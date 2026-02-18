@@ -69,7 +69,7 @@ public:
 
     void *map(void *user_context, MemoryRegion *region);
     int unmap(void *user_context, MemoryRegion *region);
-    MemoryRegion *create_crop(void *user_context, MemoryRegion *region, uint64_t offset);
+    MemoryRegion *create_crop(void *user_context, MemoryRegion *region, uint32_t index_offset);
     int destroy_crop(void *user_context, MemoryRegion *region);
     MemoryRegion *owner_of(void *user_context, MemoryRegion *region);
 
@@ -352,7 +352,7 @@ int VulkanMemoryAllocator::unmap(void *user_context, MemoryRegion *region) {
     return halide_error_code_success;
 }
 
-MemoryRegion *VulkanMemoryAllocator::create_crop(void *user_context, MemoryRegion *region, uint64_t offset) {
+MemoryRegion *VulkanMemoryAllocator::create_crop(void *user_context, MemoryRegion *region, uint32_t index_offset) {
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Cropping region ("
                    << "user_context=" << user_context << " "
@@ -361,7 +361,7 @@ MemoryRegion *VulkanMemoryAllocator::create_crop(void *user_context, MemoryRegio
                    << "region=" << (void *)(region) << " "
                    << "region_size=" << (uint32_t)region->size << " "
                    << "region_offset=" << (uint32_t)region->offset << " "
-                   << "crop_offset=" << (int64_t)offset << ") ...\n";
+                   << "index_offset=" << (int64_t)index_offset << ") ...\n";
 #endif
     if ((device == nullptr) || (physical_device == nullptr)) {
         error(user_context) << "VulkanMemoryAllocator: Unable to crop region! Invalid device handle!\n";
@@ -401,7 +401,7 @@ MemoryRegion *VulkanMemoryAllocator::create_crop(void *user_context, MemoryRegio
     // point the handle to the owner of the allocated region, and update the head offset
     memory_region->is_owner = false;
     memory_region->handle = (void *)owner;
-    memory_region->range.head_offset = owner->range.head_offset + offset;
+    memory_region->index_offset += owner->index_offset + index_offset;
     return memory_region;
 }
 

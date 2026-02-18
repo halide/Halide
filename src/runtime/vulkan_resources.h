@@ -284,12 +284,10 @@ bool vk_needs_scalar_uniform_buffer(void *user_context,
                                     size_t arg_sizes[],
                                     void *args[],
                                     int8_t arg_is_buffer[]) {
-    int i = 0;
-    while (arg_sizes[i] > 0) {
-        if (!arg_is_buffer[i]) {
-            return true;
-        }
-        i++;
+
+    // if any args exist, we need at least 1x uniform buffer
+    if (arg_sizes[0] > 0) {
+        return true;
     }
     return false;
 }
@@ -650,14 +648,41 @@ size_t vk_estimate_scalar_uniform_buffer_size(void *user_context,
                                               size_t arg_sizes[],
                                               void *args[],
                                               int8_t arg_is_buffer[]) {
-    int i = 0;
-    int scalar_uniform_buffer_size = 0;
-    while (arg_sizes[i] > 0) {
+    size_t scalar_arg_sizes = 0;
+    uint32_t buffer_count = 0;
+
+    // Add up all arg sizes for scalar params
+    for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (!arg_is_buffer[i]) {
-            scalar_uniform_buffer_size += arg_sizes[i];
+            scalar_arg_sizes += arg_sizes[i];
+        } else {
+            buffer_count++;
         }
-        i++;
     }
+
+    // Add space for index offsets for storage buffers (to support arbitrary crops)
+    size_t buffer_offset_arg_sizes = 0;
+    if (buffer_count) {
+        for (size_t i = 0; arg_sizes[i] > 0; i++) {
+            if (arg_is_buffer[i]) {
+                buffer_offset_arg_sizes += sizeof(int32_t);
+            }
+        }
+    }
+
+    size_t end_of_scalar_args = aligned_offset(scalar_arg_sizes, sizeof(int32_t));
+    size_t scalar_uniform_buffer_size = end_of_scalar_args + buffer_offset_arg_sizes;
+
+#ifdef DEBUG_RUNTIME
+    debug(user_context)
+        << " vk_estimate_scalar_uniform_buffer_size (user_context: " << user_context << "): "
+        << "scalar_uniform_buffer_size: " << (uint32_t)scalar_uniform_buffer_size << ", "
+        << "scalar_arg_sizes: " << (uint32_t)scalar_arg_sizes << ", "
+        << "end_of_scalar_args: " << (uint32_t)end_of_scalar_args << ", "
+        << "buffer_count: " << (uint32_t)buffer_count << ", "
+        << "buffer_offset_arg_sizes: " << (uint32_t)buffer_offset_arg_sizes << ")\n";
+#endif
+
     return scalar_uniform_buffer_size;
 }
 
@@ -724,12 +749,37 @@ int vk_update_scalar_uniform_buffer(void *user_context,
         return halide_error_code_internal_error;
     }
 
-    // copy to the (host-visible/coherent) scalar uniform buffer
+    // Copy all scalar params to the (host-visible/coherent) scalar uniform buffer
     size_t arg_offset = 0;
+    size_t buffer_count = 0;
     for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (!arg_is_buffer[i]) {
+            halide_debug_assert(user_context, (arg_offset + arg_sizes[i]) <= region->size);
             memcpy(host_ptr + arg_offset, args[i], arg_sizes[i]);
             arg_offset += arg_sizes[i];
+        } else {
+            buffer_count++;
+        }
+    }
+
+    // Copy all storage buffer offsets (to support arbitrary crops)
+    if (buffer_count) {
+
+        // Force alignment for the buffer offsets (e.g. all Int32 members in Uniform blocks must be 4-byte aligned)
+        arg_offset = aligned_offset(arg_offset, sizeof(int32_t));
+
+        // Copy all storage buffer offsets (to support arbitrary crops)
+        for (size_t i = 0; arg_sizes[i] > 0; i++) {
+            if (arg_is_buffer[i]) {
+
+                // get the allocated region for the buffer
+                MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(((halide_buffer_t *)args[i])->device);
+                halide_debug_assert(user_context, device_region != nullptr);
+                int32_t index_offset = device_region->index_offset;
+                halide_debug_assert(user_context, (arg_offset + sizeof(int32_t)) <= region->size);
+                memcpy(host_ptr + arg_offset, &index_offset, sizeof(int32_t));
+                arg_offset += sizeof(int32_t);
+            }
         }
     }
 
@@ -1791,7 +1841,7 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
 
 int vk_device_crop_from_offset(void *user_context,
                                const struct halide_buffer_t *src,
-                               int64_t offset,
+                               int64_t byte_offset,
                                struct halide_buffer_t *dst) {
 
     VulkanContext ctx(user_context);
@@ -1804,7 +1854,7 @@ int vk_device_crop_from_offset(void *user_context,
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    if (offset < 0) {
+    if (byte_offset < 0) {
         error(user_context) << "Vulkan: Invalid offset for device crop!\n";
         return halide_error_code_device_crop_failed;
     }
@@ -1816,8 +1866,11 @@ int vk_device_crop_from_offset(void *user_context,
         return halide_error_code_device_crop_failed;
     }
 
-    // create the croppeg region from the allocated region
-    MemoryRegion *cropped_region = ctx.allocator->create_crop(user_context, device_region, (uint64_t)offset);
+    // create the cropped region from the allocated region by computing a relative offset
+    // from the start of the region as an index based on the declared type size which
+    // will be passed as a shader parameter to adjust the indices during loads/stores
+    uint32_t index_offset = byte_offset / src->type.bytes();
+    MemoryRegion *cropped_region = ctx.allocator->create_crop(user_context, device_region, index_offset);
     if ((cropped_region == nullptr) || (cropped_region->handle == nullptr)) {
         error(user_context) << "Vulkan: Failed to crop region! Unable to create memory region!\n";
         return halide_error_code_device_crop_failed;

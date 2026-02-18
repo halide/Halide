@@ -489,6 +489,7 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
     copy_helper.dst = (uint64_t)(device_buffer);
     uint64_t src_offset = copy_helper.src_begin;
     uint64_t dst_offset = copy_helper.dst_begin + device_region->range.head_offset;
+    dst_offset += device_region->index_offset * halide_buffer->type.bytes();
 
     // enqueue the copy operation, using the allocated buffers
     error_code = vk_do_multidimensional_copy(user_context, cmds.command_buffer, copy_helper,
@@ -657,6 +658,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     copy_helper.src = (uint64_t)(device_buffer);
     copy_helper.dst = (uint64_t)(staging_buffer);
     uint64_t src_offset = copy_helper.src_begin + device_region->range.head_offset;
+    src_offset += device_region->index_offset * halide_buffer->type.bytes();
     uint64_t dst_offset = copy_helper.dst_begin;
 
     // enqueue the copy operation, using the allocated buffers
