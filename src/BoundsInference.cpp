@@ -64,71 +64,55 @@ bool depends_on_bounds_inference(const Expr &e) {
  * bounds_of_inner_var(y) would return 2 to 12, and
  * bounds_of_inner_var(x) would return 0 to 10.
  */
-class BoundsOfInnerVar : public IRVisitor {
-public:
-    Interval result;
-    BoundsOfInnerVar(const string &v)
-        : var(v) {
-    }
-
-private:
-    string var;
-    bool found = false;
-
-    using IRVisitor::visit;
-
-    void visit(const LetStmt *op) override {
-        if (op->name == var) {
-            result = Interval::single_point(op->value);
-            found = true;
-        } else if (!found) {
-            op->body.accept(this);
-            if (found) {
-                if (expr_uses_var(result.min, op->name)) {
-                    result.min = Let::make(op->name, op->value, result.min);
-                }
-                if (expr_uses_var(result.max, op->name)) {
-                    result.max = Let::make(op->name, op->value, result.max);
-                }
-            }
-        }
-    }
-
-    void visit(const Block *op) override {
-        // We're most likely to find our var at the end of a
-        // block. The start of the block could be unrelated producers.
-        op->rest.accept(this);
-        if (!found) {
-            op->first.accept(this);
-        }
-    }
-
-    void visit(const For *op) override {
-        Interval in(op->min, op->max);
-
-        if (op->name == var) {
-            result = in;
-            found = true;
-        } else if (!found) {
-            op->body.accept(this);
-            if (found) {
-                Scope<Interval> scope;
-                scope.push(op->name, in);
-                if (expr_uses_var(result.min, op->name)) {
-                    result.min = bounds_of_expr_in_scope(result.min, scope).min;
-                }
-                if (expr_uses_var(result.max, op->name)) {
-                    result.max = bounds_of_expr_in_scope(result.max, scope).max;
-                }
-            }
-        }
-    }
-};
-
 Interval bounds_of_inner_var(const string &var, const Stmt &s) {
-    BoundsOfInnerVar b(var);
-    s.accept(&b);
-    return b.result;
+    Interval result;
+    bool found = false;
+    visit_with(
+        s,
+        [&](auto *self, const LetStmt *op) {
+            if (op->name == var) {
+                result = Interval::single_point(op->value);
+                found = true;
+            } else if (!found) {
+                op->body.accept(self);
+                if (found) {
+                    if (expr_uses_var(result.min, op->name)) {
+                        result.min = Let::make(op->name, op->value, result.min);
+                    }
+                    if (expr_uses_var(result.max, op->name)) {
+                        result.max = Let::make(op->name, op->value, result.max);
+                    }
+                }
+            }
+        },
+        [&](auto *self, const Block *op) {
+            // We're most likely to find our var at the end of a
+            // block. The start of the block could be unrelated producers.
+            op->rest.accept(self);
+            if (!found) {
+                op->first.accept(self);
+            }
+        },
+        [&](auto *self, const For *op) {
+            Interval in(op->min, op->max);
+            if (op->name == var) {
+                result = in;
+                found = true;
+            } else if (!found) {
+                op->body.accept(self);
+                if (found) {
+                    Scope<Interval> scope;
+                    scope.push(op->name, in);
+                    if (expr_uses_var(result.min, op->name)) {
+                        result.min = bounds_of_expr_in_scope(result.min, scope).min;
+                    }
+                    if (expr_uses_var(result.max, op->name)) {
+                        result.max = bounds_of_expr_in_scope(result.max, scope).max;
+                    }
+                }
+            }  //
+        });
+    return result;
 }
 
 size_t find_fused_group_index(const Function &producing_func,
@@ -386,23 +370,17 @@ public:
             // don't care what sites are loaded, just what sites need
             // to have the correct value in them. So remap all selects
             // to if_then_elses to get tighter bounds.
-            class SelectToIfThenElse : public IRMutator {
-                using IRMutator::visit;
-                Expr visit(const Select *op) override {
+            for (auto &e : exprs) {
+                e.value = mutate_with(e.value, [](auto *self, const Select *op) {
                     if (is_pure(op->condition)) {
                         return Call::make(op->type, Call::if_then_else,
-                                          {mutate(op->condition),
-                                           mutate(op->true_value),
-                                           mutate(op->false_value)},
+                                          {self->mutate(op->condition),
+                                           self->mutate(op->true_value),
+                                           self->mutate(op->false_value)},
                                           Call::PureIntrinsic);
-                    } else {
-                        return IRMutator::visit(op);
                     }
-                }
-            } select_to_if_then_else;
-
-            for (auto &e : exprs) {
-                e.value = select_to_if_then_else.mutate(e.value);
+                    return self->visit_base(op);
+                });
             }
         }
 
