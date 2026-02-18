@@ -1,6 +1,8 @@
 #include "PyGenerator.h"
 
 #include <pybind11/embed.h>
+#include <string>
+#include <vector>
 
 namespace Halide {
 namespace PythonBindings {
@@ -14,16 +16,6 @@ using ArgInfo = Halide::Internal::AbstractGenerator::ArgInfo;
 using Halide::Parameter;
 using Halide::Internal::ArgInfoDirection;
 using Halide::Internal::ArgInfoKind;
-
-template<typename T>
-std::map<std::string, T> dict_to_map(const py::dict &dict) {
-    _halide_user_assert(!dict.is(py::none()));
-    std::map<std::string, T> m;
-    for (auto it : dict) {
-        m[it.first.cast<std::string>()] = it.second.cast<T>();
-    }
-    return m;
-}
 
 class PyGeneratorBase : public AbstractGenerator {
     // The name declared in the Python function's decorator
@@ -165,22 +157,32 @@ void define_generator(py::module &m) {
                 return o.str();
             });
 
-    m.def("main", []() -> void {
-        py::object argv_object = py::module_::import("sys").attr("argv");
-        std::vector<std::string> argv_vector = args_to_vector<std::string>(argv_object);
-        std::vector<char *> argv;
-        argv.reserve(argv_vector.size());
-        for (auto &s : argv_vector) {
-            argv.push_back(const_cast<char *>(s.c_str()));
-        }
-        int result = Halide::Internal::generate_filter_main((int)argv.size(), argv.data(), PyGeneratorFactoryProvider());
-        if (result != 0) {
-            // Some paths in generate_filter_main() will fail with user_error or similar (which throws an exception
-            // due to how libHalide is built for python), but some paths just return an error code, so
-            // be sure to handle both.
-            throw std::runtime_error("Generator failed: " + std::to_string(result));
-        }
-    });
+    m.def("_generate_filter_main",  //
+          [](const std::vector<std::string> &arguments) -> void {
+              if (arguments.empty()) {
+                  throw std::invalid_argument("No arguments provided to _generate_filter_main");
+              }
+
+              // POSIX requires argv to be mutable and null-terminated
+              std::vector<char *> argv;
+              argv.reserve(arguments.size() + 1);
+              for (const auto &s : arguments) {
+                  argv.push_back(const_cast<char *>(s.c_str()));
+              }
+              argv.push_back(nullptr);
+
+              const int result = Halide::Internal::generate_filter_main(
+                  static_cast<int>(argv.size()) - 1, argv.data(), PyGeneratorFactoryProvider());
+              if (result != 0) {
+                  // Some paths in generate_filter_main() will fail with user_error
+                  // or similar (which throws an exception due to how libHalide is
+                  // built for Python), but other paths just return an error code.
+                  // For consistency, handle both by throwing a C++ exception, which
+                  // PyBind11 turns into a Python exception.
+                  throw std::runtime_error("Generator failed: " + std::to_string(result));
+              }  //
+          },
+          py::arg("argv"));
 
     m.def("_unique_name", []() -> std::string {
         return ::Halide::Internal::unique_name('p');

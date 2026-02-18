@@ -615,7 +615,9 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
 #if LLVM_VERSION < 210
     options.UnsafeFPMath = !per_instruction_fast_math_flags;
 #endif
+#if LLVM_VERSION < 230
     options.NoInfsFPMath = !per_instruction_fast_math_flags;
+#endif
     options.NoNaNsFPMath = !per_instruction_fast_math_flags;
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
     options.NoZerosInBSS = false;

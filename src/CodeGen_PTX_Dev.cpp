@@ -38,7 +38,7 @@ namespace {
 class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
 public:
     /** Create a PTX device code generator. */
-    CodeGen_PTX_Dev(const Target &host);
+    CodeGen_PTX_Dev(const Target &host, bool any_strict_float);
     ~CodeGen_PTX_Dev() override;
 
     void add_kernel(Stmt stmt,
@@ -105,8 +105,9 @@ protected:
     bool supports_atomic_add(const Type &t) const override;
 };
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev(const Target &host)
+CodeGen_PTX_Dev::CodeGen_PTX_Dev(const Target &host, bool any_strict_float)
     : CodeGen_LLVM(host) {
+    this->any_strict_float = any_strict_float;
     context = new llvm::LLVMContext();
 }
 
@@ -615,7 +616,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 #if LLVM_VERSION < 210
     options.UnsafeFPMath = true;
 #endif
+#if LLVM_VERSION < 230
     options.NoInfsFPMath = true;
+#endif
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
     options.NoZerosInBSS = false;
@@ -753,11 +756,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         f.write(buffer.data(), buffer.size());
         f.close();
 
-        string cmd = "ptxas --gpu-name " + mcpu_target() + " " + ptx.pathname() + " -o " + sass.pathname();
-        if (system(cmd.c_str()) == 0) {
-            cmd = "nvdisasm " + sass.pathname();
-            int ret = system(cmd.c_str());
-            (void)ret;  // Don't care if it fails
+        if (run_process({"ptxas", "--gpu-name", mcpu_target(), ptx.pathname(), "-o", sass.pathname()}) == 0) {
+            (void)run_process({"nvdisasm", sass.pathname()});  // Don't care if it fails
         }
 
         // Note: It works to embed the contents of the .sass file in
@@ -819,13 +819,13 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
 
 }  // namespace
 
-std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
-    return std::make_unique<CodeGen_PTX_Dev>(target);
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target, bool any_strict_float) {
+    return std::make_unique<CodeGen_PTX_Dev>(target, any_strict_float);
 }
 
 #else  // WITH_PTX
 
-std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target, bool /*any_strict_float*/) {
     user_error << "PTX not enabled for this build of Halide.\n";
     return nullptr;
 }

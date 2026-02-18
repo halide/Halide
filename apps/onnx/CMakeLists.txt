@@ -121,12 +121,12 @@ target_link_libraries(model_cpp PRIVATE Halide::Halide onnx_app::oclib)
 
 add_test(
     NAME model_test
-    COMMAND ${Python_EXECUTABLE} -m unittest ${CMAKE_CURRENT_SOURCE_DIR}/model_test.py -v
+    COMMAND ${Python_EXECUTABLE} -m unittest ${CMAKE_CURRENT_SOURCE_DIR}/model_test.py
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 add_test(
     NAME halide_as_onnx_backend_test
-    COMMAND ${Python_EXECUTABLE} -m unittest ${CMAKE_CURRENT_SOURCE_DIR}/halide_as_onnx_backend_test.py -v
+    COMMAND ${Python_EXECUTABLE} -m unittest ${CMAKE_CURRENT_SOURCE_DIR}/halide_as_onnx_backend_test.py
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 set_tests_properties(

@@ -283,6 +283,21 @@ void CodeGen_LLVM::init_context() {
 
     // Ensure no Value pointers carry over from previous context.
     struct_type_recovery.clear();
+
+    if (any_strict_float) {
+        // Default all operations to strict, and relax any non-strict operations
+        // when possible. This is better than defaulting to relaxed and making
+        // some operations strict, because properties like no-nans are
+        // viral. It's no use having a strict comparison that respects nans if
+        // the source of the inputs was an op tagged with no-nans.
+        set_strict_fp_math();
+        // If the target has the strict_float flag, we act as if we're already
+        // inside a strict_float intrinsic.
+        in_strict_float = target.has_feature(Target::StrictFloat);
+    } else {
+        // Default all operations to relaxed.
+        set_fast_fp_math();
+    }
 }
 
 void CodeGen_LLVM::init_module() {
@@ -443,21 +458,6 @@ void CodeGen_LLVM::init_codegen(const std::string &name) {
 
     semaphore_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_semaphore_t");
     internal_assert(semaphore_t_type) << "Did not find halide_semaphore_t in initial module";
-
-    if (any_strict_float) {
-        // Default all operations to strict, and relax any non-strict operations
-        // when possible. This is better than defaulting to relaxed and making
-        // some operations strict, because properties like no-nans are
-        // viral. It's no use having a strict comparison that respects nans if
-        // the source of the inputs was an op tagged with no-nans.
-        set_strict_fp_math();
-        // If the target has the strict_float flag, we act as if we're already
-        // inside a strict_float intrinsic.
-        in_strict_float = target.has_feature(Target::StrictFloat);
-    } else {
-        // Default all operations to relaxed.
-        set_fast_fp_math();
-    }
 }
 
 void CodeGen_LLVM::set_fast_fp_math() {
@@ -2492,6 +2492,12 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
                                                  {VPArg(slice_val, 0), VPArg(vec_ptr, 1, alignment)})) {
                 store = dyn_cast<Instruction>(value);
             } else {
+                if (!slice_val->getType()->isVectorTy()) {
+                    slice_val = create_broadcast(slice_val, 1);
+                }
+                if (!slice_mask->getType()->isVectorTy()) {
+                    slice_mask = create_broadcast(slice_mask, 1);
+                }
                 store = builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
             }
             add_tbaa_metadata(store, op->name, slice_index);
@@ -2611,6 +2617,9 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
                 load_inst = dyn_cast<Instruction>(value);
             } else {
                 if (slice_mask != nullptr) {
+                    if (!slice_mask->getType()->isVectorTy()) {
+                        slice_mask = create_broadcast(slice_mask, 1);
+                    }
                     load_inst = builder->CreateMaskedLoad(slice_type, vec_ptr, llvm::Align(align_bytes), slice_mask);
                 } else {
                     load_inst = builder->CreateAlignedLoad(slice_type, vec_ptr, llvm::Align(align_bytes));

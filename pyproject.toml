@@ -13,7 +13,7 @@ maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
 description = "Halide is a programming language designed to make it easier to write high-performance image and array processing code."
 license = { file = "LICENSE.txt" }
 readme = "./packaging/pip/README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "imageio>=2",
     "numpy>=1.26",
@@ -46,11 +46,11 @@ classifiers = [
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: Implementation :: CPython",
     "Topic :: Multimedia :: Graphics",
     "Topic :: Scientific/Engineering",
@@ -68,15 +68,28 @@ dev = [
     "setuptools-scm>=8.3.1",
 ]
 apps = [
-    "onnx>=1.18.0", # for apps/onnx
+    "onnx==1.18.0", # for apps/onnx
     "pytest", # unspecified onnx dependency
 ]
 tools = [
     "cmake>=3.28",
-    "ninja>=1.11",
+    # 1.13.0 uses LF in .rsp files, breaking MSVC link.exe.
+    # See: https://github.com/ninja-build/ninja/pull/2616
+    "ninja>=1.11,!=1.13.0",
     "ruff>=0.12",
     "tbump>=6.11",
 ]
+
+ci-base = [
+    { include-group = "dev" },
+    { include-group = "apps" },
+    { include-group = "tools" },
+]
+
+ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm~=23.0.0.dev0"]
+ci-llvm-22 = [{ include-group = "ci-base" }, "halide-llvm~=22.1.0rc0"]
+ci-llvm-21 = [{ include-group = "ci-base" }, "halide-llvm~=21.1.0"]
+ci-llvm-20 = [{ include-group = "ci-base" }, "halide-llvm~=20.1.0"]
 
 [project.urls]
 Homepage = "https://halide-lang.org"
@@ -87,6 +100,7 @@ Repository = "https://github.com/halide/Halide.git"
 
 [tool.scikit-build]
 cmake.version = ">=3.28"
+ninja.version = ">=1.11,!=1.13.0"
 wheel.install-dir = "halide"
 sdist.include = ["dependencies/"]
 sdist.exclude = [".github/", "apps/", "test/", "tutorial/", "dependencies/update-*.sh"]
@@ -108,8 +122,7 @@ WITH_TUTORIALS = false
 # Don't version libHalide.so/dylib -- wheels are zip files that do
 # not understand symbolic links. Including version information here
 # causes the final wheel to have three copies of our library. Not good.
-Halide_VERSION_OVERRIDE = ""
-Halide_SOVERSION_OVERRIDE = ""
+CMAKE_PLATFORM_NO_VERSIONED_SONAME = true
 
 [[tool.scikit-build.overrides]]
 if.platform-system = "^win32"
@@ -173,3 +186,21 @@ search = "#define HALIDE_VERSION_MINOR {current_version}"
 src = "src/runtime/HalideRuntime.h"
 version_template = "{patch}"
 search = "#define HALIDE_VERSION_PATCH {current_version}"
+
+[tool.uv]
+conflicts = [
+    [
+        { group = "ci-llvm-main" },
+        { group = "ci-llvm-22" },
+        { group = "ci-llvm-21" },
+        { group = "ci-llvm-20" },
+    ],
+]
+
+[tool.uv.sources]
+halide-llvm = { index = "halide" }
+
+[[tool.uv.index]]
+name = "halide"
+url = "https://pypi.halide-lang.org/simple"
+explicit = true
