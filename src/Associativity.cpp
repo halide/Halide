@@ -537,8 +537,8 @@ void associativity_test() {
         Expr f_call_0 = Call::make(t, "f", {x_idx}, Call::CallType::Halide, FunctionPtr(), 0);
 
         for (const Expr &e : {cast<uint8_t>(min(cast<uint16_t>(x) + y, 255)),
-                              select(x > 255 - y, cast<uint8_t>(255), y),
-                              select(x < -y, y, cast<uint8_t>(255)),
+                              select(x > 255 - y, cast<uint8_t>(255), x + y),
+                              select(x < -y, x + y, cast<uint8_t>(255)),
                               saturating_add(x, y),
                               saturating_add(y, x),
                               saturating_cast<uint8_t>(widening_add(x, y))}) {

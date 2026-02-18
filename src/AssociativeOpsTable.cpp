@@ -237,8 +237,8 @@ void populate_ops_table_single_uint8_cast(const vector<Type> &types, vector<Asso
 
 void populate_ops_table_single_uint8_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.emplace_back(select(x0 > tmax_0 - y0, tmax_0, y0), zero_0, true);  // Saturating add
-    table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
+    table.emplace_back(select(x0 > tmax_0 - y0, tmax_0, x0 + y0), zero_0, true);  // Saturating add
+    table.emplace_back(select(x0 < -y0, x0 + y0, tmax_0), zero_0, true);          // Saturating add
 }
 
 void populate_ops_table_single_uint16_cast(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -251,8 +251,8 @@ void populate_ops_table_single_uint16_cast(const vector<Type> &types, vector<Ass
 
 void populate_ops_table_single_uint16_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.emplace_back(select(x0 > tmax_0 - y0, tmax_0, y0), zero_0, true);  // Saturating add
-    table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
+    table.emplace_back(select(x0 > tmax_0 - y0, tmax_0, x0 + y0), zero_0, true);  // Saturating add
+    table.emplace_back(select(x0 < -y0, x0 + y0, tmax_0), zero_0, true);          // Saturating add
 }
 
 void populate_ops_table_single_uint32_cast(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -263,8 +263,8 @@ void populate_ops_table_single_uint32_cast(const vector<Type> &types, vector<Ass
 
 void populate_ops_table_single_uint32_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.emplace_back(select(x0 > tmax_0 - y0, tmax_0, y0), zero_0, true);  // Saturating add
-    table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
+    table.emplace_back(select(x0 > tmax_0 - y0, tmax_0, x0 + y0), zero_0, true);  // Saturating add
+    table.emplace_back(select(x0 < -y0, x0 + y0, tmax_0), zero_0, true);          // Saturating add
 }
 
 void populate_ops_table_single_float_select(const vector<Type> &types, vector<AssociativePattern> &table) {
