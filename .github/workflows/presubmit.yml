@@ -44,6 +44,7 @@ jobs:
           repository: microsoft/vcpkg
           path: vcpkg
           ref: 2026.01.16
+          fetch-depth: 0  # need all history for vcpkg's versioning mechanism to work
 
       - name: Install dependencies
         run: brew install lld@21 llvm@21
