@@ -39,11 +39,21 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: actions/checkout@v6
+        with:
+          repository: microsoft/vcpkg
+          path: vcpkg
+          ref: 2026.01.16
+
       - name: Install dependencies
-        run: brew install flatbuffers lld@21 llvm@21 ninja pybind11 wabt
+        run: brew install lld@21 llvm@21
 
       - name: Run clang-tidy
         run: ./run-clang-tidy.sh
+        env:
+          CMAKE_TOOLCHAIN_FILE: ${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+          VCPKG_OVERLAY_PORTS: ${{ github.workspace }}/cmake/vcpkg
+          VCPKG_MANIFEST_FEATURES: developer
 
   check_cmake_file_lists:
     name: Check CMake file lists
