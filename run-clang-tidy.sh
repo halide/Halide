@@ -31,15 +31,13 @@ usage() {
 }
 
 get_thread_count() {
-    ([ -x "$(command -v nproc)" ] && nproc) ||
-        ([ -x "$(command -v sysctl)" ] && sysctl -n hw.physicalcpu)
+    ([ -x "$(command -v nproc)" ] && nproc) \
+        || ([ -x "$(command -v sysctl)" ] && sysctl -n hw.physicalcpu)
 }
 
 if [ "$(uname)" == "Darwin" ]; then
-    patch_file() { sed -i '' -E "$@"; }
     _DEFAULT_LLVM_LOCATION="/opt/homebrew/opt/llvm@$EXPECTED_VERSION"
 else
-    patch_file() { sed -i -E "$@"; }
     _DEFAULT_LLVM_LOCATION="/usr/lib/llvm-$EXPECTED_VERSION"
 fi
 
@@ -50,7 +48,7 @@ while getopts ":j:f" o; do
     case "${o}" in
     j)
         J="${OPTARG}"
-        [[ "${J}" =~ ^[0-9]+$ ]] || (
+        [[ ${J} =~ ^[0-9]+$ ]] || (
             echo "-j requires an integer argument"
             usage
         )
@@ -90,7 +88,7 @@ else
 fi
 
 # Use a temp folder for the CMake stuff here, so it's fresh & correct every time
-if [[ -z "${CLANG_TIDY_BUILD_DIR}" ]]; then
+if [[ -z ${CLANG_TIDY_BUILD_DIR} ]]; then
     CLANG_TIDY_BUILD_DIR=$(mktemp -d)
     trap 'rm -rf ${CLANG_TIDY_BUILD_DIR}' EXIT
 else
@@ -111,13 +109,13 @@ if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
     # Homebrew clang is badly misconfigured and needs help finding the
     # system headers, even though it uses system libc++ by default.
     ARCH="$(uname -m)"
-    if [[ "${ARCH}" == "arm64" ]]; then
+    if [[ ${ARCH} == "arm64" ]]; then
         HOMEBREW_TRIPLE="arm64-osx-homebrew"
     else
         HOMEBREW_TRIPLE="x64-osx-homebrew"
     fi
 
-    if [[ -d "${VCPKG_ROOT:-}" ]]; then
+    if [[ -d ${VCPKG_ROOT:-} ]]; then
         # vcpkg is active: delegate to the custom triple, which chains to the
         # toolchain file that fixes the include paths.
         export CMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
@@ -134,7 +132,7 @@ fi
 echo Configuring Halide...
 cmake -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev -DWITH_TESTS=OFF
 
-[ -a "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" ]
+[ -e "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" ]
 
 echo Building Halide...
 cmake --build "${CLANG_TIDY_BUILD_DIR}" -j "${J}"

@@ -2,7 +2,7 @@
 
 set -e
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
 
 ##
 
@@ -25,12 +25,15 @@ EXPECTED_VERSION=21
 
 ##
 
-usage() { echo -e "Usage: $0 [-c]" 1>&2; exit 1; }
+usage() {
+    echo -e "Usage: $0 [-c]" 1>&2
+    exit 1
+}
 
 if [ "$(uname)" == "Darwin" ]; then
-  _DEFAULT_LLVM_LOCATION="/opt/homebrew/opt/llvm@$EXPECTED_VERSION"
+    _DEFAULT_LLVM_LOCATION="/opt/homebrew/opt/llvm@$EXPECTED_VERSION"
 else
-  _DEFAULT_LLVM_LOCATION="/usr/lib/llvm-$EXPECTED_VERSION"
+    _DEFAULT_LLVM_LOCATION="/usr/lib/llvm-$EXPECTED_VERSION"
 fi
 
 # Fix the formatting in-place
@@ -49,7 +52,7 @@ while getopts "c" o; do
 done
 shift $((OPTIND - 1))
 
-if [[ "${MODE_FLAGS[*]}" =~ "-i" ]]; then
+if [[ ${MODE_FLAGS[*]} =~ "-i" ]]; then
     if ! git diff-files --quiet --ignore-submodules; then
         echo -e "\033[0;31m" # RED
         echo "WARNING: There are still uncommited changes in your working tree."
@@ -88,13 +91,13 @@ fi
 # Note that we specifically exclude files starting with . in order
 # to avoid finding emacs backup files
 find "${ROOT_DIR}/apps" \
-     "${ROOT_DIR}/src" \
-     "${ROOT_DIR}/tools" \
-     "${ROOT_DIR}/test" \
-     "${ROOT_DIR}/util" \
-     "${ROOT_DIR}/python_bindings" \
-     -not -path "${ROOT_DIR}/src/runtime/hexagon_remote/bin/src/*" \
-     \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) -and -not -wholename "*/.*" \
-     -print0 | xargs -0 "${CLANG_FORMAT}" "${MODE_FLAGS[@]}" -style=file
+    "${ROOT_DIR}/src" \
+    "${ROOT_DIR}/tools" \
+    "${ROOT_DIR}/test" \
+    "${ROOT_DIR}/util" \
+    "${ROOT_DIR}/python_bindings" \
+    -not -path "${ROOT_DIR}/src/runtime/hexagon_remote/bin/src/*" \
+    \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) -and -not -wholename "*/.*" \
+    -print0 | xargs -0 "${CLANG_FORMAT}" "${MODE_FLAGS[@]}" -style=file
 
 exit "${PIPESTATUS[1]}"
