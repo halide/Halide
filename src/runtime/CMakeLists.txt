@@ -234,12 +234,12 @@ foreach (i IN LISTS RUNTIME_CPP)
                 endif ()
             endif ()
         elseif (i MATCHES "webgpu_emscripten")
-            # for WASM, we need to set a wasm target rather than a generic or native target  
-           if (j EQUAL 32)
-               set(TARGET "wasm32-unknown-unknown-unknown")
-           else ()
-               set(TARGET "wasm64-unknown-unknown-unknown")
-           endif ()
+            # for WASM, we need to set a wasm target rather than a generic or native target
+            if (j EQUAL 32)
+                set(TARGET "wasm32-unknown-unknown-unknown")
+            else ()
+                set(TARGET "wasm64-unknown-unknown-unknown")
+            endif ()
         elseif (i MATCHES "webgpu_dawn_x86$")
             if (j EQUAL 32)
                 # use default generic targets from below

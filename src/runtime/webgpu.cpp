@@ -144,12 +144,10 @@ public:
         // Capture validation and OOM errors.
         wgpuDevicePushErrorScope(device, WGPUErrorFilter_Validation);
         wgpuDevicePushErrorScope(device, WGPUErrorFilter_OutOfMemory);
-        callbacks_remaining = 2;
     }
 
     ALWAYS_INLINE ~ErrorScope() {
-        if (callbacks_remaining > 0) {
-            // Pop the error scopes to flush any pending errors.
+        if (!already_waited) {
             wait();
         }
     }
@@ -157,13 +155,9 @@ public:
     // Wait for all error callbacks in this scope to fire.
     // Returns the error code (or success).
     halide_error_code_t wait() {
-        using namespace Halide::Runtime::Internal::Synchronization;
-
-        if (callbacks_remaining == 0) {
-            error(user_context) << "no outstanding error scopes\n";
-            return halide_error_code_internal_error;
+        if (already_waited) {
+            return error_code;
         }
-
         error_code = halide_error_code_success;
 
         WGPUPopErrorScopeCallbackInfo callbackInfo = WGPU_POP_ERROR_SCOPE_CALLBACK_INFO_INIT;
@@ -184,6 +178,7 @@ public:
         wait_info2.future = future2;
         wgpuInstanceWaitAny(instance, 1, &wait_info2, UINT64_MAX);
 
+        already_waited = true;
         return error_code;
     }
 
@@ -194,19 +189,16 @@ private:
 
     // The error code reported by the callback functions.
     volatile halide_error_code_t error_code;
+    bool already_waited = false;
 
-    // Used to track outstanding error callbacks.
-    volatile int callbacks_remaining = 0;
-
-    // The error callback function.
-    // Logs any errors, and decrements the remaining callback count.
+    // The error callback function. Logs any errors.
     static void error_callback(WGPUPopErrorScopeStatus status,
                                WGPUErrorType type,
                                WGPUStringView message,
                                void *userdata1,
                                void *userdata2) {
-        using namespace Halide::Runtime::Internal::Synchronization;
-
+        (void)status;
+        (void)userdata2;
         ErrorScope *context = (ErrorScope *)userdata1;
         switch (type) {
         case WGPUErrorType_NoError:
@@ -227,8 +219,6 @@ private:
                                          << "): " << message.data << "\n";
             context->error_code = halide_error_code_generic_error;
         }
-
-        atomic_fetch_add_sequentially_consistent(&context->callbacks_remaining, -1);
     }
 };
 
@@ -355,9 +345,9 @@ WEAK int create_webgpu_context(void *user_context) {
     // Use the defaults for most limits.
     WGPULimits requestedLimits = WGPU_LIMITS_INIT;
 
-    // TODO: Enable for Emscripten when wgpuAdapterGetLimits is supported.
-    // See https://github.com/halide/Halide/issues/7248
-//#if HALIDE_RUNTIME_WEBGPU_NATIVE_API
+    // Try to get adapter limits (succeeds on Dawn native; may fail on Emscripten until
+    // wgpuAdapterGetLimits is supported, see https://github.com/halide/Halide/issues/7248).
+    // On failure we keep default limits from WGPU_LIMITS_INIT.
     WGPULimits supportedLimits = WGPU_LIMITS_INIT;
     if (!wgpuAdapterGetLimits(global_adapter, &supportedLimits)) {
         debug(user_context) << "wgpuAdapterGetLimits failed\n";
@@ -370,7 +360,6 @@ WEAK int create_webgpu_context(void *user_context) {
         requestedLimits.maxComputeWorkgroupStorageSize =
             supportedLimits.maxComputeWorkgroupStorageSize;
     }
-//#endif
 
     WGPUDeviceDescriptor device_desc = WGPU_DEVICE_DESCRIPTOR_INIT;
     device_desc.requiredLimits = &requestedLimits;
