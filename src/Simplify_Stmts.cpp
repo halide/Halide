@@ -372,11 +372,10 @@ Stmt Simplify::visit(const Store *op) {
         Expr var = Variable::make(value.type(), var_name);
         std::vector<Stmt> stores;
         int lanes = 0;
-        for (size_t i = 0; i < shuf->vectors.size(); i++) {
-            Expr idx = shuf->vectors[i];
+        for (const Expr &idx : shuf->vectors) {
             stores.push_back(Store::make(op->name,
                                          Shuffle::make_slice(var, lanes, 1, idx.type().lanes()),
-                                         shuf->vectors[i],
+                                         idx,
                                          op->param,
                                          Shuffle::make_slice(predicate, lanes, 1, idx.type().lanes()),
                                          ModulusRemainder{}));
