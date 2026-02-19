@@ -69,19 +69,20 @@ struct MemoryBlock {
     MemoryProperties properties;  //< properties for the allocated block
 };
 
-// Client-facing struct for specifying a range of a memory region (eg for crops)
-struct MemoryRange {
-    size_t head_offset = 0;  //< byte offset from start of region
-    size_t tail_offset = 0;  //< byte offset from end of region
+struct RegionAllocation {
+    size_t offset = 0;            //< offset from base address in block (in bytes)
+    size_t size = 0;              //< allocated size in block (in bytes)
+};
+
+struct RegionIndexing {
+    int32_t offset = 0;           //< indexing offset from start of region (used to adjust indices in compute shader to avoid alignment constraints for arbitrary crops)
 };
 
 // Client-facing struct for exchanging memory region allocation requests
 struct MemoryRegion {
     void *handle = nullptr;       //< client data storing native handle (managed by alloc_block_region/free_block_region) or a pointer to region owning allocation
-    size_t offset = 0;            //< offset from base address in block (in bytes)
-    size_t size = 0;              //< allocated size (in bytes)
-    uint32_t index_offset = 0;    //< index offset from start of region (used to adjust indices in compute shader to avoid alignment constraints for arbitrary crops)
-    MemoryRange range;            //< optional range (e.g. for handling crops, etc)
+    RegionAllocation allocation;  //< allocation in parent block for region
+    RegionIndexing indexing;      //< indexing adjustments for controlling access
     bool dedicated = false;       //< flag indicating whether allocation is one dedicated resource (or split/shared into other resources)
     bool is_owner = true;         //< flag indicating whether allocation is owned by this region, in which case handle is a native handle. Otherwise handle points to owning region of alloction.
     MemoryProperties properties;  //< properties for the allocated region

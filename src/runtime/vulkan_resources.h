@@ -592,7 +592,8 @@ int vk_update_descriptor_set(void *user_context,
         if (arg_is_buffer[i]) {
 
             // get the allocated region for the buffer
-            MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(((halide_buffer_t *)args[i])->device);
+            halide_buffer_t *halide_buffer = (halide_buffer_t *)args[i];
+            MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(halide_buffer->device);
             MemoryRegion *owner = allocator->owner_of(user_context, device_region);
 
             // retrieve the buffer from the region
@@ -602,9 +603,8 @@ int vk_update_descriptor_set(void *user_context,
                 return halide_error_code_internal_error;
             }
 
-            VkDeviceSize range_offset = device_region->range.head_offset;
-            VkDeviceSize range_size = device_region->size - device_region->range.head_offset - device_region->range.tail_offset;
-            halide_abort_if_false(user_context, (device_region->size - device_region->range.head_offset - device_region->range.tail_offset) > 0);
+            VkDeviceSize range_offset = 0;
+            VkDeviceSize range_size = device_region->allocation.size;
             VkDescriptorBufferInfo device_buffer_info = {
                 *device_buffer,  // the buffer
                 range_offset,    // range offset
@@ -754,7 +754,7 @@ int vk_update_scalar_uniform_buffer(void *user_context,
     size_t buffer_count = 0;
     for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (!arg_is_buffer[i]) {
-            halide_debug_assert(user_context, (arg_offset + arg_sizes[i]) <= region->size);
+            halide_debug_assert(user_context, (arg_offset + arg_sizes[i]) <= region->allocation.size);
             memcpy(host_ptr + arg_offset, args[i], arg_sizes[i]);
             arg_offset += arg_sizes[i];
         } else {
@@ -775,9 +775,9 @@ int vk_update_scalar_uniform_buffer(void *user_context,
                 // get the allocated region for the buffer
                 MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(((halide_buffer_t *)args[i])->device);
                 halide_debug_assert(user_context, device_region != nullptr);
-                int32_t index_offset = device_region->index_offset;
-                halide_debug_assert(user_context, (arg_offset + sizeof(int32_t)) <= region->size);
-                memcpy(host_ptr + arg_offset, &index_offset, sizeof(int32_t));
+                RegionIndexing region_indexing = device_region->indexing;
+                halide_debug_assert(user_context, (arg_offset + sizeof(int32_t)) <= region->allocation.size);
+                memcpy(host_ptr + arg_offset, &(region_indexing.offset), sizeof(int32_t));
                 arg_offset += sizeof(int32_t);
             }
         }
@@ -1869,8 +1869,9 @@ int vk_device_crop_from_offset(void *user_context,
     // create the cropped region from the allocated region by computing a relative offset
     // from the start of the region as an index based on the declared type size which
     // will be passed as a shader parameter to adjust the indices during loads/stores
-    uint32_t index_offset = byte_offset / src->type.bytes();
-    MemoryRegion *cropped_region = ctx.allocator->create_crop(user_context, device_region, index_offset);
+    RegionIndexing region_indexing = {};
+    region_indexing.offset = byte_offset / src->type.bytes();
+    MemoryRegion *cropped_region = ctx.allocator->create_crop(user_context, device_region, region_indexing);
     if ((cropped_region == nullptr) || (cropped_region->handle == nullptr)) {
         error(user_context) << "Vulkan: Failed to crop region! Unable to create memory region!\n";
         return halide_error_code_device_crop_failed;
