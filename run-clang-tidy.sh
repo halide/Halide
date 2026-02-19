@@ -31,8 +31,8 @@ usage() {
 }
 
 get_thread_count() {
-    ([ -x "$(command -v nproc)" ] && nproc) \
-        || ([ -x "$(command -v sysctl)" ] && sysctl -n hw.physicalcpu)
+    ([ -x "$(command -v nproc)" ] && nproc) ||
+        ([ -x "$(command -v sysctl)" ] && sysctl -n hw.physicalcpu)
 }
 
 if [ "$(uname)" == "Darwin" ]; then
@@ -105,6 +105,8 @@ export CMAKE_BUILD_TYPE=Debug
 export CMAKE_EXPORT_COMPILE_COMMANDS=ON
 export Halide_LLVM_ROOT="${CLANG_TIDY_LLVM_INSTALL_DIR}"
 
+CMAKE_ARGS=()
+
 if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
     # Homebrew clang is badly misconfigured and needs help finding the
     # system headers, even though it uses system libc++ by default.
@@ -118,19 +120,23 @@ if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
     if [[ -d ${VCPKG_ROOT:-} ]]; then
         # vcpkg is active: delegate to the custom triple, which chains to the
         # toolchain file that fixes the include paths.
-        export CMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-        export VCPKG_DEFAULT_TRIPLET="${HOMEBREW_TRIPLET}"
-        export VCPKG_OVERLAY_TRIPLETS="${ROOT_DIR}/cmake/triplets"
-        export VCPKG_OVERLAY_PORTS="${ROOT_DIR}/cmake/vcpkg"
-        export VCPKG_MANIFEST_FEATURES=-developer
+        CMAKE_ARGS+=(
+            -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+            -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE="${ROOT_DIR}/cmake/toolchain.macos-homebrew-clang.cmake"
+            -DVCPKG_HOST_TRIPLET="${HOMEBREW_TRIPLET}"
+            -DVCPKG_TARGET_TRIPLET="${HOMEBREW_TRIPLET}"
+            -DVCPKG_OVERLAY_TRIPLETS="${ROOT_DIR}/cmake/triplets"
+            -DVCPKG_OVERLAY_PORTS="${ROOT_DIR}/cmake/vcpkg"
+            -DVCPKG_MANIFEST_FEATURES="developer"
+        )
     else
         # vcpkg is not active: use the toolchain file directly.
-        export CMAKE_TOOLCHAIN_FILE="${ROOT_DIR}/cmake/toolchain.macos-homebrew-clang.cmake"
+        CMAKE_ARGS+=(-DCMAKE_TOOLCHAIN_FILE="${ROOT_DIR}/cmake/toolchain.macos-homebrew-clang.cmake")
     fi
 fi
 
 echo Configuring Halide...
-cmake -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev -DWITH_TESTS=OFF
+cmake -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev -DWITH_TESTS=OFF "${CMAKE_ARGS[@]}"
 
 [ -e "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" ]
 
