@@ -70,12 +70,12 @@ struct MemoryBlock {
 };
 
 struct RegionAllocation {
-    size_t offset = 0;            //< offset from base address in block (in bytes)
-    size_t size = 0;              //< allocated size in block (in bytes)
+    size_t offset = 0;  //< offset from base address in block (in bytes)
+    size_t size = 0;    //< allocated size in block (in bytes)
 };
 
 struct RegionIndexing {
-    int32_t offset = 0;           //< indexing offset from start of region (used to adjust indices in compute shader to avoid alignment constraints for arbitrary crops)
+    int32_t offset = 0;  //< indexing offset from start of region (used to adjust indices in compute shader to avoid alignment constraints for arbitrary crops)
 };
 
 // Client-facing struct for exchanging memory region allocation requests

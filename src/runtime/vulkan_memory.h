@@ -288,7 +288,7 @@ void *VulkanMemoryAllocator::map(void *user_context, MemoryRegion *region) {
 
     void *mapped_ptr = nullptr;
     VkDeviceSize memory_offset = region->allocation.offset;
-    VkDeviceSize memory_size = region->allocation.size; 
+    VkDeviceSize memory_size = region->allocation.size;
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: MapMemory ("
                    << "user_context=" << user_context << "\n"
@@ -1104,7 +1104,7 @@ int VulkanMemoryAllocator::allocate_region(void *instance_ptr, MemoryRegion *reg
         VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,  // struct type
         nullptr,                               // struct extending this
         0,                                     // create flags
-        region->allocation.size,                          // buffer size (in bytes)
+        region->allocation.size,               // buffer size (in bytes)
         usage_flags,                           // buffer usage flags
         VK_SHARING_MODE_EXCLUSIVE,             // sharing mode
         0, nullptr};

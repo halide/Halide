@@ -937,8 +937,8 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
 
         // define the src and dst config
         uint64_t copy_dst = copy_helper.dst;
-        uint64_t src_offset = copy_helper.src_begin + (src_buffer_region->indexing.offset * src->type.bytes());  
-        uint64_t dst_offset = copy_helper.dst_begin + (dst_buffer_region->indexing.offset * dst->type.bytes());  
+        uint64_t src_offset = copy_helper.src_begin + (src_buffer_region->indexing.offset * src->type.bytes());
+        uint64_t dst_offset = copy_helper.dst_begin + (dst_buffer_region->indexing.offset * dst->type.bytes());
 
         copy_helper.src = (uint64_t)(src_device_buffer);
         copy_helper.dst = (uint64_t)(dst_device_buffer);
