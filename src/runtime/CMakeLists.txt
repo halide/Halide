@@ -233,7 +233,7 @@ foreach (i IN LISTS RUNTIME_CPP)
                     set(TARGET "x86_64-unknown-windows-unknown")
                 endif ()
             endif ()
-       elseif (i MATCHES "webgpu_emscripten")
+        elseif (i MATCHES "webgpu_emscripten")
             # for WASM, we need to set a wasm target rather than a generic or native target  
            if (j EQUAL 32)
                set(TARGET "wasm32-unknown-unknown-unknown")
