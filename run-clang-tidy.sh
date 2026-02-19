@@ -110,17 +110,17 @@ if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
     # system headers, even though it uses system libc++ by default.
     ARCH="$(uname -m)"
     if [[ ${ARCH} == "arm64" ]]; then
-        HOMEBREW_TRIPLE="arm64-osx-homebrew"
+        HOMEBREW_TRIPLET="arm64-osx-homebrew"
     else
-        HOMEBREW_TRIPLE="x64-osx-homebrew"
+        HOMEBREW_TRIPLET="x64-osx-homebrew"
     fi
 
     if [[ -d ${VCPKG_ROOT:-} ]]; then
         # vcpkg is active: delegate to the custom triple, which chains to the
         # toolchain file that fixes the include paths.
         export CMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-        export VCPKG_TARGET_TRIPLET="${HOMEBREW_TRIPLE}"
-        export VCPKG_OVERLAY_TRIPLETS="${ROOT_DIR}/cmake/triples"
+        export VCPKG_DEFAULT_TRIPLET="${HOMEBREW_TRIPLET}"
+        export VCPKG_OVERLAY_TRIPLETS="${ROOT_DIR}/cmake/triplets"
         export VCPKG_OVERLAY_PORTS="${ROOT_DIR}/cmake/vcpkg"
         export VCPKG_MANIFEST_FEATURES=-developer
     else
