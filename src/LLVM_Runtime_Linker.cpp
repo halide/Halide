@@ -307,6 +307,9 @@ DECLARE_NO_INITMOD(webgpu_emscripten_debug)
 DECLARE_NO_INITMOD(webgpu_dawn_x86)
 DECLARE_NO_INITMOD(webgpu_dawn_arm)
 DECLARE_NO_INITMOD(webgpu_emscripten)
+DECLARE_NO_INITMOD(webgpu_dawn_x86_debug)
+DECLARE_NO_INITMOD(webgpu_dawn_arm_debug)
+DECLARE_NO_INITMOD(webgpu_emscripten_debug)
 #endif  // WITH_WEBGPU
 
 #ifdef WITH_X86
