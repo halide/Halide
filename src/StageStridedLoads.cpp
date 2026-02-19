@@ -161,18 +161,19 @@ public:
     std::map<std::pair<const Allocate *, const Load *>, Expr> replacements;
     std::map<const Allocate *, int> padding;
     Scope<const Allocate *> allocation_scope;
-    std::map<Stmt, std::pair<std::string, Expr>> let_injections;
+    std::map<Stmt, std::vector<std::pair<std::string, Expr>>> let_injections;
 
     using IRMutator::mutate;
 
     Stmt mutate(const Stmt &s) override {
+        Stmt stmt = IRMutator::mutate(s);
         auto it = let_injections.find(s);
         if (it != let_injections.end()) {
-            const auto &[name, value] = it->second;
-            return LetStmt::make(name, value, IRMutator::mutate(s));
-        } else {
-            return IRMutator::mutate(s);
+            for (const auto &[name, value] : it->second) {
+                stmt = LetStmt::make(name, value, stmt);
+            }
         }
+        return stmt;
     }
 
 protected:
@@ -209,34 +210,29 @@ protected:
 };
 
 Stmt innermost_containing_stmt(const Stmt &root, const std::set<const Load *> &exprs) {
-    std::vector<Stmt> path, result;
+    Stmt result;
+    // The innermost containing stmt is whichever stmt node contains the
+    // largest number of our exprs, with ties breaking inwards.
+    int seen = 0, best = 0;
     mutate_with(root,  //
                 [&](auto *self, const Stmt &s) {
-                    path.push_back(s);
+                    int old = seen;
                     self->mutate_base(s);
-                    path.pop_back();
+                    if (old == 0 && seen > best) {
+                        result = s;
+                        best = seen;
+                    }
                     return s;  //
                 },
                 [&](auto *self, const Expr &e) {
                     const Load *l = e.as<Load>();
                     if (l && exprs.count(l)) {
-                        if (result.empty()) {
-                            result = path;
-                        } else {
-                            // Find the common prefix of path and result
-                            size_t i = 0;
-                            while (i < path.size() &&
-                                   i < result.size() &&
-                                   path[i].get() == result[i].get()) {
-                                i++;
-                            }
-                            result.resize(i);
-                        }
+                        seen++;
                     };
                     return self->mutate_base(e);  //
                 });
-    internal_assert(!result.empty()) << "None of the exprs were found\n";
-    return result.back();
+    internal_assert(seen) << "None of the exprs were found\n";
+    return result;
 }
 
 bool can_hoist_shared_load(const Stmt &s, const std::string &buf, const Expr &idx) {
@@ -290,7 +286,6 @@ Stmt stage_strided_loads(const Stmt &s) {
             const bool can_lift = l.second.lower_bound(load->first + k.stride - 1) != l.second.end();
 
             if (!can_lift) {
-                debug(0) << "Can't lift: " << Expr(load->second[0]->index) << "\n";
                 load++;
                 continue;
             }
@@ -326,7 +321,7 @@ Stmt stage_strided_loads(const Stmt &s) {
                         replacer.replacements.emplace(std::make_pair(alloc, l), shuf);
                     }
                 }
-                replacer.let_injections.emplace(let_site, std::make_pair(name, shared_load));
+                replacer.let_injections[let_site].emplace_back(name, shared_load);
             } else {
                 for (; load != v.end() && load->first < first_offset + k.stride; load++) {
                     int row = load->first - first_offset;
