@@ -24,14 +24,12 @@
 #include "Util.h"
 #include "WasmExecutor.h"
 
+extern "C" unsigned long __udivdi3(unsigned long a, unsigned long b);
+
 namespace Halide {
 namespace Internal {
 
 using std::string;
-
-#if defined(__GNUC__) && defined(__i386__)
-extern "C" unsigned long __udivdi3(unsigned long a, unsigned long b);
-#endif
 
 #ifdef _WIN32
 void *get_symbol_address(const char *s) {
@@ -167,6 +165,26 @@ void load_webgpu() {
                                << "(Try setting the env var HL_WEBGPU_NATIVE_LIB to an explicit path to fix this.)\n";
 }
 
+llvm::orc::SymbolMap GetListOfAdditionalSymbols(const llvm::orc::LLJIT &Jit) {
+    // Inject a number of symbols that may be in libgcc.a where they are
+    // not found automatically. See also the upstream issue:
+    // https://github.com/llvm/llvm-project/issues/61289.
+
+    static const std::pair<const char *, const void *> NamePtrList[] = {
+        // NOTE: at least libgcc does not provide this symbol on 64-bit x86_64, only on 32-bit i386.
+        {"__udivdi3", (((CHAR_BIT * sizeof(void *)) == 32) ? ((void *)&__udivdi3) : nullptr)},
+    };
+
+    llvm::orc::SymbolMap AdditionalSymbols;
+    for (const auto &NamePtr : NamePtrList) {
+        auto Addr = static_cast<llvm::orc::ExecutorAddr>(
+            reinterpret_cast<uintptr_t>(NamePtr.second));
+        AdditionalSymbols[Jit.mangleAndIntern(NamePtr.first)] =
+            llvm::orc::ExecutorSymbolDef(Addr, llvm::JITSymbolFlags::Exported);
+    }
+    return AdditionalSymbols;
+}
+
 }  // namespace
 
 using namespace llvm;
@@ -247,25 +265,6 @@ public:
             }
         }
         uint64_t result = SectionMemoryManager::getSymbolAddress(name);
-#if defined(__GNUC__) && defined(__i386__)
-        // This is a workaround for an odd corner case (cross-compiling + testing
-        // Python bindings x86-32 on an x86-64 system): __udivdi3 is a helper function
-        // that GCC uses to do u64/u64 division on 32-bit systems; it's usually included
-        // by the linker on these systems as needed. When we JIT, LLVM will include references
-        // to this call; MCJIT fixes up these references by doing (roughly) dlopen(NULL)
-        // to look up the symbol. For normal JIT tests, this works fine, as dlopen(NULL)
-        // finds the test executable, which has the right lookups to locate it inside libHalide.so.
-        // If, however, we are running a JIT-via-Python test, dlopen(NULL) returns the
-        // CPython executable... which apparently *doesn't* include this as an exported
-        // function, so the lookup fails and crashiness ensues. So our workaround here is
-        // a bit icky, but expedient: check for this name if we can't find it elsewhere,
-        // and if so, return the one we know should be present. (Obviously, if other runtime
-        // helper functions of this sort crop up in the future, this should be expanded
-        // into a "builtins map".)
-        if (result == 0 && name == "__udivdi3") {
-            result = (uint64_t)&__udivdi3;
-        }
-#endif
         internal_assert(result != 0)
             << "HalideJITMemoryManager: unable to find address for " << name << "\n";
         return result;
@@ -399,6 +398,8 @@ void compile_module_impl(
     auto gen = llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(target_data_layout.getGlobalPrefix());
     internal_assert(gen) << llvm::toString(gen.takeError()) << "\n";
     JIT->getMainJITDylib().addGenerator(std::move(gen.get()));
+
+    cantFail(JIT->getMainJITDylib().define(absoluteSymbols(GetListOfAdditionalSymbols(*JIT))));
 
     llvm::orc::ThreadSafeModule tsm(std::move(m), std::move(jit_module->context));
     auto err = JIT->addIRModule(std::move(tsm));
