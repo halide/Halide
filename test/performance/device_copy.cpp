@@ -56,7 +56,7 @@ double test(const Target &target, std::vector<int> order, std::vector<int> shape
 int main() {
     auto target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
-        printf("This test requires a GPU target.\n");
+        printf("[SKIP] This test requires a GPU target.\n");
         return 0;
     }
 
