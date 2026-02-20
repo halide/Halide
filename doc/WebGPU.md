@@ -27,7 +27,8 @@ device codegen may be required before it becomes profitable to use.
 
 ## Running with WebAssembly via Emscripten: `HL_TARGET=wasm-32-wasmrt-webgpu`
 
-> _Tested with top-of-tree Emscripten as of 2026-02-10._
+> _Tested with Emscripten 5.0.0 (a7c5deabd7c88ba1c38ebe988112256775f944c6)_
+> _Tested with Node.js 25.5.0_
 
 Halide can generate WebGPU code that can be integrated with WASM code using
 Emscripten.
@@ -35,7 +36,7 @@ Emscripten.
 When invoking `emcc` to link Halide-generated objects, include these flags:
 `--use-port=emdawnwebgpu -s JSPI`.
 
-Tests that use AOT compilation can be run using a native WebGPU implementation
+Tests that use AOT compilation can be run using a WebGPU implementation
 that has Node.js bindings, such as [Dawn](https://dawn.googlesource.com/dawn/).
 You must set an environment variable named `HL_WEBGPU_NODE_BINDINGS` that
 has an absolute path to the bindings to run these tests, e.g. `HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node`.
@@ -47,7 +48,7 @@ JIT compilation is not supported when using WebGPU with WASM.
 
 ## Running natively: `HL_TARGET=host-webgpu`
 
-> _Tested with top-of-tree Dawn as of 2025-12-10 [commit cc0692ffe1363ae963f90d97fb03d8b522d9c89e]._
+> _Tested with Dawn release branch chromium/7698 (536c572aba)_
 
 For testing purposes, Halide can also target native WebGPU libraries, such as
 [Dawn](https://dawn.googlesource.com/dawn/) or
