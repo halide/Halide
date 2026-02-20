@@ -218,7 +218,7 @@ protected:
     using IRMutator::visit;
 };
 
-const IRNode *innermost_containing_node(const Stmt &root, const std::set<const Load *> &exprs) {
+const IRNode *innermost_containing_node(const IRNode *root, const std::set<const Load *> &exprs) {
     const IRNode *result = nullptr;
     // The innermost containing stmt is whichever stmt node contains the
     // largest number of our exprs, with ties breaking inwards.
@@ -258,18 +258,23 @@ bool can_hoist_shared_load(const IRNode *n, const std::string &buf, const Expr &
     visit_with(n,                                 //
                [&](auto *self, const Let *let) {  //
                    result &= !expr_uses_var(idx, let->name);
+                   self->visit_base(let);
                },
                [&](auto *self, const LetStmt *let) {  //
                    result &= !expr_uses_var(idx, let->name);
+                   self->visit_base(let);
                },
                [&](auto *self, const For *loop) {  //
                    result &= !expr_uses_var(idx, loop->name);
+                   self->visit_base(loop);
                },
                [&](auto *self, const Allocate *alloc) {  //
                    result &= alloc->name != buf;
+                   self->visit_base(alloc);
                },
                [&](auto *self, const Store *store) {  //
                    result &= store->name != buf;
+                   self->visit_base(store);
                });
     return result;
 }
@@ -324,7 +329,7 @@ Stmt stage_strided_loads(const Stmt &s) {
             // If possible, we do the shuffle as an in-place transpose followed
             // by a dense slice. This is more efficient when extracting multiple
             // slices.
-            const IRNode *let_site = innermost_containing_node(alloc ? Stmt(alloc) : s, all_loads);
+            const IRNode *let_site = innermost_containing_node(k.scope, all_loads);
             if (can_hoist_shared_load(let_site, k.buf, idx)) {
                 std::string name = unique_name('t');
                 Expr var = Variable::make(shared_load.type(), name);

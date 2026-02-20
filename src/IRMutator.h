@@ -343,6 +343,15 @@ auto mutate_with(const T &ir, Lambdas &&...lambdas) {
     }
 }
 
+template<typename... Lambdas>
+auto mutate_with(const IRNode *ir, Lambdas &&...lambdas) -> IRHandle {
+    if (ir->node_type <= StrongestExprNodeType) {
+        return mutate_with(Expr((const BaseExprNode *)ir), std::forward<Lambdas>(lambdas)...);
+    } else {
+        return mutate_with(Stmt((const BaseStmtNode *)ir), std::forward<Lambdas>(lambdas)...);
+    }
+}
+
 /** A helper function for mutator-like things to mutate regions */
 template<typename Mutator, typename... Args>
 std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args &&...args) {
