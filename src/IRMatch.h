@@ -2249,6 +2249,60 @@ HALIDE_ALWAYS_INLINE auto slice(Vec vec, Base base, Stride stride, Lanes lanes) 
     return {pattern_arg(vec), pattern_arg(base), pattern_arg(stride), pattern_arg(lanes)};
 }
 
+template<typename Vec, typename Factor>
+struct TransposeOp {
+    struct pattern_tag {};
+    Vec vec;
+    Factor factor;
+
+    static constexpr uint32_t binds = Vec::binds | Factor::binds;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Shuffle;
+    constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
+    constexpr static bool canonical = Vec::canonical && Factor::canonical;
+
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+        if (e.node_type != IRNodeType::Shuffle) {
+            return false;
+        }
+        const Shuffle &v = (const Shuffle &)e;
+        return v.vectors.size() == 1 &&
+               v.is_transpose() &&
+               vec.template match<bound>(*v.vectors[0].get(), state) &&
+               factor.template match<(bound | bindings<Vec>::mask)>(v.transpose_factor(), state);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint) const {
+        halide_scalar_value_t factor_val;
+        halide_type_t ty;
+        factor.make_folded_const(factor_val, ty, state);
+        int f = (int)factor_val.u.i64;
+        return Shuffle::make_transpose(vec.make(state, type_hint), f);
+    }
+
+    constexpr static bool foldable = false;
+
+    HALIDE_ALWAYS_INLINE
+    TransposeOp(Vec v, Factor f)
+        : vec(v), factor(f) {
+        static_assert(Factor::foldable, "Factor of transpose should consist only of operations that constant-fold");
+    }
+};
+
+template<typename Vec, typename Factor>
+std::ostream &operator<<(std::ostream &s, const TransposeOp<Vec, Factor> &op) {
+    s << "transpose(" << op.vec << ", " << op.factor << ")";
+    return s;
+}
+
+template<typename Vec, typename Factor>
+HALIDE_ALWAYS_INLINE auto transpose(Vec vec, Factor factor) noexcept
+    -> TransposeOp<decltype(pattern_arg(vec)), decltype(pattern_arg(factor))> {
+    return {pattern_arg(vec), pattern_arg(factor)};
+}
+
 template<typename A>
 struct Fold {
     struct pattern_tag {};

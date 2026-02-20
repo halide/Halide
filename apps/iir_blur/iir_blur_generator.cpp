@@ -43,13 +43,12 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
             transpose.compute_root()
                 .tile(x, y, xo, yo, x, y, vec, vec * 4)
                 .split(y, y, yi, vec)
-                .unroll(yi)
+                .vectorize(yi)
                 .vectorize(x)
                 .fuse(yo, c, t)
                 .parallel(t);
 
             blur.in(transpose)
-                .reorder_storage(y, x)
                 .compute_at(transpose, y)
                 .vectorize(x)
                 .unroll(y);

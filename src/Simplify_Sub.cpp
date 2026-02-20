@@ -177,6 +177,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
          rewrite(slice(x, c0, c1, c2) - (slice(y, c0, c1, c2) + z), slice(x - y, c0, c1, c2) - z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
          rewrite((slice(x, c0, c1, c2) - z) - slice(y, c0, c1, c2), slice(x - y, c0, c1, c2) - z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
          rewrite((z - slice(x, c0, c1, c2)) - slice(y, c0, c1, c2), z - slice(x + y, c0, c1, c2), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+         rewrite(transpose(x, c0) - transpose(y, c0), transpose(x - y, c0)) ||
 
          (no_overflow(op->type) && EVAL_IN_LAMBDA  //
           (rewrite(max(x, y) - x, max(y - x, 0)) ||

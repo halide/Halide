@@ -954,9 +954,23 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
     const size_t elems_per_slice = 128 / element_bits;
 
     // Only apply special x86 logic for power-of-two interleaves for avx and
-    // above where we're going to end up with multiple native vectors (TODO:
-    // Could slice into native vectors and concat results even if not power of
-    // two)
+    // above where we're going to end up with multiple native vectors.
+
+    if (!is_power_of_two(vec_elements) &&
+        vec_elements % elems_per_native_vec == 0) {
+        // It's not a power of two, but it's a multiple of the native vector
+        // length, so slice it and recurse.
+        std::vector<Value *> results;
+        for (int i = 0; i < vec_elements; i += elems_per_native_vec) {
+            std::vector<Value *> slices;
+            slices.reserve(vecs.size());
+            for (auto *v : vecs) {
+                slices.push_back(slice_vector(v, i, (int)elems_per_native_vec));
+            }
+            results.push_back(interleave_vectors(slices));
+        }
+        return concat_vectors(results);
+    }
 
     if (!is_power_of_two(vec_elements) ||
         !is_power_of_two(vecs.size()) ||

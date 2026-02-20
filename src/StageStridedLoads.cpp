@@ -161,19 +161,28 @@ public:
     std::map<std::pair<const Allocate *, const Load *>, Expr> replacements;
     std::map<const Allocate *, int> padding;
     Scope<const Allocate *> allocation_scope;
-    std::map<Stmt, std::vector<std::pair<std::string, Expr>>> let_injections;
-
-    using IRMutator::mutate;
+    std::map<const IRNode *, std::vector<std::pair<std::string, Expr>>> let_injections;
 
     Stmt mutate(const Stmt &s) override {
         Stmt stmt = IRMutator::mutate(s);
-        auto it = let_injections.find(s);
+        auto it = let_injections.find(s.get());
         if (it != let_injections.end()) {
             for (const auto &[name, value] : it->second) {
                 stmt = LetStmt::make(name, value, stmt);
             }
         }
         return stmt;
+    }
+
+    Expr mutate(const Expr &e) override {
+        Expr expr = IRMutator::mutate(e);
+        auto it = let_injections.find(e.get());
+        if (it != let_injections.end()) {
+            for (const auto &[name, value] : it->second) {
+                expr = Let::make(name, value, expr);
+            }
+        }
+        return expr;
     }
 
 protected:
@@ -209,8 +218,8 @@ protected:
     using IRMutator::visit;
 };
 
-Stmt innermost_containing_stmt(const Stmt &root, const std::set<const Load *> &exprs) {
-    Stmt result;
+const IRNode *innermost_containing_node(const Stmt &root, const std::set<const Load *> &exprs) {
+    const IRNode *result = nullptr;
     // The innermost containing stmt is whichever stmt node contains the
     // largest number of our exprs, with ties breaking inwards.
     int seen = 0, best = 0;
@@ -219,28 +228,34 @@ Stmt innermost_containing_stmt(const Stmt &root, const std::set<const Load *> &e
                     int old = seen;
                     self->mutate_base(s);
                     if (old == 0 && seen > best) {
-                        result = s;
+                        result = s.get();
                         best = seen;
                     }
                     return s;  //
                 },
                 [&](auto *self, const Expr &e) {
+                    int old = seen;
                     const Load *l = e.as<Load>();
                     if (l && exprs.count(l)) {
                         seen++;
                     };
-                    return self->mutate_base(e);  //
+                    self->mutate_base(e);
+                    if (old == 0 && seen > best) {
+                        result = e.get();
+                        best = seen;
+                    }
+                    return e;  //
                 });
     internal_assert(seen) << "None of the exprs were found\n";
     return result;
 }
 
-bool can_hoist_shared_load(const Stmt &s, const std::string &buf, const Expr &idx) {
+bool can_hoist_shared_load(const IRNode *n, const std::string &buf, const Expr &idx) {
     // Check none of the variables the idx depends on are defined somewhere
     // within this stmt, and there are no stores to the given buffer in the
     // stmt.
     bool result = true;
-    visit_with(s,                                 //
+    visit_with(n,                                 //
                [&](auto *self, const Let *let) {  //
                    result &= !expr_uses_var(idx, let->name);
                },
@@ -293,7 +308,8 @@ Stmt stage_strided_loads(const Stmt &s) {
             // We have a complete cluster of loads. Make a single dense load
             int lanes = k.lanes * k.stride;
             int64_t first_offset = load->first;
-            Expr idx = Ramp::make(k.base + (int)first_offset, make_one(k.base.type()), lanes);
+            Expr base = common_subexpression_elimination(k.base);
+            Expr idx = Ramp::make(base + (int)first_offset, make_one(k.base.type()), lanes);
             Type t = k.type.with_lanes(lanes);
             const Load *op = load->second[0];
 
@@ -304,14 +320,12 @@ Stmt stage_strided_loads(const Stmt &s) {
 
             Expr shared_load = Load::make(t, k.buf, idx, op->image, op->param,
                                           const_true(lanes), op->alignment);
-            shared_load = common_subexpression_elimination(shared_load);
 
             // If possible, we do the shuffle as an in-place transpose followed
             // by a dense slice. This is more efficient when extracting multiple
             // slices.
-            Stmt let_site = innermost_containing_stmt(alloc ? Stmt(alloc) : s, all_loads);
+            const IRNode *let_site = innermost_containing_node(alloc ? Stmt(alloc) : s, all_loads);
             if (can_hoist_shared_load(let_site, k.buf, idx)) {
-                shared_load = Shuffle::make_transpose(shared_load, k.stride);
                 std::string name = unique_name('t');
                 Expr var = Variable::make(shared_load.type(), name);
                 for (; load != v.end() && load->first < first_offset + k.stride; load++) {
@@ -321,6 +335,7 @@ Stmt stage_strided_loads(const Stmt &s) {
                         replacer.replacements.emplace(std::make_pair(alloc, l), shuf);
                     }
                 }
+                shared_load = Shuffle::make_transpose(shared_load, k.stride);
                 replacer.let_injections[let_site].emplace_back(name, shared_load);
             } else {
                 for (; load != v.end() && load->first < first_offset + k.stride; load++) {

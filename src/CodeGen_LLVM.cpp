@@ -2289,18 +2289,20 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
     } else {
         // The number of vectors shares a factor with the length of the
         // vectors. Pick some factor of the number of vectors, interleave in
-        // separate groups, and then interleave the results. Doing the smallest
-        // factor first seems to be fastest.
+        // separate groups, and then interleave the results. Do the largest
+        // power of two factor first.
         const int n = (int)vecs.size();
-        int f = 1;
-        for (int i = 2; i < n; i++) {
-            if (n % i == 0) {
-                f = i;
-                break;
+        int f = n & -n;
+        if (f == 1 || f == n) {
+            for (int i = 2; i < n; i++) {
+                if (n % i == 0) {
+                    f = i;
+                    break;
+                }
             }
         }
 
-        internal_assert(f > 1 && f < n);
+        internal_assert(f > 1 && f < n && n % f == 0) << f << " " << n;
 
         vector<vector<Value *>> groups(f);
         for (size_t i = 0; i < vecs.size(); i++) {
@@ -2409,14 +2411,19 @@ std::vector<Value *> CodeGen_LLVM::deinterleave_vector(Value *vec, int num_vecs)
     } else {
         // Do a lower-factor deinterleave, then deinterleave each result
         // again. We know there's a non-trivial factor because if it were prime
-        // the gcd above would have been 1. Unlike interleave, doing the largest
-        // factor first seems to be fastest.
-        int f = 1;
-        for (int i = 2; i < num_vecs; i++) {
-            if (num_vecs % i == 0) {
-                f = i;
+        // the gcd above would have been 1. Do the largest power-of-two factor
+        // first.
+        int f = num_vecs & -num_vecs;
+        if (f == 1 || f == num_vecs) {
+            for (int i = 2; i < num_vecs; i++) {
+                if (num_vecs % i == 0) {
+                    f = i;
+                    break;
+                }
             }
         }
+
+        internal_assert(f > 1 && f < num_vecs && num_vecs % f == 0) << f << " " << num_vecs;
 
         auto partial = deinterleave_vector(vec, f);
         std::vector<Value *> result(num_vecs);
