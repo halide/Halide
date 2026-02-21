@@ -5030,10 +5030,11 @@ Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
     }
     // Check for type identity *after* normalizing to fixed vectors
     internal_assert(a->getType() == b->getType());
+    int elements_a = get_vector_num_elements(a->getType());
     vector<Constant *> llvm_indices(indices.size());
     for (size_t i = 0; i < llvm_indices.size(); i++) {
         if (indices[i] >= 0) {
-            internal_assert(indices[i] < get_vector_num_elements(a->getType()) * 2);
+            internal_assert(indices[i] < elements_a * 2) << indices[i] << "  " << elements_a * 2;
             llvm_indices[i] = ConstantInt::get(i32_t, indices[i]);
         } else {
             // Only let -1 be undef.
