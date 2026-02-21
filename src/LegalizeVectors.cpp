@@ -8,6 +8,8 @@
 #include "Util.h"
 
 #include <optional>
+#include <unordered_set>
+#include <vector>
 
 namespace Halide {
 namespace Internal {
@@ -16,13 +18,19 @@ namespace {
 
 using namespace std;
 
-const char *legalization_error_guide = "\n(This issue can most likely be resolved by reducing lane count for vectorize() calls in the schedule, or disabling it.)";
+const char *legalization_error_guide = "\n"
+                                       "(This is an implemenation limitation in Halide right now. This issue can most likely be \n"
+                                       " worked around by reducing lane count for vectorize() calls in GPU schedules, or disabling it.)";
 
 int max_lanes_for_device(DeviceAPI api, int parent_max_lanes) {
+    // The environment variable below (HL_FORCE_VECTOR_LEGALIZATION) is here solely for testing purposes.
+    // It is useful to "stress-test" this lowering pass by forcing a shorter maximal vector size across
+    // all codegen across the entire test suite. This should not be used in real uses of Halide.
     std::string envvar = Halide::Internal::get_env_variable("HL_FORCE_VECTOR_LEGALIZATION");
     if (!envvar.empty()) {
         return std::atoi(envvar.c_str());
     }
+    // The remainder of this function correctly determines the number of lanes the device API supports.
     switch (api) {
     case DeviceAPI::Metal:
     case DeviceAPI::WebGPU:
@@ -53,13 +61,13 @@ std::string vec_name(const string &name, int lane_start, int lane_count) {
 class LiftLetToLetStmt : public IRMutator {
     using IRMutator::visit;
 
+    unordered_set<string> lifted_let_names;
     vector<const Let *> lets;
     Expr visit(const Let *op) override {
-        for (const Let *existing : lets) {
-            internal_assert(existing->name != op->name)
-                << "Let " << op->name << " = ...  cannot be lifted to LetStmt because the name is not unique.";
-        }
+        internal_assert(lifted_let_names.count(op->name) == 0)
+            << "Let " << op->name << " = ...  cannot be lifted to LetStmt because the name is not unique.";
         lets.push_back(op);
+        lifted_let_names.insert(op->name);
         return mutate(op->body);
     }
 
@@ -124,8 +132,7 @@ class ExtractLanes : public IRMutator {
             return result;
         }
 
-        internal_error << "Unhandled trace call in LegalizeVectors' ExtractLanes: " << *event << legalization_error_guide << "\n"
-                       << "Please report this error on GitHub." << legalization_error_guide;
+        internal_error << "Unhandled trace call in LegalizeVectors' ExtractLanes: " << *event << legalization_error_guide;
         return Expr(0);
     }
 
@@ -332,7 +339,7 @@ public:
         just_in_let_definition = false;
         Stmt mutated = IRMutator::mutate(s);
         for (auto &let : reverse_view(lets)) {
-            // There is no recurse into let.second. This is handled by repeatedly calling this tranform.
+            // There is no recurse into let.second. This is handled by repeatedly calling this transform.
             mutated = LetStmt::make(let.first, let.second, mutated);
         }
         return mutated;
@@ -576,17 +583,12 @@ Stmt legalize_vectors_in_device_loop(const For *op) {
 }
 
 Stmt legalize_vectors(const Stmt &s) {
-    class LegalizeDeviceLoops : public IRMutator {
-        using IRMutator::visit;
-        Stmt visit(const For *op) override {
-            if (max_lanes_for_device(op->device_api, 0)) {
-                return legalize_vectors_in_device_loop(op);
-            } else {
-                return IRMutator::visit(op);
-            }
+    return mutate_with(s, [&](auto *self, const For *op) {
+        if (max_lanes_for_device(op->device_api, 0)) {
+            return legalize_vectors_in_device_loop(op);
         }
-    } mutator;
-    return mutator.mutate(s);
+        return self->visit_base(op);
+    });
 }
 }  // namespace Internal
 }  // namespace Halide

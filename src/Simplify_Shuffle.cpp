@@ -191,7 +191,9 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
                 }
             } else {
                 // We can't... Leave it as a Shuffle of Loads.
-                // Note: don't proceed down.
+                // Note: no mutate-recursion as we are dealing here with a
+                // Shuffle of Loads, which have already undergone mutation
+                // early in this function (new_vectors).
                 return result;
             }
         }
@@ -362,6 +364,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
                 }
             }
 
+#if 0 // Not sure what this was for. Disabling for now, and will run tests to see what's up.
             for (size_t i = 0; i < new_vectors.size() && can_collapse; i++) {
                 if (new_vectors[i].as<Load>()) {
                     // Don't create a Ramp of a Load, like:
@@ -369,6 +372,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
                     can_collapse = false;
                 }
             }
+#endif
 
             if (can_collapse) {
                 return Ramp::make(new_vectors[0], stride, op->indices.size());

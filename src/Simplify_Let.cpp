@@ -187,6 +187,11 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
                 // pure operations from _all_ arguments to the Shuffle, we will
                 // instead substitute all of the vars that go in the shuffle, and
                 // instead guard against side effects by checking with `is_pure()`.
+                //
+                // Also, it is safe to substitute in without combinatorial
+                // blow-up, because deeply nested concats implies a
+                // combinatorially-large number of vector lanes, which we can't
+                // express in the type system anyway.
                 replacement = substitute(f.new_name, shuffle, replacement);
                 f.new_value = Expr();
                 break;
