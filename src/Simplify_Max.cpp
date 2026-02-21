@@ -212,6 +212,7 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
          rewrite(max(slice(x, c0, c1, c2), slice(y, c0, c1, c2)), slice(max(x, y), c0, c1, c2), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
          rewrite(max(slice(x, c0, c1, c2), max(slice(y, c0, c1, c2), z)), max(slice(max(x, y), c0, c1, c2), z), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
          rewrite(max(slice(x, c0, c1, c2), max(z, slice(y, c0, c1, c2))), max(slice(max(x, y), c0, c1, c2), z), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+         rewrite(max(transpose(x, c0), transpose(y, c0)), transpose(max(x, y), c0)) ||
 
          (no_overflow(op->type) &&
           (rewrite(max(max(x, y) + c0, x), max(x, y + c0), c0 < 0) ||

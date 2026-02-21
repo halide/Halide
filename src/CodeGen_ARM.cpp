@@ -1886,6 +1886,7 @@ void CodeGen_ARM::visit(const Shuffle *op) {
     if (target.os != Target::IOS && target.os != Target::OSX &&
         load &&
         op->vectors.size() == 1 &&
+        op->is_slice() &&
         2 <= stride && stride <= 4 &&
         op->slice_begin() < stride &&
         load->type.lanes() == stride * op->type.lanes()) {

@@ -37,7 +37,7 @@ namespace Internal {
  * internal allocations it adds padding to the allocation explicitly, by setting
  * the padding field on Allocate nodes.
  */
-Stmt stage_strided_loads(const Stmt &s);
+Stmt stage_strided_loads(const Stmt &s, const Target &target);
 
 }  // namespace Internal
 }  // namespace Halide
