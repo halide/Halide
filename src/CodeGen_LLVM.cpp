@@ -2195,10 +2195,15 @@ Value *CodeGen_LLVM::optimization_fence(Value *v) {
     internal_assert(!t->isScalableTy())
         << "optimization_fence does not support scalable vectors yet";
     const int bits = t->getPrimitiveSizeInBits();
-    if (bits % 16) {
+    if (bits % 32) {
+        const int lanes = get_vector_num_elements(t);
+        const int padded_lanes = (lanes + 3) / 4 * 4;
+        v = slice_vector(v, 0, padded_lanes);
+        v = optimization_fence(v);
+        v = slice_vector(v, 0, lanes);
         return v;
     }
-    llvm::Type *float_type = llvm_type_of(Float(16, bits / 16));
+    llvm::Type *float_type = llvm_type_of(Float(32, bits / 32));
     v = builder->CreateBitCast(v, float_type);
     v = builder->CreateArithmeticFence(v, float_type);
     return builder->CreateBitCast(v, t);

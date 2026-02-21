@@ -281,7 +281,7 @@ bool can_hoist_shared_load(const IRNode *n, const std::string &buf, const Expr &
 
 }  // namespace
 
-Stmt stage_strided_loads(const Stmt &s) {
+Stmt stage_strided_loads(const Stmt &s, const Target &target) {
     FindStridedLoads finder;
     ReplaceStridedLoads replacer;
 
@@ -329,18 +329,27 @@ Stmt stage_strided_loads(const Stmt &s) {
             // If possible, we do the shuffle as an in-place transpose followed
             // by a dense slice. This is more efficient when extracting multiple
             // slices.
-            const IRNode *let_site = innermost_containing_node(k.scope, all_loads);
+            const IRNode *let_site = innermost_containing_node(k.scope ? k.scope : s.get(), all_loads);
             if (can_hoist_shared_load(let_site, k.buf, idx)) {
+                // For larger strides we can do a better job at shuffling if we
+                // do it as one big task. For stride 2 it interferes with
+                // horizontal add pattern matching. On ARM it also interferes
+                // with LLVM's pattern matching for vld3 and vld4.
+                bool transpose_shared_load = k.stride > 2 && (target.arch != Target::ARM || k.stride > 4);
                 std::string name = unique_name('t');
                 Expr var = Variable::make(shared_load.type(), name);
                 for (; load != v.end() && load->first < first_offset + k.stride; load++) {
                     int row = load->first - first_offset;
-                    Expr shuf = Shuffle::make_slice(var, row * k.lanes, 1, k.lanes);
+                    Expr shuf = transpose_shared_load ?
+                        Shuffle::make_slice(var, row * k.lanes, 1, k.lanes) :
+                        Shuffle::make_slice(var, row, k.stride, k.lanes);
                     for (const Load *l : load->second) {
                         replacer.replacements.emplace(std::make_pair(alloc, l), shuf);
                     }
                 }
-                shared_load = Shuffle::make_transpose(shared_load, k.stride);
+                if (transpose_shared_load) {
+                    shared_load = Shuffle::make_transpose(shared_load, k.stride);
+                }
                 replacer.let_injections[let_site].emplace_back(name, shared_load);
             } else {
                 for (; load != v.end() && load->first < first_offset + k.stride; load++) {
