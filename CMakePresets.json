@@ -9,314 +9,165 @@
     {
       "name": "base",
       "hidden": true,
-      "binaryDir": "build/${presetName}",
-      "installDir": "install/${presetName}"
-    },
-    {
-      "name": "ci",
-      "hidden": true,
-      "inherits": "base",
-      "toolchainFile": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "Halide_LLVM_SHARED_LIBS": false
-      }
-    },
-    {
-      "name": "vcpkg",
-      "inherits": "base",
-      "displayName": "vcpkg deps",
-      "description": "Build dependencies (with Halide exclusions) with vcpkg",
-      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-      "cacheVariables": {
-        "VCPKG_MANIFEST_FEATURES": "developer",
-        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg"
-      }
-    },
-    {
-      "name": "vcpkg-full",
-      "inherits": "vcpkg",
-      "displayName": "vcpkg deps (all dependencies)",
-      "description": "Build ALL dependencies with vcpkg",
-      "cacheVariables": {
-        "VCPKG_OVERLAY_PORTS": ""
-      }
-    },
-    {
-      "name": "vs2022",
-      "hidden": true,
-      "inherits": [
-        "vcpkg"
-      ],
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      },
-      "generator": "Visual Studio 17 2022",
-      "toolset": "host=x64"
-    },
-    {
-      "name": "debug",
-      "inherits": "base",
-      "displayName": "Debug",
-      "description": "Debug build with no special settings",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
-    },
-    {
-      "name": "release",
-      "inherits": "base",
-      "displayName": "Release",
-      "description": "Release build with no special settings",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "debug-vcpkg",
-      "inherits": [
-        "debug",
-        "vcpkg"
-      ],
-      "displayName": "Debug (vcpkg)",
-      "description": "Debug build for a single-config generator, vcpkg dependencies"
-    },
-    {
-      "name": "release-vcpkg",
-      "inherits": [
-        "release",
-        "vcpkg"
-      ],
-      "displayName": "Release (vcpkg)",
-      "description": "Release build for a single-config generator, vcpkg dependencies"
-    },
-    {
-      "name": "debug-vcpkg-full",
-      "inherits": [
-        "debug",
-        "vcpkg-full"
-      ],
-      "displayName": "Debug (vcpkg-full)",
-      "description": "Debug build for a single-config generator, vcpkg-full dependencies"
-    },
-    {
-      "name": "release-vcpkg-full",
-      "inherits": [
-        "release",
-        "vcpkg-full"
-      ],
-      "displayName": "Release (vcpkg-full)",
-      "description": "Release build for a single-config generator, vcpkg-full dependencies"
-    },
-    {
-      "name": "win32",
-      "inherits": "vs2022",
-      "displayName": "Win32 (Visual Studio)",
-      "description": "Visual Studio-based Win32 build with vcpkg dependencies.",
-      "architecture": "Win32"
-    },
-    {
-      "name": "win64",
-      "inherits": "vs2022",
-      "displayName": "Win64 (Visual Studio)",
-      "description": "Visual Studio-based x64 build with vcpkg dependencies.",
-      "architecture": "x64"
-    },
-    {
-      "name": "win32-vcpkg-full",
-      "inherits": [
-        "vcpkg-full",
-        "vs2022"
-      ],
-      "displayName": "Win32 (Visual Studio/vcpkg-full)",
-      "description": "Visual Studio-based Win32 build with vcpkg-full dependencies.",
-      "architecture": "Win32"
-    },
-    {
-      "name": "win64-vcpkg-full",
-      "inherits": [
-        "vcpkg-full",
-        "vs2022"
-      ],
-      "displayName": "Win64 (Visual Studio/vcpkg-full)",
-      "description": "Visual Studio-based x64 build with vcpkg-full dependencies.",
-      "architecture": "x64"
-    },
-    {
-      "name": "macOS",
-      "displayName": "macOS (Apple Clang)",
-      "description": "macOS build using Apple Clang and Homebrew LLVM",
       "generator": "Ninja",
-      "inherits": "release",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Darwin"
-      },
-      "cacheVariables": {
-        "Halide_LLVM_ROOT": "/opt/homebrew/opt/llvm"
-      }
-    },
-    {
-      "name": "macOS-vcpkg",
-      "inherits": [
-        "macOS",
-        "vcpkg"
-      ],
-      "displayName": "macOS (vcpkg)",
-      "description": "macOS build with vcpkg dependencies"
-    },
-    {
-      "name": "macOS-vcpkg-full",
-      "inherits": [
-        "macOS",
-        "vcpkg-full"
-      ],
-      "displayName": "macOS (vcpkg-full)",
-      "description": "macOS build with vcpkg-full dependencies"
-    },
-    {
-      "name": "package",
-      "hidden": true,
+      "binaryDir": "${sourceParentDir}/halide-build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "LLVM_DIR": "$env{LLVM_DIR}",
-        "Clang_DIR": "$env{Clang_DIR}",
-        "LLD_DIR": "$env{LLD_DIR}",
-        "WITH_TESTS": "NO",
-        "WITH_TUTORIALS": "NO",
-        "WITH_DOCS": "YES",
-        "WITH_UTILS": "YES",
-        "WITH_PYTHON_BINDINGS": "NO",
-        "CMAKE_INSTALL_DATADIR": "share/Halide"
+        "CMAKE_INSTALL_PREFIX": "${sourceParentDir}/halide-install",
+        "CMAKE_PREFIX_PATH": "$env{VIRTUAL_ENV}",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "Halide_BUILD_HEXAGON_REMOTE_RUNTIME": "OFF",
+        "Halide_LLVM_ROOT": "$env{HALIDE_LLVM_ROOT}",
+        "Halide_TARGET": "${presetName}",
+        "WITH_PYTHON_BINDINGS": "ON",
+        "WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING": "OFF",
+        "WITH_TEST_FUZZ": "OFF"
       }
     },
     {
-      "name": "package-windows",
+      "name": "wasm-wabt",
+      "hidden": true,
+      "cacheVariables": {
+        "Halide_WASM_BACKEND": "wabt",
+        "V8_INCLUDE_PATH": "",
+        "V8_LIB_PATH": "",
+        "WITH_PYTHON_BINDINGS": "OFF"
+      }
+    },
+    {
+      "name": "wasm-v8",
+      "hidden": true,
+      "cacheVariables": {
+        "Halide_WASM_BACKEND": "V8",
+        "V8_INCLUDE_PATH": "/home/halidenightly/v8/v8/include",
+        "V8_LIB_PATH": "/home/halidenightly/v8/v8/out/x64.release.static/obj/libv8_monolith.a",
+        "WITH_PYTHON_BINDINGS": "OFF"
+      }
+    },
+    {
+      "name": "host",
+      "inherits": "base"
+    },
+    {
+      "name": "host-cuda",
+      "inherits": "base"
+    },
+    {
+      "name": "host-cuda-opencl",
+      "inherits": "base"
+    },
+    {
+      "name": "host-hvx",
+      "inherits": "base",
+      "cacheVariables": {
+        "Halide_BUILD_HEXAGON_REMOTE_RUNTIME": "ON"
+      }
+    },
+    {
+      "name": "host-metal",
+      "inherits": "base"
+    },
+    {
+      "name": "host-opencl",
+      "inherits": "base"
+    },
+    {
+      "name": "host-vulkan-vk_int8-vk_int16-vk_int64-vk_float16-vk_float64-vk_v13",
+      "inherits": "base"
+    },
+    {
+      "name": "host-webgpu",
+      "inherits": "base"
+    },
+    {
+      "name": "host.serialization_jit_testing",
+      "inherits": "base",
+      "cacheVariables": {
+        "Halide_TARGET": "host",
+        "WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING": "ON"
+      }
+    },
+    {
+      "name": "wasm-32-wasmrt-wasm_mvponly.wabt",
       "inherits": [
-        "package",
-        "vs2022"
+        "base",
+        "wasm-wabt"
       ],
-      "displayName": "Package ZIP for Windows",
-      "description": "Build for packaging Windows shared libraries.",
-      "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "BUILD_SHARED_LIBS": "YES",
-        "CMAKE_INSTALL_BINDIR": "bin/$<CONFIG>",
-        "CMAKE_INSTALL_LIBDIR": "lib/$<CONFIG>",
-        "Halide_INSTALL_CMAKEDIR": "lib/cmake/Halide",
-        "Halide_INSTALL_HELPERSDIR": "lib/cmake/HalideHelpers"
+        "Halide_TARGET": "wasm-32-wasmrt-wasm_mvponly"
       }
     },
     {
-      "name": "package-unix",
-      "inherits": "package",
-      "displayName": "Package UNIX shared libs",
-      "description": "Build for packaging UNIX shared libraries.",
-      "binaryDir": "shared-Release",
+      "name": "wasm-32-wasmrt-wasm_simd128-wasm_threads.wabt",
+      "inherits": [
+        "base",
+        "wasm-wabt"
+      ],
       "cacheVariables": {
-        "BUILD_SHARED_LIBS": "YES"
+        "Halide_TARGET": "wasm-32-wasmrt-wasm_simd128-wasm_threads"
       }
     },
     {
-      "name": "linux-x64-asan",
-      "inherits": "ci",
-      "displayName": "ASAN (Linux x64)",
-      "description": "Build everything with ASAN enabled",
+      "name": "wasm-32-wasmrt-wasm_simd128.V8",
+      "inherits": [
+        "base",
+        "wasm-v8"
+      ],
       "cacheVariables": {
-        "LLVM_ROOT": "$penv{LLVM_ROOT}"
+        "Halide_TARGET": "wasm-32-wasmrt-wasm_simd128"
       }
     },
     {
-      "name": "linux-x64-fuzzer",
-      "inherits": "ci",
-      "displayName": "Fuzzer (Linux x64)",
-      "description": "Build everything with fuzzing enabled",
+      "name": "wasm-32-wasmrt-wasm_simd128.wabt",
+      "inherits": [
+        "base",
+        "wasm-wabt"
+      ],
       "cacheVariables": {
-        "LLVM_ROOT": "$penv{LLVM_ROOT}",
-        "WITH_TUTORIALS": "NO",
-        "WITH_UTILS": "NO",
-        "WITH_PYTHON_BINDINGS": "NO",
-        "WITH_TESTS": "YES",
-        "WITH_TEST_AUTO_SCHEDULE": "NO",
-        "WITH_TEST_CORRECTNESS": "NO",
-        "WITH_TEST_ERROR": "NO",
-        "WITH_TEST_WARNING": "NO",
-        "WITH_TEST_PERFORMANCE": "NO",
-        "WITH_TEST_RUNTIME": "NO",
-        "WITH_TEST_GENERATOR": "NO",
-        "WITH_TEST_FUZZ": "YES",
-        "BUILD_SHARED_LIBS": "NO"
-      }
-    }
-  ],
-  "buildPresets": [
-    {
-      "name": "debug",
-      "configurePreset": "debug",
-      "displayName": "Debug",
-      "description": "Debug build with no special settings"
-    },
-    {
-      "name": "release",
-      "configurePreset": "release",
-      "displayName": "Release",
-      "description": "Release build with no special settings"
-    },
-    {
-      "name": "linux-x64-asan",
-      "configurePreset": "linux-x64-asan",
-      "displayName": "ASAN (Linux x64)",
-      "description": "Build everything with ASAN enabled"
-    },
-    {
-      "name": "linux-x64-fuzzer",
-      "configurePreset": "linux-x64-fuzzer",
-      "displayName": "Fuzzing (Linux x64)",
-      "description": "Build everything with fuzzing enabled"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "debug",
-      "configurePreset": "debug",
-      "displayName": "Debug",
-      "description": "Test everything with Debug build",
-      "output": {
-        "outputOnFailure": true
+        "Halide_TARGET": "wasm-32-wasmrt-wasm_simd128"
       }
     },
     {
-      "name": "release",
-      "configurePreset": "release",
-      "displayName": "Release",
-      "description": "Test everything with Release build",
-      "output": {
-        "outputOnFailure": true
+      "name": "wasm-32-wasmrt-webgpu.wabt",
+      "inherits": [
+        "base",
+        "wasm-wabt"
+      ],
+      "cacheVariables": {
+        "Halide_TARGET": "wasm-32-wasmrt-webgpu"
       }
     },
     {
-      "name": "linux-x64-asan",
-      "configurePreset": "linux-x64-asan",
-      "displayName": "ASAN (Linux x64)",
-      "description": "Test everything with ASAN enabled",
-      "environment": {
-        "ASAN_OPTIONS": "detect_leaks=0:detect_container_overflow=0"
-      },
-      "output": {
-        "outputOnFailure": true
-      }
+      "name": "x86-32-linux",
+      "inherits": "base"
     },
     {
-      "name": "linux-x64-fuzzer",
-      "configurePreset": "linux-x64-fuzzer",
-      "displayName": "Fuzzing (Linux x64)",
-      "description": "Test everything with fuzzing enabled",
-      "output": {
-        "outputOnFailure": true
-      }
+      "name": "x86-32-windows",
+      "inherits": "base"
+    },
+    {
+      "name": "x86-64-linux",
+      "inherits": "base"
+    },
+    {
+      "name": "x86-64-linux-sse41",
+      "inherits": "base"
+    },
+    {
+      "name": "x86-64-osx",
+      "inherits": "base"
+    },
+    {
+      "name": "x86-64-osx-sse41",
+      "inherits": "base"
+    },
+    {
+      "name": "x86-64-windows",
+      "inherits": "base"
+    },
+    {
+      "name": "x86-64-windows-sse41",
+      "inherits": "base"
     }
   ]
 }
