@@ -17,7 +17,6 @@
         "CMAKE_PREFIX_PATH": "$env{VIRTUAL_ENV}",
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "Halide_BUILD_HEXAGON_REMOTE_RUNTIME": "OFF",
-        "Halide_LLVM_ROOT": "$env{HALIDE_LLVM_ROOT}",
         "Halide_TARGET": "${presetName}",
         "WITH_PYTHON_BINDINGS": "ON",
         "WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING": "OFF",
