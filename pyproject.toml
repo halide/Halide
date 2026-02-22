@@ -198,8 +198,19 @@ conflicts = [
 
 [tool.uv.sources]
 halide-llvm = { index = "halide" }
+numpy = [
+    { index = "piwheels", marker = "platform_machine == 'armv7l'" },
+]
+pillow = [
+    { index = "piwheels", marker = "platform_machine == 'armv7l'" },
+]
 
 [[tool.uv.index]]
 name = "halide"
 url = "https://pypi.halide-lang.org/simple"
+explicit = true
+
+[[tool.uv.index]]
+name = "piwheels"
+url = "https://www.piwheels.org/simple"
 explicit = true
