@@ -142,7 +142,7 @@ ci-llvm-22 = [
 ]
 ci-llvm-main = [
     { name = "cmake" },
-    { name = "halide-llvm", version = "23.0.0.dev81834+gafd4df07", source = { registry = "https://pypi.halide-lang.org/simple" } },
+    { name = "halide-llvm", version = "23.0.0.dev82675+gf912679b", source = { registry = "https://pypi.halide-lang.org/simple" } },
     { name = "ninja" },
     { name = "onnx" },
     { name = "pybind11" },
@@ -305,21 +305,21 @@ wheels = [
 
 [[package]]
 name = "halide-llvm"
-version = "23.0.0.dev81834+gafd4df07"
+version = "23.0.0.dev82675+gf912679b"
 source = { registry = "https://pypi.halide-lang.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.11'",
     "python_full_version < '3.11'",
 ]
 wheels = [
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev81834+gafd4df07-py3-none-macosx_11_0_arm64.whl", hash = "sha256:4eca129cde79579e194ef7d775defae543092329a1eb3c483cd065fd8e2228f8" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev81834+gafd4df07-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:9b82abc220bc368f9e808fa4fedcb8a2065b6bfb82eda8e122911383f89d331a" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev81834+gafd4df07-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:1f07eab86d813d638b58e3c8bd36150a22a6a6becce426a53528ad24ba3bb1b1" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev81834+gafd4df07-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:f35101f6e2cd507a1b1e93e476371579053b0bb50c9c660bade39918b5f7aec3" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev81834+gafd4df07-py3-none-manylinux_2_28_i686.whl", hash = "sha256:5b9e3958ccc11e5a9cf134ad9d6241c0789e71b348cb9d9cce09824c0c17f276" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev81834+gafd4df07-py3-none-manylinux_2_31_armv7l.whl", hash = "sha256:f71c335bc08d00dfd97a6b67cc4b183b8b19188ea1dc20a9c372d1a3bb063918" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev81834+gafd4df07-py3-none-win32.whl", hash = "sha256:1b369a0a2f7eab7c614e7c46d71e2af11d01b72149d9e1d88d4a1dda1e183cb0" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev81834+gafd4df07-py3-none-win_amd64.whl", hash = "sha256:7bb4aba2459d2ff529645affc71670ed5f99586a6a97568d417e02a3e5d53f70" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev82675+gf912679b-py3-none-macosx_11_0_arm64.whl", hash = "sha256:f3f9582bae03e7e689d7a196128503ead543997e290a6b737c9374aefbcf7793" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev82675+gf912679b-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:887902cd494abbc1ea45958b21dfc64af0ad7d501d57e671c642f7b10acaad88" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev82675+gf912679b-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:271c3108d18ee7d458f25e86e16fa601d2afaca3d59f96f41bbbd46b43e5bacd" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev82675+gf912679b-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:d6f6ceb4c14f399e68f76a0475b4304770da12153e993158c211f5f0d3f4d7d9" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev82675+gf912679b-py3-none-manylinux_2_28_i686.whl", hash = "sha256:f1f80d9f4c9ac4bd11bdb165be5caf9b03819c05381d29658a624cc3d4c1addf" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev82675+gf912679b-py3-none-manylinux_2_31_armv7l.whl", hash = "sha256:9ee862a747b22556d17a55e03044268d2517515675e16e1fe17de20c82a0f028" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev82675+gf912679b-py3-none-win32.whl", hash = "sha256:a954a2f0de848f4868d4ebd5e0d0b1c2126dbbe864c9dab6105d93a774c60eab" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev82675+gf912679b-py3-none-win_amd64.whl", hash = "sha256:08f5110998bd8a08e1ff215453066ec9e6e43609b17fa5aba6544332eea0b37a" },
 ]
 
 [[package]]
