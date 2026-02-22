@@ -36,7 +36,7 @@ T cast_arg(const py::handle &arg) {
     } catch (const py::cast_error &) {
         _halide_user_error
             << "select(): Expected " << py::str(py::type::of<T>().attr("__name__"))
-            << " but got " << py::str(arg.get_type().attr("__name__")) << ": "
+            << " but got " << py::str(py::type::of(arg).attr("__name__")) << ": "
             << py::str(arg);
     }
 }

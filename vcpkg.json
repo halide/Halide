@@ -5,7 +5,7 @@
   "homepage": "https://github.com/halide/Halide",
   "license": "MIT",
   "supports": "!uwp",
-  "builtin-baseline": "d567b667adba0e72c5c3931ddbe745b66aa34b73",
+  "builtin-baseline": "23dc124705fcac41cf35c33dd9541f5094a9c19f",
   "default-features": [
     "jit",
     "serialization"
