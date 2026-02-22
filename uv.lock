@@ -94,13 +94,15 @@ dependencies = [
 
 [package.dev-dependencies]
 apps = [
-    { name = "onnx" },
+    { name = "onnx", version = "1.17.0", source = { registry = "https://www.piwheels.org/simple" }, marker = "platform_machine == 'armv7l' or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
+    { name = "onnx", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'armv7l' or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
     { name = "pytest" },
 ]
 ci-base = [
     { name = "cmake" },
     { name = "ninja" },
-    { name = "onnx" },
+    { name = "onnx", version = "1.17.0", source = { registry = "https://www.piwheels.org/simple" }, marker = "platform_machine == 'armv7l' or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
+    { name = "onnx", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'armv7l' or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
     { name = "pybind11" },
     { name = "pytest" },
     { name = "ruff" },
@@ -112,7 +114,8 @@ ci-llvm-20 = [
     { name = "cmake" },
     { name = "halide-llvm", version = "20.1.8", source = { registry = "https://pypi.halide-lang.org/simple" } },
     { name = "ninja" },
-    { name = "onnx" },
+    { name = "onnx", version = "1.17.0", source = { registry = "https://www.piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
+    { name = "onnx", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-20') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
     { name = "pybind11" },
     { name = "pytest" },
     { name = "ruff" },
@@ -124,7 +127,8 @@ ci-llvm-21 = [
     { name = "cmake" },
     { name = "halide-llvm", version = "21.1.8", source = { registry = "https://pypi.halide-lang.org/simple" } },
     { name = "ninja" },
-    { name = "onnx" },
+    { name = "onnx", version = "1.17.0", source = { registry = "https://www.piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
+    { name = "onnx", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
     { name = "pybind11" },
     { name = "pytest" },
     { name = "ruff" },
@@ -136,7 +140,8 @@ ci-llvm-22 = [
     { name = "cmake" },
     { name = "halide-llvm", version = "22.1.0rc3", source = { registry = "https://pypi.halide-lang.org/simple" } },
     { name = "ninja" },
-    { name = "onnx" },
+    { name = "onnx", version = "1.17.0", source = { registry = "https://www.piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main')" },
+    { name = "onnx", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
     { name = "pybind11" },
     { name = "pytest" },
     { name = "ruff" },
@@ -148,7 +153,8 @@ ci-llvm-main = [
     { name = "cmake" },
     { name = "halide-llvm", version = "23.0.0.dev0+g80f627e6", source = { registry = "https://pypi.halide-lang.org/simple" } },
     { name = "ninja" },
-    { name = "onnx" },
+    { name = "onnx", version = "1.17.0", source = { registry = "https://www.piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main')" },
+    { name = "onnx", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
     { name = "pybind11" },
     { name = "pytest" },
     { name = "ruff" },
@@ -177,13 +183,15 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 apps = [
-    { name = "onnx", specifier = "==1.18.0" },
+    { name = "onnx", marker = "platform_machine != 'armv7l'", specifier = "==1.18.0" },
+    { name = "onnx", marker = "platform_machine == 'armv7l'", specifier = "==1.17.0", index = "https://www.piwheels.org/simple" },
     { name = "pytest" },
 ]
 ci-base = [
     { name = "cmake", specifier = ">=3.28" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
-    { name = "onnx", specifier = "==1.18.0" },
+    { name = "onnx", marker = "platform_machine != 'armv7l'", specifier = "==1.18.0" },
+    { name = "onnx", marker = "platform_machine == 'armv7l'", specifier = "==1.17.0", index = "https://www.piwheels.org/simple" },
     { name = "pybind11", specifier = ">=2.11.1" },
     { name = "pytest" },
     { name = "ruff", specifier = ">=0.12" },
@@ -195,7 +203,8 @@ ci-llvm-20 = [
     { name = "cmake", specifier = ">=3.28" },
     { name = "halide-llvm", specifier = "~=20.1.0", index = "https://pypi.halide-lang.org/simple" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
-    { name = "onnx", specifier = "==1.18.0" },
+    { name = "onnx", marker = "platform_machine != 'armv7l'", specifier = "==1.18.0" },
+    { name = "onnx", marker = "platform_machine == 'armv7l'", specifier = "==1.17.0", index = "https://www.piwheels.org/simple" },
     { name = "pybind11", specifier = ">=2.11.1" },
     { name = "pytest" },
     { name = "ruff", specifier = ">=0.12" },
@@ -207,7 +216,8 @@ ci-llvm-21 = [
     { name = "cmake", specifier = ">=3.28" },
     { name = "halide-llvm", specifier = "~=21.1.0", index = "https://pypi.halide-lang.org/simple" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
-    { name = "onnx", specifier = "==1.18.0" },
+    { name = "onnx", marker = "platform_machine != 'armv7l'", specifier = "==1.18.0" },
+    { name = "onnx", marker = "platform_machine == 'armv7l'", specifier = "==1.17.0", index = "https://www.piwheels.org/simple" },
     { name = "pybind11", specifier = ">=2.11.1" },
     { name = "pytest" },
     { name = "ruff", specifier = ">=0.12" },
@@ -219,7 +229,8 @@ ci-llvm-22 = [
     { name = "cmake", specifier = ">=3.28" },
     { name = "halide-llvm", specifier = "~=22.1.0rc0", index = "https://pypi.halide-lang.org/simple" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
-    { name = "onnx", specifier = "==1.18.0" },
+    { name = "onnx", marker = "platform_machine != 'armv7l'", specifier = "==1.18.0" },
+    { name = "onnx", marker = "platform_machine == 'armv7l'", specifier = "==1.17.0", index = "https://www.piwheels.org/simple" },
     { name = "pybind11", specifier = ">=2.11.1" },
     { name = "pytest" },
     { name = "ruff", specifier = ">=0.12" },
@@ -231,7 +242,8 @@ ci-llvm-main = [
     { name = "cmake", specifier = ">=3.28" },
     { name = "halide-llvm", specifier = "~=23.0.0.dev0", index = "https://pypi.halide-lang.org/simple" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
-    { name = "onnx", specifier = "==1.18.0" },
+    { name = "onnx", marker = "platform_machine != 'armv7l'", specifier = "==1.18.0" },
+    { name = "onnx", marker = "platform_machine == 'armv7l'", specifier = "==1.17.0", index = "https://www.piwheels.org/simple" },
     { name = "pybind11", specifier = ">=2.11.1" },
     { name = "pytest" },
     { name = "ruff", specifier = ">=0.12" },
@@ -561,15 +573,35 @@ wheels = [
 
 [[package]]
 name = "onnx"
+version = "1.17.0"
+source = { registry = "https://www.piwheels.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.11' and platform_machine == 'armv7l'",
+    "python_full_version < '3.11' and platform_machine == 'armv7l'",
+]
+dependencies = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://www.piwheels.org/simple" }, marker = "(python_full_version < '3.11' and platform_machine == 'armv7l') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
+    { name = "numpy", version = "2.4.2", source = { registry = "https://www.piwheels.org/simple" }, marker = "(python_full_version >= '3.11' and platform_machine == 'armv7l') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
+    { name = "protobuf", marker = "platform_machine == 'armv7l' or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
+]
+wheels = [
+    { url = "https://archive1.piwheels.org/simple/onnx/onnx-1.17.0-cp311-cp311-linux_armv6l.whl", hash = "sha256:e0685ef16ae65d2738b31c46928289eb3bd1adabc5917b8d56f778248b6c054f" },
+    { url = "https://archive1.piwheels.org/simple/onnx/onnx-1.17.0-cp311-cp311-linux_armv7l.whl", hash = "sha256:e0685ef16ae65d2738b31c46928289eb3bd1adabc5917b8d56f778248b6c054f" },
+]
+
+[[package]]
+name = "onnx"
 version = "1.18.0"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.11' and platform_machine != 'armv7l'",
+    "python_full_version < '3.11' and platform_machine != 'armv7l'",
+]
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and platform_machine != 'armv7l') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://www.piwheels.org/simple" }, marker = "(python_full_version < '3.11' and platform_machine == 'armv7l') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (python_full_version >= '3.11' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
     { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and platform_machine != 'armv7l') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
-    { name = "numpy", version = "2.4.2", source = { registry = "https://www.piwheels.org/simple" }, marker = "(python_full_version >= '3.11' and platform_machine == 'armv7l') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (python_full_version < '3.11' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine != 'armv7l' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
-    { name = "protobuf" },
-    { name = "typing-extensions" },
+    { name = "protobuf", marker = "platform_machine != 'armv7l' or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
+    { name = "typing-extensions", marker = "platform_machine != 'armv7l' or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3d/60/e56e8ec44ed34006e6d4a73c92a04d9eea6163cc12440e35045aec069175/onnx-1.18.0.tar.gz", hash = "sha256:3d8dbf9e996629131ba3aa1afd1d8239b660d1f830c6688dd7e03157cccd6b9c", size = 12563009, upload-time = "2025-05-12T22:03:09.626Z" }
 wheels = [

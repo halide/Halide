@@ -68,7 +68,8 @@ dev = [
     "setuptools-scm>=8.3.1",
 ]
 apps = [
-    "onnx==1.18.0", # for apps/onnx
+    "onnx==1.18.0; platform_machine != 'armv7l'",  # for apps/onnx
+    "onnx==1.17.0; platform_machine == 'armv7l'",  # for apps/onnx
     "pytest", # unspecified onnx dependency
 ]
 tools = [
@@ -198,12 +199,9 @@ conflicts = [
 
 [tool.uv.sources]
 halide-llvm = { index = "halide" }
-numpy = [
-    { index = "piwheels", marker = "platform_machine == 'armv7l'" },
-]
-pillow = [
-    { index = "piwheels", marker = "platform_machine == 'armv7l'" },
-]
+numpy = { index = "piwheels", marker = "platform_machine == 'armv7l'" }
+onnx = { index = "piwheels", marker = "platform_machine == 'armv7l'" }
+pillow = { index = "piwheels", marker = "platform_machine == 'armv7l'" }
 
 [[tool.uv.index]]
 name = "halide"
