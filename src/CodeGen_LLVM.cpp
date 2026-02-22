@@ -5091,6 +5091,12 @@ bool CodeGen_LLVM::supports_atomic_add(const Type &t) const {
 }
 
 bool CodeGen_LLVM::use_pic() const {
+    // PIC is meaningless on Windows. Position independence is handled by the
+    // PE/COFF linker via base relocations, not by the compiler via GOT/PLT.
+    // See: https://github.com/llvm/llvm-project/pull/137643
+    if (target.os == Target::Windows) {
+        return false;
+    }
     return true;
 }
 
