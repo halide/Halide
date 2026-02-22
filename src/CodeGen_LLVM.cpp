@@ -5091,10 +5091,13 @@ bool CodeGen_LLVM::supports_atomic_add(const Type &t) const {
 }
 
 bool CodeGen_LLVM::use_pic() const {
-    // PIC is meaningless on Windows. Position independence is handled by the
-    // PE/COFF linker via base relocations, not by the compiler via GOT/PLT.
+    // PIC is meaningless on 32-bit Windows. Position independence is handled
+    // by the PE/COFF linker via base relocations, not by the compiler via
+    // GOT/PLT. On 64-bit Windows, Reloc::PIC_ causes LLVM to emit RIP-relative
+    // addressing which avoids ADDR32 relocations that are incompatible
+    // with /LARGEADDRESSAWARE.
     // See: https://github.com/llvm/llvm-project/pull/137643
-    if (target.os == Target::Windows) {
+    if (target.os == Target::Windows && target.bits == 32) {
         return false;
     }
     return true;
