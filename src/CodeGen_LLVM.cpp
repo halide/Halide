@@ -1969,7 +1969,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     llvm::Type *load_type = llvm_type_of(type);
 
     llvm::Constant *constant_index = dyn_cast<llvm::Constant>(index);
-    if (constant_index && constant_index->isZeroValue()) {
+    if (constant_index && constant_index->isNullValue()) {
         return base_address;
     }
 
