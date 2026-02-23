@@ -1,0 +1,25 @@
+{
+  "name": "halide-apps",
+  "version": "22.0.0",
+  "license": "MIT",
+  "supports": "!uwp",
+  "builtin-baseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1",
+  "default-features": [
+    "jit",
+    "serialization"
+  ],
+  "dependencies": [
+    {
+      "name": "cuda",
+      "platform": "(windows & x64 & !uwp & !xbox) | (linux & x64) | (linux & arm64)"
+    },
+    "eigen3",
+    "libjpeg-turbo",
+    "libpng",
+    "openblas",
+    {
+      "name": "opencl",
+      "platform": "(windows & x64 & !uwp & !xbox) | (linux & x64) | (linux & arm64)"
+    }
+  ]
+}
