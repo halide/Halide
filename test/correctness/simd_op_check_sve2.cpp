@@ -447,13 +447,14 @@ private:
                 Expr shift = (i_2 % bits) - (bits / 2);
                 Expr round_s = (cast_i(1) >> min(shift, 0)) / 2;
                 Expr round_u = (cast_u(1) >> min(shift, 0)) / 2;
-                add_8_16_32(sel_op("vrshl.s", "srshl", "srshlr"), cast_i((widen_i(i_1) + round_s) << shift));
-                add_8_16_32(sel_op("vrshl.u", "urshl", "urshlr"), cast_u((widen_u(u_1) + round_u) << shift));
+                // The r suffix is optional - it just changes which of the two args gets clobbered
+                add_8_16_32(sel_op("vrshl.s", "srshlr?"), cast_i((widen_i(i_1) + round_s) << shift));
+                add_8_16_32(sel_op("vrshl.u", "urshlr?"), cast_u((widen_u(u_1) + round_u) << shift));
 
                 round_s = (cast_i(1) << max(shift, 0)) / 2;
                 round_u = (cast_u(1) << max(shift, 0)) / 2;
-                add_8_16_32(sel_op("vrshl.s", "srshl", "srshlr"), cast_i((widen_i(i_1) + round_s) >> shift));
-                add_8_16_32(sel_op("vrshl.u", "urshl", "urshlr"), cast_u((widen_u(u_1) + round_u) >> shift));
+                add_8_16_32(sel_op("vrshl.s", "srshlr?"), cast_i((widen_i(i_1) + round_s) >> shift));
+                add_8_16_32(sel_op("vrshl.u", "urshlr?"), cast_u((widen_u(u_1) + round_u) >> shift));
 
                 // VRSHR    I       -       Rounding Shift Right
                 add_8_16_32(sel_op("vrshr.s", "srshr", "srshl"), cast_i((widen_i(i_1) + 1) >> 1));
