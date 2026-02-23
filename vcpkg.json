@@ -7,10 +7,7 @@
   "supports": "!uwp",
   "builtin-baseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1",
   "default-features": [
-    "jit",
-    "python-bindings",
-    "serialization",
-    "wasm-executor"
+    "jit"
   ],
   "dependencies": [
     {
@@ -30,6 +27,22 @@
     "vulkan-headers"
   ],
   "features": {
+    "developer": {
+      "description": "Dependencies needed to run tests",
+      "dependencies": [
+        "libjpeg-turbo",
+        "libpng",
+        {
+          "name": "halide",
+          "default-features": false,
+          "features": [
+            "python-bindings",
+            "serialization",
+            "wasm-executor"
+          ]
+        }
+      ]
+    },
     "jit": {
       "description": "Include targets needed to compile for the library architecture",
       "dependencies": [
