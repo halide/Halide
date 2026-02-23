@@ -362,7 +362,9 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
         }
         return Shuffle::make(loaded_vecs, s_index->indices);
     } else if (const Ramp *inner_ramp = r_index ? r_index->base.as<Ramp>() : nullptr;
-               inner_ramp && is_const_one(r_index->stride)) {
+               inner_ramp &&
+               !is_const_one(inner_ramp->stride) &&
+               is_const_one(r_index->stride)) {
         // If it's a nested ramp and the outer ramp has stride 1, swap the
         // nesting order of the ramps to make dense loads and transpose the
         // resulting vector instead.
