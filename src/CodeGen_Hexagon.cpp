@@ -95,6 +95,7 @@ protected:
     llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &v) override;
     llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
                                  const std::vector<int> &indices) override;
+    llvm::Value *optimization_fence(llvm::Value *v) override;
     using CodeGen_Posix::shuffle_vectors;
     ///@}
 
@@ -1294,6 +1295,12 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
 
     // Use a general delta operation.
     return vdelta(concat_vectors({a, b}), indices);
+}
+
+Value *CodeGen_Hexagon::optimization_fence(Value *v) {
+    // As of llvm 21, the base class version seems to trip up LLVM's hexagon
+    // backend, possibly because it relies on a floating point type.
+    return v;
 }
 
 Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,

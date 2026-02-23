@@ -465,7 +465,7 @@ protected:
 
     /** A fence to prevent fusion of ops by llvm. Designed for floats, but we
      * abuse it to prevent shufflevector fusion too. */
-    llvm::Value *optimization_fence(llvm::Value *);
+    virtual llvm::Value *optimization_fence(llvm::Value *);
 
     /** Description of an intrinsic function overload. Overloads are resolved
      * using both argument and return types. The scalar types of the arguments
