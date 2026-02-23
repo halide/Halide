@@ -173,6 +173,9 @@ search = "VERSION {current_version}"
 src = "vcpkg.json"
 
 [[tool.tbump.file]]
+src = "apps/vcpkg.json"
+
+[[tool.tbump.file]]
 src = "src/runtime/HalideRuntime.h"
 version_template = "{major}"
 search = "#define HALIDE_VERSION_MAJOR {current_version}"

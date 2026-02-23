@@ -1,15 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-# TODO: remove this after updating build bots.
 if (CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
-    if (NOT DEFINED VCPKG_OVERLAY_PORTS)
-        set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_LIST_DIR}/cmake/vcpkg")
-    endif ()
-
-    if (NOT DEFINED VCPKG_MANIFEST_FEATURES)
-        set(VCPKG_MANIFEST_FEATURES developer)
-    endif ()
-
     # vcpkg and FetchContent are incompatible
     set(Halide_USE_FETCHCONTENT OFF)
 endif ()

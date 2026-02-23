@@ -5,10 +5,12 @@
   "homepage": "https://github.com/halide/Halide",
   "license": "MIT",
   "supports": "!uwp",
-  "builtin-baseline": "d567b667adba0e72c5c3931ddbe745b66aa34b73",
+  "builtin-baseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1",
   "default-features": [
     "jit",
-    "serialization"
+    "python-bindings",
+    "serialization",
+    "wasm-executor"
   ],
   "dependencies": [
     {
@@ -28,30 +30,6 @@
     "vulkan-headers"
   ],
   "features": {
-    "developer": {
-      "description": "Include all Halide features to facilitate development",
-      "dependencies": [
-        {
-          "name": "halide",
-          "default-features": false,
-          "features": [
-            "python-bindings",
-            "serialization",
-            "target-all",
-            "tests",
-            "wasm-executor"
-          ]
-        },
-        {
-          "name": "llvm",
-          "default-features": false,
-          "features": [
-            "clang-tools-extra",
-            "enable-assertions"
-          ]
-        }
-      ]
-    },
     "jit": {
       "description": "Include targets needed to compile for the library architecture",
       "dependencies": [
@@ -179,23 +157,6 @@
           "features": [
             "target-riscv"
           ]
-        }
-      ]
-    },
-    "tests": {
-      "description": "Include dependencies needed for testing Halide",
-      "dependencies": [
-        {
-          "name": "cuda",
-          "platform": "(windows & x64 & !uwp & !xbox) | (linux & x64) | (linux & arm64)"
-        },
-        "eigen3",
-        "libjpeg-turbo",
-        "libpng",
-        "openblas",
-        {
-          "name": "opencl",
-          "platform": "(windows & x64 & !uwp & !xbox) | (linux & x64) | (linux & arm64)"
         }
       ]
     },
