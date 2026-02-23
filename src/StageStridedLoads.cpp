@@ -340,7 +340,10 @@ Stmt stage_strided_loads(const Stmt &s, const Target &target) {
                 // do it as one big task. For stride 2 it interferes with
                 // horizontal add pattern matching. On ARM it also interferes
                 // with LLVM's pattern matching for vld3 and vld4.
-                bool transpose_shared_load = k.stride > 2 && (target.arch != Target::ARM || k.stride > 4);
+                bool transpose_shared_load = k.stride > 2;
+                if (target.arch == Target::ARM || target.arch == Target::Hexagon) {
+                    transpose_shared_load = k.stride > 4;
+                }
                 std::string name = unique_name('t');
                 Expr var = Variable::make(shared_load.type(), name);
                 for (; load != v.end() && load->first < first_offset + k.stride; load++) {
