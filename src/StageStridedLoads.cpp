@@ -329,7 +329,12 @@ Stmt stage_strided_loads(const Stmt &s, const Target &target) {
             // If possible, we do the shuffle as an in-place transpose followed
             // by a dense slice. This is more efficient when extracting multiple
             // slices.
-            const IRNode *let_site = innermost_containing_node(k.scope ? k.scope : s.get(), all_loads);
+
+            // We can't lift the shared load further out than the scope over
+            // which the loads definition occur. If k.scope is null, the loads
+            // are valid everywhere (it must be an input buffer)
+            const IRNode *outermost = k.scope ? k.scope : s.get();
+            const IRNode *let_site = innermost_containing_node(outermost, all_loads);
             if (can_hoist_shared_load(let_site, k.buf, idx)) {
                 // For larger strides we can do a better job at shuffling if we
                 // do it as one big task. For stride 2 it interferes with
@@ -341,8 +346,8 @@ Stmt stage_strided_loads(const Stmt &s, const Target &target) {
                 for (; load != v.end() && load->first < first_offset + k.stride; load++) {
                     int row = load->first - first_offset;
                     Expr shuf = transpose_shared_load ?
-                        Shuffle::make_slice(var, row * k.lanes, 1, k.lanes) :
-                        Shuffle::make_slice(var, row, k.stride, k.lanes);
+                                    Shuffle::make_slice(var, row * k.lanes, 1, k.lanes) :
+                                    Shuffle::make_slice(var, row, k.stride, k.lanes);
                     for (const Load *l : load->second) {
                         replacer.replacements.emplace(std::make_pair(alloc, l), shuf);
                     }

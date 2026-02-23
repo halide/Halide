@@ -2197,7 +2197,9 @@ Value *CodeGen_LLVM::optimization_fence(Value *v) {
     const int bits = t->getPrimitiveSizeInBits();
     if (bits % 32) {
         const int lanes = get_vector_num_elements(t);
-        const int padded_lanes = (lanes + 3) / 4 * 4;
+        const int element_bits = t->getScalarSizeInBits();
+        const int lanes_per_32_bits = 32 / element_bits;
+        const int padded_lanes = align_up(lanes, lanes_per_32_bits);
         v = slice_vector(v, 0, padded_lanes);
         v = optimization_fence(v);
         v = slice_vector(v, 0, lanes);
@@ -2215,19 +2217,20 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
         internal_assert(vecs[0]->getType() == vecs[i]->getType());
     }
     int vec_elements = get_vector_num_elements(vecs[0]->getType());
+    const int num_vecs = (int)vecs.size();
 
-    int factor = gcd(vec_elements, (int)vecs.size());
+    int factor = gcd(vec_elements, num_vecs);
 
-    if (vecs.size() == 1) {
+    if (num_vecs == 1) {
         return vecs[0];
-    } else if (vecs.size() == 2) {
+    } else if (num_vecs == 2) {
         Value *a = vecs[0];
         Value *b = vecs[1];
         vector<int> indices(vec_elements * 2);
         for (int i = 0; i < vec_elements * 2; i++) {
             indices[i] = i % 2 == 0 ? i / 2 : i / 2 + vec_elements;
         }
-        return optimization_fence(shuffle_vectors(a, b, indices));
+        return shuffle_vectors(a, b, indices);
     } else if (factor == 1) {
         // The number of vectors and the vector length is
         // coprime. (E.g. interleaving an odd number of vectors of some
@@ -2290,27 +2293,41 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
         }
 
         return concat_vectors(v);
-
     } else {
         // The number of vectors shares a factor with the length of the
         // vectors. Pick some factor of the number of vectors, interleave in
         // separate groups, and then interleave the results. Do the largest
         // power of two factor first.
-        const int n = (int)vecs.size();
-        int f = n & -n;
-        if (f == 1 || f == n) {
-            for (int i = 2; i < n; i++) {
-                if (n % i == 0) {
+        int f = num_vecs & -num_vecs;
+        if (f == 1 || f == num_vecs) {
+            for (int i = 2; i < num_vecs; i++) {
+                if (num_vecs % i == 0) {
                     f = i;
                     break;
                 }
             }
         }
 
-        internal_assert(f > 1 && f < n && n % f == 0) << f << " " << n;
+        // if f == 1 then the vector length is a multiple of the
+        // interleaving factor and the number of vectors is prime but not two
+        // (e.g. vec_elements = 24 and num_vecs = 3). Pad each vector out to a
+        // power of two size, interleave, and discard the tail of the
+        // result. This buys us some extra room to run Catanzaro's algorithm in.
+        if (f == 1) {
+            int padded_size = next_power_of_two(vec_elements);
+            std::vector<Value *> padded(num_vecs);
+            for (int i = 0; i < num_vecs; i++) {
+                padded[i] = slice_vector(vecs[i], 0, padded_size);
+            }
+            Value *v = interleave_vectors(padded);
+            return slice_vector(v, 0, num_vecs * vec_elements);
+        }
+
+        internal_assert(f > 1 && f < num_vecs && num_vecs % f == 0)
+            << f << " " << num_vecs << " " << factor;
 
         vector<vector<Value *>> groups(f);
-        for (size_t i = 0; i < vecs.size(); i++) {
+        for (int i = 0; i < num_vecs; i++) {
             groups[i % f].push_back(vecs[i]);
         }
 
@@ -2428,7 +2445,23 @@ std::vector<Value *> CodeGen_LLVM::deinterleave_vector(Value *vec, int num_vecs)
             }
         }
 
-        internal_assert(f > 1 && f < num_vecs && num_vecs % f == 0) << f << " " << num_vecs;
+        // if f == 1 then the final vector length is a multiple of the
+        // deinterleaving factor and the number of vectors is prime but not two
+        // (e.g. vec_elements = 24 and num_vecs = 3). Pad the vector out to a
+        // power of two size, deinterleave, and discard the tail of each vector
+        // result. This buys us some extra room to run Catanzaro's algorithm in.
+        if (f == 1) {
+            int padded_size = next_power_of_two(vec_elements);
+            Value *padded = slice_vector(vec, 0, padded_size * num_vecs);
+            std::vector<Value *> result = deinterleave_vector(padded, num_vecs);
+            for (int i = 0; i < num_vecs; i++) {
+                result[i] = slice_vector(result[i], 0, vec_elements);
+            }
+            return result;
+        }
+
+        internal_assert(f > 1 && f < num_vecs && num_vecs % f == 0)
+            << f << " " << num_vecs << " " << factor;
 
         auto partial = deinterleave_vector(vec, f);
         std::vector<Value *> result(num_vecs);
