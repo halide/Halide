@@ -1221,6 +1221,12 @@ private:
             std::stringstream type_name_stream;
             type_name_stream << e.type();
             std::string decorated_op_name = op_name + "_" + type_name_stream.str() + "_x" + std::to_string(vec_factor);
+
+            // Some regex symbols are illegal in filenames on windows
+            std::string illegal = "<>:\"/\\|?*";
+            std::replace_if(decorated_op_name.begin(), decorated_op_name.end(),  //
+                            [&](char c) { return illegal.find(c) != std::string::npos; }, '_');
+
             auto unique_name = "op_" + decorated_op_name + "_" + std::to_string(parent.tasks.size());
 
             // Bail out after generating the unique_name, so that names are
