@@ -348,6 +348,7 @@ Stmt Simplify::visit(const Store *op) {
     base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
 
     const Load *load = value.as<Load>();
+    const Shuffle *shuf = index.as<Shuffle>();
     const Broadcast *scalar_pred = predicate.as<Broadcast>();
     if (scalar_pred && !scalar_pred->value.type().is_scalar()) {
         // Nested vectorization
@@ -365,6 +366,24 @@ Stmt Simplify::visit(const Store *op) {
     } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
         // foo[x] = foo[x] or foo[x] = undef is a no-op
         return Evaluate::make(0);
+    } else if (shuf && shuf->is_concat()) {
+        // Break a store of a concat of vector indices into separate stores
+        std::string var_name = unique_name('t');
+        Expr var = Variable::make(value.type(), var_name);
+        std::vector<Stmt> stores;
+        int lanes = 0;
+        for (const Expr &idx : shuf->vectors) {
+            stores.push_back(Store::make(op->name,
+                                         Shuffle::make_slice(var, lanes, 1, idx.type().lanes()),
+                                         idx,
+                                         op->param,
+                                         Shuffle::make_slice(predicate, lanes, 1, idx.type().lanes()),
+                                         ModulusRemainder{}));
+            lanes += idx.type().lanes();
+        }
+        Stmt s = Block::make(stores);
+        s = LetStmt::make(var_name, value, s);
+        return mutate(s);
     } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {

@@ -447,13 +447,14 @@ private:
                 Expr shift = (i_2 % bits) - (bits / 2);
                 Expr round_s = (cast_i(1) >> min(shift, 0)) / 2;
                 Expr round_u = (cast_u(1) >> min(shift, 0)) / 2;
-                add_8_16_32(sel_op("vrshl.s", "srshl", "srshlr"), cast_i((widen_i(i_1) + round_s) << shift));
-                add_8_16_32(sel_op("vrshl.u", "urshl", "urshlr"), cast_u((widen_u(u_1) + round_u) << shift));
+                // The r suffix is optional - it just changes which of the two args gets clobbered
+                add_8_16_32(sel_op("vrshl.s", "srshlr?"), cast_i((widen_i(i_1) + round_s) << shift));
+                add_8_16_32(sel_op("vrshl.u", "urshlr?"), cast_u((widen_u(u_1) + round_u) << shift));
 
                 round_s = (cast_i(1) << max(shift, 0)) / 2;
                 round_u = (cast_u(1) << max(shift, 0)) / 2;
-                add_8_16_32(sel_op("vrshl.s", "srshl", "srshlr"), cast_i((widen_i(i_1) + round_s) >> shift));
-                add_8_16_32(sel_op("vrshl.u", "urshl", "urshlr"), cast_u((widen_u(u_1) + round_u) >> shift));
+                add_8_16_32(sel_op("vrshl.s", "srshlr?"), cast_i((widen_i(i_1) + round_s) >> shift));
+                add_8_16_32(sel_op("vrshl.u", "urshlr?"), cast_u((widen_u(u_1) + round_u) >> shift));
 
                 // VRSHR    I       -       Rounding Shift Right
                 add_8_16_32(sel_op("vrshr.s", "srshr", "srshl"), cast_i((widen_i(i_1) + 1) >> 1));
@@ -1220,6 +1221,12 @@ private:
             std::stringstream type_name_stream;
             type_name_stream << e.type();
             std::string decorated_op_name = op_name + "_" + type_name_stream.str() + "_x" + std::to_string(vec_factor);
+
+            // Some regex symbols are illegal in filenames on windows
+            std::string illegal = "<>:\"/\\|?*";
+            std::replace_if(decorated_op_name.begin(), decorated_op_name.end(),  //
+                            [&](char c) { return illegal.find(c) != std::string::npos; }, '_');
+
             auto unique_name = "op_" + decorated_op_name + "_" + std::to_string(parent.tasks.size());
 
             // Bail out after generating the unique_name, so that names are

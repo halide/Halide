@@ -381,7 +381,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after partitioning loops:", s);
 
     debug(1) << "Staging strided loads...\n";
-    s = stage_strided_loads(s);
+    s = stage_strided_loads(s, t);
     log("Lowering after staging strided loads:", s);
 
     debug(1) << "Trimming loops to the region over which they do something...\n";

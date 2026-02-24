@@ -327,8 +327,9 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
     }
 
     ExprInfo base_info;
-    if (const Ramp *r = index.as<Ramp>()) {
-        mutate(r->base, &base_info);
+    const Ramp *r_index = index.as<Ramp>();
+    if (r_index) {
+        mutate(r_index->base, &base_info);
     }
 
     base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
@@ -360,6 +361,19 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
             loaded_vecs.emplace_back(std::move(load));
         }
         return Shuffle::make(loaded_vecs, s_index->indices);
+    } else if (const Ramp *inner_ramp = r_index ? r_index->base.as<Ramp>() : nullptr;
+               inner_ramp &&
+               !is_const_one(inner_ramp->stride) &&
+               is_const_one(r_index->stride)) {
+        // If it's a nested ramp and the outer ramp has stride 1, swap the
+        // nesting order of the ramps to make dense loads and transpose the
+        // resulting vector instead.
+        Expr transposed_index =
+            Ramp::make(Ramp::make(inner_ramp->base, make_one(inner_ramp->base.type()), r_index->lanes),
+                       Broadcast::make(inner_ramp->stride, r_index->lanes), inner_ramp->lanes);
+        Expr transposed_load =
+            Load::make(op->type, op->name, transposed_index, op->image, op->param, predicate, align);
+        return mutate(Shuffle::make_transpose(transposed_load, r_index->lanes), info);
     } else if (predicate.same_as(op->predicate) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {

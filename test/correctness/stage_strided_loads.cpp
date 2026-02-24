@@ -86,10 +86,7 @@ int main(int argc, char **argv) {
         f(x) += {buf(2 * x), buf(2 * x + 1)};
         f.update().vectorize(x, 8, TailStrategy::RoundUp);
 
-        // In this case, the dense load appears twice across the two store
-        // statements for the two tuple components, but it will get deduped by
-        // llvm.
-        checker.check(f, 2);
+        checker.check(f, 1);
     }
 
     {
@@ -113,7 +110,7 @@ int main(int argc, char **argv) {
         g.vectorize(x, 8, TailStrategy::RoundUp);
         f.compute_at(g, x).vectorize(x);
 
-        checker.check(g, 2);
+        checker.check(g, 1);
     }
 
     {
@@ -125,7 +122,7 @@ int main(int argc, char **argv) {
         g(x) = f(x);
         g.vectorize(x, 8, TailStrategy::RoundUp);
 
-        checker.check(g, 2);
+        checker.check(g, 1);
     }
 
     {
@@ -135,7 +132,7 @@ int main(int argc, char **argv) {
         f(x, c) = buf(4 * x + c) + 4 * x;
         f.vectorize(x, 8, TailStrategy::RoundUp).bound(c, 0, 4).unroll(c).reorder(c, x);
 
-        checker.check(f, 4);
+        checker.check(f, 1);
     }
 
     {
@@ -152,7 +149,7 @@ int main(int argc, char **argv) {
         f.tile(x, y, xi, yi, 8, 8, TailStrategy::RoundUp).vectorize(xi).reorder(c, x, y);
         g.compute_at(f, x).vectorize(x);
         h.compute_at(f, x).vectorize(x);
-        checker.check(f, 2);
+        checker.check(f, 1);
     }
 
     // We can always densify strided loads to internal allocations, because we
@@ -181,7 +178,7 @@ int main(int argc, char **argv) {
     {
         Func f;
         Var x;
-        f(x) = buf(16 * x) + buf(16 * x + 15);
+        f(x) = buf(17 * x) + buf(17 * x + 15);
         f.vectorize(x, 16, TailStrategy::RoundUp);
 
         checker.check_not(f, 0);
