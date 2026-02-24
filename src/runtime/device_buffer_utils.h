@@ -129,6 +129,10 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
     // are added to the copy by inserting it such that the stride is
     // in ascending order in the dst.
     for (int i = 0; i < dst->dimensions; i++) {
+        // Skip extent-one dimensions
+        if (dst->dim[i].extent == 1) {
+            continue;
+        }
         // TODO: deal with negative strides.
         uint64_t dst_stride_bytes = (uint64_t)dst->dim[i].stride * dst->type.bytes();
         uint64_t src_stride_bytes = (uint64_t)src->dim[i].stride * src->type.bytes();
@@ -147,7 +151,6 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
             c.src_stride_bytes[j] = c.src_stride_bytes[j - 1];
         }
         c.extent[insert] = min(src->dim[i].extent, dst->dim[i].extent);
-        // debug(nullptr) << "c.extent[" << insert << "] = " << (int)(c.extent[insert]) << "\n";
         c.dst_stride_bytes[insert] = dst_stride_bytes;
         c.src_stride_bytes[insert] = src_stride_bytes;
     };
@@ -174,6 +177,7 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
         c.src_stride_bytes[MAX_COPY_DIMS - 1] = 0;
         c.dst_stride_bytes[MAX_COPY_DIMS - 1] = 0;
     }
+
     return c;
 }
 

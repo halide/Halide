@@ -576,19 +576,22 @@ string CodeGen_PTX_Dev::mattrs() const {
         return "+ptx71";
     } else if (target.has_feature(Target::CUDACapability80)) {
         return "+ptx70";
-    } else if (target.has_feature(Target::CUDACapability70) ||
-               target.has_feature(Target::CUDACapability75)) {
+    } else if (target.has_feature(Target::CUDACapability75)) {
+        return "+ptx63";
+    } else if (target.has_feature(Target::CUDACapability70)) {
         return "+ptx60";
     } else if (target.has_feature(Target::CUDACapability61)) {
         return "+ptx50";
     } else if (target.features_any_of({Target::CUDACapability32,
                                        Target::CUDACapability50})) {
-        // Need ptx isa 4.0.
+        // sm_32 needs ptx isa 4.0 even though it seems to break the ordering
         return "+ptx40";
-    } else {
-        // Use the default. For llvm 3.5 it's ptx 3.2.
-        return "";
+    } else if (target.features_any_of({Target::CUDACapability35,
+                                       Target::CUDACapability30})) {
+        return "+ptx32";
     }
+    // Let LLVM pick
+    return "";
 }
 
 bool CodeGen_PTX_Dev::use_soft_float_abi() const {
