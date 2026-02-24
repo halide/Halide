@@ -1471,10 +1471,11 @@ void CodeGen_ARM::visit(const Store *op) {
         intrin_type = t;
         Type elt = t.element_of();
         int vec_bits = t.bits() * t.lanes();
-        if (elt == Float(32) || elt == Float(64) ||
-            is_float16_and_has_feature(elt) ||
-            elt == Int(8) || elt == Int(16) || elt == Int(32) || elt == Int(64) ||
-            elt == UInt(8) || elt == UInt(16) || elt == UInt(32) || elt == UInt(64)) {
+        if (t.bits() <= target.bits &&
+            (elt == Float(32) || elt == Float(64) ||
+             is_float16_and_has_feature(elt) ||
+             elt == Int(8) || elt == Int(16) || elt == Int(32) || elt == Int(64) ||
+             elt == UInt(8) || elt == UInt(16) || elt == UInt(32) || elt == UInt(64))) {
             const int target_vector_bits = native_vector_bits();
             if (vec_bits % 128 == 0) {
                 type_ok_for_vst = true;
