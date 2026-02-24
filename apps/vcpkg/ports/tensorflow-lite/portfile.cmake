@@ -7,6 +7,7 @@ vcpkg_from_github(
     SHA512 48463c1dde438f18bf8d17104537258d6edf308be9f48af4fb40abee011a6f8c1c8aa50220fd1928bdfb8f251b8a9c764a1db50c9b7b9b0fe34d9e11d5273e4e
     PATCHES
     fix-neon2sse-config.patch
+    fix-msvc-friend-access.patch
 )
 
 # Protobuf is used by subdirectories (profiling/proto, tools/benchmark).
