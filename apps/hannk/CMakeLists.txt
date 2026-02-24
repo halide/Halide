@@ -29,7 +29,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 # (We need to do this even if HANNK_BUILD_TFLITE is off,
 # so that the .tflite file parser can get the right schema)
 set(TFLITE_VERSION_MAJOR "2" CACHE STRING "Major version of TFLite to assume")
-set(TFLITE_VERSION_MINOR "19" CACHE STRING "Minor version of TFLite to assume")
+set(TFLITE_VERSION_MINOR "21" CACHE STRING "Minor version of TFLite to assume")
 set(TFLITE_VERSION_PATCH "0" CACHE STRING "Patch version of TFLite to assume")
 set(TFLITE_VERSION "${TFLITE_VERSION_MAJOR}.${TFLITE_VERSION_MINOR}.${TFLITE_VERSION_PATCH}")
 
@@ -44,6 +44,14 @@ add_compile_definitions(HANNK_BUILD_TFLITE=$<BOOL:${HANNK_BUILD_TFLITE}>)
 
 # Find HalideHelpers -- this is just the Runtime headers and CMake functions, but no libraries
 find_package(HalideHelpers REQUIRED)
+if (HANNK_BUILD_TFLITE)
+    find_package(tensorflow-lite CONFIG REQUIRED)
+endif ()
+
+# Canonical include root for hannk headers (e.g. "util/error_util.h").
+add_library(hannk_headers INTERFACE)
+target_include_directories(hannk_headers INTERFACE
+                           $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
 # ----------------------------
 
