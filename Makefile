@@ -16,6 +16,8 @@ MAKEFLAGS += --no-builtin-rules
 
 UNAME = $(shell uname)
 
+$(info $(shell cat /proc/cpuinfo))
+
 ifeq ($(OS), Windows_NT)
     $(error Halide no longer supports the MinGW environment. Please use MSVC through CMake instead.)
 else
