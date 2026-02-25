@@ -38,7 +38,7 @@ namespace {
 class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
 public:
     /** Create a PTX device code generator. */
-    CodeGen_PTX_Dev(const Target &host, bool any_strict_float);
+    CodeGen_PTX_Dev(const Target &host);
     ~CodeGen_PTX_Dev() override;
 
     void add_kernel(Stmt stmt,
@@ -105,9 +105,8 @@ protected:
     bool supports_atomic_add(const Type &t) const override;
 };
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev(const Target &host, bool any_strict_float)
+CodeGen_PTX_Dev::CodeGen_PTX_Dev(const Target &host)
     : CodeGen_LLVM(host) {
-    this->any_strict_float = any_strict_float;
     context = new llvm::LLVMContext();
 }
 
@@ -837,13 +836,13 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
 
 }  // namespace
 
-std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target, bool any_strict_float) {
-    return std::make_unique<CodeGen_PTX_Dev>(target, any_strict_float);
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
+    return std::make_unique<CodeGen_PTX_Dev>(target);
 }
 
 #else  // WITH_PTX
 
-std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target, bool /*any_strict_float*/) {
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
     user_error << "PTX not enabled for this build of Halide.\n";
     return nullptr;
 }
