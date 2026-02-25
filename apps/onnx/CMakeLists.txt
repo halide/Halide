@@ -108,6 +108,13 @@ if (NOT Python_FOUND)
     return()
 endif ()
 
+# Normalize to forward slashes before passing to find_package. vcpkg overrides
+# find_package with a macro that stores ${ARGN} in a double-quoted string; if
+# the path contains a backslash followed by a letter (e.g. \build_bot -> \b),
+# CMake treats it as an escape sequence and errors (CMP0010). file(TO_CMAKE_PATH)
+# converts native separators to forward slashes, sidestepping the issue on all
+# CMake versions.
+file(TO_CMAKE_PATH "${Python_SITEARCH}" Python_SITEARCH)
 find_package(pybind11 HINTS "${Python_SITEARCH}")
 if (NOT pybind11_FOUND)
     message(WARNING "Could NOT find pybind11")
