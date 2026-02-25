@@ -1,24 +1,20 @@
 diff --git a/tensorflow/lite/core/model_building.h b/tensorflow/lite/core/model_building.h
 --- a/tensorflow/lite/core/model_building.h
 +++ b/tensorflow/lite/core/model_building.h
-@@ -136,7 +136,7 @@
+@@ -88,6 +88,7 @@
+ 
+   Buffer(const Buffer&) = default;
+   Buffer& operator=(const Buffer&) = default;
++  InterpreterInfo* GetBuilder() const noexcept { return builder_; }
+ 
+  private:
+   Buffer(InterpreterInfo* builder, BufferIdx buffer_idx)
+@@ -136,7 +137,7 @@
    Tensor(const Tensor&) = default;
    Tensor& operator=(const Tensor&) = default;
  
 -  explicit Tensor(Buffer buffer) : builder_(buffer.builder_) {}
-+  explicit Tensor(Buffer buffer);
++  explicit Tensor(Buffer buffer) : builder_(buffer.GetBuilder()) {}
  
   private:
    Tensor() = default;
-@@ -152,6 +152,11 @@
-   GraphIdx graph_idx_{-1};
- };
- 
-+// Defined out-of-line (after both Buffer and Tensor are complete) to work
-+// around an MSVC bug where friend-class access is not honoured inside inline
-+// constructor bodies defined within the friend class's own class body.
-+inline Tensor::Tensor(Buffer buffer) : builder_(buffer.builder_) {}
-+
- // Represents a subgraph in the TFLite interpreter.
- //
- // Copyable but you shouldn't create such an object by yourself. Use the
