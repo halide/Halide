@@ -311,7 +311,7 @@ public:
     ~PyBuffer() override = default;
 };
 
-py::buffer_info to_buffer_info(Buffer<> &b, bool reverse_axes = true) {
+py::buffer_info to_buffer_info(const Buffer<> &b, bool reverse_axes) {
     if (b.data() == nullptr) {
         throw py::value_error("Cannot convert a Buffer<> with null host ptr to a Python buffer.");
     }
@@ -335,6 +335,48 @@ py::buffer_info to_buffer_info(Buffer<> &b, bool reverse_axes = true) {
     );
 }
 
+// Returns a pair [c_contig, f_contig], where:
+// - If c_contig is true, the buffer is stored in the default order on the Halide side.
+//   - The first dim has stride 1 (innermost first).
+//   - This is true if `b` was constructed without passing anything to `storage_order`,
+//     or equivalently, if `storage_order` was [0, 1, 2, ...].
+// - If f_contig is true, the buffer is stored in reversed order on the Halide side.
+//   - The last dim has stride 1 (innermost last).
+//   - This is true if `b` was constructed with `storage_order` of [d-1, d-2, ..., 0].
+// - It is possible for a Buffer to be both C and F contiguous (e.g., a scalar or a
+//   1D vector), or for a Buffer to be neither (e.g., storage_order=[1, 0, 2] for a 3D
+//   buffer).
+// ELEPHANT: maybe I should just call it [densest_first, densest_last]. But that
+// doesn't imply "contiguous". contiguous_densest_first?
+std::pair<bool, bool> is_any_contiguous(const Buffer<> &b) {
+    if (b.dimensions() == 0) {
+        return {true, true};
+    }
+
+    const int d = b.dimensions();
+
+    int c_stride = 1;  // stride in elements, not bytes
+    int f_stride = 1;
+    bool c_contig = true;
+    bool f_contig = true;
+
+    for (int i = 0; i < d; ++i) {
+        const int c_idx = i;
+        const int f_idx = d - 1 - i;
+        if (b.raw_buffer()->dim[c_idx].stride != c_stride) {
+            c_contig = false;
+        }
+        c_stride *= b.raw_buffer()->dim[c_idx].extent;
+
+        if (b.raw_buffer()->dim[f_idx].stride != f_stride) {
+            f_contig = false;
+        }
+        f_stride *= b.raw_buffer()->dim[f_idx].extent;
+    }
+
+    return {c_contig, f_contig};
+}
+
 }  // namespace
 
 void define_buffer(py::module &m) {
@@ -352,32 +394,40 @@ void define_buffer(py::module &m) {
 
             // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
             // most notably, we can convert to an ndarray by calling numpy.array()
-            .def_buffer([](Buffer<> &b) -> py::buffer_info {
-                return to_buffer_info(b, /*reverse_axes*/ true);
+
+            // ELEPHANT: this always reverses axes, which might be surprising?
+            // We need to update the docs though.
+            // how about reverse axes only when "C", and does not when "F", otherweise, fail?
+            .def_buffer([](Buffer<> &self) -> py::buffer_info {
+                return to_buffer_info(self, /*reverse_axes*/ true);
             })
 
-            // This allows us to use any buffer-like python entity to create a Buffer<>
+            .def("numpy_view", [](Buffer<> &self) -> py::array {
+                const auto [c_contig, f_contig] = is_any_contiguous(self);
+                if (!c_contig && !f_contig) {
+                    throw py::value_error("Buffer is not contiguous in either C or F order; cannot create numpy view.");
+                }
+                const bool reverse_axes = c_contig && !f_contig;
+                // base = py::cast(self) ensures that `self` outlives the returned value.
+                return py::array(to_buffer_info(self, reverse_axes), /*base*/ py::cast(self)); }, "Returns a NumPy array that is a view of this Buffer. If the Buffer is C-contiguous (innermost first), reverses the axes to produce a C-contiguous array (innermost last). If the Buffer is F-contiguous (innermost last), does not reverse the axes, producing an F-contiguous array. If the Buffer is not contiguous in either order, raises an error.")
+
+            .def("numpy_view", [](Buffer<> &self, bool reverse_axes) -> py::array {
+                // base = py::cast(self) ensures that `self` outlives the returned value.
+                return py::array(to_buffer_info(self, reverse_axes), /*base*/ py::cast(self)); }, py::arg("reverse_axes"), "Returns a NumPy array that is a view of this Buffer. The caller decides whether to reverse axis ordering.")
+
+            // This allows us to use any buffer-like Python entity to create a Buffer<>
             // (most notably, an ndarray)
             .def(py::init_alias<py::buffer, const std::string &, bool>(), py::arg("buffer"), py::arg("name") = "", py::arg("reverse_axes") = true)
             .def(py::init_alias<>())
             .def(py::init_alias<const Buffer<> &>())
-            .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
-                     return Buffer<>(type, sizes, name);
-                 }),
-                 py::arg("type"), py::arg("sizes"), py::arg("name") = "")
+            .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> { return Buffer<>(type, sizes, name); }), py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
-            .def(py::init([](Type type, const std::vector<int> &sizes, const std::vector<int> &storage_order, const std::string &name) -> Buffer<> {
-                     return Buffer<>(type, sizes, storage_order, name);
-                 }),
-                 py::arg("type"), py::arg("sizes"), py::arg("storage_order"), py::arg("name") = "")
+            // The default storage order is [0, 1, 2, ...], meaning store the first axis densest.
+            .def(py::init([](Type type, const std::vector<int> &sizes, const std::vector<int> &storage_order, const std::string &name) -> Buffer<> { return Buffer<>(type, sizes, storage_order, name); }), py::arg("type"), py::arg("sizes"), py::arg("storage_order"), py::arg("name") = "")
 
             // Note that this exists solely to allow you to create a Buffer with a null host ptr;
             // this is necessary for some bounds-query operations (e.g. Func::infer_input_bounds).
-            .def_static(
-                "make_bounds_query", [](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
-                    return Buffer<>(type, nullptr, sizes, name);
-                },
-                py::arg("type"), py::arg("sizes"), py::arg("name") = "")
+            .def_static("make_bounds_query", [](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> { return Buffer<>(type, nullptr, sizes, name); }, py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
             .def_static("make_scalar", static_cast<Buffer<> (*)(Type, const std::string &)>(Buffer<>::make_scalar), py::arg("type"), py::arg("name") = "")
             .def_static("make_interleaved", static_cast<Buffer<> (*)(Type, int, int, int, const std::string &)>(Buffer<>::make_interleaved), py::arg("type"), py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("name") = "")
@@ -656,7 +706,7 @@ void define_buffer(py::module &m) {
             .def("__repr__", [](const Buffer<> &b) -> std::string {
                 std::ostringstream o;
                 if (b.defined()) {
-                    o << "<halide.Buffer of type " << halide_type_to_string(b.type()) << " shape:" << get_buffer_shape(b) << ">";
+                    o << "<halide.Buffer of type " << halide_type_to_string(b.type()) << " shape: " << get_buffer_shape(b) << ">";
                 } else {
                     o << "<undefined halide.Buffer>";
                 }
