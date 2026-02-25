@@ -254,7 +254,7 @@ public:
         device_target.os = Target::OSUnknown;
         device_target.arch = Target::ArchUnknown;
         if (target.has_feature(Target::CUDA)) {
-            cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(device_target);
+            cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(device_target, any_strict_float);
         }
         if (target.has_feature(Target::OpenCL)) {
             cgdev[DeviceAPI::OpenCL] = new_CodeGen_OpenCL_Dev(device_target);

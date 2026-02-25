@@ -21,6 +21,7 @@
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
+#include "Util.h"
 #include "WasmExecutor.h"
 
 namespace Halide {
@@ -295,9 +296,12 @@ JITModule::JITModule(const Module &m, const LoweredFunc &fn,
     llvm::reportAndResetTimings();
 }
 
-void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
-                               const std::vector<JITModule> &dependencies,
-                               const std::vector<std::string> &requested_exports) {
+namespace {
+void compile_module_impl(
+    IntrusivePtr<JITModuleContents> &jit_module,
+    std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
+    const std::vector<JITModule> &dependencies,
+    const std::vector<std::string> &requested_exports) {
 
     // Ensure that LLVM is initialized
     CodeGen_LLVM::initialize_llvm();
@@ -348,10 +352,10 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     if ((target.arch == Target::Arch::X86 && target.bits == 32) ||
         (target.arch == Target::Arch::ARM && target.bits == 32) ||
         target.os == Target::Windows) {
-// Fallback to RTDyld-based linking to workaround errors:
-// i386: "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
-// ARM 32bit: Unsupported target machine architecture in ELF object shared runtime-jitted-objectbuffer
-// Windows 64-bit: JIT session error: could not register eh-frame: __register_frame function not found
+        // Fallback to RTDyld-based linking to workaround errors:
+        // i386: "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
+        // ARM 32bit: Unsupported target machine architecture in ELF object shared runtime-jitted-objectbuffer
+        // Windows 64-bit: JIT session error: could not register eh-frame: __register_frame function not found
 #if LLVM_VERSION >= 210
         linkerBuilder = [&](llvm::orc::ExecutionSession &session) {
             return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&](const llvm::MemoryBuffer &) {
@@ -424,6 +428,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     debug(1) << "JIT compiling " << module_name
              << " for " << target.to_string() << "\n";
 
+    using Symbol = JITModule::Symbol;
     std::map<std::string, Symbol> exports;
 
     Symbol entrypoint;
@@ -450,6 +455,18 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     jit_module->entrypoint = entrypoint;
     jit_module->argv_entrypoint = argv_entrypoint;
     jit_module->name = function_name;
+}
+}  // namespace
+
+void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
+                               const std::vector<JITModule> &dependencies,
+                               const std::vector<std::string> &requested_exports) {
+    // LLJIT's SimpleCompiler triggers LLVM's AsmPrinter, which can use a large
+    // amount of stack (observed stack overflows on macOS worker threads with
+    // 512KB default stacks). Use run_with_large_stack to ensure enough space.
+    run_with_large_stack([&]() {
+        compile_module_impl(jit_module, std::move(m), function_name, target, dependencies, requested_exports);
+    });
 }
 
 /*static*/

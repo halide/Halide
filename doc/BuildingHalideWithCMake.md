@@ -146,9 +146,9 @@ building the core pieces of Halide.
 | [Clang]       | `==LLVM`           | _always_                   |                                                     |
 | [LLD]         | `==LLVM`           | _always_                   |                                                     |
 | [flatbuffers] | `~=23.5.26`        | `WITH_SERIALIZATION=ON`    |                                                     |
-| [wabt]        | `==1.0.36`         | `Halide_WASM_BACKEND=wabt` | Does not have a stable API; exact version required. |
+| [wabt]        | `==1.0.39`         | `Halide_WASM_BACKEND=wabt` | Does not have a stable API; exact version required. |
 | [V8]          | trunk              | `Halide_WASM_BACKEND=V8`   | Difficult to build. See [WebAssembly.md]            |
-| [Python]      | `>=3.9`            | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
+| [Python]      | `>=3.10`           | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
 | [pybind11]    | `~=2.11.1`         | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
 
 Halide maintains the following compatibility policy with LLVM: Halide version
@@ -230,11 +230,11 @@ necessary, it is convenient to install Python system-wide on Windows (i.e.
 `C:\Program Files`) because CMake looks at standard paths and registry keys.
 This removes the need to manually set the `PATH`.
 
-Once Python is installed, you can install the Python module dependencies either
-globally or in a [virtual environment][venv] by running
+Once Python is installed, you can install the Python module dependencies in 
+a [virtual environment][venv] by running
 
 ```shell
-$ python -m pip install -r requirements.txt
+$ uv sync
 ```
 
 from the root of the repository.
@@ -271,12 +271,11 @@ $ sudo apt install clang-tools lld llvm-dev libclang-dev liblld-dev \
 ### Python
 
 When running the Python package, you will need to install additional
-dependencies. These are tabulated in `requirements.txt` and may be installed
-with:
+dependencies. These are tabulated as constraints in `pyproject.toml` and
+resolved to specific versions in `uv.lock`. They may be installed by running:
 
 ```shell
-$ python -m pip install -U pip "setuptools[core]" wheel
-$ python -m pip install -r requirements.txt
+$ uv sync --no-install-project
 ```
 
 # Building Halide
@@ -420,7 +419,6 @@ compiled.
 | Option                                   | Default               | Description                                                                                       |
 |------------------------------------------|-----------------------|---------------------------------------------------------------------------------------------------|
 | [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.              |
-| `Halide_BUNDLE_STATIC`                   | `OFF`                 | When building Halide as a static library, merge static library dependencies into libHalide.a.     |
 | `Halide_LLVM_SHARED_LIBS`                | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                     |
 | `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                   |
 | `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                            |

@@ -2059,7 +2059,8 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value> &args) {
             // (even for wasm, where pointers are int32), and trying to extract it as an
             // int64 from a Value that is int32 will assert-fail. In JIT mode the value
             // doesn't even matter (except for guarding that it is our predicted constant).
-            internal_assert(args[i].Get<int32_t>() == 0 || args[i].Get<int32_t>() == kMagicJitUserContextValue);
+            internal_assert(args[i]->Int32Value(context).ToChecked() == 0 ||
+                            args[i]->Int32Value(context).ToChecked() == kMagicJitUserContextValue);
             store_scalar<int32_t>(context, args[i], &scalars[i]);
             trampoline_args[i] = &scalars[i];
         } else if (arg_types[i].is_buffer) {
