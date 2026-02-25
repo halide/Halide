@@ -491,6 +491,7 @@ SOURCE_FILES = \
   Debug.cpp \
   DebugArguments.cpp \
   DebugToFile.cpp \
+  DecomposeVectorShuffle.cpp \
   Definition.cpp \
   Deinterleave.cpp \
   Derivative.cpp \
@@ -686,6 +687,7 @@ HEADER_FILES = \
   Debug.h \
   DebugArguments.h \
   DebugToFile.h \
+  DecomposeVectorShuffle.h \
   Definition.h \
   Deinterleave.h \
   Derivative.h \

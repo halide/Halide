@@ -4128,7 +4128,9 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             } else {
                 internal_assert(op->indices[0] == 0);
             }
-            value = create_broadcast(value, op->indices.size());
+            if (op->indices.size() > 1) {
+                value = create_broadcast(value, op->indices.size());
+            }
             return;
         }
     }
@@ -5346,6 +5348,10 @@ int CodeGen_LLVM::get_vector_num_elements(const llvm::Type *t) {
     }
 }
 
+int CodeGen_LLVM::get_vector_num_elements(const llvm::Value *v) {
+    return get_vector_num_elements(v->getType());
+}
+
 llvm::Type *CodeGen_LLVM::llvm_type_of(LLVMContext *c, Halide::Type t,
                                        int effective_vscale) const {
     if (t.lanes() == 1) {
@@ -5382,23 +5388,7 @@ llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
     switch (type_constraint) {
     case VectorTypeConstraint::None:
         if (effective_vscale > 0) {
-            bool wide_enough = true;
-            // TODO(https://github.com/halide/Halide/issues/8119): Architecture
-            // specific code should not go here. Ideally part of this can go
-            // away via LLVM fixes and modifying intrinsic selection to handle
-            // scalable vs. fixed vectors. Making this method virtual is
-            // possibly expensive.
-            if (target.arch == Target::ARM) {
-                if (!target.has_feature(Target::NoNEON)) {
-                    // force booleans into bytes. TODO(https://github.com/halide/Halide/issues/8119): figure out a better way to do this.
-                    int bit_size = std::max((int)t->getScalarSizeInBits(), 8);
-                    wide_enough = (bit_size * n) > 128;
-                } else {
-                    // TODO(https://github.com/halide/Halide/issues/8119): AArch64 SVE2 support is crashy with scalable vectors of min size 1.
-                    wide_enough = (n / effective_vscale) > 1;
-                }
-            }
-            scalable = wide_enough && ((n % effective_vscale) == 0);
+            scalable = (n % effective_vscale) == 0;
             if (scalable) {
                 n = n / effective_vscale;
             }
