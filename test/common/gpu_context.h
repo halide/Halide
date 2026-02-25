@@ -252,9 +252,9 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
 
     // Request device and wait on the future (same API as webgpu.cpp).
     auto request_device_callback = [](WGPURequestDeviceStatus status,
-                                       WGPUDevice device,
-                                       WGPUStringView message,
-                                       void *userdata1, void *userdata2) {
+                                      WGPUDevice device,
+                                      WGPUStringView message,
+                                      void *userdata1, void *userdata2) {
         (void)message;
         (void)userdata2;
         auto *r = (Results *)userdata1;
