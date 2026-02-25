@@ -310,6 +310,14 @@ void Pipeline::compile_to_llvm_assembly(const string &filename,
     m.compile(single_output(filename, m, OutputFileType::llvm_assembly));
 }
 
+void Pipeline::compile_to_mlir(const string &filename,
+                               const vector<Argument> &args,
+                               const string &fn_name,
+                               const Target &target) {
+    Module m = compile_to_module(args, fn_name, target);
+    m.compile(single_output(filename, m, OutputFileType::mlir));
+}
+
 void Pipeline::compile_to_object(const string &filename,
                                  const vector<Argument> &args,
                                  const string &fn_name,
