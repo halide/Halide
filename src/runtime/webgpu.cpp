@@ -349,7 +349,7 @@ WEAK int create_webgpu_context(void *user_context) {
     // wgpuAdapterGetLimits is supported, see https://github.com/halide/Halide/issues/7248).
     // On failure we keep default limits from WGPU_LIMITS_INIT.
     WGPULimits supportedLimits = WGPU_LIMITS_INIT;
-    if (!wgpuAdapterGetLimits(global_adapter, &supportedLimits)) {
+    if (wgpuAdapterGetLimits(global_adapter, &supportedLimits) != WGPUStatus_Success) {
         debug(user_context) << "wgpuAdapterGetLimits failed\n";
     } else {
         // Raise the limits on buffer size and workgroup storage size.
