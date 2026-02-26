@@ -246,8 +246,9 @@ const IRNode *innermost_containing_node(const IRNode *root, const std::set<const
 
 bool can_hoist_shared_load(const IRNode *n, const std::string &buf, const Expr &idx) {
     // Check none of the variables the idx depends on are defined somewhere
-    // within this stmt, and there are no stores to the given buffer in the
-    // stmt.
+    // within this stmt, there are no stores to the given buffer in the stmt,
+    // and other side-effecty things that might either write to the buffer or
+    // guard against out of bounds reads don't occur either.
     bool result = true;
     visit_with(n,                                 //
                [&](auto *self, const Let *let) {  //
@@ -269,6 +270,13 @@ bool can_hoist_shared_load(const IRNode *n, const std::string &buf, const Expr &
                [&](auto *self, const Store *store) {  //
                    result &= store->name != buf;
                    self->visit_base(store);
+               },
+               [&](auto *self, const AssertStmt *a) {  //
+                   // Extern stages always come with asserts, even when
+                   // no_asserts is on (they get stripped later), so this also
+                   // guards against writes to the buffer happening in an extern
+                   // stage. copy_to_host/device calls also come with asserts.
+                   result = false;
                });
     return result;
 }
@@ -334,9 +342,14 @@ Stmt stage_strided_loads(const Stmt &stmt) {
             Expr shared_load = Load::make(t, k.buf, idx, op->image, op->param,
                                           const_true(lanes), op->alignment);
 
-            // We can't lift the shared load further out than the scope over
-            // which the loads definition occur. If k.scope is null, the loads
-            // are valid everywhere (it must be an input buffer)
+            // We now need to pick a site to place our shared dense load. We
+            // can't lift the shared load further out than k.scope, because that
+            // marks the outermost point at which the loads are known to both
+            // definitely occur (we don't want to escape an if statement) and
+            // produce a single fixed value (we don't want to cross over a store
+            // to the same buffer). If k.scope is null, the loads are valid
+            // everywhere, so we can hoist the single shared dense load to
+            // wherever we like.
             const IRNode *outermost = k.scope ? k.scope : s.get();
             const IRNode *let_site = innermost_containing_node(outermost, all_loads);
             if (can_hoist_shared_load(let_site, k.buf, idx)) {
