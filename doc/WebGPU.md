@@ -71,6 +71,60 @@ Note that it is explicitly legal to specify both WEBGPU_NATIVE_LIB and
 WEBGPU_NODE_BINDINGS for the same build; the correct executable environment
 will be selected based on the Halide target specified.
 
+## Setting up Dawn via vcpkg
+
+> _Tested with Dawn vcpkg port version 20251202.213730 on macOS (arm64)_
+
+The Halide repository includes vcpkg support for automatically downloading and
+building Dawn as part of the CMake configure step. This is the easiest path for
+native WebGPU testing and does not require `depot_tools` or `gclient`.
+
+Note: the vcpkg Dawn port builds only the native `libwebgpu_dawn` shared
+library. It does **not** include Node.js bindings (`dawn.node`), so this path
+only supports `HL_TARGET=host-webgpu` (native JIT). For the WASM+Node.js path,
+see [Setting up Dawn](#setting-up-dawn) below.
+
+### Install vcpkg
+
+Clone and bootstrap vcpkg locally (no system-wide installation needed):
+
+    git clone https://github.com/microsoft/vcpkg <vcpkg_dir>
+    <vcpkg_dir>/bootstrap-vcpkg.sh -disableMetrics
+
+### Configure and build Halide
+
+Use the provided `arm64-osx-halide` (or `x64-osx-halide`) overlay triplet,
+which keeps static linkage for all packages except Dawn (which must be shared
+so it can be loaded via `dlopen` at runtime):
+
+    cmake <halide_root_dir> -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=<vcpkg_dir>/scripts/buildsystems/vcpkg.cmake \
+        -DVCPKG_TARGET_TRIPLET=arm64-osx-halide \
+        -DVCPKG_MANIFEST_FEATURES=webgpu-native \
+        -DLLVM_DIR=<llvm_dir>/lib/cmake/llvm \
+        -DClang_DIR=<llvm_dir>/lib/cmake/clang \
+        -DHalide_TARGET=host-webgpu
+
+    cmake --build <build_dir>
+
+vcpkg will download and build Dawn automatically during the configure step,
+installing it into `<build_dir>/vcpkg_installed/`.
+
+You may need to add `-DWITH_SERIALIZATION=OFF`, `-DWITH_PYTHON_BINDINGS=OFF`, and
+`-DHalide_WASM_BACKEND=OFF` flags because vcpkg disables FetchContent, and those 
+features depend on packages (`flatbuffers`, `pybind11`, `wabt`) that are not included 
+in the `webgpu-native` manifest feature.
+
+### Run tests
+
+Set `HL_WEBGPU_NATIVE_LIB` to the vcpkg-installed Dawn library and run via
+CTest:
+
+    HL_JIT_TARGET=host-webgpu \
+    HL_WEBGPU_NATIVE_LIB=<build_dir>/vcpkg_installed/arm64-osx-halide/lib/libwebgpu_dawn.dylib \
+    ctest --test-dir <build_dir> -R correctness_gpu
+
 ## Setting up Dawn
 
 Building Dawn's Node.js bindings currently requires using CMake.
