@@ -178,6 +178,12 @@
       "dependencies": [
         "wabt"
       ]
+    },
+    "webgpu-native": {
+      "description": "Native WebGPU support via Dawn (libwebgpu_dawn)",
+      "dependencies": [
+        "dawn"
+      ]
     }
   }
 }

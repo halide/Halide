@@ -10,6 +10,10 @@
 
 #include "cleanup_on_error.h"
 
+#if defined(TEST_WEBGPU)
+#include "HalideRuntimeWebGPU.h"
+#endif
+
 using namespace Halide::Runtime;
 
 const int size = 64;
@@ -102,5 +106,9 @@ int main(int argc, char **argv) {
     }
 
     printf("Success!\n");
+#if TEST_WEBGPU
+    halide_device_release(nullptr, halide_webgpu_device_interface());
+#endif
+
     return 0;
 }

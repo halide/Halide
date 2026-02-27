@@ -88,7 +88,8 @@ set(RUNTIME_CPP
     wasm_cpu_features
     # TODO(https://github.com/halide/Halide/issues/7248)
     # webgpu
-    webgpu_dawn
+    webgpu_dawn_arm
+    webgpu_dawn_x86
     webgpu_emscripten
     windows_aarch64_cpu_features_arm
     windows_clock
@@ -232,12 +233,28 @@ foreach (i IN LISTS RUNTIME_CPP)
                     set(TARGET "x86_64-unknown-windows-unknown")
                 endif ()
             endif ()
-        elseif (i MATCHES "webgpu")
+        elseif (i MATCHES "webgpu_emscripten")
+            # for WASM, we need to set a wasm target rather than a generic or native target
             if (j EQUAL 32)
-                # wasm32 will fail for some i386 builds, but i386 won't
                 set(TARGET "wasm32-unknown-unknown-unknown")
             else ()
                 set(TARGET "wasm64-unknown-unknown-unknown")
+            endif ()
+        elseif (i MATCHES "webgpu_dawn_x86$")
+            if (j EQUAL 32)
+                # use default generic targets from below
+                set(TARGET "i386-unknown-unknown-unknown")
+            else ()
+                # due to struct passing, we need to use the correct arch
+                set(TARGET "x86_64-unknown-unknown-unknown")
+            endif ()
+        elseif (i MATCHES "webgpu_dawn_arm$")
+            if (j EQUAL 32 AND "ARM" IN_LIST Halide_LLVM_COMPONENTS)
+                # use default generic targets from below
+                set(TARGET "i386-unknown-unknown-unknown")
+            else ()
+                # due to struct passing, we need to use the correct arch
+                set(TARGET "aarch64-unknown-unknown-unknown")
             endif ()
         else ()
             # don't be fooled: these are just generic 32/64-bit targets for our purposes here

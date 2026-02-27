@@ -896,7 +896,8 @@ RUNTIME_CPP_COMPONENTS = \
   trace_helper \
   tracing \
   wasm_cpu_features \
-  webgpu_dawn \
+  webgpu_dawn_arm \
+  webgpu_dawn_x86 \
   webgpu_emscripten \
   windows_aarch64_cpu_features_arm \
   windows_clock \
@@ -1094,6 +1095,8 @@ RUNTIME_TRIPLE_WIN_GENERIC_64 = "x86_64-unknown-windows-unknown"
 
 RUNTIME_TRIPLE_WEBGPU_32 = "wasm32-unknown-unknown-unknown"
 RUNTIME_TRIPLE_WEBGPU_64 = "wasm64-unknown-unknown-unknown"
+RUNTIME_TRIPLE_WEBGPU_ARM_64 = "aarch64-unknown-unknown-unknown"
+RUNTIME_TRIPLE_WEBGPU_X86_64 = "x86_64-unknown-unknown-unknown"
 
 # `-fno-threadsafe-statics` is very important here (note that it allows us to use a 'modern' C++
 # standard but still skip threadsafe guards for static initialization in our runtime code)
@@ -1147,6 +1150,22 @@ $(BUILD_DIR)/initmod.windows_%_64.ll: $(SRC_DIR)/runtime/windows_%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_GENERIC_64) -fshort-wchar -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_64.d
 
+$(BUILD_DIR)/initmod.webgpu_dawn_arm_32.ll: $(SRC_DIR)/runtime/webgpu_dawn_arm.cpp
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_dawn_arm.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_dawn_arm_32.d
+
+$(BUILD_DIR)/initmod.webgpu_dawn_arm_64.ll: $(SRC_DIR)/runtime/webgpu_dawn_arm.cpp
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WEBGPU_ARM_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_dawn_arm.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_dawn_arm_64.d
+
+$(BUILD_DIR)/initmod.webgpu_dawn_x86_32.ll: $(SRC_DIR)/runtime/webgpu_dawn_x86.cpp
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_dawn_x86.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_dawn_x86_32.d
+
+$(BUILD_DIR)/initmod.webgpu_dawn_x86_64.ll: $(SRC_DIR)/runtime/webgpu_dawn_x86.cpp
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WEBGPU_X86_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_dawn_x86.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_dawn_x86_64.d
+
 $(BUILD_DIR)/initmod.webgpu_%_32.ll: $(SRC_DIR)/runtime/webgpu_%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WEBGPU_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_$*_32.d
@@ -1154,6 +1173,22 @@ $(BUILD_DIR)/initmod.webgpu_%_32.ll: $(SRC_DIR)/runtime/webgpu_%.cpp
 $(BUILD_DIR)/initmod.webgpu_%_64.ll: $(SRC_DIR)/runtime/webgpu_%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WEBGPU_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_$*_64.d
+
+$(BUILD_DIR)/initmod.webgpu_dawn_arm_32_debug.ll: $(SRC_DIR)/runtime/webgpu_dawn_arm.cpp
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_dawn_arm.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_dawn_arm_32_debug.d
+
+$(BUILD_DIR)/initmod.webgpu_dawn_arm_64_debug.ll: $(SRC_DIR)/runtime/webgpu_dawn_arm.cpp
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WEBGPU_ARM_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_dawn_arm.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_dawn_arm_64_debug.d
+
+$(BUILD_DIR)/initmod.webgpu_dawn_x86_32_debug.ll: $(SRC_DIR)/runtime/webgpu_dawn_x86.cpp
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_dawn_x86.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_dawn_x86_32_debug.d
+
+$(BUILD_DIR)/initmod.webgpu_dawn_x86_64_debug.ll: $(SRC_DIR)/runtime/webgpu_dawn_x86.cpp
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WEBGPU_X86_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_dawn_x86.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_dawn_x86_64_debug.d
 
 $(BUILD_DIR)/initmod.webgpu_%_32_debug.ll: $(SRC_DIR)/runtime/webgpu_%.cpp
 	@mkdir -p $(@D)

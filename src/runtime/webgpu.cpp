@@ -43,22 +43,6 @@ using namespace Halide::Runtime::Internal;
 using namespace Halide::Runtime::Internal::WebGPU;
 
 extern "C" {
-// TODO: Remove all of this when wgpuInstanceProcessEvents() is supported.
-// See https://github.com/halide/Halide/issues/7248
-#if HALIDE_RUNTIME_WEBGPU_NATIVE_API
-// Defined by Dawn, and used to yield execution to asynchronous commands.
-void wgpuDeviceTick(WGPUDevice);
-// From <unistd.h>, used to spin-lock while waiting for device initialization.
-int usleep(uint32_t);
-#else
-// Defined by Emscripten, and used to yield execution to asynchronous Javascript
-// work in combination with Emscripten's "Asyncify" mechanism.
-void emscripten_sleep(unsigned int ms);
-// Wrap emscripten_sleep in wgpuDeviceTick() to unify usage with Dawn.
-void wgpuDeviceTick(WGPUDevice) {
-    emscripten_sleep(1);
-}
-#endif
 
 // The default implementation of halide_webgpu_acquire_context uses the global
 // pointers above, and serializes access with a spin lock.
@@ -77,8 +61,11 @@ WEAK int halide_webgpu_acquire_context(void *user_context,
                                        WGPUDevice *device_ret,
                                        WGPUBuffer *staging_buffer_ret,
                                        bool create = true) {
+    debug(user_context) << "WGPU: halide_webgpu_acquire_context called\n";
     debug(user_context)
         << "WGPU: halide_webgpu_acquire_context (user_context: " << user_context
+        << ", global_device: " << global_device
+        << ", create: " << create
         << ")\n";
     halide_abort_if_false(user_context, &context_lock != nullptr);
     while (__atomic_test_and_set(&context_lock, __ATOMIC_ACQUIRE)) {
@@ -152,17 +139,15 @@ public:
 // within a particular scope.
 class ErrorScope {
 public:
-    ALWAYS_INLINE ErrorScope(void *user_context, WGPUDevice device)
-        : user_context(user_context), device(device) {
+    ALWAYS_INLINE ErrorScope(void *user_context, WGPUInstance instance, WGPUDevice device)
+        : user_context(user_context), instance(instance), device(device) {
         // Capture validation and OOM errors.
         wgpuDevicePushErrorScope(device, WGPUErrorFilter_Validation);
         wgpuDevicePushErrorScope(device, WGPUErrorFilter_OutOfMemory);
-        callbacks_remaining = 2;
     }
 
     ALWAYS_INLINE ~ErrorScope() {
-        if (callbacks_remaining > 0) {
-            // Pop the error scopes to flush any pending errors.
+        if (!already_waited) {
             wait();
         }
     }
@@ -170,64 +155,70 @@ public:
     // Wait for all error callbacks in this scope to fire.
     // Returns the error code (or success).
     halide_error_code_t wait() {
-        using namespace Halide::Runtime::Internal::Synchronization;
-
-        if (callbacks_remaining == 0) {
-            error(user_context) << "no outstanding error scopes\n";
-            return halide_error_code_internal_error;
+        if (already_waited) {
+            return error_code;
         }
-
         error_code = halide_error_code_success;
-        wgpuDevicePopErrorScope(device, error_callback, this);
-        wgpuDevicePopErrorScope(device, error_callback, this);
 
-        // Wait for the error callbacks to fire.
-        while (atomic_fetch_or_sequentially_consistent(&callbacks_remaining, 0) > 0) {
-            wgpuDeviceTick(device);
-        }
+        WGPUPopErrorScopeCallbackInfo callbackInfo = WGPU_POP_ERROR_SCOPE_CALLBACK_INFO_INIT;
+        callbackInfo.mode = WGPUCallbackMode_WaitAnyOnly;
+        callbackInfo.callback = error_callback;
+        callbackInfo.userdata1 = this;
 
+        // Pop and wait for each error scope separately (LIFO order).
+        // First pop the OOM scope (pushed second).
+        WGPUFuture future1 = wgpuDevicePopErrorScope(device, callbackInfo);
+        WGPUFutureWaitInfo wait_info1 = WGPU_FUTURE_WAIT_INFO_INIT;
+        wait_info1.future = future1;
+        wgpuInstanceWaitAny(instance, 1, &wait_info1, UINT64_MAX);
+
+        // Then pop the validation scope (pushed first).
+        WGPUFuture future2 = wgpuDevicePopErrorScope(device, callbackInfo);
+        WGPUFutureWaitInfo wait_info2 = WGPU_FUTURE_WAIT_INFO_INIT;
+        wait_info2.future = future2;
+        wgpuInstanceWaitAny(instance, 1, &wait_info2, UINT64_MAX);
+
+        already_waited = true;
         return error_code;
     }
 
 private:
     void *user_context;
+    WGPUInstance instance;
     WGPUDevice device;
 
     // The error code reported by the callback functions.
     volatile halide_error_code_t error_code;
+    bool already_waited = false;
 
-    // Used to track outstanding error callbacks.
-    volatile int callbacks_remaining = 0;
-
-    // The error callback function.
-    // Logs any errors, and decrements the remaining callback count.
-    static void error_callback(WGPUErrorType type,
-                               char const *message,
-                               void *userdata) {
-        using namespace Halide::Runtime::Internal::Synchronization;
-
-        ErrorScope *context = (ErrorScope *)userdata;
+    // The error callback function. Logs any errors.
+    static void error_callback(WGPUPopErrorScopeStatus status,
+                               WGPUErrorType type,
+                               WGPUStringView message,
+                               void *userdata1,
+                               void *userdata2) {
+        (void)status;
+        (void)userdata2;
+        ErrorScope *context = (ErrorScope *)userdata1;
         switch (type) {
         case WGPUErrorType_NoError:
             // Do not overwrite the error_code to avoid masking earlier errors.
             break;
         case WGPUErrorType_Validation:
             error(context->user_context) << "WGPU: validation error: "
-                                         << message << "\n";
+                                         << message.data << "\n";
             context->error_code = halide_error_code_generic_error;
             break;
         case WGPUErrorType_OutOfMemory:
             error(context->user_context) << "WGPU: out-of-memory error: "
-                                         << message << "\n";
+                                         << message.data << "\n";
             context->error_code = halide_error_code_out_of_memory;
             break;
         default:
             error(context->user_context) << "WGPU: unknown error (" << type
-                                         << "): " << message << "\n";
+                                         << "): " << message.data << "\n";
             context->error_code = halide_error_code_generic_error;
         }
-
-        atomic_fetch_add_sequentially_consistent(&context->callbacks_remaining, -1);
     }
 };
 
@@ -245,24 +236,29 @@ namespace {
 
 halide_error_code_t init_error_code = halide_error_code_success;
 
-void device_lost_callback(WGPUDeviceLostReason reason,
-                          char const *message,
-                          void *user_context) {
+void device_lost_callback(WGPUDevice const *device,
+                          WGPUDeviceLostReason reason,
+                          WGPUStringView message,
+                          void *userdata1,
+                          void *userdata2) {
+    void *user_context = userdata1;
     // Apparently this should not be treated as a fatal error
     if (reason == WGPUDeviceLostReason_Destroyed) {
         return;
     }
     error(user_context) << "WGPU device lost (" << reason << "): "
-                        << message << "\n";
+                        << message.data << "\n";
 }
 
 void request_device_callback(WGPURequestDeviceStatus status,
                              WGPUDevice device,
-                             char const *message,
-                             void *user_context) {
+                             WGPUStringView message,
+                             void *userdata1,
+                             void *userdata2) {
+    void *user_context = userdata1;
     if (status != WGPURequestDeviceStatus_Success) {
         error(user_context) << "wgpuAdapterRequestDevice failed ("
-                            << status << "): " << message << "\n";
+                            << status << "): " << message.data << "\n";
         init_error_code = halide_error_code_generic_error;
         return;
     }
@@ -272,49 +268,20 @@ void request_device_callback(WGPURequestDeviceStatus status,
 
 void request_adapter_callback(WGPURequestAdapterStatus status,
                               WGPUAdapter adapter,
-                              char const *message,
-                              void *user_context) {
+                              WGPUStringView message,
+                              void *userdata1,
+                              void *userdata2) {
+
+    void *user_context = userdata1;
+    debug(user_context)
+        << "WGPU: request_adapter_callback (status: " << status << ")\n";
     if (status != WGPURequestAdapterStatus_Success) {
         debug(user_context) << "wgpuInstanceRequestAdapter failed: ("
-                            << status << "): " << message << "\n";
+                            << status << "): " << message.data << "\n";
         init_error_code = halide_error_code_generic_error;
         return;
     }
     global_adapter = adapter;
-
-    // Use the defaults for most limits.
-    WGPURequiredLimits requestedLimits{};
-    requestedLimits.nextInChain = nullptr;
-    memset(&requestedLimits.limits, 0xFF, sizeof(WGPULimits));
-
-    // TODO: Enable for Emscripten when wgpuAdapterGetLimits is supported.
-    // See https://github.com/halide/Halide/issues/7248
-#if HALIDE_RUNTIME_WEBGPU_NATIVE_API
-    WGPUSupportedLimits supportedLimits{};
-    supportedLimits.nextInChain = nullptr;
-    if (!wgpuAdapterGetLimits(adapter, &supportedLimits)) {
-        debug(user_context) << "wgpuAdapterGetLimits failed\n";
-    } else {
-        // Raise the limits on buffer size and workgroup storage size.
-        requestedLimits.limits.maxBufferSize =
-            supportedLimits.limits.maxBufferSize;
-        requestedLimits.limits.maxStorageBufferBindingSize =
-            supportedLimits.limits.maxStorageBufferBindingSize;
-        requestedLimits.limits.maxComputeWorkgroupStorageSize =
-            supportedLimits.limits.maxComputeWorkgroupStorageSize;
-    }
-#endif
-
-    WGPUDeviceDescriptor desc{};
-    desc.nextInChain = nullptr;
-    desc.label = nullptr;
-    desc.requiredFeatureCount = 0;
-    desc.requiredFeatures = nullptr;
-    desc.requiredLimits = &requestedLimits;
-    desc.deviceLostCallback = device_lost_callback;
-
-    wgpuAdapterRequestDevice(adapter, &desc, request_device_callback,
-                             user_context);
 }
 
 size_t round_up_to_multiple_of_4(size_t x) {
@@ -328,7 +295,18 @@ WEAK int create_webgpu_context(void *user_context) {
         << "WGPU: create_webgpu_context (user_context: " << user_context
         << ")\n";
 
-    global_instance = wgpuCreateInstance(nullptr);
+    // Check if TimedWaitAny feature is available before requesting it.
+    WGPUBool has_timed_wait = wgpuHasInstanceFeature(WGPUInstanceFeatureName_TimedWaitAny);
+
+    // Create instance with TimedWaitAny feature enabled so we can use
+    // wgpuInstanceWaitAny with non-zero timeouts.
+    WGPUInstanceFeatureName required_features[] = {WGPUInstanceFeatureName_TimedWaitAny};
+    WGPUInstanceDescriptor instance_desc = WGPU_INSTANCE_DESCRIPTOR_INIT;
+    if (has_timed_wait) {
+        instance_desc.requiredFeatureCount = 1;
+        instance_desc.requiredFeatures = required_features;
+    }
+    global_instance = wgpuCreateInstance(&instance_desc);
     debug(user_context)
         << "WGPU: wgpuCreateInstance produces: " << global_instance
         << ")\n";
@@ -336,33 +314,91 @@ WEAK int create_webgpu_context(void *user_context) {
     debug(user_context)
         << "WGPU: global_instance is: (" << global_instance
         << ")\n";
-    wgpuInstanceRequestAdapter(
-        global_instance, nullptr, request_adapter_callback, user_context);
 
-    // Wait for device initialization to complete.
-    while (!global_device && init_error_code == halide_error_code_success) {
-        // TODO: Use wgpuInstanceProcessEvents() when it is supported.
-        // See https://github.com/halide/Halide/issues/7248
-#if HALIDE_RUNTIME_WEBGPU_NATIVE_API
-        usleep(1000);
-#else
-        emscripten_sleep(10);
-#endif
-    }
+    // Request adapter and wait on the future.
+    WGPURequestAdapterCallbackInfo adapter_callback_info = WGPU_REQUEST_ADAPTER_CALLBACK_INFO_INIT;
+    adapter_callback_info.mode = WGPUCallbackMode_WaitAnyOnly;
+    adapter_callback_info.callback = request_adapter_callback;
+    adapter_callback_info.userdata1 = user_context;
+
+    WGPUFuture adapter_future = wgpuInstanceRequestAdapter(global_instance, nullptr, adapter_callback_info);
+
+    debug(user_context)
+        << "WGPU: waiting for adapter\n";
+
+    WGPUFutureWaitInfo adapter_wait_info = WGPU_FUTURE_WAIT_INFO_INIT;
+    adapter_wait_info.future = adapter_future;
+    wgpuInstanceWaitAny(global_instance, 1, &adapter_wait_info, UINT64_MAX);
+
     if (init_error_code != halide_error_code_success) {
         return init_error_code;
     }
+    if (global_adapter == nullptr) {
+        error(user_context) << "WGPU: adapter request failed\n";
+        return halide_error_code_generic_error;
+    }
+
+    debug(user_context)
+        << "WGPU: got adapter: " << global_adapter << "\n";
+
+    // Now request the device.
+    // Use the defaults for most limits.
+    WGPULimits requestedLimits = WGPU_LIMITS_INIT;
+
+    // Try to get adapter limits (succeeds on Dawn native; may fail on Emscripten until
+    // wgpuAdapterGetLimits is supported, see https://github.com/halide/Halide/issues/7248).
+    // On failure we keep default limits from WGPU_LIMITS_INIT.
+    WGPULimits supportedLimits = WGPU_LIMITS_INIT;
+    if (wgpuAdapterGetLimits(global_adapter, &supportedLimits) != WGPUStatus_Success) {
+        debug(user_context) << "wgpuAdapterGetLimits failed\n";
+    } else {
+        // Raise the limits on buffer size and workgroup storage size.
+        requestedLimits.maxBufferSize =
+            supportedLimits.maxBufferSize;
+        requestedLimits.maxStorageBufferBindingSize =
+            supportedLimits.maxStorageBufferBindingSize;
+        requestedLimits.maxComputeWorkgroupStorageSize =
+            supportedLimits.maxComputeWorkgroupStorageSize;
+    }
+
+    WGPUDeviceDescriptor device_desc = WGPU_DEVICE_DESCRIPTOR_INIT;
+    device_desc.requiredLimits = &requestedLimits;
+    device_desc.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
+    device_desc.deviceLostCallbackInfo.callback = device_lost_callback;
+    device_desc.deviceLostCallbackInfo.userdata1 = user_context;
+
+    WGPURequestDeviceCallbackInfo device_callback_info = WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
+    device_callback_info.mode = WGPUCallbackMode_WaitAnyOnly;
+    device_callback_info.callback = request_device_callback;
+    device_callback_info.userdata1 = user_context;
+
+    WGPUFuture device_future = wgpuAdapterRequestDevice(global_adapter, &device_desc, device_callback_info);
+
+    debug(user_context)
+        << "WGPU: waiting for device\n";
+
+    WGPUFutureWaitInfo device_wait_info = WGPU_FUTURE_WAIT_INFO_INIT;
+    device_wait_info.future = device_future;
+    wgpuInstanceWaitAny(global_instance, 1, &device_wait_info, UINT64_MAX);
+
+    if (init_error_code != halide_error_code_success) {
+        return init_error_code;
+    }
+    if (global_device == nullptr) {
+        error(user_context) << "WGPU: device request failed\n";
+        return halide_error_code_generic_error;
+    }
+
+    debug(user_context)
+        << "WGPU: got device: " << global_device << "\n";
 
     // Create a staging buffer for transfers.
     constexpr int kStagingBufferSize = 4 * 1024 * 1024;
-    WGPUBufferDescriptor buffer_desc{};
-    buffer_desc.nextInChain = nullptr;
-    buffer_desc.label = nullptr;
+    WGPUBufferDescriptor buffer_desc = WGPU_BUFFER_DESCRIPTOR_INIT;
     buffer_desc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
     buffer_desc.size = kStagingBufferSize;
-    buffer_desc.mappedAtCreation = false;
 
-    ErrorScope error_scope(user_context, global_device);
+    ErrorScope error_scope(user_context, global_instance, global_device);
     global_staging_buffer = wgpuDeviceCreateBuffer(global_device, &buffer_desc);
 
     halide_error_code_t error_code = error_scope.wait();
@@ -397,16 +433,13 @@ WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
         return context.error_code;
     }
 
-    ErrorScope error_scope(user_context, context.device);
+    ErrorScope error_scope(user_context, context.instance, context.device);
 
-    WGPUBufferDescriptor desc{};
-    desc.nextInChain = nullptr;
-    desc.label = nullptr;
+    WGPUBufferDescriptor desc = WGPU_BUFFER_DESCRIPTOR_INIT;
     desc.usage = WGPUBufferUsage_Storage |
                  WGPUBufferUsage_CopyDst |
                  WGPUBufferUsage_CopySrc;
     desc.size = round_up_to_multiple_of_4(buf->size_in_bytes());
-    desc.mappedAtCreation = false;
 
     WgpuBufferHandle *device_handle =
         (WgpuBufferHandle *)malloc(sizeof(WgpuBufferHandle));
@@ -459,33 +492,32 @@ WEAK int halide_webgpu_device_sync(void *user_context, halide_buffer_t *) {
         return context.error_code;
     }
 
-    ErrorScope error_scope(user_context, context.device);
+    ErrorScope error_scope(user_context, context.instance, context.device);
 
     // Wait for all work on the queue to finish.
     struct WorkDoneResult {
-        volatile ScopedSpinLock::AtomicFlag complete = false;
         volatile WGPUQueueWorkDoneStatus status;
     };
     WorkDoneResult result;
 
-    __atomic_test_and_set(&result.complete, __ATOMIC_RELAXED);
-    wgpuQueueOnSubmittedWorkDone(
-        context.queue,
-        [](WGPUQueueWorkDoneStatus status, void *userdata) {
-            WorkDoneResult *result = (WorkDoneResult *)userdata;
-            result->status = status;
-            __atomic_clear(&result->complete, __ATOMIC_RELEASE);
-        },
-        &result);
+    WGPUQueueWorkDoneCallbackInfo callbackInfo = WGPU_QUEUE_WORK_DONE_CALLBACK_INFO_INIT;
+    callbackInfo.mode = WGPUCallbackMode_WaitAnyOnly;
+    callbackInfo.callback = [](WGPUQueueWorkDoneStatus status, WGPUStringView message, void *userdata1, void *userdata2) {
+        WorkDoneResult *result = (WorkDoneResult *)userdata1;
+        result->status = status;
+    };
+    callbackInfo.userdata1 = &result;
+
+    WGPUFuture work_done_future = wgpuQueueOnSubmittedWorkDone(context.queue, callbackInfo);
 
     int error_code = error_scope.wait();
     if (error_code != halide_error_code_success) {
         return error_code;
     }
 
-    while (__atomic_test_and_set(&result.complete, __ATOMIC_ACQUIRE)) {
-        wgpuDeviceTick(context.device);
-    }
+    WGPUFutureWaitInfo wait_info = WGPU_FUTURE_WAIT_INFO_INIT;
+    wait_info.future = work_done_future;
+    wgpuInstanceWaitAny(context.instance, 1, &wait_info, UINT64_MAX);
 
     if (result.status != WGPUQueueWorkDoneStatus_Success) {
         halide_error(user_context, "wgpuQueueOnSubmittedWorkDone failed");
@@ -523,13 +555,24 @@ WEAK int halide_webgpu_device_release(void *user_context) {
                 global_staging_buffer = nullptr;
             }
 
+            // Destroy the device first to release internal resources (async threads, etc.)
+            // This is required for Dawn native to allow the process to exit cleanly.
+            wgpuDeviceDestroy(device);
+            debug(user_context)
+                << "WGPU: wgpuDeviceDestroy (device: " << device << ")\n";
             wgpuDeviceRelease(device);
+            debug(user_context)
+                << "WGPU: wgpuDeviceRelease (device: " << device << ")\n";
             global_device = nullptr;
 
             wgpuAdapterRelease(adapter);
+            debug(user_context)
+                << "WGPU: wgpuAdapterRelease (adapter: " << adapter << ")\n";
             global_adapter = nullptr;
 
             wgpuInstanceRelease(instance);
+            debug(user_context)
+                << "WGPU: wgpuInstanceRelease (instance: " << instance << ")\n";
             global_instance = nullptr;
         }
     }
@@ -573,26 +616,28 @@ int do_copy_to_host(void *user_context, WgpuContext *context, uint8_t *dst,
         wgpuQueueSubmit(context->queue, 1, &command_buffer);
 
         struct BufferMapResult {
-            volatile ScopedSpinLock::AtomicFlag map_complete;
-            volatile WGPUBufferMapAsyncStatus map_status;
+            volatile WGPUMapAsyncStatus map_status;
         };
         BufferMapResult result;
 
         // Map the staging buffer for reading.
-        __atomic_test_and_set(&result.map_complete, __ATOMIC_RELAXED);
-        wgpuBufferMapAsync(
-            context->staging_buffer, WGPUMapMode_Read, 0, num_bytes,
-            [](WGPUBufferMapAsyncStatus status, void *userdata) {
-                BufferMapResult *result = (BufferMapResult *)userdata;
-                result->map_status = status;
-                __atomic_clear(&result->map_complete, __ATOMIC_RELEASE);
-            },
-            &result);
+        WGPUBufferMapCallbackInfo mapCallbackInfo = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
+        mapCallbackInfo.mode = WGPUCallbackMode_WaitAnyOnly;
+        mapCallbackInfo.callback = [](WGPUMapAsyncStatus status, WGPUStringView message, void *userdata1, void *userdata2) {
+            BufferMapResult *result = (BufferMapResult *)userdata1;
+            result->map_status = status;
+        };
+        mapCallbackInfo.userdata1 = &result;
 
-        while (__atomic_test_and_set(&result.map_complete, __ATOMIC_ACQUIRE)) {
-            wgpuDeviceTick(context->device);
-        }
-        if (result.map_status != WGPUBufferMapAsyncStatus_Success) {
+        WGPUFuture map_future = wgpuBufferMapAsync(
+            context->staging_buffer, WGPUMapMode_Read, 0, num_bytes,
+            mapCallbackInfo);
+
+        WGPUFutureWaitInfo wait_info = WGPU_FUTURE_WAIT_INFO_INIT;
+        wait_info.future = map_future;
+        wgpuInstanceWaitAny(context->instance, 1, &wait_info, UINT64_MAX);
+
+        if (result.map_status != WGPUMapAsyncStatus_Success) {
             error(user_context) << "wgpuBufferMapAsync failed: "
                                 << result.map_status << "\n";
             return halide_error_code_copy_to_host_failed;
@@ -717,7 +762,7 @@ WEAK int halide_webgpu_buffer_copy(void *user_context,
             return context.error_code;
         }
 
-        ErrorScope error_scope(user_context, context.device);
+        ErrorScope error_scope(user_context, context.instance, context.device);
 
         err = do_multidimensional_copy(user_context, &context, c,
                                        c.src_begin, c.dst_begin, dst->dimensions,
@@ -755,7 +800,7 @@ WEAK int webgpu_device_crop_from_offset(void *user_context,
     dst->device_interface = src->device_interface;
 
     WgpuBufferHandle *src_handle = (WgpuBufferHandle *)src->device;
-    wgpuBufferReference(src_handle->buffer);
+    wgpuBufferAddRef(src_handle->buffer);
 
     WgpuBufferHandle *dst_handle =
         (WgpuBufferHandle *)malloc(sizeof(WgpuBufferHandle));
@@ -829,23 +874,24 @@ WEAK int halide_webgpu_initialize_kernels(void *user_context, void **state_ptr, 
 
     WgpuContext context(user_context);
     if (context.error_code) {
+        error(user_context) << "WGPU: halide_webgpu_initialize_kernels failed: " << context.error_code << "\n";
         return context.error_code;
     }
+    debug(user_context) << "WGPU: context created successfully\n";
 
     // Get the shader module from the cache, compiling it if necessary.
     WGPUShaderModule shader_module;
     if (!shader_cache.kernel_state_setup(
             user_context, state_ptr, context.device, shader_module,
             [&]() -> WGPUShaderModule {
-                ErrorScope error_scope(user_context, context.device);
+                ErrorScope error_scope(user_context, context.instance, context.device);
 
-                WGPUShaderModuleWGSLDescriptor wgsl_desc{};
-                wgsl_desc.chain.next = nullptr;
-                wgsl_desc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-                wgsl_desc.code = src;
+                WGPUShaderSourceWGSL wgsl_desc = WGPU_SHADER_SOURCE_WGSL_INIT;
+                wgsl_desc.code.data = src;
+                wgsl_desc.code.length = WGPU_STRLEN;
                 WGPUShaderModuleDescriptor desc{};
-                desc.nextInChain = (const WGPUChainedStruct *)(&wgsl_desc);
-                desc.label = nullptr;
+                desc.nextInChain = (WGPUChainedStruct *)(&wgsl_desc);
+                desc.label = WGPU_STRING_VIEW_INIT;
                 WGPUShaderModule shader_module =
                     wgpuDeviceCreateShaderModule(context.device, &desc);
 
@@ -895,34 +941,76 @@ WEAK int halide_webgpu_run(void *user_context,
         return context.error_code;
     }
 
-    ErrorScope error_scope(user_context, context.device);
+    ErrorScope error_scope(user_context, context.instance, context.device);
 
     WGPUShaderModule shader_module = nullptr;
     bool found = shader_cache.lookup(context.device, state_ptr, shader_module);
     halide_abort_if_false(user_context, found && shader_module != nullptr);
 
     // Create the compute pipeline.
-    WGPUConstantEntry overrides[4] = {
-        {nullptr, "wgsize_x", (double)threadsX},
-        {nullptr, "wgsize_y", (double)threadsY},
-        {nullptr, "wgsize_z", (double)threadsZ},
-        {nullptr, "workgroup_mem_bytes", (double)workgroup_mem_bytes},
+    WGPUConstantEntry overrides[4];
+    overrides[0] = WGPU_CONSTANT_ENTRY_INIT;
+    overrides[0].key.data = "wgsize_x";
+    overrides[0].key.length = WGPU_STRLEN;
+    overrides[0].value = (double)threadsX;
+    overrides[1] = WGPU_CONSTANT_ENTRY_INIT;
+    overrides[1].key.data = "wgsize_y";
+    overrides[1].key.length = WGPU_STRLEN;
+    overrides[1].value = (double)threadsY;
+    overrides[2] = WGPU_CONSTANT_ENTRY_INIT;
+    overrides[2].key.data = "wgsize_z";
+    overrides[2].key.length = WGPU_STRLEN;
+    overrides[2].value = (double)threadsZ;
+    overrides[3] = WGPU_CONSTANT_ENTRY_INIT;
+    overrides[3].key.data = "workgroup_mem_bytes";
+    overrides[3].key.length = WGPU_STRLEN;
+    overrides[3].value = (double)workgroup_mem_bytes;
+    WGPUComputeState compute_state = WGPU_COMPUTE_STATE_INIT;
+    compute_state.module = shader_module;
+    compute_state.entryPoint.data = entry_name;
+    compute_state.entryPoint.length = WGPU_STRLEN;
+    compute_state.constantCount = 4;
+    compute_state.constants = overrides;
+
+    WGPUComputePipelineDescriptor pipeline_desc = WGPU_COMPUTE_PIPELINE_DESCRIPTOR_INIT;
+    pipeline_desc.compute = compute_state;
+
+    // Create the compute pipeline asynchronously.
+    struct PipelineResult {
+        volatile WGPUCreatePipelineAsyncStatus status;
+        WGPUComputePipeline pipeline;
     };
-    WGPUProgrammableStageDescriptor stage_desc{};
-    stage_desc.nextInChain = nullptr;
-    stage_desc.module = shader_module;
-    stage_desc.entryPoint = entry_name;
-    stage_desc.constantCount = 4;
-    stage_desc.constants = overrides;
+    PipelineResult pipeline_result;
+    pipeline_result.pipeline = nullptr;
 
-    WGPUComputePipelineDescriptor pipeline_desc{};
-    pipeline_desc.nextInChain = nullptr;
-    pipeline_desc.label = nullptr;
-    pipeline_desc.layout = nullptr;
-    pipeline_desc.compute = stage_desc;
+    WGPUCreateComputePipelineAsyncCallbackInfo pipeline_callback_info =
+        WGPU_CREATE_COMPUTE_PIPELINE_ASYNC_CALLBACK_INFO_INIT;
+    pipeline_callback_info.mode = WGPUCallbackMode_WaitAnyOnly;
+    pipeline_callback_info.callback = [](WGPUCreatePipelineAsyncStatus status,
+                                         WGPUComputePipeline pipeline,
+                                         WGPUStringView message,
+                                         void *userdata1, void *userdata2) {
+        PipelineResult *result = (PipelineResult *)userdata1;
+        result->status = status;
+        result->pipeline = pipeline;
+    };
+    pipeline_callback_info.userdata1 = &pipeline_result;
 
-    WGPUComputePipeline pipeline =
-        wgpuDeviceCreateComputePipeline(context.device, &pipeline_desc);
+    WGPUFuture pipeline_future = wgpuDeviceCreateComputePipelineAsync(
+        context.device, &pipeline_desc, pipeline_callback_info);
+
+    // Wait for the pipeline to be created.
+    WGPUFutureWaitInfo wait_info = WGPU_FUTURE_WAIT_INFO_INIT;
+    wait_info.future = pipeline_future;
+    wgpuInstanceWaitAny(context.instance, 1, &wait_info, UINT64_MAX);
+
+    if (pipeline_result.status != WGPUCreatePipelineAsyncStatus_Success) {
+        error(user_context) << "WGPU: wgpuDeviceCreateComputePipelineAsync failed ("
+                            << pipeline_result.status << ")\n";
+        return halide_error_code_generic_error;
+    }
+
+    WGPUComputePipeline pipeline = pipeline_result.pipeline;
 
     // Set up a compute shader dispatch command.
     WGPUCommandEncoder encoder =
@@ -958,14 +1046,11 @@ WEAK int halide_webgpu_run(void *user_context,
             if (arg_is_buffer[i]) {
                 halide_buffer_t *buffer = (halide_buffer_t *)args[i];
                 WgpuBufferHandle *handle = (WgpuBufferHandle *)(buffer->device);
-                WGPUBindGroupEntry entry{};
-                entry.nextInChain = nullptr;
+                WGPUBindGroupEntry entry = WGPU_BIND_GROUP_ENTRY_INIT;
                 entry.binding = i;
                 entry.buffer = handle->buffer;
                 entry.offset = handle->offset;
                 entry.size = round_up_to_multiple_of_4(buffer->size_in_bytes());
-                entry.sampler = nullptr;
-                entry.textureView = nullptr;
                 bind_group_entries[b] = entry;
                 b++;
             }
@@ -974,9 +1059,7 @@ WEAK int halide_webgpu_run(void *user_context,
         // Create a bind group for the buffer arguments.
         WGPUBindGroupLayout layout =
             wgpuComputePipelineGetBindGroupLayout(pipeline, 0);
-        WGPUBindGroupDescriptor bindgroup_desc{};
-        bindgroup_desc.nextInChain = nullptr;
-        bindgroup_desc.label = nullptr;
+        WGPUBindGroupDescriptor bindgroup_desc = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
         bindgroup_desc.layout = layout;
         bindgroup_desc.entryCount = num_buffers;
         bindgroup_desc.entries = bind_group_entries;
@@ -990,9 +1073,7 @@ WEAK int halide_webgpu_run(void *user_context,
     }
     if (num_args > num_buffers) {
         // Create a uniform buffer for the non-buffer arguments.
-        WGPUBufferDescriptor desc{};
-        desc.nextInChain = nullptr;
-        desc.label = nullptr;
+        WGPUBufferDescriptor desc = WGPU_BUFFER_DESCRIPTOR_INIT;
         desc.usage = WGPUBufferUsage_Uniform;
         desc.size = uniform_size;
         desc.mappedAtCreation = true;
@@ -1079,17 +1160,12 @@ WEAK int halide_webgpu_run(void *user_context,
         // Create a bind group for the uniform buffer.
         WGPUBindGroupLayout layout =
             wgpuComputePipelineGetBindGroupLayout(pipeline, 1);
-        WGPUBindGroupEntry entry{};
-        entry.nextInChain = nullptr;
+        WGPUBindGroupEntry entry = WGPU_BIND_GROUP_ENTRY_INIT;
         entry.binding = 0;
         entry.buffer = arg_buffer;
         entry.offset = 0;
         entry.size = uniform_size;
-        entry.sampler = nullptr;
-        entry.textureView = nullptr;
-        WGPUBindGroupDescriptor bindgroup_desc{};
-        bindgroup_desc.nextInChain = nullptr;
-        bindgroup_desc.label = nullptr;
+        WGPUBindGroupDescriptor bindgroup_desc = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
         bindgroup_desc.layout = layout;
         bindgroup_desc.entryCount = 1;
         bindgroup_desc.entries = &entry;
