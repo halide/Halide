@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int call_count[4];
-extern "C" HALIDE_EXPORT_SYMBOL int call_counter(int x, int idx) {
+int call_counter(int x, int idx) {
     call_count[idx]++;
     return x;
 }

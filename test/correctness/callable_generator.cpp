@@ -27,7 +27,7 @@ void my_free(JITUserContext *user_context, void *ptr) {
 }
 
 int call_counter = 0;
-extern "C" HALIDE_EXPORT_SYMBOL float my_extern_func(int x, float y) {
+float my_extern_func(int x, float y) {
     call_counter++;
     return x * y;
 }

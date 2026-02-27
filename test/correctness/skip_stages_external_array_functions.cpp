@@ -5,7 +5,7 @@ using namespace Halide;
 
 int bounds_query_count[4];
 int call_count[4];
-extern "C" HALIDE_EXPORT_SYMBOL int call_counter(halide_buffer_t *input, int x, int idx, halide_buffer_t *output) {
+int call_counter(halide_buffer_t *input, int x, int idx, halide_buffer_t *output) {
     if (input->is_bounds_query()) {
         bounds_query_count[idx]++;
         input->dim[0] = output->dim[0];
@@ -18,6 +18,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int call_counter(halide_buffer_t *input, int x, 
 
     return 0;
 }
+HALIDE_REGISTER_EXTERN(call_counter);
 
 void reset_counts() {
     for (int i = 0; i < 4; i++) {

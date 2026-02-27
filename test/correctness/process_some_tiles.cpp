@@ -6,7 +6,7 @@ using namespace Halide;
 
 // A version of pow that tracks usage so we can check how many times it was called.
 int call_count = 0;
-extern "C" HALIDE_EXPORT_SYMBOL float my_powf(float x, float y) {
+float my_powf(float x, float y) {
     call_count++;
     // We have to read from call_count, or for some reason apple clang removes it entirely.
     assert(call_count != -1);

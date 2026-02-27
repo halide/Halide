@@ -299,6 +299,15 @@ public:
     static int set_num_threads(int);
 };
 
+/** Register the name of a c symbol so that is it findable by the JIT compiler
+ * regardless of how the host process was defined, for uses such as
+ * Func::define_extern. Always returns zero (it has a return value to make it
+ * easier to call at static initialization time. */
+int register_symbol_address(const char *name, void *addr);
+
+/** Look for the address of a registered symbol for things like
+ * Func::define_extern. Checks for registered ones using the function above and
+ * failing that, does dlsym on the host process. */
 void *get_symbol_address(const char *s);
 
 struct JITCache {

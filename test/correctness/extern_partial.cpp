@@ -5,7 +5,7 @@
 
 using namespace Halide;
 
-extern "C" HALIDE_EXPORT_SYMBOL int copy_row_plus_xcoord(halide_buffer_t *input, halide_buffer_t *output) {
+int copy_row_plus_xcoord(halide_buffer_t *input, halide_buffer_t *output) {
     // Note the final output buffer argument is unused.
     if (input->is_bounds_query()) {
         for (int d = 0; d < 2; d++) {
@@ -30,6 +30,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int copy_row_plus_xcoord(halide_buffer_t *input,
 
     return 0;
 }
+HALIDE_REGISTER_EXTERN(copy_row_plus_xcoord);
 
 int main(int argc, char **argv) {
     // Try making only one of each dimension of a 2D extern stage extern.

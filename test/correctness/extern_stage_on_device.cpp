@@ -8,9 +8,9 @@ using namespace Halide;
 // either on host or device. The outer Halide filter must
 // override the "device_api" parameter of Func::define_extern
 // when using the extern_stage on device.
-extern "C" HALIDE_EXPORT_SYMBOL int extern_stage(int extern_on_device,
-                                                 int outer_filter_on_device,
-                                                 halide_buffer_t *out) {
+int extern_stage(int extern_on_device,
+                 int outer_filter_on_device,
+                 halide_buffer_t *out) {
     if (!out->is_bounds_query()) {
         if (extern_on_device > 0 && outer_filter_on_device > 0) {
             // If both the extern and the outer filter are on running on
@@ -39,6 +39,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int extern_stage(int extern_on_device,
     }
     return 0;
 }
+HALIDE_REGISTER_EXTERN(extern_stage);
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();

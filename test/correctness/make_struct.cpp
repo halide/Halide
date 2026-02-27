@@ -11,7 +11,7 @@ struct struct_t {
     const char *d;
 };
 
-extern "C" HALIDE_EXPORT_SYMBOL int check_struct(struct_t *s) {
+int check_struct(struct_t *s) {
     if (s->a != 3.0 ||
         s->b != 1234567 ||
         s->c != 1234 ||

@@ -1,7 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
 
-extern "C" HALIDE_EXPORT_SYMBOL int flip_x_and_sum(halide_buffer_t *in1, halide_buffer_t *in2, halide_buffer_t *out) {
+int flip_x_and_sum(halide_buffer_t *in1, halide_buffer_t *in2, halide_buffer_t *out) {
     int min = out->dim[0].min;
     int max = out->dim[0].min + out->dim[0].extent - 1;
 
@@ -55,6 +55,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int flip_x_and_sum(halide_buffer_t *in1, halide_
 
     return 0;
 }
+HALIDE_REGISTER_EXTERN(flip_x_and_sum);
 
 using namespace Halide;
 

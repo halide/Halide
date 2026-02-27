@@ -5,7 +5,7 @@ using namespace Halide;
 
 // Make a custom strlen so that it always returns a 32-bit int,
 // instead of switching based on bit-width.
-extern "C" HALIDE_EXPORT_SYMBOL int my_strlen(const char *c) {
+int my_strlen(const char *c) {
     int l = 0;
     while (*c) {
         c++;

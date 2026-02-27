@@ -5,7 +5,7 @@
 
 using namespace Halide;
 
-extern "C" HALIDE_EXPORT_SYMBOL int copy_plus_xcoord(halide_buffer_t *input, int tile_extent_x, int tile_extent_y, halide_buffer_t *output) {
+int copy_plus_xcoord(halide_buffer_t *input, int tile_extent_x, int tile_extent_y, halide_buffer_t *output) {
     // Note the final output buffer argument is unused.
     if (input->is_bounds_query()) {
         for (int d = 0; d < 2; d++) {
@@ -30,6 +30,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int copy_plus_xcoord(halide_buffer_t *input, int
 
     return 0;
 }
+HALIDE_REGISTER_EXTERN(copy_plus_xcoord);
 
 int main(int argc, char **argv) {
     Func input;

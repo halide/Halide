@@ -44,7 +44,7 @@ bool check_expected_mallocs(const std::vector<size_t> &expected) {
 }
 
 // An extern stage that copies input -> output
-extern "C" HALIDE_EXPORT_SYMBOL int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
     } else {
@@ -52,9 +52,10 @@ extern "C" HALIDE_EXPORT_SYMBOL int simple_buffer_copy(halide_buffer_t *in, hali
     }
     return 0;
 }
+HALIDE_REGISTER_EXTERN(simple_buffer_copy);
 
 // An extern stage accesses the input in a non-monotonic way in the y dimension.
-extern "C" HALIDE_EXPORT_SYMBOL int zigzag_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+int zigzag_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
 
@@ -88,6 +89,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int zigzag_buffer_copy(halide_buffer_t *in, hali
     }
     return 0;
 }
+HALIDE_REGISTER_EXTERN(zigzag_buffer_copy);
 
 bool error_occurred;
 void expected_error(JITUserContext *, const char *msg) {

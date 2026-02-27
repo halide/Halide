@@ -25,7 +25,7 @@ class CheckForFloatDivision : public IRMutator {
 // A mutator that injects code that counts floating point multiplies,
 // and an extern function that it calls out to for the accounting.
 int multiply_count = 0;
-extern "C" HALIDE_EXPORT_SYMBOL float record_float_mul(float arg) {
+float record_float_mul(float arg) {
     multiply_count++;
     return arg;
 }

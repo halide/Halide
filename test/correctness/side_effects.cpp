@@ -16,7 +16,7 @@ using namespace Halide;
 
 // Here we use an extern call to print an ascii-art Mandelbrot set.
 int call_count = 0;
-extern "C" HALIDE_EXPORT_SYMBOL int draw_pixel(int x, int y, int val) {
+int draw_pixel(int x, int y, int val) {
     call_count++;
     static int last_y = 0;
     if (y != last_y) {

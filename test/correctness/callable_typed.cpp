@@ -33,7 +33,7 @@ void *mischievous_malloc(JITUserContext *user_context, size_t x) {
 }
 
 int call_counter = 0;
-extern "C" HALIDE_EXPORT_SYMBOL float my_extern_func(int x, float y) {
+float my_extern_func(int x, float y) {
     call_counter++;
     return x * y;
 }

@@ -7,7 +7,7 @@ using namespace Halide;
 using namespace Halide::Tools;
 
 int call_count = 0;
-extern "C" HALIDE_EXPORT_SYMBOL int call_counter(int x, int y) {
+int call_counter(int x, int y) {
     call_count++;
     return x;
 }

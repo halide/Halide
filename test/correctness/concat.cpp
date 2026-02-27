@@ -3,7 +3,7 @@
 using namespace Halide;
 
 int count[2];
-extern "C" HALIDE_EXPORT_SYMBOL int call_counter(int slot, int val) {
+int call_counter(int slot, int val) {
     count[slot]++;
     return val;
 }

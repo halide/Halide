@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 // An extern stage that translates.
-extern "C" HALIDE_EXPORT_SYMBOL int copy_and_check_strides(halide_buffer_t *in, halide_buffer_t *out) {
+int copy_and_check_strides(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         for (int i = 0; i < 2; i++) {
             in->dim[i].min = out->dim[i].min;
@@ -17,6 +17,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int copy_and_check_strides(halide_buffer_t *in, 
 
     return 0;
 }
+HALIDE_REGISTER_EXTERN(copy_and_check_strides);
 
 using namespace Halide;
 

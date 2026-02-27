@@ -33,12 +33,27 @@ using std::string;
 extern "C" unsigned long __udivdi3(unsigned long a, unsigned long b);
 #endif
 
+namespace {
+std::map<const char *, void *> registered_symbols;
+}
+
+int register_symbol_address(const char *name, void *addr) {
+    registered_symbols[name] = addr;
+    return 0;
+}
+
 #ifdef _WIN32
 void *get_symbol_address(const char *s) {
+    if (auto it = registered_symbols.find(s); it != registered_symbols.end()) {
+        return it->second;
+    }
     return (void *)GetProcAddress(GetModuleHandle(nullptr), s);
 }
 #else
 void *get_symbol_address(const char *s) {
+    if (auto it = registered_symbols.find(s); it != registered_symbols.end()) {
+        return it->second;
+    }
     // Mac OS 10.11 fails to return a symbol address if nullptr or RTLD_DEFAULT
     // is passed to dlsym. This seems to work.
     void *handle = dlopen(nullptr, RTLD_LAZY);
@@ -227,6 +242,24 @@ JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &
     return symbol;
 }
 
+#if defined(__GNUC__) && defined(__i386__)
+// This is a workaround for an odd corner case (cross-compiling + testing
+// Python bindings x86-32 on an x86-64 system): __udivdi3 is a helper function
+// that GCC uses to do u64/u64 division on 32-bit systems; it's usually included
+// by the linker on these systems as needed. When we JIT, LLVM will include references
+// to this call; MCJIT fixes up these references by doing (roughly) dlopen(NULL)
+// to look up the symbol. For normal JIT tests, this works fine, as dlopen(NULL)
+// finds the test executable, which has the right lookups to locate it inside libHalide.so.
+// If, however, we are running a JIT-via-Python test, dlopen(NULL) returns the
+// CPython executable... which apparently *doesn't* include this as an exported
+// function, so the lookup fails and crashiness ensues. So our workaround here is
+// a bit icky, but expedient: check for this name if we can't find it elsewhere,
+// and if so, return the one we know should be present. (Obviously, if other runtime
+// helper functions of this sort crop up in the future, this should be expanded
+// into a "builtins map".)
+HALIDE_REGISTER_SYMBOL(__udivdi3);
+#endif
+
 // Expand LLVM's search for symbols to include code contained in a set of JITModule.
 class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<JITModule> modules;
@@ -246,26 +279,12 @@ public:
                 return (uint64_t)iter->second.address;
             }
         }
-        uint64_t result = SectionMemoryManager::getSymbolAddress(name);
-#if defined(__GNUC__) && defined(__i386__)
-        // This is a workaround for an odd corner case (cross-compiling + testing
-        // Python bindings x86-32 on an x86-64 system): __udivdi3 is a helper function
-        // that GCC uses to do u64/u64 division on 32-bit systems; it's usually included
-        // by the linker on these systems as needed. When we JIT, LLVM will include references
-        // to this call; MCJIT fixes up these references by doing (roughly) dlopen(NULL)
-        // to look up the symbol. For normal JIT tests, this works fine, as dlopen(NULL)
-        // finds the test executable, which has the right lookups to locate it inside libHalide.so.
-        // If, however, we are running a JIT-via-Python test, dlopen(NULL) returns the
-        // CPython executable... which apparently *doesn't* include this as an exported
-        // function, so the lookup fails and crashiness ensues. So our workaround here is
-        // a bit icky, but expedient: check for this name if we can't find it elsewhere,
-        // and if so, return the one we know should be present. (Obviously, if other runtime
-        // helper functions of this sort crop up in the future, this should be expanded
-        // into a "builtins map".)
-        if (result == 0 && name == "__udivdi3") {
-            result = (uint64_t)&__udivdi3;
+
+        uint64_t result = (uint64_t)get_symbol_address(name.c_str());
+        if (result == 0) {
+            result = SectionMemoryManager::getSymbolAddress(name);
         }
-#endif
+
         internal_assert(result != 0)
             << "HalideJITMemoryManager: unable to find address for " << name << "\n";
         return result;
@@ -419,6 +438,11 @@ void compile_module_impl(
                 newSymbols.insert({_name, {symbol, JITSymbolFlags::Exported}});
             }
         }
+    }
+    for (auto const &iter : registered_symbols) {
+        orc::SymbolStringPtr name = symbolStringPool->intern(iter.first);
+        auto symbol = llvm::orc::ExecutorAddr::fromPtr(iter.second);
+        newSymbols.insert({name, {symbol, JITSymbolFlags::Exported}});
     }
     err = JIT->getMainJITDylib().define(orc::absoluteSymbols(std::move(newSymbols)));
     internal_assert(!err) << llvm::toString(std::move(err)) << "\n";

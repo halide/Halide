@@ -5,12 +5,12 @@
 
 using namespace Halide;
 
-extern "C" HALIDE_EXPORT_SYMBOL std::list<int> *list_create(int) {
+std::list<int> *list_create(int) {
     return new std::list<int>();
 }
 HalideExtern_1(std::list<int> *, list_create, int);
 
-extern "C" HALIDE_EXPORT_SYMBOL std::list<int> *list_maybe_insert(std::list<int> *list, bool insert, int value) {
+std::list<int> *list_maybe_insert(std::list<int> *list, bool insert, int value) {
     if (insert) {
         list->push_back(value);
     }

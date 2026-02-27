@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 // out(x) = in(x) * x;
-extern "C" HALIDE_EXPORT_SYMBOL int extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
+int extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
     assert(in->type == halide_type_of<int>());
     assert(out->type == halide_type_of<int>());
     if (in->host == nullptr || out->host == nullptr) {
@@ -30,6 +30,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int extern_stage(halide_buffer_t *in, halide_buf
     }
     return 0;
 }
+HALIDE_REGISTER_EXTERN(extern_stage);
 
 using namespace Halide;
 

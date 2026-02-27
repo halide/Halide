@@ -20,7 +20,7 @@ void my_free(void *user_context, void *ptr) {
 }
 
 // An extern stage that copies input -> output
-extern "C" HALIDE_EXPORT_SYMBOL int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
     } else {
