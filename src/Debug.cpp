@@ -100,18 +100,21 @@ std::vector<DebugRule> parse_rules(const std::string &env) {
         if (auto rule = DebugRule::parse(spec)) {
             rules.push_back(*rule);
         } else if (!spec.empty()) {
-            user_warning
-                << "Ignoring malformed HL_DEBUG_CODEGEN entry: [" << spec << "]\n"
-                << "Expected rule format:\n"
-                << "    verbosity[,filename[:line_low[-line_high]]][@func]\n"
-                << "Rules are separated by ';' and are OR-ed together.\n"
-                << "Matching for filename and function uses suffix matching.\n"
-                << "Examples:\n"
-                << "    HL_DEBUG_CODEGEN=2\n"
-                << "    HL_DEBUG_CODEGEN=4,CodeGen_LLVM.cpp\n"
-                << "    HL_DEBUG_CODEGEN=3,Simplify.cpp:100-180\n"
-                << "    HL_DEBUG_CODEGEN=2@visit\n"
-                << "    HL_DEBUG_CODEGEN=1;4,CodeGen_LLVM.cpp@compile\n";
+            // Don't use user_warning here: it consults debug_is_active_impl(),
+            // which would recurse while this function-local static is initializing.
+            const std::string warning =
+                "Warning: Ignoring malformed HL_DEBUG_CODEGEN entry: [" + spec + "]\n"
+                "Expected rule format:\n"
+                "    verbosity[,filename[:line_low[-line_high]]][@func]\n"
+                "Rules are separated by ';' and are OR-ed together.\n"
+                "Matching for filename and function uses suffix matching.\n"
+                "Examples:\n"
+                "    HL_DEBUG_CODEGEN=2\n"
+                "    HL_DEBUG_CODEGEN=4,CodeGen_LLVM.cpp\n"
+                "    HL_DEBUG_CODEGEN=3,Simplify.cpp:100-180\n"
+                "    HL_DEBUG_CODEGEN=2@visit\n"
+                "    HL_DEBUG_CODEGEN=1;4,CodeGen_LLVM.cpp@compile\n";
+            issue_warning(warning.c_str());
         }
     }
     return rules;
