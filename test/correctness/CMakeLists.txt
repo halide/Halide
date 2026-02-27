@@ -457,6 +457,7 @@ set_target_properties(correctness_async
                       correctness_sliding_over_guard_with_if
                       correctness_sliding_reduction
                       correctness_sliding_window
+                      correctness_stage_strided_loads
                       correctness_storage_folding
                       PROPERTIES ENABLE_EXPORTS TRUE)
 

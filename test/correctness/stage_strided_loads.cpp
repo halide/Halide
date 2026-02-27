@@ -3,6 +3,18 @@
 using namespace Halide;
 using namespace Halide::Internal;
 
+// An extern stage needed below
+extern "C" HALIDE_EXPORT_SYMBOL int make_data(halide_buffer_t *out) {
+    if (out->is_bounds_query()) {
+        return 0;
+    }
+    int *dst = (int *)out->host;
+    for (int x = 0; x < out->dim[0].extent; x++) {
+        dst[x] = x + out->dim[0].min;
+    }
+    return 0;
+}
+
 class CheckForStridedLoads : public IRMutator {
     using IRMutator::visit;
 
@@ -86,10 +98,7 @@ int main(int argc, char **argv) {
         f(x) += {buf(2 * x), buf(2 * x + 1)};
         f.update().vectorize(x, 8, TailStrategy::RoundUp);
 
-        // In this case, the dense load appears twice across the two store
-        // statements for the two tuple components, but it will get deduped by
-        // llvm.
-        checker.check(f, 2);
+        checker.check(f, 1);
     }
 
     {
@@ -113,7 +122,7 @@ int main(int argc, char **argv) {
         g.vectorize(x, 8, TailStrategy::RoundUp);
         f.compute_at(g, x).vectorize(x);
 
-        checker.check(g, 2);
+        checker.check(g, 1);
     }
 
     {
@@ -125,7 +134,7 @@ int main(int argc, char **argv) {
         g(x) = f(x);
         g.vectorize(x, 8, TailStrategy::RoundUp);
 
-        checker.check(g, 2);
+        checker.check(g, 1);
     }
 
     {
@@ -135,7 +144,7 @@ int main(int argc, char **argv) {
         f(x, c) = buf(4 * x + c) + 4 * x;
         f.vectorize(x, 8, TailStrategy::RoundUp).bound(c, 0, 4).unroll(c).reorder(c, x);
 
-        checker.check(f, 4);
+        checker.check(f, 1);
     }
 
     {
@@ -152,7 +161,7 @@ int main(int argc, char **argv) {
         f.tile(x, y, xi, yi, 8, 8, TailStrategy::RoundUp).vectorize(xi).reorder(c, x, y);
         g.compute_at(f, x).vectorize(x);
         h.compute_at(f, x).vectorize(x);
-        checker.check(f, 2);
+        checker.check(f, 1);
     }
 
     // We can always densify strided loads to internal allocations, because we
@@ -181,7 +190,7 @@ int main(int argc, char **argv) {
     {
         Func f;
         Var x;
-        f(x) = buf(16 * x) + buf(16 * x + 15);
+        f(x) = buf(17 * x) + buf(17 * x + 15);
         f.vectorize(x, 16, TailStrategy::RoundUp);
 
         checker.check_not(f, 0);
@@ -254,6 +263,63 @@ int main(int argc, char **argv) {
                         printf("out(%d) = %f instead of %f\n", i, out(i), data(stride * i));
                     }
                 }
+            }
+        }
+    }
+
+    // Check we don't hoist a shared load past a store to the same buffer.
+    {
+        Func f, g, h;
+        Var x, y, xo, xi, xio, xii;
+        f(x) = x;
+        g(x, y) = f(2 * x + y);
+        h(x) = g(x, 0) + g(x, 1);
+
+        // Construct a situation like:
+        // alloc f
+        // for x:
+        //   f([0...14]) = [0...14]
+        //   strided load from f [0, 2, 4, ... 14]
+        //   f[15] = 15
+        //   strided load from f [1, 3, 5, ... 15]
+
+        // if a single shared load is hoisted before the stores to f
+        // stage, it will see garbage. If it's hoisted to just after the first
+        // store, it'll see garbage for the last lane
+
+        h.compute_root().vectorize(x, 8, TailStrategy::RoundUp);
+        g.compute_at(h, x).unroll(y).vectorize(x);
+        f.store_at(g, Var::outermost()).compute_at(g, y);
+
+        Buffer<int> out = h.realize({1024});
+
+        for (int x = 0; x < out.width(); x++) {
+            int correct = 4 * x + 1;
+            if (out(x) != correct) {
+                printf("out(%d) = %d instead of %d\n", x, out(x), correct);
+            }
+        }
+    }
+
+    // Check we don't hoist a shared load before an extern stage that writes to
+    // the same buffer. Same as above, but uses an extern stage to fill f.
+    {
+        Func f, g, h;
+        Var x, y, xo, xi, xio, xii;
+        f.define_extern("make_data", {}, Int(32), 1);
+        g(x, y) = f(2 * x + y);
+        h(x) = g(x, 0) + g(x, 1);
+
+        h.compute_root().vectorize(x, 8, TailStrategy::RoundUp);
+        g.compute_at(h, x).unroll(y).vectorize(x);
+        f.store_at(g, Var::outermost()).bound_storage(_0, 16).compute_at(g, y);
+
+        Buffer<int> out = h.realize({1024});
+
+        for (int x = 0; x < out.width(); x++) {
+            int correct = 4 * x + 1;
+            if (out(x) != correct) {
+                printf("out(%d) = %d instead of %d\n", x, out(x), correct);
             }
         }
     }
