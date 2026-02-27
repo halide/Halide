@@ -49,5 +49,4 @@ tests(GROUPS performance multithreaded
 # since doing so might make them flaky.
 set_tests_properties(${TEST_NAMES} PROPERTIES RUN_SERIAL TRUE)
 
-# This test needs rdynamic or equivalent
-set_target_properties(performance_fast_pow PROPERTIES ENABLE_EXPORTS TRUE)
+
