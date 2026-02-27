@@ -28,6 +28,7 @@ int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
     }
     return 0;
 }
+HALIDE_REGISTER_EXTERN(simple_buffer_copy);
 
 int main(int argc, char **argv) {
     Var x, y;
