@@ -84,7 +84,7 @@ namespace Halide {
  *
  * otherwise, it is assumed to be an appropriate pathname.
  *
- * Any error in loading will assert-fail. */
+ * Any error in loading will cause an assertion failure. */
 void load_plugin(const std::string &lib_name);
 
 namespace Internal {
