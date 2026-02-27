@@ -46,6 +46,8 @@ ostream &operator<<(ostream &out, const Type &type) {
     case Type::BFloat:
         out << "bfloat";
         break;
+    case Type::Unknown:
+        out << "unknown";
     }
     if (!type.is_handle()) {
         out << type.bits();
@@ -495,6 +497,9 @@ std::ostream &operator<<(std::ostream &out, const DimType &t) {
         break;
     case DimType::PureRVar:
         out << "PureRVar";
+        break;
+    case DimType::InductiveVar:
+        out << "InductiveVar";
         break;
     case DimType::ImpureRVar:
         out << "ImpureRVar";

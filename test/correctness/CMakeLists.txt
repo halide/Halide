@@ -183,6 +183,7 @@ tests(GROUPS correctness
       implicit_args_tests.cpp
       in_place.cpp
       indexing_access_undef.cpp
+      inductive.cpp
       infer_arguments.cpp
       inline_reduction.cpp
       inlined_generator.cpp

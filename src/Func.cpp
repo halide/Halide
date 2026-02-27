@@ -66,6 +66,10 @@ Func::Func(const string &name)
     : func(unique_name(name)) {
 }
 
+Func::Func(const Type &required_type, const string &name)
+    : func({required_type}, AnyDims, unique_name(name)) {
+}
+
 Func::Func(const Type &required_type, int required_dims, const string &name)
     : func({required_type}, required_dims, unique_name(name)) {
 }
@@ -491,7 +495,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition,
             // unless it is flagged explicitly or is a associative atomic operation.
-            if (!dim.is_pure() && var.is_rvar && is_parallel(t)) {
+            if (!dim.is_pure() && (var.is_rvar || dim.is_inductive()) && is_parallel(t)) {
                 if (!definition.schedule().allow_race_conditions() &&
                     definition.schedule().atomic()) {
                     if (!definition.schedule().override_atomic_associativity_test()) {
@@ -1341,6 +1345,9 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
             } else if (dims[i].dim_type == DimType::PureRVar ||
                        outer_type == DimType::PureRVar) {
                 dims[i].dim_type = DimType::PureRVar;
+            } else if (dims[i].dim_type == DimType::InductiveVar ||
+                       outer_type == DimType::InductiveVar) {
+                dims[i].dim_type = DimType::InductiveVar;
             } else {
                 dims[i].dim_type = DimType::PureVar;
             }
@@ -3324,8 +3331,19 @@ Stage FuncRef::operator/=(const FuncRef &e) {
 }
 
 FuncRef::operator Expr() const {
+    /*
     user_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
+    */
+
+    if (!(func.has_pure_definition() || func.has_extern_definition())) {
+        Type t = Type(Type::Unknown, 0, 1);
+        if (!func.required_types().empty()) {
+            t = func.required_types()[0];
+        }
+        return Call::make(t, func.name(), args, Call::Halide,
+                          func.get_contents(), 0, Buffer<>(), Parameter());
+    }
 
     user_assert(func.outputs() == 1)
         << "Can't convert a reference Func \"" << func.name()

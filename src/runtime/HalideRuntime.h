@@ -478,11 +478,12 @@ typedef enum halide_type_code_t
     : uint8_t
 #endif
 {
-    halide_type_int = 0,     ///< signed integers
-    halide_type_uint = 1,    ///< unsigned integers
-    halide_type_float = 2,   ///< IEEE floating point numbers
-    halide_type_handle = 3,  ///< opaque pointer type (void *)
-    halide_type_bfloat = 4,  ///< floating point numbers in the bfloat format
+    halide_type_int = 0,      ///< signed integers
+    halide_type_uint = 1,     ///< unsigned integers
+    halide_type_float = 2,    ///< IEEE floating point numbers
+    halide_type_handle = 3,   ///< opaque pointer type (void *)
+    halide_type_bfloat = 4,   ///< floating point numbers in the bfloat format
+    halide_type_unknown = 5,  ///< an expression of unknown type, to be determined later
 } halide_type_code_t;
 
 // Note that while __attribute__ can go before or after the declaration,

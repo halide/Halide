@@ -187,6 +187,12 @@ public:
                 !has_extern_definition());
     }
 
+    /** Does this function have an inductive pure definition? */
+    bool is_inductive() const;
+
+    /** Is this function inductive in the given variable? */
+    bool is_inductive(const std::string &var) const;
+
     /** Is it legal to inline this function? */
     bool can_be_inlined() const;
 
