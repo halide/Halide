@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 // An extern stage that translates.
-extern "C" HALIDE_EXPORT_SYMBOL int translate(halide_buffer_t *in, int dx, int dy, halide_buffer_t *out) {
+int translate(halide_buffer_t *in, int dx, int dy, halide_buffer_t *out) {
 
     if (in->is_bounds_query()) {
         in->dim[0].min = out->dim[0].min + dx;
@@ -17,6 +17,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int translate(halide_buffer_t *in, int dx, int d
 
     return 0;
 }
+HALIDE_REGISTER_EXTERN(translate);
 
 using namespace Halide;
 

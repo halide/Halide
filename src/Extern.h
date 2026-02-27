@@ -10,6 +10,12 @@
  */
 
 #include "Debug.h"
+#include "JITModule.h"
+
+/** Register a symbol of an extern stage or extern call so that the JIT compiler
+ * can find it. */
+#define HALIDE_REGISTER_EXTERN(name) \
+    static int _halide_register_extern_symbol_##name = Halide::Internal::register_symbol_address(#name, (void *)(name))
 
 #define _halide_check_arg_type(t, name, e, n)                                      \
     _halide_user_assert((e).type() == (t))                                         \
@@ -18,12 +24,14 @@
         << " has type " << (e).type() << ".\n";
 
 #define HalideExtern_1(rt, name, t1)                                                                             \
+    HALIDE_REGISTER_EXTERN(name);                                                                                \
     Halide::Expr name(const Halide::Expr &a1) {                                                                  \
         _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                              \
         return Halide::Internal::Call::make(Halide::type_of<rt>(), #name, {a1}, Halide::Internal::Call::Extern); \
     }
 
 #define HalideExtern_2(rt, name, t1, t2)                                                                             \
+    HALIDE_REGISTER_EXTERN(name);                                                                                    \
     Halide::Expr name(const Halide::Expr &a1, const Halide::Expr &a2) {                                              \
         _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                                  \
         _halide_check_arg_type(Halide::type_of<t2>(), name, a2, 2);                                                  \
@@ -31,6 +39,7 @@
     }
 
 #define HalideExtern_3(rt, name, t1, t2, t3)                                                                             \
+    HALIDE_REGISTER_EXTERN(name);                                                                                        \
     Halide::Expr name(const Halide::Expr &a1, const Halide::Expr &a2, const Halide::Expr &a3) {                          \
         _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                                      \
         _halide_check_arg_type(Halide::type_of<t2>(), name, a2, 2);                                                      \
@@ -39,6 +48,7 @@
     }
 
 #define HalideExtern_4(rt, name, t1, t2, t3, t4)                                                                             \
+    HALIDE_REGISTER_EXTERN(name);                                                                                            \
     Halide::Expr name(const Halide::Expr &a1, const Halide::Expr &a2, const Halide::Expr &a3, const Halide::Expr &a4) {      \
         _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                                          \
         _halide_check_arg_type(Halide::type_of<t2>(), name, a2, 2);                                                          \
@@ -48,6 +58,7 @@
     }
 
 #define HalideExtern_5(rt, name, t1, t2, t3, t4, t5)                                                                                            \
+    HALIDE_REGISTER_EXTERN(name);                                                                                                               \
     Halide::Expr name(const Halide::Expr &a1, const Halide::Expr &a2, const Halide::Expr &a3, const Halide::Expr &a4, const Halide::Expr &a5) { \
         _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                                                             \
         _halide_check_arg_type(Halide::type_of<t2>(), name, a2, 2);                                                                             \
@@ -58,12 +69,14 @@
     }
 
 #define HalidePureExtern_1(rt, name, t1)                                                                             \
+    HALIDE_REGISTER_EXTERN(name);                                                                                    \
     Halide::Expr name(const Halide::Expr &a1) {                                                                      \
         _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                                  \
         return Halide::Internal::Call::make(Halide::type_of<rt>(), #name, {a1}, Halide::Internal::Call::PureExtern); \
     }
 
 #define HalidePureExtern_2(rt, name, t1, t2)                                                                             \
+    HALIDE_REGISTER_EXTERN(name);                                                                                        \
     Halide::Expr name(const Halide::Expr &a1, const Halide::Expr &a2) {                                                  \
         _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                                      \
         _halide_check_arg_type(Halide::type_of<t2>(), name, a2, 2);                                                      \
@@ -71,6 +84,7 @@
     }
 
 #define HalidePureExtern_3(rt, name, t1, t2, t3)                                                                             \
+    HALIDE_REGISTER_EXTERN(name);                                                                                            \
     Halide::Expr name(const Halide::Expr &a1, const Halide::Expr &a2, const Halide::Expr &a3) {                              \
         _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                                          \
         _halide_check_arg_type(Halide::type_of<t2>(), name, a2, 2);                                                          \
@@ -79,6 +93,7 @@
     }
 
 #define HalidePureExtern_4(rt, name, t1, t2, t3, t4)                                                                             \
+    HALIDE_REGISTER_EXTERN(name);                                                                                                \
     Halide::Expr name(const Halide::Expr &a1, const Halide::Expr &a2, const Halide::Expr &a3, const Halide::Expr &a4) {          \
         _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                                              \
         _halide_check_arg_type(Halide::type_of<t2>(), name, a2, 2);                                                              \
@@ -88,6 +103,7 @@
     }
 
 #define HalidePureExtern_5(rt, name, t1, t2, t3, t4, t5)                                                                                        \
+    HALIDE_REGISTER_EXTERN(name);                                                                                                               \
     Halide::Expr name(const Halide::Expr &a1, const Halide::Expr &a2, const Halide::Expr &a3, const Halide::Expr &a4, const Halide::Expr &a5) { \
         _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                                                             \
         _halide_check_arg_type(Halide::type_of<t2>(), name, a2, 2);                                                                             \

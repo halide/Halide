@@ -7,7 +7,7 @@ void dump_buffer_shape(halide_buffer_t *b) {
     }
 }
 
-extern "C" HALIDE_EXPORT_SYMBOL int copy(halide_buffer_t *in, halide_buffer_t *out) {
+int copy(halide_buffer_t *in, halide_buffer_t *out) {
 
     /*
     printf("out:\n");
@@ -39,6 +39,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int copy(halide_buffer_t *in, halide_buffer_t *o
 
     return 0;
 }
+HALIDE_REGISTER_EXTERN(copy);
 
 using namespace Halide;
 

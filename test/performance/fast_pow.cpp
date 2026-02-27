@@ -7,7 +7,7 @@ using namespace Halide;
 using namespace Halide::Tools;
 
 // powf() is a macro in some environments, so always wrap it
-extern "C" HALIDE_EXPORT_SYMBOL float pow_ref(float x, float y) {
+float pow_ref(float x, float y) {
     return powf(x, y);
 }
 HalideExtern_2(float, pow_ref, float, float);

@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int counter = 0;
-extern "C" HALIDE_EXPORT_SYMBOL int call_count(int x) {
+int call_count(int x) {
     counter++;
     assert(counter > 0);
     return 99;

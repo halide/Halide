@@ -16,7 +16,7 @@ using namespace Halide;
 // received in non-bounds-query-mode is the intersection of what it
 // asked for for a single scanline and what it asked for for the whole
 // image.
-extern "C" HALIDE_EXPORT_SYMBOL int misbehaving_extern_stage(halide_buffer_t *in, int variant, halide_buffer_t *out) {
+int misbehaving_extern_stage(halide_buffer_t *in, int variant, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         // As a baseline, require the same amount of input as output, like a copy
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
@@ -68,6 +68,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int misbehaving_extern_stage(halide_buffer_t *in
     }
     return 0;
 }
+HALIDE_REGISTER_EXTERN(misbehaving_extern_stage);
 
 int main(int argc, char **argv) {
     Func f, g, h;

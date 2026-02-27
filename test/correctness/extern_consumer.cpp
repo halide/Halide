@@ -5,9 +5,9 @@
 
 using namespace Halide;
 
-extern "C" HALIDE_EXPORT_SYMBOL int dump_to_file(halide_buffer_t *input, const char *filename,
-                                                 int desired_min, int desired_extent,
-                                                 halide_buffer_t *) {
+int dump_to_file(halide_buffer_t *input, const char *filename,
+                 int desired_min, int desired_extent,
+                 halide_buffer_t *) {
     // Note the final output buffer argument is unused.
     if (input->is_bounds_query()) {
         // Request some range of the input buffer
@@ -27,6 +27,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int dump_to_file(halide_buffer_t *input, const c
 
     return 0;
 }
+HALIDE_REGISTER_EXTERN(dump_to_file);
 
 bool check_result() {
     // Check the right thing happened

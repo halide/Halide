@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int call_counter = 0;
-extern "C" HALIDE_EXPORT_SYMBOL float my_func(int x, float y) {
+float my_func(int x, float y) {
     call_counter++;
     return x * y;
 }

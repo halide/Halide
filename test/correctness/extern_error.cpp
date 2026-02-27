@@ -4,13 +4,14 @@
 using namespace Halide;
 
 bool extern_error_called = false;
-extern "C" HALIDE_EXPORT_SYMBOL int extern_error(JITUserContext *user_context, halide_buffer_t *out) {
+int extern_error(JITUserContext *user_context, halide_buffer_t *out) {
     extern_error_called = true;
     return halide_error_code_generic_error;
 }
+HALIDE_REGISTER_EXTERN(extern_error);
 
 bool error_occurred = false;
-extern "C" HALIDE_EXPORT_SYMBOL void my_halide_error(JITUserContext *user_context, const char *msg) {
+void my_halide_error(JITUserContext *user_context, const char *msg) {
     printf("Expected: %s\n", msg);
     error_occurred = true;
 }

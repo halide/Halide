@@ -11,7 +11,7 @@ using namespace Halide::Tools;
 
 std::atomic<int32_t> call_count{0};
 
-extern "C" HALIDE_EXPORT_SYMBOL int five_ms(int arg) {
+int five_ms(int arg) {
     call_count++;
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
     return arg;

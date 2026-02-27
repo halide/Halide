@@ -5,7 +5,7 @@
 using namespace Halide;
 
 // Use an extern stage to do a sort
-extern "C" HALIDE_EXPORT_SYMBOL int sort_buffer(halide_buffer_t *in, halide_buffer_t *out) {
+int sort_buffer(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         in->dim[0].min = out->dim[0].min;
         in->dim[0].extent = out->dim[0].extent;
@@ -18,6 +18,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int sort_buffer(halide_buffer_t *in, halide_buff
     }
     return 0;
 }
+HALIDE_REGISTER_EXTERN(sort_buffer);
 
 int main(int argc, char **argv) {
     Func data;
