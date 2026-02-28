@@ -109,39 +109,28 @@ private:
     }
 };
 
-class InjectMarker : public IRMutator {
-public:
-    string func;
-    Stmt last_use;
-
-private:
+Stmt inject_marker(const Stmt &stmt, const string &func, const Stmt &last_use) {
     bool injected = false;
+    return mutate_with(stmt, [&](auto *self, const Block *block) -> Stmt {
+        auto do_injection = [&](const Stmt &s) {
+            if (injected) {
+                return s;
+            }
+            if (s.same_as(last_use)) {
+                injected = true;
+                return Block::make(s, Free::make(func));
+            }
+            return self->mutate(s);
+        };
 
-    using IRMutator::visit;
+        Stmt new_rest = do_injection(block->rest);
+        Stmt new_first = do_injection(block->first);
 
-    Stmt inject_marker(Stmt s) {
-        if (injected) {
-            return s;
-        }
-        if (s.same_as(last_use)) {
-            injected = true;
-            return Block::make(s, Free::make(func));
-        } else {
-            return mutate(s);
-        }
-    }
-
-    Stmt visit(const Block *block) override {
-        Stmt new_rest = inject_marker(block->rest);
-        Stmt new_first = inject_marker(block->first);
-
-        if (new_first.same_as(block->first) &&
-            new_rest.same_as(block->rest)) {
+        if (new_first.same_as(block->first) && new_rest.same_as(block->rest)) {
             return block;
-        } else {
-            return Block::make(new_first, new_rest);
         }
-    }
+        return Block::make(new_first, new_rest);
+    });
 };
 
 class InjectEarlyFrees : public IRMutator {
@@ -156,10 +145,7 @@ class InjectEarlyFrees : public IRMutator {
         stmt.accept(&last_use);
 
         if (last_use.last_use.defined()) {
-            InjectMarker inject_marker;
-            inject_marker.func = alloc->name;
-            inject_marker.last_use = last_use.last_use;
-            stmt = inject_marker.mutate(stmt);
+            stmt = inject_marker(stmt, alloc->name, last_use.last_use);
         } else {
             stmt = Allocate::make(alloc->name, alloc->type, alloc->memory_type,
                                   alloc->extents, alloc->condition,

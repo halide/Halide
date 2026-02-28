@@ -252,13 +252,17 @@ protected:
     }
 };
 
-template<typename... Lambdas>
-void visit_with(const IRNode *ir, Lambdas &&...lambdas) {
+template<typename T, typename... Lambdas>
+void visit_with(T &&ir, Lambdas &&...lambdas) {
     LambdaVisitor visitor{std::forward<Lambdas>(lambdas)...};
     constexpr bool all_take_two_args =
         (std::is_invocable_v<Lambdas, decltype(&visitor), decltype(nullptr)> && ...);
     static_assert(all_take_two_args);
-    ir->accept(&visitor);
+    if constexpr (std::is_pointer_v<std::remove_reference_t<T>>) {
+        ir->accept(&visitor);
+    } else {
+        ir.accept(&visitor);
+    }
 }
 
 template<typename... Lambdas>
