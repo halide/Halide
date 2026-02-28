@@ -103,7 +103,7 @@ std::vector<DebugRule> parse_rules(const std::string &env) {
             // Don't use user_warning here: it consults debug_is_active_impl(),
             // which would recurse while this function-local static is initializing.
             const std::string warning =
-                "Warning: Ignoring malformed HL_DEBUG_CODEGEN entry: [" + spec + "]\n"
+                "Warning: Ignoring malformed HL_DEBUG_CODEGEN entry: [" + spec + "]\n" +
                 "Expected rule format:\n"
                 "    verbosity[,filename[:line_low[-line_high]]][@func]\n"
                 "Rules are separated by ';' and are OR-ed together.\n"
