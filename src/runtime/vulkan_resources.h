@@ -1858,7 +1858,7 @@ int vk_device_crop_from_offset(void *user_context,
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-        if (byte_offset < 0) {
+    if (byte_offset < 0) {
         error(user_context) << "Vulkan: Invalid offset for device crop!";
         return halide_error_code_device_crop_failed;
     }
