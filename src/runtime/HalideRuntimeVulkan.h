@@ -105,6 +105,23 @@ extern int halide_vulkan_release_context(void *user_context,
                                          VkDevice device,
                                          VkQueue queue,
                                          VkDebugUtilsMessengerEXT messenger);
+
+// - halide_vulkan_export_memory_allocator
+//   exports the internally allocated memory allocator in case the user wants to just set
+//   up their own context but use Halide's memory allocator. Must have overridden halide_vulkan_acquire_context
+//   and halide_vulkan_release_context. Must override also halide_vulkan_export_memory_allocator and guard access
+//   with the same locking used by the custom acquire/release implementations. This allows the allocator to be
+//   saved for future halide_vulkan_acquire_context calls that Halide will automatically issue to retrieve
+//   the custom context.
+extern int halide_vulkan_export_memory_allocator(void *user_context,
+                                                 struct halide_vulkan_memory_allocator *allocator);
+// - halide_vulkan_memory_allocator_release
+//   releases the internally allocated memory allocator, important for proper memory cleanup. Must have overridden halide_vulkan_acquire_context
+//   and halide_vulkan_release_context, and must coordinate with the same locking as the custom implementations.
+extern int halide_vulkan_memory_allocator_release(void *user_context,
+                                                  struct halide_vulkan_memory_allocator *allocator,
+                                                  VkInstance instance,
+                                                  VkDebugUtilsMessengerEXT messenger);
 // --
 
 // Override the default allocation callbacks (default uses Vulkan runtime implementation)
