@@ -76,7 +76,6 @@ public:
     }
 };
 
-
 class LiftExceedingVectors : public IRMutator {
     using IRMutator::visit;
 

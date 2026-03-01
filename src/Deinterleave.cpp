@@ -409,7 +409,7 @@ private:
                     op->name, op->type.lanes(),
                     starting_lane, lane_stride, new_lanes);
 
-                VectorSlice new_sl; // When C++20 lands: Designated initializer
+                VectorSlice new_sl;  // When C++20 lands: Designated initializer
                 new_sl.start = starting_lane;
                 new_sl.stride = lane_stride;
                 new_sl.count = new_lanes;
