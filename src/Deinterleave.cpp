@@ -408,10 +408,13 @@ private:
                 std::string sliced_var_name = variable_name_with_extracted_lanes(
                     op->name, op->type.lanes(),
                     starting_lane, lane_stride, new_lanes);
-                VectorSlice new_sl = {.start = starting_lane,
-                                      .stride = lane_stride,
-                                      .count = new_lanes,
-                                      .variable_name = sliced_var_name};
+
+                VectorSlice new_sl; // When C++20 lands: Designated initializer
+                new_sl.start = starting_lane;
+                new_sl.stride = lane_stride;
+                new_sl.count = new_lanes;
+                new_sl.variable_name = sliced_var_name;
+
                 if (auto *vec = requested_slices.shallow_find(op->name)) {
                     bool found = false;
                     for (const VectorSlice &existing_sl : *vec) {
