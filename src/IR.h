@@ -249,11 +249,12 @@ struct Load : public ExprNode<Load> {
     static const IRNodeType _node_type = IRNodeType::Load;
 };
 
-/** A linear ramp vector node. This is vector with 'lanes' elements,
- * where element i is 'base' + i*'stride'. This is a convenient way to
- * pass around vectors without busting them up into individual
- * elements. E.g. a dense vector load from a buffer can use a ramp
- * node with stride 1 as the index. */
+/** A linear ramp vector node. This is vector with 'lanes' elements, where
+ * element i is 'base' + i*'stride'. This is a convenient way to pass around
+ * vectors without busting them up into individual elements. E.g. a dense vector
+ * load from a buffer can use a ramp node with stride 1 as the index. The base
+ * and stride can also be vectors, in which case ramp(b, s, l) is the
+ * concatenation of the vectors [b, b + s, b + 2 * s ... ]**/
 struct Ramp : public ExprNode<Ramp> {
     Expr base, stride;
     int lanes;
@@ -263,9 +264,10 @@ struct Ramp : public ExprNode<Ramp> {
     static const IRNodeType _node_type = IRNodeType::Ramp;
 };
 
-/** A vector with 'lanes' elements, in which every element is
- * 'value'. This is a special case of the ramp node above, in which
- * the stride is zero. */
+/** A vector with 'lanes' elements, in which every element is 'value'. This is a
+ * special case of the ramp node above, in which the stride is zero. If the
+ * value is a vector, this is the concatenation of 'lanes' repeated copies of
+ * that vector. */
 struct Broadcast : public ExprNode<Broadcast> {
     Expr value;
     int lanes;
@@ -527,18 +529,35 @@ struct Call : public ExprNode<Call> {
     // are *not* guaranteed to be stable across time.
     enum IntrinsicOp {
         abs,
+
+        // Absolute difference between two values. absd(a, b) = abs(a - b), but
+        // without overflow issues for integer types.
         absd,
+
+        // Marks the point where assertions on input images should be inserted
         add_image_checks_marker,
+
         alloca,
         bitwise_and,
         bitwise_not,
         bitwise_or,
         bitwise_xor,
+
+        // Converts a boolean to a mask. Scalar bools become -1 (all bits set) when true,
+        // 0 when false. Vector bools are converted to proper vector masks.
         bool_to_mask,
 
         // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
         bundle,
+
+        // Takes a sequence of (condition, function) pairs, and calls the first
+        // function for which the associated condition is true. Caches this
+        // choice and directly calls the associated function on all subsequent
+        // uses. Args to the containing function are passed through to the
+        // callee. Used to implement multi-target switching.
         call_cached_indirect_function,
+
+        // Casts a mask (boolean vector) to a different bit width
         cast_mask,
 
         // Concatenate bits of the args, with least significant bits as the
@@ -547,46 +566,87 @@ struct Call : public ExprNode<Call> {
         count_leading_zeros,
         count_trailing_zeros,
         debug_to_file,
+
+        // Declares that a box region of an allocation has been touched (used by bounds inference)
         declare_box_touched,
+
         div_round_to_zero,
+
+        // A shuffle operation with runtime-varying indices.
         dynamic_shuffle,
 
         // Extract some contiguous slice of bits from the argument starting at
         // the nth bit, counting from the least significant bit, with the number
         // of bits determined by the return type.
         extract_bits,
+
+        // Extracts a single element from a mask vector
         extract_mask_element,
+
         get_user_context,
         gpu_thread_barrier,
         halving_add,
         halving_sub,
+
+        // Hexagon HVX gather/scatter operations for indirect memory access
         hvx_gather,
         hvx_scatter,
         hvx_scatter_acc,
         hvx_scatter_release,
+
         if_then_else,
+
+        // Vectorized if-then-else that operates on mask types
         if_then_else_mask,
         image_load,
         image_store,
         lerp,
+
+        // Loop partitioning hints used to help identify the 'steady state' of
+        // loops. likely marks an if condition expression as likely to be true,
+        // or marks the side of a min or max node which dominates in the steady
+        // state.  likely_if_innermost only applies the hint if this is the
+        // innermost loop.
         likely,
         likely_if_innermost,
+
+        // Loads a member from a typed struct (used for halide_buffer_t and
+        // related structures)
         load_typed_struct_member,
+
         make_struct,
+
+        // Marks an expression to be memoized (computed once and cached)
         memoize_expr,
+
         mod_round_to_zero,
         mul_shift_right,
         mux,
         popcount,
         prefetch,
+
+        // Marks the point where profiling should start counting pipeline instances
+        // (used to exclude bounds queries from profiling)
         profiling_enable_instance_marker,
+
+        // Promises that a value is clamped to the given range. This allows the compiler
+        // to optimize based on this assumption. promise_clamped is safe (adds a runtime check),
+        // unsafe_promise_clamped skips the check.
         promise_clamped,
+
         random,
+
+        // Registers a destructor function to be called when an object goes out
+        // of scope. Used internally in codegen.
         register_destructor,
+
+        // Runtime assertions. require checks the condition and errors if false.
+        // require_mask is the vectorized version that operates on masks.
         require,
         require_mask,
+
+        // Evaluates both arguments but returns the second one. Used to sequence side effects.
         return_second,
-        rewrite_buffer,
 
         // Round a floating point value to nearest integer, with ties going to even
         round,
@@ -598,11 +658,20 @@ struct Call : public ExprNode<Call> {
         saturating_add,
         saturating_sub,
         saturating_cast,
+
+        // Used to implement scatter and gather (see IROperator.h)
         scatter_gather,
+
+        // Vectorized select that operates on mask types (similar to if_then_else_mask)
         select_mask,
+
         shift_left,
         shift_right,
+
+        // Represents a signed integer overflow that occurred. Used to mark overflow points
+        // rather than producing undefined behavior.
         signed_integer_overflow,
+
         size_of_halide_buffer_t,
 
         // Marks the point in lowering where the outermost skip stages checks
@@ -646,8 +715,15 @@ struct Call : public ExprNode<Call> {
         target_natural_vector_size,
         target_os_is,
 
+        // An undef is a magic value where storing it has no observable effect.
         undef,
+
+        // Mark a code path as unreachable so that it can be dead-code eliminated.
         unreachable,
+
+        // Promise an expression is bounded. Not checked. Injected by the
+        // compiler itself during lowering when an early pass needs to
+        // communicate boundedness to a later pass.
         unsafe_promise_clamped,
 
         // One-sided variants of widening_add, widening_mul, and widening_sub.
@@ -664,6 +740,7 @@ struct Call : public ExprNode<Call> {
         widening_shift_right,
         widening_sub,
 
+        // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
         get_runtime_vscale,
 
         IntrinsicOpCount  // Sentinel: keep last.
@@ -883,6 +960,7 @@ struct For : public StmtNode<For> {
     static const IRNodeType _node_type = IRNodeType::For;
 };
 
+/** Decrement a semaphore 'count' times before executing the body. */
 struct Acquire : public StmtNode<Acquire> {
     Expr semaphore;
     Expr count;
