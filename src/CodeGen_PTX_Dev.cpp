@@ -38,7 +38,7 @@ namespace {
 class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
 public:
     /** Create a PTX device code generator. */
-    CodeGen_PTX_Dev(const Target &host, bool any_strict_float);
+    CodeGen_PTX_Dev(const Target &host);
     ~CodeGen_PTX_Dev() override;
 
     void add_kernel(Stmt stmt,
@@ -105,9 +105,8 @@ protected:
     bool supports_atomic_add(const Type &t) const override;
 };
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev(const Target &host, bool any_strict_float)
+CodeGen_PTX_Dev::CodeGen_PTX_Dev(const Target &host)
     : CodeGen_LLVM(host) {
-    this->any_strict_float = any_strict_float;
     context = new llvm::LLVMContext();
 }
 
@@ -221,6 +220,12 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 }
 
 void CodeGen_PTX_Dev::init_module() {
+    // This class uses multiple inheritance. It's a GPU device code generator,
+    // and also an llvm-based one. Both of these track strict_float presence,
+    // but OffloadGPULoops only sets the GPU device code generator flag, so here
+    // we set the CodeGen_LLVM flag to match.
+    CodeGen_LLVM::any_strict_float = CodeGen_GPU_Dev::any_strict_float;
+
     init_context();
 
     module = get_initial_module_for_ptx_device(target, context);
@@ -249,6 +254,15 @@ void CodeGen_PTX_Dev::init_module() {
         auto *fn = declare_intrin_overload(i.name, i.ret_type, i.intrin_name, std::move(i.arg_types));
         function_does_not_access_memory(fn);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
+    }
+
+    if (CodeGen_GPU_Dev::any_strict_float) {
+        debug(0) << "Setting strict fp math\n";
+        set_strict_fp_math();
+        in_strict_float = target.has_feature(Target::StrictFloat);
+    } else {
+        debug(0) << "Setting fast fp math\n";
+        set_fast_fp_math();
     }
 }
 
@@ -615,15 +629,15 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     TargetOptions options;
-    options.AllowFPOpFusion = FPOpFusion::Fast;
+    options.AllowFPOpFusion = CodeGen_GPU_Dev::any_strict_float ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
 #if LLVM_VERSION < 210
-    options.UnsafeFPMath = true;
+    options.UnsafeFPMath = !CodeGen_GPU_Dev::any_strict_float;
 #endif
 #if LLVM_VERSION < 230
-    options.NoInfsFPMath = true;
+    options.NoInfsFPMath = !CodeGen_GPU_Dev::any_strict_float;
 #endif
-    options.NoNaNsFPMath = true;
-    options.HonorSignDependentRoundingFPMathOption = false;
+    options.NoNaNsFPMath = !CodeGen_GPU_Dev::any_strict_float;
+    options.HonorSignDependentRoundingFPMathOption = !CodeGen_GPU_Dev::any_strict_float;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
 
@@ -822,13 +836,13 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
 
 }  // namespace
 
-std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target, bool any_strict_float) {
-    return std::make_unique<CodeGen_PTX_Dev>(target, any_strict_float);
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
+    return std::make_unique<CodeGen_PTX_Dev>(target);
 }
 
 #else  // WITH_PTX
 
-std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target, bool /*any_strict_float*/) {
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
     user_error << "PTX not enabled for this build of Halide.\n";
     return nullptr;
 }

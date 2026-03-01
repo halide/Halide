@@ -978,6 +978,13 @@ Expr pow(Expr x, Expr y);
  * mantissa. Vectorizes cleanly. */
 Expr erf(const Expr &x);
 
+/** Fused multiply-add. fma(a, b, c) is equivalent to a * b + c, but only
+ * rounded once at the end. For most targets, when not in a strict_float
+ * context, Halide will already generate fma instructions from a * b + c. This
+ * intrinsic's main purpose is to request a true fma inside a strict_float
+ * context. A true fma will be emulated on targets without one. */
+Expr fma(const Expr &, const Expr &, const Expr &);
+
 /** Fast vectorizable approximation to some trigonometric functions for
  * Float(32).  Absolute approximation error is less than 1e-5. Slow on x86 if
  * you don't have at least sse 4.1. */

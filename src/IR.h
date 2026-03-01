@@ -698,6 +698,7 @@ struct Call : public ExprNode<Call> {
         strict_cast,
         strict_div,
         strict_eq,
+        strict_fma,
         strict_le,
         strict_lt,
         strict_max,
@@ -872,13 +873,14 @@ struct Call : public ExprNode<Call> {
             {Call::strict_add,
              Call::strict_cast,
              Call::strict_div,
+             Call::strict_eq,
+             Call::strict_fma,
+             Call::strict_lt,
+             Call::strict_le,
              Call::strict_max,
              Call::strict_min,
              Call::strict_mul,
-             Call::strict_sub,
-             Call::strict_lt,
-             Call::strict_le,
-             Call::strict_eq});
+             Call::strict_sub});
     }
 
     static const IRNodeType _node_type = IRNodeType::Call;

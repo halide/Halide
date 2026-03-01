@@ -680,6 +680,7 @@ const char *const intrinsic_op_names[] = {
     "strict_cast",
     "strict_div",
     "strict_eq",
+    "strict_fma",
     "strict_le",
     "strict_lt",
     "strict_max",

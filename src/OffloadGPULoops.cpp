@@ -254,7 +254,7 @@ public:
         device_target.os = Target::OSUnknown;
         device_target.arch = Target::ArchUnknown;
         if (target.has_feature(Target::CUDA)) {
-            cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(device_target, any_strict_float);
+            cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(device_target);
         }
         if (target.has_feature(Target::OpenCL)) {
             cgdev[DeviceAPI::OpenCL] = new_CodeGen_OpenCL_Dev(device_target);
@@ -266,10 +266,14 @@ public:
             cgdev[DeviceAPI::D3D12Compute] = new_CodeGen_D3D12Compute_Dev(device_target);
         }
         if (target.has_feature(Target::Vulkan)) {
-            cgdev[DeviceAPI::Vulkan] = new_CodeGen_Vulkan_Dev(target);
+            cgdev[DeviceAPI::Vulkan] = new_CodeGen_Vulkan_Dev(device_target);
         }
         if (target.has_feature(Target::WebGPU)) {
             cgdev[DeviceAPI::WebGPU] = new_CodeGen_WebGPU_Dev(device_target);
+        }
+
+        for (auto &i : cgdev) {
+            i.second->set_any_strict_float(any_strict_float);
         }
 
         internal_assert(!cgdev.empty()) << "Requested unknown GPU target: " << target.to_string() << "\n";
