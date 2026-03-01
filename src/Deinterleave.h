@@ -9,15 +9,21 @@
  */
 
 #include "Expr.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
 
-/** Extract the odd-numbered lanes in a vector */
-Expr extract_odd_lanes(const Expr &a);
+struct VectorSlice {
+    int start, stride, count;
+    std::string variable_name;
+};
 
-/** Extract the even-numbered lanes in a vector */
-Expr extract_even_lanes(const Expr &a);
+/* Extract lanes and relying on the fact that the caller will provide new variables in Lets or LetStmts which correspond to slices of the original variable. */
+Expr extract_lanes(Expr e, int starting_lane, int lane_stride, int new_lanes, const Scope<> &sliceable_lets, Scope<std::vector<VectorSlice>> &requested_sliced_lets);
+
+/* Extract lanes without requesting any extra slices from variables. */
+Expr extract_lanes(Expr e, int starting_lane, int lane_stride, int new_lanes);
 
 /** Extract the nth lane of a vector */
 Expr extract_lane(const Expr &vec, int lane);

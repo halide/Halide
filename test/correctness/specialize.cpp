@@ -128,6 +128,11 @@ int main(int argc, char **argv) {
             }
         }
 
+        if (!vector_store && !scalar_store) {
+            printf("No stores were reported\n");
+            return 1;
+        }
+
         // Should have used vector stores
         if (!vector_store || scalar_store) {
             printf("This was supposed to use vector stores\n");
@@ -154,6 +159,11 @@ int main(int argc, char **argv) {
                 printf("out(%d) was %d instead of %d\n",
                        i, out(i), correct);
             }
+        }
+
+        if (!vector_store && !scalar_store) {
+            printf("No stores were reported\n");
+            return 1;
         }
 
         // Should have used scalar stores
@@ -243,6 +253,10 @@ int main(int argc, char **argv) {
         // Check we don't crash with the small input, and that it uses scalar stores
         reset_trace();
         f.realize({5});
+        if (!vector_store && !scalar_store) {
+            printf("No stores were reported\n");
+            return 1;
+        }
         if (!scalar_store || vector_store) {
             printf("These stores were supposed to be scalar.\n");
             return 1;
@@ -254,6 +268,10 @@ int main(int argc, char **argv) {
 
         reset_trace();
         f.realize({100});
+        if (!vector_store && !scalar_store) {
+            printf("No stores were reported\n");
+            return 1;
+        }
         if (scalar_store || !vector_store) {
             printf("These stores were supposed to be vector.\n");
             return 1;
@@ -282,6 +300,10 @@ int main(int argc, char **argv) {
         // Check we used scalar stores for a strided input.
         reset_trace();
         f.realize({100});
+        if (!vector_store && !scalar_store) {
+            printf("No stores were reported\n");
+            return 1;
+        }
         if (!scalar_store || vector_store) {
             printf("These stores were supposed to be scalar.\n");
             return 1;
@@ -293,6 +315,10 @@ int main(int argc, char **argv) {
 
         reset_trace();
         f.realize({100});
+        if (!vector_store && !scalar_store) {
+            printf("No stores were reported\n");
+            return 1;
+        }
         if (scalar_store || !vector_store) {
             printf("These stores were supposed to be vector.\n");
             return 1;

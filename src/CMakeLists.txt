@@ -37,7 +37,8 @@ endif ()
 set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 ##
-# Lists of source files. Keep ALL lists sorted in alphabetical order.
+# Lists of source files. Keep ALL lists sorted in case-insensitive alphabetical order.
+# (neo)vim users can use ":sort i" in visual line mode.
 ##
 
 # The externally-visible header files that go into making Halide.h.
@@ -63,9 +64,9 @@ target_sources(
     AsyncProducers.h
     AutoScheduleUtils.h
     BoundaryConditions.h
+    BoundConstantExtentLoops.h
     Bounds.h
     BoundsInference.h
-    BoundConstantExtentLoops.h
     BoundSmallAllocations.h
     Buffer.h
     Callable.h
@@ -87,9 +88,9 @@ target_sources(
     CodeGen_WebGPU_Dev.h
     CompilerLogger.h
     ConciseCasts.h
-    CPlusPlusMangle.h
     ConstantBounds.h
     ConstantInterval.h
+    CPlusPlusMangle.h
     CSE.h
     Debug.h
     DebugArguments.h
@@ -144,6 +145,7 @@ target_sources(
     IRVisitor.h
     JITModule.h
     Lambda.h
+    LegalizeVectors.h
     Lerp.h
     LICM.h
     LLVM_Output.h
@@ -241,9 +243,9 @@ target_sources(
     AsyncProducers.cpp
     AutoScheduleUtils.cpp
     BoundaryConditions.cpp
+    BoundConstantExtentLoops.cpp
     Bounds.cpp
     BoundsInference.cpp
-    BoundConstantExtentLoops.cpp
     BoundSmallAllocations.cpp
     Buffer.cpp
     Callable.cpp
@@ -269,9 +271,9 @@ target_sources(
     CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp
-    CPlusPlusMangle.cpp
     ConstantBounds.cpp
     ConstantInterval.cpp
+    CPlusPlusMangle.cpp
     CSE.cpp
     Debug.cpp
     DebugArguments.cpp
@@ -320,6 +322,7 @@ target_sources(
     IRVisitor.cpp
     JITModule.cpp
     Lambda.cpp
+    LegalizeVectors.cpp
     Lerp.cpp
     LICM.cpp
     LLVM_Output.cpp
@@ -364,7 +367,6 @@ target_sources(
     Simplify_Add.cpp
     Simplify_And.cpp
     Simplify_Call.cpp
-    Simplify_Reinterpret.cpp
     Simplify_Cast.cpp
     Simplify_Div.cpp
     Simplify_EQ.cpp
@@ -377,6 +379,7 @@ target_sources(
     Simplify_Mul.cpp
     Simplify_Not.cpp
     Simplify_Or.cpp
+    Simplify_Reinterpret.cpp
     Simplify_Select.cpp
     Simplify_Shuffle.cpp
     Simplify_Stmts.cpp

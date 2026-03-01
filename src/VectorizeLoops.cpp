@@ -732,8 +732,8 @@ class VectorSubs : public IRMutator {
 
         if (op->is_intrinsic(Call::prefetch)) {
             // We don't want prefetch args to ve vectorized, but we can't just skip the mutation
-            // (otherwise we can end up with dead loop variables. Instead, use extract_lane() on each arg
-            // to scalarize it again.
+            // (otherwise we can end up with dead loop variables). Instead, use extract_lane() on
+            // each arg to scalarize it again.
             for (auto &arg : new_args) {
                 if (arg.type().is_vector()) {
                     arg = extract_lane(arg, 0);

@@ -54,16 +54,24 @@ public:
             isa_version = 62;
         }
 
+        auto valign_test_u8 = [&](int off) {
+            return in_u8(x + off) + in_u8(x + off + 1);
+        };
+
+        auto valign_test_u16 = [&](int off) {
+            return in_u16(x + off) + in_u16(x + off + 1);
+        };
+
         // Verify that unaligned loads use the right instructions, and don't try to use
         // immediates of more than 3 bits.
-        check("valign(v*,v*,#7)", hvx_width / 1, in_u8(x + 7));
-        check("vlalign(v*,v*,#7)", hvx_width / 1, in_u8(x + hvx_width - 7));
-        check("valign(v*,v*,r*)", hvx_width / 1, in_u8(x + 8));
-        check("valign(v*,v*,r*)", hvx_width / 1, in_u8(x + hvx_width - 8));
-        check("valign(v*,v*,#6)", hvx_width / 1, in_u16(x + 3));
-        check("vlalign(v*,v*,#6)", hvx_width / 1, in_u16(x + hvx_width - 3));
-        check("valign(v*,v*,r*)", hvx_width / 1, in_u16(x + 4));
-        check("valign(v*,v*,r*)", hvx_width / 1, in_u16(x + hvx_width - 4));
+        check("valign(v*,v*,#7)", hvx_width / 1, valign_test_u8(6));
+        check("vlalign(v*,v*,#7)", hvx_width / 1, valign_test_u8(hvx_width - 7));
+        check("valign(v*,v*,r*)", hvx_width / 1, valign_test_u8(8));
+        check("valign(v*,v*,r*)", hvx_width / 1, valign_test_u8(hvx_width - 8));
+        check("valign(v*,v*,#6)", hvx_width / 1, valign_test_u16(3));
+        check("vlalign(v*,v*,#6)", hvx_width / 1, valign_test_u16(hvx_width - 3));
+        check("valign(v*,v*,r*)", hvx_width / 1, valign_test_u16(4));
+        check("valign(v*,v*,r*)", hvx_width / 1, valign_test_u16(hvx_width - 4));
 
         check("vunpack(v*.ub)", hvx_width / 1, u16(u8_1));
         check("vunpack(v*.ub)", hvx_width / 1, i16(u8_1));
