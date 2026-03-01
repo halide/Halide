@@ -364,16 +364,6 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
                 }
             }
 
-#if 0 // Not sure what this was for. Disabling for now, and will run tests to see what's up.
-            for (size_t i = 0; i < new_vectors.size() && can_collapse; i++) {
-                if (new_vectors[i].as<Load>()) {
-                    // Don't create a Ramp of a Load, like:
-                    // ramp(buf[x], buf[x + 1] - buf[x], ...)
-                    can_collapse = false;
-                }
-            }
-#endif
-
             if (can_collapse) {
                 return Ramp::make(new_vectors[0], stride, op->indices.size());
             }

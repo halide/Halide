@@ -17,6 +17,33 @@ namespace Internal {
 
 using std::pair;
 
+std::string variable_name_with_extracted_lanes(
+    const std::string &varname, int varlanes,
+    int starting_lane, int lane_stride, int new_lanes) {
+
+    if (lane_stride * new_lanes == varlanes) {
+        if (starting_lane == 0 && lane_stride == 2) {
+            return varname + ".even_lanes";
+        } else if (starting_lane == 1 && lane_stride == 2) {
+            return varname + ".odd_lanes";
+        }
+    }
+    if (lane_stride == 1) {
+        return varname + ".lanes_" + std::to_string(starting_lane) +
+               "_to_" + std::to_string(starting_lane + new_lanes - 1);
+    } else {
+        // Just specify the slice
+        std::string name = varname;
+        name += ".slice_";
+        name += std::to_string(starting_lane);
+        name += "_";
+        name += std::to_string(lane_stride);
+        name += "_";
+        name += std::to_string(new_lanes);
+        return name;
+    }
+}
+
 namespace {
 
 class StoreCollector : public IRMutator {
@@ -176,13 +203,17 @@ Stmt collect_strided_stores(const Stmt &stmt, const std::string &name, int strid
     return collect.mutate(stmt);
 }
 
-class Deinterleaver : public IRGraphMutator {
+class ExtractLanes : public IRGraphMutator {
 public:
-    Deinterleaver(int starting_lane, int lane_stride, int new_lanes, const Scope<> &lets)
+    ExtractLanes(
+        int starting_lane, int lane_stride, int new_lanes,
+        const Scope<> &sliceable_lets,
+        Scope<std::vector<VectorSlice>> &requested_slices)
         : starting_lane(starting_lane),
           lane_stride(lane_stride),
           new_lanes(new_lanes),
-          external_lets(lets) {
+          sliceable_lets(sliceable_lets),
+          requested_slices(requested_slices) {
     }
 
 private:
@@ -191,23 +222,88 @@ private:
     int new_lanes;
 
     // lets for which we have even and odd lane specializations
-    const Scope<> &external_lets;
+    const Scope<> &sliceable_lets;
+    Scope<std::vector<VectorSlice>> &requested_slices;  // We populate this with the slices we need from the external_lets.
 
     using IRMutator::visit;
 
-    Expr visit(const VectorReduce *op) override {
-        std::vector<int> input_lanes;
-        int factor = op->value.type().lanes() / op->type.lanes();
-        for (int i = starting_lane; i < op->type.lanes(); i += lane_stride) {
-            for (int j = 0; j < factor; j++) {
-                input_lanes.push_back(i * factor + j);
-            }
+    Expr extract_lanes_from_make_struct(const Call *op) {
+        internal_assert(op);
+        internal_assert(op->is_intrinsic(Call::make_struct));
+        std::vector<Expr> args(op->args.size());
+        for (int i = 0; i < int(op->args.size()); ++i) {
+            args[i] = mutate(op->args[i]);
         }
-        Expr in = Shuffle::make({op->value}, input_lanes);
-        return VectorReduce::make(op->op, in, new_lanes);
+        return Call::make(op->type, Call::make_struct, args, Call::Intrinsic);
+    }
+
+    Expr extract_lanes_trace(const Call *op) {
+        auto event = as_const_int(op->args[6]);
+        internal_assert(event);
+        if (*event == halide_trace_load || *event == halide_trace_store) {
+            debug(3) << "Extracting Trace Lanes: " << Expr(op) << "\n";
+            const Expr &func = op->args[0];
+            Expr values = extract_lanes_from_make_struct(op->args[1].as<Call>());
+            Expr coords = extract_lanes_from_make_struct(op->args[2].as<Call>());
+            const Expr &type_code = op->args[3];
+            const Expr &type_bits = op->args[4];
+            int type_lanes = *as_const_int(op->args[5]);
+            const Expr &event = op->args[6];
+            const Expr &parent_id = op->args[7];
+            const Expr &idx = op->args[8];
+            int size = *as_const_int(op->args[9]);
+            const Expr &tag = op->args[10];
+
+            int num_vecs = op->args[2].as<Call>()->args.size();
+            internal_assert(size == type_lanes * num_vecs) << Expr(op);
+            std::vector<Expr> args = {
+                func,
+                values, coords,
+                type_code, type_bits, Expr(new_lanes),
+                event, parent_id, idx, Expr(new_lanes * num_vecs),
+                tag};
+            Expr result = Call::make(Int(32), Call::trace, args, Call::Extern);
+            debug(4) << "  => " << result << "\n";
+            return result;
+        }
+
+        internal_error << "Unhandled trace call in ExtractLanes: " << *event;
+    }
+
+    Expr visit(const VectorReduce *op) override {
+        int factor = op->value.type().lanes() / op->type.lanes();
+        if (lane_stride != 1) {
+            std::vector<int> input_lanes;
+            for (int i = 0; i < new_lanes; ++i) {
+                int lane_start = (starting_lane + lane_stride * i) * factor;
+                for (int j = 0; j < factor; j++) {
+                    input_lanes.push_back(lane_start + j);
+                }
+            }
+            Expr in = Shuffle::make({op->value}, input_lanes);
+            return VectorReduce::make(op->op, in, new_lanes);
+        } else {
+            Expr in;
+            {
+                ScopedValue<int> old_starting_lane(starting_lane, starting_lane * factor);
+                ScopedValue<int> old_new_lanes(new_lanes, new_lanes * factor);
+                in = mutate(op->value);
+            }
+            return VectorReduce::make(op->op, in, new_lanes);
+        }
     }
 
     Expr visit(const Broadcast *op) override {
+        if (const Call *call = op->value.as<Call>()) {
+            if (call->name == Call::trace) {
+                Expr value = extract_lanes_trace(call);
+                if (new_lanes == 1) {
+                    return value;
+                } else {
+                    return Broadcast::make(value, new_lanes);
+                }
+            }
+        }
         if (new_lanes == 1) {
             if (op->value.type().lanes() == 1) {
                 return op->value;
@@ -299,30 +395,40 @@ private:
         } else {
 
             Type t = op->type.with_lanes(new_lanes);
+            /*
             internal_assert((op->type.lanes() - starting_lane + lane_stride - 1) / lane_stride == new_lanes)
                 << "Deinterleaving with lane stride " << lane_stride << " and staring lane " << starting_lane
                 << " for var of Type " << op->type << " to " << t << " drops lanes unexpectedly."
                 << " Deinterleaver probably recursed too deep into types of different lane count.";
-            if (external_lets.contains(op->name) &&
-                starting_lane == 0 &&
-                lane_stride == 2) {
-                return Variable::make(t, op->name + ".even_lanes", op->image, op->param, op->reduction_domain);
-            } else if (external_lets.contains(op->name) &&
-                       starting_lane == 1 &&
-                       lane_stride == 2) {
-                return Variable::make(t, op->name + ".odd_lanes", op->image, op->param, op->reduction_domain);
-            } else if (external_lets.contains(op->name) &&
-                       starting_lane == 0 &&
-                       lane_stride == 3) {
-                return Variable::make(t, op->name + ".lanes_0_of_3", op->image, op->param, op->reduction_domain);
-            } else if (external_lets.contains(op->name) &&
-                       starting_lane == 1 &&
-                       lane_stride == 3) {
-                return Variable::make(t, op->name + ".lanes_1_of_3", op->image, op->param, op->reduction_domain);
-            } else if (external_lets.contains(op->name) &&
-                       starting_lane == 2 &&
-                       lane_stride == 3) {
-                return Variable::make(t, op->name + ".lanes_2_of_3", op->image, op->param, op->reduction_domain);
+                */
+
+            if (sliceable_lets.contains(op->name)) {
+                // The variable accessed is marked as sliceable by the caller.
+                // Let's request a slice and pretend it exists.
+                std::string sliced_var_name = variable_name_with_extracted_lanes(
+                    op->name, op->type.lanes(),
+                    starting_lane, lane_stride, new_lanes);
+                VectorSlice new_sl = {.start = starting_lane,
+                                      .stride = lane_stride,
+                                      .count = new_lanes,
+                                      .variable_name = sliced_var_name};
+                if (auto *vec = requested_slices.shallow_find(op->name)) {
+                    bool found = false;
+                    for (const VectorSlice &existing_sl : *vec) {
+                        if (existing_sl.start == starting_lane &&
+                            existing_sl.stride == lane_stride &&
+                            existing_sl.count == new_lanes) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        vec->push_back(std::move(new_sl));
+                    }
+                } else {
+                    requested_slices.push(op->name, {std::move(new_sl)});
+                }
+                return Variable::make(t, sliced_var_name, op->image, op->param, op->reduction_domain);
             } else {
                 return give_up_and_shuffle(op);
             }
@@ -339,24 +445,117 @@ private:
     }
 
     Expr visit(const Reinterpret *op) override {
+        // Written with assistance from Gemini 3 Pro, which required a lot of baby-sitting.
+
+        // Simple case of a scalar reinterpret: always one lane:
         if (op->type.is_scalar()) {
             return op;
-        } else if (op->type.bits() != op->value.type().bits()) {
-            return give_up_and_shuffle(op);
-        } else {
-            Type t = op->type.with_lanes(new_lanes);
-            return Reinterpret::make(t, mutate(op->value));
         }
+
+        int out_bits = op->type.bits();
+        int in_bits = op->value.type().bits();
+
+        internal_assert(out_bits % in_bits == 0 || in_bits % out_bits == 0);
+
+        // Case A: Stride 1. Calculate everything with bit-offsets
+        if (lane_stride == 1) {
+
+            // Compute range of bits required from the input.
+            int start_bit = starting_lane * out_bits;
+            int total_bits = new_lanes * out_bits;
+            int end_bit = start_bit + total_bits;
+
+            // Convert this to a range of lane indices
+            int start_input_lane = start_bit / in_bits;
+            int end_input_lane = (end_bit + in_bits - 1) / in_bits;
+            int num_input_lanes = end_input_lane - start_input_lane;
+
+            // Actually now get those lanes from the input.
+            Expr extracted_input_lanes;
+            {
+                ScopedValue<int> old_sl(starting_lane, start_input_lane);
+                ScopedValue<int> old_nl(new_lanes, num_input_lanes);
+                extracted_input_lanes = mutate(op->value);
+            }
+
+            // The range of lanes we extracted from the input still might be too big, because
+            // we had to grab whole elements from the input, which can be coarser if out_bits > in_bits.
+            // So calculate how many lanes we extracted, when measured in the reinterpreted output type.
+            int intm_lanes = (num_input_lanes * in_bits) / out_bits;
+            Expr reinterprted = Reinterpret::make(op->type.with_lanes(intm_lanes), extracted_input_lanes);
+
+            // Now calculate how many we output Type lanes we need to trim away.
+            int bits_to_strip_front = start_bit - (start_input_lane * in_bits);
+            int lanes_to_strip_front = bits_to_strip_front / out_bits;
+
+            if (lanes_to_strip_front == 0) {
+                internal_assert(reinterprted.type().lanes() == new_lanes);
+                return reinterprted;
+            } else {
+                return Shuffle::make_slice(reinterprted, lanes_to_strip_front, 1, new_lanes);
+            }
+        }
+
+        // Case B: Stride != 1. We are effectively gathering.
+        // We will rewrite those Reinterprets as a Concat of Reinterprets of extracted lanes.
+        std::vector<Expr> chunks(new_lanes);
+        for (int i = 0; i < new_lanes; ++i) {
+            // Find the bit range of this element in the output
+            int start_bit = (starting_lane + lane_stride * i) * out_bits;
+            int end_bit = start_bit + out_bits;
+
+            // Map it to input lanes
+            int start_input_lane = start_bit / in_bits;
+            int end_input_lane = (end_bit + in_bits - 1) / in_bits;
+            int num_input_lanes = end_input_lane - start_input_lane;
+
+            // Grab this range of lanes from the input
+            Expr input_chunk;
+            {
+                ScopedValue<int> s_start(starting_lane, start_input_lane);
+                ScopedValue<int> s_stride(lane_stride, 1);
+                ScopedValue<int> s_len(new_lanes, num_input_lanes);
+                input_chunk = mutate(op->value);
+            }
+
+            // Reinterpret the chunk.
+            int extracted_bits = num_input_lanes * in_bits;
+            int reinterpreted_lanes = extracted_bits / out_bits;
+            internal_assert(reinterpreted_lanes != 0);
+
+            Expr reinterpreted = Reinterpret::make(op->type.with_lanes(reinterpreted_lanes), input_chunk);
+
+            // Now, in case of demotion:
+            // Example:
+            // R = ExtractLanes(Reinterpret([u32, u32, u32, u32], u8), 0, 2, 4)
+            //   = ExtractLanes([u8_0, u8_1, u8_2, u8_3, ...], 0, 2, 4)
+            //   = [u8_0, u8_2, u8_4, u8_6]
+            // A single extracted u32 element is too large, even after reinterpreting.
+            // So we need to slice the reinterpreted result.
+            int bit_offset = start_bit - (start_input_lane * in_bits);
+            int lane_offset = bit_offset / out_bits;
+
+            if (lane_offset == 0 && reinterpreted_lanes == 1) {
+                chunks[i] = std::move(input_chunk);
+            } else {
+                chunks[i] = Shuffle::make_extract_element(reinterpreted, lane_offset);
+            }
+        }
+
+        // In case of demotion, we will potentially extract and reinterpret the same input lane several times.
+        // Simplification afterwards will turn them into Lets.
+
+        return Shuffle::make_concat(chunks);
     }
 
     Expr visit(const Call *op) override {
+        internal_assert(op->type.lanes() >= starting_lane + lane_stride * (new_lanes - 1)) << Expr(op) << starting_lane << " " << lane_stride << " " << new_lanes;
         Type t = op->type.with_lanes(new_lanes);
 
         // Don't mutate scalars
         if (op->type.is_scalar()) {
             return op;
         } else {
-
             // Vector calls are always parallel across the lanes, so we
             // can just deinterleave the args.
 
@@ -368,105 +567,182 @@ private:
     }
 
     Expr visit(const Shuffle *op) override {
-        if (op->is_interleave()) {
-            // Special case where we can discard some of the vector arguments entirely.
-            internal_assert(starting_lane >= 0 && starting_lane < lane_stride);
-            if ((int)op->vectors.size() == lane_stride) {
-                return op->vectors[starting_lane];
-            } else if ((int)op->vectors.size() % lane_stride == 0) {
-                // Pick up every lane-stride vector.
-                std::vector<Expr> new_vectors(op->vectors.size() / lane_stride);
-                for (size_t i = 0; i < new_vectors.size(); i++) {
-                    new_vectors[i] = op->vectors[i * lane_stride + starting_lane];
+        // Special case 1: Scalar extraction
+        if (new_lanes == 1) {
+            // Find in which vector it sits.
+            int index = starting_lane;
+            for (const auto &vec : op->vectors) {
+                if (index < vec.type().lanes()) {
+                    // We found the source vector. Extract the scalar from it.
+                    ScopedValue<int> old_start(starting_lane, index);
+                    ScopedValue<int> old_stride(lane_stride, 1);  // Stride doesn't matter for scalar
+                    ScopedValue<int> old_count(new_lanes, 1);
+                    return mutate(vec);
                 }
-                return Shuffle::make_interleave(new_vectors);
-            }
-        }
-
-        // Keep the same set of vectors and extract every nth numeric
-        // arg to the shuffle.
-        std::vector<int> indices;
-        for (int i = 0; i < new_lanes; i++) {
-            int idx = i * lane_stride + starting_lane;
-            indices.push_back(op->indices[idx]);
-        }
-
-        // If this is extracting a single lane, try to recursively deinterleave rather
-        // than leaving behind a shuffle.
-        if (indices.size() == 1) {
-            int index = indices.front();
-            for (const auto &i : op->vectors) {
-                if (index < i.type().lanes()) {
-                    if (i.type().lanes() == op->type.lanes()) {
-                        ScopedValue<int> scoped_starting_lane(starting_lane, index);
-                        return mutate(i);
-                    } else {
-                        return Shuffle::make(op->vectors, indices);
-                    }
-                }
-                index -= i.type().lanes();
+                index -= vec.type().lanes();
             }
             internal_error << "extract_lane index out of bounds: " << Expr(op) << " " << index << "\n";
+        }
+
+        if (op->is_interleave()) {
+            // Special case where we can discard some of the vector arguments entirely.
+            internal_assert(starting_lane >= 0);
+            int n_vectors = (int)op->vectors.size();
+
+            // Case A: Stride is a multiple of the number of input vectors.
+            // Example: extract_lanes(interleave(A, B), stride=4)
+            //          result comes from either A or B, depending on starting lane modulo number of vectors,
+            //          required stride of said vector is lane_stride / num_vectors
+            if (lane_stride % n_vectors == 0) {
+                const Expr &vec = op->vectors[starting_lane % n_vectors];
+                if (vec.type().lanes() == new_lanes) {
+                    // We need all lanes of this vector, just return it.
+                    return vec;
+                } else {
+                    // We don't need all lanes, unfortunately. Let's extract the part we need.
+                    ScopedValue<int> old_starting_lane(starting_lane, starting_lane / n_vectors);
+                    ScopedValue<int> old_lane_stride(lane_stride, lane_stride / n_vectors);
+                    return mutate(vec);
+                }
+            }
+
+            // Case B: Number of vectors is a multiple of the stride.
+            // Eg: extract_lanes(interleave(a, b, c, d, e, f), start=8, stride=3)
+            //  = extract_lanes(a0, b0, c0, d0, e0, f0, a1, b1, c1, d1, e1, f1, ...)
+            //  = (a2, c2, e2, c1, ...)
+            //  = interleave(a, c)
+            if (n_vectors % lane_stride == 0) {
+                int num_required_vectors = n_vectors / lane_stride;
+
+                // The result is only an interleave if the number of constituent
+                // vectors divides the number of total required lanes.
+                if (new_lanes % num_required_vectors == 0) {
+                    int lanes_per_vec = new_lanes / num_required_vectors;
+
+                    // Pick up every lane-stride vector.
+                    std::vector<Expr> new_vectors(num_required_vectors);
+                    for (size_t i = 0; i < new_vectors.size(); i++) {
+                        int absolute_lane_index = starting_lane + i * lane_stride;
+                        int src_vec_idx = absolute_lane_index % n_vectors;
+                        int vec_lane_start = absolute_lane_index / n_vectors;
+                        const Expr &vec = op->vectors[src_vec_idx];
+
+                        ScopedValue<int> old_starting_lane(starting_lane, vec_lane_start);
+                        ScopedValue<int> old_lane_stride(lane_stride, 1);
+                        ScopedValue<int> old_new_lanes(new_lanes, lanes_per_vec);
+                        new_vectors[i] = mutate(vec);
+                    }
+                    return Shuffle::make_interleave(new_vectors);
+                }
+            }
+        }
+
+        // General case fallback
+        std::vector<int> indices(new_lanes);
+        bool constant_stride = true;
+        for (int i = 0; i < new_lanes; i++) {
+            int idx = op->indices[i * lane_stride + starting_lane];
+            indices[i] = idx;
+            if (i > 1 && constant_stride) {
+                int stride = indices[1] - indices[0];
+                if (indices[i] != indices[i - 1] + stride) {
+                    constant_stride = false;
+                }
+            }
+        }
+
+        // One optimization if we take a slice of a single vector.
+        if (constant_stride) {
+            int stride = indices[1] - indices[0];
+            int first_idx = indices.front();
+            int last_idx = indices.back();
+
+            // Find which vector contains this range
+            int current_bound = 0;
+            for (const auto &vec : op->vectors) {
+                int vec_lanes = vec.type().lanes();
+
+                // Check if the START of the ramp is in this vector
+                if (first_idx >= current_bound && first_idx < current_bound + vec_lanes) {
+
+                    // We found the vector containing the start.
+                    // Now, because it is a linear ramp, we only need to check if the
+                    // END of the ramp is also within this same vector.
+                    // (This handles negative strides, forward strides, and broadcasts correctly).
+                    if (last_idx >= current_bound && last_idx < current_bound + vec_lanes) {
+
+                        // Calculate the start index relative to this specific vector
+                        int local_start = first_idx - current_bound;
+
+                        ScopedValue<int> s_start(starting_lane, local_start);
+                        ScopedValue<int> s_stride(lane_stride, stride);
+                        // new_lanes is already correct
+                        return mutate(vec);
+                    }
+
+                    // If the start is here but the end is elsewhere, the ramp crosses
+                    // vector boundaries. We cannot optimize this as a single vector extraction.
+                    break;
+                }
+                current_bound += vec_lanes;
+            }
         }
 
         return Shuffle::make(op->vectors, indices);
     }
 };
 
-Expr deinterleave(Expr e, int starting_lane, int lane_stride, int new_lanes, const Scope<> &lets) {
-    debug(3) << "Deinterleave "
-             << "(start:" << starting_lane << ", stide:" << lane_stride << ", new_lanes:" << new_lanes << "): "
-             << e << " of Type: " << e.type() << "\n";
-    Type original_type = e.type();
-    e = substitute_in_all_lets(e);
-    Deinterleaver d(starting_lane, lane_stride, new_lanes, lets);
+}  // namespace
+
+Expr extract_lanes(Expr original_expr, int starting_lane, int lane_stride, int new_lanes, const Scope<> &lets, Scope<std::vector<VectorSlice>> &requested_sliced_lets) {
+    internal_assert(starting_lane + (new_lanes - 1) * lane_stride <= original_expr.type().lanes())
+        << "Extract lanes with start:" << starting_lane << ", stride:" << lane_stride << ", new_lanes:" << new_lanes << "  "
+        << "out of " << original_expr.type() << " which goes out of bounds.";
+
+    debug(3) << "ExtractLanes "
+             << "(start:" << starting_lane << ", stride:" << lane_stride << ", new_lanes:" << new_lanes << "): "
+             << original_expr << " of Type: " << original_expr.type() << "\n";
+    Type original_type = original_expr.type();
+    Expr e = substitute_in_all_lets(original_expr);
+    ExtractLanes d(starting_lane, lane_stride, new_lanes, lets, requested_sliced_lets);
     e = d.mutate(e);
     e = common_subexpression_elimination(e);
+    debug(3) << "   => " << e << "\n";
     Type final_type = e.type();
-    int expected_lanes = (original_type.lanes() + lane_stride - starting_lane - 1) / lane_stride;
-    internal_assert(original_type.code() == final_type.code()) << "Underlying types not identical after interleaving.";
-    internal_assert(expected_lanes == final_type.lanes()) << "Number of lanes incorrect after interleaving: " << final_type.lanes() << "while expected was " << expected_lanes << ".";
-    return simplify(e);
+    internal_assert(original_type.code() == final_type.code()) << "Underlying types not identical after extract_lanes.";
+    e = simplify(e);
+    internal_assert(new_lanes == final_type.lanes())
+        << "Number of lanes incorrect after extract_lanes: " << final_type.lanes() << " while expected was " << new_lanes << ": extract_lanes(" << starting_lane << ", " << lane_stride << ", " << new_lanes << "):\n"
+        << "Input: " << original_expr << "\nResult: " << e;
+    return e;
 }
 
-Expr extract_odd_lanes(const Expr &e, const Scope<> &lets) {
-    internal_assert(e.type().lanes() % 2 == 0);
-    return deinterleave(e, 1, 2, e.type().lanes() / 2, lets);
+Expr extract_lanes(Expr e, int starting_lane, int lane_stride, int new_lanes) {
+    Scope<> lets;
+    Scope<std::vector<VectorSlice>> req;
+    return extract_lanes(std::move(e), starting_lane, lane_stride, new_lanes, lets, req);
 }
-
-Expr extract_even_lanes(const Expr &e, const Scope<> &lets) {
-    internal_assert(e.type().lanes() % 2 == 0);
-    return deinterleave(e, 0, 2, e.type().lanes() / 2, lets);
-}
-
-Expr extract_mod3_lanes(const Expr &e, int lane, const Scope<> &lets) {
-    internal_assert(e.type().lanes() % 3 == 0);
-    return deinterleave(e, lane, 3, e.type().lanes() / 3, lets);
-}
-
-}  // namespace
 
 Expr extract_even_lanes(const Expr &e) {
     internal_assert(e.type().lanes() % 2 == 0);
-    Scope<> lets;
-    return extract_even_lanes(e, lets);
+    return extract_lanes(e, 0, 2, e.type().lanes() / 2);
 }
 
 Expr extract_odd_lanes(const Expr &e) {
     internal_assert(e.type().lanes() % 2 == 0);
-    Scope<> lets;
-    return extract_odd_lanes(e, lets);
+    return extract_lanes(e, 1, 2, e.type().lanes() / 2);
 }
 
 Expr extract_lane(const Expr &e, int lane) {
-    Scope<> lets;
-    return deinterleave(e, lane, e.type().lanes(), 1, lets);
+    return extract_lanes(e, lane, e.type().lanes(), 1);
 }
 
 namespace {
 
+// Change name to DenisfyStridedLoadsAndStores?
 class Interleaver : public IRMutator {
     Scope<> vector_lets;
+    Scope<std::vector<VectorSlice>> requested_sliced_lets;
 
     using IRMutator::visit;
 
@@ -475,9 +751,9 @@ class Interleaver : public IRMutator {
 
     Expr deinterleave_expr(const Expr &e) {
         std::vector<Expr> exprs;
+        exprs.reserve(num_lanes);
         for (int i = 0; i < num_lanes; i++) {
-            Scope<> lets;
-            exprs.emplace_back(deinterleave(e, i, num_lanes, e.type().lanes() / num_lanes, lets));
+            exprs.emplace_back(extract_lanes(e, i, num_lanes, e.type().lanes() / num_lanes, vector_lets, requested_sliced_lets));
         }
         return Shuffle::make_interleave(exprs);
     }
@@ -508,18 +784,17 @@ class Interleaver : public IRMutator {
         for (const auto &frame : reverse_view(frames)) {
             Expr value = std::move(frame.new_value);
 
+            // The original variable:
             result = LetOrLetStmt::make(frame.op->name, value, result);
 
-            // For vector lets, we may additionally need a let defining the even and odd lanes only
+            // For vector lets, we may additionally need a lets for the requested slices of this variable:
             if (value.type().is_vector()) {
-                if (value.type().lanes() % 2 == 0) {
-                    result = LetOrLetStmt::make(frame.op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
-                    result = LetOrLetStmt::make(frame.op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
-                }
-                if (value.type().lanes() % 3 == 0) {
-                    result = LetOrLetStmt::make(frame.op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
-                    result = LetOrLetStmt::make(frame.op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
-                    result = LetOrLetStmt::make(frame.op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
+                if (std::vector<VectorSlice> *reqs = requested_sliced_lets.shallow_find(frame.op->name)) {
+                    for (const VectorSlice &sl : *reqs) {
+                        result = LetOrLetStmt::make(
+                            sl.variable_name,
+                            extract_lanes(value, sl.start, sl.stride, sl.count, vector_lets, requested_sliced_lets), result);
+                    }
                 }
             }
         }

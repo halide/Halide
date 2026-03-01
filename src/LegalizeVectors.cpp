@@ -1,13 +1,11 @@
 #include "LegalizeVectors.h"
 #include "CSE.h"
 #include "Deinterleave.h"
-#include "DeviceInterface.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
 #include "Util.h"
 
-#include <optional>
 #include <unordered_set>
 #include <vector>
 
@@ -17,10 +15,6 @@ namespace Internal {
 namespace {
 
 using namespace std;
-
-const char *legalization_error_guide = "\n"
-                                       "(This is an implemenation limitation in Halide right now. This issue can most likely be \n"
-                                       " worked around by reducing lane count for vectorize() calls in GPU schedules, or disabling it.)";
 
 int max_lanes_for_device(DeviceAPI api, int parent_max_lanes) {
     // The environment variable below (HL_FORCE_VECTOR_LEGALIZATION) is here solely for testing purposes.
@@ -54,10 +48,6 @@ int max_lanes_for_device(DeviceAPI api, int parent_max_lanes) {
     return 0;
 }
 
-std::string vec_name(const string &name, int lane_start, int lane_count) {
-    return name + ".lanes_" + std::to_string(lane_start) + "_" + std::to_string(lane_start + lane_count - 1);
-}
-
 class LiftLetToLetStmt : public IRMutator {
     using IRMutator::visit;
 
@@ -86,184 +76,6 @@ public:
     }
 };
 
-class ExtractLanes : public IRMutator {
-    using IRMutator::visit;
-
-    int lane_start;
-    int lane_count;
-
-    Expr extract_lanes_from_make_struct(const Call *op) {
-        internal_assert(op);
-        internal_assert(op->is_intrinsic(Call::make_struct));
-        vector<Expr> args(op->args.size());
-        for (int i = 0; i < int(op->args.size()); ++i) {
-            args[i] = mutate(op->args[i]);
-        }
-        return Call::make(op->type, Call::make_struct, args, Call::Intrinsic);
-    }
-
-    Expr extract_lanes_trace(const Call *op) {
-        auto event = as_const_int(op->args[6]);
-        internal_assert(event);
-        if (*event == halide_trace_load || *event == halide_trace_store) {
-            debug(3) << "Extracting Trace Lanes: " << Expr(op) << "\n";
-            const Expr &func = op->args[0];
-            Expr values = extract_lanes_from_make_struct(op->args[1].as<Call>());
-            Expr coords = extract_lanes_from_make_struct(op->args[2].as<Call>());
-            const Expr &type_code = op->args[3];
-            const Expr &type_bits = op->args[4];
-            int type_lanes = *as_const_int(op->args[5]);
-            const Expr &event = op->args[6];
-            const Expr &parent_id = op->args[7];
-            const Expr &idx = op->args[8];
-            int size = *as_const_int(op->args[9]);
-            const Expr &tag = op->args[10];
-
-            int num_vecs = op->args[2].as<Call>()->args.size();
-            internal_assert(size == type_lanes * num_vecs) << Expr(op);
-            vector<Expr> args = {
-                func,
-                values, coords,
-                type_code, type_bits, Expr(lane_count),
-                event, parent_id, idx, Expr(lane_count * num_vecs),
-                tag};
-            Expr result = Call::make(Int(32), Call::trace, args, Call::Extern);
-            debug(4) << "  => " << result << "\n";
-            return result;
-        }
-
-        internal_error << "Unhandled trace call in LegalizeVectors' ExtractLanes: " << *event << legalization_error_guide;
-        return Expr(0);
-    }
-
-    Expr visit(const Shuffle *op) override {
-        vector<int> new_indices;
-        new_indices.reserve(lane_count);
-        for (int i = 0; i < lane_count; ++i) {
-            new_indices.push_back(op->indices[lane_start + i]);
-        }
-        return simplify(Shuffle::make(op->vectors, new_indices));
-    }
-
-    Expr visit(const Ramp *op) override {
-        if (lane_count == 1) {
-            return simplify(op->base + op->stride * lane_start);
-        }
-        return simplify(Ramp::make(op->base + op->stride * lane_start, op->stride, lane_count));
-    }
-
-    Expr visit(const Broadcast *op) override {
-        Expr value = op->value;
-        if (const Call *call = op->value.as<Call>()) {
-            if (call->name == Call::trace) {
-                value = extract_lanes_trace(call);
-            }
-        }
-        if (lane_count == 1) {
-            return value;
-        } else {
-            return Broadcast::make(value, lane_count);
-        }
-    }
-
-    Expr visit(const Variable *op) override {
-        return Variable::make(op->type.with_lanes(lane_count), vec_name(op->name, lane_start, lane_count));
-    }
-
-    Expr visit(const Load *op) override {
-        return Load::make(op->type.with_lanes(lane_count),
-                          op->name,
-                          mutate(op->index),
-                          op->image, op->param,
-                          mutate(op->predicate),
-                          op->alignment + lane_start);
-    }
-
-    Expr visit(const Call *op) override {
-        internal_assert(op->type.lanes() >= lane_start + lane_count);
-        Expr mutated = op;
-        std::vector<Expr> args;
-        args.reserve(op->args.size());
-        for (int i = 0; i < int(op->args.size()); ++i) {
-            const Expr &arg = op->args[i];
-            internal_assert(arg.type().lanes() == op->type.lanes())
-                << "Call argument " << arg << " lane count of " << arg.type().lanes()
-                << " does not match op lane count of " << op->type.lanes();
-            Expr mutated = mutate(arg);
-            internal_assert(!mutated.same_as(arg));
-            args.push_back(mutated);
-        }
-        mutated = Call::make(op->type.with_lanes(lane_count), op->name, args, op->call_type);
-        return mutated;
-    }
-
-    Expr visit(const Cast *op) override {
-        return Cast::make(op->type.with_lanes(lane_count), mutate(op->value));
-    }
-
-    Expr visit(const Reinterpret *op) override {
-        Type result_type = op->type.with_lanes(lane_count);
-        int result_scalar_bits = op->type.element_of().bits();
-        int input_scalar_bits = op->value.type().element_of().bits();
-
-        Expr value = op->value;
-        // If the bit widths of the scalar elements are the same, it's easy.
-        if (result_scalar_bits == input_scalar_bits) {
-            value = mutate(value);
-        } else {
-            // Otherwise, there can be two limiting aspects: the input lane count and the resulting lane count.
-            // In order to construct a correct Reinterpret from a small type to a wider type, we
-            // will need to produce multiple Reinterprets, all able to hold the lane count of the input
-            // and concatate the results together.
-            // Even worse, reinterpreting uint8x8 to uint64 would require intermediate reinterprets
-            // if the maximul legal vector length is 4.
-            //
-            // TODO implement this for all scenarios
-            internal_error << "Vector legalization for Reinterpret to different bit size per element is "
-                           << "not supported yet: reinterpret<" << op->type << ">(" << value.type() << ")"
-                           << legalization_error_guide;
-
-            // int input_lane_start = lane_start * result_scalar_bits / input_scalar_bits;
-            // int input_lane_count = lane_count * result_scalar_bits / input_scalar_bits;
-        }
-        Expr result = Reinterpret::make(result_type, value);
-        debug(3) << "Legalized " << Expr(op) << " to " << result << "\n";
-        return result;
-    }
-
-    Expr visit(const VectorReduce *op) override {
-        internal_assert(op->type.lanes() >= lane_start + lane_count);
-        int vecs_per_reduction = op->value.type().lanes() / op->type.lanes();
-        int input_lane_start = vecs_per_reduction * lane_start;
-        int input_lane_count = vecs_per_reduction * lane_count;
-        Expr arg = ExtractLanes(input_lane_start, input_lane_count).mutate(op->value);
-        // This might fail if the extracted lanes reference a non-existing variable!
-        return VectorReduce::make(op->op, arg, lane_count);
-    }
-
-public:
-    // Small helper to assert the transform did what it's supposed to do.
-    Expr mutate(const Expr &e) override {
-        Type original_type = e.type();
-        internal_assert(original_type.lanes() >= lane_start + lane_count)
-            << "Cannot extract lanes " << lane_start << " through " << lane_start + lane_count - 1
-            << " when the input type is " << original_type;
-        Expr result = IRMutator::mutate(e);
-        Type new_type = result.type();
-        internal_assert(new_type.lanes() == lane_count)
-            << "We didn't correctly legalize " << e << " of type " << original_type << ".\n"
-            << "Got back: " << result << " of type " << new_type << ", expected " << lane_count << " lanes.";
-        return result;
-    }
-
-    Stmt mutate(const Stmt &s) override {
-        return IRMutator::mutate(s);
-    }
-
-    ExtractLanes(int start, int count)
-        : lane_start(start), lane_count(count) {
-    }
-};
 
 class LiftExceedingVectors : public IRMutator {
     using IRMutator::visit;
@@ -380,23 +192,31 @@ class LegalizeVectors : public IRMutator {
 
     int max_lanes;
 
-    Stmt visit(const LetStmt *op) override {
+    Scope<> sliceable_vectors;
+    Scope<std::vector<VectorSlice>> requested_slices;
+
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         bool exceeds_lanecount = op->value.type().lanes() > max_lanes;
 
         if (exceeds_lanecount) {
             int num_vecs = (op->value.type().lanes() + max_lanes - 1) / max_lanes;
             debug(3) << "Legalize let " << op->value.type() << ": " << op->name
                      << " = " << op->value << " into " << num_vecs << " vecs\n";
-            Stmt body = IRMutator::mutate(op->body);
-            for (int i = num_vecs - 1; i >= 0; --i) {
-                int lane_start = i * max_lanes;
-                int lane_count_for_vec = std::min(op->value.type().lanes() - lane_start, max_lanes);
-                std::string name = vec_name(op->name, lane_start, lane_count_for_vec);
 
-                Expr value = mutate(ExtractLanes(lane_start, lane_count_for_vec).mutate(op->value));
+            // First mark this Let as sliceable before mutating the body:
+            ScopedBinding<> vector_is_slicable(sliceable_vectors, op->name);
 
-                debug(3) << "  Add: let " << name << " = " << value << "\n";
-                body = LetStmt::make(name, value, body);
+            Stmt body = mutate(op->body);
+            // Here we know which requested vector variable slices should be created for the body of the Let/LetStmt to work.
+
+            if (std::vector<VectorSlice> *reqs = requested_slices.shallow_find(op->name)) {
+                for (const VectorSlice &sl : *reqs) {
+                    Expr value = extract_lanes(op->value, sl.start, sl.stride, sl.count, sliceable_vectors, requested_slices);
+                    value = mutate(value);
+                    body = LetOrLetStmt::make(sl.variable_name, value, body);
+                    debug(3) << "  Add: let " << sl.variable_name << " = " << value << "\n";
+                }
             }
             return body;
         } else {
@@ -404,7 +224,12 @@ class LegalizeVectors : public IRMutator {
         }
     }
 
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
+    }
+
     Expr visit(const Let *op) override {
+        // TODO is this still true?
         internal_error << "Lets should have been lifted into LetStmts.";
         return IRMutator::visit(op);
     }
@@ -419,9 +244,10 @@ class LegalizeVectors : public IRMutator {
             for (int i = 0; i < num_vecs; ++i) {
                 int lane_start = i * max_lanes;
                 int lane_count_for_vec = std::min(op->value.type().lanes() - lane_start, max_lanes);
-                Expr rhs = ExtractLanes(lane_start, lane_count_for_vec).mutate(op->value);
-                Expr index = ExtractLanes(lane_start, lane_count_for_vec).mutate(op->index);
-                Expr predictate = ExtractLanes(lane_start, lane_count_for_vec).mutate(op->predicate);
+
+                Expr rhs = extract_lanes(op->value, lane_start, 1, lane_count_for_vec, sliceable_vectors, requested_slices);
+                Expr index = extract_lanes(op->index, lane_start, 1, lane_count_for_vec, sliceable_vectors, requested_slices);
+                Expr predictate = extract_lanes(op->predicate, lane_start, 1, lane_count_for_vec, sliceable_vectors, requested_slices);
                 assignments.push_back(Store::make(
                     op->name, std::move(rhs), std::move(index),
                     op->param, std::move(predictate), op->alignment + lane_start));
@@ -434,7 +260,29 @@ class LegalizeVectors : public IRMutator {
     }
 
     Expr visit(const Shuffle *op) override {
-        internal_assert(op->type.lanes() <= max_lanes) << Expr(op);
+        // Primary violatation: there are too many output lanes.
+        if (op->type.lanes() > max_lanes) {
+            // Break it down in multiple legal-output-length shuffles, and concatenate them back together.
+            int total_lanes = op->type.lanes();
+
+            std::vector<Expr> output_chunks;
+            output_chunks.reserve((total_lanes + max_lanes - 1) / max_lanes);
+            for (int i = 0; i < total_lanes; i += max_lanes) {
+                int slice_len = std::min(max_lanes, total_lanes - i);
+
+                std::vector<int> slice_indices(slice_len);
+                for (int k = 0; k < slice_len; ++k) {
+                    slice_indices[k] = op->indices[i + k];
+                }
+
+                Expr sub_shuffle = Shuffle::make(op->vectors, slice_indices);
+
+                output_chunks.push_back(mutate(sub_shuffle));
+            }
+            return Shuffle::make_concat(output_chunks);
+        }
+
+        // Secondary violation: input vectors have too many lanes.
         bool requires_mutation = false;
         for (const auto &vec : op->vectors) {
             if (vec.type().lanes() > max_lanes) {
@@ -459,7 +307,7 @@ class LegalizeVectors : public IRMutator {
                     for (int i = 0; i < num_vecs; i++) {
                         int lane_start = i * max_lanes;
                         int lane_count_for_vec = std::min(vec.type().lanes() - lane_start, max_lanes);
-                        new_vectors.push_back(ExtractLanes(lane_start, lane_count_for_vec).mutate(vec));
+                        new_vectors.push_back(extract_lanes(vec, lane_start, 1, lane_count_for_vec, sliceable_vectors, requested_slices));
                     }
                 } else {
                     new_vectors.push_back(IRMutator::mutate(vec));
@@ -469,58 +317,111 @@ class LegalizeVectors : public IRMutator {
             debug(3) << "Legalized " << Expr(op) << " => " << result << "\n";
             return result;
         }
+
+        // Base case: everything legal in this Shuffle
         return IRMutator::visit(op);
     }
 
-    Expr visit(const VectorReduce *op) override {
-        const Expr &arg = op->value;
-        if (arg.type().lanes() > max_lanes) {
-            // TODO: The transformation below is not allowed under strict_float, but
-            // I don't immediately know what to do here.
-            // This should be an internal_assert.
-
-            internal_assert(op->type.lanes() == 1)
-                << "Vector legalization currently does not support VectorReduce with lanes != 1: " << Expr(op)
-                << legalization_error_guide;
-            int num_vecs = (arg.type().lanes() + max_lanes - 1) / max_lanes;
-            Expr result;
-            for (int i = 0; i < num_vecs; i++) {
-                int lane_start = i * max_lanes;
-                int lane_count_for_vec = std::min(arg.type().lanes() - lane_start, max_lanes);
-                Expr partial_arg = mutate(ExtractLanes(lane_start, lane_count_for_vec).mutate(arg));
-                Expr partial_red = VectorReduce::make(op->op, std::move(partial_arg), op->type.lanes());
-                if (i == 0) {
-                    result = partial_red;
-                } else {
-                    switch (op->op) {
-                    case VectorReduce::Add:
-                        result = result + partial_red;
-                        break;
-                    case VectorReduce::SaturatingAdd:
-                        result = saturating_add(result, partial_red);
-                        break;
-                    case VectorReduce::Mul:
-                        result = result * partial_red;
-                        break;
-                    case VectorReduce::Min:
-                        result = min(result, partial_red);
-                        break;
-                    case VectorReduce::Max:
-                        result = max(result, partial_red);
-                        break;
-                    case VectorReduce::And:
-                        result = result && partial_red;
-                        break;
-                    case VectorReduce::Or:
-                        result = result || partial_red;
-                        break;
-                    }
-                }
-            }
-            return result;
-        } else {
-            return IRMutator::visit(op);
+    Expr make_binary_reduce_op(VectorReduce::Operator op, Expr a, Expr b) {
+        switch (op) {
+        case VectorReduce::Add:
+            return a + b;
+        case VectorReduce::SaturatingAdd:
+            return saturating_add(a, b);
+        case VectorReduce::Mul:
+            return a * b;
+        case VectorReduce::Min:
+            return min(a, b);
+        case VectorReduce::Max:
+            return max(a, b);
+        case VectorReduce::And:
+            return a && b;
+        case VectorReduce::Or:
+            return a || b;
+        default:
+            internal_error << "Unknown VectorReduce operator\n";
+            return Expr();
         }
+    }
+
+    Expr visit(const VectorReduce *op) override {
+        // Written with the help of Gemini 3 Pro.
+        Expr value = mutate(op->value);
+
+        int input_lanes = value.type().lanes();
+        int output_lanes = op->type.lanes();
+
+        // Base case: we don't need legalization.
+        if (input_lanes <= max_lanes && output_lanes <= max_lanes) {
+            if (value.same_as(op->value)) {
+                return op;
+            } else {
+                return VectorReduce::make(op->op, value, output_lanes);
+            }
+        }
+
+        // Recursive splitting strategy.
+        // Case A: Segmented Reduction (Multiple Output Lanes)
+        // Example: VectorReduce( <16 lanes>, output_lanes=2 ) with max_lanes=4.
+        // Input is too big. We split the OUTPUT domain.
+        // We calculate which chunk of the input corresponds to the first half of the output.
+        if (output_lanes > 1) {
+            // 1. Calculate good splitting point
+            int out_split = output_lanes / 2;
+
+            // 2. However, do align to max_lanes to keep chunks native-sized if possible
+            if (out_split > max_lanes) {
+                out_split = (out_split / max_lanes) * max_lanes;
+            } else if (output_lanes > max_lanes) {
+                // If the total is > max, but half is < max (e.g. 6),
+                // we want to peel 'max' (4) rather than split (3).
+                out_split = max_lanes;
+            }
+
+            // Take remainder beyond the split point
+            int out_remaining = output_lanes - out_split;
+            internal_assert(out_remaining >= 1);
+
+            // Calculate the reduction factor to find where to split the input
+            // e.g., 16 input -> 2 output means factor is 8.
+            // If we want the first 1 output lane, we need the first 8 input lanes.
+            int reduction_factor = input_lanes / output_lanes;
+            int in_split = out_split * reduction_factor;
+            int in_remaining = input_lanes - in_split;
+
+            Expr arg_lo = extract_lanes(value, 0, 1, in_split, sliceable_vectors, requested_slices);
+            Expr arg_hi = extract_lanes(value, in_split, 1, in_remaining, sliceable_vectors, requested_slices);
+
+            // Recursively mutate the smaller reductions
+            Expr res_lo = mutate(VectorReduce::make(op->op, arg_lo, out_split));
+            Expr res_hi = mutate(VectorReduce::make(op->op, arg_hi, out_remaining));
+
+            // Concatenate the results to form the new vector
+            return Shuffle::make_concat({res_lo, res_hi});
+        }
+
+        // Case B: Horizontal Reduction (Single Output Lane)
+        // Example: VectorReduce( <16 lanes>, output_lanes=1 ) with max_lanes=4.
+        // We cannot split the output. We must split the INPUT, reduce both halves
+        // to scalars, and then combine them.
+        if (output_lanes == 1) {
+            int in_split = input_lanes / 2;
+            int in_remaining = input_lanes - in_split;
+
+            // Extract input halves
+            Expr arg_lo = extract_lanes(value, 0, 1, in_split, sliceable_vectors, requested_slices);
+            Expr arg_hi = extract_lanes(value, in_split, 1, in_remaining, sliceable_vectors, requested_slices);
+
+            // Recursively reduce both halves to scalars
+            Expr res_lo = mutate(VectorReduce::make(op->op, arg_lo, 1));
+            Expr res_hi = mutate(VectorReduce::make(op->op, arg_hi, 1));
+
+            // Combine using the standard binary operator for this reduction type
+            return make_binary_reduce_op(op->op, res_lo, res_hi);
+        }
+
+        internal_error << "Unreachable";
+        return op;
     }
 
 public:
