@@ -29,6 +29,7 @@ device codegen may be required before it becomes profitable to use.
 
 > _Tested with Emscripten 5.0.0 (a7c5deabd7c88ba1c38ebe988112256775f944c6)_
 > _Tested with Node.js 25.5.0_
+> _Requires Node.js 25 or later_
 
 Halide can generate WebGPU code that can be integrated with WASM code using
 Emscripten.
