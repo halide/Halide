@@ -1,0 +1,45 @@
+name: Feature specification
+description: >-
+  Propose a well-specified new feature. For early-stage ideas, please start a
+  Discussion instead.
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        **Note:** This template is for polished feature proposals. If your idea is
+        still in the brainstorming stage, please
+        [start a Discussion](https://github.com/halide/Halide/discussions/categories/ideas)
+        instead. It can be promoted to an issue once the design solidifies.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem does this feature solve? Who is affected?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: >-
+        Describe the feature in detail. Include proposed API surfaces, semantics,
+        and behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you consider, and why is this one preferred?
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: >-
+        References, related issues, prior art in other projects, or anything
+        else that supports the proposal.
+    validations:
+      required: false
