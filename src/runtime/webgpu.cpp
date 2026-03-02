@@ -134,6 +134,26 @@ public:
     }
 };
 
+namespace {
+
+// Convert a WGPUStringView to a null-terminated C string for use with the
+// Halide printer. If the view is already null-terminated (length == WGPU_STRLEN),
+// returns sv.data directly. Otherwise copies up to buf_size-1 bytes into buf
+// and null-terminates it.
+const char *wgpu_sv_to_cstr(WGPUStringView sv, char *buf, size_t buf_size) {
+    if (sv.length == WGPU_STRLEN) {
+        return sv.data;
+    }
+    size_t len = sv.length < buf_size - 1 ? sv.length : buf_size - 1;
+    for (size_t i = 0; i < len; i++) {
+        buf[i] = sv.data[i];
+    }
+    buf[len] = '\0';
+    return buf;
+}
+
+}  // namespace
+
 // Helper class for handling asynchronous errors for a set of WebGPU API calls
 // within a particular scope.
 class ErrorScope {
@@ -199,23 +219,24 @@ private:
         (void)status;
         (void)userdata2;
         ErrorScope *context = (ErrorScope *)userdata1;
+        char buf[512];
         switch (type) {
         case WGPUErrorType_NoError:
             // Do not overwrite the error_code to avoid masking earlier errors.
             break;
         case WGPUErrorType_Validation:
             error(context->user_context) << "WGPU: validation error: "
-                                         << message.data << "\n";
+                                         << wgpu_sv_to_cstr(message, buf, sizeof(buf)) << "\n";
             context->error_code = halide_error_code_generic_error;
             break;
         case WGPUErrorType_OutOfMemory:
             error(context->user_context) << "WGPU: out-of-memory error: "
-                                         << message.data << "\n";
+                                         << wgpu_sv_to_cstr(message, buf, sizeof(buf)) << "\n";
             context->error_code = halide_error_code_out_of_memory;
             break;
         default:
             error(context->user_context) << "WGPU: unknown error (" << type
-                                         << "): " << message.data << "\n";
+                                         << "): " << wgpu_sv_to_cstr(message, buf, sizeof(buf)) << "\n";
             context->error_code = halide_error_code_generic_error;
         }
     }
@@ -245,8 +266,9 @@ void device_lost_callback(WGPUDevice const *device,
     if (reason == WGPUDeviceLostReason_Destroyed) {
         return;
     }
+    char buf[512];
     error(user_context) << "WGPU device lost (" << reason << "): "
-                        << message.data << "\n";
+                        << wgpu_sv_to_cstr(message, buf, sizeof(buf)) << "\n";
 }
 
 void request_device_callback(WGPURequestDeviceStatus status,
@@ -256,8 +278,9 @@ void request_device_callback(WGPURequestDeviceStatus status,
                              void *userdata2) {
     void *user_context = userdata1;
     if (status != WGPURequestDeviceStatus_Success) {
+        char buf[512];
         error(user_context) << "wgpuAdapterRequestDevice failed ("
-                            << status << "): " << message.data << "\n";
+                            << status << "): " << wgpu_sv_to_cstr(message, buf, sizeof(buf)) << "\n";
         init_error_code = halide_error_code_generic_error;
         return;
     }
@@ -275,8 +298,9 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
     debug(user_context)
         << "WGPU: request_adapter_callback (status: " << status << ")\n";
     if (status != WGPURequestAdapterStatus_Success) {
+        char buf[512];
         debug(user_context) << "wgpuInstanceRequestAdapter failed: ("
-                            << status << "): " << message.data << "\n";
+                            << status << "): " << wgpu_sv_to_cstr(message, buf, sizeof(buf)) << "\n";
         init_error_code = halide_error_code_generic_error;
         return;
     }
