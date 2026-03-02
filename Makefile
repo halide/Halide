@@ -2385,12 +2385,21 @@ ifeq ($(UNAME), Darwin)
 endif
 
 # Build some common tools
-$(DISTRIB_DIR)/bin/featurization_to_sample $(DISTRIB_DIR)/bin/get_host_target: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
-	@mkdir -p $(@D)
+# Use an intermediate target to avoid parallel build race condition
+# (multi-target rules with shared recipes run the recipe multiple times in parallel)
+.PHONY: build_common_autoscheduler_tools
+build_common_autoscheduler_tools: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+	@mkdir -p $(DISTRIB_DIR)/bin
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/common/Makefile $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 	for TOOL in featurization_to_sample get_host_target; do \
 		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
 	done
+
+$(DISTRIB_DIR)/bin/featurization_to_sample: build_common_autoscheduler_tools
+	@# Built by build_common_autoscheduler_tools
+
+$(DISTRIB_DIR)/bin/get_host_target: build_common_autoscheduler_tools
+	@# Built by build_common_autoscheduler_tools
 
 # Adams2019 also includes autotuning tools
 $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_adams2019.$(PLUGIN_EXT)
