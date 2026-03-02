@@ -32,7 +32,7 @@ volatile ScopedSpinLock::AtomicFlag WEAK context_lock = 0;
 WEAK WGPUBuffer global_staging_buffer = nullptr;
 
 // A flag to signify that the WebGPU device was lost.
-bool device_was_lost = false;
+WEAK bool device_was_lost = false;
 
 }  // namespace WebGPU
 }  // namespace Internal
@@ -61,7 +61,6 @@ WEAK int halide_webgpu_acquire_context(void *user_context,
                                        WGPUDevice *device_ret,
                                        WGPUBuffer *staging_buffer_ret,
                                        bool create = true) {
-    debug(user_context) << "WGPU: halide_webgpu_acquire_context called\n";
     debug(user_context)
         << "WGPU: halide_webgpu_acquire_context (user_context: " << user_context
         << ", global_device: " << global_device
@@ -295,6 +294,10 @@ WEAK int create_webgpu_context(void *user_context) {
         << "WGPU: create_webgpu_context (user_context: " << user_context
         << ")\n";
 
+    // Reset init_error_code so a previous failure doesn't persist across
+    // context-release + re-create cycles.
+    init_error_code = halide_error_code_success;
+
     // Check if TimedWaitAny feature is available before requesting it.
     WGPUBool has_timed_wait = wgpuHasInstanceFeature(WGPUInstanceFeatureName_TimedWaitAny);
 
@@ -308,11 +311,7 @@ WEAK int create_webgpu_context(void *user_context) {
     }
     global_instance = wgpuCreateInstance(&instance_desc);
     debug(user_context)
-        << "WGPU: wgpuCreateInstance produces: " << global_instance
-        << ")\n";
-
-    debug(user_context)
-        << "WGPU: global_instance is: (" << global_instance
+        << "WGPU: wgpuCreateInstance produced: (" << global_instance
         << ")\n";
 
     // Request adapter and wait on the future.
@@ -889,9 +888,8 @@ WEAK int halide_webgpu_initialize_kernels(void *user_context, void **state_ptr, 
                 WGPUShaderSourceWGSL wgsl_desc = WGPU_SHADER_SOURCE_WGSL_INIT;
                 wgsl_desc.code.data = src;
                 wgsl_desc.code.length = WGPU_STRLEN;
-                WGPUShaderModuleDescriptor desc{};
+                WGPUShaderModuleDescriptor desc = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
                 desc.nextInChain = (WGPUChainedStruct *)(&wgsl_desc);
-                desc.label = WGPU_STRING_VIEW_INIT;
                 WGPUShaderModule shader_module =
                     wgpuDeviceCreateShaderModule(context.device, &desc);
 
