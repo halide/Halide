@@ -212,7 +212,7 @@ ci-llvm-21 = [
 ]
 ci-llvm-22 = [
     { name = "cmake", specifier = ">=3.28" },
-    { name = "halide-llvm", specifier = "~=22.1.0rc0", index = "https://pypi.halide-lang.org/simple" },
+    { name = "halide-llvm", specifier = "~=22.1.0", index = "https://pypi.halide-lang.org/simple" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
     { name = "onnx", specifier = "==1.18.0" },
     { name = "pybind11", specifier = ">=2.11.1" },
