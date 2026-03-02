@@ -8,13 +8,21 @@ const halide_target_string = process.argv[3];
 console.log("target_js_path is ", target_js_path)
 console.log("halide_target_string is ", halide_target_string)
 
+var provider = null;
 if (halide_target_string.includes("webgpu")) {
-    const webgpu_node_bindings = process.env["HL_WEBGPU_NODE_BINDINGS"];
-    if (!webgpu_node_bindings) {
-        console.log("You must define the env var HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node when running WebGPU tests for Halide");
-        process.exit(1);
+    try {
+        // Try to load the webgpu module from the global scope
+        provider = require("webgpu");
+    } catch (error) {
+        // If the webgpu module is not found, try to load the webgpu module from the HL_WEBGPU_NODE_BINDINGS environment variable
+        const webgpu_node_bindings = process.env["HL_WEBGPU_NODE_BINDINGS"];
+        if (!webgpu_node_bindings) {
+            console.log("No webgpu module found and HL_WEBGPU_NODE_BINDINGS is not defined. ");
+            console.log("Either install the webgpu module globally or define HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node when running WebGPU tests for Halide");
+            process.exit(1);
+        }
+        provider = require(webgpu_node_bindings);
     }
-    const provider = require(webgpu_node_bindings);
 
     // Expose all WebGPU globals from dawn.node (error classes, etc.)
     Object.assign(globalThis, provider.globals);
