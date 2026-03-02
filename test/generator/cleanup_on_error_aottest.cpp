@@ -106,7 +106,9 @@ int main(int argc, char **argv) {
     }
 
     printf("Success!\n");
-#if TEST_WEBGPU
+#if defined(TEST_WEBGPU)
+    // WebGPU via Node requires all references to any GPU objects be released,
+    // otherwise the process will not exit.
     halide_device_release(nullptr, halide_webgpu_device_interface());
 #endif
 
