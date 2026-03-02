@@ -11,10 +11,14 @@ console.log("halide_target_string is ", halide_target_string)
 var provider = null;
 if (halide_target_string.includes("webgpu")) {
     try {
-        // Try to load the webgpu module from the global scope
+        // Try to load the webgpu npm package.
         provider = require("webgpu");
     } catch (error) {
-        // If the webgpu module is not found, try to load the webgpu module from the HL_WEBGPU_NODE_BINDINGS environment variable
+        // Only fall back to HL_WEBGPU_NODE_BINDINGS if the module was not found;
+        // re-throw any other error (e.g. the module exists but fails to initialize).
+        if (error.code !== 'MODULE_NOT_FOUND') {
+            throw error;
+        }
         const webgpu_node_bindings = process.env["HL_WEBGPU_NODE_BINDINGS"];
         if (!webgpu_node_bindings) {
             console.log("No webgpu module found and HL_WEBGPU_NODE_BINDINGS is not defined. ");
