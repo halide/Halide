@@ -37,13 +37,16 @@ Emscripten.
 When invoking `emcc` to link Halide-generated objects, include these flags:
 `--use-port=emdawnwebgpu -s JSPI`.
 
-Tests that use AOT compilation can be run using a WebGPU implementation
-that has Node.js bindings, such as [Dawn](https://dawn.googlesource.com/dawn/).
-You must set an environment variable named `HL_WEBGPU_NODE_BINDINGS` that
-has an absolute path to the bindings to run these tests, e.g. `HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node`.
+Tests that use AOT compilation require a WebGPU implementation with Node.js
+bindings. There are two options:
 
-See [below](#setting-up-dawn) for instructions on building the Dawn Node.js
-bindings.
+- **`webgpu` npm package (recommended)**: Run `npm install` in the Halide
+  source root. The test runner will find and use the package automatically,
+  with no additional environment variables needed. See
+  [below](#webgpu-provider-webgpu-npm-package-recommended) for setup
+  instructions.
+- **Custom `dawn.node`**: Set `HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node`.
+  See [Setting up Dawn](#setting-up-dawn) for build instructions.
 
 JIT compilation is not supported when using WebGPU with WASM.
 
@@ -71,6 +74,53 @@ will be selected based on the Halide target specified.
 Note that it is explicitly legal to specify both WEBGPU_NATIVE_LIB and
 WEBGPU_NODE_BINDINGS for the same build; the correct executable environment
 will be selected based on the Halide target specified.
+
+## Setting up for WASM+WebGPU testing
+
+### Installing Node.js 25 via nvm
+
+Install [nvm](https://github.com/nvm-sh/nvm) (Node Version Manager), then use
+it to install and activate Node.js 25:
+
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+    nvm install 25
+    nvm use 25
+
+To activate Node.js 25 automatically in future shell sessions, add
+`nvm use 25` (or `nvm alias default 25`) to your shell profile.
+
+### Installing Emscripten via emsdk
+
+Install Emscripten using the [emsdk](https://github.com/emscripten-core/emsdk):
+
+    git clone https://github.com/emscripten-core/emsdk.git
+    cd emsdk
+    ./emsdk install latest
+    ./emsdk activate latest
+    source ./emsdk_env.sh
+
+Add `source /path/to/emsdk/emsdk_env.sh` to your shell profile to activate
+Emscripten automatically in future sessions.
+
+### WebGPU provider: `webgpu` npm package (recommended)
+
+The simplest way to provide a WebGPU implementation for Node.js testing is to
+install the [`webgpu`](https://www.npmjs.com/package/webgpu) npm package, which
+bundles pre-built Dawn Node.js bindings. From the Halide source root, run:
+
+    npm install
+
+The `package.json` in the Halide source root lists `webgpu` as a dependency.
+Once installed, the test runner (`tools/launch_wasm_test.js`) will find and use
+it automatically — no `HL_WEBGPU_NODE_BINDINGS` environment variable is needed.
+
+### WebGPU provider: building Dawn Node.js bindings from scratch (alternative)
+
+As an alternative to the `webgpu` npm package, you can build the Dawn Node.js
+bindings from source. See [Setting up Dawn](#setting-up-dawn) for instructions.
+After building, point the test runner at your build by setting:
+
+    HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node
 
 ## Setting up Dawn via vcpkg
 
