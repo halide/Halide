@@ -9,22 +9,32 @@ public:
     Input<Buffer<float, 4>> input{"input"};
     Input<Buffer<float, 4>> filter{"filter"};
     Input<Buffer<float, 1>> bias{"bias"};
-    Output<Buffer<float, 4>> relu{"relu"};
+    Input<Buffer<float, 1>> alpha{"alpha"};
+    Output<Buffer<float, 4>> prelu{"prelu"};
 
     void generate() {
-        const int N = 5, CI = 128, CO = 128, W = 100, H = 80;
+        // Use MAX_W/MAX_H as the maximum expected spatial size (<= 272 at runtime)
+        const int N = 1, CI = 4, CO = 4, MAX_H = 272, MAX_W = 272;
 
         /* THE ALGORITHM */
 
         Var x("x"), y("y"), c("c"), n("n");
 
+        // Create a zero-padded view of `input` (constant exterior = 0)
+        Func input_padded = BoundaryConditions::constant_exterior(input, 0.0f);
+
         Func conv("conv");
         RDom r(0, CI, 0, 3, 0, 3);
 
+        // Use an offset of -1 to map the 3x3 kernel to "same" padding
         conv(c, x, y, n) = bias(c);
-        conv(c, x, y, n) += filter(c, r.y, r.z, r.x) * input(r.x, x + r.y, y + r.z, n);
+        conv(c, x, y, n) += filter(c, r.y, r.z, r.x) *
+                    input_padded(r.x, x + r.y - 1, y + r.z - 1, n);
 
-        relu(c, x, y, n) = max(0, conv(c, x, y, n));
+        // PReLU: output = conv >= 0 ? conv : alpha(c) * conv
+        prelu(c, x, y, n) = select(conv(c, x, y, n) >= 0,
+                       conv(c, x, y, n),
+                       alpha(c) * conv(c, x, y, n));
 
         /* THE SCHEDULE */
 
@@ -32,15 +42,17 @@ public:
         // do the same and ask Halide to compile for this specific
         // size:
 
-        relu.dim(0).set_bounds(0, CO).set_stride(1);
-        relu.dim(1).set_bounds(0, W).set_stride(CO);
-        relu.dim(2).set_bounds(0, H).set_stride(CO * W);
-        relu.dim(3).set_bounds(0, N).set_stride(CO * H * W);
+        prelu.dim(0).set_bounds(0, CO).set_stride(1);
+        prelu.dim(1).set_stride(CO);
+        prelu.dim(3).set_bounds(0, N);
 
+        // With "same" padding the input spatial size equals the output
+        // Keep channel dim fixed, but allow spatial dims to vary at runtime
         input.dim(0).set_bounds(0, CI).set_stride(1);
-        input.dim(1).set_bounds(0, W + 2).set_stride(CI);
-        input.dim(2).set_bounds(0, H + 2).set_stride(CI * (W + 2));
-        input.dim(3).set_bounds(0, N).set_stride(CI * (W + 2) * (H + 2));
+        input.dim(1).set_stride(CI);
+        // Intentionally do NOT set bounds/strides for input.dim(1) and input.dim(2)
+        // so that width and height may vary at runtime.
+        input.dim(3).set_bounds(0, N);
 
         filter.dim(0).set_bounds(0, CO).set_stride(1);
         filter.dim(1).set_bounds(0, 3).set_stride(CO);
@@ -48,11 +60,13 @@ public:
         filter.dim(3).set_bounds(0, CI).set_stride(CO * 3 * 3);
 
         bias.dim(0).set_bounds(0, CO).set_stride(1);
+        alpha.dim(0).set_bounds(0, CO).set_stride(1);
 
         if (using_autoscheduler()) {
+            // Provide the autoscheduler with conservative estimates (max expected sizes)
             input.dim(0).set_estimate(0, CI);
-            input.dim(1).set_estimate(0, W + 2);
-            input.dim(2).set_estimate(0, H + 2);
+            input.dim(1).set_estimate(0, MAX_W);
+            input.dim(2).set_estimate(0, MAX_H);
             input.dim(3).set_estimate(0, N);
 
             filter.dim(0).set_estimate(0, CO);
@@ -61,11 +75,13 @@ public:
             filter.dim(3).set_estimate(0, CI);
 
             bias.dim(0).set_estimate(0, CO);
+            alpha.dim(0).set_estimate(0, CO);
 
-            relu.dim(0).set_estimate(0, W);
-            relu.dim(1).set_estimate(0, H);
-            relu.dim(2).set_estimate(0, CO);
-            relu.dim(3).set_estimate(0, N);
+            // prelu dims: 0=channels(CO), 1=width, 2=height, 3=batch
+            prelu.dim(0).set_estimate(0, CO);
+            prelu.dim(1).set_estimate(0, MAX_W);
+            prelu.dim(2).set_estimate(0, MAX_H);
+            prelu.dim(3).set_estimate(0, N);
 
         } else if (get_target().has_feature(Target::CUDA)) {
             // GPU schedule, tuned for a GTX 980. Seems to be good on
@@ -82,7 +98,7 @@ public:
 
             Var ni, no, xi, xo, yi, yo, ci, co, t;
             RVar rxo, rxi, rxii;
-            relu.compute_root()
+            prelu.compute_root()
                 .split(x, xo, xi, 5)
                 .split(y, yo, yi, 5)
                 .split(c, co, ci, 32)
@@ -93,7 +109,7 @@ public:
                 .fuse(co, n, t)
                 .gpu_blocks(xo, yo, t);
 
-            conv.compute_at(relu, xo)
+            conv.compute_at(prelu, xo)
                 .store_in(MemoryType::Register)
                 .gpu_lanes(c)
                 .unroll(x)
@@ -117,6 +133,10 @@ public:
                 .gpu_lanes(t)
                 .unroll(xo)
                 .unroll(_2);
+            
+            std::cout << "Using GPU schedule" << std::endl;
+            std::cout << "loop nest:" << std::endl;
+            prelu.print_loop_nest();
 
         } else {
 
@@ -168,8 +188,8 @@ public:
                 tile_h = 4;
             }
 
-            Var co, ci, xo, xi, yo, yi, t;
-            relu.split(c, co, ci, vec * tile_w)
+            Var co("co"), ci("ci"), xo("xo"), xi("xi"), yo("yo"), yi("yi"), t("t");
+            prelu.split(c, co, ci, tile_w)
                 .split(x, xo, xi, tile_h)
                 .reorder(ci, xi, xo, y, n, co)
                 .vectorize(ci, vec)
@@ -178,7 +198,7 @@ public:
                 .parallel(y)
                 .parallel(n)
                 .parallel(co);
-            conv.compute_at(relu, xo)
+            conv.compute_at(prelu, xo)
                 .vectorize(c, vec)
                 .unroll(c)
                 .unroll(x)
@@ -198,6 +218,12 @@ public:
             input.in()
                 .compute_at(conv, x)
                 .unroll(_0);
+
+            std::cout << "Using CPU schedule" << std::endl;
+            std::cout << "tile size: " << tile_w << " x " << tile_h << std::endl;
+            std::cout << "vector size: " << vec << std::endl;
+            std::cout << "loop nest:" << std::endl;
+            prelu.print_loop_nest();
         }
     }
 };
