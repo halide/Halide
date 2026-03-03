@@ -21,37 +21,35 @@ using CastFuncTy = function<Expr(Expr)>;
 
 class SimdOpCheckArmSve : public SimdOpCheckTest {
 public:
-    SimdOpCheckArmSve(Target t, int w = 384, int h = 32)
+    SimdOpCheckArmSve(Target t, int w = 512, int h = 16)
         : SimdOpCheckTest(t, w, h), debug_mode(Internal::get_env_variable("HL_DEBUG_SIMDOPCHECK")) {
 
         // Determine and hold can_run_the_code
-        // TODO: Since features of Arm CPU cannot be obtained automatically from get_host_target(),
-        // it is necessary to set some feature (e.g. "arm_fp16") explicitly to HL_JIT_TARGET.
-        // Halide throws error if there is unacceptable mismatch between jit_target and host_target.
-
         Target host = get_host_target();
         Target jit_target = get_jit_target_from_environment();
         cout << "host is:          " << host.to_string() << endl;
         cout << "HL_TARGET is:     " << target.to_string() << endl;
         cout << "HL_JIT_TARGET is: " << jit_target.to_string() << endl;
 
-        auto is_same_triple = [](const Target &t1, const Target &t2) -> bool {
-            return t1.arch == t2.arch && t1.bits == t2.bits && t1.os == t2.os && t1.vector_bits == t2.vector_bits;
+        auto is_runtime_compatible = [](const Target &t1, const Target &t2) -> bool {
+            bool yes = true;
+            yes &= (t1.arch == t2.arch && t1.bits == t2.bits && t1.os == t2.os);
+            yes &= (t1.vector_bits == t2.vector_bits);
+
+            // A bunch of feature flags also need to match between the
+            // compiled code and the host in order to run the code.
+            for (Target::Feature f : {Target::SVE2}) {
+                yes &= (t1.has_feature(f) == t2.has_feature(f));
+            }
+            return yes;
         };
 
-        can_run_the_code = is_same_triple(host, target) && is_same_triple(jit_target, target);
+        can_run_the_code = is_runtime_compatible(host, target) && is_runtime_compatible(jit_target, target);
 
-        // A bunch of feature flags also need to match between the
-        // compiled code and the host in order to run the code.
-        for (Target::Feature f : {Target::ARMv7s, Target::ARMFp16, Target::NoNEON, Target::SVE2}) {
-            if (target.has_feature(f) != jit_target.has_feature(f)) {
-                can_run_the_code = false;
-            }
-        }
         if (!can_run_the_code) {
-            cout << "[WARN] To perform verification of realization, "
-                 << R"(the target triple "arm-<bits>-<os>" and key feature "arm_fp16")"
-                 << " must be the same between HL_TARGET and HL_JIT_TARGET" << endl;
+            debug(0) << "[WARN] To perform verification of realization, "
+                     << R"(the target triple "arm-<bits>-<os>", vector_bits, and feature "sve2")"
+                     << " must be the same between HL_TARGET and HL_JIT_TARGET" << endl;
         }
     }
 
@@ -563,13 +561,20 @@ private:
                 continue;
             }
 
-            vector total_bits_params = {256};  // {64, 128, 192, 256};
-            if (bits != 64) {
-                // Add scalar case to verify float16 native operation
-                total_bits_params.push_back(bits);
+            std::vector<int> simd_bit_widths;
+            if (has_sve()) {
+                simd_bit_widths.push_back(target.vector_bits);
+            } else if (has_neon()) {
+                simd_bit_widths.push_back(64);
+                simd_bit_widths.push_back(128);
             }
 
-            for (auto total_bits : total_bits_params) {
+            if (bits != 64) {
+                // Add scalar case to verify float16 native operation
+                simd_bit_widths.push_back(bits);
+            }
+
+            for (auto &total_bits : simd_bit_widths) {
                 const int vf = total_bits / bits;
                 const bool is_vector = vf > 1;
 
@@ -829,7 +834,8 @@ private:
 
             // SVE Gather/Scatter
             if (has_sve()) {
-                for (int width = 64; width <= 64 * 4; width *= 2) {
+                for (float factor : {0.5f, 1.f, 2.f}) {
+                    const int width = base_vec_bits * factor;
                     const int total_lanes = width / bits;
                     const int instr_lanes = min(total_lanes, 128 / bits);
                     if (instr_lanes < 2 || (total_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
@@ -871,9 +877,12 @@ private:
                 {64, in_i64, in_u64, i64, i64, u64, u64},
             };
 
+            const int base_vec_bits = has_sve() ? target.vector_bits : 128;
+            const int vscale = base_vec_bits / 128;
+
             for (const auto &[bits, in_i, in_u, widen_i, widenx4_i, widen_u, widenx4_u] : test_params) {
 
-                for (auto &total_bits : {64, 128}) {
+                for (auto &total_bits : {base_vec_bits / 2, base_vec_bits}) {
                     const int vf = total_bits / bits;
                     const int instr_lanes = Instruction::get_force_vectorized_instr_lanes(bits, vf, target);
                     AddTestFunctor add(*this, bits, instr_lanes, vf, !(is_arm32() && bits == 64));  // 64 bit is unavailable in neon 32 bit
@@ -945,11 +954,13 @@ private:
 
                     // UDOT/SDOT
                     if (is_arm_dot_prod_available) {
-                        const int factor_32bit = vf / 4;
+                        const int factor_reduced = vf / 4;
+                        if (factor_reduced / vscale < 2) continue;  // bail out scalar and <vscale x 1 x ty>
+
                         for (int f : {4, 8}) {
                             // checks vector register for narrow src data type (i.e. 8 or 16 bit)
-                            const int lanes_src = Instruction::get_instr_lanes(bits, f * factor_32bit, target);
-                            AddTestFunctor add_dot(*this, bits, lanes_src, factor_32bit);
+                            const int lanes_src = Instruction::get_instr_lanes(bits, f * factor_reduced, target);
+                            AddTestFunctor add_dot(*this, bits, lanes_src, factor_reduced);
                             RDom r(0, f);
 
                             add_dot("udot", sum(widenx4_u(in_u(f * x + r)) * in_u(f * x + r + 32)));
@@ -1048,13 +1059,13 @@ private:
             return opcode_pattern + R"(\s.*\b)" + operand_pattern + R"(\b.*)";
         }
 
-        // TODO Fix this for SVE2
-        static int natural_lanes(int bits) {
-            return 128 / bits;
+        static int natural_lanes(int bits, const Target &t) {
+            const int base_vector_bits = std::max(t.vector_bits, 128);
+            return base_vector_bits / bits;
         }
 
         static int get_instr_lanes(int bits, int vec_factor, const Target &target) {
-            return min(natural_lanes(bits), vec_factor);
+            return min(natural_lanes(bits, target), vec_factor);
         }
 
         static int get_force_vectorized_instr_lanes(int bits, int vec_factor, const Target &target) {
@@ -1063,10 +1074,10 @@ private:
                 if (vec_factor == 1) {
                     return 1;
                 } else {
-                    return natural_lanes(bits);
+                    return natural_lanes(bits, target);
                 }
             } else {
-                int min_lanes = std::max(2, natural_lanes(bits) / 2);  // 64 bit wide VL
+                int min_lanes = std::max(2, natural_lanes(bits, target) / 2);  // 64 bit wide VL
                 return max(min_lanes, get_instr_lanes(bits, vec_factor, target));
             }
         }
@@ -1379,5 +1390,6 @@ int main(int argc, char **argv) {
 
             Target("arm-64-linux-sve2-no_neon-vector_bits_128"),
             Target("arm-64-linux-sve2-no_neon-vector_bits_256"),
+            Target("arm-64-linux-sve2-no_neon-vector_bits_512"),
         });
 }

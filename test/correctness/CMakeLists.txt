@@ -80,6 +80,7 @@ tests(GROUPS correctness
       debug_to_file.cpp
       debug_to_file_multiple_outputs.cpp
       debug_to_file_reorder.cpp
+      decompose_vector_shuffle.cpp
       deferred_loop_level.cpp
       deinterleave4.cpp
       device_buffer_copies_with_profile.cpp
