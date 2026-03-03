@@ -71,6 +71,13 @@ once the design solidifies.
     Co-authored-by: Claude <noreply@anthropic.com>
     ```
 
+- **Documentation.** New or changed public APIs (those in the `Halide::`
+  namespace) should be accompanied by updated documentation.
+
+- **Python bindings.** Halide provides a Python binding for its public C++ API.
+  If your change adds or modifies an API in the `Halide::` namespace, please
+  update the corresponding Python bindings as well.
+
 - **Performance impact.** If your change could affect code generation quality or
   runtime performance, please describe the expected impact in the PR description
   and include benchmark results where practical.
