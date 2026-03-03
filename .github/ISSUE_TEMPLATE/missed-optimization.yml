@@ -1,0 +1,82 @@
+name: Missed optimization
+description: Report a case where Halide produces correct but unexpectedly slow code.
+labels: ["performance"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: >-
+        A clear description of the missed optimization. What performance do you
+        expect, and what are you observing?
+    validations:
+      required: true
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Reproducing case
+      description: >-
+        A minimal Halide pipeline that demonstrates the issue. Include the
+        schedule if relevant.
+      render: cpp
+    validations:
+      required: true
+  - type: textarea
+    id: performance
+    attributes:
+      label: Performance details
+      description: >-
+        Include relevant measurements: execution time, generated assembly
+        snippets, loop nest structure (Func::print_loop_nest()), or
+        HL_DEBUG_CODEGEN output.
+    validations:
+      required: true
+  - type: dropdown
+    id: halide-source
+    attributes:
+      label: How did you get Halide?
+      options:
+        - Built from source
+        - pip (halide)
+        - vcpkg
+        - Homebrew
+        - GitHub release binary
+        - Other (describe below)
+    validations:
+      required: true
+  - type: input
+    id: halide-version
+    attributes:
+      label: Halide version
+      description: >-
+        The version number reported by your package manager, or the release tag
+        if you downloaded a binary.
+      placeholder: "e.g. 19.0.0"
+    validations:
+      required: true
+  - type: input
+    id: halide-commit
+    attributes:
+      label: Halide commit (if known)
+      description: >-
+        If you built from source, the commit hash you built from.
+      placeholder: "e.g. abc1234"
+    validations:
+      required: false
+  - type: input
+    id: target
+    attributes:
+      label: Target
+      description: The Halide target string used.
+      placeholder: "e.g. x86-64-linux-avx2, arm-64-osx"
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: >-
+        Any other relevant information (comparison with hand-written code,
+        alternative schedules tried, etc.)
+    validations:
+      required: false
