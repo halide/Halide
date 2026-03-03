@@ -321,28 +321,6 @@ class LegalizeVectors : public IRMutator {
         return IRMutator::visit(op);
     }
 
-    Expr make_binary_reduce_op(VectorReduce::Operator op, Expr a, Expr b) {
-        switch (op) {
-        case VectorReduce::Add:
-            return a + b;
-        case VectorReduce::SaturatingAdd:
-            return saturating_add(a, b);
-        case VectorReduce::Mul:
-            return a * b;
-        case VectorReduce::Min:
-            return min(a, b);
-        case VectorReduce::Max:
-            return max(a, b);
-        case VectorReduce::And:
-            return a && b;
-        case VectorReduce::Or:
-            return a || b;
-        default:
-            internal_error << "Unknown VectorReduce operator\n";
-            return Expr();
-        }
-    }
-
     Expr visit(const VectorReduce *op) override {
         // Written with the help of Gemini 3 Pro.
         Expr value = mutate(op->value);
@@ -416,7 +394,25 @@ class LegalizeVectors : public IRMutator {
             Expr res_hi = mutate(VectorReduce::make(op->op, arg_hi, 1));
 
             // Combine using the standard binary operator for this reduction type
-            return make_binary_reduce_op(op->op, res_lo, res_hi);
+            switch (op->op) {
+            case VectorReduce::Add:
+                return res_lo + res_hi;
+            case VectorReduce::SaturatingAdd:
+                return saturating_add(res_lo, res_hi);
+            case VectorReduce::Mul:
+                return res_lo * res_hi;
+            case VectorReduce::Min:
+                return min(res_lo, res_hi);
+            case VectorReduce::Max:
+                return max(res_lo, res_hi);
+            case VectorReduce::And:
+                return res_lo && res_hi;
+            case VectorReduce::Or:
+                return res_lo || res_hi;
+            default:
+                internal_error << "Unknown VectorReduce operator\n";
+                return Expr();
+            }
         }
 
         internal_error << "Unreachable";
