@@ -227,12 +227,17 @@ private:
 
     using IRMutator::visit;
 
+    inline bool needs_extracting(const Expr &op) {
+        if (op.type.is_scalar()) { return false; }
+        return !(starting_lane == 0 && lane_stride == 1 && new_lanes == op.type.lanes());
+    }
+
     Expr extract_lanes_from_make_struct(const Call *op) {
         internal_assert(op);
         internal_assert(op->is_intrinsic(Call::make_struct));
-        std::vector<Expr> args(op->args.size());
-        for (int i = 0; i < int(op->args.size()); ++i) {
-            args[i] = mutate(op->args[i]);
+        auto [args, changed] = mutate_with_changes(op->args);
+        if (!changed) {
+            return op;
         }
         return Call::make(op->type, Call::make_struct, args, Call::Intrinsic);
     }
@@ -271,6 +276,9 @@ private:
     }
 
     Expr visit(const VectorReduce *op) override {
+        if (!needs_extracting(op)) {
+            return op;
+        }
         int factor = op->value.type().lanes() / op->type.lanes();
         if (lane_stride != 1) {
             std::vector<int> input_lanes;
@@ -288,6 +296,9 @@ private:
                 ScopedValue<int> old_starting_lane(starting_lane, starting_lane * factor);
                 ScopedValue<int> old_new_lanes(new_lanes, new_lanes * factor);
                 in = mutate(op->value);
+            }
+            if (new_lanes == op->type.lanes() && in.same_as(op->value)) {
+                return op;
             }
             return VectorReduce::make(op->op, in, new_lanes);
         }
@@ -323,31 +334,36 @@ private:
             return mutate(flatten_nested_ramps(op));
         }
 
+        if (new_lanes == op->type.lanes()) {
+            return op;
+        }
         return Broadcast::make(op->value, new_lanes);
     }
 
     Expr visit(const Load *op) override {
-        if (op->type.is_scalar()) {
+        if (!needs_extracting(op)) {
             return op;
-        } else {
-            Type t = op->type.with_lanes(new_lanes);
-            ModulusRemainder align = op->alignment;
-            // The alignment of a Load refers to the alignment of the first
-            // lane, so we can preserve the existing alignment metadata if the
-            // deinterleave is asking for any subset of lanes that includes the
-            // first. Otherwise we just drop it. We could check if the index is
-            // a ramp with constant stride or some other special case, but if
-            // that's the case, the simplifier is very good at figuring out the
-            // alignment, and it has access to context (e.g. the alignment of
-            // enclosing lets) that we do not have here.
-            if (starting_lane != 0) {
-                align = ModulusRemainder();
-            }
-            return Load::make(t, op->name, mutate(op->index), op->image, op->param, mutate(op->predicate), align);
         }
+        Type t = op->type.with_lanes(new_lanes);
+        ModulusRemainder align = op->alignment;
+        // The alignment of a Load refers to the alignment of the first
+        // lane, so we can preserve the existing alignment metadata if the
+        // deinterleave is asking for any subset of lanes that includes the
+        // first. Otherwise we just drop it. We could check if the index is
+        // a ramp with constant stride or some other special case, but if
+        // that's the case, the simplifier is very good at figuring out the
+        // alignment, and it has access to context (e.g. the alignment of
+        // enclosing lets) that we do not have here.
+        if (starting_lane != 0) {
+            align = ModulusRemainder();
+        }
+        return Load::make(t, op->name, mutate(op->index), op->image, op->param, mutate(op->predicate), align);
     }
 
     Expr visit(const Ramp *op) override {
+        if (!needs_extracting(op)) {
+            return op;
+        }
         int base_lanes = op->base.type().lanes();
         if (base_lanes > 1) {
             if (new_lanes == 1) {
@@ -390,56 +406,55 @@ private:
     }
 
     Expr visit(const Variable *op) override {
-        if (op->type.is_scalar()) {
+        if (!needs_extracting(op)) {
             return op;
-        } else {
+        }
 
-            Type t = op->type.with_lanes(new_lanes);
-            /*
-            internal_assert((op->type.lanes() - starting_lane + lane_stride - 1) / lane_stride == new_lanes)
-                << "Deinterleaving with lane stride " << lane_stride << " and staring lane " << starting_lane
-                << " for var of Type " << op->type << " to " << t << " drops lanes unexpectedly."
-                << " Deinterleaver probably recursed too deep into types of different lane count.";
-                */
+        Type t = op->type.with_lanes(new_lanes);
+        /*
+        internal_assert((op->type.lanes() - starting_lane + lane_stride - 1) / lane_stride == new_lanes)
+            << "Deinterleaving with lane stride " << lane_stride << " and staring lane " << starting_lane
+            << " for var of Type " << op->type << " to " << t << " drops lanes unexpectedly."
+            << " Deinterleaver probably recursed too deep into types of different lane count.";
+            */
 
-            if (sliceable_lets.contains(op->name)) {
-                // The variable accessed is marked as sliceable by the caller.
-                // Let's request a slice and pretend it exists.
-                std::string sliced_var_name = variable_name_with_extracted_lanes(
-                    op->name, op->type.lanes(),
-                    starting_lane, lane_stride, new_lanes);
+        if (sliceable_lets.contains(op->name)) {
+            // The variable accessed is marked as sliceable by the caller.
+            // Let's request a slice and pretend it exists.
+            std::string sliced_var_name = variable_name_with_extracted_lanes(
+                op->name, op->type.lanes(),
+                starting_lane, lane_stride, new_lanes);
 
-                VectorSlice new_sl;  // When C++20 lands: Designated initializer
-                new_sl.start = starting_lane;
-                new_sl.stride = lane_stride;
-                new_sl.count = new_lanes;
-                new_sl.variable_name = sliced_var_name;
+            VectorSlice new_sl;  // When C++20 lands: Designated initializer
+            new_sl.start = starting_lane;
+            new_sl.stride = lane_stride;
+            new_sl.count = new_lanes;
+            new_sl.variable_name = sliced_var_name;
 
-                if (auto *vec = requested_slices.shallow_find(op->name)) {
-                    bool found = false;
-                    for (const VectorSlice &existing_sl : *vec) {
-                        if (existing_sl.start == starting_lane &&
-                            existing_sl.stride == lane_stride &&
-                            existing_sl.count == new_lanes) {
-                            found = true;
-                            break;
-                        }
+            if (auto *vec = requested_slices.shallow_find(op->name)) {
+                bool found = false;
+                for (const VectorSlice &existing_sl : *vec) {
+                    if (existing_sl.start == starting_lane &&
+                        existing_sl.stride == lane_stride &&
+                        existing_sl.count == new_lanes) {
+                        found = true;
+                        break;
                     }
-                    if (!found) {
-                        vec->push_back(std::move(new_sl));
-                    }
-                } else {
-                    requested_slices.push(op->name, {std::move(new_sl)});
                 }
-                return Variable::make(t, sliced_var_name, op->image, op->param, op->reduction_domain);
+                if (!found) {
+                    vec->push_back(std::move(new_sl));
+                }
             } else {
-                return give_up_and_shuffle(op);
+                requested_slices.push(op->name, {std::move(new_sl)});
             }
+            return Variable::make(t, sliced_var_name, op->image, op->param, op->reduction_domain);
+        } else {
+            return give_up_and_shuffle(op);
         }
     }
 
     Expr visit(const Cast *op) override {
-        if (op->type.is_scalar()) {
+        if (!needs_extracting(op)) {
             return op;
         } else {
             Type t = op->type.with_lanes(new_lanes);
@@ -451,7 +466,7 @@ private:
         // Written with assistance from Gemini 3 Pro, which required a lot of baby-sitting.
 
         // Simple case of a scalar reinterpret: always one lane:
-        if (op->type.is_scalar()) {
+        if (!needs_extracting(op)) {
             return op;
         }
 
@@ -553,23 +568,28 @@ private:
 
     Expr visit(const Call *op) override {
         internal_assert(op->type.lanes() >= starting_lane + lane_stride * (new_lanes - 1)) << Expr(op) << starting_lane << " " << lane_stride << " " << new_lanes;
-        Type t = op->type.with_lanes(new_lanes);
 
         // Don't mutate scalars
-        if (op->type.is_scalar()) {
+        if (!needs_extracting(op)) {
             return op;
         } else {
             // Vector calls are always parallel across the lanes, so we
             // can just deinterleave the args.
+            Type t = op->type.with_lanes(new_lanes);
 
             // Beware of intrinsics for which this is not true!
-            auto args = mutate(op->args);
+            auto [args, changed] = mutate_with_changes(op->args);
+            internal_assert(changed);
             return Call::make(t, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         }
     }
 
     Expr visit(const Shuffle *op) override {
+        if (!needs_extracting(op)) {
+            return op;
+        }
+
         // Special case 1: Scalar extraction
         if (new_lanes == 1) {
             // Find in which vector it sits.
@@ -1012,7 +1032,7 @@ class Interleaver : public IRMutator {
             const Ramp *ri = stores[i].as<Store>()->index.as<Ramp>();
             internal_assert(ri);
 
-            // Mismatched store vector laness.
+            // Mismatched store vector lanes.
             if (ri->lanes != lanes) {
                 return Stmt();
             }
