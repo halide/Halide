@@ -4,6 +4,30 @@ find_package(
 )
 get_target_property(VulkanHeaders_INCLUDE_DIR Vulkan::Headers INTERFACE_INCLUDE_DIRECTORIES)
 
+# When cross-compiling (e.g. for wasm via Emscripten), the clang and llvm-as targets
+# from find_package(LLVM) point to cross-compiled binaries that can't run on the host.
+# These options allow specifying native host tools for runtime bitcode compilation.
+set(Halide_NATIVE_CLANG "" CACHE FILEPATH
+    "Path to native clang for runtime bitcode compilation (for cross-compilation)")
+set(Halide_NATIVE_LLVM_AS "" CACHE FILEPATH
+    "Path to native llvm-as for runtime bitcode compilation (for cross-compilation)")
+
+if (Halide_NATIVE_CLANG)
+    set(_halide_clang_cmd "${Halide_NATIVE_CLANG}")
+    set(_halide_clang_dep "")
+else ()
+    set(_halide_clang_cmd ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang>)
+    set(_halide_clang_dep $<TARGET_NAME:clang>)
+endif ()
+
+if (Halide_NATIVE_LLVM_AS)
+    set(_halide_llvm_as_cmd "${Halide_NATIVE_LLVM_AS}")
+    set(_halide_llvm_as_dep "")
+else ()
+    set(_halide_llvm_as_cmd ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as>)
+    set(_halide_llvm_as_dep $<TARGET_NAME:llvm-as>)
+endif ()
+
 # Keep these lists in alphabetical order.
 set(RUNTIME_CPP
     aarch64_cpu_features
@@ -273,14 +297,14 @@ foreach (i IN LISTS RUNTIME_CPP)
             endif ()
 
             add_custom_command(OUTPUT "${LL}"
-                               COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
-                               DEPENDS $<TARGET_NAME:clang> "${SOURCE}"
+                               COMMAND ${_halide_clang_cmd} ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
+                               DEPENDS ${_halide_clang_dep} "${SOURCE}"
                                DEPFILE "${basename}.d"
                                VERBATIM)
 
             add_custom_command(OUTPUT "${BC}"
-                               COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL}" -o "${BC}"
-                               DEPENDS $<TARGET_NAME:llvm-as> "${LL}"
+                               COMMAND ${_halide_llvm_as_cmd} "${LL}" -o "${BC}"
+                               DEPENDS ${_halide_llvm_as_dep} "${LL}"
                                VERBATIM)
 
             add_custom_command(OUTPUT "${INITMOD}"
@@ -306,8 +330,8 @@ foreach (i IN LISTS RUNTIME_LL)
                        VERBATIM)
 
     add_custom_command(OUTPUT "${BC}"
-                       COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL_TRANSFORMED}" -o "${BC}"
-                       DEPENDS $<TARGET_NAME:llvm-as> "${LL_TRANSFORMED}"
+                       COMMAND ${_halide_llvm_as_cmd} "${LL_TRANSFORMED}" -o "${BC}"
+                       DEPENDS ${_halide_llvm_as_dep} "${LL_TRANSFORMED}"
                        VERBATIM)
     add_custom_command(OUTPUT "${INITMOD}"
                        COMMAND binary2cpp "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"
