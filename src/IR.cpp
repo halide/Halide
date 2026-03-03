@@ -659,7 +659,6 @@ const char *const intrinsic_op_names[] = {
     "require",
     "require_mask",
     "return_second",
-    "rewrite_buffer",
     "round",
     "rounding_halving_add",
     "rounding_mul_shift_right",

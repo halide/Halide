@@ -30,17 +30,7 @@
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_MANIFEST_FEATURES": "developer",
-        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg",
         "Halide_USE_FETCHCONTENT": false
-      }
-    },
-    {
-      "name": "vcpkg-full",
-      "inherits": "vcpkg",
-      "displayName": "vcpkg deps (all dependencies)",
-      "description": "Build ALL dependencies with vcpkg",
-      "cacheVariables": {
-        "VCPKG_OVERLAY_PORTS": ""
       }
     },
     {
@@ -94,24 +84,6 @@
       "description": "Release build for a single-config generator, vcpkg dependencies"
     },
     {
-      "name": "debug-vcpkg-full",
-      "inherits": [
-        "debug",
-        "vcpkg-full"
-      ],
-      "displayName": "Debug (vcpkg-full)",
-      "description": "Debug build for a single-config generator, vcpkg-full dependencies"
-    },
-    {
-      "name": "release-vcpkg-full",
-      "inherits": [
-        "release",
-        "vcpkg-full"
-      ],
-      "displayName": "Release (vcpkg-full)",
-      "description": "Release build for a single-config generator, vcpkg-full dependencies"
-    },
-    {
       "name": "win32",
       "inherits": "vs2022",
       "displayName": "Win32 (Visual Studio)",
@@ -123,26 +95,6 @@
       "inherits": "vs2022",
       "displayName": "Win64 (Visual Studio)",
       "description": "Visual Studio-based x64 build with vcpkg dependencies.",
-      "architecture": "x64"
-    },
-    {
-      "name": "win32-vcpkg-full",
-      "inherits": [
-        "vcpkg-full",
-        "vs2022"
-      ],
-      "displayName": "Win32 (Visual Studio/vcpkg-full)",
-      "description": "Visual Studio-based Win32 build with vcpkg-full dependencies.",
-      "architecture": "Win32"
-    },
-    {
-      "name": "win64-vcpkg-full",
-      "inherits": [
-        "vcpkg-full",
-        "vs2022"
-      ],
-      "displayName": "Win64 (Visual Studio/vcpkg-full)",
-      "description": "Visual Studio-based x64 build with vcpkg-full dependencies.",
       "architecture": "x64"
     },
     {
@@ -168,15 +120,6 @@
       ],
       "displayName": "macOS (vcpkg)",
       "description": "macOS build with vcpkg dependencies"
-    },
-    {
-      "name": "macOS-vcpkg-full",
-      "inherits": [
-        "macOS",
-        "vcpkg-full"
-      ],
-      "displayName": "macOS (vcpkg-full)",
-      "description": "macOS build with vcpkg-full dependencies"
     },
     {
       "name": "package",
