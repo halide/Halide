@@ -228,8 +228,10 @@ private:
     using IRMutator::visit;
 
     inline bool needs_extracting(const Expr &op) {
-        if (op.type.is_scalar()) { return false; }
-        return !(starting_lane == 0 && lane_stride == 1 && new_lanes == op.type.lanes());
+        if (op.type().is_scalar()) {
+            return false;
+        }
+        return !(starting_lane == 0 && lane_stride == 1 && new_lanes == op.type().lanes());
     }
 
     Expr extract_lanes_from_make_struct(const Call *op) {
