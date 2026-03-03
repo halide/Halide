@@ -1158,8 +1158,8 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     llvm::Type *result_ty = get_vector_type(element_ty, result_elements);
 
     // Try to rewrite shuffles that only access the elements of b.
-    int min = indices[0];
-    for (size_t i = 1; i < indices.size(); i++) {
+    int min = INT_MAX;
+    for (size_t i = 0; i < indices.size(); i++) {
         if (indices[i] != -1 && indices[i] < min) {
             min = indices[i];
         }
@@ -1171,7 +1171,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 i -= a_elements;
             }
         }
-        return shuffle_vectors(b, shifted_indices);
+        return shuffle_vectors(b, b, shifted_indices);
     }
 
     // Try to rewrite shuffles that only access the elements of a.
