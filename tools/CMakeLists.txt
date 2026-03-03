@@ -11,6 +11,15 @@ target_compile_options(binary2cpp PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd4996>)
 add_executable(regexp_replace regexp_replace.cpp)
 target_compile_options(regexp_replace PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd4996>)
 
+# When cross-compiling for Emscripten (wasm), these build-time tools run via
+# node (CMAKE_CROSSCOMPILING_EMULATOR). They need NODERAWFS to access the
+# host filesystem for reading source files and writing generated output.
+if (EMSCRIPTEN)
+    foreach (_tool IN ITEMS build_halide_h binary2cpp regexp_replace)
+        target_link_options(${_tool} PRIVATE "SHELL:-s NODERAWFS=1")
+    endforeach ()
+endif ()
+
 ##
 # Interface target for enabling PNG/JPEG support in Halide
 ##

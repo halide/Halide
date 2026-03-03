@@ -54,6 +54,22 @@ if (LLVM_FOUND)
     # Halide_LLVM_ROOT or CMAKE_PREFIX_PATH (which are the standard ways of
     # setting up the dependency search), but at a higher precedence than the
     # system-wide fallback locations.
+
+    # When LLVM is built from a monorepo (e.g. cross-compiled for wasm), the
+    # ClangTargets.cmake may reference LLD targets (lldWasm, lldCommon). We
+    # must find LLD first so those targets exist before Clang tries to import
+    # them.
+    if ("WebAssembly" IN_LIST LLVM_TARGETS_TO_BUILD)
+        find_package(
+            LLD "${Halide_LLVM_VERSION}" EXACT
+            HINTS
+            "${LLVM_INSTALL_PREFIX}"
+            "${LLVM_INSTALL_PREFIX}/../lld@${LLVM_VERSION_MAJOR}"
+            "${LLVM_DIR}/../lld"
+            "${LLVM_DIR}/../lib/cmake/lld"
+        )
+    endif ()
+
     find_package(
         Clang "${Halide_LLVM_VERSION}" EXACT
         HINTS

@@ -521,6 +521,10 @@ int run_process(std::vector<std::string> args) {
     // Wait for completion; return the child's exit code.
     int rc = _spawnvp(_P_WAIT, argv[0], argv.data());
     return (rc >= 0) ? rc : -1;
+#elif defined(__EMSCRIPTEN__)
+    // Process spawning is not supported in WebAssembly/Emscripten.
+    user_error << "run_process is not supported under Emscripten/WebAssembly.\n";
+    return -1;
 #else
     pid_t pid = 0;
     int status = posix_spawnp(&pid, argv[0], nullptr, nullptr, argv.data(), environ);
@@ -744,13 +748,15 @@ size_t get_compiler_stack_size() {
 
 namespace Internal {
 
-#if defined(HALIDE_INTERNAL_USING_ASAN) || defined(__ANDROID__)
+#if defined(HALIDE_INTERNAL_USING_ASAN) || defined(__ANDROID__) || defined(__EMSCRIPTEN__)
 // If we are compiling under ASAN,  we will get a zillion warnings about
 // ASAN not supporting makecontext/swapcontext and the possibility of
 // false positives.
 //
 // If we are building for Android, well, it apparently doesn't provide
-// makecontext() / swapcontext(), despite being posixy
+// makecontext() / swapcontext(), despite being posixy.
+//
+// Emscripten's musl libc does not provide ucontext/makecontext/swapcontext.
 #define MAKECONTEXT_OK 0
 #else
 #define MAKECONTEXT_OK 1

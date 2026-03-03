@@ -331,6 +331,11 @@ Target calculate_host_target() {
 
     if (have_vsx) initial_features.push_back(Target::VSX);
     if (arch_2_07) initial_features.push_back(Target::POWER_ARCH_2_07);
+#elif defined(__EMSCRIPTEN__)
+    // When the Halide compiler itself is running as wasm (e.g. via Emscripten),
+    // there is no meaningful "host" target. Return WebAssembly as the host arch.
+    Target::Arch arch = Target::WebAssembly;
+    os = Target::WebAssemblyRuntime;
 #else
     Target::Arch arch = Target::X86;
 
