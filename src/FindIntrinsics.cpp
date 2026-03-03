@@ -1123,36 +1123,25 @@ protected:
 class SubstituteInWideningLets : public IRMutator {
     using IRMutator::visit;
 
-    bool widens(const Expr &e) {
-        class AllInputsNarrowerThan : public IRVisitor {
-            int bits;
-
-            using IRVisitor::visit;
-
-            void visit(const Variable *op) override {
+    static bool widens(const Expr &e) {
+        const int bits = e.type().bits();
+        bool result = true;
+        visit_with(
+            e,
+            [&](auto *, const Variable *op) {
                 result &= op->type.bits() < bits;
-            }
-
-            void visit(const Load *op) override {
+            },
+            [&](auto *, const Load *op) {
                 result &= op->type.bits() < bits;
-            }
-
-            void visit(const Call *op) override {
+            },
+            [&](auto *self, const Call *op) {
                 if (op->is_pure() && op->is_intrinsic()) {
-                    IRVisitor::visit(op);
+                    self->visit_base(op);
                 } else {
                     result &= op->type.bits() < bits;
                 }
-            }
-
-        public:
-            AllInputsNarrowerThan(Type t)
-                : bits(t.bits()) {
-            }
-            bool result = true;
-        } widens(e.type());
-        e.accept(&widens);
-        return widens.result;
+            });
+        return result;
     }
 
     Scope<Expr> replacements;
@@ -1635,27 +1624,24 @@ Expr lower_intrinsic(const Call *op) {
 }
 
 namespace {
-
-class LowerIntrinsics : public IRMutator {
-    using IRMutator::visit;
-
-    Expr visit(const Call *op) override {
+template<typename T>
+T lower_intrinsics_impl(const T &ir) {
+    return mutate_with(ir, [&](auto *self, const Call *op) {
         Expr lowered = lower_intrinsic(op);
         if (lowered.defined()) {
-            return mutate(lowered);
+            return self->mutate(lowered);
         }
-        return IRMutator::visit(op);
-    }
-};
-
+        return self->visit_base(op);
+    });
+}
 }  // namespace
 
 Expr lower_intrinsics(const Expr &e) {
-    return LowerIntrinsics().mutate(e);
+    return lower_intrinsics_impl(e);
 }
 
 Stmt lower_intrinsics(const Stmt &s) {
-    return LowerIntrinsics().mutate(s);
+    return lower_intrinsics_impl(s);
 }
 
 }  // namespace Internal
