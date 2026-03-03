@@ -2317,6 +2317,12 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         user_error << "Func \"" << f.name() << "\" is scheduled with ring_buffer(), but has matching store_at and hoist_storage levels. Add an explicit hoist_storage directive to the schedule to fix the issue.\n";
     }
 
+    // Check if hoist_storage is used with an extern stage
+    if (f.has_extern_definition() && !hoist_storage_at.is_inlined() && hoist_storage_at != store_at) {
+        user_error << "Func \"" << f.name() << "\" is an extern function with storage hoisted to a different level than store_at. "
+                   << "Func::hoist_storage is not currently supported for extern functions.";
+    }
+
     vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
     int store_idx = -1, compute_idx = -1, hoist_storage_idx = -1;
     for (size_t i = 0; i < sites.size(); i++) {
