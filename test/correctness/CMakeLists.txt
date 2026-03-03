@@ -295,6 +295,7 @@ tests(GROUPS correctness
       simplified_away_embedded_image.cpp
       simplify.cpp
       skip_stages.cpp
+      skip_stages_cse_bug.cpp
       skip_stages_external_array_functions.cpp
       skip_stages_memoize.cpp
       sliding_backwards.cpp
