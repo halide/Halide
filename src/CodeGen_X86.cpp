@@ -566,13 +566,36 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
 
-    if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
-        if (src.bits() < dst.bits() && dst.bits() <= 32) {
+    if (const Call *widening_op = Call::as_intrinsic(op->value, {Call::widening_mul, Call::widening_add, Call::widening_sub})) {
+        bool should_upcast_args_to_dst_type =
+            dst.can_represent(widening_op->args[0].type()) &&
+            dst.can_represent(widening_op->args[1].type()) &&
             // LLVM/x86 really doesn't like 8 -> 16 bit multiplication. If we're
             // widening to 32-bits after a widening multiply, LLVM prefers to see a
             // widening multiply directly to 32-bits. This may result in extra
             // casts, so simplify to remove them.
-            value = codegen(simplify(Mul::make(Cast::make(dst, mul->args[0]), Cast::make(dst, mul->args[1]))));
+            ((widening_op->is_intrinsic(Call::widening_mul) &&
+              src.bits() < dst.bits() &&
+              dst.bits() <= 32) ||
+             // X86 doesn't have uint to float conversions before avx512
+             (!target.has_feature(Target::AVX512) &&
+              src.is_uint() &&
+              src.bits() >= 32 &&
+              dst.is_float()));
+
+        if (should_upcast_args_to_dst_type) {
+            Expr arg0 = Cast::make(dst, widening_op->args[0]);
+            Expr arg1 = Cast::make(dst, widening_op->args[1]);
+            Expr equiv;
+            if (widening_op->is_intrinsic(Call::widening_mul)) {
+                equiv = arg0 * arg1;
+            } else if (widening_op->is_intrinsic(Call::widening_add)) {
+                equiv = arg0 + arg1;
+            } else {
+                internal_assert(widening_op->is_intrinsic(Call::widening_sub));
+                equiv = arg0 - arg1;
+            }
+            value = codegen(simplify(equiv));
             return;
         }
     }
