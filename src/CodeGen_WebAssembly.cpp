@@ -183,8 +183,9 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         // operand of a vector extend is always a load, but LLVM's optimizer may
         // insert a freeze node between the load and the extend, causing a
         // cast<LoadSDNode> assertion failure. Use an optimization fence to
-        // prevent the DAG combiner from seeing through to the load.  See
-        // https://github.com/halide/Halide/issues/8928
+        // prevent the DAG combiner from seeing through to the load. See
+        // https://github.com/halide/Halide/issues/8928 and
+        // https://github.com/llvm/llvm-project/issues/184676
         if (op->type.is_int_or_uint() &&
             op->value.type().is_int_or_uint() &&
             op->type.bits() > op->value.type().bits()) {
