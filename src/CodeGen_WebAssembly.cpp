@@ -188,8 +188,8 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         if (op->type.is_int_or_uint() &&
             op->value.type().is_int_or_uint() &&
             op->type.bits() > op->value.type().bits()) {
-            // Check if the value is a load.
-            // Loads are sometimes hiding behind let-bindings.
+            // Check if the value is a Load. Loads are sometimes hiding behind
+            // let bindings.
             bool is_load = op->value.as<Load>();
             if (const Variable *var = op->value.as<Variable>()) {
                 llvm::Value *v = sym_get(var->name, false);
