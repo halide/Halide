@@ -29,7 +29,6 @@ enum class OutputFileType {
     c_header,
     c_source,
     compiler_log,
-    cpp_stub,
     featurization,
     function_info_header,
     hlpipe,
