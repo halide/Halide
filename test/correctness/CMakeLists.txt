@@ -99,6 +99,7 @@ tests(GROUPS correctness
       error_macro_unreachable.cpp
       exception.cpp
       explicit_inline_reductions.cpp
+      extended_exp.cpp
       extern_bounds_inference.cpp
       extern_consumer.cpp
       extern_error.cpp
