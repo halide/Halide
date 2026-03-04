@@ -98,7 +98,9 @@ int main(int argc, char **argv) {
     if (!check_result())
         return 1;
 
-    // Test ImageParam ExternFuncArgument via passed in image.
+    // Test ImageParam ExternFuncArgument via passed in image. Reset the
+    // source's compute_at level to make it legal to realize in isolation.
+    source.compute_root();
     Buffer<int32_t> buf = source.realize({10});
     ImageParam passed_in(Int(32), 1);
     passed_in.set(buf);
