@@ -566,6 +566,34 @@ if (WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
 endif ()
 
+if (NOT DEFINED Halide_COMPILER_BUILTIN_LIBRARY)
+    # FIXME: `execute_process()` can not use `$<TARGET_FILE:clang>`, workarounding that.
+    get_property(clang_LOCATION TARGET clang PROPERTY LOCATION)
+    execute_process(
+        COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_C_COMPILER_LAUNCHER} ${clang_LOCATION} "--print-libgcc-file-name"
+        OUTPUT_VARIABLE Halide_COMPILER_BUILTIN_LIBRARY
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_VARIABLE Halide_COMPILER_BUILTIN_LIBRARY_stderr
+        ERROR_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE Halide_COMPILER_BUILTIN_LIBRARY_exit_code
+    )
+    if (NOT "${Halide_COMPILER_BUILTIN_LIBRARY_exit_code}" STREQUAL "0")
+        message(FATAL_ERROR "Unable to invoke clang --print-libgcc-file-name: ${Halide_COMPILER_BUILTIN_LIBRARY_stderr}")
+    endif()
+endif ()
+
+set(Halide_COMPILER_BUILTIN_LIBRARY "${Halide_COMPILER_BUILTIN_LIBRARY}"
+    CACHE FILEPATH "Library containing __udivdi3 symbol, either “libgcc.a” or “libclang_rt.builtins.*.a”.")
+
+add_library(Halide::__udivdi3 UNKNOWN IMPORTED)
+set_target_properties(
+  Halide::__udivdi3
+  PROPERTIES
+  IMPORTED_LOCATION "${Halide_COMPILER_BUILTIN_LIBRARY}"
+)
+
+target_link_libraries(Halide PRIVATE Halide::__udivdi3)
+
 # Note that we (deliberately) redeclare these versions here, even though the macros
 # with identical versions are expected to be defined in source; this allows us to
 # ensure that the versions defined between all build systems are identical.
