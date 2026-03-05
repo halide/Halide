@@ -319,6 +319,8 @@ tests(GROUPS correctness
       strict_float.cpp
       strict_float_bounds.cpp
       strided_load.cpp
+      sve_codegen_predicated.cpp
+      sve_codegen_reinterpret.cpp
       target.cpp
       target_query.cpp
       tiled_matmul.cpp
