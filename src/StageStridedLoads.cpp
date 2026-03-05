@@ -283,7 +283,7 @@ bool can_hoist_shared_load(const IRNode *n, const std::string &buf, const Expr &
 
 }  // namespace
 
-Stmt stage_strided_loads(const Stmt &stmt) {
+Stmt stage_strided_loads(const Stmt &stmt, const Target &target) {
     FindStridedLoads finder;
     ReplaceStridedLoads replacer;
 
@@ -353,14 +353,27 @@ Stmt stage_strided_loads(const Stmt &stmt) {
             const IRNode *outermost = k.scope ? k.scope : s.get();
             const IRNode *let_site = innermost_containing_node(outermost, all_loads);
             if (can_hoist_shared_load(let_site, k.buf, idx)) {
+                // For larger strides we can do a better job at shuffling if we
+                // do it as one big task. For stride 2 it interferes with
+                // horizontal add pattern matching. On ARM it also interferes
+                // with LLVM's pattern matching for vld3 and vld4.
+                bool transpose_shared_load = k.stride > 2;
+                if (target.arch == Target::ARM || target.arch == Target::Hexagon) {
+                    transpose_shared_load = k.stride > 4;
+                }
                 std::string name = unique_name('t');
                 Expr var = Variable::make(shared_load.type(), name);
                 for (; load != v.end() && load->first < first_offset + k.stride; load++) {
                     int row = load->first - first_offset;
-                    Expr shuf = Shuffle::make_slice(var, row, k.stride, k.lanes);
+                    Expr shuf = transpose_shared_load ?
+                                    Shuffle::make_slice(var, row * k.lanes, 1, k.lanes) :
+                                    Shuffle::make_slice(var, row, k.stride, k.lanes);
                     for (const Load *l : load->second) {
                         replacer.replacements.emplace(l, shuf);
                     }
+                }
+                if (transpose_shared_load) {
+                    shared_load = Shuffle::make_transpose(shared_load, k.stride);
                 }
                 replacer.let_injections[let_site].emplace_back(name, shared_load);
             } else {

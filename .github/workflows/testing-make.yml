@@ -47,6 +47,7 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
             echo "LLVM_CONFIG=llvm-config-$LLVM_VERSION" | tee -a "$GITHUB_ENV"
+            cat /proc/cpuinfo
           elif [ "$RUNNER_OS" = "macOS" ]; then
             echo "LLVM_CONFIG=$(brew --prefix llvm@$LLVM_VERSION)/bin/llvm-config" | tee -a "$GITHUB_ENV"
           fi
