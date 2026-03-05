@@ -61,6 +61,7 @@ static const HalideFuncs kHalideMetal = {
 {
     self.opaque          = YES;
     self.backgroundColor = nil;
+    self.userInteractionEnabled = YES;
 
 #if HAS_METAL_SDK
     _metalLayer = (CAMetalLayer *)self.layer;
@@ -115,7 +116,7 @@ static const HalideFuncs kHalideMetal = {
     const int pad_pixels = (64 / sizeof(int32_t));
     const int row_stride = (w + pad_pixels - 1) & ~(pad_pixels - 1);
     const halide_dimension_t pixelBufShape[] = {
-        {0, w, c},
+        {0, row_stride, c},
         {0, h, c * row_stride},
         {0, c, 1}
     };
@@ -124,6 +125,9 @@ static const HalideFuncs kHalideMetal = {
     // and memory managed by Buffer itself
     pixel_buf = Buffer<uint8_t>(nullptr, 3, pixelBufShape);
     pixel_buf.allocate();
+    // the blit command requires the padding to exist even on the last row,
+    // so we allocate it padded then crop.
+    pixel_buf.crop(0, 0, w);
 }
 
 - (void)didMoveToWindow
@@ -155,12 +159,11 @@ static const HalideFuncs kHalideMetal = {
 - (void)updateLogWith: (double) elapsedTime using_metal: (bool) using_metal
 {
 #if HAS_METAL_SDK
-    NSString *mode = using_metal ? @"(Metal; Double-tap for CPU)" : @"(CPU; Double-tap for Metal)";
+    NSString *mode = using_metal ? @"Metal (double-tap for CPU)" : @"CPU (double-tap for Metal)";
 #else
-    NSString *mode = @"(CPU; Metal not available)";
+    NSString *mode = @"CPU only";
 #endif
-    [self.outputLog setText: [NSString stringWithFormat:@"Halide routine takes %0.3f ms %@", 
-                              elapsedTime * 1000, mode]];
+    self.statsLabel.text = [NSString stringWithFormat:@"%.1f ms • %@", elapsedTime * 1000, mode];
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
@@ -191,7 +194,8 @@ static const HalideFuncs kHalideMetal = {
 
 - (void)renderOneFrame: (const HalideFuncs &) halide_funcs using_metal: (bool) using_metal
 {
-    int tx = -100, ty = -100;
+    // -1 is interpreted as no touch event
+    int tx = -1, ty = -1;
     if (self.touch_active) {
         // Note that buf/bounds is not necessarily the same as self.contentScaleFactor
         tx = (int) (self.touch_position.x * buf1.dim(0).extent() / self.bounds.size.width);
@@ -242,17 +246,13 @@ static const HalideFuncs kHalideMetal = {
         id <MTLTexture> texture = drawable.texture;
 
         // handle display changes here
-        if (texture.width != buf1.dim(0).extent() ||
+        if (!buf1.data() ||
+            texture.width != buf1.dim(0).extent() ||
             texture.height != buf1.dim(1).extent() ||
             buf1.dim(0).stride() != required_stride) {
  
             // set the metal layer to the drawable size in case orientation or size changes
             CGSize drawableSize = self.bounds.size;
-
-            // The Metal schedule for our Halide code requires that 
-            // the image be exact multiples of 8 in x & y
-            drawableSize.width  = ((long)drawableSize.width + 7) & ~7;
-            drawableSize.height  = ((long)drawableSize.height + 7) & ~7;
             _metalLayer.drawableSize = drawableSize;
             
             [self initBufsWithWidth: drawableSize.width height: drawableSize.height using_metal: using_metal];
@@ -282,8 +282,8 @@ static const HalideFuncs kHalideMetal = {
             copyFromBuffer:buffer 
             sourceOffset: 0
             sourceBytesPerRow: bytesPerRow
-            sourceBytesPerImage: pixel_buf.size_in_bytes()
-            sourceSize: image_size 
+            sourceBytesPerImage: pixel_buf.dim(1).stride() * pixel_buf.dim(1).extent() // Not sizeInBytes because we're also copying the padding on the last row
+            sourceSize: image_size
             toTexture: drawable.texture
             destinationSlice: 0 
             destinationLevel: 0 
@@ -296,7 +296,6 @@ static const HalideFuncs kHalideMetal = {
             });
         }];
         [commandBuffer commit];
-        [_commandQueue insertDebugCaptureBoundary];
     }
 #else
     float f = self.contentScaleFactor;

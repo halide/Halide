@@ -1,6 +1,6 @@
 #include <TargetConditionals.h>
 
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_8_0 && !(TARGET_IPHONE_SIMULATOR || TARGET_OS_SIMULATOR)
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_13_0
 #define HAS_METAL_SDK 1
 #else
 #define HAS_METAL_SDK 0
@@ -21,7 +21,7 @@
 
 @property CGPoint touch_position;
 @property bool touch_active;
-@property UITextView *outputLog;
+@property UILabel *statsLabel;
 
 #if HAS_METAL_SDK
 @property bool use_metal;
