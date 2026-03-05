@@ -4,7 +4,7 @@ import gc
 import sys
 
 
-def test_ndarray_to_buffer(reverse_axes=True):
+def test_ndarray_to_buffer(reverse_axes):
     a0 = np.ones((200, 300), dtype=np.int32)
 
     # Buffer always shares data (when possible) by default,
@@ -49,7 +49,7 @@ def test_ndarray_to_buffer(reverse_axes=True):
         assert a0[56, 34] == 12
 
 
-def test_buffer_to_ndarray(reverse_axes=True):
+def test_buffer_to_ndarray(reverse_axes):
     buf0 = hl.Buffer(hl.Int(16), [4, 6])
     assert buf0.type() == hl.Int(16)
     buf0.fill(0)
@@ -93,8 +93,9 @@ def test_buffer_to_ndarray(reverse_axes=True):
         assert array_shared[1, 2] == 3
         assert array_copied[1, 2] == 42
 
-    # Ensure that Buffers that have nonzero mins get converted correctly,
-    # since the Python Buffer Protocol doesn't have the 'min' concept
+    # Ensure that Buffers that have nonzero mins get converted correctly.
+    # Since the Python Buffer Protocol doesn't have the 'min' concept, the
+    # numpy views will have the cropped extents but no min coordinate.
     cropped_buf0 = buf0.copy()
     cropped_buf0.crop(dimension=0, min=1, extent=2)
     cropped_buf = cropped_buf0.reverse_axes() if not reverse_axes else cropped_buf0
@@ -129,6 +130,131 @@ def test_buffer_to_ndarray(reverse_axes=True):
         assert cropped_buf[2, 1] == 5
         assert cropped_array_shared[0, 2] == 5
         assert cropped_array_copied[0, 2] == 3
+
+
+def test_numpy_view_auto_reverse_axes():
+    W = 16
+    H = 12
+    C = 3
+
+    x = 6
+    y = 3
+    c = 1
+
+    # Construct a hl.Buffer with the default storage order ([0, 1, 2]).
+    halide_buffer_default_order = hl.Buffer(hl.Int(16), [W, H, C])
+    assert halide_buffer_default_order.type() == hl.Int(16)
+    halide_buffer_default_order.fill(0)
+    halide_buffer_default_order[x, y, c] = 42
+    assert halide_buffer_default_order[x, y, c] == 42
+
+    # Its numpy_view() has:
+    # - axes reversed
+    # - The C_CONTIGUOUS flag set.
+    numpy_view_of_halide_buffer_default_order = halide_buffer_default_order.numpy_view()
+    assert numpy_view_of_halide_buffer_default_order.shape == (C, H, W)
+    assert numpy_view_of_halide_buffer_default_order.strides == (384, 32, 2)  # (192, 16, 2) * sizeof(int16)
+    assert numpy_view_of_halide_buffer_default_order.dtype == np.int16
+    assert numpy_view_of_halide_buffer_default_order.flags['C_CONTIGUOUS']
+    assert numpy_view_of_halide_buffer_default_order[c, y, x] == 42
+
+    # Modifying the buffer should affect the view.
+    assert halide_buffer_default_order[x + 1, y + 1, c + 1] == 0
+    halide_buffer_default_order[x + 1, y + 1, c + 1] = 99
+    assert numpy_view_of_halide_buffer_default_order[c + 1, y + 1, x + 1] == 99
+
+    # Modifying the view should affect the buffer.
+    assert numpy_view_of_halide_buffer_default_order[c - 1, y - 1, x - 1] == 0
+    numpy_view_of_halide_buffer_default_order[c - 1, y - 1, x - 1] = 100
+    assert halide_buffer_default_order[x - 1, y - 1, c - 1] == 100
+
+    # Construct a hl.Buffer with the reversed storage order ([0, 1, 2]).
+    # Its shape (from Halide's perspective) is still (w, h, c), but its strides
+    # are reversed (c is densest).
+    halide_buffer_reversed_storage_order = hl.Buffer(hl.Int(16), [W, H, C], storage_order=[2, 1, 0])
+    assert halide_buffer_reversed_storage_order.type() == hl.Int(16)
+    halide_buffer_reversed_storage_order.fill(0)
+    halide_buffer_reversed_storage_order[x, y, c] = 42
+    assert halide_buffer_reversed_storage_order[x, y, c] == 42
+
+    # Its numpy_view() has:
+    # - axes preserved (i.e., its shape is also (w, h, c)).
+    # - The C_CONTIGUOUS flag set. This is not obvious: one would initially think that
+    #   it might be F_CONTIGUOUS instead. But no, numpy considers an array to be
+    #   C_CONTIGUOUS if the last axis is the densest (stride = itemsize). This is true
+    #   because we asked hl.Buffer to allocate its last axis (c) to be the densest
+    #   and did not reverse axes.
+    numpy_view_of_halide_buffer_reversed_storage_order = halide_buffer_reversed_storage_order.numpy_view()
+    assert numpy_view_of_halide_buffer_reversed_storage_order.shape == (W, H, C)
+    assert numpy_view_of_halide_buffer_reversed_storage_order.strides == (72, 6, 2)  # (36, 3, 1) * sizeof(int16)
+    assert numpy_view_of_halide_buffer_reversed_storage_order.dtype == np.int16
+    assert numpy_view_of_halide_buffer_reversed_storage_order.flags['C_CONTIGUOUS']  # This is not obvious.
+    assert numpy_view_of_halide_buffer_reversed_storage_order[x, y, c] == 42
+
+    # Modifying the buffer should affect the view.
+    assert halide_buffer_reversed_storage_order[x + 1, y + 1, c + 1] == 0
+    halide_buffer_reversed_storage_order[x + 1, y + 1, c + 1] = 99
+    assert numpy_view_of_halide_buffer_reversed_storage_order[x + 1, y + 1, c + 1] == 99
+
+    # Modifying the view should affect the buffer.
+    assert numpy_view_of_halide_buffer_reversed_storage_order[x - 1, y - 1, c - 1] == 0
+    numpy_view_of_halide_buffer_reversed_storage_order[x - 1, y - 1, c - 1] = 100
+    assert halide_buffer_reversed_storage_order[x - 1, y - 1, c - 1] == 100
+
+    # Construct a hl.Buffer with neither the first nor last as densest.
+    buf_neither_order = hl.Buffer(hl.Int(16), [W, H, C], storage_order=[1, 0, 2])
+    assert buf_neither_order.type() == hl.Int(16)
+    buf_neither_order.fill(0)
+    buf_neither_order[x, y, c] = 42
+    assert buf_neither_order[x, y, c] == 42
+
+    # numpy_view() without an explicit reverse_axes flag will fail.
+    try:
+        _ = buf_neither_order.numpy_view()
+    except ValueError as e:
+        assert "Buffer is not contiguous in either C or F order; cannot create numpy view" in str(e)
+    else:
+        assert False, "Did not see expected exception!"
+
+def test_numpy_view_explicit_reverse_axes():
+    W = 16
+    H = 12
+    C = 3
+
+    x = 6
+    y = 3
+    c = 1
+
+    # Construct a hl.Buffer with neither the first nor last as densest.
+    buf_neither_order = hl.Buffer(hl.Int(16), [W, H, C], storage_order=[1, 0, 2])
+    assert buf_neither_order.type() == hl.Int(16)
+    buf_neither_order.fill(0)
+    buf_neither_order[x, y, c] = 42
+    assert buf_neither_order[x, y, c] == 42
+
+    # numpy_view(reverse_axes=False) should succeed and preserve axis order.
+    numpy_view_no_reverse = buf_neither_order.numpy_view(reverse_axes=False)
+    assert numpy_view_no_reverse.shape == (W, H, C)
+    assert numpy_view_no_reverse[x, y, c] == 42
+    assert numpy_view_no_reverse.strides == (24, 2, 384)  # (H, 1, H * W) * sizeof(int16)
+
+    # numpy_view(reverse_axes=True) should succeed and reverse axis order.
+    numpy_view_reverse = buf_neither_order.numpy_view(reverse_axes=True)
+    assert numpy_view_reverse.shape == (C, H, W)
+    assert numpy_view_reverse[c, y, x] == 42
+    assert numpy_view_reverse.strides == (384, 2, 24)  # (H * W, 1, H) * sizeof(int16)
+
+    # Modifying the buffer should affect both views.
+    assert buf_neither_order[x + 1, y + 1, c + 1] == 0
+    buf_neither_order[x + 1, y + 1, c + 1] = 99
+    assert numpy_view_no_reverse[x + 1, y + 1, c + 1] == 99
+    assert numpy_view_reverse[c + 1, y + 1, x + 1] == 99
+
+    # Modifying one view should affect the other view and the buffer.
+    assert numpy_view_no_reverse[x - 1, y - 1, c - 1] == 0
+    numpy_view_no_reverse[x - 1, y - 1, c - 1] = 100
+    assert numpy_view_reverse[c - 1, y - 1, x - 1] == 100
+    assert buf_neither_order[x - 1, y - 1, c - 1] == 100
 
 
 def _assert_fn(e):
@@ -169,7 +295,7 @@ def test_bufferinfo_sharing():
     a0 = np.ones((20000, 30000), dtype=np.int32)
     b0 = hl.Buffer(a0)
     del a0
-    for i in range(200):
+    for _ in range(200):
         b1 = hl.Buffer(b0)
         b0 = b1
         b1 = None
@@ -546,6 +672,8 @@ if __name__ == "__main__":
     test_ndarray_to_buffer(reverse_axes=False)
     test_buffer_to_ndarray(reverse_axes=True)
     test_buffer_to_ndarray(reverse_axes=False)
+    test_numpy_view_auto_reverse_axes()
+    test_numpy_view_explicit_reverse_axes()
     test_for_each_element()
     test_fill_all_equal()
     test_bufferinfo_sharing()
