@@ -1,202 +1,118 @@
-# HelloiOS - Halide iOS Demo App
+# HelloiOS
 
-An interactive reaction-diffusion simulation demonstrating Halide's ability to generate high-performance code for iOS, with dual-path rendering on both CPU and Metal GPU.
+An interactive reaction-diffusion iOS demo that builds its Halide generators on
+the host, then builds the iOS app and generated Halide libraries from CMake.
 
-## What's Here
+## Supported Workflow
 
-This directory contains **two build targets**:
+Use [`build.sh`](build.sh) with an iOS Halide target, for example:
 
-1. **Host testing binary** (CMake) - Tests generators on macOS/Linux without requiring iOS
-2. **iOS app** (Xcode) - Full iOS application for simulator or device
+```bash
+cd apps/HelloiOS
+./build.sh arm-64-ios-simulator
+./build.sh arm-64-ios
+```
+
+The script does two builds:
+
+1. A host build in `build/host` that exports `HelloiOS-halide_generators`
+2. An iOS build in `build/<Halide_TARGET>` that imports that package, generates
+   the Halide pipelines, and builds `HelloiOS.app`
+
+For the iOS build, `build.sh` uses CMake's iOS cross-compilation support with:
+
+- `-DCMAKE_SYSTEM_NAME=iOS`
+- `-DCMAKE_OSX_SYSROOT=iphonesimulator` when `Halide_TARGET` contains
+  `simulator`, otherwise `iphoneos`
+- `-DCMAKE_OSX_ARCHITECTURES=arm64`
+- `-DHalide_TARGET=<your argument>`
 
 ## Prerequisites
 
-Build Halide first:
+Halide must be installed first, and `Halide_ROOT` must be set to the Halide
+install prefix before invoking `build.sh`.
 
 ```bash
 cd /path/to/Halide
-cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-```
-
-## 1. Host Testing (Optional)
-
-Test that generators work on your host platform:
-
-```bash
-cd apps/HelloiOS
-
-# Point CMake to Halide install tree (not build tree)
-export CMAKE_PREFIX_PATH=/path/to/Halide/install
-
-# Build and run test
-cmake -G Ninja -S . -B test_build
-cmake --build test_build
-./test_build/test_reaction_diffusion_2
-```
-
-**Expected output:**
-```
-Testing HelloiOS reaction-diffusion generators...
-  Testing reaction_diffusion_2_init...
-    ✓ init passed
-  Testing reaction_diffusion_2_update...
-    ✓ update passed (10 iterations)
-  Testing reaction_diffusion_2_render...
-    ✓ render passed
-✅ All HelloiOS generators passed!
-```
-
-**Note:** If CMake can't find Halide, you need the **install tree** (created by `cmake --install`), not the build tree. See troubleshooting below.
-
-## 2. iOS App
-
-### Option A: Build in Xcode (Recommended)
-
-```bash
-cd apps/HelloiOS
-open HelloiOS.xcodeproj
-```
-
-Then in Xcode:
-1. Select a simulator (e.g., "iPhone 16") or connected device
-2. Press **⌘ + R** to build and run
-
-### Option B: Command-Line Build
-
-**For simulator:**
-
-```bash
-cd apps/HelloiOS
-xcodebuild \
-    -project HelloiOS.xcodeproj \
-    -scheme HelloiOS \
-    -sdk iphonesimulator \
-    -configuration Release \
-    build \
-    CODE_SIGN_IDENTITY="" \
-    CODE_SIGNING_REQUIRED=NO
-```
-
-**For device:**
-
-```bash
-cd apps/HelloiOS
-xcodebuild \
-    -project HelloiOS.xcodeproj \
-    -scheme HelloiOS \
-    -sdk iphoneos \
-    -configuration Release \
-    build
-```
-
-(Device builds require code signing configuration in Xcode first)
-
-## How It Works
-
-The app uses three Halide generators:
-
-- **reaction_diffusion_2_init** - Initialize simulation state
-- **reaction_diffusion_2_update** - Update simulation each frame
-- **reaction_diffusion_2_render** - Render state to pixels
-
-Each generator is compiled **twice** during the Xcode build:
-- Once for **CPU** (ARM NEON vectorization) with target `arm-64-ios` or `arm-64-osx` (simulator)
-- Once for **Metal GPU** with target `arm-64-ios-metal` or `arm-64-osx-metal`
-
-The app switches between CPU and Metal at runtime (double-tap to toggle).
-
-## Using the App
-
-- **Tap** - Add white circle that disturbs the pattern
-- **Double-tap** - Toggle between CPU and Metal rendering
-- **Status bar** - Shows rendering mode and frame time (e.g., "16.7ms Metal")
-
-Expected performance:
-- **Metal mode:** ~5-15ms per frame (GPU)
-- **CPU mode:** ~10-30ms per frame (NEON)
-
-## Requirements
-
-- **Host testing:** CMake 3.28+, C++17 compiler, Halide install tree
-- **iOS app:** macOS with Xcode 16.0+, iOS 13.0+ deployment target, Halide build tree
-
-## Troubleshooting
-
-### "Could not find libHalide.dylib" (Xcode build)
-
-The Xcode build script looks for Halide in:
-- `../../bin/libHalide.dylib`
-- `../../build/lib/libHalide.dylib`
-
-**Solution:** Build Halide first (see Prerequisites above).
-
-### "Could not find Halide" (CMake host test)
-
-CMake needs Halide's **install tree**, not build tree.
-
-**Solution:**
-
-```bash
-# Create install tree
-cd /path/to/Halide
 cmake --install build --prefix install
 
-# Point CMake to it
-export CMAKE_PREFIX_PATH=/path/to/Halide/install
-cd apps/HelloiOS
-cmake -G Ninja -S . -B test_build
+export Halide_ROOT=$PWD/install
 ```
 
-**Why?** Build trees lack helper files like `HalideConfig.cmake`. Install trees are complete.
+`build.sh` sets `HalideHelpers_ROOT` from `Halide_ROOT` automatically.
 
-### Code signing required (device builds)
+## Useful Environment Variables
 
-1. Open `HelloiOS.xcodeproj`
-2. Select "HelloiOS" target
-3. Go to "Signing & Capabilities"
-4. Select your development team
-5. Xcode will automatically provision the app
+- `Halide_ROOT`: Halide install prefix. Required.
+- `CMAKE_BUILD_TYPE`: Build configuration. Default: `Release`
+- `CMAKE_OSX_DEPLOYMENT_TARGET`: iOS deployment target. Default: `15.0`
+- `HELLOIOS_DEVELOPMENT_TEAM`: Optional Apple development team ID. If unset,
+  code signing is disabled for the generated app target.
+- `HOST_BUILD_DIR`: Override the host build directory
+- `IOS_BUILD_DIR`: Override the iOS build directory
 
-### Generator build fails in Xcode
+Example:
 
-**Check:**
-- `../../tools/GenGen.cpp` exists
-- `../../include/Halide.h` exists
-- Halide built successfully
+```bash
+Halide_ROOT=$HOME/halide-install \
+HELLOIOS_DEVELOPMENT_TEAM=ABCDE12345 \
+./build.sh arm-64-ios
+```
 
-The generator builds on the host (macOS), not the iOS target. The Xcode build script handles this automatically.
+## Manual Equivalent
 
-### Metal shader errors
+If you want to drive the two builds yourself, this is the structure `build.sh`
+uses.
 
-First run may show warnings as Metal compiles shaders. If errors persist:
-- Clean build: Product → Clean Build Folder (⇧⌘K) in Xcode
-- Check Console: View → Debug Area → Console
-- Verify deployment target is iOS 13.0+
+Host generator build:
 
-## Architecture Notes
+```bash
+cmake -S . -B build/host \
+    -DHalide_ROOT=/path/to/install \
+    -DHalideHelpers_ROOT=/path/to/install
+cmake --build build/host --target HelloiOS-halide_generators
+```
 
-- **Xcode project:** Hand-crafted, contains embedded build script that compiles generators
-- **CMake:** Only for host testing, does NOT build iOS app
-- **Why separate?** Cross-compiling generators is complex; Xcode handles it natively
+iOS app build:
 
-## Technical Details
+```bash
+cmake -G Xcode -S . -B build/arm-64-ios-simulator \
+    -DCMAKE_SYSTEM_NAME=iOS \
+    -DCMAKE_OSX_ARCHITECTURES=arm64 \
+    -DCMAKE_OSX_SYSROOT=iphonesimulator \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+    -DHalide_ROOT=/path/to/install \
+    -DHalideHelpers_ROOT=/path/to/install \
+    -DHalide_TARGET=arm-64-ios-simulator \
+    -DHelloiOS-halide_generators_ROOT=$PWD/build/host
+cmake --build build/arm-64-ios-simulator --config Release --target HelloiOS
+```
 
-- **Reaction-diffusion:** Gray-Scott model with diffusion via 5-tap blur and coupled differential equations
-- **Scheduling:** CPU uses parallelization + NEON vectorization; GPU uses tiled blocks
-- **Metal:** iOS 13+ enables Metal on both devices and simulators (including Apple Silicon Macs)
-- **Targets:** `arm-64-ios` for device, `arm-64-osx` or `x86-64-osx` for simulator
+## Launching In Simulator
 
-## Files
+After building a simulator target, you can boot a device, install the app, and
+launch it from the command line:
 
-- `HelloiOS.xcodeproj` - Xcode project for iOS app
-- `CMakeLists.txt` - Host testing only (rejects iOS builds)
-- `test_reaction_diffusion_2.cpp` - Host test executable
-- `HelloiOS/reaction_diffusion_2_generator.cpp` - Halide generators (3 pipelines)
-- `HelloiOS/HalideView.mm` - Custom UIView with Metal/CoreGraphics rendering
-- `HelloiOS/HalideViewController.mm` - Touch input handling
-- `HelloiOS/AppDelegate.mm` - iOS app lifecycle
+```bash
+open -a Simulator
+xcrun simctl bootstatus "iPhone 16" -b
+xcrun simctl install booted build/arm-64-ios-simulator/Release-iphonesimulator/HelloiOS.app
+xcrun simctl launch booted org.halide.HelloiOS
+```
 
-## License
+To see the available simulator device names:
 
-MIT License (same as Halide). See `/LICENSE.txt` in repository root.
+```bash
+xcrun simctl list devices available
+```
+
+## Notes
+
+- [`CMakeLists.txt`](CMakeLists.txt) is the only supported CMake entry point.
+- In a non-iOS configure, `CMakeLists.txt` only exports the host generator
+  package.
+- In an iOS configure, the same file builds the generated Halide libraries and
+  the iOS app bundle.
+- CMake generates the Xcode project in `build/<Halide_TARGET>`.
