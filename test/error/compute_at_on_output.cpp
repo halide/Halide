@@ -8,12 +8,13 @@ int main(int argc, char **argv) {
     Var x("x");
 
     f(x) = x;
-    g(x) = f(x) + 1;
+    g(x) = x + 1;
 
-    // g is an output, so it can't be scheduled compute_at another Func.
+    // g is an output, so it can't be scheduled compute_at another Func, even if
+    // that func is realized first and is also an output.
     g.compute_at(f, x);
 
-    Pipeline({g}).realize({10});
+    Pipeline({f, g}).compile_jit();
 
     printf("Success!\n");
     return 0;
