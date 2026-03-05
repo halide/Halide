@@ -436,7 +436,7 @@ double benchmark(
     CacheEvictor cache_evictor;
 
     // Generate random value for every input
-    for (ssize_t i = 0; i < pipeline.model->inputs.size(); ++i) {
+    for (size_t i = 0; i < pipeline.model->inputs.size(); ++i) {
         const std::string &input_name = pipeline.input_names[i];
         prepare_random_input(pipeline, input_name);
     }
