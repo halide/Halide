@@ -82,5 +82,10 @@ if (WITH_TESTS)
     target_link_libraries(adams2019_test_function_dag PRIVATE Halide::Plugin)
 
     add_test(NAME adams2019_test_function_dag COMMAND adams2019_test_function_dag)
-    set_tests_properties(adams2019_test_function_dag PROPERTIES LABELS "adams2019;autoschedulers_cpu")
-endif()
+    set_tests_properties(
+        adams2019_test_function_dag
+        PROPERTIES
+        LABELS "adams2019;autoschedulers_cpu"
+        RUN_SERIAL TRUE
+    )
+endif ()
