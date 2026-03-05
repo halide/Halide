@@ -69,9 +69,12 @@ function(add_halide_test TARGET)
     #
     # target_link_libraries("${TARGET}" PRIVATE Halide::TerminateHandler)
 
+    # Resolve the "cmake" meta-target
+    string(REGEX REPLACE "^cmake" "${Halide_CMAKE_TARGET}" _resolved_target "${Halide_TARGET}")
+
     set_tests_properties(${TARGET} PROPERTIES
                          LABELS "${args_GROUPS}"
-                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
+                         ENVIRONMENT "HL_TARGET=${_resolved_target};HL_JIT_TARGET=${_resolved_target}"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
                          WILL_FAIL ${args_EXPECT_FAILURE})
 
