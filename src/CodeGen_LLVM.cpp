@@ -4937,6 +4937,27 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
     }
 }
 
+Value *CodeGen_LLVM::optimization_fence(Value *v) {
+    llvm::Type *t = v->getType();
+    internal_assert(!t->isScalableTy())
+        << "optimization_fence does not support scalable vectors yet";
+    const int bits = t->getPrimitiveSizeInBits();
+    if (bits % 32) {
+        const int lanes = get_vector_num_elements(t);
+        const int element_bits = t->getScalarSizeInBits();
+        const int lanes_per_32_bits = 32 / element_bits;
+        const int padded_lanes = align_up(lanes, lanes_per_32_bits);
+        v = slice_vector(v, 0, padded_lanes);
+        v = optimization_fence(v);
+        v = slice_vector(v, 0, lanes);
+        return v;
+    }
+    llvm::Type *float_type = llvm_type_of(Float(32, bits / 32));
+    v = builder->CreateBitCast(v, float_type);
+    v = builder->CreateArithmeticFence(v, float_type);
+    return builder->CreateBitCast(v, t);
+}
+
 Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
     if (v.size() == 1) {
         return v[0];
