@@ -10,6 +10,27 @@ on:
       - ".github/**"
       - "!.github/workflows/testing-make.yml"
 
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "**.cmake"
+      - "vcpkg.json"
+      - "vcpkg-configuration.json"
+
+      - "doc/**"
+      - "packaging/**"
+      - "python_bindings/**"
+
+      - "pyproject.toml"
+      - "uv.lock"
+
+      - "README.md"
+      - "CODE_OF_CONDUCT.md"
+      - "LICENSE.txt"
+      - ".gitignore"
+      - ".gitattributes"
+      - ".gitmodules"
+      - ".lldbinit"
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -40,7 +61,7 @@ jobs:
               build-essential pkg-config libpng-dev libjpeg-turbo8-dev \
               "llvm-${LLVM_VERSION}-dev" "clang-${LLVM_VERSION}" "lld-${LLVM_VERSION}" "liblld-${LLVM_VERSION}-dev"
           elif [ "$RUNNER_OS" = "macOS" ]; then
-            brew install "llvm@${LLVM_VERSION}" "lld@${LLVM_VERSION}" libjpeg-turbo libpng pkgconf protobuf
+            brew install "llvm@${LLVM_VERSION}" "lld@${LLVM_VERSION}" libjpeg-turbo libpng pkgconf protobuf pybind11
           fi
 
       - name: Set up environment
@@ -55,22 +76,22 @@ jobs:
       - run: make build_tests
 
       - run: make test_internal
-        continue-on-error: true
+        if: ${{ !cancelled() }}
 
       - run: make test_correctness
-        continue-on-error: true
+        if: ${{ !cancelled() }}
 
       - run: make test_generator
-        continue-on-error: true
+        if: ${{ !cancelled() }}
 
       - run: make test_error
-        continue-on-error: true
+        if: ${{ !cancelled() }}
 
       - run: make test_warning
-        continue-on-error: true
+        if: ${{ !cancelled() }}
 
       - run: make test_apps
-        continue-on-error: true
+        if: ${{ !cancelled() }}
 
       - run: make test_tutorial
-        continue-on-error: true
+        if: ${{ !cancelled() }}
