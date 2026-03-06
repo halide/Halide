@@ -73,7 +73,7 @@ if (LLVM_FOUND)
                 # Homebrew split the LLVM and LLD packages as of version 19, so
                 # having multiple LLVM versions installed leads to the newest
                 # LLD being found without this hint.
-                "${LLVM_INSTALL_PREFIX}/../lld@${LLVM_VERSION_MAJOR}"
+                "${LLVM_DIR}/../../../../lld@${LLVM_VERSION_MAJOR}"
                 "${LLVM_DIR}/../lld"
                 "${LLVM_DIR}/../lib/cmake/lld"
             )

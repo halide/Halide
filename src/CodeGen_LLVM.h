@@ -509,6 +509,11 @@ protected:
      * if you ask for more lanes than the vector has. */
     virtual llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);
 
+    /** Use an arithmetic fence to prevent LLVM from fusing operations
+     * across this barrier. Works by bitcasting to float, applying
+     * llvm.arithmetic.fence, and bitcasting back. */
+    virtual llvm::Value *optimization_fence(llvm::Value *);
+
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
     virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 

@@ -203,6 +203,7 @@ protected:
             {"fast_pow_f32", GLSLstd450Pow},
             {"floor_f16", GLSLstd450Floor},
             {"floor_f32", GLSLstd450Floor},
+            {"fma", GLSLstd450Fma},
             {"log_f16", GLSLstd450Log},
             {"log_f32", GLSLstd450Log},
             {"sin_f16", GLSLstd450Sin},
@@ -1195,9 +1196,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
             e.accept(this);
         }
     } else if (op->is_strict_float_intrinsic()) {
-        // TODO: Enable/Disable RelaxedPrecision flags?
-        Expr e = unstrictify_float(op);
-        e.accept(this);
+        if (op->is_intrinsic(Call::strict_fma)) {
+            Expr builtin_call = Call::make(op->type, "fma", op->args, Call::PureExtern);
+            builtin_call.accept(this);
+        } else {
+            // TODO: Enable/Disable RelaxedPrecision flags?
+            Expr e = unstrictify_float(op);
+            e.accept(this);
+        }
     } else if (op->is_intrinsic(Call::IntrinsicOp::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         // b > a, so the following works without widening:

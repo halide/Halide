@@ -237,6 +237,13 @@ public:
     /** Mutate our contents to match the contents of 'other'. */
     void set(const LoopLevel &other);
 
+    // Default copy and assignment. Unlike set(), which mutates the
+    // existing contents, assignment replaces the contents pointer.
+    LoopLevel(const LoopLevel &) = default;
+    LoopLevel &operator=(const LoopLevel &) = default;
+    LoopLevel(LoopLevel &&) = default;
+    LoopLevel &operator=(LoopLevel &&) = default;
+
     // All the public methods below this point are meant only for internal
     // use by Halide, rather than user code; hence, they are deliberately
     // documented with plain comments (rather than Doxygen) to avoid being

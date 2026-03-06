@@ -3319,6 +3319,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         // Evaluate the args first outside the strict scope, as they may use
         // non-strict operations.
         std::vector<Expr> new_args(op->args.size());
+        std::vector<std::string> to_pop;
         for (size_t i = 0; i < op->args.size(); i++) {
             const Expr &arg = op->args[i];
             if (arg.as<Variable>() || is_const(arg)) {
@@ -3326,21 +3327,44 @@ void CodeGen_LLVM::visit(const Call *op) {
             } else {
                 std::string name = unique_name('t');
                 sym_push(name, codegen(arg));
+                to_pop.push_back(name);
                 new_args[i] = Variable::make(arg.type(), name);
             }
         }
 
-        Expr call = Call::make(op->type, op->name, new_args, op->call_type);
         {
             ScopedValue<bool> old_in_strict_float(in_strict_float, true);
-            value = codegen(unstrictify_float(call.as<Call>()));
+            if (op->is_intrinsic(Call::strict_fma)) {
+                if (op->type.is_float() && op->type.bits() <= 16 &&
+                    upgrade_type_for_arithmetic(op->type) != op->type) {
+                    // For (b)float16 and below, doing the fma as a
+                    // double-precision fma is exact and is what llvm does. A
+                    // double has enough bits of precision such that the add in
+                    // the fma has no rounding error in the cases where the fma
+                    // is going to return a finite float16. We do this
+                    // legalization manually so that we can use our custom
+                    // vectorizable float16 casts instead of letting llvm call
+                    // library functions.
+                    Type wide_t = Float(64, op->type.lanes());
+                    for (Expr &e : new_args) {
+                        e = cast(wide_t, e);
+                    }
+                    Expr equiv = Call::make(wide_t, op->name, new_args, op->call_type);
+                    equiv = cast(op->type, equiv);
+                    value = codegen(equiv);
+                } else {
+                    std::string name = "llvm.fma" + mangle_llvm_type(llvm_type_of(op->type));
+                    value = call_intrin(op->type, op->type.lanes(), name, new_args);
+                }
+            } else {
+                // Lower to something other than a call node
+                Expr call = Call::make(op->type, op->name, new_args, op->call_type);
+                value = codegen(unstrictify_float(call.as<Call>()));
+            }
         }
 
-        for (size_t i = 0; i < op->args.size(); i++) {
-            const Expr &arg = op->args[i];
-            if (!arg.as<Variable>() && !is_const(arg)) {
-                sym_pop(new_args[i].as<Variable>()->name);
-            }
+        for (const auto &s : to_pop) {
+            sym_pop(s);
         }
 
     } else if (is_float16_transcendental(op) && !supports_call_as_float16(op)) {
@@ -4752,23 +4776,29 @@ Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
 Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes,
                                  const string &name, vector<Value *> arg_values,
                                  bool scalable_vector_result, bool is_reduction) {
+    auto fix_vector_lanes_of_type = [&](const llvm::Type *t) {
+        if (intrin_lanes == 1 || is_reduction) {
+            return t->getScalarType();
+        } else {
+            if (scalable_vector_result && effective_vscale != 0) {
+                return get_vector_type(result_type->getScalarType(),
+                                       intrin_lanes / effective_vscale, VectorTypeConstraint::VScale);
+            } else {
+                return get_vector_type(result_type->getScalarType(),
+                                       intrin_lanes, VectorTypeConstraint::Fixed);
+            }
+        }
+    };
+
     llvm::Function *fn = module->getFunction(name);
     if (!fn) {
         vector<llvm::Type *> arg_types(arg_values.size());
         for (size_t i = 0; i < arg_values.size(); i++) {
-            arg_types[i] = arg_values[i]->getType();
+            llvm::Type *t = arg_values[i]->getType();
+            arg_types[i] = fix_vector_lanes_of_type(t);
         }
 
-        llvm::Type *intrinsic_result_type = result_type->getScalarType();
-        if (intrin_lanes > 1 && !is_reduction) {
-            if (scalable_vector_result && effective_vscale != 0) {
-                intrinsic_result_type = get_vector_type(result_type->getScalarType(),
-                                                        intrin_lanes / effective_vscale, VectorTypeConstraint::VScale);
-            } else {
-                intrinsic_result_type = get_vector_type(result_type->getScalarType(),
-                                                        intrin_lanes, VectorTypeConstraint::Fixed);
-            }
-        }
+        llvm::Type *intrinsic_result_type = fix_vector_lanes_of_type(result_type);
         FunctionType *func_t = FunctionType::get(intrinsic_result_type, arg_types, false);
         fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
         fn->setCallingConv(CallingConv::C);
@@ -4803,7 +4833,7 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
                 if (arg_i_lanes >= arg_lanes) {
                     // Horizontally reducing intrinsics may have
                     // arguments that have more lanes than the
-                    // result. Assume that the horizontally reduce
+                    // result. Assume that they horizontally reduce
                     // neighboring elements...
                     int reduce = arg_i_lanes / arg_lanes;
                     args.push_back(slice_vector(arg_values[i], start * reduce, intrin_lanes * reduce));
@@ -4935,6 +4965,27 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
 
         return vec;
     }
+}
+
+Value *CodeGen_LLVM::optimization_fence(Value *v) {
+    llvm::Type *t = v->getType();
+    internal_assert(!t->isScalableTy())
+        << "optimization_fence does not support scalable vectors yet";
+    const int bits = t->getPrimitiveSizeInBits();
+    if (bits % 32) {
+        const int lanes = get_vector_num_elements(t);
+        const int element_bits = t->getScalarSizeInBits();
+        const int lanes_per_32_bits = 32 / element_bits;
+        const int padded_lanes = align_up(lanes, lanes_per_32_bits);
+        v = slice_vector(v, 0, padded_lanes);
+        v = optimization_fence(v);
+        v = slice_vector(v, 0, lanes);
+        return v;
+    }
+    llvm::Type *float_type = llvm_type_of(Float(32, bits / 32));
+    v = builder->CreateBitCast(v, float_type);
+    v = builder->CreateArithmeticFence(v, float_type);
+    return builder->CreateBitCast(v, t);
 }
 
 Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
