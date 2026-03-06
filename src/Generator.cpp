@@ -123,475 +123,7 @@ std::vector<Type> parse_halide_type_list(const std::string &types) {
     return result;
 }
 
-class StubEmitter {
-public:
-    StubEmitter(std::ostream &dest,
-                const std::string &generator_registered_name,
-                const std::string &generator_stub_name,
-                const std::vector<Internal::GeneratorParamBase *> &generator_params,
-                const std::vector<Internal::GeneratorInputBase *> &inputs,
-                const std::vector<Internal::GeneratorOutputBase *> &outputs)
-        : stream(dest),
-          generator_registered_name(generator_registered_name),
-          generator_stub_name(generator_stub_name),
-          generator_params(select_generator_params(generator_params)),
-          inputs(inputs),
-          outputs(outputs) {
-        namespaces = split_string(generator_stub_name, "::");
-        internal_assert(!namespaces.empty());
-        if (namespaces[0].empty()) {
-            // We have a name like ::foo::bar::baz; omit the first empty ns.
-            namespaces.erase(namespaces.begin());
-            internal_assert(namespaces.size() >= 2);
-        }
-        class_name = namespaces.back();
-        namespaces.pop_back();
-    }
 
-    void emit();
-
-private:
-    std::ostream &stream;
-    const std::string generator_registered_name;
-    const std::string generator_stub_name;
-    std::string class_name;
-    std::vector<std::string> namespaces;
-    const std::vector<Internal::GeneratorParamBase *> generator_params;
-    const std::vector<Internal::GeneratorInputBase *> inputs;
-    const std::vector<Internal::GeneratorOutputBase *> outputs;
-    int indent_level{0};
-
-    std::vector<Internal::GeneratorParamBase *> select_generator_params(const std::vector<Internal::GeneratorParamBase *> &in) {
-        std::vector<Internal::GeneratorParamBase *> out;
-        for (auto *p : in) {
-            // These are always propagated specially.
-            if (p->name() == "target" ||
-                p->name() == "autoscheduler") {
-                continue;
-            }
-            if (p->is_synthetic_param()) {
-                continue;
-            }
-            out.push_back(p);
-        }
-        return out;
-    }
-
-    /** Emit spaces according to the current indentation level */
-    Indentation get_indent() const {
-        return Indentation{indent_level};
-    }
-
-    void emit_inputs_struct();
-    void emit_generator_params_struct();
-};
-
-void StubEmitter::emit_generator_params_struct() {
-    const auto &v = generator_params;
-    std::string name = "GeneratorParams";
-    stream << get_indent() << "struct " << name << " final {\n";
-    indent_level++;
-    if (!v.empty()) {
-        for (auto *p : v) {
-            stream << get_indent() << p->get_c_type() << " " << p->name() << "{ " << p->get_default_value() << " };\n";
-        }
-        stream << "\n";
-    }
-
-    stream << get_indent() << name << "() {}\n";
-    stream << "\n";
-
-    if (!v.empty()) {
-        stream << get_indent() << name << "(\n";
-        indent_level++;
-        std::string comma = "";
-        for (auto *p : v) {
-            std::string c_type = p->get_c_type();
-            if (c_type == "AutoschedulerParams") {
-                c_type = "const AutoschedulerParams&";
-            }
-            stream << get_indent() << comma << c_type << " " << p->name() << "\n";
-            comma = ", ";
-        }
-        indent_level--;
-        stream << get_indent() << ") : \n";
-        indent_level++;
-        comma = "";
-        for (auto *p : v) {
-            stream << get_indent() << comma << p->name() << "(" << p->name() << ")\n";
-            comma = ", ";
-        }
-        indent_level--;
-        stream << get_indent() << "{\n";
-        stream << get_indent() << "}\n";
-        stream << "\n";
-    }
-
-    indent_level--;
-    stream << get_indent() << "};\n";
-    stream << "\n";
-}
-
-void StubEmitter::emit_inputs_struct() {
-    struct InInfo {
-        std::string c_type;
-        std::string name;
-    };
-    std::vector<InInfo> in_info;
-    for (auto *input : inputs) {
-        std::stringstream c_type;
-        if (input->is_array()) {
-            c_type << "std::vector<";
-        }
-        c_type << input->get_c_type();
-        if (input->is_array()) {
-            c_type << ">";
-        }
-        in_info.push_back({c_type.str(), input->name()});
-    }
-
-    const std::string name = "Inputs";
-    stream << get_indent() << "struct " << name << " final {\n";
-    indent_level++;
-    for (const auto &in : in_info) {
-        stream << get_indent() << in.c_type << " " << in.name << ";\n";
-    }
-    stream << "\n";
-
-    stream << get_indent() << name << "() {}\n";
-    stream << "\n";
-    if (!in_info.empty()) {
-        stream << get_indent() << name << "(\n";
-        indent_level++;
-        std::string comma = "";
-        for (const auto &in : in_info) {
-            stream << get_indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
-            comma = ", ";
-        }
-        indent_level--;
-        stream << get_indent() << ") : \n";
-        indent_level++;
-        comma = "";
-        for (const auto &in : in_info) {
-            stream << get_indent() << comma << in.name << "(" << in.name << ")\n";
-            comma = ", ";
-        }
-        indent_level--;
-        stream << get_indent() << "{\n";
-        stream << get_indent() << "}\n";
-
-        indent_level--;
-    }
-    stream << get_indent() << "};\n";
-    stream << "\n";
-}
-
-void StubEmitter::emit() {
-    if (outputs.empty()) {
-        // The generator can't support a real stub. Instead, generate an (essentially)
-        // empty .stub.h file, so that build systems like Bazel will still get the output file
-        // they expected. Note that we deliberately don't emit an ifndef header guard,
-        // since we can't reliably assume that the generator_name will be globally unique;
-        // on the other hand, since this file is just a couple of comments, it's
-        // really not an issue if it's included multiple times.
-        stream << "/* MACHINE-GENERATED - DO NOT EDIT */\n";
-        stream << "/* The Generator named " << generator_registered_name << " uses ImageParam or Param, thus cannot have a Stub generated. */\n";
-        return;
-    }
-
-    struct OutputInfo {
-        std::string name;
-        std::string ctype;
-        std::string getter;
-    };
-    bool all_outputs_are_func = true;
-    std::vector<OutputInfo> out_info;
-    for (auto *output : outputs) {
-        std::string c_type = output->get_c_type();
-        const bool is_func = (c_type == "Func");
-        std::stringstream getter;
-
-        if (!is_func) {
-            getter << c_type << "::to_output_buffers(";
-        }
-        getter << "generator->output_func(\"" << output->name() << "\")";
-        if (!is_func) {
-            getter << ", generator)";
-        }
-        if (!output->is_array()) {
-            getter << ".at(0)";
-        }
-
-        out_info.push_back({output->name(),
-                            output->is_array() ? "std::vector<" + c_type + ">" : c_type,
-                            getter.str()});
-        if (c_type != "Func") {
-            all_outputs_are_func = false;
-        }
-    }
-
-    std::ostringstream guard;
-    guard << "HALIDE_STUB";
-    for (const auto &ns : namespaces) {
-        guard << "_" << ns;
-    }
-    guard << "_" << class_name;
-
-    stream << get_indent() << "#ifndef " << guard.str() << "\n";
-    stream << get_indent() << "#define " << guard.str() << "\n";
-    stream << "\n";
-
-    stream << get_indent() << "/* MACHINE-GENERATED - DO NOT EDIT */\n";
-    stream << "\n";
-
-    stream << get_indent() << "#include <cassert>\n";
-    stream << get_indent() << "#include <iterator>\n";
-    stream << get_indent() << "#include <map>\n";
-    stream << get_indent() << "#include <memory>\n";
-    stream << get_indent() << "#include <string>\n";
-    stream << get_indent() << "#include <utility>\n";
-    stream << get_indent() << "#include <vector>\n";
-    stream << "\n";
-    stream << get_indent() << "#include \"Halide.h\"\n";
-    stream << "\n";
-
-    stream << "namespace halide_register_generator {\n";
-    stream << "namespace " << generator_registered_name << "_ns {\n";
-    stream << "extern std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext& context);\n";
-    stream << "}  // namespace halide_register_generator\n";
-    stream << "}  // namespace " << generator_registered_name << "\n";
-    stream << "\n";
-
-    for (const auto &ns : namespaces) {
-        stream << get_indent() << "namespace " << ns << " {\n";
-    }
-    stream << "\n";
-
-    for (auto *p : generator_params) {
-        std::string decl = p->get_type_decls();
-        if (decl.empty()) {
-            continue;
-        }
-        stream << decl << "\n";
-    }
-
-    stream << get_indent() << "class " << class_name << " final : public Halide::NamesInterface {\n";
-    stream << get_indent() << "public:\n";
-    indent_level++;
-
-    emit_inputs_struct();
-    emit_generator_params_struct();
-
-    stream << get_indent() << "struct Outputs final {\n";
-    indent_level++;
-    stream << get_indent() << "// Outputs\n";
-    for (const auto &out : out_info) {
-        stream << get_indent() << out.ctype << " " << out.name << ";\n";
-    }
-
-    stream << "\n";
-    stream << get_indent() << "// The Target used\n";
-    stream << get_indent() << "Target target;\n";
-
-    if (out_info.size() == 1) {
-        stream << "\n";
-        if (all_outputs_are_func) {
-            std::string name = out_info.at(0).name;
-            auto *output = outputs[0];
-            if (output->is_array()) {
-                stream << get_indent() << "operator std::vector<Halide::Func>() const {\n";
-                indent_level++;
-                stream << get_indent() << "return " << name << ";\n";
-                indent_level--;
-                stream << get_indent() << "}\n";
-
-                stream << get_indent() << "Halide::Func operator[](size_t i) const {\n";
-                indent_level++;
-                stream << get_indent() << "return " << name << "[i];\n";
-                indent_level--;
-                stream << get_indent() << "}\n";
-
-                stream << get_indent() << "Halide::Func at(size_t i) const {\n";
-                indent_level++;
-                stream << get_indent() << "return " << name << ".at(i);\n";
-                indent_level--;
-                stream << get_indent() << "}\n";
-
-                stream << get_indent() << "// operator operator()() overloads omitted because the sole Output is array-of-Func.\n";
-            } else {
-                // If there is exactly one output, add overloads
-                // for operator Func and operator().
-                stream << get_indent() << "operator Halide::Func() const {\n";
-                indent_level++;
-                stream << get_indent() << "return " << name << ";\n";
-                indent_level--;
-                stream << get_indent() << "}\n";
-
-                stream << "\n";
-                stream << get_indent() << "template <typename... Args>\n";
-                stream << get_indent() << "Halide::FuncRef operator()(Args&&... args) const {\n";
-                indent_level++;
-                stream << get_indent() << "return " << name << "(std::forward<Args>(args)...);\n";
-                indent_level--;
-                stream << get_indent() << "}\n";
-
-                stream << "\n";
-                stream << get_indent() << "template <typename ExprOrVar>\n";
-                stream << get_indent() << "Halide::FuncRef operator()(std::vector<ExprOrVar> args) const {\n";
-                indent_level++;
-                stream << get_indent() << "return " << name << "()(args);\n";
-                indent_level--;
-                stream << get_indent() << "}\n";
-            }
-        } else {
-            stream << get_indent() << "// operator Func() and operator()() overloads omitted because the sole Output is not Func.\n";
-        }
-    }
-
-    stream << "\n";
-    if (all_outputs_are_func) {
-        stream << get_indent() << "Halide::Pipeline get_pipeline() const {\n";
-        indent_level++;
-        stream << get_indent() << "return Halide::Pipeline(std::vector<Halide::Func>{\n";
-        indent_level++;
-        int commas = (int)out_info.size() - 1;
-        for (const auto &out : out_info) {
-            stream << get_indent() << out.name << (commas-- ? "," : "") << "\n";
-        }
-        indent_level--;
-        stream << get_indent() << "});\n";
-        indent_level--;
-        stream << get_indent() << "}\n";
-
-        stream << "\n";
-        stream << get_indent() << "Halide::Realization realize(std::vector<int32_t> sizes) {\n";
-        indent_level++;
-        stream << get_indent() << "return get_pipeline().realize(sizes, target);\n";
-        indent_level--;
-        stream << get_indent() << "}\n";
-
-        stream << "\n";
-        stream << get_indent() << "template <typename... Args, typename std::enable_if<Halide::Internal::NoRealizations<Args...>::value>::type * = nullptr>\n";
-        stream << get_indent() << "Halide::Realization realize(Args&&... args) {\n";
-        indent_level++;
-        stream << get_indent() << "return get_pipeline().realize(std::forward<Args>(args)..., target);\n";
-        indent_level--;
-        stream << get_indent() << "}\n";
-
-        stream << "\n";
-        stream << get_indent() << "void realize(Halide::Realization r) {\n";
-        indent_level++;
-        stream << get_indent() << "get_pipeline().realize(r, target);\n";
-        indent_level--;
-        stream << get_indent() << "}\n";
-    } else {
-        stream << get_indent() << "// get_pipeline() and realize() overloads omitted because some Outputs are not Func.\n";
-    }
-
-    indent_level--;
-    stream << get_indent() << "};\n";
-    stream << "\n";
-
-    stream << get_indent() << "HALIDE_NO_USER_CODE_INLINE static Outputs generate(\n";
-    indent_level++;
-    stream << get_indent() << "const GeneratorContext& context,\n";
-    stream << get_indent() << "const Inputs& inputs,\n";
-    stream << get_indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
-    indent_level--;
-    stream << get_indent() << ")\n";
-    stream << get_indent() << "{\n";
-    indent_level++;
-    stream << get_indent() << "std::shared_ptr<Halide::Internal::AbstractGenerator> generator = halide_register_generator::" << generator_registered_name << "_ns::factory(context);\n";
-    for (auto *p : generator_params) {
-        stream << get_indent();
-        if (p->is_looplevel_param()) {
-            stream << "generator->set_generatorparam_value(";
-        } else {
-            stream << "generator->set_generatorparam_value(";
-        }
-        stream << "\"" << p->name() << "\", ";
-        if (p->is_looplevel_param()) {
-            stream << "generator_params." << p->name();
-        } else {
-            stream << p->call_to_string("generator_params." + p->name());
-        }
-        stream << ");\n";
-    }
-
-    for (auto *p : inputs) {
-        stream << get_indent() << "generator->bind_input("
-               << "\"" << p->name() << "\", ";
-        if (p->kind() == ArgInfoKind::Buffer) {
-            stream << "Halide::Internal::StubInputBuffer<>::to_parameter_vector(inputs." << p->name() << ")";
-        } else {
-            // Func or Expr
-            if (!p->is_array()) {
-                stream << "{";
-            }
-            stream << "inputs." << p->name();
-            if (!p->is_array()) {
-                stream << "}";
-            }
-        }
-        stream << ");\n";
-    }
-
-    stream << get_indent() << "generator->build_pipeline();\n";
-    stream << get_indent() << "return {\n";
-    indent_level++;
-    for (const auto &out : out_info) {
-        stream << get_indent() << out.getter << ",\n";
-    }
-    stream << get_indent() << "generator->context().target()\n";
-    indent_level--;
-    stream << get_indent() << "};\n";
-    indent_level--;
-    stream << get_indent() << "}\n";
-    stream << "\n";
-
-    stream << get_indent() << "// overload to allow GeneratorBase-pointer\n";
-    stream << get_indent() << "inline static Outputs generate(\n";
-    indent_level++;
-    stream << get_indent() << "const Halide::Internal::GeneratorBase* generator,\n";
-    stream << get_indent() << "const Inputs& inputs,\n";
-    stream << get_indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
-    indent_level--;
-    stream << get_indent() << ")\n";
-    stream << get_indent() << "{\n";
-    indent_level++;
-    stream << get_indent() << "return generate(generator->context(), inputs, generator_params);\n";
-    indent_level--;
-    stream << get_indent() << "}\n";
-    stream << "\n";
-
-    stream << get_indent() << "// overload to allow Target instead of GeneratorContext.\n";
-    stream << get_indent() << "inline static Outputs generate(\n";
-    indent_level++;
-    stream << get_indent() << "const Target& target,\n";
-    stream << get_indent() << "const Inputs& inputs,\n";
-    stream << get_indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
-    indent_level--;
-    stream << get_indent() << ")\n";
-    stream << get_indent() << "{\n";
-    indent_level++;
-    stream << get_indent() << "return generate(Halide::GeneratorContext(target), inputs, generator_params);\n";
-    indent_level--;
-    stream << get_indent() << "}\n";
-    stream << "\n";
-
-    stream << get_indent() << class_name << "() = delete;\n";
-
-    indent_level--;
-    stream << get_indent() << "};\n";
-    stream << "\n";
-
-    for (const auto &ns : reverse_view(namespaces)) {
-        stream << get_indent() << "}  // namespace " << ns << "\n";
-    }
-    stream << "\n";
-
-    stream << get_indent() << "#endif  // " << guard.str() << "\n";
-}
 
 const std::map<std::string, Type> &get_halide_type_enum_map() {
     static const std::map<std::string, Type> halide_type_enum_map{
@@ -662,7 +194,7 @@ gengen
      documentation.
 
  -e  A comma separated list of files to emit. Accepted values are:
-     [assembly, bitcode, c_header, c_source, cpp_stub, featurization,
+     [assembly, bitcode, c_header, c_source, featurization,
       llvm_assembly, object, python_extension, pytorch_wrapper, registration,
       schedule, static_library, stmt, stmt_html, conceptual_stmt,
       conceptual_stmt_html, compiler_log, hlpipe, device_code].
@@ -1014,13 +546,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
     // -------------- Do some sanity checking.
     internal_assert(!args.output_dir.empty());
 
-    const bool cpp_stub_only = args.output_types.size() == 1 &&
-                               args.output_types.count(OutputFileType::cpp_stub) == 1;
-
-    if (!cpp_stub_only) {
-        // It's ok to leave targets unspecified if we are generating *only* a cpp_stub
-        internal_assert(!args.targets.empty());
-    }
+    internal_assert(!args.targets.empty());
 
     const auto ensure_valid_name = [](const std::string &s) {
         internal_assert(s.empty() || is_valid_name(s)) << "string '" << s << "' is not a valid Generator name.";
@@ -1080,15 +606,6 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             return gen;
         };
 
-        if (args.output_types.count(OutputFileType::cpp_stub)) {
-            // When generating cpp_stub we ignore all generator args passed in, and supply a fake Target.
-            // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
-            const Target fake_target = Target();
-            auto gen = args.create_generator(args.generator_name, GeneratorContext(fake_target));
-            auto output_files = compute_output_files(fake_target, base_path, args.output_types);
-            gen->emit_cpp_stub(output_files[OutputFileType::cpp_stub]);
-        }
-
 #ifdef WITH_SERIALIZATION
         if (args.output_types.count(OutputFileType::hlpipe)) {
             // When serializing a halide pipeline, target is required (since the schedule may be target dependent).
@@ -1104,8 +621,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
         }
 #endif
 
-        // Don't bother with this if we're just emitting a cpp_stub.
-        if (!cpp_stub_only) {
+        {
             auto output_files = compute_output_files(args.targets[0], base_path, args.output_types);
             auto module_factory = [&](const std::string &function_name, const Target &target) -> Module {
                 auto gen = generator_factory(function_name, target);
@@ -1374,15 +890,14 @@ void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     param_info_ptr = std::make_unique<GeneratorParamInfo>(this, size);
 }
 
-void GeneratorBase::set_generator_names(const std::string &registered_name, const std::string &stub_name) {
+void GeneratorBase::set_generator_names(const std::string &registered_name) {
     user_assert(is_valid_name(registered_name)) << "Invalid Generator name: " << registered_name;
-    internal_assert(!registered_name.empty() && !stub_name.empty());
-    internal_assert(generator_registered_name.empty() && generator_stub_name.empty());
+    internal_assert(!registered_name.empty());
+    internal_assert(generator_registered_name.empty());
     generator_registered_name = registered_name;
-    generator_stub_name = stub_name;
 }
 
-void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs) {
+void GeneratorBase::set_inputs_vector(const std::vector<std::vector<BoundInput>> &inputs) {
     ensure_configure_has_been_called();
     advance_phase(InputsSet);
     GeneratorParamInfo &pi = param_info();
@@ -1614,7 +1129,7 @@ std::vector<Func> GeneratorBase::output_func(const std::string &n) {
 void GeneratorBase::bind_input(const std::string &name, const std::vector<Parameter> &v) {
     ensure_configure_has_been_called();
     advance_phase(InputsSet);
-    std::vector<StubInput> si;
+    std::vector<BoundInput> si;
     std::copy(v.begin(), v.end(), std::back_inserter(si));
     find_input_by_name(name)->set_inputs(si);
 }
@@ -1622,7 +1137,7 @@ void GeneratorBase::bind_input(const std::string &name, const std::vector<Parame
 void GeneratorBase::bind_input(const std::string &name, const std::vector<Func> &v) {
     ensure_configure_has_been_called();
     advance_phase(InputsSet);
-    std::vector<StubInput> si;
+    std::vector<BoundInput> si;
     std::copy(v.begin(), v.end(), std::back_inserter(si));
     find_input_by_name(name)->set_inputs(si);
 }
@@ -1630,28 +1145,14 @@ void GeneratorBase::bind_input(const std::string &name, const std::vector<Func> 
 void GeneratorBase::bind_input(const std::string &name, const std::vector<Expr> &v) {
     ensure_configure_has_been_called();
     advance_phase(InputsSet);
-    std::vector<StubInput> si;
+    std::vector<BoundInput> si;
     std::copy(v.begin(), v.end(), std::back_inserter(si));
     find_input_by_name(name)->set_inputs(si);
 }
 
-bool GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
-    user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
-    // Make sure we call configure() so that extra inputs/outputs are added as necessary.
-    ensure_configure_has_been_called();
-    // StubEmitter will want to access the GP/SP values, so advance the phase to avoid assert-fails.
-    advance_phase(GenerateCalled);
-    advance_phase(ScheduleCalled);
-    GeneratorParamInfo &pi = param_info();
-    std::ofstream file(stub_file_path);
-    StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params(), pi.inputs(), pi.outputs());
-    emit.emit();
-    return true;
-}
-
 bool GeneratorBase::emit_hlpipe(const std::string &hlpipe_file_path) {
 #ifdef WITH_SERIALIZATION
-    user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
+    user_assert(!generator_registered_name.empty()) << "Generator has no name.\n";
     Pipeline pipeline = build_pipeline();
     AutoSchedulerResults auto_schedule_results;
     const auto context = this->context();
@@ -1934,14 +1435,14 @@ void GeneratorInputBase::init_internals() {
     verify_internals();
 }
 
-void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
+void GeneratorInputBase::set_inputs(const std::vector<BoundInput> &inputs) {
     generator->check_exact_phase(GeneratorBase::InputsSet);
     parameters_.clear();
     exprs_.clear();
     funcs_.clear();
     check_matching_array_size(inputs.size());
     for (size_t i = 0; i < inputs.size(); ++i) {
-        const StubInput &in = inputs.at(i);
+        const BoundInput &in = inputs.at(i);
         user_assert(in.kind() == kind()) << "An input for " << name() << " is not of the expected kind.\n";
         if (kind() == ArgInfoKind::Function) {
             auto f = in.func();
@@ -2050,20 +1551,6 @@ void GeneratorOutputBase::resize(size_t size) {
     init_internals();
 }
 
-StubOutputBufferBase::StubOutputBufferBase() = default;
-
-StubOutputBufferBase::StubOutputBufferBase(const Func &f, const std::shared_ptr<AbstractGenerator> &generator)
-    : f(f), generator(generator) {
-}
-
-Realization StubOutputBufferBase::realize(std::vector<int32_t> sizes) {
-    return f.realize(std::move(sizes), get_target());
-}
-
-Target StubOutputBufferBase::get_target() const {
-    return generator->context().target();
-}
-
 RegisterGenerator::RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {
     Internal::GeneratorRegistry::register_factory(registered_name, std::move(generator_factory));
 }
@@ -2102,10 +1589,10 @@ void generator_test() {
         // Verify that calling GeneratorParam::set() works.
         tester.gp0.set(1);
 
-        tester.set_inputs_vector({{StubInput(42)}});
+        tester.set_inputs_vector({{BoundInput(42)}});
         internal_assert(tester.phase == GeneratorBase::InputsSet);
 
-        // tester.set_inputs_vector({{StubInput(43)}});  // This will assert-fail.
+        // tester.set_inputs_vector({{BoundInput(43)}});  // This will assert-fail.
 
         // Also ok to call in this phase.
         tester.gp1.set(2.f);
@@ -2113,13 +1600,13 @@ void generator_test() {
         tester.call_generate();
         internal_assert(tester.phase == GeneratorBase::GenerateCalled);
 
-        // tester.set_inputs_vector({{StubInput(44)}});  // This will assert-fail.
+        // tester.set_inputs_vector({{BoundInput(44)}});  // This will assert-fail.
         // tester.gp2.set(2);  // This will assert-fail.
 
         tester.call_schedule();
         internal_assert(tester.phase == GeneratorBase::ScheduleCalled);
 
-        // tester.set_inputs_vector({{StubInput(45)}});  // This will assert-fail.
+        // tester.set_inputs_vector({{BoundInput(45)}});  // This will assert-fail.
         // tester.gp2.set(2);  // This will assert-fail.
         // tester.sp2.set(202);  // This will assert-fail.
     }

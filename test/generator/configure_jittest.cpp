@@ -1,8 +1,5 @@
 #include "Halide.h"
 
-// Include the machine-generated .stub.h header file.
-#include "configure.stub.h"
-
 using namespace Halide;
 
 const int kSize = 32;
@@ -43,41 +40,7 @@ int main(int argc, char **argv) {
 
     extra_value += extra_scalar + extra_dynamic_scalar + extra_func_value + typed_extra_value + bias;
 
-    // Use a Generator Stub to create the Halide IR,
-    // then call realize() to JIT and execute it.
-    {
-        // When calling a Stub, Func inputs must be actual Halide::Func.
-        Var x, y, c;
-        Func func_extra;
-        func_extra(x, y, c) = cast<uint16_t>(extra_func_value);
-
-        auto result = configure::generate(context, configure::Inputs{
-                                                       input,
-                                                       bias,
-                                                       extras[0], extras[1], extras[2],
-                                                       typed_extra,
-                                                       func_extra,
-                                                       extra_scalar,
-                                                       cast<int8_t>(extra_dynamic_scalar)});
-
-        Buffer<int32_t, 3> output = result.output.realize({kSize, kSize, 3});
-        Buffer<float, 3> extra_buffer_output = result.extra_buffer_output.realize({kSize, kSize, 3});
-        Buffer<double, 2> extra_func_output = result.extra_func_output.realize({kSize, kSize});
-
-        output.for_each_element([&](int x, int y, int c) {
-            assert(output(x, y, c) == input(x, y, c) + extra_value);
-        });
-
-        extra_buffer_output.for_each_element([&](int x, int y, int c) {
-            assert(extra_buffer_output(x, y, c) == output(x, y, c));
-        });
-
-        extra_func_output.for_each_element([&](int x, int y) {
-            assert(extra_func_output(x, y) == output(x, y, 0));
-        });
-    }
-
-    // Alternately, instead of using Generator Stubs, we can just use the Callable interface.
+    // Use the Callable interface to invoke a Generator.
     // We can call this on any Generator that is registered in the current process.
     {
         Callable configure = create_callable_from_generator(context, "configure");

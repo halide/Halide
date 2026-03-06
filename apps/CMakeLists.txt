@@ -52,7 +52,6 @@ add_app(iir_blur)
 add_app(interpolate)
 add_app(lens_blur)
 add_app(linear_algebra)
-# add_app(linear_blur)  # TODO(#5374): missing CMake build
 add_app(local_laplacian)
 add_app(max_filter)
 add_app(nl_means)

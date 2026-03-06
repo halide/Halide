@@ -187,9 +187,6 @@ void test_compile_to_everything(Func j, bool do_object) {
         {OutputFileType::c_header, filename_prefix + ".h"},                        // IsSingle
         {OutputFileType::c_source, filename_prefix + ".halide_generated.cpp"},     // IsSingle
         {OutputFileType::compiler_log, filename_prefix + ".halide_compiler_log"},  // IsSingle
-        // Note: compile_multitarget() doesn't produce cpp_stub output,
-        // even if you pass this in.
-        // {OutputFileType::cpp_stub, filename_prefix + ".stub.h"},  // IsSingle
         {OutputFileType::featurization, filename_prefix + ".featurization"},           // IsMulti
         {OutputFileType::function_info_header, filename_prefix + ".function_info.h"},  // IsSingle
         // Note: compile_multitarget() doesn't produce hlpipe output,

@@ -25,8 +25,6 @@ namespace PythonBindings {
 using ArgInfoKind = Internal::ArgInfoKind;
 using ArgInfo = Internal::AbstractGenerator::ArgInfo;
 using GeneratorFactory = Internal::GeneratorFactory;
-using StubInput = Internal::StubInput;
-using StubInputBuffer = Internal::StubInputBuffer<void>;
 
 namespace {
 
