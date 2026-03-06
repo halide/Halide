@@ -161,7 +161,7 @@ Checks: >
     -readability-use-std-min-max,
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
-ExcludeHeaderFilterRegex: '\.fbs\.h|common/cmdline\.h|/mini_\w*\.h'
+ExcludeHeaderFilterRegex: '\.fbs\.h|common/cmdline\.h|mini_[^/]*\.h'
 FormatStyle: 'file'
 CheckOptions:
     -   key: modernize-use-default-member-init.UseAssignment

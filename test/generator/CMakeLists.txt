@@ -62,8 +62,9 @@ function(add_wasm_executable TARGET)
     if ("${Halide_TARGET}" MATCHES "webgpu")
         set(EMCC_FLAGS
             ${EMCC_FLAGS}
-            -s USE_WEBGPU=1
-            -s ASYNCIFY
+            --use-port=emdawnwebgpu
+            -s JSPI
+            -Wno-experimental
         )
     endif ()
 
@@ -102,7 +103,7 @@ function(add_wasm_halide_test TARGET)
         return()
     endif ()
 
-    find_package(NodeJS 16.13 REQUIRED)
+    find_package(NodeJS 25 REQUIRED)
     add_halide_test(
         "${TARGET}"
         GROUPS ${args_GROUPS}
