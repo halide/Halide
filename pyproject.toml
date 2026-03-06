@@ -16,6 +16,7 @@ readme = "./packaging/pip/README.md"
 requires-python = ">=3.10"
 dependencies = [
     "imageio>=2",
+    "pillow; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
     "numpy>=1.26",
 ]
 dynamic = ['version']
@@ -38,7 +39,6 @@ classifiers = [
     "Environment :: WebAssembly",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Natural Language :: English",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
@@ -68,7 +68,8 @@ dev = [
     "setuptools-scm>=8.3.1",
 ]
 apps = [
-    "onnx==1.18.0", # for apps/onnx
+    "onnx==1.18.0; platform_machine != 'armv8l' and platform_machine != 'armv7l'", # for apps/onnx
+    "onnx==1.17.0; platform_machine == 'armv8l' or platform_machine == 'armv7l'", # for apps/onnx
     "pytest", # unspecified onnx dependency
 ]
 tools = [
@@ -202,8 +203,18 @@ conflicts = [
 
 [tool.uv.sources]
 halide-llvm = { index = "halide" }
+imageio = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+numpy = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+onnx = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+pillow = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+protobuf = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
 
 [[tool.uv.index]]
 name = "halide"
 url = "https://pypi.halide-lang.org/simple"
+explicit = true
+
+[[tool.uv.index]]
+name = "piwheels"
+url = "https://piwheels.org/simple"
 explicit = true

@@ -13,12 +13,17 @@ function(add_tutorial source_file)
 
     add_executable("${name}" "${source_file}")
     target_link_libraries("${name}" PRIVATE Halide::Halide Halide::Tools)
+    if (TARGET Halide::TerminateHandler)
+        target_link_libraries("${name}" PRIVATE Halide::TerminateHandler)
+    endif ()
     target_compile_options(${name} PRIVATE "$<$<CXX_COMPILER_ID:GNU>:-Wno-unused-but-set-variable>")
+
+    string(REGEX REPLACE "^cmake" "${Halide_CMAKE_TARGET}" _resolved_target "${Halide_TARGET}")
 
     add_test(NAME tutorial_${name} COMMAND ${name})
     set_tests_properties(tutorial_${name}
                          PROPERTIES
-                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
+                         ENVIRONMENT "HL_TARGET=${_resolved_target};HL_JIT_TARGET=${_resolved_target}"
                          LABELS "tutorial;${args_GROUPS}")
 
     if (args_WITH_IMAGE_IO)
