@@ -1171,7 +1171,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 i -= a_elements;
             }
         }
-        return shuffle_vectors(b, shifted_indices);
+        return shuffle_vectors(b, b, shifted_indices);
     }
 
     // Try to rewrite shuffles that only access the elements of a.
