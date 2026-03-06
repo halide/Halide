@@ -63,7 +63,7 @@ jobs:
           uv sync --group ci-llvm-22 --no-install-project
           echo "${GITHUB_WORKSPACE}/.venv/bin" | tee -a "$GITHUB_PATH"
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" | tee -a "$GITHUB_ENV"
-          echo "LLVM_CONFIG=halide-llvm" | tee -a "$GITHUB_ENV"
+          echo "LLVM_CONFIG=$(halide-llvm --bindir)/llvm-config" | tee -a "$GITHUB_ENV"
           echo "MAKEFLAGS=-j $(getconf _NPROCESSORS_ONLN)" | tee -a "$GITHUB_ENV"
 
       - run: make build_tests
