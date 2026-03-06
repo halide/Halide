@@ -190,7 +190,7 @@ int main(int argc, char **argv) {
     {
         Func f;
         Var x;
-        f(x) = buf(17 * x) + buf(17 * x + 15);
+        f(x) = buf(50 * x) + buf(50 * x + 15);
         f.vectorize(x, 16, TailStrategy::RoundUp);
 
         checker.check_not(f, 0);

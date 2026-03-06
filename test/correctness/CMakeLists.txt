@@ -327,6 +327,7 @@ tests(GROUPS correctness
       tracing_broadcast.cpp
       tracing_stack.cpp
       transitive_bounds.cpp
+      transpose_idioms.cpp
       trim_no_ops.cpp
       tuple_partial_update.cpp
       tuple_reduction.cpp

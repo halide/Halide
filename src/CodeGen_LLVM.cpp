@@ -2241,7 +2241,6 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
         // Using unary shuffles, get each element into the right ultimate
         // lane. This works out without collisions because the number of vectors
         // and the length of each vector is coprime.
-        const int num_vecs = (int)v.size();
         std::vector<int> shuffle(vec_elements);
         for (int i = 0; i < num_vecs; i++) {
             for (int j = 0; j < vec_elements; j++) {
@@ -2298,7 +2297,7 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
         // vectors. Pick some factor of the number of vectors, interleave in
         // separate groups, and then interleave the results. Do the largest
         // power of two factor first.
-        int f = num_vecs & -num_vecs;
+        int f = largest_power_of_two_factor(num_vecs);
         if (f == 1 || f == num_vecs) {
             for (int i = 2; i < num_vecs; i++) {
                 if (num_vecs % i == 0) {
@@ -2317,6 +2316,7 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
             int padded_size = next_power_of_two(vec_elements);
             std::vector<Value *> padded(num_vecs);
             for (int i = 0; i < num_vecs; i++) {
+                // slice_vector can also be used to pad with don't cares
                 padded[i] = slice_vector(vecs[i], 0, padded_size);
             }
             Value *v = interleave_vectors(padded);
@@ -2367,7 +2367,6 @@ std::vector<Value *> CodeGen_LLVM::deinterleave_vector(Value *vec, int num_vecs)
         // Use the inverse of Catanzaro's algorithm from above. We slice into
         // distinct vectors, then rotate each element into the correct final
         // vector, then do a unary permutation of each vector.
-        std::vector<int> shuffle(vec_elements);
 
         // Instead of concatenating, we slice.
         std::vector<Value *> v(num_vecs);
@@ -2385,6 +2384,7 @@ std::vector<Value *> CodeGen_LLVM::deinterleave_vector(Value *vec, int num_vecs)
 
         // We'll handle each bit of the rotation one at a time with a two-way
         // shuffle.
+        std::vector<int> shuffle(vec_elements);
         std::vector<Value *> new_v(v.size());
         int d = 1;
         while (d < num_vecs) {
@@ -2409,7 +2409,9 @@ std::vector<Value *> CodeGen_LLVM::deinterleave_vector(Value *vec, int num_vecs)
         // Now reorder the vectors in the inverse order to the above.
         for (int i = 0; i < num_vecs; i++) {
             int j = (i * vec_elements) % num_vecs;
-            // j and i are swapped below, because we're doing the inverse of the algorithm above
+            // j and i are swapped below, because we're doing the inverse of the
+            // algorithm above. This map is 1:1 because vec_elements and
+            // num_vecs are coprime, so every slot of new_v is stored to.
             new_v[j] = v[i];
         }
         v.swap(new_v);
@@ -2435,7 +2437,7 @@ std::vector<Value *> CodeGen_LLVM::deinterleave_vector(Value *vec, int num_vecs)
         // again. We know there's a non-trivial factor because if it were prime
         // the gcd above would have been 1. Do the largest power-of-two factor
         // first.
-        int f = num_vecs & -num_vecs;
+        int f = largest_power_of_two_factor(num_vecs);
         if (f == 1 || f == num_vecs) {
             for (int i = 2; i < num_vecs; i++) {
                 if (num_vecs % i == 0) {

@@ -1029,10 +1029,12 @@ bool Shuffle::is_concat() const {
 bool Shuffle::is_transpose() const {
     if (vectors.size() > 1 ||
         (int)indices.size() != vectors[0].type().lanes() ||
-        indices.size() < 2) {
+        indices.size() < 2 ||
+        indices[0] != 0 ||
+        indices[1] <= 0) {
         return false;
     }
-    int cols = indices[1] - indices[0];
+    int cols = indices[1];
     int rows = vectors[0].type().lanes() / cols;
     if ((int)indices.size() != rows * cols) {
         return false;

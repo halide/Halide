@@ -29,7 +29,11 @@ Result test_interleave(int factor, const Target &t) {
     output(x) = in(x / factor, x % factor);
 
     Var xi, yi;
-    output.unroll(x, factor, TailStrategy::RoundUp).vectorize(x, t.natural_vector_size<T>(), TailStrategy::RoundUp);
+    // We'll use the interleaving-stores scheduling idiom, where unrolling
+    // strided stores gets mashed together into a single dense store of a
+    // interleave_vectors call.
+    output.unroll(x, factor, TailStrategy::RoundUp)
+        .vectorize(x, t.natural_vector_size<T>(), TailStrategy::RoundUp);
     output.output_buffer().dim(0).set_min(0);
 
     output.compile_jit();

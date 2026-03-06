@@ -326,6 +326,7 @@ Stmt Simplify::visit(const Store *op) {
     ExprInfo index_info;
     Expr index = mutate(op->index, &index_info);
 
+
     // If the store is fully unconditional and out of bounds, drop it.
     // This should only occur inside branches that make the store unreachable,
     // but perhaps the branch was hard to prove constant true or false. This
@@ -342,8 +343,9 @@ Stmt Simplify::visit(const Store *op) {
     }
 
     ExprInfo base_info;
-    if (const Ramp *r = index.as<Ramp>()) {
-        mutate(r->base, &base_info);
+    const Ramp *r_index = index.as<Ramp>();
+    if (r_index) {
+        mutate(r_index->base, &base_info);
     }
     base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
 
@@ -367,7 +369,10 @@ Stmt Simplify::visit(const Store *op) {
         // foo[x] = foo[x] or foo[x] = undef is a no-op
         return Evaluate::make(0);
     } else if (shuf && shuf->is_concat()) {
-        // Break a store of a concat of vector indices into separate stores
+        // Break a store of a concat of vector indices into separate stores. A
+        // concat index will result in a general scatter at codegen time. We
+        // should just break it up here, where there is a hope that the
+        // individual elements might be simplifiable to dense ramps.
         std::string var_name = unique_name('t');
         Expr var = Variable::make(value.type(), var_name);
         std::vector<Stmt> stores;
@@ -384,6 +389,24 @@ Stmt Simplify::visit(const Store *op) {
         Stmt s = Block::make(stores);
         s = LetStmt::make(var_name, value, s);
         return mutate(s);
+    } else if (const Ramp *inner_ramp = r_index ? r_index->base.as<Ramp>() : nullptr;
+               inner_ramp &&
+               !is_const_one(inner_ramp->stride) &&
+               is_const_one(r_index->stride)) {
+        // If it's a nested ramp and the outer ramp has stride 1, swap the
+        // nesting order of the ramps to make dense stores and transpose the
+        // index and value instead. Later in lowering after flattening the
+        // nested ramps it will turn into a concat of dense ramps and hit the
+        // case above.
+        Expr transposed_index =
+            Ramp::make(Ramp::make(inner_ramp->base, make_one(inner_ramp->base.type()), r_index->lanes),
+                       Broadcast::make(inner_ramp->stride, r_index->lanes), inner_ramp->lanes);
+        Expr transposed_value = Shuffle::make_transpose(value, inner_ramp->lanes);
+        Expr transposed_predicate = (predicate.as<Broadcast>() ?
+                                         predicate :  // common case optimization
+                                         Shuffle::make_transpose(predicate, inner_ramp->lanes));
+        return mutate(Store::make(op->name, transposed_value, transposed_index,
+                                  op->param, transposed_predicate, align));
     } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {

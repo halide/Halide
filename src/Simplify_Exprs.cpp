@@ -349,13 +349,20 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
                                op->image, op->param, const_true(new_lanes, nullptr), align);
         return Broadcast::make(load, b_index->lanes);
     } else if (s_index &&
-               is_const_one(predicate) &&
                (s_index->is_concat() ||
                 s_index->is_interleave())) {
-        // Loads of concats/interleaves should be concats/interleaves of loads
+        // Loads of concats/interleaves should be concats/interleaves of
+        // loads. We'll need to slice up the predicate though.
         std::vector<Expr> loaded_vecs;
         for (const Expr &new_index : s_index->vectors) {
             int new_lanes = new_index.type().lanes();
+            Expr predicate_slice =
+                is_const_one(predicate) ? const_true(new_lanes, nullptr) :
+                s_index->is_concat() ?
+                                          Shuffle::make_slice(predicate, (int)loaded_vecs.size() * new_lanes, 1, new_lanes) :
+                                          Shuffle::make_slice(predicate, (int)loaded_vecs.size(), op->type.lanes() / new_lanes, new_lanes);
+            predicate_slice = mutate(predicate_slice, nullptr);
+
             Expr load = Load::make(op->type.with_lanes(new_lanes), op->name, new_index,
                                    op->image, op->param, const_true(new_lanes, nullptr), ModulusRemainder{});
             loaded_vecs.emplace_back(std::move(load));
@@ -371,8 +378,11 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
         Expr transposed_index =
             Ramp::make(Ramp::make(inner_ramp->base, make_one(inner_ramp->base.type()), r_index->lanes),
                        Broadcast::make(inner_ramp->stride, r_index->lanes), inner_ramp->lanes);
+        Expr transposed_predicate = (predicate.as<Broadcast>() ?
+                                         predicate :  // common case optimization
+                                         Shuffle::make_transpose(predicate, inner_ramp->lanes));
         Expr transposed_load =
-            Load::make(op->type, op->name, transposed_index, op->image, op->param, predicate, align);
+            Load::make(op->type, op->name, transposed_index, op->image, op->param, transposed_predicate, align);
         return mutate(Shuffle::make_transpose(transposed_load, r_index->lanes), info);
     } else if (predicate.same_as(op->predicate) && index.same_as(op->index) && align == op->alignment) {
         return op;
