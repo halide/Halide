@@ -98,6 +98,9 @@ extern "C" {
 #define HALIDE_RUNTIME_ASAN_DETECTED
 #endif
 
+#if !defined(HALIDE_CPP_COMPILER_HAS_FLOAT16)
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 0
+
 #if !defined(HALIDE_RUNTIME_ASAN_DETECTED)
 
 // clang had _Float16 added as a reserved name in clang 8, but
@@ -105,10 +108,11 @@ extern "C" {
 // Ideally there would be a better way to detect if the type
 // is supported, even in a compiler independent fashion, but
 // coming up with one has proven elusive.
-#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__)
+#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__) && !defined(__wasm__)
 #if defined(__is_identifier)
 #if !__is_identifier(_Float16)
-#define HALIDE_CPP_COMPILER_HAS_FLOAT16
+#undef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 1
 #endif
 #endif
 #endif
@@ -118,11 +122,13 @@ extern "C" {
 // we assume support. This may need revision.
 #if defined(__GNUC__) && (__GNUC__ >= 12)
 #if defined(__x86_64__) || (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) || ((defined(__arm__) || defined(__aarch64__)) && (__GNUC__ >= 13))
-#define HALIDE_CPP_COMPILER_HAS_FLOAT16
+#undef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 1
 #endif
 #endif
 
 #endif  // !HALIDE_RUNTIME_ASAN_DETECTED
+#endif  // !defined(HALIDE_CPP_COMPILER_HAS_FLOAT16)
 
 #endif  // !COMPILING_HALIDE_RUNTIME
 
@@ -2149,7 +2155,7 @@ HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of() {
     return halide_type_t(halide_type_handle, 64);
 }
 
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<_Float16>() {
     return halide_type_t(halide_type_float, 16);

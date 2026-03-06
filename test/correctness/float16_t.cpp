@@ -322,7 +322,7 @@ int run_test() {
                        std::abs(halfway_plus_eps - (double)to_even));
 
                 assert(float(halfway_plus_eps) == halfway);
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
                 assert(_Float16(halfway_plus_eps) == _Float16(float(to_odd)));
 #endif
                 assert(float16_t(halfway_plus_eps) == to_odd);
@@ -475,7 +475,7 @@ int main(int argc, char **argv) {
     }
 
     printf("Testing _Float16...\n");
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
     if (run_test<_Float16>() != 0) {
         fprintf(stderr, "_Float16 test failed!\n");
         return 1;
