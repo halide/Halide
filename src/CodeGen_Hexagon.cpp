@@ -1159,10 +1159,15 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
 
     // Try to rewrite shuffles that only access the elements of b.
     int min = INT_MAX;
+    int max = -1;
     for (int idx : indices) {
-        if (idx != -1 && idx < min) {
-            min = idx;
+        if (idx != -1) {
+            min = std::min(min, idx);
+            max = std::max(max, idx);
         }
+    }
+    if (min == INT_MAX) {
+        return llvm::PoisonValue::get(result_ty);
     }
     if (min >= a_elements) {
         vector<int> shifted_indices(indices);
@@ -1175,7 +1180,6 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     }
 
     // Try to rewrite shuffles that only access the elements of a.
-    int max = *std::max_element(indices.begin(), indices.end());
     if (max < a_elements) {
         BitCastInst *a_cast = dyn_cast<BitCastInst>(a);
         CallInst *a_call = dyn_cast<CallInst>(a_cast ? a_cast->getOperand(0) : a);
