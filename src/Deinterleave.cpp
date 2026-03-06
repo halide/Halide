@@ -595,7 +595,7 @@ private:
         // Special case 1: Scalar extraction
         if (new_lanes == 1) {
             // Find in which vector it sits.
-            int index = starting_lane;
+            int index = op->indices[starting_lane];
             for (const auto &vec : op->vectors) {
                 if (index < vec.type().lanes()) {
                     // We found the source vector. Extract the scalar from it.
