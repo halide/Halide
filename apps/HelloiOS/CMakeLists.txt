@@ -9,7 +9,7 @@ find_package(HalideHelpers REQUIRED CMAKE_FIND_ROOT_PATH_BOTH)
 
 add_halide_generator(
     reaction_diffusion_2_generator
-    SOURCES HelloiOS/reaction_diffusion_2_generator.cpp
+    SOURCES Generators/reaction_diffusion_2_generator.cpp
 )
 
 # A host configure only needs to export the generator package for the iOS build.
