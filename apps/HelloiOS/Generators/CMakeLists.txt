@@ -37,3 +37,10 @@ foreach (stage IN ITEMS init update render)
          reaction_diffusion_2_metal_${stage}.runtime.update)
 endforeach ()
 add_custom_target(halide_kernels ALL DEPENDS ${_all_kernel_updates})
+
+# Group internal targets so they don't clutter the Xcode project navigator.
+set_target_properties(
+    halide_kernels ${_all_kernel_updates} "${PROJECT_NAME}-halide_generators"
+    PROPERTIES
+    FOLDER "Halide Internal"
+)
