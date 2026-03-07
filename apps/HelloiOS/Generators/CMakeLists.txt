@@ -42,10 +42,4 @@ endforeach ()
 # The IMPORTED library targets from add_halide_library are not part of the
 # default build, so we create an explicit target to drive generation.
 add_custom_target(halide_kernels ALL DEPENDS ${_all_kernel_updates})
-
-# Group internal targets so they don't clutter the Xcode project navigator.
-set_target_properties(
-    halide_kernels ${_all_kernel_updates} "${PROJECT_NAME}-halide_generators"
-    PROPERTIES
-    FOLDER "Halide Internal"
-)
+set_property(TARGET halide_kernels PROPERTY FOLDER "Halide Internal")
