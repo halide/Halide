@@ -300,26 +300,8 @@
 				ENABLE_BITCODE = NO;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "HelloiOS-Prefix.pch";
-				HEADER_SEARCH_PATHS = (
-					"$(GENERATORS_BUILD_DIR)",
-					"$(HALIDE_INCLUDE_DIR)",
-				);
 				INFOPLIST_FILE = "HelloiOS-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				OTHER_LDFLAGS = (
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_init_$(PLATFORM_NAME).a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_update_$(PLATFORM_NAME).a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_render_$(PLATFORM_NAME).a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_init_$(PLATFORM_NAME).a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_update_$(PLATFORM_NAME).a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_render_$(PLATFORM_NAME).a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_init_$(PLATFORM_NAME).runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_update_$(PLATFORM_NAME).runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_render_$(PLATFORM_NAME).runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_init_$(PLATFORM_NAME).runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_update_$(PLATFORM_NAME).runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_render_$(PLATFORM_NAME).runtime.a",
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.halide.HelloiOS;
 				PRODUCT_NAME = HelloiOS;
 				SDKROOT = iphoneos;
@@ -340,26 +322,8 @@
 				ENABLE_BITCODE = NO;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "HelloiOS-Prefix.pch";
-				HEADER_SEARCH_PATHS = (
-					"$(GENERATORS_BUILD_DIR)",
-					"$(HALIDE_INCLUDE_DIR)",
-				);
 				INFOPLIST_FILE = "HelloiOS-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				OTHER_LDFLAGS = (
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_init_$(PLATFORM_NAME).a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_update_$(PLATFORM_NAME).a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_render_$(PLATFORM_NAME).a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_init_$(PLATFORM_NAME).a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_update_$(PLATFORM_NAME).a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_render_$(PLATFORM_NAME).a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_init_$(PLATFORM_NAME).runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_update_$(PLATFORM_NAME).runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_render_$(PLATFORM_NAME).runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_init_$(PLATFORM_NAME).runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_update_$(PLATFORM_NAME).runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_render_$(PLATFORM_NAME).runtime.a",
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.halide.HelloiOS;
 				PRODUCT_NAME = HelloiOS;
 				SDKROOT = iphoneos;
