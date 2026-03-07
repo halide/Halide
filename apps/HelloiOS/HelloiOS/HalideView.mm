@@ -93,7 +93,7 @@ static const HalideFuncs kHalideMetal = {
     }
     if ((iteration % 30) == 0) {
         dispatch_async(dispatch_get_main_queue(), ^(void) {
-            [self updateLogWith: frameElapsedEstimate using_metal: using_metal];
+            [self updateLogWith: self->frameElapsedEstimate using_metal: using_metal];
         });
     }
     iteration += 1;
