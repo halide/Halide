@@ -1157,7 +1157,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     internal_assert(result_elements > 0);
     llvm::Type *result_ty = get_vector_type(element_ty, result_elements);
 
-    // Try to rewrite shuffles that only access the elements of b.
+    // Find the range of non-dont-care indices.
     int min = INT_MAX;
     int max = -1;
     for (int idx : indices) {
@@ -1166,6 +1166,11 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             max = std::max(max, idx);
         }
     }
+    if (min == INT_MAX) {
+        return llvm::PoisonValue::get(result_ty);
+    }
+
+    // Try to rewrite shuffles that only access the elements of b.
     if (min >= a_elements) {
         vector<int> shifted_indices(indices);
         for (int &i : shifted_indices) {
