@@ -307,18 +307,18 @@
 				INFOPLIST_FILE = "HelloiOS-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				OTHER_LDFLAGS = (
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_init.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_update.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_render.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_init.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_update.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_render.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_init.runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_update.runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_render.runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_init.runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_update.runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_render.runtime.a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_init_$(PLATFORM_NAME).a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_update_$(PLATFORM_NAME).a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_render_$(PLATFORM_NAME).a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_init_$(PLATFORM_NAME).a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_update_$(PLATFORM_NAME).a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_render_$(PLATFORM_NAME).a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_init_$(PLATFORM_NAME).runtime.a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_update_$(PLATFORM_NAME).runtime.a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_render_$(PLATFORM_NAME).runtime.a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_init_$(PLATFORM_NAME).runtime.a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_update_$(PLATFORM_NAME).runtime.a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_render_$(PLATFORM_NAME).runtime.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.halide.HelloiOS;
 				PRODUCT_NAME = HelloiOS;
@@ -347,18 +347,18 @@
 				INFOPLIST_FILE = "HelloiOS-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				OTHER_LDFLAGS = (
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_init.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_update.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_render.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_init.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_update.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_render.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_init.runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_update.runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_render.runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_init.runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_update.runtime.a",
-					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_render.runtime.a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_init_$(PLATFORM_NAME).a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_update_$(PLATFORM_NAME).a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_render_$(PLATFORM_NAME).a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_init_$(PLATFORM_NAME).a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_update_$(PLATFORM_NAME).a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_render_$(PLATFORM_NAME).a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_init_$(PLATFORM_NAME).runtime.a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_update_$(PLATFORM_NAME).runtime.a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_render_$(PLATFORM_NAME).runtime.a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_init_$(PLATFORM_NAME).runtime.a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_update_$(PLATFORM_NAME).runtime.a",
+					"$(GENERATORS_BUILD_DIR)/reaction_diffusion_2_metal_render_$(PLATFORM_NAME).runtime.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.halide.HelloiOS;
 				PRODUCT_NAME = HelloiOS;

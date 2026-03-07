@@ -2,20 +2,6 @@
 
 set -euo pipefail
 
-die() {
-    echo "$@" >&2
-    exit 1
-}
-
-if [[ $# -ne 1 ]]; then
-    die "Usage: $0 <Halide_TARGET>"
-fi
-
-HALIDE_TARGET="$1"
-if [[ "${HALIDE_TARGET}" == "host" ]]; then
-    die "Halide_TARGET=host is not valid for the iOS app build."
-fi
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
 
 : "${Halide_ROOT:?Set Halide_ROOT in the environment to the Halide install prefix.}"
@@ -26,8 +12,7 @@ CMAKE="$(command -v cmake)"
 
 BUILD_DIR="${SCRIPT_DIR}/Generators/build"
 
-cmake -G Xcode -S "${SCRIPT_DIR}/Generators" -B "${BUILD_DIR}" \
-    -DHalide_TARGET="${HALIDE_TARGET}"
+cmake -G Xcode -S "${SCRIPT_DIR}/Generators" -B "${BUILD_DIR}"
 
 ## Write xcconfig for the native Xcode project.
 

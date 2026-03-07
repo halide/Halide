@@ -6,7 +6,7 @@ An interactive reaction-diffusion iOS demo powered by Halide.
 
 ```bash
 cd apps/HelloiOS
-Halide_ROOT=/path/to/halide/install ./build.sh arm-64-ios-simulator
+Halide_ROOT=/path/to/halide/install ./build.sh
 open HelloiOS.xcworkspace
 ```
 
