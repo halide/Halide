@@ -28,9 +28,10 @@ The project is split into two parts:
    available via double-tap.
 
 Both live in **HelloiOS.xcworkspace**. A one-time `setup.sh` configures the
-CMake side and writes a `GeneratorPaths.xcconfig` that the Xcode project reads
-for paths. A Run Script build phase in Xcode invokes `rebuild-kernels.sh` so
-generator changes are picked up automatically.
+CMake side and bootstraps `HalideKernels.xcframework`, which bundles the
+generated kernels, runtimes, and headers for both device and simulator. The
+Xcode project links the xcframework directly. A Run Script build phase rebuilds
+it so generator changes are picked up automatically.
 
 ## Prerequisites
 
@@ -66,8 +67,7 @@ Or use Xcode's Run button after building for a simulator destination.
 HelloiOS/
   HelloiOS.xcworkspace/     Top-level workspace
   Generators/
-    CMakeLists.txt           Builds generator + produces iOS kernels
-    rebuild-kernels.sh       Called by Xcode Run Script build phase
+    CMakeLists.txt           Builds generator + packages HalideKernels.xcframework
     reaction_diffusion_2_generator.cpp
     build/                   Created by setup.sh
   HelloiOS/

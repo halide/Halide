@@ -19,6 +19,7 @@
 		4A200000000000000000000A /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A1000000000000000000011 /* Metal.framework */; };
 		4A200000000000000000000B /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A1000000000000000000012 /* QuartzCore.framework */; };
 		4A200000000000000000000C /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A1000000000000000000013 /* UIKit.framework */; };
+		4A200000000000000000000D /* HalideKernels.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A1000000000000000000015 /* HalideKernels.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,13 +36,13 @@
 		4A100000000000000000000B /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		4A100000000000000000000C /* HelloiOS-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "HelloiOS-Info.plist"; sourceTree = "<group>"; };
 		4A100000000000000000000D /* HelloiOS-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "HelloiOS-Prefix.pch"; sourceTree = "<group>"; };
-		4A100000000000000000000E /* GeneratorPaths.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = GeneratorPaths.xcconfig; path = "../Generators/build/GeneratorPaths.xcconfig"; sourceTree = SOURCE_ROOT; };
 		4A100000000000000000000F /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		4A1000000000000000000010 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		4A1000000000000000000011 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		4A1000000000000000000012 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		4A1000000000000000000013 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		4A1000000000000000000014 /* HelloiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HelloiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4A1000000000000000000015 /* HalideKernels.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = HalideKernels.xcframework; path = "../Generators/build/HalideKernels.xcframework"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -54,6 +55,7 @@
 				4A200000000000000000000A /* Metal.framework in Frameworks */,
 				4A200000000000000000000B /* QuartzCore.framework in Frameworks */,
 				4A200000000000000000000C /* UIKit.framework in Frameworks */,
+				4A200000000000000000000D /* HalideKernels.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -63,7 +65,6 @@
 		4A3000000000000000000001 /* HelloiOS */ = {
 			isa = PBXGroup;
 			children = (
-				4A100000000000000000000E /* GeneratorPaths.xcconfig */,
 				4A1000000000000000000001 /* AppDelegate.h */,
 				4A1000000000000000000002 /* AppDelegate.mm */,
 				4A1000000000000000000003 /* HalideView.h */,
@@ -98,6 +99,7 @@
 				4A1000000000000000000011 /* Metal.framework */,
 				4A1000000000000000000012 /* QuartzCore.framework */,
 				4A1000000000000000000013 /* UIKit.framework */,
+				4A1000000000000000000015 /* HalideKernels.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -176,7 +178,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "exec \"${PROJECT_DIR}/../Generators/rebuild-kernels.sh\"\n";
+			shellScript = "xcodebuild -project \"${PROJECT_DIR}/../Generators/build/HelloiOS-Generators.xcodeproj\" -target halide_kernels -configuration Release\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -290,7 +292,6 @@
 		};
 		4A8000000000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 4A100000000000000000000E /* GeneratorPaths.xcconfig */;
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -312,7 +313,6 @@
 		};
 		4A8000000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 4A100000000000000000000E /* GeneratorPaths.xcconfig */;
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
