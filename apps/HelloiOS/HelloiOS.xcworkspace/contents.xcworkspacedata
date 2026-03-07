@@ -4,4 +4,7 @@
    <FileRef
       location = "group:HelloiOS/HelloiOS.xcodeproj">
    </FileRef>
+   <FileRef
+      location = "group:Generators/build/HelloiOS-Generators.xcodeproj">
+   </FileRef>
 </Workspace>

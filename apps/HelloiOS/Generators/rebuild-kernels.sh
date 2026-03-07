@@ -10,4 +10,4 @@ if [ -z "${GENERATORS_BUILD_DIR:-}" ]; then
     exit 1
 fi
 
-"$CMAKE_COMMAND" --build "$GENERATORS_BUILD_DIR"
+"$CMAKE_COMMAND" --build "$GENERATORS_BUILD_DIR" --config Release
