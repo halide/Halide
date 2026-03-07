@@ -66,6 +66,7 @@ function(add_halide_generator TARGET)
     if (NOT TARGET "${gen}")
         if (NOT TARGET "${ARG_PACKAGE_NAME}")
             add_custom_target("${ARG_PACKAGE_NAME}")
+            set_property(TARGET "${ARG_PACKAGE_NAME}" PROPERTY FOLDER "Halide Internal")
         endif ()
 
         if (ARG_SOURCES MATCHES ".py$")
@@ -310,6 +311,7 @@ function(_Halide_library_from_generator TARGET)
     endif ()
 
     add_custom_target("${TARGET}.update" DEPENDS ${output_files})
+    set_property(TARGET "${TARGET}.update" PROPERTY FOLDER "Halide Internal")
     add_dependencies("${TARGET}" "${TARGET}.update")
 
     target_link_libraries("${TARGET}" INTERFACE "${ARG_USE_RUNTIME}")
@@ -917,6 +919,7 @@ function(add_halide_runtime RT)
             DEPENDS Halide::GenRT
             VERBATIM)
         add_custom_target("${RT}.update" DEPENDS "${GEN_OUTS}")
+        set_property(TARGET "${RT}.update" PROPERTY FOLDER "Halide Internal")
 
         add_library("${RT}" STATIC IMPORTED GLOBAL)
         add_dependencies("${RT}" "${RT}.update")
