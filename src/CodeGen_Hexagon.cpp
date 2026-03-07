@@ -1157,13 +1157,20 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     internal_assert(result_elements > 0);
     llvm::Type *result_ty = get_vector_type(element_ty, result_elements);
 
-    // Try to rewrite shuffles that only access the elements of b.
-    int min = indices[0];
-    for (size_t i = 1; i < indices.size(); i++) {
-        if (indices[i] != -1 && indices[i] < min) {
-            min = indices[i];
+    // Find the range of non-dont-care indices.
+    int min = INT_MAX;
+    int max = -1;
+    for (int idx : indices) {
+        if (idx != -1) {
+            min = std::min(min, idx);
+            max = std::max(max, idx);
         }
     }
+    if (min == INT_MAX) {
+        return llvm::PoisonValue::get(result_ty);
+    }
+
+    // Try to rewrite shuffles that only access the elements of b.
     if (min >= a_elements) {
         vector<int> shifted_indices(indices);
         for (int &i : shifted_indices) {
@@ -1171,11 +1178,10 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 i -= a_elements;
             }
         }
-        return shuffle_vectors(b, shifted_indices);
+        return shuffle_vectors(b, b, shifted_indices);
     }
 
     // Try to rewrite shuffles that only access the elements of a.
-    int max = *std::max_element(indices.begin(), indices.end());
     if (max < a_elements) {
         BitCastInst *a_cast = dyn_cast<BitCastInst>(a);
         CallInst *a_call = dyn_cast<CallInst>(a_cast ? a_cast->getOperand(0) : a);
@@ -1561,6 +1567,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
         Value *ret = nullptr;
         for (int i = 0; i < lut_elements; i += native_elements) {
             Value *lut_i = slice_vector(lut, i, native_elements);
+            internal_assert(get_vector_num_elements(lut_i->getType()) == native_elements);
             vector<int> indices_i(native_elements);
             vector<Constant *> mask(native_elements);
             bool all_used = true;
@@ -1683,7 +1690,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     // contains the result of each range, and a condition vector
     // indicating whether the result should be used.
     vector<std::pair<Value *, Value *>> ranges;
-    for (int min_index_i = 0; min_index_i < max_index; min_index_i += 256) {
+    for (int min_index_i = 0; min_index_i <= max_index; min_index_i += 256) {
         // Make a vector of the indices shifted such that the min of
         // this range is at 0. Use 16-bit indices for this.
         Value *min_index_i_val = create_vector(i16x_t, min_index_i);
@@ -1697,9 +1704,11 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         // truncate to 8 bits, as vlut requires.
         indices = call_intrin(i8x_t, "halide.hexagon.pack.vh", {indices});
 
-        int range_extent_i = std::min(max_index - min_index_i, 255);
-        Value *range_i = vlut256(slice_vector(lut, min_index_i, range_extent_i),
-                                 indices, 0, range_extent_i);
+        int local_max_index = std::min(max_index - min_index_i, 255);
+        int slice_size = local_max_index + 1;
+
+        Value *range_i = vlut256(slice_vector(lut, min_index_i, slice_size),
+                                 indices, 0, local_max_index);
         ranges.emplace_back(range_i, use_index);
     }
 
