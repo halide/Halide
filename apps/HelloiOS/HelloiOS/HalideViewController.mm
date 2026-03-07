@@ -11,9 +11,7 @@
     _halideView = [[HalideView alloc] initWithFrame:CGRectZero];
     _halideView.backgroundColor = [UIColor blackColor];
 
-#if HAS_METAL_SDK
     _halideView.use_metal = YES;
-#endif
 
     self.view = _halideView;
 
