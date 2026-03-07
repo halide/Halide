@@ -42,11 +42,11 @@ cmake --install build --prefix install
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `Halide_ROOT` | *(required)* | Halide install prefix |
-| `CMAKE_BUILD_TYPE` | `Release` | Build configuration for generators |
-| `HELLOIOS_DEVELOPMENT_TEAM` | *(empty)* | Apple team ID for code signing |
+| Variable                    | Default      | Description                        |
+|-----------------------------|--------------|------------------------------------|
+| `Halide_ROOT`               | *(required)* | Halide install prefix              |
+| `CMAKE_BUILD_TYPE`          | `Release`    | Build configuration for generators |
+| `HELLOIOS_DEVELOPMENT_TEAM` | *(empty)*    | Apple team ID for code signing     |
 
 ## Launching in Simulator
 
