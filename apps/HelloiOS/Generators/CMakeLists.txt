@@ -15,27 +15,25 @@ add_halide_generator(
 set(_all_kernel_updates "")
 set(platforms iphoneos iphonesimulator)
 set(targets arm-64-ios arm-64-ios-simulator)
-foreach (_suffix _target IN ZIP_LISTS platforms targets)
+foreach (platform target IN ZIP_LISTS platforms targets)
     foreach (stage IN ITEMS init update render)
-        add_halide_library(reaction_diffusion_2_${stage}_${_suffix}
+        add_halide_library(reaction_diffusion_2_${stage}_${platform}
                            FROM reaction_diffusion_2_generator
                            GENERATOR reaction_diffusion_2_${stage}
                            FUNCTION_NAME reaction_diffusion_2_${stage}
-                           TARGETS ${_target}
+                           TARGETS ${target}
                            FEATURES user_context)
 
-        add_halide_library(reaction_diffusion_2_metal_${stage}_${_suffix}
+        add_halide_library(reaction_diffusion_2_metal_${stage}_${platform}
                            FROM reaction_diffusion_2_generator
                            GENERATOR reaction_diffusion_2_${stage}
                            FUNCTION_NAME reaction_diffusion_2_metal_${stage}
-                           TARGETS ${_target}
+                           TARGETS ${target}
                            FEATURES metal user_context)
 
         list(APPEND _all_kernel_updates
-             reaction_diffusion_2_${stage}_${_suffix}.update
-             reaction_diffusion_2_${stage}_${_suffix}.runtime.update
-             reaction_diffusion_2_metal_${stage}_${_suffix}.update
-             reaction_diffusion_2_metal_${stage}_${_suffix}.runtime.update)
+             reaction_diffusion_2_${stage}_${platform}
+             reaction_diffusion_2_metal_${stage}_${platform})
     endforeach ()
 endforeach ()
 
