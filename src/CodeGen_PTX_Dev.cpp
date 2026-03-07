@@ -257,11 +257,9 @@ void CodeGen_PTX_Dev::init_module() {
     }
 
     if (CodeGen_GPU_Dev::any_strict_float) {
-        debug(0) << "Setting strict fp math\n";
         set_strict_fp_math();
         in_strict_float = target.has_feature(Target::StrictFloat);
     } else {
-        debug(0) << "Setting fast fp math\n";
         set_fast_fp_math();
     }
 }
