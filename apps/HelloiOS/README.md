@@ -6,7 +6,7 @@ An interactive reaction-diffusion iOS demo powered by Halide.
 
 ```bash
 cd apps/HelloiOS
-Halide_ROOT=/path/to/halide/install ./build.sh
+Halide_ROOT=/path/to/halide/install ./setup.sh
 open HelloiOS.xcworkspace
 ```
 
@@ -18,16 +18,19 @@ The project is split into two parts:
 
 1. **Generators/** -- A CMake project that builds the Halide generator on the
    host and runs it to produce iOS-targeted static libraries and headers for
-   each reaction-diffusion kernel. The `Halide_TARGET` variable controls which
-   architecture the generated code targets.
+   each reaction-diffusion kernel. Kernels are generated for both `iphoneos`
+   and `iphonesimulator` platforms, so you can switch destinations in Xcode
+   without re-running setup.
 
 2. **HelloiOS/** -- A native Xcode project for the iOS app. It compiles the
-   Objective-C++ sources and links the generated Halide libraries.
+   Objective-C++ sources and links the generated Halide libraries. The app
+   renders a reaction-diffusion simulation using Metal, with a CPU alternative
+   available via double-tap.
 
-Both live in **HelloiOS.xcworkspace**. A one-time `build.sh` setup configures
-and builds the CMake side, writing a `GeneratorPaths.xcconfig` that the Xcode
-project reads for paths. A Run Script build phase in Xcode re-invokes
-`cmake --build` so generator changes are picked up automatically.
+Both live in **HelloiOS.xcworkspace**. A one-time `setup.sh` configures the
+CMake side and writes a `GeneratorPaths.xcconfig` that the Xcode project reads
+for paths. A Run Script build phase in Xcode invokes `rebuild-kernels.sh` so
+generator changes are picked up automatically.
 
 ## Prerequisites
 
@@ -42,11 +45,9 @@ cmake --install build --prefix install
 
 ## Environment Variables
 
-| Variable                    | Default      | Description                        |
-|-----------------------------|--------------|------------------------------------|
-| `Halide_ROOT`               | *(required)* | Halide install prefix              |
-| `CMAKE_BUILD_TYPE`          | `Release`    | Build configuration for generators |
-| `HELLOIOS_DEVELOPMENT_TEAM` | *(empty)*    | Apple team ID for code signing     |
+| Variable      | Default      | Description           |
+|---------------|--------------|-----------------------|
+| `Halide_ROOT` | *(required)* | Halide install prefix |
 
 ## Launching in Simulator
 
@@ -66,10 +67,11 @@ HelloiOS/
   HelloiOS.xcworkspace/     Top-level workspace
   Generators/
     CMakeLists.txt           Builds generator + produces iOS kernels
+    rebuild-kernels.sh       Called by Xcode Run Script build phase
     reaction_diffusion_2_generator.cpp
-    build/                   Created by build.sh
+    build/                   Created by setup.sh
   HelloiOS/
     HelloiOS.xcodeproj/      Native Xcode project for the iOS app
     *.h / *.mm               App source files
-  build.sh                   One-time setup script
+  setup.sh                   One-time setup script
 ```
