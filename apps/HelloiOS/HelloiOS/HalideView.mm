@@ -3,13 +3,24 @@
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
 #include "HalideRuntimeMetal.h"
-#include "reaction_diffusion_2_init.h"
-#include "reaction_diffusion_2_render.h"
-#include "reaction_diffusion_2_update.h"
+
+#define XSTR(s) STR(s)
+#define STR(s) #s
+
+#if TARGET_IPHONE_SIMULATOR
+#define HALIDE_HEADER(name) XSTR(name##_iphonesimulator.h)
+#else
+#define HALIDE_HEADER(name) XSTR(name##_iphoneos.h)
+#endif
+
+#include HALIDE_HEADER(reaction_diffusion_2_init)
+#include HALIDE_HEADER(reaction_diffusion_2_render)
+#include HALIDE_HEADER(reaction_diffusion_2_update)
+
 #if HAS_METAL_SDK
-#include "reaction_diffusion_2_metal_init.h"
-#include "reaction_diffusion_2_metal_render.h"
-#include "reaction_diffusion_2_metal_update.h"
+#include HALIDE_HEADER(reaction_diffusion_2_metal_init)
+#include HALIDE_HEADER(reaction_diffusion_2_metal_render)
+#include HALIDE_HEADER(reaction_diffusion_2_metal_update)
 #endif
 
 using Halide::Runtime::Buffer;
