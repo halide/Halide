@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
     if (Internal::get_llvm_version() >= 210 &&
         Internal::get_llvm_version() < 220 &&
         target.has_feature(Target::SVE2)) {
-        printf("[SKIP] LLVM 21 has known getFixedValue() assertions on SVE scalable types.\n");
+        printf("[SKIP] LLVM 21 has known getFixedValue() assertion failures on SVE scalable types.\n");
         return 0;
     }
 
