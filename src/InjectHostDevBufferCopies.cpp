@@ -214,10 +214,15 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         return call_extern_and_assert("halide_device_free", {buffer_var()});
     }
 
-    Stmt do_copies(Stmt s) {
+    Stmt do_copies(Stmt s, FindBufferUsage *precomputed = nullptr) {
         // Sniff what happens to the buffer inside the stmt
-        FindBufferUsage finder(buffer, DeviceAPI::Host);
-        s.accept(&finder);
+        FindBufferUsage local_finder(buffer, DeviceAPI::Host);
+        if (!precomputed) {
+            s.accept(&local_finder);
+            precomputed = &local_finder;
+        }
+        FindBufferUsage &finder = *precomputed;
+
         // Track the last leaf that uses this buffer, so that the
         // caller can inject a device free after it.
         if (!finder.devices_touched.empty() ||
@@ -367,7 +372,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
             state = State{};
             return s;
         } else {
-            return do_copies(op);
+            return do_copies(op, &finder);
         }
     }
 
