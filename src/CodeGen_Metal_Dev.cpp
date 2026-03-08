@@ -70,6 +70,7 @@ protected:
     public:
         CodeGen_Metal_C(std::ostream &s, const Target &t)
             : CodeGen_GPU_C(s, t) {
+            ZoneScoped;
             abs_returns_unsigned_type = false;
 
 #define alias(x, y)                         \
@@ -147,7 +148,7 @@ protected:
 
     std::ostringstream src_stream;
     std::string cur_kernel_name;
-    CodeGen_Metal_C metal_c;
+    Profiled<CodeGen_Metal_C> metal_c;
 };
 
 CodeGen_Metal_Dev::CodeGen_Metal_Dev(const Target &t)
@@ -643,6 +644,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const FloatImm *op) {
 void CodeGen_Metal_Dev::add_kernel(Stmt s,
                                    const string &name,
                                    const vector<DeviceArgument> &args) {
+    ZoneScoped;
     debug(2) << "CodeGen_Metal_Dev::compile " << name << "\n";
 
     // We need to scalarize/de-predicate any loads/stores, since Metal does not
@@ -676,7 +678,7 @@ struct BufferSize {
 void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
                                                     const string &name,
                                                     const vector<DeviceArgument> &args) {
-
+    ZoneScoped;
     debug(2) << "Adding Metal kernel " << name << "\n";
 
     // Figure out which arguments should be passed in constant.
@@ -826,6 +828,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
 }
 
 void CodeGen_Metal_Dev::init_module() {
+    ZoneScoped;
     debug(2) << "Metal device codegen init_module\n";
 
     // wipe the internal kernel source
@@ -866,6 +869,7 @@ void CodeGen_Metal_Dev::init_module() {
 }
 
 vector<char> CodeGen_Metal_Dev::compile_to_src() {
+    ZoneScoped;
     string str = src_stream.str();
     debug(1) << "Metal kernel:\n"
              << str << "\n";
@@ -922,6 +926,7 @@ std::string CodeGen_Metal_Dev::print_gpu_name(const std::string &name) {
 }  // namespace
 
 std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_Metal_Dev(const Target &target) {
+    ZoneScoped;
     return std::make_unique<CodeGen_Metal_Dev>(target);
 }
 

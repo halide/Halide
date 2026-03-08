@@ -2,6 +2,7 @@
 #include "Error.h"
 #include "LLVM_Headers.h"
 #include "Target.h"
+#include "CompilerProfiling.h"
 
 namespace Halide {
 
@@ -11,6 +12,7 @@ using std::vector;
 namespace {
 
 std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, const char *id) {
+    ZoneScoped;
 
     llvm::MemoryBufferRef bitcode_buffer = llvm::MemoryBufferRef(buf, id);
 
@@ -611,6 +613,7 @@ void convert_weak_to_linkonce(llvm::GlobalValue &gv) {
 // triple appropriately for the target.
 void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
                   bool allow_stripping_all_weak_functions = false) {
+    ZoneScoped;
     llvm::DataLayout data_layout = get_data_layout_for_target(t);
     llvm::Triple triple = Internal::get_triple_for_target(t);
 
@@ -843,6 +846,7 @@ namespace Internal {
 
 std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, const Target &t,
                                                          std::unique_ptr<llvm::Module> extra_module) {
+    ZoneScoped;
     bool bits_64 = (t.bits == 64);
     bool debug = t.has_feature(Target::Debug);
 
@@ -886,6 +890,7 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
 
 /** Create an llvm module containing the support code for a given target. */
 std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool for_shared_jit_runtime, bool just_gpu) {
+    ZoneScoped;
     enum InitialModuleType {
         ModuleAOT,
         ModuleAOTNoRuntime,
@@ -1378,6 +1383,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
 #ifdef WITH_NVPTX
 std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, llvm::LLVMContext *c) {
+    ZoneScoped;
     std::vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(get_initmod_ptx_dev_ll(c));
 
@@ -1435,6 +1441,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
 
 void add_bitcode_to_module(llvm::LLVMContext *context, llvm::Module &module,
                            const std::vector<uint8_t> &bitcode, const std::string &name) {
+    ZoneScoped;
     llvm::StringRef sb = llvm::StringRef((const char *)&bitcode[0], bitcode.size());
     std::unique_ptr<llvm::Module> add_in = parse_bitcode_file(sb, context, name.c_str());
 

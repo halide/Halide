@@ -30,6 +30,10 @@ constexpr uint8_t BIT_GENERIC = 1 << 0;
 constexpr uint8_t BIT_STMT = 1 << 1;
 constexpr uint8_t BIT_EXPR = 1 << 2;
 
+constexpr inline bool bits_for_IRNodeType(IRNodeType type) {
+    return IRNodeType_is_Stmt(type) ? BIT_STMT : BIT_EXPR;
+}
+
 struct Event {
     const char *src_tag;
     uint32_t timer;
@@ -120,12 +124,14 @@ struct ZoneScopedVisitor_ {
     const char *src_tag;
     bool active;
 
-    ZoneScopedVisitor_(IRNodeType node_type, const char *src_tag, uint8_t activation_bits = 0xff)
+    ZoneScopedVisitor_(IRNodeType node_type, const char *src_tag, uint8_t activation_bits)
         : node_type(node_type), src_tag(src_tag), active(ctx.active_bits & activation_bits) {
         if (active) {
             zone_begin(src_tag, Event::Visitor, (unsigned)node_type);
         }
     }
+
+    ZoneScopedVisitor_(IRNodeType node_type, const char *src_tag) : ZoneScopedVisitor_(node_type, src_tag, bits_for_IRNodeType(node_type)) {}
 
     ZoneScopedVisitor_(const Expr &e, const char *src_tag)
         : node_type(e.defined() ? e->node_type : IRNodeType::IntImm),
@@ -168,11 +174,11 @@ struct ZoneScoped_ {
 };
 
 #define ZoneScoped \
-    Profiling::ZoneScoped_ __zone_scoped(__FUNCTION_NAME__)
-#define ZoneScopedN(name) \
-    Profiling::ZoneScoped_ __zone_scoped(name)
-#define ZoneScopedVisitor(op_type, name) \
-    Profiling::ZoneScopedVisitor_ __zone_scoped(op_type, name)
+    Halide::Internal::Profiling::ZoneScoped_ __zone_scoped(__FUNCTION_NAME__)
+#define ZoneScopedN(...) \
+    Halide::Internal::Profiling::ZoneScoped_ __zone_scoped(__VA_ARGS__)
+#define ZoneScopedVisitor(...) \
+    Halide::Internal::Profiling::ZoneScopedVisitor_ __zone_scoped(__VA_ARGS__)
 
 #define VisitorNameTag typeid(*this).name()
 
@@ -213,11 +219,14 @@ using Profiled = Profiling::Profiled<Base>;
 
 #else
 
+inline void generic_zone_begin(const char *src_tag, unsigned data = 0) {}
+inline void generic_zone_end(const char *src_tag, unsigned data = 0) {}
+
 template<typename Base>
 using Profiled = Base;
 #define ZoneScoped
-#define ZoneScopedN(name)
-#define ZoneScopedVisitor(op_type, name)
+#define ZoneScopedN(...)
+#define ZoneScopedVisitor(...)
 #define VisitorNameTag
 
 #endif

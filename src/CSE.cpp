@@ -349,7 +349,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
         // Drop this variable as an acceptable replacement for this expr.
         replacer.erase(value);
         // Use containing lets in the value.
-        e = Let::make(var, replacer.mutate(value), e);
+        e = Let::make(var, replacer.profiled_mutate(value), e);
     }
 
     debug(4) << "With lets: " << e << "\n";

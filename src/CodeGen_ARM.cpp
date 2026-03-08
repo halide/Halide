@@ -2551,7 +2551,7 @@ bool CodeGen_ARM::supports_call_as_float16(const Call *op) const {
 }  // namespace
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_ARM(const Target &target) {
-    return std::make_unique<CodeGen_ARM>(target);
+    return std::make_unique<Profiled<CodeGen_ARM>>(target);
 }
 
 #else  // WITH_ARM || WITH_AARCH64

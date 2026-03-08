@@ -224,6 +224,7 @@ std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target,
 }
 
 void CodeGen_LLVM::initialize_llvm() {
+    ZoneScoped;
     static std::once_flag init_llvm_once;
     std::call_once(init_llvm_once, []() {
         // You can hack in command-line args to llvm with the
@@ -261,6 +262,7 @@ void CodeGen_LLVM::initialize_llvm() {
 }
 
 void CodeGen_LLVM::init_context() {
+    ZoneScoped;
     // Ensure our IRBuilder is using the current context.
     builder = std::make_unique<IRBuilder<>>(*context);
 
@@ -302,6 +304,7 @@ void CodeGen_LLVM::init_context() {
 }
 
 void CodeGen_LLVM::init_module() {
+    ZoneScoped;
     init_context();
 
     // Start with a module containing the initial module for this target.

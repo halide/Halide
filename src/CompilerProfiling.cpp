@@ -2,6 +2,8 @@
 
 #ifdef WITH_COMPILER_PROFILING
 
+#include "Util.h"
+
 #if !defined(_WIN32)
 #include <cxxabi.h>
 #else
@@ -38,6 +40,30 @@ static std::string demangle(const char *name) {
         return name;
     }
 #endif
+}
+
+static std::string cleanup_name(std::string name) {
+    debug(2) << "Cleaned  " << name << "   =>   ";
+    {
+        std::string_view profiled = "Halide::Internal::Profiling::Profiled<";
+        if (size_t idx = name.find(profiled); idx != std::string::npos) {
+            size_t cl = idx + 1;
+            int num_open = 1;
+            while (num_open != 0 && cl < name.size()) {
+                if (name[cl] == '<') {
+                    num_open++;
+                } else if (name[cl] == '>') {
+                    num_open--;
+                }
+                cl++;
+            }
+            name = name.substr(idx + profiled.size(), cl - idx - profiled.size() - 1);
+        }
+    }
+    name = replace_all(name, "Halide::Internal::", "");
+    name = replace_all(name, "(anonymous namespace)::", "");
+    debug(2) << name << "\n";
+    return name;
 }
 
 Context::Context() {
@@ -117,9 +143,14 @@ void write_halide_profiling_trace(const std::string &file) {
                     std::strncmp(src_tag, "struct Halide", 13) == 0
 #endif
                 ) {
-                    std::string dn = demangle(src_tag);
-                    auto result = demangled_names.emplace(src_tag, std::move(dn));
-                    src_tag = result.first->second.c_str();
+                    if (auto it = demangled_names.find(src_tag); it == demangled_names.end()) {
+                        std::string dn = demangle(src_tag);
+                        dn = cleanup_name(dn);
+                        auto result = demangled_names.emplace(src_tag, std::move(dn));
+                        src_tag = result.first->second.c_str();
+                    } else {
+                        src_tag = it->second.c_str();
+                    }
                 }
                 // Only add strings to the start event.
                 if (ev.tag == Event::Visitor) {

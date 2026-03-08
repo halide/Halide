@@ -218,9 +218,13 @@ protected:
     }
 
     Stmt do_copies(Stmt s) {
+        ZoneScoped;
         // Sniff what happens to the buffer inside the stmt
         Profiled<FindBufferUsage> finder(buffer, DeviceAPI::Host);
-        s.accept(&finder);
+        {
+            ZoneScopedN("FindBufferUsage");
+            s.accept(&finder);
+        }
 
         // Insert any appropriate copies/allocations before, and set
         // dirty flags after. Do not recurse into the stmt.
@@ -342,7 +346,7 @@ protected:
     // leaf.
     Stmt visit(const For *op) override {
         Profiled<FindBufferUsage> finder(buffer, DeviceAPI::Host);
-        op->accept(&finder);
+        finder.profiled_visit(op);
         if (finder.devices_touched.size() > 1) {
             // The state of the buffer going into the loop is the
             // union of the state before the loop starts and the state

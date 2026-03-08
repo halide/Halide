@@ -130,6 +130,7 @@ Type CodeGen_PTX_Dev::upgrade_type_for_storage(const Type &t) const {
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<DeviceArgument> &args) {
+    ZoneScoped;
     internal_assert(module != nullptr);
 
     debug(2) << "In CodeGen_PTX_Dev::add_kernel\n";
@@ -220,6 +221,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 }
 
 void CodeGen_PTX_Dev::init_module() {
+    ZoneScoped;
     // This class uses multiple inheritance. It's a GPU device code generator,
     // and also an llvm-based one. Both of these track strict_float presence,
     // but OffloadGPULoops only sets the GPU device code generator flag, so here
@@ -835,7 +837,7 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
 }  // namespace
 
 std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
-    return std::make_unique<CodeGen_PTX_Dev>(target);
+    return std::make_unique<Profiled<CodeGen_PTX_Dev>>(target);
 }
 
 #else  // WITH_PTX

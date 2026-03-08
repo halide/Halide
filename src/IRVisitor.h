@@ -22,6 +22,12 @@ public:
     IRVisitor() = default;
     virtual ~IRVisitor() = default;
 
+    template<typename T>
+    inline void profiled_visit(const T *op) {
+        ZoneScopedVisitor(T::_node_type, VisitorNameTag);
+        visit(op);
+    }
+
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement accept())
     template<typename T>
@@ -34,6 +40,7 @@ protected:
     virtual void visit(const T *op);
     HALIDE_FOR_EACH_IR_NODE(HALIDE_DECL_VISIT)
 #undef HALIDE_DECL_VISIT
+
 };
 
 /** A lambda-based IR visitor that accepts multiple lambdas for different
@@ -141,7 +148,7 @@ private:
         if (node == nullptr) {
             return ExprRet{};
         }
-        ZoneScopedVisitor(node->node_type, name);
+        ZoneScopedVisitor(node->node_type, name, Profiling::BIT_EXPR);
         switch (node->node_type) {
 #define HALIDE_SWITCH_EXPR(NT) \
     case IRNodeType::NT:       \
@@ -160,7 +167,7 @@ private:
         if (node == nullptr) {
             return StmtRet{};
         }
-        ZoneScopedVisitor(node->node_type, name);
+        ZoneScopedVisitor(node->node_type, name, Profiling::BIT_STMT);
         switch (node->node_type) {
 #define HALIDE_SWITCH_STMT(NT) \
     case IRNodeType::NT:       \

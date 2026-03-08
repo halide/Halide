@@ -45,7 +45,7 @@ public:
         }
     }
 
-private:
+protected:
     bool found_shared = false;
 
     using IRVisitor::visit;
@@ -88,6 +88,7 @@ private:
 };
 
 class InjectGpuOffload : public IRMutator {
+protected:
     /** Child code generator for device kernels. */
     map<DeviceAPI, unique_ptr<CodeGen_GPU_Dev>> cgdev;
 
@@ -121,7 +122,6 @@ class InjectGpuOffload : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const For *loop) override {
-        ZoneScopedVisitor(IRNodeType::For, "InjectGpuOffload");
         if (!is_gpu(loop->for_type)) {
             return IRMutator::visit(loop);
         }
@@ -132,8 +132,8 @@ class InjectGpuOffload : public IRMutator {
         internal_assert(loop->device_api != DeviceAPI::Default_GPU)
             << "A concrete device API should have been selected before codegen.";
 
-        ExtractBounds bounds;
-        loop->accept(&bounds);
+        Profiled<ExtractBounds> bounds;
+        bounds.profiled_visit(loop);
         debug(2) << "Kernel bounds: ("
                  << bounds.num_threads[0] << ", "
                  << bounds.num_threads[1] << ", "
@@ -324,7 +324,7 @@ public:
 }  // namespace
 
 Stmt inject_gpu_offload(const Stmt &s, const Target &host_target, bool any_strict_float) {
-    return InjectGpuOffload(host_target, any_strict_float).inject(s);
+    return Profiled<InjectGpuOffload>(host_target, any_strict_float).inject(s);
 }
 
 }  // namespace Internal

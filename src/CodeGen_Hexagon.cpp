@@ -2295,7 +2295,7 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
 }  // namespace
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
-    return std::make_unique<CodeGen_Hexagon>(target);
+    return std::make_unique<Profiled<CodeGen_Hexagon>>(target);
 }
 
 #else  // WITH_HEXAGON
