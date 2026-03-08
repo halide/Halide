@@ -125,6 +125,16 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // LLVM 21 calls getFixedValue() on scalable TypeSize objects in the
+    // AArch64 backend, triggering an assertion. Fixed in LLVM 22 by:
+    // https://github.com/llvm/llvm-project/commit/d1500d12be60 (PR #169764)
+    if (Internal::get_llvm_version() >= 210 &&
+        Internal::get_llvm_version() < 220 &&
+        target.has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM 21 has known getFixedValue() assertions on SVE scalable types.\n");
+        return 0;
+    }
+
     int seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
     rng.seed(seed);
     std::cout << "const_division test seed: " << seed << std::endl;

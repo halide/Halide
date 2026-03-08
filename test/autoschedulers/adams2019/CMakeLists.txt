@@ -10,11 +10,11 @@ function(add_adams2019_test NAME)
 
     if (NOT ARGS_COMMAND)
         set(ARGS_COMMAND ${NAME})
-    endif()
+    endif ()
 
     if (NOT ARGS_LABELS)
         set(ARGS_LABELS "")
-    endif()
+    endif ()
     list(APPEND ARGS_LABELS adams2019)
     list(APPEND ARGS_LABELS autoschedulers_cpu)
 
@@ -24,6 +24,9 @@ function(add_adams2019_test NAME)
                          PROPERTIES
                          LABELS "${ARGS_LABELS}"
                          ENVIRONMENT "${ENVIRONMENT}")
+    if ("autoschedulers_cpu" IN_LIST ARGS_LABELS)
+        set_tests_properties(${NAME} PROPERTIES RUN_SERIAL TRUE)
+    endif ()
 endfunction()
 
 
@@ -80,4 +83,3 @@ add_adams2019_test(adams2019_test_apps_autoscheduler
                    COMMAND adams2019_test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019> $<TARGET_FILE_DIR:Halide_Adams2019>/baseline.weights
                    LABELS multithreaded
                    ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>:$ENV{LD_LIBRARY_PATH}")
-

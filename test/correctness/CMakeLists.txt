@@ -321,6 +321,8 @@ tests(GROUPS correctness
       strict_float_bounds.cpp
       strict_fma.cpp
       strided_load.cpp
+      sve_codegen_predicated.cpp
+      sve_codegen_reinterpret.cpp
       target.cpp
       target_query.cpp
       tiled_matmul.cpp

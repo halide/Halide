@@ -23,6 +23,16 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
 }
 
 int main(int argc, char **argv) {
+    // LLVM 21 calls getFixedValue() on scalable TypeSize objects in the
+    // AArch64 backend, triggering an assertion. Fixed in LLVM 22 by:
+    // https://github.com/llvm/llvm-project/commit/d1500d12be60 (PR #169764)
+    if (Internal::get_llvm_version() >= 210 &&
+        Internal::get_llvm_version() < 220 &&
+        get_jit_target_from_environment().has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM 21 has known getFixedValue() assertions on SVE scalable types.\n");
+        return 0;
+    }
+
     // Force the bounds of an intermediate pipeline stage to be even to remove a select
     {
         Func f, g, h;

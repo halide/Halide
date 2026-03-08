@@ -29,9 +29,84 @@ namespace Internal {
 
 using std::string;
 
+// On 32-bit targets, LLVM JIT code may reference libgcc helper functions
+// that dlsym can't always resolve (e.g. under QEMU, or when the host
+// compiler inlined them). We provide wrappers and register them in a
+// builtins map that getSymbolAddress consults as a fallback.
+
 #if defined(__GNUC__) && defined(__i386__)
 extern "C" unsigned long __udivdi3(unsigned long a, unsigned long b);
+
+static const std::map<std::string, uint64_t> i386_builtins = {
+    {"__udivdi3", (uintptr_t)&__udivdi3},
+};
 #endif
+
+// On arm-32, LLVM generates calls to __sync_* libgcc functions for atomic
+// operations. We provide wrappers using GCC's __sync_* builtins, guarded
+// by the __GCC_HAVE_SYNC_COMPARE_AND_SWAP_N predefined macros.
+#if defined(__arm__)
+
+static void halide__sync_synchronize() {
+    __sync_synchronize();
+}
+
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_1
+static uint8_t halide__sync_lock_test_and_set_1(volatile uint8_t *ptr, uint8_t val) {
+    return __sync_lock_test_and_set(ptr, val);
+}
+#endif
+
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4
+static uint32_t halide__sync_fetch_and_add_4(volatile uint32_t *ptr, uint32_t val) {
+    return __sync_fetch_and_add(ptr, val);
+}
+static uint32_t halide__sync_fetch_and_sub_4(volatile uint32_t *ptr, uint32_t val) {
+    return __sync_fetch_and_sub(ptr, val);
+}
+static uint32_t halide__sync_fetch_and_or_4(volatile uint32_t *ptr, uint32_t val) {
+    return __sync_fetch_and_or(ptr, val);
+}
+static uint32_t halide__sync_fetch_and_and_4(volatile uint32_t *ptr, uint32_t val) {
+    return __sync_fetch_and_and(ptr, val);
+}
+static uint32_t halide__sync_val_compare_and_swap_4(volatile uint32_t *ptr, uint32_t oldval, uint32_t newval) {
+    return __sync_val_compare_and_swap(ptr, oldval, newval);
+}
+#endif
+
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8
+static uint64_t halide__sync_fetch_and_add_8(volatile uint64_t *ptr, uint64_t val) {
+    return __sync_fetch_and_add(ptr, val);
+}
+static uint64_t halide__sync_fetch_and_sub_8(volatile uint64_t *ptr, uint64_t val) {
+    return __sync_fetch_and_sub(ptr, val);
+}
+static uint64_t halide__sync_val_compare_and_swap_8(volatile uint64_t *ptr, uint64_t oldval, uint64_t newval) {
+    return __sync_val_compare_and_swap(ptr, oldval, newval);
+}
+#endif
+
+static const std::map<std::string, uint64_t> arm32_sync_builtins = {
+    {"__sync_synchronize", (uintptr_t)&halide__sync_synchronize},
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_1
+    {"__sync_lock_test_and_set_1", (uintptr_t)&halide__sync_lock_test_and_set_1},
+#endif
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4
+    {"__sync_fetch_and_add_4", (uintptr_t)&halide__sync_fetch_and_add_4},
+    {"__sync_fetch_and_sub_4", (uintptr_t)&halide__sync_fetch_and_sub_4},
+    {"__sync_fetch_and_or_4", (uintptr_t)&halide__sync_fetch_and_or_4},
+    {"__sync_fetch_and_and_4", (uintptr_t)&halide__sync_fetch_and_and_4},
+    {"__sync_val_compare_and_swap_4", (uintptr_t)&halide__sync_val_compare_and_swap_4},
+#endif
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8
+    {"__sync_fetch_and_add_8", (uintptr_t)&halide__sync_fetch_and_add_8},
+    {"__sync_fetch_and_sub_8", (uintptr_t)&halide__sync_fetch_and_sub_8},
+    {"__sync_val_compare_and_swap_8", (uintptr_t)&halide__sync_val_compare_and_swap_8},
+#endif
+};
+
+#endif  // defined(__arm__)
 
 #ifdef _WIN32
 void *get_symbol_address(const char *s) {
@@ -247,25 +322,6 @@ public:
             }
         }
         uint64_t result = SectionMemoryManager::getSymbolAddress(name);
-#if defined(__GNUC__) && defined(__i386__)
-        // This is a workaround for an odd corner case (cross-compiling + testing
-        // Python bindings x86-32 on an x86-64 system): __udivdi3 is a helper function
-        // that GCC uses to do u64/u64 division on 32-bit systems; it's usually included
-        // by the linker on these systems as needed. When we JIT, LLVM will include references
-        // to this call; MCJIT fixes up these references by doing (roughly) dlopen(NULL)
-        // to look up the symbol. For normal JIT tests, this works fine, as dlopen(NULL)
-        // finds the test executable, which has the right lookups to locate it inside libHalide.so.
-        // If, however, we are running a JIT-via-Python test, dlopen(NULL) returns the
-        // CPython executable... which apparently *doesn't* include this as an exported
-        // function, so the lookup fails and crashiness ensues. So our workaround here is
-        // a bit icky, but expedient: check for this name if we can't find it elsewhere,
-        // and if so, return the one we know should be present. (Obviously, if other runtime
-        // helper functions of this sort crop up in the future, this should be expanded
-        // into a "builtins map".)
-        if (result == 0 && name == "__udivdi3") {
-            result = (uint64_t)&__udivdi3;
-        }
-#endif
         internal_assert(result != 0)
             << "HalideJITMemoryManager: unable to find address for " << name << "\n";
         return result;
@@ -420,6 +476,25 @@ void compile_module_impl(
             }
         }
     }
+
+    // On 32-bit targets, add libgcc builtins that dlsym can't find.
+#if defined(__GNUC__) && defined(__i386__)
+    for (const auto &[sym_name, sym_addr] : i386_builtins) {
+        auto name = symbolStringPool->intern(sym_name);
+        if (!newSymbols.count(name)) {
+            newSymbols.insert({name, {llvm::orc::ExecutorAddr(sym_addr), JITSymbolFlags::Exported}});
+        }
+    }
+#endif
+#if defined(__arm__)
+    for (const auto &[sym_name, sym_addr] : arm32_sync_builtins) {
+        auto name = symbolStringPool->intern(sym_name);
+        if (!newSymbols.count(name)) {
+            newSymbols.insert({name, {llvm::orc::ExecutorAddr(sym_addr), JITSymbolFlags::Exported}});
+        }
+    }
+#endif
+
     err = JIT->getMainJITDylib().define(orc::absoluteSymbols(std::move(newSymbols)));
     internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
