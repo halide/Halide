@@ -219,8 +219,10 @@ using Profiled = Profiling::Profiled<Base>;
 
 #else
 
+namespace Profiling {
 inline void generic_zone_begin(const char *src_tag, unsigned data = 0) {}
 inline void generic_zone_end(const char *src_tag, unsigned data = 0) {}
+}
 
 template<typename Base>
 using Profiled = Base;
