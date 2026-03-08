@@ -1,6 +1,7 @@
 #include <map>
 
 #include "CSE.h"
+#include "CompilerProfiling.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -186,6 +187,7 @@ public:
 };
 
 class RemoveLets : public IRGraphMutator {
+protected:
     using IRGraphMutator::visit;
 
     Scope<Expr> scope;
@@ -218,6 +220,7 @@ class RemoveLets : public IRGraphMutator {
 };
 
 class CSEEveryExprInStmt : public IRMutator {
+protected:
     bool lift_all;
     using IRMutator::visit;
 
@@ -260,6 +263,7 @@ public:
 }  // namespace
 
 Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
+    ZoneScoped;
     Expr e = e_in;
 
     // Early-out for trivial cases.
@@ -269,7 +273,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
 
     debug(4) << "\n\n\nInput to CSE " << e << "\n";
 
-    e = RemoveLets().mutate(e);
+    e = Profiled<RemoveLets>().profiled_mutate(e);
 
     debug(4) << "After removing lets: " << e << "\n";
 
@@ -277,6 +281,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     // the same name as the temporaries we intend to introduce. Find any such
     // Vars so that we know not to use those names.
     class UniqueNameProvider : public IRGraphVisitor {
+    protected:
         using IRGraphVisitor::visit;
 
         const char prefix = 't';  // Annoyingly, this can't be static because this is a local class.
@@ -303,14 +308,18 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
             } while (vars.count(name));
             return name;
         }
-    } namer;
-    e.accept(&namer);
+    };
+    Profiled<UniqueNameProvider> namer;
+    {
+        ZoneScopedN("UniqueNameProvider");
+        e.accept(&namer);
+    }
 
-    GVN gvn;
-    e = gvn.mutate(e);
+    Profiled<GVN> gvn;
+    e = gvn.profiled_mutate(e);
 
-    ComputeUseCounts count_uses(gvn, lift_all);
-    count_uses.include(e);
+    Profiled<ComputeUseCounts> count_uses(gvn, lift_all);
+    count_uses.profiled_include(e);
 
     debug(4) << "Canonical form without lets " << e << "\n";
 
@@ -330,8 +339,8 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     }
 
     // Rebuild the expr to include references to the variables:
-    Replacer replacer(replacements);
-    e = replacer.mutate(e);
+    Profiled<Replacer> replacer(replacements);
+    e = replacer.profiled_mutate(e);
 
     debug(4) << "With variables " << e << "\n";
 
@@ -349,7 +358,8 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
 }
 
 Stmt common_subexpression_elimination(const Stmt &s, bool lift_all) {
-    return CSEEveryExprInStmt(lift_all).mutate(s);
+    ZoneScoped;
+    return Profiled<CSEEveryExprInStmt>(lift_all).profiled_mutate(s);
 }
 
 // Testing code.

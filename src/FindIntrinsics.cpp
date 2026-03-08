@@ -1121,6 +1121,7 @@ protected:
 // because each let in a chain has a wider value than the
 // ones it refers to.
 class SubstituteInWideningLets : public IRMutator {
+protected:
     using IRMutator::visit;
 
     bool widens(const Expr &e) {
@@ -1266,16 +1267,16 @@ class SubstituteInWideningLets : public IRMutator {
 }  // namespace
 
 Stmt find_intrinsics(const Stmt &s) {
-    Stmt stmt = SubstituteInWideningLets().mutate(s);
-    stmt = FindIntrinsics().mutate(stmt);
+    Stmt stmt = Profiled<SubstituteInWideningLets>().mutate(s);
+    stmt = Profiled<FindIntrinsics>().mutate(stmt);
     // In case we want to hoist widening ops back out
     stmt = common_subexpression_elimination(stmt);
     return stmt;
 }
 
 Expr find_intrinsics(const Expr &e) {
-    Expr expr = SubstituteInWideningLets().mutate(e);
-    expr = FindIntrinsics().mutate(expr);
+    Expr expr = Profiled<SubstituteInWideningLets>().mutate(e);
+    expr = Profiled<FindIntrinsics>().mutate(expr);
     expr = common_subexpression_elimination(expr);
     return expr;
 }

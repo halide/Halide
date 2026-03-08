@@ -3,6 +3,7 @@
 #include "IRVisitor.h"
 #include "Substitute.h"
 #include "Target.h"
+#include "CompilerProfiling.h"
 
 namespace Halide {
 namespace Internal {
@@ -35,7 +36,7 @@ public:
 Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Target &t) {
 
     // First, find all the parameters
-    FindParameters finder;
+    Profiled<FindParameters> finder;
     s.accept(&finder);
 
     map<string, Expr> replace_with_constrained;

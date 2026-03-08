@@ -116,6 +116,7 @@ protected:
 };
 
 class GenerateProducerBody : public NoOpCollapsingMutator {
+protected:
     const string &func;
     vector<Expr> sema;
     std::set<string> producers_dropped;
@@ -285,6 +286,7 @@ public:
 };
 
 class GenerateConsumerBody : public NoOpCollapsingMutator {
+protected:
     const string &func;
     vector<Expr> sema;
 
@@ -342,6 +344,7 @@ public:
 };
 
 class CloneAcquire : public IRMutator {
+protected:
     using IRMutator::visit;
 
     const string &old_name;
@@ -390,6 +393,7 @@ public:
 };
 
 class ForkAsyncProducers : public IRMutator {
+protected:
     using IRMutator::visit;
 
     const map<string, Function> &env;
@@ -493,6 +497,7 @@ public:
 // simple failure case, error_async_require_fail. One has not been
 // written for the complex nested case yet.)
 class InitializeSemaphores : public IRMutator {
+protected:
     using IRMutator::visit;
 
     const Type sema_type = type_of<halide_semaphore_t *>();
@@ -558,6 +563,7 @@ class InitializeSemaphores : public IRMutator {
 // A class to support stmt_uses_vars queries that repeatedly hit the same
 // sub-stmts. Used to support TightenProducerConsumerNodes below.
 class CachingStmtUsesVars : public IRMutator {
+protected:
     const Scope<> &query;
     bool found_use = false;
     std::map<Stmt, bool> cache;
@@ -613,6 +619,7 @@ public:
 
 // Tighten the scope of consume nodes as much as possible to avoid needless synchronization.
 class TightenProducerConsumerNodes : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt make_producer_consumer(const string &name, bool is_producer, Stmt body, const Scope<> &scope, CachingStmtUsesVars &uses_vars) {
@@ -703,6 +710,7 @@ public:
 
 // Update indices to add ring buffer.
 class UpdateIndices : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const Provide *op) override {
@@ -734,6 +742,7 @@ public:
 
 // Inject ring buffering.
 class InjectRingBuffering : public IRMutator {
+protected:
     using IRMutator::visit;
 
     struct Loop {
@@ -816,6 +825,7 @@ public:
 // Broaden the scope of acquire nodes to pack trailing work into the
 // same task and to potentially reduce the nesting depth of tasks.
 class ExpandAcquireNodes : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const Block *op) override {
@@ -918,6 +928,7 @@ class ExpandAcquireNodes : public IRMutator {
 };
 
 class TightenForkNodes : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt make_fork(const Stmt &first, const Stmt &rest) {
@@ -1005,12 +1016,13 @@ class TightenForkNodes : public IRMutator {
 }  // namespace
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
-    s = TightenProducerConsumerNodes(env).mutate(s);
-    s = InjectRingBuffering(env).mutate(s);
-    s = ForkAsyncProducers(env).mutate(s);
-    s = ExpandAcquireNodes().mutate(s);
-    s = TightenForkNodes().mutate(s);
-    s = InitializeSemaphores().mutate(s);
+    ZoneScoped;
+    s = Profiled<TightenProducerConsumerNodes>(env).profiled_mutate(s);
+    s = Profiled<InjectRingBuffering>(env).profiled_mutate(s);
+    s = Profiled<ForkAsyncProducers>(env).profiled_mutate(s);
+    s = Profiled<ExpandAcquireNodes>().profiled_mutate(s);
+    s = Profiled<TightenForkNodes>().profiled_mutate(s);
+    s = Profiled<InitializeSemaphores>().profiled_mutate(s);
     return s;
 }
 

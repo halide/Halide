@@ -1,4 +1,5 @@
 #include <map>
+#include <unordered_map>
 #include <string>
 #include <utility>
 
@@ -17,6 +18,7 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
+using std::unordered_map;
 using std::set;
 using std::string;
 using std::vector;
@@ -42,12 +44,15 @@ namespace {
 // Collect the bounds of all the externally referenced buffers in a stmt.
 class CollectExternalBufferBounds : public IRVisitor {
 public:
-    map<string, Box> buffers;
+    unordered_map<string, Box> buffers;
 
     using IRVisitor::visit;
 
     void add_buffer_bounds(const string &name, const Buffer<> &image, const Parameter &param, int dims) {
-        Box b;
+        if (buffers.find(name) != buffers.end()) {
+            return;
+        }
+        Box b(dims);
         for (int i = 0; i < dims; ++i) {
             string dim_name = std::to_string(i);
             Expr buf_min_i = Variable::make(Int(32), concat_strings(name, ".min.", i),
@@ -55,7 +60,7 @@ public:
             Expr buf_extent_i = Variable::make(Int(32), concat_strings(name, ".extent.", i),
                                                image, param, ReductionDomain());
             Expr buf_max_i = buf_min_i + buf_extent_i - 1;
-            b.push_back(Interval(buf_min_i, buf_max_i));
+            b[i] = Interval(buf_min_i, buf_max_i);
         }
         buffers.emplace(name, b);
     }
@@ -74,13 +79,13 @@ public:
 
 class InjectPrefetch : public IRMutator {
 public:
-    InjectPrefetch(const map<string, Function> &e, const map<string, Box> &buffers)
+    InjectPrefetch(const map<string, Function> &e, const unordered_map<string, Box> &buffers)
         : env(e), external_buffers(buffers) {
     }
 
-private:
+protected:
     const map<string, Function> &env;
-    const map<string, Box> &external_buffers;
+    const unordered_map<string, Box> &external_buffers;
     Scope<Box> buffer_bounds;
 
     using IRMutator::visit;
@@ -187,7 +192,7 @@ public:
         : env(e), prefix(prefix), prefetch_list(prefetches) {
     }
 
-private:
+protected:
     const map<string, Function> &env;
     const string &prefix;
     const vector<PrefetchDirective> &prefetch_list;
@@ -260,6 +265,7 @@ private:
 // Reduce the prefetch dimension if bigger than 'max_dim'. It keeps the 'max_dim'
 // innermost dimensions and replaces the rests with for-loops.
 class ReducePrefetchDimension : public IRMutator {
+protected:
     using IRMutator::visit;
 
     const size_t max_dim;
@@ -321,6 +327,7 @@ public:
 // prefetch. This will split the prefetch call into multiple calls by adding
 // an outer for-loop around the prefetch.
 class SplitPrefetch : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Expr max_byte_size;
@@ -400,6 +407,7 @@ void traverse_block(const Stmt &s, Fn &&f) {
 }
 
 class HoistPrefetches : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const Block *op) override {
@@ -432,17 +440,20 @@ class HoistPrefetches : public IRMutator {
 Stmt inject_placeholder_prefetch(const Stmt &s, const map<string, Function> &env,
                                  const string &prefix,
                                  const vector<PrefetchDirective> &prefetches) {
-    Stmt stmt = InjectPlaceholderPrefetch(env, prefix, prefetches).mutate(s);
+    ZoneScoped;
+    Stmt stmt = Profiled<InjectPlaceholderPrefetch>(env, prefix, prefetches).mutate(s);
     return stmt;
 }
 
 Stmt inject_prefetch(const Stmt &s, const map<string, Function> &env) {
-    CollectExternalBufferBounds finder;
+    ZoneScoped;
+    Profiled<CollectExternalBufferBounds> finder;
     s.accept(&finder);
-    return InjectPrefetch(env, finder.buffers).mutate(s);
+    return Profiled<InjectPrefetch>(env, finder.buffers).mutate(s);
 }
 
 Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
+    ZoneScoped;
     size_t max_dim = 0;
     Expr max_byte_size;
 
@@ -461,17 +472,18 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
     }
     internal_assert(max_dim > 0);
 
-    stmt = ReducePrefetchDimension(max_dim).mutate(stmt);
+    stmt = Profiled<ReducePrefetchDimension>(max_dim).mutate(stmt);
     if (max_byte_size.defined()) {
         // If the max byte size is specified, we may need to tile
         // the prefetch
-        stmt = SplitPrefetch(max_byte_size).mutate(stmt);
+        stmt = Profiled<SplitPrefetch>(max_byte_size).mutate(stmt);
     }
     return stmt;
 }
 
 Stmt hoist_prefetches(const Stmt &s) {
-    return HoistPrefetches().mutate(s);
+    ZoneScoped;
+    return Profiled<HoistPrefetches>().mutate(s);
 }
 
 }  // namespace Internal

@@ -17,6 +17,7 @@
 #include "RealizationOrder.h"
 #include "Serialization.h"
 #include "WasmExecutor.h"
+#include "CompilerProfiling.h"
 
 using namespace Halide::Internal;
 
@@ -495,6 +496,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const string &fn_name,
                                    const Target &target,
                                    const LinkageType linkage_type) {
+    ZoneScoped;
     user_assert(defined()) << "Can't compile undefined Pipeline.\n";
 
     for (const Function &f : contents->outputs) {
@@ -580,6 +582,7 @@ Target Pipeline::get_compiled_jit_target() const {
 }
 
 void Pipeline::compile_jit(const Target &target_arg) {
+    ZoneScoped;
     user_assert(defined()) << "Pipeline is undefined\n";
 
     Target target = target_arg;
@@ -645,6 +648,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
 }
 
 Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, const Target &target_arg) {
+    ZoneScoped;
     user_assert(defined()) << "Pipeline is undefined\n";
 
     Target target = target_arg.with_feature(Target::JIT).with_feature(Target::UserContext);
@@ -676,6 +680,7 @@ Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, con
                                                 const std::vector<Internal::Function> &outputs,
                                                 const std::map<std::string, JITExtern> &jit_externs_in,
                                                 const Target &target_arg) {
+    ZoneScoped;
     user_assert(!target_arg.has_unknowns()) << "Cannot jit-compile for target '" << target_arg << "'\n";
 
     Target jit_target = target_arg.with_feature(Target::JIT).with_feature(Target::UserContext);

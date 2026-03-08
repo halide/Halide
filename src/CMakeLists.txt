@@ -86,6 +86,7 @@ target_sources(
     CodeGen_Vulkan_Dev.h
     CodeGen_WebGPU_Dev.h
     CompilerLogger.h
+    CompilerProfiling.h
     ConciseCasts.h
     CPlusPlusMangle.h
     ConstantBounds.h
@@ -166,6 +167,7 @@ target_sources(
     Param.h
     Parameter.h
     PartitionLoops.h
+    PerformanceCounter.h
     Pipeline.h
     Prefetch.h
     PrefetchDirective.h
@@ -269,6 +271,7 @@ target_sources(
     CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp
+    CompilerProfiling.cpp
     CPlusPlusMangle.cpp
     ConstantBounds.cpp
     ConstantInterval.cpp
@@ -514,6 +517,11 @@ target_compile_definitions(Halide PRIVATE WITH_OPENCL)
 target_compile_definitions(Halide PRIVATE WITH_SPIRV)
 target_compile_definitions(Halide PRIVATE WITH_VULKAN)
 target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
+
+if (WITH_COMPILER_PROFILING)
+    target_compile_definitions(Halide PRIVATE WITH_COMPILER_PROFILING)
+endif()
+
 
 ##
 # Flatbuffers and Serialization dependencies.

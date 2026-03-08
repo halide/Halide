@@ -4,6 +4,20 @@
 namespace Halide {
 namespace Internal {
 
+const char *IRNodeType_string(IRNodeType type) {
+    switch (type) {
+#define PROFILE_NODE_CASE(T)                                    \
+    case Halide::Internal::IRNodeType::T: \
+        return #T;
+
+        HALIDE_FOR_EACH_IR_NODE(PROFILE_NODE_CASE)
+#undef PROFILE_NODE_CASE
+
+    default:
+        internal_error << "Unknown Node Tag";
+    }
+}
+
 const IntImm *IntImm::make(Type t, int64_t value) {
     internal_assert(t.is_int() && t.is_scalar())
         << "IntImm must be a scalar Int\n";

@@ -557,6 +557,7 @@ SOURCE_FILES = \
   Pipeline.cpp \
   Prefetch.cpp \
   PrintLoopNest.cpp \
+  ProfiledIRVisitor.cpp \
   Profiling.cpp \
   PurifyIndexMath.cpp \
   PythonExtensionGen.cpp \

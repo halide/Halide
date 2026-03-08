@@ -9,6 +9,7 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_Vulkan_Dev.h"
 #include "CodeGen_WebGPU_Dev.h"
+#include "CompilerProfiling.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -120,6 +121,7 @@ class InjectGpuOffload : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const For *loop) override {
+        ZoneScopedVisitor(IRNodeType::For, "InjectGpuOffload");
         if (!is_gpu(loop->for_type)) {
             return IRMutator::visit(loop);
         }
@@ -247,6 +249,7 @@ class InjectGpuOffload : public IRMutator {
 public:
     InjectGpuOffload(const Target &target, bool any_strict_float)
         : target(target) {
+        ZoneScoped;
         Target device_target = target;
         // For the GPU target we just want to pass the flags, to avoid the
         // generated kernel code unintentionally having any dependence on the
@@ -280,12 +283,13 @@ public:
     }
 
     Stmt inject(const Stmt &s) {
+        ZoneScoped;
         // Create a new module for all of the kernels we find in this function.
         for (auto &i : cgdev) {
             i.second->init_module();
         }
 
-        Stmt result = mutate(s);
+        Stmt result = profiled_mutate(s);
 
         for (auto &i : cgdev) {
             string api_unique_name = i.second->api_unique_name();

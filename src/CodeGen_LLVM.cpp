@@ -28,6 +28,7 @@
 #include "Simplify.h"
 #include "StrictifyFloat.h"
 #include "Util.h"
+#include "CompilerProfiling.h"
 
 // MSVC won't set __cplusplus correctly unless certain compiler flags are set
 // (and CMake doesn't set those flags for you even if you specify C++17),
@@ -500,6 +501,7 @@ CodeGen_LLVM::ScopedFastMath::~ScopedFastMath() {
 }
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
+    ZoneScoped;
     any_strict_float = input.any_strict_float();
 
     init_codegen(input.name());
@@ -629,6 +631,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 }
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::finish_codegen() {
+    ZoneScoped;
     llvm::for_each(*module, set_function_attributes_from_halide_target_options);
 
     // Verify the module is ok
@@ -708,6 +711,7 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument> &args) {
 
 void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_name,
                                 const std::string &extern_name) {
+    ZoneScoped;
     // Generate the function declaration and argument unpacking code.
     begin_func(f.linkage, simple_name, extern_name, f.args);
 
@@ -1137,6 +1141,7 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(const Type &t) const {
 }
 
 void CodeGen_LLVM::optimize_module() {
+    ZoneScoped;
     debug(3) << "Optimizing module\n";
 
     auto time_start = std::chrono::high_resolution_clock::now();

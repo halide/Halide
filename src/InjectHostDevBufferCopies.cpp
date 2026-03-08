@@ -1,6 +1,7 @@
 #include "InjectHostDevBufferCopies.h"
 
 #include "CodeGen_GPU_Dev.h"
+#include "CompilerProfiling.h"
 #include "Debug.h"
 #include "ExternFuncArgument.h"
 #include "IRMutator.h"
@@ -29,6 +30,7 @@ Stmt call_extern_and_assert(const string &name, const vector<Expr> &args) {
 namespace {
 
 class FindBufferUsage : public IRVisitor {
+protected:
     using IRVisitor::visit;
 
     void visit(const Load *op) override {
@@ -142,6 +144,7 @@ public:
 // the buffer as we go, sniffing usage within each leaf using
 // FindBufferUsage, and injecting device buffer logic as needed.
 class InjectBufferCopiesForSingleBuffer : public IRMutator {
+protected:
     using IRMutator::visit;
 
     // The buffer being managed
@@ -216,7 +219,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
 
     Stmt do_copies(Stmt s) {
         // Sniff what happens to the buffer inside the stmt
-        FindBufferUsage finder(buffer, DeviceAPI::Host);
+        Profiled<FindBufferUsage> finder(buffer, DeviceAPI::Host);
         s.accept(&finder);
 
         // Insert any appropriate copies/allocations before, and set
@@ -338,7 +341,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     // stmts, and possibly do copies and update state around each
     // leaf.
     Stmt visit(const For *op) override {
-        FindBufferUsage finder(buffer, DeviceAPI::Host);
+        Profiled<FindBufferUsage> finder(buffer, DeviceAPI::Host);
         op->accept(&finder);
         if (finder.devices_touched.size() > 1) {
             // The state of the buffer going into the loop is the
@@ -610,7 +613,7 @@ class InjectBufferCopies : public IRMutator {
 
         Stmt body = mutate(op->body);
 
-        InjectBufferCopiesForSingleBuffer injector(op->name, false, op->memory_type);
+        Profiled<InjectBufferCopiesForSingleBuffer> injector(op->name, false, op->memory_type);
         body = injector.mutate(body);
 
         string buffer_name = op->name + ".buffer";

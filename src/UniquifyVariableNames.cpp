@@ -5,7 +5,6 @@
 #include "IRVisitor.h"
 #include "Scope.h"
 #include "Var.h"
-#include <sstream>
 
 namespace Halide {
 namespace Internal {
@@ -16,7 +15,7 @@ using std::vector;
 
 namespace {
 class UniquifyVariableNames : public IRMutator {
-
+protected:
     using IRMutator::visit;
 
     // The mapping from old names to new names
@@ -119,7 +118,7 @@ public:
 };
 
 class FindFreeVars : public IRVisitor {
-
+protected:
     using IRVisitor::visit;
 
     Scope<> scope;
@@ -166,9 +165,10 @@ public:
 }  // namespace
 
 Stmt uniquify_variable_names(const Stmt &s) {
-    FindFreeVars finder;
+    ZoneScoped;
+    Profiled<FindFreeVars> finder;
     s.accept(&finder);
-    UniquifyVariableNames u(&finder.free_vars);
+    Profiled<UniquifyVariableNames> u(&finder.free_vars);
     return u.mutate(s);
 }
 

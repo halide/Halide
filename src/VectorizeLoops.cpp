@@ -309,6 +309,7 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
 // vector lane. This means loads and stores to them need to be
 // rewritten slightly.
 class RewriteAccessToVectorAlloc : public IRMutator {
+protected:
     Expr var;
     string alloc;
     int lanes;
@@ -1072,7 +1073,7 @@ class VectorSubs : public IRMutator {
         // Rewrite loads and stores to this allocation like so:
         // foo[x] -> foo[x*lanes + v]
         for (const auto &vv : vectorized_vars) {
-            body = RewriteAccessToVectorAlloc(vv.name + ".from_zero", op->name, vv.lanes).mutate(body);
+            body = Profiled<RewriteAccessToVectorAlloc>(vv.name + ".from_zero", op->name, vv.lanes).profiled_mutate(body);
         }
 
         body = mutate(body);
@@ -1664,17 +1665,19 @@ class RemoveUnnecessaryAtomics : public IRMutator {
 };
 
 Stmt vectorize_statement(const Stmt &stmt) {
+    ZoneScoped;
     return VectorizeLoops().mutate(stmt);
 }
 
 }  // namespace
 Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env) {
+    ZoneScoped;
     // Limit the scope of atomic nodes to just the necessary stuff.
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.
-    Stmt s = LiftVectorizableExprsOutOfAllAtomicNodes(env).mutate(stmt);
+    Stmt s = LiftVectorizableExprsOutOfAllAtomicNodes(env).profiled_mutate(stmt);
     s = vectorize_statement(s);
-    s = RemoveUnnecessaryAtomics().mutate(s);
+    s = RemoveUnnecessaryAtomics().profiled_mutate(s);
     return s;
 }
 

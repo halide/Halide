@@ -1,4 +1,5 @@
 #include "AddImageChecks.h"
+#include "CompilerProfiling.h"
 #include "ExternFuncArgument.h"
 #include "Function.h"
 #include "IRMutator.h"
@@ -103,6 +104,7 @@ class TrimStmtToPartsThatAccessBuffers : public IRMutator {
     bool touches_buffer = false;
     const map<string, FindBuffers::Result> &buffers;
 
+protected:
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
@@ -165,7 +167,7 @@ Stmt add_image_checks_inner(Stmt s,
     bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
 
     // First hunt for all the referenced buffers
-    FindBuffers finder;
+    Profiled<FindBuffers> finder;
     map<string, FindBuffers::Result> &bufs = finder.buffers;
 
     // Add the output buffer(s).
@@ -188,7 +190,7 @@ Stmt add_image_checks_inner(Stmt s,
     s.accept(&finder);
 
     Scope<Interval> empty_scope;
-    Stmt sub_stmt = TrimStmtToPartsThatAccessBuffers(bufs).mutate(s);
+    Stmt sub_stmt = Profiled<TrimStmtToPartsThatAccessBuffers>(bufs).mutate(s);
     map<string, Box> boxes = boxes_touched(sub_stmt, empty_scope, fb);
 
     // Now iterate through all the buffers, creating a list of lets
@@ -737,6 +739,7 @@ Stmt add_image_checks(const Stmt &s,
     // Checks for images go at the marker deposited by computation
     // bounds inference.
     class Injector : public IRMutator {
+    protected:
         using IRMutator::visit;
 
         Expr visit(const Variable *op) override {
@@ -794,7 +797,8 @@ Stmt add_image_checks(const Stmt &s,
                  bool will_inject_host_copies)
             : outputs(outputs), t(t), order(order), env(env), fb(fb), will_inject_host_copies(will_inject_host_copies) {
         }
-    } injector(outputs, t, order, env, fb, will_inject_host_copies);
+    };
+    Profiled<Injector> injector(outputs, t, order, env, fb, will_inject_host_copies);
 
     return injector.mutate(s);
 }

@@ -104,24 +104,24 @@ Expr substitute(const string &name, const Expr &replacement, const Expr &expr) {
     map<string, Expr> m;
     m[name] = replacement;
     Substitute s(m);
-    return s.mutate(expr);
+    return s.profiled_mutate(expr);
 }
 
 Stmt substitute(const string &name, const Expr &replacement, const Stmt &stmt) {
     map<string, Expr> m;
     m[name] = replacement;
     Substitute s(m);
-    return s.mutate(stmt);
+    return s.profiled_mutate(stmt);
 }
 
 Expr substitute(const map<string, Expr> &m, const Expr &expr) {
     Substitute s(m);
-    return s.mutate(expr);
+    return s.profiled_mutate(expr);
 }
 
 Stmt substitute(const map<string, Expr> &m, const Stmt &stmt) {
     Substitute s(m);
-    return s.mutate(stmt);
+    return s.profiled_mutate(stmt);
 }
 
 namespace {
