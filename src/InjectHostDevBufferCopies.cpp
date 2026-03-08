@@ -228,6 +228,12 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         if (!finder.devices_touched.empty() ||
             !finder.devices_touched_by_extern.empty()) {
             last_use = s;
+            // Block::make flattens nested Blocks, destroying pointer
+            // identity. Walk to the last non-Block element so that
+            // inject_free_after_last_use can find it after wrapping.
+            while (const Block *b = last_use.as<Block>()) {
+                last_use = b->rest;
+            }
         }
 
         // Insert any appropriate copies/allocations before, and set
