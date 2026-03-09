@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         bits: [ "64", "32" ]
-        uv_group: [ "ci-llvm-main", "ci-llvm-22", "ci-llvm-21", "ci-llvm-20" ]
+        uv_group: [ "ci-llvm-main", "ci-llvm-22", "ci-llvm-21" ]
         include:
           - bits: 32
             arch: armv7l
