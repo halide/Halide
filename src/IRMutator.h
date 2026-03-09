@@ -39,12 +39,12 @@ public:
     virtual Stmt mutate(const Stmt &stmt);
 
     inline Expr profiled_mutate(const Expr &expr) {
-        ZoneScopedN(VisitorNameTag);
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         return mutate(expr);
     }
 
     inline Stmt profiled_mutate(const Stmt &stmt) {
-        ZoneScopedN(VisitorNameTag);
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         return mutate(stmt);
     }
 

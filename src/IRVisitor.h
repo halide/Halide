@@ -24,7 +24,7 @@ public:
 
     template<typename T>
     inline void profiled_visit(const T *op) {
-        ZoneScopedVisitor(T::_node_type, VisitorNameTag);
+        ZoneScopedVisitor(T::_node_type, HalideVisitorDynamicNameTag);
         visit(op);
     }
 
@@ -108,11 +108,11 @@ public:
     // @}
 
     inline void profiled_include(const Expr &e) {
-        ZoneScopedN(VisitorNameTag);
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         include(e);
     }
     inline void profiled_include(const Stmt &s) {
-        ZoneScopedN(VisitorNameTag);
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         include(s);
     }
 

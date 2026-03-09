@@ -180,7 +180,11 @@ struct ZoneScoped_ {
 #define ZoneScopedVisitor(...) \
     Halide::Internal::Profiling::ZoneScopedVisitor_ __zone_scoped(__VA_ARGS__)
 
-#define VisitorNameTag typeid(*this).name()
+#ifdef HALIDE_ENABLE_RTTI
+#define HalideVisitorDynamicNameTag typeid(*this).name()
+#else
+#define HalideVisitorDynamicNameTag __FUNCTION__
+#endif
 
 template<typename Base>
 class Profiled : public Base {
@@ -229,7 +233,7 @@ using Profiled = Base;
 #define ZoneScoped
 #define ZoneScopedN(...)
 #define ZoneScopedVisitor(...)
-#define VisitorNameTag
+#define HalideVisitorDynamicNameTag
 
 #endif
 
