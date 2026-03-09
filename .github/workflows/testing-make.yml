@@ -45,7 +45,6 @@ jobs:
         os:
           - ubuntu-24.04
           - macos-15
-          - macos-15-intel
 
     runs-on: ${{ matrix.os }}
     steps:
