@@ -110,6 +110,17 @@ function(add_halide_generator TARGET)
                     $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wdeprecated-declarations>
                     $<$<CXX_COMPILER_ID:MSVC>:/w14996>  # 4996: compiler encountered deprecated declaration
                 )
+
+                if (CMAKE_GENERATOR STREQUAL "Xcode")
+                    set_target_properties(
+                        ${TARGET} PROPERTIES XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED NO
+                    )
+                    add_custom_command(
+                        TARGET ${TARGET} POST_BUILD
+                        COMMAND codesign --sign - $<TARGET_FILE:${TARGET}>
+                        COMMENT "Ad-hoc signing ${TARGET}"
+                    )
+                endif ()
             endif ()
 
             add_dependencies("${ARG_PACKAGE_NAME}" ${TARGET})
