@@ -108,7 +108,6 @@ private:
 
     template<typename T>
     auto visit_impl(const T *op) {
-        ZoneScopedVisitor(T::_node_type, "LambdaMutator");
         // Catch lambdas that accidentally take non-const T* (e.g. For *
         // instead of const For *). Such lambdas silently never match.
         static_assert(!std::is_invocable_v<decltype(handlers), LambdaMutator *, T *> ||
@@ -122,19 +121,20 @@ private:
     }
 
 protected:
-#define HALIDE_CALL_VISIT_IMPL_EXPR(T) \
-    Expr visit(const T *op) override { \
-        return this->visit_impl(op);   \
+#define HALIDE_CALL_VISIT_EXPR_IMPL(T)                                          \
+    Expr visit(const T *op) override {                                          \
+        ZoneScopedVisitor(IRNodeType::T, "LambdaMutator", Profiling::BIT_EXPR); \
+        return this->visit_impl(op);                                            \
     }
-    HALIDE_FOR_EACH_IR_EXPR(HALIDE_CALL_VISIT_IMPL_EXPR)
-#undef HALIDE_CALL_VISIT_IMPL_EXPR
-
-#define HALIDE_CALL_VISIT_IMPL_STMT(T) \
-    Stmt visit(const T *op) override { \
-        return this->visit_impl(op);   \
+    HALIDE_FOR_EACH_IR_EXPR(HALIDE_CALL_VISIT_EXPR_IMPL)
+#undef HALIDE_CALL_VISIT_EXPR_IMPL
+#define HALIDE_CALL_VISIT_STMT_IMPL(T)                                          \
+    Stmt visit(const T *op) override {                                          \
+        ZoneScopedVisitor(IRNodeType::T, "LambdaMutator", Profiling::BIT_STMT); \
+        return this->visit_impl(op);                                            \
     }
-    HALIDE_FOR_EACH_IR_STMT(HALIDE_CALL_VISIT_IMPL_STMT)
-#undef HALIDE_CALL_VISIT_IMPL_STMT
+    HALIDE_FOR_EACH_IR_STMT(HALIDE_CALL_VISIT_STMT_IMPL)
+#undef HALIDE_CALL_VISIT_STMT_IMPL
 };
 
 /** A lambda-based IR mutator that accepts multiple lambdas for overloading

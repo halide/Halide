@@ -23,18 +23,18 @@ public:
     virtual ~IRVisitor() = default;
 
     inline void profiled_visit(const Stmt &s) {
-        ZoneScopedVisitor(s->node_type, HalideVisitorDynamicNameTag, Profiling::BIT_STMT);
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         s.accept(this);
     }
 
     inline void profiled_visit(const Expr &e) {
-        ZoneScopedVisitor(e->node_type, HalideVisitorDynamicNameTag, Profiling::BIT_EXPR);
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         e.accept(this);
     }
 
     template<typename T>
     inline void profiled_visit(const T *op) {
-        ZoneScopedVisitor(T::_node_type, HalideVisitorDynamicNameTag);
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         visit(op);
     }
 
@@ -50,7 +50,6 @@ protected:
     virtual void visit(const T *op);
     HALIDE_FOR_EACH_IR_NODE(HALIDE_DECL_VISIT)
 #undef HALIDE_DECL_VISIT
-
 };
 
 /** A lambda-based IR visitor that accepts multiple lambdas for different
@@ -72,7 +71,6 @@ private:
 
     template<typename T>
     auto visit_impl(const T *op) {
-        ZoneScopedVisitor(T::_node_type, "LambdaVisitor");
         // Catch lambdas that accidentally take non-const T* (e.g. For *
         // instead of const For *). Such lambdas silently never match.
         static_assert(!std::is_invocable_v<decltype(handlers), LambdaVisitor *, T *> ||
@@ -86,12 +84,20 @@ private:
     }
 
 protected:
-#define HALIDE_CALL_VISIT_IMPL(T)      \
-    void visit(const T *op) override { \
-        this->visit_impl(op);          \
+#define HALIDE_CALL_VISIT_EXPR_IMPL(T)                                          \
+    void visit(const T *op) override {                                          \
+        ZoneScopedVisitor(IRNodeType::T, "LambdaVisitor", Profiling::BIT_EXPR); \
+        this->visit_impl(op);                                                   \
     }
-    HALIDE_FOR_EACH_IR_NODE(HALIDE_CALL_VISIT_IMPL)
-#undef HALIDE_CALL_VISIT_IMPL
+    HALIDE_FOR_EACH_IR_EXPR(HALIDE_CALL_VISIT_EXPR_IMPL)
+#undef HALIDE_CALL_VISIT_EXPR_IMPL
+#define HALIDE_CALL_VISIT_STMT_IMPL(T)                                          \
+    void visit(const T *op) override {                                          \
+        ZoneScopedVisitor(IRNodeType::T, "LambdaVisitor", Profiling::BIT_STMT); \
+        this->visit_impl(op);                                                   \
+    }
+    HALIDE_FOR_EACH_IR_STMT(HALIDE_CALL_VISIT_STMT_IMPL)
+#undef HALIDE_CALL_VISIT_STMT_IMPL
 };
 
 template<typename... Lambdas>

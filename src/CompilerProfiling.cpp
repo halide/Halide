@@ -14,8 +14,8 @@
 #endif
 
 #include <fstream>
-#include <map>
 #include <iomanip>
+#include <map>
 
 namespace Halide {
 namespace Internal {
@@ -68,7 +68,19 @@ static std::string cleanup_name(std::string name) {
 
 Context::Context() {
     if (std::string file = get_env_variable("HL_COMPILER_TRACE_FILE"); !file.empty()) {
-        active_bits = BIT_GENERIC | BIT_STMT;
+        if (std::string bits = get_env_variable("HL_COMPILER_TRACE_BITS"); !bits.empty()) {
+            active_bits = BIT_GENERIC;
+            std::vector<std::string> sp = split_string(bits, ",");
+            for (const std::string &s : sp) {
+                if (s == "stmt") {
+                    active_bits |= BIT_STMT;
+                } else if (s == "expr") {
+                    active_bits |= BIT_EXPR;
+                }
+            }
+        } else {
+            active_bits = BIT_GENERIC | BIT_STMT;
+        }
     }
 }
 Context::~Context() {
@@ -175,7 +187,6 @@ void write_halide_profiling_trace(const std::string &file) {
 
     out << "\n]\n";
 }
-
 
 }  // namespace Profiling
 }  // namespace Internal

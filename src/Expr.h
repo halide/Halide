@@ -90,12 +90,6 @@ enum class IRNodeType : uint8_t {
 };
 
 const char *IRNodeType_string(IRNodeType type);
-inline bool IRNodeType_is_Stmt(IRNodeType type) {
-    return type >= IRNodeType::LetStmt;
-}
-inline bool IRNodeType_is_Expr(IRNodeType type) {
-    return type < IRNodeType::LetStmt;
-}
 
 constexpr IRNodeType StrongestExprNodeType = IRNodeType::VectorReduce;
 

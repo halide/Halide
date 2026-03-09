@@ -30,10 +30,6 @@ constexpr uint8_t BIT_GENERIC = 1 << 0;
 constexpr uint8_t BIT_STMT = 1 << 1;
 constexpr uint8_t BIT_EXPR = 1 << 2;
 
-constexpr inline bool bits_for_IRNodeType(IRNodeType type) {
-    return IRNodeType_is_Stmt(type) ? BIT_STMT : BIT_EXPR;
-}
-
 struct Event {
     const char *src_tag;
     uint32_t timer;
@@ -130,8 +126,6 @@ struct ZoneScopedVisitor_ {
             zone_begin(src_tag, Event::Visitor, (unsigned)node_type);
         }
     }
-
-    ZoneScopedVisitor_(IRNodeType node_type, const char *src_tag) : ZoneScopedVisitor_(node_type, src_tag, bits_for_IRNodeType(node_type)) {}
 
     ZoneScopedVisitor_(const Expr &e, const char *src_tag)
         : node_type(e.defined() ? e->node_type : IRNodeType::IntImm),
