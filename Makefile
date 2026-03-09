@@ -761,6 +761,7 @@ HEADER_FILES = \
   Param.h \
   Parameter.h \
   PartitionLoops.h \
+  PerformanceCounter.h \
   Pipeline.h \
   Prefetch.h \
   PrefetchDirective.h \
