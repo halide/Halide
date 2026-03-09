@@ -79,7 +79,7 @@ Context::Context() {
                 }
             }
         } else {
-            active_bits = BIT_GENERIC | BIT_STMT;
+            active_bits = BIT_GENERIC;
         }
     }
 }

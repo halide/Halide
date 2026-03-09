@@ -17,12 +17,12 @@ protected:
 
     Stmt visit(const For *for_loop) override {
         if (for_loop->for_type == ForType::Unrolled) {
+            ZoneScopedN("UnrollForLoop");
             Stmt body = for_loop->body;
             Expr extent = simplify(for_loop->extent());
             const IntImm *e = extent.as<IntImm>();
 
-            internal_assert(e)
-                << "Loop over " << for_loop->name << " should have had a constant extent\n";
+            internal_assert(e) << "Loop over " << for_loop->name << " should have had a constant extent\n";
             body = mutate(body);
 
             if (e->value == 1) {
@@ -56,7 +56,7 @@ protected:
 
 Stmt unroll_loops(const Stmt &s) {
     ZoneScoped;
-    Stmt stmt = Profiled<UnrollLoops>().mutate(s);
+    Stmt stmt = Profiled<UnrollLoops>().profiled_mutate(s);
     // Unrolling duplicates variable names. Other passes assume variable names are unique.
     return uniquify_variable_names(stmt);
 }
