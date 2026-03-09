@@ -1,8 +1,8 @@
 #include "LLVM_Runtime_Linker.h"
+#include "CompilerProfiling.h"
 #include "Error.h"
 #include "LLVM_Headers.h"
 #include "Target.h"
-#include "CompilerProfiling.h"
 
 namespace Halide {
 

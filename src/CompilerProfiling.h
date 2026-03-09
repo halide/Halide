@@ -184,7 +184,11 @@ template<typename Base>
 class Profiled : public Base {
 public:
     using Base::Base;
+#ifdef HALIDE_ENABLE_RTTI
     const char *tag = typeid(Base).name();
+#else
+    const char *tag = "Unknown (no RTTI)";
+#endif
 
 #define PROFILE_VISIT_STMT_OVERRIDE(T)                                    \
     auto visit(const T *op) -> decltype(this->Base::visit(op)) override { \
@@ -218,9 +222,11 @@ using Profiled = Profiling::Profiled<Base>;
 #else
 
 namespace Profiling {
-inline void generic_zone_begin(const char *src_tag, unsigned data = 0) {}
-inline void generic_zone_end(const char *src_tag, unsigned data = 0) {}
+inline void generic_zone_begin(const char *src_tag, unsigned data = 0) {
 }
+inline void generic_zone_end(const char *src_tag, unsigned data = 0) {
+}
+}  // namespace Profiling
 
 template<typename Base>
 using Profiled = Base;

@@ -4,6 +4,7 @@
 #include "Argument.h"
 #include "Callable.h"
 #include "CodeGen_Internal.h"
+#include "CompilerProfiling.h"
 #include "Deserialization.h"
 #include "FindCalls.h"
 #include "Func.h"
@@ -17,7 +18,6 @@
 #include "RealizationOrder.h"
 #include "Serialization.h"
 #include "WasmExecutor.h"
-#include "CompilerProfiling.h"
 
 using namespace Halide::Internal;
 

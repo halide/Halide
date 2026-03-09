@@ -6,7 +6,7 @@ namespace Internal {
 
 const char *IRNodeType_string(IRNodeType type) {
     switch (type) {
-#define PROFILE_NODE_CASE(T)                                    \
+#define PROFILE_NODE_CASE(T)              \
     case Halide::Internal::IRNodeType::T: \
         return #T;
 

@@ -483,6 +483,7 @@ SOURCE_FILES = \
   CodeGen_WebAssembly.cpp \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
+  CompilerProfiling.cpp \
   CompilerLogger.cpp \
   ConstantBounds.cpp \
   ConstantInterval.cpp \
@@ -557,7 +558,6 @@ SOURCE_FILES = \
   Pipeline.cpp \
   Prefetch.cpp \
   PrintLoopNest.cpp \
-  ProfiledIRVisitor.cpp \
   Profiling.cpp \
   PurifyIndexMath.cpp \
   PythonExtensionGen.cpp \
@@ -678,6 +678,7 @@ HEADER_FILES = \
   CodeGen_PyTorch.h \
   CodeGen_Targets.h \
   CodeGen_WebGPU_Dev.h \
+  CompilerProfiling.h \
   CompilerLogger.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \

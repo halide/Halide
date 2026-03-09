@@ -168,7 +168,13 @@ protected:
 template<typename T, typename ExprRet, typename StmtRet>
 class VariadicVisitor {
 private:
+#ifdef WITH_COMPILER_PROFILING
+#ifdef HALIDE_ENABLE_RTTI
     const char *name = typeid(T).name();
+#else
+    const char *name = "VariadicVisitor";
+#endif
+#endif
 
     template<typename... Args>
     ExprRet dispatch_expr(const BaseExprNode *node, Args &&...args) {

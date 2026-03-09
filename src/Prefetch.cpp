@@ -1,6 +1,6 @@
 #include <map>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 #include "Bounds.h"
@@ -18,9 +18,9 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::unordered_map;
 using std::set;
 using std::string;
+using std::unordered_map;
 using std::vector;
 
 /**

@@ -3,9 +3,9 @@
 
 #include "CSE.h"
 #include "CompilerLogger.h"
+#include "CompilerProfiling.h"
 #include "IRMutator.h"
 #include "Substitute.h"
-#include "CompilerProfiling.h"
 
 namespace Halide {
 namespace Internal {

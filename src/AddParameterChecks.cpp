@@ -1,9 +1,9 @@
 #include "AddParameterChecks.h"
+#include "CompilerProfiling.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
 #include "Substitute.h"
 #include "Target.h"
-#include "CompilerProfiling.h"
 
 namespace Halide {
 namespace Internal {

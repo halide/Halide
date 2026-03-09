@@ -9,6 +9,7 @@
 #include "CodeGen_Posix.h"
 #include "CodeGen_Targets.h"
 #include "CompilerLogger.h"
+#include "CompilerProfiling.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "EmulateFloat16Math.h"
@@ -28,7 +29,6 @@
 #include "Simplify.h"
 #include "StrictifyFloat.h"
 #include "Util.h"
-#include "CompilerProfiling.h"
 
 // MSVC won't set __cplusplus correctly unless certain compiler flags are set
 // (and CMake doesn't set those flags for you even if you specify C++17),
