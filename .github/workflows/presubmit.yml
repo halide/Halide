@@ -40,8 +40,12 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - name: Install clang-tidy
-        run: brew install llvm@21 lld@21
+
+      # We intentionally don't use VCPKG here so that we get some
+      # notification that the ecosystem is moving on without us.
+      - name: Install clang-tidy & dependencies
+        run: brew install llvm@21 lld@21 flatbuffers wabt
+
       - name: Run clang-tidy
         run: ./run-clang-tidy.sh
         env:
