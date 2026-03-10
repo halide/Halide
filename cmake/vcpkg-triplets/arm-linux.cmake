@@ -6,5 +6,3 @@ set(VCPKG_CMAKE_SYSTEM_NAME Linux)
 
 set(VCPKG_C_FLAGS "-mfp16-format=ieee -Wno-psabi")
 set(VCPKG_CXX_FLAGS "-mfp16-format=ieee -Wno-psabi")
-
-set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/toolchains/linux.cmake")
