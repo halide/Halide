@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         bits: [ "32" ]  # Intentionally not 64, as we haven't configured self-hosted runners for it yet.
-        uv_group: [ "ci-llvm-main", "ci-llvm-22", "ci-llvm-21", "ci-llvm-20" ]
+        uv_group: [ "ci-llvm-main", "ci-llvm-22", "ci-llvm-21" ]
         include:
           - bits: 32
             arch: x86
