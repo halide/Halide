@@ -30,7 +30,7 @@
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_MANIFEST_FEATURES": "developer",
-        "Halide_USE_FETCHCONTENT": false
+        "FETCHCONTENT_FULLY_DISCONNECTED": "ON"
       }
     },
     {

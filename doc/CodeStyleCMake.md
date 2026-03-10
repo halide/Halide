@@ -137,14 +137,14 @@ There are also several functions that are disallowed for other reasons:
 | `include_external_msproject`    | Halide must remain portable                                                       | Write a CMake package config file or find module.                              |
 | `include_guard`                 | Use of recursive inclusion is not allowed                                         | Write (recursive) functions.                                                   |
 | `include_regular_expression`    | Changes default dependency checking behavior                                      | None                                                                           |
-| `load_cache`                    | Superseded by [`FetchContent`][FetchContent]/[`ExternalProject`][ExternalProject] | Use aforementioned modules                                                     |
+| `load_cache`                    | Superseded by [`FetchContent`][FetchContent]/[`ExternalProject`][ExternalProject] | Write a vcpkg port or present a case for an exception.                         |
 | `macro`                         | CMake macros are not hygienic and are therefore error-prone                       | Use functions instead.                                                         |
 | `site_name`                     | Privacy: do not want leak host name information                                   | Provide a cache variable, generate a unique name.                              |
 | `variable_watch`                | Debugging helper                                                                  | None. Not needed in production.                                                |
 
 Do not introduce any dependencies via [`find_package`][find_package]
-without broader approval. Importantly, never introduce a new use of
-`FetchContent`; prefer to add dependencies to `vcpkg.json`.
+without broader approval. Importantly, never introduce a use of `FetchContent`.
+Add dependencies to `vcpkg.json` or create a custom port.
 
 ## Prohibited variables list
 

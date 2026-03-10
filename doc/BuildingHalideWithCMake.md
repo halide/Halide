@@ -230,7 +230,7 @@ necessary, it is convenient to install Python system-wide on Windows (i.e.
 `C:\Program Files`) because CMake looks at standard paths and registry keys.
 This removes the need to manually set the `PATH`.
 
-Once Python is installed, you can install the Python module dependencies in 
+Once Python is installed, you can install the Python module dependencies in
 a [virtual environment][venv] by running
 
 ```shell
@@ -444,12 +444,12 @@ The following options are _advanced_ and should not be required in typical
 workflows. Generally, these are used by Halide's own CI infrastructure, or as
 escape hatches for third-party packagers.
 
-| Option                      | Default                                                            | Description                                                                              |
-|-----------------------------|--------------------------------------------------------------------|------------------------------------------------------------------------------------------|
-| `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                      |
-| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                            |
-| `Halide_VERSION_OVERRIDE`   | `${Halide_VERSION}`                                                | Override the VERSION for libHalide.                                                      |
-| `Halide_SOVERSION_OVERRIDE` | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version).   |
+| Option                      | Default                                                            | Description                                                                            |
+|-----------------------------|--------------------------------------------------------------------|----------------------------------------------------------------------------------------|
+| `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                    |
+| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                          |
+| `Halide_VERSION_OVERRIDE`   | `${Halide_VERSION}`                                                | Override the VERSION for libHalide.                                                    |
+| `Halide_SOVERSION_OVERRIDE` | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version). |
 
 The following options control whether to build certain test subsets. They only
 apply when `WITH_TESTS=ON`:
@@ -501,10 +501,9 @@ install it into the currently active Python environment.
 
 However, this comes with a few caveats:
 
-1. `Halide_USE_FETCHCONTENT` is disabled, so the environment must be prepared
-   for CMake to find its dependencies. This is easiest to do by setting either
-   `CMAKE_PREFIX_PATH` to pre-built dependencies or by setting
-   `CMAKE_TOOLCHAIN_FILE` to vcpkg.
+1. The environment must be prepared for CMake to find its dependencies. This is
+   easiest to do by setting either `CMAKE_PREFIX_PATH` to pre-built dependencies
+   or by setting `CMAKE_TOOLCHAIN_FILE` to vcpkg.
 2. The build settings are fixed, meaning that `wabt` is required on non-Windows
    systems, `flatbuffers` is always required, and the Python bindings must be
    built.
@@ -577,8 +576,8 @@ Local storage:
   Misses:             0 / 1079 ( 0.00%)
 ```
 
-On this test system (an M3 MacBook Pro), the build is three times faster,
-with a 100% cache hit rate!
+On this test system (an M3 MacBook Pro), the build is three times faster, with a
+100% cache hit rate!
 
 [ATLAS]: http://math-atlas.sourceforge.net/
 
