@@ -719,7 +719,7 @@ private:
 
 }  // namespace
 
-Expr extract_lanes(Expr original_expr, int starting_lane, int lane_stride, int new_lanes, const Scope<> &lets, Scope<std::vector<VectorSlice>> &requested_sliced_lets) {
+Expr extract_lanes(const Expr &original_expr, int starting_lane, int lane_stride, int new_lanes, const Scope<> &lets, Scope<std::vector<VectorSlice>> &requested_sliced_lets) {
     internal_assert(starting_lane + (new_lanes - 1) * lane_stride <= original_expr.type().lanes())
         << "Extract lanes with start:" << starting_lane << ", stride:" << lane_stride << ", new_lanes:" << new_lanes << "  "
         << "out of " << original_expr.type() << " which goes out of bounds.";
@@ -742,10 +742,10 @@ Expr extract_lanes(Expr original_expr, int starting_lane, int lane_stride, int n
     return e;
 }
 
-Expr extract_lanes(Expr e, int starting_lane, int lane_stride, int new_lanes) {
+Expr extract_lanes(const Expr &e, int starting_lane, int lane_stride, int new_lanes) {
     Scope<> lets;
     Scope<std::vector<VectorSlice>> req;
-    return extract_lanes(std::move(e), starting_lane, lane_stride, new_lanes, lets, req);
+    return extract_lanes(e, starting_lane, lane_stride, new_lanes, lets, req);
 }
 
 Expr extract_even_lanes(const Expr &e) {

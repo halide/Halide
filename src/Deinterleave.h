@@ -20,10 +20,10 @@ struct VectorSlice {
 };
 
 /* Extract lanes and relying on the fact that the caller will provide new variables in Lets or LetStmts which correspond to slices of the original variable. */
-Expr extract_lanes(Expr e, int starting_lane, int lane_stride, int new_lanes, const Scope<> &sliceable_lets, Scope<std::vector<VectorSlice>> &requested_sliced_lets);
+Expr extract_lanes(const Expr &e, int starting_lane, int lane_stride, int new_lanes, const Scope<> &sliceable_lets, Scope<std::vector<VectorSlice>> &requested_sliced_lets);
 
 /* Extract lanes without requesting any extra slices from variables. */
-Expr extract_lanes(Expr e, int starting_lane, int lane_stride, int new_lanes);
+Expr extract_lanes(const Expr &e, int starting_lane, int lane_stride, int new_lanes);
 
 /** Extract the nth lane of a vector */
 Expr extract_lane(const Expr &vec, int lane);
