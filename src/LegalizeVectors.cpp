@@ -84,21 +84,25 @@ class LiftExceedingVectors : public IRMutator {
     vector<pair<string, Expr>> lets;
     bool just_in_let_definition{false};
 
-    Expr visit(const Let *op) override {
-        internal_error << "We don't want to process Lets. They should have all been converted to LetStmts.";
-        return IRMutator::visit(op);
-    }
-
-    Stmt visit(const LetStmt *op) override {
+    template<typename LetOrLetStmt>
+    auto visit_let_or_letstmt(const LetOrLetStmt *op) -> decltype(op->body) {
         just_in_let_definition = true;
         Expr def = mutate(op->value);
         just_in_let_definition = false;
 
-        Stmt body = mutate(op->body);
+        decltype(op->body) body = mutate(op->body);
         if (def.same_as(op->value) && body.same_as(op->body)) {
             return op;
         }
-        return LetStmt::make(op->name, std::move(def), std::move(body));
+        return LetOrLetStmt::make(op->name, std::move(def), std::move(body));
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let_or_letstmt(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let_or_letstmt(op);
     }
 
     Expr visit(const Call *op) override {
@@ -206,7 +210,7 @@ class LegalizeVectors : public IRMutator {
             // First mark this Let as sliceable before mutating the body:
             ScopedBinding<> vector_is_slicable(sliceable_vectors, op->name);
 
-            Stmt body = mutate(op->body);
+            auto body = mutate(op->body);
             // Here we know which requested vector variable slices should be created for the body of the Let/LetStmt to work.
 
             if (std::vector<VectorSlice> *reqs = requested_slices.shallow_find(op->name)) {
@@ -228,8 +232,8 @@ class LegalizeVectors : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        // TODO is this still true?
-        internal_error << "Lets should have been lifted into LetStmts.";
+        bool exceeds_lanecount = op->value.type().lanes() > max_lanes;
+        internal_assert(!exceeds_lanecount) << "All illegal Let's should have been converted to LetStmts";
         return IRMutator::visit(op);
     }
 
@@ -238,20 +242,61 @@ class LegalizeVectors : public IRMutator {
         if (exceeds_lanecount) {
             // Split up in multiple stores
             int num_vecs = (op->index.type().lanes() + max_lanes - 1) / max_lanes;
-            std::vector<Stmt> assignments;
-            assignments.reserve(num_vecs);
+
+            std::vector<Expr> bundle_args;
+            bundle_args.reserve(num_vecs * 3);
+
+            // Break up the index, predicate, and value of the Store into legal chunks.
             for (int i = 0; i < num_vecs; ++i) {
                 int lane_start = i * max_lanes;
                 int lane_count_for_vec = std::min(op->value.type().lanes() - lane_start, max_lanes);
 
-                Expr rhs = extract_lanes(op->value, lane_start, 1, lane_count_for_vec, sliceable_vectors, requested_slices);
-                Expr index = extract_lanes(op->index, lane_start, 1, lane_count_for_vec, sliceable_vectors, requested_slices);
-                Expr predictate = extract_lanes(op->predicate, lane_start, 1, lane_count_for_vec, sliceable_vectors, requested_slices);
+                // Pack them in a known order: rhs, index, predicate
+                bundle_args.push_back(extract_lanes(op->value, lane_start, 1, lane_count_for_vec, sliceable_vectors, requested_slices));
+                bundle_args.push_back(extract_lanes(op->index, lane_start, 1, lane_count_for_vec, sliceable_vectors, requested_slices));
+                bundle_args.push_back(extract_lanes(op->predicate, lane_start, 1, lane_count_for_vec, sliceable_vectors, requested_slices));
+            }
+
+            // Run CSE on the joint bundle
+            Expr joint_bundle = Call::make(Int(32), Call::bundle, bundle_args, Call::PureIntrinsic);
+            joint_bundle = common_subexpression_elimination(joint_bundle);
+
+            // Peel off the `Let` expressions introduced by the CSE pass
+            std::vector<std::pair<std::string, Expr>> let_bindings;
+            while (const Let *let = joint_bundle.as<Let>()) {
+                let_bindings.emplace_back(let->name, let->value);
+                joint_bundle = let->body;
+            }
+
+            // Destructure the bundle to get our optimized expressions
+            const Call *struct_call = joint_bundle.as<Call>();
+            internal_assert(struct_call && struct_call->is_intrinsic(Call::bundle))
+                << "Expected the CSE bundle to remain a bundle Call.";
+
+            // Construct the legal stores with the CSE'd expressions
+            std::vector<Stmt> assignments;
+            assignments.reserve(num_vecs);
+            for (int i = 0; i < num_vecs; ++i) {
+                int lane_start = i * max_lanes;
+
+                // Unpack in the same order we packed them
+                Expr rhs = struct_call->args[i * 3 + 0];
+                Expr index = struct_call->args[i * 3 + 1];
+                Expr predicate = struct_call->args[i * 3 + 2];
+
                 assignments.push_back(Store::make(
                     op->name, std::move(rhs), std::move(index),
-                    op->param, std::move(predictate), op->alignment + lane_start));
+                    op->param, std::move(predicate), op->alignment + lane_start));
             }
+
             Stmt result = Block::make(assignments);
+
+            // Wrap the block in LetStmts to properly scope all shared expressions
+            // Iterate backwards to build the LetStmt tree from the inside out.
+            for (auto &let : reverse_view(let_bindings)) {
+                result = LetStmt::make(let.first, let.second, result);
+            }
+
             debug(3) << "Legalized store " << Stmt(op) << " => " << result << "\n";
             return result;
         }
