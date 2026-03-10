@@ -78,17 +78,7 @@ jobs:
         run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
 
       - name: Configure CMake
-        run: |
-          TOOLCHAIN_ARGS=()
-          if [[ "${{ matrix.bits }}" == "32" ]]; then
-            TOOLCHAIN_ARGS+=("-DCMAKE_TOOLCHAIN_FILE=${GITHUB_WORKSPACE}/cmake/toolchain.linux-arm32.cmake")
-          fi
-
-          cmake -G Ninja -S . -B build \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DHalide_LLVM_ROOT="${Halide_LLVM_ROOT}" \
-            -DWITH_PYTHON_BINDINGS=OFF \
-            "${TOOLCHAIN_ARGS[@]}"
+        run: cmake --preset ci-linux-arm-${{ matrix.bits }}
 
       - name: Initial build
         run: cmake --build build
