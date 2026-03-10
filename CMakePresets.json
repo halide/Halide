@@ -65,7 +65,10 @@
     },
     {
       "name": "ci-windows-x86-32",
-      "inherits": "ci"
+      "inherits": "ci",
+      "cacheVariables": {
+        "WITH_PYTHON_BINDINGS": "NO"
+      }
     },
     {
       "name": "vcpkg",
