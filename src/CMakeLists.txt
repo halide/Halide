@@ -661,6 +661,11 @@ endif ()
 # core Halide headers.
 target_precompile_headers(Halide PRIVATE Halide_pch.h)
 
+# Util.cpp implements run_with_large_stack(), which is sensitive to CMake's
+# forced-include PCH path and produces crashing helper binaries when compiled
+# with PCH enabled.
+set_source_files_properties(Util.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+
 # LLVM sources live in their own object library so they can have a separate PCH.
 add_library(Halide_LLVM_srcs OBJECT
     CodeGen_ARM.cpp
