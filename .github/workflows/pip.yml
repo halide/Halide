@@ -8,7 +8,7 @@ on:
 
 env:
   # TODO: detect this from repo somehow: https://github.com/halide/Halide/issues/8406
-  LLVM_VERSION: 21.1.8
+  LLVM_VERSION: 22.1.0
   FLATBUFFERS_VERSION: 23.5.26
   WABT_VERSION: 1.0.39
 

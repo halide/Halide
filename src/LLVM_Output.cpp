@@ -353,11 +353,7 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
                llvm::CodeGenFileType file_type) {
     // Make sure to run this with a large stack!
     debug(1) << "emit_file.Compiling to native code...\n";
-#if LLVM_VERSION >= 210
     debug(2) << "Target triple: " << module_in.getTargetTriple().str() << "\n";
-#else
-    debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
-#endif
 
     auto time_start = std::chrono::high_resolution_clock::now();
 

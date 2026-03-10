@@ -1,0 +1,120 @@
+name: ARM Linux
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  arm-linux:
+    name: arm-${{ matrix.bits }} / ${{ matrix.uv_group }}
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        bits: [ "64", "32" ]
+        uv_group: [ "ci-llvm-main", "ci-llvm-22", "ci-llvm-21" ]
+        include:
+          - bits: 32
+            arch: armv7l
+            python: 3.11-armv7-gnueabihf  # needed for piwheels
+          - bits: 64
+            arch: aarch64
+            python: linux-aarch64-gnu
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install system dependencies
+        run: |
+          if [[ "${{ matrix.bits }}" == "32" ]]; then
+            sudo dpkg --add-architecture armhf
+          fi
+
+          apt_update() {
+            for i in 1 2 3; do
+              if sudo apt-get update; then return 0; fi
+              echo "apt-get update failed (attempt $i/3), retrying in 10s..."
+              sleep 10
+            done
+            return 1
+          }
+          apt_update
+
+          if [[ "${{ matrix.bits }}" == "32" ]]; then
+            sudo apt-get install -y \
+              binutils-arm-linux-gnueabihf \
+              g++-arm-linux-gnueabihf \
+              gcc-arm-linux-gnueabihf \
+              libc6:armhf \
+              libstdc++6:armhf \
+              libatomic1:armhf \
+              libpng-dev:armhf \
+              libjpeg-dev:armhf
+          else
+            sudo apt-get install -y \
+              libpng-dev \
+              libjpeg-dev
+          fi
+
+      - name: Sync CI environment
+        run: |
+          setarch ${{ matrix.arch }} bash -ec "
+            uv sync --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-project
+            echo '${GITHUB_WORKSPACE}/.venv/bin' >> '$GITHUB_PATH'
+            echo 'VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv' >> '$GITHUB_ENV'
+          "
+
+      - name: Configure LLVM
+        run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
+
+      - name: Configure CMake
+        run: |
+          TOOLCHAIN_ARGS=()
+          if [[ "${{ matrix.bits }}" == "32" ]]; then
+            TOOLCHAIN_ARGS+=("-DCMAKE_TOOLCHAIN_FILE=${GITHUB_WORKSPACE}/cmake/toolchain.linux-arm32.cmake")
+          fi
+
+          cmake -G Ninja -S . -B build \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DHalide_LLVM_ROOT="${Halide_LLVM_ROOT}" \
+            -DWITH_PYTHON_BINDINGS=OFF \
+            "${TOOLCHAIN_ARGS[@]}"
+
+      - name: Initial build
+        run: cmake --build build
+
+      - name: Detect host target
+        run: |
+          HOST_TARGET=$(./build/src/autoschedulers/common/get_host_target)
+          echo "HAS_SVE2=$([[ "$HOST_TARGET" == *sve2* ]] && echo true || echo false)" >> "$GITHUB_ENV"
+          echo "Detected host target: ${HOST_TARGET}"
+
+      - name: Test (host)
+        if: matrix.bits == '32' || env.HAS_SVE2 == 'true'
+        run: |
+          cmake -S . -B build -DHalide_TARGET=host
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"
+
+      - name: Test (NEON)
+        if: matrix.bits == '64'
+        run: |
+          cmake -S . -B build -DHalide_TARGET=arm-64-linux-arm_dot_prod-arm_fp16
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"
+
+      - name: Test (no extensions)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=cmake
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"

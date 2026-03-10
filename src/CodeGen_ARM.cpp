@@ -56,6 +56,10 @@ Target complete_arm_target(Target t) {
         }
     };
 
+    // ARMFp16 implies ARMv8.2-A; we don't know of any devices where
+    // that doesn't hold. The cascade loop below will set ARMv81a and ARMv8a.
+    add_implied_feature_if_supported(t, Target::ARMFp16, Target::ARMv82a);
+
     constexpr int num_arm_v8_features = 10;
     static const Target::Feature arm_v8_features[num_arm_v8_features] = {
         Target::ARMv89a,
@@ -1681,6 +1685,7 @@ void CodeGen_ARM::visit(const Store *op) {
                 vpred_val = convert_fixed_or_scalable_vector_type(vpred_val, pred_type);
                 if (is_predicated_store) {
                     Value *sliced_store_vpred_val = slice_vector(store_pred_val, i, natural_lanes);
+                    sliced_store_vpred_val = convert_fixed_or_scalable_vector_type(sliced_store_vpred_val, pred_type);
                     vpred_val = builder->CreateAnd(vpred_val, sliced_store_vpred_val);
                 }
 
@@ -1854,6 +1859,7 @@ void CodeGen_ARM::visit(const Load *op) {
                 Value *vpred_val = codegen(vpred);
                 if (is_predicated_load) {
                     Value *sliced_load_vpred_val = slice_vector(load_pred_val, i, natural_lanes);
+                    sliced_load_vpred_val = convert_fixed_or_scalable_vector_type(sliced_load_vpred_val, vpred_val->getType());
                     vpred_val = builder->CreateAnd(vpred_val, sliced_load_vpred_val);
                 }
 
@@ -1904,8 +1910,14 @@ Value *CodeGen_ARM::interleave_vectors(const std::vector<Value *> &vecs) {
         return CodeGen_Posix::interleave_vectors(vecs);
     }
 
-    // Lower into llvm.vector.interleave intrinsic
+    // Lower into llvm.vector.interleave intrinsic.
+    // LLVM only supports non-power-of-2 strides (e.g. 3) for scalable
+    // vectors starting in LLVM 22.
+#if LLVM_VERSION >= 220
     const std::set<int> supported_strides{2, 3, 4, 8};
+#else
+    const std::set<int> supported_strides{2, 4, 8};
+#endif
     const int stride = vecs.size();
     const int src_lanes = get_vector_num_elements(vecs[0]->getType());
 
@@ -1957,7 +1969,11 @@ Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &
         }
 
         // Lower slice with stride into llvm.vector.deinterleave intrinsic
+#if LLVM_VERSION >= 220
         const std::set<int> supported_strides{2, 3, 4, 8};
+#else
+        const std::set<int> supported_strides{2, 4, 8};
+#endif
         if (supported_strides.find(slice_stride) != supported_strides.end() &&
             dst_lanes * slice_stride == src_lanes &&
             indices.front() < slice_stride &&  // Start position cannot be larger than stride
@@ -2410,6 +2426,10 @@ string CodeGen_ARM::mcpu_target() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
             return "swift";
+        } else if (target.has_feature(Target::ARMv82a)) {
+            return "cortex-a55";
+        } else if (target.has_feature(Target::ARMv8a)) {
+            return "cortex-a32";
         } else {
             return "cortex-a9";
         }
@@ -2436,7 +2456,10 @@ string CodeGen_ARM::mattrs() const {
         attrs.emplace_back("+fullfp16");
     }
     if (target.has_feature(Target::ARMv8a)) {
-        attrs.emplace_back("+v8a");
+        // The ARM (32-bit) backend calls this feature "v8"; the AArch64
+        // backend calls it "v8a". The dotted sub-versions (v8.1a, v8.2a,
+        // etc.) use the same names in both backends.
+        attrs.emplace_back(target.bits == 32 ? "+v8" : "+v8a");
     }
     if (target.has_feature(Target::ARMv81a)) {
         attrs.emplace_back("+v8.1a");

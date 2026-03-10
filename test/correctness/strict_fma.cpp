@@ -94,6 +94,15 @@ int test() {
 }
 
 int main(int argc, char **argv) {
+    Target t = get_jit_target_from_environment();
+
+    // LLVM < 22 cannot widen non-native vector stores for SVE, hitting
+    // "LLVM ERROR: Unable to widen vector store". Fixed in LLVM 22 by:
+    // https://github.com/llvm/llvm-project/commit/8cf43aebc67b (PR #160515)
+    if (Internal::get_llvm_version() < 220 && t.has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM <22 cannot widen vector stores for SVE scalable types.\n");
+        return 0;
+    }
 
     if (test<double, uint64_t>() ||
         test<float, uint32_t>() ||

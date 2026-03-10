@@ -407,11 +407,7 @@ void CodeGen_LLVM::init_codegen(const std::string &name) {
 
     internal_assert(module && context);
 
-#if LLVM_VERSION >= 210
     debug(1) << "Target triple of initial module: " << module->getTargetTriple().str() << "\n";
-#else
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-#endif
 
     module->setModuleIdentifier(name);
 
@@ -1515,6 +1511,17 @@ void CodeGen_LLVM::visit(const Reinterpret *op) {
         llvm::Type *llvm_dst_fixed = get_vector_type(llvm_type_of(dst.element_of()), dst.lanes(), VectorTypeConstraint::Fixed);
         value = builder->CreateBitOrPointerCast(value, llvm_dst_fixed);
         value = fixed_to_scalable_vector_type(value);
+    } else if (isa<FixedVectorType>(value->getType()) && isa<ScalableVectorType>(llvm_dst)) {
+        // Cannot bitcast/ptrtoint directly between fixed and scalable vectors.
+        // First cast to a fixed vector of the destination element type, then convert to scalable.
+        llvm::Type *llvm_dst_fixed = get_vector_type(llvm_dst->getScalarType(), dst.lanes(), VectorTypeConstraint::Fixed);
+        value = builder->CreateBitOrPointerCast(value, llvm_dst_fixed);
+        value = fixed_to_scalable_vector_type(value);
+    } else if (isa<ScalableVectorType>(value->getType()) && isa<FixedVectorType>(llvm_dst)) {
+        // Cannot bitcast/ptrtoint directly between scalable and fixed vectors.
+        // First convert to a fixed vector of the source element type, then cast.
+        value = scalable_to_fixed_vector_type(value);
+        value = builder->CreateBitOrPointerCast(value, llvm_dst);
     } else {
         // Our `Reinterpret` expr directly maps to LLVM IR bitcast/ptrtoint/inttoptr
         // instructions with no additional handling required:
@@ -3386,11 +3393,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", fn);
             IRBuilderBase::InsertPoint here = builder->saveIP();
             builder->SetInsertPoint(block);
-#if LLVM_VERSION >= 210
             Value *ret = builder->CreateVScale(i32_t);
-#else
-            Value *ret = builder->CreateVScale(ConstantInt::get(i32_t, 1));
-#endif
             builder->CreateRet(ret);
 
             // To avoid vscale_range(n,n) added in CodeGen_Internal
@@ -4338,10 +4341,12 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         const int input_lanes = val.type().lanes();
         const int input_bytes = input_lanes * val.type().bytes();
         const int vscale = std::max(effective_vscale, 1);
+        // LLVM added VECREDUCE_MUL/FMUL lowering for SVE in LLVM 22.
+        const bool mul_ok = LLVM_VERSION >= 220 || effective_vscale == 0;
         const bool llvm_has_intrinsic =
             // Must be one of these ops
             ((op->op == VectorReduce::Add ||
-              op->op == VectorReduce::Mul ||
+              (op->op == VectorReduce::Mul && mul_ok) ||
               op->op == VectorReduce::Min ||
               op->op == VectorReduce::Max) &&
              (use_llvm_vp_intrinsics ||
@@ -4950,6 +4955,13 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
         // otherwise.
         llvm::Type *scalar_type = vec->getType()->getScalarType();
 
+        if (scalar_type->isIntegerTy(1)) {
+            auto *result_type = cast<VectorType>(get_vector_type(scalar_type, size / effective_vscale, VectorTypeConstraint::VScale));
+            return handle_bool_as_i8(vec, result_type, [&](Value *v) {
+                return slice_vector(v, start, size);
+            });
+        }
+
         int intermediate_lanes = std::min(size, vec_lanes - start);
         llvm::Type *intermediate_type = get_vector_type(scalar_type, intermediate_lanes, VectorTypeConstraint::Fixed);
 
@@ -5242,6 +5254,18 @@ llvm::Value *CodeGen_LLVM::match_vector_type_scalable(llvm::Value *value, llvm::
     return match_vector_type_scalable(value, guide->getType());
 }
 
+llvm::Value *CodeGen_LLVM::handle_bool_as_i8(llvm::Value *arg, llvm::VectorType *result_i1_type,
+                                             const std::function<llvm::Value *(llvm::Value *)> &fn) {
+    auto *arg_vty = cast<llvm::VectorType>(arg->getType());
+    bool scalable = isa<llvm::ScalableVectorType>(arg_vty);
+    int min_elts = scalable ? cast<llvm::ScalableVectorType>(arg_vty)->getMinNumElements() : cast<llvm::FixedVectorType>(arg_vty)->getNumElements();
+    auto constraint = scalable ? VectorTypeConstraint::VScale : VectorTypeConstraint::Fixed;
+    llvm::Type *arg_i8 = get_vector_type(i8_t, min_elts, constraint);
+    llvm::Value *widened = builder->CreateZExt(arg, arg_i8);
+    llvm::Value *result = fn(widened);
+    return builder->CreateTrunc(result, result_i1_type);
+}
+
 llvm::Value *CodeGen_LLVM::convert_fixed_or_scalable_vector_type(llvm::Value *arg,
                                                                  llvm::Type *desired_type) {
     llvm::Type *arg_type = arg->getType();
@@ -5251,6 +5275,18 @@ llvm::Value *CodeGen_LLVM::convert_fixed_or_scalable_vector_type(llvm::Value *ar
     }
 
     internal_assert(arg_type->getScalarType() == desired_type->getScalarType());
+
+    if (arg_type->isVectorTy() && desired_type->isVectorTy() &&
+        arg_type->getScalarType()->isIntegerTy(1)) {
+        bool dst_scalable = isa<llvm::ScalableVectorType>(desired_type);
+        int dst_elts = get_vector_num_elements(desired_type);
+        llvm::Type *dst_i8 = get_vector_type(i8_t, dst_scalable ? dst_elts / effective_vscale : dst_elts,
+                                             dst_scalable ? VectorTypeConstraint::VScale : VectorTypeConstraint::Fixed);
+        return handle_bool_as_i8(arg, cast<VectorType>(desired_type), [&](Value *v) {
+            return convert_fixed_or_scalable_vector_type(v, dst_i8);
+        });
+    }
+
     if (!arg_type->isVectorTy()) {
         arg = create_broadcast(arg, 1);
         arg_type = arg->getType();
@@ -5332,6 +5368,12 @@ llvm::Value *CodeGen_LLVM::fixed_to_scalable_vector_type(llvm::Value *fixed_arg)
     internal_assert(fixed_type->getElementType() == scalable_type->getElementType());
     internal_assert(lanes == (scalable_type->getMinNumElements() * effective_vscale));
 
+    if (fixed_type->getElementType()->isIntegerTy(1)) {
+        return handle_bool_as_i8(fixed_arg, scalable_type, [&](Value *v) {
+            return fixed_to_scalable_vector_type(v);
+        });
+    }
+
     // E.g. <vscale x 2 x i64> llvm.vector.insert.nxv2i64.v4i64(<vscale x 2 x i64>, <4 x i64>, i64)
     const char *type_designator;
     if (fixed_type->getElementType()->isIntegerTy()) {
@@ -5349,7 +5391,7 @@ llvm::Value *CodeGen_LLVM::fixed_to_scalable_vector_type(llvm::Value *fixed_arg)
 
     std::vector<llvm::Value *> args;
     args.push_back(result_vec);
-    args.push_back(value);
+    args.push_back(fixed_arg);
     args.push_back(ConstantInt::get(i64_t, 0));
 
     return simple_call_intrin(intrin, args, scalable_type);
@@ -5367,6 +5409,12 @@ llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_a
 
     internal_assert(fixed_type->getElementType() == scalable_type->getElementType());
     internal_assert(fixed_type->getNumElements() == (scalable_type->getMinNumElements() * effective_vscale));
+
+    if (scalable_type->getElementType()->isIntegerTy(1)) {
+        return handle_bool_as_i8(scalable_arg, fixed_type, [&](Value *v) {
+            return scalable_to_fixed_vector_type(v);
+        });
+    }
 
     // E.g. <64 x i8> @llvm.vector.extract.v64i8.nxv8i8(<vscale x 8 x i8> %vresult, i64 0)
     const char *type_designator;

@@ -25,7 +25,7 @@ add_dependencies(li2018_test Halide::Li2018)
 if (WITH_PYTHON_BINDINGS)
     if (Halide_TARGET MATCHES "webgpu")
         message(WARNING "li2018_gradient_autoscheduler_test_py is not supported with WebGPU.")
-    else()
+    else ()
         find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
 
         add_test(
@@ -36,9 +36,12 @@ if (WITH_PYTHON_BINDINGS)
         set(PYTHONPATH "$<PATH:NORMAL_PATH,$<TARGET_FILE_DIR:Halide::Python>/..>")
         list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
-        set_tests_properties(li2018_gradient_autoscheduler_test_py PROPERTIES
-                             DEPENDS li2018_test
-                             LABELS "li2018;autoschedulers_cpu;autoschedulers_gpu"
-                             ENVIRONMENT_MODIFICATION "${PYTHONPATH}")
-    endif()
+        set_tests_properties(
+            li2018_gradient_autoscheduler_test_py PROPERTIES
+            DEPENDS li2018_test
+            LABELS "li2018;autoschedulers_cpu;autoschedulers_gpu"
+            RUN_SERIAL TRUE
+            ENVIRONMENT_MODIFICATION "${PYTHONPATH}"
+        )
+    endif ()
 endif ()

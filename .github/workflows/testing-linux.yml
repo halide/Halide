@@ -1,0 +1,105 @@
+name: Linux
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: linux-${{ matrix.bits }} / ${{ matrix.uv_group }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        bits: [ "32" ]  # Intentionally not 64, as we haven't configured self-hosted runners for it yet.
+        uv_group: [ "ci-llvm-main", "ci-llvm-22", "ci-llvm-21" ]
+        include:
+          - bits: 32
+            arch: i686
+            python: cpython-3.11.5-linux-x86-gnu  # latest available on uv
+          # - bits: 64  # Intentionally not 64, as we haven't configured self-hosted runners for it yet.
+          #   arch: x86_64
+          #   python: cpython-3.10-linux-x86_64-gnu
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install system dependencies
+        run: |
+          if [[ "${{ matrix.bits }}" == "32" ]]; then
+            sudo dpkg --add-architecture i386
+          fi
+
+          apt_update() {
+            for i in 1 2 3; do
+              if sudo apt-get update; then return 0; fi
+              echo "apt-get update failed (attempt $i/3), retrying in 10s..."
+              sleep 10
+            done
+            return 1
+          }
+          apt_update
+
+          if [[ "${{ matrix.bits }}" == "32" ]]; then
+            sudo apt-get install -y \
+              gcc-multilib \
+              g++-multilib \
+              libpng-dev:i386 \
+              libjpeg-dev:i386
+          else
+            sudo apt-get install -y \
+              libpng-dev \
+              libjpeg-dev
+          fi
+
+      - name: Sync CI environment
+        run: |
+          setarch ${{ matrix.arch }} bash -ec "
+            CC='gcc -m${{ matrix.bits }}' CXX='g++ -m${{ matrix.bits }}' \
+            uv sync --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-project
+            echo '${GITHUB_WORKSPACE}/.venv/bin' >> '$GITHUB_PATH'
+            echo 'VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv' >> '$GITHUB_ENV'
+          "
+
+      - name: Configure LLVM
+        run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
+
+      - name: Configure CMake
+        run: |
+          TOOLCHAIN_ARGS=()
+          if [[ "${{ matrix.bits }}" == "32" ]]; then
+            TOOLCHAIN_ARGS+=(
+              "-DCMAKE_TOOLCHAIN_FILE=${GITHUB_WORKSPACE}/cmake/toolchain.linux-i386.cmake"
+              "-DWITH_PYTHON_BINDINGS=OFF"
+            )
+          fi
+
+          cmake -G Ninja -S . -B build \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DHalide_LLVM_ROOT="${Halide_LLVM_ROOT}" \
+            "${TOOLCHAIN_ARGS[@]}"
+
+      - name: Initial build
+        run: cmake --build build
+
+      - name: Test (host)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=host
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"
+
+      - name: Test (no extensions)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=cmake
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"

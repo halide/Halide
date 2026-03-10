@@ -257,11 +257,9 @@ void CodeGen_PTX_Dev::init_module() {
     }
 
     if (CodeGen_GPU_Dev::any_strict_float) {
-        debug(0) << "Setting strict fp math\n";
         set_strict_fp_math();
         in_strict_float = target.has_feature(Target::StrictFloat);
     } else {
-        debug(0) << "Setting fast fp math\n";
         set_fast_fp_math();
     }
 }
@@ -630,9 +628,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     TargetOptions options;
     options.AllowFPOpFusion = CodeGen_GPU_Dev::any_strict_float ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
-#if LLVM_VERSION < 210
-    options.UnsafeFPMath = !CodeGen_GPU_Dev::any_strict_float;
-#endif
 #if LLVM_VERSION < 230
     options.NoInfsFPMath = !CodeGen_GPU_Dev::any_strict_float;
 #endif
@@ -643,11 +638,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     std::unique_ptr<TargetMachine>
         target_machine(llvm_target->createTargetMachine(
-#if LLVM_VERSION >= 210
             triple,
-#else
-            triple.str(),
-#endif
             mcpu_target(), mattrs(), options,
             llvm::Reloc::PIC_,
             llvm::CodeModel::Small,
