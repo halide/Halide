@@ -91,7 +91,6 @@ ci-base = [
 ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm~=23.0.0.dev0"]
 ci-llvm-22 = [{ include-group = "ci-base" }, "halide-llvm~=22.1.0"]
 ci-llvm-21 = [{ include-group = "ci-base" }, "halide-llvm~=21.1.0"]
-ci-llvm-20 = [{ include-group = "ci-base" }, "halide-llvm~=20.1.0"]
 
 [project.urls]
 Homepage = "https://halide-lang.org"

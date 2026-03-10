@@ -11,14 +11,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // LLVM 20 is missing llvm.vector.interleave4/deinterleave4 for SVE.
-    if (Internal::get_llvm_version() < 210 &&
-        target.has_feature(Target::SVE2)) {
-        printf("[SKIP] LLVM %d is missing SVE vector interleave/deinterleave intrinsics.\n",
-               Internal::get_llvm_version());
-        return 0;
-    }
-
     // 8-bit mat-mul into 32-bit accumulator
     {
 

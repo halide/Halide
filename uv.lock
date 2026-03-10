@@ -120,21 +120,6 @@ ci-base = [
     { name = "setuptools-scm" },
     { name = "tbump" },
 ]
-ci-llvm-20 = [
-    { name = "cmake" },
-    { name = "halide-llvm", version = "20.1.8", source = { registry = "https://pypi.halide-lang.org/simple" } },
-    { name = "ninja" },
-    { name = "onnx", version = "1.17.0", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20') or (platform_machine == 'armv8l' and extra == 'group-6-halide-ci-llvm-20') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
-    { name = "onnx", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-6-halide-ci-llvm-20') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine == 'armv8l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (platform_machine == 'armv8l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine == 'armv8l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra != 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra != 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra != 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
-    { name = "protobuf", version = "7.34.0", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20') or (platform_machine == 'armv8l' and extra == 'group-6-halide-ci-llvm-20') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
-    { name = "protobuf", version = "7.34.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-6-halide-ci-llvm-20') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine == 'armv7l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (platform_machine == 'armv8l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21') or (platform_machine == 'armv8l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22') or (platform_machine == 'armv8l' and extra == 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-main') or (extra != 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-22') or (extra != 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-21' and extra == 'group-6-halide-ci-llvm-main') or (extra != 'group-6-halide-ci-llvm-20' and extra == 'group-6-halide-ci-llvm-22' and extra == 'group-6-halide-ci-llvm-main')" },
-    { name = "pybind11" },
-    { name = "pytest" },
-    { name = "ruff" },
-    { name = "scikit-build-core" },
-    { name = "setuptools-scm" },
-    { name = "tbump" },
-]
 ci-llvm-21 = [
     { name = "cmake" },
     { name = "halide-llvm", version = "21.1.8", source = { registry = "https://pypi.halide-lang.org/simple" } },
@@ -223,21 +208,6 @@ ci-base = [
     { name = "setuptools-scm", specifier = ">=8.3.1" },
     { name = "tbump", specifier = ">=6.11" },
 ]
-ci-llvm-20 = [
-    { name = "cmake", specifier = ">=3.28" },
-    { name = "halide-llvm", specifier = "~=20.1.0", index = "https://pypi.halide-lang.org/simple" },
-    { name = "ninja", specifier = ">=1.11,!=1.13.0" },
-    { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = "==1.18.0" },
-    { name = "onnx", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = "==1.17.0", index = "https://piwheels.org/simple" },
-    { name = "protobuf", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=7" },
-    { name = "protobuf", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = ">=7", index = "https://piwheels.org/simple" },
-    { name = "pybind11", specifier = ">=2.11.1" },
-    { name = "pytest" },
-    { name = "ruff", specifier = ">=0.12" },
-    { name = "scikit-build-core", specifier = "~=0.11.0" },
-    { name = "setuptools-scm", specifier = ">=8.3.1" },
-    { name = "tbump", specifier = ">=6.11" },
-]
 ci-llvm-21 = [
     { name = "cmake", specifier = ">=3.28" },
     { name = "halide-llvm", specifier = "~=21.1.0", index = "https://pypi.halide-lang.org/simple" },
@@ -293,31 +263,6 @@ tools = [
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
     { name = "ruff", specifier = ">=0.12" },
     { name = "tbump", specifier = ">=6.11" },
-]
-
-[[package]]
-name = "halide-llvm"
-version = "20.1.8"
-source = { registry = "https://pypi.halide-lang.org/simple" }
-resolution-markers = [
-    "(python_full_version >= '3.11' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.11' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
-    "python_full_version >= '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
-    "(python_full_version >= '3.11' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.11' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.11' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.11' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
-    "(python_full_version >= '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
-    "(python_full_version < '3.11' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version < '3.11' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
-    "python_full_version < '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
-    "(python_full_version < '3.11' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version < '3.11' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
-    "(python_full_version < '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version < '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
-]
-wheels = [
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-20.1.8-py3-none-macosx_11_0_arm64.whl", hash = "sha256:8230565dc0458e4f1b60444e9df259a3c66ffed8c2b54444b73dbb2c7e5606b5" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-20.1.8-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:1db95c9dc2fe1436845094f7e38fe7ac3b26883f58bafdd3d859c87146143934" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-20.1.8-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:890149d5578821440ed62367771652e4efcf23dbd743c404291e2d35995e8c9f" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-20.1.8-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:19613fa1120b1a02590fb945e83910e77f83bdfe4c53a91cec81d960d75ae487" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-20.1.8-py3-none-manylinux_2_28_i686.whl", hash = "sha256:aad3556c18d3cfb262187e5503d5c56eccebb6cb05d657b2dfa721d2c09e495c" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-20.1.8-py3-none-manylinux_2_31_armv7l.whl", hash = "sha256:cf4b9c2906a271d87a996d02dd513aa46cc75c7fdabdbfc0c4b8b62f77c8d62e" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-20.1.8-py3-none-win32.whl", hash = "sha256:2c938fea9c01a0bef9929c8a8739f1e5152c6140a9bbac938dea6183206344fc" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-20.1.8-py3-none-win_amd64.whl", hash = "sha256:aaefe8611f94823ac192752857d64e7370d44e32b38b9251e55467fc92695633" },
 ]
 
 [[package]]

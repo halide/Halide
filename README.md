@@ -151,7 +151,7 @@ issue.
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, or trunk. At the time of writing,
-this means versions 22, 21, and 20 are supported, but 19 is not.
+this means versions 23, 22, and 21 are supported, but 20 is not.
 
 It is simplest to get a binary release of LLVM on macOS by using
 [Homebrew](https://brew.sh). Just run `brew install llvm`. On Debian flavors of

@@ -407,11 +407,7 @@ void CodeGen_LLVM::init_codegen(const std::string &name) {
 
     internal_assert(module && context);
 
-#if LLVM_VERSION >= 210
     debug(1) << "Target triple of initial module: " << module->getTargetTriple().str() << "\n";
-#else
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-#endif
 
     module->setModuleIdentifier(name);
 
@@ -3397,11 +3393,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", fn);
             IRBuilderBase::InsertPoint here = builder->saveIP();
             builder->SetInsertPoint(block);
-#if LLVM_VERSION >= 210
             Value *ret = builder->CreateVScale(i32_t);
-#else
-            Value *ret = builder->CreateVScale(ConstantInt::get(i32_t, 1));
-#endif
             builder->CreateRet(ret);
 
             // To avoid vscale_range(n,n) added in CodeGen_Internal
