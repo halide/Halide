@@ -253,24 +253,14 @@ target_sources(
     CanonicalizeGPUVars.cpp
     ClampUnsafeAccesses.cpp
     Closure.cpp
-    CodeGen_ARM.cpp
     CodeGen_C.cpp
     CodeGen_D3D12Compute_Dev.cpp
     CodeGen_GPU_Dev.cpp
-    CodeGen_Hexagon.cpp
-    CodeGen_Internal.cpp
-    CodeGen_LLVM.cpp
     CodeGen_Metal_Dev.cpp
     CodeGen_OpenCL_Dev.cpp
-    CodeGen_Posix.cpp
-    CodeGen_PowerPC.cpp
-    CodeGen_PTX_Dev.cpp
     CodeGen_PyTorch.cpp
-    CodeGen_RISCV.cpp
     CodeGen_Vulkan_Dev.cpp
-    CodeGen_WebAssembly.cpp
     CodeGen_WebGPU_Dev.cpp
-    CodeGen_X86.cpp
     CompilerLogger.cpp
     ConstantBounds.cpp
     ConstantInterval.cpp
@@ -305,7 +295,6 @@ target_sources(
     FuseGPUThreadLoops.cpp
     FuzzFloatStores.cpp
     Generator.cpp
-    HexagonOffload.cpp
     HexagonOptimize.cpp
     ImageParam.cpp
     InferArguments.cpp
@@ -321,18 +310,14 @@ target_sources(
     IROperator.cpp
     IRPrinter.cpp
     IRVisitor.cpp
-    JITModule.cpp
     Lambda.cpp
     Lerp.cpp
     LICM.cpp
-    LLVM_Output.cpp
-    LLVM_Runtime_Linker.cpp
     LoopCarry.cpp
     Lower.cpp
     LowerParallelTasks.cpp
     LowerWarpShuffles.cpp
     Memoization.cpp
-    Module.cpp
     ModulusRemainder.cpp
     Monotonic.cpp
     ObjectInstanceRegistry.cpp
@@ -413,7 +398,6 @@ target_sources(
     Util.cpp
     Var.cpp
     VectorizeLoops.cpp
-    WasmExecutor.cpp
     WrapCalls.cpp
     # keep-sorted end
 )
@@ -661,6 +645,57 @@ else ()
         Halide PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>"
     )
 endif ()
+
+##
+# Precompiled headers
+##
+
+# Non-LLVM sources get a PCH covering the most expensive standard library and
+# core Halide headers.
+target_precompile_headers(Halide PRIVATE Halide_pch.h)
+
+# LLVM sources live in their own object library so they can have a separate PCH.
+add_library(Halide_LLVM_srcs OBJECT
+    CodeGen_ARM.cpp
+    CodeGen_Hexagon.cpp
+    CodeGen_Internal.cpp
+    CodeGen_LLVM.cpp
+    CodeGen_Posix.cpp
+    CodeGen_PowerPC.cpp
+    CodeGen_PTX_Dev.cpp
+    CodeGen_RISCV.cpp
+    CodeGen_WebAssembly.cpp
+    CodeGen_X86.cpp
+    HexagonOffload.cpp
+    JITModule.cpp
+    LLVM_Output.cpp
+    LLVM_Runtime_Linker.cpp
+    Module.cpp
+    WasmExecutor.cpp
+)
+
+target_compile_features(Halide_LLVM_srcs PRIVATE cxx_std_17)
+set_target_properties(Halide_LLVM_srcs PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# Mirror compile flags from the main Halide target.
+target_include_directories(Halide_LLVM_srcs PRIVATE
+    "$<TARGET_PROPERTY:Halide,INCLUDE_DIRECTORIES>"
+)
+target_compile_definitions(Halide_LLVM_srcs PRIVATE
+    "$<TARGET_PROPERTY:Halide,COMPILE_DEFINITIONS>"
+    "$<$<STREQUAL:$<TARGET_PROPERTY:Halide,TYPE>,SHARED_LIBRARY>:Halide_EXPORTS>"
+)
+target_compile_options(Halide_LLVM_srcs PRIVATE
+    "$<TARGET_PROPERTY:Halide,COMPILE_OPTIONS>"
+)
+
+foreach (backend IN LISTS Halide_LLVM_COMPONENTS)
+    target_link_libraries(Halide_LLVM_srcs PRIVATE Halide_LLVM::${backend})
+endforeach ()
+
+target_precompile_headers(Halide_LLVM_srcs PRIVATE Halide_llvm_pch.h)
+
+target_sources(Halide PRIVATE $<TARGET_OBJECTS:Halide_LLVM_srcs>)
 
 ##
 # Add autoschedulers to the build.
