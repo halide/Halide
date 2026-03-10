@@ -155,11 +155,6 @@ void lower_impl(const vector<Function> &output_funcs,
     bool any_strict_float = strictify_float(env, t);
     result_module.set_any_strict_float(any_strict_float);
 
-    // Output functions should all be computed and stored at root.
-    for (const Function &f : outputs) {
-        Func(f).compute_root().store_root();
-    }
-
     // Finalize all the LoopLevels
     for (auto &iter : env) {
         iter.second.lock_loop_levels();

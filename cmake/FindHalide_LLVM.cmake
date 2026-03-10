@@ -17,7 +17,7 @@ foreach (
     "/usr/local/lib/llvm-@VERSION@" # Third-party packages
     "/opt/llvm-@VERSION@" # Third-party packages
 )
-    foreach (VERSION RANGE 20 22) # inclusive!
+    foreach (VERSION RANGE 21 23) # inclusive!
         string(CONFIGURE "${template}" path @ONLY)
         list(APPEND llvm_paths "${path}")
     endforeach ()
@@ -28,7 +28,7 @@ find_package(LLVM PATHS ${llvm_paths})
 
 # Neither LLVM_VERSION nor LLVM_PACKAGE_VERSION work as find_package arguments
 # in git/development builds as they include a "git" suffix. This applies at
-# time of writing to versions 18-21, inclusive.
+# time of writing to versions 21-23, inclusive.
 if (LLVM_FOUND)
     set(Halide_LLVM_VERSION "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
 endif ()
@@ -73,7 +73,7 @@ if (LLVM_FOUND)
                 # Homebrew split the LLVM and LLD packages as of version 19, so
                 # having multiple LLVM versions installed leads to the newest
                 # LLD being found without this hint.
-                "${LLVM_INSTALL_PREFIX}/../lld@${LLVM_VERSION_MAJOR}"
+                "${LLVM_DIR}/../../../../lld@${LLVM_VERSION_MAJOR}"
                 "${LLVM_DIR}/../lld"
                 "${LLVM_DIR}/../lib/cmake/lld"
             )

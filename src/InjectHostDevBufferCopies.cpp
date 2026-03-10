@@ -214,10 +214,27 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         return call_extern_and_assert("halide_device_free", {buffer_var()});
     }
 
-    Stmt do_copies(Stmt s) {
+    Stmt do_copies(Stmt s, FindBufferUsage *precomputed = nullptr) {
         // Sniff what happens to the buffer inside the stmt
-        FindBufferUsage finder(buffer, DeviceAPI::Host);
-        s.accept(&finder);
+        FindBufferUsage local_finder(buffer, DeviceAPI::Host);
+        if (!precomputed) {
+            s.accept(&local_finder);
+            precomputed = &local_finder;
+        }
+        FindBufferUsage &finder = *precomputed;
+
+        // Track the last leaf that uses this buffer, so that the
+        // caller can inject a device free after it.
+        if (!finder.devices_touched.empty() ||
+            !finder.devices_touched_by_extern.empty()) {
+            last_use = s;
+            // Block::make flattens nested Blocks, destroying pointer
+            // identity. Walk to the last non-Block element so that
+            // inject_free_after_last_use can find it after wrapping.
+            while (const Block *b = last_use.as<Block>()) {
+                last_use = b->rest;
+            }
+        }
 
         // Insert any appropriate copies/allocations before, and set
         // dirty flags after. Do not recurse into the stmt.
@@ -344,15 +361,24 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
             // The state of the buffer going into the loop is the
             // union of the state before the loop starts and the state
             // after one iteration. Just forget everything we know.
+            Stmt saved_last_use = last_use;
+            last_use = {};
             state = State{};
             Stmt s = IRMutator::visit(op);
+            // Collapse inner last_use to the For itself, since a
+            // device free must go after the entire loop.
+            if (last_use.defined()) {
+                last_use = s;
+            } else {
+                last_use = saved_last_use;
+            }
             // The state after analyzing the loop body might not be the
             // true state if the loop ran for zero iterations. So
             // forget everything again.
             state = State{};
             return s;
         } else {
-            return do_copies(op);
+            return do_copies(op, &finder);
         }
     }
 
@@ -387,8 +413,12 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         // host dirties from getting in between blocks of store stmts
         // that could be interleaved.
         bool has_loops = false;
-        visit_with(op, [&](auto *, const For *op) {
-            has_loops = true;
+        visit_with(op, [&](auto *self, const auto *s) {
+            if constexpr (std::is_same_v<decltype(s), const For *>) {
+                has_loops = true;
+            } else if (!has_loops) {
+                self->visit_base(s);
+            }
         });
         if (has_loops) {
             return IRMutator::visit(op);
@@ -402,16 +432,36 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
     Stmt visit(const IfThenElse *op) override {
+        Stmt saved_last_use = last_use;
+
+        last_use = {};
         State old = state;
         Stmt then_case = mutate(op->then_case);
+        bool then_touches = last_use.defined();
         State then_state = state;
+
+        last_use = {};
         state = old;
         Stmt else_case = mutate(op->else_case);
+        bool else_touches = last_use.defined();
         state.union_with(then_state);
-        return IfThenElse::make(op->condition, then_case, else_case);
+
+        Stmt result = IfThenElse::make(op->condition, then_case, else_case);
+        // Collapse inner last_use to the IfThenElse itself, since
+        // a device free must go after the entire conditional.
+        if (then_touches || else_touches) {
+            last_use = result;
+        } else {
+            last_use = saved_last_use;
+        }
+        return result;
     }
 
 public:
+    // The last leaf stmt that uses the buffer. Used by the caller
+    // to inject a device free after the last use.
+    Stmt last_use;
+
     InjectBufferCopiesForSingleBuffer(const std::string &b, bool e, MemoryType m)
         : buffer(b), is_external(e), memory_type(m) {
         if (is_external) {
@@ -424,72 +474,6 @@ public:
             state.host_dirty = False;
             state.current_device = DeviceAPI::None;
         }
-    }
-};
-
-// Find the last use of a given buffer, which will used later for injecting
-// device free calls.
-class FindLastUse : public IRVisitor {
-public:
-    Stmt last_use;
-
-    FindLastUse(const string &b)
-        : buffer(b) {
-    }
-
-private:
-    string buffer;
-
-    using IRVisitor::visit;
-
-    void check_and_record_last_use(const Stmt &s) {
-        // Sniff what happens to the buffer inside the stmt
-        FindBufferUsage finder(buffer, DeviceAPI::Host);
-        s.accept(&finder);
-
-        if (!finder.devices_touched.empty() ||
-            !finder.devices_touched_by_extern.empty()) {
-            last_use = s;
-        }
-    }
-
-    // We break things down into a serial sequence of leaf
-    // stmts similar to InjectBufferCopiesForSingleBuffer.
-    void visit(const For *op) override {
-        check_and_record_last_use(op);
-    }
-
-    void visit(const Fork *op) override {
-        check_and_record_last_use(op);
-    }
-
-    void visit(const Evaluate *op) override {
-        check_and_record_last_use(op);
-    }
-
-    void visit(const LetStmt *op) override {
-        // If op->value uses the buffer, we need to treat this as a
-        // single leaf. Otherwise we can recurse.
-        FindBufferUsage finder(buffer, DeviceAPI::Host);
-        op->value.accept(&finder);
-        if (finder.devices_touched.empty() &&
-            finder.devices_touched_by_extern.empty()) {
-            IRVisitor::visit(op);
-        } else {
-            check_and_record_last_use(op);
-        }
-    }
-
-    void visit(const AssertStmt *op) override {
-        check_and_record_last_use(op);
-    }
-
-    void visit(const Store *op) override {
-        check_and_record_last_use(op);
-    }
-
-    void visit(const IfThenElse *op) override {
-        check_and_record_last_use(op);
     }
 };
 
@@ -629,11 +613,9 @@ class InjectBufferCopies : public IRMutator {
 
             // Make a device_and_host_free stmt
 
-            FindLastUse last_use(op->name);
-            body.accept(&last_use);
-            if (last_use.last_use.defined()) {
+            if (injector.last_use.defined()) {
                 Stmt device_free = call_extern_and_assert("halide_device_and_host_free", {buffer});
-                body = inject_free_after_last_use(body, last_use.last_use, device_free);
+                body = inject_free_after_last_use(body, injector.last_use, device_free);
             }
 
             Expr device_interface = make_device_interface_call(touching_device, op->memory_type);
@@ -646,17 +628,15 @@ class InjectBufferCopies : public IRMutator {
             // only touched on device, or touched on multiple
             // devices. Do separate device and host allocations.
 
+            // Inject device_free after the last use. Must happen
+            // before InjectDeviceDestructor, which modifies the tree.
+            if (injector.last_use.defined()) {
+                Stmt device_free = call_extern_and_assert("halide_device_free", {buffer});
+                body = inject_free_after_last_use(body, injector.last_use, device_free);
+            }
+
             // Add a device destructor
             body = InjectDeviceDestructor(buffer_name).mutate(body);
-
-            // Make a device_free stmt
-
-            FindLastUse last_use(op->name);
-            body.accept(&last_use);
-            if (last_use.last_use.defined()) {
-                Stmt device_free = call_extern_and_assert("halide_device_free", {buffer});
-                body = inject_free_after_last_use(body, last_use.last_use, device_free);
-            }
 
             Expr condition = op->condition;
             bool touched_on_one_device = !touched_on_host && finder.devices_touched.size() == 1 &&

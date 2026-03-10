@@ -128,6 +128,15 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // LLVM 21 calls getFixedValue() on scalable TypeSize objects in the
+    // AArch64 backend, triggering an assertion. Fixed in LLVM 22 by:
+    // https://github.com/llvm/llvm-project/commit/d1500d12be60 (PR #169764)
+    if (Internal::get_llvm_version() < 220 &&
+        get_jit_target_from_environment().has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM 21 has known getFixedValue() assertion failures on SVE scalable types.\n");
+        return 0;
+    }
+
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
         return 1;
