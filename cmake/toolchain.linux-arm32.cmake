@@ -24,6 +24,9 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
+set(CMAKE_C_FLAGS_INIT "-mfp16-format=ieee -Wno-psabi")
+set(CMAKE_CXX_FLAGS_INIT "-mfp16-format=ieee -Wno-psabi")
+
 # add_custom_command() will make bad decisions about running the command
 # when crosscompiling (it won't expand the target into a full path).
 # Setting CMAKE_CROSSCOMPILING_EMULATOR to /usr/bin/env tricks it into

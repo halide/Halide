@@ -69,11 +69,20 @@ function(add_halide_test TARGET)
     #
     # target_link_libraries("${TARGET}" PRIVATE Halide::TerminateHandler)
 
-    set_tests_properties(${TARGET} PROPERTIES
-                         LABELS "${args_GROUPS}"
-                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
-                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
-                         WILL_FAIL ${args_EXPECT_FAILURE})
+    # Resolve the "cmake" meta-target
+    string(REGEX REPLACE "^cmake" "${Halide_CMAKE_TARGET}" _resolved_target "${Halide_TARGET}")
+
+    set_tests_properties(
+        ${TARGET}
+        PROPERTIES
+        LABELS "${args_GROUPS}"
+        ENVIRONMENT "HL_TARGET=${_resolved_target};HL_JIT_TARGET=${_resolved_target}"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+        WILL_FAIL ${args_EXPECT_FAILURE}
+    )
+    if ("autoschedulers_cpu" IN_LIST args_GROUPS)
+        set_tests_properties(${TARGET} PROPERTIES RUN_SERIAL TRUE)
+    endif ()
 
     if (NOT args_USE_EXIT_CODE_ONLY)
         set_tests_properties(${TARGET} PROPERTIES

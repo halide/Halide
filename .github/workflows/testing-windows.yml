@@ -1,0 +1,95 @@
+name: Windows
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  windows:
+    name: windows-${{ matrix.bits }} / ${{ matrix.uv_group }}
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        bits: [ "32" ]  # Intentionally not 64, as we haven't configured self-hosted runners for it yet.
+        uv_group: [ "ci-llvm-main", "ci-llvm-22", "ci-llvm-21" ]
+        include:
+          - bits: 32
+            arch: x86
+            python: cpython-3.10.20-windows-x86-none
+          # - bits: 64  # Intentionally not 64, as we haven't configured self-hosted runners for it yet.
+          #   arch: x64
+          #   python: cpython-3.10.20-windows-x86_64-none
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+
+      - name: Sync CI environment
+        run: |
+          # uv uses the host platform for dependency resolution regardless of the target
+          # Python, so on Windows it would download x86_64 halide-llvm (~250MB) even for
+          # a 32-bit build. Instead: read the pinned version from the lockfile (no download),
+          # sync only ci-base (no LLVM), then fetch the correct win32 wheel directly.
+          LLVM_VER=$(uv export --group '${{ matrix.uv_group }}' --no-emit-project \
+            | awk -F'==' '/^halide-llvm==/ { gsub(/ .*/, "", $2); print $2 }')
+
+          uv sync --python '${{ matrix.python }}' --group ci-base --no-install-project
+          uv pip install --python-platform i686-pc-windows-msvc --only-binary :all: \
+            --extra-index-url https://pypi.halide-lang.org/simple/ \
+            "halide-llvm==${LLVM_VER}"
+
+          echo "${GITHUB_WORKSPACE}/.venv/Scripts" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
+
+      - name: Configure LLVM
+        run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
+
+      - name: Configure CMake
+        run: |
+          # NB: vcpkg docs use VCPKG_ROOT, but GHA runners use VCPKG_INSTALLATION_ROOT
+          TOOLCHAIN_ARGS=(
+            "-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake"
+            "-DVCPKG_TARGET_TRIPLET=${{ matrix.arch }}-windows"
+            "-DVCPKG_MANIFEST_FEATURES=developer"
+          )
+          if [[ "${{ matrix.bits }}" == "32" ]]; then
+            TOOLCHAIN_ARGS+=("-DWITH_PYTHON_BINDINGS=OFF")
+          fi
+
+          cmake -G Ninja -S . -B build \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DHalide_LLVM_ROOT="${Halide_LLVM_ROOT}" \
+            "${TOOLCHAIN_ARGS[@]}"
+
+      - name: Initial build
+        run: cmake --build build
+
+      - name: Test (host)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=host
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"
+
+      - name: Test (no extensions)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=cmake
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"

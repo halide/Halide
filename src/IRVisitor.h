@@ -98,6 +98,11 @@ private:
 
     template<typename T>
     auto visit_impl(const T *op) {
+        // Catch lambdas that accidentally take non-const T* (e.g. For *
+        // instead of const For *). Such lambdas silently never match.
+        static_assert(!std::is_invocable_v<decltype(handlers), LambdaVisitor *, T *> ||
+                          std::is_invocable_v<decltype(handlers), LambdaVisitor *, const T *>,
+                      "visit_with lambda takes a non-const node pointer; use const T * instead");
         if constexpr (std::is_invocable_v<decltype(handlers), LambdaVisitor *, const T *>) {
             return handlers(this, op);
         } else {
@@ -255,9 +260,15 @@ protected:
 template<typename... Lambdas>
 void visit_with(const IRNode *ir, Lambdas &&...lambdas) {
     LambdaVisitor visitor{std::forward<Lambdas>(lambdas)...};
+    // Each lambda must take two args: (auto *self, <some-pointer> op).
+    // Test with const IntImm * (works for auto * params via deduction) and
+    // nullptr_t (works for specific-type params via implicit conversion).
     constexpr bool all_take_two_args =
-        (std::is_invocable_v<Lambdas, decltype(&visitor), decltype(nullptr)> && ...);
-    static_assert(all_take_two_args);
+        ((std::is_invocable_v<Lambdas, decltype(&visitor), const IntImm *> ||
+          std::is_invocable_v<Lambdas, decltype(&visitor), decltype(nullptr)>) &&
+         ...);
+    static_assert(all_take_two_args,
+                  "All visit_with lambdas must take two arguments: (auto *self, const T *op)");
     ir->accept(&visitor);
 }
 

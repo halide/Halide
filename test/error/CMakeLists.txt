@@ -41,6 +41,7 @@ tests(GROUPS error
       callable_typed_bad_arguments_buffer_dims.cpp
       callable_typed_bad_arguments_buffer_type.cpp
       clamp_out_of_range.cpp
+      compute_at_on_output.cpp
       compute_with_crossing_edges1.cpp
       compute_with_crossing_edges2.cpp
       compute_with_fuse_in_specialization.cpp
