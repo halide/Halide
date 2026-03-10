@@ -220,6 +220,7 @@ class LegalizeVectors : public IRMutator {
                     body = LetOrLetStmt::make(sl.variable_name, value, body);
                     debug(3) << "  Add: let " << sl.variable_name << " = " << value << "\n";
                 }
+                requested_slices.pop(op->name);
             }
             return body;
         } else {
