@@ -1424,7 +1424,6 @@ protected:
 
     void verify_internals() override;
 
-
     virtual std::string get_c_type() const = 0;
 
     void check_value_writable() const override;

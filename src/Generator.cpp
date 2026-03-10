@@ -123,8 +123,6 @@ std::vector<Type> parse_halide_type_list(const std::string &types) {
     return result;
 }
 
-
-
 const std::map<std::string, Type> &get_halide_type_enum_map() {
     static const std::map<std::string, Type> halide_type_enum_map{
         {"bool", Bool()},
