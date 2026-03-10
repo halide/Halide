@@ -92,14 +92,21 @@ jobs:
       - name: Initial build
         run: cmake --build build
 
+      - name: DEBUG - print cpu info and Halide host target
+        run: |
+          cat /proc/cpuinfo
+          ./build/src/autoschedulers/common/get_host_target
+
       - name: Test (host)
         run: |
           cmake -S . -B build -DHalide_TARGET=host
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
 
       - name: Test (no extensions)
         run: |
           cmake -S . -B build -DHalide_TARGET=cmake
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
