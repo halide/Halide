@@ -213,13 +213,14 @@ class LegalizeVectors : public IRMutator {
             auto body = mutate(op->body);
             // Here we know which requested vector variable slices should be created for the body of the Let/LetStmt to work.
 
-            if (std::vector<VectorSlice> *reqs = requested_slices.shallow_find(op->name)) {
+            if (const std::vector<VectorSlice> *reqs = requested_slices.find(op->name)) {
                 for (const VectorSlice &sl : *reqs) {
                     Expr value = extract_lanes(op->value, sl.start, sl.stride, sl.count, sliceable_vectors, requested_slices);
                     value = mutate(value);
                     body = LetOrLetStmt::make(sl.variable_name, value, body);
                     debug(3) << "  Add: let " << sl.variable_name << " = " << value << "\n";
                 }
+                requested_slices.pop(op->name);
             }
             return body;
         } else {
@@ -277,16 +278,21 @@ class LegalizeVectors : public IRMutator {
             std::vector<Stmt> assignments;
             assignments.reserve(num_vecs);
             for (int i = 0; i < num_vecs; ++i) {
-                int lane_start = i * max_lanes;
 
                 // Unpack in the same order we packed them
                 Expr rhs = struct_call->args[i * 3 + 0];
                 Expr index = struct_call->args[i * 3 + 1];
                 Expr predicate = struct_call->args[i * 3 + 2];
 
+                ModulusRemainder alignment = op->alignment;
+                if (i != 0) {
+                    // In case i == 0, we are taking the first lane, and the alignment is still valid.
+                    alignment = ModulusRemainder();
+                }
+
                 assignments.push_back(Store::make(
                     op->name, std::move(rhs), std::move(index),
-                    op->param, std::move(predicate), op->alignment + lane_start));
+                    op->param, std::move(predicate), alignment));
             }
 
             Stmt result = Block::make(assignments);
@@ -304,7 +310,7 @@ class LegalizeVectors : public IRMutator {
     }
 
     Expr visit(const Shuffle *op) override {
-        // Primary violatation: there are too many output lanes.
+        // Primary violation: there are too many output lanes.
         if (op->type.lanes() > max_lanes) {
             // Break it down in multiple legal-output-length shuffles, and concatenate them back together.
             int total_lanes = op->type.lanes();

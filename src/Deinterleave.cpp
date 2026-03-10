@@ -413,12 +413,6 @@ private:
         }
 
         Type t = op->type.with_lanes(new_lanes);
-        /*
-        internal_assert((op->type.lanes() - starting_lane + lane_stride - 1) / lane_stride == new_lanes)
-            << "Deinterleaving with lane stride " << lane_stride << " and staring lane " << starting_lane
-            << " for var of Type " << op->type << " to " << t << " drops lanes unexpectedly."
-            << " Deinterleaver probably recursed too deep into types of different lane count.";
-            */
 
         if (sliceable_lets.contains(op->name)) {
             // The variable accessed is marked as sliceable by the caller.
