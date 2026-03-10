@@ -8,6 +8,7 @@
 #include "onnx_converter.h"
 #include <chrono>
 #include <fstream>
+#include <limits>
 #include <random>
 #include <unordered_set>
 
@@ -72,14 +73,53 @@ std::string auto_schedule(const HalideModel &pipeline) {
 
 template<typename T>
 struct Distribution {
-    typedef typename std::conditional<
+    using Type = typename std::conditional<
         std::is_floating_point<T>::value,
         std::uniform_real_distribution<T>,
-        std::uniform_int_distribution<T>>::type Type;
+        std::uniform_int_distribution<T>>::type;
+
+    T operator()(std::mt19937 &generator) {
+        return distrib(generator);
+    }
+
+private:
+    Type distrib;
 };
+
 template<>
 struct Distribution<bool> {
-    typedef typename std::uniform_int_distribution<uint8_t> Type;
+    using Type = std::bernoulli_distribution;
+
+    bool operator()(std::mt19937 &generator) {
+        return distrib(generator);
+    }
+
+private:
+    Type distrib = Type(0.5);
+};
+
+template<>
+struct Distribution<std::int8_t> {
+    using Type = std::uniform_int_distribution<int>;
+
+    std::int8_t operator()(std::mt19937 &generator) {
+        return static_cast<std::int8_t>(distrib(generator));
+    }
+
+private:
+    Type distrib = Type(0, std::numeric_limits<std::int8_t>::max());
+};
+
+template<>
+struct Distribution<std::uint8_t> {
+    using Type = std::uniform_int_distribution<unsigned int>;
+
+    std::uint8_t operator()(std::mt19937 &generator) {
+        return static_cast<std::uint8_t>(distrib(generator));
+    }
+
+private:
+    Type distrib = Type(0, std::numeric_limits<std::uint8_t>::max());
 };
 
 template<typename T>
@@ -92,7 +132,7 @@ void prepare_random_image_param(
     std::vector<int> dims(shape.size());
     std::iota(dims.rbegin(), dims.rend(), 0);
     values.transpose(dims);
-    typename Distribution<T>::Type distrib;
+    Distribution<T> distrib;
     std::mt19937 generator;
     values.for_each_value([&](T &val) { val = distrib(generator); });
     image_param.set(values);
