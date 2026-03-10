@@ -22,6 +22,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "FETCHCONTENT_FULLY_DISCONNECTED": "ON",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchain.ci.cmake",
         "VCPKG_MANIFEST_FEATURES": "developer"
       }
     },
