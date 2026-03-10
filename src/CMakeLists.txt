@@ -657,14 +657,18 @@ endif ()
 # Precompiled headers
 ##
 
-# Non-LLVM sources get a PCH covering the most expensive standard library and
-# core Halide headers.
-target_precompile_headers(Halide PRIVATE Halide_pch.h)
+# On MSVC, cmake_pch.cxx compiles to a real .obj whose _PchSym_ markers leak
+# into the auto-generated exports.def (via CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS),
+# causing LNK2001/LNK4022. Disable PCH on MSVC entirely to avoid this.
+if (NOT MSVC)
+    # Non-LLVM sources get a PCH covering the most expensive standard library
+    # headers.
+    target_precompile_headers(Halide PRIVATE Halide_pch.h)
 
-# Util.cpp implements run_with_large_stack(), which is sensitive to CMake's
-# forced-include PCH path and produces crashing helper binaries when compiled
-# with PCH enabled.
-set_source_files_properties(Util.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+    # Util.cpp implements run_with_large_stack(), which requires _XOPEN_SOURCE
+    # to be defined before any includes. The PCH force-include violates this.
+    set_source_files_properties(Util.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+endif ()
 
 # LLVM sources live in their own object library so they can have a separate PCH.
 add_library(Halide_LLVM_srcs OBJECT
@@ -705,7 +709,12 @@ foreach (backend IN LISTS Halide_LLVM_COMPONENTS)
     target_link_libraries(Halide_LLVM_srcs PRIVATE Halide_LLVM::${backend})
 endforeach ()
 
-target_precompile_headers(Halide_LLVM_srcs PRIVATE Halide_llvm_pch.h)
+# On MSVC, cmake_pch.cxx compiles to a real .obj whose _PchSym_ markers leak
+# into the auto-generated exports.def (via CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS),
+# causing LNK2001/LNK4022. Disable the LLVM PCH on MSVC to avoid this.
+if (NOT MSVC)
+    target_precompile_headers(Halide_LLVM_srcs PRIVATE Halide_llvm_pch.h)
+endif ()
 
 target_sources(Halide PRIVATE $<TARGET_OBJECTS:Halide_LLVM_srcs>)
 
