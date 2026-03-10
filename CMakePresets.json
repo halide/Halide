@@ -22,22 +22,18 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "FETCHCONTENT_FULLY_DISCONNECTED": "ON",
-        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchain.ci.cmake",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
         "VCPKG_MANIFEST_FEATURES": "developer"
       }
     },
     {
       "name": "ci-linux-x86-64",
-      "inherits": "ci",
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-linux"
-      }
+      "inherits": "ci"
     },
     {
       "name": "ci-linux-x86-32",
       "inherits": "ci",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x86-linux",
         "WITH_PYTHON_BINDINGS": "NO"
       }
     },
@@ -45,7 +41,6 @@
       "name": "ci-linux-arm-64",
       "inherits": "ci",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-linux",
         "WITH_PYTHON_BINDINGS": "NO"
       }
     },
@@ -53,37 +48,24 @@
       "name": "ci-linux-arm-32",
       "inherits": "ci",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm-linux",
         "WITH_PYTHON_BINDINGS": "NO"
       }
     },
     {
       "name": "ci-macos-arm-64",
-      "inherits": "ci",
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-osx"
-      }
+      "inherits": "ci"
     },
     {
       "name": "ci-macos-x86-64",
-      "inherits": "ci",
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-osx"
-      }
+      "inherits": "ci"
     },
     {
       "name": "ci-windows-x86-64",
-      "inherits": "ci",
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows"
-      }
+      "inherits": "ci"
     },
     {
       "name": "ci-windows-x86-32",
-      "inherits": "ci",
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x86-windows"
-      }
+      "inherits": "ci"
     },
     {
       "name": "vcpkg",
