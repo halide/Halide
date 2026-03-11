@@ -452,6 +452,6 @@ void test_bounds() {
 
 int main(int argc, char **argv) {
     test_bounds();
-    printf("All tests passed.\n");
+    printf("Success!\n");
     return 0;
 }

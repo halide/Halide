@@ -16,7 +16,7 @@ add_halide_test(li2018_demo_gradient_autoscheduler
                 COMMAND li2018_demo_gradient_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all --success
                 GROUPS li2018 autoschedulers_cpu autoschedulers_gpu multithreaded)
 
-tests(GROUPS li2018 autoschedulers_cpu autoschedulers_gpu
+tests(GROUPS li2018 autoschedulers_cpu autoschedulers_gpu multithreaded
       SOURCES
       test.cpp
       ARGS $<TARGET_FILE:Halide::Li2018>)
@@ -39,7 +39,7 @@ if (WITH_PYTHON_BINDINGS)
         set_tests_properties(
             li2018_gradient_autoscheduler_test_py PROPERTIES
             DEPENDS li2018_test
-            LABELS "li2018;autoschedulers_cpu;autoschedulers_gpu"
+            LABELS "li2018;autoschedulers_cpu;autoschedulers_gpu;multithreaded"
             RUN_SERIAL TRUE
             ENVIRONMENT_MODIFICATION "${PYTHONPATH}"
         )

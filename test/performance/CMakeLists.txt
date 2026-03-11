@@ -45,9 +45,5 @@ tests(GROUPS performance multithreaded
       thread_safe_jit_callable.cpp
       )
 
-# Make sure that performance tests do not run in parallel with other tests,
-# since doing so might make them flaky.
-set_tests_properties(${TEST_NAMES} PROPERTIES RUN_SERIAL TRUE)
-
 # This test needs rdynamic or equivalent
 set_target_properties(performance_fast_pow PROPERTIES ENABLE_EXPORTS TRUE)

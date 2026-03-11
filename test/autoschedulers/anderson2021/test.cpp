@@ -466,5 +466,6 @@ int main(int argc, char **argv) {
     }
 #endif
 
+    std::cout << "Success!\n";
     return 0;
 }

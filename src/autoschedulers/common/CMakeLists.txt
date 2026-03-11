@@ -30,19 +30,3 @@ if (WITH_UTILS)
     add_executable(get_host_target get_host_target.cpp)
     target_link_libraries(get_host_target PRIVATE Halide::Halide)
 endif ()
-
-
-# =================================================================
-# Tests for private/internal functionality of Adams2019 (vs for public functionality,
-# which is handled in tests/autoschedulers/Adams2019)
-
-if (WITH_TESTS)
-    add_executable(test_perfect_hash_map test_perfect_hash_map.cpp)
-    add_test(NAME test_perfect_hash_map COMMAND test_perfect_hash_map)
-    set_tests_properties(
-        test_perfect_hash_map
-        PROPERTIES
-        LABELS "autoschedulers_cpu"
-        RUN_SERIAL TRUE
-    )
-endif ()

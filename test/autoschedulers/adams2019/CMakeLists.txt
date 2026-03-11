@@ -1,38 +1,5 @@
 ##
-# Build rules for the Adams2019 autoscheduler library
-##
-
-function(add_adams2019_test NAME)
-    set(options "")
-    set(oneValueArgs ENVIRONMENT)
-    set(multiValueArgs COMMAND LABELS)
-    cmake_parse_arguments(ARGS "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    if (NOT ARGS_COMMAND)
-        set(ARGS_COMMAND ${NAME})
-    endif ()
-
-    if (NOT ARGS_LABELS)
-        set(ARGS_LABELS "")
-    endif ()
-    list(APPEND ARGS_LABELS adams2019)
-    list(APPEND ARGS_LABELS autoschedulers_cpu)
-
-    add_test(NAME ${NAME}
-             COMMAND ${ARGS_COMMAND})
-    set_tests_properties(${NAME}
-                         PROPERTIES
-                         LABELS "${ARGS_LABELS}"
-                         ENVIRONMENT "${ENVIRONMENT}")
-    if ("autoschedulers_cpu" IN_LIST ARGS_LABELS)
-        set_tests_properties(${NAME} PROPERTIES RUN_SERIAL TRUE)
-    endif ()
-endfunction()
-
-
-##
-# Tests and demos
-# TODO(#4053): move these to a separate folder since they're tests.
+# Tests for the Adams2019 autoscheduler
 ##
 
 # =================================================================
@@ -50,8 +17,9 @@ add_halide_library(adams2019_demo FROM adams2019_demo.generator
 add_executable(adams2019_demo_apps_autoscheduler ${DEMO_REGISTRATION_FILE})
 target_link_libraries(adams2019_demo_apps_autoscheduler PRIVATE adams2019_demo Halide::RunGenMain)
 
-add_adams2019_test(adams2019_demo_apps_autoscheduler
-                   COMMAND adams2019_demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all)
+add_halide_test(adams2019_demo_apps_autoscheduler
+                COMMAND adams2019_demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all --success
+                GROUPS adams2019 autoschedulers_cpu multithreaded)
 
 # =================================================================
 
@@ -68,8 +36,9 @@ add_halide_library(adams2019_included_schedule_file FROM adams2019_included_sche
 add_executable(adams2019_demo_included_schedule_file ${adams2019_included_schedule_reg})
 target_link_libraries(adams2019_demo_included_schedule_file PRIVATE adams2019_included_schedule_file Halide::RunGenMain)
 
-add_adams2019_test(adams2019_demo_included_schedule_file
-                   COMMAND adams2019_demo_included_schedule_file --benchmarks=all --benchmark_min_time=1 --estimate_all)
+add_halide_test(adams2019_demo_included_schedule_file
+                COMMAND adams2019_demo_included_schedule_file --benchmarks=all --benchmark_min_time=1 --estimate_all --success
+                GROUPS adams2019 autoschedulers_cpu multithreaded)
 
 # =================================================================
 # Smaller tests
@@ -79,7 +48,19 @@ add_executable(adams2019_test_apps_autoscheduler test.cpp)
 target_link_libraries(adams2019_test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 add_dependencies(adams2019_test_apps_autoscheduler Halide_Adams2019)
 
-add_adams2019_test(adams2019_test_apps_autoscheduler
-                   COMMAND adams2019_test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019> $<TARGET_FILE_DIR:Halide_Adams2019>/baseline.weights
-                   LABELS multithreaded
-                   ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>:$ENV{LD_LIBRARY_PATH}")
+add_halide_test(adams2019_test_apps_autoscheduler
+                COMMAND adams2019_test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019> $<TARGET_FILE_DIR:Halide_Adams2019>/baseline.weights
+                GROUPS adams2019 autoschedulers_cpu multithreaded)
+set_tests_properties(adams2019_test_apps_autoscheduler PROPERTIES
+                     ENVIRONMENT_MODIFICATION "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:Halide_Adams2019>")
+
+# test_function_dag
+add_executable(adams2019_test_function_dag
+               test_function_dag.cpp
+               ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/FunctionDAG.cpp)
+target_include_directories(adams2019_test_function_dag PRIVATE
+                           ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019)
+target_link_libraries(adams2019_test_function_dag PRIVATE Halide::Plugin)
+
+add_halide_test(adams2019_test_function_dag
+                GROUPS adams2019 autoschedulers_cpu)

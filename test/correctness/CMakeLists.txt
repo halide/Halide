@@ -225,7 +225,6 @@ tests(GROUPS correctness
       memoize_cloned.cpp
       min_extent.cpp
       mod.cpp
-      mul_div_mod.cpp
       multi_output_pipeline_with_bad_sizes.cpp
       multi_splits_with_diff_tail_strategies.cpp
       multi_way_select.cpp
@@ -343,11 +342,8 @@ tests(GROUPS correctness
       unused_func.cpp
       update_chunk.cpp
       vector_bounds_inference.cpp
-      vector_cast.cpp
       vector_extern.cpp
-      vector_math.cpp
       vector_print_bug.cpp
-      vector_reductions.cpp
       vector_shuffle.cpp
       vector_tile.cpp
       vectorize_guard_with_if.cpp
@@ -377,15 +373,6 @@ if (NOT Halide_BUILDING_IN_CI OR Halide_TARGET STREQUAL "host")
           simd_op_check_sve2.cpp
           simd_op_check_wasm.cpp
           simd_op_check_x86.cpp)
-    set_tests_properties(
-        correctness_simd_op_check_arm
-        correctness_simd_op_check_hvx
-        correctness_simd_op_check_powerpc
-        correctness_simd_op_check_riscv
-        correctness_simd_op_check_sve2
-        correctness_simd_op_check_wasm
-        correctness_simd_op_check_x86
-        PROPERTIES RUN_SERIAL TRUE)
 endif ()
 
 tests(GROUPS correctness multithreaded
@@ -407,6 +394,7 @@ tests(GROUPS correctness multithreaded
       legal_race_condition.cpp
       lots_of_dimensions.cpp
       memoize.cpp
+      mul_div_mod.cpp
       multi_pass_reduction.cpp
       multiple_outputs_extern.cpp
       multiple_scatter.cpp
@@ -429,6 +417,9 @@ tests(GROUPS correctness multithreaded
       truncated_pyramid.cpp
       tuple_vector_reduce.cpp
       unroll_huge_mux.cpp
+      vector_cast.cpp
+      vector_math.cpp
+      vector_reductions.cpp
       )
 
 # Make sure the test that needs Halide::ImageIO has it
@@ -482,12 +473,3 @@ set_target_properties(correctness_async
                       correctness_stage_strided_loads
                       correctness_storage_folding
                       PROPERTIES ENABLE_EXPORTS TRUE)
-
-# Tests which are internally parallelized should not be run at the
-# same time as other tests, or they may time out
-
-set_tests_properties(correctness_mul_div_mod
-                     correctness_vector_cast
-                     correctness_vector_math
-                     correctness_vector_reductions
-                     PROPERTIES RUN_SERIAL TRUE)
