@@ -3,6 +3,20 @@ name: Windows
 on:
   pull_request:
     types: [ opened, synchronize, reopened ]
+    paths-ignore:
+      - "doc/**"
+      - "README.md"
+      - "CODE_OF_CONDUCT.md"
+      - "LICENSE.txt"
+      - ".gitignore"
+      - ".gitattributes"
+      - ".gitmodules"
+      - ".lldbinit"
+      - ".github/**"
+      - "!.github/workflows/testing-windows.yml"
+      - "packaging/**"
+      - "Makefile"
+      - "Makefile.inc"
   workflow_dispatch:
 
 concurrency:
