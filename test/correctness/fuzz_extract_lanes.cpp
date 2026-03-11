@@ -439,7 +439,7 @@ int main(int argc, char **argv) {
         if (argc > 1) {
             std::istringstream{argv[1]} >> seed;
         }
-        std::cout << "Seed: " << seed << std::endl;
+        std::cout << "Seed: " << seed << "\n";
         RandomEngine rng{seed};
 
         if (!test_one(rng)) {
