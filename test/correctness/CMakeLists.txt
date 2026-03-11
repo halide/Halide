@@ -285,13 +285,6 @@ tests(GROUPS correctness
       shift_by_unsigned_negated.cpp
       shifted_image.cpp
       side_effects.cpp
-      simd_op_check_arm.cpp
-      simd_op_check_hvx.cpp
-      simd_op_check_powerpc.cpp
-      simd_op_check_riscv.cpp
-      simd_op_check_sve2.cpp
-      simd_op_check_wasm.cpp
-      simd_op_check_x86.cpp
       simplified_away_embedded_image.cpp
       simplify.cpp
       skip_stages.cpp
@@ -369,7 +362,31 @@ tests(GROUPS correctness
       vectorized_reduction_bug.cpp
       widening_lerp.cpp
       widening_reduction.cpp
-      )
+)
+
+# Simd op check tests fix the target features internally, so they
+# only need to be run on one target in CI. Every CI runner targets
+# host, so we can just check for that.
+if (NOT Halide_BUILDING_IN_CI OR Halide_TARGET STREQUAL "host")
+    tests(GROUPS correctness multithreaded
+          SOURCES
+          simd_op_check_arm.cpp
+          simd_op_check_hvx.cpp
+          simd_op_check_powerpc.cpp
+          simd_op_check_riscv.cpp
+          simd_op_check_sve2.cpp
+          simd_op_check_wasm.cpp
+          simd_op_check_x86.cpp)
+    set_tests_properties(
+        correctness_simd_op_check_arm
+        correctness_simd_op_check_hvx
+        correctness_simd_op_check_powerpc
+        correctness_simd_op_check_riscv
+        correctness_simd_op_check_sve2
+        correctness_simd_op_check_wasm
+        correctness_simd_op_check_x86
+        PROPERTIES RUN_SERIAL TRUE)
+endif ()
 
 tests(GROUPS correctness multithreaded
       SOURCES
@@ -470,13 +487,6 @@ set_target_properties(correctness_async
 # same time as other tests, or they may time out
 
 set_tests_properties(correctness_mul_div_mod
-                     correctness_simd_op_check_arm
-                     correctness_simd_op_check_hvx
-                     correctness_simd_op_check_powerpc
-                     correctness_simd_op_check_riscv
-                     correctness_simd_op_check_sve2
-                     correctness_simd_op_check_wasm
-                     correctness_simd_op_check_x86
                      correctness_vector_cast
                      correctness_vector_math
                      correctness_vector_reductions
