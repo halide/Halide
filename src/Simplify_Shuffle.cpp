@@ -106,7 +106,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
 
     if (new_vectors.size() == 1) {
         const Ramp *ramp = new_vectors[0].as<Ramp>();
-        if (ramp && op->is_slice()) {
+        if (ramp && ramp->base.type().is_scalar() && op->is_slice()) {
             int first_lane_in_src = op->indices[0];
             int slice_stride = op->slice_stride();
             if (slice_stride >= 1) {
@@ -201,9 +201,11 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
 
     // Try to collapse a shuffle of broadcasts into a single
     // broadcast. Note that it doesn't matter what the indices
-    // are.
+    // are. Only applies when the broadcast value is scalar,
+    // because Broadcast::make(vec, N) has vec.lanes() * N total
+    // lanes.
     const Broadcast *b1 = new_vectors[0].as<Broadcast>();
-    if (b1) {
+    if (b1 && b1->value.type().is_scalar()) {
         bool can_collapse = true;
         for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
             if (const Broadcast *b2 = new_vectors[i].as<Broadcast>()) {
