@@ -364,7 +364,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
             predicate_slice = mutate(predicate_slice, nullptr);
 
             Expr load = Load::make(op->type.with_lanes(new_lanes), op->name, new_index,
-                                   op->image, op->param, const_true(new_lanes, nullptr), ModulusRemainder{});
+                                   op->image, op->param, predicate_slice, ModulusRemainder{});
             loaded_vecs.emplace_back(std::move(load));
         }
         return Shuffle::make(loaded_vecs, s_index->indices);
