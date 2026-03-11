@@ -38,7 +38,7 @@ namespace {
 class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
 public:
     /** Create a PTX device code generator. */
-    CodeGen_PTX_Dev(const Target &host, bool any_strict_float);
+    CodeGen_PTX_Dev(const Target &host);
     ~CodeGen_PTX_Dev() override;
 
     void add_kernel(Stmt stmt,
@@ -105,9 +105,8 @@ protected:
     bool supports_atomic_add(const Type &t) const override;
 };
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev(const Target &host, bool any_strict_float)
+CodeGen_PTX_Dev::CodeGen_PTX_Dev(const Target &host)
     : CodeGen_LLVM(host) {
-    this->any_strict_float = any_strict_float;
     context = new llvm::LLVMContext();
 }
 
@@ -221,6 +220,12 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 }
 
 void CodeGen_PTX_Dev::init_module() {
+    // This class uses multiple inheritance. It's a GPU device code generator,
+    // and also an llvm-based one. Both of these track strict_float presence,
+    // but OffloadGPULoops only sets the GPU device code generator flag, so here
+    // we set the CodeGen_LLVM flag to match.
+    CodeGen_LLVM::any_strict_float = CodeGen_GPU_Dev::any_strict_float;
+
     init_context();
 
     module = get_initial_module_for_ptx_device(target, context);
@@ -249,6 +254,13 @@ void CodeGen_PTX_Dev::init_module() {
         auto *fn = declare_intrin_overload(i.name, i.ret_type, i.intrin_name, std::move(i.arg_types));
         function_does_not_access_memory(fn);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
+    }
+
+    if (CodeGen_GPU_Dev::any_strict_float) {
+        set_strict_fp_math();
+        in_strict_float = target.has_feature(Target::StrictFloat);
+    } else {
+        set_fast_fp_math();
     }
 }
 
@@ -576,19 +588,22 @@ string CodeGen_PTX_Dev::mattrs() const {
         return "+ptx71";
     } else if (target.has_feature(Target::CUDACapability80)) {
         return "+ptx70";
-    } else if (target.has_feature(Target::CUDACapability70) ||
-               target.has_feature(Target::CUDACapability75)) {
+    } else if (target.has_feature(Target::CUDACapability75)) {
+        return "+ptx63";
+    } else if (target.has_feature(Target::CUDACapability70)) {
         return "+ptx60";
     } else if (target.has_feature(Target::CUDACapability61)) {
         return "+ptx50";
     } else if (target.features_any_of({Target::CUDACapability32,
                                        Target::CUDACapability50})) {
-        // Need ptx isa 4.0.
+        // sm_32 needs ptx isa 4.0 even though it seems to break the ordering
         return "+ptx40";
-    } else {
-        // Use the default. For llvm 3.5 it's ptx 3.2.
-        return "";
+    } else if (target.features_any_of({Target::CUDACapability35,
+                                       Target::CUDACapability30})) {
+        return "+ptx32";
     }
+    // Let LLVM pick
+    return "";
 }
 
 bool CodeGen_PTX_Dev::use_soft_float_abi() const {
@@ -612,25 +627,18 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     TargetOptions options;
-    options.AllowFPOpFusion = FPOpFusion::Fast;
-#if LLVM_VERSION < 210
-    options.UnsafeFPMath = true;
-#endif
+    options.AllowFPOpFusion = CodeGen_GPU_Dev::any_strict_float ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
 #if LLVM_VERSION < 230
-    options.NoInfsFPMath = true;
+    options.NoInfsFPMath = !CodeGen_GPU_Dev::any_strict_float;
 #endif
-    options.NoNaNsFPMath = true;
-    options.HonorSignDependentRoundingFPMathOption = false;
+    options.NoNaNsFPMath = !CodeGen_GPU_Dev::any_strict_float;
+    options.HonorSignDependentRoundingFPMathOption = !CodeGen_GPU_Dev::any_strict_float;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
 
     std::unique_ptr<TargetMachine>
         target_machine(llvm_target->createTargetMachine(
-#if LLVM_VERSION >= 210
             triple,
-#else
-            triple.str(),
-#endif
             mcpu_target(), mattrs(), options,
             llvm::Reloc::PIC_,
             llvm::CodeModel::Small,
@@ -819,13 +827,13 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
 
 }  // namespace
 
-std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target, bool any_strict_float) {
-    return std::make_unique<CodeGen_PTX_Dev>(target, any_strict_float);
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
+    return std::make_unique<CodeGen_PTX_Dev>(target);
 }
 
 #else  // WITH_PTX
 
-std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target, bool /*any_strict_float*/) {
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
     user_error << "PTX not enabled for this build of Halide.\n";
     return nullptr;
 }

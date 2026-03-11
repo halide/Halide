@@ -296,6 +296,7 @@ tests(GROUPS correctness
       simplified_away_embedded_image.cpp
       simplify.cpp
       skip_stages.cpp
+      skip_stages_cse_bug.cpp
       skip_stages_external_array_functions.cpp
       skip_stages_memoize.cpp
       sliding_backwards.cpp
@@ -319,7 +320,10 @@ tests(GROUPS correctness
       store_in.cpp
       strict_float.cpp
       strict_float_bounds.cpp
+      strict_fma.cpp
       strided_load.cpp
+      sve_codegen_predicated.cpp
+      sve_codegen_reinterpret.cpp
       target.cpp
       target_query.cpp
       tiled_matmul.cpp
@@ -453,11 +457,13 @@ set_target_properties(correctness_async
                       correctness_process_some_tiles
                       correctness_side_effects
                       correctness_skip_stages
+                      correctness_skip_stages_cse_bug
                       correctness_skip_stages_external_array_functions
                       correctness_sliding_backwards
                       correctness_sliding_over_guard_with_if
                       correctness_sliding_reduction
                       correctness_sliding_window
+                      correctness_stage_strided_loads
                       correctness_storage_folding
                       PROPERTIES ENABLE_EXPORTS TRUE)
 

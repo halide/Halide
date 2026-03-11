@@ -15,11 +15,59 @@
     {
       "name": "ci",
       "hidden": true,
-      "inherits": "base",
-      "toolchainFile": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
+      "binaryDir": "build",
+      "installDir": "local",
+      "generator": "Ninja",
+      "toolchainFile": "$env{VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "Halide_LLVM_SHARED_LIBS": false
+        "FETCHCONTENT_FULLY_DISCONNECTED": "ON",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
+        "VCPKG_MANIFEST_FEATURES": "developer"
+      }
+    },
+    {
+      "name": "ci-linux-x86-64",
+      "inherits": "ci"
+    },
+    {
+      "name": "ci-linux-x86-32",
+      "inherits": "ci",
+      "cacheVariables": {
+        "WITH_PYTHON_BINDINGS": "NO"
+      }
+    },
+    {
+      "name": "ci-linux-arm-64",
+      "inherits": "ci",
+      "cacheVariables": {
+        "WITH_PYTHON_BINDINGS": "NO"
+      }
+    },
+    {
+      "name": "ci-linux-arm-32",
+      "inherits": "ci",
+      "cacheVariables": {
+        "WITH_PYTHON_BINDINGS": "NO"
+      }
+    },
+    {
+      "name": "ci-macos-arm-64",
+      "inherits": "ci"
+    },
+    {
+      "name": "ci-macos-x86-64",
+      "inherits": "ci"
+    },
+    {
+      "name": "ci-windows-x86-64",
+      "inherits": "ci"
+    },
+    {
+      "name": "ci-windows-x86-32",
+      "inherits": "ci",
+      "cacheVariables": {
+        "WITH_PYTHON_BINDINGS": "NO"
       }
     },
     {
@@ -30,17 +78,7 @@
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_MANIFEST_FEATURES": "developer",
-        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg",
-        "Halide_USE_FETCHCONTENT": false
-      }
-    },
-    {
-      "name": "vcpkg-full",
-      "inherits": "vcpkg",
-      "displayName": "vcpkg deps (all dependencies)",
-      "description": "Build ALL dependencies with vcpkg",
-      "cacheVariables": {
-        "VCPKG_OVERLAY_PORTS": ""
+        "FETCHCONTENT_FULLY_DISCONNECTED": "ON"
       }
     },
     {
@@ -94,24 +132,6 @@
       "description": "Release build for a single-config generator, vcpkg dependencies"
     },
     {
-      "name": "debug-vcpkg-full",
-      "inherits": [
-        "debug",
-        "vcpkg-full"
-      ],
-      "displayName": "Debug (vcpkg-full)",
-      "description": "Debug build for a single-config generator, vcpkg-full dependencies"
-    },
-    {
-      "name": "release-vcpkg-full",
-      "inherits": [
-        "release",
-        "vcpkg-full"
-      ],
-      "displayName": "Release (vcpkg-full)",
-      "description": "Release build for a single-config generator, vcpkg-full dependencies"
-    },
-    {
       "name": "win32",
       "inherits": "vs2022",
       "displayName": "Win32 (Visual Studio)",
@@ -123,26 +143,6 @@
       "inherits": "vs2022",
       "displayName": "Win64 (Visual Studio)",
       "description": "Visual Studio-based x64 build with vcpkg dependencies.",
-      "architecture": "x64"
-    },
-    {
-      "name": "win32-vcpkg-full",
-      "inherits": [
-        "vcpkg-full",
-        "vs2022"
-      ],
-      "displayName": "Win32 (Visual Studio/vcpkg-full)",
-      "description": "Visual Studio-based Win32 build with vcpkg-full dependencies.",
-      "architecture": "Win32"
-    },
-    {
-      "name": "win64-vcpkg-full",
-      "inherits": [
-        "vcpkg-full",
-        "vs2022"
-      ],
-      "displayName": "Win64 (Visual Studio/vcpkg-full)",
-      "description": "Visual Studio-based x64 build with vcpkg-full dependencies.",
       "architecture": "x64"
     },
     {
@@ -168,58 +168,6 @@
       ],
       "displayName": "macOS (vcpkg)",
       "description": "macOS build with vcpkg dependencies"
-    },
-    {
-      "name": "macOS-vcpkg-full",
-      "inherits": [
-        "macOS",
-        "vcpkg-full"
-      ],
-      "displayName": "macOS (vcpkg-full)",
-      "description": "macOS build with vcpkg-full dependencies"
-    },
-    {
-      "name": "package",
-      "hidden": true,
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "LLVM_DIR": "$env{LLVM_DIR}",
-        "Clang_DIR": "$env{Clang_DIR}",
-        "LLD_DIR": "$env{LLD_DIR}",
-        "WITH_TESTS": "NO",
-        "WITH_TUTORIALS": "NO",
-        "WITH_DOCS": "YES",
-        "WITH_UTILS": "YES",
-        "WITH_PYTHON_BINDINGS": "NO",
-        "CMAKE_INSTALL_DATADIR": "share/Halide"
-      }
-    },
-    {
-      "name": "package-windows",
-      "inherits": [
-        "package",
-        "vs2022"
-      ],
-      "displayName": "Package ZIP for Windows",
-      "description": "Build for packaging Windows shared libraries.",
-      "binaryDir": "${sourceDir}/build",
-      "cacheVariables": {
-        "BUILD_SHARED_LIBS": "YES",
-        "CMAKE_INSTALL_BINDIR": "bin/$<CONFIG>",
-        "CMAKE_INSTALL_LIBDIR": "lib/$<CONFIG>",
-        "Halide_INSTALL_CMAKEDIR": "lib/cmake/Halide",
-        "Halide_INSTALL_HELPERSDIR": "lib/cmake/HalideHelpers"
-      }
-    },
-    {
-      "name": "package-unix",
-      "inherits": "package",
-      "displayName": "Package UNIX shared libs",
-      "description": "Build for packaging UNIX shared libraries.",
-      "binaryDir": "shared-Release",
-      "cacheVariables": {
-        "BUILD_SHARED_LIBS": "YES"
-      }
     },
     {
       "name": "linux-x64-asan",
@@ -250,73 +198,6 @@
         "WITH_TEST_GENERATOR": "NO",
         "WITH_TEST_FUZZ": "YES",
         "BUILD_SHARED_LIBS": "NO"
-      }
-    }
-  ],
-  "buildPresets": [
-    {
-      "name": "debug",
-      "configurePreset": "debug",
-      "displayName": "Debug",
-      "description": "Debug build with no special settings"
-    },
-    {
-      "name": "release",
-      "configurePreset": "release",
-      "displayName": "Release",
-      "description": "Release build with no special settings"
-    },
-    {
-      "name": "linux-x64-asan",
-      "configurePreset": "linux-x64-asan",
-      "displayName": "ASAN (Linux x64)",
-      "description": "Build everything with ASAN enabled"
-    },
-    {
-      "name": "linux-x64-fuzzer",
-      "configurePreset": "linux-x64-fuzzer",
-      "displayName": "Fuzzing (Linux x64)",
-      "description": "Build everything with fuzzing enabled"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "debug",
-      "configurePreset": "debug",
-      "displayName": "Debug",
-      "description": "Test everything with Debug build",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "release",
-      "configurePreset": "release",
-      "displayName": "Release",
-      "description": "Test everything with Release build",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "linux-x64-asan",
-      "configurePreset": "linux-x64-asan",
-      "displayName": "ASAN (Linux x64)",
-      "description": "Test everything with ASAN enabled",
-      "environment": {
-        "ASAN_OPTIONS": "detect_leaks=0:detect_container_overflow=0"
-      },
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "linux-x64-fuzzer",
-      "configurePreset": "linux-x64-fuzzer",
-      "displayName": "Fuzzing (Linux x64)",
-      "description": "Test everything with fuzzing enabled",
-      "output": {
-        "outputOnFailure": true
       }
     }
   ]

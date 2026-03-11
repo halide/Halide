@@ -31,8 +31,10 @@ class NamedMDNode;
 class DataLayout;
 class BasicBlock;
 class GlobalVariable;
+class VectorType;
 }  // namespace llvm
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -509,6 +511,11 @@ protected:
      * if you ask for more lanes than the vector has. */
     virtual llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);
 
+    /** Use an arithmetic fence to prevent LLVM from fusing operations
+     * across this barrier. Works by bitcasting to float, applying
+     * llvm.arithmetic.fence, and bitcasting back. */
+    virtual llvm::Value *optimization_fence(llvm::Value *);
+
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
     virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 
@@ -588,6 +595,14 @@ protected:
 
     /** Convert an LLVM vscale vector value to the corresponding fixed vector value. */
     llvm::Value *scalable_to_fixed_vector_type(llvm::Value *scalable);
+
+    /** Work around LLVM's inability to lower vector insert/extract for i1
+     * element types (getVectorSubVecPointer computes byte offsets via integer
+     * division, truncating for i1: 1/8=0). Widens the i1 vector arg to i8,
+     * applies fn to the widened value, and truncates the result back to
+     * result_i1_type. */
+    llvm::Value *handle_bool_as_i8(llvm::Value *arg, llvm::VectorType *result_i1_type,
+                                   const std::function<llvm::Value *(llvm::Value *)> &fn);
 
     /** Get number of vector elements, taking into account scalable vectors. Returns 1 for scalars. */
     // @{

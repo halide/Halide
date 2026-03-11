@@ -16,6 +16,7 @@ readme = "./packaging/pip/README.md"
 requires-python = ">=3.10"
 dependencies = [
     "imageio>=2",
+    "pillow; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
     "numpy>=1.26",
 ]
 dynamic = ['version']
@@ -38,7 +39,6 @@ classifiers = [
     "Environment :: WebAssembly",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Natural Language :: English",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
@@ -68,7 +68,8 @@ dev = [
     "setuptools-scm>=8.3.1",
 ]
 apps = [
-    "onnx==1.18.0", # for apps/onnx
+    "onnx==1.18.0; platform_machine != 'armv8l' and platform_machine != 'armv7l'", # for apps/onnx
+    "onnx==1.17.0; platform_machine == 'armv8l' or platform_machine == 'armv7l'", # for apps/onnx
     "pytest", # unspecified onnx dependency
 ]
 tools = [
@@ -86,10 +87,9 @@ ci-base = [
     { include-group = "tools" },
 ]
 
-ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm==23.0.0.dev0+g80f627e6"]
-ci-llvm-22 = [{ include-group = "ci-base" }, "halide-llvm==22.1.0rc3"]
-ci-llvm-21 = [{ include-group = "ci-base" }, "halide-llvm==21.1.8"]
-ci-llvm-20 = [{ include-group = "ci-base" }, "halide-llvm==20.1.8"]
+ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm~=23.0.0.dev0"]
+ci-llvm-22 = [{ include-group = "ci-base" }, "halide-llvm~=22.1.0"]
+ci-llvm-21 = [{ include-group = "ci-base" }, "halide-llvm~=21.1.0"]
 
 [project.urls]
 Homepage = "https://halide-lang.org"
@@ -109,10 +109,10 @@ metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
 [tool.scikit-build.cmake.define]
 CMAKE_DISABLE_FIND_PACKAGE_JPEG = true
 CMAKE_DISABLE_FIND_PACKAGE_PNG = true
+FETCHCONTENT_FULLY_DISCONNECTED = true
 Halide_ENABLE_EXCEPTIONS = true
 Halide_ENABLE_RTTI = true
 Halide_INSTALL_PYTHONDIR = "."
-Halide_USE_FETCHCONTENT = false
 Halide_WASM_BACKEND = "wabt"
 WITH_PYTHON_BINDINGS = true
 WITH_TESTS = false
@@ -173,6 +173,9 @@ search = "VERSION {current_version}"
 src = "vcpkg.json"
 
 [[tool.tbump.file]]
+src = "apps/vcpkg.json"
+
+[[tool.tbump.file]]
 src = "src/runtime/HalideRuntime.h"
 version_template = "{major}"
 search = "#define HALIDE_VERSION_MAJOR {current_version}"
@@ -199,8 +202,18 @@ conflicts = [
 
 [tool.uv.sources]
 halide-llvm = { index = "halide" }
+imageio = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+numpy = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+onnx = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+pillow = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+protobuf = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
 
 [[tool.uv.index]]
 name = "halide"
 url = "https://pypi.halide-lang.org/simple"
+explicit = true
+
+[[tool.uv.index]]
+name = "piwheels"
+url = "https://piwheels.org/simple"
 explicit = true

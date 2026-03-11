@@ -1,0 +1,36 @@
+{
+  "name": "tensorflow-lite",
+  "version-string": "2.21.0-rc0-a344c313",
+  "description": "TensorFlow Lite runtime and C API",
+  "homepage": "https://github.com/tensorflow/tensorflow",
+  "license": "Apache-2.0",
+  "dependencies": [
+    "abseil",
+    "cpuinfo",
+    "eigen3",
+    "fp16",
+    "farmhash",
+    "fft2d",
+    "flatbuffers",
+    "gemmlowp",
+    "ml-dtypes",
+    {
+      "name": "neon2sse",
+      "platform": "x86 | x64"
+    },
+    "protobuf",
+    {
+      "name": "protobuf",
+      "host": true
+    },
+    "ruy",
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ]
+}

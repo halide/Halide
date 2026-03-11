@@ -36,7 +36,7 @@ T cast_arg(const py::handle &arg) {
     } catch (const py::cast_error &) {
         _halide_user_error
             << "select(): Expected " << py::str(py::type::of<T>().attr("__name__"))
-            << " but got " << py::str(arg.get_type().attr("__name__")) << ": "
+            << " but got " << py::str(py::type::of(arg).attr("__name__")) << ": "
             << py::str(arg);
     }
 }
@@ -126,6 +126,7 @@ void define_operators(py::module &m) {
     m.def("log", &log);
     m.def("pow", &pow);
     m.def("erf", &erf);
+    m.def("fma", &fma);
     m.def("fast_sin", &fast_sin);
     m.def("fast_cos", &fast_cos);
     m.def("fast_log", &fast_log);
