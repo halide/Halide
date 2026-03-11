@@ -53,7 +53,7 @@ jobs:
 
   check_cmake_file_lists:
     name: Check CMake file lists
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v4
       - name: Run test sources check
