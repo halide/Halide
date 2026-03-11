@@ -187,26 +187,18 @@ for these packages is linked in the table above.
 
 Halide has first-class support for using [vcpkg] to manage dependencies. The
 list of dependencies and features is contained inside `vcpkg.json` at the root
-of the repository.
+of the repository. LLVM and Python must be provided by the system; vcpkg handles
+the remaining dependencies (flatbuffers, wabt, pybind11, libjpeg, libpng, etc.).
 
-By default, a minimum set of LLVM backends will be enabled to compile JIT code
-for the host and the serialization feature will be enabled. When using the vcpkg
-toolchain file, you can set `-DVCPKG_MANIFEST_FEATURES=developer`
-to enable building all dependencies (except Doxygen, which is not available on
-vcpkg).
+Halide includes a `vcpkg-configuration.json` file that automatically configures
+[overlay ports][vcpkg-overlay] and overlay triplets. The overlay ports redirect
+LLVM and Python to system installations, preventing vcpkg from trying to build
+them. This configuration is applied automatically when vcpkg is used from the
+Halide source tree.
 
-By default, running `vcpkg install` will try to build all of LLVM. This is often
-undesirable as it takes very long to do and consumes a lot of disk space,
-especially as `vcpkg` requires special configuration to disable the debug build.
-It will _also_ attempt to build Python 3 as a dependency of pybind11.
-
-To mitigate this issue, we provide a [vcpkg-overlay] that disables building LLVM
-and Python. When using the vcpkg toolchain, you can enable it by setting
-`-DVCPKG_OVERLAY_PORTS=cmake/vcpkg`.
-
-If you do choose to use vcpkg to build LLVM (the easiest way on Windows), note
-that it is safe to delete the intermediate build files and caches in
-`D:\vcpkg\buildtrees` and `%APPDATA%\local\vcpkg`.
+When using the vcpkg toolchain file, you can set
+`-DVCPKG_MANIFEST_FEATURES=developer` to enable building all test dependencies
+(except Doxygen, which is not available on vcpkg).
 
 For convenience, we provide [CMake presets](#cmake-presets) that set these flags
 appropriately per-platform. They are documented further below.
@@ -360,15 +352,15 @@ standard types: `Debug`, `RelWithDebInfo`, `MinSizeRel`, or `Release`.
 
 ## CMake Presets
 
+Halide provides several [presets][cmake_presets] to make the above commands more
+convenient.
+
 ### Common presets
 
-Halide provides several [presets][cmake_presets] to make the above commands more
-convenient. The following CMake preset commands correspond to the longer ones
-above.
+These presets do not use vcpkg. They assume that all dependencies are available
+via the system (e.g. Homebrew on macOS, APT on Linux).
 
 ```shell
-$ cmake --preset=win64    # VS 2022 generator, 64-bit build, vcpkg deps
-$ cmake --preset=win32    # VS 2022 generator, 32-bit build, vcpkg deps
 $ cmake --preset=macOS    # Ninja generator, macOS host build, Homebrew deps
 $ cmake --preset=debug    # Debug mode, any single-config generator / compiler
 $ cmake --preset=release  # Release mode, any single-config generator / compiler
@@ -376,23 +368,16 @@ $ cmake --preset=release  # Release mode, any single-config generator / compiler
 
 ### Vcpkg presets
 
-Halide provides two sets of corresponding vcpkg-enabled presets: _base_ and
-_full_.
+The following presets use vcpkg to manage non-LLVM dependencies. LLVM and Python
+must be provided by the system.
 
-| Base preset     | Full preset          |
-|-----------------|----------------------|
-| `win32`         | `win32-vcpkg-full`   |
-| `win64`         | `win64-vcpkg-full`   |
-| `macOS-vcpkg`   | `macOS-vcpkg-full`   |
-| `debug-vcpkg`   | `debug-vcpkg-full`   |
-| `release-vcpkg` | `release-vcpkg-full` |
-
-In simple terms, the base presets rely on the system to provide LLVM and Python,
-while the full presets delegate this to vcpkg (which consumes a large amount of
-hard disk space and time).
-
-The `macOS-vcpkg` preset adds `/opt/homebrew/opt/llvm` to
-`CMAKE_PREFIX_PATH`.
+| Preset          | Description                                              |
+|-----------------|----------------------------------------------------------|
+| `win32`         | Visual Studio 2022 generator, 32-bit build               |
+| `win64`         | Visual Studio 2022 generator, 64-bit build               |
+| `macOS-vcpkg`   | macOS build with vcpkg + Homebrew LLVM                   |
+| `debug-vcpkg`   | Debug build for any single-config generator              |
+| `release-vcpkg` | Release build for any single-config generator            |
 
 ### Sanitizer presets
 
