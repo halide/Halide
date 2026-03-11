@@ -87,9 +87,10 @@ int main(int argc, char **argv) {
 
     // In each case we'll say g(x, y) = f(y, x) and tile it. We will try power
     // of two sizes, and sizes that are coprime, and sizes that are neither
-    // coprime no powers of two.
+    // coprime no powers of two. We'll use sizes larger than 4, because some
+    // backends like to do different things for small strides.
 
-    for (auto tile : {std::pair{8, 16}, {7, 3}, {6, 9}}) {
+    for (auto tile : {std::pair{8, 16}, {7, 5}, {6, 9}}) {
         {
             // Idiom 1: Strided stores into a staged transposed copy of the
             // input. The strided stores that get mashed together into one big

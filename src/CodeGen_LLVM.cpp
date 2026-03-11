@@ -2199,8 +2199,12 @@ void CodeGen_LLVM::visit(const Broadcast *op) {
 
 Value *CodeGen_LLVM::optimization_fence(Value *v) {
     llvm::Type *t = v->getType();
-    internal_assert(!t->isScalableTy())
-        << "optimization_fence does not support scalable vectors yet";
+    if (t->isScalableTy()) {
+        // Convert to fixed, fence, convert back.
+        Value *fixed = scalable_to_fixed_vector_type(v);
+        fixed = optimization_fence(fixed);
+        return fixed_to_scalable_vector_type(fixed);
+    }
     const int bits = t->getPrimitiveSizeInBits();
     if (bits % 32) {
         const int lanes = get_vector_num_elements(t);
@@ -2212,7 +2216,7 @@ Value *CodeGen_LLVM::optimization_fence(Value *v) {
         v = slice_vector(v, 0, lanes);
         return v;
     }
-    llvm::Type *float_type = llvm_type_of(Float(32, bits / 32));
+    llvm::Type *float_type = get_vector_type(f32_t, bits / 32, VectorTypeConstraint::Fixed);
     v = builder->CreateBitCast(v, float_type);
     v = builder->CreateArithmeticFence(v, float_type);
     return builder->CreateBitCast(v, t);
