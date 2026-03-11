@@ -9,37 +9,34 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-find_package(Protobuf)
+find_package(Protobuf CONFIG)
 if (NOT Protobuf_FOUND)
     message(WARNING "Could NOT find Protobuf")
     return()
 endif ()
 
+find_package(ONNX CONFIG)
+if (NOT ONNX_FOUND)
+    message(WARNING "Could NOT find ONNX package config")
+    return()
+endif ()
+
 find_package(Halide REQUIRED)
 
-# Download onnx.proto
-include(FetchContent)
-FetchContent_Declare(
-    onnx
-    GIT_REPOSITORY https://github.com/onnx/onnx.git
-    GIT_TAG e709452ef2bbc1d113faf678c24e6d3467696e83  # v1.18.0
-    SOURCE_SUBDIR do-not-load/
-)
-FetchContent_MakeAvailable(onnx)
+find_path(ONNX_INCLUDE_DIR onnx/onnx_pb.h)
+if (NOT ONNX_INCLUDE_DIR)
+    message(WARNING "Could NOT find ONNX headers")
+    return()
+endif ()
+set(ONNX_PROTO_FILE "${ONNX_INCLUDE_DIR}/onnx/onnx-ml.proto")
 
 # Add library that converts ONNX models to Halide operators
 add_library(oclib STATIC)
 add_library(onnx_app::oclib ALIAS oclib)
 
-target_sources(oclib PRIVATE onnx_converter.cc "${onnx_SOURCE_DIR}/onnx/onnx.proto")
-protobuf_generate(
-    TARGET oclib
-    LANGUAGE cpp
-    PROTOC_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/_protoc_out
-    IMPORT_DIRS ${onnx_SOURCE_DIR}
-)
-target_include_directories(oclib PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/_protoc_out")
-target_link_libraries(oclib PUBLIC Halide::Halide protobuf::libprotobuf-lite)
+target_sources(oclib PRIVATE onnx_converter.cc)
+target_include_directories(oclib PUBLIC "${ONNX_INCLUDE_DIR}")
+target_link_libraries(oclib PUBLIC Halide::Halide ONNX::onnx_proto)
 target_compile_definitions(oclib PUBLIC GOOGLE_PROTOBUF_NO_RTTI)
 
 # Add test for the onnx converter library (oclib)
@@ -68,11 +65,11 @@ add_custom_command(
     COMMAND
     protobuf::protoc
     --encode=onnx.ModelProto
-    "--proto_path=${onnx_SOURCE_DIR}"
-    "$<SHELL_PATH:${onnx_SOURCE_DIR}/onnx/onnx.proto>"
+    "--proto_path=${ONNX_INCLUDE_DIR}"
+    "$<SHELL_PATH:${ONNX_PROTO_FILE}>"
     < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/test_model_proto.txt>"
     > test_model.onnx
-    DEPENDS protobuf::protoc ${onnx_SOURCE_DIR}/onnx/onnx.proto
+    DEPENDS protobuf::protoc ${ONNX_PROTO_FILE}
     COMMENT "Generating test ONNX model from proto content"
     MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/test_model_proto.txt
     VERBATIM
@@ -102,7 +99,7 @@ set_tests_properties(
 )
 
 # Python bindings to convert onnx models to Halide model
-find_package(Python 3 COMPONENTS Interpreter Development)
+find_package(Python 3 COMPONENTS Interpreter Development.Module)
 if (NOT Python_FOUND)
     message(WARNING "Could NOT find Python")
     return()
