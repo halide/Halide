@@ -206,6 +206,8 @@ find_package(PNG)
 ##
 # Optional features. These settings are defined early so that subdirectories see a consistent view
 
+Halide_feature(Halide_BUILDING_IN_CI "Enable if building in CI" OFF ADVANCED)
+
 Halide_feature(Halide_ENABLE_EXCEPTIONS "Enable exceptions in Halide" ON)
 Halide_feature(Halide_ENABLE_RTTI "Enable RTTI in Halide" ON
                DEPENDS LLVM_ENABLE_RTTI)
