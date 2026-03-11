@@ -445,9 +445,138 @@ int fuzz_test(uint32_t root_seed) {
     return 0;
 }
 
+// Regression test for a constant_integer_bounds failure found by the fuzz
+// test (seed 1617303089) on arm-32-linux. The symptom was:
+//
+//   constant_integer_bounds failure
+//   seed = 1617303089, x = 3, buf_u8 = 238, buf_i8 = -22, out1 = 5207780
+//   Bounds: [-16711503, 78]
+//
+// Analysis:
+//
+// The full fuzz expression simplifies to:
+//   int64(0 - (int32(uint16((int8)buf_i8(x))*(uint16)194)
+//            * int32(uint8(int8((uint8)buf_u8(x)/(uint8)194)*(int8)-85))))
+//
+// With buf_u8=238, buf_i8=-22:
+//   Factor A = int32(uint16(int8(-22)) * uint16(194)) = int32(61268)
+//   Factor B = int32(uint8(int8(238/194) * int8(-85)))
+//            = int32(uint8(int8(1) * int8(-85)))
+//            = int32(uint8(-85))
+//            = int32(171)                  <-- uint8(-85) = 171
+//   Correct result = 0 - (61268 * 171) = -10,476,828
+//
+// But on arm-32-linux, the test observed out1 = 5,207,780. Working backwards:
+//   5,207,780 = 0 - (61268 * (-85))
+//
+// This exactly matches the uint8 value 171 being *sign-extended* as int8(-85)
+// instead of *zero-extended*. Somewhere in the pipeline for arm-32, the cast
+// chain int32(uint8(int8_expr)) is losing the uint8 wrapper, effectively
+// becoming int32(int8_expr) which sign-extends instead of zero-extending.
+//
+// The constant_integer_bounds values [-16711503, 78] are valid (they correctly
+// overapproximate the true range [-16711425, 0]). The 78 comes from the bounds
+// analysis being unable to prove that int8(78)/int8(D) is always 0 (D is
+// always 0, but the correlation is lost through a uint8->int16->uint8 roundtrip
+// that bounds analysis treats as independent). The test failure is triggered
+// because the *evaluated* value (wrong due to a codegen/lowering bug) falls
+// outside the (correct) bounds.
+//
+// The minimal reproducer below isolates the suspect cast chain:
+//   int32(uint8(int8(-85) * int8(uint8_division_result)))
+// If the uint8 cast is dropped or ignored, int8(-85) sign-extends to int32
+// giving -85, instead of the correct zero-extension of uint8(171) giving 171.
+void test_regression() {
+
+    // --- Part 1: Full expression bounds check ---
+
+    Expr t3490 = Variable::make(UInt(8), "t3490");
+    Expr e = cast<int64_t>(
+        cast<int32_t>(
+            Let::make(
+                "t3490",
+                cast<uint8_t>(buf_u8(x)),
+                cast<int16_t>(cast<int8_t>(78) / cast<int8_t>(t3490 / cast<uint8_t>(194) - cast<uint8_t>(cast<int16_t>(t3490 / cast<uint8_t>(194))))))) -
+        cast<int32_t>(
+            cast<uint16_t>(194) * cast<uint16_t>(cast<int8_t>(buf_i8(x)))) *
+            cast<int32_t>(
+                cast<uint8_t>(buf_u8(x)) / cast<uint8_t>(194) - cast<uint8_t>(cast<int16_t>(cast<uint8_t>(buf_u8(x)) / cast<uint8_t>(194))) +
+                cast<uint8_t>(
+                    cast<int8_t>(-85) * cast<int8_t>(cast<int16_t>(cast<uint8_t>(buf_u8(x)) / cast<uint8_t>(194))))));
+
+    Expr simplified = simplify(e);
+    std::cout << "Original: " << e << "\n";
+    std::cout << "Simplified: " << simplified << "\n";
+
+    ConstantInterval orig_bounds = constant_integer_bounds(e);
+    ConstantInterval simp_bounds = constant_integer_bounds(simplified);
+    std::cout << "Original bounds: " << orig_bounds << "\n";
+    std::cout << "Simplified bounds: " << simp_bounds << "\n";
+
+    // --- Part 2: Minimal reproducer for the sign-extension bug ---
+    // This isolates the critical cast chain: int32(uint8(int8_expr))
+    // For buf_u8(x) >= 194, the uint8 division yields 1, so:
+    //   int8(1) * int8(-85) = int8(-85)
+    //   uint8(int8(-85)) = uint8(171)
+    //   int32(uint8(171)) = 171   <-- correct (zero-extend)
+    //   int32(int8(-85))  = -85   <-- wrong (sign-extend, missing uint8 cast)
+
+    buf_u8.fill(238);  // 238 / 194 = 1 in uint8 division
+
+    Expr cast_chain = cast<int32_t>(
+        cast<uint8_t>(
+            cast<int8_t>(-85) * cast<int8_t>(
+                                    cast<uint8_t>(buf_u8(x)) / cast<uint8_t>(194))));
+
+    // Test without vectorization
+    {
+        Func f_scalar{"f_scalar"};
+        f_scalar(x) = cast_chain;
+        Buffer<int32_t> out(size);
+        f_scalar.realize(out);
+
+        for (int i = 0; i < size; i++) {
+            if (out(i) != 171) {
+                std::cout << "FAIL (scalar): x=" << i
+                          << " got " << out(i)
+                          << " expected 171\n";
+                f_scalar.compile_to_lowered_stmt("/dev/stdout", {}, Text);
+                f_scalar.compile_to_llvm_assembly("/dev/stdout", {});
+                return;
+            }
+        }
+        std::cout << "Scalar cast chain: PASS\n";
+    }
+
+    // Test with vectorization (the fuzz test uses vectorize(x, 4))
+    {
+        Func f_vec{"f_vec"};
+        f_vec(x) = cast_chain;
+        f_vec.vectorize(x, 4, TailStrategy::RoundUp);
+        Buffer<int32_t> out(size);
+        f_vec.realize(out);
+
+        for (int i = 0; i < size; i++) {
+            if (out(i) != 171) {
+                std::cout << "FAIL (vectorized): x=" << i
+                          << " got " << out(i)
+                          << " expected 171\n";
+                f_vec.compile_to_lowered_stmt("/dev/stdout", {}, Text);
+                f_vec.compile_to_llvm_assembly("/dev/stdout", {});
+                return;
+            }
+        }
+        std::cout << "Vectorized cast chain: PASS\n";
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc == 2) {
         return test_one(atoi(argv[1]));
+    }
+    Target t = get_jit_target_from_environment();
+    if (t.os == Target::Linux && t.bits == 32) {
+        test_regression();
     }
     if (lossless_cast_test()) {
         std::cout << "lossless_cast test failed!\n";
