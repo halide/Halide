@@ -1,5 +1,5 @@
-#include "State.h"
 #include "LoopNest.h"
+#include "State.h"
 #include "test.h"
 
 using namespace Halide;
