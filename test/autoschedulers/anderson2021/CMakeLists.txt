@@ -64,33 +64,37 @@ set_tests_properties(anderson2021_test_apps_autoscheduler PROPERTIES
 # Internal unit tests
 
 # Helper to reduce boilerplate for anderson2021 internal tests.
-function(_add_anderson2021_internal_test NAME)
+# Takes the source file name (e.g. test_foo.cpp) as the first argument
+# so that it appears on its own line for the CMake file list checker.
+function(_add_anderson2021_internal_test SRC)
     cmake_parse_arguments(ARGS "" "" "EXTRA_SRCS" ${ARGN})
 
-    set(SRCS test_${NAME}.cpp)
+    cmake_path(GET SRC STEM NAME)
+
+    set(SRCS ${SRC})
     foreach (src IN LISTS ARGS_EXTRA_SRCS)
         list(APPEND SRCS "${ANDERSON2021_SRC_DIR}/${src}")
     endforeach ()
 
-    add_executable(anderson2021_test_${NAME} ${SRCS})
-    target_include_directories(anderson2021_test_${NAME} PRIVATE
+    add_executable(anderson2021_${NAME} ${SRCS})
+    target_include_directories(anderson2021_${NAME} PRIVATE
                                ${ANDERSON2021_SRC_DIR}
                                ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(anderson2021_test_${NAME} PRIVATE Halide::Plugin)
-    add_dependencies(anderson2021_test_${NAME} Halide::Anderson2021)
+    target_link_libraries(anderson2021_${NAME} PRIVATE Halide::Plugin)
+    add_dependencies(anderson2021_${NAME} Halide::Anderson2021)
 
-    add_halide_test(anderson2021_test_${NAME}
+    add_halide_test(anderson2021_${NAME}
                     GROUPS anderson2021 autoschedulers_cuda)
     # Workaround for nvidia driver + ASAN incompatibility
     # https://forums.developer.nvidia.com/t/cuda-runtime-library-and-addresssanitizer-incompatibilty/63145
-    set_tests_properties(anderson2021_test_${NAME} PROPERTIES
+    set_tests_properties(anderson2021_${NAME} PROPERTIES
                          ENVIRONMENT_MODIFICATION "ASAN_OPTIONS=set:protect_shadow_gap=0")
 endfunction()
 
-_add_anderson2021_internal_test(function_dag EXTRA_SRCS FunctionDAG.cpp)
-_add_anderson2021_internal_test(bounds EXTRA_SRCS FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp Tiling.cpp)
-_add_anderson2021_internal_test(parser)
-_add_anderson2021_internal_test(state EXTRA_SRCS FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
-_add_anderson2021_internal_test(storage_strides EXTRA_SRCS FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
-_add_anderson2021_internal_test(thread_info EXTRA_SRCS LoopNest.cpp FunctionDAG.cpp GPULoopInfo.cpp Tiling.cpp)
-_add_anderson2021_internal_test(tiling EXTRA_SRCS Tiling.cpp)
+_add_anderson2021_internal_test(test_function_dag.cpp EXTRA_SRCS FunctionDAG.cpp)
+_add_anderson2021_internal_test(test_bounds.cpp EXTRA_SRCS FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp Tiling.cpp)
+_add_anderson2021_internal_test(test_parser.cpp)
+_add_anderson2021_internal_test(test_state.cpp EXTRA_SRCS FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
+_add_anderson2021_internal_test(test_storage_strides.cpp EXTRA_SRCS FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
+_add_anderson2021_internal_test(test_thread_info.cpp EXTRA_SRCS LoopNest.cpp FunctionDAG.cpp GPULoopInfo.cpp Tiling.cpp)
+_add_anderson2021_internal_test(test_tiling.cpp EXTRA_SRCS Tiling.cpp)
