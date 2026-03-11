@@ -221,4 +221,4 @@ endif ()
 # Lessons 22-24
 add_tutorial(lesson_22_jit_performance.cpp)
 add_tutorial(lesson_23_serialization.cpp WITH_IMAGE_IO)
-add_tutorial(lesson_24_async.cpp)
+add_tutorial(lesson_24_async.cpp GROUPS multithreaded)

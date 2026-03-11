@@ -8,7 +8,6 @@ tests(GROUPS correctness
       align_bounds.cpp
       argmax.cpp
       async_device_copy.cpp
-      async_order.cpp
       autodiff.cpp
       bad_likely.cpp
       bad_partition_always_throws.cpp
@@ -90,7 +89,6 @@ tests(GROUPS correctness
       dilate3x3.cpp
       div_by_zero.cpp
       div_round_to_zero.cpp
-      ring_buffer.cpp
       dynamic_allocation_in_gpu_kernel.cpp
       dynamic_reduction_bounds.cpp
       early_out.cpp
@@ -336,6 +334,7 @@ tests(GROUPS correctness
       unique_func_image.cpp
       unroll_dynamic_loop.cpp
       unroll_loop_with_implied_constant_bounds.cpp
+      unroll_huge_mux.cpp
       unrolled_reduction.cpp
       unsafe_dedup_lets.cpp
       unsafe_promises.cpp
@@ -380,6 +379,7 @@ tests(GROUPS correctness multithreaded
       assertion_failure_in_parallel_for.cpp
       async.cpp
       async_copy_chain.cpp
+      async_order.cpp
       atomic_tuples.cpp
       atomics.cpp
       compute_outermost.cpp
@@ -412,11 +412,11 @@ tests(GROUPS correctness multithreaded
       random.cpp
       reorder_rvars.cpp
       rfactor.cpp
+      ring_buffer.cpp
       stream_compaction.cpp
       thread_safety.cpp
       truncated_pyramid.cpp
       tuple_vector_reduce.cpp
-      unroll_huge_mux.cpp
       vector_cast.cpp
       vector_math.cpp
       vector_reductions.cpp

@@ -1,4 +1,4 @@
-tests(GROUPS mullapudi2016 autoschedulers_cpu multithreaded
+tests(GROUPS mullapudi2016 autoschedulers_cpu
       SOURCES
       extern.cpp
       param.cpp
