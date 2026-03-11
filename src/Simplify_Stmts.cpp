@@ -326,7 +326,6 @@ Stmt Simplify::visit(const Store *op) {
     ExprInfo index_info;
     Expr index = mutate(op->index, &index_info);
 
-
     // If the store is fully unconditional and out of bounds, drop it.
     // This should only occur inside branches that make the store unreachable,
     // but perhaps the branch was hard to prove constant true or false. This
