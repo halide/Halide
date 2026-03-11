@@ -385,7 +385,7 @@ bool test_one(RandomEngine &rng) {
     }
 
     // Evaluate both
-    Buffer<int64_t> orig_vals({lanes, batch_size}), sliced_vals({new_lanes, batch_size});
+    Buffer<int64_t> orig_vals(lanes, batch_size), sliced_vals(new_lanes, batch_size);
     if (!evaluate_vector_exprs(original, orig_vals) ||
         !evaluate_vector_exprs(sliced, sliced_vals)) {
         // Can't evaluate this for whatever reason
