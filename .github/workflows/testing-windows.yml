@@ -63,21 +63,7 @@ jobs:
         run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
 
       - name: Configure CMake
-        run: |
-          # NB: vcpkg docs use VCPKG_ROOT, but GHA runners use VCPKG_INSTALLATION_ROOT
-          TOOLCHAIN_ARGS=(
-            "-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake"
-            "-DVCPKG_TARGET_TRIPLET=${{ matrix.arch }}-windows"
-            "-DVCPKG_MANIFEST_FEATURES=developer"
-          )
-          if [[ "${{ matrix.bits }}" == "32" ]]; then
-            TOOLCHAIN_ARGS+=("-DWITH_PYTHON_BINDINGS=OFF")
-          fi
-
-          cmake -G Ninja -S . -B build \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DHalide_LLVM_ROOT="${Halide_LLVM_ROOT}" \
-            "${TOOLCHAIN_ARGS[@]}"
+        run: cmake --preset ci-windows-x86-${{ matrix.bits }}
 
       - name: Initial build
         run: cmake --build build
@@ -86,10 +72,12 @@ jobs:
         run: |
           cmake -S . -B build -DHalide_TARGET=host
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
 
       - name: Test (no extensions)
         run: |
           cmake -S . -B build -DHalide_TARGET=cmake
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5

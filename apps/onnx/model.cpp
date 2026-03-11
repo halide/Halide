@@ -6,9 +6,10 @@
 #include "common_types.h"
 #include "denormal_disabler.h"
 #include "onnx_converter.h"
+#include <chrono>
 #include <fstream>
+#include <limits>
 #include <random>
-#include <sys/time.h>
 #include <unordered_set>
 
 namespace py = pybind11;
@@ -72,14 +73,53 @@ std::string auto_schedule(const HalideModel &pipeline) {
 
 template<typename T>
 struct Distribution {
-    typedef typename std::conditional<
+    using Type = typename std::conditional<
         std::is_floating_point<T>::value,
         std::uniform_real_distribution<T>,
-        std::uniform_int_distribution<T>>::type Type;
+        std::uniform_int_distribution<T>>::type;
+
+    T operator()(std::mt19937 &generator) {
+        return distrib(generator);
+    }
+
+private:
+    Type distrib;
 };
+
 template<>
 struct Distribution<bool> {
-    typedef typename std::uniform_int_distribution<uint8_t> Type;
+    using Type = std::bernoulli_distribution;
+
+    bool operator()(std::mt19937 &generator) {
+        return distrib(generator);
+    }
+
+private:
+    Type distrib = Type(0.5);
+};
+
+template<>
+struct Distribution<std::int8_t> {
+    using Type = std::uniform_int_distribution<int>;
+
+    std::int8_t operator()(std::mt19937 &generator) {
+        return static_cast<std::int8_t>(distrib(generator));
+    }
+
+private:
+    Type distrib = Type(0, std::numeric_limits<std::int8_t>::max());
+};
+
+template<>
+struct Distribution<std::uint8_t> {
+    using Type = std::uniform_int_distribution<unsigned int>;
+
+    std::uint8_t operator()(std::mt19937 &generator) {
+        return static_cast<std::uint8_t>(distrib(generator));
+    }
+
+private:
+    Type distrib = Type(0, std::numeric_limits<std::uint8_t>::max());
 };
 
 template<typename T>
@@ -92,7 +132,7 @@ void prepare_random_image_param(
     std::vector<int> dims(shape.size());
     std::iota(dims.rbegin(), dims.rend(), 0);
     values.transpose(dims);
-    typename Distribution<T>::Type distrib;
+    Distribution<T> distrib;
     std::mt19937 generator;
     values.for_each_value([&](T &val) { val = distrib(generator); });
     image_param.set(values);
@@ -436,7 +476,7 @@ double benchmark(
     CacheEvictor cache_evictor;
 
     // Generate random value for every input
-    for (ssize_t i = 0; i < pipeline.model->inputs.size(); ++i) {
+    for (size_t i = 0; i < pipeline.model->inputs.size(); ++i) {
         const std::string &input_name = pipeline.input_names[i];
         prepare_random_input(pipeline, input_name);
     }
@@ -469,29 +509,28 @@ double benchmark(
     pipeline.rep->realize(real, tgt);
 
     // Now benchmark by computing the value of the outputs num_iter times
-    struct timespec start;
-    struct timespec end;
-    clock_gettime(CLOCK_REALTIME, &start);
+    using clock = std::chrono::high_resolution_clock;
+    auto start = clock::now();
     for (int i = 0; i < num_iters; ++i) {
         // Increment the coefficients store in the cache evictor: this ensures that
         // all the data left in caches from the previous iteration is flushed out.
         cache_evictor.flush_caches();
         pipeline.rep->realize(real, tgt);
     }
-    clock_gettime(CLOCK_REALTIME, &end);
+    auto end = clock::now();
 
     double total_runtime =
-        (end.tv_sec - start.tv_sec) * 1e9 + end.tv_nsec - start.tv_nsec;
+        std::chrono::duration<double, std::nano>(end - start).count();
 
     // Figure out how long it took to generate new inputs at every iteration
     // and adjust the runtime accordingly.
-    clock_gettime(CLOCK_REALTIME, &start);
+    start = clock::now();
     for (int i = 0; i < num_iters; ++i) {
         cache_evictor.flush_caches();
     }
-    clock_gettime(CLOCK_REALTIME, &end);
+    end = clock::now();
     double input_gen_time =
-        (end.tv_sec - start.tv_sec) * 1e9 + end.tv_nsec - start.tv_nsec;
+        std::chrono::duration<double, std::nano>(end - start).count();
 
     total_runtime -= input_gen_time;
 
