@@ -19,6 +19,7 @@ permissions:
 
 jobs:
   check_clang_tidy:
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: Check clang-tidy
     runs-on: macos-latest
     steps:

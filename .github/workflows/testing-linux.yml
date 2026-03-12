@@ -17,7 +17,6 @@ on:
       - "packaging/**"
       - "Makefile"
       - "Makefile.inc"
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -28,6 +27,7 @@ permissions:
 
 jobs:
   linux:
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: linux-${{ matrix.bits }} / ${{ matrix.uv_group }}
     runs-on: ubuntu-24.04
     strategy:
