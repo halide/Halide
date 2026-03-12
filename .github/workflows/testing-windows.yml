@@ -17,7 +17,6 @@ on:
       - "packaging/**"
       - "Makefile"
       - "Makefile.inc"
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -32,6 +31,7 @@ defaults:
 
 jobs:
   windows:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip_buildbots') }}
     name: windows-${{ matrix.bits }} / ${{ matrix.uv_group }}
     runs-on: windows-2022
     strategy:

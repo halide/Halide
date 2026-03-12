@@ -44,6 +44,7 @@ permissions:
 
 jobs:
   build_make:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip_buildbots') }}
     name: build on ${{ matrix.os }}
 
     strategy:
