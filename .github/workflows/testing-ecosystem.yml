@@ -8,7 +8,7 @@ on:
       - '**.cpp'
       - 'CMakeLists.txt'
       - '**.cmake'
-      - '.github/workflows/testing-ecosystem.yml.yml'
+      - '.github/workflows/testing-ecosystem.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
