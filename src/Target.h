@@ -262,7 +262,7 @@ struct Target {
     bool supports_type(const Type &t) const;
 
     /** Does this target allow using a certain type on a certain device.
-     * This is the prefered version of this routine.
+     * This is the preferred version of this routine.
      */
     bool supports_type(const Type &t, DeviceAPI device) const;
 

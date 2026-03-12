@@ -1107,7 +1107,7 @@ public:
      * debugging.
      *
      * If filename ends in ".tif" or ".tiff" (case insensitive) the file
-     * is in TIFF format and can be read by standard tools. Oherwise, the
+     * is in TIFF format and can be read by standard tools. Otherwise, the
      * file format is as follows:
      *
      * All data is in the byte-order of the target platform.  First, a

@@ -611,7 +611,7 @@ protected:
      * providing multiple options to express even simple vector
      * operations. Specifically traditional fixed length vectors, vscale
      * based variable length vectors, and the vector predicate based approach
-     * where an explict length is passed with each instruction.
+     * where an explicit length is passed with each instruction.
      */
     // @{
     enum class VectorTypeConstraint {
@@ -639,7 +639,7 @@ protected:
     // @{
     /** Struct to hold descriptor for an argument to a vector
      *  predicated intrinsic. This includes the value, whether the
-     *  type of the argument should be mangled into the intrisic name
+     *  type of the argument should be mangled into the intrinsic name
      *  and if so, where, and the alignment for pointer arguments. */
     struct VPArg {
         llvm::Value *value;
@@ -666,7 +666,7 @@ protected:
     /** Generate a vector predicated comparison intrinsic call if
      * use_llvm_vp_intrinsics is true and result_type is a vector
      * type. If generated, assigns result of vp intrinsic to value and
-     * returns true if it an instuction is generated, otherwise
+     * returns true if it an instruction is generated, otherwise
      * returns false. */
     bool try_vector_predication_comparison(const std::string &name, const Type &result_type,
                                            MaskVariant mask, llvm::Value *a, llvm::Value *b,
@@ -680,9 +680,9 @@ protected:
         }
     };
 
-    /** Generate an intrisic call if use_llvm_vp_intrinsics is true
+    /** Generate an intrinsic call if use_llvm_vp_intrinsics is true
      * and length is greater than 1. If generated, assigns result
-     * of vp intrinsic to value and returns true if it an instuction
+     * of vp intrinsic to value and returns true if it an instruction
      * is generated, otherwise returns false. */
     bool try_vector_predication_intrinsic(const std::string &name, VPResultType result_type,
                                           int32_t length, MaskVariant mask, std::vector<VPArg> args);

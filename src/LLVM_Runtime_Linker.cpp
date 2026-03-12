@@ -1114,7 +1114,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // multiple versions of a filter for different levels of x86 -- weak
                 // linking will pick one of the alignment modules unpredictably.
                 // Another way to go is to query the CPU features and align by
-                // 64 oonly if the procesor has AVX-512.
+                // 64 oonly if the processor has AVX-512.
                 // The choice to go 64 all the time is for simplicity and on the idea
                 // that it won't be a noticeable cost in the majority of x86 usage.
                 modules.push_back(get_initmod_alignment_64(c, bits_64, debug));
@@ -1327,7 +1327,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         }
         if (t.has_feature(Target::WebGPU)) {
             if (t.os == Target::Windows) {
-                // TOOD: Test on Windows and enable this.
+                // TODO: Test on Windows and enable this.
                 // See https://github.com/halide/Halide/issues/7249
                 user_error << "WebGPU runtime not yet supported on Windows.\n";
             } else {
@@ -1405,7 +1405,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
         // be inlined to be used.
         //
         // However libdevice has a few routines that are marked
-        // "noinline" which must either be changed to alow inlining or
+        // "noinline" which must either be changed to allow inlining or
         // preserved in generated code. This preserves the intent of
         // keeping these routines out-of-line and hence called by
         // not marking them AvailableExternally.

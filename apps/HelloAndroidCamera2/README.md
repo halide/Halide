@@ -44,7 +44,7 @@ In order to build, the following will be required:
   PATH.
 
 If everything is setup correctly, running the build.sh script in this directory,
-with the current directory set to here, whould build the HelloAndroidCamera2 apk
+with the current directory set to here, would build the HelloAndroidCamera2 apk
 and install it on a connected Android device.
 
 # Gradle
