@@ -21,7 +21,7 @@ on:
       - "python_bindings/**"
 
       - "pyproject.toml"
-      - "uv.lock"
+      # Don't ignore uv.lock as it influences dependency resolution
 
       - "README.md"
       - "CODE_OF_CONDUCT.md"
@@ -30,10 +30,17 @@ on:
       - ".gitattributes"
       - ".gitmodules"
       - ".lldbinit"
+      - "run-clang-format.sh"
+      - "run-clang-tidy.sh"
+      - "**.clang-tidy"
+      - "**.py"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build_make:

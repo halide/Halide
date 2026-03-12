@@ -80,7 +80,7 @@ function(add_halide_test TARGET)
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
         WILL_FAIL ${args_EXPECT_FAILURE}
     )
-    if ("autoschedulers_cpu" IN_LIST args_GROUPS)
+    if ("multithreaded" IN_LIST args_GROUPS)
         set_tests_properties(${TARGET} PROPERTIES RUN_SERIAL TRUE)
     endif ()
 

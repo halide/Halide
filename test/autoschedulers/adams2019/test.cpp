@@ -903,6 +903,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::cout << "adams2019 testing passed\n";
+    std::cout << "Success!\n";
     return 0;
 }

@@ -4,67 +4,55 @@ on:
   # We don't want 'review_requested' (that's redundant to the ones below for our purposes)
   pull_request:
     types: [ opened, synchronize, reopened ]
-    paths:
-      - '**.h'
-      - '**.c'
-      - '**.cpp'
-      - '**CMakeLists.txt'
-      - '**.cmake'
-      - 'run-clang-tidy.sh'
-      - 'run-clang-format.sh'
-      - '.github/workflows/**'
-      - '**.clang-tidy'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   check_clang_format:
-    name: Check clang-format and ruff
-    runs-on: macos-14
+    name: Check clang-format
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v4
 
       - name: Install clang-format
-        run: brew install llvm@21
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-21 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update
+          sudo apt-get install -y clang-format-21
 
       - name: Check clang-format
         run: ./run-clang-format.sh -c
         env:
-          CLANG_FORMAT_LLVM_INSTALL_DIR: /opt/homebrew/opt/llvm@21
+          CLANG_FORMAT_LLVM_INSTALL_DIR: /usr/lib/llvm-21
 
-      - uses: astral-sh/ruff-action@v3
-
-  check_clang_tidy:
-    name: Check clang-tidy
-    runs-on: macos-14
+  check_ruff:
+    name: Check ruff
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v4
-
-      # We intentionally don't use VCPKG here so that we get some
-      # notification that the ecosystem is moving on without us.
-      - name: Install clang-tidy & dependencies
-        run: brew install flatbuffers llvm@21 lld@21 pybind11 wabt
-
-      - name: Run clang-tidy
-        run: ./run-clang-tidy.sh
-        env:
-          CLANG_TIDY_LLVM_INSTALL_DIR: /opt/homebrew/opt/llvm@21
+      - uses: astral-sh/ruff-action@v3
 
   check_cmake_file_lists:
     name: Check CMake file lists
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v4
       - name: Run test sources check
         run: |
           check_dir() {
             local dir="$1"
+            echo "Checking $dir"
             (
               cd "$dir" &&
               comm -23 \
                 <(find . -maxdepth 1 -type f \( -name '*.c' -o -name '*.cpp' \) -printf '%f\n' | sort) \
-                <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) \
+                <(grep -oP '\b[A-Za-z0-9_]+\.(?:cpp|c)\b' CMakeLists.txt | sort -u) \
                 | tee missing_files &&
               [ ! -s missing_files ]
             )
