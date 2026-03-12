@@ -31,7 +31,7 @@ defaults:
 
 jobs:
   windows:
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip_buildbots') }}
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: windows-${{ matrix.bits }} / ${{ matrix.uv_group }}
     runs-on: windows-2022
     strategy:

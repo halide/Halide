@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   linux:
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip_buildbots') }}
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: linux-${{ matrix.bits }} / ${{ matrix.uv_group }}
     runs-on: ubuntu-24.04
     strategy:
