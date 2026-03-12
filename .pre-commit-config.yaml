@@ -33,7 +33,7 @@ repos:
     hooks:
       - id: clang-format
         args: [ --sort-includes ]
-        types_or: [ c, c++ ]
+        types_or: [ c, c++, objective-c ]
         exclude: |
           (?x)(
             ^tutorial/
@@ -44,7 +44,6 @@ repos:
             | \.fbs\.h$
             | ^\.devcontainer/
             | \.xcassets/
-            | ^apps/HelloiOS/
           )
 
   - repo: https://github.com/gitleaks/gitleaks

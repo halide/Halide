@@ -2,13 +2,11 @@
 #import "HalideView.h"
 #import <UIKit/UIKit.h>
 
-@implementation HalideViewController
-{
+@implementation HalideViewController {
     HalideView *_halide_view;
 }
 
-- (void)viewWillAppear:(BOOL)animated
-{
+- (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [_halide_view initiateRender];
 }
@@ -28,6 +26,5 @@
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
     [_halide_view touchesCancelled:touches withEvent:event];
 }
-
 
 @end
