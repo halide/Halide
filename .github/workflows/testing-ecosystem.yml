@@ -27,11 +27,19 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-
       - name: Configure with vcpkg
         run: |
+          # Install uv like a user would
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          
+          # Install vcpkg like a user would
+          git clone https://github.com/microsoft/vcpkg.git
+          (cd vcpkg && ./bootstrap-vcpkg.sh -disableMetrics)
+          export VCPKG_ROOT="$PWD/vcpkg" 
+          
+          # Get LLVM from Halide's PyPI index, plus ninja/cmake
           uv sync --no-install-project --group ci-llvm-22
           source .venv/bin/activate
-          export Halide_LLVM_ROOT="$(halide-llvm)"
-          VCPKG_ROOT="$VCPKG_INSTALLATION_ROOT" cmake --preset release-vcpkg
+          
+          # Configure Halide with vcpkg, pointing to the LLVM we just installed
+          cmake --preset release-vcpkg -DHalide_LLVM_ROOT="$(halide-llvm)"
