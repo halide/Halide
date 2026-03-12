@@ -178,7 +178,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "env -i PATH=\"$PATH\" HOME=\"$HOME\" USER=\"$USER\" \\\n  xcodebuild -project \"${PROJECT_DIR}/../Generators/build/HelloiOS-Generators.xcodeproj\" \\\n  -target HalideKernels \\\n  -configuration Release\n";
+			shellScript = "xcodebuild -project \"${PROJECT_DIR}/../Generators/build/HelloiOS-Generators.xcodeproj\" \\\n  -target HalideKernels \\\n  -configuration Release\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

@@ -113,8 +113,9 @@ function(add_halide_generator TARGET)
 
                 if (CMAKE_GENERATOR STREQUAL "Xcode")
                     set_target_properties(
-                        ${TARGET} PROPERTIES XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED NO
-                    )
+                        ${TARGET} PROPERTIES
+                        XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED NO
+                        XCODE_ATTRIBUTE_PROVISIONING_PROFILE_REQUIRED NO)
                     add_custom_command(
                         TARGET ${TARGET} POST_BUILD
                         COMMAND codesign --sign - $<TARGET_FILE:${TARGET}>
