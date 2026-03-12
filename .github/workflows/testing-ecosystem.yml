@@ -23,30 +23,14 @@ env:
 jobs:
   check_clang_tidy:
     if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
-    name: CMake configure (ubuntu-24.04)
+    name: CMake configure (simple vcpkg workflow)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
 
-      - name: Install clang-tidy & dependencies
+      - name: Configure with vcpkg
         run: |
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
-          echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-${LLVM_VERSION} main" | \
-            sudo tee "/etc/apt/sources.list.d/llvm-${LLVM_VERSION}.list"
-          sudo apt-get update && sudo apt-get install -y \
-            "clang-${LLVM_VERSION}" \
-            curl \
-            flatbuffers-compiler \
-            "libclang-${LLVM_VERSION}-dev" \
-            libedit-dev \
-            libflatbuffers-dev \
-            libpng-dev \
-            libjpeg-turbo8-dev \
-            "liblld-${LLVM_VERSION}-dev" \
-            "lld-${LLVM_VERSION}" \
-            "llvm-${LLVM_VERSION}-dev" \
-            pybind11-dev \
-            wabt
-
-      - name: Test CMake configures
-        run: cmake --preset release -DHalide_LLVM_ROOT="/usr/lib/llvm-${LLVM_VERSION}"
+          uv sync --no-install-project ci-llvm-22
+          export Halide_LLVM_ROOT="$(halide-llvm)"
+          VCPKG_ROOT="$VCPKG_INSTALLATION_ROOT" uv run cmake --preset release-vcpkg
