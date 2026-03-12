@@ -51,4 +51,4 @@ jobs:
             pybind11-dev 
 
       - name: Check CMake configures
-        run: cmake --preset ubuntu-release
+        run: cmake --preset ubuntu-release -DHalide_LLVM_ROOT=/usr/lib/llvm-${LLVM_VERSION}
