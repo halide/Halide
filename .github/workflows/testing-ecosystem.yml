@@ -17,6 +17,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  LLVM_VERSION: 22
+
 jobs:
   check_clang_tidy:
     if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
