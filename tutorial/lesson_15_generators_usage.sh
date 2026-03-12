@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # Halide tutorial lesson 15: Generators part 2
 
 # This shell script demonstrates how to use a binary containing
