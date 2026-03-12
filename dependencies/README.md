@@ -1,36 +1,35 @@
 # Dependencies
 
-This folder contains vendored dependencies for building Halide. They do not
-form part of the API surface.
+This folder contains vendored dependencies for building Halide. They do not form
+part of the API surface.
 
 ## SPIR-V
 
-This folder contains a copy of the officially released v1.6 ANSI-C header
-file for [SPIR-V], obtained from the `sdk-1.3.231` branch
-of https://github.com/KhronosGroup/SPIRV-Headers.
+This folder contains a copy of the officially released v1.6 ANSI-C header file
+for [SPIR-V], obtained from the `sdk-1.3.231` branch of
+https://github.com/KhronosGroup/SPIRV-Headers.
 
 The directory structure within this folder matches that of the official
-version's install tree, plus the upstream `LICENSE` notice, minus files
-that Halide doesn't need.
+version's install tree, plus the upstream `LICENSE` notice, minus files that
+Halide doesn't need.
 
-The `update-spirv.sh` script will automatically acquire the upstream repo,
-build it, and extract the necessary files. It takes a single argument, the
-name of the branch to clone.
-
-[SPIR-V]: https://www.khronos.org/registry/spir-v
+The `update-spirv.sh` script will automatically acquire the upstream repo, build
+it, and extract the necessary files. It takes a single argument, the name of the
+branch to clone.
 
 ## Vulkan
 
-This folder contains a copy of the officially released v1.3.296 SDK headers
-for [Vulkan], obtained from the `vulkan-sdk-v1.3.296` branch
-of https://github.com/KhronosGroup/Vulkan-Headers.
+This folder contains a copy of the officially released v1.3.296 SDK headers for
+[Vulkan], obtained from the `vulkan-sdk-v1.3.296` branch of
+https://github.com/KhronosGroup/Vulkan-Headers.
 
 The directory structure within this folder matches that of the official
-version's install tree, plus the upstream `LICENSE.md` notice, minus files
-that Halide doesn't need.
+version's install tree, plus the upstream `LICENSE.md` notice, minus files that
+Halide doesn't need.
 
 The `update-vulkan.sh` script will automatically acquire the upstream repo,
-build it, and extract the necessary files. It takes a single argument, the
-name of the branch to clone.
+build it, and extract the necessary files. It takes a single argument, the name
+of the branch to clone.
 
-[Vulkan]: https://www.vulkan.org/
+[spir-v]: https://www.khronos.org/registry/spir-v
+[vulkan]: https://www.vulkan.org/
