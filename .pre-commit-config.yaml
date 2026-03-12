@@ -28,6 +28,25 @@ repos:
     hooks:
       - id: actionlint
 
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v21.1.8
+    hooks:
+      - id: clang-format
+        args: [ --sort-includes ]
+        types_or: [ c, c++ ]
+        exclude: |
+          (?x)(
+            ^tutorial/
+            | ^src/runtime/hexagon_remote/bin/src/
+            | ^src/runtime/mini_webgpu\.h$
+            | ^src/runtime/mini_d3d12\.h$
+            | ^src/runtime/vulkan_context\.h$
+            | \.fbs\.h$
+            | ^\.devcontainer/
+            | \.xcassets/
+            | ^apps/HelloiOS/
+          )
+
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.9.0
     hooks:
