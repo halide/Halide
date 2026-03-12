@@ -199,7 +199,7 @@ def test_callable_buffer_conventions():
 
         output_extents = hl.Buffer(hl.Int(32), [3])
         output_strides = hl.Buffer(hl.Int(32), [3])
-        
+
         # C-contiguous input reverses dimensions.
         # Note that numpy defaults to `order='C'`.
         input_c = np.zeros((16, 12, 3), dtype=np.int32, order='C')

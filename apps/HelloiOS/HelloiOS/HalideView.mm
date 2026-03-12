@@ -40,11 +40,11 @@ static const HalideFuncs kHalideMetal = {
 #if HAS_METAL_SDK
     __weak CAMetalLayer *_metalLayer;
 #endif  // HAS_METAL_SDK
-    
+
     Buffer<float> buf1;
     Buffer<float> buf2;
     Buffer<uint8_t> pixel_buf;
-    
+
     int32_t iteration;
     double frameElapsedEstimate;
 }
@@ -68,10 +68,10 @@ static const HalideFuncs kHalideMetal = {
 
     _device = MTLCreateSystemDefaultDevice();
     _commandQueue = [_device newCommandQueue];
-    
+
     _metalLayer.device      = _device;
     _metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
-    
+
     _metalLayer.framebufferOnly = NO;
 #endif  // HAS_METAL_SDK
 }
@@ -144,7 +144,7 @@ static const HalideFuncs kHalideMetal = {
 - (instancetype)initWithCoder:(NSCoder *)coder
 {
     self = [super initWithCoder:coder];
-    
+
     if(self)
     {
         [self initCommon];
@@ -159,7 +159,7 @@ static const HalideFuncs kHalideMetal = {
 #else
     NSString *mode = @"(CPU; Metal not available)";
 #endif
-    [self.outputLog setText: [NSString stringWithFormat:@"Halide routine takes %0.3f ms %@", 
+    [self.outputLog setText: [NSString stringWithFormat:@"Halide routine takes %0.3f ms %@",
                               elapsedTime * 1000, mode]];
 }
 
@@ -205,16 +205,16 @@ static const HalideFuncs kHalideMetal = {
     const bool output_bgra = false;
 #endif
 
-    // A note on timing: based on our experimentation, this is indeed effective for 
-    // timing Metal launches, not just CPU kernels. Other GPU API implementations 
-    // may return way before actually completing kernel execution, but Metal 
-    // (at least in this context) doesn't seem to, making this basic timing approach 
+    // A note on timing: based on our experimentation, this is indeed effective for
+    // timing Metal launches, not just CPU kernels. Other GPU API implementations
+    // may return way before actually completing kernel execution, but Metal
+    // (at least in this context) doesn't seem to, making this basic timing approach
     // fairly effective.
-    // 
-    // However, there seems to be a large minimum latency to return from the Metal launches, 
-    // which can make this an underestimate of the potential GPU throughput; for example, 
-    // running the update and render steps 10 times per frame (instead of once) 
-    // converges to a steady state per-frame cost which is often much less than 
+    //
+    // However, there seems to be a large minimum latency to return from the Metal launches,
+    // which can make this an underestimate of the potential GPU throughput; for example,
+    // running the update and render steps 10 times per frame (instead of once)
+    // converges to a steady state per-frame cost which is often much less than
     // the single iteration cost.
 
     double t_before = CACurrentMediaTime();
@@ -245,22 +245,22 @@ static const HalideFuncs kHalideMetal = {
         if (texture.width != buf1.dim(0).extent() ||
             texture.height != buf1.dim(1).extent() ||
             buf1.dim(0).stride() != required_stride) {
- 
+
             // set the metal layer to the drawable size in case orientation or size changes
             CGSize drawableSize = self.bounds.size;
 
-            // The Metal schedule for our Halide code requires that 
+            // The Metal schedule for our Halide code requires that
             // the image be exact multiples of 8 in x & y
             drawableSize.width  = ((long)drawableSize.width + 7) & ~7;
             drawableSize.height  = ((long)drawableSize.height + 7) & ~7;
             _metalLayer.drawableSize = drawableSize;
-            
+
             [self initBufsWithWidth: drawableSize.width height: drawableSize.height using_metal: using_metal];
             halide_funcs.init((__bridge void *)self, buf1);
 
             [self resetFrameTime];
         }
-        
+
         [self renderOneFrame: halide_funcs using_metal: using_metal];
 
         id <MTLBuffer> buffer = using_metal ?
@@ -278,15 +278,15 @@ static const HalideFuncs kHalideMetal = {
         MTLOrigin origin = { 0, 0, 0 };
 
         const int bytesPerRow = pixel_buf.dim(1).stride() * pixel_buf.type().bits / 8;
-        [blitEncoder 
-            copyFromBuffer:buffer 
+        [blitEncoder
+            copyFromBuffer:buffer
             sourceOffset: 0
             sourceBytesPerRow: bytesPerRow
             sourceBytesPerImage: pixel_buf.size_in_bytes()
-            sourceSize: image_size 
+            sourceSize: image_size
             toTexture: drawable.texture
-            destinationSlice: 0 
-            destinationLevel: 0 
+            destinationSlice: 0
+            destinationLevel: 0
             destinationOrigin: origin];
         [blitEncoder endEncoding];
         [commandBuffer addCompletedHandler: ^(id MTLCommandBuffer) {
@@ -313,13 +313,13 @@ static const HalideFuncs kHalideMetal = {
 
         halide_funcs.init((__bridge void *)self, buf1);
         [self resetFrameTime];
-   
+
         for (;;) {
             [self renderOneFrame: halide_funcs using_metal: false];
 
             const int bytesPerRow = pixel_buf.dim(1).stride() * pixel_buf.type().bits / 8;
             CGImageRef image_ref =
-                CGImageCreate(image_width, image_height, 
+                CGImageCreate(image_width, image_height,
                               8,   // bitsPerComponent
                               32,  // bitsPerPixel
                               bytesPerRow,
@@ -329,7 +329,7 @@ static const HalideFuncs kHalideMetal = {
                               kCGRenderingIntentDefault);
             UIImage *im = [UIImage imageWithCGImage:image_ref];
             CGImageRelease(image_ref);
-            
+
             dispatch_async(dispatch_get_main_queue(), ^(void) {
                 [self setImage: im];
             });

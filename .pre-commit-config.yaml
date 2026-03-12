@@ -15,6 +15,9 @@ repos:
       - id: fix-byte-order-marker
       - id: mixed-line-ending
       - id: no-commit-to-branch
+      - id: trailing-whitespace
+        args: [ --markdown-linebreak-ext=md ]
+        exclude: \.patch$
 
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.11

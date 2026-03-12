@@ -35,7 +35,7 @@
 	<Type Name="Halide::Runtime::Buffer&lt;*&gt;">
 		<UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" />
 	</Type>
-	
+
 	<Type Name="Halide::Runtime::Buffer&lt;*&gt;">
 		<Expand>
 			<ExpandedItem>
@@ -43,11 +43,11 @@
 			</ExpandedItem>
 		</Expand>
 	</Type>
-	
+
 	<Type Name="Halide::Buffer&lt;*&gt;">
 		<UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" />
 	</Type>
-	
+
 	<Type Name="Halide::Buffer&lt;*&gt;">
 		<Expand>
 			<ExpandedItem>

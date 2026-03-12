@@ -75,13 +75,13 @@ Process 29325 stopped
     frame #0: 0x0000000100002054 correctness_bounds`main(argc=1, argv=0x000000016fdff160) at bounds.cpp:18:12
    15       g(x, y) = min(x, y);
    16       h(x, y) = clamp(x + y, 20, 100);
-   17   
+   17  
 -> 18       Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
-   19   
+   19  
    20       Target target = get_jit_target_from_environment();
    21       if (target.has_gpu_feature()) {
 Target 0: (correctness_bounds) stopped.
-(lldb) 
+(lldb)
 ```
 
 Now we can try to inspect the Func `h`. Without the helpers, we see:

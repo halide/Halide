@@ -20,5 +20,5 @@ the same virtual environment you installed it in. On Windows, you will need to
 add the virtual environment root directory to `CMAKE_PREFIX_PATH`. This can be
 done by running `set CMAKE_PREFIX_PATH=%VIRTUAL_ENV%` in `cmd`.
 
-Other build systems can find the Halide root path by running `python -c 
+Other build systems can find the Halide root path by running `python -c
 "import halide; print(halide.install_dir())"`.
