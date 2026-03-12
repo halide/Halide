@@ -182,16 +182,22 @@ def test_callable_buffer_conventions():
         def generate(self):
             g = self
             d = hl.Var("d")
-            g.output_extents[d] = hl.mux(d, [
-                g.input.dim(0).extent(),
-                g.input.dim(1).extent(),
-                g.input.dim(2).extent()
-            ])
-            g.output_strides[d] = hl.mux(d, [
-                g.input.dim(0).stride(),
-                g.input.dim(1).stride(),
-                g.input.dim(2).stride()
-            ])
+            g.output_extents[d] = hl.mux(
+                d,
+                [
+                    g.input.dim(0).extent(),
+                    g.input.dim(1).extent(),
+                    g.input.dim(2).extent(),
+                ],
+            )
+            g.output_strides[d] = hl.mux(
+                d,
+                [
+                    g.input.dim(0).stride(),
+                    g.input.dim(1).stride(),
+                    g.input.dim(2).stride(),
+                ],
+            )
 
     with hl.GeneratorContext(hl.Target("host-debug")):
         echo_dims = EchoDims()
@@ -202,7 +208,7 @@ def test_callable_buffer_conventions():
 
         # C-contiguous input reverses dimensions.
         # Note that numpy defaults to `order='C'`.
-        input_c = np.zeros((16, 12, 3), dtype=np.int32, order='C')
+        input_c = np.zeros((16, 12, 3), dtype=np.int32, order="C")
         echo_dims_callable(input_c, output_extents, output_strides)
         assert output_extents[0] == 3
         assert output_extents[1] == 12
@@ -212,7 +218,7 @@ def test_callable_buffer_conventions():
         assert output_strides[2] == 36
 
         # F-contiguous input preserves dimensions.
-        input_f = np.zeros((16, 12, 3), dtype=np.int32, order='F')
+        input_f = np.zeros((16, 12, 3), dtype=np.int32, order="F")
         echo_dims_callable(input_f, output_extents, output_strides)
         assert output_extents[0] == 16
         assert output_extents[1] == 12
@@ -227,7 +233,9 @@ def test_callable_buffer_conventions():
         try:
             echo_dims_callable(input_noncontig, output_extents, output_strides)
         except hl.HalideError as e:
-            assert "Invalid buffer: only C or F contiguous buffers are supported" in str(e)
+            assert (
+                "Invalid buffer: only C or F contiguous buffers are supported" in str(e)
+            )
         else:
             assert False, "Did not see expected exception!"
 
@@ -236,8 +244,7 @@ if __name__ == "__main__":
     # test_callable()
 
     def via_simplecpp_pystub(target, generator_params):
-        return hl.create_callable_from_generator(target, "simplecpp",
-                                                 generator_params)
+        return hl.create_callable_from_generator(target, "simplecpp", generator_params)
 
     def via_simplepy(target, generator_params):
         with hl.GeneratorContext(target):
