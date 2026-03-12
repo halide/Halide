@@ -109,4 +109,3 @@ $(BIN)/adams2019_weightsdir_to_weightsfile: $(SRC)/weightsdir_to_weightsfile.cpp
 
 clean:
 	rm -rf $(BIN)
-

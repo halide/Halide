@@ -12,6 +12,8 @@ repos:
       - id: check-symlinks
       - id: check-yaml
       - id: destroyed-symlinks
+      - id: end-of-file-fixer
+        exclude: \.patch$
       - id: fix-byte-order-marker
       - id: mixed-line-ending
       - id: no-commit-to-branch
