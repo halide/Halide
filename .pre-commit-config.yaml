@@ -53,7 +53,7 @@ repos:
       - id: gitleaks
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.0
+    rev: v0.15.5
     hooks:
       - id: ruff-check
       - id: ruff-format
