@@ -1,0 +1,36 @@
+exclude: ^dependencies/(spirv|vulkan)/
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-json
+        exclude: ^\.devcontainer/
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-yaml
+      - id: destroyed-symlinks
+      - id: fix-byte-order-marker
+      - id: mixed-line-ending
+      - id: no-commit-to-branch
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.11
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.9.0
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: uv-lock
+        name: check uv.lock is up to date
+        entry: uv lock --check
+        language: system
+        pass_filenames: false
+        files: ^(pyproject\.toml|uv\.lock)$
