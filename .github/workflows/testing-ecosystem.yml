@@ -35,13 +35,13 @@ jobs:
             sudo tee "/etc/apt/sources.list.d/llvm-${LLVM_VERSION}.list"
           sudo apt-get update && sudo apt-get install -y \
             "clang-${LLVM_VERSION}" \
-            flatbuffers \
+            libflatbuffers-dev \
             libpng-dev \
             libjpeg-turbo8-dev \
             "liblld-${LLVM_VERSION}-dev" \
             "lld-${LLVM_VERSION}" \
             "llvm-${LLVM_VERSION}-dev" \
-            pybind11 \
+            pybind11-dev \
             wabt
 
       - name: Test CMake configures
