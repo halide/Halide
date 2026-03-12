@@ -49,4 +49,8 @@ jobs:
             wabt
 
       - name: Test CMake configures
-        run: cmake --preset release -DHalide_LLVM_ROOT=/usr/lib/llvm-${LLVM_VERSION}
+        run: |
+          cmake --preset release \
+            -DHalide_LLVM_ROOT=/usr/lib/llvm-${LLVM_VERSION} \
+            -Dflatbuffers_DIR=/usr/lib/cmake/flatbuffers \
+            -Dwabt_DIR=/usr/lib/cmake/wabt
