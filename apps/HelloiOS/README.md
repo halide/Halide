@@ -86,5 +86,5 @@ the HelloiOS target with:
 
 env -i USER="$USER" HOME="$HOME" PATH="$PATH" DEVELOPER_DIR="$DEVELOPER_DIR"
 
-though only do this if necessary as it drops *all* build context and
-may cause different problems in future.
+Only do this if necessary as it drops *all* build context and may
+cause different problems in future.
