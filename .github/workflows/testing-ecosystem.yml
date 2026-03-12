@@ -31,6 +31,6 @@ jobs:
 
       - name: Configure with vcpkg
         run: |
-          uv sync --no-install-project ci-llvm-22
+          uv sync --no-install-project --group ci-llvm-22
           export Halide_LLVM_ROOT="$(halide-llvm)"
           VCPKG_ROOT="$VCPKG_INSTALLATION_ROOT" uv run cmake --preset release-vcpkg
