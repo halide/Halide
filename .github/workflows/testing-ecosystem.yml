@@ -23,7 +23,7 @@ env:
 jobs:
   check_clang_tidy:
     if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
-    name: CMake configure against ${{ matrix.runner }}
+    name: CMake configure (ubuntu-24.04)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
