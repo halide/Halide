@@ -522,7 +522,7 @@ target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
 # Build serialization, enabled by default
 if (WITH_SERIALIZATION)
     find_package(FlatBuffers REQUIRED)
-    _Halide_pkgdep(flatbuffers)
+    _Halide_pkgdep(FlatBuffers)
 
     target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
 
