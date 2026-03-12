@@ -13,6 +13,7 @@ repos:
       - id: check-shebang-scripts-are-executable
       - id: check-symlinks
       - id: check-yaml
+        args: [ --allow-multiple-documents ]
       - id: destroyed-symlinks
       - id: end-of-file-fixer
         exclude: \.patch$
@@ -33,7 +34,7 @@ repos:
     hooks:
       - id: clang-format
         args: [ --sort-includes ]
-        types_or: [ c, c++, objective-c ]
+        types_or: [ c, c++, objective-c, json ]
         exclude: |
           (?x)(
             ^tutorial/
