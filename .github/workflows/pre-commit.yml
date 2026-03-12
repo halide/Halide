@@ -1,0 +1,22 @@
+name: Halide Presubmit Checks
+on:
+  # We don't want 'edited' (that's basically just the description, title, etc.)
+  # We don't want 'review_requested' (that's redundant to the ones below for our purposes)
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pre-commit:
+    name: Run pre-commit checks
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+      - uses: pre-commit/action@v3.0.1
