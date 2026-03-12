@@ -1,4 +1,4 @@
-name: Clang-Tidy
+name: Ecosystem
 on:
   pull_request:
     types: [ opened, synchronize, reopened ]
@@ -23,7 +23,7 @@ env:
 jobs:
   check_clang_tidy:
     if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
-    name: Check we configure against Ubuntu 24.04 packages
+    name: CMake configure against ${{ matrix.runner }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +35,9 @@ jobs:
             sudo tee "/etc/apt/sources.list.d/llvm-${LLVM_VERSION}.list"
           sudo apt-get update && sudo apt-get install -y \
             "clang-${LLVM_VERSION}" \
+            curl \
             "libclang-${LLVM_VERSION}-dev" \
+            libedit-dev \
             libflatbuffers-dev \
             libpng-dev \
             libjpeg-turbo8-dev \
