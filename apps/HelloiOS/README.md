@@ -78,13 +78,14 @@ HelloiOS/
 
 ## Troubleshooting
 
-Old Xcode versions may incorrectly think the generator binaries are
-being built for iOS, and may want signing of the generator binary
-itself. If this happens, the nuclear option is to prefix the
-xcodebuild invocation in the 'Build Halide Generators' build phase of
-the HelloiOS target with:
+Old Xcode versions may incorrectly think the generator binaries are being built
+for iOS, and may want signing of the generator binary itself. If this happens,
+the nuclear option is to prefix the xcodebuild invocation in the 'Build Halide
+Generators' build phase of the HelloiOS target with:
 
+```
 env -i USER="$USER" HOME="$HOME" PATH="$PATH" DEVELOPER_DIR="$DEVELOPER_DIR"
+```
 
 Only do this if necessary as it drops *all* build context and may
-cause different problems in future.
+cause different problems in the future.
