@@ -1,0 +1,45 @@
+name: Clang-Tidy
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    paths:
+      - '**.h'
+      - '**.c'
+      - '**.cpp'
+      - 'CMakeLists.txt'
+      - '**.cmake'
+      - '.github/workflows/testing-ecosystem.yml.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check_clang_tidy:
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
+    name: Check we configure against Ubuntu 24.04 packages
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-tidy & dependencies
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-${LLVM_VERSION} main" | \
+            sudo tee "/etc/apt/sources.list.d/llvm-${LLVM_VERSION}.list"
+          sudo apt-get update && sudo apt-get install -y \
+            "clang-${LLVM_VERSION}" \
+            flatbuffers \
+            libpng-dev \
+            libjpeg-turbo8-dev \
+            "liblld-${LLVM_VERSION}-dev" \
+            "lld-${LLVM_VERSION}" \
+            "llvm-${LLVM_VERSION}-dev" \
+            pybind11 \
+            wabt
+
+      - name: Test CMake configures
+        run: cmake --preset release
