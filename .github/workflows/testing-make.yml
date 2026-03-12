@@ -21,7 +21,7 @@ on:
       - "python_bindings/**"
 
       - "pyproject.toml"
-      - "uv.lock"
+      # Don't ignore uv.lock as it influences dependency resolution
 
       - "README.md"
       - "CODE_OF_CONDUCT.md"
