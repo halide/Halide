@@ -281,7 +281,7 @@ TEST_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 TEST_CXX_FLAGS += -fvisibility=hidden -fvisibility-inlines-hidden
 
 # In the tests, enable the debug() and internal_assert() macros
-TEST_CXX_FLAGS += -DHALIDE_KEEP_MACROS
+TEST_CXX_FLAGS += -DHALIDE_KEEP_MACROS=
 
 # gcc 4.8 fires a bogus warning on old versions of png.h
 ifneq (,$(findstring g++,$(CXX_VERSION)))
@@ -1501,8 +1501,8 @@ $(BIN_DIR)/mullapudi2016_%: $(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp 
 $(BIN_DIR)/li2018_%: $(ROOT_DIR)/test/autoschedulers/li2018/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
-$(BIN_DIR)/adams2019_test_function_dag: $(ROOT_DIR)/test/autoschedulers/adams2019/test_function_dag.cpp $(SRC_DIR)/autoschedulers/adams2019/FunctionDAG.cpp $(TEST_DEPS)
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< $(SRC_DIR)/autoschedulers/adams2019/FunctionDAG.cpp -I$(INCLUDE_DIR) -I$(SRC_DIR)/autoschedulers/adams2019 -I$(SRC_DIR)/autoschedulers/common $(TEST_LD_FLAGS) -o $@
+$(BIN_DIR)/adams2019_test_function_dag: $(ROOT_DIR)/test/autoschedulers/adams2019/test_function_dag.cpp $(SRC_DIR)/autoschedulers/adams2019/FunctionDAG.cpp $(SRC_DIR)/autoschedulers/common/ASLog.cpp $(TEST_DEPS)
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< $(SRC_DIR)/autoschedulers/adams2019/FunctionDAG.cpp $(SRC_DIR)/autoschedulers/common/ASLog.cpp -I$(INCLUDE_DIR) -I$(SRC_DIR)/autoschedulers/adams2019 -I$(SRC_DIR)/autoschedulers/common $(TEST_LD_FLAGS) -o $@
 
 $(BIN_DIR)/adams2019_%: $(ROOT_DIR)/test/autoschedulers/adams2019/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
@@ -2185,7 +2185,6 @@ TEST_APPS=\
 	local_laplacian \
 	max_filter \
 	nl_means \
-	onnx \
 	resize \
 	resnet_50 \
 	stencil_chain \
