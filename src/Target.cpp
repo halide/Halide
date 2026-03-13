@@ -360,17 +360,17 @@ Target calculate_host_target() {
     bool os_avx512 = false;
     if (have_osxsave) {
         uint64_t xcr0 = xgetbv(0);
-        os_avx = (xcr0 & 0x6) == 0x6;                          // XMM (bit 1) + YMM (bit 2)
-        os_avx512 = os_avx && ((xcr0 & 0xE0) == 0xE0);         // opmask (5) + ZMM_Hi256 (6) + Hi16_ZMM (7)
+        os_avx = (xcr0 & 0x6) == 0x6;                   // XMM (bit 1) + YMM (bit 2)
+        os_avx512 = os_avx && ((xcr0 & 0xE0) == 0xE0);  // opmask (5) + ZMM_Hi256 (6) + Hi16_ZMM (7)
     }
 
-    bool have_sse41 = (info[2] & (1 << 19)) != 0;               // ECX[19]
-    bool have_sse2 = (info[3] & (1 << 26)) != 0;                // EDX[26]
-    bool have_sse3 = (info[2] & (1 << 0)) != 0;                 // ECX[0]
-    bool have_avx = (info[2] & (1 << 28)) != 0 && os_avx;      // ECX[28], requires OS AVX support
-    bool have_f16c = (info[2] & (1 << 29)) != 0 && os_avx;     // ECX[29], VEX-encoded
-    bool have_rdrand = (info[2] & (1 << 30)) != 0;              // ECX[30]
-    bool have_fma = (info[2] & (1 << 12)) != 0 && os_avx;      // ECX[12], VEX-encoded
+    bool have_sse41 = (info[2] & (1 << 19)) != 0;           // ECX[19]
+    bool have_sse2 = (info[3] & (1 << 26)) != 0;            // EDX[26]
+    bool have_sse3 = (info[2] & (1 << 0)) != 0;             // ECX[0]
+    bool have_avx = (info[2] & (1 << 28)) != 0 && os_avx;   // ECX[28], requires OS AVX support
+    bool have_f16c = (info[2] & (1 << 29)) != 0 && os_avx;  // ECX[29], VEX-encoded
+    bool have_rdrand = (info[2] & (1 << 30)) != 0;          // ECX[30]
+    bool have_fma = (info[2] & (1 << 12)) != 0 && os_avx;   // ECX[12], VEX-encoded
 
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
