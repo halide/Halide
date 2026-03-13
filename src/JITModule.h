@@ -253,6 +253,8 @@ struct JITModule {
     /** See JITSharedRuntime::set_num_threads */
     int set_num_threads(int) const;
 
+    int set_sticky_threads(bool) const;
+
     /** Return true if compile_module has been called on this module. */
     bool compiled() const;
 };
@@ -297,6 +299,8 @@ public:
      * avoid deadlock when using the async scheduling directive. Returns the old
      * number. */
     static int set_num_threads(int);
+
+    static int set_sticky_threads(bool);
 };
 
 void *get_symbol_address(const char *s);

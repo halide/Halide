@@ -95,6 +95,8 @@ struct work {
     int threads_reserved;
 
     void *user_context;
+    uint64_t unclaimed_tasks;  // bitmask of available tasks
+
     int active_workers;
     int exit_status;
     int next_semaphore;
@@ -130,17 +132,6 @@ ALWAYS_INLINE int clamp_num_threads(int threads) {
     } else {
         return threads;
     }
-}
-
-WEAK int default_desired_num_threads() {
-    char *threads_str = getenv("HL_NUM_THREADS");
-    if (!threads_str) {
-        // Legacy name for HL_NUM_THREADS
-        threads_str = getenv("HL_NUMTHREADS");
-    }
-    return threads_str ?
-               atoi(threads_str) :
-               halide_host_cpu_count();
 }
 
 // The work queue and thread pool is weak, so one big work queue is shared by all halide functions
@@ -191,6 +182,8 @@ struct work_queue_t {
     // to prevent deadlock due to oversubscription of threads.
     int threads_reserved;
 
+    bool sticky;
+
     ALWAYS_INLINE bool running() const {
         return !shutdown;
     }
@@ -217,6 +210,25 @@ struct work_queue_t {
 };
 
 WEAK work_queue_t work_queue = {};
+
+WEAK int default_desired_num_threads() {
+    char *threads_str = getenv("HL_NUM_THREADS");
+    if (!threads_str) {
+        // Legacy name for HL_NUM_THREADS
+        threads_str = getenv("HL_NUMTHREADS");
+    }
+    // While we're at it, also check stickiness
+    char *sticky_str = getenv("HL_STICKY_THREADS");
+    if (sticky_str) {
+        work_queue.sticky = atoi(sticky_str) != 0;
+    } else {
+        work_queue.sticky = false;
+    }
+
+    return threads_str ?
+               atoi(threads_str) :
+               halide_host_cpu_count();
+}
 
 #if EXTENDED_DEBUG
 
@@ -275,6 +287,9 @@ WEAK void worker_thread_idle() {
 }
 
 WEAK void worker_thread_already_locked(work *owned_job) {
+
+    int preferred_task = 0;
+
     while (owned_job ? owned_job->running() : !work_queue.shutdown) {
         work *job = work_queue.jobs;
         work **prev_ptr = &work_queue.jobs;
@@ -417,9 +432,37 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                 work_queue.jobs = job;
             }
         } else {
-            // Claim a task from it.
+            // Claim a task index
+            int claimed_task;
+
+            if (job->unclaimed_tasks && work_queue.sticky) {
+                // Sticky bitmask path for small task counts. Pick the task that
+                // shares as many leading bits as possible with the last task I
+                // did.
+                int p = preferred_task;
+                uint64_t mask = job->unclaimed_tasks;
+                uint64_t desired_mask = (uint64_t)1 << p;
+                for (int t = 1; t < 64 && !(mask & desired_mask); t *= 2) {
+                    if (p & t) {
+                        desired_mask |= desired_mask >> t;
+                    } else {
+                        desired_mask |= desired_mask << t;
+                    }
+                }
+                int bit = __builtin_ctzll(mask & desired_mask);
+
+                // Update my preference for next time
+                preferred_task = bit;
+
+                job->unclaimed_tasks &= ~((uint64_t)1 << bit);
+                claimed_task = job->task.min + bit;
+            } else {
+                // extent > 64, just claim the next task
+                claimed_task = job->task.min;
+                job->task.min++;
+            }
+
             work myjob = *job;
-            job->task.min++;
             job->task.extent--;
 
             // If there were no more tasks pending for this job, remove it
@@ -432,10 +475,10 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             halide_mutex_unlock(&work_queue.mutex);
             if (myjob.task_fn) {
                 result = halide_do_task(myjob.user_context, myjob.task_fn,
-                                        myjob.task.min, myjob.task.closure);
+                                        claimed_task, myjob.task.closure);
             } else {
                 result = halide_do_loop_task(myjob.user_context, myjob.task.fn,
-                                             myjob.task.min, 1,
+                                             claimed_task, 1,
                                              myjob.task.closure, job);
             }
             halide_mutex_lock(&work_queue.mutex);
@@ -671,6 +714,11 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     job.active_workers = 0;
     job.next_semaphore = 0;
     job.owner_is_sleeping = false;
+    if (size <= 64) {
+        job.unclaimed_tasks = (size == 64) ? ~(uint64_t)0 : ((uint64_t)1 << size) - 1;
+    } else {
+        job.unclaimed_tasks = 0;
+    }
     job.siblings = &job;  // guarantees no other job points to the same siblings.
     job.sibling_count = 0;
     job.parent_job = nullptr;
@@ -699,6 +747,14 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
         jobs[i].active_workers = 0;
         jobs[i].next_semaphore = 0;
         jobs[i].owner_is_sleeping = false;
+        {
+            int ext = jobs[i].task.extent;
+            if (ext <= 64 && !jobs[i].task.serial) {
+                jobs[i].unclaimed_tasks = (ext == 64) ? ~(uint64_t)0 : ((uint64_t)1 << ext) - 1;
+            } else {
+                jobs[i].unclaimed_tasks = 0;
+            }
+        }
         jobs[i].parent_job = (work *)task_parent;
     }
 
@@ -736,6 +792,13 @@ WEAK int halide_set_num_threads(int n) {
     work_queue.desired_threads_working = clamp_num_threads(n);
     halide_mutex_unlock(&work_queue.mutex);
     return old;
+}
+
+WEAK int halide_set_sticky_threads(bool n) {
+    halide_mutex_lock(&work_queue.mutex);
+    work_queue.sticky = n;
+    halide_mutex_unlock(&work_queue.mutex);
+    return 0;
 }
 
 WEAK int halide_get_num_threads() {

@@ -667,6 +667,15 @@ int JITModule::set_num_threads(int n) const {
     return 1;
 }
 
+int JITModule::set_sticky_threads(bool n) const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_set_sticky_threads");
+    if (f != exports().end()) {
+        return (reinterpret_bits<int (*)(bool)>(f->second.address))(n);
+    }
+    return 1;
+}
+
 bool JITModule::compiled() const {
     return jit_module->JIT != nullptr;
 }
@@ -1221,6 +1230,11 @@ int JITSharedRuntime::get_num_threads() {
 int JITSharedRuntime::set_num_threads(int n) {
     std::scoped_lock lock(shared_runtimes_mutex);
     return shared_runtimes(MainShared).set_num_threads(n);
+}
+
+int JITSharedRuntime::set_sticky_threads(bool n) {
+    std::scoped_lock lock(shared_runtimes_mutex);
+    return shared_runtimes(MainShared).set_sticky_threads(n);
 }
 
 JITCache::JITCache(Target jit_target,
