@@ -35,14 +35,20 @@ ALWAYS_INLINE uint32_t xgetbv(uint32_t xcr_id) {
 extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
     halide_set_known_cpu_feature(features, halide_target_feature_sse41);
     halide_set_known_cpu_feature(features, halide_target_feature_avx);
-    halide_set_known_cpu_feature(features, halide_target_feature_f16c);
-    halide_set_known_cpu_feature(features, halide_target_feature_fma);
     halide_set_known_cpu_feature(features, halide_target_feature_avx2);
+    halide_set_known_cpu_feature(features, halide_target_feature_avxvnni);
+    halide_set_known_cpu_feature(features, halide_target_feature_fma);
+    // halide_set_known_cpu_feature(features, halide_target_feature_fma4);
+    halide_set_known_cpu_feature(features, halide_target_feature_f16c);
     halide_set_known_cpu_feature(features, halide_target_feature_avx512);
     halide_set_known_cpu_feature(features, halide_target_feature_avx512_knl);
     halide_set_known_cpu_feature(features, halide_target_feature_avx512_skylake);
     halide_set_known_cpu_feature(features, halide_target_feature_avx512_cannonlake);
+    halide_set_known_cpu_feature(features, halide_target_feature_avx512_zen4);
+    halide_set_known_cpu_feature(features, halide_target_feature_avx512_zen5);
     halide_set_known_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
+    halide_set_known_cpu_feature(features, halide_target_feature_avx10_1);
+    halide_set_known_cpu_feature(features, halide_target_feature_x86_apx);
 
     // Detect CPU features by specific microarchitecture.
     int32_t vendor[4];
@@ -56,10 +62,12 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
     const bool have_osxsave = (info[2] & (1 << 27)) != 0;  // ECX[27]
     bool os_avx = false;
     bool os_avx512 = false;
+    bool os_apx = false;
     if (have_osxsave) {
         uint32_t xcr0 = xgetbv(0);
         os_avx = (xcr0 & 0x6) == 0x6;                   // XMM (bit 1) + YMM (bit 2)
         os_avx512 = os_avx && ((xcr0 & 0xE0) == 0xE0);  // opmask (5) + ZMM_Hi256 (6) + Hi16_ZMM (7)
+        os_apx = (xcr0 & 0x80000) == 0x80000;           // APX extended GPRs (bit 19)
     }
 
     uint32_t family = (info[0] >> 8) & 0xF;  // Bits 8..11
@@ -135,8 +143,10 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
     }
 
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
-        int info2[4];
+        int32_t info2[4];
         cpuid(info2, 7);
+        int32_t info3[4];
+        cpuid(info3, 7, 1);
         constexpr uint32_t avx2 = 1U << 5;
         constexpr uint32_t avx512f = 1U << 16;
         constexpr uint32_t avx512dq = 1U << 17;
@@ -166,8 +176,6 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 halide_set_available_cpu_feature(features, halide_target_feature_avx512_cannonlake);
 
-                int32_t info3[4];
-                cpuid(info3, 7, 1);
                 if ((info3[0] & avxvnni) == avxvnni) {
                     halide_set_available_cpu_feature(features, halide_target_feature_avxvnni);
                     if ((info3[0] & avx512bf16) == avx512bf16) {
@@ -175,6 +183,25 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
                     }
                 }
             }
+        }
+
+        // AVX10 converged vector instructions.
+        // AVX10 uses EVEX encoding with opmask registers at all vector widths,
+        // so it requires the same OS XSAVE support as AVX-512.
+        constexpr uint32_t avx10 = 1U << 19;
+        if (os_avx512 && (info2[3] & avx10)) {
+            int32_t info_avx10[4];
+            cpuid(info_avx10, 0x24, 0x0);
+            if ((info_avx10[1] & 0xff) >= 1) {
+                halide_set_available_cpu_feature(features, halide_target_feature_avx10_1);
+            }
+        }
+
+        // APX extended GPRs (R16-R31) require OS support via XSAVE
+        // state component 19 (XCR0 bit 19).
+        constexpr uint32_t apx = 1U << 21;
+        if (os_apx && (info3[3] & apx)) {
+            halide_set_available_cpu_feature(features, halide_target_feature_x86_apx);
         }
     }
     return halide_error_code_success;

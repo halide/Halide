@@ -364,10 +364,12 @@ Target calculate_host_target() {
     bool have_osxsave = (info[2] & (1 << 27)) != 0;  // ECX[27]
     bool os_avx = false;
     bool os_avx512 = false;
+    bool os_apx = false;
     if (have_osxsave) {
         uint64_t xcr0 = xgetbv(0);
         os_avx = (xcr0 & 0x6) == 0x6;                   // XMM (bit 1) + YMM (bit 2)
         os_avx512 = os_avx && ((xcr0 & 0xE0) == 0xE0);  // opmask (5) + ZMM_Hi256 (6) + Hi16_ZMM (7)
+        os_apx = (xcr0 & 0x80000) == 0x80000;           // APX extended GPRs (bit 19)
     }
 
     bool have_sse41 = (info[2] & (1 << 19)) != 0;           // ECX[19]
@@ -485,7 +487,7 @@ Target calculate_host_target() {
 
         // AVX10 converged vector instructions.
         const uint32_t avx10 = 1U << 19;
-        if (info2[3] & avx10) {
+        if (os_avx512 && (info2[3] & avx10)) {
             int info_avx10[4];
             cpuid(info_avx10, 0x24, 0x0);
 
@@ -511,7 +513,7 @@ Target calculate_host_target() {
 
         // APX register extensions, etc.
         const uint32_t apx = 1U << 21;
-        if (info3[3] & apx) {
+        if (os_apx && (info3[3] & apx)) {
             initial_features.push_back(Target::X86APX);
         }
     }
