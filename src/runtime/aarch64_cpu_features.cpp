@@ -79,8 +79,9 @@ extern "C" BOOL IsProcessorFeaturePresent(DWORD feature);
 #define PF_ARM_FMAC_INSTRUCTIONS_AVAILABLE (27)
 #define PF_ARM_V82_DP_INSTRUCTIONS_AVAILABLE (43)
 
-// Magic value from: https://github.com/dotnet/runtime/blob/7e977dcbe5efaeec2c75ed0c3e200c85b2e55522/src/native/minipal/cpufeatures.c#L19
+// https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent
 #define PF_ARM_SVE_INSTRUCTIONS_AVAILABLE (46)
+#define PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE (47)
 
 namespace {
 
@@ -98,6 +99,10 @@ void set_platform_features(CpuFeatures *features) {
 
     if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE)) {
         halide_set_available_cpu_feature(features, halide_target_feature_sve);
+    }
+
+    if (IsProcessorFeaturePresent(PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE)) {
+        halide_set_available_cpu_feature(features, halide_target_feature_sve2);
     }
 }
 

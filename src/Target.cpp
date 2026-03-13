@@ -292,8 +292,9 @@ Target calculate_host_target() {
 
 #ifdef _MSC_VER
 
-    // Magic value from: https://github.com/dotnet/runtime/blob/7e977dcbe5efaeec2c75ed0c3e200c85b2e55522/src/native/minipal/cpufeatures.c#L19
+    // https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent
 #define PF_ARM_SVE_INSTRUCTIONS_AVAILABLE (46)
+#define PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE (47)
 
     // This is the strategy used by Google's cpuinfo library for
     // detecting fp16 arithmetic support on Windows.
@@ -311,6 +312,11 @@ Target calculate_host_target() {
     //     initial_features.push_back(Target::SVE);
     //     has_scalable_vector = true;
     // }
+
+    if (IsProcessorFeaturePresent(PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE)) {
+        initial_features.push_back(Target::SVE2);
+        has_scalable_vector = true;
+    }
 
 #endif
 
