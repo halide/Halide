@@ -4,11 +4,6 @@
 
 set(REASON_FAILURE_MESSAGE "")
 
-# Fallback configurations for weirdly built LLVMs
-set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel Release RelWithDebInfo "")
-set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel "")
-set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
-
 set(llvm_paths "")
 foreach (
     template IN ITEMS
