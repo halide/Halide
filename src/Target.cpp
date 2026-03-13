@@ -380,6 +380,12 @@ Target calculate_host_target() {
     bool have_rdrand = (info[2] & (1 << 30)) != 0;          // ECX[30]
     bool have_fma = (info[2] & (1 << 12)) != 0 && os_avx;   // ECX[12], VEX-encoded
 
+    // FMA4 is in CPUID extended leaf 0x80000001, ECX bit 16.
+    // It uses VEX-encoded YMM instructions, so requires OS AVX support.
+    int info_ext[4];
+    cpuid(info_ext, 0x80000001, 0);
+    bool have_fma4 = (info_ext[2] & (1 << 16)) != 0 && os_avx;  // ECX[16], VEX-encoded
+
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
         << "cpuid returned: "
@@ -434,6 +440,9 @@ Target calculate_host_target() {
     }
     if (have_fma) {
         initial_features.push_back(Target::FMA);
+    }
+    if (have_fma4) {
+        initial_features.push_back(Target::FMA4);
     }
 
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {

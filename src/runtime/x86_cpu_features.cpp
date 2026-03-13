@@ -38,7 +38,7 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
     halide_set_known_cpu_feature(features, halide_target_feature_avx2);
     halide_set_known_cpu_feature(features, halide_target_feature_avxvnni);
     halide_set_known_cpu_feature(features, halide_target_feature_fma);
-    // halide_set_known_cpu_feature(features, halide_target_feature_fma4);
+    halide_set_known_cpu_feature(features, halide_target_feature_fma4);
     halide_set_known_cpu_feature(features, halide_target_feature_f16c);
     halide_set_known_cpu_feature(features, halide_target_feature_avx512);
     halide_set_known_cpu_feature(features, halide_target_feature_avx512_knl);
@@ -129,6 +129,13 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
     const bool have_f16c = (info[2] & (1 << 29)) != 0 && os_avx;
     const bool have_rdrand = (info[2] & (1 << 30)) != 0;
     const bool have_fma = (info[2] & (1 << 12)) != 0 && os_avx;
+
+    // FMA4 is in CPUID extended leaf 0x80000001, ECX bit 16.
+    // It uses VEX-encoded YMM instructions, so requires OS AVX support.
+    int32_t info_ext[4];
+    cpuid(info_ext, 0x80000001);
+    const bool have_fma4 = (info_ext[2] & (1 << 16)) != 0 && os_avx;
+
     if (have_sse41) {
         halide_set_available_cpu_feature(features, halide_target_feature_sse41);
     }
@@ -140,6 +147,9 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
     }
     if (have_fma) {
         halide_set_available_cpu_feature(features, halide_target_feature_fma);
+    }
+    if (have_fma4) {
+        halide_set_available_cpu_feature(features, halide_target_feature_fma4);
     }
 
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
