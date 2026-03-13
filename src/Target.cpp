@@ -71,6 +71,10 @@ void cpuid(int info[4], int infoType, int extra) {
     __cpuidex(info, infoType, extra);
 }
 
+uint64_t xgetbv(uint32_t xcr) {
+    return _xgetbv(xcr);
+}
+
 #elif defined(__x86_64__) || defined(__i386__)
 
 // CPU feature detection code taken from ispc
@@ -81,6 +85,12 @@ void cpuid(int info[4], int infoType, int extra) {
         "cpuid                 \n\t"
         : "=a"(info[0]), "=b"(info[1]), "=c"(info[2]), "=d"(info[3])
         : "0"(infoType), "2"(extra));
+}
+
+uint64_t xgetbv(uint32_t xcr) {
+    uint32_t lo, hi;
+    __asm__ __volatile__("xgetbv" : "=a"(lo), "=d"(hi) : "c"(xcr));
+    return ((uint64_t)hi << 32) | lo;
 }
 
 #endif
@@ -342,13 +352,25 @@ Target calculate_host_target() {
     unsigned family = 0, model = 0;
     detect_family_and_model(info[0], family, model);
 
-    bool have_sse41 = (info[2] & (1 << 19)) != 0;   // ECX[19]
-    bool have_sse2 = (info[3] & (1 << 26)) != 0;    // EDX[26]
-    bool have_sse3 = (info[2] & (1 << 0)) != 0;     // ECX[0]
-    bool have_avx = (info[2] & (1 << 28)) != 0;     // ECX[28]
-    bool have_f16c = (info[2] & (1 << 29)) != 0;    // ECX[29]
-    bool have_rdrand = (info[2] & (1 << 30)) != 0;  // ECX[30]
-    bool have_fma = (info[2] & (1 << 12)) != 0;     // ECX[12]
+    // Check OS support for AVX/AVX-512 state saving via XSAVE.
+    // Even if the CPU supports these features, the OS must enable
+    // the corresponding state components in XCR0 or use will fault.
+    bool have_osxsave = (info[2] & (1 << 27)) != 0;  // ECX[27]
+    bool os_avx = false;
+    bool os_avx512 = false;
+    if (have_osxsave) {
+        uint64_t xcr0 = xgetbv(0);
+        os_avx = (xcr0 & 0x6) == 0x6;                          // XMM (bit 1) + YMM (bit 2)
+        os_avx512 = os_avx && ((xcr0 & 0xE0) == 0xE0);         // opmask (5) + ZMM_Hi256 (6) + Hi16_ZMM (7)
+    }
+
+    bool have_sse41 = (info[2] & (1 << 19)) != 0;               // ECX[19]
+    bool have_sse2 = (info[3] & (1 << 26)) != 0;                // EDX[26]
+    bool have_sse3 = (info[2] & (1 << 0)) != 0;                 // ECX[0]
+    bool have_avx = (info[2] & (1 << 28)) != 0 && os_avx;      // ECX[28], requires OS AVX support
+    bool have_f16c = (info[2] & (1 << 29)) != 0 && os_avx;     // ECX[29], VEX-encoded
+    bool have_rdrand = (info[2] & (1 << 30)) != 0;              // ECX[30]
+    bool have_fma = (info[2] & (1 << 12)) != 0 && os_avx;      // ECX[12], VEX-encoded
 
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
@@ -364,19 +386,27 @@ Target calculate_host_target() {
 
         if (processor == Target::Processor::ZnVer4) {
             Target t{os, arch, bits, processor, initial_features, vector_bits};
-            t.set_features({Target::SSE41, Target::AVX,
-                            Target::F16C, Target::FMA,
-                            Target::AVX2, Target::AVX512,
-                            Target::AVX512_Skylake, Target::AVX512_Cannonlake,
-                            Target::AVX512_Zen4});
+            t.set_feature(Target::SSE41);
+            if (os_avx) {
+                t.set_features({Target::AVX, Target::F16C, Target::FMA, Target::AVX2});
+            }
+            if (os_avx512) {
+                t.set_features({Target::AVX512, Target::AVX512_Skylake,
+                                Target::AVX512_Cannonlake, Target::AVX512_Zen4});
+            }
             return t;
         } else if (processor == Target::Processor::ZnVer5) {
             Target t{os, arch, bits, processor, initial_features, vector_bits};
-            t.set_features({Target::SSE41, Target::AVX,
-                            Target::F16C, Target::FMA,
-                            Target::AVX2, Target::AVXVNNI, Target::AVX512,
-                            Target::AVX512_Skylake, Target::AVX512_Cannonlake,
-                            Target::AVX512_Zen4, Target::AVX512_Zen5});
+            t.set_feature(Target::SSE41);
+            if (os_avx) {
+                t.set_features({Target::AVX, Target::F16C, Target::FMA,
+                                Target::AVX2, Target::AVXVNNI});
+            }
+            if (os_avx512) {
+                t.set_features({Target::AVX512, Target::AVX512_Skylake,
+                                Target::AVX512_Cannonlake,
+                                Target::AVX512_Zen4, Target::AVX512_Zen5});
+            }
             return t;
         }
     }
@@ -421,7 +451,7 @@ Target calculate_host_target() {
         if ((info2[1] & avx2) == avx2) {
             initial_features.push_back(Target::AVX2);
         }
-        if ((info2[1] & avx512) == avx512) {
+        if (os_avx512 && (info2[1] & avx512) == avx512) {
             initial_features.push_back(Target::AVX512);
             // TODO: port to family/model -based detection.
             if ((info2[1] & avx512_knl) == avx512_knl) {

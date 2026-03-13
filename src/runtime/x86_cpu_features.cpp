@@ -7,6 +7,7 @@ namespace Internal {
 
 extern "C" void x86_cpuid_halide(int32_t *);
 extern "C" void x64_cpuid_halide(int32_t *);
+extern "C" void xgetbv_halide(int32_t *);
 
 namespace {
 
@@ -20,6 +21,13 @@ ALWAYS_INLINE void cpuid(int32_t *info, int32_t fn_id, int32_t extra = 0) {
     } else {
         x86_cpuid_halide(info);
     }
+}
+
+// Returns low 32 bits of XCR specified by xcr_id.
+ALWAYS_INLINE uint32_t xgetbv(uint32_t xcr_id) {
+    int32_t xcr_info[2] = {(int32_t)xcr_id, 0};
+    xgetbv_halide(xcr_info);
+    return (uint32_t)xcr_info[0];
 }
 
 }  // namespace
@@ -42,6 +50,18 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
     int32_t info[4];
     cpuid(info, 1);
 
+    // Check OS support for AVX/AVX-512 state saving via XSAVE.
+    // Even if the CPU supports these features, the OS must enable
+    // the corresponding state components in XCR0 or use will fault.
+    const bool have_osxsave = (info[2] & (1 << 27)) != 0;  // ECX[27]
+    bool os_avx = false;
+    bool os_avx512 = false;
+    if (have_osxsave) {
+        uint32_t xcr0 = xgetbv(0);
+        os_avx = (xcr0 & 0x6) == 0x6;                   // XMM (bit 1) + YMM (bit 2)
+        os_avx512 = os_avx && ((xcr0 & 0xE0) == 0xE0);  // opmask (5) + ZMM_Hi256 (6) + Hi16_ZMM (7)
+    }
+
     uint32_t family = (info[0] >> 8) & 0xF;  // Bits 8..11
     uint32_t model = (info[0] >> 4) & 0xF;   // Bits 4..7
     if (family == 0x6 || family == 0xF) {
@@ -58,28 +78,36 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
         if (family == 0x19 && model == 0x61) {
             // Zen4
             halide_set_available_cpu_feature(features, halide_target_feature_sse41);
-            halide_set_available_cpu_feature(features, halide_target_feature_avx);
-            halide_set_available_cpu_feature(features, halide_target_feature_f16c);
-            halide_set_available_cpu_feature(features, halide_target_feature_fma);
-            halide_set_available_cpu_feature(features, halide_target_feature_avx2);
-            halide_set_available_cpu_feature(features, halide_target_feature_avx512);
-            halide_set_available_cpu_feature(features, halide_target_feature_avx512_skylake);
-            halide_set_available_cpu_feature(features, halide_target_feature_avx512_cannonlake);
-            halide_set_available_cpu_feature(features, halide_target_feature_avx512_zen4);
+            if (os_avx) {
+                halide_set_available_cpu_feature(features, halide_target_feature_avx);
+                halide_set_available_cpu_feature(features, halide_target_feature_f16c);
+                halide_set_available_cpu_feature(features, halide_target_feature_fma);
+                halide_set_available_cpu_feature(features, halide_target_feature_avx2);
+            }
+            if (os_avx512) {
+                halide_set_available_cpu_feature(features, halide_target_feature_avx512);
+                halide_set_available_cpu_feature(features, halide_target_feature_avx512_skylake);
+                halide_set_available_cpu_feature(features, halide_target_feature_avx512_cannonlake);
+                halide_set_available_cpu_feature(features, halide_target_feature_avx512_zen4);
+            }
             return halide_error_code_success;
         } else if (family == 0x1a) {
             // Zen5
             halide_set_available_cpu_feature(features, halide_target_feature_sse41);
-            halide_set_available_cpu_feature(features, halide_target_feature_avx);
-            halide_set_available_cpu_feature(features, halide_target_feature_f16c);
-            halide_set_available_cpu_feature(features, halide_target_feature_fma);
-            halide_set_available_cpu_feature(features, halide_target_feature_avx2);
-            halide_set_available_cpu_feature(features, halide_target_feature_avxvnni);
-            halide_set_available_cpu_feature(features, halide_target_feature_avx512);
-            halide_set_available_cpu_feature(features, halide_target_feature_avx512_skylake);
-            halide_set_available_cpu_feature(features, halide_target_feature_avx512_cannonlake);
-            halide_set_available_cpu_feature(features, halide_target_feature_avx512_zen4);
-            halide_set_available_cpu_feature(features, halide_target_feature_avx512_zen5);
+            if (os_avx) {
+                halide_set_available_cpu_feature(features, halide_target_feature_avx);
+                halide_set_available_cpu_feature(features, halide_target_feature_f16c);
+                halide_set_available_cpu_feature(features, halide_target_feature_fma);
+                halide_set_available_cpu_feature(features, halide_target_feature_avx2);
+                halide_set_available_cpu_feature(features, halide_target_feature_avxvnni);
+            }
+            if (os_avx512) {
+                halide_set_available_cpu_feature(features, halide_target_feature_avx512);
+                halide_set_available_cpu_feature(features, halide_target_feature_avx512_skylake);
+                halide_set_available_cpu_feature(features, halide_target_feature_avx512_cannonlake);
+                halide_set_available_cpu_feature(features, halide_target_feature_avx512_zen4);
+                halide_set_available_cpu_feature(features, halide_target_feature_avx512_zen5);
+            }
             return halide_error_code_success;
         }
     }
@@ -89,10 +117,10 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
     // complicated.
 
     const bool have_sse41 = (info[2] & (1 << 19)) != 0;
-    const bool have_avx = (info[2] & (1 << 28)) != 0;
-    const bool have_f16c = (info[2] & (1 << 29)) != 0;
+    const bool have_avx = (info[2] & (1 << 28)) != 0 && os_avx;
+    const bool have_f16c = (info[2] & (1 << 29)) != 0 && os_avx;
     const bool have_rdrand = (info[2] & (1 << 30)) != 0;
-    const bool have_fma = (info[2] & (1 << 12)) != 0;
+    const bool have_fma = (info[2] & (1 << 12)) != 0 && os_avx;
     if (have_sse41) {
         halide_set_available_cpu_feature(features, halide_target_feature_sse41);
     }
@@ -127,7 +155,7 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
         if ((info2[1] & avx2) == avx2) {
             halide_set_available_cpu_feature(features, halide_target_feature_avx2);
         }
-        if ((info2[1] & avx512) == avx512) {
+        if (os_avx512 && (info2[1] & avx512) == avx512) {
             halide_set_available_cpu_feature(features, halide_target_feature_avx512);
             if ((info2[1] & avx512_knl) == avx512_knl) {
                 halide_set_available_cpu_feature(features, halide_target_feature_avx512_knl);
