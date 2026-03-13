@@ -462,6 +462,13 @@ protected:
      * an arbitrary number of vectors.*/
     virtual llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &);
 
+    /** The inverse of interleave_vectors. */
+    virtual std::vector<llvm::Value *> deinterleave_vector(llvm::Value *vec, int num_vecs);
+
+    /** A fence to prevent fusion of ops by llvm. Designed for floats, but we
+     * abuse it to prevent shufflevector fusion too. */
+    virtual llvm::Value *optimization_fence(llvm::Value *);
+
     /** Description of an intrinsic function overload. Overloads are resolved
      * using both argument and return types. The scalar types of the arguments
      * and return type must match exactly for an overload resolution to succeed. */
@@ -511,11 +518,6 @@ protected:
      * if you ask for more lanes than the vector has. */
     virtual llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);
 
-    /** Use an arithmetic fence to prevent LLVM from fusing operations
-     * across this barrier. Works by bitcasting to float, applying
-     * llvm.arithmetic.fence, and bitcasting back. */
-    virtual llvm::Value *optimization_fence(llvm::Value *);
-
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
     virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 
@@ -529,8 +531,6 @@ protected:
                                          const std::vector<int> &indices);
     /** Shorthand for shuffling a single vector. */
     llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
-
-    bool is_power_of_two(int x) const;
 
     bool is_scalable_vector(llvm::Value *v) const;
 

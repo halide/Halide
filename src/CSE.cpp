@@ -237,10 +237,39 @@ class CSEEveryExprInStmt : public IRMutator {
         }
         const Call *bundle = Call::as_intrinsic(dummy, {Call::bundle});
         internal_assert(bundle && bundle->args.size() == 2);
-        Stmt s = Store::make(op->name, bundle->args[0], bundle->args[1],
+
+        Expr value = bundle->args[0], index = bundle->args[1];
+
+        // Figure out which ones are actually needed by the index
+
+        auto add_all_vars_to_set = [&](const Expr &e, std::set<std::string> &s) {
+            visit_with(e, [&](auto *, const Variable *var) {
+                s.insert(var->name);
+            });
+        };
+
+        std::set<string> index_lets;
+        add_all_vars_to_set(index, index_lets);
+        for (const auto &[var, val] : reverse_view(lets)) {
+            if (index_lets.count(var)) {
+                add_all_vars_to_set(val, index_lets);
+            }
+        }
+
+        vector<pair<string, Expr>> deferred;
+        for (const auto &[var, val] : reverse_view(lets)) {
+            if (index_lets.count(var)) {
+                deferred.emplace_back(var, val);
+            } else {
+                value = Let::make(var, val, value);
+            }
+        }
+
+        Stmt s = Store::make(op->name, value, index,
                              op->param, mutate(op->predicate), op->alignment);
-        for (const auto &[var, value] : reverse_view(lets)) {
-            s = LetStmt::make(var, value, s);
+
+        for (const auto &[var, val] : deferred) {
+            s = LetStmt::make(var, val, s);
         }
         return s;
     }
