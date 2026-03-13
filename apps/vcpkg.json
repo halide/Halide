@@ -12,6 +12,7 @@
     "eigen3",
     "libjpeg-turbo",
     "libpng",
+    "onnx",
     {
       "name": "openblas",
       "platform": "(windows & x64 & !uwp & !xbox) | (linux & x64) | (linux & arm64)"
@@ -20,6 +21,8 @@
       "name": "opencl",
       "platform": "(windows & x64 & !uwp & !xbox) | (linux & x64) | (linux & arm64)"
     },
+    "protobuf",
+    "pybind11",
     "tensorflow-lite"
   ]
 }

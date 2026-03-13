@@ -2,7 +2,7 @@
 #define CONVERT_MODEL_H_
 
 #include "Halide.h"
-#include "onnx/onnx.pb.h"
+#include "onnx/onnx_pb.h"
 #include <unordered_map>
 #include <vector>
 
