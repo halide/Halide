@@ -230,7 +230,6 @@ void define_enums(py::module &m) {
         .value("c_header", OutputFileType::c_header)
         .value("c_source", OutputFileType::c_source)
         .value("compiler_log", OutputFileType::compiler_log)
-        .value("cpp_stub", OutputFileType::cpp_stub)
         .value("featurization", OutputFileType::featurization)
         .value("function_info_header", OutputFileType::function_info_header)
         .value("hlpipe", OutputFileType::hlpipe)

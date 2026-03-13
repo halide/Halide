@@ -704,15 +704,6 @@ _add_halide_aot_tests(rdom_input)
 _add_halide_libraries(string_param PARAMS "rpn_expr=5 y * x +")
 _add_halide_aot_tests(string_param)
 
-# stubtest_aottest.cpp
-# stubtest_generator.cpp
-# stubtest_jittest.cpp
-# TODO: stubs not supported in CMake
-
-# stubuser_aottest.cpp
-# stubuser_generator.cpp
-# TODO: stubs not supported in CMake
-
 # shuffler_aottest.cpp
 # shuffler_generator.cpp
 _add_halide_libraries(shuffler)

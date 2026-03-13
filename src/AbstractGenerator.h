@@ -162,21 +162,6 @@ public:
     virtual void bind_input(const std::string &name, const std::vector<Expr> &v) = 0;
     // @}
 
-    /** Emit a Generator Stub (.stub.h) file to the given path. Not all Generators support this.
-     *
-     * If you call this method, you should not call any other AbstractGenerator methods
-     * on this instance, before or after this call.
-     *
-     * If the Generator is capable of emitting a Stub, do so and return true. (Errors
-     * during stub emission should assert-fail rather than returning false.)
-     *
-     * If the Generator is not capable of emitting a Stub, do nothing and return false.
-     *
-     * CALL-AFTER: none
-     * CALL-BEFORE: none
-     */
-    virtual bool emit_cpp_stub(const std::string &stub_file_path) = 0;
-
     /** Emit a Serialized Halide Pipeline (.hlpipe) file to the given path. Not all Generators support this.
      *
      * If you call this method, you should not call any other AbstractGenerator methods
