@@ -486,18 +486,18 @@ Target calculate_host_target() {
             // This checks that the AVX10 version is greater than zero.
             // It isn't really needed as for now only one version exists, but
             // the docs indicate bits 0:7 of EBX should be >= 0 so...
-            if ((info[1] & 0xff) >= 1) {
+            if ((info_avx10[1] & 0xff) >= 1) {
                 initial_features.push_back(Target::AVX10_1);
 
                 const uint32_t avx10_128 = 1U << 16;
                 const uint32_t avx10_256 = 1U << 17;
                 const uint32_t avx10_512 = 1U << 18;
                 // Choose the maximum one that is available.
-                if (info[1] & avx10_512) {
+                if (info_avx10[1] & avx10_512) {
                     vector_bits = 512;
-                } else if (info[1] & avx10_256) {
+                } else if (info_avx10[1] & avx10_256) {
                     vector_bits = 256;
-                } else if (info[1] & avx10_128) {  // Not clear it is worth turning on AVX10 for this case.
+                } else if (info_avx10[1] & avx10_128) {  // Not clear it is worth turning on AVX10 for this case.
                     vector_bits = 128;
                 }
             }
