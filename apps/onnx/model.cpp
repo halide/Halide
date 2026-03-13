@@ -21,7 +21,9 @@ HalideModel convert_onnx_model(
     const std::unordered_map<std::string, int> &expected_dim_sizes,
     const IOLayout layout) {
     onnx::ModelProto onnx_model;
-    onnx_model.ParseFromString(onnx_model_str);
+    if (!onnx_model.ParseFromString(onnx_model_str)) {
+        throw std::invalid_argument("Failed to parse the ONNX model");
+    }
 
     if (onnx_model.graph().output_size() == 0) {
         throw std::invalid_argument("No output specified in the model");

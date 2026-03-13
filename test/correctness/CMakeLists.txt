@@ -8,7 +8,6 @@ tests(GROUPS correctness
       align_bounds.cpp
       argmax.cpp
       async_device_copy.cpp
-      async_order.cpp
       autodiff.cpp
       bad_likely.cpp
       bad_partition_always_throws.cpp
@@ -91,7 +90,6 @@ tests(GROUPS correctness
       dilate3x3.cpp
       div_by_zero.cpp
       div_round_to_zero.cpp
-      ring_buffer.cpp
       dynamic_allocation_in_gpu_kernel.cpp
       dynamic_reduction_bounds.cpp
       early_out.cpp
@@ -226,7 +224,6 @@ tests(GROUPS correctness
       memoize_cloned.cpp
       min_extent.cpp
       mod.cpp
-      mul_div_mod.cpp
       multi_output_pipeline_with_bad_sizes.cpp
       multi_splits_with_diff_tail_strategies.cpp
       multi_way_select.cpp
@@ -286,13 +283,6 @@ tests(GROUPS correctness
       shift_by_unsigned_negated.cpp
       shifted_image.cpp
       side_effects.cpp
-      simd_op_check_arm.cpp
-      simd_op_check_hvx.cpp
-      simd_op_check_powerpc.cpp
-      simd_op_check_riscv.cpp
-      simd_op_check_sve2.cpp
-      simd_op_check_wasm.cpp
-      simd_op_check_x86.cpp
       simplified_away_embedded_image.cpp
       simplify.cpp
       skip_stages.cpp
@@ -345,17 +335,15 @@ tests(GROUPS correctness
       unique_func_image.cpp
       unroll_dynamic_loop.cpp
       unroll_loop_with_implied_constant_bounds.cpp
+      unroll_huge_mux.cpp
       unrolled_reduction.cpp
       unsafe_dedup_lets.cpp
       unsafe_promises.cpp
       unused_func.cpp
       update_chunk.cpp
       vector_bounds_inference.cpp
-      vector_cast.cpp
       vector_extern.cpp
-      vector_math.cpp
       vector_print_bug.cpp
-      vector_reductions.cpp
       vector_shuffle.cpp
       vector_tile.cpp
       vectorize_guard_with_if.cpp
@@ -370,13 +358,29 @@ tests(GROUPS correctness
       vectorized_reduction_bug.cpp
       widening_lerp.cpp
       widening_reduction.cpp
-      )
+)
+
+# Simd op check tests fix the target features internally, so they
+# only need to be run on one target in CI. Every CI runner targets
+# host, so we can just check for that.
+if (NOT Halide_BUILDING_IN_CI OR Halide_TARGET STREQUAL "host")
+    tests(GROUPS correctness multithreaded
+          SOURCES
+          simd_op_check_arm.cpp
+          simd_op_check_hvx.cpp
+          simd_op_check_powerpc.cpp
+          simd_op_check_riscv.cpp
+          simd_op_check_sve2.cpp
+          simd_op_check_wasm.cpp
+          simd_op_check_x86.cpp)
+endif ()
 
 tests(GROUPS correctness multithreaded
       SOURCES
       assertion_failure_in_parallel_for.cpp
       async.cpp
       async_copy_chain.cpp
+      async_order.cpp
       atomic_tuples.cpp
       atomics.cpp
       compute_outermost.cpp
@@ -391,6 +395,7 @@ tests(GROUPS correctness multithreaded
       legal_race_condition.cpp
       lots_of_dimensions.cpp
       memoize.cpp
+      mul_div_mod.cpp
       multi_pass_reduction.cpp
       multiple_outputs_extern.cpp
       multiple_scatter.cpp
@@ -408,11 +413,14 @@ tests(GROUPS correctness multithreaded
       random.cpp
       reorder_rvars.cpp
       rfactor.cpp
+      ring_buffer.cpp
       stream_compaction.cpp
       thread_safety.cpp
       truncated_pyramid.cpp
       tuple_vector_reduce.cpp
-      unroll_huge_mux.cpp
+      vector_cast.cpp
+      vector_math.cpp
+      vector_reductions.cpp
       )
 
 # Make sure the test that needs Halide::ImageIO has it
@@ -466,19 +474,3 @@ set_target_properties(correctness_async
                       correctness_stage_strided_loads
                       correctness_storage_folding
                       PROPERTIES ENABLE_EXPORTS TRUE)
-
-# Tests which are internally parallelized should not be run at the
-# same time as other tests, or they may time out
-
-set_tests_properties(correctness_mul_div_mod
-                     correctness_simd_op_check_arm
-                     correctness_simd_op_check_hvx
-                     correctness_simd_op_check_powerpc
-                     correctness_simd_op_check_riscv
-                     correctness_simd_op_check_sve2
-                     correctness_simd_op_check_wasm
-                     correctness_simd_op_check_x86
-                     correctness_vector_cast
-                     correctness_vector_math
-                     correctness_vector_reductions
-                     PROPERTIES RUN_SERIAL TRUE)

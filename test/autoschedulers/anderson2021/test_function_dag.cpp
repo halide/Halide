@@ -169,5 +169,6 @@ int main(int argc, char **argv) {
     test_coeff_wise(target);
     test_matmul(target);
 
+    printf("Success!\n");
     return 0;
 }

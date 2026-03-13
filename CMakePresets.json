@@ -23,7 +23,8 @@
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "FETCHCONTENT_FULLY_DISCONNECTED": "ON",
         "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
-        "VCPKG_MANIFEST_FEATURES": "developer"
+        "VCPKG_MANIFEST_FEATURES": "developer",
+        "Halide_BUILDING_IN_CI": "ON"
       }
     },
     {
