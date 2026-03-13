@@ -31,7 +31,7 @@ endif()
 # add_app(HelloAndroid)  # TODO(#5374): missing CMake build
 # add_app(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
 # add_app(HelloPyTorch)  # TODO(#5374): missing CMake build
-# add_app(HelloiOS)  # TODO(#5374): missing CMake build
+# add_app(HelloiOS)  # don't build HelloiOS here because it isn't universal.
 # add_app(auto_viz)  # TODO(#5374): missing CMake build
 add_app(bgu)
 add_app(bilateral_grid)
