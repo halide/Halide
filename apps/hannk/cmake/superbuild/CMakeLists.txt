@@ -96,4 +96,3 @@ file(GENERATE OUTPUT "cmake_install.cmake"
 file(RELATIVE_PATH ctest_dir "${CMAKE_CURRENT_BINARY_DIR}" "${BINARY_DIR}")
 file(GENERATE OUTPUT "CTestTestfile.cmake"
      CONTENT "subdirs(\"${ctest_dir}\")")
-

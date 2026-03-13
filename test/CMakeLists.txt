@@ -50,13 +50,13 @@ endif ()
 
 # FIXME: Disable the runtime tests for MSVC until we have a MS compatible header.
 #
-# The runtime tests include src/runtime/runtime_internal.h which was written 
-# to only support clang (GCC's front end is close enough it works fine as well). 
-# We originally setup the tests to compile with clang (in the same way as the actual 
-# runtime bitcode files), but that wasn't very clean and didn't integrate well with 
-# the other tests, so we switched to just using the native system compiler. 
+# The runtime tests include src/runtime/runtime_internal.h which was written
+# to only support clang (GCC's front end is close enough it works fine as well).
+# We originally setup the tests to compile with clang (in the same way as the actual
+# runtime bitcode files), but that wasn't very clean and didn't integrate well with
+# the other tests, so we switched to just using the native system compiler.
 # Sadly MSVC isn't compatible with the current runtime_internal.h which would need
-# some platform specific ifdefs for attributes and types that are causing compile 
+# some platform specific ifdefs for attributes and types that are causing compile
 # errors.
 #
 Halide_feature(WITH_TEST_RUNTIME "Build runtime tests" AUTO

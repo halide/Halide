@@ -52,7 +52,7 @@ clean:
 
 # Simple unit test
 $(BIN)/%/onnx_converter_test: onnx_converter_test.cc $(BIN)/%/oclib.a
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LIBHALIDE_LDFLAGS) 
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(GENERATOR_BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERATOR_DEPS) $(GENERATOR_BIN)/oclib.a
 	@mkdir -p $(@D)

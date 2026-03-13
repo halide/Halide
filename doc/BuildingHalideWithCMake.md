@@ -256,7 +256,7 @@ module dependencies):
 ```
 $ sudo apt install clang-tools lld llvm-dev libclang-dev liblld-dev \
     libpng-dev libjpeg-dev libgl-dev python3-dev python3-numpy \
-    python3-imageio python3-pybind11 libopenblas-dev libeigen3-dev \ 
+    python3-imageio python3-pybind11 libopenblas-dev libeigen3-dev \
     libatlas-base-dev doxygen
 ```
 

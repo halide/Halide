@@ -1,0 +1,79 @@
+exclude: ^dependencies/(spirv|vulkan)/
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      - id: check-json
+        exclude: ^\.devcontainer/
+      - id: check-merge-conflict
+      - id: check-shebang-scripts-are-executable
+      - id: check-symlinks
+      - id: check-yaml
+        args: [ --allow-multiple-documents ]
+      - id: destroyed-symlinks
+      - id: end-of-file-fixer
+        exclude: \.patch$
+      - id: fix-byte-order-marker
+      - id: mixed-line-ending
+      - id: no-commit-to-branch
+      - id: trailing-whitespace
+        args: [ --markdown-linebreak-ext=md ]
+        exclude: \.patch$
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.11
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v21.1.8
+    hooks:
+      - id: clang-format
+        args: [ --sort-includes ]
+        types_or: [ c, c++, objective-c, json ]
+        exclude: |
+          (?x)(
+            ^tutorial/
+            | ^src/runtime/hexagon_remote/bin/src/
+            | ^src/runtime/mini_webgpu\.h$
+            | ^src/runtime/mini_d3d12\.h$
+            | ^src/runtime/vulkan_context\.h$
+            | \.fbs\.h$
+            | ^\.devcontainer/
+            | \.xcassets/
+          )
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.9.0
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.5
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+
+  - repo: https://github.com/ComPWA/taplo-pre-commit
+    rev: v0.9.3
+    hooks:
+      - id: taplo-format
+
+  - repo: local
+    hooks:
+      - id: check-cmake-file-lists
+        name: check CMake file lists
+        entry: python tools/check_cmake_file_lists.py
+        language: system
+        files: ^test/.*CMakeLists\.txt$
+
+      - id: uv-lock
+        name: check uv.lock is up to date
+        entry: uv lock --check
+        language: system
+        pass_filenames: false
+        files: ^(pyproject\.toml|uv\.lock)$

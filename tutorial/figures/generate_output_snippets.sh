@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 for f in ../lesson_*.cpp; do
     # Figure out which source lines contain a realize call or other print we want to capture
     INTERESTING_LINES=$(egrep -n 'tick\(|[.]realize\(|print_loop_nest\(\)|Printing a complex Expr' $f  | grep -v ": *//" | cut -d':' -f1)
