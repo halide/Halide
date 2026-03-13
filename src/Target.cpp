@@ -65,13 +65,19 @@ __attribute__((target("+sve"))) int get_sve_vector_length() {
 }
 #endif
 
+struct cpuid_result {
+    int eax, ebx, ecx, edx;
+};
+
 #if defined(_M_IX86) || defined(_M_AMD64)
 
-void cpuid(int info[4], int infoType, int extra) {
+[[nodiscard]] cpuid_result cpuid(int infoType, int extra = 0) {
+    int info[4];
     __cpuidex(info, infoType, extra);
+    return {info[0], info[1], info[2], info[3]};
 }
 
-uint64_t xgetbv(uint32_t xcr) {
+[[nodiscard]] uint64_t xgetbv(uint32_t xcr) {
     return _xgetbv(xcr);
 }
 
@@ -80,14 +86,16 @@ uint64_t xgetbv(uint32_t xcr) {
 // CPU feature detection code taken from ispc
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 
-void cpuid(int info[4], int infoType, int extra) {
+[[nodiscard]] cpuid_result cpuid(int infoType, int extra = 0) {
+    cpuid_result result;
     __asm__ __volatile__(
         "cpuid                 \n\t"
-        : "=a"(info[0]), "=b"(info[1]), "=c"(info[2]), "=d"(info[3])
+        : "=a"(result.eax), "=b"(result.ebx), "=c"(result.ecx), "=d"(result.edx)
         : "0"(infoType), "2"(extra));
+    return result;
 }
 
-uint64_t xgetbv(uint32_t xcr) {
+[[nodiscard]] uint64_t xgetbv(uint32_t xcr) {
     uint32_t lo, hi;
     __asm__ __volatile__("xgetbv" : "=a"(lo), "=d"(hi) : "c"(xcr));
     return ((uint64_t)hi << 32) | lo;
@@ -104,20 +112,19 @@ enum class VendorSignatures {
 };
 
 VendorSignatures get_vendor_signature() {
-    int info[4];
-    cpuid(info, 0, 0);
+    const auto info = cpuid(0);
 
-    if (info[0] < 1) {
+    if (info.eax < 1) {
         return VendorSignatures::Unknown;
     }
 
     // "Genu ineI ntel"
-    if (info[1] == 0x756e6547 && info[3] == 0x49656e69 && info[2] == 0x6c65746e) {
+    if (info.ebx == 0x756e6547 && info.edx == 0x49656e69 && info.ecx == 0x6c65746e) {
         return VendorSignatures::GenuineIntel;
     }
 
     // "Auth enti cAMD"
-    if (info[1] == 0x68747541 && info[3] == 0x69746e65 && info[2] == 0x444d4163) {
+    if (info.ebx == 0x68747541 && info.edx == 0x69746e65 && info.ecx == 0x444d4163) {
         return VendorSignatures::AuthenticAMD;
     }
 
@@ -352,16 +359,15 @@ Target calculate_host_target() {
 
     VendorSignatures vendor_signature = get_vendor_signature();
 
-    int info[4];
-    cpuid(info, 1, 0);
+    const auto info = cpuid(1);
 
     unsigned family = 0, model = 0;
-    detect_family_and_model(info[0], family, model);
+    detect_family_and_model(info.eax, family, model);
 
     // Check OS support for AVX/AVX-512 state saving via XSAVE.
     // Even if the CPU supports these features, the OS must enable
     // the corresponding state components in XCR0 or use will fault.
-    bool have_osxsave = (info[2] & (1 << 27)) != 0;  // ECX[27]
+    bool have_osxsave = (info.ecx & (1 << 27)) != 0;  // ECX[27]
     bool os_avx = false;
     bool os_avx512 = false;
     bool os_apx = false;
@@ -372,27 +378,26 @@ Target calculate_host_target() {
         os_apx = (xcr0 & 0x80000) == 0x80000;           // APX extended GPRs (bit 19)
     }
 
-    bool have_sse41 = (info[2] & (1 << 19)) != 0;           // ECX[19]
-    bool have_sse2 = (info[3] & (1 << 26)) != 0;            // EDX[26]
-    bool have_sse3 = (info[2] & (1 << 0)) != 0;             // ECX[0]
-    bool have_avx = (info[2] & (1 << 28)) != 0 && os_avx;   // ECX[28], requires OS AVX support
-    bool have_f16c = (info[2] & (1 << 29)) != 0 && os_avx;  // ECX[29], VEX-encoded
-    bool have_rdrand = (info[2] & (1 << 30)) != 0;          // ECX[30]
-    bool have_fma = (info[2] & (1 << 12)) != 0 && os_avx;   // ECX[12], VEX-encoded
+    bool have_sse41 = (info.ecx & (1 << 19)) != 0;           // ECX[19]
+    bool have_sse2 = (info.edx & (1 << 26)) != 0;            // EDX[26]
+    bool have_sse3 = (info.ecx & (1 << 0)) != 0;             // ECX[0]
+    bool have_avx = (info.ecx & (1 << 28)) != 0 && os_avx;   // ECX[28], requires OS AVX support
+    bool have_f16c = (info.ecx & (1 << 29)) != 0 && os_avx;  // ECX[29], VEX-encoded
+    bool have_rdrand = (info.ecx & (1 << 30)) != 0;          // ECX[30]
+    bool have_fma = (info.ecx & (1 << 12)) != 0 && os_avx;   // ECX[12], VEX-encoded
 
     // FMA4 is in CPUID extended leaf 0x80000001, ECX bit 16.
     // It uses VEX-encoded YMM instructions, so requires OS AVX support.
-    int info_ext[4];
-    cpuid(info_ext, 0x80000001, 0);
-    bool have_fma4 = (info_ext[2] & (1 << 16)) != 0 && os_avx;  // ECX[16], VEX-encoded
+    const auto info_ext = cpuid(0x80000001);
+    bool have_fma4 = (info_ext.ecx & (1 << 16)) != 0 && os_avx;  // ECX[16], VEX-encoded
 
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
         << "cpuid returned: "
-        << std::hex << info[0]
-        << ", " << info[1]
-        << ", " << info[2]
-        << ", " << info[3]
+        << std::hex << info.eax
+        << ", " << info.ebx
+        << ", " << info.ecx
+        << ", " << info.edx
         << std::dec << "\n";
 
     if (vendor_signature == VendorSignatures::AuthenticAMD) {
@@ -447,11 +452,8 @@ Target calculate_host_target() {
 
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
         // So far, so good.  AVX2/512?
-        // Call cpuid with eax=7, ecx=0
-        int info2[4];
-        cpuid(info2, 7, 0);
-        int info3[4];
-        cpuid(info3, 7, 1);
+        const auto info2 = cpuid(7, 0);
+        const auto info3 = cpuid(7, 1);
         const uint32_t avx2 = 1U << 5;
         const uint32_t avx512f = 1U << 16;
         const uint32_t avx512dq = 1U << 17;
@@ -465,29 +467,29 @@ Target calculate_host_target() {
         const uint32_t avx512_knl = avx512 | avx512pf | avx512er;
         const uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
         const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma;  // Assume ifma => vbmi
-        if ((info2[1] & avx2) == avx2) {
+        if ((info2.ebx & avx2) == avx2) {
             initial_features.push_back(Target::AVX2);
         }
-        if (os_avx512 && (info2[1] & avx512) == avx512) {
+        if (os_avx512 && (info2.ebx & avx512) == avx512) {
             initial_features.push_back(Target::AVX512);
             // TODO: port to family/model -based detection.
-            if ((info2[1] & avx512_knl) == avx512_knl) {
+            if ((info2.ebx & avx512_knl) == avx512_knl) {
                 initial_features.push_back(Target::AVX512_KNL);
             }
             // TODO: port to family/model -based detection.
-            if ((info2[1] & avx512_skylake) == avx512_skylake) {
+            if ((info2.ebx & avx512_skylake) == avx512_skylake) {
                 initial_features.push_back(Target::AVX512_Skylake);
             }
             // TODO: port to family/model -based detection.
-            if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
+            if ((info2.ebx & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
 
                 const uint32_t avxvnni = 1U << 4;     // avxvnni (note, not avx512vnni) result in eax
                 const uint32_t avx512bf16 = 1U << 5;  // bf16 result in eax, with cpuid(eax=7, ecx=1)
                 // TODO: port to family/model -based detection.
-                if ((info3[0] & avxvnni) == avxvnni) {
+                if ((info3.eax & avxvnni) == avxvnni) {
                     initial_features.push_back(Target::AVXVNNI);
-                    if ((info3[0] & avx512bf16) == avx512bf16) {
+                    if ((info3.eax & avx512bf16) == avx512bf16) {
                         initial_features.push_back(Target::AVX512_SapphireRapids);
                     }
                 }
@@ -496,25 +498,24 @@ Target calculate_host_target() {
 
         // AVX10 converged vector instructions.
         const uint32_t avx10 = 1U << 19;
-        if (os_avx512 && (info2[3] & avx10)) {
-            int info_avx10[4];
-            cpuid(info_avx10, 0x24, 0x0);
+        if (os_avx512 && (info2.edx & avx10)) {
+            const auto info_avx10 = cpuid(0x24, 0x0);
 
             // This checks that the AVX10 version is greater than zero.
             // It isn't really needed as for now only one version exists, but
             // the docs indicate bits 0:7 of EBX should be >= 0 so...
-            if ((info_avx10[1] & 0xff) >= 1) {
+            if ((info_avx10.ebx & 0xff) >= 1) {
                 initial_features.push_back(Target::AVX10_1);
 
                 const uint32_t avx10_128 = 1U << 16;
                 const uint32_t avx10_256 = 1U << 17;
                 const uint32_t avx10_512 = 1U << 18;
                 // Choose the maximum one that is available.
-                if (info_avx10[1] & avx10_512) {
+                if (info_avx10.ebx & avx10_512) {
                     vector_bits = 512;
-                } else if (info_avx10[1] & avx10_256) {
+                } else if (info_avx10.ebx & avx10_256) {
                     vector_bits = 256;
-                } else if (info_avx10[1] & avx10_128) {  // Not clear it is worth turning on AVX10 for this case.
+                } else if (info_avx10.ebx & avx10_128) {  // Not clear it is worth turning on AVX10 for this case.
                     vector_bits = 128;
                 }
             }
@@ -522,7 +523,7 @@ Target calculate_host_target() {
 
         // APX register extensions, etc.
         const uint32_t apx = 1U << 21;
-        if (os_apx && (info3[3] & apx)) {
+        if (os_apx && (info3.edx & apx)) {
             initial_features.push_back(Target::X86APX);
         }
     }
