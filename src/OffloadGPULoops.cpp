@@ -286,7 +286,7 @@ public:
             i.second->init_module();
         }
 
-        Stmt result = (s);
+        Stmt result = mutate(s);
 
         for (auto &i : cgdev) {
             string api_unique_name = i.second->api_unique_name();
