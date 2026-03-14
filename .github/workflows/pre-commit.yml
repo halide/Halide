@@ -62,7 +62,7 @@ jobs:
           fi
 
       - name: Annotate codespell errors
-        if: ${{ !cancelled() && steps.push-fixes.outcome == 'failure' }}
+        if: ${{ !cancelled() && steps.pre-commit.outcome == 'failure' }}
         run: |
           pre-commit run --all-files codespell 2>&1 |
             sed -n 's/^\([^:]*\):\([0-9]*\): \(.*\)$/::error file=\1,line=\2::\3/p'
