@@ -1,4 +1,5 @@
 #include "UnrollLoops.h"
+#include "CompilerProfiling.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
@@ -11,16 +12,17 @@ namespace Internal {
 namespace {
 
 class UnrollLoops : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const For *for_loop) override {
         if (for_loop->for_type == ForType::Unrolled) {
+            ZoneScopedN("UnrollForLoop");
             Stmt body = for_loop->body;
             Expr extent = simplify(for_loop->extent());
             const IntImm *e = extent.as<IntImm>();
 
-            internal_assert(e)
-                << "Loop over " << for_loop->name << " should have had a constant extent\n";
+            internal_assert(e) << "Loop over " << for_loop->name << " should have had a constant extent\n";
             body = mutate(body);
 
             if (e->value == 1) {
@@ -53,7 +55,8 @@ class UnrollLoops : public IRMutator {
 }  // namespace
 
 Stmt unroll_loops(const Stmt &s) {
-    Stmt stmt = UnrollLoops().mutate(s);
+    ZoneScoped;
+    Stmt stmt = UnrollLoops()(s);
     // Unrolling duplicates variable names. Other passes assume variable names are unique.
     return uniquify_variable_names(stmt);
 }

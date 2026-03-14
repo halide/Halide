@@ -172,8 +172,7 @@ private:
 Stmt collect_strided_stores(const Stmt &stmt, const std::string &name, int stride, int max_stores,
                             std::vector<Stmt> lets, std::vector<Stmt> &stores) {
 
-    StoreCollector collect(name, stride, max_stores, lets, stores);
-    return collect.mutate(stmt);
+    return StoreCollector(name, stride, max_stores, lets, stores)(stmt);
 }
 
 class Deinterleaver : public IRGraphMutator {
@@ -407,8 +406,7 @@ private:
 
 Expr deinterleave(Expr e, int starting_lane, int lane_stride, int new_lanes, const Scope<> &lets) {
     e = substitute_in_all_lets(e);
-    Deinterleaver d(starting_lane, lane_stride, new_lanes, lets);
-    e = d.mutate(e);
+    e = Deinterleaver(starting_lane, lane_stride, new_lanes, lets)(e);
     e = common_subexpression_elimination(e);
     return simplify(e);
 }
@@ -802,7 +800,7 @@ public:
 }  // namespace
 
 Stmt rewrite_interleavings(const Stmt &s) {
-    return Interleaver().mutate(s);
+    return Interleaver()(s);
 }
 
 namespace {

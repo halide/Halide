@@ -9,6 +9,7 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_Vulkan_Dev.h"
 #include "CodeGen_WebGPU_Dev.h"
+#include "CompilerProfiling.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -44,7 +45,7 @@ public:
         }
     }
 
-private:
+protected:
     bool found_shared = false;
 
     using IRVisitor::visit;
@@ -87,6 +88,7 @@ private:
 };
 
 class InjectGpuOffload : public IRMutator {
+protected:
     /** Child code generator for device kernels. */
     map<DeviceAPI, unique_ptr<CodeGen_GPU_Dev>> cgdev;
 
@@ -131,7 +133,7 @@ class InjectGpuOffload : public IRMutator {
             << "A concrete device API should have been selected before codegen.";
 
         ExtractBounds bounds;
-        loop->accept(&bounds);
+        bounds(loop);
         debug(2) << "Kernel bounds: ("
                  << bounds.num_threads[0] << ", "
                  << bounds.num_threads[1] << ", "
@@ -247,6 +249,7 @@ class InjectGpuOffload : public IRMutator {
 public:
     InjectGpuOffload(const Target &target, bool any_strict_float)
         : target(target) {
+        ZoneScoped;
         Target device_target = target;
         // For the GPU target we just want to pass the flags, to avoid the
         // generated kernel code unintentionally having any dependence on the
@@ -280,12 +283,13 @@ public:
     }
 
     Stmt inject(const Stmt &s) {
+        ZoneScoped;
         // Create a new module for all of the kernels we find in this function.
         for (auto &i : cgdev) {
             i.second->init_module();
         }
 
-        Stmt result = mutate(s);
+        Stmt result = (s);
 
         for (auto &i : cgdev) {
             string api_unique_name = i.second->api_unique_name();

@@ -105,7 +105,7 @@ class IsNoOp : public IRVisitor {
             Expr equivalent_load = Load::make(op->value.type(), op->name, op->index,
                                               Buffer<>(), Parameter(), op->predicate, op->alignment);
             Expr is_no_op = equivalent_load == op->value;
-            is_no_op = StripIdentities().mutate(is_no_op);
+            is_no_op = StripIdentities()(is_no_op);
             // We need to call CSE since sometimes we have "let" stmt on the RHS
             // that makes the expr harder to solve, i.e. the solver will just give up
             // and return a conservative false on call to and_condition_over_domain().
@@ -405,7 +405,7 @@ class TrimNoOps : public IRMutator {
 
         // Simplify the body to take advantage of the fact that the
         // loop range is now truncated
-        body = simplify(SimplifyUsingBounds(op->name, i).mutate(body));
+        body = simplify(SimplifyUsingBounds(op->name, i)(body));
 
         string new_min_name = unique_name(op->name + ".new_min");
         string new_max_name = unique_name(op->name + ".new_max");
@@ -445,9 +445,8 @@ class TrimNoOps : public IRMutator {
 
 }  // namespace
 
-Stmt trim_no_ops(Stmt s) {
-    s = TrimNoOps().mutate(s);
-    return s;
+Stmt trim_no_ops(const Stmt &s) {
+    return TrimNoOps()(s);
 }
 
 }  // namespace Internal

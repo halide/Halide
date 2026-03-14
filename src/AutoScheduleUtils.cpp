@@ -53,14 +53,14 @@ Expr substitute_var_estimates(Expr e) {
     if (!e.defined()) {
         return e;
     }
-    return simplify(SubstituteVarEstimates().mutate(e));
+    return simplify(SubstituteVarEstimates()(e));
 }
 
 Stmt substitute_var_estimates(Stmt s) {
     if (!s.defined()) {
         return s;
     }
-    return simplify(SubstituteVarEstimates().mutate(s));
+    return simplify(SubstituteVarEstimates()(s));
 }
 
 int string_to_int(const string &s) {

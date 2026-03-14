@@ -31,6 +31,7 @@ using std::vector;
 namespace {
 
 class ExtractBlockSize : public IRVisitor {
+protected:
     Expr block_extent[3], block_count[3];
     string block_var_name[3];
 
@@ -123,6 +124,7 @@ public:
 };
 
 class NormalizeDimensionality : public IRMutator {
+protected:
     using IRMutator::visit;
 
     const ExtractBlockSize &block_size;
@@ -184,6 +186,7 @@ public:
 };
 
 class ReplaceForWithIf : public IRMutator {
+protected:
     using IRMutator::visit;
 
     const ExtractBlockSize &block_size;
@@ -223,6 +226,7 @@ public:
 };
 
 class ExtractSharedAndHeapAllocations : public IRMutator {
+protected:
     using IRMutator::visit;
 
     struct IntInterval {
@@ -289,7 +293,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
 public:
     vector<SharedAllocation> allocations;
 
-private:
+protected:
     map<string, SharedAllocation *> shared;
 
     bool in_threads = false;
@@ -907,7 +911,7 @@ public:
                             : alloc_name(alloc_name), cluster_name(cluster_name), offset(offset) {
                         }
                     } rewriter{alloc.name, name, offset};
-                    s = rewriter.mutate(s);
+                    s = rewriter(s);
                 }
 
                 // Define the group offset in terms of the previous group in the cluster
@@ -1041,6 +1045,7 @@ public:
 // block. Should only be run after shared allocations have already
 // been extracted.
 class ExtractRegisterAllocations : public IRMutator {
+protected:
     using IRMutator::visit;
 
     struct RegisterAllocation {
@@ -1206,6 +1211,7 @@ public:
 };
 
 class InjectThreadBarriers : public IRMutator {
+protected:
     bool in_threads = false, injected_barrier;
 
     using IRMutator::visit;
@@ -1360,6 +1366,7 @@ public:
 };
 
 class FuseGPUThreadLoopsSingleKernel : public IRMutator {
+protected:
     using IRMutator::visit;
     const ExtractBlockSize &block_size;
     ExtractSharedAndHeapAllocations &block_allocations;
@@ -1373,7 +1380,7 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
                      << body << "\n\n";
 
             NormalizeDimensionality n(block_size, op->device_api);
-            body = n.mutate(body);
+            body = n(body);
 
             debug(3) << "Normalized dimensionality:\n"
                      << body << "\n\n";
@@ -1382,7 +1389,7 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             ExtractRegisterAllocations register_allocs;
             ForType innermost_loop_type = ForType::GPUThread;
             if (block_size.threads_dimensions()) {
-                body = register_allocs.mutate(body);
+                body = register_allocs(body);
                 if (register_allocs.has_lane_loop) {
                     innermost_loop_type = ForType::GPULane;
                 }
@@ -1394,14 +1401,14 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             if (register_allocs.has_thread_loop) {
                 // If there's no loop over threads, everything is already synchronous.
                 InjectThreadBarriers i{block_allocations, register_allocs};
-                body = i.mutate(body);
+                body = i(body);
             }
 
             debug(3) << "Injected synchronization:\n"
                      << body << "\n\n";
 
             ReplaceForWithIf f(block_size);
-            body = f.mutate(body);
+            body = f(body);
 
             debug(3) << "Replaced for with if:\n"
                      << body << "\n\n";
@@ -1448,6 +1455,7 @@ public:
 };
 
 class FuseGPUThreadLoops : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
@@ -1463,17 +1471,17 @@ class FuseGPUThreadLoops : public IRMutator {
             // Do the analysis of thread block size and shared memory
             // usage.
             ExtractBlockSize block_size;
-            Stmt loop = Stmt(op);
-            loop.accept(&block_size);
+            block_size(op);
+            Stmt loop(op);
 
             ExtractSharedAndHeapAllocations block_allocations(op->device_api);
-            loop = block_allocations.mutate(loop);
+            loop = block_allocations(loop);
 
             debug(3) << "Pulled out shared allocations:\n"
                      << loop << "\n\n";
 
             // Mutate the inside of the kernel
-            loop = FuseGPUThreadLoopsSingleKernel(block_size, block_allocations).mutate(loop);
+            loop = FuseGPUThreadLoopsSingleKernel(block_size, block_allocations)(loop);
 
             loop = block_allocations.rewrap_kernel_launch(loop, block_size, op->device_api);
 
@@ -1485,6 +1493,7 @@ class FuseGPUThreadLoops : public IRMutator {
 };
 
 class ZeroGPULoopMins : public IRMutator {
+protected:
     bool in_non_glsl_gpu = false;
     using IRMutator::visit;
 
@@ -1516,13 +1525,14 @@ public:
 
 // Also used by InjectImageIntrinsics
 Stmt zero_gpu_loop_mins(const Stmt &s) {
-    return ZeroGPULoopMins().mutate(s);
+    return ZeroGPULoopMins()(s);
 }
 
 namespace {
 
 // Find the inner most GPU block of a statement.
 class FindInnermostGPUBlock : public IRVisitor {
+protected:
     using IRVisitor::visit;
 
     void visit(const For *op) override {
@@ -1540,6 +1550,7 @@ public:
 // Given a condition and a loop, add the condition
 // to the loop body.
 class AddConditionToALoop : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
@@ -1562,6 +1573,7 @@ public:
 // Push if statements between GPU blocks through all GPU blocks.
 // Throw error if the if statement has an else clause.
 class NormalizeIfStatements : public IRMutator {
+protected:
     using IRMutator::visit;
 
     bool inside_gpu_blocks = false;
@@ -1579,10 +1591,10 @@ class NormalizeIfStatements : public IRMutator {
             return IRMutator::visit(op);
         }
         FindInnermostGPUBlock find;
-        op->accept(&find);
+        find(op);
         if (find.found_gpu_block != nullptr) {
             internal_assert(!op->else_case.defined()) << "Found an if statement with else case between two GPU blocks.\n";
-            return AddConditionToALoop(op->condition, find.found_gpu_block).mutate(op->then_case);
+            return AddConditionToALoop(op->condition, find.found_gpu_block)(op->then_case);
         }
         return IRMutator::visit(op);
     }
@@ -1591,12 +1603,13 @@ class NormalizeIfStatements : public IRMutator {
 }  // namespace
 
 Stmt fuse_gpu_thread_loops(Stmt s) {
+    ZoneScoped;
     // NormalizeIfStatements pushes the predicates between GPU blocks
     // into the innermost GPU block. FuseGPUThreadLoops would then
     // merge the predicate into the merged GPU thread.
-    s = NormalizeIfStatements().mutate(s);
-    s = FuseGPUThreadLoops().mutate(s);
-    s = ZeroGPULoopMins().mutate(s);
+    s = NormalizeIfStatements()(s);
+    s = FuseGPUThreadLoops()(s);
+    s = ZeroGPULoopMins()(s);
     return s;
 }
 

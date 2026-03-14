@@ -1,6 +1,7 @@
 #include "InjectHostDevBufferCopies.h"
 
 #include "CodeGen_GPU_Dev.h"
+#include "CompilerProfiling.h"
 #include "Debug.h"
 #include "ExternFuncArgument.h"
 #include "IRMutator.h"
@@ -29,6 +30,7 @@ Stmt call_extern_and_assert(const string &name, const vector<Expr> &args) {
 namespace {
 
 class FindBufferUsage : public IRVisitor {
+protected:
     using IRVisitor::visit;
 
     void visit(const Load *op) override {
@@ -142,6 +144,7 @@ public:
 // the buffer as we go, sniffing usage within each leaf using
 // FindBufferUsage, and injecting device buffer logic as needed.
 class InjectBufferCopiesForSingleBuffer : public IRMutator {
+protected:
     using IRMutator::visit;
 
     // The buffer being managed
@@ -215,10 +218,11 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
     Stmt do_copies(Stmt s, FindBufferUsage *precomputed = nullptr) {
+        ZoneScoped;
         // Sniff what happens to the buffer inside the stmt
         FindBufferUsage local_finder(buffer, DeviceAPI::Host);
         if (!precomputed) {
-            s.accept(&local_finder);
+            local_finder(s);
             precomputed = &local_finder;
         }
         FindBufferUsage &finder = *precomputed;
@@ -356,7 +360,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     // leaf.
     Stmt visit(const For *op) override {
         FindBufferUsage finder(buffer, DeviceAPI::Host);
-        op->accept(&finder);
+        finder(op);
         if (finder.devices_touched.size() > 1) {
             // The state of the buffer going into the loop is the
             // union of the state before the loop starts and the state
@@ -480,12 +484,14 @@ public:
 // Inject the buffer-handling logic for all internal
 // allocations. Inputs and outputs are handled below.
 class InjectBufferCopies : public IRMutator {
+protected:
     using IRMutator::visit;
 
     // Inject the registration of a device destructor just after the
     // .buffer symbol is defined (which is safely before the first
     // device_malloc).
     class InjectDeviceDestructor : public IRMutator {
+    protected:
         using IRMutator::visit;
 
         Stmt visit(const LetStmt *op) override {
@@ -514,6 +520,7 @@ class InjectBufferCopies : public IRMutator {
     // and an Allocate node that takes its host field from the
     // .buffer.
     class InjectCombinedAllocation : public IRMutator {
+    protected:
         using IRMutator::visit;
 
         Stmt visit(const LetStmt *op) override {
@@ -565,6 +572,7 @@ class InjectBufferCopies : public IRMutator {
     };
 
     Stmt inject_free_after_last_use(Stmt body, const Stmt &last_use, const Stmt &free_stmt) {
+        ZoneScoped;
         bool success = false;
         body = mutate_with(
             body,
@@ -582,7 +590,7 @@ class InjectBufferCopies : public IRMutator {
 
     Stmt visit(const Allocate *op) override {
         FindBufferUsage finder(op->name, DeviceAPI::Host);
-        op->body.accept(&finder);
+        finder(op->body);
 
         bool touched_on_host = finder.devices_touched.count(DeviceAPI::Host);
         bool touched_on_device = finder.devices_touched.size() > (touched_on_host ? 1 : 0);
@@ -595,7 +603,7 @@ class InjectBufferCopies : public IRMutator {
         Stmt body = mutate(op->body);
 
         InjectBufferCopiesForSingleBuffer injector(op->name, false, op->memory_type);
-        body = injector.mutate(body);
+        body = injector(body);
 
         string buffer_name = op->name + ".buffer";
         Expr buffer = Variable::make(Handle(), buffer_name);
@@ -621,8 +629,7 @@ class InjectBufferCopies : public IRMutator {
             Expr device_interface = make_device_interface_call(touching_device, op->memory_type);
 
             return InjectCombinedAllocation(op->name, op->type, op->extents,
-                                            op->condition, device_interface)
-                .mutate(body);
+                                            op->condition, device_interface)(body);
         } else {
             // Only touched on host but passed to an extern stage, or
             // only touched on device, or touched on multiple
@@ -636,7 +643,7 @@ class InjectBufferCopies : public IRMutator {
             }
 
             // Add a device destructor
-            body = InjectDeviceDestructor(buffer_name).mutate(body);
+            body = InjectDeviceDestructor(buffer_name)(body);
 
             Expr condition = op->condition;
             bool touched_on_one_device = !touched_on_host && finder.devices_touched.size() == 1 &&
@@ -673,6 +680,7 @@ class InjectBufferCopies : public IRMutator {
 // ProducerConsumer node. Sometimes it's a Block containing a pair of
 // them.
 class FindOutermostProduce : public IRVisitor {
+protected:
     using IRVisitor::visit;
 
     void visit(const Block *op) override {
@@ -695,10 +703,12 @@ public:
 // Inject the buffer handling code for the inputs and outputs at the
 // appropriate site.
 class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
+protected:
     Stmt site;
 
     // Find all references to external buffers.
     class FindInputsAndOutputs : public IRVisitor {
+    protected:
         using IRVisitor::visit;
 
         void include(const Parameter &p) {
@@ -752,10 +762,11 @@ public:
     Stmt mutate(const Stmt &s) override {
         if (s.same_as(site)) {
             FindInputsAndOutputs finder;
-            s.accept(&finder);
+            finder(s);
             Stmt new_stmt = s;
             for (const string &buf : finder.result) {
-                new_stmt = InjectBufferCopiesForSingleBuffer(buf, true, finder.result_storage.at(buf)).mutate(new_stmt);
+                ZoneScopedN("InjectBufferCopiesForSingleBuffer");
+                new_stmt = InjectBufferCopiesForSingleBuffer(buf, true, finder.result_storage.at(buf))(new_stmt);
             }
             return new_stmt;
         } else {
@@ -782,15 +793,15 @@ Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t) {
     }
 
     // Handle internal allocations
-    s = InjectBufferCopies().mutate(s);
+    s = InjectBufferCopies()(s);
 
     // Handle inputs and outputs
     FindOutermostProduce outermost;
-    s.accept(&outermost);
+    outermost(s);
     if (outermost.result.defined()) {
         // If the entire pipeline simplified away, or just dispatches
         // to another pipeline, there may be no outermost produce.
-        s = InjectBufferCopiesForInputsAndOutputs(outermost.result).mutate(s);
+        s = InjectBufferCopiesForInputsAndOutputs(outermost.result)(s);
     }
 
     return s;

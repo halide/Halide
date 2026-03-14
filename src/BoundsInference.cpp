@@ -402,7 +402,7 @@ public:
             } select_to_if_then_else;
 
             for (auto &e : exprs) {
-                e.value = select_to_if_then_else.mutate(e.value);
+                e.value = select_to_if_then_else(e.value);
             }
         }
 
@@ -1382,8 +1382,7 @@ Stmt bounds_inference(Stmt s,
     s = For::make("<outermost>", 0, 0, ForType::Serial, Partition::Never, DeviceAPI::None, s);
 
     s = BoundsInference(funcs, fused_func_groups, fused_pairs_in_groups,
-                        outputs, func_bounds, target)
-            .mutate(s);
+                        outputs, func_bounds, target)(s);
     return s.as<For>()->body;
 }
 

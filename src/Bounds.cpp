@@ -119,6 +119,7 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
 }
 
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
+    ZoneScoped;
     Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
     Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
     interval = simplify(interval);
@@ -227,7 +228,7 @@ private:
 
 #endif  // DO_TRACK_BOUNDS_INTERVALS
 
-private:
+protected:
     // Compute the intrinsic bounds of a function.
     void bounds_of_func(const string &name, int value_index, Type t) {
         // if we can't get a good bound from the function, fall back to the bounds of the type.
@@ -1795,7 +1796,7 @@ Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Inter
 #if DO_TRACK_BOUNDS_INTERVALS
     b.log_indent = indent + 1;
 #endif
-    expr.accept(&b);
+    b(expr);
 #if DO_TRACK_BOUNDS_INTERVALS
     debug(0) << spaces << " mn=" << simplify(b.interval.min) << "\n"
              << spaces << " mx=" << simplify(b.interval.max) << "\n"
@@ -2019,6 +2020,7 @@ private:
 
 // Place innermost vars in an IfThenElse's condition as far to the left as possible.
 class SolveIfThenElse : public IRMutator {
+protected:
     // Scope of variable names and their depths. Higher depth indicates
     // variable defined more innermost.
     Scope<int> vars_depth;
@@ -2247,7 +2249,7 @@ private:
 
 #endif  // DO_TRACK_BOUNDS_INTERVALS
 
-private:
+protected:
     struct VarInstance {
         string var;
         int instance;
@@ -3000,6 +3002,7 @@ private:
 
 map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool consider_provides,
                                const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    ZoneScoped;
     if (!fn.empty() && s.defined()) {
         // Filter things down to the relevant sub-Stmts, so we don't spend a
         // long time reasoning about lets and ifs that don't surround an
@@ -3099,7 +3102,7 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
     // as possible, so that BoxesTouched can prune the variable scope tighter
     // when encountering the IfThenElse.
     if (s.defined()) {
-        s = SolveIfThenElse().mutate(s);
+        s = SolveIfThenElse()(s);
     }
 
     // Do calls and provides separately, for better simplification.
@@ -3108,18 +3111,18 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
 
     if (consider_calls) {
         if (e.defined()) {
-            e.accept(&calls);
+            calls(e);
         }
         if (s.defined()) {
-            s.accept(&calls);
+            calls(s);
         }
     }
     if (consider_provides) {
         if (e.defined()) {
-            e.accept(&provides);
+            provides(e);
         }
         if (s.defined()) {
-            s.accept(&provides);
+            provides(s);
         }
     }
 
@@ -3255,6 +3258,7 @@ Interval compute_pure_function_definition_value_bounds(
 
 FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                                               const map<string, Function> &env) {
+    ZoneScoped;
     FuncValueBounds fb;
 
     for (const auto &func_name : order) {

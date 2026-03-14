@@ -3,6 +3,7 @@
 
 #include <set>
 
+#include "CompilerProfiling.h"
 #include "IR.h"
 
 /** \file
@@ -21,6 +22,22 @@ public:
     IRVisitor() = default;
     virtual ~IRVisitor() = default;
 
+    inline void operator()(const Stmt &s) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
+        s.accept(this);
+    }
+
+    inline void operator()(const Expr &e) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
+        e.accept(this);
+    }
+
+    template<typename T>
+    inline void operator()(const T *op) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
+        visit(op);
+    }
+
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement accept())
     template<typename T>
@@ -29,54 +46,10 @@ protected:
     template<typename T>
     friend struct StmtNode;
 
-    virtual void visit(const IntImm *);
-    virtual void visit(const UIntImm *);
-    virtual void visit(const FloatImm *);
-    virtual void visit(const StringImm *);
-    virtual void visit(const Cast *);
-    virtual void visit(const Reinterpret *);
-    virtual void visit(const Add *);
-    virtual void visit(const Sub *);
-    virtual void visit(const Mul *);
-    virtual void visit(const Div *);
-    virtual void visit(const Mod *);
-    virtual void visit(const Min *);
-    virtual void visit(const Max *);
-    virtual void visit(const EQ *);
-    virtual void visit(const NE *);
-    virtual void visit(const LT *);
-    virtual void visit(const LE *);
-    virtual void visit(const GT *);
-    virtual void visit(const GE *);
-    virtual void visit(const And *);
-    virtual void visit(const Or *);
-    virtual void visit(const Not *);
-    virtual void visit(const Select *);
-    virtual void visit(const Load *);
-    virtual void visit(const Ramp *);
-    virtual void visit(const Broadcast *);
-    virtual void visit(const Let *);
-    virtual void visit(const LetStmt *);
-    virtual void visit(const AssertStmt *);
-    virtual void visit(const ProducerConsumer *);
-    virtual void visit(const Store *);
-    virtual void visit(const Provide *);
-    virtual void visit(const Allocate *);
-    virtual void visit(const Free *);
-    virtual void visit(const Realize *);
-    virtual void visit(const Block *);
-    virtual void visit(const Fork *);
-    virtual void visit(const IfThenElse *);
-    virtual void visit(const Evaluate *);
-    virtual void visit(const Call *);
-    virtual void visit(const Variable *);
-    virtual void visit(const For *);
-    virtual void visit(const Acquire *);
-    virtual void visit(const Shuffle *);
-    virtual void visit(const Prefetch *);
-    virtual void visit(const HoistedStorage *);
-    virtual void visit(const Atomic *);
-    virtual void visit(const VectorReduce *);
+#define HALIDE_DECL_VISIT(T) \
+    virtual void visit(const T *op);
+    HALIDE_FOR_EACH_IR_NODE(HALIDE_DECL_VISIT)
+#undef HALIDE_DECL_VISIT
 };
 
 /** A lambda-based IR visitor that accepts multiple lambdas for different
@@ -111,150 +84,20 @@ private:
     }
 
 protected:
-    void visit(const IntImm *op) override {
-        this->visit_impl(op);
+#define HALIDE_CALL_VISIT_EXPR_IMPL(T)                                          \
+    void visit(const T *op) override {                                          \
+        ZoneScopedVisitor(IRNodeType::T, "LambdaVisitor", Profiling::BIT_EXPR); \
+        this->visit_impl(op);                                                   \
     }
-    void visit(const UIntImm *op) override {
-        this->visit_impl(op);
+    HALIDE_FOR_EACH_IR_EXPR(HALIDE_CALL_VISIT_EXPR_IMPL)
+#undef HALIDE_CALL_VISIT_EXPR_IMPL
+#define HALIDE_CALL_VISIT_STMT_IMPL(T)                                          \
+    void visit(const T *op) override {                                          \
+        ZoneScopedVisitor(IRNodeType::T, "LambdaVisitor", Profiling::BIT_STMT); \
+        this->visit_impl(op);                                                   \
     }
-    void visit(const FloatImm *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const StringImm *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Cast *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Reinterpret *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Add *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Sub *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Mul *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Div *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Mod *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Min *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Max *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const EQ *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const NE *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const LT *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const LE *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const GT *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const GE *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const And *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Or *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Not *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Select *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Load *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Ramp *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Broadcast *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Let *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const LetStmt *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const AssertStmt *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const ProducerConsumer *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Store *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Provide *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Allocate *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Free *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Realize *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Block *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Fork *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const IfThenElse *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Evaluate *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Call *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Variable *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const For *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Acquire *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Shuffle *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Prefetch *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const HoistedStorage *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const Atomic *op) override {
-        this->visit_impl(op);
-    }
-    void visit(const VectorReduce *op) override {
-        this->visit_impl(op);
-    }
+    HALIDE_FOR_EACH_IR_STMT(HALIDE_CALL_VISIT_STMT_IMPL)
+#undef HALIDE_CALL_VISIT_STMT_IMPL
 };
 
 template<typename... Lambdas>
@@ -281,6 +124,22 @@ void visit_with(const IRHandle &ir, Lambdas &&...lambdas) {
  * without visiting the same node twice. This is for passes that are
  * capable of interpreting the IR as a DAG instead of a tree. */
 class IRGraphVisitor : public IRVisitor {
+public:
+    inline void operator()(const Expr &e) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
+        include(e);
+    }
+    inline void operator()(const Stmt &s) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
+        include(s);
+    }
+
+private:
+    /** The nodes visited so far. Only includes nodes with a ref count greater
+     * than one, because we know that nodes with a ref count of 1 will only be
+     * visited once if their parents are only visited once. */
+    std::set<const IRNode *> visited;
+
 protected:
     /** By default these methods add the node to the visited set, and
      * return whether or not it was already there. If it wasn't there,
@@ -291,64 +150,13 @@ protected:
     virtual void include(const Stmt &);
     // @}
 
-private:
-    /** The nodes visited so far. Only includes nodes with a ref count greater
-     * than one, because we know that nodes with a ref count of 1 will only be
-     * visited once if their parents are only visited once. */
-    std::set<const IRNode *> visited;
-
-protected:
     /** These methods should call 'include' on the children to only
      * visit them if they haven't been visited already. */
     // @{
-    void visit(const IntImm *) override;
-    void visit(const UIntImm *) override;
-    void visit(const FloatImm *) override;
-    void visit(const StringImm *) override;
-    void visit(const Cast *) override;
-    void visit(const Reinterpret *) override;
-    void visit(const Add *) override;
-    void visit(const Sub *) override;
-    void visit(const Mul *) override;
-    void visit(const Div *) override;
-    void visit(const Mod *) override;
-    void visit(const Min *) override;
-    void visit(const Max *) override;
-    void visit(const EQ *) override;
-    void visit(const NE *) override;
-    void visit(const LT *) override;
-    void visit(const LE *) override;
-    void visit(const GT *) override;
-    void visit(const GE *) override;
-    void visit(const And *) override;
-    void visit(const Or *) override;
-    void visit(const Not *) override;
-    void visit(const Select *) override;
-    void visit(const Load *) override;
-    void visit(const Ramp *) override;
-    void visit(const Broadcast *) override;
-    void visit(const Let *) override;
-    void visit(const LetStmt *) override;
-    void visit(const AssertStmt *) override;
-    void visit(const ProducerConsumer *) override;
-    void visit(const Store *) override;
-    void visit(const Provide *) override;
-    void visit(const Allocate *) override;
-    void visit(const Free *) override;
-    void visit(const Realize *) override;
-    void visit(const Block *) override;
-    void visit(const Fork *) override;
-    void visit(const IfThenElse *) override;
-    void visit(const Evaluate *) override;
-    void visit(const Call *) override;
-    void visit(const Variable *) override;
-    void visit(const For *) override;
-    void visit(const Acquire *) override;
-    void visit(const Shuffle *) override;
-    void visit(const Prefetch *) override;
-    void visit(const HoistedStorage *) override;
-    void visit(const Atomic *) override;
-    void visit(const VectorReduce *) override;
+#define HALIDE_VISIT_OVERRIDE(T) \
+    void visit(const T *) override;
+    HALIDE_FOR_EACH_IR_NODE(HALIDE_VISIT_OVERRIDE)
+#undef HALIDE_VISIT_OVERRIDE
     // @}
 };
 
@@ -360,94 +168,28 @@ protected:
 template<typename T, typename ExprRet, typename StmtRet>
 class VariadicVisitor {
 private:
+#ifdef WITH_COMPILER_PROFILING
+#ifdef HALIDE_ENABLE_RTTI
+    const char *name = typeid(T).name();
+#else
+    const char *name = "VariadicVisitor";
+#endif
+#endif
+
     template<typename... Args>
     ExprRet dispatch_expr(const BaseExprNode *node, Args &&...args) {
         if (node == nullptr) {
             return ExprRet{};
         }
+        ZoneScopedVisitor(node->node_type, name, Profiling::BIT_EXPR);
         switch (node->node_type) {
-        case IRNodeType::IntImm:
-            return ((T *)this)->visit((const IntImm *)node, std::forward<Args>(args)...);
-        case IRNodeType::UIntImm:
-            return ((T *)this)->visit((const UIntImm *)node, std::forward<Args>(args)...);
-        case IRNodeType::FloatImm:
-            return ((T *)this)->visit((const FloatImm *)node, std::forward<Args>(args)...);
-        case IRNodeType::StringImm:
-            return ((T *)this)->visit((const StringImm *)node, std::forward<Args>(args)...);
-        case IRNodeType::Broadcast:
-            return ((T *)this)->visit((const Broadcast *)node, std::forward<Args>(args)...);
-        case IRNodeType::Cast:
-            return ((T *)this)->visit((const Cast *)node, std::forward<Args>(args)...);
-        case IRNodeType::Reinterpret:
-            return ((T *)this)->visit((const Reinterpret *)node, std::forward<Args>(args)...);
-        case IRNodeType::Variable:
-            return ((T *)this)->visit((const Variable *)node, std::forward<Args>(args)...);
-        case IRNodeType::Add:
-            return ((T *)this)->visit((const Add *)node, std::forward<Args>(args)...);
-        case IRNodeType::Sub:
-            return ((T *)this)->visit((const Sub *)node, std::forward<Args>(args)...);
-        case IRNodeType::Mod:
-            return ((T *)this)->visit((const Mod *)node, std::forward<Args>(args)...);
-        case IRNodeType::Mul:
-            return ((T *)this)->visit((const Mul *)node, std::forward<Args>(args)...);
-        case IRNodeType::Div:
-            return ((T *)this)->visit((const Div *)node, std::forward<Args>(args)...);
-        case IRNodeType::Min:
-            return ((T *)this)->visit((const Min *)node, std::forward<Args>(args)...);
-        case IRNodeType::Max:
-            return ((T *)this)->visit((const Max *)node, std::forward<Args>(args)...);
-        case IRNodeType::EQ:
-            return ((T *)this)->visit((const EQ *)node, std::forward<Args>(args)...);
-        case IRNodeType::NE:
-            return ((T *)this)->visit((const NE *)node, std::forward<Args>(args)...);
-        case IRNodeType::LT:
-            return ((T *)this)->visit((const LT *)node, std::forward<Args>(args)...);
-        case IRNodeType::LE:
-            return ((T *)this)->visit((const LE *)node, std::forward<Args>(args)...);
-        case IRNodeType::GT:
-            return ((T *)this)->visit((const GT *)node, std::forward<Args>(args)...);
-        case IRNodeType::GE:
-            return ((T *)this)->visit((const GE *)node, std::forward<Args>(args)...);
-        case IRNodeType::And:
-            return ((T *)this)->visit((const And *)node, std::forward<Args>(args)...);
-        case IRNodeType::Or:
-            return ((T *)this)->visit((const Or *)node, std::forward<Args>(args)...);
-        case IRNodeType::Not:
-            return ((T *)this)->visit((const Not *)node, std::forward<Args>(args)...);
-        case IRNodeType::Select:
-            return ((T *)this)->visit((const Select *)node, std::forward<Args>(args)...);
-        case IRNodeType::Load:
-            return ((T *)this)->visit((const Load *)node, std::forward<Args>(args)...);
-        case IRNodeType::Ramp:
-            return ((T *)this)->visit((const Ramp *)node, std::forward<Args>(args)...);
-        case IRNodeType::Call:
-            return ((T *)this)->visit((const Call *)node, std::forward<Args>(args)...);
-        case IRNodeType::Let:
-            return ((T *)this)->visit((const Let *)node, std::forward<Args>(args)...);
-        case IRNodeType::Shuffle:
-            return ((T *)this)->visit((const Shuffle *)node, std::forward<Args>(args)...);
-        case IRNodeType::VectorReduce:
-            return ((T *)this)->visit((const VectorReduce *)node, std::forward<Args>(args)...);
-            // Explicitly list the Stmt types rather than using a
-            // default case so that when new IR nodes are added we
-            // don't miss them here.
-        case IRNodeType::LetStmt:
-        case IRNodeType::AssertStmt:
-        case IRNodeType::ProducerConsumer:
-        case IRNodeType::For:
-        case IRNodeType::Acquire:
-        case IRNodeType::Store:
-        case IRNodeType::Provide:
-        case IRNodeType::Allocate:
-        case IRNodeType::Free:
-        case IRNodeType::Realize:
-        case IRNodeType::Block:
-        case IRNodeType::Fork:
-        case IRNodeType::IfThenElse:
-        case IRNodeType::Evaluate:
-        case IRNodeType::Prefetch:
-        case IRNodeType::Atomic:
-        case IRNodeType::HoistedStorage:
+#define HALIDE_SWITCH_EXPR(NT) \
+    case IRNodeType::NT:       \
+        return ((T *)this)->visit((const NT *)node, std::forward<Args>(args)...);
+            HALIDE_FOR_EACH_IR_EXPR(HALIDE_SWITCH_EXPR)
+#undef HALIDE_SWITCH_EXPR
+
+        default:
             internal_error << "Unreachable";
         }
         return ExprRet{};
@@ -458,74 +200,17 @@ private:
         if (node == nullptr) {
             return StmtRet{};
         }
+        ZoneScopedVisitor(node->node_type, name, Profiling::BIT_STMT);
         switch (node->node_type) {
-        case IRNodeType::IntImm:
-        case IRNodeType::UIntImm:
-        case IRNodeType::FloatImm:
-        case IRNodeType::StringImm:
-        case IRNodeType::Broadcast:
-        case IRNodeType::Cast:
-        case IRNodeType::Reinterpret:
-        case IRNodeType::Variable:
-        case IRNodeType::Add:
-        case IRNodeType::Sub:
-        case IRNodeType::Mod:
-        case IRNodeType::Mul:
-        case IRNodeType::Div:
-        case IRNodeType::Min:
-        case IRNodeType::Max:
-        case IRNodeType::EQ:
-        case IRNodeType::NE:
-        case IRNodeType::LT:
-        case IRNodeType::LE:
-        case IRNodeType::GT:
-        case IRNodeType::GE:
-        case IRNodeType::And:
-        case IRNodeType::Or:
-        case IRNodeType::Not:
-        case IRNodeType::Select:
-        case IRNodeType::Load:
-        case IRNodeType::Ramp:
-        case IRNodeType::Call:
-        case IRNodeType::Let:
-        case IRNodeType::Shuffle:
-        case IRNodeType::VectorReduce:
+#define HALIDE_SWITCH_STMT(NT) \
+    case IRNodeType::NT:       \
+        return ((T *)this)->visit((const NT *)node, std::forward<Args>(args)...);
+            HALIDE_FOR_EACH_IR_STMT(HALIDE_SWITCH_STMT)
+#undef HALIDE_SWITCH_STMT
+
+        default:
             internal_error << "Unreachable";
             break;
-        case IRNodeType::LetStmt:
-            return ((T *)this)->visit((const LetStmt *)node, std::forward<Args>(args)...);
-        case IRNodeType::AssertStmt:
-            return ((T *)this)->visit((const AssertStmt *)node, std::forward<Args>(args)...);
-        case IRNodeType::ProducerConsumer:
-            return ((T *)this)->visit((const ProducerConsumer *)node, std::forward<Args>(args)...);
-        case IRNodeType::For:
-            return ((T *)this)->visit((const For *)node, std::forward<Args>(args)...);
-        case IRNodeType::Acquire:
-            return ((T *)this)->visit((const Acquire *)node, std::forward<Args>(args)...);
-        case IRNodeType::Store:
-            return ((T *)this)->visit((const Store *)node, std::forward<Args>(args)...);
-        case IRNodeType::Provide:
-            return ((T *)this)->visit((const Provide *)node, std::forward<Args>(args)...);
-        case IRNodeType::Allocate:
-            return ((T *)this)->visit((const Allocate *)node, std::forward<Args>(args)...);
-        case IRNodeType::Free:
-            return ((T *)this)->visit((const Free *)node, std::forward<Args>(args)...);
-        case IRNodeType::Realize:
-            return ((T *)this)->visit((const Realize *)node, std::forward<Args>(args)...);
-        case IRNodeType::Block:
-            return ((T *)this)->visit((const Block *)node, std::forward<Args>(args)...);
-        case IRNodeType::Fork:
-            return ((T *)this)->visit((const Fork *)node, std::forward<Args>(args)...);
-        case IRNodeType::IfThenElse:
-            return ((T *)this)->visit((const IfThenElse *)node, std::forward<Args>(args)...);
-        case IRNodeType::Evaluate:
-            return ((T *)this)->visit((const Evaluate *)node, std::forward<Args>(args)...);
-        case IRNodeType::Prefetch:
-            return ((T *)this)->visit((const Prefetch *)node, std::forward<Args>(args)...);
-        case IRNodeType::Atomic:
-            return ((T *)this)->visit((const Atomic *)node, std::forward<Args>(args)...);
-        case IRNodeType::HoistedStorage:
-            return ((T *)this)->visit((const HoistedStorage *)node, std::forward<Args>(args)...);
         }
         return StmtRet{};
     }

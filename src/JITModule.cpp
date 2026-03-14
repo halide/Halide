@@ -285,6 +285,7 @@ namespace {
 
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
 JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &name) {
+    ZoneScoped;
     debug(2) << "JIT Compiling " << name << "\n";
 
     auto addr = JIT.lookup(name);
@@ -341,6 +342,7 @@ JITModule::JITModule() {
 
 JITModule::JITModule(const Module &m, const LoweredFunc &fn,
                      const std::vector<JITModule> &dependencies) {
+    ZoneScoped;
     jit_module = new JITModuleContents();
     std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(m, *jit_module->context));
     std::vector<JITModule> deps_with_runtime = dependencies;
@@ -358,6 +360,7 @@ void compile_module_impl(
     std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
     const std::vector<JITModule> &dependencies,
     const std::vector<std::string> &requested_exports) {
+    ZoneScoped;
 
     // Ensure that LLVM is initialized
     CodeGen_LLVM::initialize_llvm();
@@ -518,6 +521,7 @@ void compile_module_impl(
 void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
+    ZoneScoped;
     // LLJIT's SimpleCompiler triggers LLVM's AsmPrinter, which can use a large
     // amount of stack (observed stack overflows on macOS worker threads with
     // 512KB default stacks). Use run_with_large_stack to ensure enough space.

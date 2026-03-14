@@ -3,6 +3,7 @@
 
 #include "CSE.h"
 #include "CompilerLogger.h"
+#include "CompilerProfiling.h"
 #include "IRMutator.h"
 #include "Substitute.h"
 
@@ -16,7 +17,7 @@ using std::string;
 using std::vector;
 
 Simplify::Simplify(const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) {
-
+    ZoneScoped;
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
         ExprInfo info;
@@ -324,6 +325,7 @@ template<typename T>
 T substitute_facts_impl(const T &t,
                         const std::set<Expr, IRDeepCompare> &truths,
                         const std::set<Expr, IRDeepCompare> &falsehoods) {
+    ZoneScoped;
     return mutate_with(t, [&](auto *self, const Expr &e) {
         if (e.type().is_bool()) {
             if (truths.count(e)) {
@@ -364,6 +366,7 @@ Expr simplify(const Expr &e,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
+    ZoneScoped;
     Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
     facts.reserve(assumptions.size());
@@ -381,6 +384,7 @@ Stmt simplify(const Stmt &s,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
+    ZoneScoped;
     Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
     facts.reserve(assumptions.size());
@@ -403,10 +407,12 @@ public:
 };
 
 Stmt simplify_exprs(const Stmt &s) {
+    ZoneScoped;
     return SimplifyExprs().mutate(s);
 }
 
 bool can_prove(Expr e, const Scope<Interval> &bounds) {
+    ZoneScoped;
     internal_assert(e.type().is_bool())
         << "Argument to can_prove is not a boolean Expr: " << e << "\n";
 
@@ -450,7 +456,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
             std::vector<pair<Type, string>> out_vars;
         } renamer;
 
-        e = renamer.mutate(e);
+        e = renamer(e);
 
         // Look for a concrete counter-example with random probing
         static std::mt19937 rng(0);

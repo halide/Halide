@@ -20,6 +20,7 @@ using std::string;
 using std::vector;
 
 class PartiallyCancelDifferences : public IRMutator {
+protected:
     using IRMutator::visit;
 
     // Symbols used by rewrite rules
@@ -65,6 +66,7 @@ class PartiallyCancelDifferences : public IRMutator {
 };
 
 class SimplifyCorrelatedDifferences : public IRMutator {
+protected:
     using IRMutator::visit;
 
     string loop_var;
@@ -177,6 +179,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
     // Add the names of any free variables in an expr to the provided set
     void track_free_vars(const Expr &e, std::set<std::string> *vars) {
         class TrackFreeVars : public IRVisitor {
+        protected:
             using IRVisitor::visit;
             void visit(const Variable *op) override {
                 if (!scope.contains(op->name)) {
@@ -195,7 +198,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
                 : vars(vars) {
             }
         } tracker(vars);
-        e.accept(&tracker);
+        tracker(e);
     }
 
     Expr cancel_correlated_subexpression(Expr e, const Expr &a, const Expr &b, bool correlated) {
@@ -224,7 +227,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             }
             e = common_subexpression_elimination(e);
             e = solve_expression(e, loop_var).result;
-            e = PartiallyCancelDifferences().mutate(e);
+            e = PartiallyCancelDifferences()(e);
             e = simplify(e);
 
             const bool check_non_monotonic = debug_is_active(1) || get_compiler_logger() != nullptr;
@@ -308,11 +311,11 @@ class SimplifyCorrelatedDifferences : public IRMutator {
 }  // namespace
 
 Stmt simplify_correlated_differences(const Stmt &stmt) {
-    return SimplifyCorrelatedDifferences().mutate(stmt);
+    return SimplifyCorrelatedDifferences()(stmt);
 }
 
 Expr bound_correlated_differences(const Expr &expr) {
-    return PartiallyCancelDifferences().mutate(expr);
+    return PartiallyCancelDifferences()(expr);
 }
 
 }  // namespace Internal

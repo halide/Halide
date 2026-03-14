@@ -130,6 +130,7 @@ Type CodeGen_PTX_Dev::upgrade_type_for_storage(const Type &t) const {
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<DeviceArgument> &args) {
+    ZoneScoped;
     internal_assert(module != nullptr);
 
     debug(2) << "In CodeGen_PTX_Dev::add_kernel\n";
@@ -220,6 +221,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 }
 
 void CodeGen_PTX_Dev::init_module() {
+    ZoneScoped;
     // This class uses multiple inheritance. It's a GPU device code generator,
     // and also an llvm-based one. Both of these track strict_float presence,
     // but OffloadGPULoops only sets the GPU device code generator flag, so here
@@ -538,7 +540,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                 Expr b_slice = Shuffle::make_slice(b, i + l * factor, 1, p.factor);
                 i_slice = Call::make(i_slice.type(), p.name, {a_slice, b_slice, i_slice}, Call::PureExtern);
             }
-            i_slice = RewriteLoadsAs32Bit().mutate(i_slice);
+            i_slice = RewriteLoadsAs32Bit()(i_slice);
             i_slice = simplify(i_slice);
             i_slice = common_subexpression_elimination(i_slice);
             result.push_back(i_slice);

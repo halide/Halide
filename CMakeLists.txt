@@ -218,6 +218,7 @@ Halide_feature(WITH_DOCS "Halide's Doxygen documentation" OFF)
 Halide_feature(WITH_PACKAGING "Halide's CMake package install rules" TOP_LEVEL)
 Halide_feature(WITH_PYTHON_BINDINGS "Halide's native Python module (not the whole pip package)" ON
                DEPENDS Halide_ENABLE_EXCEPTIONS AND Halide_ENABLE_RTTI)
+Halide_feature(WITH_COMPILER_PROFILING "Enable internal compiler tracing" OFF)
 Halide_feature(WITH_SERIALIZATION "Include experimental Serialization/Deserialization code" ON)
 Halide_feature(WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
                "Intercepting JIT compilation with a serialization roundtrip, for test only"

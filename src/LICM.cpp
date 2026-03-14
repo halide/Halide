@@ -1,5 +1,6 @@
 #include "LICM.h"
 #include "CSE.h"
+#include "CompilerProfiling.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -21,6 +22,7 @@ namespace {
 
 // Is it safe to lift an Expr out of a loop (and potentially across a device boundary)
 class CanLift : public IRVisitor {
+protected:
     using IRVisitor::visit;
 
     void visit(const Call *op) override {
@@ -54,6 +56,7 @@ public:
 // Lift pure loop invariants to the top level. Applied independently
 // to each loop.
 class LiftLoopInvariants : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Scope<> varying;
@@ -183,6 +186,7 @@ public:
 // them as just renamings of other variables. Easier to substitute
 // them in as a post-pass rather than make the pass above more clever.
 class SubstituteTrivialLets : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Expr visit(const Let *op) override {
@@ -203,6 +207,7 @@ class SubstituteTrivialLets : public IRMutator {
 };
 
 class LICM : public IRMutator {
+protected:
     using IRMutator::visit;
 
     bool in_gpu_loop{false};
@@ -246,8 +251,8 @@ class LICM : public IRMutator {
 
             // Lift invariants
             LiftLoopInvariants lifter;
-            Stmt new_stmt = lifter.mutate(op);
-            new_stmt = SubstituteTrivialLets().mutate(new_stmt);
+            Stmt new_stmt = lifter(op);
+            new_stmt = SubstituteTrivialLets()(new_stmt);
 
             // As an optimization to reduce register pressure, take
             // the set of expressions to lift and check if any can
@@ -336,6 +341,7 @@ class LICM : public IRMutator {
 
 // Reassociate summations to group together the loop invariants. Useful to run before LICM.
 class GroupLoopInvariants : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Scope<int> var_depth;
@@ -520,9 +526,10 @@ class GroupLoopInvariants : public IRMutator {
 }  // namespace
 
 Stmt hoist_loop_invariant_values(Stmt s) {
-    s = GroupLoopInvariants().mutate(s);
+    ZoneScoped;
+    s = GroupLoopInvariants()(s);
     s = common_subexpression_elimination(s);
-    s = LICM().mutate(s);
+    s = LICM()(s);
     s = simplify_exprs(s);
     return s;
 }
@@ -532,6 +539,7 @@ namespace {
 // Move IfThenElse nodes from the inside of a piece of Stmt IR to the
 // outside when legal.
 class HoistIfStatements : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const LetStmt *op) override {
@@ -656,9 +664,8 @@ class HoistIfStatements : public IRMutator {
 
 }  // namespace
 
-Stmt hoist_loop_invariant_if_statements(Stmt s) {
-    s = HoistIfStatements().mutate(s);
-    return s;
+Stmt hoist_loop_invariant_if_statements(const Stmt &s) {
+    return HoistIfStatements()(s);
 }
 
 }  // namespace Internal

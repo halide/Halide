@@ -9,6 +9,7 @@
 #include "CodeGen_Posix.h"
 #include "CodeGen_Targets.h"
 #include "CompilerLogger.h"
+#include "CompilerProfiling.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "EmulateFloat16Math.h"
@@ -223,6 +224,7 @@ std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target,
 }
 
 void CodeGen_LLVM::initialize_llvm() {
+    ZoneScoped;
     static std::once_flag init_llvm_once;
     std::call_once(init_llvm_once, []() {
         // You can hack in command-line args to llvm with the
@@ -260,6 +262,7 @@ void CodeGen_LLVM::initialize_llvm() {
 }
 
 void CodeGen_LLVM::init_context() {
+    ZoneScoped;
     // Ensure our IRBuilder is using the current context.
     builder = std::make_unique<IRBuilder<>>(*context);
 
@@ -301,6 +304,7 @@ void CodeGen_LLVM::init_context() {
 }
 
 void CodeGen_LLVM::init_module() {
+    ZoneScoped;
     init_context();
 
     // Start with a module containing the initial module for this target.
@@ -496,6 +500,7 @@ CodeGen_LLVM::ScopedFastMath::~ScopedFastMath() {
 }
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
+    ZoneScoped;
     any_strict_float = input.any_strict_float();
 
     init_codegen(input.name());
@@ -625,6 +630,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 }
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::finish_codegen() {
+    ZoneScoped;
     llvm::for_each(*module, set_function_attributes_from_halide_target_options);
 
     // Verify the module is ok
@@ -704,6 +710,7 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument> &args) {
 
 void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_name,
                                 const std::string &extern_name) {
+    ZoneScoped;
     // Generate the function declaration and argument unpacking code.
     begin_func(f.linkage, simple_name, extern_name, f.args);
 
@@ -1133,6 +1140,7 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(const Type &t) const {
 }
 
 void CodeGen_LLVM::optimize_module() {
+    ZoneScoped;
     debug(3) << "Optimizing module\n";
 
     auto time_start = std::chrono::high_resolution_clock::now();
