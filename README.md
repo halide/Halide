@@ -1,6 +1,6 @@
 # Halide
 
-Halide is a programming language designed to make it easier to write
+Halide is a prgramming language designed to make it easier to write
 high-performance image and array processing code on modern machines. Halide
 currently targets:
 
