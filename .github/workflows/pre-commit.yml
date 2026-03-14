@@ -64,4 +64,12 @@ jobs:
         if: ${{ !cancelled() && steps.pre-commit.outcome == 'failure' }}
         run: |
           pre-commit run --all-files codespell 2>&1 |
-            sed -n 's/^\([^:]*\):\([0-9]*\): \(.*\)$/::error file=\1,line=\2::\3/p'
+            awk -F: '/^[^:]*:[0-9]+: / {
+              file=$1; line=$2; sub(/^[^:]*:[0-9]+: /, ""); msg=$0
+              key=file":"line
+              if (key in msgs) msgs[key]=msgs[key]"%0A"msg
+              else { msgs[key]=msg; files[key]=file; lines[key]=line; order[++n]=key }
+            } END {
+              for (i=1; i<=n; i++)
+                printf "::error file=%s,line=%s::%s\n", files[order[i]], lines[order[i]], msgs[order[i]]
+            }'
