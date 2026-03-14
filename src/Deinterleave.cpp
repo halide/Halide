@@ -805,6 +805,7 @@ Expr extract_lanes(const Expr &original_expr, int starting_lane, int lane_stride
     Type original_type = original_expr.type();
     ExtractLanes d(starting_lane, lane_stride, new_lanes, lets, requested_sliced_lets);
     Expr e = d.mutate(original_expr);
+    e = simplify(e);
     e = common_subexpression_elimination(e);
     debug(3) << "   => " << e << "\n";
     Type final_type = e.type();
