@@ -440,7 +440,7 @@ HEXAGON_RUNTIME_LIBS = \
   $(HEXAGON_RUNTIME_LIBS_DIR)/v65/libhalide_hexagon_remote_skel.so \
   $(HEXAGON_RUNTIME_LIBS_DIR)/v65/signed_by_debug/libhalide_hexagon_remote_skel.so
 
-# Keep this list sorted in alphabetical order.
+# keep-sorted start skip_lines=1 case=no
 SOURCE_FILES = \
   AbstractGenerator.cpp \
   AddAtomicMutex.cpp \
@@ -456,15 +456,15 @@ SOURCE_FILES = \
   AsyncProducers.cpp \
   AutoScheduleUtils.cpp \
   BoundaryConditions.cpp \
+  BoundConstantExtentLoops.cpp \
   Bounds.cpp \
   BoundsInference.cpp \
-  BoundConstantExtentLoops.cpp \
   BoundSmallAllocations.cpp \
   Buffer.cpp \
   Callable.cpp \
   CanonicalizeGPUVars.cpp \
-  Closure.cpp \
   ClampUnsafeAccesses.cpp \
+  Closure.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
   CodeGen_D3D12Compute_Dev.cpp \
@@ -474,12 +474,12 @@ SOURCE_FILES = \
   CodeGen_LLVM.cpp \
   CodeGen_Metal_Dev.cpp \
   CodeGen_OpenCL_Dev.cpp \
-  CodeGen_Vulkan_Dev.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
   CodeGen_PyTorch.cpp \
   CodeGen_RISCV.cpp \
+  CodeGen_Vulkan_Dev.cpp \
   CodeGen_WebAssembly.cpp \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
@@ -580,7 +580,6 @@ SOURCE_FILES = \
   Simplify_And.cpp \
   Simplify_Call.cpp \
   Simplify_Cast.cpp \
-  Simplify_Reinterpret.cpp \
   Simplify_Div.cpp \
   Simplify_EQ.cpp \
   Simplify_Exprs.cpp \
@@ -592,6 +591,7 @@ SOURCE_FILES = \
   Simplify_Mul.cpp \
   Simplify_Not.cpp \
   Simplify_Or.cpp \
+  Simplify_Reinterpret.cpp \
   Simplify_Select.cpp \
   Simplify_Shuffle.cpp \
   Simplify_Stmts.cpp \
@@ -626,6 +626,7 @@ SOURCE_FILES = \
   VectorizeLoops.cpp \
   WasmExecutor.cpp \
   WrapCalls.cpp
+# keep-sorted end
 
  C_TEMPLATE_FILES = \
    CodeGen_C_prologue \
@@ -639,7 +640,7 @@ HTML_TEMPLATE_FILES = \
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
 # Also *don't* include anything that's only used internally (eg SpirvIR.h).
-# Keep this list sorted in alphabetical order.
+# keep-sorted start skip_lines=1 case=no
 HEADER_FILES = \
   AbstractGenerator.h \
   AddAtomicMutex.h \
@@ -655,9 +656,9 @@ HEADER_FILES = \
   AsyncProducers.h \
   AutoScheduleUtils.h \
   BoundaryConditions.h \
+  BoundConstantExtentLoops.h \
   Bounds.h \
   BoundsInference.h \
-  BoundConstantExtentLoops.h \
   BoundSmallAllocations.h \
   Buffer.h \
   Callable.h \
@@ -671,17 +672,17 @@ HEADER_FILES = \
   CodeGen_LLVM.h \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenCL_Dev.h \
-  CodeGen_Vulkan_Dev.h \
   CodeGen_Posix.h \
   CodeGen_PTX_Dev.h \
   CodeGen_PyTorch.h \
   CodeGen_Targets.h \
+  CodeGen_Vulkan_Dev.h \
   CodeGen_WebGPU_Dev.h \
   CompilerLogger.h \
   ConciseCasts.h \
-  CPlusPlusMangle.h \
   ConstantBounds.h \
   ConstantInterval.h \
+  CPlusPlusMangle.h \
   CSE.h \
   Debug.h \
   DebugArguments.h \
@@ -734,7 +735,6 @@ HEADER_FILES = \
   IROperator.h \
   IRPrinter.h \
   IRVisitor.h \
-  WasmExecutor.h \
   JITModule.h \
   Lambda.h \
   Lerp.h \
@@ -767,8 +767,8 @@ HEADER_FILES = \
   PythonExtensionGen.h \
   Qualify.h \
   Random.h \
-  Realization.h \
   RDom.h \
+  Realization.h \
   RealizationOrder.h \
   RebaseLoopsToZero.h \
   Reduction.h \
@@ -811,11 +811,14 @@ HEADER_FILES = \
   Util.h \
   Var.h \
   VectorizeLoops.h \
+  WasmExecutor.h \
   WrapCalls.h
+# keep-sorted end
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
 
+# keep-sorted start skip_lines=1
 RUNTIME_CPP_COMPONENTS = \
   aarch64_cpu_features \
   alignment_128 \
@@ -895,6 +898,7 @@ RUNTIME_CPP_COMPONENTS = \
   to_string \
   trace_helper \
   tracing \
+  vulkan \
   wasm_cpu_features \
   webgpu_dawn \
   webgpu_emscripten \
@@ -912,9 +916,10 @@ RUNTIME_CPP_COMPONENTS = \
   windows_vulkan \
   windows_yield \
   write_debug_image \
-  vulkan \
   x86_cpu_features \
+# keep-sorted end
 
+# keep-sorted start skip_lines=1
 RUNTIME_LL_COMPONENTS = \
   aarch64 \
   arm \
@@ -931,6 +936,7 @@ RUNTIME_LL_COMPONENTS = \
   x86_avx2 \
   x86_avx512 \
   x86_sse41
+# keep-sorted end
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeD3D12Compute.h \

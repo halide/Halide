@@ -197,9 +197,9 @@ that every `.c` and `.cpp` appears in the `CMakeLists.txt` file _on its own
 line_, possibly as a comment. This is to avoid globbing and also to ensure that
 added files are not missed.
 
-For most test types, it should be as simple as adding to the existing lists,
-which must remain in alphabetical order. Generator tests are trickier, but
-following the existing examples is a safe way to go.
+For most test types, it should be as simple as adding to the existing lists.
+Generator tests are trickier, but following the existing examples is a safe way
+to go.
 
 # Adding apps
 
