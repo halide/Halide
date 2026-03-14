@@ -89,8 +89,7 @@ protected:
 }  // namespace
 
 Stmt remove_dead_allocations(const Stmt &s) {
-    ZoneScoped;
-    return RemoveDeadAllocations().mutate(s);
+    return RemoveDeadAllocations()(s);
 }
 
 }  // namespace Internal

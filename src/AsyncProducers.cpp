@@ -418,8 +418,8 @@ protected:
             sema_vars.push_back(Variable::make(type_of<halide_semaphore_t *>(), sema_names.back()));
         }
 
-        Stmt producer = GenerateProducerBody(name, sema_vars, cloned_acquires).mutate(body);
-        Stmt consumer = GenerateConsumerBody(name, sema_vars).mutate(body);
+        Stmt producer = GenerateProducerBody(name, sema_vars, cloned_acquires)(body);
+        Stmt consumer = GenerateConsumerBody(name, sema_vars)(body);
 
         // Recurse on both sides
         producer = mutate(producer);
@@ -438,7 +438,7 @@ protected:
             // of the producer and consumer.
             const vector<string> &clones = cloned_acquires[sema_name];
             for (const auto &i : clones) {
-                body = CloneAcquire(sema_name, i).mutate(body);
+                body = CloneAcquire(sema_name, i)(body);
                 body = LetStmt::make(i, sema_space, body);
             }
 
@@ -777,7 +777,7 @@ protected:
             }
             current_index = current_index % f.schedule().ring_buffer();
             // Adds an extra index for to the all of the references of f.
-            body = UpdateIndices(op->name, current_index).mutate(body);
+            body = UpdateIndices(op->name, current_index)(body);
 
             if (f.schedule().async()) {
                 Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.ring_buffer");

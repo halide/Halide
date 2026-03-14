@@ -865,12 +865,12 @@ protected:
             Stmt predicated_stmt;
             if (vectorize_predicate) {
                 PredicateLoadStore p(vectorized_vars.front().name, cond);
-                predicated_stmt = p.mutate(then_case);
+                predicated_stmt = p(then_case);
                 vectorize_predicate = p.is_vectorized();
             }
             if (vectorize_predicate && else_case.defined()) {
                 PredicateLoadStore p(vectorized_vars.front().name, !cond);
-                predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case));
+                predicated_stmt = Block::make(predicated_stmt, p(else_case));
                 vectorize_predicate = p.is_vectorized();
             }
 
@@ -1317,7 +1317,7 @@ protected:
         // better luck vectorizing it.
 
         if (serialize_inner_loops) {
-            s = SerializeLoops().mutate(s);
+            s = SerializeLoops()(s);
         }
         // We'll need the original scalar versions of any containing lets.
         for (const auto &[var, value] : reverse_view(containing_lets)) {
@@ -1674,7 +1674,7 @@ protected:
 
 Stmt vectorize_statement(const Stmt &stmt) {
     ZoneScoped;
-    return VectorizeLoops().mutate(stmt);
+    return VectorizeLoops()(stmt);
 }
 
 }  // namespace

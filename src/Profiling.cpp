@@ -611,7 +611,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     Names names(pipeline_name);
 
     InjectProfiling profiling(names, env);
-    Stmt s = profiling.mutate(stmt);
+    Stmt s = profiling(stmt);
 
     int num_funcs = (int)(profiling.indices.size());
 

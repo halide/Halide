@@ -911,7 +911,7 @@ public:
                             : alloc_name(alloc_name), cluster_name(cluster_name), offset(offset) {
                         }
                     } rewriter{alloc.name, name, offset};
-                    s = rewriter.mutate(s);
+                    s = rewriter(s);
                 }
 
                 // Define the group offset in terms of the previous group in the cluster
@@ -1389,7 +1389,7 @@ protected:
             ExtractRegisterAllocations register_allocs;
             ForType innermost_loop_type = ForType::GPUThread;
             if (block_size.threads_dimensions()) {
-                body = register_allocs.mutate(body);
+                body = register_allocs(body);
                 if (register_allocs.has_lane_loop) {
                     innermost_loop_type = ForType::GPULane;
                 }
@@ -1594,7 +1594,7 @@ protected:
         find(op);
         if (find.found_gpu_block != nullptr) {
             internal_assert(!op->else_case.defined()) << "Found an if statement with else case between two GPU blocks.\n";
-            return AddConditionToALoop(op->condition, find.found_gpu_block).mutate(op->then_case);
+            return AddConditionToALoop(op->condition, find.found_gpu_block)(op->then_case);
         }
         return IRMutator::visit(op);
     }

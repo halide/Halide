@@ -125,15 +125,6 @@ void visit_with(const IRHandle &ir, Lambdas &&...lambdas) {
  * capable of interpreting the IR as a DAG instead of a tree. */
 class IRGraphVisitor : public IRVisitor {
 public:
-    /** By default these methods add the node to the visited set, and
-     * return whether or not it was already there. If it wasn't there,
-     * it delegates to the appropriate visit method. You can override
-     * them if you like. */
-    // @{
-    virtual void include(const Expr &);
-    virtual void include(const Stmt &);
-    // @}
-
     inline void operator()(const Expr &e) {
         ZoneScopedN(HalideVisitorDynamicNameTag);
         include(e);
@@ -150,6 +141,15 @@ private:
     std::set<const IRNode *> visited;
 
 protected:
+    /** By default these methods add the node to the visited set, and
+     * return whether or not it was already there. If it wasn't there,
+     * it delegates to the appropriate visit method. You can override
+     * them if you like. */
+    // @{
+    virtual void include(const Expr &);
+    virtual void include(const Stmt &);
+    // @}
+
     /** These methods should call 'include' on the children to only
      * visit them if they haven't been visited already. */
     // @{

@@ -1119,7 +1119,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     };
 
     FindSharedAllocationsAndUniquify fsa;
-    s = fsa.mutate(s);
+    s = fsa(s);
 
     uint32_t total_shared_bytes = 0;
     for (const Stmt &sop : fsa.allocs) {

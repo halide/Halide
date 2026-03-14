@@ -456,7 +456,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
             std::vector<pair<Type, string>> out_vars;
         } renamer;
 
-        e = renamer.mutate(e);
+        e = renamer(e);
 
         // Look for a concrete counter-example with random probing
         static std::mt19937 rng(0);

@@ -672,7 +672,7 @@ class ExtractTileOperations : public IRMutator {
 }  // namespace
 
 Stmt extract_tile_operations(const Stmt &s) {
-    return ExtractTileOperations().mutate(s);
+    return ExtractTileOperations()(s);
 }
 }  // namespace Internal
 }  // namespace Halide

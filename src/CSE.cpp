@@ -398,8 +398,7 @@ public:
 
 void check(const Expr &in, const Expr &correct) {
     Expr result = common_subexpression_elimination(in);
-    NormalizeVarNames n;
-    result = n.mutate(result);
+    result = NormalizeVarNames()(result);
     internal_assert(equal(result, correct))
         << "Incorrect CSE:\n"
         << in

@@ -35,9 +35,6 @@ public:
      * these in your subclass to mutate sub-expressions and
      * sub-statements.
      */
-    virtual Expr mutate(const Expr &expr);
-    virtual Stmt mutate(const Stmt &stmt);
-
     inline Expr operator()(const Expr &expr) {
         ZoneScopedN(HalideVisitorDynamicNameTag);
         return mutate(expr);
@@ -48,21 +45,31 @@ public:
         return mutate(stmt);
     }
 
+    // Like mutate_with_changes, but discard the changes flag.
+    std::vector<Expr> operator()(const std::vector<Expr> &exprs) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
+        return mutate_with_changes(exprs).first;
+    }
+
     // Mutate all the Exprs and return the new list in ret, along with
     // a flag that is true iff at least one item in the list changed.
     std::pair<std::vector<Expr>, bool> mutate_with_changes(const std::vector<Expr> &);
 
+protected:
+    virtual Expr mutate(const Expr &expr);
+    virtual Stmt mutate(const Stmt &stmt);
     // Like mutate_with_changes, but discard the changes flag.
     std::vector<Expr> mutate(const std::vector<Expr> &exprs) {
         return mutate_with_changes(exprs).first;
     }
 
-protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement mutate_expr/mutate_stmt())
     template<typename T>
     friend struct ExprNode;
     template<typename T>
     friend struct StmtNode;
+    template<typename Mutator, typename... Args>
+    friend std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args &&...args);
 
 #define HALIDE_DECL_VISIT_EXPR(T) \
     virtual Expr visit(const T *op);
@@ -83,10 +90,19 @@ protected:
     std::map<Expr, Expr, ExprCompare> expr_replacements;
     std::map<Stmt, Stmt, Stmt::Compare> stmt_replacements;
 
-public:
     using IRMutator::mutate;
     Stmt mutate(const Stmt &s) override;
     Expr mutate(const Expr &e) override;
+
+public:
+    inline Expr operator()(const Expr &expr) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
+        return mutate(expr);
+    }
+    inline Stmt operator()(const Stmt &stmt) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
+        return mutate(stmt);
+    }
 };
 
 /** A lambda-based IR mutator that accepts multiple lambdas for different
@@ -102,6 +118,9 @@ struct LambdaMutator final : IRMutator {
     auto visit_base(const T *op) {
         return IRMutator::visit(op);
     }
+
+public:
+    using IRMutator::mutate;
 
 private:
     LambdaOverloads<Lambdas...> handlers;
@@ -154,8 +173,8 @@ struct LambdaMutatorGeneric final : IRMutator {
         return IRMutator::mutate(op);
     }
 
+public:
     Expr mutate(const Expr &e) override {
-        ZoneScopedVisitor(e, "LambdaMutatorGeneric");
         if constexpr (std::is_invocable_v<decltype(handlers), LambdaMutatorGeneric *, const Expr &>) {
             return handlers(this, e);
         } else {
@@ -164,7 +183,6 @@ struct LambdaMutatorGeneric final : IRMutator {
     }
 
     Stmt mutate(const Stmt &e) override {
-        ZoneScopedVisitor(e, "LambdaMutatorGeneric");
         if constexpr (std::is_invocable_v<decltype(handlers), LambdaMutatorGeneric *, const Stmt &>) {
             return handlers(this, e);
         } else {

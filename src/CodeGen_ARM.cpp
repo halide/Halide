@@ -1193,7 +1193,7 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
         // Substitute in strided loads to get vld2/3/4 emission. We don't do it
         // on Apple silicon, because doing a dense load and then shuffling is
         // actually faster.
-        func.body = SubstituteInStridedLoads().mutate(func.body);
+        func.body = SubstituteInStridedLoads()(func.body);
     }
     // Look for opportunities to turn a + (b << c) into umlal/smlal
     // and a - (b << c) into umlsl/smlsl.

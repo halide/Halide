@@ -494,7 +494,7 @@ void lower_impl(const vector<Function> &output_funcs,
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
             log.begin("Custom lowering pass", i);
-            s = custom_passes[i]->mutate(s);
+            s = custom_passes[i]->operator()(s);
             log.end(s);
         }
     }

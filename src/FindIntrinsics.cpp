@@ -1,16 +1,14 @@
 #include "FindIntrinsics.h"
 #include "CSE.h"
-#include "CodeGen_Internal.h"
-#include "ConciseCasts.h"
 #include "ConstantBounds.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "Simplify.h"
+#include "IRVisitor.h"
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
-
-using namespace Halide::ConciseCasts;
 
 namespace {
 
@@ -1221,7 +1219,7 @@ protected:
 
             if (should_replace) {
                 size_t start_of_new_lets = frames.size();
-                value = extractor.mutate(value);
+                value = extractor(value);
                 // Mutate any subexpressions the extractor decided to
                 // leave behind, in case they in turn depend on lets
                 // we've decided to substitute in.
@@ -1267,16 +1265,16 @@ protected:
 }  // namespace
 
 Stmt find_intrinsics(const Stmt &s) {
-    Stmt stmt = SubstituteInWideningLets().mutate(s);
-    stmt = FindIntrinsics().mutate(stmt);
+    Stmt stmt = SubstituteInWideningLets()(s);
+    stmt = FindIntrinsics()(stmt);
     // In case we want to hoist widening ops back out
     stmt = common_subexpression_elimination(stmt);
     return stmt;
 }
 
 Expr find_intrinsics(const Expr &e) {
-    Expr expr = SubstituteInWideningLets().mutate(e);
-    expr = FindIntrinsics().mutate(expr);
+    Expr expr = SubstituteInWideningLets()(e);
+    expr = FindIntrinsics()(expr);
     expr = common_subexpression_elimination(expr);
     return expr;
 }
@@ -1652,11 +1650,11 @@ class LowerIntrinsics : public IRMutator {
 }  // namespace
 
 Expr lower_intrinsics(const Expr &e) {
-    return LowerIntrinsics().mutate(e);
+    return LowerIntrinsics()(e);
 }
 
 Stmt lower_intrinsics(const Stmt &s) {
-    return LowerIntrinsics().mutate(s);
+    return LowerIntrinsics()(s);
 }
 
 }  // namespace Internal

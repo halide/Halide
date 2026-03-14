@@ -251,7 +251,7 @@ protected:
 
             // Lift invariants
             LiftLoopInvariants lifter;
-            Stmt new_stmt = lifter.mutate(op);
+            Stmt new_stmt = lifter(op);
             new_stmt = SubstituteTrivialLets()(new_stmt);
 
             // As an optimization to reduce register pressure, take
@@ -664,10 +664,8 @@ protected:
 
 }  // namespace
 
-Stmt hoist_loop_invariant_if_statements(Stmt s) {
-    ZoneScoped;
-    s = HoistIfStatements().mutate(s);
-    return s;
+Stmt hoist_loop_invariant_if_statements(const Stmt &s) {
+    return HoistIfStatements()(s);
 }
 
 }  // namespace Internal
