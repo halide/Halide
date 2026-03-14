@@ -1470,7 +1470,7 @@ protected:
         if (op->for_type == ForType::GPUBlock) {
             // Do the analysis of thread block size and shared memory
             // usage.
-            Profiled<ExtractBlockSize> block_size;
+            ExtractBlockSize block_size;
             block_size.profiled_visit(op);
             Stmt loop(op);
 
@@ -1481,7 +1481,7 @@ protected:
                      << loop << "\n\n";
 
             // Mutate the inside of the kernel
-            loop = Profiled<FuseGPUThreadLoopsSingleKernel>(block_size, block_allocations).profiled_mutate(loop);
+            loop = FuseGPUThreadLoopsSingleKernel(block_size, block_allocations).profiled_mutate(loop);
 
             loop = block_allocations.rewrap_kernel_launch(loop, block_size, op->device_api);
 
@@ -1525,7 +1525,7 @@ public:
 
 // Also used by InjectImageIntrinsics
 Stmt zero_gpu_loop_mins(const Stmt &s) {
-    return Profiled<ZeroGPULoopMins>().profiled_mutate(s);
+    return ZeroGPULoopMins().profiled_mutate(s);
 }
 
 namespace {
@@ -1590,7 +1590,7 @@ protected:
         if (!inside_gpu_blocks) {
             return IRMutator::visit(op);
         }
-        Profiled<FindInnermostGPUBlock> find;
+        FindInnermostGPUBlock find;
         find.profiled_visit(op);
         if (find.found_gpu_block != nullptr) {
             internal_assert(!op->else_case.defined()) << "Found an if statement with else case between two GPU blocks.\n";
@@ -1607,9 +1607,9 @@ Stmt fuse_gpu_thread_loops(Stmt s) {
     // NormalizeIfStatements pushes the predicates between GPU blocks
     // into the innermost GPU block. FuseGPUThreadLoops would then
     // merge the predicate into the merged GPU thread.
-    s = Profiled<NormalizeIfStatements>().profiled_mutate(s);
-    s = Profiled<FuseGPUThreadLoops>().profiled_mutate(s);
-    s = Profiled<ZeroGPULoopMins>().profiled_mutate(s);
+    s = NormalizeIfStatements().profiled_mutate(s);
+    s = FuseGPUThreadLoops().profiled_mutate(s);
+    s = ZeroGPULoopMins().profiled_mutate(s);
     return s;
 }
 

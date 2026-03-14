@@ -166,9 +166,9 @@ public:
 
 Stmt uniquify_variable_names(const Stmt &s) {
     ZoneScoped;
-    Profiled<FindFreeVars> finder;
+    FindFreeVars finder;
     s.accept(&finder);
-    Profiled<UniquifyVariableNames> u(&finder.free_vars);
+    UniquifyVariableNames u(&finder.free_vars);
     return u.mutate(s);
 }
 

@@ -90,7 +90,7 @@ protected:
 
 Stmt remove_dead_allocations(const Stmt &s) {
     ZoneScoped;
-    return Profiled<RemoveDeadAllocations>().mutate(s);
+    return RemoveDeadAllocations().mutate(s);
 }
 
 }  // namespace Internal

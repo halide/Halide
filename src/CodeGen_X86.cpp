@@ -1174,7 +1174,7 @@ int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
 }  // namespace
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_X86(const Target &target) {
-    return std::make_unique<Profiled<CodeGen_X86>>(target);
+    return std::make_unique<CodeGen_X86>(target);
 }
 
 #else  // WITH_X86

@@ -1075,7 +1075,7 @@ protected:
         // Rewrite loads and stores to this allocation like so:
         // foo[x] -> foo[x*lanes + v]
         for (const auto &vv : vectorized_vars) {
-            body = Profiled<RewriteAccessToVectorAlloc>(vv.name + ".from_zero", op->name, vv.lanes).profiled_mutate(body);
+            body = RewriteAccessToVectorAlloc>(vv.name + ".from_zero", op-name, vv.lanes).profiled_mutate(body);
         }
 
         body = mutate(body);
@@ -1683,9 +1683,9 @@ Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env) {
     // Limit the scope of atomic nodes to just the necessary stuff.
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.
-    Stmt s = Profiled<LiftVectorizableExprsOutOfAllAtomicNodes>(env).profiled_mutate(stmt);
+    Stmt s = LiftVectorizableExprsOutOfAllAtomicNodes(env).profiled_mutate(stmt);
     s = vectorize_statement(s);
-    s = Profiled<RemoveUnnecessaryAtomics>().profiled_mutate(s);
+    s = RemoveUnnecessaryAtomics().profiled_mutate(s);
     return s;
 }
 

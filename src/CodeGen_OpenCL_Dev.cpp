@@ -140,7 +140,7 @@ protected:
 
     std::ostringstream src_stream;
     std::string cur_kernel_name;
-    Profiled<CodeGen_OpenCL_C> clc;
+    CodeGen_OpenCL_C clc;
 };
 
 CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(const Target &t)

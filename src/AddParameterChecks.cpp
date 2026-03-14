@@ -36,7 +36,7 @@ public:
 Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Target &t) {
 
     // First, find all the parameters
-    Profiled<FindParameters> finder;
+    FindParameters finder;
     s.accept(&finder);
 
     map<string, Expr> replace_with_constrained;

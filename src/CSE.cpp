@@ -273,7 +273,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
 
     debug(4) << "\n\n\nInput to CSE " << e << "\n";
 
-    e = Profiled<RemoveLets>().profiled_mutate(e);
+    e = RemoveLets().profiled_mutate(e);
 
     debug(4) << "After removing lets: " << e << "\n";
 
@@ -309,16 +309,16 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
             return name;
         }
     };
-    Profiled<UniqueNameProvider> namer;
+    UniqueNameProvider namer;
     {
         ZoneScopedN("UniqueNameProvider");
         e.accept(&namer);
     }
 
-    Profiled<GVN> gvn;
+    GVN gvn;
     e = gvn.profiled_mutate(e);
 
-    Profiled<ComputeUseCounts> count_uses(gvn, lift_all);
+    ComputeUseCounts count_uses(gvn, lift_all);
     count_uses.profiled_include(e);
 
     debug(4) << "Canonical form without lets " << e << "\n";
@@ -339,7 +339,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     }
 
     // Rebuild the expr to include references to the variables:
-    Profiled<Replacer> replacer(replacements);
+    Replacer replacer(replacements);
     e = replacer.profiled_mutate(e);
 
     debug(4) << "With variables " << e << "\n";
@@ -359,7 +359,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
 
 Stmt common_subexpression_elimination(const Stmt &s, bool lift_all) {
     ZoneScoped;
-    return Profiled<CSEEveryExprInStmt>(lift_all).profiled_mutate(s);
+    return CSEEveryExprInStmt(lift_all).profiled_mutate(s);
 }
 
 // Testing code.

@@ -1267,16 +1267,16 @@ protected:
 }  // namespace
 
 Stmt find_intrinsics(const Stmt &s) {
-    Stmt stmt = Profiled<SubstituteInWideningLets>().mutate(s);
-    stmt = Profiled<FindIntrinsics>().mutate(stmt);
+    Stmt stmt = SubstituteInWideningLets().mutate(s);
+    stmt = FindIntrinsics().mutate(stmt);
     // In case we want to hoist widening ops back out
     stmt = common_subexpression_elimination(stmt);
     return stmt;
 }
 
 Expr find_intrinsics(const Expr &e) {
-    Expr expr = Profiled<SubstituteInWideningLets>().mutate(e);
-    expr = Profiled<FindIntrinsics>().mutate(expr);
+    Expr expr = SubstituteInWideningLets().mutate(e);
+    expr = FindIntrinsics().mutate(expr);
     expr = common_subexpression_elimination(expr);
     return expr;
 }

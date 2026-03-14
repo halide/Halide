@@ -168,7 +168,7 @@ Stmt add_image_checks_inner(Stmt s,
     bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
 
     // First hunt for all the referenced buffers
-    Profiled<FindBuffers> finder;
+    FindBuffers finder;
     map<string, FindBuffers::Result> &bufs = finder.buffers;
 
     // Add the output buffer(s).
@@ -191,7 +191,7 @@ Stmt add_image_checks_inner(Stmt s,
     finder.profiled_visit(s);
 
     Scope<Interval> empty_scope;
-    Stmt sub_stmt = Profiled<TrimStmtToPartsThatAccessBuffers>(bufs).profiled_mutate(s);
+    Stmt sub_stmt = TrimStmtToPartsThatAccessBuffers(bufs).profiled_mutate(s);
     map<string, Box> boxes = boxes_touched(sub_stmt, empty_scope, fb);
 
     // Now iterate through all the buffers, creating a list of lets
@@ -799,7 +799,7 @@ Stmt add_image_checks(const Stmt &s,
             : outputs(outputs), t(t), order(order), env(env), fb(fb), will_inject_host_copies(will_inject_host_copies) {
         }
     };
-    Profiled<Injector> injector(outputs, t, order, env, fb, will_inject_host_copies);
+    Injector injector(outputs, t, order, env, fb, will_inject_host_copies);
 
     return injector.profiled_mutate(s);
 }

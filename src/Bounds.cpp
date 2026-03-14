@@ -1792,7 +1792,7 @@ Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Inter
     debug(0) << spaces << "BoundsOfExprInScope {\n"
              << spaces << " expr: " << expr << "\n";
 #endif
-    Profiled<Bounds> b(&scope, fb, const_bound);
+    Bounds b(&scope, fb, const_bound);
 #if DO_TRACK_BOUNDS_INTERVALS
     b.log_indent = indent + 1;
 #endif
@@ -3102,12 +3102,12 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
     // as possible, so that BoxesTouched can prune the variable scope tighter
     // when encountering the IfThenElse.
     if (s.defined()) {
-        s = Profiled<SolveIfThenElse>().profiled_mutate(s);
+        s = SolveIfThenElse().profiled_mutate(s);
     }
 
     // Do calls and provides separately, for better simplification.
-    Profiled<BoxesTouched> calls(consider_calls, false, fn, &scope, fb);
-    Profiled<BoxesTouched> provides(false, consider_provides, fn, &scope, fb);
+    BoxesTouched calls(consider_calls, false, fn, &scope, fb);
+    BoxesTouched provides(false, consider_provides, fn, &scope, fb);
 
     if (consider_calls) {
         if (e.defined()) {

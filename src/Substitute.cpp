@@ -104,24 +104,24 @@ public:
 Expr substitute(const string &name, const Expr &replacement, const Expr &expr) {
     map<string, Expr> m;
     m[name] = replacement;
-    Profiled<Substitute> s(m);
+    Substitute s(m);
     return s.profiled_mutate(expr);
 }
 
 Stmt substitute(const string &name, const Expr &replacement, const Stmt &stmt) {
     map<string, Expr> m;
     m[name] = replacement;
-    Profiled<Substitute> s(m);
+    Substitute s(m);
     return s.profiled_mutate(stmt);
 }
 
 Expr substitute(const map<string, Expr> &m, const Expr &expr) {
-    Profiled<Substitute> s(m);
+    Substitute s(m);
     return s.profiled_mutate(expr);
 }
 
 Stmt substitute(const map<string, Expr> &m, const Stmt &stmt) {
-    Profiled<Substitute> s(m);
+    Substitute s(m);
     return s.profiled_mutate(stmt);
 }
 
@@ -207,22 +207,22 @@ public:
 
 Expr graph_substitute(const string &name, const Expr &replacement, const Expr &expr) {
     ZoneScoped;
-    return Profiled<GraphSubstitute>(name, replacement).profiled_mutate(expr);
+    return GraphSubstitute(name, replacement).profiled_mutate(expr);
 }
 
 Stmt graph_substitute(const string &name, const Expr &replacement, const Stmt &stmt) {
     ZoneScoped;
-    return Profiled<GraphSubstitute>(name, replacement).profiled_mutate(stmt);
+    return GraphSubstitute(name, replacement).profiled_mutate(stmt);
 }
 
 Expr graph_substitute(const Expr &find, const Expr &replacement, const Expr &expr) {
     ZoneScoped;
-    return Profiled<GraphSubstituteExpr>(find, replacement).profiled_mutate(expr);
+    return GraphSubstituteExpr(find, replacement).profiled_mutate(expr);
 }
 
 Stmt graph_substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
     ZoneScoped;
-    return Profiled<GraphSubstituteExpr>(find, replacement).profiled_mutate(stmt);
+    return GraphSubstituteExpr(find, replacement).profiled_mutate(stmt);
 }
 
 namespace {

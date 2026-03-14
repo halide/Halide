@@ -62,7 +62,7 @@ protected:
     Scope<> varying;
 
     bool can_lift(const Expr &e) {
-        Profiled<CanLift> check(varying);
+        CanLift check(varying);
         e.accept(&check);
         return check.result;
     }
@@ -250,9 +250,9 @@ protected:
         } else {
 
             // Lift invariants
-            Profiled<LiftLoopInvariants> lifter;
+            LiftLoopInvariants lifter;
             Stmt new_stmt = lifter.mutate(op);
-            new_stmt = Profiled<SubstituteTrivialLets>().profiled_mutate(new_stmt);
+            new_stmt = SubstituteTrivialLets().profiled_mutate(new_stmt);
 
             // As an optimization to reduce register pressure, take
             // the set of expressions to lift and check if any can
@@ -527,9 +527,9 @@ protected:
 
 Stmt hoist_loop_invariant_values(Stmt s) {
     ZoneScoped;
-    s = Profiled<GroupLoopInvariants>().profiled_mutate(s);
+    s = GroupLoopInvariants().profiled_mutate(s);
     s = common_subexpression_elimination(s);
-    s = Profiled<LICM>().profiled_mutate(s);
+    s = LICM().profiled_mutate(s);
     s = simplify_exprs(s);
     return s;
 }
@@ -666,7 +666,7 @@ protected:
 
 Stmt hoist_loop_invariant_if_statements(Stmt s) {
     ZoneScoped;
-    s = Profiled<HoistIfStatements>().mutate(s);
+    s = HoistIfStatements().mutate(s);
     return s;
 }
 

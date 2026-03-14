@@ -182,7 +182,7 @@ int CodeGen_PowerPC::native_vector_bits() const {
 }  // namespace
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_PowerPC(const Target &target) {
-    return std::make_unique<Profiled<CodeGen_PowerPC>>(target);
+    return std::make_unique<CodeGen_PowerPC>(target);
 }
 
 #else  // WITH_POWERPC

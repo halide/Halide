@@ -132,7 +132,7 @@ protected:
         internal_assert(loop->device_api != DeviceAPI::Default_GPU)
             << "A concrete device API should have been selected before codegen.";
 
-        Profiled<ExtractBounds> bounds;
+        ExtractBounds bounds;
         bounds.profiled_visit(loop);
         debug(2) << "Kernel bounds: ("
                  << bounds.num_threads[0] << ", "
@@ -324,7 +324,7 @@ public:
 }  // namespace
 
 Stmt inject_gpu_offload(const Stmt &s, const Target &host_target, bool any_strict_float) {
-    return Profiled<InjectGpuOffload>(host_target, any_strict_float).inject(s);
+    return InjectGpuOffload(host_target, any_strict_float).inject(s);
 }
 
 }  // namespace Internal

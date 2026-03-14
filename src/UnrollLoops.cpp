@@ -56,7 +56,7 @@ protected:
 
 Stmt unroll_loops(const Stmt &s) {
     ZoneScoped;
-    Stmt stmt = Profiled<UnrollLoops>().profiled_mutate(s);
+    Stmt stmt = UnrollLoops().profiled_mutate(s);
     // Unrolling duplicates variable names. Other passes assume variable names are unique.
     return uniquify_variable_names(stmt);
 }

@@ -403,7 +403,7 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
 }  // anonymous namespace
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_RISCV(const Target &target) {
-    return std::make_unique<Profiled<CodeGen_RISCV>>(target);
+    return std::make_unique<CodeGen_RISCV>(target);
 }
 
 #else  // WITH_RISCV

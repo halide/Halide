@@ -148,7 +148,7 @@ protected:
 
     std::ostringstream src_stream;
     std::string cur_kernel_name;
-    Profiled<CodeGen_Metal_C> metal_c;
+    CodeGen_Metal_C metal_c;
 };
 
 CodeGen_Metal_Dev::CodeGen_Metal_Dev(const Target &t)

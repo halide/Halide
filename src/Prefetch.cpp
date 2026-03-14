@@ -441,15 +441,15 @@ Stmt inject_placeholder_prefetch(const Stmt &s, const map<string, Function> &env
                                  const string &prefix,
                                  const vector<PrefetchDirective> &prefetches) {
     ZoneScoped;
-    Stmt stmt = Profiled<InjectPlaceholderPrefetch>(env, prefix, prefetches).mutate(s);
+    Stmt stmt = InjectPlaceholderPrefetch(env, prefix, prefetches).mutate(s);
     return stmt;
 }
 
 Stmt inject_prefetch(const Stmt &s, const map<string, Function> &env) {
     ZoneScoped;
-    Profiled<CollectExternalBufferBounds> finder;
+    CollectExternalBufferBounds finder;
     s.accept(&finder);
-    return Profiled<InjectPrefetch>(env, finder.buffers).mutate(s);
+    return InjectPrefetch(env, finder.buffers).mutate(s);
 }
 
 Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
@@ -472,18 +472,18 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
     }
     internal_assert(max_dim > 0);
 
-    stmt = Profiled<ReducePrefetchDimension>(max_dim).mutate(stmt);
+    stmt = ReducePrefetchDimension(max_dim).mutate(stmt);
     if (max_byte_size.defined()) {
         // If the max byte size is specified, we may need to tile
         // the prefetch
-        stmt = Profiled<SplitPrefetch>(max_byte_size).mutate(stmt);
+        stmt = SplitPrefetch(max_byte_size).mutate(stmt);
     }
     return stmt;
 }
 
 Stmt hoist_prefetches(const Stmt &s) {
     ZoneScoped;
-    return Profiled<HoistPrefetches>().mutate(s);
+    return HoistPrefetches().mutate(s);
 }
 
 }  // namespace Internal
