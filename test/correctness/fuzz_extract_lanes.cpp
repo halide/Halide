@@ -436,6 +436,10 @@ bool test_one(RandomEngine &rng) {
 }  // namespace
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Halide::Target::ARM) {
+        printf("[SKIP-WITH-ISSUE-9026] LLVM generates incorrect IR for some expressions.\n");
+        return 0;
+    }
     auto seed_generator = initialize_rng<RandomEngine>();
 
     int num_iters = (argc > 1) ? 1 : 32;
