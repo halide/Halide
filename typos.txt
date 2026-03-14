@@ -1,8 +1,0 @@
-This is an abandonnement of the old system.
-The abritrary acount was adn to the list.
-We should definately refactor this accomodate function.
-The equivelant implemention is much simpiler.
-This sentance has mutliple erors on one lien.
-The nto field was cmo from the als module.
-I need to ist the ba items.
-We can optin to use the ot parameter.
