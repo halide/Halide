@@ -1887,6 +1887,7 @@ void UpsampleChannelsOp::execute() {
         };                                                          \
     }
 
+// keep-sorted start
 ACCEPT_AND_MUTATE_IMPL(BinaryOp)
 ACCEPT_AND_MUTATE_IMPL(ConcatenationOp)
 ACCEPT_AND_MUTATE_IMPL(ConvOp)
@@ -1896,16 +1897,17 @@ ACCEPT_AND_MUTATE_IMPL(GatherOp)
 ACCEPT_AND_MUTATE_IMPL(L2NormalizationOp)
 ACCEPT_AND_MUTATE_IMPL(PadOp)
 ACCEPT_AND_MUTATE_IMPL(Pool2DOp)
+ACCEPT_AND_MUTATE_IMPL(ReductionOp)
+ACCEPT_AND_MUTATE_IMPL(ReshapeOp)
 ACCEPT_AND_MUTATE_IMPL(ShapeOp)
 ACCEPT_AND_MUTATE_IMPL(SoftmaxOp)
 ACCEPT_AND_MUTATE_IMPL(SpaceDepthOp)
 ACCEPT_AND_MUTATE_IMPL(SplitOp)
-ACCEPT_AND_MUTATE_IMPL(ReductionOp)
-ACCEPT_AND_MUTATE_IMPL(ReshapeOp)
 ACCEPT_AND_MUTATE_IMPL(TileConvFilterOp)
 ACCEPT_AND_MUTATE_IMPL(TransposeOp)
-ACCEPT_AND_MUTATE_IMPL(UpsampleChannelsOp)
 ACCEPT_AND_MUTATE_IMPL(UnaryOp)
+ACCEPT_AND_MUTATE_IMPL(UpsampleChannelsOp)
+// keep-sorted end
 
 ACCEPT_AND_MUTATE_IMPL(OpGroup)
 
