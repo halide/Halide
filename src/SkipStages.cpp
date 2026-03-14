@@ -835,7 +835,7 @@ Stmt skip_stages(const Stmt &stmt,
         }
 
         SkipStages skipper(analysis, name_for_id);
-        stmt = skipper.mutate(stmt);
+        stmt = skipper(stmt);
         stmt = skipper.emit_outermost_defs(stmt);
         return stmt;
     };

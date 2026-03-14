@@ -12,6 +12,7 @@ namespace Internal {
 
 namespace {
 class BoundLoops : public IRMutator {
+protected:
     using IRMutator::visit;
 
     std::vector<std::pair<std::string, Expr>> lets;
@@ -128,7 +129,7 @@ public:
 }  // namespace
 
 Stmt bound_constant_extent_loops(const Stmt &s) {
-    return BoundLoops().mutate(s);
+    return BoundLoops()(s);
 }
 
 }  // namespace Internal

@@ -21,62 +21,75 @@ namespace Internal {
 class IRMutator;
 class IRVisitor;
 
+// Exprs, in order of strength. Code in IRMatch.h and the
+// simplifier relies on this order for canonicalization of
+// expressions, so you may need to update those modules if you
+// change this list.
+#define HALIDE_FOR_EACH_IR_EXPR(V) \
+    V(IntImm)                      \
+    V(UIntImm)                     \
+    V(FloatImm)                    \
+    V(StringImm)                   \
+    V(Broadcast)                   \
+    V(Cast)                        \
+    V(Reinterpret)                 \
+    V(Variable)                    \
+    V(Add)                         \
+    V(Sub)                         \
+    V(Mod)                         \
+    V(Mul)                         \
+    V(Div)                         \
+    V(Min)                         \
+    V(Max)                         \
+    V(EQ)                          \
+    V(NE)                          \
+    V(LT)                          \
+    V(LE)                          \
+    V(GT)                          \
+    V(GE)                          \
+    V(And)                         \
+    V(Or)                          \
+    V(Not)                         \
+    V(Select)                      \
+    V(Load)                        \
+    V(Ramp)                        \
+    V(Call)                        \
+    V(Let)                         \
+    V(Shuffle)                     \
+    V(VectorReduce)
+
+/* Stmts */
+#define HALIDE_FOR_EACH_IR_STMT(V) \
+    V(LetStmt)                     \
+    V(AssertStmt)                  \
+    V(ProducerConsumer)            \
+    V(For)                         \
+    V(Acquire)                     \
+    V(Store)                       \
+    V(Provide)                     \
+    V(Allocate)                    \
+    V(Free)                        \
+    V(Realize)                     \
+    V(Block)                       \
+    V(Fork)                        \
+    V(IfThenElse)                  \
+    V(Evaluate)                    \
+    V(Prefetch)                    \
+    V(Atomic)                      \
+    V(HoistedStorage)
+
+#define HALIDE_FOR_EACH_IR_NODE(V) \
+    HALIDE_FOR_EACH_IR_EXPR(V)     \
+    HALIDE_FOR_EACH_IR_STMT(V)
+
 /** All our IR node types get unique IDs for the purposes of RTTI */
-enum class IRNodeType {
-    // Exprs, in order of strength. Code in IRMatch.h and the
-    // simplifier relies on this order for canonicalization of
-    // expressions, so you may need to update those modules if you
-    // change this list.
-    IntImm,
-    UIntImm,
-    FloatImm,
-    StringImm,
-    Broadcast,
-    Cast,
-    Reinterpret,
-    Variable,
-    Add,
-    Sub,
-    Mod,
-    Mul,
-    Div,
-    Min,
-    Max,
-    EQ,
-    NE,
-    LT,
-    LE,
-    GT,
-    GE,
-    And,
-    Or,
-    Not,
-    Select,
-    Load,
-    Ramp,
-    Call,
-    Let,
-    Shuffle,
-    VectorReduce,
-    // Stmts
-    LetStmt,
-    AssertStmt,
-    ProducerConsumer,
-    For,
-    Acquire,
-    Store,
-    Provide,
-    Allocate,
-    Free,
-    Realize,
-    Block,
-    Fork,
-    IfThenElse,
-    Evaluate,
-    Prefetch,
-    Atomic,
-    HoistedStorage
+enum class IRNodeType : uint8_t {
+#define DECL_ENUM(X) X,
+    HALIDE_FOR_EACH_IR_NODE(DECL_ENUM)
+#undef DECL_ENUM
 };
+
+const char *IRNodeType_string(IRNodeType type);
 
 constexpr IRNodeType StrongestExprNodeType = IRNodeType::VectorReduce;
 

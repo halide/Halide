@@ -408,7 +408,7 @@ class SplitScatterGather : public IRMutator {
         vector<Expr> vars;
         for (extractor.idx = 0; extractor.idx < size; extractor.idx++) {
             string name = unique_name(op->name + "." + std::to_string(extractor.idx));
-            lets.emplace_back(name, extractor.mutate(op->value));
+            lets.emplace_back(name, extractor(op->value));
             vars.push_back(Variable::make(op->value.type(), name));
         }
 
@@ -475,15 +475,15 @@ class SplitScatterGather : public IRMutator {
             vector<Expr> args = op->args;
             for (Expr &a : args) {
                 string name = unique_name('t');
-                exprs.push_back(extractor.mutate(a));
+                exprs.push_back(extractor(a));
                 names.push_back(name);
                 a = Variable::make(a.type(), name);
             }
             vector<Expr> values = op->values;
             for (Expr &v : values) {
-                v = extractor.mutate(v);
+                v = extractor(v);
                 string name = unique_name('t');
-                exprs.push_back(extractor.mutate(v));
+                exprs.push_back(extractor(v));
                 names.push_back(name);
                 v = Variable::make(v.type(), name);
             }
@@ -524,8 +524,8 @@ class SplitScatterGather : public IRMutator {
 }  // namespace
 
 Stmt split_tuples(const Stmt &stmt, const map<string, Function> &env) {
-    Stmt s = SplitTuples(env).mutate(stmt);
-    s = SplitScatterGather().mutate(s);
+    Stmt s = SplitTuples(env)(stmt);
+    s = SplitScatterGather()(s);
     return s;
 }
 
