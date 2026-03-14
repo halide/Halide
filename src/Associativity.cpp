@@ -339,7 +339,7 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
 
         // Replace any self-reference to Func 'f' with a Var
         ConvertSelfRef csr(f, args, idx, op_x_names);
-        exprs[idx] = csr.mutate(exprs[idx]);
+        exprs[idx] = csr(exprs[idx]);
         if (!csr.is_solvable) {
             return AssociativeOp();
         }

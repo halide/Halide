@@ -1266,7 +1266,7 @@ private:
                         : env(env) {
                     }
                 } copier(env);
-                e = copier.mutate(e);
+                e = copier(e);
             }
 
             // Create Task and register
