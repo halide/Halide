@@ -1380,7 +1380,7 @@ protected:
                      << body << "\n\n";
 
             NormalizeDimensionality n(block_size, op->device_api);
-            body = n.profiled_mutate(body);
+            body = n(body);
 
             debug(3) << "Normalized dimensionality:\n"
                      << body << "\n\n";
@@ -1401,14 +1401,14 @@ protected:
             if (register_allocs.has_thread_loop) {
                 // If there's no loop over threads, everything is already synchronous.
                 InjectThreadBarriers i{block_allocations, register_allocs};
-                body = i.profiled_mutate(body);
+                body = i(body);
             }
 
             debug(3) << "Injected synchronization:\n"
                      << body << "\n\n";
 
             ReplaceForWithIf f(block_size);
-            body = f.profiled_mutate(body);
+            body = f(body);
 
             debug(3) << "Replaced for with if:\n"
                      << body << "\n\n";
@@ -1471,17 +1471,17 @@ protected:
             // Do the analysis of thread block size and shared memory
             // usage.
             ExtractBlockSize block_size;
-            block_size.profiled_visit(op);
+            block_size(op);
             Stmt loop(op);
 
             ExtractSharedAndHeapAllocations block_allocations(op->device_api);
-            loop = block_allocations.profiled_mutate(loop);
+            loop = block_allocations(loop);
 
             debug(3) << "Pulled out shared allocations:\n"
                      << loop << "\n\n";
 
             // Mutate the inside of the kernel
-            loop = FuseGPUThreadLoopsSingleKernel(block_size, block_allocations).profiled_mutate(loop);
+            loop = FuseGPUThreadLoopsSingleKernel(block_size, block_allocations)(loop);
 
             loop = block_allocations.rewrap_kernel_launch(loop, block_size, op->device_api);
 
@@ -1525,7 +1525,7 @@ public:
 
 // Also used by InjectImageIntrinsics
 Stmt zero_gpu_loop_mins(const Stmt &s) {
-    return ZeroGPULoopMins().profiled_mutate(s);
+    return ZeroGPULoopMins()(s);
 }
 
 namespace {
@@ -1591,7 +1591,7 @@ protected:
             return IRMutator::visit(op);
         }
         FindInnermostGPUBlock find;
-        find.profiled_visit(op);
+        find(op);
         if (find.found_gpu_block != nullptr) {
             internal_assert(!op->else_case.defined()) << "Found an if statement with else case between two GPU blocks.\n";
             return AddConditionToALoop(op->condition, find.found_gpu_block).mutate(op->then_case);
@@ -1607,9 +1607,9 @@ Stmt fuse_gpu_thread_loops(Stmt s) {
     // NormalizeIfStatements pushes the predicates between GPU blocks
     // into the innermost GPU block. FuseGPUThreadLoops would then
     // merge the predicate into the merged GPU thread.
-    s = NormalizeIfStatements().profiled_mutate(s);
-    s = FuseGPUThreadLoops().profiled_mutate(s);
-    s = ZeroGPULoopMins().profiled_mutate(s);
+    s = NormalizeIfStatements()(s);
+    s = FuseGPUThreadLoops()(s);
+    s = ZeroGPULoopMins()(s);
     return s;
 }
 

@@ -133,7 +133,7 @@ protected:
             << "A concrete device API should have been selected before codegen.";
 
         ExtractBounds bounds;
-        bounds.profiled_visit(loop);
+        bounds(loop);
         debug(2) << "Kernel bounds: ("
                  << bounds.num_threads[0] << ", "
                  << bounds.num_threads[1] << ", "
@@ -289,7 +289,7 @@ public:
             i.second->init_module();
         }
 
-        Stmt result = profiled_mutate(s);
+        Stmt result =(s);
 
         for (auto &i : cgdev) {
             string api_unique_name = i.second->api_unique_name();

@@ -198,7 +198,7 @@ protected:
                 : vars(vars) {
             }
         } tracker(vars);
-        tracker.profiled_visit(e);
+        tracker(e);
     }
 
     Expr cancel_correlated_subexpression(Expr e, const Expr &a, const Expr &b, bool correlated) {
@@ -227,7 +227,7 @@ protected:
             }
             e = common_subexpression_elimination(e);
             e = solve_expression(e, loop_var).result;
-            e = PartiallyCancelDifferences().profiled_mutate(e);
+            e = PartiallyCancelDifferences()(e);
             e = simplify(e);
 
             const bool check_non_monotonic = debug_is_active(1) || get_compiler_logger() != nullptr;
@@ -311,11 +311,11 @@ protected:
 }  // namespace
 
 Stmt simplify_correlated_differences(const Stmt &stmt) {
-    return SimplifyCorrelatedDifferences().profiled_mutate(stmt);
+    return SimplifyCorrelatedDifferences()(stmt);
 }
 
 Expr bound_correlated_differences(const Expr &expr) {
-    return PartiallyCancelDifferences().profiled_mutate(expr);
+    return PartiallyCancelDifferences()(expr);
 }
 
 }  // namespace Internal

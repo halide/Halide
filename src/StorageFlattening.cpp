@@ -641,9 +641,9 @@ Stmt storage_flattening(Stmt s,
             tuple_env[p.first] = {p.second, 0};
         }
     }
-    s = FlattenDimensions(tuple_env, outputs, target).profiled_mutate(s);
-    s = HoistStorage().profiled_mutate(s);
-    s = PromoteToMemoryType().profiled_mutate(s);
+    s = FlattenDimensions(tuple_env, outputs, target)(s);
+    s = HoistStorage()(s);
+    s = PromoteToMemoryType()(s);
 
     return s;
 }

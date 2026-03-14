@@ -1017,12 +1017,12 @@ protected:
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     ZoneScoped;
-    s = TightenProducerConsumerNodes(env).profiled_mutate(s);
-    s = InjectRingBuffering(env).profiled_mutate(s);
-    s = ForkAsyncProducers(env).profiled_mutate(s);
-    s = ExpandAcquireNodes().profiled_mutate(s);
-    s = TightenForkNodes().profiled_mutate(s);
-    s = InitializeSemaphores().profiled_mutate(s);
+    s = TightenProducerConsumerNodes(env)(s);
+    s = InjectRingBuffering(env)(s);
+    s = ForkAsyncProducers(env)(s);
+    s = ExpandAcquireNodes()(s);
+    s = TightenForkNodes()(s);
+    s = InitializeSemaphores()(s);
     return s;
 }
 

@@ -129,7 +129,7 @@ public:
 }  // namespace
 
 Stmt bound_constant_extent_loops(const Stmt &s) {
-    return BoundLoops().profiled_mutate(s);
+    return BoundLoops()(s);
 }
 
 }  // namespace Internal

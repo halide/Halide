@@ -1796,7 +1796,7 @@ Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Inter
 #if DO_TRACK_BOUNDS_INTERVALS
     b.log_indent = indent + 1;
 #endif
-    b.profiled_visit(expr);
+    b(expr);
 #if DO_TRACK_BOUNDS_INTERVALS
     debug(0) << spaces << " mn=" << simplify(b.interval.min) << "\n"
              << spaces << " mx=" << simplify(b.interval.max) << "\n"
@@ -3102,7 +3102,7 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
     // as possible, so that BoxesTouched can prune the variable scope tighter
     // when encountering the IfThenElse.
     if (s.defined()) {
-        s = SolveIfThenElse().profiled_mutate(s);
+        s = SolveIfThenElse()(s);
     }
 
     // Do calls and provides separately, for better simplification.
@@ -3111,18 +3111,18 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
 
     if (consider_calls) {
         if (e.defined()) {
-            calls.profiled_visit(e);
+            calls(e);
         }
         if (s.defined()) {
-            calls.profiled_visit(s);
+            calls(s);
         }
     }
     if (consider_provides) {
         if (e.defined()) {
-            provides.profiled_visit(e);
+            provides(e);
         }
         if (s.defined()) {
-            provides.profiled_visit(s);
+            provides(s);
         }
     }
 

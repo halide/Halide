@@ -188,10 +188,10 @@ Stmt add_image_checks_inner(Stmt s,
 
     // Add the input buffer(s) and annotate which output buffers are
     // used on host.
-    finder.profiled_visit(s);
+    finder(s);
 
     Scope<Interval> empty_scope;
-    Stmt sub_stmt = TrimStmtToPartsThatAccessBuffers(bufs).profiled_mutate(s);
+    Stmt sub_stmt = TrimStmtToPartsThatAccessBuffers(bufs)(s);
     map<string, Box> boxes = boxes_touched(sub_stmt, empty_scope, fb);
 
     // Now iterate through all the buffers, creating a list of lets
@@ -801,7 +801,7 @@ Stmt add_image_checks(const Stmt &s,
     };
     Injector injector(outputs, t, order, env, fb, will_inject_host_copies);
 
-    return injector.profiled_mutate(s);
+    return injector(s);
 }
 
 }  // namespace Internal

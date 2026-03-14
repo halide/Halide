@@ -222,7 +222,7 @@ protected:
         // Sniff what happens to the buffer inside the stmt
         FindBufferUsage local_finder(buffer, DeviceAPI::Host);
         if (!precomputed) {
-            local_finder.profiled_visit(s);
+            local_finder(s);
             precomputed = &local_finder;
         }
         FindBufferUsage &finder = *precomputed;
@@ -360,7 +360,7 @@ protected:
     // leaf.
     Stmt visit(const For *op) override {
         FindBufferUsage finder(buffer, DeviceAPI::Host);
-        finder.profiled_visit(op);
+        finder(op);
         if (finder.devices_touched.size() > 1) {
             // The state of the buffer going into the loop is the
             // union of the state before the loop starts and the state
@@ -590,7 +590,7 @@ protected:
 
     Stmt visit(const Allocate *op) override {
         FindBufferUsage finder(op->name, DeviceAPI::Host);
-        finder.profiled_visit(op->body);
+        finder(op->body);
 
         bool touched_on_host = finder.devices_touched.count(DeviceAPI::Host);
         bool touched_on_device = finder.devices_touched.size() > (touched_on_host ? 1 : 0);
@@ -603,7 +603,7 @@ protected:
         Stmt body = mutate(op->body);
 
         InjectBufferCopiesForSingleBuffer injector(op->name, false, op->memory_type);
-        body = injector.profiled_mutate(body);
+        body = injector(body);
 
         string buffer_name = op->name + ".buffer";
         Expr buffer = Variable::make(Handle(), buffer_name);
@@ -630,7 +630,7 @@ protected:
 
             return InjectCombinedAllocation(op->name, op->type, op->extents,
                                             op->condition, device_interface)
-                .profiled_mutate(body);
+                (body);
         } else {
             // Only touched on host but passed to an extern stage, or
             // only touched on device, or touched on multiple
@@ -644,7 +644,7 @@ protected:
             }
 
             // Add a device destructor
-            body = InjectDeviceDestructor(buffer_name).profiled_mutate(body);
+            body = InjectDeviceDestructor(buffer_name)(body);
 
             Expr condition = op->condition;
             bool touched_on_one_device = !touched_on_host && finder.devices_touched.size() == 1 &&
@@ -763,11 +763,11 @@ public:
     Stmt mutate(const Stmt &s) override {
         if (s.same_as(site)) {
             FindInputsAndOutputs finder;
-            finder.profiled_visit(s);
+            finder(s);
             Stmt new_stmt = s;
             for (const string &buf : finder.result) {
                 ZoneScopedN("InjectBufferCopiesForSingleBuffer");
-                new_stmt = InjectBufferCopiesForSingleBuffer(buf, true, finder.result_storage.at(buf)).profiled_mutate(new_stmt);
+                new_stmt = InjectBufferCopiesForSingleBuffer(buf, true, finder.result_storage.at(buf))(new_stmt);
             }
             return new_stmt;
         } else {
@@ -794,15 +794,15 @@ Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t) {
     }
 
     // Handle internal allocations
-    s = InjectBufferCopies().profiled_mutate(s);
+    s = InjectBufferCopies()(s);
 
     // Handle inputs and outputs
     FindOutermostProduce outermost;
-    outermost.profiled_visit(s);
+    outermost(s);
     if (outermost.result.defined()) {
         // If the entire pipeline simplified away, or just dispatches
         // to another pipeline, there may be no outermost produce.
-        s = InjectBufferCopiesForInputsAndOutputs(outermost.result).profiled_mutate(s);
+        s = InjectBufferCopiesForInputsAndOutputs(outermost.result)(s);
     }
 
     return s;

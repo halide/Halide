@@ -38,12 +38,12 @@ public:
     virtual Expr mutate(const Expr &expr);
     virtual Stmt mutate(const Stmt &stmt);
 
-    inline Expr profiled_mutate(const Expr &expr) {
+    inline Expr operator()(const Expr &expr) {
         ZoneScopedN(HalideVisitorDynamicNameTag);
         return mutate(expr);
     }
 
-    inline Stmt profiled_mutate(const Stmt &stmt) {
+    inline Stmt operator()(const Stmt &stmt) {
         ZoneScopedN(HalideVisitorDynamicNameTag);
         return mutate(stmt);
     }
@@ -182,7 +182,7 @@ auto mutate_with(const T &ir, Lambdas &&...lambdas) {
     using Generic = LambdaMutatorGeneric<Overloads>;
     if constexpr (std::is_invocable_v<Overloads, Generic *, const Expr &> ||
                   std::is_invocable_v<Overloads, Generic *, const Stmt &>) {
-        return LambdaMutatorGeneric{std::forward<Lambdas>(lambdas)...}.profiled_mutate(ir);
+        return LambdaMutatorGeneric{std::forward<Lambdas>(lambdas)...}(ir);
     } else {
         LambdaMutator mutator{std::forward<Lambdas>(lambdas)...};
         // Each lambda must take two args: (auto *self, <some-pointer> op).
@@ -194,7 +194,7 @@ auto mutate_with(const T &ir, Lambdas &&...lambdas) {
              ...);
         static_assert(all_take_two_args,
                       "All mutate_with lambdas must take two arguments: (auto *self, const T *op)");
-        return mutator.profiled_mutate(ir);
+        return mutator(ir);
     }
 }
 

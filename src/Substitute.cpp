@@ -105,24 +105,24 @@ Expr substitute(const string &name, const Expr &replacement, const Expr &expr) {
     map<string, Expr> m;
     m[name] = replacement;
     Substitute s(m);
-    return s.profiled_mutate(expr);
+    return s(expr);
 }
 
 Stmt substitute(const string &name, const Expr &replacement, const Stmt &stmt) {
     map<string, Expr> m;
     m[name] = replacement;
     Substitute s(m);
-    return s.profiled_mutate(stmt);
+    return s(stmt);
 }
 
 Expr substitute(const map<string, Expr> &m, const Expr &expr) {
     Substitute s(m);
-    return s.profiled_mutate(expr);
+    return s(expr);
 }
 
 Stmt substitute(const map<string, Expr> &m, const Stmt &stmt) {
     Substitute s(m);
-    return s.profiled_mutate(stmt);
+    return s(stmt);
 }
 
 namespace {
@@ -207,22 +207,22 @@ public:
 
 Expr graph_substitute(const string &name, const Expr &replacement, const Expr &expr) {
     ZoneScoped;
-    return GraphSubstitute(name, replacement).profiled_mutate(expr);
+    return GraphSubstitute(name, replacement)(expr);
 }
 
 Stmt graph_substitute(const string &name, const Expr &replacement, const Stmt &stmt) {
     ZoneScoped;
-    return GraphSubstitute(name, replacement).profiled_mutate(stmt);
+    return GraphSubstitute(name, replacement)(stmt);
 }
 
 Expr graph_substitute(const Expr &find, const Expr &replacement, const Expr &expr) {
     ZoneScoped;
-    return GraphSubstituteExpr(find, replacement).profiled_mutate(expr);
+    return GraphSubstituteExpr(find, replacement)(expr);
 }
 
 Stmt graph_substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
     ZoneScoped;
-    return GraphSubstituteExpr(find, replacement).profiled_mutate(stmt);
+    return GraphSubstituteExpr(find, replacement)(stmt);
 }
 
 namespace {
@@ -242,12 +242,12 @@ protected:
 
 Expr substitute_in_all_lets(const Expr &expr) {
     ZoneScoped;
-    return SubstituteInAllLets().profiled_mutate(expr);
+    return SubstituteInAllLets()(expr);
 }
 
 Stmt substitute_in_all_lets(const Stmt &stmt) {
     ZoneScoped;
-    return SubstituteInAllLets().profiled_mutate(stmt);
+    return SubstituteInAllLets()(stmt);
 }
 
 }  // namespace Internal

@@ -1137,7 +1137,7 @@ public:
 SolverResult solve_expression(const Expr &e, const std::string &variable, const Scope<Expr> &scope) {
     ZoneScoped;
     SolveExpression solver(variable, scope);
-    Expr new_e = solver.profiled_mutate(e);
+    Expr new_e = solver(e);
     // The process has expanded lets. Re-collect them.
     new_e = common_subexpression_elimination(new_e);
     debug(3) << "Solved expr for " << variable << " :\n"

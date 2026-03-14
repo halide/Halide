@@ -252,7 +252,7 @@ protected:
             // Lift invariants
             LiftLoopInvariants lifter;
             Stmt new_stmt = lifter.mutate(op);
-            new_stmt = SubstituteTrivialLets().profiled_mutate(new_stmt);
+            new_stmt = SubstituteTrivialLets()(new_stmt);
 
             // As an optimization to reduce register pressure, take
             // the set of expressions to lift and check if any can
@@ -527,9 +527,9 @@ protected:
 
 Stmt hoist_loop_invariant_values(Stmt s) {
     ZoneScoped;
-    s = GroupLoopInvariants().profiled_mutate(s);
+    s = GroupLoopInvariants()(s);
     s = common_subexpression_elimination(s);
-    s = LICM().profiled_mutate(s);
+    s = LICM()(s);
     s = simplify_exprs(s);
     return s;
 }

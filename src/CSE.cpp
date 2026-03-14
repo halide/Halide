@@ -273,7 +273,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
 
     debug(4) << "\n\n\nInput to CSE " << e << "\n";
 
-    e = RemoveLets().profiled_mutate(e);
+    e = RemoveLets()(e);
 
     debug(4) << "After removing lets: " << e << "\n";
 
@@ -316,10 +316,10 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     }
 
     GVN gvn;
-    e = gvn.profiled_mutate(e);
+    e = gvn(e);
 
     ComputeUseCounts count_uses(gvn, lift_all);
-    count_uses.profiled_include(e);
+    count_uses(e);
 
     debug(4) << "Canonical form without lets " << e << "\n";
 
@@ -340,7 +340,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
 
     // Rebuild the expr to include references to the variables:
     Replacer replacer(replacements);
-    e = replacer.profiled_mutate(e);
+    e = replacer(e);
 
     debug(4) << "With variables " << e << "\n";
 
@@ -349,7 +349,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
         // Drop this variable as an acceptable replacement for this expr.
         replacer.erase(value);
         // Use containing lets in the value.
-        e = Let::make(var, replacer.profiled_mutate(value), e);
+        e = Let::make(var, replacer(value), e);
     }
 
     debug(4) << "With lets: " << e << "\n";
@@ -359,7 +359,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
 
 Stmt common_subexpression_elimination(const Stmt &s, bool lift_all) {
     ZoneScoped;
-    return CSEEveryExprInStmt(lift_all).profiled_mutate(s);
+    return CSEEveryExprInStmt(lift_all)(s);
 }
 
 // Testing code.

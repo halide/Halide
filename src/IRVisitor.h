@@ -22,18 +22,18 @@ public:
     IRVisitor() = default;
     virtual ~IRVisitor() = default;
 
-    inline void profiled_visit(const Stmt &s) {
+    inline void operator()(const Stmt &s) {
         ZoneScopedN(HalideVisitorDynamicNameTag);
         s.accept(this);
     }
 
-    inline void profiled_visit(const Expr &e) {
+    inline void operator()(const Expr &e) {
         ZoneScopedN(HalideVisitorDynamicNameTag);
         e.accept(this);
     }
 
     template<typename T>
-    inline void profiled_visit(const T *op) {
+    inline void operator()(const T *op) {
         ZoneScopedN(HalideVisitorDynamicNameTag);
         visit(op);
     }
@@ -134,11 +134,11 @@ public:
     virtual void include(const Stmt &);
     // @}
 
-    inline void profiled_include(const Expr &e) {
+    inline void operator()(const Expr &e) {
         ZoneScopedN(HalideVisitorDynamicNameTag);
         include(e);
     }
-    inline void profiled_include(const Stmt &s) {
+    inline void operator()(const Stmt &s) {
         ZoneScopedN(HalideVisitorDynamicNameTag);
         include(s);
     }
