@@ -123,8 +123,6 @@ void write_halide_profiling_trace(const std::string &file) {
     out << "[\n";
     bool first = true;
 
-    double counter_freq = performance_counter_frequency();
-
     for (const auto &trace : ctx.traces) {
         uint64_t current_cycles = trace.start_cycles_64;
         uint32_t last_timer = static_cast<uint32_t>(current_cycles & 0xFFFFFFFF);
@@ -137,7 +135,7 @@ void write_halide_profiling_trace(const std::string &file) {
             current_cycles = (current_cycles & 0xFFFFFFFF00000000ULL) | ev.timer;
             last_timer = ev.timer;
 
-            double ts_us = static_cast<double>(current_cycles - global_start_cycles) / counter_freq;
+            double ts_us = static_cast<double>(current_cycles - global_start_cycles) * 1e-3;
 
             if (!first) {
                 out << ",\n";

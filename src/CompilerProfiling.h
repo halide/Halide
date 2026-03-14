@@ -4,11 +4,11 @@
 #ifdef WITH_COMPILER_PROFILING
 
 #include "IR.h"
-#include "PerformanceCounter.h"
 
 #include <list>
 #include <mutex>
 #include <thread>
+#include <chrono>
 
 #ifndef __FUNCTION_NAME__
 #ifdef WIN32  // WINDOWS
@@ -29,6 +29,11 @@ namespace Profiling {
 constexpr uint8_t BIT_GENERIC = 1 << 0;
 constexpr uint8_t BIT_STMT = 1 << 1;
 constexpr uint8_t BIT_EXPR = 1 << 2;
+
+inline uint64_t performance_counter() {
+    auto now = std::chrono::high_resolution_clock::now().time_since_epoch();
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+}
 
 struct Event {
     const char *src_tag;

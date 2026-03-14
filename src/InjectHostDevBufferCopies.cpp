@@ -589,7 +589,7 @@ protected:
     }
 
     Stmt visit(const Allocate *op) override {
-        FindBufferUsage> finder(op-name, DeviceAPI::Host);
+        FindBufferUsage finder(op->name, DeviceAPI::Host);
         finder.profiled_visit(op->body);
 
         bool touched_on_host = finder.devices_touched.count(DeviceAPI::Host);
@@ -602,7 +602,7 @@ protected:
 
         Stmt body = mutate(op->body);
 
-        InjectBufferCopiesForSingleBuffer> injector(op->name, false, op-memory_type);
+        InjectBufferCopiesForSingleBuffer injector(op->name, false, op->memory_type);
         body = injector.profiled_mutate(body);
 
         string buffer_name = op->name + ".buffer";
@@ -628,8 +628,8 @@ protected:
 
             Expr device_interface = make_device_interface_call(touching_device, op->memory_type);
 
-            return InjectCombinedAllocation>(op->name, op->type, op-extents,
-                                                      op->condition, device_interface)
+            return InjectCombinedAllocation(op->name, op->type, op->extents,
+                                            op->condition, device_interface)
                 .profiled_mutate(body);
         } else {
             // Only touched on host but passed to an extern stage, or

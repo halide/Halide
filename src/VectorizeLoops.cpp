@@ -1075,7 +1075,7 @@ protected:
         // Rewrite loads and stores to this allocation like so:
         // foo[x] -> foo[x*lanes + v]
         for (const auto &vv : vectorized_vars) {
-            body = RewriteAccessToVectorAlloc>(vv.name + ".from_zero", op-name, vv.lanes).profiled_mutate(body);
+            body = RewriteAccessToVectorAlloc(vv.name + ".from_zero", op->name, vv.lanes).profiled_mutate(body);
         }
 
         body = mutate(body);
