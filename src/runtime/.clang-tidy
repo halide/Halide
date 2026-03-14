@@ -1,8 +1,7 @@
 ---
 InheritParentConfig: true
-
+# keep-sorted start skip_lines=1 ignore_prefixes=-
 Checks: >
-    # keep-sorted start ignore_prefixes=-
     bugprone-argument-comment,
     bugprone-assert-side-effect,
     -bugprone-assignment-in-if-condition,
@@ -89,5 +88,5 @@ Checks: >
     -misc-unused-parameters,
     misc-unused-using-decls,
     misc-use-anonymous-namespace,
-    # keep-sorted end
+# keep-sorted end
 ...
