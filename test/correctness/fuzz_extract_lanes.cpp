@@ -291,7 +291,13 @@ bool evaluate_vector_exprs(const std::vector<Expr> &e,
 
     Pipeline p(f);
     p.add_custom_lowering_pass(&injector, nullptr);
-    p.realize(buf);
+    if (get_target_from_environment() == get_host_target()) {
+        p.realize(buf);
+    } else {
+        // Compile something, to be able to at least test CodeGen from the backends and LLVM.
+        p.compile_to_assembly("fuzz_extract_lanes.s", {fuzz_vars[0], fuzz_vars[1], fuzz_vars[2]}, "fuzz_func");
+        return false;
+    }
 
     // Upcast results to int64 for easier comparison
     internal_assert(result.height() == (int)e.size());
