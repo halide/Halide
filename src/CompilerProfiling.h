@@ -5,10 +5,10 @@
 
 #include "IR.h"
 
+#include <chrono>
 #include <list>
 #include <mutex>
 #include <thread>
-#include <chrono>
 
 #ifndef __FUNCTION_NAME__
 #ifdef WIN32  // WINDOWS

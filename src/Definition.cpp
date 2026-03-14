@@ -5,8 +5,8 @@
 #include "Definition.h"
 #include "IR.h"
 #include "IRMutator.h"
-#include "IRVisitor.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Var.h"
 
 namespace Halide {

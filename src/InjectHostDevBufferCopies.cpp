@@ -629,8 +629,7 @@ protected:
             Expr device_interface = make_device_interface_call(touching_device, op->memory_type);
 
             return InjectCombinedAllocation(op->name, op->type, op->extents,
-                                            op->condition, device_interface)
-                (body);
+                                            op->condition, device_interface)(body);
         } else {
             // Only touched on host but passed to an extern stage, or
             // only touched on device, or touched on multiple

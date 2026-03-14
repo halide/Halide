@@ -1,8 +1,8 @@
 #include <utility>
 
 #include "EarlyFree.h"
-#include "IRVisitor.h"
 #include "IRMutator.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {

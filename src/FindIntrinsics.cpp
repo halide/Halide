@@ -3,9 +3,8 @@
 #include "ConstantBounds.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
-#include "Simplify.h"
 #include "IRVisitor.h"
-#include "IRMutator.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
