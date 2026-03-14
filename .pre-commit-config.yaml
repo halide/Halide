@@ -58,6 +58,19 @@ repos:
       - id: ruff-check
       - id: ruff-format
 
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        exclude: ^apps/HelloAndroid.*/gradlew$
+
+  - repo: https://github.com/maxwinterstein/shfmt-py
+    rev: v3.12.0.1
+    hooks:
+      - id: shfmt
+        args: [ -i, "4", -ci, -s, -w ]
+        exclude: ^apps/HelloAndroid.*/gradlew$
+
   - repo: https://github.com/ComPWA/taplo-pre-commit
     rev: v0.9.3
     hooks:
