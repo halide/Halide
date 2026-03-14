@@ -1,8 +1,8 @@
 # Contributing CMake code to Halide
 
 This document specifies the coding standards we adhere to when authoring new
-CMake code. If you need directions for building Halide,
-see [BuildingHalideWithCMake.md]. If you are looking for Halide's CMake package
+CMake code. If you need directions for building Halide, see
+[BuildingHalideWithCMake.md]. If you are looking for Halide's CMake package
 documentation, see [HalideCMakePackage.md].
 
 This document is necessary for two major reasons. First, due to its long
@@ -20,12 +20,14 @@ version is 3.28. Therefore, it is not only possible, but _required_, to use
 modern CMake best practices.
 
 <!-- TOC -->
-* [Contributing CMake code to Halide](#contributing-cmake-code-to-halide)
-* [General guidelines and best practices](#general-guidelines-and-best-practices)
-  * [Prohibited commands list](#prohibited-commands-list)
-  * [Prohibited variables list](#prohibited-variables-list)
-* [Adding tests](#adding-tests)
-* [Adding apps](#adding-apps)
+
+- [Contributing CMake code to Halide](#contributing-cmake-code-to-halide)
+- [General guidelines and best practices](#general-guidelines-and-best-practices)
+  - [Prohibited commands list](#prohibited-commands-list)
+  - [Prohibited variables list](#prohibited-variables-list)
+- [Adding tests](#adding-tests)
+- [Adding apps](#adding-apps)
+
 <!-- TOC -->
 
 # General guidelines and best practices
@@ -43,7 +45,7 @@ The following are some common mistakes that lead to subtly broken builds.
   e.g. the build configuration.
 - **Using the wrong variable.** `CMAKE_SOURCE_DIR` doesn't always point to the
   Halide source root. When someone uses Halide via
-  [`FetchContent`][FetchContent], it will point to _their_ source root instead.
+  [`FetchContent`][fetchcontent], it will point to _their_ source root instead.
   The correct variable is [`Halide_SOURCE_DIR`][project-name_source_dir]. If you
   want to know if the compiler is MSVC, check it directly with the
   [`MSVC`][msvc] variable; don't use [`WIN32`][win32]. That will be wrong when
@@ -72,7 +74,7 @@ therefore _not allowed_. The following functions may not appear in any new CMake
 code.
 
 | Command                             | Alternative                                                                                        |
-|-------------------------------------|----------------------------------------------------------------------------------------------------|
+| ----------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `add_compile_definitions`           | Use [`target_compile_definitions`][target_compile_definitions]                                     |
 | `add_compile_options`               | Use [`target_compile_options`][target_compile_options]                                             |
 | `add_definitions`                   | Use [`target_compile_definitions`][target_compile_definitions]                                     |
@@ -124,27 +126,27 @@ If common properties need to be grouped together, use an INTERFACE target
 There are also several functions that are disallowed for other reasons:
 
 | Command                         | Reason                                                                            | Alternative                                                                    |
-|---------------------------------|-----------------------------------------------------------------------------------|--------------------------------------------------------------------------------|
+| ------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | `aux_source_directory`          | Interacts poorly with incremental builds and Git                                  | List source files explicitly                                                   |
 | `build_command`                 | CTest internal function                                                           | Use CTest build-and-test mode via [`CMAKE_CTEST_COMMAND`][cmake_ctest_command] |
 | `cmake_host_system_information` | Usually misleading information.                                                   | Inspect [toolchain][cmake-toolchains] variables and use generator expressions. |
 | `cmake_policy(... OLD)`         | OLD policies are deprecated by definition.                                        | Instead, fix the code to work with the new policy.                             |
 | `create_test_sourcelist`        | We use our own unit testing solution                                              | See the [adding tests](#adding-tests) section.                                 |
 | `define_property`               | Adds unnecessary complexity                                                       | Use a cache variable. Exceptions under special circumstances.                  |
-| `enable_language`               | Halide is C/C++ only                                                              | [`FindCUDAToolkit`][FindCUDAToolkit], appropriately guarded.                   |
+| `enable_language`               | Halide is C/C++ only                                                              | [`FindCUDAToolkit`][findcudatoolkit], appropriately guarded.                   |
 | `file(GLOB ...)`                | Interacts poorly with incremental builds and Git                                  | List source files explicitly. Allowed if not globbing for source files.        |
 | `fltk_wrap_ui`                  | Halide does not use FLTK                                                          | None                                                                           |
 | `include_external_msproject`    | Halide must remain portable                                                       | Write a CMake package config file or find module.                              |
 | `include_guard`                 | Use of recursive inclusion is not allowed                                         | Write (recursive) functions.                                                   |
 | `include_regular_expression`    | Changes default dependency checking behavior                                      | None                                                                           |
-| `load_cache`                    | Superseded by [`FetchContent`][FetchContent]/[`ExternalProject`][ExternalProject] | Write a vcpkg port or present a case for an exception.                         |
+| `load_cache`                    | Superseded by [`FetchContent`][fetchcontent]/[`ExternalProject`][externalproject] | Write a vcpkg port or present a case for an exception.                         |
 | `macro`                         | CMake macros are not hygienic and are therefore error-prone                       | Use functions instead.                                                         |
 | `site_name`                     | Privacy: do not want leak host name information                                   | Provide a cache variable, generate a unique name.                              |
 | `variable_watch`                | Debugging helper                                                                  | None. Not needed in production.                                                |
 
-Do not introduce any dependencies via [`find_package`][find_package]
-without broader approval. Importantly, never introduce a use of `FetchContent`.
-Add dependencies to `vcpkg.json` or create a custom port.
+Do not introduce any dependencies via [`find_package`][find_package] without
+broader approval. Importantly, never introduce a use of `FetchContent`. Add
+dependencies to `vcpkg.json` or create a custom port.
 
 ## Prohibited variables list
 
@@ -154,7 +156,7 @@ or should not be overridden for our end-users. The following (non-exhaustive)
 list of variables shall not be used in code merged into main.
 
 | Variable                        | Reason                                        | Alternative                                                                                             |
-|---------------------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------|
+| ------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `CMAKE_ROOT`                    | Code smell                                    | Rely on `find_package` search options; include `HINTS` if necessary                                     |
 | `CMAKE_DEBUG_TARGET_PROPERTIES` | Debugging helper                              | None                                                                                                    |
 | `CMAKE_FIND_DEBUG_MODE`         | Debugging helper                              | None                                                                                                    |
@@ -179,7 +181,7 @@ remove them before review. Finally, the following variables are allowed, but
 their use must be motivated:
 
 | Variable                                       | Reason                                              | Alternative                                                                                  |
-|------------------------------------------------|-----------------------------------------------------|----------------------------------------------------------------------------------------------|
+| ---------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | [`CMAKE_SOURCE_DIR`][cmake_source_dir]         | Points to global source root, not Halide's.         | [`Halide_SOURCE_DIR`][project-name_source_dir] or [`PROJECT_SOURCE_DIR`][project_source_dir] |
 | [`CMAKE_BINARY_DIR`][cmake_binary_dir]         | Points to global build root, not Halide's           | [`Halide_BINARY_DIR`][project-name_binary_dir] or [`PROJECT_BINARY_DIR`][project_binary_dir] |
 | [`CMAKE_MAKE_PROGRAM`][cmake_make_program]     | CMake abstracts over differences in the build tool. | Prefer CTest's build and test mode or CMake's `--build` mode                                 |
@@ -220,174 +222,37 @@ guidelines you should follow when writing a new app.
 - Test your app with ctest before opening a PR. Apps are built as part of the
   test, rather than the main build.
 
-[BuildingHalideWithCMake.md]: ./BuildingHalideWithCMake.md
-
-[CodeStyleCMake.md]: ./CodeStyleCMake.md
-
-[ExternalProject]: https://cmake.org/cmake/help/latest/module/ExternalProject.html
-
-[FetchContent]: https://cmake.org/cmake/help/latest/module/FetchContent.html
-
-[FindCUDAToolkit]: https://cmake.org/cmake/help/latest/module/FindCUDAToolkit.html
-
-[HalideCMakePackage.md]: ./HalideCMakePackage.md
-
 [add_custom_command]: https://cmake.org/cmake/help/latest/command/add_custom_command.html
-
-[add_library]: https://cmake.org/cmake/help/latest/command/add_library.html
-
-[add_subdirectory]: https://cmake.org/cmake/help/latest/command/add_subdirectory.html
-
-[atlas]: http://math-atlas.sourceforge.net/
-
-[brew-cmake]: https://formulae.brew.sh/cask/cmake#default
-
+[buildinghalidewithcmake.md]: ./BuildingHalideWithCMake.md
 [build_shared_libs]: https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html
-
-[cmake-apt]: https://apt.kitware.com/
-
-[cmake-discourse]: https://discourse.cmake.org/
-
-[cmake-docs]: https://cmake.org/cmake/help/latest/
-
-[cmake-download]: https://cmake.org/download/
-
-[cmake-from-source]: https://cmake.org/install/
-
 [cmake-genex]: https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html
-
-[cmake-install]: https://cmake.org/cmake/help/latest/manual/cmake.1.html#install-a-project
-
 [cmake-propagation]: https://cmake.org/cmake/help/latest/manual/cmake-buildsystem.7.html#transitive-usage-requirements
-
 [cmake-toolchains]: https://cmake.org/cmake/help/latest/manual/cmake-toolchains.7.html
-
-[cmake-user-interaction]: https://cmake.org/cmake/help/latest/guide/user-interaction/index.html#setting-build-variables
-
 [cmake_binary_dir]: https://cmake.org/cmake/help/latest/variable/CMAKE_BINARY_DIR.html
-
-[cmake_build_type]: https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html
-
 [cmake_crosscompiling]: https://cmake.org/cmake/help/latest/variable/CMAKE_CROSSCOMPILING.html
-
-[cmake_crosscompiling_emulator]: https://cmake.org/cmake/help/latest/variable/CMAKE_CROSSCOMPILING_EMULATOR.html
-
 [cmake_ctest_command]: https://cmake.org/cmake/help/latest/variable/CMAKE_CTEST_COMMAND.html
-
-[cmake_current_binary_dir]: https://cmake.org/cmake/help/latest/variable/CMAKE_CURRENT_BINARY_DIR.html
-
-[cmake_cxx_extensions]: https://cmake.org/cmake/help/latest/variable/CMAKE_CXX_EXTENSIONS.html
-
-[cmake_cxx_standard]: https://cmake.org/cmake/help/latest/variable/CMAKE_CXX_STANDARD.html
-
-[cmake_cxx_standard_required]: https://cmake.org/cmake/help/latest/variable/CMAKE_CXX_STANDARD_REQUIRED.html
-
 [cmake_foreach]: https://cmake.org/cmake/help/latest/command/foreach.html
-
 [cmake_if]: https://cmake.org/cmake/help/latest/command/if.html
-
 [cmake_lang_compiler_id]: https://cmake.org/cmake/help/latest/variable/CMAKE_LANG_COMPILER_ID.html
-
 [cmake_make_program]: https://cmake.org/cmake/help/latest/variable/CMAKE_MAKE_PROGRAM.html
-
-[cmake_minimum_required]: https://cmake.org/cmake/help/latest/command/cmake_minimum_required.html
-
-[cmake_prefix_path]: https://cmake.org/cmake/help/latest/variable/CMAKE_PREFIX_PATH.html
-
-[cmake_presets]: https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html
-
 [cmake_sizeof_void_p]: https://cmake.org/cmake/help/latest/variable/CMAKE_SIZEOF_VOID_P.html
-
 [cmake_source_dir]: https://cmake.org/cmake/help/latest/variable/CMAKE_SOURCE_DIR.html
-
 [cmake_system_name]: https://cmake.org/cmake/help/latest/variable/CMAKE_SYSTEM_NAME.html
-
-[doxygen-download]: https://www.doxygen.nl/download.html
-
-[doxygen]: https://www.doxygen.nl/index.html
-
-[eigen]: http://eigen.tuxfamily.org/index.php?title=Main_Page
-
 [enable_testing]: https://cmake.org/cmake/help/latest/command/enable_testing.html
-
+[externalproject]: https://cmake.org/cmake/help/latest/module/ExternalProject.html
+[fetchcontent]: https://cmake.org/cmake/help/latest/module/FetchContent.html
+[findcudatoolkit]: https://cmake.org/cmake/help/latest/module/FindCUDAToolkit.html
 [find_package]: https://cmake.org/cmake/help/latest/command/find_package.html
-
-[findcuda]: https://cmake.org/cmake/help/latest/module/FindCUDA.html
-
-[finddoxygen]: https://cmake.org/cmake/help/latest/module/FindDoxygen.html
-
-[findjpeg]: https://cmake.org/cmake/help/latest/module/FindJPEG.html
-
-[findopencl]: https://cmake.org/cmake/help/latest/module/FindOpenCL.html
-
-[findpng]: https://cmake.org/cmake/help/latest/module/FindPNG.html
-
-[findpython3]: https://cmake.org/cmake/help/latest/module/FindPython3.html
-
-[findx11]: https://cmake.org/cmake/help/latest/module/FindX11.html
-
-[halide-generator-tutorial]: https://halide-lang.org/tutorials/tutorial_lesson_15_generators.html
-
-[halide-tutorials]: https://halide-lang.org/tutorials/tutorial_introduction.html
-
-[homebrew]: https://brew.sh
-
-[imported-executable]: https://cmake.org/cmake/help/latest/command/add_executable.html#imported-executables
-
-[imported-target]: https://cmake.org/cmake/help/latest/manual/cmake-buildsystem.7.html#imported-targets
-
+[halidecmakepackage.md]: ./HalideCMakePackage.md
 [include]: https://cmake.org/cmake/help/latest/command/include.html
-
-[install-files]: https://cmake.org/cmake/help/latest/command/install.html#files
-
-[install-targets]: https://cmake.org/cmake/help/latest/command/install.html#targets
-
-[libjpeg]: https://www.libjpeg-turbo.org/
-
-[libpng]: http://www.libpng.org/pub/png/libpng.html
-
-[lld]: https://lld.llvm.org/
-
-[msvc-cmd]: https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line
-
 [msvc]: https://cmake.org/cmake/help/latest/variable/MSVC.html
-
-[ninja-download]: https://github.com/ninja-build/ninja/releases
-
-[ninja]: https://ninja-build.org/
-
-[openblas]: https://www.openblas.net/
-
 [project-name_binary_dir]: https://cmake.org/cmake/help/latest/variable/PROJECT-NAME_BINARY_DIR.html
-
 [project-name_source_dir]: https://cmake.org/cmake/help/latest/variable/PROJECT-NAME_SOURCE_DIR.html
-
-[project]: https://cmake.org/cmake/help/latest/command/project.html
-
 [project_binary_dir]: https://cmake.org/cmake/help/latest/variable/PROJECT_BINARY_DIR.html
-
 [project_source_dir]: https://cmake.org/cmake/help/latest/variable/PROJECT_SOURCE_DIR.html
-
-[pypi-cmake]: https://pypi.org/project/cmake/
-
-[python]: https://www.python.org/downloads/
-
-[target-file]: https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html#target-dependent-queries
-
 [target_compile_definitions]: https://cmake.org/cmake/help/latest/command/target_compile_definitions.html
-
 [target_compile_options]: https://cmake.org/cmake/help/latest/command/target_compile_options.html
-
 [target_include_directories]: https://cmake.org/cmake/help/latest/command/target_include_directories.html
-
 [target_link_libraries]: https://cmake.org/cmake/help/latest/command/target_link_libraries.html
-
 [target_link_options]: https://cmake.org/cmake/help/latest/command/target_link_options.html
-
-[vcpkg]: https://github.com/Microsoft/vcpkg
-
-[vcvarsall]: https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line#vcvarsall-syntax
-
-[venv]: https://docs.python.org/3/tutorial/venv.html
-
 [win32]: https://cmake.org/cmake/help/latest/variable/WIN32.html

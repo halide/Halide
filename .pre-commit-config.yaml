@@ -67,6 +67,16 @@ repos:
     hooks:
       - id: gitleaks
 
+  - repo: https://github.com/hukkin/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        args: [ --number, --wrap=80 ]
+        additional_dependencies:
+          - mdformat-gfm
+          - mdformat-ruff
+          - mdformat-shfmt
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.5
     hooks:
