@@ -344,7 +344,7 @@ typedef union _LARGE_INTEGER {
 // Moved here from objbase.w.
 
 // Templates are defined here in order to avoid a dependency on C++ <type_traits> header file,
-// or on compiler-specific constructs.
+// or on compiler-specific contructs.
 extern "C++" {
 
 template<size_t S>
@@ -667,7 +667,7 @@ typedef struct _RPC_MESSAGE {
 //      will create a compiler error if wrong level of indirection is used.
 //
 
-/* Unknown.h */
+/* Unknwn.h */
 #ifndef __IUnknown_FWD_DEFINED__
 #define __IUnknown_FWD_DEFINED__
 typedef interface IUnknown IUnknown;
@@ -742,7 +742,7 @@ _Post_equal_to_(pp) _Post_satisfies_(return == pp) void **IID_PPV_ARGS_Helper(T 
 typedef interface IRpcStubBuffer IRpcStubBuffer;
 typedef interface IRpcChannelBuffer IRpcChannelBuffer;
 
-/* Unknown.h */
+/* Unknwn.h */
 #ifndef __IUnknown_FWD_DEFINED__
 #define __IUnknown_FWD_DEFINED__
 typedef interface IUnknown IUnknown;
