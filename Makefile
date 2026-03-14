@@ -483,7 +483,6 @@ SOURCE_FILES = \
   CodeGen_WebAssembly.cpp \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
-  CompilerProfiling.cpp \
   CompilerLogger.cpp \
   ConstantBounds.cpp \
   ConstantInterval.cpp \
@@ -678,7 +677,6 @@ HEADER_FILES = \
   CodeGen_PyTorch.h \
   CodeGen_Targets.h \
   CodeGen_WebGPU_Dev.h \
-  CompilerProfiling.h \
   CompilerLogger.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
