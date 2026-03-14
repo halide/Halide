@@ -15,6 +15,6 @@ void test_parser() {
 
 int main(int argc, char **argv) {
     test_parser();
-    printf("All tests passed.\n");
+    printf("Success!\n");
     return 0;
 }

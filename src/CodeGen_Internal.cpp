@@ -612,9 +612,6 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
 
     options = llvm::TargetOptions();
     options.AllowFPOpFusion = per_instruction_fast_math_flags ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
-#if LLVM_VERSION < 210
-    options.UnsafeFPMath = !per_instruction_fast_math_flags;
-#endif
 #if LLVM_VERSION < 230
     options.NoInfsFPMath = !per_instruction_fast_math_flags;
 #endif
@@ -676,11 +673,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     std::string mattrs = get_modflag_string(module, "halide_mattrs");
 
     auto *tm = llvm_target->createTargetMachine(
-#if LLVM_VERSION >= 210
         triple,
-#else
-        triple.str(),
-#endif
         mcpu_target,
         mattrs,
         options,

@@ -5,27 +5,27 @@ option(Halide_NO_DEFAULT_FLAGS "When enabled, suppresses recommended flags in ad
 include(${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/TargetExportScript.cmake)
 
-define_property(TARGET PROPERTY Halide_RT_TARGETS
+define_property(TARGET PROPERTY Halide_RT_TARGETS  # nolint
                 BRIEF_DOCS "On a Halide runtime target, lists the targets the runtime backs"
                 FULL_DOCS "On a Halide runtime target, lists the targets the runtime backs")
 
-define_property(TARGET PROPERTY Halide_GENERATOR_HAS_POST_BUILD
+define_property(TARGET PROPERTY Halide_GENERATOR_HAS_POST_BUILD  # nolint
                 BRIEF_DOCS "On a Halide generator target, true if Halide.dll copy command has already been added."
                 FULL_DOCS "On a Halide generator target, true if Halide.dll copy command has already been added.")
 
-define_property(TARGET PROPERTY Halide_PYTHON_GENERATOR_SOURCE
+define_property(TARGET PROPERTY Halide_PYTHON_GENERATOR_SOURCE  # nolint
                 BRIEF_DOCS "Used to store the source file(s) for a Python Generator"
                 FULL_DOCS "Used to store the source file(s) for a Python Generator")
 
-define_property(TARGET PROPERTY Halide_LIBRARY_RUNTIME_TARGET
+define_property(TARGET PROPERTY Halide_LIBRARY_RUNTIME_TARGET  # nolint
                 BRIEF_DOCS "On a Halide library target, the runtime it uses."
                 FULL_DOCS "On a Halide library target, the runtime it uses.")
 
-define_property(TARGET PROPERTY Halide_LIBRARY_PYTHON_EXTENSION_CPP
+define_property(TARGET PROPERTY Halide_LIBRARY_PYTHON_EXTENSION_CPP  # nolint
                 BRIEF_DOCS "On a Halide library target, the .py.cpp generated for it (absent if none)."
                 FULL_DOCS "On a Halide library target, the .py.cpp generated for it (absent if none).")
 
-define_property(TARGET PROPERTY Halide_LIBRARY_FUNCTION_NAME
+define_property(TARGET PROPERTY Halide_LIBRARY_FUNCTION_NAME  # nolint
                 BRIEF_DOCS "On a Halide library target, the FUNCTION_NAME used."
                 FULL_DOCS "On a Halide library target, the FUNCTION_NAME used.")
 
@@ -227,7 +227,7 @@ function(_Halide_library_from_generator TARGET)
         "${ARG_TARGETS}"
     )
 
-    macro(_Halide_add_output type base_name)
+    macro(_Halide_add_output type base_name)  # nolint
         list(APPEND outputs "${type}")
         list(APPEND output_files "${base_name}${${type}_extension}")
     endmacro()
@@ -1039,12 +1039,12 @@ function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
     if ("${ARGN}" MATCHES "metal")
         find_library(FOUNDATION_LIBRARY Foundation REQUIRED)
         find_library(METAL_LIBRARY Metal REQUIRED)
-        target_link_libraries(${TARGET} ${VISIBILITY} "${FOUNDATION_LIBRARY}" "${METAL_LIBRARY}")
+        target_link_libraries("${TARGET}" "${VISIBILITY}" "${FOUNDATION_LIBRARY}" "${METAL_LIBRARY}")  # nolint
     endif ()
 
     if ("${ARGN}" MATCHES "webgpu" AND NOT "${ARGN}" MATCHES "wasm")
         find_package(Halide_WebGPU REQUIRED)
-        target_link_libraries(${TARGET} ${VISIBILITY} Halide::WebGPU)
+        target_link_libraries("${TARGET}" "${VISIBILITY}" Halide::WebGPU)  # nolint
     endif ()
 endfunction()
 

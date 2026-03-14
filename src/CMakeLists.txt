@@ -529,21 +529,10 @@ endif()
 
 # Build serialization, enabled by default
 if (WITH_SERIALIZATION)
-    # Sadly, there seem to be at least three variations of the Flatbuffer
-    # package in terms of the case of the relevant CMake files. Fortunately,
-    # the IMPORTED targets appear to be consistently named `flatbuffers`.
-    find_package(
-        flatbuffers 23.5.26 REQUIRED
-        NAMES flatbuffers Flatbuffers FlatBuffers
-    )
-    _Halide_pkgdep(flatbuffers)
+    find_package(FlatBuffers REQUIRED)
+    _Halide_pkgdep(FlatBuffers)
 
-    if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
-        target_sources(Halide PRIVATE "$<TARGET_OBJECTS:flatbuffers::flatbuffers>")
-        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:flatbuffers::flatbuffers>>")
-    else ()
-        target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
-    endif ()
+    target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
 
     set(fb_def "${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs")
     set(fb_dir "${Halide_BINARY_DIR}/include/flatc")
@@ -596,16 +585,10 @@ if (MSVC AND Halide_WASM_BACKEND STREQUAL "wabt")
 endif ()
 
 if (Halide_WASM_BACKEND STREQUAL "wabt")
-    find_package(wabt 1.0.39 REQUIRED)
+    find_package(wabt REQUIRED)
     _Halide_pkgdep(wabt)
 
-    if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
-        target_sources(Halide PRIVATE "$<TARGET_OBJECTS:wabt::wabt>")
-        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:wabt::wabt>>")
-    else ()
-        target_link_libraries(Halide PRIVATE wabt::wabt)
-    endif ()
-
+    target_link_libraries(Halide PRIVATE wabt::wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
 elseif (Halide_WASM_BACKEND STREQUAL "V8")
     find_package(V8 REQUIRED)

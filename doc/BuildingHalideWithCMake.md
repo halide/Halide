@@ -187,26 +187,18 @@ for these packages is linked in the table above.
 
 Halide has first-class support for using [vcpkg] to manage dependencies. The
 list of dependencies and features is contained inside `vcpkg.json` at the root
-of the repository.
+of the repository. LLVM and Python must be provided by the system; vcpkg handles
+the remaining dependencies (flatbuffers, wabt, pybind11, libjpeg, libpng, etc.).
 
-By default, a minimum set of LLVM backends will be enabled to compile JIT code
-for the host and the serialization feature will be enabled. When using the vcpkg
-toolchain file, you can set `-DVCPKG_MANIFEST_FEATURES=developer`
-to enable building all dependencies (except Doxygen, which is not available on
-vcpkg).
+Halide includes a `vcpkg-configuration.json` file that automatically configures
+[overlay ports][vcpkg-overlay] and overlay triplets. The overlay ports redirect
+LLVM and Python to system installations, preventing vcpkg from trying to build
+them. This configuration is applied automatically when vcpkg is used from the
+Halide source tree.
 
-By default, running `vcpkg install` will try to build all of LLVM. This is often
-undesirable as it takes very long to do and consumes a lot of disk space,
-especially as `vcpkg` requires special configuration to disable the debug build.
-It will _also_ attempt to build Python 3 as a dependency of pybind11.
-
-To mitigate this issue, we provide a [vcpkg-overlay] that disables building LLVM
-and Python. When using the vcpkg toolchain, you can enable it by setting
-`-DVCPKG_OVERLAY_PORTS=cmake/vcpkg`.
-
-If you do choose to use vcpkg to build LLVM (the easiest way on Windows), note
-that it is safe to delete the intermediate build files and caches in
-`D:\vcpkg\buildtrees` and `%APPDATA%\local\vcpkg`.
+When using the vcpkg toolchain file, you can set
+`-DVCPKG_MANIFEST_FEATURES=developer` to enable building all test dependencies
+(except Doxygen, which is not available on vcpkg).
 
 For convenience, we provide [CMake presets](#cmake-presets) that set these flags
 appropriately per-platform. They are documented further below.
@@ -230,7 +222,7 @@ necessary, it is convenient to install Python system-wide on Windows (i.e.
 `C:\Program Files`) because CMake looks at standard paths and registry keys.
 This removes the need to manually set the `PATH`.
 
-Once Python is installed, you can install the Python module dependencies in 
+Once Python is installed, you can install the Python module dependencies in
 a [virtual environment][venv] by running
 
 ```shell
@@ -264,7 +256,7 @@ module dependencies):
 ```
 $ sudo apt install clang-tools lld llvm-dev libclang-dev liblld-dev \
     libpng-dev libjpeg-dev libgl-dev python3-dev python3-numpy \
-    python3-imageio python3-pybind11 libopenblas-dev libeigen3-dev \ 
+    python3-imageio python3-pybind11 libopenblas-dev libeigen3-dev \
     libatlas-base-dev doxygen
 ```
 
@@ -360,15 +352,15 @@ standard types: `Debug`, `RelWithDebInfo`, `MinSizeRel`, or `Release`.
 
 ## CMake Presets
 
+Halide provides several [presets][cmake_presets] to make the above commands more
+convenient.
+
 ### Common presets
 
-Halide provides several [presets][cmake_presets] to make the above commands more
-convenient. The following CMake preset commands correspond to the longer ones
-above.
+These presets do not use vcpkg. They assume that all dependencies are available
+via the system (e.g. Homebrew on macOS, APT on Linux).
 
 ```shell
-$ cmake --preset=win64    # VS 2022 generator, 64-bit build, vcpkg deps
-$ cmake --preset=win32    # VS 2022 generator, 32-bit build, vcpkg deps
 $ cmake --preset=macOS    # Ninja generator, macOS host build, Homebrew deps
 $ cmake --preset=debug    # Debug mode, any single-config generator / compiler
 $ cmake --preset=release  # Release mode, any single-config generator / compiler
@@ -376,23 +368,16 @@ $ cmake --preset=release  # Release mode, any single-config generator / compiler
 
 ### Vcpkg presets
 
-Halide provides two sets of corresponding vcpkg-enabled presets: _base_ and
-_full_.
+The following presets use vcpkg to manage non-LLVM dependencies. LLVM and Python
+must be provided by the system.
 
-| Base preset     | Full preset          |
-|-----------------|----------------------|
-| `win32`         | `win32-vcpkg-full`   |
-| `win64`         | `win64-vcpkg-full`   |
-| `macOS-vcpkg`   | `macOS-vcpkg-full`   |
-| `debug-vcpkg`   | `debug-vcpkg-full`   |
-| `release-vcpkg` | `release-vcpkg-full` |
-
-In simple terms, the base presets rely on the system to provide LLVM and Python,
-while the full presets delegate this to vcpkg (which consumes a large amount of
-hard disk space and time).
-
-The `macOS-vcpkg` preset adds `/opt/homebrew/opt/llvm` to
-`CMAKE_PREFIX_PATH`.
+| Preset          | Description                                              |
+|-----------------|----------------------------------------------------------|
+| `win32`         | Visual Studio 2022 generator, 32-bit build               |
+| `win64`         | Visual Studio 2022 generator, 64-bit build               |
+| `macOS-vcpkg`   | macOS build with vcpkg + Homebrew LLVM                   |
+| `debug-vcpkg`   | Debug build for any single-config generator              |
+| `release-vcpkg` | Release build for any single-config generator            |
 
 ### Sanitizer presets
 
@@ -444,12 +429,12 @@ The following options are _advanced_ and should not be required in typical
 workflows. Generally, these are used by Halide's own CI infrastructure, or as
 escape hatches for third-party packagers.
 
-| Option                      | Default                                                            | Description                                                                              |
-|-----------------------------|--------------------------------------------------------------------|------------------------------------------------------------------------------------------|
-| `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                      |
-| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                            |
-| `Halide_VERSION_OVERRIDE`   | `${Halide_VERSION}`                                                | Override the VERSION for libHalide.                                                      |
-| `Halide_SOVERSION_OVERRIDE` | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version).   |
+| Option                      | Default                                                            | Description                                                                            |
+|-----------------------------|--------------------------------------------------------------------|----------------------------------------------------------------------------------------|
+| `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                    |
+| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                          |
+| `Halide_VERSION_OVERRIDE`   | `${Halide_VERSION}`                                                | Override the VERSION for libHalide.                                                    |
+| `Halide_SOVERSION_OVERRIDE` | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version). |
 
 The following options control whether to build certain test subsets. They only
 apply when `WITH_TESTS=ON`:
@@ -501,10 +486,9 @@ install it into the currently active Python environment.
 
 However, this comes with a few caveats:
 
-1. `Halide_USE_FETCHCONTENT` is disabled, so the environment must be prepared
-   for CMake to find its dependencies. This is easiest to do by setting either
-   `CMAKE_PREFIX_PATH` to pre-built dependencies or by setting
-   `CMAKE_TOOLCHAIN_FILE` to vcpkg.
+1. The environment must be prepared for CMake to find its dependencies. This is
+   easiest to do by setting either `CMAKE_PREFIX_PATH` to pre-built dependencies
+   or by setting `CMAKE_TOOLCHAIN_FILE` to vcpkg.
 2. The build settings are fixed, meaning that `wabt` is required on non-Windows
    systems, `flatbuffers` is always required, and the Python bindings must be
    built.
@@ -577,8 +561,8 @@ Local storage:
   Misses:             0 / 1079 ( 0.00%)
 ```
 
-On this test system (an M3 MacBook Pro), the build is three times faster,
-with a 100% cache hit rate!
+On this test system (an M3 MacBook Pro), the build is three times faster, with a
+100% cache hit rate!
 
 [ATLAS]: http://math-atlas.sourceforge.net/
 

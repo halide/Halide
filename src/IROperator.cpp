@@ -544,12 +544,20 @@ Expr lossless_cast(Type t,
                     }
                 }
             } else if (const VectorReduce *op = e.as<VectorReduce>()) {
-                if (op->op == VectorReduce::Add ||
+                if ((t.bits() > 1 && op->op == VectorReduce::Add) ||
                     op->op == VectorReduce::Min ||
                     op->op == VectorReduce::Max) {
                     Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value, scope, cache);
                     if (v.defined()) {
-                        return VectorReduce::make(op->op, v, op->type.lanes());
+                        auto reduce_op = op->op;
+                        if (t.bits() == 1) {
+                            // UInt(1) == Bool() is the only 1-bit type we expect to see
+                            internal_assert(t.is_uint()) << "Unexpected type: " << t << "\n";
+                            reduce_op = (op->op == VectorReduce::Min ?
+                                             VectorReduce::And :
+                                             VectorReduce::Or);
+                        }
+                        return VectorReduce::make(reduce_op, v, op->type.lanes());
                     }
                 }
             }

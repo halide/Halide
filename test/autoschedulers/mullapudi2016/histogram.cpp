@@ -126,15 +126,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // LLVM 20 generates poor SVE2 code for the histogram autoscheduler test,
-    // causing it to exceed the performance threshold. Fixed in LLVM 21+.
-    if (Internal::get_llvm_version() < 210 &&
-        get_jit_target_from_environment().has_feature(Target::SVE2)) {
-        printf("[SKIP] LLVM %d generates suboptimal SVE2 code for this test.\n",
-               Internal::get_llvm_version());
-        return 0;
-    }
-
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
         return 1;

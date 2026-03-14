@@ -77,6 +77,6 @@ void test_thread_info() {
 
 int main(int argc, char **argv) {
     test_thread_info();
-    printf("All tests passed.\n");
+    printf("Success!\n");
     return 0;
 }

@@ -1,5 +1,5 @@
-#include "State.h"
 #include "LoopNest.h"
+#include "State.h"
 #include "test.h"
 
 using namespace Halide;
@@ -46,6 +46,6 @@ void test_state() {
 
 int main(int argc, char **argv) {
     test_state();
-    printf("All tests passed.\n");
+    printf("Success!\n");
     return 0;
 }

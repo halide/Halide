@@ -10,7 +10,7 @@ halide_build_root=$(realpath "$2")
 [ -z "$halide_build_root" ] && echo "Usage: $0 <source-dir> <build-dir>" && exit
 
 cmake --preset=package-unix -S "$halide_source" -B "$halide_build_root/shared-Release" \
-  "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+    "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
 
 cmake --build "$halide_build_root/shared-Release"
 

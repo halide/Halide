@@ -81,6 +81,28 @@ int lossless_cast_test() {
     e = cast(i64, 1024) * cast(i64, 1024) * cast(i64, 1024);
     res |= check_lossless_cast(i32, e, (cast(i32, 1024) * 1024) * 1024);
 
+    // Check narrowing a vector reduction of something narrowable to bool ...
+    auto make_reduce = [&](Type t, VectorReduce::Operator op) {
+        return VectorReduce::make(op,
+                                  cast(t.with_lanes(4), Ramp::make(x, 1, 4) > 4), 2);
+    };
+
+    // It's OK to narrow it to 8-bit.
+    e = make_reduce(UInt(16), VectorReduce::Add);
+    res |= check_lossless_cast(UInt(8), e, make_reduce(UInt(8), VectorReduce::Add));
+
+    // ... but we can't reduce it all the way to bool if the operator isn't
+    // legal for bools (issue #9011)
+    e = make_reduce(UInt(8), VectorReduce::Add);
+    res |= check_lossless_cast(Bool(), e, Expr());
+
+    // Min or Max, however, can just become And and Or
+    e = make_reduce(UInt(8), VectorReduce::Min);
+    res |= check_lossless_cast(Bool(), e, make_reduce(Bool(), VectorReduce::And));
+
+    e = make_reduce(UInt(8), VectorReduce::Max);
+    res |= check_lossless_cast(Bool(), e, make_reduce(Bool(), VectorReduce::Or));
+
     return res;
 }
 

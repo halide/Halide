@@ -107,4 +107,3 @@ $ /path/to/good/version/of/node compare_vs_tflite ../test/*/*.tflite
 Note that compare_vs_tflite doesn't actually build or use tflite when compiling under WebAssembly!
 The only mode it supports is directly parsing the .tflite files, which is pretty close to the same as
 the `benchmark` tool.
-

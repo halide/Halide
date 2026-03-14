@@ -86,10 +86,12 @@ If you don't have LLVM installed already, you can try using the same ones the
 buildbots use by adding `--group ci-llvm-<VERSION>` to the `uv sync` command,
 where `<VERSION>` is the LLVM major version number (e.g. `23`) or `main`.
 
-If you install `ci-llvm-*`, you can set `Halide_LLVM_ROOT=$(halide-llvm 
+If you install `ci-llvm-*`, you can set `Halide_LLVM_ROOT=$(halide-llvm
 --prefix)` in your environment.
 
-Ensure you have `flatbuffers` and `wabt` installed, too.
+Ensure you have `flatbuffers` and `wabt` installed, too. (The wheel build does
+not use vcpkg for manylinux compatibility reasons, so these must be available as
+system packages or installed from source.)
 
 ### Using wheel infrastructure
 
