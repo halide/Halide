@@ -66,7 +66,7 @@ public:
     Output<Buffer<float, 1>> final_output{"final_output"};
 
     /** list out shapes of each layers weights **/
-    // weight shapes: out channels, kernel_w, kernel_h, pad, stride. In channels infered by input tensor shape
+    // weight shapes: out channels, kernel_w, kernel_h, pad, stride. In channels inferred by input tensor shape
     const WeightShape conv1_ws = {64, 7, 7, 3, 2};
     const WeightShape pool1_ws = {64, 3, 3, 1, 2};
     const WeightShape pool5_ws = {2048, 7, 7, 0, 1};

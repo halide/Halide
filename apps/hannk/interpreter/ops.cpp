@@ -931,7 +931,7 @@ void call_depthwise_conv_uint8(
 bool can_be_shallow(int alignment, int extent_0, int extent_1) {
     assert(alignment > 0);
     // This is correct: we want to use shallow when the vector size (ie, alignment)
-    // is evenly divisble by the number of channels (ie, extent(0)).
+    // is evenly divisible by the number of channels (ie, extent(0)).
     //
     // To avoid OOB access for tiny buffers, we also check that the fused width
     // is at least one vector wide.

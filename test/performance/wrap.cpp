@@ -16,7 +16,7 @@ using namespace Halide::Tools;
  * creating a dummy Func to stage the input data from 'host', we take advantage
  * of the 'in()' scheduling directive. Calling 'host.in()' returns a global
  * wrapper Func for 'host', which then can be scheduled as appropriate. The global
- * wrapper is essentialy the same as the dummy Func 'staged' in 'build(true)'.
+ * wrapper is essentially the same as the dummy Func 'staged' in 'build(true)'.
  * The 'in()' scheduling directive provides an easy way to schedule one Func in
  * different ways.
  */

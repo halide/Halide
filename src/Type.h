@@ -18,7 +18,7 @@
  * time type checking for both Halide generated functions and calls
  * from Halide to external functions.
  *
- * These are intended to be constexpr producable.
+ * These are intended to be constexpr producible.
  *
  * halide_handle_traits has to go outside the Halide namespace due to template
  * resolution rules. TODO(zalman): Do all types need to be in global namespace?
@@ -98,7 +98,7 @@ struct halide_handle_cplusplus_type {
     /// No modifiers are needed for references as they are not allowed to apply
     /// to the reference itself. (This isn't true for restrict, but that is a C++
     /// extension anyway.) If modifiers are needed, the last entry in the above
-    /// array would be the modifers for the reference.
+    /// array would be the modifiers for the reference.
     enum ReferenceType : uint8_t {
         NotReference = 0,
         LValueReference = 1,  // "&"

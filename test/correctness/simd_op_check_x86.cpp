@@ -132,7 +132,7 @@ public:
             if (w > 1) {
                 // LLVM no longer generates division instructions with
                 // fast-math on (instead it uses the approximate
-                // reciprocal, a newtown rhapson step, and a
+                // reciprocal, a newtown raphson step, and a
                 // multiplication by the numerator).
                 // check("divps", 2*w, f32_1 / f32_2);
             }

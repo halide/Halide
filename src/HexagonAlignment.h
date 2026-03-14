@@ -21,7 +21,7 @@ public:
     }
 
     /** Analyze the index of a load/store instruction for alignment
-     *  Returns true if it can determing that the address of the store or load is aligned, false otherwise.
+     *  Returns true if it can determining that the address of the store or load is aligned, false otherwise.
      */
     template<typename T>
     bool is_aligned_impl(const T *op, int native_lanes, int64_t *aligned_offset) {

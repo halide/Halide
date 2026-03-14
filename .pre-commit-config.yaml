@@ -47,6 +47,21 @@ repos:
             | \.xcassets/
           )
 
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        args: [ --ignore-words-list, "CreateOr,implementors,PADD,re-use,re-used,re-using,subtile,subtiles" ]
+        exclude: |
+          (?x)(
+            ^src/autoschedulers/common/cmdline\.h$
+            | ^src/runtime/hexagon_remote/bin/src/
+            | ^src/runtime/mini_cuda\.h$
+            | ^src/runtime/mini_d3d12\.h$
+            | ^apps/HelloAndroid.*/gradlew\.bat$
+            | \.pgm$
+          )
+
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.9.0
     hooks:

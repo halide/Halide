@@ -135,7 +135,7 @@ VK_LAYER_KHRONOS_profiles (Khronos Profiles layer) Vulkan version 1.3.224, layer
 
 Make sure everything looks correct before continuing!
 
-# Targetting Vulkan
+# Targeting Vulkan
 
 To generate Halide code for Vulkan, simply add the `vulkan` flag to your target as well as any other optional device specific features you wish to enable for Halide:
 
@@ -233,7 +233,7 @@ Default is 32 ... setting this to zero means no constraint.
 The following environment variables may be useful for tracking down potential
 issues related to Vulkan:
 
-`HL_DEBUG_CODEGEN=3` will print out debug info that includees the SPIR-V
+`HL_DEBUG_CODEGEN=3` will print out debug info that includes the SPIR-V
 code generator used for Vulkan while it is compiling.
 
 `HL_SPIRV_DUMP_FILE=...` specifies a file to dump the binary SPIR-V generated

@@ -11,7 +11,7 @@ namespace Runtime {
 namespace Internal {
 namespace Vulkan {
 
-// Defines the specialization constants used for dynamically overiding the dispatch size
+// Defines the specialization constants used for dynamically overriding the dispatch size
 struct VulkanWorkgroupSizeBinding {
     uint32_t constant_id[3] = {0};  // zero if unused
 };
@@ -995,7 +995,7 @@ int vk_setup_compute_pipeline(void *user_context,
             } else {
                 // dynamic allocation
                 if (shared_mem_constant_id > 0) {
-                    error(user_context) << "Vulkan: Multiple dynamic shared memory allocations found! Only one is suported!!\n";
+                    error(user_context) << "Vulkan: Multiple dynamic shared memory allocations found! Only one is supported!!\n";
                     result = VK_ERROR_TOO_MANY_OBJECTS;
                     break;
                 }
@@ -1202,7 +1202,7 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
     // ... [4] Dynamic workgroup dimensions bound to specialization constants
     // ....... [0] Constant id to use for local_size_x (zero if it was statically declared and not bound to a specialization constant)
     // ....... [1] Constant id to use for local_size_y
-    // ....... [2] Constant id ot use for local_size_z
+    // ....... [2] Constant id to use for local_size_z
     //
     // NOTE: See CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_header() for the encoding
     //
@@ -1591,7 +1591,7 @@ VulkanCompiledShaderModule *vk_compile_shader_module(void *user_context, VulkanM
     VkShaderModuleCreateInfo shader_info = {
         VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         nullptr,                      // pointer to structure extending this
-        0,                            // flags (curently unused)
+        0,                            // flags (currently unused)
         (size_t)binary_size,          // code size in bytes
         (const uint32_t *)binary_ptr  // source
     };
@@ -1862,7 +1862,7 @@ int vk_device_crop_from_offset(void *user_context,
     // get the allocated region for the device
     MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(src->device);
     if (device_region == nullptr) {
-        error(user_context) << "Vulkan: Failed to crop region! Invalide device region!\n";
+        error(user_context) << "Vulkan: Failed to crop region! Invalid device region!\n";
         return halide_error_code_device_crop_failed;
     }
 

@@ -70,9 +70,9 @@ WEAK int64_t halide_current_time_ns(void *user_context) {
     // To avoid requiring people to link -lrt, we just make the syscall directly.
 
     syscall(SYS_CLOCK_GETTIME, CLOCK_REALTIME, &now);
-    int64_t d = int64_t(now.tv_sec - halide_reference_clock.tv_sec) * 1000000000;
-    int64_t nd = (now.tv_nsec - halide_reference_clock.tv_nsec);
-    return d + nd;
+    int64_t sec_ns = int64_t(now.tv_sec - halide_reference_clock.tv_sec) * 1000000000;
+    int64_t ns = (now.tv_nsec - halide_reference_clock.tv_nsec);
+    return sec_ns + ns;
 }
 
 extern int usleep(int);

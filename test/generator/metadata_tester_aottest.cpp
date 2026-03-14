@@ -1586,10 +1586,10 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    constexpr auto usig = compute_signature(metadata_tester_ucon_argument_info());
-    if (strcmp(&usig[0], "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+    constexpr auto ucon_sig = compute_signature(metadata_tester_ucon_argument_info());
+    if (strcmp(&ucon_sig[0], "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
         // NOLINTNEXTLINE(clang-diagnostic-unreachable-code)
-        std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &usig[0] << "\n";
+        std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &ucon_sig[0] << "\n";
         exit(1);
     }
 

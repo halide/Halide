@@ -40,7 +40,7 @@ struct StringUtils {
         return count;
     }
 
-    // retuns true if s1 contains s2 (within n characters)
+    // returns true if s1 contains s2 (within n characters)
     static bool contains(const char *s1, const char *s2, size_t n) {
         if (is_empty(s2)) {
             return true;

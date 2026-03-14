@@ -2334,7 +2334,7 @@ int main(int argc, char **argv) {
     {
         using ConciseCasts::i32;
 
-        // Wrap all in i32() to ensure C++ won't optimize our multiplies away at compiletime
+        // Wrap all in i32() to ensure C++ won't optimize our multiplies away at compile time
         Expr e = max(max(max(i32(-1074233344) * i32(-32767), i32(-32783) * i32(32783)), i32(32767) * i32(-32767)), i32(1074200561) * i32(32783)) / i32(64);
         Expr e2 = e / i32(2);
         check_is_sio(e2);

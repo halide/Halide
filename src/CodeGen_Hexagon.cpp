@@ -90,7 +90,7 @@ protected:
                              std::vector<llvm::Value *>, bool maybe = false);
     ///@}
 
-    /** Override CodeGen_LLVM to use hexagon intrinics when possible. */
+    /** Override CodeGen_LLVM to use hexagon intrinsics when possible. */
     ///@{
     llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &v) override;
     llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
@@ -331,7 +331,7 @@ private:
     Expr uses_hvx_var;
     using IRMutator::visit;
     // Primarily, we do two things when we encounter a parallel for loop.
-    // First, we check if the paralell for loop uses_hvx and accordingly
+    // First, we check if the parallel for loop uses_hvx and accordingly
     // acqure_hvx_context i.e. acquire and release HVX locks.
     // Then we insert a conditional unlock before the for loop, let's call
     // this the prolog, and a conditional lock after the for loop which
@@ -1724,7 +1724,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
     // indices at compile time to implement a few
     // optimizations. First, we can avoid running the vlut
     // instructions for ranges of the LUT for which we know we don't
-    // have any indices. This wil happen often for strided
+    // have any indices. This will happen often for strided
     // ramps. Second, we can do the shuffling of the indices necessary
     // at compile time.
     vector<Constant *> llvm_indices;
