@@ -84,6 +84,12 @@ repos:
         language: system
         files: ^test/.*CMakeLists\.txt$
 
+      - id: check-cmake-style
+        name: check CMake style
+        entry: python tools/check_cmake_style.py
+        language: system
+        files: (^|/)(CMakeLists\.txt|.*\.cmake)$
+
       - id: uv-lock
         name: check uv.lock is up to date
         entry: uv lock --check

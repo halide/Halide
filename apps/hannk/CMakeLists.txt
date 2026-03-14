@@ -35,10 +35,10 @@ set(TFLITE_VERSION "${TFLITE_VERSION_MAJOR}.${TFLITE_VERSION_MINOR}.${TFLITE_VER
 
 # ----------------------------
 
-add_compile_definitions(TFLITE_VERSION_MAJOR=${TFLITE_VERSION_MAJOR})
-add_compile_definitions(TFLITE_VERSION_MINOR=${TFLITE_VERSION_MINOR})
-add_compile_definitions(TFLITE_VERSION_PATCH=${TFLITE_VERSION_PATCH})
-add_compile_definitions(HANNK_BUILD_TFLITE=$<BOOL:${HANNK_BUILD_TFLITE}>)
+add_compile_definitions(TFLITE_VERSION_MAJOR=${TFLITE_VERSION_MAJOR})  # nolint -- TODO: move to target_compile_definitions
+add_compile_definitions(TFLITE_VERSION_MINOR=${TFLITE_VERSION_MINOR})  # nolint
+add_compile_definitions(TFLITE_VERSION_PATCH=${TFLITE_VERSION_PATCH})  # nolint
+add_compile_definitions(HANNK_BUILD_TFLITE=$<BOOL:${HANNK_BUILD_TFLITE}>)  # nolint
 
 # ----------------------------
 
