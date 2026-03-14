@@ -48,7 +48,6 @@ jobs:
         uses: pre-commit/action@v3.0.1
 
       - name: Push auto-fixes
-        id: push-fixes
         if: ${{ !cancelled() && steps.pre-commit.outcome == 'failure' }}
         run: |
           if git diff --quiet; then
