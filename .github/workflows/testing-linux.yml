@@ -3,7 +3,20 @@ name: Linux
 on:
   pull_request:
     types: [ opened, synchronize, reopened ]
-  workflow_dispatch:
+    paths-ignore:
+      - "doc/**"
+      - "README.md"
+      - "CODE_OF_CONDUCT.md"
+      - "LICENSE.txt"
+      - ".gitignore"
+      - ".gitattributes"
+      - ".gitmodules"
+      - ".lldbinit"
+      - ".github/**"
+      - "!.github/workflows/testing-linux.yml"
+      - "packaging/**"
+      - "Makefile"
+      - "Makefile.inc"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -14,6 +27,7 @@ permissions:
 
 jobs:
   linux:
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: linux-${{ matrix.bits }} / ${{ matrix.uv_group }}
     runs-on: ubuntu-24.04
     strategy:

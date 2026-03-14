@@ -57,18 +57,19 @@ if [ -z ${CXX+x} ]; then
     exit
 fi
 
-if command -v ccache > /dev/null; then
+if command -v ccache >/dev/null; then
     echo "ccache detected and will be used"
     export CXX="ccache ${CXX}"
 fi
 
-AUTOSCHEDULER_SRC_DIR=$(dirname $0)
+AUTOSCHEDULER_SRC_DIR=$(dirname "$0")
 SCRIPTS_DIR="${AUTOSCHEDULER_SRC_DIR}/scripts"
-source ${SCRIPTS_DIR}/utils.sh
-make_dir_path_absolute $(dirname $0) AUTOSCHEDULER_SRC_DIR
+# shellcheck disable=SC1091
+source "${SCRIPTS_DIR}"/utils.sh
+make_dir_path_absolute "$(dirname "$0")" AUTOSCHEDULER_SRC_DIR
 
-get_halide_src_dir ${AUTOSCHEDULER_SRC_DIR} HALIDE_SRC_DIR
-get_autoscheduler_build_dir ${HALIDE_BUILD_DIR} AUTOSCHEDULER_BUILD_DIR
+get_halide_src_dir "${AUTOSCHEDULER_SRC_DIR}" HALIDE_SRC_DIR
+get_autoscheduler_build_dir "${HALIDE_BUILD_DIR}" AUTOSCHEDULER_BUILD_DIR
 
 echo "HALIDE_SRC_DIR = ${HALIDE_SRC_DIR}"
 echo "HALIDE_BUILD_DIR = ${HALIDE_BUILD_DIR}"
@@ -80,7 +81,7 @@ BEST_SCHEDULES_DIR=${AUTOSCHEDULER_SRC_DIR}/best
 export HL_PERMIT_FAILED_UNROLL=1
 
 if [ -z ${HL_TARGET+x} ]; then
-    get_host_target ${AUTOSCHEDULER_BUILD_DIR} HL_TARGET
+    get_host_target "${AUTOSCHEDULER_BUILD_DIR}" HL_TARGET
     HL_TARGET=${HL_TARGET}-cuda-cuda_capability_70
 fi
 
@@ -98,20 +99,20 @@ fi
 
 DEFAULT_SAMPLES_DIR_NAME="${SAMPLES_DIR:-autotuned_samples}"
 
-CURRENT_DATE_TIME="`date +%Y-%m-%d-%H-%M-%S`";
+CURRENT_DATE_TIME="$(date +%Y-%m-%d-%H-%M-%S)"
 
 function ctrl_c() {
     echo "Trap: CTRL+C received, exiting"
     pkill -P $$
 
     for app in $APPS; do
-        ps aux | grep ${app}.generator | awk '{print $2}' | xargs kill
+        pkill -f "${app}\.generator" || true
 
         unset -v LATEST_SAMPLES_DIR
         for f in "$APP_DIR/${DEFAULT_SAMPLES_DIR_NAME}"*; do
             if [[ ! -d $f ]]; then
-               continue
-           fi
+                continue
+            fi
 
             if [[ -z ${LATEST_SAMPLES_DIR+x} || $f -nt $LATEST_SAMPLES_DIR ]]; then
                 LATEST_SAMPLES_DIR=$f
@@ -121,7 +122,7 @@ function ctrl_c() {
         if [[ ${RESUME} -eq 1 && -z ${LATEST_SAMPLES_DIR+x} ]]; then
             SAMPLES_DIR=${LATEST_SAMPLES_DIR}
         else
-            while [[ 1 ]]; do
+            while true; do
                 SAMPLES_DIR_NAME=${DEFAULT_SAMPLES_DIR_NAME}-${CURRENT_DATE_TIME}
                 SAMPLES_DIR="${APP_DIR}/${SAMPLES_DIR_NAME}"
 
@@ -130,13 +131,13 @@ function ctrl_c() {
                 fi
 
                 sleep 1
-                CURRENT_DATE_TIME="`date +%Y-%m-%d-%H-%M-%S`";
+                CURRENT_DATE_TIME="$(date +%Y-%m-%d-%H-%M-%S)"
             done
         fi
-        save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
+        save_best_schedule_result "${BEST_SCHEDULES_DIR}" "${SAMPLES_DIR}"
     done
 
-    print_best_schedule_times $(dirname $0)/best
+    print_best_schedule_times "$(dirname "$0")/best"
     exit
 }
 
@@ -152,7 +153,7 @@ echo "Autotuning on $APPS for $MAX_ITERATIONS iteration(s)"
 for app in $APPS; do
     SECONDS=0
     APP_DIR="${HALIDE_SRC_DIR}/apps/${app}"
-    if [ ! -d $APP_DIR ]; then
+    if [ ! -d "$APP_DIR" ]; then
         echo "App ${APP_DIR} not found. Skipping..."
         continue
     fi
@@ -160,8 +161,8 @@ for app in $APPS; do
     unset -v LATEST_SAMPLES_DIR
     for f in "$APP_DIR/${DEFAULT_SAMPLES_DIR_NAME}"*; do
         if [[ ! -d $f ]]; then
-           continue
-       fi
+            continue
+        fi
 
         if [[ -z ${LATEST_SAMPLES_DIR+x} || $f -nt $LATEST_SAMPLES_DIR ]]; then
             LATEST_SAMPLES_DIR=$f
@@ -172,7 +173,7 @@ for app in $APPS; do
         SAMPLES_DIR=${LATEST_SAMPLES_DIR}
         echo "Resuming from existing run: ${SAMPLES_DIR}"
     else
-        while [[ 1 ]]; do
+        while true; do
             SAMPLES_DIR_NAME=${DEFAULT_SAMPLES_DIR_NAME}-${CURRENT_DATE_TIME}
             SAMPLES_DIR="${APP_DIR}/${SAMPLES_DIR_NAME}"
 
@@ -181,7 +182,7 @@ for app in $APPS; do
             fi
 
             sleep 1
-            CURRENT_DATE_TIME="`date +%Y-%m-%d-%H-%M-%S`";
+            CURRENT_DATE_TIME="$(date +%Y-%m-%d-%H-%M-%S)"
         done
         SAMPLES_DIR="${APP_DIR}/${SAMPLES_DIR_NAME}"
         echo "Starting new run in: ${SAMPLES_DIR}"
@@ -190,26 +191,24 @@ for app in $APPS; do
     OUTPUT_FILE="${SAMPLES_DIR}/autotune_out.txt"
     PREDICTIONS_FILE="${SAMPLES_DIR}/predictions"
     PREDICTIONS_WITH_FILENAMES_FILE="${SAMPLES_DIR}/predictions_with_filenames"
-    BEST_TIMES_FILE="${SAMPLES_DIR}/best_times"
-
     if [[ $TRAIN_ONLY == 1 ]]; then
-        if [[ ! -d ${SAMPLES_DIR} || -z "$(ls -A ${SAMPLES_DIR})" ]]; then
+        if [[ ! -d ${SAMPLES_DIR} || -z "$(ls -A "${SAMPLES_DIR}")" ]]; then
             echo "No samples found in ${SAMPLES_DIR}. Skipping..."
             continue
         fi
     fi
 
-    mkdir -p ${SAMPLES_DIR}
-    touch ${OUTPUT_FILE}
+    mkdir -p "${SAMPLES_DIR}"
+    touch "${OUTPUT_FILE}"
 
     GENERATOR_BUILD_DIR=${HALIDE_BUILD_DIR}/apps/${app}
 
-    if [[ ${app} = "cuda_mat_mul" ]]; then
+    if [[ ${app} == "cuda_mat_mul" ]]; then
         app="mat_mul"
     fi
 
     GENERATOR=${GENERATOR_BUILD_DIR}/${app}.generator
-    if [ ! -f $GENERATOR ]; then
+    if [ ! -f "$GENERATOR" ]; then
         echo "Generator ${GENERATOR} not found. Skipping..."
         continue
     fi
@@ -217,30 +216,29 @@ for app in $APPS; do
 
     if [[ $PREDICT_ONLY != 1 ]]; then
         NUM_BATCHES=${MAX_ITERATIONS} \
-        TRAIN_ONLY=${TRAIN_ONLY} \
-        SAMPLES_DIR=${SAMPLES_DIR} \
-        HL_DEBUG_CODEGEN=0 \
-        bash ${AUTOSCHEDULER_SRC_DIR}/anderson2021_autotune_loop.sh \
-            ${GENERATOR} \
-            ${app} \
-            ${HL_TARGET} \
-            ${AUTOSCHEDULER_SRC_DIR}/baseline.weights \
-            ${HALIDE_BUILD_DIR} \
-            ${PARALLELISM} \
-            ${TRAIN_ONLY} | tee -a ${OUTPUT_FILE}
+            SAMPLES_DIR=${SAMPLES_DIR} \
+            HL_DEBUG_CODEGEN=0 \
+            bash "${AUTOSCHEDULER_SRC_DIR}"/anderson2021_autotune_loop.sh \
+            "${GENERATOR}" \
+            "${app}" \
+            "${HL_TARGET}" \
+            "${AUTOSCHEDULER_SRC_DIR}"/baseline.weights \
+            "${HALIDE_BUILD_DIR}" \
+            "${PARALLELISM}" \
+            "${TRAIN_ONLY}" | tee -a "${OUTPUT_FILE}"
     fi
 
     WEIGHTS_FILE="${SAMPLES_DIR}/updated.weights"
-    predict_all ${HALIDE_SRC_DIR} ${HALIDE_BUILD_DIR} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_WITH_FILENAMES_FILE} 1 ${LIMIT:-0} ${PARALLELISM}
-    awk -F", " '{printf("%f, %f\n", $2, $3);}' ${PREDICTIONS_WITH_FILENAMES_FILE} > ${PREDICTIONS_FILE}
+    predict_all "${HALIDE_SRC_DIR}" "${HALIDE_BUILD_DIR}" "${SAMPLES_DIR}" "${WEIGHTS_FILE}" "${PREDICTIONS_WITH_FILENAMES_FILE}" 1 "${LIMIT:-0}" "${PARALLELISM}"
+    awk -F", " '{printf("%f, %f\n", $2, $3);}' "${PREDICTIONS_WITH_FILENAMES_FILE}" >"${PREDICTIONS_FILE}"
 
     echo "Computing average statistics..."
-    bash ${SCRIPTS_DIR}/average_times.sh ${SAMPLES_DIR} >> ${OUTPUT_FILE}
+    bash "${SCRIPTS_DIR}"/average_times.sh "${SAMPLES_DIR}" >>"${OUTPUT_FILE}"
 
-    echo "Total autotune time (s): ${SECONDS}" >> ${OUTPUT_FILE}
+    echo "Total autotune time (s): ${SECONDS}" >>"${OUTPUT_FILE}"
 
-    save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
+    save_best_schedule_result "${BEST_SCHEDULES_DIR}" "${SAMPLES_DIR}"
 done
 
 echo
-print_best_schedule_times $(dirname $0)/best
+print_best_schedule_times "$(dirname "$0")/best"

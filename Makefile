@@ -281,7 +281,7 @@ TEST_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 TEST_CXX_FLAGS += -fvisibility=hidden -fvisibility-inlines-hidden
 
 # In the tests, enable the debug() and internal_assert() macros
-TEST_CXX_FLAGS += -DHALIDE_KEEP_MACROS
+TEST_CXX_FLAGS += -DHALIDE_KEEP_MACROS=
 
 # gcc 4.8 fires a bogus warning on old versions of png.h
 ifneq (,$(findstring g++,$(CXX_VERSION)))
@@ -1284,8 +1284,9 @@ GENERATOR_EXTERNAL_TESTS := $(shell ls $(ROOT_DIR)/test/generator/*test.cpp)
 GENERATOR_EXTERNAL_TEST_GENERATOR := $(shell ls $(ROOT_DIR)/test/generator/*_generator.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls $(ROOT_DIR)/tutorial/*.cpp))
 MULLAPUDI2016_TESTS = $(shell ls $(ROOT_DIR)/test/autoschedulers/mullapudi2016/*.cpp)
-LI2018_TESTS = $(shell ls $(ROOT_DIR)/test/autoschedulers/li2018/test.cpp)
-ADAMS2019_TESTS = $(shell ls $(ROOT_DIR)/test/autoschedulers/adams2019/test.cpp)
+LI2018_TESTS = $(filter-out %_generator.cpp, $(shell ls $(ROOT_DIR)/test/autoschedulers/li2018/*.cpp))
+ADAMS2019_TESTS = $(filter-out %_generator.cpp, $(shell ls $(ROOT_DIR)/test/autoschedulers/adams2019/*.cpp))
+COMMON_AUTOSCHEDULER_TESTS = $(shell ls $(ROOT_DIR)/test/autoschedulers/common/*.cpp)
 
 test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=quiet_correctness_%) $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.c=quiet_correctness_%)
 test_performance: $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=performance_%)
@@ -1295,7 +1296,7 @@ test_runtime: $(RUNTIME_TESTS:$(ROOT_DIR)/test/runtime/%.cpp=runtime_%)
 test_tutorial: $(TUTORIALS:$(ROOT_DIR)/tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=valgrind_%)
 test_avx512: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=avx512_%)
-test_autoschedulers: test_mullapudi2016 test_li2018 test_adams2019
+test_autoschedulers: test_mullapudi2016 test_li2018 test_adams2019 test_common_autoscheduler
 test_auto_schedule: test_autoschedulers
 
 .PHONY: test_correctness_multi_gpu
@@ -1391,7 +1392,8 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%) \
 	$(MULLAPUDI2016_TESTS:$(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp=$(BIN_DIR)/mullapudi2016_%) \
 	$(LI2018_TESTS:$(ROOT_DIR)/test/autoschedulers/li2018/%.cpp=$(BIN_DIR)/li2018_%) \
-	$(ADAMS2019_TESTS:$(ROOT_DIR)/test/autoschedulers/adams2019/%.cpp=$(BIN_DIR)/adams2019_%)
+	$(ADAMS2019_TESTS:$(ROOT_DIR)/test/autoschedulers/adams2019/%.cpp=$(BIN_DIR)/adams2019_%) \
+	$(COMMON_AUTOSCHEDULER_TESTS:$(ROOT_DIR)/test/autoschedulers/common/%.cpp=$(BIN_DIR)/common_autoscheduler_%)
 
 clean_generator:
 	rm -rf $(BIN_DIR)/*.generator
@@ -1501,8 +1503,14 @@ $(BIN_DIR)/mullapudi2016_%: $(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp 
 $(BIN_DIR)/li2018_%: $(ROOT_DIR)/test/autoschedulers/li2018/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
+$(BIN_DIR)/adams2019_test_function_dag: $(ROOT_DIR)/test/autoschedulers/adams2019/test_function_dag.cpp $(SRC_DIR)/autoschedulers/adams2019/FunctionDAG.cpp $(SRC_DIR)/autoschedulers/common/ASLog.cpp $(TEST_DEPS)
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< $(SRC_DIR)/autoschedulers/adams2019/FunctionDAG.cpp $(SRC_DIR)/autoschedulers/common/ASLog.cpp -I$(INCLUDE_DIR) -I$(SRC_DIR)/autoschedulers/adams2019 -I$(SRC_DIR)/autoschedulers/common $(TEST_LD_FLAGS) -o $@
+
 $(BIN_DIR)/adams2019_%: $(ROOT_DIR)/test/autoschedulers/adams2019/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
+
+$(BIN_DIR)/common_autoscheduler_%: $(ROOT_DIR)/test/autoschedulers/common/%.cpp $(TEST_DEPS)
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR)/autoschedulers/common $(TEST_LD_FLAGS) -o $@
 
 # TODO(srj): this doesn't auto-delete, why not?
 .INTERMEDIATE: $(BIN_DIR)/%.generator
@@ -2143,6 +2151,18 @@ adams2019_test: $(BIN_DIR)/adams2019_test $(BIN_ADAMS2019) $(SRC_DIR)/autoschedu
 	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(BIN_ADAMS2019)) $(realpath $(SRC_DIR)/autoschedulers/adams2019/baseline.weights)
 	@-echo
 
+adams2019_test_function_dag: $(BIN_DIR)/adams2019_test_function_dag
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$<
+	@-echo
+
+test_common_autoscheduler: $(COMMON_AUTOSCHEDULER_TESTS:$(ROOT_DIR)/test/autoschedulers/common/%.cpp=common_autoscheduler_%)
+
+common_autoscheduler_%: $(BIN_DIR)/common_autoscheduler_%
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$<
+	@-echo
+
 time_compilation_test_%: $(BIN_DIR)/test_%
 	$(TIME_COMPILATION) compile_times_correctness.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_test_%=test_%)
 
@@ -2167,7 +2187,6 @@ TEST_APPS=\
 	local_laplacian \
 	max_filter \
 	nl_means \
-	onnx \
 	resize \
 	resnet_50 \
 	stencil_chain \

@@ -16,7 +16,7 @@ tests(GROUPS fuzz
 )
 
 
-# By default we are going to use the libfuzzer engine. However if 
+# By default we are going to use the libfuzzer engine. However if
 # LIB_FUZZING_ENGINE is declared you can override the fuzzing engine to one of;
 # - Centipede
 # - Hongfuzz
@@ -37,4 +37,3 @@ foreach(fuzzer "fuzz_bounds" "fuzz_cse")
     target_link_options(${fuzzer} PRIVATE -fsanitize=fuzzer)
   endif ()
 endforeach()
-

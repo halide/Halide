@@ -3,7 +3,20 @@ name: Windows
 on:
   pull_request:
     types: [ opened, synchronize, reopened ]
-  workflow_dispatch:
+    paths-ignore:
+      - "doc/**"
+      - "README.md"
+      - "CODE_OF_CONDUCT.md"
+      - "LICENSE.txt"
+      - ".gitignore"
+      - ".gitattributes"
+      - ".gitmodules"
+      - ".lldbinit"
+      - ".github/**"
+      - "!.github/workflows/testing-windows.yml"
+      - "packaging/**"
+      - "Makefile"
+      - "Makefile.inc"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -18,6 +31,7 @@ defaults:
 
 jobs:
   windows:
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: windows-${{ matrix.bits }} / ${{ matrix.uv_group }}
     runs-on: windows-2022
     strategy:

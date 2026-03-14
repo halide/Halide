@@ -50,9 +50,9 @@ int main() {
         //     }
         //     thread #2 {
         //         consume producer {
-        //             block until producer data is ready       
+        //             block until producer data is ready
         //             produce consumer {
-        //                 ...                        
+        //                 ...
         //             }
         //         }
         //     }
@@ -62,8 +62,8 @@ int main() {
 
     {
         // Now let's use async() to execute two different producers simultaneously.
-        // This could be useful in various scenarios when you want to overlap 
-        // computations of different functions in time. For example, you could execute 
+        // This could be useful in various scenarios when you want to overlap
+        // computations of different functions in time. For example, you could execute
         // producer1 and producer2 on different devices in parallel (e.g producer1 on CPU
         // and producer2 on GPU).
         Func producer1("producer1"), producer2("producer2"), consumer("consumer");
@@ -72,10 +72,10 @@ int main() {
         producer2(x, y) = x + y;
         consumer(x, y) = producer1(x - 1, y - 1) + producer2(x, y) + producer1(x + 1, y + 1);
 
-        // With the schedule below, `producer1` and `producer2` computations will be each 
+        // With the schedule below, `producer1` and `producer2` computations will be each
         // launched in separate threads. Since `consumer` depends on both of them, and producers
         // are scheduled as compute_root(), `consumer` will have to wait until `producer1` and
-        // `producer2` fully completed their work. The required synchronization primitives 
+        // `producer2` fully completed their work. The required synchronization primitives
         // will be added between producers and `consumer` to ensure that it's safe for `consumer`
         // to start its work and input data is fully ready.
         consumer.compute_root();
@@ -104,7 +104,7 @@ int main() {
         //                 block until producer1 data is ready
         //                 block until producer2 data is ready
         //                 produce consumer {
-        //                     ...                        
+        //                     ...
         //                 }
         //             }
         //         }
@@ -118,9 +118,9 @@ int main() {
         // to wait until the data is fully ready. Wouldn't it be great if we could overlap computations
         // of `producer` and `consumer` too? This computational pattern is known as 'double buffering' and
         // can be critical for achieving good performance in certain scenarios. The high-level idea is that
-        // producer is allowed to run ahead and do the next chunk of work without waiting while consumer 
+        // producer is allowed to run ahead and do the next chunk of work without waiting while consumer
         // is processing the current chunk. The obvious drawback of this method is that it requires twice
-        // as much memory for `producer`. 
+        // as much memory for `producer`.
         Func producer("producer"), consumer("consumer");
 
         producer(x, y, c) = (x + y) * (c + 1);
@@ -128,7 +128,7 @@ int main() {
 
         consumer.compute_root();
 
-        // In this example the planes are processed separately, so producer can run ahead 
+        // In this example the planes are processed separately, so producer can run ahead
         // and start producing plane `c + 1`, while `consumer` consumes already produced plane `c`.
         // One way to express it with Halide schedule is very similar to how sliding window schedules
         // are expressed (see lesson_8 for details). There are indeed a lot of commonalities between the two
@@ -201,7 +201,7 @@ int main() {
         // ahead and start producing plane `c + 1`, while `consumer` consumes already produced plane `c`.
         // A more direct way to express this would be to hoist storage of `producer` to ouside of the loop
         // `c` over planes, double its size and add necessary indices to flip the  planes.
-        // The first part can be achieved with `hoist_storage` directive and the rest is done with 
+        // The first part can be achieved with `hoist_storage` directive and the rest is done with
         // `ring_buffer`. Please, note that it's enough to provide only extent of the ring buffer, there is no
         // need to specify an explicit loop level to tie ring buffer to, because the index for ring buffer
         // will be implicitly computed based on a linear combination of loop variables between storage and
@@ -219,7 +219,7 @@ int main() {
 
     {
         // The advantage of the `hoist_storage` + `ring_buffer` approach is that it can be applied to
-        // fairly arbitrary loop splits and tilings. For example, in the following schedule instead of 
+        // fairly arbitrary loop splits and tilings. For example, in the following schedule instead of
         // double buffering over whole planes, we double buffer over sub-regions or tiles of the planes.
         // This is not possible to achieve with fold_storage, because it works over the *storage*
         // dimensions of the function and not the loop splits.

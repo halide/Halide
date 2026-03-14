@@ -524,14 +524,8 @@ target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
 
 # Build serialization, enabled by default
 if (WITH_SERIALIZATION)
-    # Sadly, there seem to be at least three variations of the Flatbuffer
-    # package in terms of the case of the relevant CMake files. Fortunately,
-    # the IMPORTED targets appear to be consistently named `flatbuffers`.
-    find_package(
-        flatbuffers 23.5.26 REQUIRED
-        NAMES flatbuffers Flatbuffers FlatBuffers
-    )
-    _Halide_pkgdep(flatbuffers)
+    find_package(FlatBuffers REQUIRED)
+    _Halide_pkgdep(FlatBuffers)
 
     target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
 
@@ -586,7 +580,7 @@ if (MSVC AND Halide_WASM_BACKEND STREQUAL "wabt")
 endif ()
 
 if (Halide_WASM_BACKEND STREQUAL "wabt")
-    find_package(wabt 1.0.39 REQUIRED)
+    find_package(wabt REQUIRED)
     _Halide_pkgdep(wabt)
 
     target_link_libraries(Halide PRIVATE wabt::wabt)

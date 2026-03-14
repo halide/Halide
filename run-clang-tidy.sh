@@ -2,7 +2,7 @@
 
 set -e
 
-ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 ##
 
@@ -25,19 +25,24 @@ EXPECTED_VERSION=21
 
 ##
 
-usage() { echo "Usage: $0 [-j MAX_PROCESS_COUNT] [-f]" 1>&2; exit 1; }
+usage() {
+    echo "Usage: $0 [-j MAX_PROCESS_COUNT] [-f]" 1>&2
+    exit 1
+}
 
-get_thread_count () {
-  ([ -x "$(command -v nproc)" ] && nproc) ||
-  ([ -x "$(command -v sysctl)" ] && sysctl -n hw.physicalcpu)
+get_thread_count() {
+    ([ -x "$(command -v nproc)" ] && nproc) ||
+        ([ -x "$(command -v sysctl)" ] && sysctl -n hw.physicalcpu)
 }
 
 if [ "$(uname)" == "Darwin" ]; then
-  patch_file () { sed -i '' -E "$@"; }
-  _DEFAULT_LLVM_LOCATION="/opt/homebrew/opt/llvm@$EXPECTED_VERSION"
+    # shellcheck disable=SC2329
+    patch_file() { sed -i '' -E "$@"; }
+    _DEFAULT_LLVM_LOCATION="/opt/homebrew/opt/llvm@$EXPECTED_VERSION"
 else
-  patch_file () { sed -i -E "$@"; }
-  _DEFAULT_LLVM_LOCATION="/usr/lib/llvm-$EXPECTED_VERSION"
+    # shellcheck disable=SC2329
+    patch_file() { sed -i -E "$@"; }
+    _DEFAULT_LLVM_LOCATION="/usr/lib/llvm-$EXPECTED_VERSION"
 fi
 
 J=$(get_thread_count)
@@ -47,7 +52,10 @@ while getopts ":j:f" o; do
     case "${o}" in
         j)
             J="${OPTARG}"
-            [[ "${J}" =~ ^[0-9]+$ ]] || ( echo "-j requires an integer argument"; usage )
+            [[ ${J} =~ ^[0-9]+$ ]] || (
+                echo "-j requires an integer argument"
+                usage
+            )
             ;;
         f)
             FIX="-fix"
@@ -57,7 +65,7 @@ while getopts ":j:f" o; do
             ;;
     esac
 done
-shift $((OPTIND-1))
+shift $((OPTIND - 1))
 
 echo "Using ${J} processes."
 if [ -n "${FIX}" ]; then
@@ -84,11 +92,11 @@ else
 fi
 
 # Use a temp folder for the CMake stuff here, so it's fresh & correct every time
-if [[ -z "${CLANG_TIDY_BUILD_DIR}" ]]; then
-  CLANG_TIDY_BUILD_DIR=$(mktemp -d)
-  trap 'rm -rf ${CLANG_TIDY_BUILD_DIR}' EXIT
+if [[ -z ${CLANG_TIDY_BUILD_DIR} ]]; then
+    CLANG_TIDY_BUILD_DIR=$(mktemp -d)
+    trap 'rm -rf ${CLANG_TIDY_BUILD_DIR}' EXIT
 else
-  mkdir -p "${CLANG_TIDY_BUILD_DIR}"
+    mkdir -p "${CLANG_TIDY_BUILD_DIR}"
 fi
 
 echo "CLANG_TIDY_BUILD_DIR = ${CLANG_TIDY_BUILD_DIR}"
@@ -102,13 +110,13 @@ export CMAKE_EXPORT_COMPILE_COMMANDS=ON
 export Halide_LLVM_ROOT="${CLANG_TIDY_LLVM_INSTALL_DIR}"
 
 if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
-  # Homebrew clang 21 is badly misconfigured and needs help finding the
-  # system headers, even though it uses system libc++ by default.
-  SDKROOT="$(xcrun --show-sdk-path)"
-  # TOOLCHAINROOT="$(xcrun --show-toolchain-path)"
-  TOOLCHAINROOT="$(cd "$(dirname "$(xcrun --find clang)")"/../.. && pwd)"
-  RCDIR="$(xcrun clang -print-resource-dir)"
-  cat > "${CLANG_TIDY_BUILD_DIR}/toolchain.cmake" << EOF
+    # Homebrew clang 21 is badly misconfigured and needs help finding the
+    # system headers, even though it uses system libc++ by default.
+    SDKROOT="$(xcrun --show-sdk-path)"
+    # TOOLCHAINROOT="$(xcrun --show-toolchain-path)"
+    TOOLCHAINROOT="$(cd "$(dirname "$(xcrun --find clang)")"/../.. && pwd)"
+    RCDIR="$(xcrun clang -print-resource-dir)"
+    cat >"${CLANG_TIDY_BUILD_DIR}/toolchain.cmake" <<EOF
 set(CMAKE_SYSROOT "${SDKROOT}")
 set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES
     "${RCDIR}/include"
@@ -122,13 +130,13 @@ set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
     \${CMAKE_C_STANDARD_INCLUDE_DIRECTORIES}
 )
 EOF
-  export CMAKE_TOOLCHAIN_FILE="${CLANG_TIDY_BUILD_DIR}/toolchain.cmake"
+    export CMAKE_TOOLCHAIN_FILE="${CLANG_TIDY_BUILD_DIR}/toolchain.cmake"
 fi
 
 echo Configuring Halide...
 cmake -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev -DWITH_TESTS=OFF
 
-[ -a "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" ]
+[ -e "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" ]
 
 echo Building Halide...
 cmake --build "${CLANG_TIDY_BUILD_DIR}" -j "${J}"
@@ -137,17 +145,17 @@ echo Building runtime compilation database...
 temp_file=$(mktemp)
 trap 'rm -f $temp_file' EXIT
 rm -f "${CLANG_TIDY_BUILD_DIR}/src/runtime/compile_commands.json"
-cat "${CLANG_TIDY_BUILD_DIR}"/src/runtime/*.json > "$temp_file"
+cat "${CLANG_TIDY_BUILD_DIR}"/src/runtime/*.json >"$temp_file"
 {
-  echo '['
-  cat "$temp_file" | sed '$ s/,$//'
-  echo ']'
-} > "${CLANG_TIDY_BUILD_DIR}/src/runtime/compile_commands.json"
+    echo '['
+    cat "$temp_file" | sed '$ s/,$//'
+    echo ']'
+} >"${CLANG_TIDY_BUILD_DIR}/src/runtime/compile_commands.json"
 
 echo Merging compilation databases...
 jq -s 'add' "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" \
     "${CLANG_TIDY_BUILD_DIR}/src/runtime/compile_commands.json" \
-    > "${CLANG_TIDY_BUILD_DIR}/compile_commands_merged.json"
+    >"${CLANG_TIDY_BUILD_DIR}/compile_commands_merged.json"
 mv "${CLANG_TIDY_BUILD_DIR}/compile_commands_merged.json" "${CLANG_TIDY_BUILD_DIR}/compile_commands.json"
 
 echo Running clang-tidy...

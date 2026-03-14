@@ -7,7 +7,7 @@
 #include "CostModel.h"
 #include "Featurization.h"
 #include "FunctionDAG.h"
-#include "Halide.h"
+#include "HalidePlugin.h"
 #include "PerfectHashMap.h"
 #include "SearchSpace.h"
 #include "State.h"

@@ -23,7 +23,8 @@
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "FETCHCONTENT_FULLY_DISCONNECTED": "ON",
         "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
-        "VCPKG_MANIFEST_FEATURES": "developer"
+        "VCPKG_MANIFEST_FEATURES": "developer",
+        "Halide_BUILDING_IN_CI": "ON"
       }
     },
     {
@@ -112,6 +113,32 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "ubuntu",
+      "inherits": "base",
+      "hidden": true,
+      "cacheVariables": {
+        "Halide_WASM_BACKEND": "OFF"
+      }
+    },
+    {
+      "name": "ubuntu-debug",
+      "inherits": [
+        "ubuntu",
+        "debug"
+      ],
+      "displayName": "Debug (Ubuntu)",
+      "description": "Debug build for a single-config generator, Ubuntu dependencies"
+    },
+    {
+      "name": "ubuntu-release",
+      "inherits": [
+        "ubuntu",
+        "release"
+      ],
+      "displayName": "Release (Ubuntu)",
+      "description": "Release build for a single-config generator, Ubuntu dependencies"
     },
     {
       "name": "debug-vcpkg",
