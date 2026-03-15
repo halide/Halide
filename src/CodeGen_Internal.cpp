@@ -607,7 +607,6 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     bool use_soft_float_abi = get_modflag_bool(module, "halide_use_soft_float_abi");
     std::string mabi = get_modflag_string(module, "halide_mabi");
 
-    // FIXME: can this be migrated into `set_function_attributes_from_halide_target_options()`?
     bool per_instruction_fast_math_flags = get_modflag_bool(module, "halide_per_instruction_fast_math_flags");
 
     options = llvm::TargetOptions();
@@ -721,6 +720,16 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     if (vscale_range != 0 && !fn.hasFnAttribute(llvm::Attribute::VScaleRange)) {
         fn.addFnAttr(llvm::Attribute::getWithVScaleRangeArgs(
             module.getContext(), vscale_range, vscale_range));
+    }
+
+    // When not using per-instruction fast-math flags (i.e., the whole module
+    // is in fast-math mode), propagate the fast-math assumptions as function
+    // attributes. In LLVM 23+, NoNaNsFPMath and NoInfsFPMath were removed from
+    // TargetOptions in favor of these per-function attributes.
+    bool per_instruction_fast_math_flags = get_modflag_bool(module, "halide_per_instruction_fast_math_flags");
+    if (!per_instruction_fast_math_flags) {
+        fn.addFnAttr("no-nans-fp-math", "true");
+        fn.addFnAttr("no-infs-fp-math", "true");
     }
 }
 

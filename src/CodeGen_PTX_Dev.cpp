@@ -230,6 +230,11 @@ void CodeGen_PTX_Dev::init_module() {
 
     module = get_initial_module_for_ptx_device(target, context);
 
+    // Propagate the strict-float flag as a module flag so that
+    // set_function_attributes_from_halide_target_options can read it.
+    module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags",
+                          CodeGen_GPU_Dev::any_strict_float ? 1 : 0);
+
     struct Intrinsic {
         const char *name;
         Type ret_type;
