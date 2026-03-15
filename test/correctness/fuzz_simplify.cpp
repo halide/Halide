@@ -53,10 +53,10 @@ int get_random_divisor(RandomEngine &rng, Type t) {
     return random_choice(rng, divisors);
 }
 
-int random_vector_width(RandomEngine &rng, int min_lanes = 2) {
+int random_vector_width(RandomEngine &rng, int min_lanes = 2, int multiple_of = 1) {
     std::vector<int> widths;
     for (int width : {2, 3, 4, 6, 8}) {
-        if (width >= min_lanes) {
+        if (width >= min_lanes && (width % multiple_of) == 0) {
             widths.push_back(width);
         }
     }
@@ -152,10 +152,10 @@ Expr random_shuffle_expr(RandomEngine &rng, Type t, int depth, bool overflow_und
 }
 
 Expr random_vector_reduce_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef) {
-    int input_lanes = (t.is_scalar() ? random_vector_width(rng) : t.lanes());
+    int input_lanes = t.is_scalar() ? random_vector_width(rng) : random_vector_width(rng, t.lanes(), t.lanes());
     Type input_type = t.with_lanes(input_lanes);
     Expr vec = random_expr(rng, input_type, depth, overflow_undef);
-    int output_lanes = get_random_divisor(rng, input_type);
+    int output_lanes = t.lanes();
 
     if (input_type.is_bool()) {
         VectorReduce::Operator reduce_ops[] = {
