@@ -630,8 +630,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     options.AllowFPOpFusion = CodeGen_GPU_Dev::any_strict_float ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
 #if LLVM_VERSION < 230
     options.NoInfsFPMath = !CodeGen_GPU_Dev::any_strict_float;
-#endif
     options.NoNaNsFPMath = !CodeGen_GPU_Dev::any_strict_float;
+#endif
     options.HonorSignDependentRoundingFPMathOption = !CodeGen_GPU_Dev::any_strict_float;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
