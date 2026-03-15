@@ -236,6 +236,10 @@ VISIT_NODE(Atomic, op->producer_name, op->mutex_name, op->body)
 void IRGraphCXXPrinter::test() {
     // This:
     Expr e = Select::make(Mod::make(Ramp::make(10, 314, 8), Broadcast::make(10, 8)) < Variable::make(Int(32), "p"), Broadcast::make(40, 8) + Ramp::make(4, 8, 8), VectorReduce::make(VectorReduce::Add, Ramp::make(0, 1, 16), 8));
+    e = e * e;  // make it a graph
+    e = cast(Float(32, 8), e);
+    e = reinterpret(Int(32, 8), e);
+    e = Shuffle::make_interleave({e, e * Broadcast::make(3, 8)});
 
     // Printed by:
     IRGraphCXXPrinter p(std::cout);
@@ -262,11 +266,19 @@ void IRGraphCXXPrinter::test() {
     Expr expr_17 = Ramp::make(expr_15, expr_16, 16);
     Expr expr_18 = VectorReduce::make(VectorReduce::Add, expr_17, 8);
     Expr expr_19 = Select::make(expr_8, expr_14, expr_18);
+    Expr expr_20 = Mul::make(expr_19, expr_19);
+    Expr expr_21 = Cast::make(Type(Type::Float, 32, 8), expr_20);
+    Expr expr_22 = Reinterpret::make(Type(Type::Int, 32, 8), expr_21);
+    Expr expr_23 = IntImm::make(Type(Type::Int, 32, 1), 3);
+    Expr expr_24 = Broadcast::make(expr_23, 8);
+    Expr expr_25 = Mul::make(expr_22, expr_24);
+    Expr expr_26 = Shuffle::make({expr_22, expr_25}, {0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15});
 
     // Now let's see if it matches:
-    internal_assert(equal(expr_19, e)) << "Expressions don't match:\n\n"
+    const Expr &printed = expr_26;
+    internal_assert(equal(printed, e)) << "Expressions don't match:\n\n"
                                        << e << "\n\n"
-                                       << expr_19 << "\n";
+                                       << printed << "\n";
 }
 }  // namespace Internal
 }  // namespace Halide
