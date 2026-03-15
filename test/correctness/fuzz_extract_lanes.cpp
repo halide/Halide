@@ -428,6 +428,16 @@ bool test_one(RandomEngine &rng) {
                 return false;
             }
         }
+
+        std::cerr << "Original values:";
+        for (int j = 0; j < lanes; j++) {
+            std::cerr << " " << orig_vals(j, y);
+        }
+        std::cerr << "    Sliced values:";
+        for (int j = 0; j < new_lanes; j++) {
+            std::cerr << " " << sliced_vals(j, y);
+        }
+        std::cerr << "  Correct.\n";
     }
 
     return true;
@@ -447,6 +457,10 @@ int main(int argc, char **argv) {
         11290674455725750672ull,
         18322803614019275106ull,
         12847901530538798383ull,
+
+        // Failures on ARM:
+        5792148528566212763,
+        6300344786331520063,
     };
 
     size_t num_iters = (argc > 1) ? 1 : 64;
