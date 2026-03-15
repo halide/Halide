@@ -9,6 +9,7 @@
 #include "Generator.h"
 #include "IR.h"
 #include "IREquality.h"
+#include "IRGraphCXXPrinter.h"
 #include "IRMatch.h"
 #include "IRPrinter.h"
 #include "Interval.h"
@@ -18,7 +19,6 @@
 #include "Solve.h"
 #include "SpirvIR.h"
 #include "UniquifyVariableNames.h"
-#include "IRGraphCXXPrinter.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
