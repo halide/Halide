@@ -9,12 +9,6 @@ namespace Halide {
 namespace Internal {
 
 namespace {
-// =========================================================================
-// ✨ CLEVER TEMPLATING ✨
-// This SFINAE trick checks if `T::make` can be invoked with `Args...`.
-// It will trigger a static_assert if you forget an argument or pass the
-// wrong field types, completely preventing generated code compile errors!
-// =========================================================================
 template<typename T, typename... Args>
 static constexpr auto check_make_args(Args &&...args)
     -> decltype(T::make(std::forward<Args>(args)...), std::true_type{}) {
