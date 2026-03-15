@@ -18,12 +18,14 @@
 #include "Solve.h"
 #include "SpirvIR.h"
 #include "UniquifyVariableNames.h"
+#include "IRGraphCXXPrinter.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
 
 int main(int argc, const char **argv) {
     IRPrinter::test();
+    IRGraphCXXPrinter::test();
     CodeGen_C::test();
     ir_equality_test();
     bounds_test();

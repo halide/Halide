@@ -528,6 +528,7 @@ SOURCE_FILES = \
   Interval.cpp \
   IR.cpp \
   IREquality.cpp \
+  IRGraphCXXPrinter.cpp \
   IRMatch.cpp \
   IRMutator.cpp \
   IROperator.cpp \
@@ -730,6 +731,7 @@ HEADER_FILES = \
   IntrusivePtr.h \
   IR.h \
   IREquality.h \
+  IRGraphCXXPrinter.h \
   IRMatch.h \
   IRMutator.h \
   IROperator.h \
