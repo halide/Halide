@@ -69,7 +69,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
         return value;
     }
 
-    if (info && op->type.is_int()) {
+    if (info && op->type.is_int_or_uint()) {
         switch (op->op) {
         case VectorReduce::Add:
             // Alignment of result is the alignment of the arg. Bounds
@@ -123,7 +123,8 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
     case VectorReduce::Add: {
         auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
         if (rewrite(h_add(x * broadcast(y, arg_lanes), lanes), h_add(x, lanes) * broadcast(y, lanes)) ||
-            rewrite(h_add(broadcast(x, arg_lanes) * y, lanes), h_add(y, lanes) * broadcast(x, lanes))) {
+            rewrite(h_add(broadcast(x, arg_lanes) * y, lanes), h_add(y, lanes) * broadcast(x, lanes)) ||
+            rewrite(h_add(broadcast(x, arg_lanes), lanes), broadcast(x * factor, lanes))) {
             return mutate(rewrite.result, info);
         }
         break;
