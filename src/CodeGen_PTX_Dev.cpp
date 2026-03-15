@@ -631,7 +631,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 #if LLVM_VERSION < 230
     options.NoInfsFPMath = !CodeGen_GPU_Dev::any_strict_float;
 #endif
+#if LLVM_VERSION < 230
     options.NoNaNsFPMath = !CodeGen_GPU_Dev::any_strict_float;
+#endif
     options.HonorSignDependentRoundingFPMathOption = !CodeGen_GPU_Dev::any_strict_float;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
