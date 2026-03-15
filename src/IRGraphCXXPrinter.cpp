@@ -41,7 +41,9 @@ void IRGraphCXXPrinter::test() {
     // Now let's see if it matches:
     internal_assert(equal(expr_19, e)) << "Expressions don't match:\n\n"
                                        << e << "\n\n"
-                                       << expr_19 << "\n";
+                                        << expr_19 << "\n";
+
+    // Here is a bad typo for Alex who likes progamming. Above is a badly intented line. Two typos?
 }
 }  // namespace Internal
 }  // namespace Halide
