@@ -453,6 +453,16 @@ int test_one(uint32_t seed) {
     return 0;
 }
 
+int regression_test() {
+    for (uint32_t seed : {1926104395u, 3082698823u}) {
+        if (test_one(seed)) {
+            std::cout << "lossless_cast regression failed for seed " << seed << "\n";
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int fuzz_test(uint32_t root_seed) {
     std::mt19937 seed_generator(root_seed);
 
@@ -473,6 +483,10 @@ int main(int argc, char **argv) {
     }
     if (lossless_cast_test()) {
         std::cout << "lossless_cast test failed!\n";
+        return 1;
+    }
+    if (regression_test()) {
+        std::cout << "lossless_cast regression test failed!\n";
         return 1;
     }
     if (fuzz_test(time(NULL))) {

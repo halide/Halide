@@ -182,27 +182,21 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         // WebAssemblyTargetLowering::isVectorLoadExtDesirable assumes the
         // operand of a vector extend is always a load, but LLVM's optimizer may
         // insert a freeze node between the load and the extend, causing a
-        // cast<LoadSDNode> assertion failure. Use an optimization fence to
-        // prevent the DAG combiner from seeing through to the load. See
+        // cast<LoadSDNode> assertion failure. Some expressions that originate
+        // from loads become less obviously load-like after lossless_cast()
+        // rewrites and vectorization, so fence all widening vector integer
+        // casts here to keep the DAG combiner from seeing through to the load.
+        // See
         // https://github.com/halide/Halide/issues/8928 and
         // https://github.com/llvm/llvm-project/issues/184676
         if (op->type.is_int_or_uint() &&
             op->value.type().is_int_or_uint() &&
             op->type.bits() > op->value.type().bits()) {
-            // Check if the value is a Load. Loads are sometimes hiding behind
-            // let bindings.
-            bool is_load = op->value.as<Load>();
-            if (const Variable *var = op->value.as<Variable>()) {
-                llvm::Value *v = sym_get(var->name, false);
-                is_load = v && llvm::isa<llvm::LoadInst>(v);
-            }
-            if (is_load) {
-                llvm::Value *v = codegen(op->value);
-                v = optimization_fence(v);
-                value = builder->CreateIntCast(v, llvm_type_of(op->type),
-                                               op->value.type().is_int());
-                return;
-            }
+            llvm::Value *v = codegen(op->value);
+            v = optimization_fence(v);
+            value = builder->CreateIntCast(v, llvm_type_of(op->type),
+                                           op->value.type().is_int());
+            return;
         }
     }
 
