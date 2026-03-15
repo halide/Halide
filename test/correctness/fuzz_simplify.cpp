@@ -187,13 +187,18 @@ Expr random_condition(RandomEngine &rng, Type t, int depth, bool maybe_scalar) {
         GE::make,
     };
 
+    int lanes = t.lanes();
     if (maybe_scalar && (rng() & 1)) {
         t = t.element_of();
     }
 
     Expr a = random_expr(rng, t, depth);
     Expr b = random_expr(rng, t, depth);
-    return random_choice(rng, make_bin_op)(a, b);
+    Expr result = random_choice(rng, make_bin_op)(a, b);
+    if (result.type().lanes() != lanes) {
+        result = Broadcast::make(result, lanes);
+    }
+    return result;
 }
 
 Expr make_absd(Expr a, Expr b) {
