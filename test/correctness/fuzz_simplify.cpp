@@ -53,6 +53,16 @@ int get_random_divisor(RandomEngine &rng, Type t) {
     return random_choice(rng, divisors);
 }
 
+int random_vector_width(RandomEngine &rng, int min_lanes = 2) {
+    std::vector<int> widths;
+    for (int width : {2, 3, 4, 6, 8}) {
+        if (width >= min_lanes) {
+            widths.push_back(width);
+        }
+    }
+    return random_choice(rng, widths);
+}
+
 Expr random_leaf(RandomEngine &rng, Type t, bool overflow_undef = false, bool imm_only = false) {
     if (t.is_int() && t.bits() == 32) {
         overflow_undef = true;
@@ -84,6 +94,61 @@ Expr random_leaf(RandomEngine &rng, Type t, bool overflow_undef = false, bool im
 }
 
 Expr random_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef = false);
+
+Expr random_shuffle_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef) {
+    if (t.is_scalar()) {
+        int lanes = random_vector_width(rng);
+        Expr vector = random_expr(rng, t.with_lanes(lanes), depth, overflow_undef);
+        std::uniform_int_distribution<int> dist(0, lanes - 1);
+        return Shuffle::make_extract_element(vector, dist(rng));
+    }
+
+    std::vector<std::function<Expr()>> shuffles = {
+        [&]() {
+            int vectors = get_random_divisor(rng, t);
+            Type subtype = t.with_lanes(t.lanes() / vectors);
+            std::vector<Expr> exprs;
+            exprs.reserve(vectors);
+            for (int i = 0; i < vectors; i++) {
+                exprs.push_back(random_expr(rng, subtype, depth, overflow_undef));
+            }
+            return Shuffle::make_concat(exprs);
+        },
+        [&]() {
+            int vectors = get_random_divisor(rng, t);
+            Type subtype = t.with_lanes(t.lanes() / vectors);
+            std::vector<Expr> exprs;
+            exprs.reserve(vectors);
+            for (int i = 0; i < vectors; i++) {
+                exprs.push_back(random_expr(rng, subtype, depth, overflow_undef));
+            }
+            return Shuffle::make_interleave(exprs);
+        },
+        [&]() {
+            Expr vector = random_expr(rng, t, depth, overflow_undef);
+            std::vector<int> indices(t.lanes());
+            for (int i = 0; i < t.lanes(); i++) {
+                indices[i] = i;
+                if (i & 1) {
+                    int tmp = indices[i];
+                    indices[i] = indices[i / 2];
+                    indices[i / 2] = tmp;
+                }
+            }
+            return Shuffle::make({vector}, indices);
+        },
+    };
+
+    if (t.lanes() * 2 <= 8) {
+        shuffles.push_back([&]() {
+            Expr vector = random_expr(rng, t.with_lanes(t.lanes() * 2), depth, overflow_undef);
+            std::uniform_int_distribution<int> dist(0, 1);
+            return Shuffle::make_slice(vector, dist(rng), 2, t.lanes());
+        });
+    }
+
+    return random_choice(rng, shuffles)();
+}
 
 Expr random_condition(RandomEngine &rng, Type t, int depth, bool maybe_scalar) {
     static make_bin_op_fn make_bin_op[] = {
@@ -173,6 +238,9 @@ Expr random_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef) {
                 return Ramp::make(e1, e2, lanes);
             }
             return random_expr(rng, t, depth, overflow_undef);
+        },
+        [&]() {
+            return random_shuffle_expr(rng, t, depth, overflow_undef);
         },
         [&]() {
             if (t.is_bool()) {
