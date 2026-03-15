@@ -42,7 +42,7 @@ int main() {
                                   132);         // Blue value
 
     // Since this pattern appears quite often, Halide provides a
-    // syntatic sugar to write the code above as the following,
+    // syntactic sugar to write the code above as the following,
     // using the "mux" function.
     // color_image(x, y, c) = mux(c, {245, 42, 132});
 

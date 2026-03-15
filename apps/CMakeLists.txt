@@ -28,10 +28,7 @@ if (Halide_TARGET MATCHES "wasm")
     return()
 endif()
 
-# add_app(HelloAndroid)  # TODO(#5374): missing CMake build
-# add_app(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
-# add_app(HelloPyTorch)  # TODO(#5374): missing CMake build
-# add_app(HelloiOS)  # TODO(#5374): missing CMake build
+# keep-sorted start case=no ignore_prefixes=#
 # add_app(auto_viz)  # TODO(#5374): missing CMake build
 add_app(bgu)
 add_app(bilateral_grid)
@@ -45,6 +42,11 @@ add_app(depthwise_separable_conv)
 add_app(fft)
 add_app(hannk)
 add_app(harris)
+# add_app(HelloAndroid)  # TODO(#5374): missing CMake build
+# add_app(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
+add_app(HelloBaremetal)
+# add_app(HelloiOS)  # TODO(#5374): missing CMake build
+# add_app(HelloPyTorch)  # TODO(#5374): missing CMake build
 add_app(hexagon_benchmarks)
 # add_app(hexagon_dma)  # TODO(#5374): missing CMake build
 add_app(hist)
@@ -64,4 +66,4 @@ add_app(resize)
 add_app(stencil_chain)
 add_app(unsharp)
 add_app(wavelet)
-add_app(HelloBaremetal)
+# keep-sorted end

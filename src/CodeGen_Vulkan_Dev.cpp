@@ -244,7 +244,7 @@ protected:
         StorageBufferOffsetMap storage_buffer_offset_map;
 
         // Defines the binding information for a specialization constant
-        // that is exported by the module and can be overriden at runtime
+        // that is exported by the module and can be overridden at runtime
         struct SpecializationBinding {
             SpvId constant_id = 0;
             uint32_t type_size = 0;
@@ -261,7 +261,7 @@ protected:
         };
         using SharedMemoryUsage = std::vector<SharedMemoryAllocation>;
 
-        // Defines the specialization constants used for dynamically overiding the dispatch size
+        // Defines the specialization constants used for dynamically overriding the dispatch size
         struct WorkgroupSizeBinding {
             SpvId local_size_constant_id[3] = {0, 0, 0};  // zero if unused
         };
@@ -2367,7 +2367,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_header(SpvBinary &spirv_header) {
     // ... [4] Dynamic workgroup dimensions bound to specialization constants
     // ....... [0] Constant id to use for local_size_x (zero if it was statically declared and not bound to a specialization constant)
     // ....... [1] Constant id to use for local_size_y
-    // ....... [2] Constant id ot use for local_size_z
+    // ....... [2] Constant id to use for local_size_z
     //
     // NOTE: Halide's Vulkan runtime consumes this header prior to compiling.
     //

@@ -453,7 +453,7 @@ if (NOT ${_USING_WASM})
 
     # cxx_mangling_define_extern_externs.cpp
     add_library(cxx_mangling_define_extern_externs STATIC cxx_mangling_define_extern_externs.cpp)
-    # Ensure that cxx_mangling.h is availabe for cxx_mangling_define_extern_externs
+    # Ensure that cxx_mangling.h is available for cxx_mangling_define_extern_externs
     target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling)
     add_dependencies(cxx_mangling_define_extern_externs cxx_mangling)
 

@@ -240,11 +240,11 @@ int vscale_lanes(int vscale, const Type &type) {
  *       flip arguments to ensure the scalar is second. (LLVM may handle this, don't know.)
  *     - Widening and narrowing are supported via the relative_scale field of
  *       the RISCVIntrinsic structure is used to indicate a difference in type
- *       bit wdith, not lanes, between the slot and the smallest size used in the call.
+ *       bit width, not lanes, between the slot and the smallest size used in the call.
  *       ("Slot" is either return type or an argument.
  *     - Currently this only handles two argument ops.
  *
- * TODO: Curently there are no floating-point intrinsics supported.
+ * TODO: Currently there are no floating-point intrinsics supported.
  *       Add masking support.
  *       Handle RISC V specific reductions.
  */

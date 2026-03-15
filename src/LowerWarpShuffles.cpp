@@ -259,7 +259,7 @@ class DetermineAllocStride : public IRVisitor {
             }
         }
         if (!single_stores.empty()) {
-            message << "And the following indicies by lane zero:\n";
+            message << "And the following indices by lane zero:\n";
             for (const Expr &e : single_stores) {
                 message << "  " << e << "\n";
             }

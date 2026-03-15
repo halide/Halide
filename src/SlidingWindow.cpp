@@ -311,7 +311,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             if (!min_required.defined()) {
                 debug(3) << "Could not perform sliding window optimization of "
                          << func.name() << " over " << loop_var << " because multiple "
-                         << "dimensions of the function dependended on the loop var\n";
+                         << "dimensions of the function depended on the loop var\n";
                 return op;
             }
 

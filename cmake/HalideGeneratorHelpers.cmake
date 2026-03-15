@@ -174,6 +174,7 @@ function(_Halide_library_from_generator TARGET)
 
     ## "hash table" of extra outputs to extensions
     # Keep in sync with Module.cpp
+    # keep-sorted start ignore_prefixes=#
     set(assembly_extension ".s")
     set(bitcode_extension ".bc")
     # set(c_header_extension ".h")  # handled specially
@@ -195,6 +196,7 @@ function(_Halide_library_from_generator TARGET)
     # set(static_library_extension (is_windows_coff ? ".lib" : ".a"))  # handled specially
     set(stmt_extension ".stmt")
     set(stmt_html_extension ".stmt.html")
+    # keep-sorted end
 
     ## Validate TYPE
     if (NOT ARG_TYPE MATCHES "^(c_source|static_library|object)$")
@@ -452,6 +454,7 @@ function(add_halide_library TARGET)
     # - `object` is selected for CMake-target-compile
     # - `static_library` is selected for cross-compile
     set(extra_output_names
+        # keep-sorted start
         ASSEMBLY
         BITCODE
         COMPILER_LOG
@@ -469,6 +472,7 @@ function(add_halide_library TARGET)
         SCHEDULE
         STMT
         STMT_HTML
+        # keep-sorted end
     )
 
     ##

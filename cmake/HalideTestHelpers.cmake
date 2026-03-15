@@ -77,7 +77,7 @@ function(add_halide_test TARGET)
         PROPERTIES
         LABELS "${args_GROUPS}"
         ENVIRONMENT "HL_TARGET=${_resolved_target};HL_JIT_TARGET=${_resolved_target}"
-        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP(-WITH-ISSUE(-[0-9]+)?)?\\]"
         WILL_FAIL ${args_EXPECT_FAILURE}
     )
     if ("multithreaded" IN_LIST args_GROUPS)

@@ -50,6 +50,7 @@ target_sources(
     FILE_SET private_headers
     TYPE HEADERS
     FILES
+    # keep-sorted start case=no
     AbstractGenerator.h
     AddAtomicMutex.h
     AddImageChecks.h
@@ -222,6 +223,7 @@ target_sources(
     VectorizeLoops.h
     WasmExecutor.h
     WrapCalls.h
+    # keep-sorted end
 )
 
 # The sources that go into libHalide. For the sake of IDE support, headers that
@@ -229,6 +231,7 @@ target_sources(
 target_sources(
     Halide
     PRIVATE
+    # keep-sorted start case=no
     AbstractGenerator.cpp
     AddAtomicMutex.cpp
     AddImageChecks.cpp
@@ -415,6 +418,7 @@ target_sources(
     VectorizeLoops.cpp
     WasmExecutor.cpp
     WrapCalls.cpp
+    # keep-sorted end
 )
 
 set(C_TEMPLATE_FILES

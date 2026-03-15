@@ -1225,7 +1225,7 @@ wabt::Result extern_callback_wrapper(const std::vector<ExternArgType> &arg_types
         results[0] = dynamic_type_dispatch<LoadValue>(ret_type.type, (void *)&ret_val);
     }
 
-    // Progagate buffer data backwards. Note that for arbitrary extern functions,
+    // Propagate buffer data backwards. Note that for arbitrary extern functions,
     // we have no idea which buffers might be "input only", so we copy all data for all of them.
     for (size_t i = 0; i < arg_types_len; ++i) {
         const auto &a = arg_types[i + 1];
@@ -2086,7 +2086,7 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value> &args) {
         dynamic_type_dispatch<LoadAndReturnScalar>(ret_type.type, context, (void *)&ret_val, args.GetReturnValue());
     }
 
-    // Progagate buffer data backwards. Note that for arbitrary extern functions,
+    // Propagate buffer data backwards. Note that for arbitrary extern functions,
     // we have no idea which buffers might be "input only", so we copy all data for all of them.
     for (size_t i = 0; i < arg_types_len; ++i) {
         if (arg_types[i].is_buffer) {

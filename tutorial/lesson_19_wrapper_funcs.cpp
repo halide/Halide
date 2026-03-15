@@ -253,7 +253,7 @@ int main() {
             .unroll(y);
 
         // We take care to make sure f_transpose is only ever accessed
-        // at constant indicies. The full unrolling/vectorization of
+        // at constant indices. The full unrolling/vectorization of
         // all loops that exist inside its compute_at level has this
         // effect. Allocations that are only ever accessed at constant
         // indices can be promoted into registers.

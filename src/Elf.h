@@ -535,7 +535,7 @@ public:
     static std::unique_ptr<Object> parse_object(const char *data, size_t size);
 
     /** Write a shared object in memory. */
-    std::vector<char> write_shared_object(Linker *linker, const std::vector<std::string> &depedencies = {},
+    std::vector<char> write_shared_object(Linker *linker, const std::vector<std::string> &dependencies = {},
                                           const std::string &soname = "");
 
     section_iterator sections_begin() {

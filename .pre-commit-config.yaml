@@ -47,10 +47,44 @@ repos:
             | \.xcassets/
           )
 
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        args: [ --ignore-words-list, "CreateOr,implementors,PADD,re-use,re-used,re-using,subtile,subtiles" ]
+        exclude: |
+          (?x)(
+            ^src/autoschedulers/common/cmdline\.h$
+            | ^src/runtime/hexagon_remote/bin/src/
+            | ^src/runtime/mini_cuda\.h$
+            | ^src/runtime/mini_d3d12\.h$
+            | ^apps/HelloAndroid.*/gradlew\.bat$
+            | \.pgm$
+          )
+
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.9.0
     hooks:
       - id: gitleaks
+
+  - repo: https://github.com/google/keep-sorted
+    rev: v0.8.0
+    hooks:
+      - id: keep-sorted
+        args: [
+          --default-options,
+          "allow_yaml_lists=yes case=yes group=yes order=asc remove_duplicates=yes sticky_comments=no"
+        ]
+
+  - repo: https://github.com/hukkin/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        args: [ --number, --wrap=80 ]
+        additional_dependencies:
+          - mdformat-gfm
+          - mdformat-ruff
+          - mdformat-shfmt
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.5

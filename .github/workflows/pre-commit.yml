@@ -17,7 +17,59 @@ jobs:
     name: Run pre-commit checks
     runs-on: ubuntu-slim
     steps:
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.LLVM_UPDATER_ID }}
+          private-key: ${{ secrets.LLVM_UPDATER_PRIVATE_KEY }}
+
+      - name: Get GitHub App user ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure git and environment
+        run: |
+          echo "GH_TOKEN=${{ steps.app-token.outputs.token }}" >> "$GITHUB_ENV"
+          git config --global user.name "${{ steps.app-token.outputs.app-slug }}[bot]"
+          git config --global user.email "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ steps.app-token.outputs.token }}
+
       - uses: actions/setup-python@v5
       - uses: astral-sh/setup-uv@v5
-      - uses: pre-commit/action@v3.0.1
+
+      - name: Run pre-commit
+        id: pre-commit
+        uses: pre-commit/action@v3.0.1
+
+      - name: Push auto-fixes
+        if: ${{ !cancelled() && steps.pre-commit.outcome == 'failure' }}
+        run: |
+          if git diff --quiet; then
+            echo "::error::no auto-fixable changes; pre-commit failure requires manual attention."
+          elif [ "$(git log -1 --format='%ae')" = "$(git config user.email)" ]; then
+            echo "::error::pre-commit auto-fixes were not idempotent. Please fix manually."
+          else
+            git add -A
+            git commit -m "Apply pre-commit auto-fixes"
+            git push
+          fi
+
+      - name: Annotate codespell errors
+        if: ${{ !cancelled() && steps.pre-commit.outcome == 'failure' }}
+        run: |
+          pre-commit run --all-files codespell 2>&1 |
+            awk -F: '/^[^:]*:[0-9]+: / {
+              file=$1; line=$2; sub(/^[^:]*:[0-9]+: /, ""); msg=$0
+              key=file":"line
+              if (key in msgs) msgs[key]=msgs[key]"%0A"msg
+              else { msgs[key]=msg; files[key]=file; lines[key]=line; order[++n]=key }
+            } END {
+              for (i=1; i<=n; i++)
+                printf "::error file=%s,line=%s::%s\n", files[order[i]], lines[order[i]], msgs[order[i]]
+            }'

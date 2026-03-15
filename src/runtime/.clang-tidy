@@ -1,11 +1,7 @@
 ---
 InheritParentConfig: true
-
+# keep-sorted start skip_lines=1 ignore_prefixes=-
 Checks: >
-    # For reasons that aren't clear, clang-tidy-16 will apparently
-    # ignore disable-check requests if they were already enabled
-    # by a glob, so we will individually enumerate all the ones we want (or don't want).
-    # bugprone-*,
     bugprone-argument-comment,
     bugprone-assert-side-effect,
     -bugprone-assignment-in-if-condition,
@@ -72,9 +68,7 @@ Checks: >
     bugprone-unused-return-value,
     bugprone-use-after-move,
     bugprone-virtual-near-miss,
-
     clang-diagnostic-shadow-field,
-
     misc-confusable-identifiers,
     -misc-const-correctness,
     -misc-definitions-in-headers,
@@ -94,4 +88,5 @@ Checks: >
     -misc-unused-parameters,
     misc-unused-using-decls,
     misc-use-anonymous-namespace,
+# keep-sorted end
 ...
