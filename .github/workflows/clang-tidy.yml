@@ -8,7 +8,7 @@ on:
       - '**.cpp'
       - 'run-clang-tidy.sh'
       - '**.clang-tidy'
-      - '.github/workflows/presubmit-clang-tidy.yml'
+      - '.github/workflows/clang-tidy.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

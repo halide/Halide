@@ -35,10 +35,10 @@ set(TFLITE_VERSION "${TFLITE_VERSION_MAJOR}.${TFLITE_VERSION_MINOR}.${TFLITE_VER
 
 # ----------------------------
 
-add_compile_definitions(TFLITE_VERSION_MAJOR=${TFLITE_VERSION_MAJOR})
-add_compile_definitions(TFLITE_VERSION_MINOR=${TFLITE_VERSION_MINOR})
-add_compile_definitions(TFLITE_VERSION_PATCH=${TFLITE_VERSION_PATCH})
-add_compile_definitions(HANNK_BUILD_TFLITE=$<BOOL:${HANNK_BUILD_TFLITE}>)
+add_compile_definitions(TFLITE_VERSION_MAJOR=${TFLITE_VERSION_MAJOR})  # nolint -- TODO: move to target_compile_definitions
+add_compile_definitions(TFLITE_VERSION_MINOR=${TFLITE_VERSION_MINOR})  # nolint
+add_compile_definitions(TFLITE_VERSION_PATCH=${TFLITE_VERSION_PATCH})  # nolint
+add_compile_definitions(HANNK_BUILD_TFLITE=$<BOOL:${HANNK_BUILD_TFLITE}>)  # nolint
 
 # ----------------------------
 
@@ -117,6 +117,7 @@ endif ()
 # Tests
 
 set(TEST_FILES
+    # keep-sorted start
     inception_v2_224_quant/000.DEPTHWISE_CONV_2D.tflite
     inception_v4_299_quant/000.CONV_2D.tflite
     inception_v4_299_quant/001.CONV_2D.tflite
@@ -235,6 +236,7 @@ set(TEST_FILES
     mobilenet_v2_1.0_224_quant/059.DEPTHWISE_CONV_2D.tflite
     mobilenet_v2_1.0_224_quant/062.AVERAGE_POOL_2D.tflite
     mobilenet_v2_1.0_224_quant/064.RESHAPE.tflite
+    # keep-sorted end
 )
 list(TRANSFORM TEST_FILES PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/test/")
 

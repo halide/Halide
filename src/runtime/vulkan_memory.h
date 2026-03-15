@@ -45,7 +45,7 @@ public:
     VulkanMemoryAllocator(const VulkanMemoryAllocator &) = delete;
     VulkanMemoryAllocator &operator=(const VulkanMemoryAllocator &) = delete;
 
-    // disable non-factory constrction
+    // disable non-factory construction
     VulkanMemoryAllocator() = delete;
     ~VulkanMemoryAllocator() = delete;
 
@@ -173,7 +173,7 @@ VulkanMemoryAllocator *VulkanMemoryAllocator::create(void *user_context,
 
 int VulkanMemoryAllocator::destroy(void *user_context, VulkanMemoryAllocator *instance) {
     if (instance == nullptr) {
-        error(user_context) << "VulkanBlockAllocator: Unable to destroy instance! Invalide instance pointer!\n";
+        error(user_context) << "VulkanBlockAllocator: Unable to destroy instance! Invalid instance pointer!\n";
         return halide_error_code_internal_error;
     }
     BlockAllocator::MemoryAllocators allocators = instance->block_allocator->current_allocators();
@@ -816,14 +816,14 @@ int VulkanMemoryAllocator::deallocate_block(void *instance_ptr, MemoryBlock *blo
     if (instance->block_count > 0) {
         instance->block_count--;
     } else {
-        error(nullptr) << "VulkanRegionAllocator: Block counter invalid ... reseting to zero!\n";
+        error(nullptr) << "VulkanRegionAllocator: Block counter invalid ... resetting to zero!\n";
         instance->block_count = 0;
     }
 
     if (int64_t(instance->block_byte_count) - int64_t(block->size) >= 0) {
         instance->block_byte_count -= block->size;
     } else {
-        error(nullptr) << "VulkanRegionAllocator: Block byte counter invalid ... reseting to zero!\n";
+        error(nullptr) << "VulkanRegionAllocator: Block byte counter invalid ... resetting to zero!\n";
         instance->block_byte_count = 0;
     }
 
@@ -1249,7 +1249,7 @@ int VulkanMemoryAllocator::deallocate_region(void *instance_ptr, MemoryRegion *r
     if (instance->region_count > 0) {
         instance->region_count--;
     } else {
-        error(user_context) << "VulkanRegionAllocator: Region counter invalid ... reseting to zero!\n";
+        error(user_context) << "VulkanRegionAllocator: Region counter invalid ... resetting to zero!\n";
         instance->region_count = 0;
         error_code = halide_error_code_internal_error;
     }
@@ -1257,7 +1257,7 @@ int VulkanMemoryAllocator::deallocate_region(void *instance_ptr, MemoryRegion *r
     if (int64_t(instance->region_byte_count) - int64_t(region->allocation.size) >= 0) {
         instance->region_byte_count -= region->allocation.size;
     } else {
-        error(user_context) << "VulkanRegionAllocator: Region byte counter invalid ... reseting to zero!\n";
+        error(user_context) << "VulkanRegionAllocator: Region byte counter invalid ... resetting to zero!\n";
         instance->region_byte_count = 0;
         error_code = halide_error_code_internal_error;
     }

@@ -81,7 +81,7 @@ jobs:
             brew install libjpeg-turbo libpng pkgconf protobuf "llvm@${LLVM_VERSION}" "lld@${LLVM_VERSION}"
             echo "LLVM_CONFIG=$(brew --prefix "llvm@${LLVM_VERSION}")/bin/llvm-config" | tee -a "$GITHUB_ENV"
           fi
-          
+
           uv sync --group ci-base --no-install-project
           echo "${GITHUB_WORKSPACE}/.venv/bin" | tee -a "$GITHUB_PATH"
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" | tee -a "$GITHUB_ENV"

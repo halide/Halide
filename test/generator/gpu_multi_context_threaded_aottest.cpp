@@ -259,21 +259,21 @@ void run_kernels_on_thread(gpu_context context1, bool destroy_when_done) {
 }
 
 int main(int argc, char **argv) {
-    gpu_context contexta;
-    init_context(contexta);
+    gpu_context context_a;
+    init_context(context_a);
 
-    gpu_context contextb;
-    init_context(contextb);
+    gpu_context context_b;
+    init_context(context_b);
 
-    std::thread thread1(run_kernels_on_thread, contexta, false);
-    std::thread thread2(run_kernels_on_thread, contextb, false);
+    std::thread thread1(run_kernels_on_thread, context_a, false);
+    std::thread thread2(run_kernels_on_thread, context_b, false);
 
     thread1.join();
     thread2.join();
 
     // Make sure using the same context on different threads works.
-    std::thread thread3(run_kernels_on_thread, contexta, HAS_MULTIPLE_CONTEXTS);
-    std::thread thread4(run_kernels_on_thread, contextb, HAS_MULTIPLE_CONTEXTS);
+    std::thread thread3(run_kernels_on_thread, context_a, HAS_MULTIPLE_CONTEXTS);
+    std::thread thread4(run_kernels_on_thread, context_b, HAS_MULTIPLE_CONTEXTS);
 
     thread3.join();
     thread4.join();

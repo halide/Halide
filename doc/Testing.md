@@ -8,7 +8,7 @@ Halide's tests are organized beneath the top-level `test/` directory. These
 folders are described below:
 
 | Folder               | Description                                                                      |
-|----------------------|----------------------------------------------------------------------------------|
+| -------------------- | -------------------------------------------------------------------------------- |
 | `autoschedulers/$AS` | Test for the `$AS` (e.g. `adams2019`) autoscheduler                              |
 | `common`             | Code that may be shared across multiple tests                                    |
 | `correctness`        | Tests that check correctness of various compiler properties                      |
@@ -30,8 +30,8 @@ The vast majority of our tests are simple C++ executables that link to Halide,
 perform some checks, and print the special line `Success!` upon successful
 completion. There are three main exceptions to this:
 
-First, the `warning` tests are expected to print a line that reads
-`Warning:` and do not look for `Success!`.
+First, the `warning` tests are expected to print a line that reads `Warning:`
+and do not look for `Success!`.
 
 Second, some tests cannot run in all scenarios; for example, a test that
 measures CUDA performance requires a CUDA-capable GPU. In these cases, tests are
@@ -75,13 +75,13 @@ Process 29325 stopped
     frame #0: 0x0000000100002054 correctness_bounds`main(argc=1, argv=0x000000016fdff160) at bounds.cpp:18:12
    15       g(x, y) = min(x, y);
    16       h(x, y) = clamp(x + y, 20, 100);
-   17   
+   17  
 -> 18       Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
-   19   
+   19  
    20       Target target = get_jit_target_from_environment();
    21       if (target.has_gpu_feature()) {
 Target 0: (correctness_bounds) stopped.
-(lldb) 
+(lldb)
 ```
 
 Now we can try to inspect the Func `h`. Without the helpers, we see:

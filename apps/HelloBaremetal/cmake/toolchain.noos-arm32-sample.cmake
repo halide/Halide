@@ -12,7 +12,7 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
-# For newlib (standard C libraray) and semihosting mode
+# For newlib (standard C library) and semihosting mode
 set(C_COMMON_FLAGS "-specs=rdimon.specs")
 
 # Target CPU dependent flags to use NEON. Please modify for your target.

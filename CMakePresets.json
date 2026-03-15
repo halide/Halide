@@ -115,6 +115,32 @@
       }
     },
     {
+      "name": "ubuntu",
+      "inherits": "base",
+      "hidden": true,
+      "cacheVariables": {
+        "Halide_WASM_BACKEND": "OFF"
+      }
+    },
+    {
+      "name": "ubuntu-debug",
+      "inherits": [
+        "ubuntu",
+        "debug"
+      ],
+      "displayName": "Debug (Ubuntu)",
+      "description": "Debug build for a single-config generator, Ubuntu dependencies"
+    },
+    {
+      "name": "ubuntu-release",
+      "inherits": [
+        "ubuntu",
+        "release"
+      ],
+      "displayName": "Release (Ubuntu)",
+      "description": "Release build for a single-config generator, Ubuntu dependencies"
+    },
+    {
       "name": "debug-vcpkg",
       "inherits": [
         "debug",

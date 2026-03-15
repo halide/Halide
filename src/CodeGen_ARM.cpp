@@ -63,6 +63,8 @@ Target complete_arm_target(Target t) {
 
     constexpr int num_arm_v8_features = 10;
     static const Target::Feature arm_v8_features[num_arm_v8_features] = {
+        // The following loop depends on this array being sorted correctly.
+        // keep-sorted start numeric=yes order=desc
         Target::ARMv89a,
         Target::ARMv88a,
         Target::ARMv87a,
@@ -73,6 +75,7 @@ Target complete_arm_target(Target t) {
         Target::ARMv82a,
         Target::ARMv81a,
         Target::ARMv8a,
+        // keep-sorted end
     };
 
     for (int i = 0; i < num_arm_v8_features - 1; i++) {
