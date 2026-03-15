@@ -1,6 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
+
+CLEANUP_FILES=()
+# shellcheck disable=SC2329
+cleanup() { rm -rf "${CLEANUP_FILES[@]}"; }
+trap cleanup EXIT
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
@@ -36,12 +41,8 @@ get_thread_count() {
 }
 
 if [ "$(uname)" == "Darwin" ]; then
-    # shellcheck disable=SC2329
-    patch_file() { sed -i '' -E "$@"; }
     _DEFAULT_LLVM_LOCATION="/opt/homebrew/opt/llvm@$EXPECTED_VERSION"
 else
-    # shellcheck disable=SC2329
-    patch_file() { sed -i -E "$@"; }
     _DEFAULT_LLVM_LOCATION="/usr/lib/llvm-$EXPECTED_VERSION"
 fi
 
@@ -94,7 +95,7 @@ fi
 # Use a temp folder for the CMake stuff here, so it's fresh & correct every time
 if [[ -z ${CLANG_TIDY_BUILD_DIR} ]]; then
     CLANG_TIDY_BUILD_DIR=$(mktemp -d)
-    trap 'rm -rf ${CLANG_TIDY_BUILD_DIR}' EXIT
+    CLEANUP_FILES+=("${CLANG_TIDY_BUILD_DIR}")
 else
     mkdir -p "${CLANG_TIDY_BUILD_DIR}"
 fi
@@ -141,34 +142,32 @@ cmake -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev -DWITH_TESTS=OFF
 echo Building Halide...
 cmake --build "${CLANG_TIDY_BUILD_DIR}" -j "${J}"
 
-echo Building runtime compilation database...
-temp_file=$(mktemp)
-trap 'rm -f $temp_file' EXIT
-rm -f "${CLANG_TIDY_BUILD_DIR}/src/runtime/compile_commands.json"
-cat "${CLANG_TIDY_BUILD_DIR}"/src/runtime/*.json >"$temp_file"
-{
-    echo '['
-    cat "$temp_file" | sed '$ s/,$//'
-    echo ']'
-} >"${CLANG_TIDY_BUILD_DIR}/src/runtime/compile_commands.json"
-
-echo Merging compilation databases...
+echo Merging runtime compilation database...
 jq -s 'add' "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" \
-    "${CLANG_TIDY_BUILD_DIR}/src/runtime/compile_commands.json" \
+    <(sed 's/,$//' "${CLANG_TIDY_BUILD_DIR}"/src/runtime/*.json | jq -s '.') \
     >"${CLANG_TIDY_BUILD_DIR}/compile_commands_merged.json"
 mv "${CLANG_TIDY_BUILD_DIR}/compile_commands_merged.json" "${CLANG_TIDY_BUILD_DIR}/compile_commands.json"
 
+# Wrapper filters noisy "N warnings generated." from each clang-tidy invocation.
+CLANG_TIDY_FILTER="${CLANG_TIDY_BUILD_DIR}/clang-tidy-filter.sh"
+cat >"${CLANG_TIDY_FILTER}" <<WRAPPER
+#!/usr/bin/env bash
+"${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy" "\$@" 2>&1 | grep -v '^[[:digit:]]\+ warnings\? generated\.\$'
+exit "\${PIPESTATUS[0]}"
+WRAPPER
+chmod +x "${CLANG_TIDY_FILTER}"
+
 echo Running clang-tidy...
-PYTHONUNBUFFERED=1 "${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy" \
+"${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy" \
     ${FIX} \
     -j "${J}" \
     -quiet \
     -p "${CLANG_TIDY_BUILD_DIR}" \
-    -clang-tidy-binary "${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy" \
+    -clang-tidy-binary "${CLANG_TIDY_FILTER}" \
     -clang-apply-replacements-binary "${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-apply-replacements" \
-    "$@" 2>&1 | sed -Eu '/^[[:digit:]]+ warnings? generated\.$/{N;/\n$/d;}'
+    "$@"
 
-CLANG_TIDY_EXIT_CODE=${PIPESTATUS[0]}
+CLANG_TIDY_EXIT_CODE=$?
 
 if [ "$CLANG_TIDY_EXIT_CODE" -eq 0 ]; then
     echo "Success!"
