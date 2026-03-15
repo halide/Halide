@@ -236,7 +236,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
                 }
             }
             if (can_collapse) {
-                return Ramp::make(r->base, r->stride, op->indices.size());
+                return mutate(Ramp::make(r->base, r->stride, op->indices.size()), info);
             }
         }
 
@@ -257,7 +257,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
             }
 
             if (can_collapse) {
-                return Ramp::make(new_vectors[0], stride, op->indices.size());
+                return mutate(Ramp::make(new_vectors[0], stride, op->indices.size()), info);
             }
         }
     }

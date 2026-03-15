@@ -83,7 +83,8 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         return make_const(op->type, safe_numeric_cast<double>(*u), info);
     } else if (cast &&
                op->type.code() == cast->type.code() &&
-               op->type.bits() < cast->type.bits()) {
+               op->type.bits() < cast->type.bits() &&
+               op->type.lanes() == cast->value.type().lanes()) {
         // If this is a cast of a cast of the same type, where the
         // outer cast is narrower, the inner cast can be
         // eliminated.
@@ -93,7 +94,8 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
                cast->type.is_int() &&
                cast->value.type().is_int() &&
                op->type.bits() >= cast->type.bits() &&
-               cast->type.bits() >= cast->value.type().bits()) {
+               cast->type.bits() >= cast->value.type().bits() &&
+               op->type.lanes() == cast->value.type().lanes()) {
         // Casting from a signed type always sign-extends, so widening
         // partway to a signed type and the rest of the way to some other
         // integer type is the same as just widening to that integer type
@@ -103,7 +105,8 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
                op->type.is_int_or_uint() &&
                cast->type.is_int_or_uint() &&
                op->type.bits() <= cast->type.bits() &&
-               op->type.bits() <= op->value.type().bits()) {
+               op->type.bits() <= op->value.type().bits() &&
+               op->type.lanes() == cast->value.type().lanes()) {
         // If this is a cast between integer types, where the
         // outer cast is narrower than the inner cast and the
         // inner cast's argument, the inner cast can be

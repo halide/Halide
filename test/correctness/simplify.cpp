@@ -672,6 +672,7 @@ void check_vectors() {
     // Collapse some vector concats
     check(concat_vectors({ramp(x, 2, 4), ramp(x + 8, 2, 4)}), ramp(x, 2, 8));
     check(concat_vectors({ramp(x, 3, 2), ramp(x + 6, 3, 2), ramp(x + 12, 3, 2)}), ramp(x, 3, 6));
+    check(concat_vectors({x, x}), Broadcast::make(x, 2));
 
     // Now some ones that can't work
     {
@@ -810,23 +811,26 @@ void check_vectors() {
           int_vector);
     check(VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8),
           VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8));
+    check(cast(UInt(32, 2),
+               VectorReduce::make(VectorReduce::Max, Ramp::make(cast(UInt(8), x), cast(UInt(8), y), 8), 2)),
+          cast(UInt(32, 2),
+               VectorReduce::make(VectorReduce::Max, Ramp::make(cast(UInt(8), x), cast(UInt(8), y), 8), 2)));
 
     {
-        // h_add(broadcast(x, 8), 4) should simplify to broadcast(x * 2, 4)
         check(VectorReduce::make(VectorReduce::Add, broadcast(x, 8), 4),
               broadcast(x * 2, 4));
     }
 
     {
         Expr const_u8 = cast(UInt(8), 3);
-        check(VectorReduce::make(VectorReduce::Add, broadcast(const_u8, 9), 3), broadcast(cast(UInt(8), 9), 3));
+        check(VectorReduce::make(VectorReduce::Add, broadcast(const_u8, 9), 3),
+              broadcast(cast(UInt(8), 9), 3));
     }
 
     {
-        // Test VectorReduce::Add on a variable of unsigned type to ensure the multiplied factor
-        // keeps the correct type and avoids type-mismatch assertion failures.
         Expr u8_x = Variable::make(UInt(8), "u8_x");
-        check(VectorReduce::make(VectorReduce::Add, broadcast(u8_x, 9), 3), broadcast(u8_x * cast(UInt(8), 3), 3));
+        check(VectorReduce::make(VectorReduce::Add, broadcast(u8_x, 9), 3),
+              broadcast(u8_x * cast(UInt(8), 3), 3));
     }
 }
 
