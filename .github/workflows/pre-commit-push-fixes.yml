@@ -12,7 +12,9 @@ jobs:
   push-fixes:
     name: Push auto-fixes to PR branch
     runs-on: ubuntu-slim
-    if: github.event.workflow_run.conclusion == 'failure'
+    if: >-
+      github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.conclusion == 'failure'
     steps:
       - name: Download auto-fix artifacts
         id: download
@@ -27,12 +29,16 @@ jobs:
       - name: Read PR metadata
         if: steps.download.outcome == 'success'
         id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
         run: |
+          pr_json="$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER})"
           {
-            echo "number=$(jq -r '.number' /tmp/pre-commit-fixes/pr-metadata.json)"
-            echo "head-repo=$(jq -r '.head_repo' /tmp/pre-commit-fixes/pr-metadata.json)"
-            echo "head-ref=$(jq -r '.head_ref' /tmp/pre-commit-fixes/pr-metadata.json)"
-            echo "maintainer-can-modify=$(jq -r '.maintainer_can_modify' /tmp/pre-commit-fixes/pr-metadata.json)"
+            echo "number=${PR_NUMBER}"
+            echo "head-repo=$(jq -r '.head.repo.full_name' <<<"${pr_json}")"
+            echo "head-ref=$(jq -r '.head.ref' <<<"${pr_json}")"
+            echo "maintainer-can-modify=$(jq -r '.maintainer_can_modify' <<<"${pr_json}")"
           } >> "$GITHUB_OUTPUT"
 
       - name: Abort if maintainer edits not allowed
@@ -58,15 +64,21 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
-      - uses: actions/checkout@v4
+      - name: Fetch PR branch
         if: steps.download.outcome == 'success' && env.skip != 'true'
-        with:
-          repository: ${{ steps.pr.outputs.head-repo }}
-          ref: ${{ steps.pr.outputs.head-ref }}
-          token: ${{ steps.app-token.outputs.token }}
+        env:
+          HEAD_REPO: ${{ steps.pr.outputs.head-repo }}
+          HEAD_REF: ${{ steps.pr.outputs.head-ref }}
+        run: |
+          git init .
+          git remote add origin "https://github.com/${HEAD_REPO}.git"
+          git -c advice.detachedHead=false fetch --depth=1 origin "refs/heads/${HEAD_REF}"
+          git checkout --detach FETCH_HEAD
 
       - name: Apply and push fixes
         if: steps.download.outcome == 'success' && env.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           git config user.name "${{ steps.app-token.outputs.app-slug }}[bot]"
           git config user.email "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
@@ -79,4 +91,5 @@ jobs:
           git apply /tmp/pre-commit-fixes/pre-commit-fixes.patch
           git add -A
           git commit -m "Apply pre-commit auto-fixes"
-          git push
+          git remote set-url --push origin "https://x-access-token:${GH_TOKEN}@github.com/${{ steps.pr.outputs.head-repo }}.git"
+          git push origin HEAD:${{ steps.pr.outputs.head-ref }}
