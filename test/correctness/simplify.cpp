@@ -817,6 +817,7 @@ void check_vectors() {
                VectorReduce::make(VectorReduce::Max, Ramp::make(cast(UInt(8), x), cast(UInt(8), y), 8), 2)));
 
     {
+        // h_add(broadcast(x, 8), 4) should simplify to broadcast(x * 2, 4)
         check(VectorReduce::make(VectorReduce::Add, broadcast(x, 8), 4),
               broadcast(x * 2, 4));
     }
@@ -828,6 +829,8 @@ void check_vectors() {
     }
 
     {
+        // Test VectorReduce::Add on a variable of unsigned type to ensure the multiplied factor
+        // keeps the correct type and avoids type-mismatch assertion failures.
         Expr u8_x = Variable::make(UInt(8), "u8_x");
         check(VectorReduce::make(VectorReduce::Add, broadcast(u8_x, 9), 3),
               broadcast(u8_x * cast(UInt(8), 3), 3));
