@@ -811,10 +811,6 @@ void check_vectors() {
           int_vector);
     check(VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8),
           VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8));
-    check(cast(UInt(32, 2),
-               VectorReduce::make(VectorReduce::Max, Ramp::make(cast(UInt(8), x), cast(UInt(8), y), 8), 2)),
-          cast(UInt(32, 2),
-               VectorReduce::make(VectorReduce::Max, Ramp::make(cast(UInt(8), x), cast(UInt(8), y), 8), 2)));
 
     {
         // h_add(broadcast(x, 8), 4) should simplify to broadcast(x * 2, 4)
@@ -824,17 +820,20 @@ void check_vectors() {
 
     {
         Expr const_u8 = cast(UInt(8), 3);
-        check(VectorReduce::make(VectorReduce::Add, broadcast(const_u8, 9), 3),
-              broadcast(cast(UInt(8), 9), 3));
+        check(VectorReduce::make(VectorReduce::Add, broadcast(const_u8, 9), 3), broadcast(cast(UInt(8), 9), 3));
     }
 
     {
         // Test VectorReduce::Add on a variable of unsigned type to ensure the multiplied factor
         // keeps the correct type and avoids type-mismatch assertion failures.
         Expr u8_x = Variable::make(UInt(8), "u8_x");
-        check(VectorReduce::make(VectorReduce::Add, broadcast(u8_x, 9), 3),
-              broadcast(u8_x * cast(UInt(8), 3), 3));
+        check(VectorReduce::make(VectorReduce::Add, broadcast(u8_x, 9), 3), broadcast(u8_x * cast(UInt(8), 3), 3));
     }
+
+    check(cast(UInt(32, 2),
+               VectorReduce::make(VectorReduce::Max, Ramp::make(cast(UInt(8), x), cast(UInt(8), y), 8), 2)),
+          cast(UInt(32, 2),
+               VectorReduce::make(VectorReduce::Max, Ramp::make(cast(UInt(8), x), cast(UInt(8), y), 8), 2)));
 }
 
 void check_bounds() {
