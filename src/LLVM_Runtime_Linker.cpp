@@ -108,7 +108,8 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 #define DECLARE_LL_INITMOD(mod) \
     DECLARE_INITMOD(mod##_ll)
 
-// Universal CPP Initmods. Please keep sorted alphabetically.
+// Universal CPP Initmods.
+// keep-sorted start ignore_prefixes=//
 DECLARE_CPP_INITMOD(alignment_128)
 DECLARE_CPP_INITMOD(alignment_32)
 DECLARE_CPP_INITMOD(alignment_64)
@@ -175,8 +176,7 @@ DECLARE_CPP_INITMOD(timer_profiler)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
-// TODO(https://github.com/halide/Halide/issues/7248)
-// DECLARE_CPP_INITMOD(webgpu)
+// DECLARE_CPP_INITMOD(webgpu)  // TODO(https://github.com/halide/Halide/issues/7248)
 DECLARE_CPP_INITMOD(webgpu_dawn)
 DECLARE_CPP_INITMOD(webgpu_emscripten)
 DECLARE_CPP_INITMOD(windows_clock)
@@ -189,11 +189,14 @@ DECLARE_CPP_INITMOD(windows_threads)
 DECLARE_CPP_INITMOD(windows_threads_tsan)
 DECLARE_CPP_INITMOD(windows_yield)
 DECLARE_CPP_INITMOD(write_debug_image)
+// keep-sorted end
 
-// Universal LL Initmods. Please keep sorted alphabetically.
+// Universal LL Initmods
+// keep-sorted start
 DECLARE_LL_INITMOD(posix_math)
-DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
+DECLARE_LL_INITMOD(win32_math)
+// keep-sorted end
 
 // Various conditional initmods follow (both LL and CPP).
 #ifdef WITH_METAL
@@ -285,21 +288,25 @@ DECLARE_NO_INITMOD(windows_vulkan)
 #endif  // WITH_VULKAN
 
 #ifdef WITH_X86
-DECLARE_LL_INITMOD(x86_amx)
-DECLARE_LL_INITMOD(x86_avx512)
-DECLARE_LL_INITMOD(x86_avx2)
-DECLARE_LL_INITMOD(x86_avx)
+// keep-sorted start by_regex=["INITMOD\\(.+"]
 DECLARE_LL_INITMOD(x86)
-DECLARE_LL_INITMOD(x86_sse41)
+DECLARE_LL_INITMOD(x86_amx)
+DECLARE_LL_INITMOD(x86_avx)
+DECLARE_LL_INITMOD(x86_avx2)
+DECLARE_LL_INITMOD(x86_avx512)
 DECLARE_CPP_INITMOD(x86_cpu_features)
+DECLARE_LL_INITMOD(x86_sse41)
+// keep-sorted end
 #else
-DECLARE_NO_INITMOD(x86_amx)
-DECLARE_NO_INITMOD(x86_avx512)
-DECLARE_NO_INITMOD(x86_avx2)
-DECLARE_NO_INITMOD(x86_avx)
+// keep-sorted start by_regex=["INITMOD\\(.+"]
 DECLARE_NO_INITMOD(x86)
-DECLARE_NO_INITMOD(x86_sse41)
+DECLARE_NO_INITMOD(x86_amx)
+DECLARE_NO_INITMOD(x86_avx)
+DECLARE_NO_INITMOD(x86_avx2)
+DECLARE_NO_INITMOD(x86_avx512)
 DECLARE_NO_INITMOD(x86_cpu_features)
+DECLARE_NO_INITMOD(x86_sse41)
+// keep-sorted end
 #endif  // WITH_X86
 
 #ifdef WITH_POWERPC

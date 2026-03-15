@@ -67,6 +67,15 @@ repos:
     hooks:
       - id: gitleaks
 
+  - repo: https://github.com/google/keep-sorted
+    rev: v0.8.0
+    hooks:
+      - id: keep-sorted
+        args: [
+          --default-options,
+          "allow_yaml_lists=yes case=yes group=yes order=asc remove_duplicates=yes sticky_comments=no"
+        ]
+
   - repo: https://github.com/hukkin/mdformat
     rev: 1.0.0
     hooks:
