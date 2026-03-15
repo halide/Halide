@@ -449,9 +449,9 @@ int main(int argc, char **argv) {
         12847901530538798383ull,
     };
 
-    int num_iters = (argc > 1) ? 1 : 64;
+    size_t num_iters = (argc > 1) ? 1 : 64;
 
-    for (int i = 0; i < num_iters; i++) {
+    for (size_t i = 0; i < num_iters; i++) {
         uint64_t seed = seed_generator();
         if (i < seeds_to_try.size()) {
             seed = seeds_to_try[i];
