@@ -151,6 +151,32 @@ Expr random_shuffle_expr(RandomEngine &rng, Type t, int depth, bool overflow_und
     return random_choice(rng, shuffles)();
 }
 
+Expr random_vector_reduce_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef) {
+    int input_lanes = (t.is_scalar() ? random_vector_width(rng) : t.lanes());
+    Type input_type = t.with_lanes(input_lanes);
+    Expr vec = random_expr(rng, input_type, depth, overflow_undef);
+    int output_lanes = get_random_divisor(rng, input_type);
+
+    if (input_type.is_bool()) {
+        VectorReduce::Operator reduce_ops[] = {
+            VectorReduce::And,
+            VectorReduce::Or,
+        };
+        return VectorReduce::make(random_choice(rng, reduce_ops), vec, output_lanes);
+    }
+
+    VectorReduce::Operator reduce_ops[] = {
+        VectorReduce::Add,
+        VectorReduce::SaturatingAdd,
+        VectorReduce::Mul,
+        VectorReduce::Min,
+        VectorReduce::Max,
+        VectorReduce::And,
+        VectorReduce::Or,
+    };
+    return VectorReduce::make(random_choice(rng, reduce_ops), vec, output_lanes);
+}
+
 Expr random_condition(RandomEngine &rng, Type t, int depth, bool maybe_scalar) {
     static make_bin_op_fn make_bin_op[] = {
         EQ::make,
@@ -242,6 +268,9 @@ Expr random_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef) {
         },
         [&]() {
             return random_shuffle_expr(rng, t, depth, overflow_undef);
+        },
+        [&]() {
+            return random_vector_reduce_expr(rng, t, depth, overflow_undef);
         },
         [&]() {
             if (t.is_bool()) {
