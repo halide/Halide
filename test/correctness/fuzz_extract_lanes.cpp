@@ -373,7 +373,7 @@ bool test_one(RandomEngine &rng) {
     }
 
     // Generate a batch of random vector expressions
-    constexpr int batch_size = 32;
+    constexpr int batch_size = 64;
     constexpr int depth = 4;
     std::vector<Expr> original(batch_size);
     std::vector<Expr> sliced(batch_size);
@@ -403,10 +403,10 @@ bool test_one(RandomEngine &rng) {
         for (int x = 0; x < new_lanes; x++) {
             int orig_lane = starting_lane + x * lane_stride;
             if (sliced_vals(x, y) != orig_vals(orig_lane, y)) {
-                std::cerr << "MISMATCH!\n"
+                std::cerr << "MISMATCH! (y=" << y << ", x=" << x << ")\n"
                           << "Original expr: " << original[y] << "\n"
                           << "Original type: " << original[y].type() << "\n"
-                          << "Deinterleave params: starting_lane=" << starting_lane
+                          << "ExtractLanes params: starting_lane=" << starting_lane
                           << " lane_stride=" << lane_stride
                           << " new_lanes=" << new_lanes << "\n"
                           << "Sliced expr: " << sliced[y] << "\n"
@@ -436,16 +436,26 @@ bool test_one(RandomEngine &rng) {
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Halide::Target::ARM) {
+    if (get_jit_target_from_environment().has_feature(Target::SVE2)) {
         printf("[SKIP-WITH-ISSUE-9026] LLVM generates incorrect IR for some expressions.\n");
         return 0;
     }
     auto seed_generator = initialize_rng<RandomEngine>();
 
-    int num_iters = (argc > 1) ? 1 : 32;
+    /* Seeds known to have failed in the past: */
+    std::vector<uint64_t> seeds_to_try = {
+        11290674455725750672ull,
+        18322803614019275106ull,
+        12847901530538798383ull,
+    };
+
+    int num_iters = (argc > 1) ? 1 : 64;
 
     for (int i = 0; i < num_iters; i++) {
-        auto seed = seed_generator();
+        uint64_t seed = seed_generator();
+        if (i < seeds_to_try.size()) {
+            seed = seeds_to_try[i];
+        }
         if (argc > 1) {
             std::istringstream{argv[1]} >> seed;
         }
