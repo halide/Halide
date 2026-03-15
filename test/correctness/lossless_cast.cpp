@@ -486,8 +486,8 @@ Expr regression_expr_1926104395() {
     return mul_shift_right(shifted - cast(Int(32), halving),
                            cast(Int(32), twice_div_173_88 / cast(UInt(8), shifted)),
                            cast(UInt(32), rounding /
-                                             cast(UInt(8), buf_i8(x) /
-                                                               cast(Int(8), div_173_88))));
+                                              cast(UInt(8), buf_i8(x) /
+                                                                cast(Int(8), div_173_88))));
 }
 
 Expr regression_expr_3082698823() {
