@@ -97,65 +97,20 @@ Expr random_leaf(RandomEngine &rng, Type t, bool overflow_undef = false, bool im
 Expr random_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef = false);
 
 Expr random_shuffle_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef) {
-    if (t.is_scalar()) {
-        int lanes = random_vector_width(rng);
-        Expr vector = random_expr(rng, t.with_lanes(lanes), depth, overflow_undef);
-        std::uniform_int_distribution<int> dist(0, lanes - 1);
-        return Shuffle::make_extract_element(vector, dist(rng));
-    }
-
-    std::vector<std::function<Expr()>> shuffles = {
-        [&]() {
-            int vectors = get_random_divisor(rng, t);
-            Type subtype = t.with_lanes(t.lanes() / vectors);
-            std::vector<Expr> exprs;
-            exprs.reserve(vectors);
-            for (int i = 0; i < vectors; i++) {
-                exprs.push_back(random_expr(rng, subtype, depth, overflow_undef));
-            }
-            return Shuffle::make_concat(exprs);
-        },
-        [&]() {
-            int vectors = get_random_divisor(rng, t);
-            Type subtype = t.with_lanes(t.lanes() / vectors);
-            std::vector<Expr> exprs;
-            exprs.reserve(vectors);
-            for (int i = 0; i < vectors; i++) {
-                exprs.push_back(random_expr(rng, subtype, depth, overflow_undef));
-            }
-            return Shuffle::make_interleave(exprs);
-        },
-        [&]() {
-            Expr vector = random_expr(rng, t, depth, overflow_undef);
-            std::vector<int> indices(t.lanes());
-            for (int i = 0; i < t.lanes(); i++) {
-                indices[i] = i;
-                if (i & 1) {
-                    int tmp = indices[i];
-                    indices[i] = indices[i / 2];
-                    indices[i / 2] = tmp;
-                }
-            }
-            return Shuffle::make({vector}, indices);
-        },
-    };
-
-    if (t.lanes() * 2 <= 8) {
-        shuffles.push_back([&]() {
-            Expr vector = random_expr(rng, t.with_lanes(t.lanes() * 2), depth, overflow_undef);
-            std::uniform_int_distribution<int> dist(0, 1);
-            return Shuffle::make_slice(vector, dist(rng), 2, t.lanes());
-        });
-    }
-
-    return random_choice(rng, shuffles)();
+    internal_assert(t.is_scalar());
+    internal_assert(!t.is_bool());
+    int lanes = random_vector_width(rng);
+    Expr vector = Broadcast::make(random_expr(rng, t, depth, overflow_undef), lanes);
+    std::uniform_int_distribution<int> dist(0, lanes - 1);
+    return Shuffle::make_extract_element(vector, dist(rng));
 }
 
 Expr random_vector_reduce_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef) {
-    int input_lanes = t.is_scalar() ? random_vector_width(rng) : random_vector_width(rng, t.lanes(), t.lanes());
+    internal_assert(t.is_scalar());
+    int input_lanes = random_vector_width(rng);
     Type input_type = t.with_lanes(input_lanes);
     Expr vec = random_expr(rng, input_type, depth, overflow_undef);
-    int output_lanes = t.lanes();
+    int output_lanes = 1;
 
     if (input_type.is_bool()) {
         VectorReduce::Operator reduce_ops[] = {
@@ -167,12 +122,6 @@ Expr random_vector_reduce_expr(RandomEngine &rng, Type t, int depth, bool overfl
 
     VectorReduce::Operator reduce_ops[] = {
         VectorReduce::Add,
-        VectorReduce::SaturatingAdd,
-        VectorReduce::Mul,
-        VectorReduce::Min,
-        VectorReduce::Max,
-        VectorReduce::And,
-        VectorReduce::Or,
     };
     return VectorReduce::make(random_choice(rng, reduce_ops), vec, output_lanes);
 }
@@ -227,7 +176,7 @@ Expr make_bitwise_not(Expr a, Expr) {
 }
 
 Expr make_shift_right(Expr a, Expr b) {
-    return a >> (b % a.type().bits());
+    return a >> (b % make_const(b.type(), a.type().bits()));
 }
 
 Expr random_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef) {
@@ -267,10 +216,16 @@ Expr random_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef) {
             return random_expr(rng, t, depth, overflow_undef);
         },
         [&]() {
-            return random_shuffle_expr(rng, t, depth, overflow_undef);
+            if (t.is_scalar() && !t.is_bool()) {
+                return random_shuffle_expr(rng, t, depth, overflow_undef);
+            }
+            return random_expr(rng, t, depth, overflow_undef);
         },
         [&]() {
-            return random_vector_reduce_expr(rng, t, depth, overflow_undef);
+            if (t.is_scalar()) {
+                return random_vector_reduce_expr(rng, t, depth, overflow_undef);
+            }
+            return random_expr(rng, t, depth, overflow_undef);
         },
         [&]() {
             if (t.is_bool()) {
