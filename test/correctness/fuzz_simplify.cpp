@@ -60,6 +60,7 @@ int random_vector_width(RandomEngine &rng, int min_lanes = 2) {
             widths.push_back(width);
         }
     }
+    internal_assert(!widths.empty());
     return random_choice(rng, widths);
 }
 
