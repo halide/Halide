@@ -158,6 +158,7 @@ WRAPPER
 chmod +x "${CLANG_TIDY_FILTER}"
 
 echo Running clang-tidy...
+export PYTHONUNBUFFERED=1
 "${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy" \
     ${FIX} \
     -j "${J}" \
