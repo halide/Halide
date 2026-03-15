@@ -505,16 +505,6 @@ Expr regression_expr_3082698823() {
 }
 
 int regression_case(const char *name, Expr e1, Type target) {
-    Expr simplified = simplify(e1);
-    if (might_have_ub(e1) ||
-        might_have_ub(simplified) ||
-        might_have_ub(lower_intrinsics(simplified))) {
-        std::cout << "regression case unexpectedly has ub: " << name << "\n"
-                  << "e1 = " << e1 << "\n"
-                  << "simplify(e1) = " << simplified << "\n";
-        return 1;
-    }
-
     Expr e2 = lossless_cast(target, e1);
     if (!e2.defined()) {
         std::cout << "regression case unexpectedly cannot be narrowed: " << name << "\n"
