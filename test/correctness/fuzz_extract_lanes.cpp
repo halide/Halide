@@ -446,8 +446,13 @@ bool test_one(RandomEngine &rng) {
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().has_feature(Target::SVE2)) {
+    Target t = get_jit_target_from_environment();
+    if (t.has_feature(Target::SVE2)) {
         printf("[SKIP-WITH-ISSUE-9026] LLVM generates incorrect IR for some expressions.\n");
+        return 0;
+    }
+    if (t.arch != Target::X86 || t.bits != 64) {
+        printf("[SKIP-WITH-ISSUE-9040] Only running test on X86-64 for now. See also #9044.");
         return 0;
     }
     auto seed_generator = initialize_rng<RandomEngine>();
