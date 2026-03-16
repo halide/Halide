@@ -40,6 +40,7 @@ std::string IRGraphCXXPrinter::to_cpp_arg<Expr>(const Expr &e) {
     return node_names.at(e.get());
 }
 
+// Not used, but leaving in place in case we ever want to expand this to Stmts.
 template<>
 std::string IRGraphCXXPrinter::to_cpp_arg<Stmt>(const Stmt &s) {
     if (!s.defined()) {
@@ -60,6 +61,8 @@ template<>
 std::string IRGraphCXXPrinter::to_cpp_arg<std::string>(const std::string &s) {
     return "\"" + s + "\"";
 }
+
+// Not used, but leaving in place in case we ever want to expand this to Stmts.
 template<>
 std::string IRGraphCXXPrinter::to_cpp_arg<ForType>(const ForType &f) {
     switch (f) {
@@ -210,6 +213,7 @@ VISIT_NODE(Call, op->type, op->name, op->args, op->call_type, op->func, op->valu
 VISIT_NODE(Let, op->name, op->value, op->body)
 VISIT_NODE(VectorReduce, op->op, op->value, op->type.lanes())
 
+#if 0  // Currently no support yet for Stmts, however, the macros below are already correct. We just can't print everything yet.
 // --- 6. Core Statements ---
 VISIT_NODE(LetStmt, op->name, op->value, op->body)
 VISIT_NODE(AssertStmt, op->condition, op->message)
@@ -232,6 +236,7 @@ VISIT_NODE(ProducerConsumer, op->name, op->is_producer, op->body)
 VISIT_NODE(Acquire, op->semaphore, op->count, op->body)
 VISIT_NODE(Fork, op->first, op->rest)
 VISIT_NODE(Atomic, op->producer_name, op->mutex_name, op->body)
+#endif
 
 void IRGraphCXXPrinter::test() {
     // This:
