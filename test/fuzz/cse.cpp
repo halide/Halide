@@ -2,7 +2,6 @@
 
 #include "fuzz_helpers.h"
 #include <functional>
-#include <fuzzer/FuzzedDataProvider.h>
 #include <time.h>
 
 using namespace Halide;
@@ -15,14 +14,14 @@ using std::vector;
 // *not* int32 -- because we want to test CSE, not the simplifier's
 // overflow behavior, and using int32 can end up with results
 // containing signed_integer_overflow(), which is not helpful here.
-Expr random_expr(FuzzedDataProvider &fdp, int depth, vector<pair<Expr, int>> &exprs) {
+Expr random_expr(FuzzingContext &fdp, int depth, vector<pair<Expr, int>> &exprs) {
     if (depth <= 0) {
         return i16(fdp.ConsumeIntegralInRange<int>(-5, 4));
     }
     if (!exprs.empty() && fdp.ConsumeBool()) {
         // Reuse an existing expression that was generated under conditions at
         // least as strict as our current depth limit.
-        auto p = pick_value_in_vector(fdp, exprs);
+        auto p = fdp.PickValueInVector(exprs);
         if (p.second <= depth) {
             return p.first;
         }
@@ -76,8 +75,7 @@ Expr random_expr(FuzzedDataProvider &fdp, int depth, vector<pair<Expr, int>> &ex
     return next;
 }
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-    FuzzedDataProvider fdp(data, size);
+FUZZ_TEST(cse, FuzzingContext &fdp) {
     vector<pair<Expr, int>> exprs;
     Expr orig = random_expr(fdp, 5, exprs);
 
@@ -92,7 +90,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
     // Don't use can_prove, because it recursively calls cse, which just confuses matters.
     Expr result = simplify(check);
-    assert(is_const_one(result));
+    if (is_const_one(result)) {
+        return 0;
+    }
 
-    return 0;
+    return 1;
 }

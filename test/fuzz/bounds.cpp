@@ -1,7 +1,6 @@
 #include "Halide.h"
 #include "fuzz_helpers.h"
 #include <array>
-#include <fuzzer/FuzzedDataProvider.h>
 #include <random>
 #include <stdio.h>
 #include <time.h>
@@ -26,12 +25,12 @@ std::string fuzz_var(int i) {
 // This is modified for each round.
 static Type global_var_type = Int(32);
 
-Expr random_var(FuzzedDataProvider &fdp) {
+Expr random_var(FuzzingContext &fdp) {
     int fuzz_count = fdp.ConsumeIntegralInRange(0, fuzz_var_count - 1);
     return Variable::make(global_var_type, fuzz_var(fuzz_count));
 }
 
-Type random_type(FuzzedDataProvider &fdp, int width) {
+Type random_type(FuzzingContext &fdp, int width) {
     Type t = fdp.PickValueInArray(fuzz_types);
 
     if (width > 1) {
@@ -40,7 +39,7 @@ Type random_type(FuzzedDataProvider &fdp, int width) {
     return t;
 }
 
-int get_random_divisor(FuzzedDataProvider &fdp, Type t) {
+int get_random_divisor(FuzzingContext &fdp, Type t) {
     std::vector<int> divisors = {t.lanes()};
     for (int dd = 2; dd < t.lanes(); dd++) {
         if (t.lanes() % dd == 0) {
@@ -48,10 +47,10 @@ int get_random_divisor(FuzzedDataProvider &fdp, Type t) {
         }
     }
 
-    return pick_value_in_vector(fdp, divisors);
+    return fdp.PickValueInVector(divisors);
 }
 
-Expr random_leaf(FuzzedDataProvider &fdp, Type t, bool overflow_undef = false, bool imm_only = false) {
+Expr random_leaf(FuzzingContext &fdp, Type t, bool overflow_undef = false, bool imm_only = false) {
     if (t.is_int() && t.bits() == 32) {
         overflow_undef = true;
     }
@@ -80,9 +79,9 @@ Expr random_leaf(FuzzedDataProvider &fdp, Type t, bool overflow_undef = false, b
     }
 }
 
-Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef = false);
+Expr random_expr(FuzzingContext &fdp, Type t, int depth, bool overflow_undef = false);
 
-Expr random_condition(FuzzedDataProvider &fdp, Type t, int depth, bool maybe_scalar) {
+Expr random_condition(FuzzingContext &fdp, Type t, int depth, bool maybe_scalar) {
     static make_bin_op_fn make_bin_op[] = {
         EQ::make,
         NE::make,
@@ -101,7 +100,7 @@ Expr random_condition(FuzzedDataProvider &fdp, Type t, int depth, bool maybe_sca
     return fdp.PickValueInArray(make_bin_op)(a, b);
 }
 
-Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef) {
+Expr random_expr(FuzzingContext &fdp, Type t, int depth, bool overflow_undef) {
     if (t.is_int() && t.bits() == 32) {
         overflow_undef = true;
     }
@@ -157,7 +156,7 @@ Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef
         },
         [&]() {
             // Get a random type that isn't t or int32 (int32 can overflow and we don't care about that).
-            // Note also that the FuzzedDataProvider doesn't actually promise to return a random distribution --
+            // Note also that the FuzzingContext doesn't actually promise to return a random distribution --
             // it can (e.g.) decide to just return 0 for all data, forever -- so this loop has no guarantee
             // of eventually finding a different type. To remedy this, we'll just put a limit on the retries.
             int count = 0;
@@ -285,7 +284,7 @@ Expr c(Variable::make(global_var_type, fuzz_var(2)));
 Expr d(Variable::make(global_var_type, fuzz_var(3)));
 Expr e(Variable::make(global_var_type, fuzz_var(4)));
 
-Interval random_interval(FuzzedDataProvider &fdp, Type t) {
+Interval random_interval(FuzzingContext &fdp, Type t) {
     Interval interval;
 
     int min_value = -128;
@@ -337,7 +336,7 @@ Interval random_interval(FuzzedDataProvider &fdp, Type t) {
     return interval;
 }
 
-int sample_interval(FuzzedDataProvider &fdp, const Interval &interval) {
+int sample_interval(FuzzingContext &fdp, const Interval &interval) {
     // Values chosen so intervals don't repeatedly produce signed_overflow when simplified.
     int min_value = -128;
     int max_value = 128;
@@ -416,7 +415,7 @@ bool test_bounds(Expr test, const Interval &interval, Type t, const map<string, 
     return true;
 }
 
-bool test_expression_bounds(FuzzedDataProvider &fdp, Expr test, int trials, int samples_per_trial) {
+bool test_expression_bounds(FuzzingContext &fdp, Expr test, int trials, int samples_per_trial) {
     map<string, Expr> vars;
     for (int i = 0; i < fuzz_var_count; i++) {
         vars[fuzz_var(i)] = Expr();
@@ -474,9 +473,7 @@ bool test_expression_bounds(FuzzedDataProvider &fdp, Expr test, int trials, int 
 
 }  // namespace
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-    FuzzedDataProvider fdp(data, size);
-
+FUZZ_TEST(bounds, FuzzingContext &fdp) {
     // Number of random expressions to test.
     const int count = 100;
     // Depth of the randomly generated expression trees.
@@ -500,6 +497,5 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         }
     }
 
-    std::cout << "Success!\n";
     return 0;
 }
