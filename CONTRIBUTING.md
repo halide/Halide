@@ -67,9 +67,9 @@ once the design solidifies.
   using a `Co-authored-by` trailer, as described in the
   [Code of Conduct](CODE_OF_CONDUCT.md). For example:
 
-    ```
-    Co-authored-by: Claude <noreply@anthropic.com>
-    ```
+  ```
+  Co-authored-by: Claude <noreply@anthropic.com>
+  ```
 
 - **Documentation.** New or changed public APIs (those in the `Halide::`
   namespace) should be accompanied by updated documentation.

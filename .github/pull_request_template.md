@@ -17,4 +17,5 @@ Fixes #<!-- issue number, if applicable -->
 - [ ] Tests added or updated (not required for docs, CI config, or typo fixes)
 - [ ] Documentation updated (if public API changed)
 - [ ] Python bindings updated (if `Halide::` namespace API changed)
-- [ ] Commits include AI attribution where applicable (see [Code of Conduct](../CODE_OF_CONDUCT.md))
+- [ ] Commits include AI attribution where applicable (see
+  [Code of Conduct](../CODE_OF_CONDUCT.md))
