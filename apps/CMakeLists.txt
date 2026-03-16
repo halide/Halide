@@ -30,6 +30,7 @@ if (Halide_TARGET MATCHES "wasm")
     return()
 endif()
 
+# keep-sorted start case=no ignore_prefixes=#
 # add_app(HelloAndroid)  # TODO(#5374): missing CMake build
 # add_app(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
 # add_app(HelloPyTorch)  # TODO(#5374): missing CMake build
