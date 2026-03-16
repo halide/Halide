@@ -404,6 +404,7 @@ void ExprInterpreter::visit(const Broadcast *op) {
 
 void ExprInterpreter::visit(const Shuffle *op) {
     std::vector<EvalValue> vecs;
+    vecs.reserve(op->vectors.size());
     for (const Expr &e : op->vectors) {
         vecs.push_back(eval(e));
     }
@@ -489,6 +490,7 @@ void ExprInterpreter::visit(const VectorReduce *op) {
 
 void ExprInterpreter::visit(const Call *op) {
     std::vector<EvalValue> args;
+    args.reserve(op->args.size());
     for (const Expr &e : op->args) {
         args.push_back(eval(e));
     }
