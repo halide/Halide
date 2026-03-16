@@ -15,10 +15,11 @@ set(CMAKE_SYSROOT "${CMAKE_SYSROOT}" CACHE PATH "")
 
 if (NOT DEFINED XC_TOOLCHAIN_PATH)
     execute_process(
-        COMMAND xcrun --show-toolchain-path
+        COMMAND xcrun --find clang
         OUTPUT_VARIABLE XC_TOOLCHAIN_PATH
         OUTPUT_STRIP_TRAILING_WHITESPACE
         COMMAND_ERROR_IS_FATAL ANY)
+    cmake_path(SET XC_TOOLCHAIN_PATH NORMALIZE "${XC_TOOLCHAIN_PATH}/../../..")
 endif ()
 
 set(XC_TOOLCHAIN_PATH "${XC_TOOLCHAIN_PATH}" CACHE PATH "")
