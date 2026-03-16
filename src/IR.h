@@ -208,7 +208,7 @@ struct Not : public ExprNode<Not> {
     static const IRNodeType _node_type = IRNodeType::Not;
 };
 
-/** A ternary operator. Evalutes 'true_value' and 'false_value',
+/** A ternary operator. Evaluates 'true_value' and 'false_value',
  * then selects between them based on 'condition'. Equivalent to
  * the ternary operator in C. */
 struct Select : public ExprNode<Select> {
@@ -516,7 +516,7 @@ struct Call : public ExprNode<Call> {
     // (instead of IR nodes). These are matched by name. Note that
     // these are deliberately char* (rather than std::string) so that
     // they can be referenced at static-initialization time without
-    // risking ambiguous initalization order; we use a typedef to simplify
+    // risking ambiguous initialization order; we use a typedef to simplify
     // declaration.
     typedef const char *const ConstString;
 

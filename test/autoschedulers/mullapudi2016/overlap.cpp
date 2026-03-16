@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
         up[i](x, y) = (up[i - 1](x / 2, y) + up[i - 1]((x + 1) / 2, y)) / 2;
     }
 
-    // Provide esitmates for pipeline outputs
+    // Provide estimates for pipeline outputs
     up[num_levels - 1].set_estimates({{0, 1500}, {0, 1500}});
 
     // Auto-schedule the pipeline

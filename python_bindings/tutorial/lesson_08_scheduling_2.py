@@ -56,7 +56,7 @@ def main():
         #                   sqrt((x + 1) * (y + 1)))
 
         # All calls to 'producer' have been replaced with the body of
-        # 'producer', with the arguments subtituted in for the
+        # 'producer', with the arguments substituted in for the
         # variables.
 
         # The equivalent C code is:
@@ -160,7 +160,7 @@ def main():
     # memory and memory bandwidth, but did a whole bunch of redundant
     # expensive math (calling sqrt). It evaluated most points in
     # 'producer' four times. The second schedule,
-    # producer.compute_root(), did the mimimum number of calls to
+    # producer.compute_root(), did the minimum number of calls to
     # sqrt, but used more temporary memory and more memory bandwidth.
 
     # In any given situation the correct choice can be difficult to

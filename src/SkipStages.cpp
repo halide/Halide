@@ -125,7 +125,7 @@ class SkipStagesAnalysis : public IRVisitor {
             }
             // Is this expression interesting? I.e. might it show up in a .used
             // or .loaded? Either the body Expr was interesting in its own right
-            // (refered to something used in a conditional somewhere), or the
+            // (referred to something used in a conditional somewhere), or the
             // value was interesting, and presumably the value is used in the
             // body.
             found_var_used_in_condition = found_var_used_in_condition || old;

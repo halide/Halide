@@ -12,10 +12,12 @@ PROTOC := $(shell which protoc)
 
 ifdef PROTOC
 
+PROTOC_PREFIX := $(dir $(PROTOC))..
+PROTOBUF_PKG_CONFIG := PKG_CONFIG_PATH=$(PROTOC_PREFIX)/lib/pkgconfig pkg-config protobuf-lite
+
 CXXFLAGS += -DGOOGLE_PROTOBUF_NO_RTTI -Wno-sign-compare -Wno-unused-but-set-variable
-CXXFLAGS += -I$(dir $(PROTOC))../include
-LDFLAGS += -L$(dir $(PROTOC))../lib
-LDFLAGS += $(shell pkg-config protobuf-lite --libs)
+CXXFLAGS += $(shell $(PROTOBUF_PKG_CONFIG) --cflags)
+LDFLAGS += $(shell $(PROTOBUF_PKG_CONFIG) --libs)
 
 # Copy onnx.proto to $(BIN)
 $(BIN)/%/onnx/onnx.proto:
@@ -27,7 +29,7 @@ $(BIN)/%/onnx/onnx.proto:
 	fi
 
 # protoc generates two files
-$(BIN)/%/onnx/onnx.pb.cc: $(BIN)/%/onnx/onnx.proto
+$(BIN)/%/onnx/onnx.pb.cc: $(BIN)/%/onnx/onnx.proto $(PROTOC)
 	@sed -i -e 's/package onnx;/package onnx;option optimize_for = LITE_RUNTIME;/g' $<
 	@mkdir -p $(@D)
 	$(PROTOC) --cpp_out=$(@D) --proto_path=$(dir $<) $<
@@ -50,7 +52,7 @@ clean:
 
 # Simple unit test
 $(BIN)/%/onnx_converter_test: onnx_converter_test.cc $(BIN)/%/oclib.a
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LIBHALIDE_LDFLAGS) 
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(GENERATOR_BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERATOR_DEPS) $(GENERATOR_BIN)/oclib.a
 	@mkdir -p $(@D)
@@ -100,15 +102,14 @@ PY_MODEL_EXT = model_cpp$(PY_EXT)
 PYCXXFLAGS = $(PYBIND11_CFLAGS) $(CXXFLAGS) -Wno-deprecated-register
 
 # Python extension for HalideModel
-$(BIN)/%/$(PY_MODEL_EXT): model.cpp $(BIN)/%/oclib.a
+$(BIN)/%/$(PY_MODEL_EXT): model.cpp $(BIN)/%/oclib.a | $(BIN)/%/onnx/onnx_pb.h
 	$(CXX) $(PYCXXFLAGS) -Wall -shared -fPIC -I$(BIN)/$* $^ $(LIBHALIDE_LDFLAGS) -o $@ $(LDFLAGS)
 
-
 model_test: $(BIN)/$(HL_TARGET)/$(PY_MODEL_EXT)
-	PYTHONPATH="$(BIN)/$(HL_TARGET)/:$$PYTHONPATH" $(PYTHON) -m unittest model_test.py -v
+	PYTHONPATH="$(BIN)/$(HL_TARGET)/:$$PYTHONPATH" DYLD_LIBRARY_PATH="$(PROTOC_PREFIX)/lib:$$DYLD_LIBRARY_PATH" $(PYTHON) -m unittest model_test.py -v
 
 halide_as_onnx_backend_test: $(BIN)/$(HL_TARGET)/$(PY_MODEL_EXT)
-	PYTHONPATH="$(BIN)/$(HL_TARGET)/:$$PYTHONPATH" $(PYTHON) -m unittest halide_as_onnx_backend_test.py -v
+	PYTHONPATH="$(BIN)/$(HL_TARGET)/:$$PYTHONPATH" DYLD_LIBRARY_PATH="$(PROTOC_PREFIX)/lib:$$DYLD_LIBRARY_PATH" $(PYTHON) -m unittest halide_as_onnx_backend_test.py -v
 
 # No Protoc
 else

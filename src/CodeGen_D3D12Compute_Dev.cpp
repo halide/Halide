@@ -1126,7 +1126,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         const Allocate *op = sop.as<Allocate>();
         internal_assert(op->extents.size() == 1);
         internal_assert(op->type.lanes() == 1);
-        // In D3D12/HLSL, only 32bit types (int/uint/float) are suppoerted (even
+        // In D3D12/HLSL, only 32bit types (int/uint/float) are supported (even
         // though things are changing with newer shader models). Since there is
         // no uint8 type, we'll have to emulate it with 32bit types...
         // This will also require pack/unpack logic with bit-masking and aliased

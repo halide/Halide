@@ -1,90 +1,98 @@
 [build-system]
 requires = [
-    "pybind11>=2.11.1",
-    "scikit-build-core~=0.11.0",
-    "setuptools-scm>=8.3.1",
+  "pybind11>=2.11.1",
+  "scikit-build-core~=0.11.0",
+  "setuptools-scm>=8.3.1",
 ]
 build-backend = "scikit_build_core.build"
 
 [project]
 name = "halide"
-authors = [{ name = "The Halide team", email = "halide-dev@lists.csail.mit.edu" }]
+authors = [
+  { name = "The Halide team", email = "halide-dev@lists.csail.mit.edu" },
+]
 maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
 description = "Halide is a programming language designed to make it easier to write high-performance image and array processing code."
 license = { file = "LICENSE.txt" }
 readme = "./packaging/pip/README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "imageio>=2",
-    "pillow; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
-    "numpy>=1.26",
+  "imageio>=2",
+  "pillow; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
+  "numpy>=1.26",
 ]
 dynamic = ['version']
 keywords = [
-    "array",
-    "compiler",
-    "domain-specific language",
-    "dsl",
-    "gpu",
-    "hexagon",
-    "image processing",
-    "machine learning",
-    "performance",
-    "programming language",
+  "array",
+  "compiler",
+  "domain-specific language",
+  "dsl",
+  "gpu",
+  "hexagon",
+  "image processing",
+  "machine learning",
+  "performance",
+  "programming language",
 ]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "Environment :: GPU",
-    "Environment :: GPU :: NVIDIA CUDA",
-    "Environment :: WebAssembly",
-    "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
-    "Natural Language :: English",
-    "Operating System :: MacOS",
-    "Operating System :: Microsoft :: Windows",
-    "Operating System :: POSIX",
-    "Programming Language :: C++",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Topic :: Multimedia :: Graphics",
-    "Topic :: Scientific/Engineering",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Scientific/Engineering :: Image Processing",
-    "Topic :: Software Development :: Code Generators",
-    "Topic :: Software Development :: Compilers",
-    "Topic :: Software Development :: Libraries",
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: GPU",
+  "Environment :: GPU :: NVIDIA CUDA",
+  "Environment :: WebAssembly",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Natural Language :: English",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Topic :: Multimedia :: Graphics",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Image Processing",
+  "Topic :: Software Development :: Code Generators",
+  "Topic :: Software Development :: Compilers",
+  "Topic :: Software Development :: Libraries",
 ]
 
 [dependency-groups]
 dev = [
-    "pybind11>=2.11.1",
-    "scikit-build-core~=0.11.0",
-    "setuptools-scm>=8.3.1",
+  # Matches build-system.requires
+  "pybind11>=2.11.1",
+  "scikit-build-core~=0.11.0",
+  "setuptools-scm>=8.3.1",
 ]
 apps = [
-    "onnx==1.18.0; platform_machine != 'armv8l' and platform_machine != 'armv7l'", # for apps/onnx
-    "onnx==1.17.0; platform_machine == 'armv8l' or platform_machine == 'armv7l'", # for apps/onnx
-    "pytest", # unspecified onnx dependency
+  # for apps/onnx
+  "onnx==1.18.0; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
+  "onnx==1.17.0; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
+  # onnx 1.18.0 gencode requires protobuf 7.x runtime
+  "protobuf>=7",
+  # unspecified onnx dependency
+  "pytest",
 ]
 tools = [
-    "cmake>=3.28",
-    # 1.13.0 uses LF in .rsp files, breaking MSVC link.exe.
-    # See: https://github.com/ninja-build/ninja/pull/2616
-    "ninja>=1.11,!=1.13.0",
-    "ruff>=0.12",
-    "tbump>=6.11",
+  "cmake>=3.28",
+  # 1.13.0 uses LF in .rsp files, breaking MSVC link.exe.
+  # See: https://github.com/ninja-build/ninja/pull/2616
+  "ninja>=1.11,!=1.13.0",
+  "pre-commit>=4",
+  "ruff>=0.12",
+  "tbump>=6.11",
 ]
 
 ci-base = [
-    { include-group = "dev" },
-    { include-group = "apps" },
-    { include-group = "tools" },
+  { include-group = "dev" },
+  { include-group = "apps" },
+  { include-group = "tools" },
 ]
 
 ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm~=23.0.0.dev0"]
@@ -103,16 +111,22 @@ cmake.version = ">=3.28"
 ninja.version = ">=1.11,!=1.13.0"
 wheel.install-dir = "halide"
 sdist.include = ["dependencies/"]
-sdist.exclude = [".github/", "apps/", "test/", "tutorial/", "dependencies/update-*.sh"]
+sdist.exclude = [
+  ".github/",
+  "apps/",
+  "test/",
+  "tutorial/",
+  "dependencies/update-*.sh",
+]
 metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
 
 [tool.scikit-build.cmake.define]
 CMAKE_DISABLE_FIND_PACKAGE_JPEG = true
 CMAKE_DISABLE_FIND_PACKAGE_PNG = true
+FETCHCONTENT_FULLY_DISCONNECTED = true
 Halide_ENABLE_EXCEPTIONS = true
 Halide_ENABLE_RTTI = true
 Halide_INSTALL_PYTHONDIR = "."
-Halide_USE_FETCHCONTENT = false
 Halide_WASM_BACKEND = "wabt"
 WITH_PYTHON_BINDINGS = true
 WITH_TESTS = false
@@ -135,19 +149,19 @@ cmake.define.Halide_WASM_BACKEND = "OFF"
 [tool.ruff.lint]
 # docs: https://docs.astral.sh/ruff/rules/
 select = [
-    "E4", # pycodestyle / import statements
-    "E7", # pycodestyle / superfluous or misused syntax
-    "E9", # pycodestyle / internal error (odd this can be disabled)
-    "F", # pyflakes
-    "FURB", # refurb / rules for upgrading old Python usage
-    "PERF", # perflint / rules for performance pitfalls
-    "RUF", # Ruff-specific rules
-    "SIM", # flake8 / simplify
-    "UP" # pyupgrade / detect uses of old Python features
+  "E4",   # pycodestyle / import statements
+  "E7",   # pycodestyle / superfluous or misused syntax
+  "E9",   # pycodestyle / internal error (odd this can be disabled)
+  "F",    # pyflakes
+  "FURB", # refurb / rules for upgrading old Python usage
+  "PERF", # perflint / rules for performance pitfalls
+  "RUF",  # Ruff-specific rules
+  "SIM",  # flake8 / simplify
+  "UP",   # pyupgrade / detect uses of old Python features
 ]
 ignore = [
-    "UP045", # Don't replace Optional[T] with T | None
-    "SIM108", # Don't replace an if statement with ternary
+  "UP045",  # Don't replace Optional[T] with T | None
+  "SIM108", # Don't replace an if statement with ternary
 ]
 
 [tool.tbump]
@@ -192,12 +206,12 @@ search = "#define HALIDE_VERSION_PATCH {current_version}"
 
 [tool.uv]
 conflicts = [
-    [
-        { group = "ci-llvm-main" },
-        { group = "ci-llvm-22" },
-        { group = "ci-llvm-21" },
-        { group = "ci-llvm-20" },
-    ],
+  [
+    { group = "ci-llvm-main" },
+    { group = "ci-llvm-22" },
+    { group = "ci-llvm-21" },
+    { group = "ci-llvm-20" },
+  ],
 ]
 
 [tool.uv.sources]

@@ -49,7 +49,7 @@ struct float16_t {
 
     /// @}
 
-    // Use explicit to avoid accidently raising the precision
+    // Use explicit to avoid accidentally raising the precision
     /** Cast to float */
     explicit operator float() const;
     /** Cast to double */
@@ -187,7 +187,7 @@ struct bfloat16_t {
 
     /// @}
 
-    // Use explicit to avoid accidently raising the precision
+    // Use explicit to avoid accidentally raising the precision
     /** Cast to float */
     explicit operator float() const;
     /** Cast to double */

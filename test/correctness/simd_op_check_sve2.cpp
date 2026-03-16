@@ -111,7 +111,7 @@ private:
                 const int vf = total_bits / bits;
 
                 // Due to workaround for SVE LLVM issues, in case of vector of half length of natural_lanes,
-                // there is some inconsistency in generated SVE insturction about the number of lanes.
+                // there is some inconsistency in generated SVE instruction about the number of lanes.
                 // So the verification of lanes is skipped for this specific case.
                 const int instr_lanes = (total_bits == 64 && has_sve()) ?
                                             Instruction::ANY_LANES :

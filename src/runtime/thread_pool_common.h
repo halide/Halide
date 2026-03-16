@@ -185,7 +185,7 @@ struct work_queue_t {
     // whether the thread pool has been initialized.
     bool shutdown, initialized;
 
-    // The number of threads that are currently commited to possibly block
+    // The number of threads that are currently committed to possibly block
     // via outstanding jobs queued or being actively worked on. Used to limit
     // the number of iterations of parallel for loops that are invoked so as
     // to prevent deadlock due to oversubscription of threads.
@@ -293,7 +293,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             } else if (owned_job->parent_job && owned_job->parent_job->exit_status != halide_error_code_success) {
                 owned_job->exit_status = owned_job->parent_job->exit_status;
                 // The wakeup can likely be only done under certain conditions, but it is only happening
-                // in when an error has already occured and it seems more important to ensure reliable
+                // in when an error has already occurred and it seems more important to ensure reliable
                 // termination than to optimize this path.
                 work_queue.wake_owners.broadcast();
                 continue;
@@ -302,7 +302,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
 
         dump_job_state();
 
-        // Find a job to run, prefering things near the top of the stack.
+        // Find a job to run, preferring things near the top of the stack.
         while (job) {
             print_job(job, "", "Considering job ");
             // Only schedule tasks with enough free worker threads

@@ -5,10 +5,10 @@ tests(GROUPS correctness_multi_gpu
 
 tests(GROUPS correctness
       SOURCES
+      # keep-sorted start case=no
       align_bounds.cpp
       argmax.cpp
       async_device_copy.cpp
-      async_order.cpp
       autodiff.cpp
       bad_likely.cpp
       bad_partition_always_throws.cpp
@@ -90,7 +90,6 @@ tests(GROUPS correctness
       dilate3x3.cpp
       div_by_zero.cpp
       div_round_to_zero.cpp
-      ring_buffer.cpp
       dynamic_allocation_in_gpu_kernel.cpp
       dynamic_reduction_bounds.cpp
       early_out.cpp
@@ -130,8 +129,8 @@ tests(GROUPS correctness
       fuzz_simplify.cpp
       gameoflife.cpp
       gather.cpp
-      gpu_allocation_cache.cpp
       gpu_alloc_group_profiling.cpp
+      gpu_allocation_cache.cpp
       gpu_arg_types.cpp
       gpu_assertion_in_kernel.cpp
       gpu_bounds_inference_failure.cpp
@@ -221,11 +220,10 @@ tests(GROUPS correctness
       many_updates.cpp
       math.cpp
       median3x3.cpp
-      metal_precompiled_shaders.cpp
       memoize_cloned.cpp
+      metal_precompiled_shaders.cpp
       min_extent.cpp
       mod.cpp
-      mul_div_mod.cpp
       multi_output_pipeline_with_bad_sizes.cpp
       multi_splits_with_diff_tail_strategies.cpp
       multi_way_select.cpp
@@ -267,8 +265,8 @@ tests(GROUPS correctness
       realize_over_shifted_domain.cpp
       recursive_box_filters.cpp
       reduction_chain.cpp
-      reduction_predicate_racing.cpp
       reduction_non_rectangular.cpp
+      reduction_predicate_racing.cpp
       reduction_schedule.cpp
       register_shuffle.cpp
       reorder_storage.cpp
@@ -285,13 +283,6 @@ tests(GROUPS correctness
       shift_by_unsigned_negated.cpp
       shifted_image.cpp
       side_effects.cpp
-      simd_op_check_arm.cpp
-      simd_op_check_hvx.cpp
-      simd_op_check_powerpc.cpp
-      simd_op_check_riscv.cpp
-      simd_op_check_sve2.cpp
-      simd_op_check_wasm.cpp
-      simd_op_check_x86.cpp
       simplified_away_embedded_image.cpp
       simplify.cpp
       skip_stages.cpp
@@ -344,6 +335,7 @@ tests(GROUPS correctness
       uninitialized_read.cpp
       unique_func_image.cpp
       unroll_dynamic_loop.cpp
+      unroll_huge_mux.cpp
       unroll_loop_with_implied_constant_bounds.cpp
       unrolled_reduction.cpp
       unsafe_dedup_lets.cpp
@@ -351,11 +343,8 @@ tests(GROUPS correctness
       unused_func.cpp
       update_chunk.cpp
       vector_bounds_inference.cpp
-      vector_cast.cpp
       vector_extern.cpp
-      vector_math.cpp
       vector_print_bug.cpp
-      vector_reductions.cpp
       vector_shuffle.cpp
       vector_tile.cpp
       vectorize_guard_with_if.cpp
@@ -370,13 +359,34 @@ tests(GROUPS correctness
       vectorized_reduction_bug.cpp
       widening_lerp.cpp
       widening_reduction.cpp
-      )
+      # keep-sorted end
+)
+
+# Simd op check tests fix the target features internally, so they
+# only need to be run on one target in CI. Every CI runner targets
+# host, so we can just check for that.
+if (NOT Halide_BUILDING_IN_CI OR Halide_TARGET STREQUAL "host")
+    tests(GROUPS correctness multithreaded
+          SOURCES
+          # keep-sorted start
+          simd_op_check_arm.cpp
+          simd_op_check_hvx.cpp
+          simd_op_check_powerpc.cpp
+          simd_op_check_riscv.cpp
+          simd_op_check_sve2.cpp
+          simd_op_check_wasm.cpp
+          simd_op_check_x86.cpp
+          # keep-sorted end
+          )
+endif ()
 
 tests(GROUPS correctness multithreaded
       SOURCES
+      # keep-sorted start
       assertion_failure_in_parallel_for.cpp
       async.cpp
       async_copy_chain.cpp
+      async_order.cpp
       atomic_tuples.cpp
       atomics.cpp
       compute_outermost.cpp
@@ -391,6 +401,7 @@ tests(GROUPS correctness multithreaded
       legal_race_condition.cpp
       lots_of_dimensions.cpp
       memoize.cpp
+      mul_div_mod.cpp
       multi_pass_reduction.cpp
       multiple_outputs_extern.cpp
       multiple_scatter.cpp
@@ -408,11 +419,15 @@ tests(GROUPS correctness multithreaded
       random.cpp
       reorder_rvars.cpp
       rfactor.cpp
+      ring_buffer.cpp
       stream_compaction.cpp
       thread_safety.cpp
       truncated_pyramid.cpp
       tuple_vector_reduce.cpp
-      unroll_huge_mux.cpp
+      vector_cast.cpp
+      vector_math.cpp
+      vector_reductions.cpp
+      # keep-sorted end
       )
 
 # Make sure the test that needs Halide::ImageIO has it
@@ -422,63 +437,50 @@ target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
 target_link_libraries(correctness_gpu_allocation_cache PRIVATE Halide::ThreadPool)
 
 # Tests which use external funcs need to enable exports.
-set_target_properties(correctness_async
-                      correctness_atomics
-                      correctness_c_function
-                      correctness_callable
-                      correctness_callable_generator
-                      correctness_callable_typed
-                      correctness_compute_at_split_rvar
-                      correctness_concat
-                      correctness_custom_lowering_pass
-                      correctness_extern_bounds_inference
-                      correctness_extern_consumer
-                      correctness_extern_consumer_tiled
-                      correctness_extern_error
-                      correctness_extern_output_expansion
-                      correctness_extern_partial
-                      correctness_extern_producer
-                      correctness_extern_reorder_storage
-                      correctness_extern_sort
-                      correctness_extern_stage
-                      correctness_extern_stage_on_device
-                      correctness_handle
-                      correctness_image_of_lists
-                      correctness_lazy_convolution
-                      correctness_loop_invariant_extern_calls
-                      correctness_make_struct
-                      correctness_many_small_extern_stages
-                      correctness_memoize
-                      correctness_memoize_cloned
-                      correctness_multiple_outputs_extern
-                      correctness_non_nesting_extern_bounds_query
-                      correctness_parallel_fork
-                      correctness_pipeline_set_jit_externs_func
-                      correctness_process_some_tiles
-                      correctness_side_effects
-                      correctness_skip_stages
-                      correctness_skip_stages_cse_bug
-                      correctness_skip_stages_external_array_functions
-                      correctness_sliding_backwards
-                      correctness_sliding_over_guard_with_if
-                      correctness_sliding_reduction
-                      correctness_sliding_window
-                      correctness_stage_strided_loads
-                      correctness_storage_folding
-                      PROPERTIES ENABLE_EXPORTS TRUE)
-
-# Tests which are internally parallelized should not be run at the
-# same time as other tests, or they may time out
-
-set_tests_properties(correctness_mul_div_mod
-                     correctness_simd_op_check_arm
-                     correctness_simd_op_check_hvx
-                     correctness_simd_op_check_powerpc
-                     correctness_simd_op_check_riscv
-                     correctness_simd_op_check_sve2
-                     correctness_simd_op_check_wasm
-                     correctness_simd_op_check_x86
-                     correctness_vector_cast
-                     correctness_vector_math
-                     correctness_vector_reductions
-                     PROPERTIES RUN_SERIAL TRUE)
+set_target_properties(
+    # keep-sorted start
+    correctness_async
+    correctness_atomics
+    correctness_c_function
+    correctness_callable
+    correctness_callable_generator
+    correctness_callable_typed
+    correctness_compute_at_split_rvar
+    correctness_concat
+    correctness_custom_lowering_pass
+    correctness_extern_bounds_inference
+    correctness_extern_consumer
+    correctness_extern_consumer_tiled
+    correctness_extern_error
+    correctness_extern_output_expansion
+    correctness_extern_partial
+    correctness_extern_producer
+    correctness_extern_reorder_storage
+    correctness_extern_sort
+    correctness_extern_stage
+    correctness_extern_stage_on_device
+    correctness_handle
+    correctness_image_of_lists
+    correctness_lazy_convolution
+    correctness_loop_invariant_extern_calls
+    correctness_make_struct
+    correctness_many_small_extern_stages
+    correctness_memoize
+    correctness_memoize_cloned
+    correctness_multiple_outputs_extern
+    correctness_non_nesting_extern_bounds_query
+    correctness_parallel_fork
+    correctness_pipeline_set_jit_externs_func
+    correctness_process_some_tiles
+    correctness_side_effects
+    correctness_skip_stages
+    correctness_skip_stages_cse_bug
+    correctness_skip_stages_external_array_functions
+    correctness_sliding_backwards
+    correctness_sliding_over_guard_with_if
+    correctness_sliding_reduction
+    correctness_sliding_window
+    correctness_stage_strided_loads
+    correctness_storage_folding
+    # keep-sorted end
+    PROPERTIES ENABLE_EXPORTS TRUE)

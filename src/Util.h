@@ -440,7 +440,7 @@ void halide_toc_impl(const char *file, int line);
 
 // statically cast a value from one type to another: this is really just
 // some syntactic sugar around static_cast<>() to avoid compiler warnings
-// regarding 'bool' in some compliation configurations.
+// regarding 'bool' in some compilation configurations.
 template<typename TO>
 struct StaticCast {
     template<typename FROM>

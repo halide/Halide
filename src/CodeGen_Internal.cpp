@@ -368,7 +368,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         internal_assert(a.type().is_int());
 
         // Signed integer division sucks. It should be defined such
-        // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
+        // that it satisfies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
         // i.e. Euclidean division.
         //
         // We additionally define division by zero to be zero, and

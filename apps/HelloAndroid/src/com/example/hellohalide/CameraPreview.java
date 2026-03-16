@@ -120,7 +120,7 @@ public class CameraPreview extends SurfaceView
         android.hardware.Camera.CameraInfo info =
             new android.hardware.Camera.CameraInfo();
         // Assume that we opened camera 0
-        android.hardware.Camera.getCameraInfo(0, info); 
+        android.hardware.Camera.getCameraInfo(0, info);
         mCameraOrientation = info.orientation;
         if (mCamera != null) {
             startPreview(getHolder());

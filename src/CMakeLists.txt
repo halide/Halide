@@ -49,6 +49,7 @@ target_sources(
     FILE_SET private_headers
     TYPE HEADERS
     FILES
+    # keep-sorted start case=no
     AbstractGenerator.h
     AddAtomicMutex.h
     AddImageChecks.h
@@ -63,9 +64,9 @@ target_sources(
     AsyncProducers.h
     AutoScheduleUtils.h
     BoundaryConditions.h
+    BoundConstantExtentLoops.h
     Bounds.h
     BoundsInference.h
-    BoundConstantExtentLoops.h
     BoundSmallAllocations.h
     Buffer.h
     Callable.h
@@ -87,9 +88,9 @@ target_sources(
     CodeGen_WebGPU_Dev.h
     CompilerLogger.h
     ConciseCasts.h
-    CPlusPlusMangle.h
     ConstantBounds.h
     ConstantInterval.h
+    CPlusPlusMangle.h
     CSE.h
     Debug.h
     DebugArguments.h
@@ -220,6 +221,7 @@ target_sources(
     VectorizeLoops.h
     WasmExecutor.h
     WrapCalls.h
+    # keep-sorted end
 )
 
 # The sources that go into libHalide. For the sake of IDE support, headers that
@@ -227,6 +229,7 @@ target_sources(
 target_sources(
     Halide
     PRIVATE
+    # keep-sorted start case=no
     AbstractGenerator.cpp
     AddAtomicMutex.cpp
     AddImageChecks.cpp
@@ -241,9 +244,9 @@ target_sources(
     AsyncProducers.cpp
     AutoScheduleUtils.cpp
     BoundaryConditions.cpp
+    BoundConstantExtentLoops.cpp
     Bounds.cpp
     BoundsInference.cpp
-    BoundConstantExtentLoops.cpp
     BoundSmallAllocations.cpp
     Buffer.cpp
     Callable.cpp
@@ -269,9 +272,9 @@ target_sources(
     CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp
-    CPlusPlusMangle.cpp
     ConstantBounds.cpp
     ConstantInterval.cpp
+    CPlusPlusMangle.cpp
     CSE.cpp
     Debug.cpp
     DebugArguments.cpp
@@ -364,7 +367,6 @@ target_sources(
     Simplify_Add.cpp
     Simplify_And.cpp
     Simplify_Call.cpp
-    Simplify_Reinterpret.cpp
     Simplify_Cast.cpp
     Simplify_Div.cpp
     Simplify_EQ.cpp
@@ -377,6 +379,7 @@ target_sources(
     Simplify_Mul.cpp
     Simplify_Not.cpp
     Simplify_Or.cpp
+    Simplify_Reinterpret.cpp
     Simplify_Select.cpp
     Simplify_Shuffle.cpp
     Simplify_Stmts.cpp
@@ -412,6 +415,7 @@ target_sources(
     VectorizeLoops.cpp
     WasmExecutor.cpp
     WrapCalls.cpp
+    # keep-sorted end
 )
 
 set(C_TEMPLATE_FILES
@@ -521,21 +525,10 @@ target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
 
 # Build serialization, enabled by default
 if (WITH_SERIALIZATION)
-    # Sadly, there seem to be at least three variations of the Flatbuffer
-    # package in terms of the case of the relevant CMake files. Fortunately,
-    # the IMPORTED targets appear to be consistently named `flatbuffers`.
-    find_package(
-        flatbuffers 23.5.26 REQUIRED
-        NAMES flatbuffers Flatbuffers FlatBuffers
-    )
-    _Halide_pkgdep(flatbuffers)
+    find_package(FlatBuffers REQUIRED)
+    _Halide_pkgdep(FlatBuffers)
 
-    if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
-        target_sources(Halide PRIVATE "$<TARGET_OBJECTS:flatbuffers::flatbuffers>")
-        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:flatbuffers::flatbuffers>>")
-    else ()
-        target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
-    endif ()
+    target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
 
     set(fb_def "${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs")
     set(fb_dir "${Halide_BINARY_DIR}/include/flatc")
@@ -588,16 +581,10 @@ if (MSVC AND Halide_WASM_BACKEND STREQUAL "wabt")
 endif ()
 
 if (Halide_WASM_BACKEND STREQUAL "wabt")
-    find_package(wabt 1.0.39 REQUIRED)
+    find_package(wabt REQUIRED)
     _Halide_pkgdep(wabt)
 
-    if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
-        target_sources(Halide PRIVATE "$<TARGET_OBJECTS:wabt::wabt>")
-        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:wabt::wabt>>")
-    else ()
-        target_link_libraries(Halide PRIVATE wabt::wabt)
-    endif ()
-
+    target_link_libraries(Halide PRIVATE wabt::wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
 elseif (Halide_WASM_BACKEND STREQUAL "V8")
     find_package(V8 REQUIRED)

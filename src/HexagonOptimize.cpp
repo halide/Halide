@@ -2152,7 +2152,7 @@ class ScatterGatherGenerator : public IRMutator {
             Expr value = make_gather(op->value.as<Load>(), dst_base, dst_index);
             if (value.defined()) {
                 // Found a vgather.
-                // Function make_gather already mutates all the call arguements,
+                // Function make_gather already mutates all the call arguments,
                 // so no need to mutate again.
                 return Evaluate::make(value);
             }
@@ -2184,7 +2184,7 @@ class ScatterGatherGenerator : public IRMutator {
 
 // Scatter-Gather instructions on Hexagon are asynchronous and hence require a
 // scatter-release store followed by a vector load from the same address. This
-// stalls the pipeline untill all previous scatter-gather operations have
+// stalls the pipeline until all previous scatter-gather operations have
 // finished. The operations are not ordered with respect to load and store
 // operations as well.
 class SyncronizationBarriers : public IRMutator {
@@ -2214,7 +2214,7 @@ class SyncronizationBarriers : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        // Keep trail of the For blocks encoutered.
+        // Keep trail of the For blocks encountered.
         curr_path.push_back(curr);
         Stmt s = IRMutator::visit(op);
         curr_path.pop_back();
