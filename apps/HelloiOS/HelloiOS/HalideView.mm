@@ -28,8 +28,7 @@ static const HalideFuncs kHalideCPU = {
 static const HalideFuncs kHalideMetal = {
     reaction_diffusion_2_metal_init,
     reaction_diffusion_2_metal_update,
-    reaction_diffusion_2_metal_render
-};
+    reaction_diffusion_2_metal_render};
 
 @implementation HalideView {
 @private
@@ -43,9 +42,7 @@ static const HalideFuncs kHalideMetal = {
     double frameElapsedEstimate;
 }
 
-
-+ (Class)layerClass
-{
++ (Class)layerClass {
     return [CAMetalLayer class];
 }
 
@@ -60,7 +57,7 @@ static const HalideFuncs kHalideMetal = {
     _device = MTLCreateSystemDefaultDevice();
     _commandQueue = [_device newCommandQueue];
 
-    _metalLayer.device      = _device;
+    _metalLayer.device = _device;
     _metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
 
     _metalLayer.framebufferOnly = NO;
@@ -80,7 +77,7 @@ static const HalideFuncs kHalideMetal = {
     }
     if ((iteration % 30) == 0) {
         dispatch_async(dispatch_get_main_queue(), ^(void) {
-            [self updateLogWith: self->frameElapsedEstimate using_metal: using_metal];
+          [self updateLogWith:self->frameElapsedEstimate using_metal:using_metal];
         });
     }
     iteration += 1;
@@ -130,15 +127,13 @@ static const HalideFuncs kHalideMetal = {
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super initWithCoder:coder];
 
-    if(self)
-    {
+    if (self) {
         [self initCommon];
     }
     return self;
 }
 
-- (void)updateLogWith: (double) elapsedTime using_metal: (bool) using_metal
-{
+- (void)updateLogWith:(double)elapsedTime using_metal:(bool)using_metal {
     NSString *mode = using_metal ? @"Metal (double-tap for CPU)" : @"CPU (double-tap for Metal)";
     self.statsLabel.text = [NSString stringWithFormat:@"%.1f ms • %@", elapsedTime * 1000, mode];
 }
@@ -167,8 +162,7 @@ static const HalideFuncs kHalideMetal = {
     self.touch_active = false;
 }
 
-- (void)renderOneFrame: (const HalideFuncs &) halide_funcs using_metal: (bool) using_metal
-{
+- (void)renderOneFrame:(const HalideFuncs &)halide_funcs using_metal:(bool)using_metal {
     // -1 is interpreted as no touch event
     int tx = -1, ty = -1;
     if (self.touch_active) {
@@ -202,8 +196,7 @@ static const HalideFuncs kHalideMetal = {
     [self updateFrameTime:(t_after - t_before) using_metal:using_metal];
 }
 
-- (void)initiateRender
-{
+- (void)initiateRender {
     bool using_metal = self.use_metal;
     const HalideFuncs &halide_funcs = using_metal ? kHalideMetal : kHalideCPU;
     const int required_stride = using_metal ? 3 : 1;
@@ -224,13 +217,13 @@ static const HalideFuncs kHalideMetal = {
             CGSize drawableSize = self.bounds.size;
             _metalLayer.drawableSize = drawableSize;
 
-            [self initBufsWithWidth: drawableSize.width height: drawableSize.height using_metal: using_metal];
+            [self initBufsWithWidth:drawableSize.width height:drawableSize.height using_metal:using_metal];
             halide_funcs.init((__bridge void *)self, buf1);
 
             [self resetFrameTime];
         }
 
-        [self renderOneFrame: halide_funcs using_metal: using_metal];
+        [self renderOneFrame:halide_funcs using_metal:using_metal];
 
         [self renderOneFrame:halide_funcs using_metal:using_metal];
 
@@ -250,15 +243,15 @@ static const HalideFuncs kHalideMetal = {
 
         const int bytesPerRow = pixel_buf.dim(1).stride() * pixel_buf.type().bits / 8;
         [blitEncoder
-            copyFromBuffer:buffer
-            sourceOffset: 0
-            sourceBytesPerRow: bytesPerRow
-            sourceBytesPerImage: pixel_buf.dim(1).stride() * pixel_buf.dim(1).extent() // Not sizeInBytes because we're also copying the padding on the last row
-            sourceSize: image_size
-            toTexture: drawable.texture
-            destinationSlice: 0
-            destinationLevel: 0
-            destinationOrigin: origin];
+                 copyFromBuffer:buffer
+                   sourceOffset:0
+              sourceBytesPerRow:bytesPerRow
+            sourceBytesPerImage:pixel_buf.dim(1).stride() * pixel_buf.dim(1).extent()  // Not sizeInBytes because we're also copying the padding on the last row
+                     sourceSize:image_size
+                      toTexture:drawable.texture
+               destinationSlice:0
+               destinationLevel:0
+              destinationOrigin:origin];
         [blitEncoder endEncoding];
         [commandBuffer addCompletedHandler:^(id MTLCommandBuffer) {
           dispatch_async(dispatch_get_main_queue(), ^(void) {
