@@ -30,12 +30,6 @@ public:
         }
     }
 
-    void print(const Stmt &s) {
-        if (s.defined()) {
-            s.accept(this);
-        }
-    }
-
 private:
     template<typename T, typename... Args>
     void emit_node(const char *node_type_str, const T *op, Args &&...args);
@@ -47,6 +41,8 @@ private:
     std::string to_cpp_arg(const std::vector<T> &vec);
 
 protected:
+    using IRGraphVisitor::visit;
+
     void visit(const IntImm *) override;
     void visit(const UIntImm *) override;
     void visit(const FloatImm *) override;
@@ -74,26 +70,9 @@ protected:
     void visit(const Ramp *) override;
     void visit(const Broadcast *) override;
     void visit(const Let *) override;
-    void visit(const LetStmt *) override;
-    void visit(const AssertStmt *) override;
-    void visit(const ProducerConsumer *) override;
-    void visit(const Store *) override;
-    void visit(const Provide *) override;
-    void visit(const Allocate *) override;
-    void visit(const Free *) override;
-    void visit(const Realize *) override;
-    void visit(const Block *) override;
-    void visit(const Fork *) override;
-    void visit(const IfThenElse *) override;
-    void visit(const Evaluate *) override;
     void visit(const Call *) override;
     void visit(const Variable *) override;
-    void visit(const For *) override;
-    void visit(const Acquire *) override;
     void visit(const Shuffle *) override;
-    void visit(const Prefetch *) override;
-    void visit(const HoistedStorage *) override;
-    void visit(const Atomic *) override;
     void visit(const VectorReduce *) override;
 
 public:
