@@ -1,5 +1,7 @@
 #include "ExprInterpreter.h"
 #include "Error.h"
+#include "StrictifyFloat.h"
+#include "FindIntrinsics.h"
 #include "IROperator.h"
 
 #include <algorithm>
@@ -588,19 +590,11 @@ void ExprInterpreter::visit(const Call *op) {
         result = apply_unary(op->type, args[0], [](auto a) { return std::log(a); });
     } else if (op->name == "sqrt") {
         result = apply_unary(op->type, args[0], [](auto a) { return std::sqrt(a); });
-    } else if (op->is_intrinsic(Call::strict_add)) {
-        result = apply_binary(op->type, args[0], args[1], [](auto a, auto b) { return a + b; });
-    } else if (op->is_intrinsic(Call::strict_sub)) {
-        result = apply_binary(op->type, args[0], args[1], [](auto a, auto b) { return a - b; });
-    } else if (op->is_intrinsic(Call::strict_mul)) {
-        result = apply_binary(op->type, args[0], args[1], [](auto a, auto b) { return a * b; });
-    } else if (op->is_intrinsic(Call::strict_div)) {
-        result = apply_binary(op->type, args[0], args[1], [](auto a, auto b) { return a / b; });
     } else if (op->is_intrinsic(Call::strict_fma)) {
         for (int j = 0; j < op->type.lanes(); j++) {
             result.lanes[j] = std::visit([&](auto a, auto b, auto c) -> Scalar {
                 if constexpr (std::is_same_v<decltype(a), decltype(b)> && std::is_same_v<decltype(b), decltype(c)>) {
-                    auto out = a * b + c;
+                    auto out = std::fma(a,b, c);
                     if (op->type.is_float()) {
                         return static_cast<double>(out);
                     }
@@ -613,8 +607,14 @@ void ExprInterpreter::visit(const Call *op) {
                     return double{0};
                 }
             },
-                                         args[0].lanes[j], args[1].lanes[j], args[2].lanes[j]);
+            args[0].lanes[j], args[1].lanes[j], args[2].lanes[j]);
         }
+    } else if (op->is_strict_float_intrinsic()) {
+        Expr unstrict = unstrictify_float(op);
+        unstrict.accept(this);
+    } else if (op->is_integer_intrinsic()) {
+        Expr lower = lower_intrinsic(op);
+        lower.accept(this);
     } else if (op->is_intrinsic(Call::absd)) {
         result = apply_binary(op->type, args[0], args[1], [](auto a, auto b) {
             return a < b ? b - a : a - b;

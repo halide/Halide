@@ -883,6 +883,29 @@ struct Call : public ExprNode<Call> {
              Call::strict_sub});
     }
 
+    bool is_integer_intrinsic() const {
+        return is_intrinsic(
+            {Call::widen_right_add,
+             Call::widen_right_mul,
+             Call::widen_right_sub,
+             Call::widening_add,
+             Call::widening_mul,
+             Call::widening_sub,
+             Call::saturating_add,
+             Call::saturating_sub,
+             Call::saturating_cast,
+             Call::widening_shift_left,
+             Call::widening_shift_right,
+             Call::rounding_shift_right,
+             Call::rounding_shift_left,
+             Call::halving_add,
+             Call::halving_sub,
+             Call::rounding_halving_add,
+             Call::rounding_mul_shift_right,
+             Call::mul_shift_right,
+             Call::sorted_avg});
+    }
+
     static const IRNodeType _node_type = IRNodeType::Call;
 };
 
