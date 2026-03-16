@@ -1,8 +1,8 @@
 #include "ExprInterpreter.h"
 #include "Error.h"
-#include "StrictifyFloat.h"
 #include "FindIntrinsics.h"
 #include "IROperator.h"
+#include "StrictifyFloat.h"
 
 #include <algorithm>
 #include <cmath>
@@ -594,7 +594,7 @@ void ExprInterpreter::visit(const Call *op) {
         for (int j = 0; j < op->type.lanes(); j++) {
             result.lanes[j] = std::visit([&](auto a, auto b, auto c) -> Scalar {
                 if constexpr (std::is_same_v<decltype(a), decltype(b)> && std::is_same_v<decltype(b), decltype(c)>) {
-                    auto out = std::fma(a,b, c);
+                    auto out = std::fma(a, b, c);
                     if (op->type.is_float()) {
                         return static_cast<double>(out);
                     }
@@ -607,7 +607,7 @@ void ExprInterpreter::visit(const Call *op) {
                     return double{0};
                 }
             },
-            args[0].lanes[j], args[1].lanes[j], args[2].lanes[j]);
+                                         args[0].lanes[j], args[1].lanes[j], args[2].lanes[j]);
         }
     } else if (op->is_strict_float_intrinsic()) {
         Expr unstrict = unstrictify_float(op);
