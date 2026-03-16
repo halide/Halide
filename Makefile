@@ -506,6 +506,7 @@ SOURCE_FILES = \
   EmulateFloat16Math.cpp \
   Error.cpp \
   Expr.cpp \
+  ExprInterpreter.cpp \
   ExtractTileOperations.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
@@ -703,6 +704,7 @@ HEADER_FILES = \
   EmulateFloat16Math.h \
   Error.h \
   Expr.h \
+  ExprInterpreter.h \
   ExprUsesVar.h \
   Extern.h \
   ExternFuncArgument.h \
