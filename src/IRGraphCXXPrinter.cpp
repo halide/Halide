@@ -10,13 +10,13 @@ namespace Internal {
 
 namespace {
 template<typename T, typename... Args>
-static constexpr auto check_make_args(Args &&...args)
+constexpr auto check_make_args(Args &&...args)
     -> decltype(T::make(std::forward<Args>(args)...), std::true_type{}) {
     return std::true_type{};
 }
 
 template<typename T, typename... Args>
-static constexpr std::false_type check_make_args(...) {
+constexpr std::false_type check_make_args(...) {
     return std::false_type{};
 }
 
