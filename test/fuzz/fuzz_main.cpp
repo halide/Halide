@@ -1,6 +1,7 @@
 #include "fuzz_main.h"
 #include "fuzz_helpers.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
