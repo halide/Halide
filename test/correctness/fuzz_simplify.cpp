@@ -12,7 +12,8 @@ using std::map;
 using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
-using namespace Halide::Internal::Fuzz;
+
+using RandomEngine = RandomExpressionGenerator::RandomEngine;
 
 bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) {
     if (equal(a, b) && !a.same_as(b)) {
@@ -59,12 +60,12 @@ bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) 
     return true;
 }
 
-bool test_expression(RandomEngine &rng, Expr test, int samples) {
+bool test_expression(RandomExpressionGenerator &reg, RandomEngine &rng, Expr test, int samples) {
     Expr simplified = simplify(test);
 
     map<string, Expr> vars;
-    for (int i = 0; i < fuzz_var_count; i++) {
-        vars[fuzz_var(i)] = Expr();
+    for (int i = 0; i < (int)reg.fuzz_vars.size(); i++) {
+        vars[reg.fuzz_var(i)] = Expr();
     }
 
     for (int i = 0; i < samples; i++) {
@@ -73,7 +74,7 @@ bool test_expression(RandomEngine &rng, Expr test, int samples) {
             // Don't let the random leaf depend on v itself.
             size_t iterations = 0;
             do {
-                val = random_leaf(rng, Int(32), true);
+                val = reg.random_leaf(rng, Int(32), true);
                 iterations++;
             } while (expr_uses_var(val, var) && iterations < kMaxLeafIterations);
         }
@@ -104,6 +105,16 @@ int main(int argc, char **argv) {
 
     auto seed_generator = initialize_rng<RandomEngine>();
 
+    RandomExpressionGenerator reg;
+    reg.fuzz_types = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
+    // FIXME: UInt64 fails!
+    // FIXME: These need to be disabled (otherwise crashes and/or failures):
+    //reg.gen_ramp_of_vector = false;
+    //reg.gen_broadcast_of_vector = false;
+    reg.gen_vector_reduce = false;
+    reg.gen_reinterpret = false;
+    reg.gen_shuffles = false;
+
     for (int i = 0; i < ((argc == 1) ? 10000 : 1); i++) {
         auto seed = seed_generator();
         if (argc > 1) {
@@ -114,11 +125,12 @@ int main(int argc, char **argv) {
         std::cout << "Seed: " << seed << "\n";
         RandomEngine rng{seed};
         std::array<int, 6> vector_widths = {1, 2, 3, 4, 6, 8};
-        int width = random_choice(rng, vector_widths);
-        Type VT = random_type(rng, width);
+        int width = reg.random_choice(rng, vector_widths);
+        Type VT = reg.random_type(rng, width);
         // Generate a random expr...
-        Expr test = random_expr(rng, VT, depth);
-        if (!test_expression(rng, test, samples)) {
+        Expr test = reg.random_expr(rng, VT, depth);
+        std::cout << test << "\n";
+        if (!test_expression(reg, rng, test, samples)) {
 
             class LimitDepth : public IRMutator {
                 int limit;
@@ -145,6 +157,7 @@ int main(int argc, char **argv) {
             // Failure. Find the minimal subexpression that failed.
             std::cout << "Testing subexpressions...\n";
             class TestSubexpressions : public IRMutator {
+                RandomExpressionGenerator reg;
                 RandomEngine &rng;
                 bool found_failure = false;
 
@@ -159,19 +172,19 @@ int main(int argc, char **argv) {
                         Expr limited;
                         for (int i = 1; i < 4 && !found_failure; i++) {
                             limited = LimitDepth(i).mutate(e);
-                            found_failure = !test_expression(rng, limited, samples);
+                            found_failure = !test_expression(reg, rng, limited, samples);
                         }
                         if (!found_failure) {
-                            found_failure = !test_expression(rng, e, samples);
+                            found_failure = !test_expression(reg, rng, e, samples);
                         }
                     }
                     return e;
                 }
 
-                TestSubexpressions(RandomEngine &rng)
-                    : rng(rng) {
+                TestSubexpressions(RandomExpressionGenerator &reg, RandomEngine &rng)
+                    : reg(reg), rng(rng) {
                 }
-            } tester(rng);
+            } tester(reg, rng);
             tester.mutate(test);
 
             std::cout << "Failed with seed " << seed << "\n";
