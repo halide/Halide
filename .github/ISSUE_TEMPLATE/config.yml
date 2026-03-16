@@ -1,0 +1,15 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions
+    url: https://github.com/halide/Halide/discussions/categories/q-a
+    about: Ask questions about using Halide in GitHub Discussions.
+  - name: Ideas and brainstorming
+    url: https://github.com/halide/Halide/discussions/categories/ideas
+    about: >-
+      Share early-stage ideas or brainstorm in Discussions. Polished proposals
+      can be promoted to a feature specification issue.
+  - name: Contributor guidelines
+    url: https://github.com/halide/Halide/blob/main/CONTRIBUTING.md
+    about: >-
+      Guidelines for contributing to Halide development. Read these before
+      making a pull request or filing an issue.
