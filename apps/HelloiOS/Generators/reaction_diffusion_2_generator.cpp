@@ -85,7 +85,6 @@ public:
         B = clamp(B, 0.0f, 1.0f);
 
         new_state(x, y, c) = mux(c, {R, G, B});
-
     }
 
     void schedule() {

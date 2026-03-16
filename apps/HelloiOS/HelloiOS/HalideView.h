@@ -1,5 +1,5 @@
-#import <QuartzCore/QuartzCore.h>
 #import <Metal/Metal.h>
+#import <QuartzCore/QuartzCore.h>
 #import <UIKit/UIKit.h>
 
 @interface HalideView : UIView

@@ -7,10 +7,10 @@
 }
 
 - (UISceneConfiguration *)application:(UIApplication *)application
-        configurationForConnectingSceneSession:(UISceneSession *)connectingSceneSession
-                                       options:(UISceneConnectionOptions *)options {
+    configurationForConnectingSceneSession:(UISceneSession *)connectingSceneSession
+                                   options:(UISceneConnectionOptions *)options {
     UISceneConfiguration *configuration = [[UISceneConfiguration alloc] initWithName:@"Default Configuration"
-                                                                          sessionRole:connectingSceneSession.role];
+                                                                         sessionRole:connectingSceneSession.role];
     configuration.delegateClass = NSClassFromString(@"SceneDelegate");
     return configuration;
 }

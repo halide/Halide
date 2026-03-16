@@ -18,9 +18,9 @@ The project is split into two parts:
 
 1. **Generators/** -- A CMake project that builds the Halide generator on the
    host and runs it to produce iOS-targeted static libraries and headers for
-   each reaction-diffusion kernel. Kernels are generated for both `iphoneos`
-   and `iphonesimulator` platforms, so you can switch destinations in Xcode
-   without re-running setup.
+   each reaction-diffusion kernel. Kernels are generated for both `iphoneos` and
+   `iphonesimulator` platforms, so you can switch destinations in Xcode without
+   re-running setup.
 
 2. **HelloiOS/** -- A native Xcode project for the iOS app. It compiles the
    Objective-C++ sources and links the generated Halide libraries. The app
@@ -47,7 +47,7 @@ cmake --install build --prefix install
 ## Environment Variables
 
 | Variable      | Default      | Description           |
-|---------------|--------------|-----------------------|
+| ------------- | ------------ | --------------------- |
 | `Halide_ROOT` | *(required)* | Halide install prefix |
 
 ## Launching in Simulator
@@ -87,5 +87,5 @@ Generators' build phase of the HelloiOS target with:
 env -i USER="$USER" HOME="$HOME" PATH="$PATH" DEVELOPER_DIR="$DEVELOPER_DIR"
 ```
 
-Only do this if necessary as it drops *all* build context and may
-cause different problems in the future.
+Only do this if necessary as it drops *all* build context and may cause
+different problems in the future.
