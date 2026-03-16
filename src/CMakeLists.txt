@@ -111,6 +111,7 @@ target_sources(
     EmulateFloat16Math.h
     Error.h
     Expr.h
+    ExprInterpreter.h
     ExprUsesVar.h
     Extern.h
     ExternFuncArgument.h
@@ -294,6 +295,7 @@ target_sources(
     EmulateFloat16Math.cpp
     Error.cpp
     Expr.cpp
+    ExprInterpreter.cpp
     ExtractTileOperations.cpp
     FastIntegerDivide.cpp
     FindCalls.cpp
