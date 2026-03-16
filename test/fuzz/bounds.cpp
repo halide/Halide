@@ -421,6 +421,19 @@ bool test_expression_bounds(FuzzingContext &fdp, Expr test, int trials, int samp
         vars[fuzz_var(i)] = Expr();
     }
 
+    // Don't test expressions with potentially overflowing casts to signed
+    // ints. This is known to be broken (See
+    // https://github.com/halide/Halide/pull/7814)
+    bool contains_risky_cast = false;
+    visit_with(test, [&](auto *self, const Cast *op) {
+        contains_risky_cast |= (op->type.is_int() &&
+                                op->type.bits() >= 32 &&
+                                !op->type.can_represent(op->value.type()));
+    });
+    if (contains_risky_cast) {
+        return true;
+    }
+
     for (int i = 0; i < trials; i++) {
         Scope<Interval> scope;
 
