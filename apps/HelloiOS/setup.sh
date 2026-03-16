@@ -25,3 +25,6 @@ echo "If you encounter build problems, check the troubleshooting section of"
 echo "the README. If that section doesn't help and you solve your build"
 echo "problems regardless, we would welcome a PR that updates the"
 echo "troubleshooting section of the README."
+echo
+echo "Known issue: You must build-and-run in Xcode twice to see the effect"
+echo "of changes to the generator source (issue #9049)."
