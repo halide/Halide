@@ -15,16 +15,15 @@
 using Halide::Runtime::Buffer;
 
 struct HalideFuncs {
-    int (*init)(const void*, halide_buffer_t*);
-    int (*update)(const void*, halide_buffer_t*, int, int, int, halide_buffer_t*);
-    int (*render)(const void*, halide_buffer_t*, int, halide_buffer_t*);
+    int (*init)(const void *, halide_buffer_t *);
+    int (*update)(const void *, halide_buffer_t *, int, int, int, halide_buffer_t *);
+    int (*render)(const void *, halide_buffer_t *, int, halide_buffer_t *);
 };
 
 static const HalideFuncs kHalideCPU = {
     reaction_diffusion_2_init,
     reaction_diffusion_2_update,
-    reaction_diffusion_2_render
-};
+    reaction_diffusion_2_render};
 
 static const HalideFuncs kHalideMetal = {
     reaction_diffusion_2_metal_init,
@@ -32,8 +31,7 @@ static const HalideFuncs kHalideMetal = {
     reaction_diffusion_2_metal_render
 };
 
-@implementation HalideView
-{
+@implementation HalideView {
 @private
     __weak CAMetalLayer *_metalLayer;
 
@@ -51,9 +49,8 @@ static const HalideFuncs kHalideMetal = {
     return [CAMetalLayer class];
 }
 
-- (void)initCommon
-{
-    self.opaque          = YES;
+- (void)initCommon {
+    self.opaque = YES;
     self.backgroundColor = nil;
     self.userInteractionEnabled = YES;
 
@@ -69,14 +66,12 @@ static const HalideFuncs kHalideMetal = {
     _metalLayer.framebufferOnly = NO;
 }
 
-- (void) resetFrameTime
-{
+- (void)resetFrameTime {
     iteration = 0;
     frameElapsedEstimate = -1;
 }
 
-- (void) updateFrameTime: (double) elapsed using_metal: (bool)using_metal
-{
+- (void)updateFrameTime:(double)elapsed using_metal:(bool)using_metal {
     // Smooth elapsed using an IIR
     if (frameElapsedEstimate == -1) {
         frameElapsedEstimate = elapsed;
@@ -91,8 +86,7 @@ static const HalideFuncs kHalideMetal = {
     iteration += 1;
 }
 
-- (void)initBufsWithWidth: (int)w height: (int)h using_metal: (bool) using_metal
-{
+- (void)initBufsWithWidth:(int)w height:(int)h using_metal:(bool)using_metal {
     // Make a pair of buffers to represent the current state
     if (using_metal) {
         buf1 = Buffer<float>::make_interleaved(w, h, 3);
@@ -110,8 +104,7 @@ static const HalideFuncs kHalideMetal = {
     const halide_dimension_t pixelBufShape[] = {
         {0, row_stride, c},
         {0, h, c * row_stride},
-        {0, c, 1}
-    };
+        {0, c, 1}};
 
     // This allows us to make a Buffer with an arbitrary shape
     // and memory managed by Buffer itself
@@ -122,23 +115,19 @@ static const HalideFuncs kHalideMetal = {
     pixel_buf.crop(0, 0, w);
 }
 
-- (void)didMoveToWindow
-{
+- (void)didMoveToWindow {
     self.contentScaleFactor = self.window.screen.nativeScale;
 }
 
-- (id)initWithFrame:(CGRect)frame
-{
+- (id)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
-    if(self)
-    {
+    if (self) {
         [self initCommon];
     }
     return self;
 }
 
-- (instancetype)initWithCoder:(NSCoder *)coder
-{
+- (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super initWithCoder:coder];
 
     if(self)
@@ -155,7 +144,7 @@ static const HalideFuncs kHalideMetal = {
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
-    UITouch* touch = [touches anyObject];
+    UITouch *touch = [touches anyObject];
     self.touch_position = [touch locationInView:self];
     self.touch_active = [self pointInside:self.touch_position withEvent:event];
     NSUInteger numTaps = [touch tapCount];
@@ -184,8 +173,8 @@ static const HalideFuncs kHalideMetal = {
     int tx = -1, ty = -1;
     if (self.touch_active) {
         // Note that buf/bounds is not necessarily the same as self.contentScaleFactor
-        tx = (int) (self.touch_position.x * buf1.dim(0).extent() / self.bounds.size.width);
-        ty = (int) (self.touch_position.y * buf1.dim(1).extent() / self.bounds.size.height);
+        tx = (int)(self.touch_position.x * buf1.dim(0).extent() / self.bounds.size.width);
+        ty = (int)(self.touch_position.y * buf1.dim(1).extent() / self.bounds.size.height);
         NSLog(@"touch %d %d", tx, ty);
     }
 
@@ -210,7 +199,7 @@ static const HalideFuncs kHalideMetal = {
 
     std::swap(buf1, buf2);
 
-    [self updateFrameTime:(t_after - t_before) using_metal: using_metal];
+    [self updateFrameTime:(t_after - t_before) using_metal:using_metal];
 }
 
 - (void)initiateRender
@@ -221,10 +210,9 @@ static const HalideFuncs kHalideMetal = {
 
     // Create autorelease pool per frame to avoid possible deadlock situations
     // because there are 3 CAMetalDrawables sitting in an autorelease pool.
-    @autoreleasepool
-    {
-        id <CAMetalDrawable> drawable = [_metalLayer nextDrawable];
-        id <MTLTexture> texture = drawable.texture;
+    @autoreleasepool {
+        id<CAMetalDrawable> drawable = [_metalLayer nextDrawable];
+        id<MTLTexture> texture = drawable.texture;
 
         // handle display changes here
         if (!buf1.data() ||
@@ -244,19 +232,21 @@ static const HalideFuncs kHalideMetal = {
 
         [self renderOneFrame: halide_funcs using_metal: using_metal];
 
-        id <MTLBuffer> buffer = using_metal ?
-            (__bridge id <MTLBuffer>)(void *)halide_metal_get_buffer((void *)&self, pixel_buf) :
-            [self.device newBufferWithBytes: pixel_buf.data()
-                                     length: pixel_buf.size_in_bytes()
-                                    options:MTLResourceStorageModeShared];
-        id <MTLCommandBuffer> commandBuffer = [_commandQueue commandBuffer];
-        id <MTLBlitCommandEncoder> blitEncoder = [commandBuffer blitCommandEncoder];
+        [self renderOneFrame:halide_funcs using_metal:using_metal];
+
+        id<MTLBuffer> buffer = using_metal ?
+                                   (__bridge id<MTLBuffer>)(void *)halide_metal_get_buffer((void *)&self, pixel_buf) :
+                                   [self.device newBufferWithBytes:pixel_buf.data()
+                                                            length:pixel_buf.size_in_bytes()
+                                                           options:MTLResourceStorageModeShared];
+        id<MTLCommandBuffer> commandBuffer = [_commandQueue commandBuffer];
+        id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer blitCommandEncoder];
 
         MTLSize image_size;
         image_size.width = pixel_buf.dim(0).extent();
         image_size.height = pixel_buf.dim(1).extent();
         image_size.depth = 1;
-        MTLOrigin origin = { 0, 0, 0 };
+        MTLOrigin origin = {0, 0, 0};
 
         const int bytesPerRow = pixel_buf.dim(1).stride() * pixel_buf.type().bits / 8;
         [blitEncoder
@@ -270,11 +260,11 @@ static const HalideFuncs kHalideMetal = {
             destinationLevel: 0
             destinationOrigin: origin];
         [blitEncoder endEncoding];
-        [commandBuffer addCompletedHandler: ^(id MTLCommandBuffer) {
-            dispatch_async(dispatch_get_main_queue(), ^(void) {
-                [drawable present];
-                [self initiateRender];
-            });
+        [commandBuffer addCompletedHandler:^(id MTLCommandBuffer) {
+          dispatch_async(dispatch_get_main_queue(), ^(void) {
+            [drawable present];
+            [self initiateRender];
+          });
         }];
         [commandBuffer commit];
     }

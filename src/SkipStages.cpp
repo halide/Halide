@@ -53,6 +53,9 @@ class SkipStagesAnalysis : public IRVisitor {
     // What is the current nearest enclosing conditional node.
     const IRNode *enclosing_conditional = nullptr;
 
+    Scope<const IRNode *> conditional_around_let;
+    std::set<std::string> unconditionally_used_vars;
+
     void visit(const Select *op) override {
         {
             ScopedValue<bool> bind(in_condition, true);
@@ -85,40 +88,56 @@ class SkipStagesAnalysis : public IRVisitor {
     // condition.
     bool found_var_used_in_condition = false;
 
-    void visit(const LetStmt *op) override {
-        op->body.accept(this);
+    template<typename LetOrLetStmt>
+    void visit_let(const LetOrLetStmt *op) {
         {
-            ScopedValue<bool> bind(in_condition, in_condition ||
-                                                     interesting_vars.count(op->name));
-            found_var_used_in_condition = false;
-            op->value.accept(this);
-            if (found_var_used_in_condition) {
-                // The value referred to a var or call that gets used in a
-                // condition somewhere, therefore this LetStmt could also get
-                // hoisted into a condition at some point.
-                interesting_vars.insert(op->name);
-            }
+            ScopedBinding<const IRNode *> bind_cond(conditional_around_let,
+                                                    op->name,
+                                                    enclosing_conditional);
+            op->body.accept(this);
         }
-    }
-
-    void visit(const Let *op) override {
-        op->body.accept(this);
         {
             ScopedValue<bool> bind(in_condition, in_condition ||
                                                      interesting_vars.count(op->name));
             bool old = found_var_used_in_condition;
             found_var_used_in_condition = false;
-            op->value.accept(this);
+
+            if (!unconditionally_used_vars.count(op->name)) {
+                // All let uses are within enclosing conditionals that are
+                // further in than this one, so we if just visit the value, we
+                // may incorrectly think that the value is unconditionally
+                // used. Add a new enclosing conditional that isn't going to
+                // match the one around the realize node. The choice is
+                // arbitrary. We'll pick the let node itself.
+                ScopedValue<const IRNode *> bind(enclosing_conditional, op);
+                interesting_vars.insert(op->name);
+                op->value.accept(this);
+            } else {
+                unconditionally_used_vars.erase(op->name);
+                op->value.accept(this);
+            }
+
             if (found_var_used_in_condition) {
+                // The value referred to a var or call that gets used in a
+                // condition somewhere, therefore this Let could also get
+                // hoisted into a condition at some point.
                 interesting_vars.insert(op->name);
             }
             // Is this expression interesting? I.e. might it show up in a .used
             // or .loaded? Either the body Expr was interesting in its own right
-            // (refered to something used in a conditional somewhere), or the
+            // (referred to something used in a conditional somewhere), or the
             // value was interesting, and presumably the value is used in the
             // body.
             found_var_used_in_condition = found_var_used_in_condition || old;
         }
+    }
+
+    void visit(const LetStmt *op) override {
+        visit_let(op);
+    }
+
+    void visit(const Let *op) override {
+        visit_let(op);
     }
 
     void visit(const Block *op) override {
@@ -193,6 +212,11 @@ class SkipStagesAnalysis : public IRVisitor {
             interesting_vars.insert(op->name);
             found_var_used_in_condition = true;
         }
+        if (const IRNode *const *c = conditional_around_let.find(op->name);
+            c &&
+            *c == enclosing_conditional) {
+            unconditionally_used_vars.insert(op->name);
+        }
         if (op->type.is_handle()) {
             auto it = func_id.find(op->name);
             if (it != func_id.end() &&
@@ -233,6 +257,16 @@ public:
         : analysis(analysis), name_for_id(name_for_id) {
     }
 
+    Stmt emit_outermost_defs(Stmt s) {
+        if (inner_unbound_use_of_used_or_loaded_vars) {
+            s = emit_defs(s);
+        }
+        if (need_uniquify) {
+            s = uniquify_variable_names(s);
+        }
+        return s;
+    }
+
 protected:
     const SkipStagesAnalysis &analysis;
     const std::vector<std::string> &name_for_id;
@@ -254,8 +288,6 @@ protected:
     // body. (TODO: worry about fork)
     std::map<size_t, FuncInfo> func_info;
 
-    bool found_marker = false;
-
     // Might there be nested lets with the same name? Set to true if we ever
     // stamp down a .used let more than once for the same Func.
     bool need_uniquify = false;
@@ -266,6 +298,9 @@ protected:
     // Have we made use of .used or .loaded vars that haven't been wrapped in a
     // LetStmt yet (while iterating from inside out)?
     bool inner_unbound_use_of_used_or_loaded_vars = false;
+
+    // Information about called funcs in the value field of let nodes
+    std::map<std::string, std::map<size_t, FuncInfo>> let_value_func_info;
 
     Stmt emit_defs(Stmt stmt) {
         for (auto &p : func_info) {
@@ -280,19 +315,7 @@ protected:
         // We want to iterate in reverse, which really just requires changing
         // the block visitor.
         Stmt rest = mutate(op->rest);
-        found_marker = false;
         Stmt first = mutate(op->first);
-        if (found_marker) {
-            // This is where the outermost .used definitions go
-            internal_assert(first.as<Evaluate>());
-            if (inner_unbound_use_of_used_or_loaded_vars) {
-                rest = emit_defs(rest);
-            }
-            if (need_uniquify) {
-                rest = uniquify_variable_names(rest);
-            }
-            return rest;
-        }
         if (first.same_as(op->first) &&
             rest.same_as(op->rest)) {
             return op;
@@ -332,8 +355,6 @@ protected:
                 // We're unconditionally used. Clobber any existing info.
                 func_info[id] = FuncInfo{const_true(), const_true()};
             }
-        } else if (op->is_intrinsic(Call::skip_stages_marker)) {
-            found_marker = true;
         }
         return e;
     }
@@ -348,7 +369,32 @@ protected:
                 func_info[it->second] = FuncInfo{const_true(), const_true()};
             }
         }
+        if (auto it = let_value_func_info.find(op->name);
+            it != let_value_func_info.end()) {
+            // The value is taken, but it is not actually evaluated here (that already happened)
+            merge_func_info(&func_info, it->second, const_true(), const_false());
+        }
         return op;
+    }
+
+    Expr make_and(const Expr &a, const Expr &b) {
+        if (is_const_zero(a) || is_const_one(b) || a.same_as(b)) {
+            return a;
+        } else if (is_const_zero(b) || is_const_one(a)) {
+            return b;
+        } else {
+            return a && b;
+        }
+    }
+
+    Expr make_or(const Expr &a, const Expr &b) {
+        if (is_const_one(a) || is_const_zero(b) || a.same_as(b)) {
+            return a;
+        } else if (is_const_one(b) || is_const_zero(a)) {
+            return b;
+        } else {
+            return a || b;
+        }
     }
 
     void merge_func_info(std::map<size_t, FuncInfo> *old,
@@ -358,20 +404,16 @@ protected:
         for (const auto &it : new_info) {
             FuncInfo fi = it.second;
             if (used.defined()) {
-                fi.used = fi.used && used;
+                fi.used = make_and(fi.used, used);
             }
             if (evaluated.defined()) {
-                fi.loaded = fi.loaded && evaluated;
+                fi.loaded = make_and(fi.loaded, evaluated);
             }
             auto [p, inserted] = old->try_emplace(it.first, fi);
             if (!inserted) {
                 // Merge with any existing info
-                if (!is_const_one(p->second.used)) {
-                    p->second.used = p->second.used || fi.used;
-                }
-                if (!is_const_one(p->second.loaded)) {
-                    p->second.loaded = p->second.loaded || fi.loaded;
-                }
+                p->second.used = make_or(p->second.used, fi.used);
+                p->second.loaded = make_or(p->second.loaded, fi.loaded);
             }
         }
     }
@@ -474,6 +516,7 @@ protected:
         decltype(op->body) body;
         while (op && !analysis.interesting_vars.count(op->name)) {
             containing_lets.emplace_back(op->name, op->value);
+            mutate(op->value);  // Just visit the value
             body = op->body;
             op = body.template as<T>();
         }
@@ -482,7 +525,25 @@ protected:
         if (op) {
             std::map<size_t, FuncInfo> old;
             old.swap(func_info);
+            // Use a separate sub func_info map while visiting the value, as
+            // uses of Funcs in a let value don't necessarily mean direct
+            // dependence on the value for the value of this node. It depends
+            // how the let value itself is used inside the body.
+            mutate(op->value);
+            bool value_calls_interesting_funcs = false;
+            if (!func_info.empty()) {
+                // The .used conditions come from how the associated Variable is
+                // used, but the loads are done here and now. So we need to
+                // merge the loads eagerly, and the uses when we see mentions of
+                // the Variable.
+                merge_func_info(&old, func_info, const_false());
+                let_value_func_info.emplace(op->name, std::move(func_info));
+                value_calls_interesting_funcs = true;
+            }
+            func_info.clear();
+
             body = mutate(op->body);
+
             internal_assert(body.defined());
             if (may_lift(op->value)) {
                 for (auto &it : func_info) {
@@ -506,7 +567,10 @@ protected:
             }
             merge_func_info(&old, func_info);
             old.swap(func_info);
-            mutate(op->value);
+
+            if (value_calls_interesting_funcs) {
+                let_value_func_info.erase(op->name);
+            }
             if (body.same_as(op->body)) {
                 body = op;
             } else {
@@ -515,17 +579,20 @@ protected:
                 changed = true;
             }
         } else if (std::is_same_v<T, LetStmt>) {
+            // It was a LetStmt originally, but we've peeled all the lets away
+            // and declared them uninteresting. Just mutate the body.
             auto new_body = mutate(body);
             changed = !new_body.same_as(body);
             body = std::move(new_body);
         } else {
-            // Just visit the body
+            // It was a Let originally, but we've peeled all the lets away and
+            // declared them uninteresting. Just visit the body, but we don't
+            // care about the result because we're not mutating Exprs here.
             mutate(body);
         }
 
         // Rewrap any uninteresting lets
         for (auto &[var, value] : reverse_view(containing_lets)) {
-            mutate(value);  // Visit the value of each let
             if (changed) {
                 body = T::make(var, std::move(value), std::move(body));
             }
@@ -729,44 +796,72 @@ Stmt skip_stages(const Stmt &stmt,
                  const std::vector<std::vector<std::string>> &order,
                  const std::map<std::string, Function> &env) {
 
-    // Each thing we might want to skip gets a unique id, sorted by realization
-    // order of the corresponding Func.
-    std::map<std::string, size_t> func_id;
-    std::vector<std::string> name_for_id(order.size());
-    for (size_t i = 0; i < order.size(); i++) {
-        // Funcs in a compute_with group get the same id, because you can either
-        // skip them all or skip none of them.
-        for (const auto &f : order[i]) {
-            func_id[f] = i;
+    auto run_pass = [&](Stmt stmt) {
+        // Each thing we might want to skip gets a unique id, sorted by realization
+        // order of the corresponding Func.
+        std::map<std::string, size_t> func_id;
+        std::vector<std::string> name_for_id(order.size());
+        for (size_t i = 0; i < order.size(); i++) {
+            // Funcs in a compute_with group get the same id, because you can either
+            // skip them all or skip none of them.
+            for (const auto &f : order[i]) {
+                func_id[f] = i;
+            }
+            name_for_id[i] = order[i][0];
         }
-        name_for_id[i] = order[i][0];
-    }
 
-    // Map any .buffer symbols back to the id of the Func they refer to.
-    for (const auto &p : env) {
-        for (const auto &buf : p.second.output_buffers()) {
-            func_id[buf.name() + ".buffer"] = func_id[p.first];
+        // Map any .buffer symbols back to the id of the Func they refer to.
+        for (const auto &p : env) {
+            for (const auto &buf : p.second.output_buffers()) {
+                func_id[buf.name() + ".buffer"] = func_id[p.first];
+            }
         }
-    }
 
-    // Make a map from Funcs to the first member of any compute_with group they belong to.
-    SkipStagesAnalysis analysis(func_id);
-    stmt.accept(&analysis);
+        // Make a map from Funcs to the first member of any compute_with group they belong to.
+        SkipStagesAnalysis analysis(func_id);
+        stmt.accept(&analysis);
 
-    if (analysis.conditionally_used_funcs.empty()) {
-        // Nothing to do. No Funcs can be skipped. Just strip the skip stages
-        // marker.
-        return StripSkipStagesMarker().mutate(stmt);
-    }
+        if (analysis.conditionally_used_funcs.empty()) {
+            // Nothing to do. No Funcs can be skipped. Just strip the skip stages
+            // marker.
+            return stmt;
+        }
 
-    // There may be no calls to the output, which means they'll show up in
-    // neither set. Add them to the unconditionally used set so that the mutator
-    // knows to skip them.
-    for (const Function &f : outputs) {
-        analysis.unconditionally_used_funcs.insert(func_id[f.name()]);
-    }
+        // There may be no calls to the output, which means they'll show up in
+        // neither set. Add them to the unconditionally used set so that the mutator
+        // knows to skip them.
+        for (const Function &f : outputs) {
+            analysis.unconditionally_used_funcs.insert(func_id[f.name()]);
+        }
 
-    return SkipStages(analysis, name_for_id).mutate(stmt);
+        SkipStages skipper(analysis, name_for_id);
+        stmt = skipper.mutate(stmt);
+        stmt = skipper.emit_outermost_defs(stmt);
+        return stmt;
+    };
+
+    // We want to run this pass starting at the skip stages marker
+    return mutate_with(stmt,  //
+                       [&](auto *self, const Block *op) {
+                           const Evaluate *eval = op->first.as<Evaluate>();
+                           const Call *call = eval ? eval->value.as<Call>() : nullptr;
+                           if (call && call->is_intrinsic(Call::skip_stages_marker)) {
+                               return run_pass(op->rest);
+                           } else {
+                               return self->visit_base(op);
+                           }  //
+                       },
+                       [&](auto *self, const Evaluate *eval) {
+                           // It's technically possible that *nothing*
+                           // follows the skip stages marker, if the
+                           // pipeline is a no-op, in which case we just drop the marker.
+                           if (const Call *call = eval->value.as<Call>();
+                               call && call->is_intrinsic(Call::skip_stages_marker)) {
+                               return Evaluate::make(0);
+                           } else {
+                               return self->visit_base(eval);
+                           }  //
+                       });
 }
 
 }  // namespace Internal

@@ -3,9 +3,9 @@
 # Build the generator to autotune. This script will be autotuning the
 # autoscheduler's cost model training pipeline, which is large enough
 # to be interesting.
-if [ $# -lt 6 -o $# -gt 8 ]; then
-  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file autoschedule_bin_dir halide_distrib_path samples_out_path [generator_args_sets]"
-  exit
+if [ $# -lt 6 ] || [ $# -gt 8 ]; then
+    echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file autoschedule_bin_dir halide_distrib_path samples_out_path [generator_args_sets]"
+    exit
 fi
 
 set -eu
@@ -25,35 +25,35 @@ SAMPLES=${7}
 # by space; multiple values within each set are are delimited with ;
 # e.g. "set1arg1=1;set1arg2=foo set2=bar set3arg1=3.14;set4arg2=42"
 if [ $# -ge 8 ]; then
-    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${8}"
+    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<<"${8}"
 else
     declare -a GENERATOR_ARGS_SETS_ARRAY=
 fi
 
 # Ensure the length is at least 1
 if [ ${#GENERATOR_ARGS_SETS_ARRAY[@]} -eq 0 ]; then
-    GENERATOR_ARGS_SETS_ARRAY=( '' )
+    GENERATOR_ARGS_SETS_ARRAY=('')
 fi
 
 COMPILATION_TIMEOUT=600s
 BENCHMARKING_TIMEOUT=60s
 
-if [ -z ${HL_TARGET} ]; then
-# Use the host target -- but remove features that we don't want to train
-# for by default, at least not yet (most notably, AVX512).
-HL_TARGET=`${AUTOSCHED_BIN}/get_host_target avx512 avx512_knl avx512_skylake avx512_cannonlake`
+if [ -z "${HL_TARGET}" ]; then
+    # Use the host target -- but remove features that we don't want to train
+    # for by default, at least not yet (most notably, AVX512).
+    HL_TARGET=$("${AUTOSCHED_BIN}"/get_host_target avx512 avx512_knl avx512_skylake avx512_cannonlake)
 fi
-echo Training target is: ${HL_TARGET}
+echo Training target is: "${HL_TARGET}"
 
-if [ -z ${GENERATOR} ]; then
-GENERATOR=./bin/adams2019_demo.generator
-fi
-
-if [ -z ${PIPELINE} ]; then
-PIPELINE=demo
+if [ -z "${GENERATOR}" ]; then
+    GENERATOR=./bin/adams2019_demo.generator
 fi
 
-mkdir -p ${SAMPLES}
+if [ -z "${PIPELINE}" ]; then
+    PIPELINE=demo
+fi
+
+mkdir -p "${SAMPLES}"
 
 WEIGHTS=${SAMPLES}/updated.weights
 if [[ -f ${WEIGHTS} ]]; then
@@ -61,8 +61,8 @@ if [[ -f ${WEIGHTS} ]]; then
 else
     # Only copy over the weights if we don't have any already,
     # so that restarted jobs can continue from where they left off
-    cp ${START_WEIGHTS_FILE} ${WEIGHTS}
-    echo Copying starting weights from ${START_WEIGHTS_FILE} to ${WEIGHTS}
+    cp "${START_WEIGHTS_FILE}" "${WEIGHTS}"
+    echo Copying starting weights from "${START_WEIGHTS_FILE}" to "${WEIGHTS}"
 fi
 
 # A batch of this many samples is built in parallel, and then
@@ -70,10 +70,10 @@ fi
 BATCH_SIZE=32
 
 TIMEOUT_CMD="timeout"
-if [ $(uname -s) = "Darwin" ] && ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
+if [ "$(uname -s)" = "Darwin" ] && ! command -v "$TIMEOUT_CMD" >/dev/null 2>&1; then
     # OSX doesn't have timeout; gtimeout is equivalent and available via Homebrew
     TIMEOUT_CMD="gtimeout"
-    if ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
+    if ! command -v "$TIMEOUT_CMD" >/dev/null 2>&1; then
         echo "Can't find the command 'gtimeout'. Run 'brew install coreutils' to install it."
         exit 1
     fi
@@ -87,7 +87,7 @@ make_featurization() {
     SEED=${2}
     FNAME=${3}
     EXTRA_GENERATOR_ARGS=${4}
-    mkdir -p ${D}
+    mkdir -p "${D}"
     rm -f "${D}/${FNAME}.featurization"
     rm -f "${D}/${FNAME}.sample"
     if [[ $D == */0 ]]; then
@@ -96,36 +96,35 @@ make_featurization() {
         beam=32
     else
         # The other samples are random probes biased by the cost model
-        dropout=1  # 1% chance of operating entirely greedily
+        dropout=1 # 1% chance of operating entirely greedily
         beam=1
     fi
     ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
-        ${GENERATOR} \
-        -g ${PIPELINE} \
-        -f ${FNAME} \
-        -o ${D} \
+        "${GENERATOR}" \
+        -g "${PIPELINE}" \
+        -f "${FNAME}" \
+        -o "${D}" \
         -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
-        target=${HL_TARGET} \
-        ${EXTRA_GENERATOR_ARGS} \
-        -p ${AUTOSCHED_BIN}/libautoschedule_adams2019.${PLUGIN_EXT} \
+        target="${HL_TARGET}" \
+        "${EXTRA_GENERATOR_ARGS}" \
+        -p "${AUTOSCHED_BIN}"/libautoschedule_adams2019.${PLUGIN_EXT} \
         autoscheduler=Adams2019 \
         autoscheduler.parallelism=32 \
         autoscheduler.beam_size=${beam} \
         autoscheduler.random_dropout=${dropout} \
-        autoscheduler.random_dropout_seed=${SEED} \
-        autoscheduler.weights_path=${WEIGHTS} \
-            2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
-
+        autoscheduler.random_dropout_seed="${SEED}" \
+        autoscheduler.weights_path="${WEIGHTS}" \
+        2>"${D}"/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 
     # We don't need image I/O for this purpose,
     # so leave out libpng and libjpeg
     c++ \
         -std=c++17 \
-        -I ${HALIDE_DISTRIB_PATH}/include \
-        ${HALIDE_DISTRIB_PATH}/tools/RunGenMain.cpp \
-        ${D}/*.registration.cpp \
-        ${D}/*.a \
-        -o ${D}/bench \
+        -I "${HALIDE_DISTRIB_PATH}"/include \
+        "${HALIDE_DISTRIB_PATH}"/tools/RunGenMain.cpp \
+        "${D}"/*.registration.cpp \
+        "${D}"/*.a \
+        -o "${D}"/bench \
         -DHALIDE_NO_PNG -DHALIDE_NO_JPEG \
         -ldl -lpthread
 }
@@ -136,56 +135,56 @@ benchmark_sample() {
     D=${1}
     HL_NUM_THREADS=32 \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
-        ${D}/bench \
+        "${D}"/bench \
         --estimate_all \
-        --benchmarks=all \
-            | tee ${D}/bench.txt || echo "Benchmarking failed or timed out for ${D}"
+        --benchmarks=all |
+        tee "${D}"/bench.txt || echo "Benchmarking failed or timed out for ${D}"
 
     # Add the runtime, pipeline id, and schedule id to the feature file
-    R=$(cut -d' ' -f8 < ${D}/bench.txt)
+    R=$(cut -d' ' -f8 <"${D}"/bench.txt)
     P=$3
     S=$2
     FNAME=$4
-    ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
+    "${AUTOSCHED_BIN}"/featurization_to_sample "${D}"/"${FNAME}".featurization "$R" "$P" "$S" "${D}"/"${FNAME}".sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
 }
 
 # Don't clobber existing samples
-FIRST=$(ls -d ${SAMPLES}/batch_* 2>/dev/null | sed -e "s|.*/batch_||;s|_.*||" | sort -n | tail -n1)
+FIRST=$(find "${SAMPLES}" -maxdepth 1 -type d -name 'batch_*' -print 2>/dev/null | sed -e "s|.*/batch_||;s|_.*||" | sort -n | tail -n1)
 
-if [ $(uname -s) = "Darwin" ]; then
-    LOCAL_CORES=`sysctl -n hw.ncpu`
+if [ "$(uname -s)" = "Darwin" ]; then
+    LOCAL_CORES=$(sysctl -n hw.ncpu)
 else
-    LOCAL_CORES=`nproc`
+    LOCAL_CORES=$(nproc)
 fi
-echo Local number of cores detected as ${LOCAL_CORES}
+echo Local number of cores detected as "${LOCAL_CORES}"
 
 NUM_BATCHES=1
 
-for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
+for ((BATCH_ID = $((FIRST + 1)); BATCH_ID < $((FIRST + 1 + NUM_BATCHES)); BATCH_ID++)); do
 
     SECONDS=0
 
-    for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${#GENERATOR_ARGS_SETS_ARRAY[@]};EXTRA_ARGS_IDX++)); do
+    for ((EXTRA_ARGS_IDX = 0; EXTRA_ARGS_IDX < ${#GENERATOR_ARGS_SETS_ARRAY[@]}; EXTRA_ARGS_IDX++)); do
 
         # Compile a batch of samples using the generator in parallel
         DIR=${SAMPLES}/batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
 
         # Copy the weights being used into the batch folder so that we can repro failures
-        mkdir -p ${DIR}/
-        cp ${WEIGHTS} ${DIR}/used.weights
+        mkdir -p "${DIR}"/
+        cp "${WEIGHTS}" "${DIR}"/used.weights
 
         EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
         if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then
             echo "Adding extra generator args (${EXTRA_GENERATOR_ARGS}) for batch_${BATCH_ID}"
         fi
 
-        echo ${EXTRA_GENERATOR_ARGS} > ${DIR}/extra_generator_args.txt
+        echo "${EXTRA_GENERATOR_ARGS}" >"${DIR}"/extra_generator_args.txt
 
         # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
         # don't get swamped and timeout unnecessarily
         echo -n Compiling ${BATCH_SIZE} samples
-        for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
-            while [[ 1 ]]; do
+        for ((SAMPLE_ID = 0; SAMPLE_ID < BATCH_SIZE; SAMPLE_ID++)); do
+            while true; do
                 RUNNING=$(jobs -r | wc -l)
                 if [[ RUNNING -ge LOCAL_CORES ]]; then
                     sleep 1
@@ -195,32 +194,32 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
             done
 
             S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
-            FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-            make_featurization "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" &
+            FNAME=$(printf "%s_batch_%04d_sample_%04d" "${PIPELINE}" $BATCH_ID $SAMPLE_ID)
+            make_featurization "${DIR}/${SAMPLE_ID}" "$S" "$FNAME" "$EXTRA_GENERATOR_ARGS" &
             echo -n .
         done
         wait
-        echo  done.
+        echo done.
 
         # benchmark them serially using rungen
-        for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
+        for ((SAMPLE_ID = 0; SAMPLE_ID < BATCH_SIZE; SAMPLE_ID++)); do
             S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
-            FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-            benchmark_sample "${DIR}/${SAMPLE_ID}" $S $EXTRA_ARGS_IDX $FNAME
+            FNAME=$(printf "%s_batch_%04d_sample_%04d" "${PIPELINE}" $BATCH_ID $SAMPLE_ID)
+            benchmark_sample "${DIR}/${SAMPLE_ID}" "$S" $EXTRA_ARGS_IDX "$FNAME"
         done
 
         # retrain model weights on all samples seen so far
         echo Retraining model...
 
-        find ${SAMPLES} -name "*.sample" | \
-            ${AUTOSCHED_BIN}/adams2019_retrain_cost_model \
+        find "${SAMPLES}" -name "*.sample" |
+            "${AUTOSCHED_BIN}"/adams2019_retrain_cost_model \
                 --epochs=${BATCH_SIZE} \
                 --rates="0.0001" \
                 --num_cores=32 \
-                --initial_weights=${WEIGHTS} \
-                --weights_out=${WEIGHTS} \
-                --best_benchmark=${SAMPLES}/best.${PIPELINE}.benchmark.txt \
-                --best_schedule=${SAMPLES}/best.${PIPELINE}.schedule.h
+                --initial_weights="${WEIGHTS}" \
+                --weights_out="${WEIGHTS}" \
+                --best_benchmark="${SAMPLES}"/best."${PIPELINE}".benchmark.txt \
+                --best_schedule="${SAMPLES}"/best."${PIPELINE}".schedule.h
     done
 
     echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain

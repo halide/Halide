@@ -22,7 +22,9 @@ function(add_app app_name)
 endfunction()
 
 # TODO: most of the apps need to be smartened to be crosscompilable under wasm.
-message(STATUS "Halide_TARGET ${Halide_TARGET}")
+find_package(Halide REQUIRED)
+message(STATUS "Found Halide: ${Halide_DIR} (found version \"${Halide_VERSION}\")")
+message(STATUS "Halide_TARGET: ${Halide_TARGET}")
 if (Halide_TARGET MATCHES "wasm")
     message(WARNING "Skipping apps when building under wasm")
     return()
@@ -45,6 +47,11 @@ add_app(depthwise_separable_conv)
 add_app(fft)
 add_app(hannk)
 add_app(harris)
+# add_app(HelloAndroid)  # TODO(#5374): missing CMake build
+# add_app(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
+add_app(HelloBaremetal)
+# add_app(HelloiOS)  # TODO(#5374): missing CMake build
+# add_app(HelloPyTorch)  # TODO(#5374): missing CMake build
 add_app(hexagon_benchmarks)
 # add_app(hexagon_dma)  # TODO(#5374): missing CMake build
 add_app(hist)
@@ -64,4 +71,4 @@ add_app(resize)
 add_app(stencil_chain)
 add_app(unsharp)
 add_app(wavelet)
-add_app(HelloBaremetal)
+# keep-sorted end

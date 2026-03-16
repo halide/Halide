@@ -33,20 +33,20 @@ Pipeline make_pipeline() {
     input(x, y) = cast<uint16_t>(x + y);
     input.compute_root();
 
-    // Transpose the rows and cols 
+    // Transpose the rows and cols
     output(x, y) = input(y, x);
 
     // Schedule it ... there's a number of possibilities here to do an efficient block-wise transpose.
     Var xi("xi"), yi("yi");
-    
+
     // Let's focus on 8x8 subtiles, and then vectorize across X, and unroll across Y.
     output.tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
 
-    // For more advanced scheduling: 
+    // For more advanced scheduling:
     //
-    // We can improve this even more by using the .in() directive (see Tutorial 19), 
+    // We can improve this even more by using the .in() directive (see Tutorial 19),
     // which allows us to interpose new Funcs in between input and output.
-    // 
+    //
     // Here we can inject a block_transpose function to allow us to do 8 vectorized loads from the input.
     Func block_transpose("block_transpose"), block("block");
     block_transpose = input.in(output).compute_at(output, x).vectorize(x).unroll(y);
@@ -63,7 +63,7 @@ int main() {
     // let's define them here in the outermost scope.
     constexpr int samples = 100;
     constexpr int iterations = 1;
-    
+
     // Now, let's measure the performance of constructing and executing a simple pipeline from scratch...
     {
         size_t count = 0;
@@ -71,7 +71,7 @@ int main() {
 
             // First, create an output buffer to hold the results.
             Buffer<uint16_t> result(1024, 1024);
-            
+
             // Now, construct our pipeline from scratch.
             Pipeline pipeline = make_pipeline();
 
@@ -94,7 +94,7 @@ int main() {
 
             // Create our output buffer
             Buffer<uint16_t> result(1024, 1024);
-            
+
             // Now, call realize
             pipeline.realize(result);
             ++count;
@@ -118,19 +118,19 @@ int main() {
             pipeline.realize(result);
             ++count;
         });
- 
+
         // On a MacBook Pro M1, this should be about the same as the previous run (about ~175000 times/sec)
         //
-        // This may seem somewhat surprising, since compiling before realizing doesn't seem to make 
+        // This may seem somewhat surprising, since compiling before realizing doesn't seem to make
         // much of a difference to the previous case.  However, the first call to realize() will implicitly
-        // JIT-compile and cache the generated code associated with the Pipeline object, which is basically 
-        // what we've done here. Each subsequent call to realize uses the cached version of the native code, 
+        // JIT-compile and cache the generated code associated with the Pipeline object, which is basically
+        // what we've done here. Each subsequent call to realize uses the cached version of the native code,
         // so there's no additional overhead, and the cost is amortized as we re-use the pipeline.
         std::cout << "Execute Pipeline (compile before realize): " << int(count / t) << " times/sec\n";
 
         // Another subtlety is the creation of the result buffer ... the declaration implicitly
-        // allocates memory which will add overhead to each loop iteration. This time, let's try 
-        // using the realize({1024, 1024}) call which will use the buffer managed by the pipeline 
+        // allocates memory which will add overhead to each loop iteration. This time, let's try
+        // using the realize({1024, 1024}) call which will use the buffer managed by the pipeline
         // object for the outputs...
         count = 0;
         t = benchmark(samples, iterations, [&]() {
@@ -142,7 +142,7 @@ int main() {
         std::cout << "Execute Pipeline (same but with realize({})): " << int(count / t) << " times/sec\n";
 
         // Or ... we could move the declaration of the result buffer outside the timing loop, and
-        // re-use the allocation (with the caveat that we will be stomping over its contents on each 
+        // re-use the allocation (with the caveat that we will be stomping over its contents on each
         // execution).
         Buffer<uint16_t> result(1024, 1024);
 
@@ -162,12 +162,12 @@ int main() {
         const Target target = get_jit_target_from_environment();
 
         // Here, we can ask the pipeline for its argument list (these are either Params,
-        // ImageParams, or Buffers) so that we can construct a Callable object with the same 
+        // ImageParams, or Buffers) so that we can construct a Callable object with the same
         // calling convention.
         auto arguments = pipeline.infer_arguments();
 
         // The Callable object acts as a convenient way of invoking the compiled code like
-        // a function call, using an argv-like syntax for the argument list. It also caches 
+        // a function call, using an argv-like syntax for the argument list. It also caches
         // the JIT compiled code, so there's no code generation overhead when invoking the
         // callable object and executing the pipeline.
         Callable callable = pipeline.compile_to_callable(arguments, target);
@@ -184,12 +184,12 @@ int main() {
         // This should be about the same as the previous run (about ~200000 times/sec).
         std::cout << "Execute Pipeline (compile to callable): " << int(count / t) << " times/sec\n";
 
-        // Perhaps even more convient, we can create a std::function object from the callable,
+        // Perhaps even more convenient, we can create a std::function object from the callable,
         // which allows cleaner type checking for the parameters, and slightly less overhead
         // for invoking the function. The list used for the template parameters needs to match
         // the list for the parameters of the pipeline.  Here, we have a single result buffer,
-        // so we specify Buffer<uint16_t> in our call to .make_std_function<>. If we had other 
-        // scalar parameters, input buffers or output buffers, we'd pass them in the template 
+        // so we specify Buffer<uint16_t> in our call to .make_std_function<>. If we had other
+        // scalar parameters, input buffers or output buffers, we'd pass them in the template
         // parameter list too.
         auto function = callable.make_std_function<Buffer<uint16_t>>();
 

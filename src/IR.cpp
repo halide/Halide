@@ -680,6 +680,7 @@ const char *const intrinsic_op_names[] = {
     "strict_cast",
     "strict_div",
     "strict_eq",
+    "strict_fma",
     "strict_le",
     "strict_lt",
     "strict_max",
@@ -772,7 +773,7 @@ Expr Variable::make(Type type, const std::string &name, Buffer<> image, Paramete
 Expr Shuffle::make(const std::vector<Expr> &vectors,
                    const std::vector<int> &indices) {
     internal_assert(!vectors.empty()) << "Shuffle of zero vectors.\n";
-    internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
+    internal_assert(!indices.empty()) << "Shuffle with zero indices.\n";
     Type element_ty = vectors.front().type().element_of();
     int input_lanes = 0;
     for (const Expr &i : vectors) {

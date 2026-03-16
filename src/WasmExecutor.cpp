@@ -914,6 +914,20 @@ wabt::Result wabt_posix_math_2(wabt::interp::Thread &thread,
     return wabt::Result::Ok;
 }
 
+template<typename T, T some_func(T, T, T)>
+wabt::Result wabt_posix_math_3(wabt::interp::Thread &thread,
+                               const wabt::interp::Values &args,
+                               wabt::interp::Values &results,
+                               wabt::interp::Trap::Ptr *trap) {
+    internal_assert(args.size() == 3);
+    const T in1 = args[0].Get<T>();
+    const T in2 = args[1].Get<T>();
+    const T in3 = args[2].Get<T>();
+    const T out = some_func(in1, in2, in3);
+    results[0] = wabt::interp::Value::Make(out);
+    return wabt::Result::Ok;
+}
+
 #define WABT_HOST_CALLBACK(x)                                              \
     wabt::Result wabt_jit_##x##_callback(wabt::interp::Thread &thread,     \
                                          const wabt::interp::Values &args, \
@@ -1211,7 +1225,7 @@ wabt::Result extern_callback_wrapper(const std::vector<ExternArgType> &arg_types
         results[0] = dynamic_type_dispatch<LoadValue>(ret_type.type, (void *)&ret_val);
     }
 
-    // Progagate buffer data backwards. Note that for arbitrary extern functions,
+    // Propagate buffer data backwards. Note that for arbitrary extern functions,
     // we have no idea which buffers might be "input only", so we copy all data for all of them.
     for (size_t i = 0; i < arg_types_len; ++i) {
         const auto &a = arg_types[i + 1];
@@ -1998,6 +2012,20 @@ void wasm_jit_posix_math2_callback(const v8::FunctionCallbackInfo<v8::Value> &ar
     args.GetReturnValue().Set(load_scalar(context, out));
 }
 
+template<typename T, T some_func(T, T, T)>
+void wasm_jit_posix_math3_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+    Isolate *isolate = args.GetIsolate();
+    Local<Context> context = isolate->GetCurrentContext();
+    HandleScope scope(isolate);
+
+    const T in1 = args[0]->NumberValue(context).ToChecked();
+    const T in2 = args[1]->NumberValue(context).ToChecked();
+    const T in3 = args[2]->NumberValue(context).ToChecked();
+    const T out = some_func(in1, in2, in3);
+
+    args.GetReturnValue().Set(load_scalar(context, out));
+}
+
 enum ExternWrapperFieldSlots {
     kTrampolineWrap,
     kArgTypesWrap
@@ -2058,7 +2086,7 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value> &args) {
         dynamic_type_dispatch<LoadAndReturnScalar>(ret_type.type, context, (void *)&ret_val, args.GetReturnValue());
     }
 
-    // Progagate buffer data backwards. Note that for arbitrary extern functions,
+    // Propagate buffer data backwards. Note that for arbitrary extern functions,
     // we have no idea which buffers might be "input only", so we copy all data for all of them.
     for (size_t i = 0; i < arg_types_len; ++i) {
         if (arg_types[i].is_buffer) {
@@ -2123,6 +2151,7 @@ using HostCallbackMap = std::unordered_map<std::string, wabt::interp::HostFunc::
 #define DEFINE_CALLBACK(f) {#f, wabt_jit_##f##_callback}
 #define DEFINE_POSIX_MATH_CALLBACK(t, f) {#f, wabt_posix_math_1<t, ::f>}
 #define DEFINE_POSIX_MATH_CALLBACK2(t, f) {#f, wabt_posix_math_2<t, ::f>}
+#define DEFINE_POSIX_MATH_CALLBACK3(t, f) {#f, wabt_posix_math_3<t, ::f>}
 
 #endif
 
@@ -2132,6 +2161,7 @@ using HostCallbackMap = std::unordered_map<std::string, FunctionCallback>;
 #define DEFINE_CALLBACK(f) {#f, wasm_jit_##f##_callback}
 #define DEFINE_POSIX_MATH_CALLBACK(t, f) {#f, wasm_jit_posix_math_callback<t, ::f>}
 #define DEFINE_POSIX_MATH_CALLBACK2(t, f) {#f, wasm_jit_posix_math2_callback<t, ::f>}
+#define DEFINE_POSIX_MATH_CALLBACK3(t, f) {#f, wasm_jit_posix_math3_callback<t, ::f>}
 #endif
 
 const HostCallbackMap &get_host_callback_map() {
@@ -2200,7 +2230,11 @@ const HostCallbackMap &get_host_callback_map() {
         DEFINE_POSIX_MATH_CALLBACK2(float, fmaxf),
         DEFINE_POSIX_MATH_CALLBACK2(double, fmax),
         DEFINE_POSIX_MATH_CALLBACK2(float, powf),
-        DEFINE_POSIX_MATH_CALLBACK2(double, pow)};
+        DEFINE_POSIX_MATH_CALLBACK2(double, pow),
+
+        DEFINE_POSIX_MATH_CALLBACK3(float, fmaf),
+        DEFINE_POSIX_MATH_CALLBACK3(double, fma),
+    };
 
     return m;
 }

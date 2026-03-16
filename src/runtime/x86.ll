@@ -146,3 +146,11 @@ define weak_odr void @x64_cpuid_halide(i32* %info) nounwind uwtable {
   call void asm sideeffect inteldialect "xchg rbx, rsi\0A\09mov eax, dword ptr $$0 $0\0A\09mov ecx, dword ptr $$4 $0\0A\09cpuid\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, ebx\0A\09mov dword ptr $$8 $0, ecx\0A\09mov dword ptr $$12 $0, edx\0A\09xchg rbx, rsi", "=*m,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* elementtype(i32) %info)
   ret void
 }
+
+; xgetbv: info[0] is ECX (input), output is info[0]=EAX, info[1]=EDX.
+; Unlike cpuid, xgetbv does not clobber ebx/rbx, so one definition
+; works for both 32-bit and 64-bit.
+define weak_odr void @xgetbv_halide(i32* %info) nounwind uwtable {
+  call void asm sideeffect inteldialect "mov ecx, dword ptr $$0 $0\0A\09xgetbv\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, edx", "=*m,~{eax},~{ecx},~{edx},~{dirflag},~{fpsr},~{flags}"(i32* elementtype(i32) %info)
+  ret void
+}

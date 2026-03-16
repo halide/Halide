@@ -117,7 +117,10 @@ extern "C" {
 // For now, we say that if >= v12, and compiling on x86 or arm,
 // we assume support. This may need revision.
 #if defined(__GNUC__) && (__GNUC__ >= 12)
-#if defined(__x86_64__) || (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) || ((defined(__arm__) || defined(__aarch64__)) && (__GNUC__ >= 13))
+#if defined(__x86_64__) ||                                              \
+    (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) ||     \
+    (defined(__arm__) && (__GNUC__ >= 13) && __ARM_FP16_FORMAT_IEEE) || \
+    (defined(__aarch64__) && (__GNUC__ >= 13))
 #define HALIDE_CPP_COMPILER_HAS_FLOAT16
 #endif
 #endif
@@ -258,7 +261,7 @@ typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int)
 
 /** A task representing a serial for loop evaluated over some range.
  * Note that task_parent is a pass through argument that should be
- * passed to any dependent taks that are invoked using halide_do_parallel_tasks
+ * passed to any dependent tasks that are invoked using halide_do_parallel_tasks
  * underneath this call. */
 typedef int (*halide_loop_task_t)(void *user_context, int min, int extent,
                                   uint8_t *closure, void *task_parent);
@@ -948,7 +951,7 @@ extern int halide_get_gpu_device(void *user_context);
 /** Set the soft maximum amount of memory, in bytes, that the LRU
  *  cache will use to memoize Func results.  This is not a strict
  *  maximum in that concurrency and simultaneous use of memoized
- *  reults larger than the cache size can both cause it to
+ *  results larger than the cache size can both cause it to
  *  temporariliy be larger than the size specified here.
  */
 extern void halide_memoization_cache_set_size(int64_t size);
@@ -976,7 +979,7 @@ extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *ca
 
 /** Given a cache key for a memoized result, currently constructed
  *  from the Func name and top-level Func name plus the arguments of
- *  the computation, store the result in the cache for futre access by
+ *  the computation, store the result in the cache for future access by
  *  halide_memoization_cache_lookup. (The internals of the cache key
  *  should be considered opaque by this function.) Data is copied out
  *  from the inputs and inputs are unmodified. The last argument is a
@@ -2000,7 +2003,7 @@ struct halide_profiler_state {
 
     /** If this callback is defined, the profiler asserts that there is a single
      * live instance, and then uses it to get the current func and number of
-     * active threads insted of reading the fields in the instance. This is used
+     * active threads instead of reading the fields in the instance. This is used
      * so that the profiler can follow along with execution that occurs
      * elsewhere (e.g. on an accelerator). */
     void (*get_remote_profiler_state)(int *func, int *active_workers);
@@ -2043,7 +2046,7 @@ extern void halide_profiler_shutdown(void);
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
 
-/** These routines are called to temporarily disable and then reenable
+/** These routines are called to temporarily disable and then re-enable
  * the profiler. */
 //@{
 extern void halide_profiler_lock(struct halide_profiler_state *);

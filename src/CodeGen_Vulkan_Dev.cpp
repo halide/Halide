@@ -203,6 +203,7 @@ protected:
             {"fast_pow_f32", GLSLstd450Pow},
             {"floor_f16", GLSLstd450Floor},
             {"floor_f32", GLSLstd450Floor},
+            {"fma", GLSLstd450Fma},
             {"log_f16", GLSLstd450Log},
             {"log_f32", GLSLstd450Log},
             {"sin_f16", GLSLstd450Sin},
@@ -243,7 +244,7 @@ protected:
         StorageBufferOffsetMap storage_buffer_offset_map;
 
         // Defines the binding information for a specialization constant
-        // that is exported by the module and can be overriden at runtime
+        // that is exported by the module and can be overridden at runtime
         struct SpecializationBinding {
             SpvId constant_id = 0;
             uint32_t type_size = 0;
@@ -260,7 +261,7 @@ protected:
         };
         using SharedMemoryUsage = std::vector<SharedMemoryAllocation>;
 
-        // Defines the specialization constants used for dynamically overiding the dispatch size
+        // Defines the specialization constants used for dynamically overriding the dispatch size
         struct WorkgroupSizeBinding {
             SpvId local_size_constant_id[3] = {0, 0, 0};  // zero if unused
         };
@@ -1195,9 +1196,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
             e.accept(this);
         }
     } else if (op->is_strict_float_intrinsic()) {
-        // TODO: Enable/Disable RelaxedPrecision flags?
-        Expr e = unstrictify_float(op);
-        e.accept(this);
+        if (op->is_intrinsic(Call::strict_fma)) {
+            Expr builtin_call = Call::make(op->type, "fma", op->args, Call::PureExtern);
+            builtin_call.accept(this);
+        } else {
+            // TODO: Enable/Disable RelaxedPrecision flags?
+            Expr e = unstrictify_float(op);
+            e.accept(this);
+        }
     } else if (op->is_intrinsic(Call::IntrinsicOp::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         // b > a, so the following works without widening:
@@ -2371,7 +2377,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_header(SpvBinary &spirv_header) {
     // ... [4] Dynamic workgroup dimensions bound to specialization constants
     // ....... [0] Constant id to use for local_size_x (zero if it was statically declared and not bound to a specialization constant)
     // ....... [1] Constant id to use for local_size_y
-    // ....... [2] Constant id ot use for local_size_z
+    // ....... [2] Constant id to use for local_size_z
     //
     // NOTE: Halide's Vulkan runtime consumes this header prior to compiling.
     //

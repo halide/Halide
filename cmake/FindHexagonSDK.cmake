@@ -3,7 +3,7 @@ include(FindPackageHandleStandardArgs)
 ##
 # Find the Hexagon SDK root
 
-# We use the presense of the hexagon toolchain file to determine the SDK
+# We use the presence of the hexagon toolchain file to determine the SDK
 # root. Other files have names that are too generic (like readme.txt) or
 # are platform-specific (like setup_sdk_env.source) to and so can't be
 # used to autodetect the path. Plus, we need to find this file anyway.

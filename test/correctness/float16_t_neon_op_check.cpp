@@ -314,7 +314,7 @@ private:
 
 int main(int argc, char **argv) {
     // FIXME
-    printf("[SKIP] Test is currently broken. See https://github.com/halide/Halide/issues/8083");
+    printf("[SKIP-WITH-ISSUE-8083] Test is currently broken. See https://github.com/halide/Halide/issues/8083");
     return 0;
 
     return SimdOpCheckTest::main<SimdOpCheck>(

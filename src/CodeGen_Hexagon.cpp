@@ -90,7 +90,7 @@ protected:
                              std::vector<llvm::Value *>, bool maybe = false);
     ///@}
 
-    /** Override CodeGen_LLVM to use hexagon intrinics when possible. */
+    /** Override CodeGen_LLVM to use hexagon intrinsics when possible. */
     ///@{
     llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &v) override;
     llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
@@ -331,7 +331,7 @@ private:
     Expr uses_hvx_var;
     using IRMutator::visit;
     // Primarily, we do two things when we encounter a parallel for loop.
-    // First, we check if the paralell for loop uses_hvx and accordingly
+    // First, we check if the parallel for loop uses_hvx and accordingly
     // acqure_hvx_context i.e. acquire and release HVX locks.
     // Then we insert a conditional unlock before the for loop, let's call
     // this the prolog, and a conditional lock after the for loop which
@@ -1158,11 +1158,16 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     llvm::Type *result_ty = get_vector_type(element_ty, result_elements);
 
     // Try to rewrite shuffles that only access the elements of b.
-    int min = indices[0];
-    for (size_t i = 1; i < indices.size(); i++) {
-        if (indices[i] != -1 && indices[i] < min) {
-            min = indices[i];
+    int min = INT_MAX;
+    int max = -1;
+    for (int idx : indices) {
+        if (idx != -1) {
+            min = std::min(min, idx);
+            max = std::max(max, idx);
         }
+    }
+    if (min == INT_MAX) {
+        return llvm::PoisonValue::get(result_ty);
     }
     if (min >= a_elements) {
         vector<int> shifted_indices(indices);
@@ -1171,11 +1176,10 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 i -= a_elements;
             }
         }
-        return shuffle_vectors(b, shifted_indices);
+        return shuffle_vectors(b, b, shifted_indices);
     }
 
     // Try to rewrite shuffles that only access the elements of a.
-    int max = *std::max_element(indices.begin(), indices.end());
     if (max < a_elements) {
         BitCastInst *a_cast = dyn_cast<BitCastInst>(a);
         CallInst *a_call = dyn_cast<CallInst>(a_cast ? a_cast->getOperand(0) : a);
@@ -1186,15 +1190,16 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 create_bitcast(a_call->getArgOperand(1), native_ty),
                 create_bitcast(a_call->getArgOperand(0), native_ty), indices);
         } else if (ShuffleVectorInst *a_shuffle = dyn_cast<ShuffleVectorInst>(a)) {
-            bool is_identity = true;
-            for (int i = 0; i < a_elements; i++) {
-                int mask_i = a_shuffle->getMaskValue(i);
-                is_identity = is_identity && (mask_i == i || mask_i == -1);
+            std::vector<int> new_indices(indices.size());
+            for (size_t i = 0; i < indices.size(); i++) {
+                if (indices[i] != -1) {
+                    new_indices[i] = a_shuffle->getMaskValue(indices[i]);
+                } else {
+                    new_indices[i] = -1;
+                }
             }
-            if (is_identity) {
-                return shuffle_vectors(a_shuffle->getOperand(0),
-                                       a_shuffle->getOperand(1), indices);
-            }
+            return shuffle_vectors(a_shuffle->getOperand(0),
+                                   a_shuffle->getOperand(1), new_indices);
         }
     }
 
@@ -1516,7 +1521,11 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
         vector<int> i8_indices(indices.size() * replicate);
         for (size_t i = 0; i < indices.size(); i++) {
             for (int j = 0; j < replicate; j++) {
-                i8_indices[i * replicate + j] = indices[i] * replicate + j;
+                if (indices[i] == -1) {
+                    i8_indices[i * replicate + j] = -1;  // Replicate the don't-care.
+                } else {
+                    i8_indices[i * replicate + j] = indices[i] * replicate + j;
+                }
             }
         }
         Value *result = vdelta(i8_lut, i8_indices);
@@ -1678,7 +1687,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     // contains the result of each range, and a condition vector
     // indicating whether the result should be used.
     vector<std::pair<Value *, Value *>> ranges;
-    for (int min_index_i = 0; min_index_i < max_index; min_index_i += 256) {
+    for (int min_index_i = 0; min_index_i <= max_index; min_index_i += 256) {
         // Make a vector of the indices shifted such that the min of
         // this range is at 0. Use 16-bit indices for this.
         Value *min_index_i_val = create_vector(i16x_t, min_index_i);
@@ -1692,9 +1701,11 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         // truncate to 8 bits, as vlut requires.
         indices = call_intrin(i8x_t, "halide.hexagon.pack.vh", {indices});
 
-        int range_extent_i = std::min(max_index - min_index_i, 255);
-        Value *range_i = vlut256(slice_vector(lut, min_index_i, range_extent_i),
-                                 indices, 0, range_extent_i);
+        int local_max_index = std::min(max_index - min_index_i, 255);
+        int slice_size = local_max_index + 1;
+
+        Value *range_i = vlut256(slice_vector(lut, min_index_i, slice_size),
+                                 indices, 0, local_max_index);
         ranges.emplace_back(range_i, use_index);
     }
 
@@ -1713,7 +1724,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
     // indices at compile time to implement a few
     // optimizations. First, we can avoid running the vlut
     // instructions for ranges of the LUT for which we know we don't
-    // have any indices. This wil happen often for strided
+    // have any indices. This will happen often for strided
     // ramps. Second, we can do the shuffling of the indices necessary
     // at compile time.
     vector<Constant *> llvm_indices;

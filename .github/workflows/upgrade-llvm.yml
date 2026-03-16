@@ -5,15 +5,49 @@ on:
     - cron: "0 6 * * *"  # Daily at 1am EST / 2am EDT
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
+env:
+  BRANCH: automated/upgrade-halide-llvm
 
 jobs:
   upgrade:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.LLVM_UPDATER_ID }}
+          private-key: ${{ secrets.LLVM_UPDATER_PRIVATE_KEY }}
+
+      - name: Get GitHub App user ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure git and environment
+        run: |
+          echo "GH_TOKEN=${{ steps.app-token.outputs.token }}" >> "$GITHUB_ENV"
+          git config --global user.name "${{ steps.app-token.outputs.app-slug }}[bot]"
+          git config --global user.email "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Switch to existing PR branch if present
+        id: branch
+        run: |
+          if gh pr view "$BRANCH" --json state -q .state 2>/dev/null | grep -q OPEN; then
+            echo "pr-exists=true" >> "$GITHUB_OUTPUT"
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+          else
+            echo "pr-exists=false" >> "$GITHUB_OUTPUT"
+            # Delete stale remote branch (e.g. leftover from a merged PR)
+            git push origin --delete "$BRANCH" 2>/dev/null || true
+            git checkout -b "$BRANCH"
+          fi
 
       - uses: astral-sh/setup-uv@v5
 
@@ -38,25 +72,16 @@ jobs:
 
       - name: Create or update PR
         if: steps.diff.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BRANCH="automated/upgrade-halide-llvm"
           TITLE="Upgrade halide-llvm to ${{ steps.diff.outputs.versions }}"
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "$BRANCH"
           git add uv.lock
           git commit -m "$TITLE"
 
-          # Update existing PR or create a new one
-          if gh pr view "$BRANCH" --json state -q .state 2>/dev/null | grep -q OPEN; then
-            git push -u origin "$BRANCH" --force-with-lease \
-              && gh pr edit "$BRANCH" --title "$TITLE"
+          if [ "${{ steps.branch.outputs.pr-exists }}" = "true" ]; then
+            git push -u origin "$BRANCH"
+            gh pr edit "$BRANCH" --title "$TITLE"
           else
-            # Delete stale remote branch (e.g. leftover from a merged PR)
-            git push origin --delete "$BRANCH" 2>/dev/null || true
             git push -u origin "$BRANCH"
             gh pr create \
               --title "$TITLE" \
