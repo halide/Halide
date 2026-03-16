@@ -2197,31 +2197,6 @@ void CodeGen_LLVM::visit(const Broadcast *op) {
     value = create_broadcast(v, op->lanes);
 }
 
-Value *CodeGen_LLVM::optimization_fence(Value *v) {
-    llvm::Type *t = v->getType();
-    if (t->isScalableTy()) {
-        // Convert to fixed, fence, convert back.
-        Value *fixed = scalable_to_fixed_vector_type(v);
-        fixed = optimization_fence(fixed);
-        return fixed_to_scalable_vector_type(fixed);
-    }
-    const int bits = t->getPrimitiveSizeInBits();
-    if (bits % 32) {
-        const int lanes = get_vector_num_elements(t);
-        const int element_bits = t->getScalarSizeInBits();
-        const int lanes_per_32_bits = 32 / element_bits;
-        const int padded_lanes = align_up(lanes, lanes_per_32_bits);
-        v = slice_vector(v, 0, padded_lanes);
-        v = optimization_fence(v);
-        v = slice_vector(v, 0, lanes);
-        return v;
-    }
-    llvm::Type *float_type = get_vector_type(f32_t, bits / 32, VectorTypeConstraint::Fixed);
-    v = builder->CreateBitCast(v, float_type);
-    v = builder->CreateArithmeticFence(v, float_type);
-    return builder->CreateBitCast(v, t);
-}
-
 Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
     internal_assert(!vecs.empty());
     for (size_t i = 1; i < vecs.size(); i++) {
@@ -5213,6 +5188,31 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
 
         return vec;
     }
+}
+
+Value *CodeGen_LLVM::optimization_fence(Value *v) {
+    llvm::Type *t = v->getType();
+    if (t->isScalableTy()) {
+        // Convert to fixed, fence, convert back.
+        Value *fixed = scalable_to_fixed_vector_type(v);
+        fixed = optimization_fence(fixed);
+        return fixed_to_scalable_vector_type(fixed);
+    }
+    const int bits = t->getPrimitiveSizeInBits();
+    if (bits % 32) {
+        const int lanes = get_vector_num_elements(t);
+        const int element_bits = t->getScalarSizeInBits();
+        const int lanes_per_32_bits = 32 / element_bits;
+        const int padded_lanes = align_up(lanes, lanes_per_32_bits);
+        v = slice_vector(v, 0, padded_lanes);
+        v = optimization_fence(v);
+        v = slice_vector(v, 0, lanes);
+        return v;
+    }
+    llvm::Type *float_type = get_vector_type(f32_t, bits / 32, VectorTypeConstraint::Fixed);
+    v = builder->CreateBitCast(v, float_type);
+    v = builder->CreateArithmeticFence(v, float_type);
+    return builder->CreateBitCast(v, t);
 }
 
 Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
