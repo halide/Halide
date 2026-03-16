@@ -4,11 +4,6 @@
 
 set(REASON_FAILURE_MESSAGE "")
 
-# Fallback configurations for weirdly built LLVMs
-set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel Release RelWithDebInfo "")
-set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel "")
-set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
-
 set(llvm_paths "")
 foreach (
     template IN ITEMS
@@ -118,9 +113,9 @@ find_package_handle_standard_args(
     HANDLE_VERSION_RANGE
 )
 
-function(_Halide_LLVM_link target visibility)
+function(_Halide_LLVM_link target)
     llvm_map_components_to_libnames(comps ${ARGN})
-    target_link_libraries("${target}" "${visibility}" ${comps})
+    target_link_libraries("${target}" INTERFACE ${comps})
 endfunction()
 
 if (Halide_LLVM_FOUND)
@@ -159,7 +154,7 @@ if (Halide_LLVM_FOUND)
         if (Halide_LLVM_SHARED_LIBS)
             target_link_libraries(Halide_LLVM::Core INTERFACE LLVM ${CMAKE_DL_LIBS})
         else ()
-            _Halide_LLVM_link(Halide_LLVM::Core INTERFACE orcjit bitwriter linker passes)
+            _Halide_LLVM_link(Halide_LLVM::Core orcjit bitwriter linker passes)
         endif ()
     endif ()
 
@@ -169,7 +164,7 @@ if (Halide_LLVM_FOUND)
             target_link_libraries(Halide_LLVM::${comp} INTERFACE Halide_LLVM::Core)
 
             if (NOT Halide_LLVM_SHARED_LIBS)
-                _Halide_LLVM_link(Halide_LLVM::${comp} INTERFACE ${comp})
+                _Halide_LLVM_link(Halide_LLVM::${comp} ${comp})
             endif ()
 
             if (comp STREQUAL "WebAssembly")

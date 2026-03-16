@@ -15,11 +15,60 @@
     {
       "name": "ci",
       "hidden": true,
-      "inherits": "base",
-      "toolchainFile": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
+      "binaryDir": "build",
+      "installDir": "local",
+      "generator": "Ninja",
+      "toolchainFile": "$env{VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "Halide_LLVM_SHARED_LIBS": false
+        "FETCHCONTENT_FULLY_DISCONNECTED": "ON",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
+        "VCPKG_MANIFEST_FEATURES": "developer",
+        "Halide_BUILDING_IN_CI": "ON"
+      }
+    },
+    {
+      "name": "ci-linux-x86-64",
+      "inherits": "ci"
+    },
+    {
+      "name": "ci-linux-x86-32",
+      "inherits": "ci",
+      "cacheVariables": {
+        "WITH_PYTHON_BINDINGS": "NO"
+      }
+    },
+    {
+      "name": "ci-linux-arm-64",
+      "inherits": "ci",
+      "cacheVariables": {
+        "WITH_PYTHON_BINDINGS": "NO"
+      }
+    },
+    {
+      "name": "ci-linux-arm-32",
+      "inherits": "ci",
+      "cacheVariables": {
+        "WITH_PYTHON_BINDINGS": "NO"
+      }
+    },
+    {
+      "name": "ci-macos-arm-64",
+      "inherits": "ci"
+    },
+    {
+      "name": "ci-macos-x86-64",
+      "inherits": "ci"
+    },
+    {
+      "name": "ci-windows-x86-64",
+      "inherits": "ci"
+    },
+    {
+      "name": "ci-windows-x86-32",
+      "inherits": "ci",
+      "cacheVariables": {
+        "WITH_PYTHON_BINDINGS": "NO"
       }
     },
     {
@@ -30,7 +79,7 @@
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_MANIFEST_FEATURES": "developer",
-        "Halide_USE_FETCHCONTENT": false
+        "FETCHCONTENT_FULLY_DISCONNECTED": "ON"
       }
     },
     {
@@ -64,6 +113,32 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "ubuntu",
+      "inherits": "base",
+      "hidden": true,
+      "cacheVariables": {
+        "Halide_WASM_BACKEND": "OFF"
+      }
+    },
+    {
+      "name": "ubuntu-debug",
+      "inherits": [
+        "ubuntu",
+        "debug"
+      ],
+      "displayName": "Debug (Ubuntu)",
+      "description": "Debug build for a single-config generator, Ubuntu dependencies"
+    },
+    {
+      "name": "ubuntu-release",
+      "inherits": [
+        "ubuntu",
+        "release"
+      ],
+      "displayName": "Release (Ubuntu)",
+      "description": "Release build for a single-config generator, Ubuntu dependencies"
     },
     {
       "name": "debug-vcpkg",
@@ -122,49 +197,6 @@
       "description": "macOS build with vcpkg dependencies"
     },
     {
-      "name": "package",
-      "hidden": true,
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "LLVM_DIR": "$env{LLVM_DIR}",
-        "Clang_DIR": "$env{Clang_DIR}",
-        "LLD_DIR": "$env{LLD_DIR}",
-        "WITH_TESTS": "NO",
-        "WITH_TUTORIALS": "NO",
-        "WITH_DOCS": "YES",
-        "WITH_UTILS": "YES",
-        "WITH_PYTHON_BINDINGS": "NO",
-        "CMAKE_INSTALL_DATADIR": "share/Halide"
-      }
-    },
-    {
-      "name": "package-windows",
-      "inherits": [
-        "package",
-        "vs2022"
-      ],
-      "displayName": "Package ZIP for Windows",
-      "description": "Build for packaging Windows shared libraries.",
-      "binaryDir": "${sourceDir}/build",
-      "cacheVariables": {
-        "BUILD_SHARED_LIBS": "YES",
-        "CMAKE_INSTALL_BINDIR": "bin/$<CONFIG>",
-        "CMAKE_INSTALL_LIBDIR": "lib/$<CONFIG>",
-        "Halide_INSTALL_CMAKEDIR": "lib/cmake/Halide",
-        "Halide_INSTALL_HELPERSDIR": "lib/cmake/HalideHelpers"
-      }
-    },
-    {
-      "name": "package-unix",
-      "inherits": "package",
-      "displayName": "Package UNIX shared libs",
-      "description": "Build for packaging UNIX shared libraries.",
-      "binaryDir": "shared-Release",
-      "cacheVariables": {
-        "BUILD_SHARED_LIBS": "YES"
-      }
-    },
-    {
       "name": "linux-x64-asan",
       "inherits": "ci",
       "displayName": "ASAN (Linux x64)",
@@ -193,73 +225,6 @@
         "WITH_TEST_GENERATOR": "NO",
         "WITH_TEST_FUZZ": "YES",
         "BUILD_SHARED_LIBS": "NO"
-      }
-    }
-  ],
-  "buildPresets": [
-    {
-      "name": "debug",
-      "configurePreset": "debug",
-      "displayName": "Debug",
-      "description": "Debug build with no special settings"
-    },
-    {
-      "name": "release",
-      "configurePreset": "release",
-      "displayName": "Release",
-      "description": "Release build with no special settings"
-    },
-    {
-      "name": "linux-x64-asan",
-      "configurePreset": "linux-x64-asan",
-      "displayName": "ASAN (Linux x64)",
-      "description": "Build everything with ASAN enabled"
-    },
-    {
-      "name": "linux-x64-fuzzer",
-      "configurePreset": "linux-x64-fuzzer",
-      "displayName": "Fuzzing (Linux x64)",
-      "description": "Build everything with fuzzing enabled"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "debug",
-      "configurePreset": "debug",
-      "displayName": "Debug",
-      "description": "Test everything with Debug build",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "release",
-      "configurePreset": "release",
-      "displayName": "Release",
-      "description": "Test everything with Release build",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "linux-x64-asan",
-      "configurePreset": "linux-x64-asan",
-      "displayName": "ASAN (Linux x64)",
-      "description": "Test everything with ASAN enabled",
-      "environment": {
-        "ASAN_OPTIONS": "detect_leaks=0:detect_container_overflow=0"
-      },
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "linux-x64-fuzzer",
-      "configurePreset": "linux-x64-fuzzer",
-      "displayName": "Fuzzing (Linux x64)",
-      "description": "Test everything with fuzzing enabled",
-      "output": {
-        "outputOnFailure": true
       }
     }
   ]

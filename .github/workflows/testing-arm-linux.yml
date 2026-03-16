@@ -3,7 +3,20 @@ name: ARM Linux
 on:
   pull_request:
     types: [ opened, synchronize, reopened ]
-  workflow_dispatch:
+    paths-ignore:
+      - "doc/**"
+      - "README.md"
+      - "CODE_OF_CONDUCT.md"
+      - "LICENSE.txt"
+      - ".gitignore"
+      - ".gitattributes"
+      - ".gitmodules"
+      - ".lldbinit"
+      - ".github/**"
+      - "!.github/workflows/testing-arm-linux.yml"
+      - "packaging/**"
+      - "Makefile"
+      - "Makefile.inc"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -14,6 +27,7 @@ permissions:
 
 jobs:
   arm-linux:
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: arm-${{ matrix.bits }} / ${{ matrix.uv_group }}
     runs-on: ubuntu-24.04-arm
     strategy:
@@ -78,17 +92,7 @@ jobs:
         run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
 
       - name: Configure CMake
-        run: |
-          TOOLCHAIN_ARGS=()
-          if [[ "${{ matrix.bits }}" == "32" ]]; then
-            TOOLCHAIN_ARGS+=("-DCMAKE_TOOLCHAIN_FILE=${GITHUB_WORKSPACE}/cmake/toolchain.linux-arm32.cmake")
-          fi
-
-          cmake -G Ninja -S . -B build \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DHalide_LLVM_ROOT="${Halide_LLVM_ROOT}" \
-            -DWITH_PYTHON_BINDINGS=OFF \
-            "${TOOLCHAIN_ARGS[@]}"
+        run: cmake --preset ci-linux-arm-${{ matrix.bits }}
 
       - name: Initial build
         run: cmake --build build
@@ -104,17 +108,20 @@ jobs:
         run: |
           cmake -S . -B build -DHalide_TARGET=host
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
 
       - name: Test (NEON)
         if: matrix.bits == '64'
         run: |
           cmake -S . -B build -DHalide_TARGET=arm-64-linux-arm_dot_prod-arm_fp16
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
 
       - name: Test (no extensions)
         run: |
           cmake -S . -B build -DHalide_TARGET=cmake
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5

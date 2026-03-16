@@ -60,7 +60,7 @@ public:
     }
 
     void set_generatorparam_value(const std::string &name, const LoopLevel &value) override {
-        _halide_user_assert(false) << "Python Genrators should never see LoopLevels for GeneratorParam values.";
+        _halide_user_assert(false) << "Python Generators should never see LoopLevels for GeneratorParam values.";
     }
 
     Pipeline build_pipeline() override {

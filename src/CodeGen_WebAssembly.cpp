@@ -400,7 +400,7 @@ string CodeGen_WebAssembly::mattrs() const {
     }
     // PIC implies +mutable-globals because the PIC ABI used by the linker
     // depends on importing and exporting mutable globals. Also -pthread implies
-    // mutable-globals too, so quitely enable it if either of these are specified.
+    // mutable-globals too, so quietly enable it if either of these are specified.
     if (use_pic() || target.has_feature(Target::WasmThreads)) {
         attrs.emplace_back("+mutable-globals");
     }

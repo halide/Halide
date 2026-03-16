@@ -441,9 +441,9 @@ public:
         check("vand(v*,v*)", hvx_width / 1, u8_1 & u8_2);
         check("vand(v*,v*)", hvx_width / 2, u16_1 & u16_2);
         check("vand(v*,v*)", hvx_width / 4, u32_1 & u32_2);
-        check("vor(v*,v*)", hvx_width / 1, u8_1 | u8_2);
-        check("vor(v*,v*)", hvx_width / 2, u16_1 | u16_2);
-        check("vor(v*,v*)", hvx_width / 4, u32_1 | u32_2);
+        check("vor(v*,v*)", hvx_width / 1, u8_1 | u8_2);    // codespell:ignore vor
+        check("vor(v*,v*)", hvx_width / 2, u16_1 | u16_2);  // codespell:ignore vor
+        check("vor(v*,v*)", hvx_width / 4, u32_1 | u32_2);  // codespell:ignore vor
         check("vxor(v*,v*)", hvx_width / 1, u8_1 ^ u8_2);
         check("vxor(v*,v*)", hvx_width / 2, u16_1 ^ u16_2);
         check("vxor(v*,v*)", hvx_width / 4, u32_1 ^ u32_2);

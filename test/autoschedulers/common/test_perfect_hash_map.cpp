@@ -66,6 +66,6 @@ int main(int argc, char **argv) {
             ref_it++;
         }
     }
-    printf("Perfect hash map test passed\n");
+    printf("Success!\n");
     return 0;
 }

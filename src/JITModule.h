@@ -219,7 +219,7 @@ struct JITModule {
     /** Registers a single Symbol as available to modules which depend
      * on this one. The Symbol structure provides both the address and
      * the LLVM type for the function, which allows type safe linkage of
-     * extenal routines. */
+     * external routines. */
     void add_symbol_for_export(const std::string &name, const Symbol &extern_symbol);
     /** Registers a single function as available to modules which
      * depend on this one. This routine converts the ExternSignature

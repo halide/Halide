@@ -2447,7 +2447,7 @@ FormatInfo best_save_format(const ImageType &im, const std::set<FormatInfo> &inf
 struct ImageTypeConversion {
     // Convert an Image from one ElemType to another, where the src and
     // dst types are statically known (e.g. Buffer<uint8_t> -> Buffer<float>).
-    // Note that this does conversion with scaling -- intepreting integers
+    // Note that this does conversion with scaling -- interpreting integers
     // as fixed-point numbers between 0 and 1 -- not merely C-style casting.
     //
     // You'd normally call this with an explicit type for DstElemType and

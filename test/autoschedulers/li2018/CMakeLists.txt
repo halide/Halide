@@ -40,7 +40,6 @@ if (WITH_PYTHON_BINDINGS)
             li2018_gradient_autoscheduler_test_py PROPERTIES
             DEPENDS li2018_test
             LABELS "li2018;autoschedulers_cpu;autoschedulers_gpu"
-            RUN_SERIAL TRUE
             ENVIRONMENT_MODIFICATION "${PYTHONPATH}"
         )
     endif ()

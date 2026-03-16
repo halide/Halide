@@ -24,11 +24,15 @@ struct Target;
 
 /** Enums specifying various kinds of outputs that can be produced from a Halide Pipeline. */
 enum class OutputFileType {
+    // keep-sorted start
     assembly,
     bitcode,
     c_header,
     c_source,
     compiler_log,
+    conceptual_stmt,
+    conceptual_stmt_html,
+    device_code,
     featurization,
     function_info_header,
     hlpipe,
@@ -40,10 +44,8 @@ enum class OutputFileType {
     schedule,
     static_library,
     stmt,
-    conceptual_stmt,
     stmt_html,
-    conceptual_stmt_html,
-    device_code,
+    // keep-sorted end
 };
 
 /** Type of linkage a function in a lowered Halide module can have.

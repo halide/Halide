@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
 
         output.for_each_element([&](int x, int y) {
             if (output(x, y) != input(x, y) + 4) {
-                printf("output(%d, %d) = %f intead of %f\n",
+                printf("output(%d, %d) = %f instead of %f\n",
                        x, y, output(x, y), input(x, y) + 4);
                 exit(1);
             }

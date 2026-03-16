@@ -1467,7 +1467,7 @@ public:
         // copy of the allocation, if there is one).
         Buffer<T, Dims, InClassDimStorage> im = *this;
 
-        // This guarantees the prexisting device ref is dropped if the
+        // This guarantees the preexisting device ref is dropped if the
         // device_crop call fails and maintains the buffer in a consistent
         // state.
         im.device_deallocate();
@@ -1503,7 +1503,7 @@ public:
         // copy of the allocation, if there is one).
         Buffer<T, Dims, InClassDimStorage> im = *this;
 
-        // This guarantees the prexisting device ref is dropped if the
+        // This guarantees the preexisting device ref is dropped if the
         // device_crop call fails and maintains the buffer in a consistent
         // state.
         im.device_deallocate();
@@ -1663,7 +1663,7 @@ public:
 
         Buffer<T, AnyDims, InClassDimStorage> im = *this;
 
-        // This guarantees the prexisting device ref is dropped if the
+        // This guarantees the preexisting device ref is dropped if the
         // device_slice call fails and maintains the buffer in a consistent
         // state.
         im.device_deallocate();
