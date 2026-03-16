@@ -188,6 +188,20 @@
       }
     },
     {
+      "name": "macOS-fuzz",
+      "displayName": "macOS (Fuzz)",
+      "description": "macOS fuzzing build",
+      "inherits": "macOS",
+      "toolchainFile": "${sourceDir}/cmake/toolchain.macos-homebrew.cmake",
+      "cacheVariables": {
+        "CMAKE_C_FLAGS": "-fsanitize=fuzzer-no-link -O1 -g3",
+        "CMAKE_CXX_FLAGS": "-fsanitize=fuzzer-no-link -O1 -g3",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=fuzzer",
+        "CMAKE_MODULE_LINKER_FLAGS": "-fsanitize=fuzzer",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=fuzzer"
+      }
+    },
+    {
       "name": "macOS-vcpkg",
       "inherits": [
         "macOS",
