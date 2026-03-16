@@ -22,7 +22,6 @@ ConstructorInitializerIndentWidth: 4
 ContinuationIndentWidth: 4
 IndentCaseLabels: false
 IndentWidth: 4
-InsertBraces: true
 IndentWrappedFunctionNames: false
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
