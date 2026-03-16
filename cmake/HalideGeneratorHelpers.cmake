@@ -742,7 +742,7 @@ function(add_halide_library TARGET)
     endif ()
 
     # Save metadata on the library target for downstream helpers.
-    set_property(DIRECTORY APPEND PROPERTY Halide_BUILDSYSTEM_TARGETS "${TARGET}")
+    set_property(DIRECTORY APPEND PROPERTY Halide_BUILDSYSTEM_TARGETS "${TARGET}") # nolint
     set_property(TARGET "${TARGET}" PROPERTY Halide_LIBRARY_RUNTIME_TARGET "${ARG_USE_RUNTIME}")
     set_property(TARGET "${TARGET}" PROPERTY Halide_LIBRARY_FUNCTION_NAME "${ARG_FUNCTION_NAME}")
     set_property(TARGET "${TARGET}" PROPERTY Halide_LIBRARY_TARGETS "${ARG_TARGETS}")
