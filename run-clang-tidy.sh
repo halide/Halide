@@ -111,27 +111,7 @@ export CMAKE_EXPORT_COMPILE_COMMANDS=ON
 export Halide_LLVM_ROOT="${CLANG_TIDY_LLVM_INSTALL_DIR}"
 
 if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
-    # Homebrew clang 21 is badly misconfigured and needs help finding the
-    # system headers, even though it uses system libc++ by default.
-    SDKROOT="$(xcrun --show-sdk-path)"
-    # TOOLCHAINROOT="$(xcrun --show-toolchain-path)"
-    TOOLCHAINROOT="$(cd "$(dirname "$(xcrun --find clang)")"/../.. && pwd)"
-    RCDIR="$(xcrun clang -print-resource-dir)"
-    cat >"${CLANG_TIDY_BUILD_DIR}/toolchain.cmake" <<EOF
-set(CMAKE_SYSROOT "${SDKROOT}")
-set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES
-    "${RCDIR}/include"
-    "${SDKROOT}/usr/include"
-    "${TOOLCHAINROOT}/usr/include"
-    "${SDKROOT}/System/Library/Frameworks"
-    "${SDKROOT}/System/Library/SubFrameworks"
-)
-set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
-    "${SDKROOT}/usr/include/c++/v1"
-    \${CMAKE_C_STANDARD_INCLUDE_DIRECTORIES}
-)
-EOF
-    export CMAKE_TOOLCHAIN_FILE="${CLANG_TIDY_BUILD_DIR}/toolchain.cmake"
+    export CMAKE_TOOLCHAIN_FILE="${ROOT_DIR}/cmake/toolchain.macos-homebrew.cmake"
 fi
 
 echo Configuring Halide...
