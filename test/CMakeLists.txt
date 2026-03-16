@@ -67,19 +67,7 @@ endif ()
 
 # FIXME: failing_with_issue is dead code :)
 
-# Check that the configured toolchain can compile a libfuzzer test harness. If
-# this fails, the user likely needs to set up their environment to use a
-# compatible fuzzing engine (e.g. by setting up a toolchain file).
-check_cxx_source_compiles([[
-#include <cstdint>
-#include <cstddef>
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, std::size_t Size) {
-  return 0;
-}
-]] HAVE_LIBFUZZER_FLAGS)
-
-Halide_feature(WITH_TEST_FUZZ "Build fuzz tests" AUTO
-               DEPENDS HAVE_LIBFUZZER_FLAGS)
+Halide_feature(WITH_TEST_FUZZ "Build fuzz tests" ON)
 if (WITH_TEST_FUZZ)
     add_subdirectory(fuzz)
 endif ()

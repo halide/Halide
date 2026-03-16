@@ -1,3 +1,10 @@
+if (NOT LIB_FUZZING_ENGINE)
+    set(LIB_FUZZING_ENGINE "$ENV{LIB_FUZZING_ENGINE}")
+endif ()
+
+set(LIB_FUZZING_ENGINE "${LIB_FUZZING_ENGINE}"
+    CACHE STRING "Extra link libraries arguments for fuzz tests.")
+
 tests(GROUPS fuzz
       SOURCES
       bounds.cpp
@@ -15,10 +22,31 @@ tests(GROUPS fuzz
       USE_EXIT_CODE_ONLY
 )
 
-# Allow OSS-fuzz to manage flags directly
-set(LIB_FUZZING_ENGINE "$ENV{LIB_FUZZING_ENGINE}"
-    CACHE STRING "Extra link libraries arguments for fuzz tests.")
+# Check whether the configured toolchain can compile a libfuzzer test harness.
+# If this fails, the user likely needs to set up their environment to use a
+# compatible fuzzing engine (e.g. by setting up a toolchain file).
+check_cxx_source_compiles([[
+#include <cstdint>
+#include <cstddef>
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, std::size_t Size) {
+  return 0;
+}
+]] HAVE_LIBFUZZER_FLAGS)
+
+add_library(Halide_fuzz INTERFACE)
+add_library(Halide::fuzz ALIAS Halide_fuzz)
+
+if (NOT HAVE_LIBFUZZER_FLAGS)
+    if (LIB_FUZZING_ENGINE)
+        message(FATAL_ERROR "Cannot set LIB_FUZZING_ENGINE when not building with -fsanitize=fuzzer or a compatible fuzzing engine.")
+    endif ()
+    target_sources(Halide_fuzz INTERFACE fuzz_main.cpp)
+    target_compile_definitions(Halide_fuzz INTERFACE HALIDE_FUZZER_BACKEND=HALIDE_FUZZER_BACKEND_STDLIB)
+else ()
+    target_link_libraries(Halide_fuzz INTERFACE ${LIB_FUZZING_ENGINE})
+    target_compile_definitions(Halide_fuzz INTERFACE HALIDE_FUZZER_BACKEND=HALIDE_FUZZER_BACKEND_LIBFUZZER)
+endif ()
 
 foreach (fuzzer IN LISTS TEST_NAMES)
-    target_link_libraries("${fuzzer}" PRIVATE ${LIB_FUZZING_ENGINE})
+    target_link_libraries("${fuzzer}" PRIVATE Halide::fuzz)
 endforeach ()

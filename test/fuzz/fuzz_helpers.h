@@ -5,18 +5,20 @@
 #define HALIDE_FUZZER_BACKEND_LIBFUZZER 1
 
 #ifndef HALIDE_FUZZER_BACKEND
-#warning "HALIDE_FUZZER_BACKEND not defined, defaulting to libFuzzer"
-#define HALIDE_FUZZER_BACKEND HALIDE_FUZZER_BACKEND_LIBFUZZER
+#error "HALIDE_FUZZER_BACKEND not defined, defaulting to libFuzzer"
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#if HALIDE_FUZZER_BACKEND == HALIDE_FUZZER_BACKEND_LIBFUZZER
-#include "fuzzer/FuzzedDataProvider.h"  // IWYU pragma: export
-#endif
-
 #include <cstddef>
 #include <vector>
+
+#if HALIDE_FUZZER_BACKEND == HALIDE_FUZZER_BACKEND_LIBFUZZER
+#include "fuzzer/FuzzedDataProvider.h"  // IWYU pragma: export
+#elif HALIDE_FUZZER_BACKEND == HALIDE_FUZZER_BACKEND_STDLIB
+#include "fuzz_main.h"
+#include <random>
+#endif
 
 namespace Halide {
 
@@ -29,10 +31,51 @@ public:
         return vec[ConsumeIntegralInRange<std::size_t>(0, vec.size() - 1)];
     }
 };
+#elif HALIDE_FUZZER_BACKEND == HALIDE_FUZZER_BACKEND_STDLIB
+class FuzzingContext {
+
+public:
+    using RandomEngine = std::mt19937_64;
+    using SeedType = RandomEngine::result_type;
+
+    explicit FuzzingContext(SeedType seed) : rng(seed) {
+    }
+
+    template<typename T>
+    T ConsumeIntegral() {
+        std::uniform_int_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
+        return dist(rng);
+    }
+
+    template<typename T>
+    T ConsumeIntegralInRange(T min, T max) {
+        std::uniform_int_distribution<T> dist(min, max);
+        return dist(rng);
+    }
+
+    bool ConsumeBool() {
+        std::bernoulli_distribution dist;
+        return dist(rng);
+    }
+
+    template<typename T>
+    T PickValueInVector(std::vector<T> &vec) {
+        return vec[ConsumeIntegralInRange(static_cast<std::size_t>(0), vec.size() - 1)];
+    }
+
+    template<typename T>
+    auto PickValueInArray(T &array) -> decltype(auto) {
+        return array[ConsumeIntegralInRange(static_cast<std::size_t>(0), std::size(array) - 1)];
+    }
+
+private:
+    RandomEngine rng;
+};
 #endif
 
 }  // namespace Halide
 
+#if HALIDE_FUZZER_BACKEND == HALIDE_FUZZER_BACKEND_LIBFUZZER
 #define FUZZ_TEST(name, signature)                                            \
     static int name##_fuzz_test(signature);                                   \
     extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) { \
@@ -40,5 +83,13 @@ public:
         return name##_fuzz_test(fdp);                                         \
     }                                                                         \
     static int name##_fuzz_test(signature)
+#elif HALIDE_FUZZER_BACKEND == HALIDE_FUZZER_BACKEND_STDLIB
+#define FUZZ_TEST(name, signature)                              \
+    static int name##_fuzz_test(signature);                     \
+    int main(int argc, char **argv) {                           \
+        return Halide::fuzz_main(argc, argv, name##_fuzz_test); \
+    }                                                           \
+    static int name##_fuzz_test(signature)
+#endif
 
 #endif  // HALIDE_FUZZ_HELPERS_H_
