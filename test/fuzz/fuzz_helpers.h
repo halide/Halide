@@ -11,6 +11,9 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <type_traits>
 #include <vector>
 
 #if HALIDE_FUZZER_BACKEND == HALIDE_FUZZER_BACKEND_LIBFUZZER
@@ -32,8 +35,8 @@ public:
     }
 };
 #elif HALIDE_FUZZER_BACKEND == HALIDE_FUZZER_BACKEND_STDLIB
+// IMPORTANT: we don't use std::*_distribution because they are not portable across standard libraries
 class FuzzingContext {
-
 public:
     using RandomEngine = std::mt19937_64;
     using SeedType = RandomEngine::result_type;
@@ -43,19 +46,21 @@ public:
 
     template<typename T>
     T ConsumeIntegral() {
-        std::uniform_int_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
-        return dist(rng);
+        return static_cast<T>(rng());
     }
 
     template<typename T>
     T ConsumeIntegralInRange(T min, T max) {
-        std::uniform_int_distribution<T> dist(min, max);
-        return dist(rng);
+        // If this proves too slow, there are smarter things we can do:
+        // https://lemire.me/blog/2019/06/06/nearly-divisionless-random-integer-generation-on-various-systems/
+        if (max < min) {
+            return min;
+        }
+        return min + rng() % (max - min + 1);
     }
 
     bool ConsumeBool() {
-        std::bernoulli_distribution dist;
-        return dist(rng);
+        return rng() & 1;
     }
 
     template<typename T>
