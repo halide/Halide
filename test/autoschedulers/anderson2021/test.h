@@ -21,7 +21,7 @@ void expect_eq(int line, const A &expected, const B &actual) {
 }
 
 template<typename A, typename B>
-void approx_eq(int line, const A &expected, const B &actual, float epsilon) {
+void approx_eq(int line, const A &expected, const B &actual, double epsilon) {
     user_assert(std::abs(expected - actual) < epsilon)
         << "Assert failed on line " << line << "."
         << "\nExpected value = " << expected

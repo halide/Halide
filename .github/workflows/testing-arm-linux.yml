@@ -17,6 +17,8 @@ on:
       - "packaging/**"
       - "Makefile"
       - "Makefile.inc"
+      - 'run-clang-tidy.sh'
+      - '**.clang-tidy'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

@@ -4,6 +4,11 @@
 #ifndef HALIDE_IMAGE_IO_H
 #define HALIDE_IMAGE_IO_H
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4996)  // disable unsafe CRT function warnings
+#endif
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -2790,5 +2795,9 @@ void convert_and_save_image(ImageType &im, const std::string &filename) {
 
 }  // namespace Tools
 }  // namespace Halide
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #endif  // HALIDE_IMAGE_IO_H

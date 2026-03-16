@@ -257,7 +257,9 @@ Target calculate_host_target() {
 #else
 #if defined(__arm__) || defined(__aarch64__) || defined(_M_ARM64) || defined(_M_ARM64EC)
     Target::Arch arch = Target::ARM;
+#if !defined(__arm__)
     bool has_scalable_vector = false;
+#endif
 
 #ifdef __APPLE__
     if (is_armv7s()) {
@@ -293,7 +295,9 @@ Target calculate_host_target() {
 
     if (hwcaps2 & HWCAP2_SVE2) {
         initial_features.push_back(Target::SVE2);
+#if !defined(__arm__)
         has_scalable_vector = true;
+#endif
     }
 #endif
 
@@ -322,12 +326,14 @@ Target calculate_host_target() {
 
     if (IsProcessorFeaturePresent(PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE)) {
         initial_features.push_back(Target::SVE2);
+#if !defined(__arm__)
         has_scalable_vector = true;
+#endif
     }
 
 #endif
 
-#if defined(__aarch64__)
+#if !defined(__arm__)
     if (has_scalable_vector) {
         vector_bits = get_sve_vector_length();
     }

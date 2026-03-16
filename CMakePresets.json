@@ -21,6 +21,7 @@
       "toolchainFile": "$env{VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
         "FETCHCONTENT_FULLY_DISCONNECTED": "ON",
         "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
         "VCPKG_MANIFEST_FEATURES": "developer",
