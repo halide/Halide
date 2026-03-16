@@ -208,6 +208,8 @@ vcpkg_installed/
 ################################################################################
 ## IDE directories and metadata
 
+.ccls-cache/
+
 # Visual Studio
 .vs/
 out/
