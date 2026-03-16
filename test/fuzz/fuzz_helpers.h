@@ -19,7 +19,7 @@
 #if HALIDE_FUZZER_BACKEND == HALIDE_FUZZER_BACKEND_LIBFUZZER
 #include "fuzzer/FuzzedDataProvider.h"  // IWYU pragma: export
 #elif HALIDE_FUZZER_BACKEND == HALIDE_FUZZER_BACKEND_STDLIB
-#include "fuzz_main.h"
+#include "fuzz_stdlib_main.h"
 #include <random>
 #endif
 
