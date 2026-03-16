@@ -20,6 +20,7 @@ if (NOT ONNX_FOUND)
     message(WARNING "Could NOT find ONNX package config")
     return()
 endif ()
+message(STATUS "Found ONNX: ${ONNX_DIR} (found version \"${ONNX_VERSION}\")")
 
 find_package(Halide REQUIRED)
 
