@@ -6,7 +6,10 @@ body:
     id: description
     attributes:
       label: Description
-      description: A clear and concise description of the bug.
+      description: >-
+        A clear and concise description of the bug. What happened and how
+        did it differ from what you expected? Include error messages or
+        incorrect output.
     validations:
       required: true
   - type: textarea
@@ -15,22 +18,9 @@ body:
       label: Reproducing case
       description: >-
         A minimal, self-contained code example that demonstrates the problem. The
-        smaller and more self-contained, the better.
+        smaller and more self-contained, the better. Ideally, it should look like
+        one of the tests in `test/correctness`.
       render: cpp
-    validations:
-      required: true
-  - type: textarea
-    id: expected
-    attributes:
-      label: Expected behavior
-      description: What did you expect to happen?
-    validations:
-      required: true
-  - type: textarea
-    id: actual
-    attributes:
-      label: Actual behavior
-      description: What actually happened? Include error messages or incorrect output.
     validations:
       required: true
   - type: dropdown
@@ -45,7 +35,7 @@ body:
         - GitHub release binary
         - Other (describe below)
     validations:
-      required: true
+      required: false
   - type: input
     id: halide-version
     attributes:
@@ -55,7 +45,7 @@ body:
         if you downloaded a binary.
       placeholder: "e.g. 19.0.0"
     validations:
-      required: true
+      required: false
   - type: input
     id: halide-commit
     attributes:
@@ -72,14 +62,14 @@ body:
       description: The Halide target string used when the bug occurs.
       placeholder: "e.g. x86-64-linux-avx2, arm-64-osx"
     validations:
-      required: true
+      required: false
   - type: input
     id: os
     attributes:
       label: Operating system
       placeholder: "e.g. Ubuntu 24.04, macOS 15.3, Windows 11"
     validations:
-      required: true
+      required: false
   - type: textarea
     id: extra
     attributes:

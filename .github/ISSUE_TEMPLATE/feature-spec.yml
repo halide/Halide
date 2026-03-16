@@ -2,7 +2,7 @@ name: Feature specification
 description: >-
   Propose a well-specified new feature. For early-stage ideas, please start a
   Discussion instead.
-labels: ["feature"]
+labels: [ "feature" ]
 body:
   - type: markdown
     attributes:
@@ -24,14 +24,8 @@ body:
       label: Proposed solution
       description: >-
         Describe the feature in detail. Include proposed API surfaces, semantics,
-        and behavior.
-    validations:
-      required: true
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives considered
-      description: What other approaches did you consider, and why is this one preferred?
+        and behavior. Compare this solution to other approaches you considered.
+        Why is this one preferred?
     validations:
       required: true
   - type: textarea

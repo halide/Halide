@@ -1,14 +1,16 @@
-name: Missed optimization
-description: Report a case where Halide produces correct but unexpectedly slow code.
-labels: ["performance"]
+name: Enhancement request
+description: Report a case where Halide produces a correct output in a suboptimal way
+labels: [ "enhancement" ]
 body:
   - type: textarea
     id: description
     attributes:
       label: Description
       description: >-
-        A clear description of the missed optimization. What performance do you
-        expect, and what are you observing?
+        Describe the problem: could an error message could be made clearer?
+        Is documentation is missing or misleading?
+        Was an optimization was missed?
+        Did a pipeline take unexpectedly long to compile?
     validations:
       required: true
   - type: textarea
@@ -16,19 +18,10 @@ body:
     attributes:
       label: Reproducing case
       description: >-
-        A minimal Halide pipeline that demonstrates the issue. Include the
-        schedule if relevant.
+        A minimal, self-contained code example that demonstrates the problem. The
+        smaller and more self-contained, the better. Ideally, it should look like
+        one of the tests in `test/correctness`.
       render: cpp
-    validations:
-      required: true
-  - type: textarea
-    id: performance
-    attributes:
-      label: Performance details
-      description: >-
-        Include relevant measurements: execution time, generated assembly
-        snippets, loop nest structure (Func::print_loop_nest()), or
-        HL_DEBUG_CODEGEN output.
     validations:
       required: true
   - type: dropdown
@@ -43,7 +36,7 @@ body:
         - GitHub release binary
         - Other (describe below)
     validations:
-      required: true
+      required: false
   - type: input
     id: halide-version
     attributes:
@@ -53,7 +46,7 @@ body:
         if you downloaded a binary.
       placeholder: "e.g. 19.0.0"
     validations:
-      required: true
+      required: false
   - type: input
     id: halide-commit
     attributes:
@@ -67,16 +60,21 @@ body:
     id: target
     attributes:
       label: Target
-      description: The Halide target string used.
+      description: The Halide target string used when the bug occurs.
       placeholder: "e.g. x86-64-linux-avx2, arm-64-osx"
     validations:
-      required: true
+      required: false
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "e.g. Ubuntu 24.04, macOS 15.3, Windows 11"
+    validations:
+      required: false
   - type: textarea
     id: extra
     attributes:
       label: Additional context
-      description: >-
-        Any other relevant information (comparison with hand-written code,
-        alternative schedules tried, etc.)
+      description: Anything else that might be relevant (build flags, environment, workarounds found, etc.)
     validations:
       required: false
