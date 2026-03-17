@@ -17,31 +17,28 @@ class RandomExpressionGenerator {
 public:
     using make_bin_op_fn = Expr (*)(Expr, Expr);
 
-    bool gen_cast = true;
-    bool gen_select = true;
+    // keep-sorted start
     bool gen_arithmetic = true;
     bool gen_bitwise = true;
     bool gen_bool_ops = true;
-    bool gen_reinterpret = true;
     bool gen_broadcast_of_vector = true;
+    bool gen_cast = true;
+    bool gen_cse = true;
+    bool gen_intrinsics = true;
     bool gen_ramp_of_vector = true;
+    bool gen_reinterpret = true;
+    bool gen_select = true;
     bool gen_shuffles = true;
     bool gen_vector_reduce = true;
+    // keep-sorted end
 
     FuzzingContext &fuzz;
 
     std::vector<Type> fuzz_types = {UInt(1), UInt(8), UInt(16), UInt(32), UInt(64), Int(8), Int(16), Int(32), Int(64)};
-    std::vector<Param<int>> fuzz_vars;
+    std::vector<Expr> atoms;
 
-    explicit RandomExpressionGenerator(FuzzingContext &fuzz)
-        : fuzz(fuzz) {
-        for (int i = 0; i < 5; i++) {
-            fuzz_vars.emplace_back("a" + std::to_string(i));
-        }
-    }
-
-    Type random_scalar_type() {
-        return fuzz.PickValueInVector(fuzz_types);
+    explicit RandomExpressionGenerator(FuzzingContext &fuzz, std::vector<Expr> atoms)
+        : fuzz(fuzz), atoms(std::move(atoms)) {
     }
 
     int get_random_divisor(int x) {
@@ -56,11 +53,11 @@ public:
     }
 
     Expr random_var(Type t) {
-        return cast(t, fuzz.PickValueInVector(fuzz_vars));
+        return cast(t, fuzz.PickValueInVector(atoms));
     }
 
-    Type random_type(int width) {
-        Type t = random_scalar_type();
+    Type random_type(int width = 1) {
+        Type t = fuzz.PickValueInVector(fuzz_types);
         if (width > 1) {
             t = t.with_lanes(width);
         }
@@ -177,13 +174,13 @@ public:
         std::vector<std::function<Expr()>> ops;
 
         // Leaf
-        ops.push_back([&]() -> Expr {
+        ops.emplace_back([&] {
             return random_leaf(t);
         });
 
         if (gen_arithmetic) {
             // Arithmetic
-            ops.push_back([&] {
+            ops.emplace_back([&] {
                 static make_bin_op_fn make_bin_op[] = {
                     // Arithmetic operations.
                     Add::make,
@@ -202,7 +199,7 @@ public:
         }
         if (gen_bitwise) {
             // Bitwise
-            ops.push_back([&] {
+            ops.emplace_back([&] {
                 static make_bin_op_fn make_bin_op[] = {
                     make_bitwise_or,
                     make_bitwise_and,
@@ -218,7 +215,7 @@ public:
         }
         if (gen_bool_ops) {
             // Boolean ops
-            ops.push_back([&] {
+            ops.emplace_back([&] {
                 static make_bin_op_fn make_bin_op[] = {
                     And::make,
                     Or::make,
@@ -236,13 +233,12 @@ public:
         }
         if (gen_select) {
             // Select
-            ops.push_back(
-                [&]() -> Expr {
-                    auto c = random_condition(t, depth, true);
-                    auto e1 = random_expr(t, depth, overflow_undef);
-                    auto e2 = random_expr(t, depth, overflow_undef);
-                    return select(c, e1, e2);
-                });
+            ops.emplace_back([&] {
+                auto c = random_condition(t, depth, true);
+                auto e1 = random_expr(t, depth, overflow_undef);
+                auto e2 = random_expr(t, depth, overflow_undef);
+                return select(c, e1, e2);
+            });
         }
         // Cast
         if (gen_cast) {
@@ -260,7 +256,7 @@ public:
         }
         if (gen_reinterpret) {
             // Reinterpret (different bit width, changes lane count)
-            ops.push_back([&]() -> Expr {
+            ops.emplace_back([&] {
                 int total_bits = t.bits() * t.lanes();
                 // Pick a different bit width that divides the total bits evenly
                 int bit_widths[] = {8, 16, 32, 64};
@@ -282,7 +278,7 @@ public:
 
         if (gen_broadcast_of_vector) {
             // Broadcast of vector
-            ops.push_back([&]() -> Expr {
+            ops.emplace_back([&] {
                 if (t.lanes() != 1) {
                     int lanes = get_random_divisor(t.lanes());
                     auto e1 = random_expr(t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
@@ -294,7 +290,7 @@ public:
 
         if (gen_ramp_of_vector) {
             // Ramp
-            ops.push_back([&] {
+            ops.emplace_back([&] {
                 if (t.lanes() != 1) {
                     int lanes = get_random_divisor(t.lanes());
                     auto e1 = random_expr(t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
@@ -305,14 +301,14 @@ public:
             });
         }
         if (gen_bool_ops) {
-            ops.push_back([&] {
+            ops.emplace_back([&] {
                 if (t.is_bool()) {
                     auto e1 = random_expr(t, depth);
                     return Not::make(e1);
                 }
                 return random_expr(t, depth, overflow_undef);
             });
-            ops.push_back([&] {
+            ops.emplace_back([&] {
                 // When generating boolean expressions, maybe throw in a condition on non-bool types.
                 if (t.is_bool()) {
                     return random_condition(random_type(t.lanes()), depth, false);
@@ -322,7 +318,7 @@ public:
         }
         if (gen_shuffles) {
             // Shuffle (interleave)
-            ops.push_back([&]() -> Expr {
+            ops.emplace_back([&] {
                 if (t.lanes() >= 4 && t.lanes() % 2 == 0) {
                     int half = t.lanes() / 2;
                     Expr a = random_expr(t.with_lanes(half), depth);
@@ -333,7 +329,7 @@ public:
                 return random_expr(t, depth);
             });
             // Shuffle (concat)
-            ops.push_back([&]() -> Expr {
+            ops.emplace_back([&] {
                 if (t.lanes() >= 4 && t.lanes() % 2 == 0) {
                     int half = t.lanes() / 2;
                     Expr a = random_expr(t.with_lanes(half), depth);
@@ -343,7 +339,7 @@ public:
                 return random_expr(t, depth);
             });
             // Shuffle (slice)
-            ops.push_back([&]() -> Expr {
+            ops.emplace_back([&] {
                 // Make a wider vector and slice it
                 if (t.lanes() <= 8) {
                     int wider = t.lanes() * 2;
@@ -357,7 +353,7 @@ public:
         }
         if (gen_vector_reduce) {
             // VectorReduce (only when we can make it work with lane counts)
-            ops.push_back([&]() -> Expr {
+            ops.emplace_back([&] {
                 // Input has more lanes, output has t.lanes() lanes
                 // factor must divide input lanes, and input lanes = t.lanes() * factor
                 int factor = fuzz.ConsumeIntegralInRange(2, 4);
@@ -374,6 +370,74 @@ public:
                     return VectorReduce::make(op, val, t.lanes());
                 }
                 return random_expr(t, depth);
+            });
+        }
+        if (gen_intrinsics && t.bits() >= 8) {
+            // Fixed-point and intrinsic operations (from lossless_cast fuzzer)
+            ops.emplace_back([&] {
+                bool may_widen = t.bits() < 32;  // TODO: uint64 is broken
+                bool has_narrow = t.bits() >= 16;
+                Type nt = has_narrow ? t.narrow() : t;
+
+                std::vector<std::function<Expr()>> choices;
+
+                // Halving ops
+                choices.emplace_back([&] { return halving_add(random_expr(t, depth, overflow_undef), random_expr(t, depth, overflow_undef)); });
+                choices.emplace_back([&] { return rounding_halving_add(random_expr(t, depth, overflow_undef), random_expr(t, depth, overflow_undef)); });
+                choices.emplace_back([&] { return halving_sub(random_expr(t, depth, overflow_undef), random_expr(t, depth, overflow_undef)); });
+
+                // Saturating ops
+                choices.emplace_back([&] { return saturating_add(random_expr(t, depth, overflow_undef), random_expr(t, depth, overflow_undef)); });
+                choices.emplace_back([&] { return saturating_sub(random_expr(t, depth, overflow_undef), random_expr(t, depth, overflow_undef)); });
+
+                // Count ops
+                choices.emplace_back([&] { return count_leading_zeros(random_expr(t, depth, overflow_undef)); });
+                choices.emplace_back([&] { return count_trailing_zeros(random_expr(t, depth, overflow_undef)); });
+
+                // Rounding shift ops
+                choices.emplace_back([&] { return rounding_shift_right(random_expr(t, depth, overflow_undef), random_expr(t, depth, overflow_undef)); });
+                choices.emplace_back([&] { return rounding_shift_left(random_expr(t, depth, overflow_undef), random_expr(t, depth, overflow_undef)); });
+
+                // Widening ops: inputs are t.narrow(), output is t
+                if (has_narrow) {
+                    choices.emplace_back([&] { return widening_add(random_expr(nt, depth, overflow_undef), random_expr(nt, depth, overflow_undef)); });
+                    choices.emplace_back([&] { return widening_mul(random_expr(nt, depth, overflow_undef), random_expr(nt, depth, overflow_undef)); });
+                }
+
+                // Widening sub always returns signed
+                if (has_narrow && t.is_int()) {
+                    choices.emplace_back([&] { return widening_sub(random_expr(nt, depth, overflow_undef), random_expr(nt, depth, overflow_undef)); });
+                }
+
+                // Widen-right ops: a is type t, b is type t.narrow(), output is type t
+                if (has_narrow) {
+                    choices.emplace_back([&] { return widen_right_add(random_expr(t, depth, overflow_undef), random_expr(nt, depth, overflow_undef)); });
+                    choices.emplace_back([&] { return widen_right_sub(random_expr(t, depth, overflow_undef), random_expr(nt, depth, overflow_undef)); });
+                    choices.emplace_back([&] { return widen_right_mul(random_expr(t, depth, overflow_undef), random_expr(nt, depth, overflow_undef)); });
+                }
+
+                // mul_shift_right / rounding_mul_shift_right
+                if (may_widen) {
+                    choices.emplace_back([&] {
+                        Expr a = random_expr(t, depth, overflow_undef);
+                        Expr b = random_expr(t, depth, overflow_undef);
+                        Expr c = cast(t.with_code(halide_type_uint), random_expr(t, depth, overflow_undef));
+                        return mul_shift_right(a, b, c);
+                    });
+                    choices.emplace_back([&] {
+                        Expr a = random_expr(t, depth, overflow_undef);
+                        Expr b = random_expr(t, depth, overflow_undef);
+                        Expr c = cast(t.with_code(halide_type_uint), random_expr(t, depth, overflow_undef));
+                        return rounding_mul_shift_right(a, b, c);
+                    });
+                }
+
+                return fuzz.PickValueInVector(choices)();
+            });
+        }
+        if (gen_cse) {
+            ops.emplace_back([&] {
+                return common_subexpression_elimination(random_expr(t, depth, overflow_undef));
             });
         }
 

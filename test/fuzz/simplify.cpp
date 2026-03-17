@@ -61,8 +61,10 @@ bool test_expression(RandomExpressionGenerator &reg, Expr test, int samples) {
     Expr simplified = simplify(test);
 
     map<string, Expr> vars;
-    for (const auto &fuzz_var : reg.fuzz_vars) {
-        vars[fuzz_var.name()] = Expr();
+    for (const auto &atom : reg.atoms) {
+        if (const Variable *v = atom.as<Variable>()) {
+            vars[v->name] = atom;
+        }
     }
 
     for (int i = 0; i < samples; i++) {
@@ -105,9 +107,17 @@ FUZZ_TEST(simplify, FuzzingContext &fuzz) {
     // Number of samples to test the generated expressions for during minimization.
     constexpr int samples_during_minimization = 100;
 
-    RandomExpressionGenerator reg{fuzz};
-    reg.fuzz_types = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
+    RandomExpressionGenerator reg{
+        fuzz,
+        {
+            Param<int>("a0"),
+            Param<int>("a1"),
+            Param<int>("a2"),
+            Param<int>("a3"),
+            Param<int>("a4"),
+        }};
     // FIXME: UInt64 fails!
+    reg.fuzz_types = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
     // FIXME: These need to be disabled (otherwise crashes and/or failures):
     // reg.gen_ramp_of_vector = false;
     // reg.gen_broadcast_of_vector = false;
