@@ -256,7 +256,7 @@ private:
         if (base_lanes > 1) {
             if (new_lanes == 1) {
                 int index = starting_lane / base_lanes;
-                Expr expr = op->base + cast(op->base.type(), index) * op->stride;
+                Expr expr = simplify(op->base + cast(op->base.type(), index) * op->stride);
                 ScopedValue<int> old_starting_lane(starting_lane, starting_lane % base_lanes);
                 ScopedValue<int> old_lane_stride(lane_stride, base_lanes);
                 expr = mutate(expr);
@@ -274,10 +274,10 @@ private:
                 return mutate(flatten_nested_ramps(op));
             }
         }
-        Expr expr = op->base + cast(op->base.type(), starting_lane) * op->stride;
+        Expr expr = simplify(op->base + cast(op->base.type(), starting_lane) * op->stride);
         internal_assert(expr.type() == op->base.type());
         if (new_lanes > 1) {
-            expr = Ramp::make(expr, op->stride * lane_stride, new_lanes);
+            expr = Ramp::make(expr, simplify(op->stride * lane_stride), new_lanes);
         }
         return expr;
     }
@@ -410,7 +410,7 @@ Expr deinterleave(Expr e, int starting_lane, int lane_stride, int new_lanes, con
     Deinterleaver d(starting_lane, lane_stride, new_lanes, lets);
     e = d.mutate(e);
     e = common_subexpression_elimination(e);
-    return simplify(e);
+    return e;
 }
 
 Expr extract_odd_lanes(const Expr &e, const Scope<> &lets) {
