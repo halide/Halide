@@ -262,8 +262,8 @@ void IRPrinter::test() {
     ostringstream source;
     source << allocate;
     std::string correct_source =
-        "allocate buf[float32 * 1023] in Stack\n"
-        "let y = 17\n"
+        "allocate buf[f32 * 1023] in Stack\n"
+        "let y : i32 = 17\n"
         "assert(y >= 3, halide_error_param_too_small_i64(\"y\", y, 3))\n"
         "produce buf {\n"
         " parallel (x, -2, y + 2) {\n"

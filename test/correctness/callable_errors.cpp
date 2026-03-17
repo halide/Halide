@@ -67,9 +67,9 @@ void test_bad_untyped_calls() {
         expect_failure(c(Buffer<uint8_t, AnyDims>(), 2, 1.0f, result1), "Buffer argument p_img is nullptr");
         expect_failure(c(Buffer<void, 2>(), 2, 1.0f, result1), "Buffer argument p_img is nullptr");
         expect_failure(c(Buffer<void, AnyDims>(), 2, 1.0f, result1), "Buffer argument p_img is nullptr");
-        expect_failure(c(42, 2, 1.0f, result1), "Argument 1 of 4 ('p_img') was expected to be a buffer of type 'uint8' and dimension 2");
-        expect_failure(c(in1, 2.25, 1.0f, result1), "Argument 2 of 4 ('p_int') was expected to be a scalar of type 'int32' and dimension 0");
-        expect_failure(c(in1, 2, 1, result1), "Argument 3 of 4 ('p_float') was expected to be a scalar of type 'float32' and dimension 0");
+        expect_failure(c(42, 2, 1.0f, result1), "Argument 1 of 4 ('p_img') was expected to be a buffer of type 'u8' and dimension 2");
+        expect_failure(c(in1, 2.25, 1.0f, result1), "Argument 2 of 4 ('p_int') was expected to be a scalar of type 'i32' and dimension 0");
+        expect_failure(c(in1, 2, 1, result1), "Argument 3 of 4 ('p_float') was expected to be a scalar of type 'f32' and dimension 0");
         expect_failure(c(in1, 2, 1.0f, (const halide_buffer_t *)nullptr), "Buffer argument fn1 is nullptr");
         expect_failure(c(in1, 2, 1.0f, (halide_buffer_t *)nullptr), "Buffer argument fn1 is nullptr");
         expect_failure(c(in1, 2, 1.0f, Buffer<const uint8_t, 2>()), "Buffer argument fn1 is nullptr");
