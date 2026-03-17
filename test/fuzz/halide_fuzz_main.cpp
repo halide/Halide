@@ -1,4 +1,4 @@
-#include "fuzz_stdlib_main.h"
+#include "halide_fuzz_main.h"
 #include "fuzz_helpers.h"
 
 #include <algorithm>
