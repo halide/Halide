@@ -105,7 +105,7 @@ Expr simplify_at_depth(int limit, const Expr &in) {
             return simplify(e);
         }
         limit--;
-        Expr new_e = self->mutate(e);
+        Expr new_e = self->mutate_base(e);
         limit++;
         return new_e;
     });
