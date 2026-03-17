@@ -112,9 +112,9 @@ void test_bad_untyped_calls() {
         expect_failure(c(&context, Buffer<uint8_t, AnyDims>(), 2, 1.0f, result1), "Buffer argument p_img is nullptr");
         expect_failure(c(&context, Buffer<void, 2>(), 2, 1.0f, result1), "Buffer argument p_img is nullptr");
         expect_failure(c(&context, Buffer<void, AnyDims>(), 2, 1.0f, result1), "Buffer argument p_img is nullptr");
-        expect_failure(c(&context, 42, 2, 1.0f, result1), "Argument 1 of 4 ('p_img') was expected to be a buffer of type 'uint8' and dimension 2");
-        expect_failure(c(&context, in1, 2.25, 1.0f, result1), "Argument 2 of 4 ('p_int') was expected to be a scalar of type 'int32' and dimension 0");
-        expect_failure(c(&context, in1, 2, 1, result1), "Argument 3 of 4 ('p_float') was expected to be a scalar of type 'float32' and dimension 0");
+        expect_failure(c(&context, 42, 2, 1.0f, result1), "Argument 1 of 4 ('p_img') was expected to be a buffer of type 'u8' and dimension 2");
+        expect_failure(c(&context, in1, 2.25, 1.0f, result1), "Argument 2 of 4 ('p_int') was expected to be a scalar of type 'i32' and dimension 0");
+        expect_failure(c(&context, in1, 2, 1, result1), "Argument 3 of 4 ('p_float') was expected to be a scalar of type 'f32' and dimension 0");
         expect_failure(c(&context, in1, 2, 1.0f, (const halide_buffer_t *)nullptr), "Buffer argument fn2 is nullptr");
         expect_failure(c(&context, in1, 2, 1.0f, (halide_buffer_t *)nullptr), "Buffer argument fn2 is nullptr");
         expect_failure(c(&context, in1, 2, 1.0f, Buffer<const uint8_t, 2>()), "Buffer argument fn2 is nullptr");
@@ -162,16 +162,16 @@ void test_bad_typed_calls() {
 
         // Calls to make_std_function fail
         c.make_std_function<bool, int32_t, float, Buffer<uint8_t, 2>>();
-        expect_failure(-1, "Argument 1 of 4 ('p_img') was expected to be a buffer of type 'uint8' and dimension 2");
+        expect_failure(-1, "Argument 1 of 4 ('p_img') was expected to be a buffer of type 'u8' and dimension 2");
 
         c.make_std_function<Buffer<uint8_t, 2>, bool, float, Buffer<uint8_t, 2>>();
-        expect_failure(-1, "Argument 2 of 4 ('p_int') was expected to be a scalar of type 'int32' and dimension 0");
+        expect_failure(-1, "Argument 2 of 4 ('p_int') was expected to be a scalar of type 'i32' and dimension 0");
 
         c.make_std_function<Buffer<uint8_t, 2>, int32_t, bool, Buffer<uint8_t, 2>>();
-        expect_failure(-1, "Argument 3 of 4 ('p_float') was expected to be a scalar of type 'float32' and dimension 0");
+        expect_failure(-1, "Argument 3 of 4 ('p_float') was expected to be a scalar of type 'f32' and dimension 0");
 
         c.make_std_function<Buffer<uint8_t, 2>, int32_t, float, bool>();
-        expect_failure(-1, "Argument 4 of 4 ('fn3') was expected to be a buffer of type 'uint8' and dimension 2");
+        expect_failure(-1, "Argument 4 of 4 ('fn3') was expected to be a buffer of type 'u8' and dimension 2");
     }
 
     // Test custom error handler in the JITUserContext
