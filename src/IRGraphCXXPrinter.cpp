@@ -1,9 +1,12 @@
 #include "IRGraphCXXPrinter.h"
 
 #include "Expr.h"
+#include "Function.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
+
+#include <sstream>
 
 namespace Halide {
 namespace Internal {
@@ -62,50 +65,68 @@ std::string IRGraphCXXPrinter::to_cpp_arg<std::string>(const std::string &s) {
     return "\"" + s + "\"";
 }
 
+#define ENUM_TO_STR(x) \
+    case x:            \
+        return #x;
+
 // Not used, but leaving in place in case we ever want to expand this to Stmts.
 template<>
 std::string IRGraphCXXPrinter::to_cpp_arg<ForType>(const ForType &f) {
     switch (f) {
-    case ForType::Serial:
-        return "ForType::Serial";
-    case ForType::Parallel:
-        return "ForType::Parallel";
-    case ForType::Vectorized:
-        return "ForType::Vectorized";
-    case ForType::Unrolled:
-        return "ForType::Unrolled";
-    case ForType::Extern:
-        return "ForType::Extern";
-    case ForType::GPUBlock:
-        return "ForType::GPUBlock";
-    case ForType::GPUThread:
-        return "ForType::GPUThread";
-    case ForType::GPULane:
-        return "ForType::GPULane";
-    default:
-        return "ForType::Serial";
+        ENUM_TO_STR(ForType::Serial);
+        ENUM_TO_STR(ForType::Parallel);
+        ENUM_TO_STR(ForType::Vectorized);
+        ENUM_TO_STR(ForType::Unrolled);
+        ENUM_TO_STR(ForType::Extern);
+        ENUM_TO_STR(ForType::GPUBlock);
+        ENUM_TO_STR(ForType::GPUThread);
+        ENUM_TO_STR(ForType::GPULane);
     }
+    return "";
+}
+
+template<>
+std::string IRGraphCXXPrinter::to_cpp_arg<Call::CallType>(const Call::CallType &f) {
+    switch (f) {
+        ENUM_TO_STR(Call::CallType::Image);
+        ENUM_TO_STR(Call::CallType::Extern);
+        ENUM_TO_STR(Call::CallType::ExternCPlusPlus);
+        ENUM_TO_STR(Call::CallType::PureExtern);
+        ENUM_TO_STR(Call::CallType::Halide);
+        ENUM_TO_STR(Call::CallType::Intrinsic);
+        ENUM_TO_STR(Call::CallType::PureIntrinsic);
+    }
+    return "";
 }
 
 template<>
 std::string IRGraphCXXPrinter::to_cpp_arg<VectorReduce::Operator>(const VectorReduce::Operator &op) {
     switch (op) {
-    case VectorReduce::Add:
-        return "VectorReduce::Add";
-    case VectorReduce::SaturatingAdd:
-        return "VectorReduce::SaturatingAdd";
-    case VectorReduce::Mul:
-        return "VectorReduce::Mul";
-    case VectorReduce::Min:
-        return "VectorReduce::Min";
-    case VectorReduce::Max:
-        return "VectorReduce::Max";
-    case VectorReduce::And:
-        return "VectorReduce::And";
-    case VectorReduce::Or:
-        return "VectorReduce::Or";
+        ENUM_TO_STR(VectorReduce::Add);
+        ENUM_TO_STR(VectorReduce::SaturatingAdd);
+        ENUM_TO_STR(VectorReduce::Mul);
+        ENUM_TO_STR(VectorReduce::Min);
+        ENUM_TO_STR(VectorReduce::Max);
+        ENUM_TO_STR(VectorReduce::And);
+        ENUM_TO_STR(VectorReduce::Or);
     }
-    internal_error << "Invalid VectorReduce";
+    return "";
+}
+
+template<>
+std::string IRGraphCXXPrinter::to_cpp_arg<Halide::Parameter>(const Halide::Parameter &p) {
+    if (!p.defined()) {
+        return "Parameter()";
+    }
+    return "/* Parameter */ " + to_cpp_arg(p.name());
+}
+
+template<>
+std::string IRGraphCXXPrinter::to_cpp_arg<Halide::Buffer<>>(const Halide::Buffer<> &b) {
+    if (!b.defined()) {
+        return "Buffer<>()";
+    }
+    return "/* Buffer */ " + to_cpp_arg(b.name());
 }
 
 template<>
@@ -209,7 +230,31 @@ VISIT_NODE(Shuffle, op->vectors, op->indices)
 VISIT_NODE(Select, op->condition, op->true_value, op->false_value)
 VISIT_NODE(Load, op->type, op->name, op->index, op->image, op->param, op->predicate, op->alignment)
 VISIT_NODE(Ramp, op->base, op->stride, op->lanes)
-VISIT_NODE(Call, op->type, op->name, op->args, op->call_type, op->func, op->value_index, op->image, op->param)
+
+void IRGraphCXXPrinter::visit(const Call *op) {
+    if (op->call_type == Call::Image && op->image.defined()) {
+        // Variant 4: Convenience constructor for loads from concrete images
+        emit_node<Call>("Call", op, op->image, op->args);
+    } else if (op->call_type == Call::Image && op->param.defined()) {
+        // Variant 5: Convenience constructor for loads from image parameters
+        emit_node<Call>("Call", op, op->param, op->args);
+    } else if (op->call_type == Call::Halide && op->func.defined()) {
+        // Variant 3: Convenience constructor for calls to other halide functions.
+        // We wrap the FunctionPtr into a Function object to perfectly match
+        // the expected `const Function &func` signature.
+        emit_node<Call>("Call", op, Internal::Function(op->func), op->args, op->value_index);
+    } else if (op->is_intrinsic()) {
+
+        emit_node<Call>("Call", op, op->type, op->name, op->args, op->call_type);
+    } else {
+        // Variant 2: Fallback to the fully explicit string-name version.
+        // (Note: Halide's API internally handles mapping string names back
+        // to IntrinsicOp if it happens to be an intrinsic call).
+        emit_node<Call>("Call", op, op->type, op->name, op->args, op->call_type,
+                        op->func, op->value_index, op->image, op->param);
+    }
+}
+
 VISIT_NODE(Let, op->name, op->value, op->body)
 VISIT_NODE(VectorReduce, op->op, op->value, op->type.lanes())
 
@@ -238,52 +283,93 @@ VISIT_NODE(Fork, op->first, op->rest)
 VISIT_NODE(Atomic, op->producer_name, op->mutex_name, op->body)
 #endif
 
+#undef ENUM_TO_STR
+
 void IRGraphCXXPrinter::test() {
-    // This:
-    Expr e = Select::make(Mod::make(Ramp::make(10, 314, 8), Broadcast::make(10, 8)) < Variable::make(Int(32), "p"), Broadcast::make(40, 8) + Ramp::make(4, 8, 8), VectorReduce::make(VectorReduce::Add, Ramp::make(0, 1, 16), 8));
-    e = e * e;  // make it a graph
-    e = cast(Float(32, 8), e);
-    e = reinterpret(Int(32, 8), e);
-    e = Shuffle::make_interleave({e, e * Broadcast::make(3, 8)});
+    {
+        // This:
+        Expr e = Select::make(Mod::make(Ramp::make(10, 314, 8), Broadcast::make(10, 8)) < Variable::make(Int(32), "p"), Broadcast::make(40, 8) + Ramp::make(4, 8, 8), VectorReduce::make(VectorReduce::Add, Ramp::make(0, 1, 16), 8));
+        e = e * e;  // make it a graph
+        e = cast(Float(32, 8), e);
+        e = reinterpret(Int(32, 8), e);
+        e = Shuffle::make_interleave({e, e * Broadcast::make(3, 8)});
 
-    // Printed by:
-    IRGraphCXXPrinter p(std::cout);
-    p.print(e);
+        // Printed by:
+        std::stringstream ss;
+        IRGraphCXXPrinter p(ss);
+        p.print(e);
 
-    // Prints:
-    Expr expr_0 = IntImm::make(Type(Type::Int, 32, 1), 10);
-    Expr expr_1 = IntImm::make(Type(Type::Int, 32, 1), 314);
-    Expr expr_2 = Ramp::make(expr_0, expr_1, 8);
-    Expr expr_3 = IntImm::make(Type(Type::Int, 32, 1), 10);
-    Expr expr_4 = Broadcast::make(expr_3, 8);
-    Expr expr_5 = Mod::make(expr_2, expr_4);
-    Expr expr_6 = Variable::make(Type(Type::Int, 32, 1), "p");
-    Expr expr_7 = Broadcast::make(expr_6, 8);
-    Expr expr_8 = LT::make(expr_5, expr_7);
-    Expr expr_9 = IntImm::make(Type(Type::Int, 32, 1), 40);
-    Expr expr_10 = Broadcast::make(expr_9, 8);
-    Expr expr_11 = IntImm::make(Type(Type::Int, 32, 1), 4);
-    Expr expr_12 = IntImm::make(Type(Type::Int, 32, 1), 8);
-    Expr expr_13 = Ramp::make(expr_11, expr_12, 8);
-    Expr expr_14 = Add::make(expr_10, expr_13);
-    Expr expr_15 = IntImm::make(Type(Type::Int, 32, 1), 0);
-    Expr expr_16 = IntImm::make(Type(Type::Int, 32, 1), 1);
-    Expr expr_17 = Ramp::make(expr_15, expr_16, 16);
-    Expr expr_18 = VectorReduce::make(VectorReduce::Add, expr_17, 8);
-    Expr expr_19 = Select::make(expr_8, expr_14, expr_18);
-    Expr expr_20 = Mul::make(expr_19, expr_19);
-    Expr expr_21 = Cast::make(Type(Type::Float, 32, 8), expr_20);
-    Expr expr_22 = Reinterpret::make(Type(Type::Int, 32, 8), expr_21);
-    Expr expr_23 = IntImm::make(Type(Type::Int, 32, 1), 3);
-    Expr expr_24 = Broadcast::make(expr_23, 8);
-    Expr expr_25 = Mul::make(expr_22, expr_24);
-    Expr expr_26 = Shuffle::make({expr_22, expr_25}, {0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15});
+        std::cout << "Printed expr: " << e << "\n";
+        std::cout << ss.str();
+        std::cout << "\n";
 
-    // Now let's see if it matches:
-    const Expr &printed = expr_26;
-    internal_assert(equal(printed, e)) << "Expressions don't match:\n\n"
-                                       << e << "\n\n"
-                                       << printed << "\n";
+        // Prints:
+        Expr expr_0 = IntImm::make(Type(Type::Int, 32, 1), 10);
+        Expr expr_1 = IntImm::make(Type(Type::Int, 32, 1), 314);
+        Expr expr_2 = Ramp::make(expr_0, expr_1, 8);
+        Expr expr_3 = IntImm::make(Type(Type::Int, 32, 1), 10);
+        Expr expr_4 = Broadcast::make(expr_3, 8);
+        Expr expr_5 = Mod::make(expr_2, expr_4);
+        Expr expr_6 = Variable::make(Type(Type::Int, 32, 1), "p");
+        Expr expr_7 = Broadcast::make(expr_6, 8);
+        Expr expr_8 = LT::make(expr_5, expr_7);
+        Expr expr_9 = IntImm::make(Type(Type::Int, 32, 1), 40);
+        Expr expr_10 = Broadcast::make(expr_9, 8);
+        Expr expr_11 = IntImm::make(Type(Type::Int, 32, 1), 4);
+        Expr expr_12 = IntImm::make(Type(Type::Int, 32, 1), 8);
+        Expr expr_13 = Ramp::make(expr_11, expr_12, 8);
+        Expr expr_14 = Add::make(expr_10, expr_13);
+        Expr expr_15 = IntImm::make(Type(Type::Int, 32, 1), 0);
+        Expr expr_16 = IntImm::make(Type(Type::Int, 32, 1), 1);
+        Expr expr_17 = Ramp::make(expr_15, expr_16, 16);
+        Expr expr_18 = VectorReduce::make(VectorReduce::Add, expr_17, 8);
+        Expr expr_19 = Select::make(expr_8, expr_14, expr_18);
+        Expr expr_20 = Mul::make(expr_19, expr_19);
+        Expr expr_21 = Cast::make(Type(Type::Float, 32, 8), expr_20);
+        Expr expr_22 = Reinterpret::make(Type(Type::Int, 32, 8), expr_21);
+        Expr expr_23 = IntImm::make(Type(Type::Int, 32, 1), 3);
+        Expr expr_24 = Broadcast::make(expr_23, 8);
+        Expr expr_25 = Mul::make(expr_22, expr_24);
+        Expr expr_26 = Shuffle::make({expr_22, expr_25}, {0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15});
+
+        // Now let's see if it matches:
+        const Expr &printed = expr_26;
+        internal_assert(equal(printed, e)) << "Expressions don't match:\n\n"
+                                           << e << "\n\n"
+                                           << printed << "\n";
+    }
+
+    {
+        // An expression Alex was interested in:
+        Expr imm1 = IntImm::make(Int(16), -32000);
+        Expr imm2 = UIntImm::make(UInt(16), 1);
+        Expr cast_imm1 = Cast::make(UInt(64), imm1);
+        Expr cast_imm2 = Cast::make(UInt(64), imm2);
+        Expr test_cast = ~(cast_imm1 / cast_imm2);
+
+        // Printed by:
+        std::stringstream ss;
+        IRGraphCXXPrinter p(ss);
+        p.print(test_cast);
+
+        std::cout << "Printed expr: " << test_cast << "\n";
+        std::cout << ss.str();
+        std::cout << "\n";
+
+        // Produces:
+        Expr expr_0 = IntImm::make(Type(Type::Int, 16, 1), -32000);
+        Expr expr_1 = Cast::make(Type(Type::UInt, 64, 1), expr_0);
+        Expr expr_2 = UIntImm::make(Type(Type::UInt, 16, 1), 1);
+        Expr expr_3 = Cast::make(Type(Type::UInt, 64, 1), expr_2);
+        Expr expr_4 = Div::make(expr_1, expr_3);
+        Expr expr_5 = Call::make(Type(Type::UInt, 64, 1), "bitwise_not", {expr_4}, Call::CallType::PureIntrinsic);
+
+        // Now let's see if it matches:
+        const Expr &printed = expr_5;
+        internal_assert(equal(printed, test_cast)) << "Expressions don't match:\n\n"
+                                                   << test_cast << "\n\n"
+                                                   << printed << "\n";
+    }
 }
 }  // namespace Internal
 }  // namespace Halide
