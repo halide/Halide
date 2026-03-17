@@ -20,5 +20,6 @@ least be tagged with the `release_notes` label.
 - [ ] Tests added or updated (not required for docs, CI config, or typo fixes)
 - [ ] Documentation updated (if public API changed)
 - [ ] Python bindings updated (if public API changed)
-- [ ] Benchmarks are included here if the change is intended to affect performance.
+- [ ] Benchmarks are included here if the change is intended to affect
+  performance.
 - [ ] Commits include AI attribution where applicable (see Code of Conduct)
