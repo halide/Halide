@@ -1429,19 +1429,21 @@ private:
     void visit(const Cast *op) override {
         std::string type_str = type_to_string(op->type);
         print_opening_tag("span", "Cast");
-        print_opening_tag("span", "matched");
+        print_opening_tag("span", "matched keyword");
+        print_text("cast&lt;");
         print_type(op->type);
-        print_text("(");
+        print_text("&gt;");
         print_closing_tag("span");
+        print_html_element("span", "matched", "(", type_str);
         print(op->value);
-        print_html_element("span", "matched", ")");
+        print_html_element("span", "matched", ")", type_str);
         print_closing_tag("span");
     }
 
     void visit(const Reinterpret *op) override {
         std::string type_str = type_to_string(op->type);
         print_opening_tag("span", "Reinterpret");
-        print_opening_tag("span", "matched Symbol", type_str);
+        print_opening_tag("span", "matched keyword", type_str);
         print_text("reinterpret&lt;");
         print_type(op->type);
         print_text("&gt;");

@@ -796,7 +796,7 @@ void IRPrinter::visit(const StringImm *op) {
 }
 
 void IRPrinter::visit(const Cast *op) {
-    stream << type(op->type);
+    stream << kw("cast<") << type(op->type) << kw(">");
     openf();
     print_no_parens(op->value);
     closef();
