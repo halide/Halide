@@ -5,6 +5,7 @@
 #include "CSE.h"
 #include "CodeGen_C.h"
 #include "Deinterleave.h"
+#include "ExprInterpreter.h"
 #include "Func.h"
 #include "Generator.h"
 #include "IR.h"
@@ -18,7 +19,6 @@
 #include "Solve.h"
 #include "SpirvIR.h"
 #include "UniquifyVariableNames.h"
-#include "ExprInterpreter.h"
 
 using namespace Halide;
 using namespace Halide::Internal;

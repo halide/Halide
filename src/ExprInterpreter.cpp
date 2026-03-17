@@ -664,8 +664,8 @@ void test_scalar_equivalence() {
         << ", Got: " << std::get<int64_t>(eval_res.lanes[0]);
 
     // 2. Float scalar math equivalence
-    using std::sin;
     using Halide::sin;
+    using std::sin;
     auto math_test_float = [](const auto &x, const auto &y) {
         return (x * y) - sin(x / (y + 1.0f));
     };
