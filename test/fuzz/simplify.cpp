@@ -83,6 +83,18 @@ bool test_expression(RandomExpressionGenerator &reg, Expr test, int samples) {
     return true;
 }
 
+Expr simplify_at_depth(int limit, const Expr &in) {
+    return mutate_with(in, [&](auto *self, const Expr &e) {
+        if (limit == 0) {
+            return simplify(e);
+        }
+        limit--;
+        Expr new_e = self->mutate(e);
+        limit++;
+        return new_e;
+    });
+}
+
 }  // namespace
 
 FUZZ_TEST(simplify, FuzzingContext &fuzz) {
@@ -107,28 +119,6 @@ FUZZ_TEST(simplify, FuzzingContext &fuzz) {
     Expr test = reg.random_expr(reg.random_type(width), depth);
 
     if (!test_expression(reg, test, samples)) {
-        class LimitDepth : public IRMutator {
-            int limit;
-
-        public:
-            using IRMutator::mutate;
-
-            Expr mutate(const Expr &e) override {
-                if (limit == 0) {
-                    return simplify(e);
-                } else {
-                    limit--;
-                    Expr new_e = IRMutator::mutate(e);
-                    limit++;
-                    return new_e;
-                }
-            }
-
-            LimitDepth(int l)
-                : limit(l) {
-            }
-        };
-
         // Failure. Find the minimal subexpression that failed.
         std::cerr << "Testing subexpressions...\n";
         bool found_failure = false;
@@ -136,7 +126,7 @@ FUZZ_TEST(simplify, FuzzingContext &fuzz) {
             self->mutate(e);
             if (e.type().bits() && !found_failure) {
                 for (int i = 1; i < 4 && !found_failure; i++) {
-                    Expr limited = LimitDepth(i).mutate(e);
+                    Expr limited = simplify_at_depth(i, e);
                     found_failure = !test_expression(reg, limited, samples_during_minimization);
                     if (found_failure) {
                         return limited;
