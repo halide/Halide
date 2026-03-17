@@ -23,6 +23,7 @@ ContinuationIndentWidth: 4
 IndentCaseLabels: false
 IndentWidth: 4
 IndentWrappedFunctionNames: false
+LambdaBodyIndentation: OuterScope
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
 PackConstructorInitializers: BinPack
