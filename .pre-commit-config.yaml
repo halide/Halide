@@ -85,6 +85,7 @@ repos:
           - mdformat-gfm
           - mdformat-ruff
           - mdformat-shfmt
+        exclude: ^.github/pull_request_template\.md$  # mdformat-gfm doesn't understand GitHub's checklists.
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.5
