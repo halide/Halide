@@ -1580,7 +1580,9 @@ private:
         print_opening_tag("span", "matched");
         print_text("(");
         print_html_element("span", "keyword", "let ");
-        print_variable(op->name, op->type);
+        print_variable(op->name, op->value.type());
+        print_html_element("span", "Operator Assign", " : ");
+        print_type(op->type);
         print_html_element("span", "Operator Assign", " = ");
         print_closing_tag("span");
         print(op->value);
@@ -1599,6 +1601,8 @@ private:
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword", "let ");
         print_variable(op->name, op->value.type());
+        print_html_element("span", "Operator Assign", " : ");
+        print_type(op->value.type());
         print_html_element("span", "Operator Assign", " = ");
         print_closing_tag("span");  // matched
         print(op->value);
