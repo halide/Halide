@@ -21,5 +21,5 @@ least be tagged with the `release_notes` label.
 - [ ] Documentation updated (if public API changed)
 - [ ] Python bindings updated (if public API changed)
 - [ ] Benchmarks are included here if the change is intended to affect
-  performance.
+      performance.
 - [ ] Commits include AI attribution where applicable (see Code of Conduct)
