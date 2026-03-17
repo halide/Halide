@@ -25,7 +25,7 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         // It's possible we just reduced to a constant. E.g. if we cast an
         // even number to uint1 we get zero.
         if (value_info.bounds.is_single_point()) {
-            return make_const(op->type, value_info.bounds.min, nullptr);
+            return make_const(op->type, value_info.bounds.min, info);
         }
     }
 
