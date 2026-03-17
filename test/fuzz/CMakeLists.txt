@@ -10,6 +10,7 @@ tests(GROUPS fuzz
       bounds.cpp
       cse.cpp
       lossless_cast.cpp
+      simplify.cpp
       widening_lerp.cpp
       # By default, the libfuzzer harness runs with a timeout of 1200 seconds.
       # Let's dial that back:

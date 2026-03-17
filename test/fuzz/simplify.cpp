@@ -1,8 +1,7 @@
 #include "Halide.h"
-#include <array>
 #include <functional>
-#include <random>
 
+#include "fuzz_helpers.h"
 #include "random_expr_generator.h"
 
 // Test the simplifier in Halide by testing for equivalence of randomly generated expressions.
@@ -13,9 +12,7 @@ using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
-using RandomEngine = RandomExpressionGenerator::RandomEngine;
-
-bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) {
+bool test_simplification(Expr a, Expr b, const map<string, Expr> &vars) {
     if (equal(a, b) && !a.same_as(b)) {
         std::cerr << "Simplifier created new IR node but made no changes:\n"
                   << a << "\n";
@@ -60,12 +57,12 @@ bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) 
     return true;
 }
 
-bool test_expression(RandomExpressionGenerator &reg, RandomEngine &rng, Expr test, int samples) {
+bool test_expression(RandomExpressionGenerator &reg, Expr test, int samples) {
     Expr simplified = simplify(test);
 
     map<string, Expr> vars;
-    for (int i = 0; i < (int)reg.fuzz_vars.size(); i++) {
-        vars[reg.fuzz_var(i)] = Expr();
+    for (const auto &fuzz_var : reg.fuzz_vars) {
+        vars[fuzz_var.name()] = Expr();
     }
 
     for (int i = 0; i < samples; i++) {
@@ -74,38 +71,29 @@ bool test_expression(RandomExpressionGenerator &reg, RandomEngine &rng, Expr tes
             // Don't let the random leaf depend on v itself.
             size_t iterations = 0;
             do {
-                val = reg.random_leaf(rng, Int(32), true);
+                val = reg.random_leaf(Int(32), true);
                 iterations++;
             } while (expr_uses_var(val, var) && iterations < kMaxLeafIterations);
         }
 
-        if (!test_simplification(test, simplified, test.type(), vars)) {
+        if (!test_simplification(test, simplified, vars)) {
             return false;
         }
     }
     return true;
 }
 
-template<typename T>
-T initialize_rng() {
-    constexpr size_t kStateWords = T::state_size * sizeof(typename T::result_type) / sizeof(uint32_t);
-    std::vector<uint32_t> random(kStateWords);
-    std::generate(random.begin(), random.end(), std::random_device{});
-    std::seed_seq seed_seq(random.begin(), random.end());
-    return T{seed_seq};
-}
-
 }  // namespace
 
-int main(int argc, char **argv) {
+FUZZ_TEST(simplify, FuzzingContext &fuzz) {
     // Depth of the randomly generated expression trees.
     constexpr int depth = 6;
     // Number of samples to test the generated expressions for.
     constexpr int samples = 3;
+    // Number of samples to test the generated expressions for during minimization.
+    constexpr int samples_during_minimization = 100;
 
-    auto seed_generator = initialize_rng<RandomEngine>();
-
-    RandomExpressionGenerator reg;
+    RandomExpressionGenerator reg{fuzz};
     reg.fuzz_types = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
     // FIXME: UInt64 fails!
     // FIXME: These need to be disabled (otherwise crashes and/or failures):
@@ -115,83 +103,54 @@ int main(int argc, char **argv) {
     reg.gen_reinterpret = false;
     reg.gen_shuffles = false;
 
-    for (int i = 0; i < ((argc == 1) ? 10000 : 1); i++) {
-        auto seed = seed_generator();
-        if (argc > 1) {
-            std::istringstream{argv[1]} >> seed;
-        }
-        // Print the seed on every iteration so that if the simplifier crashes
-        // (rather than the check failing), we can reproduce.
-        std::cout << "Seed: " << seed << "\n";
-        RandomEngine rng{seed};
-        std::array<int, 6> vector_widths = {1, 2, 3, 4, 6, 8};
-        int width = reg.random_choice(rng, vector_widths);
-        Type VT = reg.random_type(rng, width);
-        // Generate a random expr...
-        Expr test = reg.random_expr(rng, VT, depth);
-        std::cout << test << "\n";
-        if (!test_expression(reg, rng, test, samples)) {
+    int width = fuzz.PickValueInArray({1, 2, 3, 4, 6, 8});
+    Expr test = reg.random_expr(reg.random_type(width), depth);
 
-            class LimitDepth : public IRMutator {
-                int limit;
+    if (!test_expression(reg, test, samples)) {
+        class LimitDepth : public IRMutator {
+            int limit;
 
-            public:
-                using IRMutator::mutate;
+        public:
+            using IRMutator::mutate;
 
-                Expr mutate(const Expr &e) override {
-                    if (limit == 0) {
-                        return simplify(e);
-                    } else {
-                        limit--;
-                        Expr new_e = IRMutator::mutate(e);
-                        limit++;
-                        return new_e;
+            Expr mutate(const Expr &e) override {
+                if (limit == 0) {
+                    return simplify(e);
+                } else {
+                    limit--;
+                    Expr new_e = IRMutator::mutate(e);
+                    limit++;
+                    return new_e;
+                }
+            }
+
+            LimitDepth(int l)
+                : limit(l) {
+            }
+        };
+
+        // Failure. Find the minimal subexpression that failed.
+        std::cerr << "Testing subexpressions...\n";
+        bool found_failure = false;
+        test = mutate_with(test, [&](auto *self, const Expr &e) {
+            self->mutate(e);
+            if (e.type().bits() && !found_failure) {
+                for (int i = 1; i < 4 && !found_failure; i++) {
+                    Expr limited = LimitDepth(i).mutate(e);
+                    found_failure = !test_expression(reg, limited, samples_during_minimization);
+                    if (found_failure) {
+                        return limited;
                     }
                 }
-
-                LimitDepth(int l)
-                    : limit(l) {
+                if (!found_failure) {
+                    found_failure = !test_expression(reg, e, samples_during_minimization);
                 }
-            };
-
-            // Failure. Find the minimal subexpression that failed.
-            std::cout << "Testing subexpressions...\n";
-            class TestSubexpressions : public IRMutator {
-                RandomExpressionGenerator reg;
-                RandomEngine &rng;
-                bool found_failure = false;
-
-            public:
-                using IRMutator::mutate;
-                Expr mutate(const Expr &e) override {
-                    // We know there's a failure here somewhere, so test
-                    // subexpressions more aggressively.
-                    constexpr int samples = 100;
-                    IRMutator::mutate(e);
-                    if (e.type().bits() && !found_failure) {
-                        Expr limited;
-                        for (int i = 1; i < 4 && !found_failure; i++) {
-                            limited = LimitDepth(i).mutate(e);
-                            found_failure = !test_expression(reg, rng, limited, samples);
-                        }
-                        if (!found_failure) {
-                            found_failure = !test_expression(reg, rng, e, samples);
-                        }
-                    }
-                    return e;
-                }
-
-                TestSubexpressions(RandomExpressionGenerator &reg, RandomEngine &rng)
-                    : reg(reg), rng(rng) {
-                }
-            } tester(reg, rng);
-            tester.mutate(test);
-
-            std::cout << "Failed with seed " << seed << "\n";
-            return 1;
-        }
+            }
+            return e;
+        });
+        std::cerr << "Final test case: " << test << "\n";
+        return 1;
     }
 
-    std::cout << "Success!\n";
     return 0;
 }
