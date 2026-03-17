@@ -1430,9 +1430,13 @@ private:
         std::string type_str = type_to_string(op->type);
         print_opening_tag("span", "Cast");
         print_opening_tag("span", "matched keyword");
+#if 0
         print_text("cast&lt;");
         print_type(op->type);
         print_text("&gt;");
+#else
+        print_text(type_str);
+#endif
         print_closing_tag("span");
         print_html_element("span", "matched", "(", type_str);
         print(op->value);

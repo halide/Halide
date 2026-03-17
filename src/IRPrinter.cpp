@@ -31,20 +31,20 @@ using std::vector;
 ostream &operator<<(ostream &out, const Type &type) {
     switch (type.code()) {
     case Type::Int:
-        out << "int";
+        out << "i";
         break;
     case Type::UInt:
-        out << "uint";
+        out << "u";
         break;
     case Type::Float:
-        out << "float";
+        out << "f";
         break;
     case Type::Handle:
         // ensure that 'const' (etc) qualifiers are emitted when appropriate
         out << "(" << type_to_c_type(type, false) << ")";
         break;
     case Type::BFloat:
-        out << "bfloat";
+        out << "bf";
         break;
     }
     if (!type.is_handle()) {
@@ -724,12 +724,16 @@ void IRPrinter::visit(const IntImm *op) {
     if (op->type == Int(32)) {
         stream << imm_int(op->value);
     } else {
-        stream << typep(op->type) << imm_int(op->value);
+        stream << ansi_imm_int << op->value << "_i" << op->type.bits() << ansi_reset;
     }
 }
 
 void IRPrinter::visit(const UIntImm *op) {
-    stream << typep(op->type) << imm_int(op->value);
+    if (op->type.bits() == 1) {
+        stream << ansi_imm_int << (op->value ? "true" : "false") << ansi_reset;
+    } else {
+        stream << ansi_imm_int << op->value << "_u" << op->type.bits() << ansi_reset;
+    }
 }
 
 void IRPrinter::visit(const FloatImm *op) {
@@ -796,10 +800,20 @@ void IRPrinter::visit(const StringImm *op) {
 }
 
 void IRPrinter::visit(const Cast *op) {
+#if 0
+    // More explicit style of denoting a cast, which we did not yet agree upon.
+    // Leaving it in as commted out code, because it might be useful at some point.
     stream << kw("cast<") << type(op->type) << kw(">");
     openf();
     print_no_parens(op->value);
     closef();
+#else
+    std::stringstream ss;
+    ss << op->type;
+    openf(ss.str().c_str());
+    print_no_parens(op->value);
+    closef();
+#endif
 }
 
 void IRPrinter::visit(const Reinterpret *op) {
@@ -1084,7 +1098,7 @@ void IRPrinter::visit(const Let *op) {
     if (!implicit_parens) {
         stream << paren("(");
     }
-    stream << paren("let ") << var(op->name) << paren(" = ");
+    stream << paren("let ") << var(op->name) << paren(" : ") << paren(op->value.type()) << paren(" = ");
     print(op->value);
     stream << paren(" in ");
     if (!is_summary) {
@@ -1098,7 +1112,7 @@ void IRPrinter::visit(const Let *op) {
 
 void IRPrinter::visit(const LetStmt *op) {
     ScopedBinding<> bind(known_type, op->name);
-    stream << get_indent() << kw("let ") << var(op->name) << kw(" = ");
+    stream << get_indent() << ansi_kw << "let " << ansi_reset << op->name << ansi_kw << " : " << op->value.type() << " = " << ansi_reset;
     {
         ScopedValue<int> reset_paren_depth(paren_depth, 0);
         print_no_parens(op->value);
