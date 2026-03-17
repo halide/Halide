@@ -27,17 +27,18 @@ template<typename F>
 ExprInterpreter::EvalValue ExprInterpreter::apply_unary(Type t, const EvalValue &a, F f) {
     EvalValue res(t);
     for (int i = 0; i < t.lanes(); ++i) {
-        res.lanes[i] = std::visit([&f, &t](auto x) -> Scalar {
-            auto out = f(x);
-            if (t.is_float()) {
-                return static_cast<double>(out);
-            }
-            if (t.is_int()) {
-                return static_cast<int64_t>(out);
-            }
-            return static_cast<uint64_t>(out);
-        },
-                                  a.lanes[i]);
+        res.lanes[i] = std::visit(
+            [&f, &t](auto x) -> Scalar {
+                auto out = f(x);
+                if (t.is_float()) {
+                    return static_cast<double>(out);
+                }
+                if (t.is_int()) {
+                    return static_cast<int64_t>(out);
+                }
+                return static_cast<uint64_t>(out);
+            },
+            a.lanes[i]);
     }
     return res;
 }
@@ -46,22 +47,23 @@ template<typename F>
 ExprInterpreter::EvalValue ExprInterpreter::apply_binary(Type t, const EvalValue &a, const EvalValue &b, F f) {
     EvalValue res(t);
     for (int i = 0; i < t.lanes(); ++i) {
-        res.lanes[i] = std::visit([&f, &t](auto x, auto y) -> Scalar {
-            if constexpr (std::is_same_v<decltype(x), decltype(y)>) {
-                auto out = f(x, y);
-                if (t.is_float()) {
-                    return static_cast<double>(out);
+        res.lanes[i] = std::visit(
+            [&f, &t](auto x, auto y) -> Scalar {
+                if constexpr (std::is_same_v<decltype(x), decltype(y)>) {
+                    auto out = f(x, y);
+                    if (t.is_float()) {
+                        return static_cast<double>(out);
+                    }
+                    if (t.is_int()) {
+                        return static_cast<int64_t>(out);
+                    }
+                    return static_cast<uint64_t>(out);
+                } else {
+                    internal_error << "Type mismatch in binary operation";
+                    return int64_t{0};
                 }
-                if (t.is_int()) {
-                    return static_cast<int64_t>(out);
-                }
-                return static_cast<uint64_t>(out);
-            } else {
-                internal_error << "Type mismatch in binary operation";
-                return int64_t{0};
-            }
-        },
-                                  a.lanes[i], b.lanes[i]);
+            },
+            a.lanes[i], b.lanes[i]);
     }
     return res;
 }
@@ -70,22 +72,23 @@ template<typename F>
 ExprInterpreter::EvalValue ExprInterpreter::apply_cmp(Type t, const EvalValue &a, const EvalValue &b, F f) {
     EvalValue res(t);
     for (int i = 0; i < t.lanes(); ++i) {
-        res.lanes[i] = std::visit([&f, &t](auto x, auto y) -> Scalar {
-            if constexpr (std::is_same_v<decltype(x), decltype(y)>) {
-                uint64_t out = f(x, y) ? 1 : 0;
-                if (t.is_float()) {
-                    return static_cast<double>(out);
+        res.lanes[i] = std::visit(
+            [&f, &t](auto x, auto y) -> Scalar {
+                if constexpr (std::is_same_v<decltype(x), decltype(y)>) {
+                    uint64_t out = f(x, y) ? 1 : 0;
+                    if (t.is_float()) {
+                        return static_cast<double>(out);
+                    }
+                    if (t.is_int()) {
+                        return static_cast<int64_t>(out);
+                    }
+                    return static_cast<uint64_t>(out);
+                } else {
+                    internal_error << "Type mismatch in comparison operation";
+                    return uint64_t{0};
                 }
-                if (t.is_int()) {
-                    return static_cast<int64_t>(out);
-                }
-                return static_cast<uint64_t>(out);
-            } else {
-                internal_error << "Type mismatch in comparison operation";
-                return uint64_t{0};
-            }
-        },
-                                  a.lanes[i], b.lanes[i]);
+            },
+            a.lanes[i], b.lanes[i]);
     }
     return res;
 }
@@ -182,22 +185,23 @@ void ExprInterpreter::visit(const Reinterpret *op) {
 
     for (int j = 0; j < in_lanes; j++) {
         char *dst = buffer.data() + j * in_bytes;
-        std::visit([&](auto x) {
-            if constexpr (std::is_floating_point_v<decltype(x)>) {
-                if (in_bits == 32) {
-                    float f = static_cast<float>(x);
-                    std::memcpy(dst, &f, 4);
-                } else if (in_bits == 64) {
-                    std::memcpy(dst, &x, 8);
+        std::visit(
+            [&](auto x) {
+                if constexpr (std::is_floating_point_v<decltype(x)>) {
+                    if (in_bits == 32) {
+                        float f = static_cast<float>(x);
+                        std::memcpy(dst, &f, 4);
+                    } else if (in_bits == 64) {
+                        std::memcpy(dst, &x, 8);
+                    } else {
+                        internal_error << "Unsupported float bit width in Reinterpret input";
+                    }
                 } else {
-                    internal_error << "Unsupported float bit width in Reinterpret input";
+                    uint64_t u = static_cast<uint64_t>(x);
+                    std::memcpy(dst, &u, in_bytes);
                 }
-            } else {
-                uint64_t u = static_cast<uint64_t>(x);
-                std::memcpy(dst, &u, in_bytes);
-            }
-        },
-                   val.lanes[j]);
+            },
+            val.lanes[j]);
     }
 
     for (int j = 0; j < out_lanes; j++) {
@@ -374,23 +378,24 @@ void ExprInterpreter::visit(const Let *op) {
 void ExprInterpreter::visit(const Ramp *op) {
     EvalValue base = eval(op->base), stride = eval(op->stride);
     result = EvalValue(op->type);
-    std::visit([&](auto b, auto s) {
-        if constexpr (std::is_same_v<decltype(b), decltype(s)>) {
-            for (int j = 0; j < op->lanes; j++) {
-                auto res = b + j * s;
-                if (op->type.is_float()) {
-                    result.lanes[j] = static_cast<double>(res);
-                } else if (op->type.is_int()) {
-                    result.lanes[j] = static_cast<int64_t>(res);
-                } else {
-                    result.lanes[j] = static_cast<uint64_t>(res);
+    std::visit(
+        [&](auto b, auto s) {
+            if constexpr (std::is_same_v<decltype(b), decltype(s)>) {
+                for (int j = 0; j < op->lanes; j++) {
+                    auto res = b + j * s;
+                    if (op->type.is_float()) {
+                        result.lanes[j] = static_cast<double>(res);
+                    } else if (op->type.is_int()) {
+                        result.lanes[j] = static_cast<int64_t>(res);
+                    } else {
+                        result.lanes[j] = static_cast<uint64_t>(res);
+                    }
                 }
+            } else {
+                internal_error << "Ramp base and stride type mismatch";
             }
-        } else {
-            internal_error << "Ramp base and stride type mismatch";
-        }
-    },
-               base.lanes[0], stride.lanes[0]);
+        },
+        base.lanes[0], stride.lanes[0]);
 }
 
 void ExprInterpreter::visit(const Broadcast *op) {
@@ -440,53 +445,55 @@ void ExprInterpreter::visit(const VectorReduce *op) {
         Scalar res = val.lanes[j * factor];
         for (int k = 1; k < factor; k++) {
             Scalar next = val.lanes[j * factor + k];
-            res = std::visit([&](auto a, auto b) -> Scalar {
-                if constexpr (std::is_same_v<decltype(a), decltype(b)>) {
-                    switch (op->op) {
-                    case VectorReduce::Add:
-                        return a + b;
-                    case VectorReduce::Mul:
-                        return a * b;
-                    case VectorReduce::Min:
-                        return std::min(a, b);
-                    case VectorReduce::Max:
-                        return std::max(a, b);
-                    case VectorReduce::And:
-                        if constexpr (std::is_integral_v<decltype(a)>) {
-                            return a & b;
-                        } else {
-                            internal_error << "And on floats";
+            res = std::visit(
+                [&](auto a, auto b) -> Scalar {
+                    if constexpr (std::is_same_v<decltype(a), decltype(b)>) {
+                        switch (op->op) {
+                        case VectorReduce::Add:
+                            return a + b;
+                        case VectorReduce::Mul:
+                            return a * b;
+                        case VectorReduce::Min:
+                            return std::min(a, b);
+                        case VectorReduce::Max:
+                            return std::max(a, b);
+                        case VectorReduce::And:
+                            if constexpr (std::is_integral_v<decltype(a)>) {
+                                return a & b;
+                            } else {
+                                internal_error << "And on floats";
+                                return a;
+                            }
+                        case VectorReduce::Or:
+                            if constexpr (std::is_integral_v<decltype(a)>) {
+                                return a | b;
+                            } else {
+                                internal_error << "Or on floats";
+                                return a;
+                            }
+                        default:
+                            internal_error << "Unhandled VectorReduce op";
                             return a;
                         }
-                    case VectorReduce::Or:
-                        if constexpr (std::is_integral_v<decltype(a)>) {
-                            return a | b;
-                        } else {
-                            internal_error << "Or on floats";
-                            return a;
-                        }
-                    default:
-                        internal_error << "Unhandled VectorReduce op";
+                    } else {
+                        internal_error << "VectorReduce type mismatch";
                         return a;
                     }
-                } else {
-                    internal_error << "VectorReduce type mismatch";
-                    return a;
-                }
-            },
-                             res, next);
+                },
+                res, next);
         }
 
-        std::visit([&](auto x) {
-            if (op->type.is_float()) {
-                result.lanes[j] = static_cast<double>(x);
-            } else if (op->type.is_int()) {
-                result.lanes[j] = static_cast<int64_t>(x);
-            } else {
-                result.lanes[j] = static_cast<uint64_t>(x);
-            }
-        },
-                   res);
+        std::visit(
+            [&](auto x) {
+                if (op->type.is_float()) {
+                    result.lanes[j] = static_cast<double>(x);
+                } else if (op->type.is_int()) {
+                    result.lanes[j] = static_cast<int64_t>(x);
+                } else {
+                    result.lanes[j] = static_cast<uint64_t>(x);
+                }
+            },
+            res);
     }
 }
 
@@ -591,23 +598,26 @@ void ExprInterpreter::visit(const Call *op) {
     } else if (op->name == "sqrt") {
         result = apply_unary(op->type, args[0], [](auto a) { return std::sqrt(a); });
     } else if (op->is_intrinsic(Call::strict_fma)) {
+        internal_assert(op->args.size() == 3);
+        internal_assert(op->args[0].type().is_float());
         for (int j = 0; j < op->type.lanes(); j++) {
-            result.lanes[j] = std::visit([&](auto a, auto b, auto c) -> Scalar {
-                if constexpr (std::is_same_v<decltype(a), decltype(b)> && std::is_same_v<decltype(b), decltype(c)>) {
-                    auto out = std::fma(a, b, c);
-                    if (op->type.is_float()) {
-                        return static_cast<double>(out);
+            result.lanes[j] = std::visit(
+                [&](auto a, auto b, auto c) -> Scalar {
+                    if constexpr (std::is_same_v<decltype(a), decltype(b)> && std::is_same_v<decltype(b), decltype(c)>) {
+                        auto out = std::fma(a, b, c);
+                        if (op->type.is_float()) {
+                            return static_cast<double>(out);
+                        }
+                        if (op->type.is_int()) {
+                            return static_cast<int64_t>(out);
+                        }
+                        return static_cast<uint64_t>(out);
+                    } else {
+                        internal_error << "Type mismatch in strict_fma";
+                        return double{0};
                     }
-                    if (op->type.is_int()) {
-                        return static_cast<int64_t>(out);
-                    }
-                    return static_cast<uint64_t>(out);
-                } else {
-                    internal_error << "Type mismatch in strict_fma";
-                    return double{0};
-                }
-            },
-                                         args[0].lanes[j], args[1].lanes[j], args[2].lanes[j]);
+                },
+                args[0].lanes[j], args[1].lanes[j], args[2].lanes[j]);
         }
     } else if (op->is_strict_float_intrinsic()) {
         Expr unstrict = unstrictify_float(op);
