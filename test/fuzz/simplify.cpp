@@ -19,17 +19,31 @@ bool test_simplification(Expr a, Expr b, const map<string, Expr> &vars) {
         return false;
     }
     if (Expr sb = simplify(b); !equal(b, sb)) {
-        std::cerr << "Idempotency failure!\n    " << a << "\n -> " << b << "\n -> " << sb << "\n";
-        // These are broken out below to make it easier to parse any logging
-        // added to the simplifier to debug the failure.
-        std::cerr << "---------------------------------\n"
-                  << "Begin simplification of original:\n"
-                  << simplify(a) << "\n";
-        std::cerr << "---------------------------------\n"
-                  << "Begin resimplification of result:\n"
-                  << simplify(b) << "\n"
-                  << "---------------------------------\n";
+        // Test all sub-expressions in pre-order traversal to minimize
+        bool found_failure = false;
+        mutate_with(a, [&](auto *self, const Expr &e) {
+            self->mutate_base(e);
+            Expr s = simplify(e);
+            Expr ss = simplify(s);
+            if (!found_failure && !equal(s, ss)) {
+                std::cerr << "Idempotency failure\n    "
+                          << e << "\n -> "
+                          << s << "\n -> "
+                          << ss << "\n";
+                // These are broken out below to make it easier to parse any logging
+                // added to the simplifier to debug the failure.
+                std::cerr << "---------------------------------\n"
+                          << "Begin simplification of original:\n"
+                          << simplify(e) << "\n";
+                std::cerr << "---------------------------------\n"
+                          << "Begin resimplification of result:\n"
+                          << simplify(s) << "\n"
+                          << "---------------------------------\n";
 
+                found_failure = true;
+            }
+            return e;
+        });
         return false;
     }
 
@@ -116,8 +130,6 @@ FUZZ_TEST(simplify, FuzzingContext &fuzz) {
             Param<int>("a3"),
             Param<int>("a4"),
         }};
-    // FIXME: UInt64 fails!
-    reg.fuzz_types = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
     // FIXME: These need to be disabled (otherwise crashes and/or failures):
     // reg.gen_ramp_of_vector = false;
     // reg.gen_broadcast_of_vector = false;
@@ -133,7 +145,7 @@ FUZZ_TEST(simplify, FuzzingContext &fuzz) {
         std::cerr << "Testing subexpressions...\n";
         bool found_failure = false;
         test = mutate_with(test, [&](auto *self, const Expr &e) {
-            self->mutate(e);
+            self->mutate_base(e);
             if (e.type().bits() && !found_failure) {
                 for (int i = 1; i < 4 && !found_failure; i++) {
                     Expr limited = simplify_at_depth(i, e);

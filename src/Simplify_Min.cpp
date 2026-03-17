@@ -22,7 +22,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
         // This is possible when, for example, the smallest number in the type
         // that satisfies the alignment of the left-hand-side is greater than
         // the max value of the right-hand-side.
-        return make_const(op->type, min_info.bounds.min, nullptr);
+        return make_const(op->type, min_info.bounds.min, info);
     }
 
     // Early out when the bounds tells us one side or the other is smaller
@@ -66,10 +66,10 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
         return rewrite.result;
     }
 
+    // Cases where one side dominates. All of these must reduce to a or b in the
+    // RHS for ExprInfo to update correctly.
     if (EVAL_IN_LAMBDA  //
         (rewrite(min(x, x), a) ||
-         rewrite(min(c0, c1), fold(min(c0, c1))) ||
-         // Cases where one side dominates:
          rewrite(min(x, c0), b, is_min_value(c0)) ||
          rewrite(min(x, c0), a, is_max_value(c0)) ||
          rewrite(min((x / c0) * c0, x), a, c0 > 0) ||
@@ -148,7 +148,8 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
         if (info) {
             if (rewrite.result.same_as(a)) {
                 info->intersect(a_info);
-            } else if (rewrite.result.same_as(b)) {
+            } else {
+                internal_assert(rewrite.result.same_as(b));
                 info->intersect(b_info);
             }
         }
@@ -156,7 +157,8 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
     }
 
     if (EVAL_IN_LAMBDA  //
-        (rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1)))) ||
+        (rewrite(min(c0, c1), fold(min(c0, c1))) ||
+         rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1)))) ||
          rewrite(min(min(x, c0), y), min(min(x, y), c0)) ||
          rewrite(min(min(x, y), min(x, z)), min(min(y, z), x)) ||
          rewrite(min(min(y, x), min(x, z)), min(min(y, z), x)) ||

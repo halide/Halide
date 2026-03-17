@@ -19,10 +19,12 @@ Expr Simplify::visit(const IntImm *op, ExprInfo *info) {
 }
 
 Expr Simplify::visit(const UIntImm *op, ExprInfo *info) {
-    if (info && Int(64).can_represent(op->value)) {
+    if (info) {
+        // Pretend it's an int constant that has been cast to uint.
         int64_t v = (int64_t)(op->value);
         info->bounds = ConstantInterval::single_point(v);
         info->alignment = ModulusRemainder(0, v);
+        // If it's not representable as an int64, this will wrap it appropriately:
         info->cast_to(op->type);
     } else {
         clear_expr_info(info);

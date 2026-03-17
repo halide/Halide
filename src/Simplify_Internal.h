@@ -124,8 +124,34 @@ public:
                 }
             }
 
-            // Truncate the bounds to the new type.
-            bounds.cast_to(t);
+            // We have to take special care with uint64, because their bounds
+            // and alignment may not be representable with ModulusRemainder and
+            // ConstantInterval.
+            if (t.bits() == 64 && t.is_uint()) {
+                // For UInt64 constants, the remainder might not be representable as an int64
+                if (alignment.modulus == 0 && alignment.remainder < 0) {
+                    // Forget the leading two bits to get a representable modulus
+                    // and remainder.
+                    alignment.modulus = (int64_t)1 << 62;
+                    alignment.remainder = alignment.remainder & (alignment.modulus - 1);
+                }
+
+                int64_t old_min = bounds.min;
+                bounds.cast_to(t);
+                if (bounds.min_defined && old_min > 0) {
+                    // We don't want to lose a known positive min value for
+                    // uint64s. In general a ConstantInterval represents
+                    // infinite-precision integer intervals, and a cast from an infinite
+                    // precision integer to a uint64 could overflow. However, in the
+                    // simplifier, ConstantIntervals are used to represent bounds on the
+                    // values a Halide::Expr could take on, and for all Halide Expr
+                    // types, casting to a uint64_t can't overflow at the top end
+                    // (e.g. double casts to uint64_t saturate).
+                    bounds.min = old_min;
+                }
+            } else {
+                bounds.cast_to(t);
+            }
         }
 
         // Mix in existing knowledge about this Expr
@@ -241,6 +267,10 @@ public:
     // We never want to return make_const anything in the simplifier without
     // also setting the ExprInfo, so shadow the global make_const.
     Expr make_const(const Type &t, int64_t c, ExprInfo *info) {
+        if (t.is_uint() && c < 0) {
+            // Wrap it around
+            return make_const(t, (uint64_t)c, info);
+        }
         c = normalize_constant(t, c);
         set_expr_info_to_constant(info, c);
         return Halide::Internal::make_const(t, c);
