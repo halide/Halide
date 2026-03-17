@@ -75,6 +75,9 @@ private:
 
     template<typename F>
     EvalValue apply_cmp(Type t, const EvalValue &a, const EvalValue &b, F f);
+
+public:
+    static void test();
 };
 
 }  // namespace Internal

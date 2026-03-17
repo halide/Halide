@@ -18,6 +18,7 @@
 #include "Solve.h"
 #include "SpirvIR.h"
 #include "UniquifyVariableNames.h"
+#include "ExprInterpreter.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -25,6 +26,7 @@ using namespace Halide::Internal;
 int main(int argc, const char **argv) {
     IRPrinter::test();
     CodeGen_C::test();
+    ExprInterpreter::test();
     ir_equality_test();
     bounds_test();
     expr_match_test();
