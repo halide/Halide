@@ -3623,22 +3623,22 @@ void bounds_test() {
     scope.pop("x");
 
     // Check some bitwise ops.
-    check(scope, (cast<uint8_t>(x) & cast<uint8_t>(7)), u8(0), u8(7));
-    check(scope, (cast<uint8_t>(3) & cast<uint8_t>(2)), u8(2), u8(2));
-    check(scope, (cast<uint8_t>(1) | cast<uint8_t>(2)), u8(3), u8(3));
-    check(scope, (cast<uint8_t>(3) ^ cast<uint8_t>(2)), u8(1), u8(1));
-    check(scope, (~cast<uint8_t>(3)), u8(0xfc), u8(0xfc));
+    check(scope, (cast<uint8_t>(x) & make_const(UInt(8), 7)), u8(0), u8(7));
+    check(scope, (make_const(UInt(8), 3) & make_const(UInt(8), 2)), u8(2), u8(2));
+    check(scope, (make_one(UInt(8)) | make_const(UInt(8), 2)), u8(3), u8(3));
+    check(scope, (make_const(UInt(8), 3) ^ make_const(UInt(8), 2)), u8(1), u8(1));
+    check(scope, (~make_const(UInt(8), 3)), u8(0xfc), u8(0xfc));
     check(scope, cast<uint8_t>(x + 5) & cast<uint8_t>(x + 3), u8(0), u8(13));
     check(scope, cast<int8_t>(x - 5) & cast<int8_t>(x + 3), i8(0), i8(13));
     check(scope, cast<int8_t>(2 * x - 5) & cast<int8_t>(x - 3), i8(-128), i8(15));
     check(scope, cast<uint8_t>(x + 5) | cast<uint8_t>(x + 3), u8(5), u8(255));
     check(scope, cast<int8_t>(x + 5) | cast<int8_t>(x + 3), i8(3), i8(127));
     check(scope, ~cast<uint8_t>(x), u8(-11), u8(-1));
-    check(scope, (cast<uint8_t>(x) >> cast<uint8_t>(1)), u8(0), u8(5));
-    check(scope, (cast<uint8_t>(10) >> cast<uint8_t>(1)), u8(5), u8(5));
-    check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(1)), u8(6), u8(26));
-    check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(7)), u8(0), u8(255));  // Overflows
-    check(scope, (cast<uint8_t>(5) << cast<uint8_t>(1)), u8(10), u8(10));
+    check(scope, (cast<uint8_t>(x) >> make_one(UInt(8))), u8(0), u8(5));
+    check(scope, (make_const(UInt(8), 10) >> make_one(UInt(8))), u8(5), u8(5));
+    check(scope, (cast<uint8_t>(x + 3) << make_one(UInt(8))), u8(6), u8(26));
+    check(scope, (cast<uint8_t>(x + 3) << make_const(UInt(8), 7)), u8(0), u8(255));  // Overflows
+    check(scope, (make_const(UInt(8), 5) << make_one(UInt(8))), u8(10), u8(10));
     check(scope, (x << 12), 0, 10 << 12);
     check(scope, x & 4095, 0, 10);          // LHS known to be positive
     check(scope, x & 123, 0, 10);           // Doesn't have to be a precise bitmask
@@ -3712,7 +3712,7 @@ void bounds_test() {
           u16(0), u16(4095));
 
     check(scope,
-          cast<uint8_t>(clamp(cast<uint16_t>(x ^ y), cast<uint16_t>(0), cast<uint16_t>(128))),
+          cast<uint8_t>(clamp(cast<uint16_t>(x ^ y), make_zero(UInt(16)), make_const(UInt(16), 128))),
           u8(0), u8(128));
 
     Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
@@ -3720,19 +3720,19 @@ void bounds_test() {
     check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
           u16(0), u16(255 * 2));
 
-    check(scope, saturating_cast<uint8_t>(clamp(x, 5, 10)), cast<uint8_t>(5), cast<uint8_t>(10));
+    check(scope, saturating_cast<uint8_t>(clamp(x, 5, 10)), make_const(UInt(8), 5), make_const(UInt(8), 10));
     {
         scope.push("x", Interval(UInt(32).min(), UInt(32).max()));
-        check(scope, saturating_cast<int32_t>(max(cast<uint32_t>(x), cast<uint32_t>(5))), cast<int32_t>(5), Int(32).max());
+        check(scope, saturating_cast<int32_t>(max(cast<uint32_t>(x), make_const(UInt(32), 5))), make_const(Int(32), 5), Int(32).max());
         scope.pop("x");
     }
     {
         Expr z = Variable::make(Float(32), "z");
-        scope.push("z", Interval(cast<float>(-1), cast<float>(1)));
-        check(scope, saturating_cast<int32_t>(z), cast<int32_t>(-1), cast<int32_t>(1));
-        check(scope, saturating_cast<double>(z), cast<double>(-1), cast<double>(1));
-        check(scope, saturating_cast<float16_t>(z), cast<float16_t>(-1), cast<float16_t>(1));
-        check(scope, saturating_cast<uint8_t>(z), cast<uint8_t>(0), cast<uint8_t>(1));
+        scope.push("z", Interval(make_const(Float(32), -1), make_one(Float(32))));
+        check(scope, saturating_cast<int32_t>(z), make_const(Int(32), -1), make_one(Int(32)));
+        check(scope, saturating_cast<double>(z), make_const(Float(64), -1), make_one(Float(64)));
+        check(scope, saturating_cast<float16_t>(z), make_const(Float(16), -1), make_one(Float(16)));
+        check(scope, saturating_cast<uint8_t>(z), make_zero(UInt(8)), make_one(UInt(8)));
         scope.pop("z");
     }
     {
