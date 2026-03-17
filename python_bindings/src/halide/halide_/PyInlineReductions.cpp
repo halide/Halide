@@ -28,25 +28,21 @@ void define_inline_reductions(py::module &m) {
 
     m.def(
         "argmax", [](const Expr &e, const std::string &s) -> py::tuple {
-            return to_python_tuple(argmax(e, s));
-        },
-        py::arg("expr"), py::arg("name") = "argmax");
+        return to_python_tuple(argmax(e, s));
+    }, py::arg("expr"), py::arg("name") = "argmax");
     m.def(
         "argmax", [](const RDom &r, const Expr &e, const std::string &s) -> py::tuple {
-            return to_python_tuple(argmax(r, e, s));
-        },
-        py::arg("rdom"), py::arg("expr"), py::arg("name") = "argmax");
+        return to_python_tuple(argmax(r, e, s));
+    }, py::arg("rdom"), py::arg("expr"), py::arg("name") = "argmax");
 
     m.def(
         "argmin", [](const Expr &e, const std::string &s) -> py::tuple {
-            return to_python_tuple(argmin(e, s));
-        },
-        py::arg("expr"), py::arg("name") = "argmin");
+        return to_python_tuple(argmin(e, s));
+    }, py::arg("expr"), py::arg("name") = "argmin");
     m.def(
         "argmin", [](const RDom &r, const Expr &e, const std::string &s) -> py::tuple {
-            return to_python_tuple(argmin(r, e, s));
-        },
-        py::arg("rdom"), py::arg("expr"), py::arg("name") = "argmin");
+        return to_python_tuple(argmin(r, e, s));
+    }, py::arg("rdom"), py::arg("expr"), py::arg("name") = "argmin");
 }
 
 }  // namespace PythonBindings

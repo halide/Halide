@@ -61,15 +61,15 @@ extern "C" HALIDE_EXPORT_SYMBOL int zigzag_buffer_copy(halide_buffer_t *in, hali
         // An intentionally nasty mapping from y coords of the output to y coords of the input:
         auto coord_map =
             [](int y) {
-                // Reverse the bottom 8 bits
-                int new_y = y & ~255;
-                for (int i = 0; i < 8; i++) {
-                    if (y & (7 - i)) {
-                        new_y |= (1 << i);
-                    }
+            // Reverse the bottom 8 bits
+            int new_y = y & ~255;
+            for (int i = 0; i < 8; i++) {
+                if (y & (7 - i)) {
+                    new_y |= (1 << i);
                 }
-                return new_y;
-            };
+            }
+            return new_y;
+        };
 
         // Just manually take a min/max over all scanlines of the output
         int in_y_min = coord_map(out->dim[1].min);

@@ -33,8 +33,7 @@ int main(int argc, char **argv) {
                 printf("Copying a crop failed\n");
                 exit(1);
             }
-        },
-                           in_crop);
+        }, in_crop);
     }
 
 #if (defined(TEST_CUDA) || defined(TEST_OPENCL))
@@ -66,8 +65,7 @@ int main(int argc, char **argv) {
                 printf("Copying a crop failed\n");
                 exit(1);
             }
-        },
-                           in_crop);
+        }, in_crop);
     }
 
     // Test a buffer-copy to a host buffer from a device buffer.
@@ -98,8 +96,7 @@ int main(int argc, char **argv) {
                 printf("Copying a crop failed\n");
                 exit(1);
             }
-        },
-                           in_crop);
+        }, in_crop);
     }
 
     // Then a test of the pipeline that uses it in complicated ways

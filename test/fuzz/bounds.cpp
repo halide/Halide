@@ -110,95 +110,95 @@ Expr random_expr(FuzzingContext &fuzz, Type t, int depth, bool overflow_undef) {
 
     std::function<Expr()> operations[] = {
         [&]() {
-            return random_leaf(fuzz, t);
-        },
+        return random_leaf(fuzz, t);
+    },
         [&]() {
-            auto c = random_condition(fuzz, t, depth, true);
-            auto e1 = random_expr(fuzz, t, depth, overflow_undef);
-            auto e2 = random_expr(fuzz, t, depth, overflow_undef);
-            // Don't use Select::make: we want to use select() here to
-            // ensure that the condition and values match types.
-            return select(c, e1, e2);
-        },
+        auto c = random_condition(fuzz, t, depth, true);
+        auto e1 = random_expr(fuzz, t, depth, overflow_undef);
+        auto e2 = random_expr(fuzz, t, depth, overflow_undef);
+        // Don't use Select::make: we want to use select() here to
+        // ensure that the condition and values match types.
+        return select(c, e1, e2);
+    },
         [&]() {
-            if (t.lanes() != 1) {
-                int lanes = get_random_divisor(fuzz, t);
-                auto e1 = random_expr(fuzz, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
-                return Broadcast::make(e1, lanes);
-            }
-            // If we got here, try again.
-            return random_expr(fuzz, t, depth, overflow_undef);
-        },
+        if (t.lanes() != 1) {
+            int lanes = get_random_divisor(fuzz, t);
+            auto e1 = random_expr(fuzz, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
+            return Broadcast::make(e1, lanes);
+        }
+        // If we got here, try again.
+        return random_expr(fuzz, t, depth, overflow_undef);
+    },
         [&]() {
-            if (t.lanes() != 1) {
-                int lanes = get_random_divisor(fuzz, t);
-                auto e1 = random_expr(fuzz, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
-                auto e2 = random_expr(fuzz, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
-                return Ramp::make(e1, e2, lanes);
-            }
-            // If we got here, try again.
-            return random_expr(fuzz, t, depth, overflow_undef);
-        },
+        if (t.lanes() != 1) {
+            int lanes = get_random_divisor(fuzz, t);
+            auto e1 = random_expr(fuzz, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
+            auto e2 = random_expr(fuzz, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
+            return Ramp::make(e1, e2, lanes);
+        }
+        // If we got here, try again.
+        return random_expr(fuzz, t, depth, overflow_undef);
+    },
         [&]() {
-            if (t.is_bool()) {
-                auto e1 = random_expr(fuzz, t, depth);
-                return Not::make(e1);
-            }
-            // If we got here, try again.
-            return random_expr(fuzz, t, depth, overflow_undef);
-        },
+        if (t.is_bool()) {
+            auto e1 = random_expr(fuzz, t, depth);
+            return Not::make(e1);
+        }
+        // If we got here, try again.
+        return random_expr(fuzz, t, depth, overflow_undef);
+    },
         [&]() {
-            if (t.is_bool()) {
-                return random_condition(fuzz, random_type(fuzz, t.lanes()), depth, false);
-            }
-            // If we got here, try again.
-            return random_expr(fuzz, t, depth, overflow_undef);
-        },
+        if (t.is_bool()) {
+            return random_condition(fuzz, random_type(fuzz, t.lanes()), depth, false);
+        }
+        // If we got here, try again.
+        return random_expr(fuzz, t, depth, overflow_undef);
+    },
         [&]() {
-            // Get a random type that isn't t or int32 (int32 can overflow and we don't care about that).
-            // Note also that the FuzzingContext doesn't actually promise to return a random distribution --
-            // it can (e.g.) decide to just return 0 for all data, forever -- so this loop has no guarantee
-            // of eventually finding a different type. To remedy this, we'll just put a limit on the retries.
-            int count = 0;
-            Type subtype;
-            do {
-                subtype = random_type(fuzz, t.lanes());
-            } while (++count < 10 && (subtype == t || (subtype.is_int() && subtype.bits() == 32)));
-            auto e1 = random_expr(fuzz, subtype, depth, overflow_undef);
-            return Cast::make(t, e1);
-        },
+        // Get a random type that isn't t or int32 (int32 can overflow and we don't care about that).
+        // Note also that the FuzzingContext doesn't actually promise to return a random distribution --
+        // it can (e.g.) decide to just return 0 for all data, forever -- so this loop has no guarantee
+        // of eventually finding a different type. To remedy this, we'll just put a limit on the retries.
+        int count = 0;
+        Type subtype;
+        do {
+            subtype = random_type(fuzz, t.lanes());
+        } while (++count < 10 && (subtype == t || (subtype.is_int() && subtype.bits() == 32)));
+        auto e1 = random_expr(fuzz, subtype, depth, overflow_undef);
+        return Cast::make(t, e1);
+    },
         [&]() {
-            static make_bin_op_fn make_bin_op[] = {
-                // Arithmetic operations.
-                Add::make,
-                Sub::make,
-                Mul::make,
-                Min::make,
-                Max::make,
-                Div::make,
-                Mod::make,
-            };
-            make_bin_op_fn maker = fuzz.PickValueInArray(make_bin_op);
-            Expr a = random_expr(fuzz, t, depth, overflow_undef);
-            Expr b = random_expr(fuzz, t, depth, overflow_undef);
-            return maker(a, b);
-        },
+        static make_bin_op_fn make_bin_op[] = {
+            // Arithmetic operations.
+            Add::make,
+            Sub::make,
+            Mul::make,
+            Min::make,
+            Max::make,
+            Div::make,
+            Mod::make,
+        };
+        make_bin_op_fn maker = fuzz.PickValueInArray(make_bin_op);
+        Expr a = random_expr(fuzz, t, depth, overflow_undef);
+        Expr b = random_expr(fuzz, t, depth, overflow_undef);
+        return maker(a, b);
+    },
         [&]() {
-            static make_bin_op_fn make_bin_op[] = {
-                // Binary operations.
-                And::make,
-                Or::make,
-            };
-            // Boolean operations -- both sides must be cast to booleans,
-            // and then we must cast the result back to 't'.
-            make_bin_op_fn maker = fuzz.PickValueInArray(make_bin_op);
-            Expr a = random_expr(fuzz, t, depth, overflow_undef);
-            Expr b = random_expr(fuzz, t, depth, overflow_undef);
-            Type bool_with_lanes = Bool(t.lanes());
-            a = cast(bool_with_lanes, a);
-            b = cast(bool_with_lanes, b);
-            return cast(t, maker(a, b));
-        },
+        static make_bin_op_fn make_bin_op[] = {
+            // Binary operations.
+            And::make,
+            Or::make,
+        };
+        // Boolean operations -- both sides must be cast to booleans,
+        // and then we must cast the result back to 't'.
+        make_bin_op_fn maker = fuzz.PickValueInArray(make_bin_op);
+        Expr a = random_expr(fuzz, t, depth, overflow_undef);
+        Expr b = random_expr(fuzz, t, depth, overflow_undef);
+        Type bool_with_lanes = Bool(t.lanes());
+        a = cast(bool_with_lanes, a);
+        b = cast(bool_with_lanes, b);
+        return cast(t, maker(a, b));
+    },
     };
     return fuzz.PickValueInArray(operations)();
 }

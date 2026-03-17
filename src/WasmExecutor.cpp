@@ -2341,11 +2341,10 @@ WasmModuleContents::WasmModuleContents(
 
     debug(2) << "Disassembly:\n"
              << [&] {
-                    wabt::MemoryStream dis_stream;
-                    module_desc.istream.Disassemble(&dis_stream);
-                    return to_string(dis_stream);
-                }()
-             << "\n";
+        wabt::MemoryStream dis_stream;
+        module_desc.istream.Disassemble(&dis_stream);
+        return to_string(dis_stream);
+    }() << "\n";
 
     module = wabt::interp::Module::New(store, module_desc);
 

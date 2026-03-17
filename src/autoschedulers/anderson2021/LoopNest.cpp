@@ -4117,8 +4117,8 @@ void LoopNest::apply(LoopLevel here,
                         // There's a hope we can fit anything compute-at this level into registers if we fully unroll
                         std::stable_sort(state.vars.begin(), state.vars.begin() + symbolic_loop.size(),
                                          [](const StageScheduleState::FuncVar &a, const StageScheduleState::FuncVar &b) {
-                                             return a.pure && !b.pure;
-                                         });
+                            return a.pure && !b.pure;
+                        });
 
                         for (size_t i = 0; i < symbolic_loop.size(); i++) {
                             if (state.vars[i].pure && state.vars[i].exists && state.vars[i].extent > 1) {

@@ -125,8 +125,8 @@ void define_generator(py::module &m) {
         py::class_<ArgInfo>(m, "ArgInfo")
             .def(py::init<>())
             .def(py::init([](const std::string &name, ArgInfoDirection dir, ArgInfoKind kind, std::vector<Type> types, int dimensions) -> ArgInfo {
-                     return ArgInfo{name, dir, kind, std::move(types), dimensions};
-                 }),
+        return ArgInfo{name, dir, kind, std::move(types), dimensions};
+    }),
                  py::arg("name"), py::arg("dir"), py::arg("kind"), py::arg("types"), py::arg("dimensions"))
             .def_readonly("name", &ArgInfo::name)
             .def_readonly("dir", &ArgInfo::dir)
@@ -143,45 +143,43 @@ void define_generator(py::module &m) {
             .def("target", &GeneratorContext::target)
             .def("autoscheduler_params", &GeneratorContext::autoscheduler_params)
             .def("__enter__", [](const GeneratorContext &context) -> py::object {
-                auto _generatorcontext_enter = py::module_::import("halide").attr("_generatorcontext_enter");
-                return _generatorcontext_enter(context);
-            })
-            .def("__exit__", [](const GeneratorContext &context, const py::object &exc_type, const py::object &exc_value, const py::object &exc_traceback) -> bool {
-                auto _generatorcontext_exit = py::module_::import("halide").attr("_generatorcontext_exit");
-                _generatorcontext_exit(context);
-                return false;
-            })
-            .def("__repr__", [](const GeneratorContext &context) -> std::string {
-                std::ostringstream o;
-                o << "<halide.GeneratorContext " << context.target() << ">";
-                return o.str();
-            });
+        auto _generatorcontext_enter = py::module_::import("halide").attr("_generatorcontext_enter");
+        return _generatorcontext_enter(context);
+    }).def("__exit__", [](const GeneratorContext &context, const py::object &exc_type, const py::object &exc_value, const py::object &exc_traceback) -> bool {
+        auto _generatorcontext_exit = py::module_::import("halide").attr("_generatorcontext_exit");
+        _generatorcontext_exit(context);
+        return false;
+    }).def("__repr__", [](const GeneratorContext &context) -> std::string {
+        std::ostringstream o;
+        o << "<halide.GeneratorContext " << context.target() << ">";
+        return o.str();
+    });
 
     m.def("_generate_filter_main",  //
           [](const std::vector<std::string> &arguments) -> void {
-              if (arguments.empty()) {
-                  throw std::invalid_argument("No arguments provided to _generate_filter_main");
-              }
+        if (arguments.empty()) {
+            throw std::invalid_argument("No arguments provided to _generate_filter_main");
+        }
 
-              // POSIX requires argv to be mutable and null-terminated
-              std::vector<char *> argv;
-              argv.reserve(arguments.size() + 1);
-              for (const auto &s : arguments) {
-                  argv.push_back(const_cast<char *>(s.c_str()));
-              }
-              argv.push_back(nullptr);
+        // POSIX requires argv to be mutable and null-terminated
+        std::vector<char *> argv;
+        argv.reserve(arguments.size() + 1);
+        for (const auto &s : arguments) {
+            argv.push_back(const_cast<char *>(s.c_str()));
+        }
+        argv.push_back(nullptr);
 
-              const int result = Halide::Internal::generate_filter_main(
-                  static_cast<int>(argv.size()) - 1, argv.data(), PyGeneratorFactoryProvider());
-              if (result != 0) {
-                  // Some paths in generate_filter_main() will fail with user_error
-                  // or similar (which throws an exception due to how libHalide is
-                  // built for Python), but other paths just return an error code.
-                  // For consistency, handle both by throwing a C++ exception, which
-                  // PyBind11 turns into a Python exception.
-                  throw std::runtime_error("Generator failed: " + std::to_string(result));
-              }  //
-          },
+        const int result = Halide::Internal::generate_filter_main(
+            static_cast<int>(argv.size()) - 1, argv.data(), PyGeneratorFactoryProvider());
+        if (result != 0) {
+            // Some paths in generate_filter_main() will fail with user_error
+            // or similar (which throws an exception due to how libHalide is
+            // built for Python), but other paths just return an error code.
+            // For consistency, handle both by throwing a C++ exception, which
+            // PyBind11 turns into a Python exception.
+            throw std::runtime_error("Generator failed: " + std::to_string(result));
+        }  //
+    },
           py::arg("argv"));
 
     m.def("_unique_name", []() -> std::string {

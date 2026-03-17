@@ -114,28 +114,28 @@ void add_binary_operators_with(PythonClass &class_instance) {
     using Promote = std::conditional_t<
         std::is_same_v<other_t, double>, DoubleToExprCheck, other_t>;
 
-#define BINARY_OP(op, method)                                   \
-    do {                                                        \
-        class_instance.def(                                     \
-            "__" #method "__",                                  \
-            [](const self_t &self, const other_t &other) {      \
-                auto result = self op Promote(other);           \
-                LOG_PY_BINARY_OP(self, #method, other, result); \
-                return result;                                  \
-            },                                                  \
-            py::is_operator());                                 \
+#define BINARY_OP(op, method)                               \
+    do {                                                    \
+        class_instance.def(                                 \
+            "__" #method "__",                              \
+            [](const self_t &self, const other_t &other) {  \
+            auto result = self op Promote(other);           \
+            LOG_PY_BINARY_OP(self, #method, other, result); \
+            return result;                                  \
+        },                                                  \
+            py::is_operator());                             \
     } while (0)
 
-#define RBINARY_OP(op, method)                                      \
-    do {                                                            \
-        class_instance.def(                                         \
-            "__r" #method "__",                                     \
-            [](const self_t &self, const other_t &other) {          \
-                auto result = Promote(other) op self;               \
-                LOG_PY_BINARY_OP(self, "r" #method, other, result); \
-                return result;                                      \
-            },                                                      \
-            py::is_operator());                                     \
+#define RBINARY_OP(op, method)                                  \
+    do {                                                        \
+        class_instance.def(                                     \
+            "__r" #method "__",                                 \
+            [](const self_t &self, const other_t &other) {      \
+            auto result = Promote(other) op self;               \
+            LOG_PY_BINARY_OP(self, "r" #method, other, result); \
+            return result;                                      \
+        },                                                      \
+            py::is_operator());                                 \
     } while (0)
 
 #define BINARY_OPS(op, method)  \
@@ -145,23 +145,23 @@ void add_binary_operators_with(PythonClass &class_instance) {
     } while (0)
 
     if constexpr (std::is_same_v<self_t, FuncRef>) {
-#define BINARY_OPS_UNEVAL(op, method, val)                                                                       \
-    do {                                                                                                         \
-        class_instance.def(                                                                                      \
-            "__" #method "__",                                                                                   \
-            [](const self_t &self, const other_t &other) -> std::variant<UnevaluatedFuncRefExpr, Expr> {         \
-                if (self.function().has_pure_definition() || self.function().has_extern_definition()) {          \
-                    auto result = Expr(self) op Promote(other);                                                  \
-                    LOG_PY_BINARY_OP(self, #method, other, result);                                              \
-                    return result;                                                                               \
-                } else {                                                                                         \
-                    auto result = UnevaluatedFuncRefExpr{self, Promote(other), UnevaluatedFuncRefExpr::Op::val}; \
-                    LOG_PY_BINARY_OP_UNEVAL(self, #method, other, result);                                       \
-                    return result;                                                                               \
-                }                                                                                                \
-            },                                                                                                   \
-            py::is_operator());                                                                                  \
-        RBINARY_OP(op, method);                                                                                  \
+#define BINARY_OPS_UNEVAL(op, method, val)                                                                   \
+    do {                                                                                                     \
+        class_instance.def(                                                                                  \
+            "__" #method "__",                                                                               \
+            [](const self_t &self, const other_t &other) -> std::variant<UnevaluatedFuncRefExpr, Expr> {     \
+            if (self.function().has_pure_definition() || self.function().has_extern_definition()) {          \
+                auto result = Expr(self) op Promote(other);                                                  \
+                LOG_PY_BINARY_OP(self, #method, other, result);                                              \
+                return result;                                                                               \
+            } else {                                                                                         \
+                auto result = UnevaluatedFuncRefExpr{self, Promote(other), UnevaluatedFuncRefExpr::Op::val}; \
+                LOG_PY_BINARY_OP_UNEVAL(self, #method, other, result);                                       \
+                return result;                                                                               \
+            }                                                                                                \
+        },                                                                                                   \
+            py::is_operator());                                                                              \
+        RBINARY_OP(op, method);                                                                              \
     } while (0)
 
         BINARY_OPS_UNEVAL(+, add, Add);
@@ -222,9 +222,8 @@ void add_binary_operators(PythonClass &class_instance) {
     class_instance
         .def("__pow__", Halide::pow, py::is_operator())
         .def("__rpow__", [](const Expr &self, const Expr &other) {
-            return Halide::pow(other, self);  //
-        },
-             py::is_operator());
+        return Halide::pow(other, self);  //
+    }, py::is_operator());
 
     const auto logical_not_wrap = [](const self_t &self) -> decltype(!self) {
         return !self;

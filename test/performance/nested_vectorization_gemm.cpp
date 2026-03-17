@@ -112,9 +112,9 @@ int main(int argc, char **argv) {
 
             times[use_nested_vectorization] =
                 Tools::benchmark(20, 20, [&]() {
-                    result.realize(out, target);
-                    out.device_sync();
-                });
+                result.realize(out, target);
+                out.device_sync();
+            });
         }
 
         double speed_up = times[0] / times[1];
@@ -199,9 +199,9 @@ int main(int argc, char **argv) {
 
             times[use_nested_vectorization] =
                 Tools::benchmark(10, 10, [&]() {
-                    result.realize(out, target);
-                    out.device_sync();
-                });
+                result.realize(out, target);
+                out.device_sync();
+            });
         }
 
         double speed_up = times[0] / times[1];
@@ -282,9 +282,9 @@ int main(int argc, char **argv) {
 
             times[use_nested_vectorization] =
                 Tools::benchmark(10, 10, [&]() {
-                    result.realize(out, target);
-                    out.device_sync();
-                });
+                result.realize(out, target);
+                out.device_sync();
+            });
         }
 
         double speed_up = times[0] / times[1];
@@ -375,9 +375,9 @@ int main(int argc, char **argv) {
 
             times[use_nested_vectorization] =
                 Tools::benchmark(10, 10, [&]() {
-                    result.realize(out, target);
-                    out.device_sync();
-                });
+                result.realize(out, target);
+                out.device_sync();
+            });
         }
 
         // We don't actually get any win from this on X86, as the

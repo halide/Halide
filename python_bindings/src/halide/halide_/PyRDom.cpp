@@ -16,10 +16,10 @@ void define_rvar(py::module &m) {
             .def("extent", &RVar::extent)
             .def("name", &RVar::name)
             .def("__repr__", [](const RVar &v) -> std::string {
-                std::ostringstream o;
-                o << "<halide.RVar " << v << ">";
-                return o.str();
-            });
+        std::ostringstream o;
+        o << "<halide.RVar " << v << ">";
+        return o.str();
+    });
 
     py::implicitly_convertible<RDom, RVar>();
 
@@ -71,20 +71,19 @@ void define_rdom(py::module &m) {
             .def("__iter__", [](const RDom &r) { return RDomIterator(r); }, py::keep_alive<0, 1>())
             .def("where", &RDom::where, py::arg("predicate"))
             .def("__getitem__", [](RDom &r, const int i) -> RVar {
-                if (i < 0 || i >= r.dimensions()) {
-                    throw pybind11::key_error();
-                }
-                return r[i];  //
-            })
-            .def_readonly("x", &RDom::x)
+        if (i < 0 || i >= r.dimensions()) {
+            throw pybind11::key_error();
+        }
+        return r[i];  //
+    }).def_readonly("x", &RDom::x)
             .def_readonly("y", &RDom::y)
             .def_readonly("z", &RDom::z)
             .def_readonly("w", &RDom::w)
             .def("__repr__", [](const RDom &r) -> std::string {
-                std::ostringstream o;
-                o << "<halide.RDom " << r << ">";
-                return o.str();  //
-            });
+        std::ostringstream o;
+        o << "<halide.RDom " << r << ">";
+        return o.str();  //
+    });
 
     add_binary_operators(rdom_class);
 }

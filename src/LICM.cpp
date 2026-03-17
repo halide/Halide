@@ -399,8 +399,8 @@ class GroupLoopInvariants : public IRMutator {
         // likely already in a good order, so don't mess with them.
         std::stable_sort(terms.begin(), terms.end(),
                          [](const Term &a, const Term &b) {
-                             return a.depth > b.depth;
-                         });
+            return a.depth > b.depth;
+        });
 
         return terms;
     }

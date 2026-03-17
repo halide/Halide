@@ -519,75 +519,75 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
 
     fp.flag_handlers = FlagProcessor::FnMap{
         {"benchmark", [this](const std::string &value) {
-             this->do_benchmark = std::stoi(value) != 0;
-             return 0;
-         }},
+        this->do_benchmark = std::stoi(value) != 0;
+        return 0;
+    }},
         {"compare", [this](const std::string &value) {
-             this->do_compare_results = std::stoi(value) != 0;
-             return 0;
-         }},
+        this->do_compare_results = std::stoi(value) != 0;
+        return 0;
+    }},
         {"csv", [this](const std::string &value) {
-             this->csv_output = std::stoi(value) != 0;
-             return 0;
-         }},
+        this->csv_output = std::stoi(value) != 0;
+        return 0;
+    }},
         {"enable", [this](const std::string &value) {
-             for (int i = 0; i < ModelRunner::kNumRuns; i++) {
-                 this->do_run[i] = false;
-             }
-             for (char c : value) {
-                 switch (c) {
-                 case 'h':
-                     this->do_run[ModelRunner::kHannk] = true;
-                     break;
+        for (int i = 0; i < ModelRunner::kNumRuns; i++) {
+            this->do_run[i] = false;
+        }
+        for (char c : value) {
+            switch (c) {
+            case 'h':
+                this->do_run[ModelRunner::kHannk] = true;
+                break;
 #if HANNK_BUILD_TFLITE
-                 case 't':
-                     this->do_run[ModelRunner::kTfLite] = true;
-                     break;
-                 case 'x':
-                     this->do_run[ModelRunner::kExternalDelegate] = true;
-                     break;
-                 case 'i':
-                     this->do_run[ModelRunner::kInternalDelegate] = true;
-                     break;
+            case 't':
+                this->do_run[ModelRunner::kTfLite] = true;
+                break;
+            case 'x':
+                this->do_run[ModelRunner::kExternalDelegate] = true;
+                break;
+            case 'i':
+                this->do_run[ModelRunner::kInternalDelegate] = true;
+                break;
 #else
-                 case 't':
-                 case 'x':
-                 case 'i':
-                    std::cerr << "Unsupported option to --enable (TFLite is not enabled in this build): " << c << "\n";
-                    return -1;
-                    break;
+            case 't':
+            case 'x':
+            case 'i':
+                std::cerr << "Unsupported option to --enable (TFLite is not enabled in this build): " << c << "\n";
+                return -1;
+                break;
 #endif
-                 default:
-                     std::cerr << "Unknown option to --enable: " << c << "\n";
-                     return -1;
-                 }
-             }
-             return 0;
-         }},
+            default:
+                std::cerr << "Unknown option to --enable: " << c << "\n";
+                return -1;
+            }
+        }
+        return 0;
+    }},
         {"external_delegate_path", [this](const std::string &value) {
-             this->external_delegate_path = value;
-             return 0;
-         }},
+        this->external_delegate_path = value;
+        return 0;
+    }},
         {"keep_going", [this](const std::string &value) {
-             this->keep_going = std::stoi(value) != 0;
-             return 0;
-         }},
+        this->keep_going = std::stoi(value) != 0;
+        return 0;
+    }},
         {"seed", [&seed](const std::string &value) {
-             seed = std::stoi(value);
-             return 0;
-         }},
+        seed = std::stoi(value);
+        return 0;
+    }},
         {"threads", [this](const std::string &value) {
-             this->threads = std::stoi(value);
-             return 0;
-         }},
+        this->threads = std::stoi(value);
+        return 0;
+    }},
         {"tolerance", [this](const std::string &value) {
-             this->tolerance = std::stof(value);
-             return 0;
-         }},
+        this->tolerance = std::stof(value);
+        return 0;
+    }},
         {"verbose", [this](const std::string &value) {
-             this->verbosity = std::stoi(value);
-             return 0;
-         }},
+        this->verbosity = std::stoi(value);
+        return 0;
+    }},
     };
 
     int r = fp.process(argc, argv);

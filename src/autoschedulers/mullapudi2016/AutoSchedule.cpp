@@ -1002,8 +1002,8 @@ public:
             const auto &y = vars.back();
             const auto tail_strategy = std::any_of(
                                            vars.begin(), vars.end(), [](const auto &v) {
-                                               return v.strategy == TailStrategy::GuardWithIf;
-                                           }) ?
+                return v.strategy == TailStrategy::GuardWithIf;
+            }) ?
                                            TailStrategy::GuardWithIf :
                                            TailStrategy::Auto;
 
@@ -1037,8 +1037,8 @@ public:
 
             const auto tail_strategy = std::any_of(
                                            vars.begin(), vars.end(), [](const auto &v) {
-                                               return v.strategy == TailStrategy::GuardWithIf;
-                                           }) ?
+                return v.strategy == TailStrategy::GuardWithIf;
+            }) ?
                                            TailStrategy::GuardWithIf :
                                            TailStrategy::Auto;
 
@@ -1328,8 +1328,8 @@ public:
         const auto findItem = [&](const VarOrRVar &v) {
             return std::find_if(ordering.begin(), ordering.end(),
                                 [v_name = v.name()](const VarOrRVar &item) {
-                                    return item.name() == v_name;
-                                });
+                return item.name() == v_name;
+            });
         };
 
         auto inner_iter = findItem(inner);
@@ -3769,9 +3769,9 @@ void validate_no_partial_schedules(const Function &f, bool is_output) {
                 const auto &iter =
                     std::find_if(args.begin(), args.end(),
                                  [&d](const Expr &arg) {
-                                     const Variable *v = arg.as<Variable>();
-                                     return (d.var == v->name);
-                                 });
+                    const Variable *v = arg.as<Variable>();
+                    return (d.var == v->name);
+                });
                 internal_assert(iter != args.end());
                 int current_index = iter - args.begin();
                 user_assert(current_index > last_index)

@@ -219,27 +219,27 @@ const IRNode *innermost_containing_node(const IRNode *root, const std::set<const
     int seen = 0, best = 0;
     mutate_with(root,  //
                 [&](auto *self, const Stmt &s) {
-                    int old = seen;
-                    self->mutate_base(s);
-                    if (old == 0 && seen > best) {
-                        result = s.get();
-                        best = seen;
-                    }
-                    return s;  //
-                },
+        int old = seen;
+        self->mutate_base(s);
+        if (old == 0 && seen > best) {
+            result = s.get();
+            best = seen;
+        }
+        return s;  //
+    },
                 [&](auto *self, const Expr &e) {
-                    int old = seen;
-                    const Load *l = e.as<Load>();
-                    if (l && exprs.count(l)) {
-                        seen++;
-                    };
-                    self->mutate_base(e);
-                    if (old == 0 && seen > best) {
-                        result = e.get();
-                        best = seen;
-                    }
-                    return e;  //
-                });
+        int old = seen;
+        const Load *l = e.as<Load>();
+        if (l && exprs.count(l)) {
+            seen++;
+        };
+        self->mutate_base(e);
+        if (old == 0 && seen > best) {
+            result = e.get();
+            best = seen;
+        }
+        return e;  //
+    });
     internal_assert(seen) << "None of the exprs were found\n";
     return result;
 }
@@ -252,32 +252,32 @@ bool can_hoist_shared_load(const IRNode *n, const std::string &buf, const Expr &
     bool result = true;
     visit_with(n,                                 //
                [&](auto *self, const Let *let) {  //
-                   result &= !expr_uses_var(idx, let->name);
-                   self->visit_base(let);
-               },
+        result &= !expr_uses_var(idx, let->name);
+        self->visit_base(let);
+    },
                [&](auto *self, const LetStmt *let) {  //
-                   result &= !expr_uses_var(idx, let->name);
-                   self->visit_base(let);
-               },
+        result &= !expr_uses_var(idx, let->name);
+        self->visit_base(let);
+    },
                [&](auto *self, const For *loop) {  //
-                   result &= !expr_uses_var(idx, loop->name);
-                   self->visit_base(loop);
-               },
+        result &= !expr_uses_var(idx, loop->name);
+        self->visit_base(loop);
+    },
                [&](auto *self, const Allocate *alloc) {  //
-                   result &= alloc->name != buf;
-                   self->visit_base(alloc);
-               },
+        result &= alloc->name != buf;
+        self->visit_base(alloc);
+    },
                [&](auto *self, const Store *store) {  //
-                   result &= store->name != buf;
-                   self->visit_base(store);
-               },
+        result &= store->name != buf;
+        self->visit_base(store);
+    },
                [&](auto *self, const AssertStmt *a) {  //
-                   // Extern stages always come with asserts, even when
-                   // no_asserts is on (they get stripped later), so this also
-                   // guards against writes to the buffer happening in an extern
-                   // stage. copy_to_host/device calls also come with asserts.
-                   result = false;
-               });
+        // Extern stages always come with asserts, even when
+        // no_asserts is on (they get stripped later), so this also
+        // guards against writes to the buffer happening in an extern
+        // stage. copy_to_host/device calls also come with asserts.
+        result = false;
+    });
     return result;
 }
 

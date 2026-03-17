@@ -40,38 +40,37 @@ void define_tuple(py::module &m) {
         py::class_<Tuple>(m, "Tuple")
             // for implicitly_convertible
             .def(py::init([](const py::tuple &t) -> Tuple {
-                std::vector<Expr> v;
-                v.reserve(t.size());
-                for (const auto o : t) {
-                    v.push_back(o.cast<Expr>());
-                }
-                return Tuple(v);
-            }))
+        std::vector<Expr> v;
+        v.reserve(t.size());
+        for (const auto o : t) {
+            v.push_back(o.cast<Expr>());
+        }
+        return Tuple(v);
+    }))
             .def(py::init([](const FuncRef &f) -> Tuple {
-                std::vector<Expr> v;
-                v.reserve(f.size());
-                if (f.size() == 1) {
-                    v.push_back(f);
-                } else {
-                    for (size_t i = 0; i < f.size(); ++i) {
-                        v.push_back(f[(int)i]);
-                    }
-                }
-                return Tuple(v);
-            }))
+        std::vector<Expr> v;
+        v.reserve(f.size());
+        if (f.size() == 1) {
+            v.push_back(f);
+        } else {
+            for (size_t i = 0; i < f.size(); ++i) {
+                v.push_back(f[(int)i]);
+            }
+        }
+        return Tuple(v);
+    }))
             .def(py::init([](const std::vector<Expr> &v) -> Tuple {
-                return Tuple(v);
-            }))
+        return Tuple(v);
+    }))
             .def("__repr__", [](const Tuple &t) -> std::string {
-                std::ostringstream o;
-                o << "<halide.Tuple of size " << t.size() << ">";
-                return o.str();
-            })
-            .def("__str__", [](const Tuple &t) -> std::string {
-                std::ostringstream o;
-                o << t;
-                return o.str();
-            });
+        std::ostringstream o;
+        o << "<halide.Tuple of size " << t.size() << ">";
+        return o.str();
+    }).def("__str__", [](const Tuple &t) -> std::string {
+        std::ostringstream o;
+        o << t;
+        return o.str();
+    });
 
     py::implicitly_convertible<py::tuple, Tuple>();
 

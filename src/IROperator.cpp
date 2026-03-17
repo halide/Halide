@@ -1065,11 +1065,11 @@ T remove_intrinsics(const T &e, const std::initializer_list<Call::IntrinsicOp> &
     return mutate_with(
         e,
         [&](auto *self, const Call *op) {
-            if (op->is_intrinsic(ops)) {
-                return self->mutate(op->args[0]);
-            }
-            return self->visit_base(op);
-        });
+        if (op->is_intrinsic(ops)) {
+            return self->mutate(op->args[0]);
+        }
+        return self->visit_base(op);
+    });
 }
 
 }  // namespace

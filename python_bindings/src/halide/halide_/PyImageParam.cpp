@@ -43,18 +43,18 @@ void define_image_param(py::module &m) {
             .def("parameter", &OutputImageParam::parameter)
 
             .def("__repr__", [](const OutputImageParam &im) -> std::string {
-                std::ostringstream o;
-                o << "<halide.OutputImageParam ";
-                if (!im.defined()) {
-                    o << "OutputImageParam()";
-                } else {
-                    o << "'" << im.name() << "'"
-                      << ", dims: " << im.dimensions()
-                      << ", type: " << halide_type_to_string(im.type());
-                }
-                o << ">";
-                return o.str();
-            });
+        std::ostringstream o;
+        o << "<halide.OutputImageParam ";
+        if (!im.defined()) {
+            o << "OutputImageParam()";
+        } else {
+            o << "'" << im.name() << "'"
+              << ", dims: " << im.dimensions()
+              << ", type: " << halide_type_to_string(im.type());
+        }
+        o << ">";
+        return o.str();
+    });
 
     auto image_param_class =
         py::class_<ImageParam>(m, "ImageParam", output_image_param_class)
@@ -65,32 +65,29 @@ void define_image_param(py::module &m) {
             .def("get", &ImageParam::get)
             .def("reset", &ImageParam::reset)
             .def("__getitem__", [](ImageParam &im, const Expr &args) -> Expr {
-                return im(args);
-            })
-            .def("__getitem__", [](ImageParam &im, const std::vector<Expr> &args) -> Expr {
-                return im(args);
-            })
-            .def("__getitem__", [](ImageParam &im, const std::vector<Var> &args) -> Expr {
-                return im(args);
-            })
-            .def("in_", static_cast<Func (ImageParam::*)(const Func &)>(&ImageParam::in))
+        return im(args);
+    }).def("__getitem__", [](ImageParam &im, const std::vector<Expr> &args) -> Expr {
+        return im(args);
+    }).def("__getitem__", [](ImageParam &im, const std::vector<Var> &args) -> Expr {
+        return im(args);
+    }).def("in_", static_cast<Func (ImageParam::*)(const Func &)>(&ImageParam::in))
             .def("in_", static_cast<Func (ImageParam::*)(const std::vector<Func> &)>(&ImageParam::in))
             .def("in_", static_cast<Func (ImageParam::*)()>(&ImageParam::in))
             .def("trace_loads", &ImageParam::trace_loads)
 
             .def("__repr__", [](const ImageParam &im) -> std::string {
-                std::ostringstream o;
-                o << "<halide.ImageParam ";
-                if (!im.defined()) {
-                    o << "ImageParam()";
-                } else {
-                    o << "'" << im.name() << "'"
-                      << ", dims: " << im.dimensions()
-                      << ", type: " << halide_type_to_string(im.type());
-                }
-                o << ">";
-                return o.str();
-            });
+        std::ostringstream o;
+        o << "<halide.ImageParam ";
+        if (!im.defined()) {
+            o << "ImageParam()";
+        } else {
+            o << "'" << im.name() << "'"
+              << ", dims: " << im.dimensions()
+              << ", type: " << halide_type_to_string(im.type());
+        }
+        o << ">";
+        return o.str();
+    });
 }
 
 }  // namespace PythonBindings

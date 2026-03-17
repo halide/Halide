@@ -152,20 +152,20 @@ class InjectGpuOffload : public IRMutator {
         // which passes the scalar args as a struct.
         sort(closure_args.begin(), closure_args.end(),
              [](const DeviceArgument &a, const DeviceArgument &b) {
-                 if (a.is_buffer == b.is_buffer) {
-                     return a.type.bits() > b.type.bits();
-                 } else {
-                     // Ensure that buffer arguments come first:
-                     // for some GPU systems, the
-                     // legal indices for buffer args are much
-                     // more restrictive than for scalar args,
-                     // and scalar args can be 'grown' by
-                     // LICM. Putting buffers first makes it much
-                     // more likely we won't fail on some
-                     // hardware.
-                     return a.is_buffer > b.is_buffer;
-                 }
-             });
+            if (a.is_buffer == b.is_buffer) {
+                return a.type.bits() > b.type.bits();
+            } else {
+                // Ensure that buffer arguments come first:
+                // for some GPU systems, the
+                // legal indices for buffer args are much
+                // more restrictive than for scalar args,
+                // and scalar args can be 'grown' by
+                // LICM. Putting buffers first makes it much
+                // more likely we won't fail on some
+                // hardware.
+                return a.is_buffer > b.is_buffer;
+            }
+        });
 
         // compile the kernel
         string kernel_name = c_print_name(unique_name("kernel_" + loop->name));

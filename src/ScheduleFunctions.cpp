@@ -1435,8 +1435,8 @@ private:
         {
             const auto &iter = std::find_if(dims.begin(), dims.end(),
                                             [&fuse_level](const Dim &d) {
-                                                return var_name_match(d.var, fuse_level.var().name());
-                                            });
+                return var_name_match(d.var, fuse_level.var().name());
+            });
             internal_assert(iter != dims.end());
             start_fuse = (int)(iter - dims.begin());
         }
@@ -1502,8 +1502,8 @@ private:
         if (!fuse_level.is_inlined() && !fuse_level.is_root()) {
             const auto &iter = std::find_if(dims.begin(), dims.end(),
                                             [&fuse_level](const Dim &d) {
-                                                return var_name_match(d.var, fuse_level.var().name());
-                                            });
+                return var_name_match(d.var, fuse_level.var().name());
+            });
             internal_assert(iter != dims.end());
             start_fuse = (size_t)(iter - dims.begin());
         }
@@ -2453,8 +2453,8 @@ void validate_fused_group_schedule_helper(const string &fn,
         const auto &iter_1 =
             std::find_if(dims_1.begin(), dims_1.end(),
                          [&p](const Dim &d) {
-                             return var_name_match(d.var, p.var_name);
-                         });
+            return var_name_match(d.var, p.var_name);
+        });
         user_assert(iter_1 != dims_1.end())
             << "Invalid compute_with: cannot find " << p.var_name << " in "
             << p.func_1 << ".s" << p.stage_1 << "\n";
@@ -2462,8 +2462,8 @@ void validate_fused_group_schedule_helper(const string &fn,
         const auto &iter_2 =
             std::find_if(dims_2.begin(), dims_2.end(),
                          [&p](const Dim &d) {
-                             return var_name_match(d.var, p.var_name);
-                         });
+            return var_name_match(d.var, p.var_name);
+        });
         user_assert(iter_2 != dims_2.end())
             << "Invalid compute_with: cannot find " << p.var_name << " in "
             << p.func_2 << ".s" << p.stage_2 << "\n";

@@ -17,8 +17,8 @@ void define_module(py::module &m) {
             .def_readwrite("schedule_source", &AutoSchedulerResults::schedule_source)
             .def_readwrite("featurization", &AutoSchedulerResults::featurization)
             .def("__repr__", [](const AutoSchedulerResults &o) -> std::string {
-                return "<halide.AutoSchedulerResults>";
-            });
+        return "<halide.AutoSchedulerResults>";
+    });
 
     auto module_class =
         py::class_<Module>(m, "Module")
@@ -54,10 +54,10 @@ void define_module(py::module &m) {
             // .def("append", (void (Module::*)(const Internal::LoweredFunc &)) &Module::append, py::arg("function"))
 
             .def("__repr__", [](const Module &m) -> std::string {
-                std::ostringstream o;
-                o << "<halide.Module '" << m.name() << "'>";
-                return o.str();
-            });
+        std::ostringstream o;
+        o << "<halide.Module '" << m.name() << "'>";
+        return o.str();
+    });
 
     m.def("link_modules", &link_modules, py::arg("name"), py::arg("modules"));
     m.def("compile_standalone_runtime", static_cast<void (*)(const std::string &, const Target &)>(&compile_standalone_runtime), py::arg("filename"), py::arg("target"));

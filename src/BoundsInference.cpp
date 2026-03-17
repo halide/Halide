@@ -39,19 +39,19 @@ bool depends_on_bounds_inference(const Expr &e) {
     visit_with(
         e,
         [&](auto *, const Variable *var) {
-            if (ends_with(var->name, ".max") ||
-                ends_with(var->name, ".min")) {
-                result = true;
-            }  //
-        },
+        if (ends_with(var->name, ".max") ||
+            ends_with(var->name, ".min")) {
+            result = true;
+        }  //
+    },
         [&](auto *self, const Call *op) {
-            if (op->name == Call::buffer_get_min ||
-                op->name == Call::buffer_get_max) {
-                result = true;
-            } else {
-                self->visit_base(op);
-            }  //
-        });
+        if (op->name == Call::buffer_get_min ||
+            op->name == Call::buffer_get_max) {
+            result = true;
+        } else {
+            self->visit_base(op);
+        }  //
+    });
     return result;
 }
 
@@ -135,11 +135,11 @@ size_t find_fused_group_index(const Function &producing_func,
                               const vector<vector<Function>> &fused_groups) {
     const auto &iter = std::find_if(fused_groups.begin(), fused_groups.end(),
                                     [&producing_func](const vector<Function> &group) {
-                                        return std::any_of(group.begin(), group.end(),
-                                                           [&producing_func](const Function &f) {
-                                                               return (f.name() == producing_func.name());
-                                                           });
-                                    });
+        return std::any_of(group.begin(), group.end(),
+                           [&producing_func](const Function &f) {
+            return (f.name() == producing_func.name());
+        });
+    });
     internal_assert(iter != fused_groups.end());
     return iter - fused_groups.begin();
 }
@@ -301,8 +301,8 @@ public:
                     Expr cond_val = std::accumulate(
                         predicates.begin(), predicates.end(), val,
                         [](const auto &acc, const auto &pred) {
-                            return Call::make(acc.type(), Call::if_then_else, {likely(pred), acc}, Call::PureIntrinsic);
-                        });
+                        return Call::make(acc.type(), Call::if_then_else, {likely(pred), acc}, Call::PureIntrinsic);
+                    });
                     result[i].emplace_back(const_true(), cond_val);
                 }
             }

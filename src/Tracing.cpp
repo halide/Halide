@@ -412,49 +412,49 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
                 const string &func_name,
                 const vector<Type> &func_types  //
             ) {
-                Expr space = Expr(" ");
+            Expr space = Expr(" ");
 
-                vector<Expr> strings;
-                strings.emplace_back("func_type_and_dim:");
+            vector<Expr> strings;
+            strings.emplace_back("func_type_and_dim:");
+            strings.push_back(space);
+            strings.emplace_back((int)func_types.size());
+            for (const auto &func_type : func_types) {
                 strings.push_back(space);
-                strings.emplace_back((int)func_types.size());
-                for (const auto &func_type : func_types) {
-                    strings.push_back(space);
-                    strings.emplace_back((int)func_type.code());
-                    strings.push_back(space);
-                    strings.emplace_back(func_type.bits());
-                    strings.push_back(space);
-                    strings.emplace_back(func_type.lanes());
-                }
-                auto it = bt.find(func_name);
-                internal_assert(it != bt.end());
-                const Box &box = it->second;
+                strings.emplace_back((int)func_type.code());
                 strings.push_back(space);
-                strings.emplace_back((int)box.bounds.size());
-                for (const Interval &i : box.bounds) {
-                    internal_assert(i.min.defined() && i.max.defined());
-                    if (i.is_bounded()) {
-                        strings.push_back(space);
-                        strings.push_back(i.min);
-                        strings.push_back(space);
-                        // Emit as (min, extent) rather than (min, max)
-                        strings.push_back(i.max - i.min + Expr(1));
-                    } else {
-                        // This should really only happen for unusual cases
-                        // that we won't end up realizing, so we can just
-                        // use any numeric values.
-                        strings.push_back(space);
-                        strings.emplace_back(0);
-                        strings.push_back(space);
-                        strings.emplace_back(0);
-                    }
+                strings.emplace_back(func_type.bits());
+                strings.push_back(space);
+                strings.emplace_back(func_type.lanes());
+            }
+            auto it = bt.find(func_name);
+            internal_assert(it != bt.end());
+            const Box &box = it->second;
+            strings.push_back(space);
+            strings.emplace_back((int)box.bounds.size());
+            for (const Interval &i : box.bounds) {
+                internal_assert(i.min.defined() && i.max.defined());
+                if (i.is_bounded()) {
+                    strings.push_back(space);
+                    strings.push_back(i.min);
+                    strings.push_back(space);
+                    // Emit as (min, extent) rather than (min, max)
+                    strings.push_back(i.max - i.min + Expr(1));
+                } else {
+                    // This should really only happen for unusual cases
+                    // that we won't end up realizing, so we can just
+                    // use any numeric values.
+                    strings.push_back(space);
+                    strings.emplace_back(0);
+                    strings.push_back(space);
+                    strings.emplace_back(0);
                 }
+            }
 
-                builder.func = func_name;
-                builder.trace_tag_expr =
-                    Call::make(type_of<const char *>(), Call::stringify, strings, Call::PureIntrinsic);
-                return Block::make(Evaluate::make(builder.build()), std::move(s));
-            };
+            builder.func = func_name;
+            builder.trace_tag_expr =
+                Call::make(type_of<const char *>(), Call::stringify, strings, Call::PureIntrinsic);
+            return Block::make(Evaluate::make(builder.build()), std::move(s));
+        };
 
         for (const auto &o : reverse_view(order)) {
             if (auto p = tracing.funcs_touched.find(o); p != tracing.funcs_touched.end()) {

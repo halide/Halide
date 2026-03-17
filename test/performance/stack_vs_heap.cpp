@@ -63,8 +63,8 @@ int main(int argc, char **argv) {
             Buffer<float> out(sz, 1024);
             task_size.set(1);
             double t = 1e3 * Tools::benchmark(10, 1 + 100 / sz, [&]() {
-                           g.realize(out);
-                       });
+                g.realize(out);
+            });
             times[c] += t;
         }
     }

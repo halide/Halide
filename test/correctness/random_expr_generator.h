@@ -241,11 +241,11 @@ public:
             // Select
             ops.push_back(
                 [&]() -> Expr {
-                    auto c = random_condition(rng, t, depth, true);
-                    auto e1 = random_expr(rng, t, depth, overflow_undef);
-                    auto e2 = random_expr(rng, t, depth, overflow_undef);
-                    return select(c, e1, e2);
-                });
+                auto c = random_condition(rng, t, depth, true);
+                auto e1 = random_expr(rng, t, depth, overflow_undef);
+                auto e2 = random_expr(rng, t, depth, overflow_undef);
+                return select(c, e1, e2);
+            });
         }
         // Cast
         if (gen_cast) {

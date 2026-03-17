@@ -794,10 +794,10 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
                     {"ceil_f32", std::ceil},
                     {"floor_f32", std::floor},
                     {Call::get_intrinsic_name(Call::round), [](double a) -> double {
-                         std::fesetround(FE_TONEAREST);
-                         a = std::nearbyint(a);
-                         return a;
-                     }},
+                std::fesetround(FE_TONEAREST);
+                a = std::nearbyint(a);
+                return a;
+            }},
                     {"trunc_f32", std::trunc},
                 };
             auto it = pure_externs_truncation.find(op->name);

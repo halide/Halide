@@ -17,16 +17,16 @@ void define_argument(py::module &m) {
         py::class_<Argument>(m, "Argument")
             .def(py::init<>())
             .def(py::init([](const OutputImageParam &im) -> Argument {
-                     return im;
-                 }),
+        return im;
+    }),
                  py::arg("im"))
             .def(py::init([](const ImageParam &im) -> Argument {
-                     return im;
-                 }),
+        return im;
+    }),
                  py::arg("im"))
             .def(py::init([](const Param<> &param) -> Argument {
-                     return param;
-                 }),
+        return param;
+    }),
                  py::arg("param"))
             .def(py::init<Buffer<>>(), py::arg("buffer"))
             .def_readwrite("name", &Argument::name)

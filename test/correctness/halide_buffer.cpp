@@ -276,8 +276,7 @@ int main(int argc, char **argv) {
         });
         a.for_each_value([&](float &a, float b) {
             a = 2 * b;
-        },
-                         b);
+        }, b);
 
         if (counter != W * H * C) {
             printf("for_each_value didn't hit every element\n");
@@ -416,8 +415,7 @@ int main(int argc, char **argv) {
         a.for_each_value([&](int a_value, const int &b_value, int &c_value_ref) {
             counter += 1;
             c_value_ref = 1;
-        },
-                         b, c);
+        }, b, c);
         assert(counter == 5 * 4 * 3);
         assert(a.all_equal(0));
         assert(b.all_equal(0));
@@ -427,8 +425,7 @@ int main(int argc, char **argv) {
         c.for_each_value([&](int &c_value_ref, const int &b_value, int a_value) {
             counter += 1;
             c_value_ref = 2;
-        },
-                         b, a);
+        }, b, a);
         assert(counter == 5 * 4 * 3);
         assert(a.all_equal(0));
         assert(b.all_equal(0));
@@ -438,8 +435,7 @@ int main(int argc, char **argv) {
         a_const.for_each_value([&](int a_value, const int &b_value, int &c_value_ref) {
             counter += 1;
             c_value_ref = 1;
-        },
-                               b_const, c);
+        }, b_const, c);
         assert(counter == 5 * 4 * 3);
         assert(a.all_equal(0));
         assert(b.all_equal(0));
@@ -449,8 +445,7 @@ int main(int argc, char **argv) {
         c.for_each_value([&](int &c_value_ref, const int &b_value, int a_value) {
             counter += 1;
             c_value_ref = 2;
-        },
-                         b_const, a_const);
+        }, b_const, a_const);
         assert(counter == 5 * 4 * 3);
         assert(a.all_equal(0));
         assert(b.all_equal(0));

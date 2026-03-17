@@ -188,8 +188,8 @@ void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pa
             }
             const auto &it = std::find_if(o_iter->second.begin(), o_iter->second.end(),
                                           [&pair](const FusedPair &other) {
-                                              return (pair.func_1 == other.func_2) && (pair.func_2 == other.func_1);
-                                          });
+                return (pair.func_1 == other.func_2) && (pair.func_2 == other.func_1);
+            });
             user_assert(it == o_iter->second.end())
                 << "Found cyclic dependencies between compute_with of "
                 << pair.func_1 << " and " << pair.func_2 << "\n";
@@ -403,10 +403,10 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     for (auto &group : group_order) {
         std::sort(group.begin(), group.end(),
                   [&](const string &lhs, const string &rhs) {
-                      const auto &iter_lhs = std::find(temp.begin(), temp.end(), lhs);
-                      const auto &iter_rhs = std::find(temp.begin(), temp.end(), rhs);
-                      return iter_lhs < iter_rhs;
-                  });
+            const auto &iter_lhs = std::find(temp.begin(), temp.end(), lhs);
+            const auto &iter_rhs = std::find(temp.begin(), temp.end(), rhs);
+            return iter_lhs < iter_rhs;
+        });
     }
 
     // Collect the realization order of all functions within the pipeline.

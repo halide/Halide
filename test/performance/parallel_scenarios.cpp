@@ -59,12 +59,12 @@ int main(int argc, char **argv) {
             for (size_t t = 0; t < futures.size(); t++) {
                 futures[t] = thread_pool.async(
                     [&](size_t t) {
-                        bench_one();
-                        auto t_start = now();
-                        while (to_ns(now() - t_start) < 1e7 || times[t].size() < min_samples / num_tasks) {
-                            times[t].push_back(bench_one());
-                        }
-                    },
+                    bench_one();
+                    auto t_start = now();
+                    while (to_ns(now() - t_start) < 1e7 || times[t].size() < min_samples / num_tasks) {
+                        times[t].push_back(bench_one());
+                    }
+                },
                     t);
             }
             for (auto &f : futures) {

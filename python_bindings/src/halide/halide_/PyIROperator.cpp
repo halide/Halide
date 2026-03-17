@@ -151,17 +151,15 @@ void define_operators(py::module &m) {
 
     m.def(
         "print_when", [](const Expr &condition, const py::args &args) -> Expr {
-            return print_when(condition, collect_print_args(args));
-        },
-        py::arg("condition"));
+        return print_when(condition, collect_print_args(args));
+    }, py::arg("condition"));
 
     m.def(
         "require", [](const Expr &condition, const Expr &value, const py::args &args) -> Expr {
-            auto v = args_to_vector<Expr>(args);
-            v.insert(v.begin(), value);
-            return require(condition, v);
-        },
-        py::arg("condition"), py::arg("value"));
+        auto v = args_to_vector<Expr>(args);
+        v.insert(v.begin(), value);
+        return require(condition, v);
+    }, py::arg("condition"), py::arg("value"));
 
     m.def("lerp", &lerp);
     m.def("popcount", &popcount);
@@ -179,9 +177,8 @@ void define_operators(py::module &m) {
 
     m.def(
         "memoize_tag", [](const Expr &result, const py::args &cache_key_values) -> Expr {
-            return Internal::memoize_tag_helper(result, args_to_vector<Expr>(cache_key_values));
-        },
-        py::arg("result"));
+        return Internal::memoize_tag_helper(result, args_to_vector<Expr>(cache_key_values));
+    }, py::arg("result"));
 
     m.def("likely", &likely);
     m.def("likely_if_innermost", &likely_if_innermost);

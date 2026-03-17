@@ -353,8 +353,8 @@ void define_buffer(py::module &m) {
             // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
             // most notably, we can convert to an ndarray by calling numpy.array()
             .def_buffer([](Buffer<> &b) -> py::buffer_info {
-                return to_buffer_info(b, /*reverse_axes*/ true);
-            })
+        return to_buffer_info(b, /*reverse_axes*/ true);
+    })
 
             // This allows us to use any buffer-like python entity to create a Buffer<>
             // (most notably, an ndarray)
@@ -362,30 +362,28 @@ void define_buffer(py::module &m) {
             .def(py::init_alias<>())
             .def(py::init_alias<const Buffer<> &>())
             .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
-                     return Buffer<>(type, sizes, name);
-                 }),
+        return Buffer<>(type, sizes, name);
+    }),
                  py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
             .def(py::init([](Type type, const std::vector<int> &sizes, const std::vector<int> &storage_order, const std::string &name) -> Buffer<> {
-                     return Buffer<>(type, sizes, storage_order, name);
-                 }),
+        return Buffer<>(type, sizes, storage_order, name);
+    }),
                  py::arg("type"), py::arg("sizes"), py::arg("storage_order"), py::arg("name") = "")
 
             // Note that this exists solely to allow you to create a Buffer with a null host ptr;
             // this is necessary for some bounds-query operations (e.g. Func::infer_input_bounds).
             .def_static(
                 "make_bounds_query", [](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
-                    return Buffer<>(type, nullptr, sizes, name);
-                },
-                py::arg("type"), py::arg("sizes"), py::arg("name") = "")
+        return Buffer<>(type, nullptr, sizes, name);
+    }, py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
             .def_static("make_scalar", static_cast<Buffer<> (*)(Type, const std::string &)>(Buffer<>::make_scalar), py::arg("type"), py::arg("name") = "")
             .def_static("make_interleaved", static_cast<Buffer<> (*)(Type, int, int, int, const std::string &)>(Buffer<>::make_interleaved), py::arg("type"), py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("name") = "")
             .def_static(  //
                 "make_with_shape_of", [](const Buffer<> &buffer, const std::string &name) -> Buffer<> {
-                    return Buffer<>::make_with_shape_of(buffer, nullptr, nullptr, name);  //
-                },
-                py::arg("src"), py::arg("name") = "")
+        return Buffer<>::make_with_shape_of(buffer, nullptr, nullptr, name);  //
+    }, py::arg("src"), py::arg("name") = "")
 
             .def("set_name", &Buffer<>::set_name)
             .def("name", &Buffer<>::name)
@@ -410,166 +408,152 @@ void define_buffer(py::module &m) {
 
             .def("set_host_dirty",  //
                  [](Buffer<> &b, bool dirty) -> void {
-                     b.set_host_dirty(dirty);  //
-                 },
+        b.set_host_dirty(dirty);  //
+    },
                  py::arg("dirty") = true)
             .def("set_device_dirty",  //
                  [](Buffer<> &b, bool dirty) -> void {
-                     b.set_device_dirty(dirty);  //
-                 },
-                 py::arg("dirty") = true)
+        b.set_device_dirty(dirty);  //
+    }, py::arg("dirty") = true)
 
             .def("copy", &Buffer<>::copy)
             .def("copy_from", &Buffer<>::copy_from<void, Buffer<>::AnyDims>)
             .def("reverse_axes", [](Buffer<> &b) -> Buffer<> {
-                const int d = b.dimensions();
-                std::vector<int> order;
-                order.reserve(b.dimensions());
-                for (int i = 0; i < b.dimensions(); i++) {
-                    order.push_back(d - i - 1);
-                }
-                return b.transposed(order);  //
-            })
+        const int d = b.dimensions();
+        std::vector<int> order;
+        order.reserve(b.dimensions());
+        for (int i = 0; i < b.dimensions(); i++) {
+            order.push_back(d - i - 1);
+        }
+        return b.transposed(order);  //
+    })
 
             .def("add_dimension", static_cast<void (Buffer<>::*)()>(&Buffer<>::add_dimension))
 
             .def("allocate", [](Buffer<> &b) -> void {
-                b.allocate(nullptr, nullptr);  //
-            })
-            .def("deallocate", static_cast<void (Buffer<>::*)()>(&Buffer<>::deallocate))
+        b.allocate(nullptr, nullptr);  //
+    }).def("deallocate", static_cast<void (Buffer<>::*)()>(&Buffer<>::deallocate))
             .def("device_deallocate", static_cast<void (Buffer<>::*)()>(&Buffer<>::device_deallocate))
 
             .def("crop",  //
                  [](Buffer<> &b, int d, int min, int extent) -> void {
-                     b.crop(d, min, extent);  //
-                 },
-                 py::arg("dimension"), py::arg("min"), py::arg("extent"))
+        b.crop(d, min, extent);  //
+    }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
             .def("crop",  //
                  [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> void {
-                     b.crop(rect);  //
-                 },
+        b.crop(rect);  //
+    },
                  py::arg("rect"))
 
             .def("cropped",  //
                  [](Buffer<> &b, int d, int min, int extent) -> Buffer<> {
-                     return b.cropped(d, min, extent);  //
-                 },
-                 py::arg("dimension"), py::arg("min"), py::arg("extent"))
+        return b.cropped(d, min, extent);  //
+    }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
             .def("cropped",  //
                  [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> Buffer<> {
-                     return b.cropped(rect);  //
-                 },
+        return b.cropped(rect);  //
+    },
                  py::arg("rect"))
 
             .def("embed",  //
                  [](Buffer<> &b, int d, int pos) -> void {
-                     b.embed(d, pos);  //
-                 },
-                 py::arg("dimension"), py::arg("pos"))
+        b.embed(d, pos);  //
+    }, py::arg("dimension"), py::arg("pos"))
             .def("embedded",  //
                  [](Buffer<> &b, int d, int pos) -> Buffer<> {
-                     return b.embedded(d, pos);  //
-                 },
-                 py::arg("dimension"), py::arg("pos"))
+        return b.embedded(d, pos);  //
+    }, py::arg("dimension"), py::arg("pos"))
 
             .def("embed",  //
                  [](Buffer<> &b, int d) -> void {
-                     b.embed(d);  //
-                 },
+        b.embed(d);  //
+    },
                  py::arg("dimension"))
             .def("embedded",  //
                  [](Buffer<> &b, int d) -> Buffer<> {
-                     return b.embedded(d);  //
-                 },
+        return b.embedded(d);  //
+    },
                  py::arg("dimension"))
 
             .def("slice",  //
                  [](Buffer<> &b, int d, int pos) -> void {
-                     b.slice(d, pos);  //
-                 },
-                 py::arg("dimension"), py::arg("pos"))
+        b.slice(d, pos);  //
+    }, py::arg("dimension"), py::arg("pos"))
             .def("sliced",  //
                  [](Buffer<> &b, int d, int pos) -> Buffer<> {
-                     return b.sliced(d, pos);  //
-                 },
-                 py::arg("dimension"), py::arg("pos"))
+        return b.sliced(d, pos);  //
+    }, py::arg("dimension"), py::arg("pos"))
 
             .def("slice",  //
                  [](Buffer<> &b, int d) -> void {
-                     b.slice(d);  //
-                 },
+        b.slice(d);  //
+    },
                  py::arg("dimension"))
             .def("sliced",  //
                  [](Buffer<> &b, int d) -> Buffer<> {
-                     return b.sliced(d);  //
-                 },
+        return b.sliced(d);  //
+    },
                  py::arg("dimension"))
 
             .def("translate",  //
                  [](Buffer<> &b, int d, int dx) -> void {
-                     b.translate(d, dx);  //
-                 },
-                 py::arg("dimension"), py::arg("dx"))
+        b.translate(d, dx);  //
+    }, py::arg("dimension"), py::arg("dx"))
             .def("translate",  //
                  [](Buffer<> &b, const std::vector<int> &delta) -> void {
-                     b.translate(delta);  //
-                 },
+        b.translate(delta);  //
+    },
                  py::arg("delta"))
 
             .def("translated",  //
                  [](Buffer<> &b, int d, int dx) -> Buffer<> {
-                     return b.translated(d, dx);  //
-                 },
-                 py::arg("dimension"), py::arg("dx"))
+        return b.translated(d, dx);  //
+    }, py::arg("dimension"), py::arg("dx"))
             .def("translated",  //
                  [](Buffer<> &b, const std::vector<int> &delta) -> Buffer<> {
-                     return b.translated(delta);  //
-                 },
+        return b.translated(delta);  //
+    },
                  py::arg("delta"))
 
             .def("transpose",  //
                  [](Buffer<> &b, int d1, int d2) -> void {
-                     b.transpose(d1, d2);  //
-                 },
-                 py::arg("d1"), py::arg("d2"))
+        b.transpose(d1, d2);  //
+    }, py::arg("d1"), py::arg("d2"))
 
             .def("transposed",  //
                  [](Buffer<> &b, int d1, int d2) -> Buffer<> {
-                     return b.transposed(d1, d2);  //
-                 },
-                 py::arg("d1"), py::arg("d2"))
+        return b.transposed(d1, d2);  //
+    }, py::arg("d1"), py::arg("d2"))
 
             .def("transpose",  //
                  [](Buffer<> &b, const std::vector<int> &order) -> void {
-                     b.transpose(order);  //
-                 },
+        b.transpose(order);  //
+    },
                  py::arg("order"))
 
             .def("transposed",  //
                  [](Buffer<> &b, const std::vector<int> &order) -> Buffer<> {
-                     return b.transposed(order);  //
-                 },
+        return b.transposed(order);  //
+    },
                  py::arg("order"))
 
             .def("dim",  //
                  [](Buffer<> &b, int dimension) -> BufferDimension {
-                     return b.dim(dimension);  //
-                 },
-                 py::arg("dimension"), py::keep_alive<0, 1>()  // Keep Buffer<> alive while Dimension exists
+        return b.dim(dimension);                     //
+    }, py::arg("dimension"), py::keep_alive<0, 1>()  // Keep Buffer<> alive while Dimension exists
                  )
 
             .def("for_each_element",  //
                  [](Buffer<> &b, py::function f) -> void {
-                     const int d = b.dimensions();
-                     std::vector<int> pos_v(d, 0);
-                     b.for_each_element([&f, &pos_v](const int *pos) -> void {
-                         for (size_t i = 0; i < pos_v.size(); ++i) {
-                             pos_v[i] = pos[i];
-                         }
-                         f(pos_v);
-                     });  //
-                 },
-                 py::arg("f"))
+        const int d = b.dimensions();
+        std::vector<int> pos_v(d, 0);
+        b.for_each_element([&f, &pos_v](const int *pos) -> void {
+            for (size_t i = 0; i < pos_v.size(); ++i) {
+                pos_v[i] = pos[i];
+            }
+            f(pos_v);
+        });  //
+    }, py::arg("f"))
 
             .def("fill", &call_fill, py::arg("value"))
             .def("all_equal", &call_all_equal, py::arg("value"))
@@ -582,90 +566,85 @@ void define_buffer(py::module &m) {
             // }, py::arg("f"))
 
             .def("copy_to_host", [](Buffer<> &b) -> int {  //
-                return b.copy_to_host(nullptr);
-            })
+        return b.copy_to_host(nullptr);
+    })
             .def("device_detach_native", [](Buffer<> &b) -> int {  //
-                return b.device_detach_native(nullptr);
-            })
+        return b.device_detach_native(nullptr);
+    })
             .def("device_free", [](Buffer<> &b) -> int {  //
-                return b.device_free(nullptr);
-            })
+        return b.device_free(nullptr);
+    })
             .def("device_sync", [](Buffer<> &b) -> int {  //
-                return b.device_sync(nullptr);
-            })
+        return b.device_sync(nullptr);
+    })
 
             .def("copy_to_device", [](Buffer<> &b, const Target &target) -> int {  //
-                return b.copy_to_device(to_jit_target(target));
-            },
-                 py::arg("target") = Target())
+        return b.copy_to_device(to_jit_target(target));
+    }, py::arg("target") = Target())
 
             .def("copy_to_device", [](Buffer<> &b, const DeviceAPI &d, const Target &target) -> int {  //
-                return b.copy_to_device(d, to_jit_target(target));
-            },
-                 py::arg("device_api"), py::arg("target") = Target())
+        return b.copy_to_device(d, to_jit_target(target));
+    }, py::arg("device_api"), py::arg("target") = Target())
             .def("device_malloc", [](Buffer<> &b, const Target &target) -> int {  //
-                return b.device_malloc(to_jit_target(target));
-            },
-                 py::arg("target") = Target())
+        return b.device_malloc(to_jit_target(target));
+    }, py::arg("target") = Target())
 
             .def("device_malloc", [](Buffer<> &b, const DeviceAPI &d, const Target &target) -> int {  //
-                return b.device_malloc(d, to_jit_target(target));
-            },
-                 py::arg("device_api"), py::arg("target") = Target())
+        return b.device_malloc(d, to_jit_target(target));
+    }, py::arg("device_api"), py::arg("target") = Target())
 
             .def(           //
                 "set_min",  //
                 [](Buffer<> &b, const std::vector<int> &mins) -> void {
-                    if (mins.size() > (size_t)b.dimensions()) {
-                        throw py::value_error("Too many arguments");
-                    }
-                    b.set_min(mins);  //
-                },
+        if (mins.size() > (size_t)b.dimensions()) {
+            throw py::value_error("Too many arguments");
+        }
+        b.set_min(mins);  //
+    },
                 py::arg("mins"))
 
             .def(  //
                 "contains", [](Buffer<> &b, const std::vector<int> &coords) -> bool {
-                    if (coords.size() > (size_t)b.dimensions()) {
-                        throw py::value_error("Too many arguments");
-                    }
-                    return b.contains(coords);  //
-                },
-                py::arg("coords"))
+        if (coords.size() > (size_t)b.dimensions()) {
+            throw py::value_error("Too many arguments");
+        }
+        return b.contains(coords);  //
+    }, py::arg("coords"))
 
             .def("__getitem__", [](Buffer<> &buf, const int &pos) -> py::object {  //
-                return buffer_getitem_operator(buf, {pos});
-            })
+        return buffer_getitem_operator(buf, {pos});
+    })
             .def("__getitem__", [](Buffer<> &buf, const std::vector<int> &pos) -> py::object {  //
-                return buffer_getitem_operator(buf, pos);
-            })
+        return buffer_getitem_operator(buf, pos);
+    })
 
             .def("__getitem__", [](Buffer<> &buf, const Expr &pos) -> Expr {  //
-                return buf(std::vector<Expr>{pos});
-            })
+        return buf(std::vector<Expr>{pos});
+    })
             .def("__getitem__", [](Buffer<> &buf, const std::vector<Expr> &pos) -> Expr {  //
-                return buf(pos);
-            })
+        return buf(pos);
+    })
 
             .def("__setitem__", [](Buffer<> &buf, const int &pos, const py::object &value) -> py::object {  //
-                return buffer_setitem_operator(buf, {pos}, value);
-            })
+        return buffer_setitem_operator(buf, {pos}, value);
+    })
             .def("__setitem__", [](Buffer<> &buf, const std::vector<int> &pos, const py::object &value) -> py::object {  //
-                return buffer_setitem_operator(buf, pos, value);
-            })
+        return buffer_setitem_operator(buf, pos, value);
+    })
 
             .def("__repr__", [](const Buffer<> &b) -> std::string {
-                std::ostringstream o;
-                if (b.defined()) {
-                    o << "<halide.Buffer of type " << halide_type_to_string(b.type()) << " shape:" << get_buffer_shape(b) << ">";
-                } else {
-                    o << "<undefined halide.Buffer>";
-                }
-                return o.str();  //
-            })
+        std::ostringstream o;
+        if (b.defined()) {
+            o << "<halide.Buffer of type " << halide_type_to_string(b.type()) << " shape:" << get_buffer_shape(b) << ">";
+        } else {
+            o << "<undefined halide.Buffer>";
+        }
+        return o.str();  //
+    })
 
             .def("_get_raw_halide_buffer_t", [](const Buffer<> &b) -> uintptr_t {
-                return reinterpret_cast<uintptr_t>(b.raw_buffer());  //
-            });
+        return reinterpret_cast<uintptr_t>(b.raw_buffer());  //
+    });
 }
 
 }  // namespace PythonBindings

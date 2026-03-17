@@ -472,10 +472,10 @@ WEAK int halide_webgpu_device_sync(void *user_context, halide_buffer_t *) {
     wgpuQueueOnSubmittedWorkDone(
         context.queue,
         [](WGPUQueueWorkDoneStatus status, void *userdata) {
-            WorkDoneResult *result = (WorkDoneResult *)userdata;
-            result->status = status;
-            __atomic_clear(&result->complete, __ATOMIC_RELEASE);
-        },
+        WorkDoneResult *result = (WorkDoneResult *)userdata;
+        result->status = status;
+        __atomic_clear(&result->complete, __ATOMIC_RELEASE);
+    },
         &result);
 
     int error_code = error_scope.wait();
@@ -583,10 +583,10 @@ int do_copy_to_host(void *user_context, WgpuContext *context, uint8_t *dst,
         wgpuBufferMapAsync(
             context->staging_buffer, WGPUMapMode_Read, 0, num_bytes,
             [](WGPUBufferMapAsyncStatus status, void *userdata) {
-                BufferMapResult *result = (BufferMapResult *)userdata;
-                result->map_status = status;
-                __atomic_clear(&result->map_complete, __ATOMIC_RELEASE);
-            },
+            BufferMapResult *result = (BufferMapResult *)userdata;
+            result->map_status = status;
+            __atomic_clear(&result->map_complete, __ATOMIC_RELEASE);
+        },
             &result);
 
         while (__atomic_test_and_set(&result.map_complete, __ATOMIC_ACQUIRE)) {
@@ -837,25 +837,25 @@ WEAK int halide_webgpu_initialize_kernels(void *user_context, void **state_ptr, 
     if (!shader_cache.kernel_state_setup(
             user_context, state_ptr, context.device, shader_module,
             [&]() -> WGPUShaderModule {
-                ErrorScope error_scope(user_context, context.device);
+        ErrorScope error_scope(user_context, context.device);
 
-                WGPUShaderModuleWGSLDescriptor wgsl_desc{};
-                wgsl_desc.chain.next = nullptr;
-                wgsl_desc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-                wgsl_desc.code = src;
-                WGPUShaderModuleDescriptor desc{};
-                desc.nextInChain = (const WGPUChainedStruct *)(&wgsl_desc);
-                desc.label = nullptr;
-                WGPUShaderModule shader_module =
-                    wgpuDeviceCreateShaderModule(context.device, &desc);
+        WGPUShaderModuleWGSLDescriptor wgsl_desc{};
+        wgsl_desc.chain.next = nullptr;
+        wgsl_desc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
+        wgsl_desc.code = src;
+        WGPUShaderModuleDescriptor desc{};
+        desc.nextInChain = (const WGPUChainedStruct *)(&wgsl_desc);
+        desc.label = nullptr;
+        WGPUShaderModule shader_module =
+            wgpuDeviceCreateShaderModule(context.device, &desc);
 
-                int error_code = error_scope.wait();
-                if (error_code != halide_error_code_success) {
-                    return nullptr;  // from the lambda
-                }
+        int error_code = error_scope.wait();
+        if (error_code != halide_error_code_success) {
+            return nullptr;  // from the lambda
+        }
 
-                return shader_module;
-            })) {
+        return shader_module;
+    })) {
         return halide_error_code_generic_error;
     }
     halide_abort_if_false(user_context, shader_module != nullptr);

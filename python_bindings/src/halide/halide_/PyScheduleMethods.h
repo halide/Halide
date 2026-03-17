@@ -55,8 +55,8 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
              py::arg("previous"), py::arg("inners"), py::arg("factors"), py::arg("tail") = TailStrategy::Auto)
         .def("reorder", (T & (T::*)(const std::vector<VarOrRVar> &)) & T::reorder, py::arg("vars"))
         .def("reorder", [](T &t, const py::args &args) -> T & {
-            return t.reorder(args_to_vector<VarOrRVar>(args));
-        })
+        return t.reorder(args_to_vector<VarOrRVar>(args));
+    })
 
         .def("parallel", (T & (T::*)(const VarOrRVar &)) & T::parallel, py::arg("var"))
         .def("parallel", (T & (T::*)(const VarOrRVar &, const Expr &, TailStrategy)) & T::parallel, py::arg("var"), py::arg("task_size"), py::arg("tail") = TailStrategy::Auto)
@@ -104,9 +104,9 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
         .def("prefetch", (T & (T::*)(const Func &, const VarOrRVar &, const VarOrRVar &, Expr, PrefetchBoundStrategy)) & T::prefetch, py::arg("func"), py::arg("at"), py::arg("from"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
         .def("prefetch",  //
              [](T &t, const ImageParam &image, const VarOrRVar &at, const VarOrRVar &from, const Expr &offset, PrefetchBoundStrategy strategy) -> T & {
-                 // Templated function; specializing only on ImageParam for now
-                 return t.template prefetch<ImageParam>(image, at, from, offset, strategy);  //
-             },
+        // Templated function; specializing only on ImageParam for now
+        return t.template prefetch<ImageParam>(image, at, from, offset, strategy);  //
+    },
              py::arg("image"),       //
              py::arg("at"),          //
              py::arg("from"),        //

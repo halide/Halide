@@ -23,8 +23,8 @@ void define_expr(py::module &m) {
         py::class_<Expr>(m, "Expr")
             .def(py::init<>())
             .def(py::init([](bool b) {
-                return Internal::make_bool(b);
-            }))
+        return Internal::make_bool(b);
+    }))
             // PyBind11 searches in declared order,
             // int should be tried before float conversion
             .def(py::init<int>())
@@ -32,8 +32,8 @@ void define_expr(py::module &m) {
             // Python float is implemented by double
             // But Halide prohibits implicitly construct by double.
             .def(py::init([](double v) {
-                return double_to_expr_check(v);
-            }))
+        return double_to_expr_check(v);
+    }))
             .def(py::init<std::string>())
 
             // for implicitly_convertible
@@ -50,19 +50,18 @@ void define_expr(py::module &m) {
             .def("type", &Expr::type)
             .def("defined", &Expr::defined)
             .def("__repr__", [](const Expr &e) -> std::string {
-                std::ostringstream o;
-                if (e.defined()) {
-                    o << "<halide.Expr of type " << halide_type_to_string(e.type()) << ": " << e << ">";
-                } else {
-                    o << "<undefined halide.Expr>";
-                }
-                return o.str();
-            })
-            .def("__str__", [](const Expr &e) -> std::string {
-                std::ostringstream o;
-                o << e;
-                return o.str();
-            });
+        std::ostringstream o;
+        if (e.defined()) {
+            o << "<halide.Expr of type " << halide_type_to_string(e.type()) << ": " << e << ">";
+        } else {
+            o << "<undefined halide.Expr>";
+        }
+        return o.str();
+    }).def("__str__", [](const Expr &e) -> std::string {
+        std::ostringstream o;
+        o << e;
+        return o.str();
+    });
 
     add_binary_operators(expr_class);
 
@@ -92,17 +91,17 @@ void define_expr(py::module &m) {
         py::class_<Range>(m, "Range")
             .def(py::init<>())
             .def(py::init([](const Expr &min, const Expr &extent) -> Range {
-                return Range(min, extent);
-            }))
+        return Range(min, extent);
+    }))
             // Allow implicit conversion from py::tuple -> Range, iff py::tuple.size() == 2
             .def(py::init([](const py::tuple &t) -> Range {
-                if (t.size() != 2) {
-                    throw py::value_error("Halide::Range requires exactly two values");
-                }
-                Expr min = t[0].cast<Expr>();
-                Expr extent = t[1].cast<Expr>();
-                return Range(min, extent);
-            }))
+        if (t.size() != 2) {
+            throw py::value_error("Halide::Range requires exactly two values");
+        }
+        Expr min = t[0].cast<Expr>();
+        Expr extent = t[1].cast<Expr>();
+        return Range(min, extent);
+    }))
             .def_readwrite("min", &Range::min)
             .def_readwrite("extent", &Range::extent);
 

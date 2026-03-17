@@ -13,9 +13,8 @@ void add_scalar_methods(py::class_<Parameter> &parameter_class) {
         .def("scalar", &Parameter::scalar<TYPE>)
         .def(
             "set_scalar", [](Parameter &parameter, TYPE value) -> void {
-                parameter.set_scalar<TYPE>(value);
-            },
-            py::arg("value"));
+        parameter.set_scalar<TYPE>(value);
+    }, py::arg("value"));
 }
 
 }  // namespace
@@ -31,25 +30,23 @@ void define_parameter(py::module &m) {
             .def(py::init<const Type &, bool, int>())
             .def(py::init<const Type &, bool, int, const std::string &>())
             .def("_to_argument", [](const Parameter &p) -> Argument {
-                return Argument(p.name(),
-                                p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-                                p.type(),
-                                p.dimensions(),
-                                p.get_argument_estimates());
-            })
-            .def("__repr__", [](const Parameter &p) -> std::string {
-                std::ostringstream o;
-                o << "<halide.Parameter '" << p.name() << "'";
-                if (!p.defined()) {
-                    o << " (undefined)";
-                } else {
-                    // TODO: add dimensions to this
-                    o << " type " << halide_type_to_string(p.type());
-                }
-                o << ">";
-                return o.str();
-            })
-            .def("type", &Parameter::type)
+        return Argument(p.name(),
+                        p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
+                        p.type(),
+                        p.dimensions(),
+                        p.get_argument_estimates());
+    }).def("__repr__", [](const Parameter &p) -> std::string {
+        std::ostringstream o;
+        o << "<halide.Parameter '" << p.name() << "'";
+        if (!p.defined()) {
+            o << " (undefined)";
+        } else {
+            // TODO: add dimensions to this
+            o << " type " << halide_type_to_string(p.type());
+        }
+        o << ">";
+        return o.str();
+    }).def("type", &Parameter::type)
             .def("dimensions", &Parameter::dimensions)
             .def("name", &Parameter::name)
             .def("is_buffer", &Parameter::is_buffer)

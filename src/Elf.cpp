@@ -766,8 +766,8 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     std::vector<std::pair<const Symbol *, const Symbol *>> sorted_symbols(symbols.begin(), symbols.end());
     std::sort(sorted_symbols.begin(), sorted_symbols.end(),
               [&](const auto &lhs, const auto &rhs) {
-                  return lhs.first->get_name() < rhs.first->get_name();
-              });
+        return lhs.first->get_name() < rhs.first->get_name();
+    });
 
     std::map<const Symbol *, uint16_t> symbol_idxs;
     uint64_t local_count = 0;

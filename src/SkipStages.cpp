@@ -452,11 +452,11 @@ protected:
         Expr relaxed =
             mutate_with(e,
                         [&](auto *self, const Call *op) {
-                            if (op->call_type == Call::Halide && op->name == func) {
-                                return cast(op->type, var);
-                            }
-                            return self->visit_base(op);
-                        });
+            if (op->call_type == Call::Halide && op->name == func) {
+                return cast(op->type, var);
+            }
+            return self->visit_base(op);
+        });
         return relax_over_var(relaxed, var_name);
     }
 
@@ -843,25 +843,25 @@ Stmt skip_stages(const Stmt &stmt,
     // We want to run this pass starting at the skip stages marker
     return mutate_with(stmt,  //
                        [&](auto *self, const Block *op) {
-                           const Evaluate *eval = op->first.as<Evaluate>();
-                           const Call *call = eval ? eval->value.as<Call>() : nullptr;
-                           if (call && call->is_intrinsic(Call::skip_stages_marker)) {
-                               return run_pass(op->rest);
-                           } else {
-                               return self->visit_base(op);
-                           }  //
-                       },
+        const Evaluate *eval = op->first.as<Evaluate>();
+        const Call *call = eval ? eval->value.as<Call>() : nullptr;
+        if (call && call->is_intrinsic(Call::skip_stages_marker)) {
+            return run_pass(op->rest);
+        } else {
+            return self->visit_base(op);
+        }  //
+    },
                        [&](auto *self, const Evaluate *eval) {
-                           // It's technically possible that *nothing*
-                           // follows the skip stages marker, if the
-                           // pipeline is a no-op, in which case we just drop the marker.
-                           if (const Call *call = eval->value.as<Call>();
-                               call && call->is_intrinsic(Call::skip_stages_marker)) {
-                               return Evaluate::make(0);
-                           } else {
-                               return self->visit_base(eval);
-                           }  //
-                       });
+        // It's technically possible that *nothing*
+        // follows the skip stages marker, if the
+        // pipeline is a no-op, in which case we just drop the marker.
+        if (const Call *call = eval->value.as<Call>();
+            call && call->is_intrinsic(Call::skip_stages_marker)) {
+            return Evaluate::make(0);
+        } else {
+            return self->visit_base(eval);
+        }  //
+    });
 }
 
 }  // namespace Internal

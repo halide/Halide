@@ -1182,40 +1182,40 @@ void CodeGen_LLVM::optimize_module() {
         // See https://bugs.llvm.org/show_bug.cgi?id=45244
         pb.registerOptimizerLastEPCallback(
             [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase) {
-                mpm.addPass(RelLookupTableConverterPass());
-            });
+            mpm.addPass(RelLookupTableConverterPass());
+        });
     }
 
     if (get_target().has_feature(Target::SanitizerCoverage)) {
         pb.registerOptimizerLastEPCallback(
             [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase) {
-                SanitizerCoverageOptions sanitizercoverage_options;
-                // Mirror what -fsanitize=fuzzer-no-link would enable.
-                // See https://github.com/halide/Halide/issues/6528
-                sanitizercoverage_options.CoverageType = SanitizerCoverageOptions::SCK_Edge;
-                sanitizercoverage_options.IndirectCalls = true;
-                sanitizercoverage_options.TraceCmp = true;
-                sanitizercoverage_options.Inline8bitCounters = true;
-                sanitizercoverage_options.PCTable = true;
-                // Due to TLS differences, stack depth tracking is only enabled on Linux
-                if (get_target().os == Target::OS::Linux) {
-                    sanitizercoverage_options.StackDepth = true;
-                }
-                mpm.addPass(SanitizerCoveragePass(sanitizercoverage_options));
-            });
+            SanitizerCoverageOptions sanitizercoverage_options;
+            // Mirror what -fsanitize=fuzzer-no-link would enable.
+            // See https://github.com/halide/Halide/issues/6528
+            sanitizercoverage_options.CoverageType = SanitizerCoverageOptions::SCK_Edge;
+            sanitizercoverage_options.IndirectCalls = true;
+            sanitizercoverage_options.TraceCmp = true;
+            sanitizercoverage_options.Inline8bitCounters = true;
+            sanitizercoverage_options.PCTable = true;
+            // Due to TLS differences, stack depth tracking is only enabled on Linux
+            if (get_target().os == Target::OS::Linux) {
+                sanitizercoverage_options.StackDepth = true;
+            }
+            mpm.addPass(SanitizerCoveragePass(sanitizercoverage_options));
+        });
     }
 
     if (get_target().has_feature(Target::ASAN)) {
         pb.registerPipelineStartEPCallback(
             [](ModulePassManager &mpm, OptimizationLevel) {
-                AddressSanitizerOptions asan_options;  // default values are good...
-                asan_options.UseAfterScope = true;     // ...except this one
-                constexpr bool use_global_gc = false;
-                constexpr bool use_odr_indicator = true;
-                constexpr auto destructor_kind = AsanDtorKind::Global;
-                mpm.addPass(AddressSanitizerPass(
-                    asan_options, use_global_gc, use_odr_indicator, destructor_kind));
-            });
+            AddressSanitizerOptions asan_options;  // default values are good...
+            asan_options.UseAfterScope = true;     // ...except this one
+            constexpr bool use_global_gc = false;
+            constexpr bool use_odr_indicator = true;
+            constexpr auto destructor_kind = AsanDtorKind::Global;
+            mpm.addPass(AddressSanitizerPass(
+                asan_options, use_global_gc, use_odr_indicator, destructor_kind));
+        });
     }
 
     // Target::MSAN handling is sprinkled throughout the codebase,
@@ -1224,9 +1224,9 @@ void CodeGen_LLVM::optimize_module() {
     if (get_target().has_feature(Target::TSAN)) {
         pb.registerOptimizerLastEPCallback(
             [](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase) {
-                mpm.addPass(
-                    createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
-            });
+            mpm.addPass(
+                createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
+        });
     }
 
     for (auto &function : *module) {

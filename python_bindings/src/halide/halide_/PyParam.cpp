@@ -12,27 +12,26 @@ template<typename TYPE>
 void add_param_methods(py::class_<Param<>> &param_class) {
     param_class
         .def(py::init([](const Type &type, TYPE value) {
-                 Param<> param(type);
-                 param.set<TYPE>(value);
-                 return param;
-             }),
+        Param<> param(type);
+        param.set<TYPE>(value);
+        return param;
+    }),
              py::arg("type"), py::arg("value"))
         .def(py::init([](const Type &type, const std::string &name, TYPE value) {
-                 Param<> param(type, name);
-                 param.set<TYPE>(value);
-                 return param;
-             }),
+        Param<> param(type, name);
+        param.set<TYPE>(value);
+        return param;
+    }),
              py::arg("type"), py::arg("name"), py::arg("value"))
         .def(
             "set", [](Param<> &param, TYPE value) -> void {
-                param.set<TYPE>(value);
-            },
+        param.set<TYPE>(value);
+    },
             py::arg("value"))
         .def("set_estimate",  //
              [](Param<> &param, TYPE value) -> void {
-                 param.set_estimate<TYPE>(value);  //
-             },
-             py::arg("value"));
+        param.set_estimate<TYPE>(value);  //
+    }, py::arg("value"));
 }
 
 }  // namespace
@@ -53,15 +52,15 @@ void define_param(py::module &m) {
             .def("min_value", &Param<>::min_value)
             .def("max_value", &Param<>::max_value)
             .def("parameter", [](const Param<> &param) -> Parameter {
-                return param.parameter();
-            })
+        return param.parameter();
+    })
 
             .def("__repr__", [](const Param<> &param) -> std::string {
-                std::ostringstream o;
-                o << "<halide.Param '" << param.name() << "'"
-                  << " type " << halide_type_to_string(param.type()) << ">";
-                return o.str();
-            });
+        std::ostringstream o;
+        o << "<halide.Param '" << param.name() << "'"
+          << " type " << halide_type_to_string(param.type()) << ">";
+        return o.str();
+    });
 
     add_param_methods<bool>(param_class);
     add_param_methods<uint8_t>(param_class);

@@ -521,8 +521,8 @@ class OptimizePatterns : public IRMutator {
             }
             std::stable_sort(mpys.begin(), mpys.end(),
                              [](const MulExpr &m1, const MulExpr &m2) {
-                                 return m1.first.as<Shuffle>()->slice_begin() < m2.first.as<Shuffle>()->slice_begin();
-                             });
+                return m1.first.as<Shuffle>()->slice_begin() < m2.first.as<Shuffle>()->slice_begin();
+            });
             return;
         } else if (const Load *first_load = mpys[0].first.as<Load>()) {
             const Ramp *first_ramp = first_load->index.as<Ramp>();

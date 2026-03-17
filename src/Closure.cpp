@@ -125,8 +125,8 @@ Expr Closure::pack_into_struct() const {
     // memory. We don't actually rely on this, it's just nice to have.
     std::stable_sort(elements.begin(), elements.end(),
                      [&](const Expr &a, const Expr &b) {
-                         return a.type().bytes() > b.type().bytes();
-                     });
+        return a.type().bytes() > b.type().bytes();
+    });
 
     Expr result = Call::make(Handle(),
                              Call::make_struct, elements, Call::Intrinsic);
@@ -142,12 +142,12 @@ Stmt Closure::unpack_from_struct(const Expr &e, const Stmt &s) const {
     Expr prototype =
         mutate_with(packed,
                     [](auto *self, const Expr &e) {
-                        if (!e.as<Call>()) {
-                            return make_zero(e.type());
-                        } else {
-                            return self->mutate_base(e);
-                        }
-                    });
+        if (!e.as<Call>()) {
+            return make_zero(e.type());
+        } else {
+            return self->mutate_base(e);
+        }
+    });
     string prototype_name = unique_name("closure_prototype");
     Expr prototype_var = Variable::make(Handle(), prototype_name);
 

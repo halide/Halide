@@ -74,13 +74,13 @@ inline int check_call_graphs(Halide::Pipeline p, CallGraphs &expected) {
             std::string expected_str = std::accumulate(
                 expected_callees.begin(), expected_callees.end(), std::string{},
                 [](const std::string &a, const std::string &b) {
-                    return a.empty() ? b : a + ", " + b;
-                });
+                return a.empty() ? b : a + ", " + b;
+            });
             std::string result_str = std::accumulate(
                 result_callees.begin(), result_callees.end(), std::string{},
                 [](const std::string &a, const std::string &b) {
-                    return a.empty() ? b : a + ", " + b;
-                });
+                return a.empty() ? b : a + ", " + b;
+            });
 
             printf("Expect callees of %s to be (%s); got (%s) instead\n",
                    iter.first.c_str(), expected_str.c_str(), result_str.c_str());

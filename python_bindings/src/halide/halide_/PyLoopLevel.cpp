@@ -16,12 +16,12 @@ void define_loop_level(py::module &m) {
             .def_static("inlined", &LoopLevel::inlined)
             .def_static("root", &LoopLevel::root)
             .def("__repr__", [](const LoopLevel &b) -> std::string {
-                std::ostringstream o;
-                // b.to_string() fails for locked LoopLevels. Just output something generic.
-                // o << "<halide.LoopLevel " << (b.defined() ? b.to_string() : "UNDEF") << ">";
-                o << "<halide.LoopLevel>";
-                return o.str();
-            });
+        std::ostringstream o;
+        // b.to_string() fails for locked LoopLevels. Just output something generic.
+        // o << "<halide.LoopLevel " << (b.defined() ? b.to_string() : "UNDEF") << ">";
+        o << "<halide.LoopLevel>";
+        return o.str();
+    });
 }
 
 }  // namespace PythonBindings

@@ -681,13 +681,13 @@ private:
         // then sort based on the ascending order of the max liveness stage.
         sort(allocations.begin(), allocations.end(),
              [](const SharedAllocation &lhs, const SharedAllocation &rhs) {
-                 if (lhs.liveness.min < rhs.liveness.min) {
-                     return true;
-                 } else if (lhs.liveness.min == rhs.liveness.min) {
-                     return lhs.liveness.max < rhs.liveness.max;
-                 }
-                 return false;
-             });
+            if (lhs.liveness.min < rhs.liveness.min) {
+                return true;
+            } else if (lhs.liveness.min == rhs.liveness.min) {
+                return lhs.liveness.max < rhs.liveness.max;
+            }
+            return false;
+        });
 
         vector<AllocGroup> mem_allocs;
         vector<int> free_spaces;  // Contains index to free spaces in mem_allocs
@@ -777,8 +777,8 @@ public:
             // to the widest type.
             sort(mem_allocs.begin(), mem_allocs.end(),
                  [](const AllocGroup &lhs, const AllocGroup &rhs) {
-                     return lhs.widest_type.bytes() > rhs.widest_type.bytes();
-                 });
+                return lhs.widest_type.bytes() > rhs.widest_type.bytes();
+            });
 
             for (const auto &alloc : mem_allocs) {
                 Type t = may_merge_allocs_of_different_type ? UInt(8) : alloc.widest_type;

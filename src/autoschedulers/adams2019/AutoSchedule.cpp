@@ -251,19 +251,19 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
     std::function<void(IntrusivePtr<State> &&)> enqueue_new_children =
         [&](IntrusivePtr<State> &&s) {
-            // Each child should have one more decision made than its parent state.
-            internal_assert(s->num_decisions_made == s->parent->num_decisions_made + 1);
+        // Each child should have one more decision made than its parent state.
+        internal_assert(s->num_decisions_made == s->parent->num_decisions_made + 1);
 
-            int progress = s->num_decisions_made * params.beam_size + expanded;
-            size_t max_progress = dag.nodes.size() * params.beam_size * 2;
+        int progress = s->num_decisions_made * params.beam_size + expanded;
+        size_t max_progress = dag.nodes.size() * params.beam_size * 2;
 
-            // Update the progress bar
-            tick.set(double(progress) / max_progress);
-            s->penalized = false;
+        // Update the progress bar
+        tick.set(double(progress) / max_progress);
+        s->penalized = false;
 
-            // Add the state to the list of states to evaluate
-            q.emplace(std::move(s));
-        };
+        // Add the state to the list of states to evaluate
+        q.emplace(std::move(s));
+    };
 
 #ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
     string cyos_str = get_env_variable("HL_CYOS");

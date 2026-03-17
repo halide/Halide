@@ -1259,25 +1259,25 @@ Function &Function::substitute_calls(const map<FunctionPtr, FunctionPtr> &substi
     // Replace all calls to functions listed in 'substitutions' with their wrappers.
     auto m = LambdaMutator{
         [&](auto *self, const Call *c) {
-            Expr expr = self->visit_base(c);
-            c = expr.as<Call>();
-            internal_assert(c);
+        Expr expr = self->visit_base(c);
+        c = expr.as<Call>();
+        internal_assert(c);
 
-            if ((c->call_type == Call::Halide) &&
-                c->func.defined() &&
-                substitutions.count(c->func)) {
-                auto it = substitutions.find(c->func);
-                internal_assert(it != substitutions.end())
-                    << "Function not in environment: " << c->func->name << "\n";
-                FunctionPtr subs = it->second;
-                debug(4) << "...Replace call to Func \"" << c->name << "\" with "
-                         << "\"" << subs->name << "\"\n";
-                expr = Call::make(c->type, subs->name, c->args, c->call_type,
-                                  subs, c->value_index,
-                                  c->image, c->param);
-            }
-            return expr;
-        }};
+        if ((c->call_type == Call::Halide) &&
+            c->func.defined() &&
+            substitutions.count(c->func)) {
+            auto it = substitutions.find(c->func);
+            internal_assert(it != substitutions.end())
+                << "Function not in environment: " << c->func->name << "\n";
+            FunctionPtr subs = it->second;
+            debug(4) << "...Replace call to Func \"" << c->name << "\" with "
+                     << "\"" << subs->name << "\"\n";
+            expr = Call::make(c->type, subs->name, c->args, c->call_type,
+                              subs, c->value_index,
+                              c->image, c->param);
+        }
+        return expr;
+    }};
 
     contents->mutate(&m);
     return *this;

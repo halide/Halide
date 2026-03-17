@@ -184,10 +184,10 @@ Expr perform_inline(Expr e, const map<string, Function> &env,
         if (!order.empty()) {
             std::sort(calls.begin(), calls.end(),
                       [&order](const string &lhs, const string &rhs) {
-                          const auto &iter_lhs = std::find(order.begin(), order.end(), lhs);
-                          const auto &iter_rhs = std::find(order.begin(), order.end(), rhs);
-                          return iter_lhs > iter_rhs;
-                      });
+                const auto &iter_lhs = std::find(order.begin(), order.end(), lhs);
+                const auto &iter_rhs = std::find(order.begin(), order.end(), rhs);
+                return iter_lhs > iter_rhs;
+            });
         }
 
         // Check if any of the calls are in the set of functions to be inlined.

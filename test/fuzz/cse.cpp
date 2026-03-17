@@ -28,47 +28,47 @@ Expr random_expr(FuzzingContext &fuzz, int depth, vector<pair<Expr, int>> &exprs
     }
     std::function<Expr()> build_next_expr[] = {
         [&]() {
-            // Can't use Var() here because that would require i32 values,
-            // which we are avoiding here because we don't want to end
-            // up with signed_integer_overflow()
-            return Variable::make(Int(16), "x");
-        },
+        // Can't use Var() here because that would require i32 values,
+        // which we are avoiding here because we don't want to end
+        // up with signed_integer_overflow()
+        return Variable::make(Int(16), "x");
+    },
         [&]() {
-            return Variable::make(Int(16), "y");
-        },
+        return Variable::make(Int(16), "y");
+    },
         [&]() {
-            return Variable::make(Int(16), "z");
-        },
+        return Variable::make(Int(16), "z");
+    },
         [&]() {
-            Expr next = random_expr(fuzz, depth - 1, exprs);
-            next += random_expr(fuzz, depth - 1, exprs);
-            return next;
-        },
+        Expr next = random_expr(fuzz, depth - 1, exprs);
+        next += random_expr(fuzz, depth - 1, exprs);
+        return next;
+    },
         [&]() {
-            Expr a = random_expr(fuzz, depth - 2, exprs);
-            Expr b = random_expr(fuzz, depth - 2, exprs);
-            Expr c = random_expr(fuzz, depth - 2, exprs);
-            Expr d = random_expr(fuzz, depth - 2, exprs);
-            return select(a > b, c, d);
-        },
+        Expr a = random_expr(fuzz, depth - 2, exprs);
+        Expr b = random_expr(fuzz, depth - 2, exprs);
+        Expr c = random_expr(fuzz, depth - 2, exprs);
+        Expr d = random_expr(fuzz, depth - 2, exprs);
+        return select(a > b, c, d);
+    },
         [&]() {
-            Expr a = random_expr(fuzz, depth - 1, exprs);
-            Expr b = random_expr(fuzz, depth - 1, exprs);
-            return i16(Let::make("x", a, b));
-        },
+        Expr a = random_expr(fuzz, depth - 1, exprs);
+        Expr b = random_expr(fuzz, depth - 1, exprs);
+        return i16(Let::make("x", a, b));
+    },
         [&]() {
-            Expr a = random_expr(fuzz, depth - 1, exprs);
-            Expr b = random_expr(fuzz, depth - 1, exprs);
-            return i16(Let::make("y", a, b));
-        },
+        Expr a = random_expr(fuzz, depth - 1, exprs);
+        Expr b = random_expr(fuzz, depth - 1, exprs);
+        return i16(Let::make("y", a, b));
+    },
         [&]() {
-            Expr a = random_expr(fuzz, depth - 1, exprs);
-            Expr b = random_expr(fuzz, depth - 1, exprs);
-            return i16(Let::make("z", a, b));
-        },
+        Expr a = random_expr(fuzz, depth - 1, exprs);
+        Expr b = random_expr(fuzz, depth - 1, exprs);
+        return i16(Let::make("z", a, b));
+    },
         [&]() {
-            return i16(fuzz.ConsumeIntegralInRange<int>(-5, 4));
-        },
+        return i16(fuzz.ConsumeIntegralInRange<int>(-5, 4));
+    },
     };
     Expr next = fuzz.PickValueInArray(build_next_expr)();
     exprs.emplace_back(next, depth);

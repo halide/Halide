@@ -253,8 +253,8 @@ py::object call_impl(const GeneratorFactory &factory,
 void pystub_init(pybind11::module &m, const GeneratorFactory &factory) {
     m.def(
         "call", [factory](const py::args &args, const py::kwargs &kwargs) -> py::object {
-            return call_impl(factory, args, kwargs);
-        });
+        return call_impl(factory, args, kwargs);
+    });
 }
 
 }  // namespace

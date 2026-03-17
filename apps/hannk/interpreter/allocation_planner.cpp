@@ -77,14 +77,14 @@ void AllocationPlanner::commit() {
 
     std::sort(block_requirements_sorted.begin(), block_requirements_sorted.end(),
               [](BlockRequirements *a, BlockRequirements *b) -> bool {
-                  // Sort in decreasing (well, really non-increasing) order by size.
-                  if (a->size_needed != b->size_needed) {
-                      return a->size_needed > b->size_needed;
-                  }
+        // Sort in decreasing (well, really non-increasing) order by size.
+        if (a->size_needed != b->size_needed) {
+            return a->size_needed > b->size_needed;
+        }
 
-                  // If sizes are equal, sort by increasing time of first use.
-                  return a->first_use < b->first_use;
-              });
+        // If sizes are equal, sort by increasing time of first use.
+        return a->first_use < b->first_use;
+    });
 
     // This is a list that we keep sorted (by offset) as we go along.
     // It just points to entries in block_requirements_sorted, so it's crucial

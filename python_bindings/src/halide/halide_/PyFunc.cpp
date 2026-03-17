@@ -22,8 +22,8 @@ void define_get(py::class_<Func> &func_class) {
     func_class
         .def("__getitem__",
              [](Func &func, const LHS &args) -> FuncRef {
-                 return func(args);
-             });
+        return func(args);
+    });
 }
 
 template<typename LHS, typename RHS>
@@ -56,19 +56,19 @@ void define_set_func_ref<double>(py::class_<Func> &func_class) {
     func_class
         .def("__setitem__",
              [](Func &func, const FuncRef &lhs, const double &rhs) {
-                 // Implicitly convert rhs to single precision. Issue warnings if
-                 // we detect loss of precision.
-                 float f = rhs;
-                 if (Internal::reinterpret_bits<uint64_t>(rhs) !=
-                     Internal::reinterpret_bits<uint64_t>((double)f)) {
-                     double diff = rhs - f;
-                     std::ostringstream os;
-                     os << "Loss of precision detected when casting " << rhs << " to a single precision float. The difference is " << diff << ".";
-                     std::string msg = os.str();
-                     PyErr_WarnEx(nullptr, msg.c_str(), 1);
-                 }
-                 func(lhs) = Expr(f);
-             });
+        // Implicitly convert rhs to single precision. Issue warnings if
+        // we detect loss of precision.
+        float f = rhs;
+        if (Internal::reinterpret_bits<uint64_t>(rhs) !=
+            Internal::reinterpret_bits<uint64_t>((double)f)) {
+            double diff = rhs - f;
+            std::ostringstream os;
+            os << "Loss of precision detected when casting " << rhs << " to a single precision float. The difference is " << diff << ".";
+            std::string msg = os.str();
+            PyErr_WarnEx(nullptr, msg.c_str(), 1);
+        }
+        func(lhs) = Expr(f);
+    });
 }
 
 py::object realization_to_object(const Realization &r) {
@@ -145,11 +145,11 @@ void define_func(py::module &m) {
             .def(
                 "realize",
                 [](Func &f, Buffer<> buffer, const Target &target) -> void {
-                    py::gil_scoped_release release;
+        py::gil_scoped_release release;
 
-                    PyJITUserContext juc;
-                    f.realize(&juc, buffer, target);
-                },
+        PyJITUserContext juc;
+        f.realize(&juc, buffer, target);
+    },
                 py::arg("dst"), py::arg("target") = Target())
 
             // It's important to have this overload of realize() go first:
@@ -161,26 +161,26 @@ void define_func(py::module &m) {
             .def(
                 "realize",
                 [](Func &f, const std::vector<int32_t> &sizes, const Target &target) -> py::object {
-                    std::optional<Realization> r;
-                    {
-                        py::gil_scoped_release release;
+        std::optional<Realization> r;
+        {
+            py::gil_scoped_release release;
 
-                        PyJITUserContext juc;
-                        r = f.realize(&juc, sizes, target);
-                    }
-                    return realization_to_object(*r);
-                },
+            PyJITUserContext juc;
+            r = f.realize(&juc, sizes, target);
+        }
+        return realization_to_object(*r);
+    },
                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 
             // This will actually allow a list-of-buffers as well as a tuple-of-buffers, but that's OK.
             .def(
                 "realize",
                 [](Func &f, std::vector<Buffer<>> buffers, const Target &t) -> void {
-                    py::gil_scoped_release release;
+        py::gil_scoped_release release;
 
-                    PyJITUserContext juc;
-                    f.realize(&juc, Realization(std::move(buffers)), t);
-                },
+        PyJITUserContext juc;
+        f.realize(&juc, Realization(std::move(buffers)), t);
+    },
                 py::arg("dst"), py::arg("target") = Target())
 
             .def("defined", &Func::defined)
@@ -189,9 +189,8 @@ void define_func(py::module &m) {
             .def("args", &Func::args)
             .def("value", &Func::value)
             .def("values", [](Func &func) -> py::tuple {
-                return to_python_tuple(func.values());
-            })
-            .def("defined", &Func::defined)
+        return to_python_tuple(func.values());
+    }).def("defined", &Func::defined)
             .def("outputs", &Func::outputs)
 
             .def("type", &Func::type)
@@ -203,8 +202,8 @@ void define_func(py::module &m) {
 
             .def("reorder_storage", (Func & (Func::*)(const std::vector<Var> &)) & Func::reorder_storage, py::arg("dims"))
             .def("reorder_storage", [](Func &func, const py::args &args) -> Func & {
-                return func.reorder_storage(args_to_vector<Var>(args));
-            })
+        return func.reorder_storage(args_to_vector<Var>(args));
+    })
 
             .def("compute_at", (Func & (Func::*)(const Func &, const Var &)) & Func::compute_at, py::arg("f"), py::arg("var"))
             .def("compute_at", (Func & (Func::*)(const Func &, const RVar &)) & Func::compute_at, py::arg("f"), py::arg("rvar"))
@@ -231,79 +230,64 @@ void define_func(py::module &m) {
 
             .def("compile_to",  //
                  [](Func &f, const std::map<OutputFileType, std::string> &output_files, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
-                     f.compile_to(output_files, args, fn_name, to_aot_target(target));  //
-                 },
-                 py::arg("outputs"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
+        f.compile_to(output_files, args, fn_name, to_aot_target(target));  //
+    }, py::arg("outputs"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
             .def("compile_to_bitcode",  //
                  [](Func &f, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
-                     f.compile_to_bitcode(filename, args, fn_name, to_aot_target(target));  //
-                 },
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
+        f.compile_to_bitcode(filename, args, fn_name, to_aot_target(target));  //
+    }, py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
             .def("compile_to_bitcode",  //
                  [](Func &f, const std::string &filename, const std::vector<Argument> &args, const Target &target) {
-                     f.compile_to_bitcode(filename, args, "", to_aot_target(target));  //
-                 },
-                 py::arg("filename"), py::arg("arguments"), py::arg("target") = Target())
+        f.compile_to_bitcode(filename, args, "", to_aot_target(target));  //
+    }, py::arg("filename"), py::arg("arguments"), py::arg("target") = Target())
             .def("compile_to_llvm_assembly",  //
                  [](Func &f, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
-                     f.compile_to_llvm_assembly(filename, args, fn_name, to_aot_target(target));  //
-                 },
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
+        f.compile_to_llvm_assembly(filename, args, fn_name, to_aot_target(target));  //
+    }, py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
             .def("compile_to_llvm_assembly",  //
                  [](Func &f, const std::string &filename, const std::vector<Argument> &args, const Target &target) {
-                     f.compile_to_llvm_assembly(filename, args, "", to_aot_target(target));  //
-                 },
-                 py::arg("filename"), py::arg("arguments"), py::arg("target") = Target())
+        f.compile_to_llvm_assembly(filename, args, "", to_aot_target(target));  //
+    }, py::arg("filename"), py::arg("arguments"), py::arg("target") = Target())
             .def("compile_to_object",  //
                  [](Func &f, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
-                     f.compile_to_object(filename, args, fn_name, to_aot_target(target));  //
-                 },
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
+        f.compile_to_object(filename, args, fn_name, to_aot_target(target));  //
+    }, py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
             .def("compile_to_object",  //
                  [](Func &f, const std::string &filename, const std::vector<Argument> &args, const Target &target) {
-                     f.compile_to_object(filename, args, "", to_aot_target(target));  //
-                 },
-                 py::arg("filename"), py::arg("arguments"), py::arg("target") = Target())
+        f.compile_to_object(filename, args, "", to_aot_target(target));  //
+    }, py::arg("filename"), py::arg("arguments"), py::arg("target") = Target())
             .def("compile_to_header",  //
                  [](Func &f, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
-                     f.compile_to_header(filename, args, fn_name, to_aot_target(target));  //
-                 },
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
+        f.compile_to_header(filename, args, fn_name, to_aot_target(target));  //
+    }, py::arg("filename"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
             .def("compile_to_assembly",  //
                  [](Func &f, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
-                     f.compile_to_assembly(filename, args, fn_name, to_aot_target(target));  //
-                 },
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
+        f.compile_to_assembly(filename, args, fn_name, to_aot_target(target));  //
+    }, py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
             .def("compile_to_assembly",  //
                  [](Func &f, const std::string &filename, const std::vector<Argument> &args, const Target &target) {
-                     f.compile_to_assembly(filename, args, "", to_aot_target(target));  //
-                 },
-                 py::arg("filename"), py::arg("arguments"), py::arg("target") = Target())
+        f.compile_to_assembly(filename, args, "", to_aot_target(target));  //
+    }, py::arg("filename"), py::arg("arguments"), py::arg("target") = Target())
             .def("compile_to_c",  //
                  [](Func &f, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
-                     f.compile_to_c(filename, args, fn_name, to_aot_target(target));  //
-                 },
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
+        f.compile_to_c(filename, args, fn_name, to_aot_target(target));  //
+    }, py::arg("filename"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
             .def("compile_to_lowered_stmt",  //
                  [](Func &f, const std::string &filename, const std::vector<Argument> &args, StmtOutputFormat fmt, const Target &target) {
-                     f.compile_to_lowered_stmt(filename, args, fmt, to_aot_target(target));  //
-                 },
-                 py::arg("filename"), py::arg("arguments"), py::arg("fmt") = Text, py::arg("target") = Target())
+        f.compile_to_lowered_stmt(filename, args, fmt, to_aot_target(target));  //
+    }, py::arg("filename"), py::arg("arguments"), py::arg("fmt") = Text, py::arg("target") = Target())
             .def("compile_to_conceptual_stmt",  //
                  [](Func &f, const std::string &filename, const std::vector<Argument> &args, StmtOutputFormat fmt, const Target &target) {
-                     f.compile_to_conceptual_stmt(filename, args, fmt, to_aot_target(target));  //
-                 },
-                 py::arg("filename"), py::arg("arguments"), py::arg("fmt") = Text, py::arg("target") = Target())
+        f.compile_to_conceptual_stmt(filename, args, fmt, to_aot_target(target));  //
+    }, py::arg("filename"), py::arg("arguments"), py::arg("fmt") = Text, py::arg("target") = Target())
             .def("compile_to_file",  //
                  [](Func &f, const std::string &filename_prefix, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
-                     f.compile_to_file(filename_prefix, args, fn_name, to_aot_target(target));  //
-                 },
-                 py::arg("filename_prefix"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
+        f.compile_to_file(filename_prefix, args, fn_name, to_aot_target(target));  //
+    }, py::arg("filename_prefix"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
             .def("compile_to_static_library",  //
                  [](Func &f, const std::string &filename_prefix, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
-                     f.compile_to_static_library(filename_prefix, args, fn_name, to_aot_target(target));  //
-                 },
-                 py::arg("filename_prefix"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
+        f.compile_to_static_library(filename_prefix, args, fn_name, to_aot_target(target));  //
+    }, py::arg("filename_prefix"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
 
             .def("compile_to_multitarget_static_library", &Func::compile_to_multitarget_static_library, py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"))
             .def("compile_to_multitarget_object_files", &Func::compile_to_multitarget_object_files, py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"), py::arg("suffixes"))
@@ -311,21 +295,19 @@ void define_func(py::module &m) {
             // TODO: useless until Module is defined.
             .def("compile_to_module",  //
                  [](Func &f, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) -> Module {
-                     return f.compile_to_module(args, fn_name, to_aot_target(target));  //
-                 },
-                 py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
+        return f.compile_to_module(args, fn_name, to_aot_target(target));  //
+    }, py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
 
             .def("compile_jit",  //
                  [](Func &f, const Target &target) {
-                     f.compile_jit(to_jit_target(target));  //
-                 },
+        f.compile_jit(to_jit_target(target));  //
+    },
                  py::arg("target") = Target())
 
             .def("compile_to_callable",  //
                  [](Func &f, const std::vector<Argument> &args, const Target &target) {
-                     return f.compile_to_callable(args, to_jit_target(target));  //
-                 },
-                 py::arg("arguments"), py::arg("target") = Target())
+        return f.compile_to_callable(args, to_jit_target(target));  //
+    }, py::arg("arguments"), py::arg("target") = Target())
 
             .def("has_update_definition", &Func::has_update_definition)
             .def("num_update_definitions", &Func::num_update_definitions)
@@ -336,9 +318,8 @@ void define_func(py::module &m) {
             .def("update_value", &Func::update_value, py::arg("idx") = 0)
             .def("update_values",  //
                  [](Func &func, int idx) -> py::tuple {
-                     return to_python_tuple(func.update_values(idx));  //
-                 },
-                 py::arg("idx") = 0)
+        return to_python_tuple(func.update_values(idx));  //
+    }, py::arg("idx") = 0)
             .def("rvars", &Func::rvars, py::arg("idx") = 0)
 
             .def("trace_loads", &Func::trace_loads)
@@ -374,37 +355,36 @@ void define_func(py::module &m) {
 
             .def("infer_input_bounds",  //
                  [](Func &f, const py::object &dst, const Target &target) -> void {
-                     const Target t = to_jit_target(target);
-                     PyJITUserContext juc;
+        const Target t = to_jit_target(target);
+        PyJITUserContext juc;
 
-                     // dst could be Buffer<>, vector<Buffer>, or vector<int>
-                     try {
-                         Buffer<> b = dst.cast<Buffer<>>();
-                         f.infer_input_bounds(&juc, b, t);
-                         return;
-                     } catch (...) {
-                         // fall thru
-                     }
+        // dst could be Buffer<>, vector<Buffer>, or vector<int>
+        try {
+            Buffer<> b = dst.cast<Buffer<>>();
+            f.infer_input_bounds(&juc, b, t);
+            return;
+        } catch (...) {
+            // fall thru
+        }
 
-                     try {
-                         std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
-                         f.infer_input_bounds(&juc, Realization(std::move(v)), t);
-                         return;
-                     } catch (...) {
-                         // fall thru
-                     }
+        try {
+            std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
+            f.infer_input_bounds(&juc, Realization(std::move(v)), t);
+            return;
+        } catch (...) {
+            // fall thru
+        }
 
-                     try {
-                         std::vector<int32_t> v = dst.cast<std::vector<int32_t>>();
-                         f.infer_input_bounds(&juc, v, t);
-                         return;
-                     } catch (...) {
-                         // fall thru
-                     }
+        try {
+            std::vector<int32_t> v = dst.cast<std::vector<int32_t>>();
+            f.infer_input_bounds(&juc, v, t);
+            return;
+        } catch (...) {
+            // fall thru
+        }
 
-                     throw py::value_error("Invalid arguments to infer_input_bounds");  //
-                 },
-                 py::arg("dst"), py::arg("target") = Target())
+        throw py::value_error("Invalid arguments to infer_input_bounds");  //
+    }, py::arg("dst"), py::arg("target") = Target())
 
             .def("in_", static_cast<Func (Func::*)(const Func &)>(&Func::in), py::arg("f"))
             .def("in_", static_cast<Func (Func::*)(const std::vector<Func> &fs)>(&Func::in), py::arg("fs"))
@@ -431,10 +411,10 @@ void define_func(py::module &m) {
             .def("infer_arguments", &Func::infer_arguments)
 
             .def("__repr__", [](const Func &func) -> std::string {
-                std::ostringstream o;
-                o << "<halide.Func '" << func.name() << "'>";
-                return o.str();  //
-            });
+        std::ostringstream o;
+        o << "<halide.Func '" << func.name() << "'>";
+        return o.str();  //
+    });
 
     py::implicitly_convertible<ImageParam, Func>();
 
@@ -485,15 +465,13 @@ void define_func(py::module &m) {
 
     m.def(
         "evaluate", [](const py::object &expr) -> py::object {
-            return evaluate_impl(expr, false);
-        },
-        py::arg("expr"));
+        return evaluate_impl(expr, false);
+    }, py::arg("expr"));
 
     m.def(
         "evaluate_may_gpu", [](const py::object &expr) -> py::object {
-            return evaluate_impl(expr, true);
-        },
-        py::arg("expr"));
+        return evaluate_impl(expr, true);
+    }, py::arg("expr"));
 }
 
 }  // namespace PythonBindings
