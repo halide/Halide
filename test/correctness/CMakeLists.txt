@@ -356,7 +356,6 @@ tests(GROUPS correctness
       vectorized_initialization.cpp
       vectorized_load_from_vectorized_allocation.cpp
       vectorized_reduction_bug.cpp
-      widening_lerp.cpp
       widening_reduction.cpp
       # keep-sorted end
 )
