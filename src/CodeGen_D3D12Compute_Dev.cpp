@@ -684,8 +684,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
     bool shared_promotion_required = false;
     string promotion_str = "";
     if (groupshared_allocations.contains(op->name)) {
-        internal_assert(allocations.contains(op->name));
-        Type promoted_type = allocations.get(op->name).type;
+        const auto *alloc = allocations.find(op->name);
+        internal_assert(alloc);
+        Type promoted_type = alloc->type;
         if (promoted_type != op->value.type()) {
             shared_promotion_required = true;
             // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here
