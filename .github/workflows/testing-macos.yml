@@ -81,6 +81,6 @@ jobs:
           xcodebuild -workspace HelloiOS.xcworkspace
           -scheme HelloiOS
           -configuration Debug
-          -destination 'platform=iOS Simulator,OS=latest,name=iPhone 16'
+          -destination 'generic/platform=iOS Simulator'
           build
         working-directory: apps/HelloiOS
