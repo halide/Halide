@@ -170,6 +170,7 @@ class SplitTuples : public IRMutator {
                         could_alias(op->args, store_args)) {
                         deps.insert(op->value_index);
                     }
+                    IRVisitor::visit(op);
                 }
 
                 bool could_alias(const vector<Expr> &a, const vector<Expr> &b) {

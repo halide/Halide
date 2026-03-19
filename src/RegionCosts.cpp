@@ -244,10 +244,6 @@ class ExprCost : public IRVisitor {
         }
     }
 
-    void visit(const Shuffle *op) override {
-        arith += 1;
-    }
-
     void visit(const Let *let) override {
         let->value.accept(this);
         let->body.accept(this);
@@ -259,6 +255,9 @@ class ExprCost : public IRVisitor {
         internal_error;
     }
     void visit(const Ramp *) override {
+        internal_error;
+    }
+    void visit(const Shuffle *op) override {
         internal_error;
     }
     void visit(const Broadcast *) override {

@@ -1452,8 +1452,7 @@ class FindVectorizableExprsInAtomicNode : public IRMutator {
     Stmt visit(const Store *op) override {
         // A store poisons all subsequent loads, but loads before the
         // first store can be lifted.
-        mutate(op->index);
-        mutate(op->value);
+        IRMutator::visit(op);
         poisoned_names.push(op->name);
         return op;
     }
