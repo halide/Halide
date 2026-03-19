@@ -415,7 +415,7 @@ bool test_bounds(Expr test, const Interval &interval, Type t, const map<string, 
     return true;
 }
 
-bool test_expression_bounds(FuzzingContext &fuzz, Expr test, int trials, int samples_per_trial) {
+bool test_expression_bounds(FuzzingContext &fuzz, Expr test, int trials, int samples_per_trial, bool minimize_failures = true) {
     map<string, Expr> vars;
     for (int i = 0; i < fuzz_var_count; i++) {
         vars[fuzz_var(i)] = Expr();
@@ -429,6 +429,7 @@ bool test_expression_bounds(FuzzingContext &fuzz, Expr test, int trials, int sam
         contains_risky_cast |= (op->type.is_int() &&
                                 op->type.bits() >= 32 &&
                                 !op->type.can_represent(op->value.type()));
+        self->visit_base(op);
     });
     if (contains_risky_cast) {
         return true;
@@ -472,11 +473,26 @@ bool test_expression_bounds(FuzzingContext &fuzz, Expr test, int trials, int sam
             }
 
             if (!test_bounds(test, interval, test.type(), vars)) {
-                std::cerr << "scope {\n";
-                for (auto v = vars.begin(); v != vars.end(); v++) {
-                    std::cerr << "\t" << v->first << " : " << scope.get(v->first) << "\n";
+                // Try to minimize it to an incorrect sub-expression
+                bool found_failure = false;
+                if (minimize_failures) {
+                    std::cerr << "Attempting to minimize failure...\n";
+                    mutate_with(test, [&](auto *self, const Expr &e) {
+                        self->mutate_base(e);
+                        if (!found_failure && !e.same_as(test)) {
+                            found_failure |= !test_expression_bounds(fuzz, e, trials * 10, samples_per_trial * 10, false);
+                        }
+                        return e;
+                    });
                 }
-                std::cerr << "}\n";
+
+                if (!found_failure) {
+                    std::cerr << "scope {\n";
+                    for (auto v = vars.begin(); v != vars.end(); v++) {
+                        std::cerr << "\t" << v->first << " : " << scope.get(v->first) << "\n";
+                    }
+                    std::cerr << "}\n";
+                }
                 return false;
             }
         }
