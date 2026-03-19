@@ -61,7 +61,7 @@ jobs:
       - name: Configure CMake
         run: >-
           cmake --preset ci-macos-${{ matrix.arch }}
-          -DCMAKE_INSTALL_PREFIX=/opt/halide
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
           -DWITH_TESTS=NO
           -DWITH_UTILS=NO
           -DWITH_TUTORIALS=NO
@@ -74,7 +74,7 @@ jobs:
         run: ./setup.sh
         working-directory: apps/HelloiOS
         env:
-          Halide_ROOT: /opt/halide
+          Halide_ROOT: ${{ github.workspace }}/install
 
       - name: Build HelloiOS
         run: >-
