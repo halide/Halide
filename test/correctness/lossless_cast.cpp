@@ -364,13 +364,7 @@ bool might_have_ub(Expr e) {
 
 bool found_error = false;
 
-int test_one(uint32_t seed) {
-    std::mt19937 rng{seed};
-
-    buf_u8.fill(rng);
-    buf_i8.fill(rng);
-
-    Expr e1 = random_expr(rng);
+int test_case(const char *name, Expr e1, Type target, uint32_t seed = 0) {
     Expr simplified = simplify(e1);
 
     if (might_have_ub(e1) ||
@@ -382,9 +376,6 @@ int test_one(uint32_t seed) {
     // We're also going to test constant_integer_bounds here.
     ConstantInterval bounds = constant_integer_bounds(e1);
 
-    Type target;
-    std::vector<Type> target_types = {UInt(32), Int(32), UInt(16), Int(16)};
-    target = target_types[rng() % target_types.size()];
     Expr e2 = lossless_cast(target, e1);
 
     if (!e2.defined()) {
@@ -393,8 +384,11 @@ int test_one(uint32_t seed) {
 
     if (definitely_has_ub(e2)) {
         std::cout << "lossless_cast introduced ub:\n"
-                  << "seed = " << seed << "\n"
-                  << "e1 = " << e1 << "\n"
+                  << "case = " << name << "\n";
+        if (seed != 0) {
+            std::cout << "seed = " << seed << "\n";
+        }
+        std::cout << "e1 = " << e1 << "\n"
                   << "e2 = " << e2 << "\n"
                   << "simplify(e1) = " << simplify(e1) << "\n"
                   << "simplify(e2) = " << simplify(e2) << "\n";
@@ -417,14 +411,17 @@ int test_one(uint32_t seed) {
         if (out1(x) != out2(x)) {
             std::cout
                 << "lossless_cast failure\n"
-                << "seed = " << seed << "\n"
-                << "x = " << x << "\n"
-                << "buf_u8 = " << (int)buf_u8(x) << "\n"
-                << "buf_i8 = " << (int)buf_i8(x) << "\n"
-                << "out1 = " << out1(x) << "\n"
-                << "out2 = " << out2(x) << "\n"
-                << "Original: " << e1 << "\n"
-                << "Lossless cast: " << e2 << "\n";
+                << "case = " << name << "\n";
+            if (seed != 0) {
+                std::cout << "seed = " << seed << "\n";
+            }
+            std::cout << "x = " << x << "\n"
+                      << "buf_u8 = " << (int)buf_u8(x) << "\n"
+                      << "buf_i8 = " << (int)buf_i8(x) << "\n"
+                      << "out1 = " << out1(x) << "\n"
+                      << "out2 = " << out2(x) << "\n"
+                      << "Original: " << e1 << "\n"
+                      << "Lossless cast: " << e2 << "\n";
             return 1;
         }
     }
@@ -435,21 +432,108 @@ int test_one(uint32_t seed) {
             Expr simplified = simplify(e1);
             std::cout
                 << "constant_integer_bounds failure\n"
-                << "seed = " << seed << "\n"
-                << "x = " << x << "\n"
-                << "buf_u8 = " << (int)buf_u8(x) << "\n"
-                << "buf_i8 = " << (int)buf_i8(x) << "\n"
-                << "out1 = " << out1(x) << "\n"
-                << "Expression: " << e1 << "\n"
-                << "Bounds: " << bounds << "\n"
-                << "Simplified: " << simplified << "\n"
-                // If it's still out-of-bounds when the expression is
-                // simplified, that'll be easier to debug.
-                << "Bounds: " << constant_integer_bounds(simplified) << "\n";
+                << "case = " << name << "\n";
+            if (seed != 0) {
+                std::cout << "seed = " << seed << "\n";
+            }
+            std::cout << "x = " << x << "\n"
+                      << "buf_u8 = " << (int)buf_u8(x) << "\n"
+                      << "buf_i8 = " << (int)buf_i8(x) << "\n"
+                      << "out1 = " << out1(x) << "\n"
+                      << "Expression: " << e1 << "\n"
+                      << "Bounds: " << bounds << "\n"
+                      << "Simplified: " << simplified << "\n"
+                      // If it's still out-of-bounds when the expression is
+                      // simplified, that'll be easier to debug.
+                      << "Bounds: " << constant_integer_bounds(simplified) << "\n";
             return 1;
         }
     }
 
+    return 0;
+}
+
+int test_one(uint32_t seed) {
+    std::mt19937 rng{seed};
+
+    buf_u8.fill(rng);
+    buf_i8.fill(rng);
+
+    Expr e1 = random_expr(rng);
+
+    Type target;
+    std::vector<Type> target_types = {UInt(32), Int(32), UInt(16), Int(16)};
+    target = target_types[rng() % target_types.size()];
+
+    return test_case("fuzz", e1, target, seed);
+}
+
+Expr regression_expr_1926104395() {
+    Expr u8_88 = cast<uint8_t>(88);
+    Expr u8_173 = cast<uint8_t>(173);
+    Expr i8_122 = cast<int8_t>(122);
+    Expr i8_112 = cast<int8_t>(112);
+
+    Expr div_173_88 = u8_173 / cast(UInt(8), u8_88);
+    Expr twice_div_173_88 = div_173_88 + cast(UInt(8), div_173_88);
+    Expr halving = halving_sub(buf_u8(x), cast(UInt(8), buf_i8(x)));
+    Expr mul = cast(Int(16), u8_88 * cast(UInt(8), u8_173)) +
+               cast(Int(16), halving * cast(UInt(8), twice_div_173_88));
+    Expr shifted = mul_shift_right(mul, cast(Int(16), i8_122), cast(UInt(16), i8_122));
+    Expr rounding = rounding_shift_right(u8_88 * cast(UInt(8), u8_173),
+                                         cast(UInt(8), u8_88 + cast(UInt(8), i8_112)));
+
+    return mul_shift_right(shifted - cast(Int(32), halving),
+                           cast(Int(32), twice_div_173_88 / cast(UInt(8), shifted)),
+                           cast(UInt(32), rounding /
+                                              cast(UInt(8), buf_i8(x) /
+                                                                cast(Int(8), div_173_88))));
+}
+
+Expr regression_expr_3082698823() {
+    Expr i8_106 = cast<int8_t>(106);
+    Expr u8_191 = cast<uint8_t>(191);
+
+    Expr div = i8_106 / cast(Int(8), buf_i8(x));
+    Expr shifted = mul_shift_right(cast(Int(16), i8_106),
+                                   cast(Int(16), buf_i8(x)),
+                                   cast(UInt(16), u8_191 + cast(UInt(8), div)));
+    Expr sub = cast(Int(16), div - cast(Int(8), u8_191));
+
+    return cast(Int(64), shifted) *
+           cast(Int(64), cast(Int(32), sub - cast(Int(16), count_leading_zeros(sub))));
+}
+
+int regression_case(const char *name, Expr e1, Type target) {
+    Expr e2 = lossless_cast(target, e1);
+    if (!e2.defined()) {
+        std::cout << "regression case unexpectedly cannot be narrowed: " << name << "\n"
+                  << "target = " << target << "\n"
+                  << "e1 = " << e1 << "\n";
+        return 1;
+    }
+
+    Func f;
+    f(x) = {cast<int64_t>(e1), cast<int64_t>(e2)};
+    f.vectorize(x, 4, TailStrategy::RoundUp);
+
+    Pipeline p(f);
+    Target t = get_jit_target_from_environment();
+    Module m = p.compile_to_module({}, name, t);
+    (void)m;
+
+    return 0;
+}
+
+int regression_test() {
+    if (regression_case("seed 1926104395", regression_expr_1926104395(), Int(32))) {
+        std::cout << "lossless_cast regression failed for case seed 1926104395\n";
+        return 1;
+    }
+    if (regression_case("seed 3082698823", regression_expr_3082698823(), Int(16))) {
+        std::cout << "lossless_cast regression failed for case seed 3082698823\n";
+        return 1;
+    }
     return 0;
 }
 
@@ -473,6 +557,10 @@ int main(int argc, char **argv) {
     }
     if (lossless_cast_test()) {
         std::cout << "lossless_cast test failed!\n";
+        return 1;
+    }
+    if (regression_test()) {
+        std::cout << "lossless_cast regression test failed!\n";
         return 1;
     }
     if (fuzz_test(time(NULL))) {
