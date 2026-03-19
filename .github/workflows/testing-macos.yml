@@ -42,6 +42,7 @@ jobs:
         include:
           - runner: macos-26
             arch: arm-64
+            python: cpython-3.10.20-macos-aarch64-none
 
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +51,7 @@ jobs:
 
       - name: Sync CI environment
         run: |
-          uv sync --group '${{ matrix.uv_group }}' --no-install-project
+          uv sync --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-project
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 
