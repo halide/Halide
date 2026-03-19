@@ -82,10 +82,11 @@ repos:
       - id: mdformat
         args: [ --number, --wrap=80 ]
         additional_dependencies:
-          - mdformat-gfm
+          # Upstream mdformat-gfm declined to work around GitHub's rendering
+          # quirks. See: https://github.com/hukkin/mdformat-gfm/issues/58
+          - git+https://github.com/halide/mdformat-gfm.git@fce9859
           - mdformat-ruff
           - mdformat-shfmt
-        exclude: ^.github/pull_request_template\.md$  # mdformat-gfm doesn't understand GitHub's checklists.
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.5
