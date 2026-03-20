@@ -2167,7 +2167,7 @@ void generator_test() {
         const std::vector<uint64_t> a = {1, 2, 3, 4};
         Var x;
         Func fn_typed, fn_untyped;
-        fn_typed(x) = cast<int16_t>(38);
+        fn_typed(x) = make_const(Int(16), 38);
         fn_untyped(x) = 32.f;
         const std::vector<Func> fn_array = {fn_untyped, fn_untyped};
 
