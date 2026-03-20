@@ -47,7 +47,7 @@ jobs:
           fetch-tags: true
 
       - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@v4.2.0
+      - uses: lukka/get-cmake@v4.3.0
         with:
           cmakeVersion: "~3.28.0"
 
