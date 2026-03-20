@@ -170,7 +170,7 @@ Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
     // Modify the stmt to add a call to halide_qurt_hvx_lock, and
     // register a destructor to call halide_qurt_hvx_unlock.
     Stmt check_hvx_lock = call_halide_qurt_hvx_lock(target);
-    Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
+    Expr dummy_obj = reinterpret(Handle(), make_one(UInt(64)));
     Expr hvx_unlock =
         Call::make(Handle(), Call::register_destructor,
                    {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj},

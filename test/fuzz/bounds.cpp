@@ -332,7 +332,7 @@ bool test_bounds(const Expr &test, const Interval &interval, Type t, const map<s
     return true;
 }
 
-bool test_expression_bounds(FuzzingContext &fuzz, const Expr &test, int trials, int samples_per_trial) {
+bool test_expression_bounds(FuzzingContext &fuzz, const Expr &test, int trials, int samples_per_trial, bool minimize_failures = true) {
     map<string, Expr> vars;
     for (int i = 0; i < fuzz_var_count; i++) {
         vars[fuzz_var(i)] = Expr();
@@ -348,9 +348,8 @@ bool test_expression_bounds(FuzzingContext &fuzz, const Expr &test, int trials, 
                 contains_risky_cast |= (op->type.is_int() &&
                                         op->type.bits() >= 32 &&
                                         !op->type.can_represent(op->value.type()));
-            } else {
-                self->visit_base(op);
             }
+            self->visit_base(op);
         }
     });
     if (contains_risky_cast) {
@@ -393,11 +392,26 @@ bool test_expression_bounds(FuzzingContext &fuzz, const Expr &test, int trials, 
             }
 
             if (!test_bounds(test, interval, test.type(), vars)) {
-                debug(0) << "scope {\n";
-                for (auto &[var, val] : vars) {
-                    debug(0) << "\t" << var << " : " << scope.get(var) << "\n";
+                // Try to minimize it to an incorrect sub-expression
+                bool found_failure = false;
+                if (minimize_failures) {
+                    debug(0) << "Attempting to minimize failure...\n";
+                    mutate_with(test, [&](auto *self, const Expr &e) {
+                        self->mutate_base(e);
+                        if (!found_failure && !e.same_as(test)) {
+                            found_failure |= !test_expression_bounds(fuzz, e, trials * 10, samples_per_trial * 10, false);
+                        }
+                        return e;
+                    });
                 }
-                debug(0) << "}\n";
+
+                if (!found_failure) {
+                    debug(0) << "scope {\n";
+                    for (auto v = vars.begin(); v != vars.end(); v++) {
+                        debug(0) << "\t" << v->first << " : " << scope.get(v->first) << "\n";
+                    }
+                    debug(0) << "}\n";
+                }
                 return false;
             }
         }
