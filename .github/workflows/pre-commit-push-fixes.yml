@@ -44,7 +44,7 @@ jobs:
           echo "::warning::PR #${{ steps.pr.outputs.number }} does not allow maintainer edits. Cannot push auto-fixes to fork."
           echo "skip=true" >> "$GITHUB_ENV"
 
-      - uses: actions/create-github-app-token@v2
+      - uses: actions/create-github-app-token@v3
         if: steps.download.outcome == 'success' && env.skip != 'true'
         id: app-token
         with:
