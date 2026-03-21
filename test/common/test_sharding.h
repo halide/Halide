@@ -1,6 +1,11 @@
 #ifndef TEST_SHARDING_H
 #define TEST_SHARDING_H
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
+
 // This file may be used by AOT tests, so it deliberately does not
 // include Halide.h
 
@@ -85,5 +90,9 @@ public:
 }  // namespace Test
 }  // namespace Internal
 }  // namespace Halide
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #endif  // TEST_SHARDING_H

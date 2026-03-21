@@ -31,7 +31,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
                     // we're better off returning an overflow condition than
                     // a known-wrong value. (Note that no_overflow_int() should
                     // only be true for signed integers.)
-                    internal_assert(no_overflow_int(op->type));
+                    internal_assert(no_overflow_int(op->type)) << op->type << " " << info->bounds;
                     clear_expr_info(info);
                     return make_signed_integer_overflow(op->type);
                 }

@@ -198,7 +198,11 @@ private:
         void log_line(Args &&...args) {
             debug(0) << self->log_spaces();
             // C++17 right fold
-            (debug(0) << ... << args) << "\n";
+            auto dump = [](auto &&arg) {
+                debug(0) << arg;
+            };
+            (dump(args), ...);
+            debug(0) << "\n";
         }
 
         ~BoundsLogger() {
@@ -2144,7 +2148,11 @@ private:
         void log_line(Args &&...args) {
             debug(0) << self->log_spaces();
             // C++17 right fold
-            (debug(0) << ... << args) << "\n";
+            auto dump = [](auto &&arg) {
+                debug(0) << arg;
+            };
+            (dump(args), ...);
+            debug(0) << "\n";
         }
 
         BoxesTouchedLogger(BoxesTouched *self, const char *pretty_function)

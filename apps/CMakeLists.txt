@@ -22,7 +22,9 @@ function(add_app app_name)
 endfunction()
 
 # TODO: most of the apps need to be smartened to be crosscompilable under wasm.
-message(STATUS "Halide_TARGET ${Halide_TARGET}")
+find_package(Halide REQUIRED)
+message(STATUS "Found Halide: ${Halide_DIR} (found version \"${Halide_VERSION}\")")
+message(STATUS "Halide_TARGET: ${Halide_TARGET}")
 if (Halide_TARGET MATCHES "wasm")
     message(WARNING "Skipping apps when building under wasm")
     return()
