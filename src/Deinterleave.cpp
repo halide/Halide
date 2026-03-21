@@ -204,6 +204,7 @@ Stmt collect_strided_stores(const Stmt &stmt, const std::string &name, int strid
 }
 
 class ExtractLanes : public IRMutator {
+#define DEBUG_OP(op) debug(4) << "ExtractLanes(" << starting_lane << ", " << lane_stride << ", " << new_lanes << ") " << Expr(op)
 public:
     ExtractLanes(
         int starting_lane, int lane_stride, int new_lanes,
@@ -350,6 +351,7 @@ private:
             return op;
         }
         int factor = op->value.type().lanes() / op->type.lanes();
+        DEBUG_OP(op) << "  (factor=" << factor << ")\n";
         if (lane_stride != 1) {
             std::vector<int> input_lanes;
             for (int i = 0; i < new_lanes; ++i) {
@@ -385,6 +387,7 @@ private:
                 }
             }
         }
+        DEBUG_OP(op) << "\n";
         if (new_lanes == 1) {
             if (op->value.type().lanes() == 1) {
                 return op->value;
@@ -397,7 +400,9 @@ private:
         }
         if (op->value.type().lanes() > 1) {
             // There is probably a more efficient way to do this.
-            return mutate(flatten_nested_ramps(op));
+            Expr flat = flatten_nested_ramps(op);
+            debug(4) << "flatten_nested_ramps( " << Expr(op) << " ) = " << flat << "\n";
+            return mutate(flat);
         }
 
         if (new_lanes == op->type.lanes()) {
@@ -430,11 +435,15 @@ private:
         if (!needs_extracting(op)) {
             return op;
         }
+        DEBUG_OP(op) << "\n";
         int base_lanes = op->base.type().lanes();
         if (base_lanes > 1) {
             if (new_lanes == 1) {
                 int index = starting_lane / base_lanes;
-                Expr expr = simplify(op->base + cast(op->base.type(), index) * op->stride);
+                Expr expr = (op->base + cast(op->base.type(), index) * op->stride);
+                debug(5) << "  expr: " << expr << "\n";
+                expr = simplify(expr);
+                debug(5) << "  simplified expr: " << expr << "\n";
                 ScopedValue<int> old_starting_lane(starting_lane, starting_lane % base_lanes);
                 ScopedValue<int> old_lane_stride(lane_stride, base_lanes);
                 expr = mutate(expr);
@@ -457,7 +466,9 @@ private:
             } else {
                 // There is probably a more efficient way to this by
                 // generalizing the two cases above.
-                return mutate(flatten_nested_ramps(op));
+                Expr flat = flatten_nested_ramps(op);
+                debug(4) << "flatten_nested_ramps( " << Expr(op) << " ) = " << flat << "\n";
+                return mutate(flat);
             }
         }
         Expr expr = simplify(op->base + cast(op->base.type(), starting_lane) * op->stride);
@@ -531,6 +542,7 @@ private:
     }
 
     Expr visit(const Reinterpret *op) override {
+        DEBUG_OP(op) << "\n";
         // Written with assistance from Gemini 3 Pro, which required a lot of baby-sitting.
 
         // Simple case of a scalar reinterpret: always one lane:
@@ -634,6 +646,7 @@ private:
     }
 
     Expr visit(const Call *op) override {
+        DEBUG_OP(op) << "\n";
         internal_assert(op->type.lanes() >= starting_lane + lane_stride * (new_lanes - 1)) << Expr(op) << starting_lane << " " << lane_stride << " " << new_lanes;
 
         // Don't mutate scalars
@@ -662,6 +675,7 @@ private:
         if (!needs_extracting(op)) {
             return op;
         }
+        DEBUG_OP(op) << "\n";
 
         // Special case 1: Scalar extraction
         if (new_lanes == 1) {

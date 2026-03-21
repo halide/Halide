@@ -379,6 +379,7 @@ bool test_one(RandomEngine &rng) {
     std::vector<Expr> sliced(batch_size);
 
     for (int i = 0; i < batch_size; i++) {
+        std::cout << "\nExpression " << i << "\n";
         original[i] = random_vector_expr(rng, t, depth);
         sliced[i] = extract_lanes(original[i], starting_lane, lane_stride, new_lanes);
         internal_assert(sliced[i].type() == scalar_t.with_lanes(new_lanes))
