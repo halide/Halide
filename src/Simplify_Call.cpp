@@ -282,10 +282,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             // pattern minus x. We get more information that way than just
             // counting the leading zeros or ones.
             Expr e = mutate(make_const(op->type, (int64_t)(-1), nullptr) - a, info);
-            // If the result of this happens to be a constant, we may as well
-            // return it. This is redundant with the constant folding below, but
-            // the constant folding below still needs to happen when info is
-            // nullptr.
+            // If the result of this happens to fold to a constant, we may as
+            // well return it immediately. This only happens if a is a constant
+            // uint or int, in which case the logic below would produce the
+            // exact same constant Expr with the exact same info as we're
+            // already holding.
             if (info->bounds.is_single_point()) {
                 return e;
             }

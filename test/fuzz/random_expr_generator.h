@@ -2,8 +2,9 @@
 
 #include <array>
 #include <functional>
-#include <random>
 #include <vector>
+
+#include "fuzz_helpers.h"
 
 namespace Halide {
 namespace Internal {
@@ -14,7 +15,6 @@ using namespace Halide::Internal;
 
 class RandomExpressionGenerator {
 public:
-    using RandomEngine = std::mt19937_64;
     using make_bin_op_fn = Expr (*)(Expr, Expr);
 
     bool gen_cast = true;
@@ -28,20 +28,23 @@ public:
     bool gen_shuffles = true;
     bool gen_vector_reduce = true;
 
+    FuzzingContext &fuzz;
+
     std::vector<Type> fuzz_types = {UInt(1), UInt(8), UInt(16), UInt(32), UInt(64), Int(8), Int(16), Int(32), Int(64)};
-    std::vector<Param<int>> fuzz_vars{5};
+    std::vector<Param<int>> fuzz_vars;
 
-    template<typename T>
-    decltype(auto) random_choice(RandomEngine &rng, T &&choices) {
-        std::uniform_int_distribution<size_t> dist(0, std::size(choices) - 1);
-        return choices[dist(rng)];
+    explicit RandomExpressionGenerator(FuzzingContext &fuzz)
+        : fuzz(fuzz) {
+        for (int i = 0; i < 5; i++) {
+            fuzz_vars.emplace_back("a" + std::to_string(i));
+        }
     }
 
-    Type random_scalar_type(RandomEngine &rng) {
-        return random_choice(rng, fuzz_types);
+    Type random_scalar_type() {
+        return fuzz.PickValueInVector(fuzz_types);
     }
 
-    int get_random_divisor(RandomEngine &rng, int x) {
+    int get_random_divisor(int x) {
         vector<int> divisors;
         divisors.reserve(x);
         for (int i = 2; i <= x; i++) {
@@ -49,29 +52,23 @@ public:
                 divisors.push_back(i);
             }
         }
-        return random_choice(rng, divisors);
+        return fuzz.PickValueInVector(divisors);
     }
 
-    std::string fuzz_var(int i) {
-        return std::string(1, 'a' + i);
+    Expr random_var(Type t) {
+        return cast(t, fuzz.PickValueInVector(fuzz_vars));
     }
 
-    Expr random_var(RandomEngine &rng, Type t) {
-        std::uniform_int_distribution<int> dist(0, fuzz_vars.size() - 1);
-        int fuzz_count = dist(rng);
-        return cast(t, Variable::make(Int(32), fuzz_var(fuzz_count)));
-    }
-
-    Type random_type(RandomEngine &rng, int width) {
-        Type t = random_choice(rng, fuzz_types);
+    Type random_type(int width) {
+        Type t = random_scalar_type();
         if (width > 1) {
             t = t.with_lanes(width);
         }
         return t;
     }
 
-    Expr random_const(RandomEngine &rng, Type t) {
-        int val = (int)((int8_t)(rng() & 0x0f));
+    Expr random_const(Type t) const {
+        int val = fuzz.ConsumeIntegralInRange(0, 0x0f);
         if (t.is_vector()) {
             return Broadcast::make(cast(t.element_of(), val), t.lanes());
         } else {
@@ -113,40 +110,40 @@ public:
         return a >> (b % a.type().bits());
     }
 
-    Expr random_leaf(RandomEngine &rng, Type t, bool overflow_undef = false, bool imm_only = false) {
+    Expr random_leaf(Type t, bool overflow_undef = false, bool imm_only = false) {
         if (t.is_int() && t.bits() == 32) {
             overflow_undef = true;
         }
         if (t.is_scalar()) {
-            if (!imm_only && (rng() & 1)) {
-                return random_var(rng, t);
+            if (!imm_only && fuzz.ConsumeBool()) {
+                return random_var(t);
             } else {
                 if (overflow_undef) {
                     // For Int(32), we don't care about correctness during
                     // overflow, so just use numbers that are unlikely to
                     // overflow.
-                    return cast(t, (int32_t)((int8_t)(rng() & 255)));
+                    return cast(t, fuzz.ConsumeIntegralInRange<int>(0, 255));
                 } else {
-                    return cast(t, (int32_t)(rng()));
+                    return cast(t, fuzz.ConsumeIntegral<int>());
                 }
             }
         } else {
-            int lanes = get_random_divisor(rng, t.lanes());
+            int lanes = get_random_divisor(t.lanes());
 
-            if (rng() & 1) {
-                auto e1 = random_leaf(rng, t.with_lanes(t.lanes() / lanes), overflow_undef);
-                auto e2 = random_leaf(rng, t.with_lanes(t.lanes() / lanes), overflow_undef);
+            if (fuzz.ConsumeBool()) {
+                auto e1 = random_leaf(t.with_lanes(t.lanes() / lanes), overflow_undef);
+                auto e2 = random_leaf(t.with_lanes(t.lanes() / lanes), overflow_undef);
                 return Ramp::make(e1, e2, lanes);
             } else {
-                auto e1 = random_leaf(rng, t.with_lanes(t.lanes() / lanes), overflow_undef);
+                auto e1 = random_leaf(t.with_lanes(t.lanes() / lanes), overflow_undef);
                 return Broadcast::make(e1, lanes);
             }
         }
     }
 
-    // Expr random_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef = false);
+    // Expr random_expr( Type t, int depth, bool overflow_undef = false);
 
-    Expr random_condition(RandomEngine &rng, Type t, int depth, bool maybe_scalar) {
+    Expr random_condition(Type t, int depth, bool maybe_scalar) {
         static make_bin_op_fn make_bin_op[] = {
             EQ::make,
             NE::make,
@@ -156,22 +153,22 @@ public:
             GE::make,
         };
 
-        if (maybe_scalar && (rng() & 1)) {
+        if (maybe_scalar && fuzz.ConsumeBool()) {
             t = t.element_of();
         }
 
-        Expr a = random_expr(rng, t, depth);
-        Expr b = random_expr(rng, t, depth);
-        return random_choice(rng, make_bin_op)(a, b);
+        Expr a = random_expr(t, depth);
+        Expr b = random_expr(t, depth);
+        return fuzz.PickValueInArray(make_bin_op)(a, b);
     }
 
-    Expr random_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef = false) {
+    Expr random_expr(Type t, int depth, bool overflow_undef = false) {
         if (t.is_int() && t.bits() == 32) {
             overflow_undef = true;
         }
 
         if (depth-- <= 0) {
-            return random_leaf(rng, t, overflow_undef);
+            return random_leaf(t, overflow_undef);
         }
 
         // Weight the choices to cover all Deinterleaver visit methods:
@@ -181,12 +178,12 @@ public:
 
         // Leaf
         ops.push_back([&]() -> Expr {
-            return random_leaf(rng, t);
+            return random_leaf(t);
         });
 
         if (gen_arithmetic) {
             // Arithmetic
-            ops.push_back([&]() {
+            ops.push_back([&] {
                 static make_bin_op_fn make_bin_op[] = {
                     // Arithmetic operations.
                     Add::make,
@@ -198,14 +195,14 @@ public:
                     Mod::make,
                     make_absd,
                     make_abs};
-                Expr a = random_expr(rng, t, depth, overflow_undef);
-                Expr b = random_expr(rng, t, depth, overflow_undef);
-                return random_choice(rng, make_bin_op)(a, b);
+                Expr a = random_expr(t, depth, overflow_undef);
+                Expr b = random_expr(t, depth, overflow_undef);
+                return fuzz.PickValueInArray(make_bin_op)(a, b);
             });
         }
         if (gen_bitwise) {
             // Bitwise
-            ops.push_back([&]() {
+            ops.push_back([&] {
                 static make_bin_op_fn make_bin_op[] = {
                     make_bitwise_or,
                     make_bitwise_and,
@@ -214,14 +211,14 @@ public:
                     make_shift_right,  // No shift left or we just keep testing integer overflow
                 };
 
-                Expr a = random_expr(rng, t, depth, overflow_undef);
-                Expr b = random_expr(rng, t, depth, overflow_undef);
-                return random_choice(rng, make_bin_op)(a, b);
+                Expr a = random_expr(t, depth, overflow_undef);
+                Expr b = random_expr(t, depth, overflow_undef);
+                return fuzz.PickValueInArray(make_bin_op)(a, b);
             });
         }
         if (gen_bool_ops) {
             // Boolean ops
-            ops.push_back([&]() {
+            ops.push_back([&] {
                 static make_bin_op_fn make_bin_op[] = {
                     And::make,
                     Or::make,
@@ -229,27 +226,27 @@ public:
 
                 // Boolean operations -- both sides must be cast to booleans,
                 // and then we must cast the result back to 't'.
-                Expr a = random_expr(rng, t, depth, overflow_undef);
-                Expr b = random_expr(rng, t, depth, overflow_undef);
+                Expr a = random_expr(t, depth, overflow_undef);
+                Expr b = random_expr(t, depth, overflow_undef);
                 Type bool_with_lanes = Bool(t.lanes());
                 a = cast(bool_with_lanes, a);
                 b = cast(bool_with_lanes, b);
-                return cast(t, random_choice(rng, make_bin_op)(a, b));
+                return cast(t, fuzz.PickValueInArray(make_bin_op)(a, b));
             });
         }
         if (gen_select) {
             // Select
             ops.push_back(
                 [&]() -> Expr {
-                    auto c = random_condition(rng, t, depth, true);
-                    auto e1 = random_expr(rng, t, depth, overflow_undef);
-                    auto e2 = random_expr(rng, t, depth, overflow_undef);
+                    auto c = random_condition(t, depth, true);
+                    auto e1 = random_expr(t, depth, overflow_undef);
+                    auto e2 = random_expr(t, depth, overflow_undef);
                     return select(c, e1, e2);
                 });
         }
         // Cast
         if (gen_cast) {
-            ops.push_back([&]() {
+            ops.emplace_back([&] {
                 // Get a random type that isn't `t` or int32 (int32 can overflow, and we don't care about that).
                 std::vector<Type> subtypes;
                 for (const Type &subtype : fuzz_types) {
@@ -257,8 +254,8 @@ public:
                         subtypes.push_back(subtype);
                     }
                 }
-                Type subtype = random_choice(rng, subtypes).with_lanes(t.lanes());
-                return Cast::make(t, random_expr(rng, subtype, depth, overflow_undef));
+                Type subtype = fuzz.PickValueInVector(subtypes).with_lanes(t.lanes());
+                return Cast::make(t, random_expr(subtype, depth, overflow_undef));
             });
         }
         if (gen_reinterpret) {
@@ -275,10 +272,10 @@ public:
                 }
                 // Should at least be able to preserve the existing bit width and change signedness.
                 internal_assert(!valid_widths.empty());
-                int other_bits = random_choice(rng, valid_widths);
+                int other_bits = fuzz.PickValueInVector(valid_widths);
                 int other_lanes = total_bits / other_bits;
-                Type other = ((rng() & 1) ? Int(other_bits) : UInt(other_bits)).with_lanes(other_lanes);
-                Expr e = random_expr(rng, other, depth);
+                Type other = (fuzz.ConsumeBool() ? Int(other_bits) : UInt(other_bits)).with_lanes(other_lanes);
+                Expr e = random_expr(other, depth);
                 return Reinterpret::make(t, e);
             });
         }
@@ -287,40 +284,40 @@ public:
             // Broadcast of vector
             ops.push_back([&]() -> Expr {
                 if (t.lanes() != 1) {
-                    int lanes = get_random_divisor(rng, t.lanes());
-                    auto e1 = random_expr(rng, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
+                    int lanes = get_random_divisor(t.lanes());
+                    auto e1 = random_expr(t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
                     return Broadcast::make(e1, lanes);
                 }
-                return random_expr(rng, t, depth, overflow_undef);
+                return random_expr(t, depth, overflow_undef);
             });
         }
 
         if (gen_ramp_of_vector) {
             // Ramp
-            ops.push_back([&]() {
+            ops.push_back([&] {
                 if (t.lanes() != 1) {
-                    int lanes = get_random_divisor(rng, t.lanes());
-                    auto e1 = random_expr(rng, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
-                    auto e2 = random_expr(rng, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
+                    int lanes = get_random_divisor(t.lanes());
+                    auto e1 = random_expr(t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
+                    auto e2 = random_expr(t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
                     return Ramp::make(e1, e2, lanes);
                 }
-                return random_expr(rng, t, depth, overflow_undef);
+                return random_expr(t, depth, overflow_undef);
             });
         }
         if (gen_bool_ops) {
-            ops.push_back([&]() {
+            ops.push_back([&] {
                 if (t.is_bool()) {
-                    auto e1 = random_expr(rng, t, depth);
+                    auto e1 = random_expr(t, depth);
                     return Not::make(e1);
                 }
-                return random_expr(rng, t, depth, overflow_undef);
+                return random_expr(t, depth, overflow_undef);
             });
-            ops.push_back([&]() {
+            ops.push_back([&] {
                 // When generating boolean expressions, maybe throw in a condition on non-bool types.
                 if (t.is_bool()) {
-                    return random_condition(rng, random_type(rng, t.lanes()), depth, false);
+                    return random_condition(random_type(t.lanes()), depth, false);
                 }
-                return random_expr(rng, t, depth, overflow_undef);
+                return random_expr(t, depth, overflow_undef);
             });
         }
         if (gen_shuffles) {
@@ -328,34 +325,34 @@ public:
             ops.push_back([&]() -> Expr {
                 if (t.lanes() >= 4 && t.lanes() % 2 == 0) {
                     int half = t.lanes() / 2;
-                    Expr a = random_expr(rng, t.with_lanes(half), depth);
-                    Expr b = random_expr(rng, t.with_lanes(half), depth);
+                    Expr a = random_expr(t.with_lanes(half), depth);
+                    Expr b = random_expr(t.with_lanes(half), depth);
                     return Shuffle::make_interleave({a, b});
                 }
                 // Fall back to a simple expression
-                return random_expr(rng, t, depth);
+                return random_expr(t, depth);
             });
             // Shuffle (concat)
             ops.push_back([&]() -> Expr {
                 if (t.lanes() >= 4 && t.lanes() % 2 == 0) {
                     int half = t.lanes() / 2;
-                    Expr a = random_expr(rng, t.with_lanes(half), depth);
-                    Expr b = random_expr(rng, t.with_lanes(half), depth);
+                    Expr a = random_expr(t.with_lanes(half), depth);
+                    Expr b = random_expr(t.with_lanes(half), depth);
                     return Shuffle::make_concat({a, b});
                 }
-                return random_expr(rng, t, depth);
+                return random_expr(t, depth);
             });
             // Shuffle (slice)
             ops.push_back([&]() -> Expr {
                 // Make a wider vector and slice it
                 if (t.lanes() <= 8) {
                     int wider = t.lanes() * 2;
-                    Expr e = random_expr(rng, t.with_lanes(wider), depth);
+                    Expr e = random_expr(t.with_lanes(wider), depth);
                     // Slice: take every other element starting at 0 or 1
-                    int start = rng() & 1;
+                    int start = fuzz.ConsumeIntegralInRange(0, 1);
                     return Shuffle::make_slice(e, start, 2, t.lanes());
                 }
-                return random_expr(rng, t, depth);
+                return random_expr(t, depth);
             });
         }
         if (gen_vector_reduce) {
@@ -363,7 +360,7 @@ public:
             ops.push_back([&]() -> Expr {
                 // Input has more lanes, output has t.lanes() lanes
                 // factor must divide input lanes, and input lanes = t.lanes() * factor
-                int factor = (rng() % 3) + 2;
+                int factor = fuzz.ConsumeIntegralInRange(2, 4);
                 int input_lanes = t.lanes() * factor;
                 if (input_lanes <= 32) {
                     VectorReduce::Operator ops[] = {
@@ -371,16 +368,16 @@ public:
                         VectorReduce::Min,
                         VectorReduce::Max,
                     };
-                    auto op = random_choice(rng, ops);
-                    Expr val = random_expr(rng, t.with_lanes(input_lanes), depth);
+                    auto op = fuzz.PickValueInArray(ops);
+                    Expr val = random_expr(t.with_lanes(input_lanes), depth);
                     internal_assert(val.type().lanes() == input_lanes) << val;
                     return VectorReduce::make(op, val, t.lanes());
                 }
-                return random_expr(rng, t, depth);
+                return random_expr(t, depth);
             });
         }
 
-        Expr e = random_choice(rng, ops)();
+        Expr e = fuzz.PickValueInVector(ops)();
         internal_assert(e.type() == t) << e.type() << " " << t << " " << e;
         return e;
     }
