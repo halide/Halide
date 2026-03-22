@@ -805,11 +805,11 @@ void check_vectors() {
     check(VectorReduce::make(VectorReduce::And, Broadcast::make(bool_vector, 4), 1),
           VectorReduce::make(VectorReduce::And, bool_vector, 1));
     check(VectorReduce::make(VectorReduce::Or, Broadcast::make(bool_vector, 4), 2),
-          VectorReduce::make(VectorReduce::Or, bool_vector, 2));
+          Broadcast::make(VectorReduce::make(VectorReduce::Or, bool_vector, 1), 2));
     check(VectorReduce::make(VectorReduce::Min, Broadcast::make(int_vector, 4), 4),
-          int_vector);
+          Broadcast::make(VectorReduce::make(VectorReduce::Min, int_vector, 1), 4));
     check(VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8),
-          VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8));
+          Broadcast::make(VectorReduce::make(VectorReduce::Max, int_vector, 2), 4));
 
     {
         // h_add(broadcast(x, 8), 4) should simplify to broadcast(x * 2, 4)
