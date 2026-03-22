@@ -41,10 +41,18 @@ Expr Simplify::visit(const Mul *op, ExprInfo *info) {
         return rewrite.result;
     }
 
-    if (rewrite(0 * x, 0) ||
-        rewrite(1 * x, x) ||
-        rewrite(x * 0, 0) ||
-        rewrite(x * 1, x)) {
+    if (rewrite(0 * x, a) ||
+        rewrite(1 * x, b) ||
+        rewrite(x * 0, b) ||
+        rewrite(x * 1, a)) {
+        if (info) {
+            if (rewrite.result.same_as(a)) {
+                info->intersect(a_info);
+            } else {
+                internal_assert(rewrite.result.same_as(b));
+                info->intersect(b_info);
+            }
+        }
         return rewrite.result;
     }
 

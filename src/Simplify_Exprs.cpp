@@ -19,11 +19,17 @@ Expr Simplify::visit(const IntImm *op, ExprInfo *info) {
 }
 
 Expr Simplify::visit(const UIntImm *op, ExprInfo *info) {
-    if (info && Int(64).can_represent(op->value)) {
+    if (info) {
+        // Pretend it's an int constant that has been cast to uint.
         int64_t v = (int64_t)(op->value);
         info->bounds = ConstantInterval::single_point(v);
         info->alignment = ModulusRemainder(0, v);
+        // If it's not representable as an int64, this will wrap the alignment appropriately:
         info->cast_to(op->type);
+        // Be as informative as we can with bounds for out-of-range uint64s
+        if ((int64_t)op->value < 0) {
+            info->bounds = ConstantInterval::bounded_below(INT64_MAX);
+        }
     } else {
         clear_expr_info(info);
     }

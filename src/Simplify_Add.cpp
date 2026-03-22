@@ -25,8 +25,16 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
 
     if (rewrite(IRMatcher::Overflow() + x, a) ||
         rewrite(x + IRMatcher::Overflow(), b) ||
-        rewrite(x + 0, x) ||
-        rewrite(0 + x, x)) {
+        rewrite(x + 0, a) ||
+        rewrite(0 + x, b)) {
+        if (info) {
+            if (rewrite.result.same_as(a)) {
+                info->intersect(a_info);
+            } else {
+                internal_assert(rewrite.result.same_as(b));
+                info->intersect(b_info);
+            }
+        }
         return rewrite.result;
     }
 

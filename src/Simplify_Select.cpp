@@ -34,7 +34,8 @@ Expr Simplify::visit(const Select *op, ExprInfo *info) {
         if (info) {
             if (rewrite.result.same_as(true_value)) {
                 *info = t_info;
-            } else if (rewrite.result.same_as(false_value)) {
+            } else {
+                internal_assert(rewrite.result.same_as(false_value));
                 *info = f_info;
             }
         }
