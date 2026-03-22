@@ -684,8 +684,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
     bool shared_promotion_required = false;
     string promotion_str = "";
     if (groupshared_allocations.contains(op->name)) {
-        internal_assert(allocations.contains(op->name));
-        Type promoted_type = allocations.get(op->name).type;
+        const auto *alloc = allocations.find(op->name);
+        internal_assert(alloc);
+        Type promoted_type = alloc->type;
         if (promoted_type != op->value.type()) {
             shared_promotion_required = true;
             // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here
@@ -1126,7 +1127,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         const Allocate *op = sop.as<Allocate>();
         internal_assert(op->extents.size() == 1);
         internal_assert(op->type.lanes() == 1);
-        // In D3D12/HLSL, only 32bit types (int/uint/float) are suppoerted (even
+        // In D3D12/HLSL, only 32bit types (int/uint/float) are supported (even
         // though things are changing with newer shader models). Since there is
         // no uint8 type, we'll have to emulate it with 32bit types...
         // This will also require pack/unpack logic with bit-masking and aliased

@@ -156,7 +156,7 @@ int main(int argc, char **argv) {
 
     {
         printf("Running heap allocate condition is always false test...\n");
-        // Allocate condiiton is always false
+        // Allocate condition is always false
         Func f3("f_3"), g3("g_3");
         g3(x, y) = x * y;
         f3(x, y) = select(1 == 2, g3(x - 1, y), 0);
@@ -173,7 +173,7 @@ int main(int argc, char **argv) {
 
     {
         printf("Running stack allocate condition is always false test...\n");
-        // Allocate condiiton is always false
+        // Allocate condition is always false
         Func f3("f_3"), g3("g_3");
         g3(x, y) = x * y;
         f3(x, y) = select(1 == 2, g3((x - 1) % 10, y % 10), 0);

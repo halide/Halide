@@ -169,7 +169,7 @@ int main() {
     // memory and memory bandwidth, but did a whole bunch of redundant
     // expensive math (calling sin). It evaluated most points in
     // 'producer' four times. The second schedule,
-    // producer.compute_root(), did the mimimum number of calls to
+    // producer.compute_root(), did the minimum number of calls to
     // sin, but used more temporary memory and more memory bandwidth.
 
     // In any given situation the correct choice can be difficult to

@@ -368,7 +368,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         internal_assert(a.type().is_int());
 
         // Signed integer division sucks. It should be defined such
-        // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
+        // that it satisfies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
         // i.e. Euclidean division.
         //
         // We additionally define division by zero to be zero, and
@@ -614,8 +614,8 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.AllowFPOpFusion = per_instruction_fast_math_flags ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
 #if LLVM_VERSION < 230
     options.NoInfsFPMath = !per_instruction_fast_math_flags;
-#endif
     options.NoNaNsFPMath = !per_instruction_fast_math_flags;
+#endif
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;

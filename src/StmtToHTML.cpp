@@ -632,7 +632,7 @@ private:
         return marker;
     }
 
-    // Generate asm markers for Halide producer/consumer ndoes
+    // Generate asm markers for Halide producer/consumer nodes
     int prodcons_id = 0;
     int gen_prodcons_id() {
         return ++prodcons_id;
@@ -1749,7 +1749,7 @@ private:
         // Open indented div to hold body code
         print_opening_tag("div", "indent AcquireBody", "", id);
 
-        // Print aquire body
+        // Print acquire body
         print(op->body);
 
         // Close indented div holding body code

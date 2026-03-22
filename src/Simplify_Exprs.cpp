@@ -19,11 +19,17 @@ Expr Simplify::visit(const IntImm *op, ExprInfo *info) {
 }
 
 Expr Simplify::visit(const UIntImm *op, ExprInfo *info) {
-    if (info && Int(64).can_represent(op->value)) {
+    if (info) {
+        // Pretend it's an int constant that has been cast to uint.
         int64_t v = (int64_t)(op->value);
         info->bounds = ConstantInterval::single_point(v);
         info->alignment = ModulusRemainder(0, v);
+        // If it's not representable as an int64, this will wrap the alignment appropriately:
         info->cast_to(op->type);
+        // Be as informative as we can with bounds for out-of-range uint64s
+        if ((int64_t)op->value < 0) {
+            info->bounds = ConstantInterval::bounded_below(INT64_MAX);
+        }
     } else {
         clear_expr_info(info);
     }
@@ -69,7 +75,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
         return value;
     }
 
-    if (info && op->type.is_int()) {
+    if (info && op->type.is_int_or_uint()) {
         switch (op->op) {
         case VectorReduce::Add:
             // Alignment of result is the alignment of the arg. Bounds
@@ -123,7 +129,8 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
     case VectorReduce::Add: {
         auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
         if (rewrite(h_add(x * broadcast(y, arg_lanes), lanes), h_add(x, lanes) * broadcast(y, lanes)) ||
-            rewrite(h_add(broadcast(x, arg_lanes) * y, lanes), h_add(y, lanes) * broadcast(x, lanes))) {
+            rewrite(h_add(broadcast(x, arg_lanes) * y, lanes), h_add(y, lanes) * broadcast(x, lanes)) ||
+            rewrite(h_add(broadcast(x, arg_lanes), lanes), broadcast(x * factor, lanes))) {
             return mutate(rewrite.result, info);
         }
         break;

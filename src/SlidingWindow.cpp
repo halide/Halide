@@ -270,9 +270,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             for (int i = 0; i < func.dimensions(); i++) {
                 // Look up the region required of this function's last stage
                 string var = prefix + func_args[i];
-                internal_assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
-                Expr min_req = scope.get(var + ".min");
-                Expr max_req = scope.get(var + ".max");
+                const auto *min_val = scope.find(var + ".min");
+                const auto *max_val = scope.find(var + ".max");
+                internal_assert(min_val && max_val);
+                Expr min_req = *min_val;
+                Expr max_req = *max_val;
                 min_req = expand_expr(min_req, scope);
                 max_req = expand_expr(max_req, scope);
 
@@ -311,7 +313,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             if (!min_required.defined()) {
                 debug(3) << "Could not perform sliding window optimization of "
                          << func.name() << " over " << loop_var << " because multiple "
-                         << "dimensions of the function dependended on the loop var\n";
+                         << "dimensions of the function depended on the loop var\n";
                 return op;
             }
 

@@ -55,7 +55,7 @@ shift $((OPTIND - 1))
 if [[ ${MODE_FLAGS[*]} =~ "-i" ]]; then
     if ! git diff-files --quiet --ignore-submodules; then
         echo -e "\033[0;31m" # RED
-        echo "WARNING: There are still uncommited changes in your working tree."
+        echo "WARNING: There are still uncommitted changes in your working tree."
         echo "         Reverting this formatting action will be difficult."
         echo -e "\033[0m" # RESET
         git diff-files --ignore-submodules

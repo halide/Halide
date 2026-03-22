@@ -11,7 +11,7 @@ namespace Internal {
 
 namespace {
 
-// This routine provides a guard on the return type of intrisics such that only
+// This routine provides a guard on the return type of intrinsics such that only
 // these types will ever be considered in the visiting that happens here.
 bool find_intrinsics_for_type(const Type &t) {
     // Currently, we only try to find and replace intrinsics for vector types that aren't bools.
@@ -76,7 +76,7 @@ Expr find_and_subtract(const Expr &e, const Expr &round) {
         if (a.defined()) {
             return Sub::make(a, sub->b);
         }
-        // We can't recurse into the negatve part of a subtract.
+        // We can't recurse into the negative part of a subtract.
     } else if (can_prove(e == round)) {
         return make_zero(e.type());
     }

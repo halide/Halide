@@ -21,6 +21,11 @@ if (NOT TARGET Halide::Test)
     # Make internal_assert, debug, etc. available to tests
     target_compile_definitions(Halide_test INTERFACE HALIDE_KEEP_MACROS)
 
+    # Disable warnings about standard C functions that have more secure replacements
+    # in the Windows API.
+    target_compile_definitions(Halide_test INTERFACE
+                               $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>)
+
     # Everyone gets to see the common headers
     target_include_directories(Halide_test
                                INTERFACE
@@ -77,7 +82,7 @@ function(add_halide_test TARGET)
         PROPERTIES
         LABELS "${args_GROUPS}"
         ENVIRONMENT "HL_TARGET=${_resolved_target};HL_JIT_TARGET=${_resolved_target}"
-        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP(-WITH-ISSUE(-[0-9]+)?)?\\]"
         WILL_FAIL ${args_EXPECT_FAILURE}
     )
     if ("multithreaded" IN_LIST args_GROUPS)

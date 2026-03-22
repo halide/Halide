@@ -1789,7 +1789,7 @@ void CodeGen_LLVM::visit(const LT *op) {
     Value *b = codegen(op->b);
     if (t.is_float()) {
         ScopedFastMath guard(this);
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "olt")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "olt")) {  // codespell:ignore olt
             value = builder->CreateFCmpOLT(a, b);
         }
     } else if (t.is_int()) {
@@ -3989,7 +3989,7 @@ void CodeGen_LLVM::codegen_asserts(const vector<const AssertStmt *> &asserts) {
 
     // Mix all the conditions together into a bitmask
 
-    Expr bitmask = cast<uint64_t>(1) << 63;
+    Expr bitmask = make_const(UInt(64), ((uint64_t)1) << 63);
     for (size_t i = 0; i < asserts.size(); i++) {
         bitmask = bitmask | (cast<uint64_t>(!asserts[i]->condition) << i);
     }
@@ -5315,7 +5315,7 @@ llvm::Value *CodeGen_LLVM::convert_fixed_or_scalable_vector_type(llvm::Value *ar
         arg_elements = result_elements;
     } else {
         // Use extract to make smaller, insert to make bigger.
-        // A somewhat arbitary decision.
+        // A somewhat arbitrary decision.
         use_insert = (arg_elements < result_elements);
     }
 
@@ -5437,7 +5437,7 @@ int CodeGen_LLVM::get_vector_num_elements(const llvm::Type *t) {
         const auto *vt = cast<llvm::FixedVectorType>(t);
         return vt->getNumElements();
     } else if (isa<llvm::ScalableVectorType>(t)) {
-        internal_assert(effective_vscale != 0) << "Scalable vector type enountered without vector_bits being set.\n";
+        internal_assert(effective_vscale != 0) << "Scalable vector type encountered without vector_bits being set.\n";
         const auto *vt = cast<llvm::ScalableVectorType>(t);
         return vt->getMinNumElements() * effective_vscale;
     } else {

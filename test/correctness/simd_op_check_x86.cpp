@@ -132,7 +132,7 @@ public:
             if (w > 1) {
                 // LLVM no longer generates division instructions with
                 // fast-math on (instead it uses the approximate
-                // reciprocal, a newtown rhapson step, and a
+                // reciprocal, a newtown raphson step, and a
                 // multiplication by the numerator).
                 // check("divps", 2*w, f32_1 / f32_2);
             }
@@ -414,8 +414,8 @@ public:
             // Some llvm's don't use kandw, but instead predicate the computation of bool_2
             // using the result of bool_1
             // check(use_avx512 ? "kandw" : "vandps", 8, bool_1 & bool_2);
-            check(use_avx512 ? "korw" : "vorps", 8, bool_1 | bool_2);
-            check(use_avx512 ? "kxorw" : "vxorps", 8, bool_1 ^ bool_2);
+            check(use_avx512 ? "korb" : "vorps", 8, bool_1 | bool_2);
+            check(use_avx512 ? "kxorb" : "vxorps", 8, bool_1 ^ bool_2);
 
             check("vaddps*ymm", 8, f32_1 + f32_2);
             check("vaddpd*ymm", 4, f64_1 + f64_2);

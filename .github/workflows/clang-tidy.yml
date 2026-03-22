@@ -23,7 +23,7 @@ jobs:
     name: Check clang-tidy
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # We intentionally don't use VCPKG here so that we get some
       # notification that the ecosystem is moving on without us.

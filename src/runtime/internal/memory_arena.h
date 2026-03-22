@@ -57,7 +57,7 @@ public:
     static const SystemMemoryAllocatorFns &default_allocator();
 
 private:
-    // Sentinal invalid entry value
+    // Sentinel invalid entry value
     static const uint32_t invalid_entry = uint32_t(-1);
 
     // Each block contains:
@@ -163,7 +163,7 @@ void *MemoryArena::reserve(void *user_context, bool initialize) {
     }
 
     if (config.maximum_block_count && (blocks.size() >= config.maximum_block_count)) {
-        halide_error(user_context, "MemoryArena: Failed to reserve new entry! Maxmimum blocks reached!\n");
+        halide_error(user_context, "MemoryArena: Failed to reserve new entry! Maximum blocks reached!\n");
         return nullptr;
     }
 

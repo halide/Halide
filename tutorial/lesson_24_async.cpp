@@ -199,7 +199,7 @@ int main() {
 
         // As mentioned in the previous example, the planes are processed separately, so producer can run
         // ahead and start producing plane `c + 1`, while `consumer` consumes already produced plane `c`.
-        // A more direct way to express this would be to hoist storage of `producer` to ouside of the loop
+        // A more direct way to express this would be to hoist storage of `producer` to outside of the loop
         // `c` over planes, double its size and add necessary indices to flip the  planes.
         // The first part can be achieved with `hoist_storage` directive and the rest is done with
         // `ring_buffer`. Please, note that it's enough to provide only extent of the ring buffer, there is no
@@ -239,7 +239,7 @@ int main() {
 
         // // The high-level structure of the generated code will be:
         // {
-        //     // The size of the tile (16, 16, 1) + extra to accomodate 3x3 filter. The fourth dimension
+        //     // The size of the tile (16, 16, 1) + extra to accommodate 3x3 filter. The fourth dimension
         //     // is added by ring_buffer() directive.
         //     allocate producer1[18, 18, 1, 2]
         //     // In this case there are two semaphores, because producer can run ahead, so we need

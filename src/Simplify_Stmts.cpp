@@ -101,7 +101,7 @@ Stmt Simplify::visit(const IfThenElse *op) {
         else_acquire &&
         equal(then_acquire->semaphore, else_acquire->semaphore) &&
         equal(then_acquire->count, else_acquire->count)) {
-        // TODO: This simplification sometimes prevents useful loop partioning/no-op
+        // TODO: This simplification sometimes prevents useful loop partitioning/no-op
         // trimming from happening, e.g. it rewrites:
         //
         //   for (x, min + -2, extent + 2) {

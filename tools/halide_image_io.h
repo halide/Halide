@@ -4,6 +4,11 @@
 #ifndef HALIDE_IMAGE_IO_H
 #define HALIDE_IMAGE_IO_H
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4996)  // disable unsafe CRT function warnings
+#endif
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -2447,7 +2452,7 @@ FormatInfo best_save_format(const ImageType &im, const std::set<FormatInfo> &inf
 struct ImageTypeConversion {
     // Convert an Image from one ElemType to another, where the src and
     // dst types are statically known (e.g. Buffer<uint8_t> -> Buffer<float>).
-    // Note that this does conversion with scaling -- intepreting integers
+    // Note that this does conversion with scaling -- interpreting integers
     // as fixed-point numbers between 0 and 1 -- not merely C-style casting.
     //
     // You'd normally call this with an explicit type for DstElemType and
@@ -2790,5 +2795,9 @@ void convert_and_save_image(ImageType &im, const std::string &filename) {
 
 }  // namespace Tools
 }  // namespace Halide
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #endif  // HALIDE_IMAGE_IO_H

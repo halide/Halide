@@ -1447,7 +1447,7 @@ void solve_test() {
     }
 
     // This case was incorrect due to canonicalization of the multiply
-    // occuring after unpacking the LHS.
+    // occurring after unpacking the LHS.
     check_solve((y - z) * x, x * (y - z));
 
     // These cases were incorrectly not flipping min/max when moving

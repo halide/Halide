@@ -12,8 +12,8 @@ such as `hexagon-32-qurt-hvx`.
 Halide can also be used to offload parts of a pipeline to Hexagon using the
 `hexagon` scheduling directive. To enable the `hexagon` scheduling directive,
 include the `hvx` target feature in your target. The currently supported
-combination of targets is to use the HVX target features with an x86 linux
-host (to use the simulator) or with an ARM android target (to use Hexagon DSP
+combination of targets is to use the HVX target features with an x86 linux host
+(to use the simulator) or with an ARM android target (to use Hexagon DSP
 hardware). For examples of using the `hexagon` scheduling directive on both the
 simulator and a Hexagon DSP, see the blur example app.
 

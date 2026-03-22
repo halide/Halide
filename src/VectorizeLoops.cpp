@@ -544,8 +544,8 @@ protected:
     }
 
     Expr visit(const Variable *op) override {
-        if (replacements.count(op->name) > 0) {
-            return replacements[op->name];
+        if (auto it = replacements.find(op->name); it != replacements.end()) {
+            return it->second;
         } else if (scope.contains(op->name)) {
             string widened_name = get_widened_var_name(op->name);
             return Variable::make(vector_scope.get(widened_name).type(), widened_name);
@@ -997,11 +997,12 @@ protected:
             // them according to the current loop level.
             for (const auto &[var, val] : containing_lets) {
                 // Skip if this var wasn't vectorized.
-                if (!scope.contains(var)) {
+                const auto *scope_val = scope.find(var);
+                if (!scope_val) {
                     continue;
                 }
                 string vectorized_name = get_widened_var_name(var);
-                Expr vectorized_value = mutate(scope.get(var));
+                Expr vectorized_value = mutate(*scope_val);
                 vector_scope.push(vectorized_name, vectorized_value);
             }
 
@@ -1455,8 +1456,7 @@ protected:
     Stmt visit(const Store *op) override {
         // A store poisons all subsequent loads, but loads before the
         // first store can be lifted.
-        mutate(op->index);
-        mutate(op->value);
+        IRMutator::visit(op);
         poisoned_names.push(op->name);
         return op;
     }

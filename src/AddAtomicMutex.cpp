@@ -326,7 +326,7 @@ protected:
         }
 
         if (const std::string *mutex_name = needs_mutex_allocation.find(producer_name)) {
-            Expr extent = cast<uint64_t>(1);  // uint64_t to handle LargeBuffers
+            Expr extent = make_one(UInt(64));  // uint64_t to handle LargeBuffers
             for (const Expr &e : op->extents) {
                 extent = extent * e;
             }
@@ -378,7 +378,7 @@ protected:
         if (const std::string *mutex_name = needs_mutex_allocation.find(it->first)) {
             // All output buffers in a Tuple have the same extent.
             OutputImageParam output_buffer = Func(f).output_buffers()[0];
-            Expr extent = cast<uint64_t>(1);  // uint64_t to handle LargeBuffers
+            Expr extent = make_one(UInt(64));  // uint64_t to handle LargeBuffers
             for (int i = 0; i < output_buffer.dimensions(); i++) {
                 extent *= output_buffer.dim(i).extent();
             }

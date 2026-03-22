@@ -17,7 +17,64 @@ jobs:
     name: Run pre-commit checks
     runs-on: ubuntu-slim
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-      - uses: astral-sh/setup-uv@v5
-      - uses: pre-commit/action@v3.0.1
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.head_ref }}
+
+      - uses: actions/setup-python@v6
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Run pre-commit
+        id: pre-commit
+        uses: pre-commit/action@v3.0.1
+
+      - name: Create auto-fix diff
+        id: diff
+        if: ${{ !cancelled() && steps.pre-commit.outcome == 'failure' }}
+        run: |
+          if git diff --quiet; then
+            echo "has-fixes=false" >> "$GITHUB_OUTPUT"
+          else
+            git diff > /tmp/pre-commit-fixes.patch
+            echo "has-fixes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save PR metadata
+        if: ${{ !cancelled() && steps.diff.outputs.has-fixes == 'true' }}
+        run: |
+          jq -n \
+            --argjson number "$PR_NUMBER" \
+            --arg head_repo "$PR_HEAD_REPO" \
+            --arg head_ref "$PR_HEAD_REF" \
+            --argjson maintainer_can_modify "$PR_MAINTAINER_CAN_MODIFY" \
+            '$ARGS.named' | tee /tmp/pr-metadata.json
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_MAINTAINER_CAN_MODIFY: ${{ github.event.pull_request.maintainer_can_modify }}
+
+      - name: Upload auto-fix artifacts
+        if: ${{ !cancelled() && steps.diff.outputs.has-fixes == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: pre-commit-fixes
+          path: |
+            /tmp/pre-commit-fixes.patch
+            /tmp/pr-metadata.json
+          retention-days: 1
+
+      - name: Annotate codespell errors
+        if: ${{ !cancelled() && steps.pre-commit.outcome == 'failure' }}
+        run: |
+          pre-commit run --all-files codespell 2>&1 |
+            awk -F: '/^[^:]*:[0-9]+: / {
+              file=$1; line=$2; sub(/^[^:]*:[0-9]+: /, ""); msg=$0
+              key=file":"line
+              if (key in msgs) msgs[key]=msgs[key]"%0A"msg
+              else { msgs[key]=msg; files[key]=file; lines[key]=line; order[++n]=key }
+            } END {
+              for (i=1; i<=n; i++)
+                printf "::error file=%s,line=%s::%s\n", files[order[i]], lines[order[i]], msgs[order[i]]
+            }'
