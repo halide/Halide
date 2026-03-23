@@ -839,7 +839,7 @@ enum class InlineReductionVariant {
 template<InlineReductionVariant variant>
 int inline_reductions_test() {
     using namespace ConciseCasts;
-    constexpr float pi = M_PI;
+    constexpr float pi = static_cast<float>(M_PI);
 
     Func f{"f"};
     Var x("x");
@@ -897,7 +897,7 @@ enum class ArgMaxTupleOrder {
 template<ArgMaxVariant variant, ArgMaxTupleOrder order>
 int argmax_rfactor_test() {
     using namespace ConciseCasts;
-    constexpr float pi = M_PI;
+    constexpr float pi = static_cast<float>(M_PI);
 
     Func f{"f"};
     Var x("x");

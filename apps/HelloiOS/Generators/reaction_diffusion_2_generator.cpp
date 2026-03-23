@@ -35,7 +35,10 @@ public:
     Output<Buffer<float, 3>> new_state{"new_state"};
 
     void generate() {
-        clamped = Halide::BoundaryConditions::repeat_edge(state);
+        // Add a boundary condition to the old state that treats out of bounds values as random
+        clamped = Halide::BoundaryConditions::constant_exterior(state, random_float(frame));
+
+        // Diffusion
 
         blur_x(x, y, c) = (clamped(x - 3, y, c) +
                            clamped(x - 1, y, c) +
@@ -62,14 +65,16 @@ public:
         // Reaction
         Expr dR = B * (1 - R - G);
         Expr dG = (1 - B) * (R - G);
-        Expr dB = 1 - B + 2 * G * R - R - G;
+        Expr dB = 0.5f * (1 - B + 2 * G * R - R - G);
 
-        Expr bump = (frame % 1024) / 1024.0f;
-        bump *= 1 - bump;
-        Expr alpha = lerp(0.3f, 0.7f, bump);
-        dR = select(dR > 0, dR * alpha, dR);
+        // We'll massively speed up the reaction where the user touches
+        Expr dx = x - mouse_x;
+        Expr dy = y - mouse_y;
+        Expr radius = dx * dx + dy * dy;
+        Expr bump = 0.002f * state.dim(0).extent() * state.dim(1).extent() / max(1.0f, radius);
+        bump = select(mouse_x >= 0, bump, 0.0f);
 
-        Expr t = 0.1f;
+        Expr t = 0.04f + bump;
 
         R += t * dR;
         G += t * dG;
@@ -80,26 +85,6 @@ public:
         B = clamp(B, 0.0f, 1.0f);
 
         new_state(x, y, c) = mux(c, {R, G, B});
-
-        // Noise at the edges
-        new_state(x, state.dim(1).min(), c) = random_float(frame) * 0.2f;
-        new_state(x, state.dim(1).max(), c) = random_float(frame) * 0.2f;
-        new_state(state.dim(0).min(), y, c) = random_float(frame) * 0.2f;
-        new_state(state.dim(0).max(), y, c) = random_float(frame) * 0.2f;
-
-        // Add some white where the mouse is
-        Expr min_x = clamp(mouse_x - 20, 0, state.dim(0).extent() - 1);
-        Expr max_x = clamp(mouse_x + 20, 0, state.dim(0).extent() - 1);
-        Expr min_y = clamp(mouse_y - 20, 0, state.dim(1).extent() - 1);
-        Expr max_y = clamp(mouse_y + 20, 0, state.dim(1).extent() - 1);
-        clobber = RDom(min_x, max_x - min_x + 1, min_y, max_y - min_y + 1);
-
-        Expr dx = clobber.x - mouse_x;
-        Expr dy = clobber.y - mouse_y;
-        Expr radius = dx * dx + dy * dy;
-        new_state(clobber.x, clobber.y, c) = select(radius < 400.0f,
-                                                    1.0f,
-                                                    new_state(clobber.x, clobber.y, c));
     }
 
     void schedule() {
@@ -112,27 +97,10 @@ public:
         if (get_target().has_gpu_feature()) {
             blur
                 .reorder(c, x, y)
-                .vectorize(c)
+                .unroll(c)
                 .compute_at(new_state, xi);
 
             new_state.gpu_tile(x, y, xi, yi, 8, 2);
-
-            for (int i = 0; i <= 1; ++i) {
-                new_state.update(i)
-                    .reorder(c, x)
-                    .unroll(c)
-                    .gpu_tile(x, xi, 8);
-            }
-            for (int i = 2; i <= 3; ++i) {
-                new_state.update(i)
-                    .reorder(c, y)
-                    .unroll(c)
-                    .gpu_tile(y, yi, 8);
-            }
-            new_state.update(4)
-                .reorder(c, clobber.x)
-                .unroll(c)
-                .gpu_tile(clobber.x, clobber.y, 1, 1);
 
             state.dim(0).set_stride(3);
             state.dim(2).set_stride(1).set_extent(3);
@@ -141,24 +109,21 @@ public:
         } else {
             Var yi;
             new_state
-                .split(y, y, yi, 64)
+                .split(y, y, yi, 32)
                 .parallel(y)
                 .vectorize(x, natural_vector_size<float>());
 
-            blur
-                .compute_at(new_state, yi)
-                .vectorize(x, natural_vector_size<float>());
-
             clamped
+                .store_in(MemoryType::Stack)
                 .store_at(new_state, y)
-                .compute_at(new_state, yi);
+                .compute_at(new_state, yi)
+                .vectorize(Halide::_0, natural_vector_size<float>());
         }
     }
 
 private:
     Func blur_x, blur_y, blur, clamped;
     Var x, y, xi, yi, c;
-    RDom clobber;
 };
 
 class ReactionDiffusion2Render : public Halide::Generator<ReactionDiffusion2Render> {
@@ -170,7 +135,7 @@ public:
 
     void generate() {
         Func contour;
-        contour(x, y, c) = pow(state(x, y, c) * (1 - state(x, y, c)) * 4, 8);
+        contour(x, y, c) = pow(state(x, y, c) * (1 - state(x, y, c)) * 4, 2);
 
         Expr c0 = contour(x, y, 0);
         Expr c1 = contour(x, y, 1);

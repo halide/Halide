@@ -1,0 +1,86 @@
+name: macOS
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    paths-ignore:
+      - "doc/**"
+      - "README.md"
+      - "CODE_OF_CONDUCT.md"
+      - "LICENSE.txt"
+      - ".gitignore"
+      - ".gitattributes"
+      - ".gitmodules"
+      - ".lldbinit"
+      - ".github/**"
+      - "!.github/workflows/testing-macos.yml"
+      - "packaging/**"
+      - "Makefile"
+      - "Makefile.inc"
+      - 'run-clang-tidy.sh'
+      - '**.clang-tidy'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
+    name: ${{ matrix.arch }} / ${{ matrix.uv_group }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Disable extra cases until we have a fuller workflow
+        # For now, we're only testing HelloiOS
+        uv_group: [ "ci-llvm-main", ] # "ci-llvm-22", "ci-llvm-21"
+        runner: [ "macos-26", ] # "macos-26-intel"
+        include:
+          - runner: macos-26
+            arch: arm-64
+            python: cpython-3.10.20-macos-aarch64-none
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Sync CI environment
+        run: |
+          uv sync --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-project
+          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
+
+      - name: Configure LLVM paths
+        run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
+
+      - name: Configure CMake
+        run: >-
+          cmake --preset ci-macos-${{ matrix.arch }}
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
+          -DWITH_TESTS=NO
+          -DWITH_UTILS=NO
+          -DWITH_TUTORIALS=NO
+          -DWITH_PYTHON_BINDINGS=NO
+
+      - name: Initial build
+        run: cmake --build build --target install
+
+      - name: Configure HelloiOS
+        run: ./setup.sh
+        working-directory: apps/HelloiOS
+        env:
+          Halide_ROOT: ${{ github.workspace }}/install
+
+      - name: Build HelloiOS
+        run: >-
+          xcodebuild -workspace HelloiOS.xcworkspace
+          -scheme HelloiOS
+          -configuration Debug
+          -destination 'generic/platform=iOS Simulator'
+          build
+        working-directory: apps/HelloiOS
