@@ -24,15 +24,6 @@
 using namespace Halide;
 
 int main() {
-    // SVE2 backend has the below LLVM issue which has been fixed in LLVM 22.
-    // "Request for a fixed element count on a scalable object"
-    // https://github.com/llvm/llvm-project/issues/160127
-    if (Internal::get_llvm_version() < 220 &&
-        get_jit_target_from_environment().has_feature(Target::SVE2)) {
-        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
-               Internal::get_llvm_version());
-        return 0;
-    }
 
     // We're going to define and schedule our gradient function in
     // several different ways, and see what order pixels are computed
