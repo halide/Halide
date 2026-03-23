@@ -286,6 +286,8 @@ VISIT_NODE(Atomic, op->producer_name, op->mutex_name, op->body)
 #undef ENUM_TO_STR
 
 void IRGraphCXXPrinter::test() {
+#define STR(X) #X "\n"
+#define CODE(X) X
     {
         // This:
         Expr e = Select::make(Mod::make(Ramp::make(10, 314, 8), Broadcast::make(10, 8)) < Variable::make(Int(32), "p"), Broadcast::make(40, 8) + Ramp::make(4, 8, 8), VectorReduce::make(VectorReduce::Add, Ramp::make(0, 1, 16), 8));
@@ -299,44 +301,49 @@ void IRGraphCXXPrinter::test() {
         IRGraphCXXPrinter p(ss);
         p.print(e);
 
-        std::cout << "Printed expr: " << e << "\n";
-        std::cout << ss.str();
-        std::cout << "\n";
-
         // Prints:
-        Expr expr_0 = IntImm::make(Type(Type::Int, 32, 1), 10);
-        Expr expr_1 = IntImm::make(Type(Type::Int, 32, 1), 314);
-        Expr expr_2 = Ramp::make(expr_0, expr_1, 8);
-        Expr expr_3 = IntImm::make(Type(Type::Int, 32, 1), 10);
-        Expr expr_4 = Broadcast::make(expr_3, 8);
-        Expr expr_5 = Mod::make(expr_2, expr_4);
-        Expr expr_6 = Variable::make(Type(Type::Int, 32, 1), "p");
-        Expr expr_7 = Broadcast::make(expr_6, 8);
-        Expr expr_8 = LT::make(expr_5, expr_7);
-        Expr expr_9 = IntImm::make(Type(Type::Int, 32, 1), 40);
-        Expr expr_10 = Broadcast::make(expr_9, 8);
-        Expr expr_11 = IntImm::make(Type(Type::Int, 32, 1), 4);
-        Expr expr_12 = IntImm::make(Type(Type::Int, 32, 1), 8);
-        Expr expr_13 = Ramp::make(expr_11, expr_12, 8);
-        Expr expr_14 = Add::make(expr_10, expr_13);
-        Expr expr_15 = IntImm::make(Type(Type::Int, 32, 1), 0);
-        Expr expr_16 = IntImm::make(Type(Type::Int, 32, 1), 1);
-        Expr expr_17 = Ramp::make(expr_15, expr_16, 16);
-        Expr expr_18 = VectorReduce::make(VectorReduce::Add, expr_17, 8);
-        Expr expr_19 = Select::make(expr_8, expr_14, expr_18);
-        Expr expr_20 = Mul::make(expr_19, expr_19);
-        Expr expr_21 = Cast::make(Type(Type::Float, 32, 8), expr_20);
-        Expr expr_22 = Reinterpret::make(Type(Type::Int, 32, 8), expr_21);
-        Expr expr_23 = IntImm::make(Type(Type::Int, 32, 1), 3);
-        Expr expr_24 = Broadcast::make(expr_23, 8);
-        Expr expr_25 = Mul::make(expr_22, expr_24);
-        Expr expr_26 = Shuffle::make({expr_22, expr_25}, {0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15});
+#define RESULT(X)                                                         \
+    X(Expr expr_0 = IntImm::make(Type(Type::Int, 32, 1), 10);)            \
+    X(Expr expr_1 = IntImm::make(Type(Type::Int, 32, 1), 314);)           \
+    X(Expr expr_2 = Ramp::make(expr_0, expr_1, 8);)                       \
+    X(Expr expr_3 = IntImm::make(Type(Type::Int, 32, 1), 10);)            \
+    X(Expr expr_4 = Broadcast::make(expr_3, 8);)                          \
+    X(Expr expr_5 = Mod::make(expr_2, expr_4);)                           \
+    X(Expr expr_6 = Variable::make(Type(Type::Int, 32, 1), "p");)         \
+    X(Expr expr_7 = Broadcast::make(expr_6, 8);)                          \
+    X(Expr expr_8 = LT::make(expr_5, expr_7);)                            \
+    X(Expr expr_9 = IntImm::make(Type(Type::Int, 32, 1), 40);)            \
+    X(Expr expr_10 = Broadcast::make(expr_9, 8);)                         \
+    X(Expr expr_11 = IntImm::make(Type(Type::Int, 32, 1), 4);)            \
+    X(Expr expr_12 = IntImm::make(Type(Type::Int, 32, 1), 8);)            \
+    X(Expr expr_13 = Ramp::make(expr_11, expr_12, 8);)                    \
+    X(Expr expr_14 = Add::make(expr_10, expr_13);)                        \
+    X(Expr expr_15 = IntImm::make(Type(Type::Int, 32, 1), 0);)            \
+    X(Expr expr_16 = IntImm::make(Type(Type::Int, 32, 1), 1);)            \
+    X(Expr expr_17 = Ramp::make(expr_15, expr_16, 16);)                   \
+    X(Expr expr_18 = VectorReduce::make(VectorReduce::Add, expr_17, 8);)  \
+    X(Expr expr_19 = Select::make(expr_8, expr_14, expr_18);)             \
+    X(Expr expr_20 = Mul::make(expr_19, expr_19);)                        \
+    X(Expr expr_21 = Cast::make(Type(Type::Float, 32, 8), expr_20);)      \
+    X(Expr expr_22 = Reinterpret::make(Type(Type::Int, 32, 8), expr_21);) \
+    X(Expr expr_23 = IntImm::make(Type(Type::Int, 32, 1), 3);)            \
+    X(Expr expr_24 = Broadcast::make(expr_23, 8);)                        \
+    X(Expr expr_25 = Mul::make(expr_22, expr_24);)                        \
+    X(Expr expr_26 = Shuffle::make({expr_22, expr_25}, {0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15});)
 
-        // Now let's see if it matches:
+        std::string expected = RESULT(STR);
+        internal_assert(expected == ss.str()) << "Generated C++ code was not as expected."
+                                              << "Expected:\n"
+                                              << expected << "\n\nGenerated:\n"
+                                              << ss.str() << "\n";
+
+        // Now let's see if the IR it produces matches:
+        RESULT(CODE);
         const Expr &printed = expr_26;
         internal_assert(equal(printed, e)) << "Expressions don't match:\n\n"
                                            << e << "\n\n"
                                            << printed << "\n";
+#undef RESULT
     }
 
     {
@@ -352,23 +359,28 @@ void IRGraphCXXPrinter::test() {
         IRGraphCXXPrinter p(ss);
         p.print(test_cast);
 
-        std::cout << "Printed expr: " << test_cast << "\n";
-        std::cout << ss.str();
-        std::cout << "\n";
-
         // Produces:
-        Expr expr_0 = IntImm::make(Type(Type::Int, 16, 1), -32000);
-        Expr expr_1 = Cast::make(Type(Type::UInt, 64, 1), expr_0);
-        Expr expr_2 = UIntImm::make(Type(Type::UInt, 16, 1), 1);
-        Expr expr_3 = Cast::make(Type(Type::UInt, 64, 1), expr_2);
-        Expr expr_4 = Div::make(expr_1, expr_3);
-        Expr expr_5 = Call::make(Type(Type::UInt, 64, 1), "bitwise_not", {expr_4}, Call::CallType::PureIntrinsic);
+#define RESULT(X)                                                  \
+    X(Expr expr_0 = IntImm::make(Type(Type::Int, 16, 1), -32000);) \
+    X(Expr expr_1 = Cast::make(Type(Type::UInt, 64, 1), expr_0);)  \
+    X(Expr expr_2 = UIntImm::make(Type(Type::UInt, 16, 1), 1);)    \
+    X(Expr expr_3 = Cast::make(Type(Type::UInt, 64, 1), expr_2);)  \
+    X(Expr expr_4 = Div::make(expr_1, expr_3);)                    \
+    X(Expr expr_5 = Call::make(Type(Type::UInt, 64, 1), "bitwise_not", {expr_4}, Call::CallType::PureIntrinsic);)
+
+        std::string expected = RESULT(STR);
+        internal_assert(expected == ss.str()) << "Generated C++ code was not as expected."
+                                              << "Expected:\n"
+                                              << expected << "\n\nGenerated:\n"
+                                              << ss.str() << "\n";
 
         // Now let's see if it matches:
+        RESULT(CODE);
         const Expr &printed = expr_5;
         internal_assert(equal(printed, test_cast)) << "Expressions don't match:\n\n"
                                                    << test_cast << "\n\n"
                                                    << printed << "\n";
+#undef RESULT
     }
 }
 }  // namespace Internal
