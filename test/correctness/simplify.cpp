@@ -812,6 +812,59 @@ void check_vectors() {
           Broadcast::make(VectorReduce::make(VectorReduce::Max, int_vector, 2), 4));
 
     {
+        Expr x = Variable::make(Int(32), "x");
+        Expr y = Variable::make(Int(32), "y");
+
+        // == Symbolic Strides ==
+
+        // 1. Min: Scalar Reduction (arg_lanes=4, lanes=1 -> factor=4)
+        check(VectorReduce::make(VectorReduce::Min, Ramp::make(x, y, 4), 1),
+              min(y, 0) * 3 + x);
+
+        // 2. Min: Vector Reduction (arg_lanes=6, lanes=2 -> factor=3)
+        check(VectorReduce::make(VectorReduce::Min, Ramp::make(x, y, 6), 2),
+              Ramp::make(min(y, 0) * 2 + x, y * 3, 2));
+
+        // 3. Max: Scalar Reduction (arg_lanes=4, lanes=1 -> factor=4)
+        check(VectorReduce::make(VectorReduce::Max, Ramp::make(x, y, 4), 1),
+              max(y, 0) * 3 + x);
+
+        // 4. Max: Vector Reduction (arg_lanes=6, lanes=2 -> factor=3)
+        check(VectorReduce::make(VectorReduce::Max, Ramp::make(x, y, 6), 2),
+              Ramp::make(max(y, 0) * 2 + x, y * 3, 2));
+
+        // == Constant Strides (Positive & Negative) ==
+
+        // 5. Min: Positive Stride (arg_lanes=8, lanes=2 -> factor=4, stride=2)
+        // Block 1: min(x, x+2, x+4, x+6) -> x
+        // Expected Base: x + min(2 * 3, 0) -> x + 0 -> x
+        // Expected Stride: 2 * 4 = 8
+        check(VectorReduce::make(VectorReduce::Min, Ramp::make(x, 2, 8), 2),
+              Ramp::make(x, 8, 2));
+
+        // 6. Max: Positive Stride (arg_lanes=8, lanes=2 -> factor=4, stride=2)
+        // Block 1: max(x, x+2, x+4, x+6) -> x+6
+        // Expected Base: x + max(2 * 3, 0) -> x + 6
+        // Expected Stride: 2 * 4 = 8
+        check(VectorReduce::make(VectorReduce::Max, Ramp::make(x, 2, 8), 2),
+              Ramp::make(x + 6, 8, 2));
+
+        // 7. Min: Negative Stride (arg_lanes=8, lanes=2 -> factor=4, stride=-2)
+        // Block 1: min(x, x-2, x-4, x-6) -> x-6
+        // Expected Base: x + min(-2 * 3, 0) -> x - 6
+        // Expected Stride: -2 * 4 = -8
+        check(VectorReduce::make(VectorReduce::Min, Ramp::make(x, -2, 8), 2),
+              Ramp::make(x + -6, -8, 2));
+
+        // 8. Max: Negative Stride (arg_lanes=8, lanes=2 -> factor=4, stride=-2)
+        // Block 1: max(x, x-2, x-4, x-6) -> x
+        // Expected Base: x + max(-2 * 3, 0) -> x + 0 -> x
+        // Expected Stride: -2 * 4 = -8
+        check(VectorReduce::make(VectorReduce::Max, Ramp::make(x, -2, 8), 2),
+              Ramp::make(x, -8, 2));
+    }
+
+    {
         // h_add(broadcast(x, 8), 4) should simplify to broadcast(x * 2, 4)
         check(VectorReduce::make(VectorReduce::Add, broadcast(x, 8), 4),
               broadcast(x * 2, 4));
