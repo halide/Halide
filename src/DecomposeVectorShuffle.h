@@ -45,8 +45,8 @@ namespace Internal {
 
 /** Enum to represent the special cases of slice index */
 enum {
-    SLICE_INDEX_NONE = -1,
-    SLICE_INDEX_CARRY_PREV_RESULT = -2,
+    SliceIndexNone = -1,
+    SliceIndexCarryPrevResult = -2,
 };
 
 struct NativeShuffle {
@@ -56,7 +56,7 @@ struct NativeShuffle {
 
     NativeShuffle(int vl, int a, int b)
         : slice_a(a), slice_b(b) {
-        lane_map.resize(vl, SLICE_INDEX_NONE);
+        lane_map.resize(vl, SliceIndexNone);
     }
 };
 
@@ -105,7 +105,7 @@ struct DecomposeVectorShuffle {
             for (const auto &step : steps_for_dst_slice) {
                 // Obtain 1st slice a
                 VecTy a;
-                if (step.slice_a == SLICE_INDEX_CARRY_PREV_RESULT) {
+                if (step.slice_a == SliceIndexCarryPrevResult) {
                     internal_assert(dst_slice.has_value()) << "Tried to carry from undefined previous result";
                     a = *dst_slice;
                 } else {
@@ -113,7 +113,7 @@ struct DecomposeVectorShuffle {
                 }
                 // Obtain 2nd slice b
                 std::optional<VecTy> b;
-                if (step.slice_b == SLICE_INDEX_NONE) {
+                if (step.slice_b == SliceIndexNone) {
                     b = std::nullopt;
                 } else {
                     b = std::optional<VecTy>(get_vl_slice(step.slice_b));

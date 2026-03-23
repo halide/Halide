@@ -2274,9 +2274,9 @@ Value *CodeGen_ARM::shuffle_scalable_vectors_general(Value *a, Value *b, const s
     int highest_lane = *std::max_element(indices.begin(), indices.end());
     internal_assert(highest_lane >= 0)
         << "highest_lane was "
-        << (highest_lane == SLICE_INDEX_NONE              ? "SLICE_INDEX_NONE" :
-            highest_lane == SLICE_INDEX_CARRY_PREV_RESULT ? "SLICE_INDEX_CARRY_PREV_RESULT" :
-                                                            "")
+        << (highest_lane == SliceIndexNone            ? "SliceIndexNone" :
+            highest_lane == SliceIndexCarryPrevResult ? "SliceIndexCarryPrevResult" :
+                                                        "")
         << " (" << highest_lane << ")";
 
     bool use_tbl = highest_lane < src_lanes;
