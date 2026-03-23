@@ -2264,20 +2264,14 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
+    if (is_output) {
+        // None of the checks below apply to outputs
+        return true;
+    }
+
     LoopLevel store_at = f.schedule().store_level();
     LoopLevel compute_at = f.schedule().compute_level();
     LoopLevel hoist_storage_at = f.schedule().hoist_storage_level();
-
-    // Outputs must be compute_root and store_root. They're really
-    // store_in_user_code, but store_root is close enough.
-    if (is_output) {
-        if (store_at.is_root() && compute_at.is_root()) {
-            return true;
-        } else {
-            user_error << "Func " << f.name() << " is an output, so must"
-                       << " be scheduled compute_root (which is the default).\n";
-        }
-    }
 
     // Otherwise inspect the uses to see what's ok.
     ComputeLegalSchedules legal(f, env);
@@ -2315,6 +2309,12 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
 
     if (f.schedule().ring_buffer().defined() && store_at == hoist_storage_at) {
         user_error << "Func \"" << f.name() << "\" is scheduled with ring_buffer(), but has matching store_at and hoist_storage levels. Add an explicit hoist_storage directive to the schedule to fix the issue.\n";
+    }
+
+    // Check if hoist_storage is used with an extern stage
+    if (f.has_extern_definition() && !hoist_storage_at.is_inlined() && hoist_storage_at != store_at) {
+        user_error << "Func \"" << f.name() << "\" is an extern function with storage hoisted to a different level than store_at. "
+                   << "Func::hoist_storage is not currently supported for extern functions.";
     }
 
     vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
@@ -2378,6 +2378,27 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     }
 
     return true;
+}
+
+void validate_output_schedules(const vector<Function> &outputs) {
+    for (Function f : outputs) {
+        // Treat unscheduled as root
+        FuncSchedule &sched = f.schedule();
+        for (LoopLevel *l : {&sched.compute_level(), &sched.store_level(), &sched.hoist_storage_level()}) {
+            if (l->is_inlined()) {
+                *l = LoopLevel::root();
+                l->lock();
+            } else if (!l->is_root()) {
+                user_error
+                    << "Func " << f.name() << " is an output, so must be scheduled"
+                    << " compute_root, store_root, and hoist_storage_root (which is the"
+                    << " default). The requested compute, store, and hoist_storage levels are "
+                    << sched.compute_level() << ", "
+                    << sched.store_level() << ", and "
+                    << sched.hoist_storage_level() << " respectively.\n";
+            }
+        }
+    }
 }
 
 void validate_fused_group_schedule_helper(const string &fn,
@@ -2551,6 +2572,8 @@ Stmt schedule_functions(const vector<Function> &outputs,
     Stmt s = For::make(root_var, 0, 0, ForType::Serial, Partition::Never, DeviceAPI::Host, Evaluate::make(0));
 
     any_memoized = false;
+
+    validate_output_schedules(outputs);
 
     validate_fused_groups_schedule(fused_groups, env);
 

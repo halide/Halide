@@ -1,0 +1,134 @@
+exclude: ^dependencies/(spirv|vulkan)/
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      - id: check-json
+        exclude: ^\.devcontainer/
+      - id: check-merge-conflict
+      - id: check-shebang-scripts-are-executable
+      - id: check-symlinks
+      - id: check-yaml
+        args: [ --allow-multiple-documents ]
+      - id: destroyed-symlinks
+      - id: end-of-file-fixer
+        exclude: \.patch$
+      - id: fix-byte-order-marker
+      - id: mixed-line-ending
+      - id: no-commit-to-branch
+      - id: trailing-whitespace
+        args: [ --markdown-linebreak-ext=md ]
+        exclude: \.patch$
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.11
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v21.1.8
+    hooks:
+      - id: clang-format
+        args: [ --sort-includes ]
+        types_or: [ c, c++, objective-c, json ]
+        exclude: |
+          (?x)(
+            ^tutorial/
+            | ^src/runtime/hexagon_remote/bin/src/
+            | ^src/runtime/mini_webgpu\.h$
+            | ^src/runtime/mini_d3d12\.h$
+            | ^src/runtime/vulkan_context\.h$
+            | \.fbs\.h$
+            | ^\.devcontainer/
+            | \.xcassets/
+          )
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        args: [ --ignore-words-list, "CreateOr,implementors,PADD,re-use,re-used,re-using,subtile,subtiles" ]
+        exclude: |
+          (?x)(
+            ^src/autoschedulers/common/cmdline\.h$
+            | ^src/runtime/hexagon_remote/bin/src/
+            | ^src/runtime/mini_cuda\.h$
+            | ^src/runtime/mini_d3d12\.h$
+            | ^apps/HelloAndroid.*/gradlew\.bat$
+            | \.pgm$
+          )
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.9.0
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/google/keep-sorted
+    rev: v0.8.0
+    hooks:
+      - id: keep-sorted
+        args: [
+          --default-options,
+          "allow_yaml_lists=yes case=yes group=yes order=asc remove_duplicates=yes sticky_comments=no"
+        ]
+
+  - repo: https://github.com/hukkin/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        args: [ --number, --wrap=80 ]
+        additional_dependencies:
+          # Upstream mdformat-gfm declined to work around GitHub's rendering
+          # quirks. See: https://github.com/hukkin/mdformat-gfm/issues/58
+          - git+https://github.com/halide/mdformat-gfm.git@fce9859
+          - mdformat-ruff
+          - mdformat-shfmt
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.5
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        exclude: ^apps/HelloAndroid.*/gradlew$
+
+  - repo: https://github.com/maxwinterstein/shfmt-py
+    rev: v3.12.0.1
+    hooks:
+      - id: shfmt
+        args: [ -i, "4", -ci, -s, -w ]
+        exclude: ^apps/HelloAndroid.*/gradlew$
+
+  - repo: https://github.com/ComPWA/taplo-pre-commit
+    rev: v0.9.3
+    hooks:
+      - id: taplo-format
+
+  - repo: local
+    hooks:
+      - id: check-cmake-file-lists
+        name: check CMake file lists
+        entry: python tools/check_cmake_file_lists.py
+        language: system
+        files: ^test/.*CMakeLists\.txt$
+
+      - id: check-cmake-style
+        name: check CMake style
+        entry: python tools/check_cmake_style.py
+        language: system
+        files: (^|/)(CMakeLists\.txt|.*\.cmake)$
+
+      - id: uv-lock
+        name: check uv.lock is up to date
+        entry: uv lock --check
+        language: system
+        pass_filenames: false
+        files: ^(pyproject\.toml|uv\.lock)$

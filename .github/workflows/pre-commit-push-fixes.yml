@@ -1,0 +1,82 @@
+name: Push pre-commit auto-fixes
+on:
+  workflow_run:
+    workflows: [ "Halide Presubmit Checks" ]
+    types: [ completed ]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  push-fixes:
+    name: Push auto-fixes to PR branch
+    runs-on: ubuntu-slim
+    if: github.event.workflow_run.conclusion == 'failure'
+    steps:
+      - name: Download auto-fix artifacts
+        id: download
+        uses: actions/download-artifact@v8
+        with:
+          name: pre-commit-fixes
+          path: /tmp/pre-commit-fixes
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+        continue-on-error: true
+
+      - name: Read PR metadata
+        if: steps.download.outcome == 'success'
+        id: pr
+        run: |
+          {
+            echo "number=$(jq -r '.number' /tmp/pre-commit-fixes/pr-metadata.json)"
+            echo "head-repo=$(jq -r '.head_repo' /tmp/pre-commit-fixes/pr-metadata.json)"
+            echo "head-ref=$(jq -r '.head_ref' /tmp/pre-commit-fixes/pr-metadata.json)"
+            echo "maintainer-can-modify=$(jq -r '.maintainer_can_modify' /tmp/pre-commit-fixes/pr-metadata.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Abort if maintainer edits not allowed
+        if: >-
+          steps.download.outcome == 'success'
+          && steps.pr.outputs.head-repo != github.repository
+          && steps.pr.outputs.maintainer-can-modify != 'true'
+        run: |
+          echo "::warning::PR #${{ steps.pr.outputs.number }} does not allow maintainer edits. Cannot push auto-fixes to fork."
+          echo "skip=true" >> "$GITHUB_ENV"
+
+      - uses: actions/create-github-app-token@v3
+        if: steps.download.outcome == 'success' && env.skip != 'true'
+        id: app-token
+        with:
+          app-id: ${{ secrets.LLVM_UPDATER_ID }}
+          private-key: ${{ secrets.LLVM_UPDATER_PRIVATE_KEY }}
+
+      - name: Get GitHub App user ID
+        if: steps.download.outcome == 'success' && env.skip != 'true'
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - uses: actions/checkout@v6
+        if: steps.download.outcome == 'success' && env.skip != 'true'
+        with:
+          repository: ${{ steps.pr.outputs.head-repo }}
+          ref: ${{ steps.pr.outputs.head-ref }}
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Apply and push fixes
+        if: steps.download.outcome == 'success' && env.skip != 'true'
+        run: |
+          git config user.name "${{ steps.app-token.outputs.app-slug }}[bot]"
+          git config user.email "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+          if [ "$(git log -1 --format='%ae')" = "$(git config user.email)" ]; then
+            echo "::error::pre-commit auto-fixes were not idempotent. Please fix manually."
+            exit 1
+          fi
+
+          git apply /tmp/pre-commit-fixes/pre-commit-fixes.patch
+          git add -A
+          git commit -m "Apply pre-commit auto-fixes"
+          git push

@@ -354,7 +354,8 @@ foreach (LIB IN LISTS EXTRA_ALIAS_LIBS)
 endforeach ()
 _add_halide_aot_tests(alias
                       ENABLE_IF WITH_AUTOSCHEDULERS
-                      HALIDE_LIBRARIES alias ${EXTRA_ALIAS_LIBS})
+                      HALIDE_LIBRARIES alias ${EXTRA_ALIAS_LIBS}
+                      GROUPS multithreaded)
 
 # all_type_names_aottest.cpp
 # all_type_names_generator.cpp
@@ -452,7 +453,7 @@ if (NOT ${_USING_WASM})
 
     # cxx_mangling_define_extern_externs.cpp
     add_library(cxx_mangling_define_extern_externs STATIC cxx_mangling_define_extern_externs.cpp)
-    # Ensure that cxx_mangling.h is availabe for cxx_mangling_define_extern_externs
+    # Ensure that cxx_mangling.h is available for cxx_mangling_define_extern_externs
     target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling)
     add_dependencies(cxx_mangling_define_extern_externs cxx_mangling)
 
@@ -511,7 +512,8 @@ if ((NOT ${_USING_WASM}) AND (NOT Halide_TARGET MATCHES "vulkan"))
                           FEATURES user_context)
     _add_halide_aot_tests(gpu_multi_context_threaded
                           HALIDE_LIBRARIES gpu_multi_context_threaded_add gpu_multi_context_threaded_mul
-                          LINK_TO_GPU)
+                          LINK_TO_GPU
+                          GROUPS multithreaded)
 endif ()
 
 # gpu_object_lifetime_aottest.cpp
@@ -674,7 +676,8 @@ foreach (LIB IN LISTS NESTED_EXTERNS_LIBS)
     _add_halide_libraries(${LIB} FROM nested_externs.generator GENERATOR_NAME ${LIB} FEATURES user_context c_plus_plus_name_mangling)
 endforeach ()
 _add_halide_aot_tests(nested_externs
-                      HALIDE_LIBRARIES ${NESTED_EXTERNS_LIBS})
+                      HALIDE_LIBRARIES ${NESTED_EXTERNS_LIBS}
+                      GROUPS multithreaded)
 
 # opencl_runtime_aottest.cpp
 # opencl_runtime_generator.cpp

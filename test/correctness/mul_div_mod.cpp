@@ -541,6 +541,18 @@ void add_test_div_mod(int vector_width, ScheduleVariant scheduling, Target targe
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
+    // LLVM's performSignExtendInRegCombine in the AArch64 backend asserts
+    // when it encounters SIGN_EXTEND_INREG from i1 on SVE vectors. Halide's
+    // division lowering produces select(cond, -1, 0) which LLVM canonicalizes
+    // to sext i1, triggering the assertion. Fixed on LLVM main by:
+    // https://github.com/llvm/llvm-project/commit/ffb7a9f0ec80 (PR #177976)
+    if (target.has_feature(Target::SVE2) &&
+        Internal::get_llvm_version() < 230) {
+        printf("[SKIP] LLVM %d has a known SVE bug in performSignExtendInRegCombine (PR #177976).\n",
+               Internal::get_llvm_version());
+        return 0;
+    }
+
     ScheduleVariant scheduling = CPU;
     if (target.has_gpu_feature()) {
         scheduling = TiledGPU;

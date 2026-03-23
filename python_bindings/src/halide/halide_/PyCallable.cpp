@@ -47,6 +47,28 @@ T cast_to(const py::handle &h) {
     }
 }
 
+std::pair<bool, bool> is_any_contiguous(const py::buffer_info &info) {
+    py::ssize_t c_stride = info.itemsize;
+    py::ssize_t f_stride = info.itemsize;
+    bool c_contig = true;
+    bool f_contig = true;
+
+    for (size_t i = 0; i < info.ndim; ++i) {
+        size_t c_idx = info.ndim - 1 - i;
+        if (info.strides[c_idx] != c_stride) {
+            c_contig = false;
+        }
+        c_stride *= info.shape[c_idx];
+
+        if (info.strides[i] != f_stride) {
+            f_contig = false;
+        }
+        f_stride *= info.shape[i];
+    }
+
+    return {c_contig, f_contig};
+}
+
 }  // namespace
 
 class PyCallable {
@@ -92,11 +114,22 @@ public:
                     auto b = cast_to<Halide::Buffer<>>(value);
                     raw_buffer = b.raw_buffer();
                 } else {
+                    py::buffer py_buffer_value = cast_to<py::buffer>(value);
                     const bool writable = c_arg.is_output();
-                    const bool reverse_axes = true;
+
+                    const py::buffer_info value_buffer_info = py_buffer_value.request(writable);
+                    auto [c_contig, f_contig] = is_any_contiguous(value_buffer_info);
+
+                    if (!c_contig && !f_contig) {
+                        throw Halide::Error("Invalid buffer: only C or F contiguous buffers are supported");
+                    }
+
+                    // It is possible for a buffer to be both C and F contiguous
+                    // (e.g., a scalar or a 1D buffer).
+                    const bool reverse_axes = c_contig && !f_contig;
                     buffers.buffers[slot] =
-                        pybuffer_to_halidebuffer<void, AnyDims, MaxFastDimensions>(
-                            cast_to<py::buffer>(value), writable, reverse_axes);
+                        pybufferinfo_to_halidebuffer<void, AnyDims, MaxFastDimensions>(
+                            value_buffer_info, reverse_axes);
                     raw_buffer = buffers.buffers[slot].raw_buffer();
                 }
                 // Mark all input buffers as having a dirty host, so that the Halide call will

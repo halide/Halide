@@ -4,11 +4,6 @@
 
 set(REASON_FAILURE_MESSAGE "")
 
-# Fallback configurations for weirdly built LLVMs
-set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel Release RelWithDebInfo "")
-set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel "")
-set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
-
 set(llvm_paths "")
 foreach (
     template IN ITEMS
@@ -17,7 +12,7 @@ foreach (
     "/usr/local/lib/llvm-@VERSION@" # Third-party packages
     "/opt/llvm-@VERSION@" # Third-party packages
 )
-    foreach (VERSION RANGE 20 22) # inclusive!
+    foreach (VERSION RANGE 21 23) # inclusive!
         string(CONFIGURE "${template}" path @ONLY)
         list(APPEND llvm_paths "${path}")
     endforeach ()
@@ -28,7 +23,7 @@ find_package(LLVM PATHS ${llvm_paths})
 
 # Neither LLVM_VERSION nor LLVM_PACKAGE_VERSION work as find_package arguments
 # in git/development builds as they include a "git" suffix. This applies at
-# time of writing to versions 18-21, inclusive.
+# time of writing to versions 21-23, inclusive.
 if (LLVM_FOUND)
     set(Halide_LLVM_VERSION "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
 endif ()
@@ -73,7 +68,7 @@ if (LLVM_FOUND)
                 # Homebrew split the LLVM and LLD packages as of version 19, so
                 # having multiple LLVM versions installed leads to the newest
                 # LLD being found without this hint.
-                "${LLVM_INSTALL_PREFIX}/../lld@${LLVM_VERSION_MAJOR}"
+                "${LLVM_DIR}/../../../../lld@${LLVM_VERSION_MAJOR}"
                 "${LLVM_DIR}/../lld"
                 "${LLVM_DIR}/../lib/cmake/lld"
             )
@@ -118,9 +113,9 @@ find_package_handle_standard_args(
     HANDLE_VERSION_RANGE
 )
 
-function(_Halide_LLVM_link target visibility)
+function(_Halide_LLVM_link target)
     llvm_map_components_to_libnames(comps ${ARGN})
-    target_link_libraries("${target}" "${visibility}" ${comps})
+    target_link_libraries("${target}" INTERFACE ${comps})
 endfunction()
 
 if (Halide_LLVM_FOUND)
@@ -159,7 +154,7 @@ if (Halide_LLVM_FOUND)
         if (Halide_LLVM_SHARED_LIBS)
             target_link_libraries(Halide_LLVM::Core INTERFACE LLVM ${CMAKE_DL_LIBS})
         else ()
-            _Halide_LLVM_link(Halide_LLVM::Core INTERFACE orcjit bitwriter linker passes)
+            _Halide_LLVM_link(Halide_LLVM::Core orcjit bitwriter linker passes)
         endif ()
     endif ()
 
@@ -169,7 +164,7 @@ if (Halide_LLVM_FOUND)
             target_link_libraries(Halide_LLVM::${comp} INTERFACE Halide_LLVM::Core)
 
             if (NOT Halide_LLVM_SHARED_LIBS)
-                _Halide_LLVM_link(Halide_LLVM::${comp} INTERFACE ${comp})
+                _Halide_LLVM_link(Halide_LLVM::${comp} ${comp})
             endif ()
 
             if (comp STREQUAL "WebAssembly")

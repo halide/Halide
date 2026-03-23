@@ -60,8 +60,9 @@ class SplitTuples : public IRMutator {
         if (op->types.size() > 1) {
             // If there is a corresponding HoistedStorage node record the new number of
             // realizes.
-            if (hoisted_tuple_count.count(op->name)) {
-                hoisted_tuple_count[op->name] = op->types.size();
+            if (auto it = hoisted_tuple_count.find(op->name);
+                it != hoisted_tuple_count.end()) {
+                it->second = op->types.size();
             }
             // Make a nested set of realize nodes for each tuple element
             Stmt body = mutate(op->body);
@@ -169,6 +170,7 @@ class SplitTuples : public IRMutator {
                         could_alias(op->args, store_args)) {
                         deps.insert(op->value_index);
                     }
+                    IRVisitor::visit(op);
                 }
 
                 bool could_alias(const vector<Expr> &a, const vector<Expr> &b) {

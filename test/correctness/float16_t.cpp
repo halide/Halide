@@ -322,7 +322,7 @@ int run_test() {
                        std::abs(halfway_plus_eps - (double)to_even));
 
                 assert(float(halfway_plus_eps) == halfway);
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
                 assert(_Float16(halfway_plus_eps) == _Float16(float(to_odd)));
 #endif
                 assert(float16_t(halfway_plus_eps) == to_odd);
@@ -465,6 +465,15 @@ int run_test() {
 }  // namespace
 
 int main(int argc, char **argv) {
+    // TODO(https://github.com/halide/Halide/issues/8985): LLVM's JIT emits
+    // misaligned jump tables on arm-32 with arm_fp16, causing SIGILL.
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::ARM && target.bits == 32 &&
+        target.has_feature(Target::ARMFp16)) {
+        printf("[SKIP] arm-32 JIT with arm_fp16 hits LLVM jump table misalignment bug.\n");
+        return 0;
+    }
+
     MyCustomErrorReporter reporter;
     set_custom_compile_time_error_reporter(&reporter);
 
@@ -475,7 +484,7 @@ int main(int argc, char **argv) {
     }
 
     printf("Testing _Float16...\n");
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
     if (run_test<_Float16>() != 0) {
         fprintf(stderr, "_Float16 test failed!\n");
         return 1;

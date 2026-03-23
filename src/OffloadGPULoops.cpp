@@ -200,18 +200,18 @@ class InjectGpuOffload : public IRMutator {
                 arg_types_or_sizes.emplace_back(cast(target_size_t_type, i.is_buffer ? 8 : i.type.bytes()));
             }
 
-            arg_is_buffer.emplace_back(cast<uint8_t>(i.is_buffer));
+            arg_is_buffer.emplace_back(make_const(UInt(8), (int)i.is_buffer));
         }
 
         // nullptr-terminate the lists
-        args.emplace_back(reinterpret(Handle(), cast<uint64_t>(0)));
+        args.emplace_back(reinterpret(Handle(), make_zero(UInt(64))));
         if (runtime_run_takes_types) {
             internal_assert(sizeof(halide_type_t) == sizeof(uint32_t));
-            arg_types_or_sizes.emplace_back(cast<uint32_t>(0));
+            arg_types_or_sizes.emplace_back(make_zero(UInt(32)));
         } else {
             arg_types_or_sizes.emplace_back(cast(target_size_t_type, 0));
         }
-        arg_is_buffer.emplace_back(cast<uint8_t>(0));
+        arg_is_buffer.emplace_back(make_zero(UInt(8)));
 
         debug(3) << "bounds.num_blocks[0] = " << bounds.num_blocks[0] << "\n";
         debug(3) << "bounds.num_blocks[1] = " << bounds.num_blocks[1] << "\n";
@@ -254,7 +254,7 @@ public:
         device_target.os = Target::OSUnknown;
         device_target.arch = Target::ArchUnknown;
         if (target.has_feature(Target::CUDA)) {
-            cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(device_target, any_strict_float);
+            cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(device_target);
         }
         if (target.has_feature(Target::OpenCL)) {
             cgdev[DeviceAPI::OpenCL] = new_CodeGen_OpenCL_Dev(device_target);
@@ -266,10 +266,14 @@ public:
             cgdev[DeviceAPI::D3D12Compute] = new_CodeGen_D3D12Compute_Dev(device_target);
         }
         if (target.has_feature(Target::Vulkan)) {
-            cgdev[DeviceAPI::Vulkan] = new_CodeGen_Vulkan_Dev(target);
+            cgdev[DeviceAPI::Vulkan] = new_CodeGen_Vulkan_Dev(device_target);
         }
         if (target.has_feature(Target::WebGPU)) {
             cgdev[DeviceAPI::WebGPU] = new_CodeGen_WebGPU_Dev(device_target);
+        }
+
+        for (auto &i : cgdev) {
+            i.second->set_any_strict_float(any_strict_float);
         }
 
         internal_assert(!cgdev.empty()) << "Requested unknown GPU target: " << target.to_string() << "\n";

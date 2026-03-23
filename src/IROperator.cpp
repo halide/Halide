@@ -544,12 +544,20 @@ Expr lossless_cast(Type t,
                     }
                 }
             } else if (const VectorReduce *op = e.as<VectorReduce>()) {
-                if (op->op == VectorReduce::Add ||
+                if ((t.bits() > 1 && op->op == VectorReduce::Add) ||
                     op->op == VectorReduce::Min ||
                     op->op == VectorReduce::Max) {
                     Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value, scope, cache);
                     if (v.defined()) {
-                        return VectorReduce::make(op->op, v, op->type.lanes());
+                        auto reduce_op = op->op;
+                        if (t.bits() == 1) {
+                            // UInt(1) == Bool() is the only 1-bit type we expect to see
+                            internal_assert(t.is_uint()) << "Unexpected type: " << t << "\n";
+                            reduce_op = (op->op == VectorReduce::Min ?
+                                             VectorReduce::And :
+                                             VectorReduce::Or);
+                        }
+                        return VectorReduce::make(reduce_op, v, op->type.lanes());
                     }
                 }
             }
@@ -2278,6 +2286,19 @@ Expr erf(const Expr &x) {
     user_assert(x.defined()) << "erf of undefined Expr\n";
     user_assert(x.type() == Float(32)) << "erf only takes float arguments\n";
     return halide_erf(x);
+}
+
+Expr fma(const Expr &a, const Expr &b, const Expr &c) {
+    user_assert(a.type().is_float()) << "fma requires floating-point arguments.";
+    user_assert(a.type() == b.type() && a.type() == c.type())
+        << "All arguments to fma must have the same type.";
+
+    // TODO: Once we use LLVM's native bfloat type instead of treating them as
+    // ints, we should be able to remove this assert. Currently, it tries to
+    // codegen an integer fma.
+    user_assert(!a.type().is_bfloat()) << "fma does not yet support bfloat types.";
+
+    return Call::make(a.type(), Call::strict_fma, {a, b, c}, Call::PureIntrinsic);
 }
 
 Expr fast_pow(Expr x, Expr y) {

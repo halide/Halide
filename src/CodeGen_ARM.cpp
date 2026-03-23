@@ -56,8 +56,14 @@ Target complete_arm_target(Target t) {
         }
     };
 
+    // ARMFp16 implies ARMv8.2-A; we don't know of any devices where
+    // that doesn't hold. The cascade loop below will set ARMv81a and ARMv8a.
+    add_implied_feature_if_supported(t, Target::ARMFp16, Target::ARMv82a);
+
     constexpr int num_arm_v8_features = 10;
     static const Target::Feature arm_v8_features[num_arm_v8_features] = {
+        // The following loop depends on this array being sorted correctly.
+        // keep-sorted start numeric=yes order=desc
         Target::ARMv89a,
         Target::ARMv88a,
         Target::ARMv87a,
@@ -68,6 +74,7 @@ Target complete_arm_target(Target t) {
         Target::ARMv82a,
         Target::ARMv81a,
         Target::ARMv8a,
+        // keep-sorted end
     };
 
     for (int i = 0; i < num_arm_v8_features - 1; i++) {
@@ -1475,17 +1482,13 @@ void CodeGen_ARM::visit(const Store *op) {
             is_float16_and_has_feature(elt) ||
             elt == Int(8) || elt == Int(16) || elt == Int(32) || elt == Int(64) ||
             elt == UInt(8) || elt == UInt(16) || elt == UInt(32) || elt == UInt(64)) {
-            // TODO(zvookin): Handle vector_bits_*.
+            const int target_vector_bits = native_vector_bits();
             if (vec_bits % 128 == 0) {
                 type_ok_for_vst = true;
-                int target_vector_bits = native_vector_bits();
-                if (target_vector_bits == 0) {
-                    target_vector_bits = 128;
-                }
                 intrin_type = intrin_type.with_lanes(target_vector_bits / t.bits());
             } else if (vec_bits % 64 == 0) {
                 type_ok_for_vst = true;
-                auto intrin_bits = (vec_bits % 128 == 0 || target.has_feature(Target::SVE2)) ? 128 : 64;
+                auto intrin_bits = (vec_bits % 128 == 0 || target.has_feature(Target::SVE2)) ? target_vector_bits : 64;
                 intrin_type = intrin_type.with_lanes(intrin_bits / t.bits());
             }
         }
@@ -1494,7 +1497,9 @@ void CodeGen_ARM::visit(const Store *op) {
     if (ramp && is_const_one(ramp->stride) &&
         shuffle && shuffle->is_interleave() &&
         type_ok_for_vst &&
-        2 <= shuffle->vectors.size() && shuffle->vectors.size() <= 4) {
+        2 <= shuffle->vectors.size() && shuffle->vectors.size() <= 4 &&
+        // TODO: we could handle predicated_store once shuffle_vector gets robust for scalable vectors
+        !is_predicated_store) {
 
         const int num_vecs = shuffle->vectors.size();
         vector<Value *> args(num_vecs);
@@ -1513,7 +1518,6 @@ void CodeGen_ARM::visit(const Store *op) {
         for (int i = 0; i < num_vecs; ++i) {
             args[i] = codegen(shuffle->vectors[i]);
         }
-        Value *store_pred_val = codegen(op->predicate);
 
         bool is_sve = target.has_feature(Target::SVE2);
 
@@ -1559,8 +1563,8 @@ void CodeGen_ARM::visit(const Store *op) {
         llvm::FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
         internal_assert(fn);
 
-        // SVE2 supports predication for smaller than whole vector size.
-        internal_assert(target.has_feature(Target::SVE2) || (t.lanes() >= intrin_type.lanes()));
+        // Scalable vector supports predication for smaller than whole vector size.
+        internal_assert(target_vscale() > 0 || (t.lanes() >= intrin_type.lanes()));
 
         for (int i = 0; i < t.lanes(); i += intrin_type.lanes()) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
@@ -1581,15 +1585,10 @@ void CodeGen_ARM::visit(const Store *op) {
                 slice_args.push_back(ConstantInt::get(i32_t, alignment));
             } else {
                 if (is_sve) {
-                    // Set the predicate argument
+                    // Set the predicate argument to mask active lanes
                     auto active_lanes = std::min(t.lanes() - i, intrin_type.lanes());
-                    Value *vpred_val;
-                    if (is_predicated_store) {
-                        vpred_val = slice_vector(store_pred_val, i, intrin_type.lanes());
-                    } else {
-                        Expr vpred = make_vector_predicate_1s_0s(active_lanes, intrin_type.lanes() - active_lanes);
-                        vpred_val = codegen(vpred);
-                    }
+                    Expr vpred = make_vector_predicate_1s_0s(active_lanes, intrin_type.lanes() - active_lanes);
+                    Value *vpred_val = codegen(vpred);
                     slice_args.push_back(vpred_val);
                 }
                 // Set the pointer argument
@@ -1689,6 +1688,7 @@ void CodeGen_ARM::visit(const Store *op) {
                 vpred_val = convert_fixed_or_scalable_vector_type(vpred_val, pred_type);
                 if (is_predicated_store) {
                     Value *sliced_store_vpred_val = slice_vector(store_pred_val, i, natural_lanes);
+                    sliced_store_vpred_val = convert_fixed_or_scalable_vector_type(sliced_store_vpred_val, pred_type);
                     vpred_val = builder->CreateAnd(vpred_val, sliced_store_vpred_val);
                 }
 
@@ -1810,74 +1810,6 @@ void CodeGen_ARM::visit(const Load *op) {
                 CodeGen_Posix::visit(op);
                 return;
             }
-        } else if (stride && (2 <= stride->value && stride->value <= 4)) {
-            // Structured load ST2/ST3/ST4 of SVE
-
-            Expr base = ramp->base;
-            ModulusRemainder align = op->alignment;
-
-            int aligned_stride = gcd(stride->value, align.modulus);
-            int offset = 0;
-            if (aligned_stride == stride->value) {
-                offset = mod_imp((int)align.remainder, aligned_stride);
-            } else {
-                const Add *add = base.as<Add>();
-                if (const IntImm *add_c = add ? add->b.as<IntImm>() : base.as<IntImm>()) {
-                    offset = mod_imp(add_c->value, stride->value);
-                }
-            }
-
-            if (offset) {
-                base = simplify(base - offset);
-            }
-
-            Value *load_pred_val = codegen(op->predicate);
-
-            // We need to slice the result in to native vector lanes to use sve intrin.
-            // LLVM will optimize redundant ld instructions afterwards
-            const int slice_lanes = target.natural_vector_size(op->type);
-            vector<Value *> results;
-            for (int i = 0; i < op->type.lanes(); i += slice_lanes) {
-                int load_base_i = i * stride->value;
-                Expr slice_base = simplify(base + load_base_i);
-                Expr slice_index = Ramp::make(slice_base, stride, slice_lanes);
-                std::ostringstream instr;
-                instr << "llvm.aarch64.sve.ld"
-                      << stride->value
-                      << ".sret.nxv"
-                      << slice_lanes
-                      << (op->type.is_float() ? 'f' : 'i')
-                      << op->type.bits();
-                llvm::Type *elt = llvm_type_of(op->type.element_of());
-                llvm::Type *slice_type = get_vector_type(elt, slice_lanes);
-                StructType *sret_type = StructType::get(module->getContext(), std::vector(stride->value, slice_type));
-                std::vector<llvm::Type *> arg_types{get_vector_type(i1_t, slice_lanes), ptr_t};
-                llvm::FunctionType *fn_type = FunctionType::get(sret_type, arg_types, false);
-                FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
-
-                // Set the predicate argument
-                int active_lanes = std::min(op->type.lanes() - i, slice_lanes);
-
-                Expr vpred = make_vector_predicate_1s_0s(active_lanes, slice_lanes - active_lanes);
-                Value *vpred_val = codegen(vpred);
-                vpred_val = convert_fixed_or_scalable_vector_type(vpred_val, get_vector_type(vpred_val->getType()->getScalarType(), slice_lanes));
-                if (is_predicated_load) {
-                    Value *sliced_load_vpred_val = slice_vector(load_pred_val, i, slice_lanes);
-                    vpred_val = builder->CreateAnd(vpred_val, sliced_load_vpred_val);
-                }
-
-                Value *elt_ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
-                CallInst *load_i = builder->CreateCall(fn, {vpred_val, elt_ptr});
-                add_tbaa_metadata(load_i, op->name, slice_index);
-                // extract one element out of returned struct
-                Value *extracted = builder->CreateExtractValue(load_i, offset);
-                results.push_back(extracted);
-            }
-
-            // Retrieve original lanes
-            value = concat_vectors(results);
-            value = slice_vector(value, 0, op->type.lanes());
-            return;
         } else if (op->index.type().is_vector()) {
             // General Gather Load
 
@@ -1930,6 +1862,7 @@ void CodeGen_ARM::visit(const Load *op) {
                 Value *vpred_val = codegen(vpred);
                 if (is_predicated_load) {
                     Value *sliced_load_vpred_val = slice_vector(load_pred_val, i, natural_lanes);
+                    sliced_load_vpred_val = convert_fixed_or_scalable_vector_type(sliced_load_vpred_val, vpred_val->getType());
                     vpred_val = builder->CreateAnd(vpred_val, sliced_load_vpred_val);
                 }
 
@@ -1980,8 +1913,14 @@ Value *CodeGen_ARM::interleave_vectors(const std::vector<Value *> &vecs) {
         return CodeGen_Posix::interleave_vectors(vecs);
     }
 
-    // Lower into llvm.vector.interleave intrinsic
+    // Lower into llvm.vector.interleave intrinsic.
+    // LLVM only supports non-power-of-2 strides (e.g. 3) for scalable
+    // vectors starting in LLVM 22.
+#if LLVM_VERSION >= 220
     const std::set<int> supported_strides{2, 3, 4, 8};
+#else
+    const std::set<int> supported_strides{2, 4, 8};
+#endif
     const int stride = vecs.size();
     const int src_lanes = get_vector_num_elements(vecs[0]->getType());
 
@@ -2033,7 +1972,11 @@ Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &
         }
 
         // Lower slice with stride into llvm.vector.deinterleave intrinsic
+#if LLVM_VERSION >= 220
         const std::set<int> supported_strides{2, 3, 4, 8};
+#else
+        const std::set<int> supported_strides{2, 4, 8};
+#endif
         if (supported_strides.find(slice_stride) != supported_strides.end() &&
             dst_lanes * slice_stride == src_lanes &&
             indices.front() < slice_stride &&  // Start position cannot be larger than stride
@@ -2486,6 +2429,10 @@ string CodeGen_ARM::mcpu_target() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
             return "swift";
+        } else if (target.has_feature(Target::ARMv82a)) {
+            return "cortex-a55";
+        } else if (target.has_feature(Target::ARMv8a)) {
+            return "cortex-a32";
         } else {
             return "cortex-a9";
         }
@@ -2512,7 +2459,10 @@ string CodeGen_ARM::mattrs() const {
         attrs.emplace_back("+fullfp16");
     }
     if (target.has_feature(Target::ARMv8a)) {
-        attrs.emplace_back("+v8a");
+        // The ARM (32-bit) backend calls this feature "v8"; the AArch64
+        // backend calls it "v8a". The dotted sub-versions (v8.1a, v8.2a,
+        // etc.) use the same names in both backends.
+        attrs.emplace_back(target.bits == 32 ? "+v8" : "+v8a");
     }
     if (target.has_feature(Target::ARMv81a)) {
         attrs.emplace_back("+v8.1a");

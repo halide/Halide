@@ -14,7 +14,7 @@ namespace Halide {
 
 /** Different ways to handle loops with a potentially optimizable boundary conditions. */
 enum class Partition {
-    /** Automatically let Halide decide on Loop Parititioning. */
+    /** Automatically let Halide decide on Loop Partitioning. */
     Auto,
 
     /** Disallow loop partitioning. */

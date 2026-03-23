@@ -458,7 +458,7 @@ def test_translated_buffer():
     """
     Test that Buffer.translated
     - shares an allocation as the original buffer
-    - can have name independant from the original buffer
+    - can have name independent from the original buffer
     - both overloads of `translated` are available
     """
     orig_name = "buf"
@@ -475,7 +475,7 @@ def test_translated_buffer():
 
     tag = -1
 
-    # the tranlation offset
+    # the translation offset
     dxs = [-3, 3]
     for dx in dxs:
         new_name = "bt0"

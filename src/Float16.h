@@ -40,7 +40,7 @@ struct float16_t {
      * positive zero.*/
     float16_t() = default;
 
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
     /** Construct a float16_t from compiler's built-in _Float16 type. */
     explicit float16_t(_Float16 value) {
         memcpy(&data, &value, sizeof(_Float16));
@@ -49,7 +49,7 @@ struct float16_t {
 
     /// @}
 
-    // Use explicit to avoid accidently raising the precision
+    // Use explicit to avoid accidentally raising the precision
     /** Cast to float */
     explicit operator float() const;
     /** Cast to double */
@@ -57,7 +57,7 @@ struct float16_t {
     /** Cast to int */
     explicit operator int() const;
 
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
     /** Cast to compiler's built-in _Float16 type. */
     explicit operator _Float16() const {
         _Float16 result;
@@ -187,7 +187,7 @@ struct bfloat16_t {
 
     /// @}
 
-    // Use explicit to avoid accidently raising the precision
+    // Use explicit to avoid accidentally raising the precision
     /** Cast to float */
     explicit operator float() const;
     /** Cast to double */

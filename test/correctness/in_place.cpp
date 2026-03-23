@@ -50,9 +50,9 @@ int main(int argc, char **argv) {
     // page in the middle of your halide_buffer_t is memprotected as read
     // only and you can't store to it safely, or if you have some
     // weird memory mapping or race condition for which loading then
-    // storing the same value has undesireable side-effects.
+    // storing the same value has undesirable side-effects.
 
-    // This sets the even numbered entires to 1.
+    // This sets the even numbered entries to 1.
     data = lambda(x, sin(x)).realize({100});
     Func h;
     h(x) = select(x % 2 == 0, 1.0f, undef<float>());

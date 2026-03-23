@@ -136,6 +136,11 @@ private:
 
     template<typename T>
     auto visit_impl(const T *op) {
+        // Catch lambdas that accidentally take non-const T* (e.g. For *
+        // instead of const For *). Such lambdas silently never match.
+        static_assert(!std::is_invocable_v<decltype(handlers), LambdaMutator *, T *> ||
+                          std::is_invocable_v<decltype(handlers), LambdaMutator *, const T *>,
+                      "mutate_with lambda takes a non-const node pointer; use const T * instead");
         if constexpr (std::is_invocable_v<decltype(handlers), LambdaMutator *, const T *>) {
             return handlers(this, op);
         } else {
@@ -336,10 +341,25 @@ auto mutate_with(const T &ir, Lambdas &&...lambdas) {
         return LambdaMutatorGeneric{std::forward<Lambdas>(lambdas)...}.mutate(ir);
     } else {
         LambdaMutator mutator{std::forward<Lambdas>(lambdas)...};
+        // Each lambda must take two args: (auto *self, <some-pointer> op).
+        // Test with const IntImm * (works for auto * params via deduction) and
+        // nullptr_t (works for specific-type params via implicit conversion).
         constexpr bool all_take_two_args =
-            (std::is_invocable_v<Lambdas, decltype(&mutator), decltype(nullptr)> && ...);
-        static_assert(all_take_two_args);
+            ((std::is_invocable_v<Lambdas, decltype(&mutator), const IntImm *> ||
+              std::is_invocable_v<Lambdas, decltype(&mutator), decltype(nullptr)>) &&
+             ...);
+        static_assert(all_take_two_args,
+                      "All mutate_with lambdas must take two arguments: (auto *self, const T *op)");
         return mutator.mutate(ir);
+    }
+}
+
+template<typename... Lambdas>
+auto mutate_with(const IRNode *ir, Lambdas &&...lambdas) -> IRHandle {
+    if (ir->node_type <= StrongestExprNodeType) {
+        return mutate_with(Expr((const BaseExprNode *)ir), std::forward<Lambdas>(lambdas)...);
+    } else {
+        return mutate_with(Stmt((const BaseStmtNode *)ir), std::forward<Lambdas>(lambdas)...);
     }
 }
 

@@ -8,7 +8,7 @@ size_t mem_limit = (size_t)-1;
 size_t total_allocated = 0;
 
 // Ussing a lookaside instead of increasing the size of the block to hold the
-// allocation size keeps the malloc behavior the same with regard to alignement
+// allocation size keeps the malloc behavior the same with regard to alignment
 // and bug behaviors, etc. Cheap enough to be good in testing.
 std::map<void *, size_t> allocation_sizes;
 

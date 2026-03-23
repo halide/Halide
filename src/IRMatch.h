@@ -2929,8 +2929,8 @@ struct Rewriter {
     bool validate;
 
     HALIDE_ALWAYS_INLINE
-    Rewriter(Instance instance, halide_type_t ot, halide_type_t wt)
-        : instance(std::move(instance)), output_type(ot), wildcard_type(wt) {
+    Rewriter(Instance instance, halide_type_t output, halide_type_t wildcard)
+        : instance(std::move(instance)), output_type(output), wildcard_type(wildcard) {
     }
 
     template<typename After>

@@ -1,0 +1,90 @@
+name: Upgrade halide-llvm
+
+on:
+  schedule:
+    - cron: "0 6 * * *"  # Daily at 1am EST / 2am EDT
+  workflow_dispatch:
+
+env:
+  BRANCH: automated/upgrade-halide-llvm
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          app-id: ${{ secrets.LLVM_UPDATER_ID }}
+          private-key: ${{ secrets.LLVM_UPDATER_PRIVATE_KEY }}
+
+      - name: Get GitHub App user ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure git and environment
+        run: |
+          echo "GH_TOKEN=${{ steps.app-token.outputs.token }}" >> "$GITHUB_ENV"
+          git config --global user.name "${{ steps.app-token.outputs.app-slug }}[bot]"
+          git config --global user.email "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Switch to existing PR branch if present
+        id: branch
+        run: |
+          if gh pr view "$BRANCH" --json state -q .state 2>/dev/null | grep -q OPEN; then
+            echo "pr-exists=true" >> "$GITHUB_OUTPUT"
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+          else
+            echo "pr-exists=false" >> "$GITHUB_OUTPUT"
+            # Delete stale remote branch (e.g. leftover from a merged PR)
+            git push origin --delete "$BRANCH" 2>/dev/null || true
+            git checkout -b "$BRANCH"
+          fi
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Upgrade halide-llvm
+        run: uv lock -P halide-llvm
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet uv.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+
+            # Extract new resolved versions from the diff
+            VERSIONS=$(git diff uv.lock \
+              | grep '^+.*name = "halide-llvm", version' \
+              | sed 's/.*version = "\([^"]*\)".*/\1/' \
+              | tr '\n' ',' | sed 's/,/, /g; s/, $//')
+            echo "versions=$VERSIONS" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update PR
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          TITLE="Upgrade halide-llvm to ${{ steps.diff.outputs.versions }}"
+
+          git add uv.lock
+          git commit -m "$TITLE"
+
+          if [ "${{ steps.branch.outputs.pr-exists }}" = "true" ]; then
+            git push -u origin "$BRANCH"
+            gh pr edit "$BRANCH" --title "$TITLE"
+          else
+            git push -u origin "$BRANCH"
+            gh pr create \
+              --title "$TITLE" \
+              --body "Automated upgrade via \`uv lock -P halide-llvm\`." \
+              --head "$BRANCH"
+          fi

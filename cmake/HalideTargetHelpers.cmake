@@ -4,15 +4,15 @@ cmake_minimum_required(VERSION 3.28)
 # Utilities for manipulating Halide target triples
 ##
 
-macro(_Halide_target_arch_os arch os)
-    string(TOLOWER "${arch}" arch)
+function(_Halide_target_arch_os OUT_ARCH OUT_OS raw_arch raw_os)
+    string(TOLOWER "${raw_arch}" arch)
     list(TRANSFORM arch REPLACE "^.*(x86|arm|powerpc|hexagon|wasm|riscv).*$" "\\1")
     list(TRANSFORM arch REPLACE "^i.?86.*$" "x86")
     list(TRANSFORM arch REPLACE "^(amd|ia|em)64t?$" "x86")
     list(TRANSFORM arch REPLACE "^ppc(64(le)?)?$" "powerpc")
     list(TRANSFORM arch REPLACE "^aarch(64)?$" "arm")
 
-    string(TOLOWER "${os}" os)
+    string(TOLOWER "${raw_os}" os)
     list(TRANSFORM os REPLACE "^darwin$" "osx")
     list(TRANSFORM os REPLACE "^emscripten$" "wasmrt")
 
@@ -20,12 +20,15 @@ macro(_Halide_target_arch_os arch os)
     if (os STREQUAL "wasmrt" AND arch STREQUAL "x86")
         set(arch "wasm")
     endif ()
-endmacro()
+
+    set(${OUT_ARCH} "${arch}" PARENT_SCOPE)
+    set(${OUT_OS} "${os}" PARENT_SCOPE)
+endfunction()
 
 function(_Halide_host_target OUTVAR)
-    _Halide_target_arch_os("${CMAKE_HOST_SYSTEM_PROCESSOR}" "${CMAKE_HOST_SYSTEM_NAME}")
+    _Halide_target_arch_os(arch os "${CMAKE_HOST_SYSTEM_PROCESSOR}" "${CMAKE_HOST_SYSTEM_NAME}")
 
-    cmake_host_system_information(RESULT is_64bit QUERY IS_64BIT)
+    cmake_host_system_information(RESULT is_64bit QUERY IS_64BIT)  # nolint -- no alternative for host bitness
     if (is_64bit)
         set(bits 64)
     else ()
@@ -40,12 +43,12 @@ function(_Halide_cmake_target OUTVAR)
     if (CMAKE_OSX_ARCHITECTURES)
         set(${OUTVAR} "")
         foreach (processor IN LISTS CMAKE_OSX_ARCHITECTURES)
-            _Halide_target_arch_os("${processor}" "${CMAKE_SYSTEM_NAME}")
+            _Halide_target_arch_os(arch os "${processor}" "${CMAKE_SYSTEM_NAME}")
             list(APPEND ${OUTVAR} "${arch}-${bits}-${os}")
         endforeach ()
         list(REMOVE_DUPLICATES ${OUTVAR}) # defensive
     else ()
-        _Halide_target_arch_os("${CMAKE_SYSTEM_PROCESSOR}" "${CMAKE_SYSTEM_NAME}")
+        _Halide_target_arch_os(arch os "${CMAKE_SYSTEM_PROCESSOR}" "${CMAKE_SYSTEM_NAME}")
         set(${OUTVAR} "${arch}-${bits}-${os}")
     endif ()
     set(${OUTVAR} "${${OUTVAR}}" PARENT_SCOPE)

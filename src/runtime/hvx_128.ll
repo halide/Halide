@@ -360,7 +360,7 @@ declare <32 x i32> @llvm.hexagon.V6.lvsplath.128B(i32)
 
 ; We do not have saturating downcasts of unsigned 16bit types. So, we expand these
 ; in bitcode here.
-; Note: pack_satub.vuh doesnt interleave its input.
+; Note: pack_satub.vuh doesn't interleave its input.
 define weak_odr <128 x i8> @halide.hexagon.pack_satub.vuh(<64 x i32> %arg) nounwind uwtable readnone alwaysinline {
   %max = call <32 x i32> @llvm.hexagon.V6.lvsplath.128B(i32 255)
   %lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %arg)

@@ -66,7 +66,7 @@ public:
     }
 
     // Assemble the current program. The return value is the buffer
-    // fromt his assembler cropped to the region needed for the program.
+    // from this assembler cropped to the region needed for the program.
     Halide::Runtime::Buffer<int16_t, 2> assemble(std::initializer_list<Slot> outputs);
 
     // Write the current program to the given stream.
