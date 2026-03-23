@@ -10,7 +10,7 @@
 
 import halide as hl
 
-import imageio
+import halide.imageio
 import numpy as np
 import os.path
 
@@ -19,13 +19,15 @@ def main():
     # First we'll declare some Vars to use below.
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
 
-    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
+    image_path = os.path.join(
+        os.path.dirname(__file__), "../../tutorial/images/rgb.png"
+    )
 
     # Now we'll express a multi-stage pipeline that blurs an image
     # first horizontally, and then vertically.
     if True:
         # Take a color 8-bit input
-        input = hl.Buffer(imageio.imread(image_path))
+        input = hl.Buffer(halide.imageio.imread(image_path))
         assert input.type() == hl.UInt(8)
 
         # Upgrade it to 16-bit, so we can do math without it overflowing.
@@ -34,13 +36,15 @@ def main():
 
         # Blur it horizontally:
         blur_x = hl.Func("blur_x")
-        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 *
-                           input_16[x, y, c] + input_16[x + 1, y, c]) / 4
+        blur_x[x, y, c] = (
+            input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]
+        ) / 4
 
         # Blur it vertically:
         blur_y = hl.Func("blur_y")
-        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 *
-                           blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
+        blur_y[x, y, c] = (
+            blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]
+        ) / 4
 
         # Convert back to 8-bit.
         output = hl.Func("output")
@@ -84,7 +88,7 @@ def main():
         # shorter than the input image.
 
         # python3-imageio versions <2.5 expect a numpy array
-        imageio.imsave("blurry_parrot_1.png", np.asanyarray(result))
+        halide.imageio.imwrite("blurry_parrot_1.png", np.asanyarray(result))
         print("Created blurry_parrot_1.png")
 
         # This is usually the fastest way to deal with boundaries:
@@ -94,7 +98,7 @@ def main():
     # The same pipeline, with a boundary condition on the input.
     if True:
         # Take a color 8-bit input
-        input = hl.Buffer(imageio.imread(image_path))
+        input = hl.Buffer(halide.imageio.imread(image_path))
         assert input.type() == hl.UInt(8)
 
         # This time, we'll wrap the input in a hl.Func that prevents
@@ -134,13 +138,15 @@ def main():
 
         # Blur it horizontally:
         blur_x = hl.Func("blur_x")
-        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 *
-                           input_16[x, y, c] + input_16[x + 1, y, c]) / 4
+        blur_x[x, y, c] = (
+            input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]
+        ) / 4
 
         # Blur it vertically:
         blur_y = hl.Func("blur_y")
-        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 *
-                           blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
+        blur_y[x, y, c] = (
+            blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]
+        ) / 4
 
         # Convert back to 8-bit.
         output = hl.Func("output")
@@ -155,7 +161,7 @@ def main():
         # input.
 
         # python3-imageio versions <2.5 expect a numpy array
-        imageio.imsave("blurry_parrot_2.png", np.asanyarray(result))
+        halide.imageio.imwrite("blurry_parrot_2.png", np.asanyarray(result))
         print("Created blurry_parrot_2.png")
 
     print("Success!")

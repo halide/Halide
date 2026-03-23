@@ -1,0 +1,111 @@
+name: Makefile
+
+env:
+  LLVM_VERSION: '22'
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    paths-ignore:
+      - ".github/**"
+      - "!.github/workflows/testing-make.yml"
+
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "**.cmake"
+      - "vcpkg.json"
+      - "vcpkg-configuration.json"
+
+      - "doc/**"
+      - "packaging/**"
+      - "python_bindings/**"
+
+      - "pyproject.toml"
+      # Don't ignore uv.lock as it influences dependency resolution
+
+      - "README.md"
+      - "CODE_OF_CONDUCT.md"
+      - "LICENSE.txt"
+      - ".gitignore"
+      - ".gitattributes"
+      - ".gitmodules"
+      - ".lldbinit"
+      - "run-clang-format.sh"
+      - "run-clang-tidy.sh"
+      - "**.clang-tidy"
+      - "**.py"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build_make:
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
+    name: build on ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-15
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+            echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-${LLVM_VERSION} main" | \
+              sudo tee "/etc/apt/sources.list.d/llvm-${LLVM_VERSION}.list"
+            sudo apt-get update
+            sudo apt-get install -y \
+              build-essential \
+              pkg-config \
+              libpng-dev \
+              libjpeg-turbo8-dev \
+              "llvm-${LLVM_VERSION}-dev" \
+              "clang-${LLVM_VERSION}" \
+              "lld-${LLVM_VERSION}" \
+              "liblld-${LLVM_VERSION}-dev"
+            echo "LLVM_CONFIG=llvm-config-${LLVM_VERSION}" | tee -a "$GITHUB_ENV"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            brew install libjpeg-turbo libpng pkgconf protobuf "llvm@${LLVM_VERSION}" "lld@${LLVM_VERSION}"
+            echo "LLVM_CONFIG=$(brew --prefix "llvm@${LLVM_VERSION}")/bin/llvm-config" | tee -a "$GITHUB_ENV"
+          fi
+
+          uv sync --group ci-base --no-install-project
+          echo "${GITHUB_WORKSPACE}/.venv/bin" | tee -a "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" | tee -a "$GITHUB_ENV"
+          echo "MAKEFLAGS=-j $(getconf _NPROCESSORS_ONLN)" | tee -a "$GITHUB_ENV"
+
+      - run: make build_tests
+
+      - run: make test_internal
+        if: ${{ !cancelled() }}
+
+      - run: make test_correctness
+        if: ${{ !cancelled() }}
+
+      - run: make test_generator
+        if: ${{ !cancelled() }}
+
+      - run: make test_error
+        if: ${{ !cancelled() }}
+
+      - run: make test_warning
+        if: ${{ !cancelled() }}
+
+      - run: make test_apps
+        if: ${{ !cancelled() }}
+
+      - run: make test_tutorial
+        if: ${{ !cancelled() }}

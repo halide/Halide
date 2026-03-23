@@ -10,9 +10,19 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (t.has_feature(Target::OpenGLCompute)) {
-        printf("[SKIP] Skipping test for OpenGLCompute, as it does not support dynamically-sized shared memory\n");
-        return 0;
+    if (t.has_feature(Target::Vulkan)) {
+        const auto *interface = get_device_interface_for_device_api(DeviceAPI::Vulkan);
+        assert(interface->compute_capability != nullptr);
+        int major, minor;
+        int err = interface->compute_capability(nullptr, &major, &minor);
+        if (err != 0 || (major == 1 && minor < 3)) {
+            printf("[SKIP] Vulkan %d.%d is less than required 1.3.\n", major, minor);
+            return 0;
+        }
+        if ((t.os == Target::IOS) || (t.os == Target::OSX)) {
+            printf("[SKIP] Skipping test for Vulkan on iOS/OSX (MoltenVK doesn't support dynamic LocalSizeId yet)!\n");
+            return 0;
+        }
     }
 
     // Check dynamic allocations per-block and per-thread into both
@@ -41,7 +51,7 @@ int main(int argc, char **argv) {
                 if (out(x) != correct) {
                     printf("out[%d|%d](%d) = %d instead of %d\n",
                            per_thread, (int)memory_type, x, out(x), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }

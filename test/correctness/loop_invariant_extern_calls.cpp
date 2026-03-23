@@ -5,27 +5,21 @@ using namespace Halide;
 
 // NB: You must compile with -rdynamic for llvm to be able to find the appropriate symbols
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 int call_counter[] = {0, 0, 0, 0, 0, 0};
-extern "C" DLLEXPORT int my_func(int counter, int x) {
+extern "C" HALIDE_EXPORT_SYMBOL int my_func(int counter, int x) {
     call_counter[counter]++;
     return x;
 }
 HalidePureExtern_2(int, my_func, int, int);
 
-extern "C" DLLEXPORT int my_impure_func(int counter, int x) {
+extern "C" HALIDE_EXPORT_SYMBOL int my_impure_func(int counter, int x) {
     call_counter[counter]++;
     return x;
 }
 HalideExtern_2(int, my_impure_func, int, int);
 
 // A parallel for loop runner that isn't actually parallel
-int not_really_parallel_for(void *ctx, int (*f)(void *, int, uint8_t *), int min, int extent, uint8_t *closure) {
+int not_really_parallel_for(JITUserContext *ctx, int (*f)(JITUserContext *, int, uint8_t *), int min, int extent, uint8_t *closure) {
     for (int i = min; i < min + extent; i++) {
         f(ctx, i, closure);
     }
@@ -34,7 +28,7 @@ int not_really_parallel_for(void *ctx, int (*f)(void *, int, uint8_t *), int min
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] Skipping test for WebAssembly as the wasm JIT cannot support set_custom_do_par_for().\n");
+        printf("[SKIP] Skipping test for WebAssembly as the wasm JIT cannot support custom parallel runtimes\n");
         return 0;
     }
 
@@ -55,7 +49,7 @@ int main(int argc, char **argv) {
             int correct = y + 32 * x + y;
             if (im(x, y) != correct) {
                 printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -65,7 +59,7 @@ int main(int argc, char **argv) {
         printf("Call counters were %d %d %d instead of %d %d %d\n",
                call_counter[0], call_counter[1], call_counter[2],
                1, 32, 32 * 32);
-        return -1;
+        return 1;
     }
 
     // Note that pure things get lifted out of loops (even parallel ones), but impure things do not.
@@ -73,13 +67,13 @@ int main(int argc, char **argv) {
     g(x, y) = my_func(3, Expr(0)) + my_impure_func(4, Expr(0));
     g.parallel(y);
     // Avoid the race condition by not actually being parallel
-    g.set_custom_do_par_for(&not_really_parallel_for);
+    g.jit_handlers().custom_do_par_for = not_really_parallel_for;
     g.realize({32, 32});
 
     if (call_counter[3] != 1 || call_counter[4] != 32 * 32) {
         printf("Call counter for parallel call was %d, %d instead of %d, %d\n",
                call_counter[3], call_counter[4], 1, 32 * 32);
-        return -1;
+        return 1;
     }
 
     // Check that something we can't compute on the GPU gets lifted
@@ -96,7 +90,7 @@ int main(int argc, char **argv) {
         if (call_counter[5] != 1) {
             printf("Call counter for GPU call was %d instead of %d\n",
                    call_counter[5], 1);
-            return -1;
+            return 1;
         }
     }
 

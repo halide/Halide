@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     h.compute_root();
     g.compute_at(f, y);
 
-    //f.trace();
+    // f.trace();
 
     Buffer<int> out = f.realize({32, 32});
 
@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
         for (int x = 0; x < 32; x++) {
             if (out(x, y) != x + y) {
                 printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y);
-                return -1;
+                return 1;
             }
         }
     }

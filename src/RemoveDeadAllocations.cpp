@@ -15,8 +15,8 @@ class RemoveDeadAllocations : public IRMutator {
 
     Expr visit(const Call *op) override {
         if (op->is_extern()) {
-            for (size_t i = 0; i < op->args.size(); i++) {
-                const Variable *var = op->args[i].as<Variable>();
+            for (const auto &arg : op->args) {
+                const Variable *var = arg.as<Variable>();
                 if (var && ends_with(var->name, ".buffer")) {
                     std::string func = var->name.substr(0, var->name.find_first_of('.'));
                     if (allocs.contains(func)) {
@@ -62,8 +62,8 @@ class RemoveDeadAllocations : public IRMutator {
         } else if (body.same_as(op->body)) {
             return op;
         } else {
-            return Allocate::make(op->name, op->type, op->memory_type, op->extents,
-                                  op->condition, body, op->new_expr, op->free_function);
+            return Allocate::make(op->name, op->type, op->memory_type, op->extents, op->condition,
+                                  body, op->new_expr, op->free_function, op->padding);
         }
     }
 

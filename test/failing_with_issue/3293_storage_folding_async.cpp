@@ -19,14 +19,8 @@ void my_free(void *user_context, void *ptr) {
     free(((void **)ptr)[-1]);
 }
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 // An extern stage that copies input -> output
-extern "C" DLLEXPORT int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
     } else {
@@ -52,7 +46,7 @@ int main(int argc, char **argv) {
         f.compute_root();
         g.store_root().compute_at(h, y).fold_storage(g.args()[1], 3).async();
 
-        // Make sure that explict storage folding happens, even if
+        // Make sure that explicit storage folding happens, even if
         // there are multiple producers of the folded buffer. Note the
         // automatic storage folding refused to fold this (the case
         // above).
@@ -64,7 +58,7 @@ int main(int argc, char **argv) {
         size_t expected_size = 101 * 3 * sizeof(int) + sizeof(int);
         if (custom_malloc_size == 0 || custom_malloc_size != expected_size) {
             printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)expected_size);
-            return -1;
+            return 1;
         }
     }
 

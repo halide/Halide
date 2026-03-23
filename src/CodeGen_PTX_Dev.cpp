@@ -1,5 +1,6 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CSE.h"
+#include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
@@ -18,14 +19,6 @@
 #include "Target.h"
 
 #include <fstream>
-
-// This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
-// hardcoding a path to the .h file.
-#ifdef WITH_NVPTX
-namespace llvm {
-FunctionPass *createNVVMReflectPass(const StringMap<int> &Mapping);
-}
-#endif
 
 namespace Halide {
 namespace Internal {
@@ -91,7 +84,8 @@ protected:
     // @}
 
     std::string march() const;
-    std::string mcpu() const override;
+    std::string mcpu_target() const override;
+    std::string mcpu_tune() const override;
     std::string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
@@ -104,8 +98,8 @@ protected:
     }
     Type upgrade_type_for_storage(const Type &t) const override;
 
-    /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
-     * ptx intrinsic functions to call to get them. */
+    /** Map from simt variable names (e.g. foo.block_id_x) to the llvm ptx
+     * intrinsic functions to call to get them. */
     std::string simt_intrinsic(const std::string &name);
 
     bool supports_atomic_add(const Type &t) const override;
@@ -144,7 +138,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            arg_types[i] = llvm_type_of(UInt(8))->getPointerTo();
+            arg_types[i] = ptr_t;
         } else {
             arg_types[i] = llvm_type_of(args[i].type);
         }
@@ -153,7 +147,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Make our function
     FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
-    set_function_attributes_for_target(function, target);
+    set_function_attributes_from_halide_target_options(*function);
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -161,6 +155,8 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
             function->addParamAttr(i, Attribute::NoAlias);
         }
     }
+
+    function->setCallingConv(llvm::CallingConv::PTX_Kernel);
 
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
@@ -218,12 +214,18 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     debug(2) << "Done generating llvm bitcode for PTX\n";
 
     // Clear the symbol table
-    for (size_t i = 0; i < arg_sym_names.size(); i++) {
-        sym_pop(arg_sym_names[i]);
+    for (const auto &arg_sym_name : arg_sym_names) {
+        sym_pop(arg_sym_name);
     }
 }
 
 void CodeGen_PTX_Dev::init_module() {
+    // This class uses multiple inheritance. It's a GPU device code generator,
+    // and also an llvm-based one. Both of these track strict_float presence,
+    // but OffloadGPULoops only sets the GPU device code generator flag, so here
+    // we set the CodeGen_LLVM flag to match.
+    CodeGen_LLVM::any_strict_float = CodeGen_GPU_Dev::any_strict_float;
+
     init_context();
 
     module = get_initial_module_for_ptx_device(target, context);
@@ -244,12 +246,21 @@ void CodeGen_PTX_Dev::init_module() {
         {"dp2a", Int(32), "dp2a_s32_u32", {Int(16, 4), UInt(8, 4), Int(32)}},
         {"dp2a", Int(32), "dp2a_u32_s32", {UInt(16, 4), Int(8, 4), Int(32)}},
         {"dp2a", UInt(32), "dp2a_u32_u32", {UInt(16, 4), UInt(8, 4), UInt(32)}},
+        {"round", Float(32), "llvm.rint.f32", {Float(32)}},
+        {"round", Float(64), "llvm.rint.f64", {Float(64)}},
     };
 
     for (auto &&i : ptx_intrins) {
         auto *fn = declare_intrin_overload(i.name, i.ret_type, i.intrin_name, std::move(i.arg_types));
-        fn->addFnAttr(llvm::Attribute::ReadNone);
+        function_does_not_access_memory(fn);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
+    }
+
+    if (CodeGen_GPU_Dev::any_strict_float) {
+        set_strict_fp_math();
+        in_strict_float = target.has_feature(Target::StrictFloat);
+    } else {
+        set_fast_fp_math();
     }
 }
 
@@ -261,46 +272,50 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         // arguments
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        const auto *fence_type_ptr = as_const_int(op->args[0]);
+        auto fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
 
-        llvm::Function *barrier0 = module->getFunction("llvm.nvvm.barrier0");
-        internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
-        builder->CreateCall(barrier0);
+        llvm::Function *barrier;
+        if ((barrier = module->getFunction("llvm.nvvm.barrier.cta.sync.aligned.all")) && barrier->getIntrinsicID() != 0) {
+            // LLVM 20.1.6 and above: https://github.com/llvm/llvm-project/pull/140615
+            builder->CreateCall(barrier, builder->getInt32(0));
+        } else if ((barrier = module->getFunction("llvm.nvvm.barrier0")) && barrier->getIntrinsicID() != 0) {
+            // LLVM 21.1.5 and below: Testing for llvm.nvvm.barrier0 can be removed once we drop support for LLVM 20
+            builder->CreateCall(barrier);
+        } else {
+            internal_error << "Could not find PTX barrier intrinsic llvm.nvvm.barrier0 nor llvm.nvvm.barrier.cta.sync.aligned.all\n";
+        }
         value = ConstantInt::get(i32_t, 0);
-    } else if (op->name == "dp2a" || op->name == "dp4a") {
-        // TODO: It would be better if CodeGen_LLVM could handle overloaded intrin calls by default.
-        value = call_overloaded_intrin(op->type, op->name, op->args);
-        internal_assert(value) << Expr(op) << "\n";
-    } else {
+        return;
+    }
+
+    // TODO: It would be better if CodeGen_LLVM could handle overloaded intrin calls by default.
+    value = call_overloaded_intrin(op->type, op->name, op->args);
+    if (!value) {
         CodeGen_LLVM::visit(op);
     }
 }
 
 string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
-    if (ends_with(name, ".__thread_id_x")) {
+    if (ends_with(name, gpu_thread_name(0))) {
         return "llvm.nvvm.read.ptx.sreg.tid.x";
-    } else if (ends_with(name, ".__thread_id_y")) {
+    } else if (ends_with(name, gpu_thread_name(1))) {
         return "llvm.nvvm.read.ptx.sreg.tid.y";
-    } else if (ends_with(name, ".__thread_id_z")) {
+    } else if (ends_with(name, gpu_thread_name(2))) {
         return "llvm.nvvm.read.ptx.sreg.tid.z";
-    } else if (ends_with(name, ".__thread_id_w")) {
-        return "llvm.nvvm.read.ptx.sreg.tid.w";
-    } else if (ends_with(name, ".__block_id_x")) {
+    } else if (ends_with(name, gpu_block_name(0))) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.x";
-    } else if (ends_with(name, ".__block_id_y")) {
+    } else if (ends_with(name, gpu_block_name(1))) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.y";
-    } else if (ends_with(name, ".__block_id_z")) {
+    } else if (ends_with(name, gpu_block_name(2))) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.z";
-    } else if (ends_with(name, ".__block_id_w")) {
-        return "llvm.nvvm.read.ptx.sreg.ctaid.w";
     }
     internal_error << "simt_intrinsic called on bad variable name\n";
     return "";
 }
 
 void CodeGen_PTX_Dev::visit(const For *loop) {
-    if (is_gpu_var(loop->name)) {
+    if (is_gpu(loop->for_type)) {
         Expr simt_idx = Call::make(Int(32), simt_intrinsic(loop->name), std::vector<Expr>(), Call::Extern);
         internal_assert(is_const_zero(loop->min));
         sym_push(loop->name, codegen(simt_idx));
@@ -316,7 +331,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
                                             << "(Memoization is not supported inside GPU kernels at present.)\n";
     if (alloc->memory_type == MemoryType::GPUShared) {
         // PTX uses zero in address space 3 as the base address for shared memory
-        Value *shared_base = Constant::getNullValue(PointerType::get(i8_t, 3));
+        Value *shared_base = Constant::getNullValue(PointerType::get(*context, 3));
         sym_push(alloc->name, shared_base);
     } else {
         debug(2) << "Allocate " << alloc->name << " on device\n";
@@ -438,7 +453,7 @@ class RewriteLoadsAs32Bit : public IRMutator {
         } else if (index.same_as(op->index)) {
             return op;
         } else {
-            return Load::make(op->type, op->name, op->index, op->image, op->param, op->predicate, op->alignment);
+            return Load::make(op->type, op->name, std::move(index), op->image, op->param, op->predicate, op->alignment);
         }
     }
 };
@@ -463,7 +478,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
     // TODO: Support rewriting to arbitrary calls in IRMatch and use that instead
     // of expr_match here. That would probably allow avoiding the redundant swapping
     // operands logic.
-    // clang-format off
     static const Pattern patterns[] = {
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_i8x)), "dp4a"},
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_u8x)), "dp4a"},
@@ -478,7 +492,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
         {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
     };
-    // clang-format on
 
     const int input_lanes = op->value.type().lanes();
     const int factor = input_lanes / op->type.lanes();
@@ -542,8 +555,10 @@ string CodeGen_PTX_Dev::march() const {
     return "nvptx64";
 }
 
-string CodeGen_PTX_Dev::mcpu() const {
-    if (target.has_feature(Target::CUDACapability80)) {
+string CodeGen_PTX_Dev::mcpu_target() const {
+    if (target.has_feature(Target::CUDACapability86)) {
+        return "sm_86";
+    } else if (target.has_feature(Target::CUDACapability80)) {
         return "sm_80";
     } else if (target.has_feature(Target::CUDACapability75)) {
         return "sm_75";
@@ -564,22 +579,31 @@ string CodeGen_PTX_Dev::mcpu() const {
     }
 }
 
+string CodeGen_PTX_Dev::mcpu_tune() const {
+    return mcpu_target();
+}
+
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.has_feature(Target::CUDACapability80)) {
+    if (target.has_feature(Target::CUDACapability86)) {
+        return "+ptx71";
+    } else if (target.has_feature(Target::CUDACapability80)) {
         return "+ptx70";
-    } else if (target.has_feature(Target::CUDACapability70) ||
-               target.has_feature(Target::CUDACapability75)) {
+    } else if (target.has_feature(Target::CUDACapability75)) {
+        return "+ptx63";
+    } else if (target.has_feature(Target::CUDACapability70)) {
         return "+ptx60";
     } else if (target.has_feature(Target::CUDACapability61)) {
         return "+ptx50";
     } else if (target.features_any_of({Target::CUDACapability32,
                                        Target::CUDACapability50})) {
-        // Need ptx isa 4.0.
+        // sm_32 needs ptx isa 4.0 even though it seems to break the ordering
         return "+ptx40";
-    } else {
-        // Use the default. For llvm 3.5 it's ptx 3.2.
-        return "";
+    } else if (target.features_any_of({Target::CUDACapability35,
+                                       Target::CUDACapability30})) {
+        return "+ptx32";
     }
+    // Let LLVM pick
+    return "";
 }
 
 bool CodeGen_PTX_Dev::use_soft_float_abi() const {
@@ -594,37 +618,31 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     /*int argc = sizeof(argv)/sizeof(char*);*/
     /*cl::ParseCommandLineOptions(argc, argv, "Halide PTX internal compiler\n");*/
 
-    llvm::Triple triple(module->getTargetTriple());
-
-    // Allocate target machine
-
+    // Allocate target machine (similar to code in CodeGen_Internal.cpp make_target_machine)
     std::string err_str;
-    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(triple.str(), err_str);
-    internal_assert(llvm_target) << err_str << "\n";
+    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(
+        module->getTargetTriple(),
+        err_str);
+    auto triple = llvm::Triple(module->getTargetTriple());
+    internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     TargetOptions options;
-#if LLVM_VERSION < 120
-    options.PrintMachineCode = false;
+    options.AllowFPOpFusion = CodeGen_GPU_Dev::any_strict_float ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
+#if LLVM_VERSION < 230
+    options.NoInfsFPMath = !CodeGen_GPU_Dev::any_strict_float;
+    options.NoNaNsFPMath = !CodeGen_GPU_Dev::any_strict_float;
 #endif
-    options.AllowFPOpFusion = FPOpFusion::Fast;
-    options.UnsafeFPMath = true;
-    options.NoInfsFPMath = true;
-    options.NoNaNsFPMath = true;
-    options.HonorSignDependentRoundingFPMathOption = false;
+    options.HonorSignDependentRoundingFPMathOption = !CodeGen_GPU_Dev::any_strict_float;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-#if LLVM_VERSION >= 13
-    // nothing
-#else
-    options.StackAlignmentOverride = 0;
-#endif
 
     std::unique_ptr<TargetMachine>
-        target_machine(llvm_target->createTargetMachine(triple.str(),
-                                                        mcpu(), mattrs(), options,
-                                                        llvm::Reloc::PIC_,
-                                                        llvm::CodeModel::Small,
-                                                        CodeGenOpt::Aggressive));
+        target_machine(llvm_target->createTargetMachine(
+            triple,
+            mcpu_target(), mattrs(), options,
+            llvm::Reloc::PIC_,
+            llvm::CodeModel::Small,
+            CodeGenOptLevel::Aggressive));
 
     internal_assert(target_machine.get()) << "Could not allocate target machine!";
 
@@ -634,12 +652,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     llvm::SmallString<8> outstr;
     raw_svector_ostream ostream(outstr);
     ostream.SetUnbuffered();
-
-    legacy::FunctionPassManager function_pass_manager(module.get());
-    legacy::PassManager module_pass_manager;
-
-    module_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
-    function_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
 
     // NVidia's libdevice library uses a __nvvm_reflect to choose
     // how to handle denormalized numbers. (The pass replaces calls
@@ -667,26 +679,58 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         }
     }
 
-    // At present, we default to *enabling* LLVM loop optimization,
-    // unless DisableLLVMLoopOpt is set; we're going to flip this to defaulting
-    // to *not* enabling these optimizations (and removing the DisableLLVMLoopOpt feature).
-    // See https://github.com/halide/Halide/issues/4113 for more info.
-    // (Note that setting EnableLLVMLoopOpt always enables loop opt, regardless
-    // of the setting of DisableLLVMLoopOpt.)
-    const bool do_loop_opt = !target.has_feature(Target::DisableLLVMLoopOpt) ||
-                             target.has_feature(Target::EnableLLVMLoopOpt);
+    const bool do_loop_opt = get_target().has_feature(Target::EnableLLVMLoopOpt);
 
-    PassManagerBuilder b;
-    b.OptLevel = 3;
-    b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-    b.LoopVectorize = do_loop_opt;
-    b.SLPVectorize = true;
-    b.DisableUnrollLoops = !do_loop_opt;
+    // Define and run optimization pipeline with new pass manager
+    PipelineTuningOptions pto;
+    pto.LoopInterleaving = do_loop_opt;
+    pto.LoopVectorization = do_loop_opt;
+    pto.SLPVectorization = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
+    pto.LoopUnrolling = do_loop_opt;
+    pto.ForgetAllSCEVInLoopUnroll = true;
 
-    target_machine->adjustPassManager(b);
+    llvm::PassBuilder pb(target_machine.get(), pto);
 
-    b.populateFunctionPassManager(function_pass_manager);
-    b.populateModulePassManager(module_pass_manager);
+    // These analysis managers have to be declared in this order.
+    llvm::LoopAnalysisManager lam;
+    llvm::FunctionAnalysisManager fam;
+    llvm::CGSCCAnalysisManager cgam;
+    llvm::ModuleAnalysisManager mam;
+
+    // Register all the basic analyses with the managers.
+    pb.registerModuleAnalyses(mam);
+    pb.registerCGSCCAnalyses(cgam);
+    pb.registerFunctionAnalyses(fam);
+    pb.registerLoopAnalyses(lam);
+    pb.crossRegisterProxies(lam, fam, cgam, mam);
+    ModulePassManager mpm;
+
+    using OptimizationLevel = llvm::OptimizationLevel;
+    OptimizationLevel level = OptimizationLevel::O3;
+
+    target_machine->registerPassBuilderCallbacks(pb);
+
+    mpm = pb.buildPerModuleDefaultPipeline(level);
+    mpm.run(*module, mam);
+
+    if (llvm::verifyModule(*module, &errs())) {
+        report_fatal_error("Transformation resulted in an invalid module\n");
+    }
+
+    // Optimization pipeline completed; run codegen pipeline
+
+    // NOTE: use of the "legacy" PassManager here is still required; it is deprecated
+    // for optimization, but is still the only complete API for codegen as of work-in-progress
+    // LLVM14. At the time of this comment (Dec 2021), there is no firm plan as to when codegen will
+    // be fully available in the new PassManager, so don't worry about this 'legacy'
+    // tag until there's any indication that the old APIs start breaking.
+    //
+    // See:
+    // https://lists.llvm.org/pipermail/llvm-dev/2021-April/150100.html
+    // https://releases.llvm.org/13.0.0/docs/ReleaseNotes.html#changes-to-the-llvm-ir
+    // https://groups.google.com/g/llvm-dev/c/HoS07gXx0p8
+    legacy::PassManager module_pass_manager;
+    module_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
 
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
@@ -695,24 +739,15 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     // Ask the target to add backend passes as necessary.
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream, nullptr,
-                                                    ::llvm::CGFT_AssemblyFile,
-                                                    true);
-    if (fail) {
-        internal_error << "Failed to set up passes to emit PTX source\n";
-    }
-
-    // Run optimization passes
-    function_pass_manager.doInitialization();
-    for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
-        function_pass_manager.run(*i);
-    }
-    function_pass_manager.doFinalization();
+                                                    CodeGenFileType::AssemblyFile, true);
+    internal_assert(!fail) << "Failed to set up passes to emit PTX source\n";
     module_pass_manager.run(*module);
 
-    if (debug::debug_level() >= 2) {
+    // Codegen pipeline completed.
+    debug(2) << [&] {
         dump();
-    }
-    debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
+        return "Done with CodeGen_PTX_Dev::compile_to_src";
+    }();
 
     debug(1) << "PTX kernel:\n"
              << outstr.c_str() << "\n";
@@ -720,9 +755,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     vector<char> buffer(outstr.begin(), outstr.end());
 
     // Dump the SASS too if the cuda SDK is in the path
-    if (debug::debug_level() >= 2) {
-        debug(2) << "Compiling PTX to SASS. Will fail if CUDA SDK is not installed (and in the path).\n";
-
+    debug(2) << "Compiling PTX to SASS. Will fail if CUDA SDK is not installed (and in the path).\n";
+    debug(2) << [&] {
         TemporaryFile ptx(get_current_kernel_name(), ".ptx");
         TemporaryFile sass(get_current_kernel_name(), ".sass");
 
@@ -730,11 +764,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         f.write(buffer.data(), buffer.size());
         f.close();
 
-        string cmd = "ptxas --gpu-name " + mcpu() + " " + ptx.pathname() + " -o " + sass.pathname();
-        if (system(cmd.c_str()) == 0) {
-            cmd = "nvdisasm " + sass.pathname();
-            int ret = system(cmd.c_str());
-            (void)ret;  // Don't care if it fails
+        if (run_process({"ptxas", "--gpu-name", mcpu_target(), ptx.pathname(), "-o", sass.pathname()}) == 0) {
+            (void)run_process({"nvdisasm", sass.pathname()});  // Don't care if it fails
         }
 
         // Note: It works to embed the contents of the .sass file in
@@ -751,7 +782,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
             f.read(buffer.data(), sz);
         }
         */
-    }
+        return "";
+    }();
 
     // Null-terminate the ptx source
     buffer.push_back(0);

@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     f(x, y, z) = x * y + z * k + 1;
 
     Target t = get_jit_target_from_environment();
-    if (t.has_gpu_feature() && !t.has_feature(Target::OpenGLCompute)) {
+    if (t.has_gpu_feature()) {
         Var xi, yi;
         f.gpu_tile(x, y, xi, yi, 16, 16);
     } else if (t.has_feature(Target::HVX)) {
@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
             for (int z = 0; z < 64; z++) {
                 if (im(x, y, z) != x * y + z * 3 + 1) {
                     printf("im(%d, %d, %d) = %d\n", x, y, z, im(x, y, z));
-                    return -1;
+                    return 1;
                 }
             }
         }

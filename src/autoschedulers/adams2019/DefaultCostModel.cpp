@@ -14,8 +14,8 @@
 #include "DefaultCostModel.h"
 #include "HalideBuffer.h"
 #include "NetworkSize.h"
-#include "cost_model.h"
-#include "train_cost_model.h"
+#include "adams2019_cost_model.h"
+#include "adams2019_train_cost_model.h"
 
 // This is an embedded version of `baseline.weights`.
 // The embedding is done using binary2cpp.
@@ -47,7 +47,7 @@ bool ends_with(const std::string &str, const std::string &suffix) {
 }  // namespace
 
 void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
-                                             const MachineParams &params) {
+                                             const Internal::Autoscheduler::Adams2019Params &params) {
 
     const int pipeline_feat_size = head1_w * head1_h;
     // We ignore the first seven pipeline features in the cost
@@ -57,14 +57,17 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
                   "Incorrect size for pipeline features");
     int num_stages = 0;
     for (const auto &n : dag.nodes) {
-        if (!n.is_input) num_stages += (int)n.stages.size();
+        if (!n.is_input) {
+            num_stages += (int)n.stages.size();
+        }
     }
     Runtime::Buffer<float> pipeline_features(head1_w, head1_h, num_stages);
     int stage = 0;
     for (const auto &n : dag.nodes) {
-        if (n.is_input) continue;
-        for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-            const auto &s = *it;
+        if (n.is_input) {
+            continue;
+        }
+        for (const auto &s : Internal::reverse_view(n.stages)) {
             const int *pipeline_feats = (const int *)(&(s.features)) + 7;
             // skip the first 7 features
             for (int i = 0; i < pipeline_feat_size; i++) {
@@ -106,7 +109,9 @@ void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
     for (const auto &n : dag.nodes) {
 
         // Inputs are computed outside of the pipeline and don't count.
-        if (n.is_input) continue;
+        if (n.is_input) {
+            continue;
+        }
 
         // The remaining stages are not yet
         // scheduled. Optimistically assume their internal costs
@@ -116,12 +121,14 @@ void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
         // cost for loading from these unscheduled stages is
         // already baked into the scheduled stages that consume
         // them.
-        if (stage >= num_stages) break;
+        if (stage >= num_stages) {
+            break;
+        }
 
         // Load up the schedule features for all stages of this Func.
-        for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-            internal_assert(schedule_feats.contains(&*it)) << n.func.name() << "\n";
-            const auto &feat = schedule_feats.get(&*it);
+        for (const auto &s : Internal::reverse_view(n.stages)) {
+            internal_assert(schedule_feats.contains(&s)) << n.func.name() << "\n";
+            const auto &feat = schedule_feats.get(&s);
             for (size_t i = 0; i < ScheduleFeatures::num_features(); i++) {
                 schedule_features(i, stage) = feat[i];
             }
@@ -135,8 +142,8 @@ void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
 void DefaultCostModel::enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
     num_stages = ns;
 
-    // We know the most stages that will ever be enqueued from the schedule features
-    internal_assert(pipeline_feat_queue.data() && "Call set_schedule_features before calling enqueue\n");
+    // We know the most stages that will ever be enqueued from the pipeline features
+    internal_assert(pipeline_feat_queue.data() && "Call set_pipeline_features before calling enqueue\n");
     const int max_num_stages = pipeline_feat_queue.dim(2).extent();
     internal_assert(num_stages <= max_num_stages)
         << "schedule features has more stages (" << num_stages
@@ -180,6 +187,7 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
     if (!head1_filter_update.data()) {
         auto weight_update_buffer = [](const Runtime::Buffer<float> &w) {
             std::vector<int> size;
+            size.reserve(w.dimensions() + 1);
             for (int i = 0; i < w.dimensions(); i++) {
                 size.push_back(w.dim(i).extent());
             }
@@ -232,18 +240,18 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
         *(cost_ptrs(i)) = dst(i);
         if (std::isnan(dst(i))) {
             any_nans = true;
-            aslog(0) << "Prediction " << i << " is NaN. True runtime is " << true_runtimes(i) << "\n";
-            aslog(0) << "Checking pipeline features for NaNs...\n";
-            pipeline_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
-            aslog(0) << "None found\n";
-            aslog(0) << "Checking schedule features for NaNs...\n";
-            schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
-            aslog(0) << "None found\n";
-            aslog(0) << "Checking network weights for NaNs...\n";
+            aslog(1) << "Prediction " << i << " is NaN. True runtime is " << true_runtimes(i) << "\n";
+            aslog(1) << "Checking pipeline features for NaNs...\n";
+            pipeline_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) { abort(); } });
+            aslog(1) << "None found\n";
+            aslog(1) << "Checking schedule features for NaNs...\n";
+            schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) { abort(); } });
+            aslog(1) << "None found\n";
+            aslog(1) << "Checking network weights for NaNs...\n";
             weights.for_each_buffer([&](const Runtime::Buffer<float> &buf) {
-                buf.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+                buf.for_each_value([&](float f) { if (std::isnan(f)) { abort(); } });
             });
-            aslog(0) << "None found\n";
+            aslog(1) << "None found\n";
         }
         internal_assert(true_runtimes(i) > 0);
     }
@@ -382,7 +390,7 @@ void DefaultCostModel::reset() {
 std::unique_ptr<DefaultCostModel> make_default_cost_model(const std::string &weights_in_path,
                                                           const std::string &weights_out_path,
                                                           bool randomize_weights) {
-    return std::unique_ptr<DefaultCostModel>(new DefaultCostModel(weights_in_path, weights_out_path, randomize_weights));
+    return std::make_unique<DefaultCostModel>(weights_in_path, weights_out_path, randomize_weights);
 }
 
 }  // namespace Halide

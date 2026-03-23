@@ -49,7 +49,8 @@ bool test() {
             .parallel(y)
             .vectorize(x, vector_size);
 
-        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
+        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66,
+                                    Target::HVX_v68})) {
             lut_vtcm
                 .store_in(MemoryType::VTCM)
                 .compute_at(output, Var::outermost())

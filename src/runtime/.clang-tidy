@@ -1,9 +1,31 @@
 ---
 InheritParentConfig: true
-
+# keep-sorted start skip_lines=1 ignore_prefixes=-
 Checks: >
+    bugprone-*,
+    -bugprone-assignment-in-if-condition,
+    -bugprone-bitwise-pointer-cast,
+    -bugprone-branch-clone,
     -bugprone-dynamic-static-initializers,
+    -bugprone-easily-swappable-parameters,
+    -bugprone-exception-escape,
+    -bugprone-implicit-widening-of-multiplication-result,
+    -bugprone-integer-division,
+    -bugprone-multi-level-implicit-pointer-conversion,
+    -bugprone-narrowing-conversions,,
+    -bugprone-reserved-identifier,
+    -bugprone-signed-char-misuse,
     -bugprone-sizeof-expression,
     -bugprone-suspicious-include,
+    clang-diagnostic-shadow-field,
+    misc-*,
+    -misc-const-correctness,
     -misc-definitions-in-headers,
+    -misc-include-cleaner,
+    -misc-no-recursion,
+    -misc-non-private-member-variables-in-classes,
+    -misc-unconventional-assign-operator,
+    -misc-unused-parameters,
+    -misc-use-internal-linkage,
+# keep-sorted end
 ...

@@ -9,9 +9,9 @@ Expr expensive_zero(Expr x, Expr y, Expr t, int n) {
     RDom r(0, n);
     Func a, b, c;
     Var z;
-    a(x, y, t, z) = random_int() % 1024;
-    b(x, y, t, z) = random_int() % 1024;
-    c(x, y, t, z) = random_int() % 1024;
+    a(x, y, t, z) = random_int() % 1024 + 5;
+    b(x, y, t, z) = random_int() % 1024 + 5;
+    c(x, y, t, z) = random_int() % 1024 + 5;
     return sum(select(pow(a(x, y, t, r), 3) + pow(b(x, y, t, r), 3) == pow(c(x, y, t, r), 3), 1, 0));
 }
 
@@ -19,12 +19,6 @@ int main(int argc, char **argv) {
 
     if (!get_jit_target_from_environment().has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
-        return 0;
-    }
-
-    if (get_jit_target_from_environment().has_feature(Target::OpenGLCompute)) {
-        printf("Skipping test for OpenGLCompute as it does not support copy_to_host/device() yet"
-               " (halide_buffer_copy is unimplemented in that backend).\n");
         return 0;
     }
 
@@ -77,7 +71,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }

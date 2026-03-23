@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
         int correct = i < 5 ? (1617 + i * 100) : 17;
         if (result(i, 0) != correct) {
             printf("Value at %d should have been %d but was instead %d\n", i, correct, result(i, 0));
-            return -1;
+            return 1;
         }
     }
 

@@ -1,0 +1,503 @@
+#include "StageStridedLoads.h"
+#include "CSE.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRVisitor.h"
+#include "Scope.h"
+#include "Simplify.h"
+#include "Substitute.h"
+
+namespace Halide {
+namespace Internal {
+
+namespace {
+
+class FindStridedLoads : public IRVisitor {
+public:
+    struct Key {
+        // The buffer being accessed.
+        std::string buf;
+        // The base index being accessed, without any constant offset.
+        Expr base;
+
+        // The stride and lanes of the vector access.
+        int64_t stride;
+        int lanes;
+
+        // The loaded type.
+        Type type;
+
+        // The Allocate node the load belongs to. nullptr for loads from external buffers.
+        const Allocate *allocation;
+
+        // The Stmt over which the load definitely happens, and definitely
+        // refers to the same buffer as other loads with the same name. nullptr
+        // means global scope.
+        const IRNode *scope;
+
+        bool operator<(const Key &other) const {
+            // Check fields in order of cost to compare
+            if (stride < other.stride) {
+                return true;
+            } else if (stride > other.stride) {
+                return false;
+            } else if (lanes < other.lanes) {
+                return true;
+            } else if (lanes > other.lanes) {
+                return false;
+            } else if (scope < other.scope) {
+                return true;
+            } else if (scope > other.scope) {
+                return false;
+            } else if (allocation < other.allocation) {
+                return true;
+            } else if (allocation > other.allocation) {
+                return false;
+            } else if (type < other.type) {
+                return true;
+            } else if (other.type < type) {
+                return false;
+            } else if (buf < other.buf) {
+                return true;
+            } else if (buf > other.buf) {
+                return false;
+            } else {
+                return graph_less_than(base, other.base);
+            }
+        }
+    };
+    // Entry entry maps from an offset from the base to a vector of identical
+    // Load nodes with that offset.
+    std::map<Key, std::map<int64_t, std::vector<const Load *>>> found_loads;
+
+    // The current scope over which accesses definitely occur.
+    const IRNode *scope = nullptr;
+
+    Scope<const Allocate *> allocation_scope;
+
+    std::map<const IRNode *, const IRNode *> parent_scope;
+
+protected:
+    void visit(const Load *op) override {
+        if (is_const_one(op->predicate)) {
+            // We want to give ourselves the best possible chance at recognizing
+            // a naked Ramp, so we simplify and substitute in lets (and take
+            // care to treat the index expression as a graph until the next
+            // CSE).
+            Expr idx = substitute_in_all_lets(simplify(common_subexpression_elimination(op->index)));
+            if (const Ramp *r = idx.as<Ramp>()) {
+                int64_t stride = as_const_int(r->stride).value_or(0);
+                Expr base = r->base;
+                int64_t offset = 0;
+                if (const Add *base_add = base.as<Add>()) {
+                    if (auto off = as_const_int(base_add->b)) {
+                        base = base_add->a;
+                        offset = *off;
+                    }
+                } else if (auto off = as_const_int(base)) {
+                    base = 0;
+                    offset = *off;
+                }
+
+                // TODO: We do not yet handle nested vectorization here for
+                // ramps which have not already collapsed. We could potentially
+                // handle more interesting types of shuffle than simple flat slices.
+                if (stride >= 2 && stride <= r->lanes && r->stride.type().is_scalar()) {
+                    const IRNode *s = scope;
+                    const Allocate *a = nullptr;
+                    if (const Allocate *const *a_ptr = allocation_scope.find(op->name)) {
+                        a = *a_ptr;
+                    }
+                    found_loads[Key{op->name, base, stride, r->lanes, op->type, a, s}][offset].push_back(op);
+                }
+            }
+        }
+        IRVisitor::visit(op);
+    }
+
+    void visit(const For *op) override {
+        if (can_prove(op->min <= op->max)) {
+            // The loop body definitely runs
+            IRVisitor::visit(op);
+        } else {
+            const IRNode *child_scope = op->body.get();
+            parent_scope[child_scope] = scope;
+            ScopedValue<const IRNode *> bind(scope, child_scope);
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const IfThenElse *op) override {
+        op->condition.accept(this);
+        {
+            const IRNode *child_scope = op->then_case.get();
+            parent_scope[child_scope] = scope;
+            ScopedValue<const IRNode *> bind(scope, child_scope);
+            op->then_case.accept(this);
+        }
+        if (op->else_case.defined()) {
+            const IRNode *child_scope = op->else_case.get();
+            parent_scope[child_scope] = scope;
+            ScopedValue<const IRNode *> bind(scope, child_scope);
+            op->else_case.accept(this);
+        }
+    }
+
+    void visit(const Allocate *op) override {
+        // Provide a mapping from load nodes to paddable allocations they belong
+        // to.
+        ScopedBinding<const Allocate *> bind(allocation_scope, op->name, op);
+        IRVisitor::visit(op);
+    }
+
+    using IRVisitor::visit;
+};
+
+// Replace a bunch of load expressions in a stmt
+class ReplaceStridedLoads : public IRMutator {
+public:
+    std::map<const Load *, Expr> replacements;
+    std::map<const Allocate *, int> padding;
+    std::map<const IRNode *, std::vector<std::pair<std::string, Expr>>> let_injections;
+
+    Stmt mutate(const Stmt &s) override {
+        Stmt stmt = IRMutator::mutate(s);
+        auto it = let_injections.find(s.get());
+        if (it != let_injections.end()) {
+            for (const auto &[name, value] : it->second) {
+                stmt = LetStmt::make(name, value, stmt);
+            }
+        }
+        return stmt;
+    }
+
+    Expr mutate(const Expr &e) override {
+        Expr expr = IRMutator::mutate(e);
+        auto it = let_injections.find(e.get());
+        if (it != let_injections.end()) {
+            for (const auto &[name, value] : it->second) {
+                expr = Let::make(name, value, expr);
+            }
+        }
+        return expr;
+    }
+
+protected:
+    Expr visit(const Load *op) override {
+        auto it = replacements.find(op);
+        if (it != replacements.end()) {
+            return mutate(it->second);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Stmt visit(const Allocate *op) override {
+        auto it = padding.find(op);
+        Stmt s = IRMutator::visit(op);
+        if (it == padding.end()) {
+            return s;
+        } else {
+            op = s.as<Allocate>();
+            internal_assert(op);
+            return Allocate::make(op->name, op->type, op->memory_type,
+                                  op->extents, op->condition,
+                                  op->body, op->new_expr, op->free_function,
+                                  std::max(it->second, op->padding));
+        }
+    }
+
+    using IRMutator::visit;
+};
+
+const IRNode *innermost_containing_node(const IRNode *root, const std::set<const Load *> &exprs) {
+    const IRNode *result = nullptr;
+    // The innermost containing stmt is whichever stmt node contains the
+    // largest number of our exprs, with ties breaking inwards.
+    int seen = 0, best = 0;
+    mutate_with(root,  //
+                [&](auto *self, const Stmt &s) {
+                    int old = seen;
+                    self->mutate_base(s);
+                    if (old == 0 && seen > best) {
+                        result = s.get();
+                        best = seen;
+                    }
+                    return s;  //
+                },
+                [&](auto *self, const Expr &e) {
+                    int old = seen;
+                    const Load *l = e.as<Load>();
+                    if (l && exprs.count(l)) {
+                        seen++;
+                    };
+                    self->mutate_base(e);
+                    if (old == 0 && seen > best) {
+                        result = e.get();
+                        best = seen;
+                    }
+                    return e;  //
+                });
+    internal_assert(seen) << "None of the exprs were found\n";
+    return result;
+}
+
+bool can_hoist_shared_load(const IRNode *n, const std::string &buf, const Expr &idx) {
+    // Check none of the variables the idx depends on are defined somewhere
+    // within this stmt, there are no stores to the given buffer in the stmt,
+    // and other side-effecty things that might either write to the buffer or
+    // guard against out of bounds reads don't occur either.
+    bool result = true;
+    visit_with(n,                                 //
+               [&](auto *self, const Let *let) {  //
+                   result &= !expr_uses_var(idx, let->name);
+                   self->visit_base(let);
+               },
+               [&](auto *self, const LetStmt *let) {  //
+                   result &= !expr_uses_var(idx, let->name);
+                   self->visit_base(let);
+               },
+               [&](auto *self, const For *loop) {  //
+                   result &= !expr_uses_var(idx, loop->name);
+                   self->visit_base(loop);
+               },
+               [&](auto *self, const Allocate *alloc) {  //
+                   result &= alloc->name != buf;
+                   self->visit_base(alloc);
+               },
+               [&](auto *self, const Store *store) {  //
+                   result &= store->name != buf;
+                   self->visit_base(store);
+               },
+               [&](auto *self, const AssertStmt *a) {  //
+                   // Extern stages always come with asserts, even when
+                   // no_asserts is on (they get stripped later), so this also
+                   // guards against writes to the buffer happening in an extern
+                   // stage. copy_to_host/device calls also come with asserts.
+                   result = false;
+               });
+    return result;
+}
+
+}  // namespace
+
+Stmt stage_strided_loads(const Stmt &stmt) {
+    FindStridedLoads finder;
+    ReplaceStridedLoads replacer;
+
+    // Make all strided loads distinct IR nodes so that we can uniquely identify
+    // them by address. We may want to mutate the same load node in different
+    // ways depending on the surrounding context.
+    Stmt s = mutate_with(stmt, [&](auto *self, const Load *l) {
+        const Ramp *r = l->index.as<Ramp>();
+        if (l->type.is_scalar() || (r && is_const_one(r->stride))) {
+            // Definitely not a strided load
+            return self->visit_base(l);
+        } else {
+            // Might be a strided load after simplification
+            return Load::make(l->type, l->name, self->mutate(l->index), l->image, l->param,
+                              self->mutate(l->predicate), l->alignment);
+        }
+    });
+
+    // Find related clusters of strided loads anywhere in the stmt. While this
+    // appears to look globally, it requires expressions to match exactly, so
+    // really it's only going to find things inside the same loops and let
+    // statements.
+    s.accept(&finder);
+
+    for (const auto &l : finder.found_loads) {
+        const FindStridedLoads::Key &k = l.first;
+        const std::map<int64_t, std::vector<const Load *>> &v = l.second;
+
+        // Find clusters of strided loads that can share the same dense load.
+        for (auto load = v.begin(); load != v.end();) {
+            // If there is any other load at the same base at an offset at least
+            // stride-1 ahead, it's safe to do a big dense load. Note that we're
+            // assuming that it's always valid to load addresses between two
+            // valid addresses, which rules out games involving protected pages
+            // at the end of scanlines.
+            const bool can_lift = l.second.lower_bound(load->first + k.stride - 1) != l.second.end();
+
+            if (!can_lift) {
+                load++;
+                continue;
+            }
+
+            // We have a complete cluster of loads. Make a single dense load
+            int lanes = k.lanes * k.stride;
+            int64_t first_offset = load->first;
+            Expr base = common_subexpression_elimination(k.base);
+            Expr idx = Ramp::make(base + (int)first_offset, make_one(k.base.type()), lanes);
+            Type t = k.type.with_lanes(lanes);
+            const Load *op = load->second[0];
+
+            std::set<const Load *> all_loads;
+            for (auto l = load; l != v.end() && l->first < first_offset + k.stride; l++) {
+                all_loads.insert(l->second.begin(), l->second.end());
+            }
+
+            Expr shared_load = Load::make(t, k.buf, idx, op->image, op->param,
+                                          const_true(lanes), op->alignment);
+
+            // We now need to pick a site to place our shared dense load. We
+            // can't lift the shared load further out than k.scope, because that
+            // marks the outermost point at which the loads are known to both
+            // definitely occur (we don't want to escape an if statement) and
+            // produce a single fixed value (we don't want to cross over a store
+            // to the same buffer). If k.scope is null, the loads are valid
+            // everywhere, so we can hoist the single shared dense load to
+            // wherever we like.
+            const IRNode *outermost = k.scope ? k.scope : s.get();
+            const IRNode *let_site = innermost_containing_node(outermost, all_loads);
+            if (can_hoist_shared_load(let_site, k.buf, idx)) {
+                std::string name = unique_name('t');
+                Expr var = Variable::make(shared_load.type(), name);
+                for (; load != v.end() && load->first < first_offset + k.stride; load++) {
+                    int row = load->first - first_offset;
+                    Expr shuf = Shuffle::make_slice(var, row, k.stride, k.lanes);
+                    for (const Load *l : load->second) {
+                        replacer.replacements.emplace(l, shuf);
+                    }
+                }
+                replacer.let_injections[let_site].emplace_back(name, shared_load);
+            } else {
+                for (; load != v.end() && load->first < first_offset + k.stride; load++) {
+                    int row = load->first - first_offset;
+                    Expr shuf = Shuffle::make_slice(shared_load, row, k.stride, k.lanes);
+                    for (const Load *l : load->second) {
+                        replacer.replacements.emplace(l, shuf);
+                    }
+                }
+            }
+        }
+
+        // Do the same in reverse to pick up any loads that didn't get
+        // picked up in a cluster, but for whom we know it's safe to do a
+        // dense load before their start.
+        for (const auto &[offset, loads] : reverse_view(v)) {
+            if (replacer.replacements.count(loads[0])) {
+                continue;
+            }
+            int64_t delta = k.stride - 1;
+            const bool can_lift = l.second.upper_bound(offset - delta) != l.second.begin();
+            if (!can_lift) {
+                continue;
+            }
+            int lanes = k.lanes * k.stride;
+            int64_t first_offset = offset - delta;
+            Expr idx = Ramp::make(k.base + (int)first_offset, make_one(k.base.type()), lanes);
+            Type t = k.type.with_lanes(lanes);
+            const Load *op = loads[0];
+            Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
+                                         const_true(lanes), op->alignment - delta);
+            dense_load = common_subexpression_elimination(dense_load);
+            Expr shuf = Shuffle::make_slice(dense_load, delta, k.stride, k.lanes);
+            for (const Load *l : loads) {
+                replacer.replacements.emplace(l, shuf);
+            }
+        }
+
+        // Look for any loads we can densify because an overlapping load occurs
+        // in any parent scope.
+        for (const auto &[offset, loads] : reverse_view(v)) {
+            if (replacer.replacements.count(loads[0])) {
+                continue;
+            }
+            int64_t min_offset = offset;
+            int64_t max_offset = offset;
+            const IRNode *scope = k.scope;
+            while (scope) {
+                const IRNode *parent = finder.parent_scope[scope];
+                auto parent_key = k;
+                parent_key.scope = parent;
+                auto it = finder.found_loads.find(parent_key);
+                if (it != finder.found_loads.end() && !it->second.empty()) {
+                    min_offset = std::min(it->second.begin()->first, min_offset);
+                    max_offset = std::max(it->second.rbegin()->first, max_offset);
+                }
+                scope = parent;
+            }
+
+            if (max_offset - min_offset < k.stride - 1) {
+                continue;
+            }
+            int64_t final_offset = std::max(offset - (k.stride - 1), min_offset);
+            int lanes = k.lanes * k.stride;
+            Expr idx = Ramp::make(k.base + (int)final_offset, make_one(k.base.type()), lanes);
+            Type t = k.type.with_lanes(lanes);
+            const Load *op = loads[0];
+            Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
+                                         const_true(lanes), op->alignment);
+            dense_load = common_subexpression_elimination(dense_load);
+            Expr shuf = Shuffle::make_slice(dense_load, offset - final_offset, k.stride, k.lanes);
+            for (const Load *l : loads) {
+                replacer.replacements.emplace(l, shuf);
+            }
+        }
+
+        // Densify any remaining strided loads to internal allocations by
+        // padding the allocation, and densify any remaining strided loads to
+        // external allocations by doing a dense load at a trimmed size. We rely
+        // on codegen to do a good job at loading vectors of a funny size.
+        for (const auto &[offset, loads] : v) {
+            if (replacer.replacements.count(loads[0])) {
+                continue;
+            }
+
+            int lanes = k.lanes * k.stride;
+
+            bool may_pad = k.allocation && !k.allocation->new_expr.defined();
+            int delta = (int)(k.stride - 1);
+
+            if (may_pad) {
+                auto p = replacer.padding.insert({k.allocation, delta});
+                if (!p.second) {
+                    p.first->second = std::max(p.first->second, delta);
+                }
+
+                int64_t first_offset = offset;
+                Expr idx = Ramp::make(k.base + (int)first_offset, make_one(k.base.type()), lanes);
+                Type t = k.type.with_lanes(lanes);
+                const Load *op = loads[0];
+                Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
+                                             const_true(lanes), op->alignment);
+                dense_load = common_subexpression_elimination(dense_load);
+                Expr shuf = Shuffle::make_slice(dense_load, offset - first_offset, k.stride, k.lanes);
+                for (const Load *l : loads) {
+                    replacer.replacements.emplace(l, shuf);
+                }
+
+            } else if (k.lanes % 2 == 0) {
+                // Do two overlapping half-sized dense loads and mush them together.
+                int64_t first_offset = offset;
+                int half_lanes = lanes / 2;
+                internal_assert(delta <= half_lanes);
+                Expr idx1 = Ramp::make(k.base + (int)first_offset, make_one(k.base.type()), half_lanes);
+
+                Expr idx2 = Ramp::make(k.base + (int)first_offset + half_lanes - delta, make_one(k.base.type()), half_lanes);
+                Type t = k.type.with_lanes(half_lanes);
+                const Load *op = loads[0];
+                Expr dense_load1 = Load::make(t, k.buf, idx1, op->image, op->param,
+                                              const_true(half_lanes), op->alignment);
+                Expr dense_load2 = Load::make(t, k.buf, idx2, op->image, op->param,
+                                              const_true(half_lanes), op->alignment + half_lanes - delta);
+                dense_load1 = common_subexpression_elimination(dense_load1);
+                dense_load2 = common_subexpression_elimination(dense_load2);
+                Expr shuf1 = Shuffle::make_slice(dense_load1, 0, k.stride, k.lanes / 2);
+                Expr shuf2 = Shuffle::make_slice(dense_load2, delta, k.stride, k.lanes / 2);
+                Expr shuf = Shuffle::make_concat({shuf1, shuf2});
+                for (const Load *l : loads) {
+                    replacer.replacements.emplace(l, shuf);
+                }
+            }
+        }
+    }
+
+    return replacer.mutate(s);
+}
+
+}  // namespace Internal
+}  // namespace Halide

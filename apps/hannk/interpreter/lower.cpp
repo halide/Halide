@@ -10,7 +10,7 @@ namespace hannk {
 // and remove the 'LstmElementwiseOp' op.
 OpPtr lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_activ_input, TensorPtr weights_input, TensorPtr biases_input, TensorPtr prev_state_input,
                         TensorPtr activ_output, TensorPtr state_output, TensorPtr concat_temp, TensorPtr activ_temp,
-                        ActivationFunction activation) {
+                        ActivationFunction activation_fn) {
     std::vector<TensorPtr> inputs = {data_input, prev_activ_input, weights_input, biases_input, prev_state_input};
     std::vector<TensorPtr> outputs = {activ_output, state_output};
 
@@ -18,7 +18,7 @@ OpPtr lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_activ_input, Tensor
 
     std::vector<TensorPtr> concat_inputs = {data_input, prev_activ_input};
     ops.push_back(make_op<ConcatenationOp>(concat_inputs, concat_temp, 0));
-    ops.push_back(lower_tflite_fullyconnected(concat_temp, weights_input, biases_input, activ_temp, activation));
+    ops.push_back(lower_tflite_fullyconnected(concat_temp, weights_input, biases_input, activ_temp, activation_fn));
 
     // Split activ_temp into the 4 ops we need.
     Box elementwise_bounds = activ_temp->bounds();
@@ -61,12 +61,12 @@ OpPtr lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_activ_input, Tensor
     auto prev_state_times_forget_state = p.mul(forget_gate_output, prev_state);
 
     auto state = p.add(input_times_input_modulation, prev_state_times_forget_state);
-    auto activ = p.mul_add(output_gate_output, p.tanh(7, state, q - 4), 128);
+    auto activation = p.mul_add(output_gate_output, p.tanh(7, state, q - 4), 128);
     // Reload new_state so it's in the right place for the outputs.
     // TODO: Make the assembler smart enough to do this itself.
     state = p.add(state, 0);
 
-    auto program_buf = p.assemble({activ, state});
+    auto program_buf = p.assemble({activation, state});
     program_buf = program_buf.copy();
 
     ops.push_back(make_op<ElementwiseProgramOp>(elementwise_inputs, elementwise_outputs, program_buf));
@@ -108,11 +108,17 @@ OpPtr lower_tflite_fullyconnected(const TensorPtr &input, const TensorPtr &filte
             assert(i.min == 0);
         }
 #endif
-        int c_extent = 1;
-        int b_extent = bounds.back().extent();
-        for (size_t i = 0; i + 1 < bounds.size(); i++) {
-            c_extent *= bounds[i].extent();
+        // It's important that we preserve the invariants:
+        //      input_reshaped[0] == filter[0]
+        //      input_reshaped[1] = input->number_of_elements()/input_reshaped[0]
+        int c_extent = filter->bounds()[0].extent();
+        int num_elems = 1;
+        for (size_t i = 0; i < bounds.size(); i++) {
+            num_elems *= bounds[i].extent();
         }
+        const int b_extent = num_elems / c_extent;
+        HCHECK(c_extent * b_extent == num_elems);
+
         Box reshaped_bounds = {{0, c_extent - 1}, {0, b_extent - 1}};
         TensorPtr input_reshaped =
             std::make_shared<Tensor>(input->name() + ".reshaped", input->type(), std::move(reshaped_bounds), input->quantization());

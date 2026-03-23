@@ -46,7 +46,7 @@ public:
         s.accept(&c);
         if (c.sin_count != correct) {
             printf("There were %d sin calls instead of %d\n", c.sin_count, correct);
-            exit(-1);
+            exit(1);
         }
         return s;
     }
@@ -69,7 +69,8 @@ public:
         s.accept(&c);
         if (c.store_count != correct) {
             printf("There were %d stores to %s instead of %d\n", c.store_count, func.c_str(), correct);
-            exit(-1);
+            debug(1) << s << "\n";
+            exit(1);
         }
         return s;
     }
@@ -105,6 +106,10 @@ int main(int argc, char **argv) {
     {
         Func g = BoundaryConditions::repeat_edge(f, {{0, 100}});
         count_partitions(g, 3);
+
+        // check that disabling works.
+        g.partition(x, Partition::Never);
+        count_partitions(g, 1);
     }
 
     // If you vectorize or otherwise split, then the last vector
@@ -116,14 +121,18 @@ int main(int argc, char **argv) {
         g(x) = f(x);
         g.vectorize(x, 8);
         count_partitions(g, 2);
+
+        // check that disabling works.
+        g.partition(x, Partition::Never);
+        count_partitions(g, 1);
     }
 
-    // The slicing applies to every loop level starting from the
-    // outermost one, but only recursively simplifies the clean steady
-    // state. It either splits things three (start, middle, end). So
-    // adding a boundary condition to a 2D computation will produce 5
-    // code paths for the top, bottom, left, right, and center of the
-    // image.
+    // The slicing applies to every loop level starting from the outermost one,
+    // but only recursively simplifies the clean steady state. It either splits
+    // things three (start, middle, end). So adding a boundary condition to a 2D
+    // computation will produce 5 code paths for the top, bottom, left, right,
+    // and center of the image. With explicit control over loop partitioning, we
+    // might produce more or fewer.
     {
         Var y;
         Func g;
@@ -131,6 +140,48 @@ int main(int argc, char **argv) {
         g.compute_root();
         Func h = BoundaryConditions::mirror_image(g, {{0, 10}, {0, 10}});
         count_partitions(h, 5);
+
+        {
+            debug(1) << "Never partition y, always partition x:\n";
+            Func h2 = h;
+            h2.partition(x, Partition::Always);
+            h2.partition(y, Partition::Never);
+            count_partitions(h2, 3);  // We expect left-center-right
+        }
+
+        {
+            debug(1) << "Never partition x, always partition y:\n";
+            Func h2 = h;
+            h2.partition(x, Partition::Never);
+            h2.partition(y, Partition::Always);
+            count_partitions(h2, 3);  // We expect top-middle-bottom
+        }
+
+        {
+            debug(1) << "Never partition x and y.\n";
+            Func h2 = h;
+            h2.partition(x, Partition::Never);
+            h2.partition(y, Partition::Never);
+            count_partitions(h2, 1);
+        }
+
+        {
+            debug(1) << "Always partition x and y.\n";
+            Func h2 = h;
+            h2.partition(x, Partition::Always);
+            h2.partition(y, Partition::Always);
+            // All loops get partitioned, including the tails of outer loops, so we expect 9 zones:
+            /*
+               ----------------------------------------------
+               | top left    | top middle    | top right    |
+               | ------------------------------------------ |
+               | left        | middle        | right        |
+               | ------------------------------------------ |
+               | bottom left | bottom middle | bottom right |
+               ----------------------------------------------
+            */
+            count_partitions(h2, 9);
+        }
     }
 
     // If you split and also have a boundary condition, or have
@@ -184,6 +235,10 @@ int main(int argc, char **argv) {
         g(x) = f(clamp(x, 0, 10));  // treated as clamp(likely(x), 0, 10)
         g.vectorize(x, 8);
         count_partitions(g, 3);
+
+        // check that disabling works.
+        g.partition(x, Partition::Never);
+        count_partitions(g, 1);
     }
 
     // Using the likely intrinsic pulls some IR relating to the
@@ -236,6 +291,26 @@ int main(int argc, char **argv) {
 
         limit.set(-10000000);
         result = g.realize({10});
+    }
+
+    // Test for the bug described in https://github.com/halide/Halide/issues/7929
+    {
+        Func f, g, h;
+        Var x, y;
+
+        f(x, y) = x;
+        f.compute_root();
+
+        Param<int> p;
+        g = BoundaryConditions::repeat_edge(f, {{0, p}, {Expr(), Expr()}});
+
+        h(x, y) = g(x, y) + g(x, y + 1) + g(x, y + 2);
+
+        count_partitions(h, 3);
+
+        // Same thing with vectorization too.
+        h.vectorize(x, 8);
+        count_partitions(h, 3);
     }
 
     // The performance of this behavior is tested in

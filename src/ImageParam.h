@@ -25,7 +25,7 @@ class ImageParam : public OutputImageParam {
     friend class ::Halide::Internal::GeneratorInput_Buffer;
 
     // Only for use of Generator
-    ImageParam(const Internal::Parameter &p, Func f)
+    ImageParam(const Parameter &p, Func f)
         : OutputImageParam(p, Argument::InputBuffer, std::move(f)) {
     }
 

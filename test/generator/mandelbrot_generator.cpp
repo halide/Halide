@@ -58,8 +58,7 @@ public:
     Input<int> iters{"iters"};
     Input<int> w{"w"};
     Input<int> h{"h"};
-
-    Output<Buffer<int32_t>> count{"count", 2};
+    Output<Buffer<int32_t, 2>> count{"count"};
 
     void generate() {
         Var x, y, z;

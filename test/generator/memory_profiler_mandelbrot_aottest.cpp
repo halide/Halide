@@ -60,7 +60,7 @@ void validate(halide_profiler_state *s) {
 }
 
 int launcher_task(void *user_context, int index, uint8_t *closure) {
-    Buffer<int> output(width, height);
+    Buffer<int, 2> output(width, height);
     float fx = cos(index / 10.0f), fy = sin(index / 10.0f);
     memory_profiler_mandelbrot(-2.0f, 2.0f, -1.4f, 1.4f, fx, fy, iters,
                                output.width(), output.height(), output);
@@ -82,7 +82,11 @@ int main(int argc, char **argv) {
     printf("argmin expected value\n  stack peak: %d\n", argmin_stack_peak);
     printf("\n");
 
-    halide_do_par_for(nullptr, launcher_task, 0, num_launcher_tasks, nullptr);
+    // Note that launcher_task() always returns zero, thus halide_do_par_for()
+    // should always return zero, but since this is a test, let's verify that.
+    int result = halide_do_par_for(nullptr, launcher_task, 0, num_launcher_tasks, nullptr);
+    assert(result == 0);
+    (void)result;
 
     halide_profiler_state *state = halide_profiler_get_state();
     assert(state != nullptr);

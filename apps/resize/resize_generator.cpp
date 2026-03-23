@@ -63,18 +63,23 @@ public:
     // resample in x and in y).
     GeneratorParam<bool> upsample{"upsample", false};
 
-    Input<Buffer<>> input{"input", 3};
+    Input<Buffer<void, 3>> input{"input"};
     Input<float> scale_factor{"scale_factor"};
-    Output<Buffer<>> output{"output", 3};
+    Output<Buffer<void, 3>> output{"output"};
 
     // Common Vars
-    Var x, y, c, k;
+    Var x{"x"}, y{"y"}, c{"c"}, k{"k"};
 
     // Intermediate Funcs
-    Func as_float, resized_x, resized_y,
-        unnormalized_kernel_x, unnormalized_kernel_y,
-        kernel_x, kernel_y,
-        kernel_sum_x, kernel_sum_y;
+    Func as_float{"as_float"},
+        resized_x{"resized_x"},
+        resized_y{"resized_y"},
+        unnormalized_kernel_x{"unnormalized_kernel_x"},
+        unnormalized_kernel_y{"unnormalized_kernel_y"},
+        kernel_x{"kernel_x"},
+        kernel_y{"kernel_y"},
+        kernel_sum_x{"kernel_sum_x"},
+        kernel_sum_y{"kernel_sum_y"};
 
     void generate() {
 
@@ -145,9 +150,10 @@ public:
     void schedule() {
         const int vec = natural_vector_size<float>();
 
-        Var xi, yi;
+        Var xi("xi"), yi("yi");
         unnormalized_kernel_x
             .compute_at(kernel_x, x)
+            .store_in(MemoryType::Stack)
             .vectorize(x);
         kernel_sum_x
             .compute_at(kernel_x, x)
@@ -175,7 +181,7 @@ public:
                 .vectorize(xi);
             resized_x
                 .compute_at(output, x)
-                .store_in(MemoryType::Stack)
+                .hoist_storage(output, y)
                 .vectorize(x);
             resized_y
                 .compute_at(output, xi)

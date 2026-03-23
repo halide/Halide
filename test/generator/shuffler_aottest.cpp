@@ -11,12 +11,12 @@ int main(int argc, char **argv) {
     {
         constexpr int W = 256;
 
-        Buffer<int32_t> input(W);
+        Buffer<int32_t, 1> input(W);
         for (int x = 0; x < W; x++) {
             input(x) = x;
         }
 
-        Buffer<int32_t> output(W / 4);
+        Buffer<int32_t, 1> output(W / 4);
         shuffler(input, output);
 
         for (int x = 0; x < W / 4; x++) {
@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
             int actual = output(x);
             if (expected != actual) {
                 printf("at x = %d expected %d got %d\n", x, expected, actual);
-                return -1;
+                return 1;
             }
         }
     }
@@ -32,12 +32,12 @@ int main(int argc, char **argv) {
     {
         constexpr int W = 16384;
 
-        Buffer<int32_t> input(W);
+        Buffer<int32_t, 1> input(W);
         for (int x = 0; x < W; x++) {
             input(x) = x;
         }
 
-        Buffer<int32_t> output(W / 4);
+        Buffer<int32_t, 1> output(W / 4);
 
         BenchmarkConfig config;
         config.min_time = 1.0;

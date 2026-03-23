@@ -12,7 +12,7 @@ void check_int(const Expr &expr, int expected) {
     if (!is_const(expr, expected)) {
         std::cerr << "Found expression " << expr << "; "
                   << "expected constant int " << expected << "\n";
-        exit(-1);
+        exit(1);
     }
 }
 
@@ -26,9 +26,9 @@ private:
     using IRVisitor::visit;
 
     void visit(const For *op) override {
-        std::cout << "for(" << op->name << ", " << op->min << ", " << op->extent << ")\n";
+        std::cout << "for(" << op->name << ", " << op->min << ", " << op->max << ")\n";
         check_int(op->min, 0);
-        check_int(op->extent, size);
+        check_int(op->max, size - 1);
         ++count;
         IRVisitor::visit(op);
     }
@@ -43,7 +43,7 @@ class Validator : public IRMutator {
 
         if (c.count != 1) {
             std::cerr << "expected one loop, found " << c.count << "\n";
-            exit(-1);
+            exit(1);
         }
 
         return s;
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         Buffer<uint8_t> out = f.realize({size});
         if (!out.all_equal(42)) {
             std::cerr << "wrong output\n";
-            exit(-1);
+            exit(1);
         }
     }
 
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         Buffer<uint8_t> out = f.realize({size});
         if (!out.all_equal(42)) {
             std::cerr << "wrong output\n";
-            exit(-1);
+            exit(1);
         }
     }
 

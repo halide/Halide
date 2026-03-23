@@ -4,7 +4,7 @@ namespace {
 
 class VariableNumThreads : public Halide::Generator<VariableNumThreads> {
 public:
-    Output<Buffer<float>> output{"output", 2};
+    Output<Buffer<float, 2>> output{"output"};
 
     void generate() {
         // A job with lots of nested parallelism

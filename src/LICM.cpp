@@ -89,6 +89,10 @@ class LiftLoopInvariants : public IRMutator {
                 return false;
             }
         }
+        if (const Reinterpret *reinterpret = e.as<Reinterpret>()) {
+            // Don't lift Reinterpret nodes. They're free.
+            return should_lift(reinterpret->value);
+        }
         if (const Add *add = e.as<Add>()) {
             if (add->type == Int(32) &&
                 is_const(add->b)) {
@@ -97,8 +101,7 @@ class LiftLoopInvariants : public IRMutator {
             }
         }
         if (const Call *call = e.as<Call>()) {
-            if (Call::as_tag(call) ||
-                call->is_intrinsic(Call::reinterpret)) {
+            if (Call::as_tag(call)) {
                 // Don't lift these intrinsics. They're free.
                 return should_lift(call->args[0]);
             }
@@ -109,31 +112,31 @@ class LiftLoopInvariants : public IRMutator {
         return true;
     }
 
-    template<typename T, typename Body>
-    Body visit_let(const T *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
-            const T *op;
+            const LetOrLetStmt *op;
             Expr new_value;
             ScopedBinding<> binding;
-            Frame(const T *op, Expr v, Scope<> &scope)
+            Frame(const LetOrLetStmt *op, Expr v, Scope<> &scope)
                 : op(op), new_value(std::move(v)), binding(scope, op->name) {
             }
         };
         vector<Frame> frames;
-        Body result;
+        decltype(op->body) result;
         do {
             frames.emplace_back(op, mutate(op->value), varying);
             result = op->body;
-        } while ((op = result.template as<T>()));
+        } while ((op = result.template as<LetOrLetStmt>()));
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
-                result = it->op;
+        for (const auto &frame : reverse_view(frames)) {
+            if (frame.new_value.same_as(frame.op->value) && result.same_as(frame.op->body)) {
+                result = frame.op;
             } else {
-                result = T::make(it->op->name, std::move(it->new_value), result);
+                result = LetOrLetStmt::make(frame.op->name, std::move(frame.new_value), result);
             }
         }
 
@@ -141,11 +144,11 @@ class LiftLoopInvariants : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Let, Expr>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<LetStmt, Stmt>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const For *op) override {
@@ -209,6 +212,8 @@ class LICM : public IRMutator {
     int cost(const Expr &e, const set<string> &vars) {
         if (is_const(e)) {
             return 0;
+        } else if (const Reinterpret *reinterpret = e.as<Reinterpret>()) {
+            return cost(reinterpret->value, vars);
         } else if (const Variable *var = e.as<Variable>()) {
             if (vars.count(var->name)) {
                 // We're loading this already
@@ -223,13 +228,6 @@ class LICM : public IRMutator {
             return cost(sub->a, vars) + cost(sub->b, vars) + 1;
         } else if (const Mul *mul = e.as<Mul>()) {
             return cost(mul->a, vars) + cost(mul->b, vars) + 1;
-        } else if (const Call *call = e.as<Call>()) {
-            if (call->is_intrinsic(Call::reinterpret)) {
-                internal_assert(call->args.size() == 1);
-                return cost(call->args[0], vars);
-            } else {
-                return 100;
-            }
         } else {
             return 100;
         }
@@ -280,16 +278,11 @@ class LICM : public IRMutator {
             }
 
             // Track the set of variables used by the inner loop
-            class CollectVars : public IRVisitor {
-                using IRVisitor::visit;
-                void visit(const Variable *op) override {
-                    vars.insert(op->name);
-                }
-
-            public:
-                set<string> vars;
-            } vars;
-            new_stmt.accept(&vars);
+            set<string> vars;
+            LambdaVisitor collect_var([&](auto *, const Variable *op) {
+                vars.insert(op->name);
+            });
+            new_stmt.accept(&collect_var);
 
             // Now consider substituting back in each use
             const Call *call = dummy_call.as<Call>();
@@ -302,10 +295,10 @@ class LICM : public IRMutator {
                         continue;
                     }
                     Expr e = call->args[i];
-                    if (cost(e, vars.vars) <= 1) {
+                    if (cost(e, vars) <= 1) {
                         // Just subs it back in - computing it is as cheap
                         // as loading it.
-                        e.accept(&vars);
+                        e.accept(&collect_var);
                         new_stmt = substitute(names[i], e, new_stmt);
                         names[i].clear();
                         exprs[i] = Expr();
@@ -320,8 +313,8 @@ class LICM : public IRMutator {
             const For *loop = new_stmt.as<For>();
             internal_assert(loop);
 
-            new_stmt = For::make(loop->name, loop->min, loop->extent,
-                                 loop->for_type, loop->device_api, mutate(loop->body));
+            new_stmt = For::make(loop->name, loop->min, loop->max,
+                                 loop->for_type, loop->partition_policy, loop->device_api, mutate(loop->body));
 
             // Wrap lets for the lifted invariants
             for (size_t i = 0; i < exprs.size(); i++) {
@@ -352,8 +345,8 @@ class GroupLoopInvariants : public IRMutator {
         const Scope<int> &depth;
 
         void visit(const Variable *op) override {
-            if (depth.contains(op->name)) {
-                result = std::max(result, depth.get(op->name));
+            if (const int *d = depth.find(op->name)) {
+                result = std::max(result, *d);
             }
         }
 
@@ -478,20 +471,20 @@ class GroupLoopInvariants : public IRMutator {
         return stmt;
     }
 
-    template<typename T, typename Body>
-    Body visit_let(const T *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         struct Frame {
-            const T *op;
+            const LetOrLetStmt *op;
             Expr new_value;
             ScopedBinding<int> binding;
-            Frame(const T *op, Expr v, int depth, Scope<int> &scope)
+            Frame(const LetOrLetStmt *op, Expr v, int depth, Scope<int> &scope)
                 : op(op),
                   new_value(std::move(v)),
                   binding(scope, op->name, depth) {
             }
         };
         std::vector<Frame> frames;
-        Body result;
+        decltype(op->body) result;
 
         do {
             result = op->body;
@@ -500,15 +493,15 @@ class GroupLoopInvariants : public IRMutator {
                 d = expr_depth(op->value);
             }
             frames.emplace_back(op, mutate(op->value), d, var_depth);
-        } while ((op = result.template as<T>()));
+        } while ((op = result.template as<LetOrLetStmt>()));
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
-                result = it->op;
+        for (const auto &frame : reverse_view(frames)) {
+            if (frame.new_value.same_as(frame.op->value) && result.same_as(frame.op->body)) {
+                result = frame.op;
             } else {
-                result = T::make(it->op->name, it->new_value, result);
+                result = LetOrLetStmt::make(frame.op->name, frame.new_value, result);
             }
         }
 
@@ -516,11 +509,11 @@ class GroupLoopInvariants : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Let, Expr>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<LetStmt, Stmt>(op);
+        return visit_let(op);
     }
 };
 
@@ -565,16 +558,16 @@ class HoistIfStatements : public IRMutator {
             if (!i->else_case.defined() &&
                 is_pure(i->condition) &&
                 !expr_uses_var(i->condition, op->name)) {
-                Stmt s = For::make(op->name, op->min, op->extent,
-                                   op->for_type, op->device_api, i->then_case);
+                Stmt s = For::make(op->name, op->min, op->max,
+                                   op->for_type, op->partition_policy, op->device_api, i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
         }
         if (body.same_as(op->body)) {
             return op;
         } else {
-            return For::make(op->name, op->min, op->extent,
-                             op->for_type, op->device_api, body);
+            return For::make(op->name, op->min, op->max,
+                             op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 
@@ -620,7 +613,7 @@ class HoistIfStatements : public IRMutator {
                 is_pure(i->condition)) {
                 Stmt s = Allocate::make(op->name, op->type, op->memory_type,
                                         op->extents, op->condition, i->then_case,
-                                        op->new_expr, op->free_function);
+                                        op->new_expr, op->free_function, op->padding);
                 return IfThenElse::make(i->condition, s);
             }
         }
@@ -629,7 +622,7 @@ class HoistIfStatements : public IRMutator {
         } else {
             return Allocate::make(op->name, op->type, op->memory_type,
                                   op->extents, op->condition, body,
-                                  op->new_expr, op->free_function);
+                                  op->new_expr, op->free_function, op->padding);
         }
     }
 

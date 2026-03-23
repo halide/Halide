@@ -113,9 +113,9 @@ Func merge_sort(Func input, int total_size) {
         Expr valid_b = candidate_b < chunk_size;
         Expr value_a = result(clamp(candidate_a, 0, chunk_size - 1), 2 * y);
         Expr value_b = result(clamp(candidate_b, 0, chunk_size - 1), 2 * y + 1);
-        merge_rows(r, y) = tuple_select(valid_a && ((value_a < value_b) || !valid_b),
-                                        Tuple(candidate_a + 1, candidate_b, value_a),
-                                        Tuple(candidate_a, candidate_b + 1, value_b));
+        merge_rows(r, y) = select(valid_a && ((value_a < value_b) || !valid_b),
+                                  Tuple(candidate_a + 1, candidate_b, value_a),
+                                  Tuple(candidate_a, candidate_b + 1, value_b));
 
         if (chunk_size <= parallel_work_size) {
             merge_rows.compute_at(parallel_stage, y);
@@ -198,11 +198,11 @@ int main(int argc, char **argv) {
     for (int i = 0; i < N; i++) {
         if (bitonic_sorted(i) != correct(i)) {
             printf("bitonic sort failed: %d -> %d instead of %d\n", i, bitonic_sorted(i), correct(i));
-            return -1;
+            return 1;
         }
         if (merge_sorted(i) != correct(i)) {
             printf("merge sort failed: %d -> %d instead of %d\n", i, merge_sorted(i), correct(i));
-            return -1;
+            return 1;
         }
     }
 

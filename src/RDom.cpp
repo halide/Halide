@@ -22,15 +22,16 @@ const char *const dom_var_names[] = {"$x", "$y", "$z", "$w"};
 
 // T is an ImageParam, Buffer<>, Input<Buffer<>>
 template<typename T>
-Internal::ReductionDomain make_dom_from_dimensions(const T &t, const std::string &name) {
-    std::vector<Internal::ReductionVariable> vars;
+ReductionDomain make_dom_from_dimensions(const T &t, const std::string &name) {
+    std::vector<ReductionVariable> vars;
+    vars.reserve(t.dimensions());
     for (int i = 0; i < t.dimensions(); i++) {
         vars.push_back({name + dom_var_names[i],
                         t.dim(i).min(),
                         t.dim(i).extent()});
     }
 
-    return Internal::ReductionDomain(vars);
+    return ReductionDomain(vars);
 }
 
 }  // namespace
@@ -66,12 +67,14 @@ const std::string &RVar::name() const {
     }
 }
 
+namespace {
 template<int N>
 ReductionDomain build_domain(ReductionVariable (&vars)[N]) {
     vector<ReductionVariable> d(&vars[0], &vars[N]);
     ReductionDomain dom(d);
     return dom;
 }
+}  // namespace
 
 // This just initializes the predefined x, y, z, w members of RDom.
 void RDom::init_vars(const string &name) {
@@ -126,9 +129,16 @@ public:
 };
 }  // namespace
 
+void RDom::validate_min_extent(const Expr &min, const Expr &extent) {
+    user_assert(lossless_cast(Int(32), min).defined())
+        << "RDom min cannot be represented as an int32: " << min;
+    user_assert(lossless_cast(Int(32), extent).defined())
+        << "RDom extent cannot be represented as an int32: " << extent;
+}
+
 void RDom::initialize_from_region(const Region &region, string name) {
     if (name.empty()) {
-        name = make_entity_name(this, "Halide:.*:RDom", 'r');
+        name = unique_name('r');
     }
 
     std::vector<ReductionVariable> vars;
@@ -172,7 +182,7 @@ void RDom::initialize_from_region(const Region &region, string name) {
             break;
         }
         ReductionVariable rv;
-        rv.var = name + "$" + rvar_uniquifier;
+        rv.var = concat_strings(name, "$", rvar_uniquifier);
         rv.min = cast<int32_t>(region[i].min);
         rv.extent = cast<int32_t>(region[i].extent);
         vars.push_back(rv);
@@ -251,16 +261,19 @@ std::ostream &operator<<(std::ostream &stream, const RVar &v) {
 
 /** Emit an RDom in a human-readable form. */
 std::ostream &operator<<(std::ostream &stream, const RDom &dom) {
+    if (!dom.defined()) {
+        return stream << "RDom()";
+    }
+
     stream << "RDom(\n";
     for (int i = 0; i < dom.dimensions(); i++) {
         stream << "  " << dom[i] << "\n";
     }
     stream << ")";
-    Expr pred = simplify(dom.domain().predicate());
-    if (!equal(const_true(), pred)) {
-        stream << " where (\n  " << pred << ")";
+    const Expr pred = dom.domain().predicate();
+    if (!is_const_one(pred)) {
+        stream << " where (" << pred << ")";
     }
-    stream << "\n";
     return stream;
 }
 

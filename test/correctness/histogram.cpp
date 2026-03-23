@@ -50,7 +50,8 @@ bool test() {
             .compute_at(g, Var::outermost())
             .vectorize(x, vector_size);
 
-        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
+        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66,
+                                    Target::HVX_v68})) {
             hist.store_in(MemoryType::VTCM);
 
             hist

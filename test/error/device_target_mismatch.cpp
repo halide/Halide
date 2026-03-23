@@ -5,7 +5,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     Target t("host");
-    (void)get_device_interface_for_device_api(DeviceAPI::CUDA, t, "Device Target Mistmatch Test");
+    (void)get_device_interface_for_device_api(DeviceAPI::CUDA, t, "Device Target Mismatch Test");
 
     printf("Success!\n");
     return 0;

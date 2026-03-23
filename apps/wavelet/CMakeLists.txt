@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(wavelet)
 
 enable_testing()
@@ -12,12 +12,12 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(wavelet.generator
-               daubechies_x_generator.cpp
-               inverse_daubechies_x_generator.cpp
-               haar_x_generator.cpp
-               inverse_haar_x_generator.cpp)
-target_link_libraries(wavelet.generator PRIVATE Halide::Generator)
+add_halide_generator(wavelet.generator
+                     SOURCES
+                     daubechies_x_generator.cpp
+                     inverse_daubechies_x_generator.cpp
+                     haar_x_generator.cpp
+                     inverse_haar_x_generator.cpp)
 
 # Filters
 add_halide_library(daubechies_x FROM wavelet.generator)

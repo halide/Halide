@@ -3,15 +3,9 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 int bounds_query_count[4];
 int call_count[4];
-extern "C" DLLEXPORT int call_counter(halide_buffer_t *input, int x, int idx, halide_buffer_t *output) {
+extern "C" HALIDE_EXPORT_SYMBOL int call_counter(halide_buffer_t *input, int x, int idx, halide_buffer_t *output) {
     if (input->is_bounds_query()) {
         bounds_query_count[idx]++;
         input->dim[0] = output->dim[0];
@@ -37,7 +31,7 @@ void check_queries(int a = 0, int b = 0, int c = 0, int d = 0) {
     for (int i = 0; i < 4; i++) {
         if (correct[i] != bounds_query_count[i]) {
             printf("bounds_query_count[%d] was supposed to be %d but instead is %d\n", i, correct[i], bounds_query_count[i]);
-            exit(-1);
+            exit(1);
         }
     }
 }
@@ -47,7 +41,7 @@ void check_counts(int a = 0, int b = 0, int c = 0, int d = 0) {
     for (int i = 0; i < 4; i++) {
         if (correct[i] != call_count[i]) {
             printf("call_count[%d] was supposed to be %d but instead is %d\n", i, correct[i], call_count[i]);
-            exit(-1);
+            exit(1);
         }
     }
 }

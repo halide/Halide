@@ -21,11 +21,4 @@ use `halide_reuse_device_allocations(nullptr, true)` for GPU)
 
 Tested on a 8 core Intel CPU (16 with HT) and TITAN Xp.
 
-See `test.cpp` and `demo_generator.cpp` for how to use this autoscheduler. It
-can also be used with Python bindings. Compile with
-
-```
-WITH_PYTHON=1 make
-```
-
-and see `test.py` for usage.
+See `test/autoschedulers/li2018` for examples of using this autoscheduler.

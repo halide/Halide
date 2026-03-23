@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
             float delta = correct - r;
             if (delta < -0.001 || delta > 0.001) {
                 printf("result(%d, %d) was %f instead of %f\n", x, y, r, correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -89,25 +89,25 @@ int main(int argc, char **argv) {
             delta = (correct_prod + 10) / (prod_im(x, y) + 10);
             if (delta < 0.99 || delta > 1.01) {
                 printf("prod_im(%d, %d) = %f instead of %f\n", x, y, prod_im(x, y), correct_prod);
-                return -1;
+                return 1;
             }
 
             delta = correct_min - min_im(x, y);
             if (delta < -0.001 || delta > 0.001) {
                 printf("min_im(%d, %d) = %f instead of %f\n", x, y, min_im(x, y), correct_min);
-                return -1;
+                return 1;
             }
 
             delta = correct_min - min_im_separable(x, y);
             if (delta < -0.001 || delta > 0.001) {
                 printf("min_im(%d, %d) = %f instead of %f\n", x, y, min_im_separable(x, y), correct_min);
-                return -1;
+                return 1;
             }
 
             delta = correct_max - max_im(x, y);
             if (delta < -0.001 || delta > 0.001) {
                 printf("max_im(%d, %d) = %f instead of %f\n", x, y, max_im(x, y), correct_max);
-                return -1;
+                return 1;
             }
         }
     }
@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
         args[0].name() != Var(_0).name() ||
         args[1].name() != Var(_1).name()) {
         printf("sum_implicit_inner has the wrong args\n");
-        return -1;
+        return 1;
     }
 
     Func product_implicit;
@@ -155,13 +155,13 @@ int main(int argc, char **argv) {
     float result_f32 = evaluate<float>(minimum(RDom(0, 11) * -0.5f));
     if (result_f32 != -5.0f) {
         printf("minimum is %f instead of -5.0f\n", result_f32);
-        return -1;
+        return 1;
     }
 
     double result_f64 = evaluate<double>(minimum(RDom(0, 11) * cast<double>(-0.5f)));
     if (result_f64 != -5.0) {
         printf("minimum is %f instead of -5.0\n", result_f64);
-        return -1;
+        return 1;
     }
 
     // Check that min of a bunch of infinities is infinity.
@@ -172,22 +172,22 @@ int main(int argc, char **argv) {
     result_f32 = evaluate<float>(minimum(strict_float(RDom(1, 10) * inf_f32)));
     if (result_f32 != inf_f32) {
         printf("minimum is %f instead of infinity\n", result_f32);
-        return -1;
+        return 1;
     }
     result_f64 = evaluate<double>(minimum(strict_float(RDom(1, 10) * Expr(inf_f64))));
     if (result_f64 != inf_f64) {
         printf("minimum is %f instead of infinity\n", result_f64);
-        return -1;
+        return 1;
     }
     result_f32 = evaluate<float>(maximum(strict_float(RDom(1, 10) * -inf_f32)));
     if (result_f32 != -inf_f32) {
         printf("maximum is %f instead of -infinity\n", result_f32);
-        return -1;
+        return 1;
     }
     result_f64 = evaluate<double>(maximum(strict_float(RDom(1, 10) * Expr(-inf_f64))));
     if (result_f64 != -inf_f64) {
         printf("maximum is %f instead of -infinity\n", result_f64);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

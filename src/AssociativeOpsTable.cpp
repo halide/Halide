@@ -12,19 +12,6 @@ using std::vector;
 
 namespace {
 
-enum class RootExpr {
-    Add = 0,
-    Mul = 1,
-    Max = 2,
-    Min = 3,
-    Sub = 4,
-    Select = 5,
-    And = 6,
-    Or = 7,
-    Cast = 8,
-    Unknown = 9,  // Not supported IR type
-};
-
 enum class ValType {
     UInt1 = 0,
     UInt8 = 1,
@@ -93,12 +80,12 @@ vector<ValType> convert_halide_types_to_val_types(const vector<Type> &halide_typ
 
 struct TableKey {
     vector<ValType> types;
-    RootExpr root;
+    IRNodeType root;
     size_t dim;
-    TableKey(ValType t, RootExpr r, size_t d)
+    TableKey(ValType t, IRNodeType r, size_t d)
         : types({t}), root(r), dim(d) {
     }
-    TableKey(const vector<ValType> &t, RootExpr r, size_t d)
+    TableKey(const vector<ValType> &t, IRNodeType r, size_t d)
         : types(t), root(r), dim(d) {
     }
 
@@ -169,6 +156,14 @@ void populate_ops_table_single_general_select(const vector<Type> &types, vector<
     declare_vars_single(types);
 }
 
+void populate_ops_table_single_general_call(const vector<Type> &types, vector<AssociativePattern> &table) {
+    declare_vars_single(types);
+    if (types[0].code() == Type::UInt) {
+        table.emplace_back(saturating_add(x0, y0), zero_0, true);
+        table.emplace_back(saturating_cast(types[0], widening_add(x0, y0)), zero_0, true);
+    }
+}
+
 void populate_ops_table_double_general_add(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_double(types);
     if (types[0] == types[1]) {
@@ -182,12 +177,20 @@ void populate_ops_table_double_general_mul(const vector<Type> &types, vector<Ass
 
 void populate_ops_table_double_general_max(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_double(types);
+    // Argmax
+    table.push_back({{max(x0, y0), select(x0 > y0, x1, y1)}, {tmin_0, zero_1}, true});
+    table.push_back({{max(x0, y0), select(x0 >= y0, x1, y1)}, {tmin_0, zero_1}, true});
     table.push_back({{max(x0, y0), select(y0 < x0, x1, y1)}, {tmin_0, zero_1}, true});
+    table.push_back({{max(x0, y0), select(y0 <= x0, x1, y1)}, {tmin_0, zero_1}, true});
 }
 
 void populate_ops_table_double_general_min(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_double(types);
+    // Argmin
     table.push_back({{min(x0, y0), select(x0 < y0, x1, y1)}, {tmax_0, zero_1}, true});
+    table.push_back({{min(x0, y0), select(x0 <= y0, x1, y1)}, {tmax_0, zero_1}, true});
+    table.push_back({{min(x0, y0), select(y0 > x0, x1, y1)}, {tmax_0, zero_1}, true});
+    table.push_back({{min(x0, y0), select(y0 >= x0, x1, y1)}, {tmax_0, zero_1}, true});
 }
 
 void populate_ops_table_double_general_sub(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -200,6 +203,16 @@ void populate_ops_table_double_general_sub(const vector<Type> &types, vector<Ass
 
 void populate_ops_table_double_general_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_double(types);
+    // Argmax with index as first tuple element
+    table.push_back({{select(x1 > y1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    table.push_back({{select(x1 >= y1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    table.push_back({{select(y1 < x1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    table.push_back({{select(y1 <= x1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    // Argmin with index as first tuple element
+    table.push_back({{select(x1 < y1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
+    table.push_back({{select(x1 <= y1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
+    table.push_back({{select(y1 > x1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
+    table.push_back({{select(y1 >= x1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
 }
 
 void populate_ops_table_single_uint1_and(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -217,9 +230,9 @@ void populate_ops_table_single_uint8_cast(const vector<Type> &types, vector<Asso
     Expr k0_uint16 = Variable::make(UInt(16), "k0");
     Expr k0_uint32 = Variable::make(UInt(32), "k0");
     Expr k0_uint64 = Variable::make(UInt(64), "k0");
-    table.emplace_back(cast<uint8_t>(min(cast<uint16_t>(x0 + y0), k0_uint16)), zero_0, true);
-    table.emplace_back(cast<uint8_t>(min(cast<uint32_t>(x0 + y0), k0_uint32)), zero_0, true);
-    table.emplace_back(cast<uint8_t>(min(cast<uint64_t>(x0 + y0), k0_uint64)), zero_0, true);
+    table.emplace_back(cast<uint8_t>(min(cast<uint16_t>(x0) + y0, k0_uint16)), zero_0, true);
+    table.emplace_back(cast<uint8_t>(min(cast<uint32_t>(x0) + y0, k0_uint32)), zero_0, true);
+    table.emplace_back(cast<uint8_t>(min(cast<uint64_t>(x0) + y0, k0_uint64)), zero_0, true);
 }
 
 void populate_ops_table_single_uint8_select(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -232,8 +245,8 @@ void populate_ops_table_single_uint16_cast(const vector<Type> &types, vector<Ass
     declare_vars_single(types);
     Expr k0_uint32 = Variable::make(UInt(32), "k0");
     Expr k0_uint64 = Variable::make(UInt(64), "k0");
-    table.emplace_back(cast<uint16_t>(min(cast<uint32_t>(x0 + y0), k0_uint32)), zero_0, true);
-    table.emplace_back(cast<uint16_t>(min(cast<uint64_t>(x0 + y0), k0_uint64)), zero_0, true);
+    table.emplace_back(cast<uint16_t>(min(cast<uint32_t>(x0) + y0, k0_uint32)), zero_0, true);
+    table.emplace_back(cast<uint16_t>(min(cast<uint64_t>(x0) + y0, k0_uint64)), zero_0, true);
 }
 
 void populate_ops_table_single_uint16_select(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -254,34 +267,51 @@ void populate_ops_table_single_uint32_select(const vector<Type> &types, vector<A
     table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
 }
 
+void populate_ops_table_single_float_select(const vector<Type> &types, vector<AssociativePattern> &table) {
+    declare_vars_single(types);
+
+    // Propagating max operators
+    table.emplace_back(select(is_nan(x0) || x0 > y0, x0, y0), tmin_0, true);
+    table.emplace_back(select(is_nan(x0) || x0 >= y0, x0, y0), tmin_0, true);
+
+    // Propagating min operators
+    table.emplace_back(select(is_nan(x0) || x0 < y0, x0, y0), tmax_0, true);
+    table.emplace_back(select(is_nan(x0) || x0 <= y0, x0, y0), tmax_0, true);
+}
+
 const map<TableKey, void (*)(const vector<Type> &types, vector<AssociativePattern> &)> val_type_to_populate_luts_fn = {
-    {TableKey(ValType::All, RootExpr::Add, 1), &populate_ops_table_single_general_add},
-    {TableKey(ValType::All, RootExpr::Mul, 1), &populate_ops_table_single_general_mul},
-    {TableKey(ValType::All, RootExpr::Max, 1), &populate_ops_table_single_general_max},
-    {TableKey(ValType::All, RootExpr::Min, 1), &populate_ops_table_single_general_min},
-    {TableKey(ValType::All, RootExpr::Sub, 1), &populate_ops_table_single_general_sub},
-    {TableKey(ValType::All, RootExpr::Select, 1), &populate_ops_table_single_general_select},
-    {TableKey(ValType::All, RootExpr::Add, 2), &populate_ops_table_double_general_add},
-    {TableKey(ValType::All, RootExpr::Mul, 2), &populate_ops_table_double_general_mul},
-    {TableKey(ValType::All, RootExpr::Max, 2), &populate_ops_table_double_general_max},
-    {TableKey(ValType::All, RootExpr::Min, 2), &populate_ops_table_double_general_min},
-    {TableKey(ValType::All, RootExpr::Sub, 2), &populate_ops_table_double_general_sub},
-    {TableKey(ValType::All, RootExpr::Select, 2), &populate_ops_table_double_general_select},
+    {TableKey(ValType::All, IRNodeType::Add, 1), &populate_ops_table_single_general_add},
+    {TableKey(ValType::All, IRNodeType::Mul, 1), &populate_ops_table_single_general_mul},
+    {TableKey(ValType::All, IRNodeType::Max, 1), &populate_ops_table_single_general_max},
+    {TableKey(ValType::All, IRNodeType::Min, 1), &populate_ops_table_single_general_min},
+    {TableKey(ValType::All, IRNodeType::Sub, 1), &populate_ops_table_single_general_sub},
+    {TableKey(ValType::All, IRNodeType::Select, 1), &populate_ops_table_single_general_select},
+    {TableKey(ValType::All, IRNodeType::Call, 1), &populate_ops_table_single_general_call},
+    {TableKey(ValType::All, IRNodeType::Add, 2), &populate_ops_table_double_general_add},
+    {TableKey(ValType::All, IRNodeType::Mul, 2), &populate_ops_table_double_general_mul},
+    {TableKey(ValType::All, IRNodeType::Max, 2), &populate_ops_table_double_general_max},
+    {TableKey(ValType::All, IRNodeType::Min, 2), &populate_ops_table_double_general_min},
+    {TableKey(ValType::All, IRNodeType::Sub, 2), &populate_ops_table_double_general_sub},
+    {TableKey(ValType::All, IRNodeType::Select, 2), &populate_ops_table_double_general_select},
 
-    {TableKey(ValType::UInt1, RootExpr::And, 1), &populate_ops_table_single_uint1_and},
-    {TableKey(ValType::UInt1, RootExpr::Or, 1), &populate_ops_table_single_uint1_or},
+    {TableKey(ValType::UInt1, IRNodeType::And, 1), &populate_ops_table_single_uint1_and},
+    {TableKey(ValType::UInt1, IRNodeType::Or, 1), &populate_ops_table_single_uint1_or},
 
-    {TableKey(ValType::UInt8, RootExpr::Cast, 1), &populate_ops_table_single_uint8_cast},
-    {TableKey(ValType::UInt8, RootExpr::Select, 1), &populate_ops_table_single_uint8_select},
+    {TableKey(ValType::UInt8, IRNodeType::Cast, 1), &populate_ops_table_single_uint8_cast},
+    {TableKey(ValType::UInt8, IRNodeType::Select, 1), &populate_ops_table_single_uint8_select},
 
-    {TableKey(ValType::UInt16, RootExpr::Cast, 1), &populate_ops_table_single_uint16_cast},
-    {TableKey(ValType::UInt16, RootExpr::Select, 1), &populate_ops_table_single_uint16_select},
+    {TableKey(ValType::UInt16, IRNodeType::Cast, 1), &populate_ops_table_single_uint16_cast},
+    {TableKey(ValType::UInt16, IRNodeType::Select, 1), &populate_ops_table_single_uint16_select},
 
-    {TableKey(ValType::UInt32, RootExpr::Cast, 1), &populate_ops_table_single_uint32_cast},
-    {TableKey(ValType::UInt32, RootExpr::Select, 1), &populate_ops_table_single_uint32_select},
+    {TableKey(ValType::UInt32, IRNodeType::Cast, 1), &populate_ops_table_single_uint32_cast},
+    {TableKey(ValType::UInt32, IRNodeType::Select, 1), &populate_ops_table_single_uint32_select},
+
+    {TableKey(ValType::Float16, IRNodeType::Select, 1), &populate_ops_table_single_float_select},
+    {TableKey(ValType::Float32, IRNodeType::Select, 1), &populate_ops_table_single_float_select},
+    {TableKey(ValType::Float64, IRNodeType::Select, 1), &populate_ops_table_single_float_select},
 };
 
-const vector<AssociativePattern> &get_ops_table_helper(const vector<Type> &types, RootExpr root, size_t dim) {
+const vector<AssociativePattern> &get_ops_table_helper(const vector<Type> &types, IRNodeType root, size_t dim) {
     TableKey gen_key(ValType::All, root, dim);
     TableKey key(convert_halide_types_to_val_types(types), root, dim);
 
@@ -306,19 +336,6 @@ const vector<AssociativePattern> &get_ops_table_helper(const vector<Type> &types
     return table_it->second;
 }
 
-std::string print_types(const vector<Type> &types) {
-    std::ostringstream stream;
-    stream << "{";
-    for (size_t i = 0; i < types.size(); ++i) {
-        if (i > 0) {
-            stream << ", ";
-        }
-        stream << types[i];
-    }
-    stream << "}";
-    return stream.str();
-}
-
 }  // anonymous namespace
 
 const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
@@ -336,51 +353,21 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
         types[i] = exprs[i].type();
     }
 
-    RootExpr root = RootExpr::Unknown;
-    if (exprs[0].as<Halide::Internal::Add>()) {
-        debug(5) << "Returning Add root table for type " << print_types(types) << "\n";
-        root = RootExpr::Add;
-    } else if (exprs[0].as<Halide::Internal::Sub>()) {
-        debug(5) << "Returning Sub root table for type " << print_types(types) << "\n";
-        root = RootExpr::Sub;
-    } else if (exprs[0].as<Halide::Internal::Mul>()) {
-        debug(5) << "Returning Mul root table for type " << print_types(types) << "\n";
-        root = RootExpr::Mul;
-    } else if (exprs[0].as<Halide::Internal::Min>()) {
-        debug(5) << "Returning Min root table for type " << print_types(types) << "\n";
-        root = RootExpr::Min;
-    } else if (exprs[0].as<Halide::Internal::Max>()) {
-        debug(5) << "Returning Max root table for type " << print_types(types) << "\n";
-        root = RootExpr::Max;
-    } else if (exprs[0].as<Halide::Internal::Select>()) {
-        debug(5) << "Returning Select root table for type " << print_types(types) << "\n";
-        root = RootExpr::Select;
-    } else if (exprs[0].as<Halide::Internal::And>()) {
-        debug(5) << "Returning And root table for type " << print_types(types) << "\n";
-        root = RootExpr::And;
-    } else if (exprs[0].as<Halide::Internal::Or>()) {
-        debug(5) << "Returning Or root table for type " << print_types(types) << "\n";
-        root = RootExpr::Or;
-    } else if (exprs[0].as<Halide::Internal::Cast>()) {
-        debug(5) << "Returning Cast root table for type " << print_types(types) << "\n";
-        root = RootExpr::Cast;
-    }
-
-    if (root != RootExpr::Unknown) {
+    const vector<AssociativePattern> &table = [&]() -> decltype(auto) {
         // get_ops_table_helper() lazily initializes the table, so ensure
         // that multiple threads can't try to do so at the same time.
         static std::mutex ops_table_lock;
-        std::lock_guard<std::mutex> lock_guard(ops_table_lock);
+        std::scoped_lock lock_guard(ops_table_lock);
 
-        const vector<AssociativePattern> &table = get_ops_table_helper(types, root, exprs.size());
-        debug(7) << "Table size: " << table.size() << "\n";
-        for (const auto &p : table) {
-            debug(7) << p;
-        }
-        return table;
+        return get_ops_table_helper(types, exprs[0].node_type(), exprs.size());
+    }();
+
+    debug(5) << "Table size: " << table.size() << "\n";
+    for (const auto &p : table) {
+        debug(5) << p;
     }
-    debug(5) << "Returning empty table\n";
-    return empty;
+
+    return table;
 }
 
 }  // namespace Internal

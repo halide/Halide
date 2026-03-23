@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(depthwise_separable_conv)
 
 enable_testing()
@@ -12,16 +12,14 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(depthwise_separable_conv.generator depthwise_separable_conv_generator.cpp)
-target_link_libraries(depthwise_separable_conv.generator
-                      PRIVATE
-                      Halide::Generator)
+add_halide_generator(depthwise_separable_conv.generator SOURCES depthwise_separable_conv_generator.cpp)
 
 # Filters
 add_halide_library(depthwise_separable_conv FROM depthwise_separable_conv.generator)
 add_halide_library(depthwise_separable_conv_auto_schedule FROM depthwise_separable_conv.generator
                    GENERATOR depthwise_separable_conv
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(depthwise_separable_conv_process process.cpp)

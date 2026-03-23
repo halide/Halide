@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     Var x;
     const int size = 100;
 
-    // Try a nest of highly connection funcs all marked inline.
+    // Try a nest of highly connected funcs all marked inline.
     std::vector<Func> funcs;
     funcs.push_back(lambda(x, cast<uint32_t>(x)));
     funcs.push_back(lambda(x, cast<uint32_t>(x)));

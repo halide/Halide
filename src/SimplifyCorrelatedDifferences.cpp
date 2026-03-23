@@ -78,8 +78,8 @@ class SimplifyCorrelatedDifferences : public IRMutator {
     };
     vector<OuterLet> lets;
 
-    template<typename LetStmtOrLet, typename StmtOrExpr>
-    StmtOrExpr visit_let(const LetStmtOrLet *op) {
+    template<typename LetStmtOrLet>
+    auto visit_let(const LetStmtOrLet *op) -> decltype(op->body) {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
             const LetStmtOrLet *op;
@@ -94,7 +94,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             }
         };
         std::vector<Frame> frames;
-        StmtOrExpr result;
+        decltype(op->body) result;
 
         // Note that we must add *everything* that depends on the loop
         // var to the monotonic scope and the list of lets, even
@@ -131,13 +131,13 @@ class SimplifyCorrelatedDifferences : public IRMutator {
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            if (it->new_value.defined()) {
-                result = LetStmtOrLet::make(it->op->name, it->new_value, result);
+        for (const auto &frame : reverse_view(frames)) {
+            if (frame.new_value.defined()) {
+                result = LetStmtOrLet::make(frame.op->name, frame.new_value, result);
             } else {
-                result = LetStmtOrLet::make(it->op->name, it->op->value, result);
+                result = LetStmtOrLet::make(frame.op->name, frame.op->value, result);
             }
-            if (it->binding.bound()) {
+            if (frame.binding.bound()) {
                 lets.pop_back();
             }
         }
@@ -146,11 +146,11 @@ class SimplifyCorrelatedDifferences : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Let, Expr>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<LetStmt, Stmt>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const For *op) override {
@@ -174,6 +174,30 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         return s;
     }
 
+    // Add the names of any free variables in an expr to the provided set
+    void track_free_vars(const Expr &e, std::set<std::string> *vars) {
+        class TrackFreeVars : public IRVisitor {
+            using IRVisitor::visit;
+            void visit(const Variable *op) override {
+                if (!scope.contains(op->name)) {
+                    vars->insert(op->name);
+                }
+            }
+            void visit(const Let *op) override {
+                ScopedBinding<> bind(scope, op->name);
+                IRVisitor::visit(op);
+            }
+
+        public:
+            std::set<std::string> *vars;
+            Scope<> scope;
+            TrackFreeVars(std::set<std::string> *vars)
+                : vars(vars) {
+            }
+        } tracker(vars);
+        e.accept(&tracker);
+    }
+
     Expr cancel_correlated_subexpression(Expr e, const Expr &a, const Expr &b, bool correlated) {
         auto ma = is_monotonic(a, loop_var, monotonic);
         auto mb = is_monotonic(b, loop_var, monotonic);
@@ -183,25 +207,27 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             (ma == Monotonic::Increasing && mb == Monotonic::Decreasing && !correlated) ||
             (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && !correlated)) {
 
-            for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-                if (expr_uses_var(e, it->name)) {
-                    if (!it->may_substitute) {
-                        // We have to stop here. Can't continue
-                        // because there might be an outer let with
-                        // the same name that we *can* substitute in,
-                        // and then inner uses will get the wrong
-                        // value.
-                        break;
-                    }
+            std::set<std::string> vars;
+            track_free_vars(e, &vars);
+
+            for (const auto &[var, value, may_substitute] : reverse_view(lets)) {
+                if (!may_substitute && vars.count(var)) {
+                    // We have to stop here. Can't continue
+                    // because there might be an outer let with
+                    // the same name that we *can* substitute in,
+                    // and then inner uses will get the wrong
+                    // value.
+                    break;
                 }
-                e = Let::make(it->name, it->value, e);
+                track_free_vars(value, &vars);
+                e = Let::make(var, value, e);
             }
             e = common_subexpression_elimination(e);
             e = solve_expression(e, loop_var).result;
             e = PartiallyCancelDifferences().mutate(e);
             e = simplify(e);
 
-            const bool check_non_monotonic = debug::debug_level() > 0 || get_compiler_logger() != nullptr;
+            const bool check_non_monotonic = debug_is_active(1) || get_compiler_logger() != nullptr;
             if (check_non_monotonic &&
                 is_monotonic(e, loop_var) == Monotonic::Unknown) {
                 // Might be a missed simplification opportunity. Log to help improve the simplifier.

@@ -17,24 +17,29 @@ namespace Internal {
 namespace {
 
 class FindParameterDependencies : public IRGraphVisitor {
+    std::set<Function, Function::Compare> visited_functions;
+
 public:
     FindParameterDependencies() = default;
     ~FindParameterDependencies() override = default;
 
     void visit_function(const Function &function) {
+        if (const auto [_, inserted] = visited_functions.insert(function); !inserted) {
+            return;
+        }
         function.accept(this);
 
         if (function.has_extern_definition()) {
             const std::vector<ExternFuncArgument> &extern_args =
                 function.extern_arguments();
-            for (size_t i = 0; i < extern_args.size(); i++) {
-                if (extern_args[i].is_buffer()) {
+            for (const auto &extern_arg : extern_args) {
+                if (extern_arg.is_buffer()) {
                     // Function with an extern definition
-                    record(Halide::Internal::Parameter(extern_args[i].buffer.type(), true,
-                                                       extern_args[i].buffer.dimensions(),
-                                                       extern_args[i].buffer.name()));
-                } else if (extern_args[i].is_image_param()) {
-                    record(extern_args[i].image_param);
+                    record(Halide::Parameter(extern_arg.buffer.type(), true,
+                                             extern_arg.buffer.dimensions(),
+                                             extern_arg.buffer.name()));
+                } else if (extern_arg.is_image_param()) {
+                    record(extern_arg.image_param);
                 }
             }
         }
@@ -165,9 +170,7 @@ class KeyInfo {
         // Find maximum natural alignment needed.
         for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
             int alignment = i.second.type.bytes();
-            if (alignment > max_alignment) {
-                max_alignment = alignment;
-            }
+            max_alignment = std::max(max_alignment, alignment);
         }
         // Make sure max_alignment is a power of two and has maximum value of 32
         int i = 0;
@@ -394,7 +397,7 @@ private:
             builder.dimensions = f.dimensions();
             std::string max_stage_num = std::to_string(f.updates().size());
             for (const std::string &arg : f.args()) {
-                std::string prefix = op->name + ".s" + max_stage_num + "." + arg;
+                std::string prefix = concat_strings(op->name, ".s", max_stage_num, ".", arg);
                 Expr min = Variable::make(Int(32), prefix + ".min");
                 Expr max = Variable::make(Int(32), prefix + ".max");
                 builder.mins.push_back(min);
@@ -425,13 +428,10 @@ private:
 
             Stmt body = mutate(op->body);
 
-            std::string cache_miss_name = op->name + ".cache_miss";
-            Expr cache_miss = Variable::make(Bool(), cache_miss_name);
-
             if (op->is_producer) {
-                Stmt mutated_body = IfThenElse::make(cache_miss, body);
-                return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
-            } else {
+                std::string cache_miss_name = op->name + ".cache_miss";
+                Expr cache_miss = Variable::make(Bool(), cache_miss_name);
+
                 const Function f(iter->second);
                 KeyInfo key_info(f, top_level_name, memoize_instance);
 
@@ -447,9 +447,10 @@ private:
                                      key_info.store_computation(cache_key_name, computed_bounds_name,
                                                                 eviction_key_name, f.outputs(), op->name));
 
-                Stmt mutated_body = Block::make(cache_store_back, body);
-                return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
+                body = Block::make(body, cache_store_back);
+                body = IfThenElse::make(cache_miss, body);
             }
+            return ProducerConsumer::make(op->name, op->is_producer, body);
         } else {
             return IRMutator::visit(op);
         }
@@ -541,11 +542,7 @@ private:
             Expr value = mutate(let->value);
             Stmt body = mutate(let->body);
 
-            std::vector<const Allocate *> &allocations = pending_memoized_allocations[innermost_realization_name];
-
-            for (size_t i = allocations.size(); i > 0; i--) {
-                const Allocate *allocation = allocations[i - 1];
-
+            for (const auto *allocation : reverse_view(pending_memoized_allocations[innermost_realization_name])) {
                 // Make the allocation node
                 body = Allocate::make(allocation->name, allocation->type, allocation->memory_type, allocation->extents, allocation->condition, body,
                                       Call::make(Handle(), Call::buffer_get_host,

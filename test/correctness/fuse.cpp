@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
         int err = evaluate_may_gpu<uint32_t>(error());
         if (err != 0) {
             printf("Fusion caused a difference in the output\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
 
         Expr visit(const Internal::Mod *op) override {
             std::cerr << "Found mod: " << Expr(op) << "\n";
-            exit(-1);
+            exit(1);
             return op;
         }
     };
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
         Var xy("xy");
         f.compute_root()
             .fuse(x, y, xy)
-            .vectorize(xy, 16);
+            .vectorize(xy, 16, TailStrategy::RoundUp);
 
         f.add_custom_lowering_pass(new CheckForMod);
         f.compile_jit();

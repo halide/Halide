@@ -4,7 +4,7 @@ using namespace Halide;
 
 size_t largest_allocation = 0;
 
-void *my_malloc(void *user_context, size_t x) {
+void *my_malloc(JITUserContext *user_context, size_t x) {
     largest_allocation = std::max(x, largest_allocation);
     void *orig = malloc(x + 32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
@@ -12,17 +12,19 @@ void *my_malloc(void *user_context, size_t x) {
     return ptr;
 }
 
-void my_free(void *user_context, void *ptr) {
+void my_free(JITUserContext *user_context, void *ptr) {
     free(((void **)ptr)[-1]);
 }
 
 void check(Func out, int line, std::vector<TailStrategy> tails) {
     bool has_round_up =
         std::find(tails.begin(), tails.end(), TailStrategy::RoundUp) != tails.end() ||
+        std::find(tails.begin(), tails.end(), TailStrategy::RoundUpAndBlend) != tails.end() ||
         std::find(tails.begin(), tails.end(), TailStrategy::PredicateLoads) != tails.end() ||
         std::find(tails.begin(), tails.end(), TailStrategy::PredicateStores) != tails.end();
     bool has_shift_inwards =
-        std::find(tails.begin(), tails.end(), TailStrategy::ShiftInwards) != tails.end();
+        std::find(tails.begin(), tails.end(), TailStrategy::ShiftInwards) != tails.end() ||
+        std::find(tails.begin(), tails.end(), TailStrategy::ShiftInwardsAndBlend) != tails.end();
 
     std::vector<int> sizes_to_try;
 
@@ -41,7 +43,8 @@ void check(Func out, int line, std::vector<TailStrategy> tails) {
         sizes_to_try.push_back(3);
     }
 
-    out.set_custom_allocator(my_malloc, my_free);
+    out.jit_handlers().custom_malloc = my_malloc;
+    out.jit_handlers().custom_free = my_free;
 
     for (int s : sizes_to_try) {
         largest_allocation = 0;
@@ -63,9 +66,15 @@ void check(Func out, int line, std::vector<TailStrategy> tails) {
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }
+
+    // We'll randomly subsample these tests, because otherwise there are too many of them.
+    std::mt19937 rng(0);
+    int seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
+    rng.seed(seed);
+    std::cout << "Nested tail strategies seed: " << seed << "\n";
 
     // Test random compositions of tail strategies in simple
     // producer-consumer pipelines. The bounds being tight sometimes
@@ -75,7 +84,8 @@ int main(int argc, char **argv) {
         TailStrategy::RoundUp,
         TailStrategy::GuardWithIf,
         TailStrategy::ShiftInwards,
-    };
+        TailStrategy::RoundUpAndBlend,
+        TailStrategy::ShiftInwardsAndBlend};
 
     TailStrategy innermost_tails[] = {
         TailStrategy::RoundUp,
@@ -83,7 +93,8 @@ int main(int argc, char **argv) {
         TailStrategy::PredicateLoads,
         TailStrategy::PredicateStores,
         TailStrategy::ShiftInwards,
-    };
+        TailStrategy::RoundUpAndBlend,
+        TailStrategy::ShiftInwardsAndBlend};
 
     // Two stages. First stage computed at tiles of second.
     for (auto t1 : innermost_tails) {
@@ -109,6 +120,10 @@ int main(int argc, char **argv) {
     for (auto t1 : innermost_tails) {
         for (auto t2 : innermost_tails) {
             for (auto t3 : innermost_tails) {
+                if ((rng() & 7) != 0) {
+                    continue;
+                }
+
                 Func in("in"), f("f"), g("g"), h("h");
                 Var x;
 
@@ -133,6 +148,10 @@ int main(int argc, char **argv) {
     for (auto t1 : tails) {
         for (auto t2 : innermost_tails) {
             for (auto t3 : innermost_tails) {
+                if ((rng() & 7) != 0) {
+                    continue;
+                }
+
                 Func in, f, g, h;
                 Var x;
 
@@ -157,8 +176,12 @@ int main(int argc, char **argv) {
     // (but can handle smaller outputs).
     for (auto t1 : innermost_tails) {
         for (auto t2 : tails) {
-            for (auto t3 : tails) {  // Not innermost_tails because of n^4 complexity here.
+            for (auto t3 : innermost_tails) {
                 for (auto t4 : tails) {
+                    if ((rng() & 63) != 0) {
+                        continue;
+                    }
+
                     Func in("in"), f("f"), g("g"), h("h");
                     Var x;
 

@@ -1,0 +1,85 @@
+<script src='http://code.jquery.com/jquery-1.10.2.js'></script>
+
+<!-- Assembly Code links (Speed Highlight) -->
+<script type="module" name="hl">
+  import {loadLanguage, highlightElement} from 'https://cdn.jsdelivr.net/gh/speed-highlight/core/dist/index.js';
+  var asmRules = {}
+  asmRules["default"] = [
+    {
+      type: 'cmnt',
+      match: /(;|#).*/gm
+    },
+    {
+      expand: 'str'
+    },
+    {
+      // value (ex: "$0x1")
+      type: 'num',
+      match: /\$-?(0x)?[\da-fA-F]*\b/g
+    },
+    {
+      // offsets (ex: "0x201(%reg)")
+      type: 'offset',
+      match: /-?[\da-fA-F]+\b/g
+    },
+    {
+      type: 'kwd',
+      // ex: "section .data"
+      match: /^[a-z]+\s+[a-z.]+\b/gm,
+      sub: [
+        {
+          // keyword (ex: "section")
+          type: 'func',
+          match: /^[a-z]+/g
+        }
+      ]
+    },
+    {
+      // lock instruction (ex: "mov")
+      type: 'instruction',
+      match: /^\t*lock( |\t)+[a-z][a-z\d]*\b/gm,
+    },
+    {
+      // instruction (ex: "mov")
+      type: 'instruction',
+      match: /^\t*[a-z][a-z\d]*\b/gm,
+    },
+    {
+      // registers
+      match: /%[a-z\d]+/g,
+      type: 'register'
+    },
+    {
+      // assembler directives
+      match: /\t*\.[a-z\d]+\b/g,
+      type: 'asm-directive'
+    },
+    {
+      // labels
+      match: /\.L[A-Za-z\d_]+:?/g,
+      type: 'label'
+    }
+  ];
+  loadLanguage("asm", asmRules)
+  highlightElement(document.getElementById("assemblyContent"), "asm", undefined, {hideLineNumbers: true});
+
+  function highlightMetalDeviceCode() {
+    const first_five_lines =
+      document.querySelectorAll("#device-code-pane span:nth-child(-n + 5)");
+    const has_metal_code =
+      Array.from(first_five_lines).some((item) => {
+        return item.textContent.search(/using namespace metal/) !== -1;
+      });
+
+    const has_opencl_code =
+      Array.from(first_five_lines).some((item) => {
+        return item.textContent.search(/#pragma OPENCL/) !== -1;
+      });
+
+    if (has_metal_code || has_opencl_code) {
+      highlightElement(document.getElementById("device-code-pane"),
+                       "c", undefined, {hideLineNumbers : true});
+    }
+  }
+  highlightMetalDeviceCode();
+</script>

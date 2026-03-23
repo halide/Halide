@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     // memcpy will win by a little bit for large inputs because it uses streaming stores
     if (t1 > t2 * 3) {
         printf("Halide memcpy is slower than it should be.\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

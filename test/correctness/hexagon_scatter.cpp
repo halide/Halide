@@ -76,7 +76,8 @@ int test() {
             .parallel(y)
             .vectorize(x, vector_size / 2);
 
-        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
+        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66,
+                                    Target::HVX_v68})) {
             f.store_in(MemoryType::VTCM);
         }
     }
@@ -97,6 +98,11 @@ int test() {
 }
 
 int main() {
+    if (!get_jit_target_from_environment().has_feature(Target::HVX)) {
+        printf("[SKIP] hexagon_scatter is only useful when targeting HVX.\n");
+        return 0;
+    }
+
     if (!test<uint16_t>() ||
         !test<int16_t>() ||
         !test<uint32_t>() ||

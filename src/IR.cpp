@@ -1,6 +1,7 @@
 #include "IR.h"
 
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
 #include <numeric>
@@ -14,6 +15,22 @@ Expr Cast::make(Type t, Expr v) {
     internal_assert(t.lanes() == v.type().lanes()) << "Cast may not change vector widths\n";
 
     Cast *node = new Cast;
+    node->type = t;
+    node->value = std::move(v);
+    return node;
+}
+
+Expr Reinterpret::make(Type t, Expr v) {
+    user_assert(v.defined()) << "reinterpret of undefined Expr\n";
+    int from_bits = v.type().bits() * v.type().lanes();
+    int to_bits = t.bits() * t.lanes();
+    user_assert(from_bits == to_bits)
+        << "Reinterpret cast from type " << v.type()
+        << " which has " << from_bits
+        << " bits, to type " << t
+        << " which has " << to_bits << " bits\n";
+
+    Reinterpret *node = new Reinterpret;
     node->type = t;
     node->value = std::move(v);
     return node;
@@ -219,9 +236,8 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     internal_assert(false_value.defined()) << "Select of undefined\n";
     internal_assert(condition.type().is_bool()) << "First argument to Select is not a bool: " << condition.type() << "\n";
     internal_assert(false_value.type() == true_value.type()) << "Select of mismatched types\n";
-    internal_assert(condition.type().is_scalar() ||
-                    condition.type().lanes() == true_value.type().lanes())
-        << "In Select, vector lanes of condition must either be 1, or equal to vector lanes of arguments\n";
+    internal_assert(condition.type().lanes() == true_value.type().lanes())
+        << "In Select, vector lanes of condition must be equal to vector lanes of arguments\n";
 
     Select *node = new Select;
     node->type = true_value.type();
@@ -325,18 +341,23 @@ Stmt ProducerConsumer::make_consume(const std::string &name, Stmt body) {
     return ProducerConsumer::make(name, false, std::move(body));
 }
 
-Stmt For::make(const std::string &name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body) {
+Stmt For::make(const std::string &name,
+               Expr min, Expr max,
+               ForType for_type, Partition partition_policy,
+               DeviceAPI device_api,
+               Stmt body) {
     internal_assert(min.defined()) << "For of undefined\n";
-    internal_assert(extent.defined()) << "For of undefined\n";
+    internal_assert(max.defined()) << "For of undefined\n";
     internal_assert(min.type() == Int(32)) << "For with non-integer min\n";
-    internal_assert(extent.type() == Int(32)) << "For with non-integer extent\n";
+    internal_assert(max.type() == Int(32)) << "For with non-integer max\n";
     internal_assert(body.defined()) << "For of undefined\n";
 
     For *node = new For;
     node->name = name;
     node->min = std::move(min);
-    node->extent = std::move(extent);
+    node->max = std::move(max);
     node->for_type = for_type;
+    node->partition_policy = partition_policy;
     node->device_api = device_api;
     node->body = std::move(body);
     return node;
@@ -374,11 +395,11 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
 Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate) {
     internal_assert(predicate.defined()) << "Provide with undefined predicate\n";
     internal_assert(!values.empty()) << "Provide of no values\n";
-    for (size_t i = 0; i < values.size(); i++) {
-        internal_assert(values[i].defined()) << "Provide of undefined value\n";
+    for (const auto &value : values) {
+        internal_assert(value.defined()) << "Provide of undefined value\n";
     }
-    for (size_t i = 0; i < args.size(); i++) {
-        internal_assert(args[i].defined()) << "Provide to undefined location\n";
+    for (const auto &arg : args) {
+        internal_assert(arg.defined()) << "Provide to undefined location\n";
     }
 
     Provide *node = new Provide;
@@ -392,14 +413,16 @@ Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, con
 Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
                     const std::vector<Expr> &extents,
                     Expr condition, Stmt body,
-                    Expr new_expr, const std::string &free_function) {
-    for (size_t i = 0; i < extents.size(); i++) {
-        internal_assert(extents[i].defined()) << "Allocate of undefined extent\n";
-        internal_assert(extents[i].type().is_scalar() == 1) << "Allocate of vector extent\n";
+                    Expr new_expr, const std::string &free_function, int padding) {
+    for (const auto &extent : extents) {
+        internal_assert(extent.defined()) << "Allocate of undefined extent\n";
+        internal_assert(extent.type().is_scalar() == 1) << "Allocate of vector extent\n";
     }
     internal_assert(body.defined()) << "Allocate of undefined\n";
     internal_assert(condition.defined()) << "Allocate with undefined condition\n";
     internal_assert(condition.type().is_bool()) << "Allocate condition is not boolean\n";
+    internal_assert(!(new_expr.defined() && padding))
+        << "Allocate nodes with custom new expressions may not have padding\n";
 
     Allocate *node = new Allocate;
     node->name = name;
@@ -409,6 +432,7 @@ Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
     node->new_expr = std::move(new_expr);
     node->free_function = free_function;
     node->condition = std::move(condition);
+    node->padding = padding;
     node->body = std::move(body);
     return node;
 }
@@ -416,8 +440,8 @@ Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
 int32_t Allocate::constant_allocation_size(const std::vector<Expr> &extents, const std::string &name) {
     int64_t result = 1;
 
-    for (size_t i = 0; i < extents.size(); i++) {
-        if (const IntImm *int_size = extents[i].as<IntImm>()) {
+    for (const auto &extent : extents) {
+        if (const IntImm *int_size = extent.as<IntImm>()) {
             // Check if the individual dimension is > 2^31 - 1. Not
             // currently necessary because it's an int32_t, which is
             // always smaller than 2^31 - 1. If we ever upgrade the
@@ -455,11 +479,11 @@ Stmt Free::make(const std::string &name) {
 }
 
 Stmt Realize::make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body) {
-    for (size_t i = 0; i < bounds.size(); i++) {
-        internal_assert(bounds[i].min.defined()) << "Realize of undefined\n";
-        internal_assert(bounds[i].extent.defined()) << "Realize of undefined\n";
-        internal_assert(bounds[i].min.type().is_scalar()) << "Realize of vector size\n";
-        internal_assert(bounds[i].extent.type().is_scalar()) << "Realize of vector size\n";
+    for (const auto &bound : bounds) {
+        internal_assert(bound.min.defined()) << "Realize of undefined\n";
+        internal_assert(bound.extent.defined()) << "Realize of undefined\n";
+        internal_assert(bound.min.type().is_scalar()) << "Realize of vector size\n";
+        internal_assert(bound.extent.type().is_scalar()) << "Realize of vector size\n";
     }
     internal_assert(body.defined()) << "Realize of undefined\n";
     internal_assert(!types.empty()) << "Realize has empty type\n";
@@ -480,16 +504,18 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
                     const Region &bounds,
                     const PrefetchDirective &prefetch,
                     Expr condition, Stmt body) {
-    for (size_t i = 0; i < bounds.size(); i++) {
-        internal_assert(bounds[i].min.defined()) << "Prefetch of undefined\n";
-        internal_assert(bounds[i].extent.defined()) << "Prefetch of undefined\n";
-        internal_assert(bounds[i].min.type().is_scalar()) << "Prefetch of vector size\n";
-        internal_assert(bounds[i].extent.type().is_scalar()) << "Prefetch of vector size\n";
+    for (const auto &bound : bounds) {
+        internal_assert(bound.min.defined()) << "Prefetch of undefined\n";
+        internal_assert(bound.extent.defined()) << "Prefetch of undefined\n";
+        internal_assert(bound.min.type().is_scalar()) << "Prefetch of vector size\n";
+        internal_assert(bound.extent.type().is_scalar()) << "Prefetch of vector size\n";
     }
     internal_assert(!types.empty()) << "Prefetch has empty type\n";
     internal_assert(body.defined()) << "Prefetch of undefined\n";
     internal_assert(condition.defined()) << "Prefetch with undefined condition\n";
     internal_assert(condition.type().is_bool()) << "Prefetch condition is not boolean\n";
+
+    user_assert(is_pure(prefetch.offset)) << "The offset to the prefetch directive must be pure.";
 
     Prefetch *node = new Prefetch;
     node->name = name;
@@ -552,6 +578,8 @@ Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
     internal_assert(condition.defined() && then_case.defined()) << "IfThenElse of undefined\n";
     // else_case may be null.
 
+    internal_assert(condition.type().is_scalar()) << "IfThenElse with vector condition\n";
+
     IfThenElse *node = new IfThenElse;
     node->condition = std::move(condition);
     node->then_case = std::move(then_case);
@@ -592,13 +620,16 @@ const char *const intrinsic_op_names[] = {
     "bundle",
     "call_cached_indirect_function",
     "cast_mask",
+    "concat_bits",
     "count_leading_zeros",
     "count_trailing_zeros",
-    "declare_box_touched",
     "debug_to_file",
+    "declare_box_touched",
     "div_round_to_zero",
     "dynamic_shuffle",
+    "extract_bits",
     "extract_mask_element",
+    "get_user_context",
     "gpu_thread_barrier",
     "halving_add",
     "halving_sub",
@@ -613,6 +644,7 @@ const char *const intrinsic_op_names[] = {
     "lerp",
     "likely",
     "likely_if_innermost",
+    "load_typed_struct_member",
     "make_struct",
     "memoize_expr",
     "mod_round_to_zero",
@@ -620,38 +652,59 @@ const char *const intrinsic_op_names[] = {
     "mux",
     "popcount",
     "prefetch",
+    "profiling_enable_instance_marker",
     "promise_clamped",
     "random",
     "register_destructor",
-    "reinterpret",
     "require",
     "require_mask",
     "return_second",
-    "rewrite_buffer",
+    "round",
     "rounding_halving_add",
-    "rounding_halving_sub",
     "rounding_mul_shift_right",
     "rounding_shift_left",
     "rounding_shift_right",
     "saturating_add",
     "saturating_sub",
+    "saturating_cast",
     "scatter_gather",
     "select_mask",
     "shift_left",
     "shift_right",
     "signed_integer_overflow",
     "size_of_halide_buffer_t",
+    "skip_stages_marker",
+    "sliding_window_marker",
     "sorted_avg",
-    "strict_float",
+    "strict_add",
+    "strict_cast",
+    "strict_div",
+    "strict_eq",
+    "strict_fma",
+    "strict_le",
+    "strict_lt",
+    "strict_max",
+    "strict_min",
+    "strict_mul",
+    "strict_sub",
     "stringify",
+    "target_arch_is",
+    "target_bits",
+    "target_has_feature",
+    "target_natural_vector_size",
+    "target_os_is",
     "undef",
     "unreachable",
     "unsafe_promise_clamped",
+    "widen_right_add",
+    "widen_right_mul",
+    "widen_right_sub",
     "widening_add",
     "widening_mul",
     "widening_shift_left",
     "widening_shift_right",
     "widening_sub",
+    "get_runtime_vscale",
 };
 
 static_assert(sizeof(intrinsic_op_names) / sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount,
@@ -681,15 +734,15 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
         internal_assert(args[i].defined()) << "Call of " << name << " with argument " << i << " undefined.\n";
     }
     if (call_type == Halide) {
-        for (size_t i = 0; i < args.size(); i++) {
-            internal_assert(args[i].type() == Int(32))
+        for (const auto &arg : args) {
+            internal_assert(arg.type() == Int(32))
                 << "Args to call to halide function must be type Int(32)\n";
         }
     } else if (call_type == Image) {
         internal_assert((param.defined() || image.defined()))
             << "Call node to undefined image\n";
-        for (size_t i = 0; i < args.size(); i++) {
-            internal_assert(args[i].type() == Int(32))
+        for (const auto &arg : args) {
+            internal_assert(arg.type() == Int(32))
                 << "Args to load from image must be type Int(32)\n";
         }
     }
@@ -720,7 +773,7 @@ Expr Variable::make(Type type, const std::string &name, Buffer<> image, Paramete
 Expr Shuffle::make(const std::vector<Expr> &vectors,
                    const std::vector<int> &indices) {
     internal_assert(!vectors.empty()) << "Shuffle of zero vectors.\n";
-    internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
+    internal_assert(!indices.empty()) << "Shuffle with zero indices.\n";
     Type element_ty = vectors.front().type().element_of();
     int input_lanes = 0;
     for (const Expr &i : vectors) {
@@ -771,8 +824,8 @@ Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
 
     std::vector<int> indices;
     int lane = 0;
-    for (int i = 0; i < (int)vectors.size(); i++) {
-        for (int j = 0; j < vectors[i].type().lanes(); j++) {
+    for (const auto &vector : vectors) {
+        for (int j = 0; j < vector.type().lanes(); j++) {
             indices.push_back(lane++);
         }
     }
@@ -796,6 +849,7 @@ Expr Shuffle::make_slice(Expr vector, int begin, int stride, int size) {
     }
 
     std::vector<int> indices;
+    indices.reserve(size);
     for (int i = 0; i < size; i++) {
         indices.push_back(begin + i * stride);
     }
@@ -871,6 +925,25 @@ bool Shuffle::is_interleave() const {
     return true;
 }
 
+std::vector<std::pair<int, int>> Shuffle::vector_and_lane_indices() const {
+
+    // Construct the mapping for each shuffled element and find the index
+    // of which vector to use and the index for which of its lanes to use
+    std::vector<std::pair<int, int>> all_indices;
+    all_indices.reserve(indices.size());
+    for (int i = 0; i < (int)vectors.size(); i++) {
+        for (int j = 0; j < vectors[i].type().lanes(); j++) {
+            all_indices.emplace_back(i, j);
+        }
+    }
+    std::vector<std::pair<int, int>> result;
+    result.reserve(indices.size());
+    for (int i : indices) {
+        result.push_back(all_indices[i]);
+    }
+    return result;
+}
+
 Stmt Atomic::make(const std::string &producer_name,
                   const std::string &mutex_name,
                   Stmt body) {
@@ -878,6 +951,15 @@ Stmt Atomic::make(const std::string &producer_name,
     node->producer_name = producer_name;
     node->mutex_name = mutex_name;
     internal_assert(body.defined()) << "Atomic must have a body statement.\n";
+    node->body = std::move(body);
+    return node;
+}
+
+Stmt HoistedStorage::make(const std::string &name,
+                          Stmt body) {
+    internal_assert(body.defined()) << "HoistedStorage must have a body statement.\n";
+    HoistedStorage *node = new HoistedStorage;
+    node->name = name;
     node->body = std::move(body);
     return node;
 }
@@ -964,6 +1046,10 @@ void ExprNode<StringImm>::accept(IRVisitor *v) const {
 template<>
 void ExprNode<Cast>::accept(IRVisitor *v) const {
     v->visit((const Cast *)this);
+}
+template<>
+void ExprNode<Reinterpret>::accept(IRVisitor *v) const {
+    v->visit((const Reinterpret *)this);
 }
 template<>
 void ExprNode<Variable>::accept(IRVisitor *v) const {
@@ -1129,6 +1215,10 @@ template<>
 void StmtNode<Atomic>::accept(IRVisitor *v) const {
     v->visit((const Atomic *)this);
 }
+template<>
+void StmtNode<HoistedStorage>::accept(IRVisitor *v) const {
+    v->visit((const HoistedStorage *)this);
+}
 
 template<>
 Expr ExprNode<IntImm>::mutate_expr(IRMutator *v) const {
@@ -1149,6 +1239,10 @@ Expr ExprNode<StringImm>::mutate_expr(IRMutator *v) const {
 template<>
 Expr ExprNode<Cast>::mutate_expr(IRMutator *v) const {
     return v->visit((const Cast *)this);
+}
+template<>
+Expr ExprNode<Reinterpret>::mutate_expr(IRMutator *v) const {
+    return v->visit((const Reinterpret *)this);
 }
 template<>
 Expr ExprNode<Variable>::mutate_expr(IRMutator *v) const {
@@ -1314,6 +1408,10 @@ Stmt StmtNode<Fork>::mutate_stmt(IRMutator *v) const {
 template<>
 Stmt StmtNode<Atomic>::mutate_stmt(IRMutator *v) const {
     return v->visit((const Atomic *)this);
+}
+template<>
+Stmt StmtNode<HoistedStorage>::mutate_stmt(IRMutator *v) const {
+    return v->visit((const HoistedStorage *)this);
 }
 
 Call::ConstString Call::buffer_get_dimensions = "_halide_buffer_get_dimensions";

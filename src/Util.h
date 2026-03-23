@@ -13,10 +13,12 @@
 /** \file
  * Various utility functions used internally Halide. */
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -45,6 +47,32 @@
 #define HALIDE_NO_USER_CODE_INLINE HALIDE_NEVER_INLINE
 #endif
 
+// Clang uses __has_feature() for sanitizers...
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define HALIDE_INTERNAL_USING_ASAN
+#endif
+#if __has_feature(memory_sanitizer)
+#define HALIDE_INTERNAL_USING_MSAN
+#endif
+#if __has_feature(thread_sanitizer)
+#define HALIDE_INTERNAL_USING_TSAN
+#endif
+#if __has_feature(coverage_sanitizer)
+#define HALIDE_INTERNAL_USING_COVSAN
+#endif
+#if __has_feature(undefined_behavior_sanitizer)
+#define HALIDE_INTERNAL_USING_UBSAN
+#endif
+#endif
+
+// ...but GCC/MSVC don't like __has_feature, so handle them separately.
+// (Only AddressSanitizer for now, not sure if any others are well-supported
+// outside of Clang.
+#if defined(__SANITIZE_ADDRESS__) && !defined(HALIDE_INTERNAL_USING_ASAN)
+#define HALIDE_INTERNAL_USING_ASAN
+#endif
+
 namespace Halide {
 
 /** Load a plugin in the form of a dynamic library (e.g. for custom autoschedulers).
@@ -56,7 +84,7 @@ namespace Halide {
  *
  * otherwise, it is assumed to be an appropriate pathname.
  *
- * Any error in loading will assert-fail. */
+ * Any error in loading will cause an assertion failure. */
 void load_plugin(const std::string &lib_name);
 
 namespace Internal {
@@ -67,9 +95,9 @@ namespace Internal {
  * common implementation behavior as much as possible.
  */
 template<typename DST, typename SRC,
-         typename std::enable_if<std::is_floating_point<SRC>::value>::type * = nullptr>
+         std::enable_if_t<std::is_floating_point_v<SRC>> * = nullptr>
 DST safe_numeric_cast(SRC s) {
-    if (std::is_integral<DST>::value) {
+    if (std::is_integral_v<DST>) {
         // Treat float -> int as a saturating cast; this is handled
         // in different ways by different compilers, so an arbitrary but safe
         // choice like this is reasonable.
@@ -84,9 +112,9 @@ DST safe_numeric_cast(SRC s) {
 }
 
 template<typename DST, typename SRC,
-         typename std::enable_if<std::is_integral<SRC>::value>::type * = nullptr>
+         std::enable_if_t<std::is_integral_v<SRC>> * = nullptr>
 DST safe_numeric_cast(SRC s) {
-    if (std::is_integral<DST>::value) {
+    if (std::is_integral_v<DST>) {
         // any-int -> signed-int is technically UB if value won't fit;
         // in practice, common compilers implement such conversions as done below
         // (as verified by exhaustive testing on Clang for x86-64). We could
@@ -94,8 +122,8 @@ DST safe_numeric_cast(SRC s) {
         // avoids possible wrather of UBSan and similar debug helpers.
         // (Yes, using sizeof for this comparison is a little odd for the uint->int
         // case, but the intent is to match existing common behavior, which this does.)
-        if (std::is_integral<SRC>::value && std::is_signed<DST>::value && sizeof(DST) < sizeof(SRC)) {
-            using UnsignedSrc = typename std::make_unsigned<SRC>::type;
+        if (std::is_integral_v<SRC> && std::is_signed_v<DST> && sizeof(DST) < sizeof(SRC)) {
+            using UnsignedSrc = std::make_unsigned_t<SRC>;
             return (DST)(s & (UnsignedSrc)(-1));
         }
     }
@@ -110,11 +138,6 @@ DstType reinterpret_bits(const SrcType &src) {
     memcpy(&dst, &src, sizeof(SrcType));
     return dst;
 }
-
-/** Make a unique name for an object based on the name of the stack
- * variable passed in. If introspection isn't working or there are no
- * debug symbols, just uses unique_name with the given prefix. */
-std::string make_entity_name(void *stack_ptr, const std::string &type, char prefix);
 
 /** Get value of an environment variable. Returns its value
  * is defined in the environment. If the var is not defined, an empty string
@@ -153,11 +176,45 @@ bool starts_with(const std::string &str, const std::string &prefix);
 /** Test if the first string ends with the second string */
 bool ends_with(const std::string &str, const std::string &suffix);
 
-/** Replace all matches of the second string in the first string with the last string */
-std::string replace_all(const std::string &str, const std::string &find, const std::string &replace);
+/** Replace all matches of the second string in the first string with the last string.
+ * The string to search-and-replace in is passed by value, offering the ability to
+ * std::move() a string in if you're not interested in keeping the original string.
+ * This is useful when the original string does not contain the find-string, causing
+ * this function to return the same string without any copies being made. */
+std::string replace_all(std::string str, const std::string &find, const std::string &replace);
 
 /** Split the source string using 'delim' as the divider. */
 std::vector<std::string> split_string(const std::string &source, const std::string &delim);
+
+/** Join the source vector using 'delim' as the divider. */
+template<typename T>
+std::string join_strings(const std::vector<T> &sources, const std::string &delim) {
+    size_t sz = 0;
+    if (!sources.empty()) {
+        sz += delim.size() * (sources.size() - 1);
+    }
+    for (const auto &s : sources) {
+        sz += s.size();
+    }
+    std::string result;
+    result.reserve(sz);
+    bool need_delim = false;
+    for (const auto &s : sources) {
+        if (need_delim) {
+            result += delim;
+        }
+        result += s;
+        need_delim = true;
+    }
+    return result;
+}
+
+template<typename... Args>
+std::string concat_strings(Args &&...args) {
+    std::stringstream ss;
+    (ss << ... << args);
+    return ss.str();
+}
 
 /** Perform a left fold of a vector. Returns a default-constructed
  * vector element if the vector is empty. Similar to std::accumulate
@@ -208,8 +265,8 @@ struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 /** Returns base name and fills in namespaces, outermost one first in vector. */
 std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
 
-/** Overload that returns base name only */
-std::string extract_namespaces(const std::string &name);
+/** Like extract_namespaces(), but strip and discard the namespaces, returning base name only */
+std::string strip_namespaces(const std::string &name);
 
 struct FileStat {
     uint64_t file_size;
@@ -314,12 +371,28 @@ public:
     TemporaryFile &operator=(TemporaryFile &&) = delete;
 };
 
+/** Run an executable with the given arguments without going through
+ * the shell. The first element of args should be the program name/path.
+ * If a name without a path-separator is given, it will be searched for
+ * in the PATH. Returns the exit code of the process, or -1 if the process
+ * could not be started. */
+int run_process(std::vector<std::string> args);
+
 /** Routines to test if math would overflow for signed integers with
  * the given number of bits. */
 // @{
 bool add_would_overflow(int bits, int64_t a, int64_t b);
 bool sub_would_overflow(int bits, int64_t a, int64_t b);
 bool mul_would_overflow(int bits, int64_t a, int64_t b);
+// @}
+
+/** Routines to perform arithmetic on signed types without triggering signed
+ * overflow. If overflow would occur, sets result to zero, and returns
+ * false. Otherwise set result to the correct value, and returns true. */
+// @{
+HALIDE_MUST_USE_RESULT bool add_with_overflow(int bits, int64_t a, int64_t b, int64_t *result);
+HALIDE_MUST_USE_RESULT bool sub_with_overflow(int bits, int64_t a, int64_t b, int64_t *result);
+HALIDE_MUST_USE_RESULT bool mul_with_overflow(int bits, int64_t a, int64_t b, int64_t *result);
 // @}
 
 /** Helper class for saving/restoring variable values on the stack, to allow
@@ -333,7 +406,7 @@ struct ScopedValue {
         : var(var), old_value(var) {
     }
     /** Preserve the old value, then set the var to a new value. */
-    ScopedValue(T &var, T new_value)
+    ScopedValue(T &var, const T &new_value)
         : var(var), old_value(var) {
         var = new_value;
     }
@@ -367,17 +440,16 @@ void halide_toc_impl(const char *file, int line);
 
 // statically cast a value from one type to another: this is really just
 // some syntactic sugar around static_cast<>() to avoid compiler warnings
-// regarding 'bool' in some compliation configurations.
+// regarding 'bool' in some compilation configurations.
 template<typename TO>
 struct StaticCast {
-    template<typename FROM, typename TO2 = TO, typename std::enable_if<!std::is_same<TO2, bool>::value>::type * = nullptr>
-    inline constexpr static TO2 value(const FROM &from) {
-        return static_cast<TO2>(from);
-    }
-
-    template<typename FROM, typename TO2 = TO, typename std::enable_if<std::is_same<TO2, bool>::value>::type * = nullptr>
-    inline constexpr static TO2 value(const FROM &from) {
-        return from != 0;
+    template<typename FROM>
+    constexpr static TO value(const FROM &from) {
+        if constexpr (std::is_same_v<TO, bool>) {
+            return from != 0;
+        } else {
+            return static_cast<TO>(from);
+        }
     }
 };
 
@@ -386,34 +458,127 @@ struct StaticCast {
 // or dropping of fractional parts).
 template<typename TO>
 struct IsRoundtrippable {
-    template<typename FROM, typename TO2 = TO, typename std::enable_if<!std::is_convertible<FROM, TO>::value>::type * = nullptr>
-    inline constexpr static bool value(const FROM &from) {
-        return false;
-    }
-
-    template<typename FROM, typename TO2 = TO, typename std::enable_if<std::is_convertible<FROM, TO>::value && std::is_arithmetic<TO>::value && std::is_arithmetic<FROM>::value && !std::is_same<TO, FROM>::value>::type * = nullptr>
-    inline constexpr static bool value(const FROM &from) {
-        return StaticCast<FROM>::value(StaticCast<TO>::value(from)) == from;
-    }
-
-    template<typename FROM, typename TO2 = TO, typename std::enable_if<std::is_convertible<FROM, TO>::value && !(std::is_arithmetic<TO>::value && std::is_arithmetic<FROM>::value && !std::is_same<TO, FROM>::value)>::type * = nullptr>
-    inline constexpr static bool value(const FROM &from) {
-        return true;
+    template<typename FROM>
+    constexpr static bool value(const FROM &from) {
+        if constexpr (std::is_convertible_v<FROM, TO>) {
+            if constexpr (std::is_arithmetic_v<TO> &&
+                          std::is_arithmetic_v<FROM> &&
+                          !std::is_same_v<TO, FROM>) {
+                const TO to = static_cast<TO>(from);
+                const FROM roundtripped = static_cast<FROM>(to);
+                return roundtripped == from;
+            } else {
+                return true;
+            }
+        } else {
+            return false;
+        }
     }
 };
 
-/** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
-std::string c_print_name(const std::string &name);
+template<typename T>
+struct reverse_adaptor {
+    T &range;
+};
+
+template<typename T>
+auto begin(reverse_adaptor<T> i) {
+    return std::rbegin(i.range);
+}
+
+template<typename T>
+auto end(reverse_adaptor<T> i) {
+    return std::rend(i.range);
+}
+
+/**
+ * Reverse-order adaptor for range-based for-loops.
+ * TODO: Replace with std::ranges::reverse_view when upgrading to C++20.
+ */
+template<typename T>
+reverse_adaptor<T> reverse_view(T &&range) {
+    return {range};
+}
+
+/** Emit a version of a string that is a valid identifier in C (. is replaced with _)
+ * If prefix_underscore is true (the default), an underscore will be prepended if the
+ * input starts with an alphabetic character to avoid reserved word clashes.
+ */
+std::string c_print_name(const std::string &name, bool prefix_underscore = true);
 
 /** Return the LLVM_VERSION against which this libHalide is compiled. This is provided
  * only for internal tests which need to verify behavior; please don't use this outside
  * of Halide tests. */
 int get_llvm_version();
 
-/** Call the given action in a platform-specific context that provides at least
- * 8MB of stack space. Currently only has any effect on Windows where it uses
- * a Fiber. */
+}  // namespace Internal
+
+/** Set how much stack the compiler should use for compilation in
+ * bytes. This can also be set through the environment variable
+ * HL_COMPILER_STACK_SIZE, though this function takes precedence. A
+ * value of zero causes the compiler to just use the calling stack for
+ * all compilation tasks.
+ *
+ * Calling this or setting the environment variable should not be
+ * necessary. It is provided for three kinds of testing:
+ *
+ * First, Halide uses it in our internal tests to make sure
+ * we're not using a silly amount of stack size on some
+ * canary programs to avoid stack usage regressions.
+ *
+ * Second, if you have a mysterious crash inside a generator, you can
+ * set a larger stack size as a way to test if it's a stack
+ * overflow. Perhaps our default stack size is not large enough for
+ * your program and schedule. Use this call or the environment var as
+ * a workaround, and then open a bug with a reproducer at
+ * github.com/halide/Halide/issues so that we can determine what's
+ * going wrong that is causing your code to use so much stack.
+ *
+ * Third, perhaps using a side-stack is causing problems with
+ * sanitizing, debugging, or profiling tools. If this is a problem,
+ * you can set HL_COMPILER_STACK_SIZE to zero to make Halide stay on
+ * the main thread's stack.
+ */
+void set_compiler_stack_size(size_t);
+
+/** The default amount of stack used for lowering and codegen. 32 MB
+ * ought to be enough for anyone. */
+constexpr size_t default_compiler_stack_size = 32 * 1024 * 1024;
+
+/** Return how much stack size the compiler should use for calls that
+ * go through run_with_large_stack below. Currently that's lowering,
+ * codegen, and JIT compilation. If no call to set_compiler_stack_size
+ * has been made, this checks the value of the environment variable
+ * HL_COMPILER_STACK_SIZE. If that's unset, it returns
+ * default_compiler_stack_size, defined above. */
+size_t get_compiler_stack_size();
+
+namespace Internal {
+
+/** Call the given action in a platform-specific context that
+ * provides at least the stack space returned by
+ * get_compiler_stack_size. If that value is zero, just calls the
+ * function on the calling thread. Otherwise on Windows this
+ * uses a Fiber, and on other platforms it uses swapcontext. */
 void run_with_large_stack(const std::function<void()> &action);
+
+/** Portable versions of popcount, count-leading-zeros, and
+    count-trailing-zeros. */
+// @{
+int popcount64(uint64_t x);
+int clz64(uint64_t x);
+int ctz64(uint64_t x);
+// @}
+
+/** Return an integer 2^n, for some n,  which is >= x. Argument x must be > 0. */
+inline int64_t next_power_of_two(int64_t x) {
+    return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x)));
+}
+
+template<typename T>
+inline T align_up(T x, int n) {
+    return (x + n - 1) / n * n;
+}
 
 }  // namespace Internal
 }  // namespace Halide

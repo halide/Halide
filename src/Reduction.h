@@ -14,7 +14,12 @@ class IRMutator;
 
 /** A single named dimension of a reduction domain */
 struct ReductionVariable {
+    /**
+     * A variable name for the reduction variable. This name must be a
+     * valid Var name, i.e. it must not contain a <tt>.</tt> character.
+     */
     std::string var;
+
     Expr min, extent;
 
     /** This lets you use a ReductionVariable as a key in a map of the form
@@ -54,6 +59,9 @@ public:
      * the vector being outermost. */
     ReductionDomain(const std::vector<ReductionVariable> &domain);
 
+    /** Construct a reduction domain from deserialization */
+    ReductionDomain(const std::vector<ReductionVariable> &domain, const Expr &predicate, bool frozen);
+
     /** Return a deep copy of this ReductionDomain. */
     ReductionDomain deep_copy() const;
 
@@ -76,7 +84,7 @@ public:
      * for more details. */
     void where(Expr predicate);
 
-    /** Return the predicate defined on this reducation demain. */
+    /** Return the predicate defined on this reduction domain. */
     Expr predicate() const;
 
     /** Set the predicate, replacing any previously set predicate. */

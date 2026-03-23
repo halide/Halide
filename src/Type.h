@@ -18,7 +18,7 @@
  * time type checking for both Halide generated functions and calls
  * from Halide to external functions.
  *
- * These are intended to be constexpr producable.
+ * These are intended to be constexpr producible.
  *
  * halide_handle_traits has to go outside the Halide namespace due to template
  * resolution rules. TODO(zalman): Do all types need to be in global namespace?
@@ -82,12 +82,13 @@ struct halide_handle_cplusplus_type {
     std::vector<halide_cplusplus_type_name> enclosing_types;
 
     /// One set of modifiers on a type.
-    /// The const/volatile/restrict propertises are "inside" the pointer property.
+    /// The const/volatile/restrict properties are "inside" the pointer property.
     enum Modifier : uint8_t {
-        Const = 1 << 0,     ///< Bitmask flag for "const"
-        Volatile = 1 << 1,  ///< Bitmask flag for "volatile"
-        Restrict = 1 << 2,  ///< Bitmask flag for "restrict"
-        Pointer = 1 << 3,   ///< Bitmask flag for a pointer "*"
+        Const = 1 << 0,            ///< Bitmask flag for "const"
+        Volatile = 1 << 1,         ///< Bitmask flag for "volatile"
+        Restrict = 1 << 2,         ///< Bitmask flag for "restrict"
+        Pointer = 1 << 3,          ///< Bitmask flag for a pointer "*"
+        FunctionTypedef = 1 << 4,  ///< Bitmask flag for a function typedef; when this is set, Pointer should also always be set
     };
 
     /// Qualifiers and indirections on type. 0 is innermost.
@@ -97,7 +98,7 @@ struct halide_handle_cplusplus_type {
     /// No modifiers are needed for references as they are not allowed to apply
     /// to the reference itself. (This isn't true for restrict, but that is a C++
     /// extension anyway.) If modifiers are needed, the last entry in the above
-    /// array would be the modifers for the reference.
+    /// array would be the modifiers for the reference.
     enum ReferenceType : uint8_t {
         NotReference = 0,
         LValueReference = 1,  // "&"
@@ -163,6 +164,11 @@ HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(int64_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(uint64_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(Halide::float16_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(Halide::bfloat16_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(halide_task_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(halide_loop_task_t);
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(_Float16);
+#endif
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(float);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(double);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_buffer_t);
@@ -170,6 +176,7 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_dimension_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_device_interface_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_filter_metadata_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_semaphore_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_semaphore_acquire_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_parallel_task_t);
 
 // You can make arbitrary user-defined types be "Known" using the
@@ -191,27 +198,32 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_parallel_task_t);
 
 template<typename T>
 /*static*/ halide_handle_cplusplus_type halide_handle_cplusplus_type::make() {
-    constexpr bool is_ptr = std::is_pointer<T>::value;
-    constexpr bool is_lvalue_reference = std::is_lvalue_reference<T>::value;
-    constexpr bool is_rvalue_reference = std::is_rvalue_reference<T>::value;
+    constexpr bool is_ptr = std::is_pointer_v<T>;
+    constexpr bool is_lvalue_reference = std::is_lvalue_reference_v<T>;
+    constexpr bool is_rvalue_reference = std::is_rvalue_reference_v<T>;
 
-    using TBase = typename std::remove_pointer<typename std::remove_reference<T>::type>::type;
-    constexpr bool is_const = std::is_const<TBase>::value;
-    constexpr bool is_volatile = std::is_volatile<TBase>::value;
+    using TNoRef = std::remove_reference_t<T>;
+    using TNoRefNoPtr = std::remove_pointer_t<TNoRef>;
+    constexpr bool is_function_pointer = std::is_pointer_v<TNoRef> &&
+                                         std::is_function_v<TNoRefNoPtr>;
+
+    // Don't remove the pointer-ness from a function pointer.
+    using TBase = std::conditional_t<is_function_pointer, TNoRef, TNoRefNoPtr>;
+    constexpr bool is_const = std::is_const_v<TBase>;
+    constexpr bool is_volatile = std::is_volatile_v<TBase>;
 
     constexpr uint8_t modifiers = static_cast<uint8_t>(
-        (is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
-        (is_const ? halide_handle_cplusplus_type::Const : 0) |
-        (is_volatile ? halide_handle_cplusplus_type::Volatile : 0));
+        (is_function_pointer ? FunctionTypedef : 0) |
+        (is_ptr ? Pointer : 0) |
+        (is_const ? Const : 0) |
+        (is_volatile ? Volatile : 0));
 
-    // clang-format off
-    constexpr halide_handle_cplusplus_type::ReferenceType ref_type =
-        (is_lvalue_reference ? halide_handle_cplusplus_type::LValueReference :
-         is_rvalue_reference ? halide_handle_cplusplus_type::RValueReference :
-                               halide_handle_cplusplus_type::NotReference);
-    // clang-format on
+    constexpr ReferenceType ref_type =
+        (is_lvalue_reference ? LValueReference :
+         is_rvalue_reference ? RValueReference :
+                               NotReference);
 
-    using TNonCVBase = typename std::remove_cv<TBase>::type;
+    using TNonCVBase = std::remove_cv_t<TBase>;
     constexpr bool known_type = halide_c_type_to_name<TNonCVBase>::known_type;
     static_assert(!(!known_type && !is_ptr), "Unknown types must be pointers");
 
@@ -243,9 +255,9 @@ struct halide_handle_traits {
     // This trait must return a pointer to a global structure. I.e. it should never be freed.
     // A return value of nullptr here means "void *".
     HALIDE_ALWAYS_INLINE static const halide_handle_cplusplus_type *type_info() {
-        if (std::is_pointer<T>::value ||
-            std::is_lvalue_reference<T>::value ||
-            std::is_rvalue_reference<T>::value) {
+        if (std::is_pointer_v<T> ||
+            std::is_lvalue_reference_v<T> ||
+            std::is_rvalue_reference_v<T>) {
             static const halide_handle_cplusplus_type the_info = halide_handle_cplusplus_type::make<T>();
             return &the_info;
         }
@@ -254,6 +266,10 @@ struct halide_handle_traits {
 };
 
 namespace Halide {
+
+namespace Internal {
+struct ConstantInterval;
+}
 
 struct Expr;
 
@@ -270,11 +286,11 @@ public:
     /** Aliases for halide_type_code_t values for legacy compatibility
      * and to match the Halide internal C++ style. */
     // @{
-    static const halide_type_code_t Int = halide_type_int;
-    static const halide_type_code_t UInt = halide_type_uint;
-    static const halide_type_code_t Float = halide_type_float;
-    static const halide_type_code_t BFloat = halide_type_bfloat;
-    static const halide_type_code_t Handle = halide_type_handle;
+    static constexpr halide_type_code_t Int = halide_type_int;
+    static constexpr halide_type_code_t UInt = halide_type_uint;
+    static constexpr halide_type_code_t Float = halide_type_float;
+    static constexpr halide_type_code_t BFloat = halide_type_bfloat;
+    static constexpr halide_type_code_t Handle = halide_type_handle;
     // @}
 
     /** The number of bytes required to store a single scalar value of this type. Ignores vector lanes. */
@@ -293,6 +309,10 @@ public:
      * lanes: The number of vector elements in the type. */
     Type(halide_type_code_t code, int bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
         : type(code, (uint8_t)bits, (uint16_t)lanes), handle_type(handle_type) {
+        user_assert(lanes == type.lanes)
+            << "Halide only supports vector types with up to 65535 lanes. " << lanes << " lanes requested.";
+        user_assert(bits == type.bits)
+            << "Halide only supports types with up to 255 bits. " << bits << " bits requested.";
     }
 
     /** Trivial copy constructor. */
@@ -352,14 +372,25 @@ public:
         return Type(code(), bits(), new_lanes, handle_type);
     }
 
-    /** Return Type with the same type code and number of lanes, but with twice as many bits. */
+    /** Return Type with the same type code and number of lanes, but with at least twice as many bits. */
     Type widen() const {
-        return with_bits(bits() * 2);
+        if (bits() == 1) {
+            // Widening a 1-bit type should produce an 8-bit type.
+            return with_bits(8);
+        } else {
+            return with_bits(bits() * 2);
+        }
     }
 
-    /** Return Type with the same type code and number of lanes, but with half as many bits. */
+    /** Return Type with the same type code and number of lanes, but with at most half as many bits. */
     Type narrow() const {
-        return with_bits(bits() / 2);
+        internal_assert(bits() != 1) << "Attempting to narrow a 1-bit type\n";
+        if (bits() == 8) {
+            // Narrowing an 8-bit type should produce a 1-bit type.
+            return with_bits(1);
+        } else {
+            return with_bits(bits() / 2);
+        }
     }
 
     /** Type to be printed when declaring handles of this type. */
@@ -446,6 +477,16 @@ public:
         return type != other.type || (code() == Handle && !same_handle_type(other));
     }
 
+    /** Compare two types for equality */
+    bool operator==(const halide_type_t &other) const {
+        return type == other;
+    }
+
+    /** Compare two types for inequality */
+    bool operator!=(const halide_type_t &other) const {
+        return type != other;
+    }
+
     /** Compare ordering of two types so they can be used in certain containers and algorithms */
     bool operator<(const Type &other) const {
         if (type < other.type) {
@@ -464,6 +505,10 @@ public:
 
     /** Can this type represent all values of another type? */
     bool can_represent(Type other) const;
+
+    /** Can this type represent exactly all integer values of some constant
+     * integer range? */
+    bool can_represent(const Internal::ConstantInterval &in) const;
 
     /** Can this type represent a particular constant? */
     // @{

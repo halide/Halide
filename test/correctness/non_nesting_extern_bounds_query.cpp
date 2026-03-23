@@ -2,12 +2,6 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 // Extern stages are supposed to obey the following nesting property
 // on bounds queries: If some region of the output O requires some
 // region of the input I, then requesting any subset of O should only
@@ -22,7 +16,7 @@ using namespace Halide;
 // received in non-bounds-query-mode is the intersection of what it
 // asked for for a single scanline and what it asked for for the whole
 // image.
-extern "C" DLLEXPORT int misbehaving_extern_stage(halide_buffer_t *in, int variant, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int misbehaving_extern_stage(halide_buffer_t *in, int variant, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         // As a baseline, require the same amount of input as output, like a copy
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));

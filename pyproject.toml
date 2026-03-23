@@ -1,0 +1,230 @@
+[build-system]
+requires = [
+  "pybind11>=2.11.1",
+  "scikit-build-core~=0.11.0",
+  "setuptools-scm>=8.3.1",
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "halide"
+authors = [
+  { name = "The Halide team", email = "halide-dev@lists.csail.mit.edu" },
+]
+maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
+description = "Halide is a programming language designed to make it easier to write high-performance image and array processing code."
+license = { file = "LICENSE.txt" }
+readme = "./packaging/pip/README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "imageio>=2",
+  "pillow; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
+  "numpy>=1.26",
+]
+dynamic = ['version']
+keywords = [
+  "array",
+  "compiler",
+  "domain-specific language",
+  "dsl",
+  "gpu",
+  "hexagon",
+  "image processing",
+  "machine learning",
+  "performance",
+  "programming language",
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: GPU",
+  "Environment :: GPU :: NVIDIA CUDA",
+  "Environment :: WebAssembly",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Natural Language :: English",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Topic :: Multimedia :: Graphics",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Image Processing",
+  "Topic :: Software Development :: Code Generators",
+  "Topic :: Software Development :: Compilers",
+  "Topic :: Software Development :: Libraries",
+]
+
+[dependency-groups]
+dev = [
+  # Matches build-system.requires
+  "pybind11>=2.11.1",
+  "scikit-build-core~=0.11.0",
+  "setuptools-scm>=8.3.1",
+]
+apps = [
+  # for apps/onnx -- matches the vcpkg version
+  "onnx==1.19.0; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
+  # onnx 1.19.0 gencode requires protobuf 7.x runtime
+  "protobuf>=7; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
+  # unspecified onnx dependency
+  "pytest; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
+]
+tools = [
+  "cmake>=3.28",
+  # 1.13.0 uses LF in .rsp files, breaking MSVC link.exe.
+  # See: https://github.com/ninja-build/ninja/pull/2616
+  "ninja>=1.11,!=1.13.0",
+  "pre-commit>=4",
+  "ruff>=0.12",
+  "tbump>=6.11",
+]
+
+ci-base = [
+  { include-group = "dev" },
+  { include-group = "apps" },
+  { include-group = "tools" },
+]
+
+ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm~=23.0.0.dev0"]
+ci-llvm-22 = [{ include-group = "ci-base" }, "halide-llvm~=22.1.0"]
+ci-llvm-21 = [{ include-group = "ci-base" }, "halide-llvm~=21.1.0"]
+
+[project.urls]
+Homepage = "https://halide-lang.org"
+Documentation = "https://github.com/halide/Halide/blob/main/doc/Python.md"
+"Documentation (C++)" = "https://halide-lang.org/docs"
+Issues = "https://github.com/halide/Halide/issues"
+Repository = "https://github.com/halide/Halide.git"
+
+[tool.scikit-build]
+cmake.version = ">=3.28"
+ninja.version = ">=1.11,!=1.13.0"
+wheel.install-dir = "halide"
+sdist.include = ["dependencies/"]
+sdist.exclude = [
+  ".github/",
+  "apps/",
+  "test/",
+  "tutorial/",
+  "dependencies/update-*.sh",
+]
+metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
+
+[tool.scikit-build.cmake.define]
+CMAKE_DISABLE_FIND_PACKAGE_JPEG = true
+CMAKE_DISABLE_FIND_PACKAGE_PNG = true
+FETCHCONTENT_FULLY_DISCONNECTED = true
+Halide_ENABLE_EXCEPTIONS = true
+Halide_ENABLE_RTTI = true
+Halide_INSTALL_PYTHONDIR = "."
+Halide_WASM_BACKEND = "wabt"
+WITH_PYTHON_BINDINGS = true
+WITH_TESTS = false
+WITH_TUTORIALS = false
+
+##
+# Don't version libHalide.so/dylib -- wheels are zip files that do
+# not understand symbolic links. Including version information here
+# causes the final wheel to have three copies of our library. Not good.
+CMAKE_PLATFORM_NO_VERSIONED_SONAME = true
+
+[[tool.scikit-build.overrides]]
+if.platform-system = "^win32"
+inherit.cmake.define = "append"
+cmake.define.Halide_WASM_BACKEND = "OFF"
+
+[tool.setuptools_scm]
+# Needs to exist for scikit-build-core to use setuptools_scm
+
+[tool.ruff.lint]
+# docs: https://docs.astral.sh/ruff/rules/
+select = [
+  "E4",   # pycodestyle / import statements
+  "E7",   # pycodestyle / superfluous or misused syntax
+  "E9",   # pycodestyle / internal error (odd this can be disabled)
+  "F",    # pyflakes
+  "FURB", # refurb / rules for upgrading old Python usage
+  "PERF", # perflint / rules for performance pitfalls
+  "RUF",  # Ruff-specific rules
+  "SIM",  # flake8 / simplify
+  "UP",   # pyupgrade / detect uses of old Python features
+]
+ignore = [
+  "UP045",  # Don't replace Optional[T] with T | None
+  "SIM108", # Don't replace an if statement with ternary
+]
+
+[tool.tbump]
+github_url = "https://github.com/halide/Halide/"
+
+[tool.tbump.version]
+current = "22.0.0"
+regex = '(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)'
+
+[tool.tbump.git]
+message_template = "Bump version to {new_version}"
+tag_template = "v{new_version}.dev0"
+
+[[tool.tbump.file]]
+src = "CMakeLists.txt"
+search = "VERSION {current_version}"
+
+[[tool.tbump.file]]
+src = "python_bindings/CMakeLists.txt"
+search = "VERSION {current_version}"
+
+[[tool.tbump.file]]
+src = "vcpkg.json"
+
+[[tool.tbump.file]]
+src = "apps/vcpkg.json"
+
+[[tool.tbump.file]]
+src = "src/runtime/HalideRuntime.h"
+version_template = "{major}"
+search = "#define HALIDE_VERSION_MAJOR {current_version}"
+
+[[tool.tbump.file]]
+src = "src/runtime/HalideRuntime.h"
+version_template = "{minor}"
+search = "#define HALIDE_VERSION_MINOR {current_version}"
+
+[[tool.tbump.file]]
+src = "src/runtime/HalideRuntime.h"
+version_template = "{patch}"
+search = "#define HALIDE_VERSION_PATCH {current_version}"
+
+[tool.uv]
+conflicts = [
+  [
+    { group = "ci-llvm-main" },
+    { group = "ci-llvm-22" },
+    { group = "ci-llvm-21" },
+    { group = "ci-llvm-20" },
+  ],
+]
+
+[tool.uv.sources]
+halide-llvm = { index = "halide" }
+imageio = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+numpy = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+pillow = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+
+[[tool.uv.index]]
+name = "halide"
+url = "https://pypi.halide-lang.org/simple"
+explicit = true
+
+[[tool.uv.index]]
+name = "piwheels"
+url = "https://piwheels.org/simple"
+explicit = true

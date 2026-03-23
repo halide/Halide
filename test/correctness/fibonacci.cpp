@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
         if (i >= 10) {
             if (fib_ref[i] != out(i - 10)) {
                 printf("out(%d) = %d instead of %d\n", i - 10, out(i - 10), fib_ref[i]);
-                return -1;
+                return 1;
             }
         }
     }

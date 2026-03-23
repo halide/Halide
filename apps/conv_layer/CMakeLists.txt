@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(conv_layer)
 
 enable_testing()
@@ -12,16 +12,14 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(conv_layer.generator conv_layer_generator.cpp)
-target_link_libraries(conv_layer.generator
-                      PRIVATE
-                      Halide::Generator)
+add_halide_generator(conv_layer.generator SOURCES conv_layer_generator.cpp)
 
 # Filters
 add_halide_library(conv_layer FROM conv_layer.generator)
 add_halide_library(conv_layer_auto_schedule FROM conv_layer.generator
                    GENERATOR conv_layer
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.parallelism=4096 autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(conv_layer_process process.cpp)

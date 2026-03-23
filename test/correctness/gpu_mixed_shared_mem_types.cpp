@@ -10,7 +10,7 @@ int check_result(Buffer<T> output, int n_types, int offset) {
         if (output(x) != correct) {
             printf("output(%d) = %d instead of %d\n",
                    (unsigned int)x, (unsigned int)output(x), (unsigned int)correct);
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -45,12 +45,8 @@ int main(int argc, char **argv) {
     for (int i = 0; i < n_types; i++) {
         int off = 0;
         if ((types[i].is_int() || types[i].is_uint())) {
-            // Metal does not support 64-bit integers.
-            // neither does D3D12 under SM 5.1.
-            if ((t.supports_device_api(DeviceAPI::Metal) ||
-                 t.supports_device_api(DeviceAPI::OpenGLCompute) ||
-                 t.supports_device_api(DeviceAPI::D3D12Compute)) &&
-                types[i].bits() >= 64) {
+            // Not all targets support 64-bit integers.
+            if (!t.supports_type(types[i])) {
                 ++skipped_types;
                 continue;
             }

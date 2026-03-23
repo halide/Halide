@@ -29,7 +29,7 @@ public:
     StoreCollector(const std::string &name, int stride, int ms,
                    std::vector<Stmt> &lets, std::vector<Stmt> &ss)
         : store_name(name), store_stride(stride), max_stores(ms),
-          let_stmts(lets), stores(ss), collecting(true) {
+          let_stmts(lets), stores(ss) {
     }
 
 private:
@@ -57,7 +57,7 @@ private:
         return op;
     }
 
-    bool collecting;
+    bool collecting = true;
     // These are lets that we've encountered since the last collected
     // store. If we collect another store, these "potential" lets
     // become lets used by the collected stores.
@@ -223,7 +223,7 @@ private:
             }
         }
         if (op->value.type().lanes() > 1) {
-            // There is probably a more efficient way to this.
+            // There is probably a more efficient way to do this.
             return mutate(flatten_nested_ramps(op));
         }
 
@@ -236,7 +236,14 @@ private:
         } else {
             Type t = op->type.with_lanes(new_lanes);
             ModulusRemainder align = op->alignment;
-            // TODO: Figure out the alignment of every nth lane
+            // The alignment of a Load refers to the alignment of the first
+            // lane, so we can preserve the existing alignment metadata if the
+            // deinterleave is asking for any subset of lanes that includes the
+            // first. Otherwise we just drop it. We could check if the index is
+            // a ramp with constant stride or some other special case, but if
+            // that's the case, the simplifier is very good at figuring out the
+            // alignment, and it has access to context (e.g. the alignment of
+            // enclosing lets) that we do not have here.
             if (starting_lane != 0) {
                 align = ModulusRemainder();
             }
@@ -249,7 +256,7 @@ private:
         if (base_lanes > 1) {
             if (new_lanes == 1) {
                 int index = starting_lane / base_lanes;
-                Expr expr = op->base + cast(op->base.type(), index) * op->stride;
+                Expr expr = simplify(op->base + cast(op->base.type(), index) * op->stride);
                 ScopedValue<int> old_starting_lane(starting_lane, starting_lane % base_lanes);
                 ScopedValue<int> old_lane_stride(lane_stride, base_lanes);
                 expr = mutate(expr);
@@ -267,12 +274,23 @@ private:
                 return mutate(flatten_nested_ramps(op));
             }
         }
-        Expr expr = op->base + cast(op->base.type(), starting_lane) * op->stride;
+        Expr expr = simplify(op->base + cast(op->base.type(), starting_lane) * op->stride);
         internal_assert(expr.type() == op->base.type());
         if (new_lanes > 1) {
-            expr = Ramp::make(expr, op->stride * lane_stride, new_lanes);
+            expr = Ramp::make(expr, simplify(op->stride * lane_stride), new_lanes);
         }
         return expr;
+    }
+
+    Expr give_up_and_shuffle(const Expr &e) {
+        // Uh-oh, we don't know how to deinterleave this vector expression
+        // Make llvm do it
+        std::vector<int> indices;
+        indices.reserve(new_lanes);
+        for (int i = 0; i < new_lanes; i++) {
+            indices.push_back(starting_lane + lane_stride * i);
+        }
+        return Shuffle::make({e}, indices);
     }
 
     Expr visit(const Variable *op) override {
@@ -302,13 +320,7 @@ private:
                        lane_stride == 3) {
                 return Variable::make(t, op->name + ".lanes_2_of_3", op->image, op->param, op->reduction_domain);
             } else {
-                // Uh-oh, we don't know how to deinterleave this vector expression
-                // Make llvm do it
-                std::vector<int> indices;
-                for (int i = 0; i < new_lanes; i++) {
-                    indices.push_back(starting_lane + lane_stride * i);
-                }
-                return Shuffle::make({op}, indices);
+                return give_up_and_shuffle(op);
             }
         }
     }
@@ -319,6 +331,17 @@ private:
         } else {
             Type t = op->type.with_lanes(new_lanes);
             return Cast::make(t, mutate(op->value));
+        }
+    }
+
+    Expr visit(const Reinterpret *op) override {
+        if (op->type.is_scalar()) {
+            return op;
+        } else if (op->type.bits() != op->value.type().bits()) {
+            return give_up_and_shuffle(op);
+        } else {
+            Type t = op->type.with_lanes(new_lanes);
+            return Reinterpret::make(t, mutate(op->value));
         }
     }
 
@@ -363,6 +386,21 @@ private:
             int idx = i * lane_stride + starting_lane;
             indices.push_back(op->indices[idx]);
         }
+
+        // If this is extracting a single lane, try to recursively deinterleave rather
+        // than leaving behind a shuffle.
+        if (indices.size() == 1) {
+            int index = indices.front();
+            for (const auto &i : op->vectors) {
+                if (index < i.type().lanes()) {
+                    ScopedValue<int> lane(starting_lane, index);
+                    return mutate(i);
+                }
+                index -= i.type().lanes();
+            }
+            internal_error << "extract_lane index out of bounds: " << Expr(op) << " " << index << "\n";
+        }
+
         return Shuffle::make(op->vectors, indices);
     }
 };
@@ -372,9 +410,8 @@ Expr deinterleave(Expr e, int starting_lane, int lane_stride, int new_lanes, con
     Deinterleaver d(starting_lane, lane_stride, new_lanes, lets);
     e = d.mutate(e);
     e = common_subexpression_elimination(e);
-    return simplify(e);
+    return e;
 }
-}  // namespace
 
 Expr extract_odd_lanes(const Expr &e, const Scope<> &lets) {
     internal_assert(e.type().lanes() % 2 == 0);
@@ -386,6 +423,13 @@ Expr extract_even_lanes(const Expr &e, const Scope<> &lets) {
     return deinterleave(e, 0, 2, (e.type().lanes() + 1) / 2, lets);
 }
 
+Expr extract_mod3_lanes(const Expr &e, int lane, const Scope<> &lets) {
+    internal_assert(e.type().lanes() % 3 == 0);
+    return deinterleave(e, lane, 3, (e.type().lanes() + 2) / 3, lets);
+}
+
+}  // namespace
+
 Expr extract_even_lanes(const Expr &e) {
     internal_assert(e.type().lanes() % 2 == 0);
     Scope<> lets;
@@ -396,11 +440,6 @@ Expr extract_odd_lanes(const Expr &e) {
     internal_assert(e.type().lanes() % 2 == 0);
     Scope<> lets;
     return extract_odd_lanes(e, lets);
-}
-
-Expr extract_mod3_lanes(const Expr &e, int lane, const Scope<> &lets) {
-    internal_assert(e.type().lanes() % 3 == 0);
-    return deinterleave(e, lane, 3, (e.type().lanes() + 2) / 3, lets);
 }
 
 Expr extract_lane(const Expr &e, int lane) {
@@ -427,44 +466,44 @@ class Interleaver : public IRMutator {
         return Shuffle::make_interleave(exprs);
     }
 
-    template<typename T, typename Body>
-    Body visit_lets(const T *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
-            const T *op;
+            const LetOrLetStmt *op;
             Expr new_value;
             ScopedBinding<> binding;
-            Frame(const T *op, Expr v, Scope<void> &scope)
+            Frame(const LetOrLetStmt *op, Expr v, Scope<void> &scope)
                 : op(op),
                   new_value(std::move(v)),
                   binding(new_value.type().is_vector(), scope, op->name) {
             }
         };
         std::vector<Frame> frames;
-        Body result;
+        decltype(op->body) result;
 
         do {
             result = op->body;
             frames.emplace_back(op, mutate(op->value), vector_lets);
-        } while ((op = result.template as<T>()));
+        } while ((op = result.template as<LetOrLetStmt>()));
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            Expr value = std::move(it->new_value);
+        for (const auto &frame : reverse_view(frames)) {
+            Expr value = std::move(frame.new_value);
 
-            result = T::make(it->op->name, value, result);
+            result = LetOrLetStmt::make(frame.op->name, value, result);
 
             // For vector lets, we may additionally need a let defining the even and odd lanes only
             if (value.type().is_vector()) {
                 if (value.type().lanes() % 2 == 0) {
-                    result = T::make(it->op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
-                    result = T::make(it->op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
                 }
                 if (value.type().lanes() % 3 == 0) {
-                    result = T::make(it->op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
-                    result = T::make(it->op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
-                    result = T::make(it->op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
                 }
             }
         }
@@ -473,11 +512,11 @@ class Interleaver : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        return visit_lets<Let, Expr>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_lets<LetStmt, Stmt>(op);
+        return visit_let(op);
     }
 
     Expr visit(const Ramp *op) override {
@@ -627,14 +666,14 @@ class Interleaver : public IRMutator {
             return Stmt();
         }
 
-        const int64_t *stride_ptr = as_const_int(r0->stride);
+        auto optional_stride = as_const_int(r0->stride);
 
         // The stride isn't a constant or is <= 1
-        if (!stride_ptr || *stride_ptr <= 1) {
+        if (!optional_stride || *optional_stride <= 1) {
             return Stmt();
         }
 
-        const int64_t stride = *stride_ptr;
+        const int64_t stride = *optional_stride;
         const int lanes = r0->lanes;
         const int64_t expected_stores = stride;
 
@@ -669,8 +708,8 @@ class Interleaver : public IRMutator {
         std::vector<Expr> args(stores.size());
         std::vector<Expr> predicates(stores.size());
 
-        int min_offset = 0;
-        std::vector<int> offsets(stores.size());
+        int64_t min_offset = 0;
+        std::vector<int64_t> offsets(stores.size());
 
         std::string load_name;
         Buffer<> load_image;
@@ -684,8 +723,7 @@ class Interleaver : public IRMutator {
                 return Stmt();
             }
 
-            Expr diff = simplify(ri->base - r0->base);
-            const int64_t *offs = as_const_int(diff);
+            auto offs = as_const_int(simplify(ri->base - r0->base));
 
             // Difference between bases is not constant.
             if (!offs) {
@@ -693,14 +731,12 @@ class Interleaver : public IRMutator {
             }
 
             offsets[i] = *offs;
-            if (*offs < min_offset) {
-                min_offset = *offs;
-            }
+            min_offset = std::min(min_offset, *offs);
         }
 
         // Gather the args for interleaving.
         for (size_t i = 0; i < stores.size(); ++i) {
-            int j = offsets[i] - min_offset;
+            int64_t j = offsets[i] - min_offset;
             if (j == 0) {
                 base = stores[i].as<Store>()->index.as<Ramp>()->base;
             }
@@ -729,16 +765,16 @@ class Interleaver : public IRMutator {
         Expr predicate = Shuffle::make_interleave(predicates);
         Stmt new_store = Store::make(store->name, value, index, store->param, predicate, ModulusRemainder());
 
-        // Continue recursively into the stuff that
-        // collect_strided_stores didn't collect.
-        Stmt stmt = Block::make(new_store, mutate(rest));
-
         // Rewrap the let statements we pulled off.
         while (!let_stmts.empty()) {
             const LetStmt *let = let_stmts.back().as<LetStmt>();
-            stmt = LetStmt::make(let->name, let->value, stmt);
+            new_store = LetStmt::make(let->name, let->value, new_store);
             let_stmts.pop_back();
         }
+
+        // Continue recursively into the stuff that
+        // collect_strided_stores didn't collect.
+        Stmt stmt = Block::make(new_store, mutate(rest));
 
         // Success!
         return stmt;
@@ -806,7 +842,7 @@ void deinterleave_vector_test() {
           Shuffle::make({vec_x, vec_y}, {0, 2, 4, 3, 1, 3}),
           Shuffle::make({vec_x, vec_y}, {4, 6, 2, 7, 2, 4}));
 
-    std::cout << "deinterleave_vector test passed" << std::endl;
+    std::cout << "deinterleave_vector test passed\n";
 }
 
 }  // namespace Internal

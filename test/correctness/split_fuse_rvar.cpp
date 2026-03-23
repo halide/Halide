@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
                 int expected = i * 4 + j;
                 if (Rg(j, i) != expected) {
                     printf("Error! Expected %d at g(%d, %d), got %d\n", expected, j, i, Rg(j, i));
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 16; i++) {
             if (Rg(i) != i) {
                 printf("Error! Expected %d at g(%d), got %d\n", i, i, Rg(i));
-                return -1;
+                return 1;
             }
         }
     }

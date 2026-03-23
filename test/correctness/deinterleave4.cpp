@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     for (int x = 0; x < o2.width(); x++) {
         if (o1(x) != o2(x)) {
             printf("o1(%d) = %d but o2(%d) = %d\n", x, o1(x), x, o2(x));
-            return -1;
+            return 1;
         }
     }
 

@@ -4,15 +4,15 @@ namespace {
 
 class BitOperations : public Halide::Generator<BitOperations> {
 public:
-    Input<Buffer<uint8_t>> input8{"input8", 1};
-    Input<Buffer<uint16_t>> input16{"input16", 1};
-    Input<Buffer<uint32_t>> input32{"input32", 1};
-    Input<Buffer<uint64_t>> input64{"input64", 1};
+    Input<Buffer<uint8_t, 1>> input8{"input8"};
+    Input<Buffer<uint16_t, 1>> input16{"input16"};
+    Input<Buffer<uint32_t, 1>> input32{"input32"};
+    Input<Buffer<uint64_t, 1>> input64{"input64"};
 
-    Output<Buffer<uint8_t>> output8{"output8", 1};
-    Output<Buffer<uint8_t>> output16{"output16", 1};
-    Output<Buffer<uint8_t>> output32{"output32", 1};
-    Output<Buffer<uint8_t>> output64{"output64", 1};
+    Output<Buffer<uint8_t, 1>> output8{"output8"};
+    Output<Buffer<uint8_t, 1>> output16{"output16"};
+    Output<Buffer<uint8_t, 1>> output32{"output32"};
+    Output<Buffer<uint8_t, 1>> output64{"output64"};
 
     void generate() {
         Var x;

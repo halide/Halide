@@ -3,9 +3,11 @@
 
 #ifndef COMPILING_HALIDE_RUNTIME
 #ifdef __cplusplus
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <string_view>
 #else
 #include <stdbool.h>
 #include <stddef.h>
@@ -15,6 +17,15 @@
 #else
 #include "runtime_internal.h"
 #endif
+
+// Note that the canonical Halide version is considered to be defined here
+// (rather than in the build system); we redundantly define the value in
+// our CMake build, so that we ensure that the in-build metadata (eg soversion)
+// matches, but keeping the canonical version here makes it easier to keep
+// downstream build systems (eg Blaze/Bazel) properly in sync with the source.
+#define HALIDE_VERSION_MAJOR 22
+#define HALIDE_VERSION_MINOR 0
+#define HALIDE_VERSION_PATCH 0
 
 #ifdef __cplusplus
 // Forward declare type to allow naming typed handles.
@@ -55,6 +66,75 @@ extern "C" {
 #endif
 #endif
 
+// Annotation for AOT and JIT calls -- if undefined, use no annotation.
+// To ensure that all results are checked, do something like
+//
+//    -DHALIDE_FUNCTION_ATTRS=HALIDE_MUST_USE_RESULT
+//
+// in your C++ compiler options
+#ifndef HALIDE_FUNCTION_ATTRS
+#define HALIDE_FUNCTION_ATTRS
+#endif
+
+#ifndef HALIDE_EXPORT_SYMBOL
+#ifdef _MSC_VER
+#define HALIDE_EXPORT_SYMBOL __declspec(dllexport)
+#else
+#define HALIDE_EXPORT_SYMBOL __attribute__((visibility("default")))
+#endif
+#endif
+
+#ifndef COMPILING_HALIDE_RUNTIME
+
+// ASAN builds can cause linker errors for Float16, so sniff for that and
+// don't enable it by default.
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define HALIDE_RUNTIME_ASAN_DETECTED
+#endif
+#endif
+
+#if defined(__SANITIZE_ADDRESS__) && !defined(HALIDE_RUNTIME_ASAN_DETECTED)
+#define HALIDE_RUNTIME_ASAN_DETECTED
+#endif
+
+#if !defined(HALIDE_CPP_COMPILER_HAS_FLOAT16)
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 0
+
+#if !defined(HALIDE_RUNTIME_ASAN_DETECTED)
+
+// clang had _Float16 added as a reserved name in clang 8, but
+// doesn't actually support it on most platforms until clang 15.
+// Ideally there would be a better way to detect if the type
+// is supported, even in a compiler independent fashion, but
+// coming up with one has proven elusive.
+#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__) && !defined(__wasm__)
+#if defined(__is_identifier)
+#if !__is_identifier(_Float16)
+#undef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 1
+#endif
+#endif
+#endif
+
+// Similarly, detecting _Float16 for gcc is problematic.
+// For now, we say that if >= v12, and compiling on x86 or arm,
+// we assume support. This may need revision.
+#if defined(__GNUC__) && (__GNUC__ >= 12)
+#if defined(__x86_64__) ||                                              \
+    (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) ||     \
+    (defined(__arm__) && (__GNUC__ >= 13) && __ARM_FP16_FORMAT_IEEE) || \
+    (defined(__aarch64__) && (__GNUC__ >= 13))
+#undef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 1
+#endif
+#endif
+
+#endif  // !HALIDE_RUNTIME_ASAN_DETECTED
+#endif  // !defined(HALIDE_CPP_COMPILER_HAS_FLOAT16)
+
+#endif  // !COMPILING_HALIDE_RUNTIME
+
 /** \file
  *
  * This file declares the routines used by Halide internally in its
@@ -62,9 +142,9 @@ extern "C" {
  * replaced with user-defined versions by defining an extern "C"
  * function with the same name and signature.
  *
- * When doing Just In Time (JIT) compilation methods on the Func being
- * compiled must be called instead. The corresponding methods are
- * documented below.
+ * When doing Just In Time (JIT) compilation members of
+ * some_pipeline_or_func.jit_handlers() must be replaced instead. The
+ * corresponding methods are documented below.
  *
  * All of these functions take a "void *user_context" parameter as their
  * first argument; if the Halide kernel that calls back to any of these
@@ -140,7 +220,7 @@ extern void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mute
 /** Functions for constructing/destroying/locking/unlocking arrays of mutexes. */
 struct halide_mutex_array;
 //@{
-extern struct halide_mutex_array *halide_mutex_array_create(int sz);
+extern struct halide_mutex_array *halide_mutex_array_create(uint64_t sz);
 extern void halide_mutex_array_destroy(void *user_context, void *array);
 extern int halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
 extern int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry);
@@ -159,7 +239,7 @@ typedef int (*halide_task_t)(void *user_context, int task_number, uint8_t *closu
 extern int halide_do_par_for(void *user_context,
                              halide_task_t task,
                              int min, int size, uint8_t *closure);
-extern void halide_shutdown_thread_pool();
+extern void halide_shutdown_thread_pool(void);
 //@}
 
 /** Set a custom method for performing a parallel for loop. Returns
@@ -187,7 +267,7 @@ typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int)
 
 /** A task representing a serial for loop evaluated over some range.
  * Note that task_parent is a pass through argument that should be
- * passed to any dependent taks that are invoked using halide_do_parallel_tasks
+ * passed to any dependent tasks that are invoked using halide_do_parallel_tasks
  * underneath this call. */
 typedef int (*halide_loop_task_t)(void *user_context, int min, int extent,
                                   uint8_t *closure, void *task_parent);
@@ -319,7 +399,7 @@ extern struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closur
 /** Join a thread. */
 extern void halide_join_thread(struct halide_thread *);
 
-/** Set the number of threads used by Halide's thread pool. Returns
+/** Get or set the number of threads used by Halide's thread pool. Set returns
  * the old number.
  *
  * n < 0  : error condition
@@ -331,7 +411,10 @@ extern void halide_join_thread(struct halide_thread *);
  * of halide_do_par_for(); custom implementations may completely ignore values
  * passed to halide_set_num_threads().)
  */
+// @{
+extern int halide_get_num_threads();
 extern int halide_set_num_threads(int n);
+// @}
 
 /** Halide calls these functions to allocate and free memory. To
  * replace in AOT code, use the halide_set_custom_malloc and
@@ -345,10 +428,10 @@ extern int halide_set_num_threads(int n);
  *
  * Note that halide_malloc must return a pointer aligned to the
  * maximum meaningful alignment for the platform for the purpose of
- * vector loads and stores. The default implementation uses 32-byte
- * alignment, which is safe for arm and x86. Additionally, it must be
- * safe to read at least 8 bytes before the start and beyond the
- * end.
+ * vector loads and stores, *and* with an allocated size that is (at least)
+ * an integral multiple of that same alignment. The default implementation
+ * uses 32-byte alignment on arm and 64-byte alignment on x86. Additionally,
+ * it must be safe to read at least 8 bytes before the start and beyond the end.
  */
 //@{
 extern void *halide_malloc(void *user_context, size_t x);
@@ -392,7 +475,6 @@ extern halide_get_library_symbol_t halide_set_custom_get_library_symbol(halide_g
  * Cannot be replaced in JITted code at present.
  */
 extern int32_t halide_debug_to_file(void *user_context, const char *filename,
-                                    int32_t type_code,
                                     struct halide_buffer_t *buf);
 
 /** Types in the halide type system. They can be ints, unsigned ints,
@@ -450,45 +532,56 @@ struct halide_type_t {
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    HALIDE_ALWAYS_INLINE halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
         : code(code), bits(bits), lanes(lanes) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
-    HALIDE_ALWAYS_INLINE halide_type_t()
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t()
         : code((halide_type_code_t)0), bits(0), lanes(0) {
     }
 
-    HALIDE_ALWAYS_INLINE halide_type_t with_lanes(uint16_t new_lanes) const {
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t with_lanes(uint16_t new_lanes) const {
         return halide_type_t((halide_type_code_t)code, bits, new_lanes);
     }
 
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t element_of() const {
+        return with_lanes(1);
+    }
     /** Compare two types for equality. */
-    HALIDE_ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
+    HALIDE_ALWAYS_INLINE constexpr bool operator==(const halide_type_t &other) const {
         return as_u32() == other.as_u32();
     }
 
-    HALIDE_ALWAYS_INLINE bool operator!=(const halide_type_t &other) const {
+    HALIDE_ALWAYS_INLINE constexpr bool operator!=(const halide_type_t &other) const {
         return !(*this == other);
     }
 
-    HALIDE_ALWAYS_INLINE bool operator<(const halide_type_t &other) const {
+    HALIDE_ALWAYS_INLINE constexpr bool operator<(const halide_type_t &other) const {
         return as_u32() < other.as_u32();
     }
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-    HALIDE_ALWAYS_INLINE int bytes() const {
+    HALIDE_ALWAYS_INLINE constexpr int bytes() const {
         return (bits + 7) / 8;
     }
 
-    HALIDE_ALWAYS_INLINE uint32_t as_u32() const {
-        uint32_t u;
-        memcpy(&u, this, sizeof(u));
-        return u;
+    HALIDE_ALWAYS_INLINE constexpr uint32_t as_u32() const {
+        // Note that this produces a result that is identical to memcpy'ing 'this'
+        // into a u32 (on a little-endian machine, anyway), and at -O1 or greater
+        // on Clang, the compiler knows this and optimizes this into a single 32-bit move.
+        // (At -O0 it will look awful.)
+        return static_cast<uint8_t>(code) |
+               (static_cast<uint16_t>(bits) << 8) |
+               (static_cast<uint32_t>(lanes) << 16);
     }
 #endif
 };
+
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
+static_assert(sizeof(halide_type_t) == sizeof(uint32_t), "size mismatch in halide_type_t");
+#endif
 
 enum halide_trace_event_code_t { halide_trace_load = 0,
                                  halide_trace_store = 1,
@@ -546,12 +639,6 @@ struct halide_trace_event_t {
 
     /** The length of the coordinates array */
     int32_t dimensions;
-
-#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
-    // If we don't explicitly mark the default ctor as inline,
-    // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_event_t() = default;
-#endif
 };
 
 /** Called when Funcs are marked as trace_load, trace_store, or
@@ -564,20 +651,18 @@ struct halide_trace_event_t {
  *
  * halide_trace returns a unique ID which will be passed to future
  * events that "belong" to the earlier event as the parent id. The
- * ownership hierarchy looks like:
+ * ownership hierarchy follows the realization stack.
  *
  * begin_pipeline
- * +--trace_tag (if any)
- * +--trace_tag (if any)
+ * +--tag (if any)
+ * +--tag (if any)
  * ...
- * +--begin_realization
- * |  +--produce
- * |  |  +--load/store
- * |  |  +--end_produce
- * |  +--consume
- * |  |  +--load
- * |  |  +--end_consume
- * |  +--end_realization
+ * +--(begin_realization|produce|consume)
+ * |  +-- ... recursively more realizations/produces/consumes ...
+ * |      +-- load
+ * |      +-- store
+ * |      +-- ... recursively more end events ...
+ * |  +--(end_realization|end_produce|end_consume)
  * +--end_pipeline
  *
  * Threading means that ownership cannot be inferred from the ordering
@@ -586,8 +671,8 @@ struct halide_trace_event_t {
  * realization. Within a single production, the ordering of events is
  * meaningful.
  *
- * Note that all trace_tag events (if any) will occur just after the begin_pipeline
- * event, but before any begin_realization events. All trace_tags for a given Func
+ * Note that all tag events (if any) will occur just after the begin_pipeline
+ * event, but before any begin_realization events. All tags for a given Func
  * will be emitted in the order added.
  */
 // @}
@@ -617,10 +702,6 @@ struct halide_trace_packet_t {
     // @}
 
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
-    // If we don't explicitly mark the default ctor as inline,
-    // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_packet_t() = default;
-
     /** Get the coordinates array, assuming this packet is laid out in
      * memory as it was written. The coordinates array comes
      * immediately after the packet header. */
@@ -695,7 +776,7 @@ extern int halide_get_trace_file(void *user_context);
 
 /** If tracing is writing to a file. This call closes that file
  * (flushing the trace). Returns zero on success. */
-extern int halide_shutdown_trace();
+extern int halide_shutdown_trace(void);
 
 /** All Halide GPU or device backend implementations provide an
  * interface to be used with halide_device_malloc, etc. This is
@@ -829,6 +910,16 @@ extern int halide_device_release_crop(void *user_context,
  * should rarely be necessary, except maybe for profiling. */
 extern int halide_device_sync(void *user_context, struct halide_buffer_t *buf);
 
+/**
+ * Wait for current GPU operations to complete. Calling this explicitly
+ * should rarely be necessary, except maybe for profiling.
+ * This variation of the synchronizing is useful when a synchronization is desirable
+ * without specifying any buffer to synchronize on.
+ * Calling this with a null device_interface is always illegal.
+ */
+extern int halide_device_sync_global(void *user_context,
+                                     const struct halide_device_interface_t *device_interface);
+
 /** Allocate device memory to back a halide_buffer_t. */
 extern int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
                                 const struct halide_device_interface_t *device_interface);
@@ -866,7 +957,7 @@ extern int halide_get_gpu_device(void *user_context);
 /** Set the soft maximum amount of memory, in bytes, that the LRU
  *  cache will use to memoize Func results.  This is not a strict
  *  maximum in that concurrency and simultaneous use of memoized
- *  reults larger than the cache size can both cause it to
+ *  results larger than the cache size can both cause it to
  *  temporariliy be larger than the size specified here.
  */
 extern void halide_memoization_cache_set_size(int64_t size);
@@ -894,7 +985,7 @@ extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *ca
 
 /** Given a cache key for a memoized result, currently constructed
  *  from the Func name and top-level Func name plus the arguments of
- *  the computation, store the result in the cache for futre access by
+ *  the computation, store the result in the cache for future access by
  *  halide_memoization_cache_lookup. (The internals of the cache key
  *  should be considered opaque by this function.) Data is copied out
  *  from the inputs and inputs are unmodified. The last argument is a
@@ -940,7 +1031,7 @@ extern void halide_memoization_cache_release(void *user_context, void *host);
 /** Free all memory and resources associated with the memoization cache.
  * Must be called at a time when no other threads are accessing the cache.
  */
-extern void halide_memoization_cache_cleanup();
+extern void halide_memoization_cache_cleanup(void);
 
 /** Verify that a given range of memory has been initialized; only used when Target::MSAN is enabled.
  *
@@ -1070,12 +1161,11 @@ enum halide_error_code_t {
      * violates a Halide invariant. */
     halide_error_code_no_device_interface = -19,
 
-    /** An error occurred when attempting to initialize the Matlab
-     * runtime. */
-    halide_error_code_matlab_init_failed = -20,
+    /** This part of the Halide runtime is unimplemented on this platform. */
+    halide_error_code_unimplemented = -20,
 
-    /** The type of an mxArray did not match the expected type. */
-    halide_error_code_matlab_bad_param_type = -21,
+    /** A runtime symbol could not be loaded. */
+    halide_error_code_symbol_not_found = -21,
 
     /** There is a bug in the Halide compiler. */
     halide_error_code_internal_error = -22,
@@ -1105,9 +1195,11 @@ enum halide_error_code_t {
     /** At least one of the buffer's extents are negative. */
     halide_error_code_buffer_extents_negative = -28,
 
-    halide_error_code_unused_29 = -29,
+    /** Call(s) to a GPU backend API failed. */
+    halide_error_code_gpu_device_error = -29,
 
-    halide_error_code_unused_30 = -30,
+    /** Failure recording trace packets for one of the halide_target_feature_trace features. */
+    halide_error_code_trace_failed = -30,
 
     /** A specialize_fail() schedule branch was selected at runtime. */
     halide_error_code_specialize_fail = -31,
@@ -1173,6 +1265,20 @@ enum halide_error_code_t {
      * pipeline, or enable the appropriate device backend. */
     halide_error_code_device_dirty_with_no_device_support = -44,
 
+    /** An explicit storage bound provided is too small to store
+     * all the values produced by the function. */
+    halide_error_code_storage_bound_too_small = -45,
+
+    /** A factor used to split a loop was discovered to be zero or negative at
+     * runtime. */
+    halide_error_code_split_factor_not_positive = -46,
+
+    /** "vscale" value of Scalable Vector detected in runtime does not match
+     * the vscale value used in compilation. */
+    halide_error_code_vscale_invalid = -47,
+
+    /** Profiling failed for a pipeline invocation. */
+    halide_error_code_cannot_profile_pipeline = -48,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1244,24 +1350,35 @@ extern int halide_error_device_interface_no_device(void *user_context);
 extern int halide_error_host_and_device_dirty(void *user_context);
 extern int halide_error_buffer_is_null(void *user_context, const char *routine);
 extern int halide_error_device_dirty_with_no_device_support(void *user_context, const char *buffer_name);
+extern int halide_error_storage_bound_too_small(void *user_context, const char *func_name, const char *var_name,
+                                                int provided_size, int required_size);
+extern int halide_error_device_crop_failed(void *user_context);
+extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
+extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
 // @}
 
 /** Optional features a compilation Target can have.
- * Be sure to keep this in sync with the Feature enum in Target.h and the implementation of
- * get_runtime_compatible_target in Target.cpp if you add a new feature.
+ *
+ * Be sure to keep this in sync with:
+ *  1. the Feature enum in Target.h,
+ *  2. the implementation of get_runtime_compatible_target in Target.cpp,
+ *  3. PyEnums.cpp,
+ * if you add a new feature.
  */
 typedef enum halide_target_feature_t {
-    halide_target_feature_jit = 0,          ///< Generate code that will run immediately inside the calling process.
-    halide_target_feature_debug,            ///< Turn on debug info and output for runtime code.
-    halide_target_feature_no_asserts,       ///< Disable all runtime checks, for slightly tighter code.
-    halide_target_feature_no_bounds_query,  ///< Disable the bounds querying functionality.
+    halide_target_feature_jit = 0,            ///< Generate code that will run immediately inside the calling process.
+    halide_target_feature_debug,              ///< Turn on debug info and output for runtime code.
+    halide_target_feature_enable_backtraces,  ///< Preserve frame pointers and include unwind tables to support accurate backtraces for debugging and profiling.
+    halide_target_feature_no_asserts,         ///< Disable all runtime checks, for slightly tighter code.
+    halide_target_feature_no_bounds_query,    ///< Disable the bounds querying functionality.
 
-    halide_target_feature_sse41,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
-    halide_target_feature_avx,    ///< Use AVX 1 instructions. Only relevant on x86.
-    halide_target_feature_avx2,   ///< Use AVX 2 instructions. Only relevant on x86.
-    halide_target_feature_fma,    ///< Enable x86 FMA instruction
-    halide_target_feature_fma4,   ///< Enable x86 (AMD) FMA4 instruction set
-    halide_target_feature_f16c,   ///< Enable x86 16-bit float support
+    halide_target_feature_sse41,    ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
+    halide_target_feature_avx,      ///< Use AVX 1 instructions. Only relevant on x86.
+    halide_target_feature_avx2,     ///< Use AVX 2 instructions. Only relevant on x86.
+    halide_target_feature_avxvnni,  ///< Enable the AVX-VNNI features supported by AVX2 instructions. Supports 256-bit VNNI instructions without EVEX encoding.
+    halide_target_feature_fma,      ///< Enable x86 FMA instruction
+    halide_target_feature_fma4,     ///< Enable x86 (AMD) FMA4 instruction set
+    halide_target_feature_f16c,     ///< Enable x86 16-bit float support
 
     halide_target_feature_armv7s,   ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
     halide_target_feature_no_neon,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
@@ -1278,16 +1395,13 @@ typedef enum halide_target_feature_t {
     halide_target_feature_cuda_capability70,  ///< Enable CUDA compute capability 7.0 (Volta)
     halide_target_feature_cuda_capability75,  ///< Enable CUDA compute capability 7.5 (Turing)
     halide_target_feature_cuda_capability80,  ///< Enable CUDA compute capability 8.0 (Ampere)
+    halide_target_feature_cuda_capability86,  ///< Enable CUDA compute capability 8.6 (Ampere)
 
     halide_target_feature_opencl,       ///< Enable the OpenCL runtime.
     halide_target_feature_cl_doubles,   ///< Enable double support on OpenCL targets
     halide_target_feature_cl_atomic64,  ///< Enable 64-bit atomics operations on OpenCL targets
 
-    halide_target_feature_openglcompute,  ///< Enable OpenGL Compute runtime.
-
     halide_target_feature_user_context,  ///< Generated code takes a user_context pointer as first argument
-
-    halide_target_feature_matlab,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
 
     halide_target_feature_profile,     ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
     halide_target_feature_no_runtime,  ///< Do not include a copy of the Halide runtime in any generated object file or assembly
@@ -1307,14 +1421,16 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx512_knl,             ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
     halide_target_feature_avx512_skylake,         ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
     halide_target_feature_avx512_cannonlake,      ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
-    halide_target_feature_avx512_sapphirerapids,  ///< Enable the AVX512 features supported by Sapphire Rapids processors. This include all of the Cannonlake features, plus AVX512-VNNI and AVX512-BF16.
-    halide_target_feature_hvx_use_shared_object,  ///< Deprecated
+    halide_target_feature_avx512_zen4,            ///< Enable the AVX512 features supported by Zen4 processors. This include all of the Cannonlake features, plus AVX512-VNNI, AVX512-BF16, and more.
+    halide_target_feature_avx512_zen5,            ///< Enable the AVX512 features supported by Zen5 processors. This include all of the Cannonlake features, plus AVX512-VNNI, AVX512-BF16, AVX-VNNI and more.
+    halide_target_feature_avx512_sapphirerapids,  ///< Enable the AVX512 features supported by Sapphire Rapids processors. This include all of the Zen4 features, plus AVX-VNNI and AMX instructions.
     halide_target_feature_trace_loads,            ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
     halide_target_feature_trace_stores,           ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
     halide_target_feature_trace_realizations,     ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
     halide_target_feature_trace_pipeline,         ///< Trace the pipeline.
     halide_target_feature_hvx_v65,                ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66,                ///< Enable Hexagon v66 architecture.
+    halide_target_feature_hvx_v68,                ///< Enable Hexagon v68 architecture.
     halide_target_feature_cl_half,                ///< Enable half support on OpenCL targets
     halide_target_feature_strict_float,           ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
     halide_target_feature_tsan,                   ///< Enable hooks for TSAN support.
@@ -1324,12 +1440,11 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hexagon_dma,            ///< Enable Hexagon DMA buffers.
     halide_target_feature_embed_bitcode,          ///< Emulate clang -fembed-bitcode flag.
     halide_target_feature_enable_llvm_loop_opt,   ///< Enable loop vectorization + unrolling in LLVM. Overrides halide_target_feature_disable_llvm_loop_opt. (Ignored for non-LLVM targets.)
-    halide_target_feature_disable_llvm_loop_opt,  ///< Disable loop vectorization + unrolling in LLVM. (Ignored for non-LLVM targets.)
+    halide_target_feature_wasm_mvponly,           ///< Disable all extensions to WebAssembly codegen (including +sign-ext and +nontrapping-fptoint, which are on by default).
     halide_target_feature_wasm_simd128,           ///< Enable +simd128 instructions for WebAssembly codegen.
-    halide_target_feature_wasm_signext,           ///< Enable +sign-ext instructions for WebAssembly codegen.
-    halide_target_feature_wasm_sat_float_to_int,  ///< Enable saturating (nontrapping) float-to-int instructions for WebAssembly codegen.
     halide_target_feature_wasm_threads,           ///< Enable use of threads in WebAssembly codegen. Requires the use of a wasm runtime that provides pthread-compatible wrappers (typically, Emscripten with the -pthreads flag). Unsupported under WASI.
     halide_target_feature_wasm_bulk_memory,       ///< Enable +bulk-memory instructions for WebAssembly codegen.
+    halide_target_feature_webgpu,                 ///< Enable the WebGPU runtime.
     halide_target_feature_sve,                    ///< Enable ARM Scalable Vector Extensions
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
     halide_target_feature_egl,                    ///< Force use of EGL support.
@@ -1337,7 +1452,32 @@ typedef enum halide_target_feature_t {
     halide_target_feature_arm_fp16,               ///< Enable ARMv8.2-a half-precision floating point data processing
     halide_llvm_large_code_model,                 ///< Use the LLVM large code model to compile
     halide_target_feature_rvv,                    ///< Enable RISCV "V" Vector Extension
-    halide_target_feature_armv81a,                ///< Enable ARMv8.1-a instructions
+    halide_target_feature_armv8a,                 ///< Enable ARMv8a instructions
+    halide_target_feature_armv81a,                ///< Enable ARMv8.1a instructions
+    halide_target_feature_armv82a,                ///< Enable ARMv8.2a instructions
+    halide_target_feature_armv83a,                ///< Enable ARMv8.3a instructions
+    halide_target_feature_armv84a,                ///< Enable ARMv8.4a instructions
+    halide_target_feature_armv85a,                ///< Enable ARMv8.5a instructions
+    halide_target_feature_armv86a,                ///< Enable ARMv8.6a instructions
+    halide_target_feature_armv87a,                ///< Enable ARMv8.7a instructions
+    halide_target_feature_armv88a,                ///< Enable ARMv8.8a instructions
+    halide_target_feature_armv89a,                ///< Enable ARMv8.9a instructions
+    halide_target_feature_sanitizer_coverage,     ///< Enable hooks for SanitizerCoverage support.
+    halide_target_feature_profile_by_timer,       ///< Alternative to halide_target_feature_profile using timer interrupt for systems without threads or applicartions that need to avoid them.
+    halide_target_feature_spirv,                  ///< Enable SPIR-V code generation support.
+    halide_target_feature_vulkan,                 ///< Enable Vulkan runtime support.
+    halide_target_feature_vulkan_int8,            ///< Enable Vulkan 8-bit integer support.
+    halide_target_feature_vulkan_int16,           ///< Enable Vulkan 16-bit integer support.
+    halide_target_feature_vulkan_int64,           ///< Enable Vulkan 64-bit integer support.
+    halide_target_feature_vulkan_float16,         ///< Enable Vulkan 16-bit float support.
+    halide_target_feature_vulkan_float64,         ///< Enable Vulkan 64-bit float support.
+    halide_target_feature_vulkan_version10,       ///< Enable Vulkan v1.0 runtime target support.
+    halide_target_feature_vulkan_version12,       ///< Enable Vulkan v1.2 runtime target support.
+    halide_target_feature_vulkan_version13,       ///< Enable Vulkan v1.3 runtime target support.
+    halide_target_feature_semihosting,            ///< Used together with Target::NoOS for the baremetal target built with semihosting library and run with semihosting mode where minimum I/O communication with a host PC is available.
+    halide_target_feature_avx10_1,                ///< Intel AVX10 version 1 support. vector_bits is used to indicate width.
+    halide_target_feature_x86_apx,                ///< Intel x86 APX support. Covers initial set of features released as APX: egpr,push2pop2,ppx,ndd .
+    halide_target_feature_simulator,              ///< Target is for a simulator environment. Currently only applies to iOS.
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
@@ -1414,8 +1554,19 @@ typedef struct halide_dimension_t {
 }  // extern "C"
 #endif
 
-typedef enum { halide_buffer_flag_host_dirty = 1,
-               halide_buffer_flag_device_dirty = 2 } halide_buffer_flags;
+#if __cplusplus > 201100L || _MSVC_LANG > 201100L || __STDC_VERSION__ > 202300L
+// In C++, an underlying type is required to let the user define their own flag
+// values, without those values being undefined behavior when passed around as
+// this enum typedef.
+#define BUFFER_FLAGS_UNDERLYING_TYPE : uint64_t
+#else
+#define BUFFER_FLAGS_UNDERLYING_TYPE
+#endif
+typedef enum BUFFER_FLAGS_UNDERLYING_TYPE {
+    halide_buffer_flag_host_dirty = 1,
+    halide_buffer_flag_device_dirty = 2
+} halide_buffer_flags;
+#undef BUFFER_FLAGS_UNDERLYING_TYPE
 
 /**
  * The raw representation of an image passed around by generated
@@ -1465,11 +1616,11 @@ typedef struct halide_buffer_t {
         }
     }
 
-    HALIDE_ALWAYS_INLINE bool host_dirty() const {
+    HALIDE_MUST_USE_RESULT HALIDE_ALWAYS_INLINE bool host_dirty() const {
         return get_flag(halide_buffer_flag_host_dirty);
     }
 
-    HALIDE_ALWAYS_INLINE bool device_dirty() const {
+    HALIDE_MUST_USE_RESULT HALIDE_ALWAYS_INLINE bool device_dirty() const {
         return get_flag(halide_buffer_flag_device_dirty);
     }
 
@@ -1711,7 +1862,7 @@ void halide_register_argv_and_metadata(
  * alongside the pipeline. */
 
 /** Per-Func state tracked by the sampling profiler. */
-struct halide_profiler_func_stats {
+struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t time;
 
@@ -1739,8 +1890,8 @@ struct halide_profiler_func_stats {
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
  * in a linked list. */
-struct halide_profiler_pipeline_stats {
-    /** Total time spent inside this pipeline (in nanoseconds) */
+struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
+    /** Total time spent in this pipeline (in nanoseconds) */
     uint64_t time;
 
     /** The current memory allocation of funcs in this pipeline. */
@@ -1769,9 +1920,6 @@ struct halide_profiler_pipeline_stats {
     /** The number of funcs in this pipeline. */
     int num_funcs;
 
-    /** An internal base id used to identify the funcs in this pipeline. */
-    int first_func_id;
-
     /** The number of times this pipeline has been run. */
     int runs;
 
@@ -1782,27 +1930,69 @@ struct halide_profiler_pipeline_stats {
     int num_allocs;
 };
 
-/** The global state of the profiler. */
+/** Per-invocation-of-a-pipeline state. Lives on the stack of the Halide
+ * code. Exists in a doubly-linked list to that it can be cleanly
+ * removed. */
+struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_instance_state {
+    /** Time billed to funcs in this instance by the sampling thread. */
+    uint64_t billed_time;
 
-struct halide_profiler_state {
-    /** Guards access to the fields below. If not locked, the sampling
-     * profiler thread is free to modify things below (including
-     * reordering the linked list of pipeline stats). */
-    struct halide_mutex lock;
+    /** Wall clock time of the start of the instance. */
+    uint64_t start_time;
 
-    /** The amount of time the profiler thread sleeps between samples
-     * in milliseconds. Defaults to 1 */
-    int sleep_time;
+    /** The current memory allocation of funcs in this instance. */
+    uint64_t memory_current;
 
-    /** An internal id used for bookkeeping. */
-    int first_free_id;
+    /** The peak memory allocation of funcs in this instance. */
+    uint64_t memory_peak;
+
+    /** The total memory allocation of funcs in this instance. */
+    uint64_t memory_total;
+
+    /** The average number of thread pool worker threads doing useful
+     * work while computing this instance. */
+    uint64_t active_threads_numerator, active_threads_denominator;
+
+    /** A pointer to the next running instance, so that the running instances
+     * can exist in a linked list. */
+    struct halide_profiler_instance_state *next;
+
+    /** A pointer to the address of the next pointer of the previous instance,
+     * so that this can be removed from the linked list when the instance
+     * terminates. */
+    struct halide_profiler_instance_state **prev_next;
+
+    /** Information shared across all instances. The stats above are merged into
+     * it when the instance is retired. */
+    struct halide_profiler_pipeline_stats *pipeline_stats;
+
+    /** An array containing states for each Func in this instance of this pipeline. */
+    struct halide_profiler_func_stats *funcs;
 
     /** The id of the current running Func. Set by the pipeline, read
      * periodically by the profiler thread. */
     int current_func;
 
-    /** The number of threads currently doing work. */
+    /** The number of threads currently doing work on this pipeline instance. */
     int active_threads;
+
+    /** The number of samples taken by this instance. */
+    int samples;
+
+    /** The total number of memory allocation of funcs in this instance. */
+    int num_allocs;
+
+    /** Whether or not this instance should count towards pipeline
+     * statistics. */
+    int should_collect_statistics;
+};
+
+/** The global state of the profiler. */
+struct halide_profiler_state {
+    /** Guards access to the fields below. If not locked, the sampling
+     * profiler thread is free to modify things below (including
+     * reordering the linked list of pipeline stats). */
+    struct halide_mutex lock;
 
     /** A linked list of stats gathered for each pipeline. */
     struct halide_profiler_pipeline_stats *pipelines;
@@ -1810,48 +2000,64 @@ struct halide_profiler_state {
     /** Retrieve remote profiler state. Used so that the sampling
      * profiler can follow along with execution that occurs elsewhere,
      * e.g. on a DSP. If null, it reads from the int above instead. */
-    void (*get_remote_profiler_state)(int *func, int *active_workers);
 
     /** Sampling thread reference to be joined at shutdown. */
     struct halide_thread *sampling_thread;
-};
 
-/** Profiler func ids with special meanings. */
-enum {
-    /// current_func takes on this value when not inside Halide code
-    halide_profiler_outside_of_halide = -1,
-    /// Set current_func to this value to tell the profiling thread to
-    /// halt. It will start up again next time you run a pipeline with
-    /// profiling enabled.
-    halide_profiler_please_stop = -2
+    /** The running instances of Halide pipelines. */
+    struct halide_profiler_instance_state *instances;
+
+    /** If this callback is defined, the profiler asserts that there is a single
+     * live instance, and then uses it to get the current func and number of
+     * active threads instead of reading the fields in the instance. This is used
+     * so that the profiler can follow along with execution that occurs
+     * elsewhere (e.g. on an accelerator). */
+    void (*get_remote_profiler_state)(int *func, int *active_workers);
+
+    /** The amount of time the profiler thread sleeps between samples in
+     * microseconds. Defaults to 1000. To change it call
+     * halide_profiler_get_state and mutate this field. */
+    int sleep_time;
+
+    /** Set to 1 when you want the profiler to wait for all running instances to
+     * finish and then stop gracefully. */
+    int shutdown;
 };
 
 /** Get a pointer to the global profiler state for programmatic
  * inspection. Lock it before using to pause the profiler. */
-extern struct halide_profiler_state *halide_profiler_get_state();
+extern struct halide_profiler_state *halide_profiler_get_state(void);
 
 /** Get a pointer to the pipeline state associated with pipeline_name.
  * This function grabs the global profiler state's lock on entry. */
 extern struct halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name);
 
-/** Reset profiler state cheaply. May leave threads running or some
- * memory allocated but all accumluated statistics are reset.
- * WARNING: Do NOT call this method while any halide pipeline is
- * running; halide_profiler_memory_allocate/free and
- * halide_profiler_stack_peak_update update the profiler pipeline's
- * state without grabbing the global profiler state's lock. */
-extern void halide_profiler_reset();
+/** Collects profiling information. Intended to be called from a timer
+ * interrupt handler if timer based profiling is being used.
+ *  State argument is acquired via halide_profiler_get_pipeline_state.
+ * prev_t argument is the previous time and can be used to set a more
+ * accurate time interval if desired. */
+extern int halide_profiler_sample(struct halide_profiler_state *s, uint64_t *prev_t);
 
-/** Reset all profiler state.
- * WARNING: Do NOT call this method while any halide pipeline is
- * running; halide_profiler_memory_allocate/free and
- * halide_profiler_stack_peak_update update the profiler pipeline's
- * state without grabbing the global profiler state's lock. */
-void halide_profiler_shutdown();
+/** Reset profiler state cheaply. May leave threads running or some memory
+ * allocated but all accumulated statistics are reset. Blocks until all running
+ * profiled Halide pipelines exit. */
+extern void halide_profiler_reset(void);
+
+/** Reset all profiler state. Blocks until all running profiled Halide
+ * pipelines exit. */
+extern void halide_profiler_shutdown(void);
 
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
+
+/** These routines are called to temporarily disable and then re-enable
+ * the profiler. */
+//@{
+extern void halide_profiler_lock(struct halide_profiler_state *);
+extern void halide_profiler_unlock(struct halide_profiler_state *);
+//@}
 
 /// \name "Float16" functions
 /// These functions operate of bits (``uint16_t``) representing a half
@@ -1895,7 +2101,12 @@ extern double halide_float16_bits_to_double(uint16_t);
  *
  * If set to false, releases all unused device allocations back to the
  * underlying device APIs. For finer-grained control, see specific
- * methods in each device api runtime. */
+ * methods in each device api runtime.
+ *
+ * Note that if the flag is set to true, this call *must* succeed and return
+ * a value of halide_error_code_success (i.e., zero); if you replace
+ * the implementation of this call in the runtime, you must honor this contract.
+ * */
 extern int halide_reuse_device_allocations(void *user_context, bool);
 
 /** Determines whether on device_free the memory is returned
@@ -1923,76 +2134,113 @@ extern void halide_register_device_allocation_pool(struct halide_device_allocati
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
 
 namespace {
+
 template<typename T>
-struct check_is_pointer;
+struct check_is_pointer {
+    static constexpr bool value = false;
+};
+
 template<typename T>
-struct check_is_pointer<T *> {};
+struct check_is_pointer<T *> {
+    static constexpr bool value = true;
+};
+
 }  // namespace
 
 /** Construct the halide equivalent of a C type */
 template<typename T>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of() {
     // Create a compile-time error if T is not a pointer (without
     // using any includes - this code goes into the runtime).
-    check_is_pointer<T> check;
-    (void)check;
+    // (Note that we can't have uninitialized variables in constexpr functions,
+    // even if those variables aren't used.)
+    static_assert(check_is_pointer<T>::value, "Expected a pointer type here");
     return halide_type_t(halide_type_handle, 64);
 }
 
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<float>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<_Float16>() {
+    return halide_type_t(halide_type_float, 16);
+}
+#endif
+
+template<>
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<float>() {
     return halide_type_t(halide_type_float, 32);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<double>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<double>() {
     return halide_type_t(halide_type_float, 64);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<bool>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<bool>() {
     return halide_type_t(halide_type_uint, 1);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint8_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<uint8_t>() {
     return halide_type_t(halide_type_uint, 8);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint16_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<uint16_t>() {
     return halide_type_t(halide_type_uint, 16);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint32_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<uint32_t>() {
     return halide_type_t(halide_type_uint, 32);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint64_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<uint64_t>() {
     return halide_type_t(halide_type_uint, 64);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int8_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int8_t>() {
     return halide_type_t(halide_type_int, 8);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int16_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int16_t>() {
     return halide_type_t(halide_type_int, 16);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int32_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int32_t>() {
     return halide_type_t(halide_type_int, 32);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int64_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int64_t>() {
     return halide_type_t(halide_type_int, 64);
 }
+
+#ifndef COMPILING_HALIDE_RUNTIME
+
+// These structures are used by `function_info_header` files
+// (generated by passing `-e function_info_header` to a Generator).
+// The generated files contain documentation on the proper usage.
+namespace HalideFunctionInfo {
+
+enum ArgumentKind { InputScalar = 0,
+                    InputBuffer = 1,
+                    OutputBuffer = 2 };
+
+struct ArgumentInfo {
+    std::string_view name;
+    ArgumentKind kind;
+    int32_t dimensions;  // always zero for scalar arguments
+    halide_type_t type;
+};
+
+}  // namespace HalideFunctionInfo
+
+#endif  // COMPILING_HALIDE_RUNTIME
 
 #endif  // (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
 

@@ -3,14 +3,8 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 int counter = 0;
-extern "C" DLLEXPORT int call_count(int x) {
+extern "C" HALIDE_EXPORT_SYMBOL int call_count(int x) {
     counter++;
     assert(counter > 0);
     return 99;
@@ -24,7 +18,7 @@ void check(Buffer<int> im) {
             if (im(x, y) != correct) {
                 printf("Value at %d %d was %d instead of %d\n",
                        x, y, im(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         }
     }
@@ -54,7 +48,7 @@ int main(int argc, char **argv) {
         int correct = 24;
         if (counter != correct) {
             printf("Failed sliding a reduction: %d evaluations instead of %d\n", counter, correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -76,7 +70,7 @@ int main(int argc, char **argv) {
         int correct = 60;
         if (counter != correct) {
             printf("Failed sliding a reduction: %d evaluations instead of %d\n", counter, correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -95,8 +89,8 @@ int main(int argc, char **argv) {
         f(x, y) = call_count(f(x, y));
 
         f.unroll(y, 2);
-        f.update(0);
-        f.update(1);
+        f.update(0).unscheduled();
+        f.update(1).unscheduled();
 
         Func g("g");
         g(x, y) = f(x, y) + f(x, y - 1) + f(x, y - 2);
@@ -109,7 +103,7 @@ int main(int argc, char **argv) {
         int correct = 48;
         if (counter != correct) {
             printf("Failed sliding a reduction: %d evaluations instead of %d\n", counter, correct);
-            return -1;
+            return 1;
         }
     }
 

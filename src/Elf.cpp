@@ -139,8 +139,8 @@ struct Rel {
     typedef typename T::addr_t addr_t;
     typedef typename T::addr_off_t addr_off_t;
 
-    addr_t r_offset;
-    addr_t r_info;
+    const addr_t r_offset;
+    const addr_t r_info;
 
     uint32_t r_type() const {
         if (sizeof(addr_t) == 8) {
@@ -158,28 +158,21 @@ struct Rel {
         }
     }
 
-    static addr_t make_info(uint32_t type, uint32_t sym) {
-        if (sizeof(addr_t) == 8) {
-            return (uint64_t)type | ((uint64_t)sym << 32);
-        } else {
-            return (type & 0xff) | (sym << 8);
-        }
-    }
-
-    void set_r_type(uint32_t type) {
-        r_info = make_info(type, r_sym());
-    }
-
-    void set_r_sym(uint32_t sym) {
-        r_info = make_info(r_type(), sym);
-    }
-
     Rel(addr_t offset, addr_t info)
         : r_offset(offset), r_info(info) {
     }
 
     Rel(addr_t offset, uint32_t type, uint32_t sym)
         : r_offset(offset), r_info(make_info(type, sym)) {
+    }
+
+private:
+    static addr_t make_info(uint32_t type, uint32_t sym) {
+        if (sizeof(addr_t) == 8) {
+            return (uint64_t)type | ((uint64_t)sym << 32);
+        } else {
+            return (type & 0xff) | (sym << 8);
+        }
     }
 };
 
@@ -188,7 +181,7 @@ struct Rela : public Rel<T> {
     typedef typename T::addr_t addr_t;
     typedef typename T::addr_off_t addr_off_t;
 
-    addr_off_t r_addend;
+    const addr_off_t r_addend;
 
     Rela(addr_t offset, addr_t info, addr_off_t addend)
         : Rel<T>(offset, info), r_addend(addend) {
@@ -218,15 +211,13 @@ struct Sym<Types<32>> {
         return st_info & 0xf;
     }
 
-    static uint8_t make_info(uint8_t binding, uint8_t type) {
-        return (binding << 4) | (type & 0xf);
+    void set_binding_and_type(uint8_t binding, uint8_t type) {
+        st_info = make_info(binding, type);
     }
 
-    void set_binding(uint8_t binding) {
-        st_info = make_info(binding, get_type());
-    }
-    void set_type(uint8_t type) {
-        st_info = make_info(get_binding(), type);
+private:
+    static uint8_t make_info(uint8_t binding, uint8_t type) {
+        return (binding << 4) | (type & 0xf);
     }
 };
 
@@ -415,8 +406,8 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
             auto to_relocate = obj->find_section(name + 5);
             internal_assert(to_relocate != obj->sections_end());
             // TODO: This assert should work, but it seems like this
-            // isn't a reliable test. We rely on the names intead.
-            //internal_assert(&*to_relocate == section_map[sh->sh_link]);
+            // isn't a reliable test. We rely on the names instead.
+            // internal_assert(&*to_relocate == section_map[sh->sh_link]);
             for (uint64_t i = 0; i < sh->sh_size / sh->sh_entsize; i++) {
                 const char *rela_ptr = data + sh->sh_offset + i * sh->sh_entsize;
                 internal_assert(data <= rela_ptr && rela_ptr + sizeof(Rela<T>) <= data + size);
@@ -529,6 +520,8 @@ Object::section_iterator Object::merge_text_sections() {
     text->set_name(".text");
     return text;
 }
+
+namespace {
 
 template<typename T>
 std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, const std::vector<std::string> &dependencies,
@@ -770,12 +763,9 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
 
     // Ensure that we output the symbols deterministically, since a map of pointers
     // will vary in ordering from run to tun.
-    std::vector<std::pair<const Symbol *, const Symbol *>> sorted_symbols;
-    for (const auto &i : symbols) {
-        sorted_symbols.emplace_back(i);
-    }
+    std::vector<std::pair<const Symbol *, const Symbol *>> sorted_symbols(symbols.begin(), symbols.end());
     std::sort(sorted_symbols.begin(), sorted_symbols.end(),
-              [&](const std::pair<const Symbol *, const Symbol *> &lhs, const std::pair<const Symbol *, const Symbol *> &rhs) {
+              [&](const auto &lhs, const auto &rhs) {
                   return lhs.first->get_name() < rhs.first->get_name();
               });
 
@@ -798,8 +788,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
             safe_assign(sym.st_name, strings.get(s->get_name()));
             safe_assign(sym.st_value, value);
             safe_assign(sym.st_size, s->get_size());
-            sym.set_type(s->get_type());
-            sym.set_binding(s->get_binding());
+            sym.set_binding_and_type(s->get_binding(), s->get_type());
             safe_assign(sym.st_other, s->get_visibility());
             sym.st_shndx = section_idxs[s->get_section()];
 
@@ -932,6 +921,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     uint16_t strtab_idx = write_section(strtab, 0);
 
     std::vector<Dyn<T>> dyn;
+    dyn.reserve(dependencies.size() + 16);
     auto make_dyn = [](int32_t tag, addr_t val) {
         Dyn<T> d;
         d.d_tag = tag;
@@ -1046,6 +1036,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
 
     return output;
 }
+}  // namespace
 
 std::vector<char> Object::write_shared_object(Linker *linker, const std::vector<std::string> &dependencies,
                                               const std::string &soname) {

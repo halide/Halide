@@ -26,6 +26,10 @@ namespace Halide {
  * human-readable form */
 std::ostream &operator<<(std::ostream &stream, const Expr &);
 
+/** Emit a tuple on an output stream (such as std::cout) in
+ * human-readable form */
+std::ostream &operator<<(std::ostream &stream, const Tuple &);
+
 /** Emit a halide type on an output stream (such as std::cout) in
  * human-readable form */
 std::ostream &operator<<(std::ostream &stream, const Type &);
@@ -41,7 +45,10 @@ std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
 std::ostream &operator<<(std::ostream &stream, const MemoryType &);
 
 /** Emit a halide tail strategy in human-readable form */
-std::ostream &operator<<(std::ostream &stream, const TailStrategy &t);
+std::ostream &operator<<(std::ostream &stream, const TailStrategy &);
+
+/** Emit a halide loop partitioning policy in human-readable form */
+std::ostream &operator<<(std::ostream &stream, const Partition &);
 
 /** Emit a halide LoopLevel in human-readable form */
 std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
@@ -54,6 +61,15 @@ namespace Internal {
 
 struct AssociativePattern;
 struct AssociativeOp;
+class Closure;
+struct Interval;
+struct ConstantInterval;
+struct ModulusRemainder;
+enum class IRNodeType;
+
+/** Emit a halide node type on an output stream (such as std::cout) in
+ * human-readable form */
+std::ostream &operator<<(std::ostream &stream, IRNodeType);
 
 /** Emit a halide associative pattern on an output stream (such as std::cout)
  * in a human-readable form */
@@ -86,10 +102,40 @@ std::ostream &operator<<(std::ostream &stream, const LinkageType &);
 /** Emit a halide dimension type in human-readable format */
 std::ostream &operator<<(std::ostream &stream, const DimType &);
 
+/** Emit a Closure in human-readable form */
+std::ostream &operator<<(std::ostream &out, const Closure &c);
+
+/** Emit an Interval in human-readable form */
+std::ostream &operator<<(std::ostream &out, const Interval &c);
+
+/** Emit a ConstantInterval in human-readable form */
+std::ostream &operator<<(std::ostream &out, const ConstantInterval &c);
+
+/** Emit a ModulusRemainder in human-readable form */
+std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c);
+
 struct Indentation {
     int indent;
 };
 std::ostream &operator<<(std::ostream &stream, const Indentation &);
+
+template<typename T>
+struct Ansi {
+    const T &cnt;
+    const char *open, *close;
+};
+
+template<typename T>
+std::ostream &operator<<(std::ostream &out, const Ansi<T> &a) {
+    if (a.open) {
+        out << a.open;
+    }
+    out << a.cnt;
+    if (a.close) {
+        out << a.close;
+    }
+    return out;
+}
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
@@ -109,6 +155,9 @@ public:
 
     /** emit a statement on the output stream */
     void print(const Stmt &);
+
+    /** emit a statement summary on the output stream */
+    void print_summary(const Stmt &);
 
     /** emit a comma delimited list of exprs, without any leading or
      * trailing punctuation. */
@@ -133,11 +182,54 @@ protected:
      * surrounding set of parens. */
     bool implicit_parens = false;
 
+    /** Print only a summary of a statement, with sub-statements replaced by
+     * ellipses (...). */
+    bool is_summary = false;
+
+    bool ansi = false;
+    int paren_depth = 0;
+
+    const char *ansi_hl = "";
+    const char *ansi_dim = "";
+    const char *ansi_kw = "";
+    const char *ansi_imm_int = "";
+    const char *ansi_imm_float = "";
+    const char *ansi_imm_str = "";
+    const char *ansi_var = "";
+    const char *ansi_buf = "";
+    const char *ansi_fn = "";
+    const char *ansi_type = "";
+    const char *ansi_reset_col = "";
+    const char *ansi_reset = "";
+
+    // clang-format off
+    template<typename T> Ansi<T> hl(const T &t);
+    template<typename T> Ansi<T> kw(const T &t);
+    template<typename T> Ansi<T> imm_int(const T &t);
+    template<typename T> Ansi<T> imm_float(const T &t);
+    template<typename T> Ansi<T> imm_str(const T &t);
+    template<typename T> Ansi<T> var(const T &t);
+    template<typename T> Ansi<T> buf(const T &t);
+    template<typename T> Ansi<T> fn(const T &t);
+    template<typename T> Ansi<T> type(const T &t);
+    template<typename T> Ansi<T> typep(const T &t);
+    template<typename T> Ansi<T> paren(const T &t, bool bold = true, int d = -1);
+    // clang-format on
+
     /** Either emits "(" or "", depending on the value of implicit_parens */
     void open();
 
     /** Either emits ")" or "", depending on the value of implicit_parens */
     void close();
+
+    /** Emits "(" always */
+    void openf();
+
+    /** Emits "name(" always */
+    void openf(const char *name);
+
+    /** Emits ")" always */
+    void closef();
 
     /** The symbols whose types can be inferred from values printed
      * already. */
@@ -146,11 +238,15 @@ protected:
     /** A helper for printing a chain of lets with line breaks */
     void print_lets(const Let *let);
 
+    /** A helper for printing a braced statement */
+    void print_braced_stmt(const Stmt &, int extra_indent = 2);
+
     void visit(const IntImm *) override;
     void visit(const UIntImm *) override;
     void visit(const FloatImm *) override;
     void visit(const StringImm *) override;
     void visit(const Cast *) override;
+    void visit(const Reinterpret *) override;
     void visit(const Variable *) override;
     void visit(const Add *) override;
     void visit(const Sub *) override;
@@ -192,7 +288,15 @@ protected:
     void visit(const VectorReduce *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
+    void visit(const HoistedStorage *) override;
 };
+
+/** Debugging helpers for LLDB */
+/// @{
+std::string lldb_string(const Expr &);
+std::string lldb_string(const Internal::BaseExprNode *);
+std::string lldb_string(const Stmt &);
+/// @}
 
 }  // namespace Internal
 }  // namespace Halide

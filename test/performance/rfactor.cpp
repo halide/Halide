@@ -269,11 +269,11 @@ int dot_product() {
     // Reference implementation
     Func dot_ref("dot_ref");
     dot_ref() = 0.0f;
-    dot_ref() += (A(r.x)) * B(r.x);
+    dot_ref() += A(r.x) * B(r.x);
 
     Func dot("dot");
     dot() = 0.0f;
-    dot() += (A(r.x)) * B(r.x);
+    dot() += A(r.x) * B(r.x);
     RVar rxo, rxi, rxio, rxii;
     dot.update().split(r.x, rxo, rxi, 4 * 8192);
 

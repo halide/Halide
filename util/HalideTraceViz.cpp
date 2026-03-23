@@ -105,36 +105,30 @@ struct fail {
 
 // -------------------------------------------------------------
 
-// Combine type-and-code into a single integer to avoid nested switches.
-// Must be constexpr to allow use in case clauses.
-inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return (((int)code) << 8) | bits;
-}
-
 template<typename T>
 T value_as(const halide_type_t &type, const halide_scalar_value_t &value) {
-    switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
-    case halide_type_code(halide_type_int, 8):
+    switch (type.element_of().as_u32()) {
+    case halide_type_t(halide_type_int, 8).as_u32():
         return (T)value.u.i8;
-    case halide_type_code(halide_type_int, 16):
+    case halide_type_t(halide_type_int, 16).as_u32():
         return (T)value.u.i16;
-    case halide_type_code(halide_type_int, 32):
+    case halide_type_t(halide_type_int, 32).as_u32():
         return (T)value.u.i32;
-    case halide_type_code(halide_type_int, 64):
+    case halide_type_t(halide_type_int, 64).as_u32():
         return (T)value.u.i64;
-    case halide_type_code(halide_type_uint, 1):
+    case halide_type_t(halide_type_uint, 1).as_u32():
         return (T)value.u.b;
-    case halide_type_code(halide_type_uint, 8):
+    case halide_type_t(halide_type_uint, 8).as_u32():
         return (T)value.u.u8;
-    case halide_type_code(halide_type_uint, 16):
+    case halide_type_t(halide_type_uint, 16).as_u32():
         return (T)value.u.u16;
-    case halide_type_code(halide_type_uint, 32):
+    case halide_type_t(halide_type_uint, 32).as_u32():
         return (T)value.u.u32;
-    case halide_type_code(halide_type_uint, 64):
+    case halide_type_t(halide_type_uint, 64).as_u32():
         return (T)value.u.u64;
-    case halide_type_code(halide_type_float, 32):
+    case halide_type_t(halide_type_float, 32).as_u32():
         return (T)value.u.f32;
-    case halide_type_code(halide_type_float, 64):
+    case halide_type_t(halide_type_float, 64).as_u32():
         return (T)value.u.f64;
     default:
         fail() << "Can't convert packet with type: " << (int)type.code << "bits: " << type.bits;
@@ -1181,9 +1175,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                     int frames_since_first_draw = (halide_clock - first_draw_clock) / state.globals.timestep;
                     if (frames_since_first_draw < label.fade_in_frames) {
                         uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.fade_in_frames);
-                        if (color > 255) {
-                            color = 255;
-                        }
+                        color = std::min<uint32_t>(color, 255);
                         color *= 0x10101;
                         surface->draw_text(label.text, label.pos, color, label.h_scale);
                         ++it;
@@ -1308,7 +1300,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                 Label l = label;
                 l.pos.x += fi.config.pos.x;
                 l.pos.y += fi.config.pos.y;
-                labels_being_drawn.emplace_back(l, halide_clock);
+                labels_being_drawn.emplace_back(l, (int)halide_clock);
             }
         }
 
@@ -1436,19 +1428,12 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         info() << dumps.str();
 
         // Print stats about the Func gleaned from the trace.
-        std::vector<std::pair<std::string, FuncInfo>> funcs;
-        for (const auto &p : state.funcs) {
-            funcs.emplace_back(p);
-        }
-        struct by_first_packet_idx {
-            bool operator()(const std::pair<std::string, FuncInfo> &a,
-                            const std::pair<std::string, FuncInfo> &b) const {
-                return a.second.stats.first_packet_idx < b.second.stats.first_packet_idx;
-            }
-        };
-        std::sort(funcs.begin(), funcs.end(), by_first_packet_idx());
-        for (std::pair<std::string, FuncInfo> p : funcs) {
-            p.second.stats.report();
+        std::vector<std::pair<std::string, FuncInfo>> funcs(state.funcs.begin(), state.funcs.end());
+        std::sort(funcs.begin(), funcs.end(), [](const auto &a, const auto &b) {
+            return a.second.stats.first_packet_idx < b.second.stats.first_packet_idx;
+        });
+        for (auto [_, func_info] : funcs) {
+            func_info.stats.report();
         }
     }
 

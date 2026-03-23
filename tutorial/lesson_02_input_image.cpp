@@ -24,7 +24,7 @@
 #include "halide_image_io.h"
 using namespace Halide::Tools;
 
-int main(int argc, char **argv) {
+int main() {
 
     // This program defines a single-stage imaging pipeline that
     // brightens an image.

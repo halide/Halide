@@ -33,6 +33,7 @@ define GEN_RULE
 $$(BIN)/%/resize_$(1).a: $$(GENERATOR_BIN)/resize.generator
 	@mkdir -p $$(@D)
 	$$^ -g resize -o $$(@D) -f resize_$(1) \
+	-e $(GENERATOR_OUTPUTS) \
 	target=$$*-no_runtime \
 	interpolation_type=$$$$(echo $(1) | cut -d_ -f1) \
 	input.type=$$$$(echo $(1) | cut -d_ -f2) \

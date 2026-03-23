@@ -38,7 +38,7 @@ public:
 
         if (c.count != correct) {
             printf("There were %d barriers. There were supposed to be %d\n", c.count, correct);
-            exit(-1);
+            exit(1);
         }
 
         return s;
@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
                 if (out(x, y) != correct) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, out(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
         f.update(1).gpu_threads(x, y);
         f.update(2).gpu_threads(x, y);
 
-        // There should be three thread barriers: one after the intial
+        // There should be three thread barriers: one after the initial
         // pure definition, one in between the
         // non-undef definitions, and one between f and g.
         g.add_custom_lowering_pass(new CheckBarrierCount(3));

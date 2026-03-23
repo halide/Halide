@@ -5,7 +5,7 @@
 
 // Round x up to a multiple of mask.
 // E.g., ALIGN(x, 16) means round x up to the nearest multiple of 16.
-#define ALIGN(x, mask) (((x) + (mask)-1) & ~((mask)-1))
+#define ALIGN(x, mask) (((x) + (mask) - 1) & ~((mask) - 1))
 
 LockedSurface *LockedSurface::lock(JNIEnv *env, jobject surface) {
     LockedSurface *output = new LockedSurface;

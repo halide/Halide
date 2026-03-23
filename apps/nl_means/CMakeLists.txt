@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(nl_means)
 
 enable_testing()
@@ -12,8 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(nl_means.generator nl_means_generator.cpp)
-target_link_libraries(nl_means.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(nl_means.generator SOURCES nl_means_generator.cpp)
 
 # Filters
 add_halide_library(nl_means FROM nl_means.generator)

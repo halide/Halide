@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
                out_buf.dim(0).min(), out_buf.dim(0).extent(),
                out_buf.dim(1).min(), out_buf.dim(1).extent());
 
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

@@ -5,7 +5,7 @@
 #include <set>
 #include <string>
 
-std::set<std::string> done;
+std::set<std::string> done, listed;
 
 void dump_header(const std::string &header) {
     if (done.find(header) != done.end()) {
@@ -16,6 +16,14 @@ void dump_header(const std::string &header) {
     if (header.find("runtime_internal") != std::string::npos) {
         fprintf(stdout, "#error \"COMPILING_HALIDE_RUNTIME should never be defined for Halide.h\"\n");
         return;
+    }
+
+    if (!listed.count(header)) {
+        fprintf(stderr, "Error: %s is transitively included by the files listed, "
+                        "but is not one of the files listed. The list of files that go "
+                        "into making Halide.h is stale.\n",
+                header.c_str());
+        abort();
     }
 
     FILE *f = fopen(header.c_str(), "r");
@@ -52,19 +60,19 @@ void dump_header(const std::string &header) {
     fclose(f);
 }
 
-int main(int argc, char **files) {
+int main(int argc, char **argv) {
 
     if (argc < 3) {
-        fprintf(stderr, "Usage: %s LICENSE.txt [headers...]\n", files[0]);
+        fprintf(stderr, "Usage: %s LICENSE.txt [headers...]\n", argv[0]);
         exit(1);
     }
 
     fprintf(stdout, "/* Halide.h -- interface for the 'Halide' library.\n\n");
 
     {
-        FILE *f = fopen(files[1], "r");
+        FILE *f = fopen(argv[1], "r");
         if (f == nullptr) {
-            fprintf(stderr, "Could not open %s.\n", files[1]);
+            fprintf(stderr, "Could not open %s.\n", argv[1]);
             exit(1);
         }
 
@@ -76,23 +84,29 @@ int main(int argc, char **files) {
         fclose(f);
     }
 
+    listed.insert(argv + 2, argv + argc);
+
     fprintf(stdout, "\n*/\n\n");
     fprintf(stdout, "#ifndef HALIDE_H\n");
     fprintf(stdout, "#define HALIDE_H\n\n");
 
-    for (int i = 2; i < argc; i++) {
-        dump_header(files[i]);
+    for (const auto &f : listed) {
+        dump_header(f);
     }
 
     fprintf(stdout, "\n");
     fprintf(stdout,
             "// Clean up macros used inside Halide headers\n"
+            "#ifndef HALIDE_KEEP_MACROS\n"
             "#undef user_assert\n"
             "#undef user_error\n"
             "#undef user_warning\n"
             "#undef internal_error\n"
             "#undef internal_assert\n"
             "#undef halide_runtime_error\n"
+            "#undef debug\n"
+            "#undef debug_is_active\n"
+            "#endif\n"
             "#endif  // HALIDE_H\n");
 
     return 0;

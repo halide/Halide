@@ -14,7 +14,7 @@ void check(Func f, ImageParam in, int min, int extent) {
     if (im.extent(0) != extent || im.min(0) != min) {
         printf("Inferred size was [%d, %d] instead of [%d, %d]\n",
                im.min(0), im.extent(0), min, extent);
-        exit(-1);
+        exit(1);
     }
 }
 

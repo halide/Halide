@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # Halide tutorial lesson 15: Generators part 2
 
 # This shell script demonstrates how to use a binary containing
@@ -13,23 +15,21 @@
 # bash lesson_15_generators_usage.sh
 
 # First we define a helper function that checks that a file exists
-check_file_exists()
-{
+check_file_exists() {
     FILE=$1
-    if [ ! -f $FILE ]; then
-        echo $FILE not found
-        exit -1
+    if [ ! -f "$FILE" ]; then
+        echo "$FILE" not found
+        exit 1
     fi
 }
 
 # And another helper function to check if a symbol exists in an object file
-check_symbol()
-{
+check_symbol() {
     FILE=$1
     SYM=$2
-    if !(nm $FILE | grep $SYM > /dev/null); then
+    if ! nm "$FILE" | grep "$SYM" >/dev/null; then
         echo "$SYM not found in $FILE"
-    exit -1
+        exit 1
     fi
 }
 
@@ -121,23 +121,23 @@ check_file_exists my_first_generator.stmt
 # The second generator has generator params, which can be specified on
 # the command-line after the target. Let's compile a few different variants:
 ./lesson_15_generate -g my_second_generator -f my_second_generator_1 -o . \
-target=host parallel=false scale=3.0 rotation=ccw output.type=uint16
+    target=host parallel=false scale=3.0 rotation=ccw output.type=uint16
 
 ./lesson_15_generate -g my_second_generator -f my_second_generator_2 -o . \
-target=host scale=9.0 rotation=ccw output.type=float32
+    target=host scale=9.0 rotation=ccw output.type=float32
 
 ./lesson_15_generate -g my_second_generator -f my_second_generator_3 -o . \
-target=host parallel=false output.type=float64
+    target=host parallel=false output.type=float64
 
 check_file_exists my_second_generator_1.a
 check_file_exists my_second_generator_1.h
-check_symbol      my_second_generator_1.a my_second_generator_1
+check_symbol my_second_generator_1.a my_second_generator_1
 check_file_exists my_second_generator_2.a
 check_file_exists my_second_generator_2.h
-check_symbol      my_second_generator_2.a my_second_generator_2
+check_symbol my_second_generator_2.a my_second_generator_2
 check_file_exists my_second_generator_3.a
 check_file_exists my_second_generator_3.h
-check_symbol      my_second_generator_3.a my_second_generator_3
+check_symbol my_second_generator_3.a my_second_generator_3
 
 # Use of these generated object files and headers is exactly the same
 # as in lesson 10.
@@ -155,19 +155,17 @@ echo "The halide runtime:"
 nm my_second_generator_1.a | grep "[SWT] _\?halide_"
 
 # Let's define some functions to check that the runtime exists in a file.
-check_runtime()
-{
-    if !(nm $1 | grep "[TSW] _\?halide_" > /dev/null); then
+check_runtime() {
+    if ! (nm "$1" | grep "[TSW] _\?halide_" >/dev/null); then
         echo "Halide runtime not found in $1"
-    exit -1
+        exit 1
     fi
 }
 
-check_no_runtime()
-{
-    if nm $1 | grep "[TSW] _\?halide_" > /dev/null; then
+check_no_runtime() {
+    if nm "$1" | grep "[TSW] _\?halide_" >/dev/null; then
         echo "Halide runtime found in $1"
-    exit -1
+        exit 1
     fi
 }
 
@@ -192,38 +190,34 @@ check_no_runtime()
 ./lesson_15_generate \
     -g my_first_generator \
     -f my_first_generator_basic \
-    -e object,c_header\
-    -o . \
-    target=host-x86-64-no_runtime
+    -e object,c_header -o . \
+    target=x86-64-linux-no_runtime
 
 ./lesson_15_generate \
     -g my_first_generator \
     -f my_first_generator_sse41 \
-    -e object,c_header\
-    -o . \
-    target=host-x86-64-sse41-no_runtime
+    -e object,c_header -o . \
+    target=x86-64-linux-sse41-no_runtime
 
 ./lesson_15_generate \
     -g my_first_generator \
     -f my_first_generator_avx \
-    -e object,c_header\
-    -o . \
-    target=host-x86-64-avx-no_runtime
+    -e object,c_header -o . \
+    target=x86-64-linux-avx-no_runtime
 
 # These files don't contain the runtime
 check_no_runtime my_first_generator_basic.o
-check_symbol     my_first_generator_basic.o my_first_generator_basic
+check_symbol my_first_generator_basic.o my_first_generator_basic
 check_no_runtime my_first_generator_sse41.o
-check_symbol     my_first_generator_sse41.o my_first_generator_sse41
+check_symbol my_first_generator_sse41.o my_first_generator_sse41
 check_no_runtime my_first_generator_avx.o
-check_symbol     my_first_generator_avx.o my_first_generator_avx
+check_symbol my_first_generator_avx.o my_first_generator_avx
 
 # We can then use the generator to emit just the runtime:
 ./lesson_15_generate \
     -r halide_runtime_x86 \
-    -e object,c_header\
-    -o . \
-    target=host-x86-64
+    -e object,c_header -o . \
+    target=x86-64-linux
 check_runtime halide_runtime_x86.o
 
 # Linking the standalone runtime with the three generated object files
@@ -237,8 +231,8 @@ ar q my_first_generator_multi.a \
     halide_runtime_x86.o
 
 check_runtime my_first_generator_multi.a
-check_symbol  my_first_generator_multi.a my_first_generator_basic
-check_symbol  my_first_generator_multi.a my_first_generator_sse41
-check_symbol  my_first_generator_multi.a my_first_generator_avx
+check_symbol my_first_generator_multi.a my_first_generator_basic
+check_symbol my_first_generator_multi.a my_first_generator_sse41
+check_symbol my_first_generator_multi.a my_first_generator_avx
 
 echo "Success!"

@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
             if (out(i) != correct) {
                 printf("out(%d) = %d instead of %d\n",
                        i, out(i), correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 256; i++) {
             if (out(i) != i) {
                 printf("Error: after sorting, out(%d) was %d instead of %d\n", i, out(i), i);
-                return -1;
+                return 1;
             }
         }
     }

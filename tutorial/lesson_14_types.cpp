@@ -17,14 +17,14 @@
 // source tree.
 
 #include "Halide.h"
-#include <stdio.h>
+#include <cstdio>
 using namespace Halide;
 
 // This function is used to demonstrate generic code at the end of
 // this lesson.
 Expr average(Expr a, Expr b);
 
-int main(int argc, char **argv) {
+int main() {
 
     // All Exprs have a scalar type, and all Funcs evaluate to one or
     // more scalar types. The scalar types in Halide are unsigned
@@ -79,12 +79,12 @@ int main(int argc, char **argv) {
         // You can also query any defined Func for the types it produces.
         Func f1;
         f1(x) = cast<uint8_t>(x);
-        assert(f1.output_types()[0] == UInt(8));
+        assert(f1.types()[0] == UInt(8));
 
         Func f2;
         f2(x) = {x, sin(x)};
-        assert(f2.output_types()[0] == Int(32) &&
-               f2.output_types()[1] == Float(32));
+        assert(f2.types()[0] == Int(32) &&
+               f2.types()[1] == Float(32));
     }
 
     // Type promotion rules.
@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
         // 2) If the types are the same, then no type conversions occur.
         for (Type t : valid_halide_types) {
             // Skip the handle type.
-            if (t.is_handle()) continue;
+            if (t.is_handle()) { continue; }
             Expr e = cast(t, x);
             assert((e + e).type() == e.type());
         }

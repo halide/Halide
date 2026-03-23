@@ -9,7 +9,7 @@ Var::Var(const std::string &n)
 }
 
 Var::Var()
-    : e(Internal::Variable::make(Int(32), Internal::make_entity_name(this, "Halide:.*:Var", 'v'))) {
+    : e(Internal::Variable::make(Int(32), Internal::unique_name('v'))) {
 }
 
 Var Var::implicit(int n) {

@@ -22,8 +22,12 @@ function(add_autoscheduler)
                           OUTPUT_NAME autoschedule_${name_lower})
 endfunction()
 
+## Autoschedulers must always be built for the same target as libHalide.
+set(Halide_TARGET cmake)
+
 add_subdirectory(common)
 
 add_subdirectory(adams2019)
 add_subdirectory(li2018)
 add_subdirectory(mullapudi2016)
+add_subdirectory(anderson2021)

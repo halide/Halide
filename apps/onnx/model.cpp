@@ -6,9 +6,10 @@
 #include "common_types.h"
 #include "denormal_disabler.h"
 #include "onnx_converter.h"
+#include <chrono>
 #include <fstream>
+#include <limits>
 #include <random>
-#include <sys/time.h>
 #include <unordered_set>
 
 namespace py = pybind11;
@@ -20,7 +21,9 @@ HalideModel convert_onnx_model(
     const std::unordered_map<std::string, int> &expected_dim_sizes,
     const IOLayout layout) {
     onnx::ModelProto onnx_model;
-    onnx_model.ParseFromString(onnx_model_str);
+    if (!onnx_model.ParseFromString(onnx_model_str)) {
+        throw std::invalid_argument("Failed to parse the ONNX model");
+    }
 
     if (onnx_model.graph().output_size() == 0) {
         throw std::invalid_argument("No output specified in the model");
@@ -65,20 +68,60 @@ HalideModel convert_onnx_model(
 std::string auto_schedule(const HalideModel &pipeline) {
     // Generate a schedule for the pipeline.
     Halide::Target tgt = Halide::get_host_target();
-    auto schedule = pipeline.rep->auto_schedule(tgt);
+    Halide::AutoschedulerParams autoscheduler_params = Halide::AutoschedulerParams("Adams2019");
+    auto schedule = pipeline.rep->apply_autoscheduler(tgt, autoscheduler_params);
     return schedule.schedule_source;
 }
 
 template<typename T>
 struct Distribution {
-    typedef typename std::conditional<
+    using Type = typename std::conditional<
         std::is_floating_point<T>::value,
         std::uniform_real_distribution<T>,
-        std::uniform_int_distribution<T>>::type Type;
+        std::uniform_int_distribution<T>>::type;
+
+    T operator()(std::mt19937 &generator) {
+        return distrib(generator);
+    }
+
+private:
+    Type distrib;
 };
+
 template<>
 struct Distribution<bool> {
-    typedef typename std::uniform_int_distribution<uint8_t> Type;
+    using Type = std::bernoulli_distribution;
+
+    bool operator()(std::mt19937 &generator) {
+        return distrib(generator);
+    }
+
+private:
+    Type distrib = Type(0.5);
+};
+
+template<>
+struct Distribution<std::int8_t> {
+    using Type = std::uniform_int_distribution<int>;
+
+    std::int8_t operator()(std::mt19937 &generator) {
+        return static_cast<std::int8_t>(distrib(generator));
+    }
+
+private:
+    Type distrib = Type(0, std::numeric_limits<std::int8_t>::max());
+};
+
+template<>
+struct Distribution<std::uint8_t> {
+    using Type = std::uniform_int_distribution<unsigned int>;
+
+    std::uint8_t operator()(std::mt19937 &generator) {
+        return static_cast<std::uint8_t>(distrib(generator));
+    }
+
+private:
+    Type distrib = Type(0, std::numeric_limits<std::uint8_t>::max());
 };
 
 template<typename T>
@@ -91,7 +134,7 @@ void prepare_random_image_param(
     std::vector<int> dims(shape.size());
     std::iota(dims.rbegin(), dims.rend(), 0);
     values.transpose(dims);
-    typename Distribution<T>::Type distrib;
+    Distribution<T> distrib;
     std::mt19937 generator;
     values.for_each_value([&](T &val) { val = distrib(generator); });
     image_param.set(values);
@@ -125,7 +168,7 @@ void prepare_py_array_input(
         input_shape.push_back(ndarray.shape(i));
     }
     // Make sure the input is contiguous.
-    int stride = ndarray.itemsize();
+    int stride = ndarray.request().itemsize;
     for (int i = rank - 1; i >= 0; --i) {
         if (stride != ndarray.strides(i)) {
             throw std::invalid_argument(
@@ -173,7 +216,7 @@ void prepare_random_input(
     const Tensor &t = pipeline.model->tensors.at(input_name);
     std::vector<int> input_shape;
     for (int i = 0; i < t.shape.size(); ++i) {
-        const int64_t *dim = Halide::Internal::as_const_int(t.shape[i]);
+        auto dim = Halide::Internal::as_const_int(t.shape[i]);
         if (!dim) {
             // The dimension isn't fixed: use the estimated typical value instead if
             // one was provided.
@@ -344,8 +387,6 @@ std::vector<py::array> run(
     }
     Halide::Realization real(outputs);
     Halide::Target tgt = Halide::get_host_target();
-    // Don't allow LLVM to mess with the code.
-    tgt.set_feature(Halide::Target::DisableLLVMLoopOpt, true);
     // Don't create buffers larger than 2GB since we use 32bit signed indices to
     // index the data stored in them.
     tgt.set_feature(Halide::Target::LargeBuffers, false);
@@ -437,7 +478,7 @@ double benchmark(
     CacheEvictor cache_evictor;
 
     // Generate random value for every input
-    for (ssize_t i = 0; i < pipeline.model->inputs.size(); ++i) {
+    for (size_t i = 0; i < pipeline.model->inputs.size(); ++i) {
         const std::string &input_name = pipeline.input_names[i];
         prepare_random_input(pipeline, input_name);
     }
@@ -461,8 +502,6 @@ double benchmark(
 
     Halide::Realization real(outputs);
     Halide::Target tgt = Halide::get_host_target();
-    // Don't allow LLVM to mess with the code.
-    tgt.set_feature(Halide::Target::DisableLLVMLoopOpt, true);
     // Don't create buffers larger than 2GB since we use 32bit signed indices to
     // index the data stored in them.
     tgt.set_feature(Halide::Target::LargeBuffers, false);
@@ -472,29 +511,28 @@ double benchmark(
     pipeline.rep->realize(real, tgt);
 
     // Now benchmark by computing the value of the outputs num_iter times
-    struct timespec start;
-    struct timespec end;
-    clock_gettime(CLOCK_REALTIME, &start);
+    using clock = std::chrono::high_resolution_clock;
+    auto start = clock::now();
     for (int i = 0; i < num_iters; ++i) {
         // Increment the coefficients store in the cache evictor: this ensures that
         // all the data left in caches from the previous iteration is flushed out.
         cache_evictor.flush_caches();
         pipeline.rep->realize(real, tgt);
     }
-    clock_gettime(CLOCK_REALTIME, &end);
+    auto end = clock::now();
 
     double total_runtime =
-        (end.tv_sec - start.tv_sec) * 1e9 + end.tv_nsec - start.tv_nsec;
+        std::chrono::duration<double, std::nano>(end - start).count();
 
     // Figure out how long it took to generate new inputs at every iteration
     // and adjust the runtime accordingly.
-    clock_gettime(CLOCK_REALTIME, &start);
+    start = clock::now();
     for (int i = 0; i < num_iters; ++i) {
         cache_evictor.flush_caches();
     }
-    clock_gettime(CLOCK_REALTIME, &end);
+    end = clock::now();
     double input_gen_time =
-        (end.tv_sec - start.tv_sec) * 1e9 + end.tv_nsec - start.tv_nsec;
+        std::chrono::duration<double, std::nano>(end - start).count();
 
     total_runtime -= input_gen_time;
 
@@ -532,7 +570,8 @@ void print_loop_nest(const HalideModel &pipeline) {
 }
 
 void print_lowered_statement(const HalideModel &pipeline) {
-    std::string tmp_file = std::tmpnam(nullptr);
+    Halide::Internal::TemporaryFile f("model", ".stmt");
+    std::string tmp_file = f.pathname();
     pipeline.rep->compile_to_lowered_stmt(
         tmp_file, pipeline.rep->infer_arguments());
     std::ifstream is(tmp_file);
@@ -540,12 +579,16 @@ void print_lowered_statement(const HalideModel &pipeline) {
     while (std::getline(is, line)) {
         std::cout << line << "\n";
     }
-    std::remove(tmp_file.c_str());
 }
 
 }  // namespace
 
 PYBIND11_MODULE(model_cpp, m) {
+    if (const auto autoscheduler = Halide::Internal::get_env_variable("MODEL_AUTOSCHEDULER");
+        !autoscheduler.empty()) {
+        Halide::load_plugin(autoscheduler);
+    }
+
     py::class_<HalideModel>(m, "HalideModel");
 
     py::enum_<IOLayout>(m, "Layout")

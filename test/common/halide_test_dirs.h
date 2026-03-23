@@ -5,6 +5,7 @@
 // include Halide.h
 
 #include <cassert>
+#include <stdlib.h>
 #include <string>
 
 #ifdef _WIN32

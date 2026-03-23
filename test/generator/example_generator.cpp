@@ -81,7 +81,7 @@ public:
         runtime_factor.set_estimate(1);
         output.set_estimates({{0, 32}, {0, 32}, {0, 3}});
 
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             output
                 .bound(c, 0, channels)
                 .reorder(c, x, y)

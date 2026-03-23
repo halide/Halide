@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a) {
                     printf("result(%d, %d) = (%d) instead of (%d)\n",
                            x, y, a(x, y), correct_a);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
                     if (a(x, i, j) != correct_a || b(x, i, j) != correct_b) {
                         printf("result(%d, %d, %d) = (%d, %d) instead of (%d, %d)\n",
                                x, i, j, a(x, i, j), b(x, i, j), correct_a, correct_b);
-                        return -1;
+                        return 1;
                     }
                 }
             }
@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a) {
                     printf("result(%d, %d) = (%d) instead of (%d)\n",
                            x, y, a(x, y), correct_a);
-                    return -1;
+                    return 1;
                 }
             }
         }

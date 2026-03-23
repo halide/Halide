@@ -25,8 +25,8 @@ int main() {
         const float16_t zeroPFromDouble(0.0);
         const float16_t zeroPFromInt(0);
         h_assert(zeroDefaultConstructor.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
-        h_assert(zeroPFromFloat.to_bits() == zeroP.to_bits(), "Mistmatch between constructors");
-        h_assert(zeroPFromDouble.to_bits() == zeroP.to_bits(), "Mistmatch between constructors");
+        h_assert(zeroPFromFloat.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
+        h_assert(zeroPFromDouble.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
         h_assert(zeroPFromInt.to_bits() == zeroP.to_bits(), "make_from_signed_int gave wrong value");
 
         // Check the representation
@@ -77,9 +77,9 @@ int main() {
         // Try converting to native float types
         float infinityPf = (float)infinityP;
         double infinityPd = (double)infinityP;
-        h_assert(std::isinf(infinityPf) & !std::signbit(infinityPf),
+        h_assert(std::isinf(infinityPf) && !std::signbit(infinityPf),
                  "positive infinity conversion to float invalid");
-        h_assert(std::isinf(infinityPd) & !std::signbit(infinityPd),
+        h_assert(std::isinf(infinityPd) && !std::signbit(infinityPd),
                  "positive infinity conversion to double invalid");
     }
 
@@ -101,9 +101,9 @@ int main() {
         // Try converting to native float types
         float infinityNf = (float)infinityN;
         double infinityNd = (double)infinityN;
-        h_assert(std::isinf(infinityNf) & std::signbit(infinityNf),
+        h_assert(std::isinf(infinityNf) && std::signbit(infinityNf),
                  "negative infinity conversion to float invalid");
-        h_assert(std::isinf(infinityNd) & std::signbit(infinityNd),
+        h_assert(std::isinf(infinityNd) && std::signbit(infinityNd),
                  "negative infinity conversion to double invalid");
     }
 
@@ -155,7 +155,7 @@ int main() {
         const float16_t v(test.val);
         if (v.to_bits() != test.bits) {
             printf("Rounding error: %f -> %u instead of %u\n", test.val, v.to_bits(), test.bits);
-            return -1;
+            return 1;
         }
     }
 

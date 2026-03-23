@@ -6,11 +6,12 @@
 #include "IROperator.h"
 #include "Lerp.h"
 #include "Simplify.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
 
-Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight) {
+Expr lower_lerp(Type final_type, Expr zero_val, Expr one_val, const Expr &weight, const Target &target) {
 
     Expr result;
 
@@ -134,19 +135,24 @@ Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight) {
             case 8:
             case 16:
             case 32: {
-                Expr zero_expand = Cast::make(UInt(2 * bits, computation_type.lanes()),
-                                              zero_val);
-                Expr one_expand = Cast::make(UInt(2 * bits, one_val.type().lanes()),
-                                             one_val);
-
-                Expr rounding = Cast::make(UInt(2 * bits), 1) << Cast::make(UInt(2 * bits), (bits - 1));
-                Expr divisor = Cast::make(UInt(2 * bits), 1) << Cast::make(UInt(2 * bits), bits);
-
-                Expr prod_sum = zero_expand * inverse_typed_weight +
-                                one_expand * typed_weight + rounding;
-                Expr divided = ((prod_sum / divisor) + prod_sum) / divisor;
-
-                result = Cast::make(UInt(bits, computation_type.lanes()), divided);
+                Expr prod_sum = (widening_mul(zero_val, inverse_typed_weight) +
+                                 widening_mul(one_val, typed_weight));
+                // Now we need to do a rounding divide and narrow. For
+                // 8-bit, this rounding divide looks like (x + 127) /
+                // 255. On most platforms it's we can compute this as
+                // ((x + 128) / 256 + x + 128) / 256. Note that
+                // overflow is impossible here because the most our
+                // prod_sum can be is 255^2.
+                if (target.arch == Target::X86) {
+                    // On x86 we have no rounding shifts but we do
+                    // have a multiply-keep-high-half. So it's
+                    // actually one instruction cheaper to do the
+                    // division directly.
+                    Expr divisor = cast(UInt(bits), -1);
+                    result = (prod_sum + divisor / 2) / divisor;
+                } else {
+                    result = rounding_shift_right(rounding_shift_right(prod_sum, bits) + prod_sum, bits);
+                }
                 break;
             }
             case 64:
@@ -158,11 +164,22 @@ Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight) {
             default:
                 break;
             }
+
+            if (weight.type().is_float()) {
+                // Insert an explicit cast to the computation type, even if
+                // we're going to widen, because out-of-range floats can produce
+                // out-of-range outputs.
+                result = Cast::make(computation_type, result);
+            }
         }
 
         if (!is_const_zero(bias_value)) {
             result = Cast::make(result_type, result + bias_value);
         }
+    }
+
+    if (result.type() != final_type) {
+        result = Cast::make(final_type, result);
     }
 
     return simplify(common_subexpression_elimination(result));

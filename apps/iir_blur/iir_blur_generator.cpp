@@ -51,6 +51,8 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
             blur.compute_at(transpose, yo);
 
             // Vectorize computations within the strips.
+            blur.update(0)
+                .unscheduled();
             blur.update(1)
                 .reorder(x, ry)
                 .vectorize(x);
@@ -133,25 +135,33 @@ class IirBlur : public Generator<IirBlur> {
 public:
     // This is the input image: a 3D (color) image with 32 bit float
     // pixels.
-    Input<Buffer<float>> input{"input", 3};
+    Input<Buffer<float, 3>> input{"input"};
     // The filter coefficient, alpha is the weight of the input to the
     // filter.
     Input<float> alpha{"alpha"};
 
-    Output<Buffer<float>> output{"output", 3};
+    Output<Buffer<float, 3>> output{"output"};
 
     void generate() {
         Expr width = input.width();
         Expr height = input.height();
 
         // First, blur the columns of the input.
-        Func blury_T = blur_cols_transpose(input, height, alpha, auto_schedule, get_target());
+        Func blury_T = blur_cols_transpose(input, height, alpha, using_autoscheduler(), get_target());
 
         // Blur the columns again (the rows of the original).
-        Func blur = blur_cols_transpose(blury_T, width, alpha, auto_schedule, get_target());
+        Func blur = blur_cols_transpose(blury_T, width, alpha, using_autoscheduler(), get_target());
 
         // Scheduling is done inside blur_cols_transpose.
         output = blur;
+
+        // Hardcode all CPU/GPU kernel bounds via Halide's constant bound propagation.
+        input.dim(0).set_bounds(0, 1536).set_stride(1);
+        input.dim(1).set_bounds(0, 2560).set_stride(1536);
+        input.dim(2).set_bounds(0, 3).set_stride(1536 * 2560);
+        output.dim(0).set_bounds(0, 1536).set_stride(1);
+        output.dim(1).set_bounds(0, 2560).set_stride(1536);
+        output.dim(2).set_bounds(0, 3).set_stride(1536 * 2560);
 
         // Estimates
         {

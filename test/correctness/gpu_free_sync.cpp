@@ -14,7 +14,8 @@ int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
 
     if (t.has_feature(Target::OpenCL) ||
-        t.has_feature(Target::CUDA)) {
+        t.has_feature(Target::CUDA) ||
+        t.has_feature(Target::WebGPU)) {
         f.gpu_tile(x, y, xi, yi, 16, 16);
 
         // This allocates a buffer, does gpu compute into it, and then

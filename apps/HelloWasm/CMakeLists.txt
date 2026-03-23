@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(HelloWasm)
 
 enable_testing()
@@ -10,18 +10,14 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 set(halide_includes "$<TARGET_PROPERTY:Halide::Runtime,INTERFACE_INCLUDE_DIRECTORIES>")
 
-find_program(EMCC emcc HINTS "$ENV{EMSDK}/upstream/emscripten")
-if (NOT EMCC)
-    message(FATAL_ERROR "Could not find emscripten/emcc!")
-endif ()
+find_program(EMCC emcc REQUIRED HINTS "$ENV{EMSDK}/upstream/emscripten")
 
 configure_file(index.html index.html COPYONLY)
 
 set(EMCC_FLAGS -s WASM=1 -s USE_SDL=2 -s TOTAL_MEMORY=512MB -O3)
 set(EMCC_FLAGS_threads -pthread -matomics)
 
-add_executable(reaction_diffusion_generator reaction_diffusion_generator.cpp)
-target_link_libraries(reaction_diffusion_generator PRIVATE Halide::Generator)
+add_halide_generator(reaction_diffusion_generator SOURCES reaction_diffusion_generator.cpp)
 
 set(features_simd -wasm_simd128)
 set(features_threads -wasm_threads)

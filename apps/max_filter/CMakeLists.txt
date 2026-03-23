@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(max_filter)
 
 enable_testing()
@@ -12,14 +12,14 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(max_filter.generator max_filter_generator.cpp)
-target_link_libraries(max_filter.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(max_filter.generator SOURCES max_filter_generator.cpp)
 
 # Filters
 add_halide_library(max_filter FROM max_filter.generator)
 add_halide_library(max_filter_auto_schedule FROM max_filter.generator
                    GENERATOR max_filter
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(max_filter_filter filter.cpp)

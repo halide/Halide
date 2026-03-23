@@ -4,19 +4,13 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 // An extern stage implemented by a Halide pipeline running
 // either on host or device. The outer Halide filter must
 // override the "device_api" parameter of Func::define_extern
 // when using the extern_stage on device.
-extern "C" DLLEXPORT int extern_stage(int extern_on_device,
-                                      int outer_filter_on_device,
-                                      halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int extern_stage(int extern_on_device,
+                                                 int outer_filter_on_device,
+                                                 halide_buffer_t *out) {
     if (!out->is_bounds_query()) {
         if (extern_on_device > 0 && outer_filter_on_device > 0) {
             // If both the extern and the outer filter are on running on
@@ -82,14 +76,14 @@ int main(int argc, char **argv) {
 
             Buffer<int32_t> output = sink.realize({100, 100});
 
-            // Should be all zeroes.
+            // Should be all zeros.
             RDom r(output);
             uint32_t error = evaluate_may_gpu<uint32_t>(sum(abs(output(r.x, r.y))));
             if (error != 0) {
                 printf("Something went wrong when "
                        "extern_on_device=%d, sink_on_device=%d \n",
                        extern_on_device, sink_on_device);
-                return -1;
+                return 1;
             }
         }
     }

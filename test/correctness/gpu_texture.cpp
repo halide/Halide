@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
                 int correct = 2 * x + 10;
                 if (out(x) != correct) {
                     printf("out[1D][%d](%d) = %d instead of %d\n", (int)memory_type, x, out(x), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
                 int correct = 3 * x + 10;
                 if (out(x) != correct) {
                     printf("out[2D][%d](%d) = %d instead of %d\n", (int)memory_type, x, out(x), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
                 int correct = 4 * x + 10;
                 if (out(x) != correct) {
                     printf("out[3D][%d](%d) = %d instead of %d\n", (int)memory_type, x, out(x), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
                 int correct = 2 * x + 10;
                 if (out(x) != correct) {
                     printf("out[1D-shift][%d](%d) = %d instead of %d\n", (int)memory_type, x, out(x), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }

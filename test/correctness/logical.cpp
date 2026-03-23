@@ -12,6 +12,14 @@ Expr u16(Expr a) {
 }
 
 int main(int argc, char **argv) {
+    // LLVM 21 calls getFixedValue() on scalable TypeSize objects in the
+    // AArch64 backend, triggering an assertion. Fixed in LLVM 22 by:
+    // https://github.com/llvm/llvm-project/commit/d1500d12be60 (PR #169764)
+    if (Internal::get_llvm_version() < 220 &&
+        get_jit_target_from_environment().has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM 21 has known getFixedValue() assertion failures on SVE scalable types.\n");
+        return 0;
+    }
 
     Buffer<uint8_t> input(128, 64);
 
@@ -31,9 +39,7 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
-            if (!target.has_feature(Target::OpenGLCompute)) {
-                f.vectorize(xi, 4);
-            }
+            f.vectorize(xi, 4);
         } else if (target.has_feature(Target::HVX)) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -49,7 +55,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -67,9 +73,7 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
-            if (!target.has_feature(Target::OpenGLCompute)) {
-                f.vectorize(xi, 4);
-            }
+            f.vectorize(xi, 4);
         } else if (target.has_feature(Target::HVX)) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -86,7 +90,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -101,9 +105,7 @@ int main(int argc, char **argv) {
 
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
-            if (!target.has_feature(Target::OpenGLCompute)) {
-                f.vectorize(xi, 4);
-            }
+            f.vectorize(xi, 4);
         } else if (target.has_feature(Target::HVX)) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -118,7 +120,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = cond ? 0 : input(x, y);
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -133,9 +135,7 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
-            if (!target.has_feature(Target::OpenGLCompute)) {
-                f.vectorize(xi, 4);
-            }
+            f.vectorize(xi, 4);
         } else if (target.has_feature(Target::HVX)) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -193,9 +193,7 @@ int main(int argc, char **argv) {
             }
             if (target.has_gpu_feature()) {
                 gpu.gpu_tile(x, y, xi, yi, 16, 16);
-                if (!target.has_feature(Target::OpenGLCompute)) {
-                    gpu.vectorize(xi, 4);
-                }
+                gpu.vectorize(xi, 4);
             } else if (target.has_feature(Target::HVX)) {
                 gpu.hexagon().vectorize(x, 128);
             } else {
@@ -212,7 +210,7 @@ int main(int argc, char **argv) {
                     if (cpu_output(x, y) != gpu_output(x, y)) {
                         fprintf(stderr, "gpu_output(%d, %d) = %d instead of %d for uint%d -> uint%d\n",
                                 x, y, gpu_output(x, y), cpu_output(x, y), n, w);
-                        return -1;
+                        return 1;
                     }
                 }
             }

@@ -50,6 +50,9 @@ extern int halide_hexagon_detach_device_handle(void *user_context, struct halide
 extern void *halide_hexagon_get_device_handle(void *user_context, struct halide_buffer_t *buf);
 extern uint64_t halide_hexagon_get_device_size(void *user_context, struct halide_buffer_t *buf);
 
+/** Return a pointer to the module_state. */
+extern void *halide_hexagon_get_module_state(void *user_context, void **host);
+
 /** Power HVX on and off. Calling a Halide pipeline will do this
  * automatically on each pipeline invocation; however, it costs a
  * small but possibly significant amount of time for short running

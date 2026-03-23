@@ -37,6 +37,14 @@ Expr IRMutator::visit(const Cast *op) {
     return Cast::make(op->type, std::move(value));
 }
 
+Expr IRMutator::visit(const Reinterpret *op) {
+    Expr value = mutate(op->value);
+    if (value.same_as(op->value)) {
+        return op;
+    }
+    return Reinterpret::make(op->type, std::move(value));
+}
+
 namespace {
 template<typename T>
 Expr mutate_binary_operator(IRMutator *mutator, const T *op) {
@@ -194,15 +202,15 @@ Stmt IRMutator::visit(const ProducerConsumer *op) {
 
 Stmt IRMutator::visit(const For *op) {
     Expr min = mutate(op->min);
-    Expr extent = mutate(op->extent);
+    Expr max = mutate(op->max);
     Stmt body = mutate(op->body);
     if (min.same_as(op->min) &&
-        extent.same_as(op->extent) &&
+        max.same_as(op->max) &&
         body.same_as(op->body)) {
         return op;
     }
-    return For::make(op->name, std::move(min), std::move(extent),
-                     op->for_type, op->device_api, std::move(body));
+    return For::make(op->name, std::move(min), std::move(max),
+                     op->for_type, op->partition_policy, op->device_api, std::move(body));
 }
 
 Stmt IRMutator::visit(const Store *op) {
@@ -243,7 +251,7 @@ Stmt IRMutator::visit(const Allocate *op) {
     }
     return Allocate::make(op->name, op->type, op->memory_type,
                           new_extents, std::move(condition),
-                          std::move(body), std::move(new_expr), op->free_function);
+                          std::move(body), std::move(new_expr), op->free_function, op->padding);
 }
 
 Stmt IRMutator::visit(const Free *op) {
@@ -362,22 +370,44 @@ Stmt IRMutator::visit(const Atomic *op) {
     }
 }
 
-Stmt IRGraphMutator::mutate(const Stmt &s) {
-    auto p = stmt_replacements.emplace(s, Stmt());
-    if (p.second) {
-        // N.B: Inserting into a map (as the recursive mutate call
-        // does), does not invalidate existing iterators.
-        p.first->second = IRMutator::mutate(s);
+Stmt IRMutator::visit(const HoistedStorage *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return HoistedStorage::make(op->name,
+                                    std::move(body));
     }
-    return p.first->second;
+}
+
+Stmt IRGraphMutator::mutate(const Stmt &s) {
+    if (s.is_sole_reference()) {
+        // There's no point in caching mutations of this Stmt. We can never
+        // possibly see it again, and it can't be in the cache already if this
+        // is the sole reference. Doing this here and in the Expr mutate method
+        // below speeds up lowering by about 5%
+        return IRMutator::mutate(s);
+    } else {
+        auto p = stmt_replacements.emplace(s, Stmt());
+        if (p.second) {
+            // N.B: Inserting into a map (as the recursive mutate call
+            // does), does not invalidate existing iterators.
+            p.first->second = IRMutator::mutate(s);
+        }
+        return p.first->second;
+    }
 }
 
 Expr IRGraphMutator::mutate(const Expr &e) {
-    auto p = expr_replacements.emplace(e, Expr());
-    if (p.second) {
-        p.first->second = IRMutator::mutate(e);
+    if (e.is_sole_reference()) {
+        return IRMutator::mutate(e);
+    } else {
+        auto p = expr_replacements.emplace(e, Expr());
+        if (p.second) {
+            p.first->second = IRMutator::mutate(e);
+        }
+        return p.first->second;
     }
-    return p.first->second;
 }
 
 std::pair<std::vector<Expr>, bool> IRMutator::mutate_with_changes(const std::vector<Expr> &old_exprs) {

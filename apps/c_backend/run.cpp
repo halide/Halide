@@ -37,7 +37,7 @@ extern "C" int an_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
 }
 
 int main(int argc, char **argv) {
-    Buffer<uint16_t> in(1432, 324);
+    Buffer<uint16_t, 2> in(1432, 324);
 
     for (int y = 0; y < in.height(); y++) {
         for (int x = 0; x < in.width(); x++) {
@@ -45,8 +45,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    Buffer<uint16_t> out_native(423, 633);
-    Buffer<uint16_t> out_c(423, 633);
+    Buffer<uint16_t, 2> out_native(423, 633);
+    Buffer<uint16_t, 2> out_c(423, 633);
 
     pipeline_native(in, out_native);
 

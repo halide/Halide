@@ -43,17 +43,17 @@ public:
     GeneratorParam<int> unroll_reduction_{"unroll_reduction", 4};
 
     // Unsigned 8-bit input tensor, indexed by c, x, y, b.
-    Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<Buffer<uint8_t, 4>> input_{"input"};
     Input<uint8_t> input_zero_{"input_zero"};
 
     // A 6D array of filter coefficients indexed by ci % n, co % k, ci / n, co / k, x, y,
     // where n = vector_reduction and k = accum_vector_size (below).
-    Input<Buffer<>> filter_{"filter", 6};
+    Input<Buffer<void, 6>> filter_{"filter"};
     Input<uint8_t> filter_zero_{"filter_zero"};
 
     // A 1D array of 32-bit biases. The bias should be added to the c
     // dimension of the output.
-    Input<Buffer<int32_t>> bias_{"bias", 1};
+    Input<Buffer<int32_t, 1>> bias_{"bias"};
 
     // The stride specifies how the input [x, y] is sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
@@ -70,7 +70,7 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
-    Output<Buffer<>> output_{"output", 4};
+    Output<Buffer<void, 4>> output_{"output"};
 
     void configure() {
         if (use_8bit_multiply(target)) {
@@ -321,13 +321,13 @@ public:
 // The above generator expects the filter to already be tiled into
 class TileConvFilter : public Generator<TileConvFilter> {
 public:
-    Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<Buffer<uint8_t, 4>> input_{"input"};
     Input<uint8_t> input_zero_{"input_zero"};
     Input<uint8_t> output_zero_{"output_zero"};
 
     // 6D array of filter coefficients indexed by ci % n, co % k, ci / n, co / k, x, y,
     // where n = vector_reduction and k = accum_vector_size (below).
-    Output<Buffer<>> output_{"output", 6};
+    Output<Buffer<void, 6>> output_{"output"};
 
     void configure() {
         if (use_8bit_multiply(target)) {

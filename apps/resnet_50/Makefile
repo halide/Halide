@@ -17,7 +17,7 @@ $(GENERATOR_BIN)/resnet50.generator: Resnet50Generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/resnet50.a: $(GENERATOR_BIN)/resnet50.generator
 	@mkdir -p $(@D)
-	$^ -g resnet50 -o $(@D) -f resnet50 target=$* auto_schedule=false
+	$^ -g resnet50 -o $(@D) -f resnet50 target=$*
 
 $(BIN)/%/process: process.cpp $(BIN)/%/resnet50.a
 	@mkdir -p $(@D)

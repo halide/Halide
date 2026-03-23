@@ -40,21 +40,23 @@ WEAK int halide_default_can_use_target_features(int count, const uint64_t *featu
 
         static_assert(sizeof(halide_cpu_features_storage) == sizeof(CpuFeatures), "CpuFeatures Mismatch");
         if (!halide_cpu_features_initialized) {
-            CpuFeatures tmp = halide_get_cpu_features();
+            CpuFeatures tmp;
+            int error = halide_get_cpu_features(&tmp);
+            halide_abort_if_false(nullptr, error == halide_error_code_success);
             memcpy(&halide_cpu_features_storage, &tmp, sizeof(tmp));
             halide_cpu_features_initialized = true;
         }
     }
 
-    if (count != CpuFeatures::kWordCount) {
+    if (count != cpu_feature_mask_size) {
         // This should not happen unless our runtime is out of sync with the rest of libHalide.
 #ifdef DEBUG_RUNTIME
-        debug(nullptr) << "count " << count << " CpuFeatures::kWordCount " << CpuFeatures::kWordCount << "\n";
+        debug(nullptr) << "count " << count << " cpu_feature_mask_size " << cpu_feature_mask_size << "\n";
 #endif
         halide_error(nullptr, "Internal error: wrong structure size passed to halide_can_use_target_features()\n");
     }
     const CpuFeatures *cpu_features = reinterpret_cast<const CpuFeatures *>(&halide_cpu_features_storage[0]);
-    for (int i = 0; i < CpuFeatures::kWordCount; ++i) {
+    for (int i = 0; i < cpu_feature_mask_size; ++i) {
         uint64_t m;
         if ((m = (features[i] & cpu_features->known[i])) != 0) {
             if ((m & cpu_features->available[i]) != m) {

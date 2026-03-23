@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < result.width(); i++) {
             if (result(i) != i) {
                 printf("result(%d) was %d instead of %d\n", i, result(i), i);
-                return -1;
+                return 1;
             }
         }
     }
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
             int actual = result(i);
             if (actual != correct) {
                 printf("result(%d) = %d instead of %d\n", i, actual, correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
             int actual = result(i);
             if (actual != correct) {
                 printf("result(%d) = %d instead of %d\n", i, actual, correct);
-                return -1;
+                return 1;
             }
         }
     }

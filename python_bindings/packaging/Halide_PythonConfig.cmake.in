@@ -1,0 +1,9 @@
+cmake_minimum_required(VERSION 3.28)
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Python 3 COMPONENTS Interpreter Development.Module)
+
+include("${CMAKE_CURRENT_LIST_DIR}/Halide_Python-targets.cmake")
+
+check_required_components(${CMAKE_FIND_PACKAGE_NAME})

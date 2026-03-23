@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(resize)
 
 enable_testing()
@@ -12,8 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(resize.generator resize_generator.cpp)
-target_link_libraries(resize.generator PRIVATE Halide::Generator)
+add_halide_generator(resize.generator SOURCES resize_generator.cpp)
 
 # Filters
 list(APPEND VARIANTS

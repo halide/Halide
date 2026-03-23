@@ -19,8 +19,8 @@ int main(int argc, char **argv) {
 
     int use_linear = atoi(argv[1]);
 
-    Buffer<float> input = load_and_convert_image(argv[2]);
-    Buffer<float> output = Buffer<float>::make_with_shape_of(input);
+    Buffer<float, 3> input = load_and_convert_image(argv[2]);
+    Buffer<float, 3> output = Buffer<float>::make_with_shape_of(input);
 
     // Call either the simple or linear-corrected blur at runtime,
     // mainly to demonstrate how simple_blur can be used either standalone

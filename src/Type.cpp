@@ -1,3 +1,4 @@
+#include "ConstantBounds.h"
 #include "IR.h"
 #include <cfloat>
 #include <sstream>
@@ -34,7 +35,7 @@ Halide::Expr Type::max() const {
     } else {
         internal_assert(is_float());
         if (bits() == 16) {
-            return Internal::FloatImm::make(*this, 65504.0);
+            return Internal::FloatImm::make(*this, (double)float16_t::make_infinity());
         } else if (bits() == 32) {
             return Internal::FloatImm::make(*this, std::numeric_limits<float>::infinity());
         } else if (bits() == 64) {
@@ -58,7 +59,7 @@ Halide::Expr Type::min() const {
     } else {
         internal_assert(is_float());
         if (bits() == 16) {
-            return Internal::FloatImm::make(*this, -65504.0);
+            return Internal::FloatImm::make(*this, (double)float16_t::make_negative_infinity());
         } else if (bits() == 32) {
             return Internal::FloatImm::make(*this, -std::numeric_limits<float>::infinity());
         } else if (bits() == 64) {
@@ -117,13 +118,18 @@ bool Type::can_represent(Type other) const {
         if (other.is_bfloat()) {
             return bits() > other.bits();
         } else {
-            return ((other.is_float() && other.bits() <= bits()) ||
-                    (bits() == 64 && other.bits() <= 32) ||
-                    (bits() == 32 && other.bits() <= 16));
+            return (other.is_float() && other.bits() <= bits()) ||
+                   (bits() == 64 && other.bits() <= 32) ||
+                   (bits() == 32 && other.bits() <= 16) ||
+                   (bits() == 16 && other.bits() <= 8);
         }
     } else {
         return false;
     }
+}
+
+bool Type::can_represent(const Internal::ConstantInterval &in) const {
+    return in.is_bounded() && can_represent(in.min) && can_represent(in.max);
 }
 
 bool Type::can_represent(int64_t x) const {
@@ -275,11 +281,11 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
             if (!type.handle_type->namespaces.empty() ||
                 !type.handle_type->enclosing_types.empty()) {
                 oss << "::";
-                for (size_t i = 0; i < type.handle_type->namespaces.size(); i++) {
-                    oss << type.handle_type->namespaces[i] << "::";
+                for (const auto &ns : type.handle_type->namespaces) {
+                    oss << ns << "::";
                 }
-                for (size_t i = 0; i < type.handle_type->enclosing_types.size(); i++) {
-                    oss << type.handle_type->enclosing_types[i].name << "::";
+                for (const auto &enclosing_type : type.handle_type->enclosing_types) {
+                    oss << enclosing_type.name << "::";
                 }
             }
             oss << type.handle_type->inner_name.name;
@@ -298,7 +304,8 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
                 if (modifier & halide_handle_cplusplus_type::Restrict) {
                     oss << " restrict";
                 }
-                if (modifier & halide_handle_cplusplus_type::Pointer) {
+                if ((modifier & halide_handle_cplusplus_type::Pointer) &&
+                    !(modifier & halide_handle_cplusplus_type::FunctionTypedef)) {
                     oss << " *";
                 }
             }

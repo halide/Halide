@@ -40,47 +40,60 @@ public:
         }
     }
 
-    Expr visit(const Let *op) override {
-        Expr new_value = mutate(op->value);
-        hidden.push(op->name);
-        Expr new_body = mutate(op->body);
-        hidden.pop(op->name);
+    template<typename T>
+    auto visit_let(const T *op) -> decltype(op->body) {
+        decltype(op->body) orig = op;
 
-        if (new_value.same_as(op->value) &&
-            new_body.same_as(op->body)) {
-            return op;
+        struct Frame {
+            const T *op;
+            Expr new_value;
+            ScopedBinding<> bind;
+        };
+        std::vector<Frame> frames;
+        decltype(op->body) body;
+        bool values_unchanged = true;
+        do {
+            Expr new_value = mutate(op->value);
+            values_unchanged &= new_value.same_as(op->value);
+            frames.push_back(Frame{op, std::move(new_value), ScopedBinding<>(hidden, op->name)});
+            body = op->body;
+            op = body.template as<T>();
+        } while (op);
+
+        auto new_body = mutate(body);
+
+        if (values_unchanged &&
+            new_body.same_as(body)) {
+            return orig;
         } else {
-            return Let::make(op->name, new_value, new_body);
+            for (const auto &frame : reverse_view(frames)) {
+                new_body = T::make(frame.op->name, frame.new_value, new_body);
+            }
+            return new_body;
         }
     }
 
-    Stmt visit(const LetStmt *op) override {
-        Expr new_value = mutate(op->value);
-        hidden.push(op->name);
-        Stmt new_body = mutate(op->body);
-        hidden.pop(op->name);
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
 
-        if (new_value.same_as(op->value) &&
-            new_body.same_as(op->body)) {
-            return op;
-        } else {
-            return LetStmt::make(op->name, new_value, new_body);
-        }
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
     }
 
     Stmt visit(const For *op) override {
         Expr new_min = mutate(op->min);
-        Expr new_extent = mutate(op->extent);
+        Expr new_max = mutate(op->max);
         hidden.push(op->name);
         Stmt new_body = mutate(op->body);
         hidden.pop(op->name);
 
         if (new_min.same_as(op->min) &&
-            new_extent.same_as(op->extent) &&
+            new_max.same_as(op->max) &&
             new_body.same_as(op->body)) {
             return op;
         } else {
-            return For::make(op->name, new_min, new_extent, op->for_type, op->device_api, new_body);
+            return For::make(op->name, new_min, new_max, op->for_type, op->partition_policy, op->device_api, new_body);
         }
     }
 };
@@ -113,35 +126,24 @@ Stmt substitute(const map<string, Expr> &m, const Stmt &stmt) {
 
 namespace {
 
-class SubstituteExpr : public IRMutator {
-public:
-    Expr find, replacement;
-
-    using IRMutator::mutate;
-
-    Expr mutate(const Expr &e) override {
+template<typename T>
+auto substitute_impl(const Expr &find, const Expr &replacement, const T &ir) {
+    return mutate_with(ir, [&](auto *self, const Expr &e) {
         if (equal(e, find)) {
             return replacement;
-        } else {
-            return IRMutator::mutate(e);
         }
-    }
-};
+        return self->mutate_base(e);
+    });
+}
 
 }  // namespace
 
 Expr substitute(const Expr &find, const Expr &replacement, const Expr &expr) {
-    SubstituteExpr s;
-    s.find = find;
-    s.replacement = replacement;
-    return s.mutate(expr);
+    return substitute_impl(find, replacement, expr);
 }
 
 Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
-    SubstituteExpr s;
-    s.find = find;
-    s.replacement = replacement;
-    return s.mutate(stmt);
+    return substitute_impl(find, replacement, stmt);
 }
 
 namespace {

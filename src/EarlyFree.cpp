@@ -30,7 +30,7 @@ private:
 
     void visit(const For *loop) override {
         loop->min.accept(this);
-        loop->extent.accept(this);
+        loop->max.accept(this);
         ScopedValue<bool> old_in_loop(in_loop, true);
         loop->body.accept(this);
     }
@@ -164,7 +164,7 @@ class InjectEarlyFrees : public IRMutator {
             stmt = Allocate::make(alloc->name, alloc->type, alloc->memory_type,
                                   alloc->extents, alloc->condition,
                                   Block::make(alloc->body, Free::make(alloc->name)),
-                                  alloc->new_expr, alloc->free_function);
+                                  alloc->new_expr, alloc->free_function, alloc->padding);
         }
         return stmt;
     }

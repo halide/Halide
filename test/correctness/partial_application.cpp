@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
         for (int x = 0; x < 4; x++) {
             if (im(x, y) != 36.0f) {
                 printf("im(%d, %d) = %f\n", x, y, im(x, y));
-                return -1;
+                return 1;
             }
         }
     }

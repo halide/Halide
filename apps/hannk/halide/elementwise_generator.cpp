@@ -11,11 +11,11 @@ namespace hannk {
 class Add : public Generator<Add> {
 public:
     // Input buffers and quantization parameters.
-    Input<Buffer<uint8_t>> input1_{"input1", 2};
+    Input<Buffer<uint8_t, 2>> input1_{"input1"};
     Input<uint8_t> input1_zero_{"input1_zero"};
     Input<int16_t> input1_multiplier_{"input1_multiplier"};
 
-    Input<Buffer<uint8_t>> input2_{"input2", 2};
+    Input<Buffer<uint8_t, 2>> input2_{"input2"};
     Input<uint8_t> input2_zero_{"input2_zero"};
     Input<int16_t> input2_multiplier_{"input2_multiplier"};
 
@@ -23,7 +23,7 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
-    Output<Buffer<uint8_t>> output_{"output", 2};
+    Output<Buffer<uint8_t, 2>> output_{"output"};
 
     void generate() {
         Var x("x"), y("y");
@@ -44,20 +44,27 @@ public:
         output_.compute_root()
             .vectorize(x, vector_size * 2, TailStrategy::Predicate);
 
-        // Support broadcasting in the c dimension for input2.
+        // Support broadcasting in the c dimension for either input.
+        input1_.dim(0).set_stride(Expr());
         input2_.dim(0).set_stride(Expr());
-        output_.specialize(input2_.dim(0).stride() == 1);
-        output_.specialize(input2_.dim(0).stride() == 0);
-        output_.specialize_fail("input2 dimension 0 must have a stride of 0 or 1.");
+        // Most common case
+        output_.specialize(input1_.dim(0).stride() == 1 && input2_.dim(0).stride() == 1);
+        // Second most common case
+        output_.specialize(input1_.dim(0).stride() == 1 && input2_.dim(0).stride() == 0);
+        // Very uncommon (not seen in the wild)
+        output_.specialize(input1_.dim(0).stride() == 0 && input2_.dim(0).stride() == 1);
+        // Don't specialize for both strides being 0
+        // output_.specialize(input1_.dim(0).stride() == 0 && input2_.dim(0).stride() == 0);
+        output_.specialize_fail("input dimension 0 must have a stride of 0 or 1.");
     }
 };
 
 class Mul : public Generator<Mul> {
 public:
-    Input<Buffer<uint8_t>> input1_{"input1", 2};
+    Input<Buffer<uint8_t, 2>> input1_{"input1"};
     Input<uint8_t> input1_zero_{"input1_zero"};
 
-    Input<Buffer<uint8_t>> input2_{"input2", 2};
+    Input<Buffer<uint8_t, 2>> input2_{"input2"};
     Input<uint8_t> input2_zero_{"input2_zero"};
 
     Input<uint8_t> output_zero_{"output_zero"};
@@ -66,7 +73,7 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
-    Output<Buffer<uint8_t>> output_{"output", 2};
+    Output<Buffer<uint8_t, 2>> output_{"output"};
 
     void generate() {
         Var x("x"), y("y");
@@ -85,11 +92,18 @@ public:
         output_.compute_root()
             .vectorize(x, vector_size * 2, TailStrategy::Predicate);
 
-        // Support broadcasting in the c dimension for input2.
+        // Support broadcasting in the c dimension for either input.
+        input1_.dim(0).set_stride(Expr());
         input2_.dim(0).set_stride(Expr());
-        output_.specialize(input2_.dim(0).stride() == 1);
-        output_.specialize(input2_.dim(0).stride() == 0);
-        output_.specialize_fail("input2 dimension 0 must have a stride of 0 or 1.");
+        // Most common case
+        output_.specialize(input1_.dim(0).stride() == 1 && input2_.dim(0).stride() == 1);
+        // Second most common case
+        output_.specialize(input1_.dim(0).stride() == 1 && input2_.dim(0).stride() == 0);
+        // Very uncommon (not seen in the wild)
+        output_.specialize(input1_.dim(0).stride() == 0 && input2_.dim(0).stride() == 1);
+        // Don't specialize for both strides being 0
+        // output_.specialize(input1_.dim(0).stride() == 0 && input2_.dim(0).stride() == 0);
+        output_.specialize_fail("input dimension 0 must have a stride of 0 or 1.");
     }
 };
 
@@ -108,12 +122,15 @@ public:
     GeneratorParam<Type> output3_type_{"output3_type", Int(0)};
 
     // An array of inputs.
-    Input<Buffer<>[]> inputs_ { "inputs", 2 };
+    Input<Buffer<void, 2>[]> inputs_{"inputs"};
     // The program to run. See elementwise_program.h for a description of
     // this buffer.
-    Input<Buffer<int16_t>> program_{"program", 2};
+    Input<Buffer<int16_t, 2>> program_{"program"};
 
-    Func build() {
+    // Type is determined by the GeneratorParams specified.
+    Output<Buffer<void, 2>> output_{"output"};
+
+    void generate() {
         Var x("x"), y("y"), u("u");
 
         Type intermediate_type = intermediate_type_;
@@ -161,7 +178,6 @@ public:
         r.where(r.x == op);
         scratch(x, y, slot) = mux(r.x, instructions);
 
-        Func output("output");
         std::vector<Type> output_types;
         if (((Type)output1_type_).bits() > 0) {
             output_types.push_back(output1_type_);
@@ -181,10 +197,10 @@ public:
             output_i = saturating_cast(output_types[i], output_i);
             outputs.push_back(output_i);
         }
-        output(x, y) = Tuple(outputs);
+        output_(x, y) = Tuple(outputs);
 
         // Schedule.
-        output.compute_root()
+        output_.compute_root()
             .vectorize(x, natural_vector_size<uint8_t>(), TailStrategy::Predicate);
 
         // Only allow this many instructions per input, so we can store scratch
@@ -198,6 +214,7 @@ public:
             scratch.update(i).specialize(inputs_[i].dim(0).stride() == 0);
             scratch.update(i).specialize_fail("Input dimension 0 must have stride 0 or 1.");
         }
+        scratch.update(input_count).unscheduled();  // constant zero
 
         const int slots = input_count * max_instructions_per_input;
         scratch
@@ -208,8 +225,6 @@ public:
 
         program_.dim(0).set_min(0).set_extent(ElementwiseAssembler::InstructionSize).set_stride(1);
         program_.dim(1).set_min(0).set_stride(ElementwiseAssembler::InstructionSize);
-
-        return output;
     }
 };
 

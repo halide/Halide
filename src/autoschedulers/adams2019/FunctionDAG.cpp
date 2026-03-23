@@ -210,7 +210,7 @@ class Featurizer : public IRVisitor {
             return a;
         } else if (const Mul *op = e.as<Mul>()) {
             auto a = differentiate(op->a, v);
-            if (const int64_t *ib = as_const_int(op->b)) {
+            if (auto ib = as_const_int(op->b)) {
                 a.numerator *= *ib;
                 return a;
             } else {
@@ -218,7 +218,7 @@ class Featurizer : public IRVisitor {
             }
         } else if (const Div *op = e.as<Div>()) {
             auto a = differentiate(op->a, v);
-            if (const int64_t *ib = as_const_int(op->b)) {
+            if (auto ib = as_const_int(op->b)) {
                 if (a.numerator != 0) {
                     a.denominator *= *ib;
                 }
@@ -287,7 +287,7 @@ class Featurizer : public IRVisitor {
                 // (e.g. a+a, where a is a trivial function),
                 // so we can't use std::move(matrix) here without making a copy
                 vector<vector<OptionalRational>> copy = matrix;
-                e->add_load_jacobian(std::move(copy));
+                e->add_load_jacobian(LoadJacobian(std::move(copy)));
             }
         }
     }
@@ -307,42 +307,44 @@ public:
 
 }  // namespace
 
-void LoadJacobian::dump(const char *prefix) const {
+void LoadJacobian::dump(std::ostream &os, const char *prefix) const {
     if (count() > 1) {
-        aslog(0) << prefix << count() << " x\n";
+        os << prefix << count() << " x\n";
     }
     for (size_t i = 0; i < producer_storage_dims(); i++) {
-        aslog(0) << prefix << "  [";
+        os << prefix << "  [";
 
         for (size_t j = 0; j < consumer_loop_dims(); j++) {
             const auto &c = (*this)(i, j);
             if (!c.exists) {
-                aslog(0) << " _  ";
+                os << " _  ";
             } else if (c.denominator == 1) {
-                aslog(0) << " " << c.numerator << "  ";
+                os << " " << c.numerator << "  ";
             } else {
-                aslog(0) << c.numerator << "/" << c.denominator << " ";
+                os << c.numerator << "/" << c.denominator << " ";
             }
         }
-        aslog(0) << "]\n";
+        os << "]\n";
     }
-    aslog(0) << "\n";
+    os << "\n";
 }
 
 void BoundContents::validate() const {
     for (int i = 0; i < layout->total_size; i++) {
         auto p = data()[i];
         if (p.max() < p.min()) {
-            aslog(0) << "Bad bounds object:\n";
+            std::ostringstream err;
+            err << "Bad bounds object:\n";
             for (int j = 0; j < layout->total_size; j++) {
                 if (i == j) {
-                    aslog(0) << "=> ";
+                    err << "=> ";
                 } else {
-                    aslog(0) << "   ";
+                    err << "   ";
                 }
-                aslog(0) << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
+                err << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
             }
-            internal_error << "Aborting";
+            err << "Aborting";
+            internal_error << err.str();
         }
     }
 }
@@ -412,8 +414,8 @@ void FunctionDAG::Node::loop_nest_for_region(int stage_idx, const Span *computed
         } else {
             Expr min = simplify(substitute(computed_map, l.min));
             Expr max = simplify(substitute(computed_map, l.max));
-            const int64_t *imin = as_const_int(min);
-            const int64_t *imax = as_const_int(max);
+            auto imin = as_const_int(min);
+            auto imax = as_const_int(max);
             internal_assert(imin && imax) << min << ", " << max << "\n";
             loop[i] = Span(*imin, *imax, false);
         }
@@ -440,8 +442,8 @@ void FunctionDAG::Node::required_to_computed(const Span *required, Span *compute
         } else {
             Expr min = simplify(substitute(required_map, comp.in.min));
             Expr max = simplify(substitute(required_map, comp.in.max));
-            const int64_t *imin = as_const_int(min);
-            const int64_t *imax = as_const_int(max);
+            auto imin = as_const_int(min);
+            auto imax = as_const_int(max);
             internal_assert(imin && imax) << min << ", " << max << "\n";
             computed[i] = Span(*imin, *imax, false);
         }
@@ -540,7 +542,7 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
             } else {
                 Expr substituted = substitute(s, b.expr);
                 Expr e = simplify(substituted);
-                const int64_t *i = as_const_int(e);
+                auto i = as_const_int(e);
                 internal_assert(i) << "Should be constant: " << b.expr << " -> " << substituted << " -> " << e << "\n";
                 bounds_are_constant = false;
                 return *i;
@@ -552,6 +554,7 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
     }
 }
 
+namespace {
 class DependsOnEstimate : public IRVisitor {
 public:
     bool found_estimate = false;
@@ -569,8 +572,9 @@ bool depends_on_estimate(const Expr &expr) {
     expr.accept(&dependency_checker);
     return dependency_checker.found_estimate;
 }
+}  // namespace
 
-FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target) {
+FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) {
     map<string, Function> env = build_environment(outputs);
 
     // A mutator to apply parameter estimates to the expressions
@@ -698,8 +702,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                     } else {
                         const Min *min = comp.in.min.as<Min>();
                         const Max *max = comp.in.max.as<Max>();
-                        const int64_t *min_b = min ? as_const_int(min->b) : nullptr;
-                        const int64_t *max_b = max ? as_const_int(max->b) : nullptr;
+                        auto min_b = min ? as_const_int(min->b) : std::nullopt;
+                        auto max_b = max ? as_const_int(max->b) : std::nullopt;
                         if (min_b && max_b && equal(min->a, req.min) && equal(max->a, req.max)) {
                             comp.equals_union_of_required_with_constants = true;
                             comp.c_min = *min_b;
@@ -754,7 +758,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 }
 
                 if (!l.equals_region_computed) {
-                    const int64_t *c_min = as_const_int(l.min), *c_max = as_const_int(l.max);
+                    auto c_min = as_const_int(l.min);
+                    auto c_max = as_const_int(l.max);
                     if (c_min && c_max) {
                         l.bounds_are_constant = true;
                         l.c_min = *c_min;
@@ -816,6 +821,11 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                     check_type(op->type);
                 }
 
+                void visit(const Reinterpret *op) override {
+                    IRVisitor::visit(op);
+                    check_type(op->type);
+                }
+
                 void check_type(Type t) {
                     if (t.bits() > 1 &&
                         (!narrowest_type.bits() ||
@@ -830,7 +840,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 int leaves = 0;
                 Type narrowest_type;
                 map<string, int> calls;
-                CheckTypes(const Function &f)
+                explicit CheckTypes(const Function &f)
                     : func(f) {
                 }
             };
@@ -867,8 +877,11 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 // Get the bounds estimate
                 map<string, Span> estimates;
                 for (const auto &b : consumer.schedule().estimates()) {
-                    int64_t i_min = *as_const_int(b.min);
-                    int64_t i_extent = *as_const_int(b.extent);
+                    auto i_min = as_const_int(b.min);
+                    auto i_extent = as_const_int(b.extent);
+                    user_assert(i_min && i_extent)
+                        << "Min/extent of estimate or bound is not constant in \"" << consumer.name()
+                        << "\", var:" << b.var << ", min:" << b.min << ", extent:" << b.extent;
 
                     if ((false)) {  // Intentional dead code. Extra parens to pacify clang-tidy.
                         // Some methods we compare to compile for
@@ -884,14 +897,14 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                         // like unroll across color channels, so
                         // it affects the scheduling space.
                         Func(node.func).bound(b.var, b.min, b.extent);
-                        estimates[b.var] = Span(i_min, i_min + i_extent - 1, true);
+                        estimates[b.var] = Span(*i_min, *i_min + *i_extent - 1, true);
                     } else {
-                        estimates[b.var] = Span(i_min, i_min + i_extent - 1, false);
+                        estimates[b.var] = Span(*i_min, *i_min + *i_extent - 1, false);
                     }
                 }
                 for (const auto &b : consumer.schedule().bounds()) {
-                    const int64_t *i_min = as_const_int(b.min);
-                    const int64_t *i_extent = as_const_int(b.extent);
+                    auto i_min = as_const_int(b.min);
+                    auto i_extent = as_const_int(b.extent);
                     if (i_min && i_extent) {
                         // It's a true bound, not just an estimate
                         estimates[b.var] = Span(*i_min, *i_min + *i_extent - 1, true);
@@ -952,7 +965,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             }
 
             node.is_wrapper = node.func.is_wrapper();
-            node.is_input = !node.func.has_update_definition() && node.is_wrapper && !any_incoming_edges;
+            node.is_input = !node.is_output && !node.func.has_update_definition() && node.is_wrapper && !any_incoming_edges;
             node.dimensions = node.func.dimensions();
         }
     }
@@ -981,9 +994,9 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
         }
     }
 
-    for (size_t i = 0; i < edges.size(); i++) {
-        edges[i].producer->outgoing_edges.push_back(&(edges[i]));
-        edges[i].consumer->incoming_edges.push_back(&(edges[i]));
+    for (auto &edge : edges) {
+        edge.producer->outgoing_edges.push_back(&edge);
+        edge.consumer->incoming_edges.push_back(&edge);
     }
 
     // Compute transitive dependencies
@@ -1039,8 +1052,7 @@ void FunctionDAG::featurize() {
     }
 }
 
-template<typename OS>
-void FunctionDAG::dump_internal(OS &os) const {
+void FunctionDAG::dump(std::ostream &os) const {
     for (const Node &n : nodes) {
         os << "Node: " << n.func.name() << "\n"
            << "  Symbolic region required: \n";
@@ -1076,19 +1088,9 @@ void FunctionDAG::dump_internal(OS &os) const {
 
         os << "  Load Jacobians:\n";
         for (const auto &jac : e.load_jacobians) {
-            jac.dump("  ");
+            jac.dump(os, "  ");
         }
     }
-}
-
-void FunctionDAG::dump() const {
-    auto os = aslog(0);
-    dump_internal(os);
-}
-
-std::ostream &FunctionDAG::dump(std::ostream &os) const {
-    dump_internal(os);
-    return os;
 }
 
 }  // namespace Autoscheduler

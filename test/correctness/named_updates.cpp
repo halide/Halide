@@ -41,6 +41,8 @@ int main(int argc, char **argv) {
         more_updates.a.vectorize(r, 4);
         more_updates.b.vectorize(r, 4);
         more_updates.c.vectorize(r, 4);
+
+        f.update().unscheduled();  // fix_first isn't scheduled
     }
 
     // Define the same thing without all the weird syntax and without
@@ -64,7 +66,7 @@ int main(int argc, char **argv) {
 
     if (error) {
         printf("There was a difference between using named updates and not.\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

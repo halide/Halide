@@ -14,7 +14,20 @@ int main(int argc, char **argv) {
 
     if (target.arch == Target::ARM &&
         target.os == Target::OSX) {
+        // vrecpe, vrecps, fmul have inverse throughputs of 1, 0.25, 0.25
+        // respectively, while fdiv has inverse throughput of 1.
         printf("[SKIP] Apple M1 chips have division performance roughly on par with the reciprocal instruction\n");
+        return 0;
+    }
+
+    // SVE2-capable cores (e.g. Neoverse V1/V2, Ampere Altra) have fast
+    // enough fdiv that the frecpe+frecps approximation used by fast_inverse
+    // is not reliably faster. Additionally, Halide generates wide scalable
+    // vectors (e.g. <vscale x 32 x float>) that LLVM (at time of writing)
+    // cannot optimize through llvm.vector.insert/extract, causing register
+    // spilling and overhead that does not occur with fixed NEON vectors.
+    if (target.has_feature(Target::SVE2)) {
+        printf("[SKIP] SVE2-capable cores typically have fast division; fast_inverse is not expected to win.\n");
         return 0;
     }
 
@@ -31,13 +44,16 @@ int main(int argc, char **argv) {
     slow(x) = p / (slow(x) + 1) + 0 * r;
     fast(x) = fast_inverse((fast(x) + 1) + 0 * r);
 
-    slow.update().vectorize(x, 4);
-    fast.update().vectorize(x, 4);
+    // Use wide vectors to ensure we're throughput-limited rather than latency-limited.
+    const int vec = 32;
+
+    slow.update().vectorize(x, vec);
+    fast.update().vectorize(x, vec);
 
     slow.compile_jit();
     fast.compile_jit();
 
-    Buffer<float> out_fast(8), out_slow(8);
+    Buffer<float> out_fast(vec), out_slow(vec);
 
     double slow_time = benchmark([&]() { slow.realize(out_slow); });
     double fast_time = benchmark([&]() { fast.realize(out_fast); });

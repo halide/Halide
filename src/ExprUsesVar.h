@@ -36,8 +36,8 @@ class ExprUsesVars : public IRGraphVisitor {
     void visit_name(const std::string &name) {
         if (vars.contains(name)) {
             result = true;
-        } else if (scope.contains(name)) {
-            include(scope.get(name));
+        } else if (const Expr *e = scope.find(name)) {
+            IRGraphVisitor::include(*e);
         }
     }
 
@@ -87,10 +87,10 @@ class ExprUsesVars : public IRGraphVisitor {
 
 public:
     ExprUsesVars(const Scope<T> &v, const Scope<Expr> *s = nullptr)
-        : vars(v), result(false) {
+        : vars(v) {
         scope.set_containing_scope(s);
     }
-    bool result;
+    bool result = false;
 };
 
 /** Test if a statement or expression references or defines any of the

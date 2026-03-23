@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
             if (out(x) != correct) {
                 printf("out(%d) = %d instead of %d\n",
                        x, out(x), correct);
-                return -1;
+                return 1;
             }
         }
 

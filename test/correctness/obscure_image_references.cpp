@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
         int correct = i < im2(3) ? 37 : (i + 20);
         if (result(i) != correct) {
             printf("result(%d) = %d instead of %d\n", i, result(i), correct);
-            return -1;
+            return 1;
         }
     }
 

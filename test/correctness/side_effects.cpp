@@ -15,14 +15,8 @@ using namespace Halide;
 // thread-safe.
 
 // Here we use an extern call to print an ascii-art Mandelbrot set.
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 int call_count = 0;
-extern "C" DLLEXPORT int draw_pixel(int x, int y, int val) {
+extern "C" HALIDE_EXPORT_SYMBOL int draw_pixel(int x, int y, int val) {
     call_count++;
     static int last_y = 0;
     if (y != last_y) {
@@ -122,7 +116,7 @@ int main(int argc, char **argv) {
     // Check draw_pixel was called the right number of times.
     if (call_count != 71 * 21) {
         printf("Something went wrong\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

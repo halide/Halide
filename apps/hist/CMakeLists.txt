@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(hist)
 
 enable_testing()
@@ -12,14 +12,14 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(hist.generator hist_generator.cpp)
-target_link_libraries(hist.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(hist.generator SOURCES hist_generator.cpp)
 
 # Filters
 add_halide_library(hist FROM hist.generator)
 add_halide_library(hist_auto_schedule FROM hist.generator
                    GENERATOR hist
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(hist_filter filter.cpp)

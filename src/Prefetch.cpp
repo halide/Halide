@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <map>
 #include <string>
 #include <utility>
@@ -51,9 +50,9 @@ public:
         Box b;
         for (int i = 0; i < dims; ++i) {
             string dim_name = std::to_string(i);
-            Expr buf_min_i = Variable::make(Int(32), name + ".min." + dim_name,
+            Expr buf_min_i = Variable::make(Int(32), concat_strings(name, ".min.", i),
                                             image, param, ReductionDomain());
-            Expr buf_extent_i = Variable::make(Int(32), name + ".extent." + dim_name,
+            Expr buf_extent_i = Variable::make(Int(32), concat_strings(name, ".extent.", i),
                                                image, param, ReductionDomain());
             Expr buf_max_i = buf_min_i + buf_extent_i - 1;
             b.push_back(Interval(buf_min_i, buf_max_i));
@@ -87,10 +86,9 @@ private:
     using IRMutator::visit;
 
     Box get_buffer_bounds(const string &name, int dims) {
-        if (buffer_bounds.contains(name)) {
-            const Box &b = buffer_bounds.ref(name);
-            internal_assert((int)b.size() == dims);
-            return b;
+        if (const Box *b = buffer_bounds.find(name)) {
+            internal_assert((int)b->size() == dims);
+            return *b;
         }
 
         // It is an external buffer.
@@ -156,7 +154,7 @@ private:
             Region new_bounds;
             for (size_t i = 0; i < prefetch_box.size(); i++) {
                 Expr extent = prefetch_box[i].max - prefetch_box[i].min + 1;
-                new_bounds.push_back(Range(simplify(prefetch_box[i].min), simplify(extent)));
+                new_bounds.emplace_back(simplify(prefetch_box[i].min), simplify(extent));
             }
             Expr condition = op->condition;
             if (prefetch_box.maybe_unused()) {
@@ -220,8 +218,7 @@ private:
             // If there are multiple prefetches of the same Func or ImageParam,
             // use the most recent one
             set<string> seen;
-            for (int i = prefetch_list.size() - 1; i >= 0; --i) {
-                const PrefetchDirective &p = prefetch_list[i];
+            for (const PrefetchDirective &p : reverse_view(prefetch_list)) {
                 if (!ends_with(op->name, "." + p.at) || (seen.find(p.name) != seen.end())) {
                     continue;
                 }
@@ -233,9 +230,9 @@ private:
                 // Note that it is not good enough to just prepend use 'prefix + from', as there may be splits involved, e.g.,
                 // prefix = g.s0, from = xo, but the var we seek is actually g.s0.x.xo (because 'g' was split at x).
                 string from_var;
-                for (int j = (int)loop_nest.size() - 1; j >= 0; --j) {
-                    if (starts_with(loop_nest[j], prefix) && ends_with(loop_nest[j], "." + p.from)) {
-                        from_var = loop_nest[j];
+                for (const auto &var : reverse_view(loop_nest)) {
+                    if (starts_with(var, prefix) && ends_with(var, "." + p.from)) {
+                        from_var = var;
                         debug(5) << "Prefetch from " << p.from << " -> from_var " << from_var << "\n";
                         break;
                     }
@@ -249,7 +246,7 @@ private:
 
         Stmt stmt;
         if (!body.same_as(op->body)) {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, std::move(body));
+            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, std::move(body));
         } else {
             stmt = op;
         }
@@ -303,8 +300,8 @@ class ReducePrefetchDimension : public IRMutator {
 
             stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
-                stmt = For::make(index_names[i], 0, prefetch->args[(i + max_dim) * 2 + 2],
-                                 ForType::Serial, DeviceAPI::None, stmt);
+                stmt = For::make(index_names[i], 0, prefetch->args[(i + max_dim) * 2 + 2] - 1,
+                                 ForType::Serial, Partition::Auto, DeviceAPI::None, stmt);
             }
             debug(5) << "\nReduce prefetch to " << max_dim << " dim:\n"
                      << "Before:\n"
@@ -374,8 +371,8 @@ class SplitPrefetch : public IRMutator {
             vector<Expr> args = {base, std::move(new_offset), std::move(new_extent), std::move(new_stride)};
             stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
-                stmt = For::make(index_names[i], 0, extents[i],
-                                 ForType::Serial, DeviceAPI::None, stmt);
+                stmt = For::make(index_names[i], 0, extents[i] - 1,
+                                 ForType::Serial, Partition::Auto, DeviceAPI::None, stmt);
             }
             debug(5) << "\nSplit prefetch to max of " << max_byte_size << " bytes:\n"
                      << "Before:\n"
@@ -388,6 +385,45 @@ class SplitPrefetch : public IRMutator {
 public:
     SplitPrefetch(Expr bytes)
         : max_byte_size(std::move(bytes)) {
+    }
+};
+
+template<typename Fn>
+void traverse_block(const Stmt &s, Fn &&f) {
+    const Block *b = s.as<Block>();
+    if (!b) {
+        f(s);
+    } else {
+        traverse_block(b->first, f);
+        traverse_block(b->rest, f);
+    }
+}
+
+class HoistPrefetches : public IRMutator {
+    using IRMutator::visit;
+
+    Stmt visit(const Block *op) override {
+        Stmt s = op;
+
+        Stmt prefetches, body;
+        traverse_block(s, [this, &prefetches, &body](const Stmt &s_in) {
+            Stmt s = IRMutator::mutate(s_in);
+            const Evaluate *eval = s.as<Evaluate>();
+            if (eval && Call::as_intrinsic(eval->value, {Call::prefetch})) {
+                prefetches = prefetches.defined() ? Block::make(prefetches, s) : s;
+            } else {
+                body = body.defined() ? Block::make(body, s) : s;
+            }
+        });
+        if (prefetches.defined()) {
+            if (body.defined()) {
+                return Block::make(prefetches, body);
+            } else {
+                return prefetches;
+            }
+        } else {
+            return body;
+        }
     }
 };
 
@@ -432,6 +468,10 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
         stmt = SplitPrefetch(max_byte_size).mutate(stmt);
     }
     return stmt;
+}
+
+Stmt hoist_prefetches(const Stmt &s) {
+    return HoistPrefetches().mutate(s);
 }
 
 }  // namespace Internal

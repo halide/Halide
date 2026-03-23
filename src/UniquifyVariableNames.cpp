@@ -64,14 +64,14 @@ class UniquifyVariableNames : public IRMutator {
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            renaming.pop(it->op->name);
-            if (it->new_name == it->op->name &&
-                result.same_as(it->op->body) &&
-                it->op->value.same_as(it->value)) {
-                result = it->op;
+        for (const auto &frame : reverse_view(frames)) {
+            renaming.pop(frame.op->name);
+            if (frame.new_name == frame.op->name &&
+                result.same_as(frame.op->body) &&
+                frame.op->value.same_as(frame.value)) {
+                result = frame.op;
             } else {
-                result = LetOrLetStmt::make(it->new_name, it->value, result);
+                result = LetOrLetStmt::make(frame.new_name, frame.value, result);
             }
         }
 
@@ -88,7 +88,7 @@ class UniquifyVariableNames : public IRMutator {
 
     Stmt visit(const For *op) override {
         Expr min = mutate(op->min);
-        Expr extent = mutate(op->extent);
+        Expr max = mutate(op->max);
         string new_name = make_new_name(op->name);
         Stmt body = mutate(op->body);
         renaming.pop(op->name);
@@ -96,18 +96,17 @@ class UniquifyVariableNames : public IRMutator {
         if (new_name == op->name &&
             body.same_as(op->body) &&
             min.same_as(op->min) &&
-            extent.same_as(op->extent)) {
+            max.same_as(op->max)) {
             return op;
         } else {
-            return For::make(new_name, min, extent, op->for_type, op->device_api, body);
+            return For::make(new_name, min, max, op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 
     Expr visit(const Variable *op) override {
-        if (renaming.contains(op->name)) {
-            string new_name = renaming.get(op->name);
-            if (new_name != op->name) {
-                return Variable::make(op->type, new_name);
+        if (const string *new_name = renaming.find(op->name)) {
+            if (*new_name != op->name) {
+                return Variable::make(op->type, *new_name);
             }
         }
         return op;
@@ -131,25 +130,30 @@ class FindFreeVars : public IRVisitor {
         }
     }
 
+    template<typename LetOrLetStmt>
+    void visit_let(const LetOrLetStmt *op) {
+        vector<ScopedBinding<>> frame;
+        decltype(op->body) body;
+        do {
+            op->value.accept(this);
+            frame.emplace_back(scope, op->name);
+            body = op->body;
+            op = body.template as<LetOrLetStmt>();
+        } while (op);
+        body.accept(this);
+    }
+
     void visit(const Let *op) override {
-        op->value.accept(this);
-        {
-            ScopedBinding<> bind(scope, op->name);
-            op->body.accept(this);
-        }
+        visit_let(op);
     }
 
     void visit(const LetStmt *op) override {
-        op->value.accept(this);
-        {
-            ScopedBinding<> bind(scope, op->name);
-            op->body.accept(this);
-        }
+        visit_let(op);
     }
 
     void visit(const For *op) override {
         op->min.accept(this);
-        op->extent.accept(this);
+        op->max.accept(this);
         {
             ScopedBinding<> bind(scope, op->name);
             op->body.accept(this);
@@ -168,14 +172,15 @@ Stmt uniquify_variable_names(const Stmt &s) {
     return u.mutate(s);
 }
 
+namespace {
 void check(vector<pair<Var, Expr>> in,
            vector<pair<Var, Expr>> out) {
     Stmt in_stmt = Evaluate::make(0), out_stmt = Evaluate::make(0);
-    for (auto it = in.rbegin(); it != in.rend(); it++) {
-        in_stmt = LetStmt::make(it->first.name(), it->second, in_stmt);
+    for (const auto &[var, value] : reverse_view(in)) {
+        in_stmt = LetStmt::make(var.name(), value, in_stmt);
     }
-    for (auto it = out.rbegin(); it != out.rend(); it++) {
-        out_stmt = LetStmt::make(it->first.name(), it->second, out_stmt);
+    for (const auto &[var, value] : reverse_view(out)) {
+        out_stmt = LetStmt::make(var.name(), value, out_stmt);
     }
 
     Stmt s = uniquify_variable_names(in_stmt);
@@ -189,6 +194,7 @@ void check(vector<pair<Var, Expr>> in,
         << "Correct output:\n"
         << out_stmt << "\n";
 }
+}  // namespace
 
 void uniquify_variable_names_test() {
     Var x("x"), x_1("x_1"), x_2("x_2"), x_3{"x_3"};
@@ -243,7 +249,7 @@ void uniquify_variable_names_test() {
           {{x, Let::make(y.name(), 3, y)},
            {x_1, Let::make(y.name(), 4, y)}});
 
-    std::cout << "uniquify_variable_names test passed" << std::endl;
+    std::cout << "uniquify_variable_names test passed\n";
 }
 
 }  // namespace Internal

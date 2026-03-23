@@ -154,6 +154,7 @@ DimBounds get_stage_bounds(const Function &f, int stage_num, const DimBounds &pu
 vector<DimBounds> get_stage_bounds(const Function &f, const DimBounds &pure_bounds) {
     vector<DimBounds> stage_bounds;
     size_t num_stages = f.updates().size() + 1;
+    stage_bounds.reserve(num_stages);
     for (size_t s = 0; s < num_stages; s++) {
         stage_bounds.push_back(get_stage_bounds(f, s, pure_bounds));
     }
@@ -405,7 +406,7 @@ void propagate_estimate_test() {
     check(img.dim(0).min() + img.dim(1).min() + x, x + 2);
     check(img.dim(0).extent() + img.dim(1).min() + img.dim(1).extent() * x, 55 * x + 38);
 
-    std::cout << "Propagate estimate test passed" << std::endl;
+    std::cout << "Propagate estimate test passed\n";
 }
 
 }  // namespace Internal

@@ -49,15 +49,15 @@ int main(int argc, char **argv) {
 
         if (out_p(x) != correct_p) {
             std::cout << "out_p(" << x << ") = " << out_p(x) << " instead of " << correct_p << "\n";
-            return -1;
+            return 1;
         }
         if (out_s(x) != correct_s) {
             std::cout << "out_s(" << x << ") = " << out_s(x) << " instead of " << correct_s << "\n";
-            return -1;
+            return 1;
         }
         if (out_d(x) != correct_d) {
             std::cout << "out_d(" << x << ") = " << out_d(x) << " instead of " << correct_d << "\n";
-            return -1;
+            return 1;
         }
     }
 

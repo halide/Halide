@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <iomanip>
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -9,19 +10,23 @@
 #include "AddAtomicMutex.h"
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
+#include "AddSplitFactorChecks.h"
 #include "AllocationBoundsInference.h"
 #include "AsyncProducers.h"
+#include "BoundConstantExtentLoops.h"
 #include "BoundSmallAllocations.h"
 #include "Bounds.h"
 #include "BoundsInference.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
+#include "ClampUnsafeAccesses.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
 #include "DebugArguments.h"
 #include "DebugToFile.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
+#include "ExtractTileOperations.h"
 #include "FindCalls.h"
 #include "FindIntrinsics.h"
 #include "FlattenNestedRamps.h"
@@ -38,6 +43,7 @@
 #include "Inline.h"
 #include "LICM.h"
 #include "LoopCarry.h"
+#include "LowerParallelTasks.h"
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "OffloadGPULoops.h"
@@ -59,10 +65,13 @@
 #include "SkipStages.h"
 #include "SlidingWindow.h"
 #include "SplitTuples.h"
+#include "StageStridedLoads.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
 #include "StrictifyFloat.h"
+#include "StripAsserts.h"
 #include "Substitute.h"
+#include "TargetQueryOps.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
 #include "UnifyDuplicateLets.h"
@@ -84,15 +93,43 @@ namespace {
 
 class LoweringLogger {
     Stmt last_written;
+    std::chrono::time_point<std::chrono::high_resolution_clock> last_time;
+    std::vector<std::pair<double, std::string>> timings;
+    bool time_lowering_passes = false;
 
 public:
+    LoweringLogger() {
+        last_time = std::chrono::high_resolution_clock::now();
+        static bool should_time = !get_env_variable("HL_TIME_LOWERING_PASSES").empty();
+        time_lowering_passes = should_time;
+    }
+
     void operator()(const string &message, const Stmt &s) {
+        auto t = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = t - last_time;
         if (!s.same_as(last_written)) {
             debug(2) << message << "\n"
                      << s << "\n";
             last_written = s;
+            last_time = t;
         } else {
             debug(2) << message << " (unchanged)\n\n";
+            last_time = t;
+        }
+        timings.emplace_back(diff.count() * 1000, message);
+    }
+
+    ~LoweringLogger() {
+        if (time_lowering_passes) {
+            double total = 0.0;
+            debug(0) << "Lowering pass runtimes:\n";
+            std::sort(timings.begin(), timings.end());
+            for (const auto &p : timings) {
+                total += p.first;
+                debug(0) << std::setw(10) << std::fixed << std::setprecision(3) << p.first << " ms : "
+                         << p.second << "\n";
+            }
+            debug(0) << std::setw(10) << std::fixed << std::setprecision(3) << total << " ms in total\n";
         }
     }
 };
@@ -108,16 +145,15 @@ void lower_impl(const vector<Function> &output_funcs,
                 Module &result_module) {
     auto time_start = std::chrono::high_resolution_clock::now();
 
+    size_t initial_lowered_function_count = result_module.functions().size();
+
     // Create a deep-copy of the entire graph of Funcs.
     auto [outputs, env] = deep_copy(output_funcs, build_environment(output_funcs));
 
+    lower_target_query_ops(env, t);
+
     bool any_strict_float = strictify_float(env, t);
     result_module.set_any_strict_float(any_strict_float);
-
-    // Output functions should all be computed and stored at root.
-    for (const Function &f : outputs) {
-        Func(f).compute_root().store_root();
-    }
 
     // Finalize all the LoopLevels
     for (auto &iter : env) {
@@ -162,12 +198,22 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Computing bounds of each function's value\n";
     FuncValueBounds func_bounds = compute_function_value_bounds(order, env);
 
+    // Clamp unsafe instances where a Func f accesses a Func g using
+    // an index which depends on a third Func h.
+    debug(1) << "Clamping unsafe data-dependent accesses\n";
+    s = clamp_unsafe_accesses(s, env, func_bounds);
+    log("Lowering after clamping unsafe data-dependent accesses", s);
+
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
     // can still simplify Exprs).
     debug(1) << "Performing computation bounds inference...\n";
     s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
     log("Lowering after computation bounds inference:", s);
+
+    debug(1) << "Asserting that all split factors are positive...\n";
+    s = add_split_factor_checks(s, env);
+    log("Lowering after asserting that all split factors are positive:", s);
 
     debug(1) << "Removing extern loops...\n";
     s = remove_extern_loops(s);
@@ -185,7 +231,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after uniquifying variable names:", s);
 
     debug(1) << "Simplifying...\n";
-    s = simplify(s, false);  // Storage folding and allocation bounds inference needs .loop_max symbols
+    s = simplify(s);
     log("Lowering after first simplification:", s);
 
     debug(1) << "Simplifying correlated differences...\n";
@@ -198,7 +244,6 @@ void lower_impl(const vector<Function> &output_funcs,
 
     bool will_inject_host_copies =
         (t.has_gpu_feature() ||
-         t.has_feature(Target::OpenGLCompute) ||
          t.has_feature(Target::HexagonDma) ||
          (t.arch != Target::Hexagon && (t.has_feature(Target::HVX))));
 
@@ -227,7 +272,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after discarding safe promises:", s);
 
     debug(1) << "Dynamically skipping stages...\n";
-    s = skip_stages(s, order);
+    s = skip_stages(s, outputs, fused_groups, env);
     log("Lowering after dynamically skipping stages:", s);
 
     debug(1) << "Forking asynchronous producers...\n";
@@ -238,10 +283,7 @@ void lower_impl(const vector<Function> &output_funcs,
     s = split_tuples(s, env);
     log("Lowering after destructuring tuple-valued realizations:", s);
 
-    // OpenGL relies on GPU var canonicalization occurring before
-    // storage flattening.
-    if (t.has_gpu_feature() ||
-        t.has_feature(Target::OpenGLCompute)) {
+    if (t.has_gpu_feature()) {
         debug(1) << "Canonicalizing GPU var names...\n";
         s = canonicalize_gpu_vars(s);
         log("Lowering after canonicalizing GPU var names:", s);
@@ -257,7 +299,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after storage flattening:", s);
 
     debug(1) << "Adding atomic mutex allocation...\n";
-    s = add_atomic_mutex(s, env);
+    s = add_atomic_mutex(s, outputs);
     log("Lowering after adding atomic mutex allocation:", s);
 
     debug(1) << "Unpacking buffer arguments...\n";
@@ -284,12 +326,16 @@ void lower_impl(const vector<Function> &output_funcs,
         debug(1) << "Selecting a GPU API for extern stages...\n";
         s = select_gpu_api(s, t);
         log("Lowering after selecting a GPU API for extern stages:", s);
+    } else {
+        debug(1) << "Injecting host-dirty marking...\n";
+        s = inject_host_dev_buffer_copies(s, t);
+        log("Lowering after injecting host-dirty marking:", s);
     }
 
     debug(1) << "Simplifying...\n";
     s = simplify(s);
     s = unify_duplicate_lets(s);
-    log("Lowering after second simplifcation:", s);
+    log("Lowering after second simplification:", s);
 
     debug(1) << "Reduce prefetch dimension...\n";
     s = reduce_prefetch_dimension(s, t);
@@ -298,6 +344,10 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
     log("Lowering after simplifying correlated differences:", s);
+
+    debug(1) << "Bounding constant extent loops...\n";
+    s = bound_constant_extent_loops(s);
+    log("Lowering after bounding constant extent loops:", s);
 
     debug(1) << "Unrolling...\n";
     s = unroll_loops(s);
@@ -309,7 +359,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after vectorizing:", s);
 
     if (t.has_gpu_feature() ||
-        t.has_feature(Target::OpenGLCompute)) {
+        t.has_feature(Target::Vulkan)) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
         log("Lowering after injecting per-block gpu synchronization:", s);
@@ -324,6 +374,10 @@ void lower_impl(const vector<Function> &output_funcs,
     s = partition_loops(s);
     s = simplify(s);
     log("Lowering after partitioning loops:", s);
+
+    debug(1) << "Staging strided loads...\n";
+    s = stage_strided_loads(s);
+    log("Lowering after staging strided loads:", s);
 
     debug(1) << "Trimming loops to the region over which they do something...\n";
     s = trim_no_ops(s);
@@ -356,15 +410,15 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bound_small_allocations(s);
     log("Lowering after bounding small allocations:", s);
 
-    if (t.has_feature(Target::Profile)) {
+    if (t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer)) {
         debug(1) << "Injecting profiling...\n";
-        s = inject_profiling(s, pipeline_name);
+        s = inject_profiling(s, pipeline_name, env);
         log("Lowering after injecting profiling:", s);
     }
 
     if (t.has_feature(Target::CUDA)) {
         debug(1) << "Injecting warp shuffles...\n";
-        s = lower_warp_shuffles(s);
+        s = lower_warp_shuffles(s, t);
         log("Lowering after injecting warp shuffles:", s);
     }
 
@@ -374,6 +428,12 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Lowering unsafe promises...\n";
     s = lower_unsafe_promises(s, t);
     log("Lowering after lowering unsafe promises:", s);
+
+    if (t.has_feature(Target::AVX512_SapphireRapids)) {
+        debug(1) << "Extracting tile operations...\n";
+        s = extract_tile_operations(s);
+        log("Lowering after extracting tile operations:", s);
+    }
 
     debug(1) << "Flattening nested ramps...\n";
     s = flatten_nested_ramps(s);
@@ -387,8 +447,20 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after removing dead allocations and hoisting loop invariants:", s);
 
     debug(1) << "Finding intrinsics...\n";
+    // Must be run after the last simplification, because it turns
+    // divisions into shifts, which the simplifier reverses.
     s = find_intrinsics(s);
     log("Lowering after finding intrinsics:", s);
+
+    debug(1) << "Hoisting prefetches...\n";
+    s = hoist_prefetches(s);
+    log("Lowering after hoisting prefetches:", s);
+
+    if (t.has_feature(Target::NoAsserts)) {
+        debug(1) << "Stripping asserts...\n";
+        s = strip_asserts(s);
+        log("Lowering after stripping asserts:", s);
+    }
 
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
@@ -402,6 +474,9 @@ void lower_impl(const vector<Function> &output_funcs,
         }
     }
 
+    // Make a copy of the Stmt code, before we lower anything to less human-readable code.
+    result_module.set_conceptual_code_stmt(s);
+
     if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
         debug(1) << "Splitting off Hexagon offload...\n";
         s = inject_hexagon_rpc(s, t, result_module);
@@ -413,12 +488,40 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_gpu_feature()) {
         debug(1) << "Offloading GPU loops...\n";
-        s = inject_gpu_offload(s, t);
+        s = inject_gpu_offload(s, t, any_strict_float);
         debug(2) << "Lowering after splitting off GPU loops:\n"
                  << s << "\n\n";
     } else {
         debug(1) << "Skipping GPU offload...\n";
     }
+
+    // TODO: This needs to happen before lowering parallel tasks, because global
+    // images used inside parallel loops are rewritten from loads from images to
+    // loads from closure parameters. Closure parameters are missing the Buffer<>
+    // object, which needs to be found by infer_arguments here. Running
+    // infer_arguments prior to lower_parallel_tasks is a hacky solution to this
+    // problem. It would be better if closures could directly reference globals
+    // so they don't add overhead to the closure.
+    vector<InferredArgument> inferred_args = infer_arguments(s, outputs);
+
+    std::vector<LoweredFunc> closure_implementations;
+    debug(1) << "Lowering Parallel Tasks...\n";
+    s = lower_parallel_tasks(s, closure_implementations, pipeline_name, t);
+    // Process any LoweredFunctions added by other passes. In practice, this
+    // will likely not work well enough due to ordering issues with
+    // closure generating passes and instead all such passes will need to
+    // be done at once.
+    for (size_t i = initial_lowered_function_count; i < result_module.functions().size(); i++) {
+        // Note that lower_parallel_tasks() appends to the end of closure_implementations
+        result_module.functions()[i].body =
+            lower_parallel_tasks(result_module.functions()[i].body, closure_implementations,
+                                 result_module.functions()[i].name, t);
+    }
+    for (auto &lowered_func : closure_implementations) {
+        result_module.append(lowered_func);
+    }
+    debug(2) << "Lowering after generating parallel tasks and closures:\n"
+             << s << "\n\n";
 
     vector<Argument> public_args = args;
     for (const auto &out : outputs) {
@@ -429,7 +532,6 @@ void lower_impl(const vector<Function> &output_funcs,
         }
     }
 
-    vector<InferredArgument> inferred_args = infer_arguments(s, outputs);
     for (const InferredArgument &arg : inferred_args) {
         if (arg.param.defined() && arg.param.name() == "__user_context") {
             // The user context is always in the inferred args, but is
@@ -459,8 +561,8 @@ void lower_impl(const vector<Function> &output_funcs,
                 << ", which was not found in the argument list.\n";
 
             err << "\nArgument list specified: ";
-            for (size_t i = 0; i < args.size(); i++) {
-                err << args[i].name << " ";
+            for (const auto &arg : args) {
+                err << arg.name << " ";
             }
             err << "\n\nParameters referenced in generated code: ";
             for (const InferredArgument &ia : inferred_args) {
@@ -476,23 +578,19 @@ void lower_impl(const vector<Function> &output_funcs,
     // We're about to drop the environment and outputs vector, which
     // contain the only strong refs to Functions that may still be
     // pointed to by the IR. So make those refs strong.
-    class StrengthenRefs : public IRMutator {
-        using IRMutator::visit;
-        Expr visit(const Call *c) override {
-            Expr expr = IRMutator::visit(c);
-            c = expr.as<Call>();
-            internal_assert(c);
-            if (c->func.defined()) {
-                FunctionPtr ptr = c->func;
-                ptr.strengthen();
-                expr = Call::make(c->type, c->name, c->args, c->call_type,
-                                  ptr, c->value_index,
-                                  c->image, c->param);
-            }
-            return expr;
+    s = mutate_with(s, [&](auto *self, const Call *c) {
+        Expr expr = self->visit_base(c);
+        c = expr.as<Call>();
+        internal_assert(c);
+        if (c->func.defined()) {
+            FunctionPtr ptr = c->func;
+            ptr.strengthen();
+            expr = Call::make(c->type, c->name, c->args, c->call_type,
+                              ptr, c->value_index,
+                              c->image, c->param);
         }
-    };
-    s = StrengthenRefs().mutate(s);
+        return expr;
+    });
 
     LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
 
@@ -521,7 +619,7 @@ Module lower(const vector<Function> &output_funcs,
              const vector<Stmt> &requirements,
              bool trace_pipeline,
              const vector<IRMutator *> &custom_passes) {
-    Module result_module{extract_namespaces(pipeline_name), t};
+    Module result_module{strip_namespaces(pipeline_name), t};
     run_with_large_stack([&]() {
         lower_impl(output_funcs, pipeline_name, t, args, linkage_type, requirements, trace_pipeline, custom_passes, result_module);
     });

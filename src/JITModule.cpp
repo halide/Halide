@@ -21,15 +21,92 @@
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
+#include "Util.h"
+#include "WasmExecutor.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
 
+// On 32-bit targets, LLVM JIT code may reference libgcc helper functions
+// that dlsym can't always resolve (e.g. under QEMU, or when the host
+// compiler inlined them). We provide wrappers and register them in a
+// builtins map that getSymbolAddress consults as a fallback.
+
 #if defined(__GNUC__) && defined(__i386__)
 extern "C" unsigned long __udivdi3(unsigned long a, unsigned long b);
+
+static const std::map<std::string, uint64_t> i386_builtins = {
+    {"__udivdi3", (uintptr_t)&__udivdi3},
+};
 #endif
+
+// On arm-32, LLVM generates calls to __sync_* libgcc functions for atomic
+// operations. We provide wrappers using GCC's __sync_* builtins, guarded
+// by the __GCC_HAVE_SYNC_COMPARE_AND_SWAP_N predefined macros.
+#if defined(__arm__)
+
+static void halide__sync_synchronize() {
+    __sync_synchronize();
+}
+
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_1
+static uint8_t halide__sync_lock_test_and_set_1(volatile uint8_t *ptr, uint8_t val) {
+    return __sync_lock_test_and_set(ptr, val);
+}
+#endif
+
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4
+static uint32_t halide__sync_fetch_and_add_4(volatile uint32_t *ptr, uint32_t val) {
+    return __sync_fetch_and_add(ptr, val);
+}
+static uint32_t halide__sync_fetch_and_sub_4(volatile uint32_t *ptr, uint32_t val) {
+    return __sync_fetch_and_sub(ptr, val);
+}
+static uint32_t halide__sync_fetch_and_or_4(volatile uint32_t *ptr, uint32_t val) {
+    return __sync_fetch_and_or(ptr, val);
+}
+static uint32_t halide__sync_fetch_and_and_4(volatile uint32_t *ptr, uint32_t val) {
+    return __sync_fetch_and_and(ptr, val);
+}
+static uint32_t halide__sync_val_compare_and_swap_4(volatile uint32_t *ptr, uint32_t oldval, uint32_t newval) {
+    return __sync_val_compare_and_swap(ptr, oldval, newval);
+}
+#endif
+
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8
+static uint64_t halide__sync_fetch_and_add_8(volatile uint64_t *ptr, uint64_t val) {
+    return __sync_fetch_and_add(ptr, val);
+}
+static uint64_t halide__sync_fetch_and_sub_8(volatile uint64_t *ptr, uint64_t val) {
+    return __sync_fetch_and_sub(ptr, val);
+}
+static uint64_t halide__sync_val_compare_and_swap_8(volatile uint64_t *ptr, uint64_t oldval, uint64_t newval) {
+    return __sync_val_compare_and_swap(ptr, oldval, newval);
+}
+#endif
+
+static const std::map<std::string, uint64_t> arm32_sync_builtins = {
+    {"__sync_synchronize", (uintptr_t)&halide__sync_synchronize},
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_1
+    {"__sync_lock_test_and_set_1", (uintptr_t)&halide__sync_lock_test_and_set_1},
+#endif
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4
+    {"__sync_fetch_and_add_4", (uintptr_t)&halide__sync_fetch_and_add_4},
+    {"__sync_fetch_and_sub_4", (uintptr_t)&halide__sync_fetch_and_sub_4},
+    {"__sync_fetch_and_or_4", (uintptr_t)&halide__sync_fetch_and_or_4},
+    {"__sync_fetch_and_and_4", (uintptr_t)&halide__sync_fetch_and_and_4},
+    {"__sync_val_compare_and_swap_4", (uintptr_t)&halide__sync_val_compare_and_swap_4},
+#endif
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8
+    {"__sync_fetch_and_add_8", (uintptr_t)&halide__sync_fetch_and_add_8},
+    {"__sync_fetch_and_sub_8", (uintptr_t)&halide__sync_fetch_and_sub_8},
+    {"__sync_val_compare_and_swap_8", (uintptr_t)&halide__sync_val_compare_and_swap_8},
+#endif
+};
+
+#endif  // defined(__arm__)
 
 #ifdef _WIN32
 void *get_symbol_address(const char *s) {
@@ -57,48 +134,6 @@ typedef struct CUctx_st *CUcontext;
 typedef struct cl_context_st *cl_context;
 typedef struct cl_command_queue_st *cl_command_queue;
 
-void load_opengl(bool needs_egl) {
-#if defined(__linux__)
-    if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
-        debug(1) << "OpenGL support code already linked in...\n";
-    } else {
-        debug(1) << "Looking for OpenGL support code...\n";
-        string error;
-        if (needs_egl) {
-            // NVIDIA EGL prefers users to load libOpenGL.so instead of libGL.so
-            // The way we're using it, it seems like libGL.so.1 is a valid fallback.
-            // See here for more details: https://developer.nvidia.com/blog/linking-opengl-server-side-rendering
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenGL.so.0", &error);
-            if (!error.empty()) {
-                debug(1) << "Could not find libOpenGL.so.0 when EGL requested. Falling back to libGL.so.1\n";
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
-            }
-            user_assert(error.empty()) << "Could not find libOpenGL.so.0 or libGL.so.1\n";
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libEGL.so.1", &error);
-            user_assert(error.empty()) << "Could not find libEGL.so.1\n";
-        } else {
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
-            user_assert(error.empty()) << "Could not find libGL.so\n";
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so.6", &error);
-            user_assert(error.empty()) << "Could not find libX11.so.6\n";
-        }
-    }
-#elif defined(__APPLE__)
-    if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
-        debug(1) << "OpenGL support code already linked in...\n";
-    } else {
-        debug(1) << "Looking for OpenGL support code...\n";
-        string error;
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/AGL.framework/AGL", &error);
-        user_assert(error.empty()) << "Could not find AGL.framework\n";
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenGL.framework/OpenGL", &error);
-        user_assert(error.empty()) << "Could not find OpenGL.framework\n";
-    }
-#else
-    internal_error << "JIT support for OpenGL on anything other than linux or OS X not yet implemented\n";
-#endif
-}
-
 void load_metal() {
 #if defined(__APPLE__)
     if (have_symbol("MTLCreateSystemDefaultDevice")) {
@@ -114,6 +149,99 @@ void load_metal() {
 #endif
 }
 
+void load_vulkan() {
+    if (have_symbol("vkGetInstanceProcAddr")) {
+        debug(1) << "Vulkan support code already linked in...\n";
+    } else {
+        debug(1) << "Looking for Vulkan support code...\n";
+
+        const auto try_load = [](const char *libname) -> string {
+            debug(1) << "Trying " << libname << "... ";
+            string error;
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently(libname, &error);
+            debug(1) << (error.empty() ? "found!\n" : "not found.\n");
+            return error;
+        };
+
+        string error;
+
+        auto env_libname = get_env_variable("HL_VK_LOADER_LIB");
+        if (!env_libname.empty()) {
+            error = try_load(env_libname.c_str());
+        }
+
+        // First, attempt to find the versioned library (per the Vulkan API docs), otherwise
+        // fallback to unversioned libs, and known common paths
+        if (!error.empty()) {
+            const char *libnames[] = {
+#if defined(__APPLE__)
+                "libvulkan.1.dylib",
+                "libvulkan.dylib",
+                "/usr/local/lib/libvulkan.dylib",
+                "libMoltenVK.dylib",
+                "vulkan.framework/vulkan",
+                "MoltenVK.framework/MoltenVK"
+#elif defined(_WIN32)
+                "vulkan-1.dll",
+#else
+                "libvulkan.so.1",
+                "libvulkan.so",
+#endif
+            };
+
+            for (const char *libname : libnames) {
+                error = try_load(libname);
+                if (error.empty()) {
+                    break;
+                }
+            }
+        }
+        user_assert(error.empty()) << "Could not find a Vulkan loader library: " << error << "\n"
+                                   << "(Try setting the env var HL_VK_LOADER_LIB to an explicit path to fix this.)\n";
+    }
+}
+
+void load_webgpu() {
+    debug(1) << "Looking for a native WebGPU implementation...\n";
+
+    const auto try_load = [](const char *libname) -> string {
+        debug(1) << "Trying " << libname << "... ";
+        string error;
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently(libname, &error);
+        debug(1) << (error.empty() ? "found!\n" : "not found.\n");
+        return error;
+    };
+
+    string error;
+
+    auto env_libname = get_env_variable("HL_WEBGPU_NATIVE_LIB");
+    if (!env_libname.empty()) {
+        error = try_load(env_libname.c_str());
+    }
+    if (!error.empty()) {
+        const char *libnames[] = {
+            // Dawn (Chromium).
+            "libwebgpu_dawn.so",
+            "libwebgpu_dawn.dylib",
+            "webgpu_dawn.dll",
+
+            // wgpu (Firefox).
+            "libwgpu.so",
+            "libwgpu.dylib",
+            "wgpu.dll",
+        };
+
+        for (const char *libname : libnames) {
+            error = try_load(libname);
+            if (error.empty()) {
+                break;
+            }
+        }
+    }
+    user_assert(error.empty()) << "Could not find a native WebGPU library: " << error << "\n"
+                               << "(Try setting the env var HL_WEBGPU_NATIVE_LIB to an explicit path to fix this.)\n";
+}
+
 }  // namespace
 
 using namespace llvm;
@@ -126,15 +254,16 @@ public:
     JITModuleContents() = default;
 
     ~JITModuleContents() {
-        if (execution_engine != nullptr) {
-            execution_engine->runStaticConstructorsDestructors(true);
-            delete execution_engine;
+        if (JIT != nullptr) {
+            auto err = dtorRunner->run();
+            internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
         }
     }
 
     std::map<std::string, JITModule::Symbol> exports;
-    llvm::LLVMContext context;
-    ExecutionEngine *execution_engine = nullptr;
+    std::unique_ptr<llvm::LLVMContext> context = std::make_unique<llvm::LLVMContext>();
+    std::unique_ptr<llvm::orc::LLJIT> JIT = nullptr;
+    std::unique_ptr<llvm::orc::CtorDtorRunner> dtorRunner = nullptr;
     std::vector<JITModule> dependencies;
     JITModule::Symbol entrypoint;
     JITModule::Symbol argv_entrypoint;
@@ -155,11 +284,13 @@ void destroy<JITModuleContents>(const JITModuleContents *f) {
 namespace {
 
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
-JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
+JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
-    llvm::Function *fn = ee.FindFunctionNamed(name);
-    internal_assert(fn->getName() == name);
-    void *f = (void *)ee.getFunctionAddress(name);
+
+    auto addr = JIT.lookup(name);
+    internal_assert(addr) << llvm::toString(addr.takeError()) << "\n";
+
+    void *f = (void *)addr->getValue();
     if (!f) {
         internal_error << "Compiling " << name << " returned nullptr\n";
     }
@@ -174,7 +305,6 @@ JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &na
 // Expand LLVM's search for symbols to include code contained in a set of JITModule.
 class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<JITModule> modules;
-    std::vector<std::pair<uint8_t *, size_t>> code_pages;
 
 public:
     HalideJITMemoryManager(const std::vector<JITModule> &modules)
@@ -182,46 +312,25 @@ public:
     }
 
     uint64_t getSymbolAddress(const std::string &name) override {
-        for (size_t i = 0; i < modules.size(); i++) {
-            const JITModule &m = modules[i];
-            std::map<std::string, JITModule::Symbol>::const_iterator iter = m.exports().find(name);
-            if (iter == m.exports().end() && starts_with(name, "_")) {
-                iter = m.exports().find(name.substr(1));
+        for (const auto &module : modules) {
+            std::map<std::string, JITModule::Symbol>::const_iterator iter = module.exports().find(name);
+            if (iter == module.exports().end() && starts_with(name, "_")) {
+                iter = module.exports().find(name.substr(1));
             }
-            if (iter != m.exports().end()) {
+            if (iter != module.exports().end()) {
                 return (uint64_t)iter->second.address;
             }
         }
         uint64_t result = SectionMemoryManager::getSymbolAddress(name);
-#if defined(__GNUC__) && defined(__i386__)
-        // This is a workaround for an odd corner case (cross-compiling + testing
-        // Python bindings x86-32 on an x86-64 system): __udivdi3 is a helper function
-        // that GCC uses to do u64/u64 division on 32-bit systems; it's usually included
-        // by the linker on these systems as needed. When we JIT, LLVM will include references
-        // to this call; MCJIT fixes up these references by doing (roughly) dlopen(NULL)
-        // to look up the symbol. For normal JIT tests, this works fine, as dlopen(NULL)
-        // finds the test executable, which has the right lookups to locate it inside libHalide.so.
-        // If, however, we are running a JIT-via-Python test, dlopen(NULL) returns the
-        // CPython executable... which apparently *doesn't* include this as an exported
-        // function, so the lookup fails and crashiness ensues. So our workaround here is
-        // a bit icky, but expedient: check for this name if we can't find it elsewhere,
-        // and if so, return the one we know should be present. (Obviously, if other runtime
-        // helper functions of this sort crop up in the future, this should be expanded
-        // into a "builtins map".)
-        if (result == 0 && name == "__udivdi3") {
-            result = (uint64_t)&__udivdi3;
-        }
-#endif
         internal_assert(result != 0)
             << "HalideJITMemoryManager: unable to find address for " << name << "\n";
         return result;
     }
 
-    uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
-        uint8_t *result = SectionMemoryManager::allocateCodeSection(size, alignment, section_id, section_name);
-        code_pages.emplace_back(result, size);
-        return result;
-    }
+    // We don't support throwing C++ exceptions through JIT-compiled code. Avoid
+    // any issues with it by just opting out.
+    void registerEHFrames(uint8_t *, uint64_t, size_t) override {};
+    void deregisterEHFrames() override {};
 };
 
 }  // namespace
@@ -233,117 +342,188 @@ JITModule::JITModule() {
 JITModule::JITModule(const Module &m, const LoweredFunc &fn,
                      const std::vector<JITModule> &dependencies) {
     jit_module = new JITModuleContents();
-    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(m, jit_module->context));
+    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(m, *jit_module->context));
     std::vector<JITModule> deps_with_runtime = dependencies;
     std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module.get(), m.target());
     deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
     compile_module(std::move(llvm_module), fn.name, m.target(), deps_with_runtime);
-    // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
+    // If -time-passes is in HL_LLVM_ARGS, this will print llvm pass time
+    // statistics. Otherwise it's a no-op.
     llvm::reportAndResetTimings();
 }
 
-void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
-                               const std::vector<JITModule> &dependencies,
-                               const std::vector<std::string> &requested_exports) {
+namespace {
+void compile_module_impl(
+    IntrusivePtr<JITModuleContents> &jit_module,
+    std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
+    const std::vector<JITModule> &dependencies,
+    const std::vector<std::string> &requested_exports) {
 
     // Ensure that LLVM is initialized
     CodeGen_LLVM::initialize_llvm();
 
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
-    debug(2) << "Target triple: " << m->getTargetTriple() << "\n";
+    debug(2) << "Target triple: " << m->getTargetTriple().str() << "\n";
     string error_string;
 
-    string mcpu;
-    string mattrs;
+    llvm::for_each(*m, set_function_attributes_from_halide_target_options);
+
     llvm::TargetOptions options;
-    get_target_options(*m, options, mcpu, mattrs);
+    get_target_options(*m, options);
 
     DataLayout initial_module_data_layout = m->getDataLayout();
     string module_name = m->getModuleIdentifier();
 
-    llvm::EngineBuilder engine_builder((std::move(m)));
-    engine_builder.setTargetOptions(options);
-    engine_builder.setErrorStr(&error_string);
-    engine_builder.setEngineKind(llvm::EngineKind::JIT);
-    HalideJITMemoryManager *memory_manager = new HalideJITMemoryManager(dependencies);
-    engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(memory_manager));
-
-    engine_builder.setOptLevel(CodeGenOpt::Aggressive);
-    if (!mcpu.empty()) {
-        engine_builder.setMCPU(mcpu);
+    // Build TargetMachine
+    llvm::orc::JITTargetMachineBuilder tm_builder(llvm::Triple(m->getTargetTriple()));
+    tm_builder.setOptions(options);
+    tm_builder.setCodeGenOptLevel(CodeGenOptLevel::Aggressive);
+    if (target.arch == Target::Arch::RISCV) {
+        tm_builder.setCodeModel(llvm::CodeModel::Medium);
     }
-    std::vector<string> mattrs_array = {mattrs};
-    engine_builder.setMAttrs(mattrs_array);
 
-    TargetMachine *tm = engine_builder.selectTarget();
-    internal_assert(tm) << error_string << "\n";
-    DataLayout target_data_layout(tm->createDataLayout());
+    auto tm = tm_builder.createTargetMachine();
+    internal_assert(tm) << llvm::toString(tm.takeError()) << "\n";
+
+    DataLayout target_data_layout(tm.get()->createDataLayout());
     if (initial_module_data_layout != target_data_layout) {
         internal_error << "Warning: data layout mismatch between module ("
                        << initial_module_data_layout.getStringRepresentation()
                        << ") and what the execution engine expects ("
                        << target_data_layout.getStringRepresentation() << ")\n";
     }
-    ExecutionEngine *ee = engine_builder.create(tm);
 
-    if (!ee) {
-        std::cerr << error_string << "\n";
+    // Create LLJIT
+    const auto compilerBuilder = [&](const llvm::orc::JITTargetMachineBuilder & /*jtmb*/)
+        -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
+        return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*tm));
+    };
+
+    llvm::orc::LLJITBuilderState::ObjectLinkingLayerCreator linkerBuilder;
+    if ((target.arch == Target::Arch::X86 && target.bits == 32) ||
+        (target.arch == Target::Arch::ARM && target.bits == 32) ||
+        target.os == Target::Windows) {
+        // Fallback to RTDyld-based linking to workaround errors:
+        // i386: "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
+        // ARM 32bit: Unsupported target machine architecture in ELF object shared runtime-jitted-objectbuffer
+        // Windows 64-bit: JIT session error: could not register eh-frame: __register_frame function not found
+        linkerBuilder = [&](llvm::orc::ExecutionSession &session) {
+            return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&](const llvm::MemoryBuffer &) {
+                return std::make_unique<HalideJITMemoryManager>(dependencies);
+            });
+        };
+    } else {
+        linkerBuilder = [](llvm::orc::ExecutionSession &session) {
+            return std::make_unique<llvm::orc::ObjectLinkingLayer>(session);
+        };
     }
-    internal_assert(ee) << "Couldn't create execution engine\n";
 
-    // Do any target-specific initialization
-    std::vector<llvm::JITEventListener *> listeners;
+    auto JIT = llvm::cantFail(llvm::orc::LLJITBuilder()
+                                  .setDataLayout(target_data_layout)
+                                  .setCompileFunctionCreator(compilerBuilder)
+                                  .setObjectLinkingLayerCreator(linkerBuilder)
+                                  .create());
 
-    if (target.arch == Target::X86) {
-        listeners.push_back(llvm::JITEventListener::createIntelJITEventListener());
+    auto ctors = llvm::orc::getConstructors(*m);
+    llvm::orc::CtorDtorRunner ctorRunner(JIT->getMainJITDylib());
+    ctorRunner.add(ctors);
+
+    auto dtors = llvm::orc::getDestructors(*m);
+    auto dtorRunner = std::make_unique<llvm::orc::CtorDtorRunner>(JIT->getMainJITDylib());
+    dtorRunner->add(dtors);
+
+    // Resolve system symbols (like pthread, dl and others)
+    auto gen = llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(target_data_layout.getGlobalPrefix());
+    internal_assert(gen) << llvm::toString(gen.takeError()) << "\n";
+    JIT->getMainJITDylib().addGenerator(std::move(gen.get()));
+
+    llvm::orc::ThreadSafeModule tsm(std::move(m), std::move(jit_module->context));
+    auto err = JIT->addIRModule(std::move(tsm));
+    internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
+
+    // Resolve symbol dependencies
+    llvm::orc::SymbolMap newSymbols;
+    auto symbolStringPool = JIT->getExecutionSession().getExecutorProcessControl().getSymbolStringPool();
+    for (const auto &module : dependencies) {
+        for (auto const &iter : module.exports()) {
+            orc::SymbolStringPtr name = symbolStringPool->intern(iter.first);
+            orc::SymbolStringPtr _name = symbolStringPool->intern("_" + iter.first);
+            auto symbol = llvm::orc::ExecutorAddr::fromPtr(iter.second.address);
+            if (!newSymbols.count(name)) {
+                newSymbols.insert({name, {symbol, JITSymbolFlags::Exported}});
+            }
+            if (!newSymbols.count(_name)) {
+                newSymbols.insert({_name, {symbol, JITSymbolFlags::Exported}});
+            }
+        }
     }
-    // TODO: If this ever works in LLVM, this would allow profiling of JIT code with symbols with oprofile.
-    //listeners.push_back(llvm::createOProfileJITEventListener());
 
-    for (size_t i = 0; i < listeners.size(); i++) {
-        ee->RegisterJITEventListener(listeners[i]);
+    // On 32-bit targets, add libgcc builtins that dlsym can't find.
+#if defined(__GNUC__) && defined(__i386__)
+    for (const auto &[sym_name, sym_addr] : i386_builtins) {
+        auto name = symbolStringPool->intern(sym_name);
+        if (!newSymbols.count(name)) {
+            newSymbols.insert({name, {llvm::orc::ExecutorAddr(sym_addr), JITSymbolFlags::Exported}});
+        }
     }
+#endif
+#if defined(__arm__)
+    for (const auto &[sym_name, sym_addr] : arm32_sync_builtins) {
+        auto name = symbolStringPool->intern(sym_name);
+        if (!newSymbols.count(name)) {
+            newSymbols.insert({name, {llvm::orc::ExecutorAddr(sym_addr), JITSymbolFlags::Exported}});
+        }
+    }
+#endif
+
+    err = JIT->getMainJITDylib().define(orc::absoluteSymbols(std::move(newSymbols)));
+    internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
     debug(1) << "JIT compiling " << module_name
              << " for " << target.to_string() << "\n";
 
+    using Symbol = JITModule::Symbol;
     std::map<std::string, Symbol> exports;
 
     Symbol entrypoint;
     Symbol argv_entrypoint;
     if (!function_name.empty()) {
-        entrypoint = compile_and_get_function(*ee, function_name);
+        entrypoint = compile_and_get_function(*JIT, function_name);
         exports[function_name] = entrypoint;
-        argv_entrypoint = compile_and_get_function(*ee, function_name + "_argv");
+        argv_entrypoint = compile_and_get_function(*JIT, function_name + "_argv");
         exports[function_name + "_argv"] = argv_entrypoint;
     }
 
-    for (size_t i = 0; i < requested_exports.size(); i++) {
-        exports[requested_exports[i]] = compile_and_get_function(*ee, requested_exports[i]);
+    for (const auto &requested_export : requested_exports) {
+        exports[requested_export] = compile_and_get_function(*JIT, requested_export);
     }
 
-    debug(2) << "Finalizing object\n";
-    ee->finalizeObject();
-    // Do any target-specific post-compilation module meddling
-    for (size_t i = 0; i < listeners.size(); i++) {
-        ee->UnregisterJITEventListener(listeners[i]);
-        delete listeners[i];
-    }
-    listeners.clear();
-
-    // TODO: I don't think this is necessary, we shouldn't have any static constructors
-    ee->runStaticConstructorsDestructors(false);
+    err = ctorRunner.run();
+    internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
     jit_module->exports = exports;
-    jit_module->execution_engine = ee;
+    jit_module->JIT = std::move(JIT);
+    jit_module->dtorRunner = std::move(dtorRunner);
     jit_module->dependencies = dependencies;
     jit_module->entrypoint = entrypoint;
     jit_module->argv_entrypoint = argv_entrypoint;
     jit_module->name = function_name;
+}
+}  // namespace
+
+void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
+                               const std::vector<JITModule> &dependencies,
+                               const std::vector<std::string> &requested_exports) {
+    // LLJIT's SimpleCompiler triggers LLVM's AsmPrinter, which can use a large
+    // amount of stack (observed stack overflows on macOS worker threads with
+    // 512KB default stacks). Use run_with_large_stack to ensure enough space.
+    run_with_large_stack([&]() {
+        compile_module_impl(jit_module, std::move(m), function_name, target, dependencies, requested_exports);
+    });
 }
 
 /*static*/
@@ -367,7 +547,7 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg,
     }
 
     std::unique_ptr<llvm::Module> llvm_module = CodeGen_LLVM::compile_trampolines(
-        target, result.jit_module->context, suffix, extern_signatures);
+        target, *result.jit_module->context, suffix, extern_signatures);
 
     result.compile_module(std::move(llvm_module), /*function_name*/ "", target, deps, requested_exports);
 
@@ -400,15 +580,17 @@ JITModule::Symbol JITModule::entrypoint_symbol() const {
     return jit_module->entrypoint;
 }
 
-int (*JITModule::argv_function() const)(const void **) {
-    return (int (*)(const void **))jit_module->argv_entrypoint.address;
+int (*JITModule::argv_function() const)(const void *const *) {
+    return (int (*)(const void *const *))jit_module->argv_entrypoint.address;
 }
 
 JITModule::Symbol JITModule::argv_entrypoint_symbol() const {
     return jit_module->argv_entrypoint;
 }
 
-static bool module_already_in_graph(const JITModuleContents *start, const JITModuleContents *target, std::set<const JITModuleContents *> &already_seen) {
+namespace {
+
+bool module_already_in_graph(const JITModuleContents *start, const JITModuleContents *target, std::set<const JITModuleContents *> &already_seen) {
     if (start == target) {
         return true;
     }
@@ -424,6 +606,8 @@ static bool module_already_in_graph(const JITModuleContents *start, const JITMod
     }
     return false;
 }
+
+}  // namespace
 
 void JITModule::add_dependency(JITModule &dep) {
     std::set<const JITModuleContents *> already_seen;
@@ -465,8 +649,26 @@ void JITModule::reuse_device_allocations(bool b) const {
     }
 }
 
+int JITModule::get_num_threads() const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_get_num_threads");
+    if (f != exports().end()) {
+        return (reinterpret_bits<int (*)()>(f->second.address))();
+    }
+    return 1;
+}
+
+int JITModule::set_num_threads(int n) const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_set_num_threads");
+    if (f != exports().end()) {
+        return (reinterpret_bits<int (*)(int)>(f->second.address))(n);
+    }
+    return 1;
+}
+
 bool JITModule::compiled() const {
-    return jit_module->execution_engine != nullptr;
+    return jit_module->JIT != nullptr;
 }
 
 namespace {
@@ -507,70 +709,72 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     if (addins.custom_get_library_symbol) {
         base.custom_get_library_symbol = addins.custom_get_library_symbol;
     }
-}
-
-void print_handler(void *context, const char *msg) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        (*jit_user_context->handlers.custom_print)(context, msg);
-    } else {
-        return (*active_handlers.custom_print)(context, msg);
+    if (addins.custom_cuda_acquire_context) {
+        base.custom_cuda_acquire_context = addins.custom_cuda_acquire_context;
+    }
+    if (addins.custom_cuda_release_context) {
+        base.custom_cuda_release_context = addins.custom_cuda_release_context;
+    }
+    if (addins.custom_cuda_get_stream) {
+        base.custom_cuda_get_stream = addins.custom_cuda_get_stream;
     }
 }
 
-void *malloc_handler(void *context, size_t x) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_malloc)(context, x);
+void print_handler(JITUserContext *context, const char *msg) {
+    if (context && context->handlers.custom_print) {
+        context->handlers.custom_print(context, msg);
     } else {
-        return (*active_handlers.custom_malloc)(context, x);
+        active_handlers.custom_print(context, msg);
     }
 }
 
-void free_handler(void *context, void *ptr) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        (*jit_user_context->handlers.custom_free)(context, ptr);
+void *malloc_handler(JITUserContext *context, size_t x) {
+    if (context && context->handlers.custom_malloc) {
+        return context->handlers.custom_malloc(context, x);
     } else {
-        (*active_handlers.custom_free)(context, ptr);
+        return active_handlers.custom_malloc(context, x);
     }
 }
 
-int do_task_handler(void *context, halide_task f, int idx,
+void free_handler(JITUserContext *context, void *ptr) {
+    if (context && context->handlers.custom_free) {
+        context->handlers.custom_free(context, ptr);
+    } else {
+        active_handlers.custom_free(context, ptr);
+    }
+}
+
+int do_task_handler(JITUserContext *context, int (*f)(JITUserContext *, int, uint8_t *), int idx,
                     uint8_t *closure) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_do_task)(context, f, idx, closure);
+    if (context && context->handlers.custom_do_task) {
+        return context->handlers.custom_do_task(context, f, idx, closure);
     } else {
-        return (*active_handlers.custom_do_task)(context, f, idx, closure);
+        return active_handlers.custom_do_task(context, f, idx, closure);
     }
 }
 
-int do_par_for_handler(void *context, halide_task f,
+int do_par_for_handler(JITUserContext *context, int (*f)(JITUserContext *, int, uint8_t *),
                        int min, int size, uint8_t *closure) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_do_par_for)(context, f, min, size, closure);
+    if (context && context->handlers.custom_do_par_for) {
+        return context->handlers.custom_do_par_for(context, f, min, size, closure);
     } else {
-        return (*active_handlers.custom_do_par_for)(context, f, min, size, closure);
+        return active_handlers.custom_do_par_for(context, f, min, size, closure);
     }
 }
 
-void error_handler_handler(void *context, const char *msg) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        (*jit_user_context->handlers.custom_error)(context, msg);
+void error_handler_handler(JITUserContext *context, const char *msg) {
+    if (context && context->handlers.custom_error) {
+        context->handlers.custom_error(context, msg);
     } else {
-        (*active_handlers.custom_error)(context, msg);
+        active_handlers.custom_error(context, msg);
     }
 }
 
-int32_t trace_handler(void *context, const halide_trace_event_t *e) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_trace)(context, e);
+int32_t trace_handler(JITUserContext *context, const halide_trace_event_t *e) {
+    if (context && context->handlers.custom_trace) {
+        return context->handlers.custom_trace(context, e);
     } else {
-        return (*active_handlers.custom_trace)(context, e);
+        return active_handlers.custom_trace(context, e);
     }
 }
 
@@ -584,6 +788,30 @@ void *load_library_handler(const char *name) {
 
 void *get_library_symbol_handler(void *lib, const char *name) {
     return (*active_handlers.custom_get_library_symbol)(lib, name);
+}
+
+int cuda_acquire_context_handler(JITUserContext *context, void **cuda_context_ptr, bool create) {
+    if (context && context->handlers.custom_cuda_acquire_context) {
+        return context->handlers.custom_cuda_acquire_context(context, cuda_context_ptr, create);
+    } else {
+        return active_handlers.custom_cuda_acquire_context(context, cuda_context_ptr, create);
+    }
+}
+
+int cuda_release_context_handler(JITUserContext *context) {
+    if (context && context->handlers.custom_cuda_release_context) {
+        return context->handlers.custom_cuda_release_context(context);
+    } else {
+        return active_handlers.custom_cuda_release_context(context);
+    }
+}
+
+int cuda_get_stream_handler(JITUserContext *context, void *cuda_context, void **cuda_stream_ptr) {
+    if (context && context->handlers.custom_cuda_get_stream) {
+        return context->handlers.custom_cuda_get_stream(context, cuda_context, cuda_stream_ptr);
+    } else {
+        return active_handlers.custom_cuda_get_stream(context, cuda_context, cuda_stream_ptr);
+    }
 }
 
 template<typename function_t>
@@ -624,15 +852,17 @@ enum RuntimeKind {
     OpenCL,
     Metal,
     CUDA,
-    OpenGLCompute,
     Hexagon,
     D3D12Compute,
+    Vulkan,
+    WebGPU,
     OpenCLDebug,
     MetalDebug,
     CUDADebug,
-    OpenGLComputeDebug,
     HexagonDebug,
     D3D12ComputeDebug,
+    VulkanDebug,
+    WebGPUDebug,
     MaxRuntimeKind
 };
 
@@ -666,8 +896,9 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::Metal, false);
         one_gpu.set_feature(Target::CUDA, false);
         one_gpu.set_feature(Target::HVX, false);
-        one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
+        one_gpu.set_feature(Target::Vulkan, false);
+        one_gpu.set_feature(Target::WebGPU, false);
         string module_name;
         switch (runtime_kind) {
         case OpenCLDebug:
@@ -699,17 +930,6 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             one_gpu.set_feature(Target::CUDA);
             module_name += "cuda";
             break;
-        case OpenGLComputeDebug:
-            one_gpu.set_feature(Target::Debug);
-            one_gpu.set_feature(Target::OpenGLCompute);
-            module_name = "debug_openglcompute";
-            load_opengl(one_gpu.has_feature(Target::EGL));
-            break;
-        case OpenGLCompute:
-            one_gpu.set_feature(Target::OpenGLCompute);
-            module_name += "openglcompute";
-            load_opengl(one_gpu.has_feature(Target::EGL));
-            break;
         case HexagonDebug:
             one_gpu.set_feature(Target::Debug);
             one_gpu.set_feature(Target::HVX);
@@ -731,6 +951,28 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             internal_error << "JIT support for Direct3D 12 is only implemented on Windows 10 and above.\n";
 #endif
             break;
+        case VulkanDebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::Vulkan);
+            load_vulkan();
+            module_name = "debug_vulkan";
+            break;
+        case Vulkan:
+            one_gpu.set_feature(Target::Vulkan);
+            load_vulkan();
+            module_name += "vulkan";
+            break;
+        case WebGPUDebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::WebGPU);
+            module_name = "debug_webgpu";
+            load_webgpu();
+            break;
+        case WebGPU:
+            one_gpu.set_feature(Target::WebGPU);
+            module_name += "webgpu";
+            load_webgpu();
+            break;
         default:
             module_name = "shared runtime";
             break;
@@ -739,7 +981,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         // This function is protected by a mutex so this is thread safe.
         auto module =
             get_initial_module_for_target(one_gpu,
-                                          &runtime.jit_module->context,
+                                          runtime.jit_module->context.get(),
                                           true,
                                           runtime_kind != MainShared);
         if (for_module) {
@@ -784,13 +1026,13 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                 hook_function(runtime.exports(), "halide_set_custom_trace", trace_handler);
 
             runtime_internal_handlers.custom_get_symbol =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_get_symbol", get_symbol_handler);
+                hook_function(runtime.exports(), "halide_set_custom_get_symbol", get_symbol_handler);
 
             runtime_internal_handlers.custom_load_library =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_load_library", load_library_handler);
+                hook_function(runtime.exports(), "halide_set_custom_load_library", load_library_handler);
 
             runtime_internal_handlers.custom_get_library_symbol =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_get_library_symbol", get_library_symbol_handler);
+                hook_function(runtime.exports(), "halide_set_custom_get_library_symbol", get_library_symbol_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
@@ -802,15 +1044,50 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             runtime.jit_module->name = "MainShared";
         } else {
             runtime.jit_module->name = "GPU";
+
+            // There are two versions of these cuda context
+            // management handlers we could use - one in the cuda
+            // module, and one in the cuda-debug module. If both
+            // modules are in use, we'll just want to use one of
+            // them, so that we don't needlessly create two cuda
+            // contexts. We'll use whichever was first
+            // created. The second one will then declare a
+            // dependency on the first one, to make sure things
+            // are destroyed in the correct order.
+
+            if (runtime_kind == CUDA || runtime_kind == CUDADebug) {
+                if (!runtime_internal_handlers.custom_cuda_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_cuda_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_cuda_acquire_context", cuda_acquire_context_handler);
+
+                    runtime_internal_handlers.custom_cuda_release_context =
+                        hook_function(runtime.exports(), "halide_set_cuda_release_context", cuda_release_context_handler);
+
+                    runtime_internal_handlers.custom_cuda_get_stream =
+                        hook_function(runtime.exports(), "halide_set_cuda_get_stream", cuda_get_stream_handler);
+
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == CUDA) {
+                    // The CUDADebug module has already been created.
+                    // Use the context in the CUDADebug module and add
+                    // a dependence edge from the CUDA module to it.
+                    runtime.add_dependency(shared_runtimes(CUDADebug));
+                } else {
+                    // The CUDA module has already been created.
+                    runtime.add_dependency(shared_runtimes(CUDA));
+                }
+            }
         }
 
-        uint64_t arg_addr =
-            runtime.jit_module->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
-
+        uint64_t arg_addr = llvm::cantFail(runtime.jit_module->JIT->lookup("halide_jit_module_argument"))
+                                .getValue();
         internal_assert(arg_addr != 0);
         *((void **)arg_addr) = runtime.jit_module.get();
 
-        uint64_t fun_addr = runtime.jit_module->execution_engine->getGlobalValueAddress("halide_jit_module_adjust_ref_count");
+        uint64_t fun_addr = llvm::cantFail(runtime.jit_module->JIT->lookup("halide_jit_module_adjust_ref_count"))
+                                .getValue();
         internal_assert(fun_addr != 0);
         *(void (**)(void *arg, int32_t count))fun_addr = &adjust_module_ref_count;
     }
@@ -828,7 +1105,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
  * JITSharedRuntime::release_all is called, the global state is reset
  * and any newly compiled Funcs will get a new runtime. */
 std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Target &target, bool create) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
 
     std::vector<JITModule> result;
 
@@ -860,13 +1137,6 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
-    if (target.has_feature(Target::OpenGLCompute)) {
-        auto kind = target.has_feature(Target::Debug) ? OpenGLComputeDebug : OpenGLCompute;
-        JITModule m = make_module(for_module, target, kind, result, create);
-        if (m.compiled()) {
-            result.push_back(m);
-        }
-    }
     if (target.has_feature(Target::HVX)) {
         auto kind = target.has_feature(Target::Debug) ? HexagonDebug : Hexagon;
         JITModule m = make_module(for_module, target, kind, result, create);
@@ -881,24 +1151,35 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
-
+    if (target.has_feature(Target::Vulkan)) {
+        auto kind = target.has_feature(Target::Debug) ? VulkanDebug : Vulkan;
+        JITModule m = make_module(for_module, target, kind, result, create);
+        if (m.compiled()) {
+            result.push_back(m);
+        }
+    }
+    if (target.has_feature(Target::WebGPU)) {
+        auto kind = target.has_feature(Target::Debug) ? WebGPUDebug : WebGPU;
+        JITModule m = make_module(for_module, target, kind, result, create);
+        if (m.compiled()) {
+            result.push_back(m);
+        }
+    }
     return result;
 }
 
-// TODO: Either remove user_context argument figure out how to make
-// caller provided user context work with JIT. (At present, this
-// cascaded handler calls cannot work with the right context as
-// JITModule needs its context to be passed in case the called handler
-// calls another callback which is not overriden by the caller.)
-void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
-                                             void *user_context, const JITHandlers &handlers) {
-    jit_user_context.handlers = active_handlers;
-    jit_user_context.user_context = user_context;
-    merge_handlers(jit_user_context.handlers, handlers);
+void JITSharedRuntime::populate_jit_handlers(JITUserContext *jit_user_context, const JITHandlers &handlers) {
+    // Take the active global handlers
+    JITHandlers merged = active_handlers;
+    // Clobber with any custom handlers set on the pipeline
+    merge_handlers(merged, handlers);
+    // Clobber with any custom handlers set on the call
+    merge_handlers(merged, jit_user_context->handlers);
+    jit_user_context->handlers = merged;
 }
 
 void JITSharedRuntime::release_all() {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
 
     for (int i = MaxRuntimeKind; i > 0; i--) {
         shared_runtimes((RuntimeKind)(i - 1)) = JITModule();
@@ -914,7 +1195,7 @@ JITHandlers JITSharedRuntime::set_default_handlers(const JITHandlers &handlers) 
 }
 
 void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
 
     if (size != default_cache_size) {
         default_cache_size = size;
@@ -923,13 +1204,158 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
 }
 
 void JITSharedRuntime::memoization_cache_evict(uint64_t eviction_key) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     shared_runtimes(MainShared).memoization_cache_evict(eviction_key);
 }
 
 void JITSharedRuntime::reuse_device_allocations(bool b) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     shared_runtimes(MainShared).reuse_device_allocations(b);
+}
+
+int JITSharedRuntime::get_num_threads() {
+    std::scoped_lock lock(shared_runtimes_mutex);
+    return shared_runtimes(MainShared).get_num_threads();
+}
+
+int JITSharedRuntime::set_num_threads(int n) {
+    std::scoped_lock lock(shared_runtimes_mutex);
+    return shared_runtimes(MainShared).set_num_threads(n);
+}
+
+JITCache::JITCache(Target jit_target,
+                   std::vector<Argument> arguments,
+                   std::map<std::string, JITExtern> jit_externs,
+                   JITModule jit_module,
+                   WasmModule wasm_module)
+    : jit_target(jit_target),  // clang-tidy complains that this is "trivially copyable" and std::move shouldn't be here, grr
+      arguments(std::move(arguments)),
+      jit_externs(std::move(jit_externs)),
+      jit_module(std::move(jit_module)),
+      wasm_module(std::move(wasm_module)) {
+}
+
+Target JITCache::get_compiled_jit_target() const {
+    // This essentially is just a getter for contents->jit_target,
+    // but also reality-checks that the status of the jit_module and/or wasm_module
+    // match what we expect.
+    const bool has_wasm = wasm_module.contents.defined();
+    const bool has_native = jit_module.compiled();
+    if (jit_target.arch == Target::WebAssembly) {
+        internal_assert(has_wasm && !has_native);
+    } else if (!jit_target.has_unknowns()) {
+        internal_assert(!has_wasm && has_native);
+    } else {
+        internal_assert(!has_wasm && !has_native);
+    }
+    return jit_target;
+}
+
+int JITCache::call_jit_code(const void *const *args) {
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+    user_warning << "MSAN does not support JIT compilers of any sort, and will report "
+                    "false positives when used in conjunction with the Halide JIT. "
+                    "If you need to test with MSAN enabled, you must use ahead-of-time "
+                    "compilation for Halide code.";
+#endif
+#endif
+    if (get_compiled_jit_target().arch == Target::WebAssembly) {
+        internal_assert(wasm_module.contents.defined());
+        return wasm_module.run(args);
+    } else {
+        auto argv_wrapper = jit_module.argv_function();
+        internal_assert(argv_wrapper != nullptr);
+        return argv_wrapper(args);
+    }
+}
+
+void JITCache::finish_profiling(JITUserContext *context) {
+    // If we're profiling, report runtimes and reset profiler stats.
+    if (jit_target.has_feature(Target::Profile) || jit_target.has_feature(Target::ProfileByTimer)) {
+        JITModule::Symbol report_sym = jit_module.find_symbol_by_name("halide_profiler_report");
+        JITModule::Symbol reset_sym = jit_module.find_symbol_by_name("halide_profiler_reset");
+        if (report_sym.address && reset_sym.address) {
+            void (*report_fn_ptr)(JITUserContext *) = (void (*)(JITUserContext *))(report_sym.address);
+            report_fn_ptr(context);
+
+            void (*reset_fn_ptr)() = (void (*)())(reset_sym.address);
+            reset_fn_ptr();
+        }
+    }
+}
+
+void JITErrorBuffer::concat(const char *message) {
+    size_t len = strlen(message);
+
+    if (len && message[len - 1] != '\n') {
+        // Claim some extra space for a newline.
+        len++;
+    }
+
+    // Atomically claim some space in the buffer
+    size_t old_end = end.fetch_add(len);
+
+    if (old_end + len >= MaxBufSize - 1) {
+        // Out of space
+        return;
+    }
+
+    for (size_t i = 0; i < len - 1; i++) {
+        buf[old_end + i] = message[i];
+    }
+    if (buf[old_end + len - 2] != '\n') {
+        buf[old_end + len - 1] = '\n';
+    }
+}
+
+std::string JITErrorBuffer::str() const {
+    return std::string(buf, end);
+}
+
+/*static*/ void JITErrorBuffer::handler(JITUserContext *ctx, const char *message) {
+    if (ctx && ctx->error_buffer) {
+        ctx->error_buffer->concat(message);
+    }
+}
+
+JITFuncCallContext::JITFuncCallContext(JITUserContext *context, const JITHandlers &pipeline_handlers)
+    : context(context) {
+    custom_error_handler = ((context->handlers.custom_error != nullptr &&
+                             context->handlers.custom_error != JITErrorBuffer::handler) ||
+                            pipeline_handlers.custom_error != nullptr);
+    // Hook the error handler if not set
+    if (!custom_error_handler) {
+        context->handlers.custom_error = JITErrorBuffer::handler;
+    }
+
+    // Add the handlers stored in the pipeline for anything else
+    // not set, then for anything still not set, use the global
+    // active handlers.
+    JITSharedRuntime::populate_jit_handlers(context, pipeline_handlers);
+    context->error_buffer = &error_buffer;
+
+    debug(2) << "custom_print: " << (void *)context->handlers.custom_print << "\n"
+             << "custom_malloc: " << (void *)context->handlers.custom_malloc << "\n"
+             << "custom_free: " << (void *)context->handlers.custom_free << "\n"
+             << "custom_do_task: " << (void *)context->handlers.custom_do_task << "\n"
+             << "custom_do_par_for: " << (void *)context->handlers.custom_do_par_for << "\n"
+             << "custom_error: " << (void *)context->handlers.custom_error << "\n"
+             << "custom_trace: " << (void *)context->handlers.custom_trace << "\n";
+}
+
+void JITFuncCallContext::finalize(int exit_status) {
+    // Only report the errors if no custom error handler was installed
+    if (exit_status && !custom_error_handler) {
+        std::string output = error_buffer.str();
+        if (output.empty()) {
+            output = ("The pipeline returned exit status " +
+                      std::to_string(exit_status) +
+                      " but halide_error was never called.\n");
+        }
+        halide_runtime_error << output;
+        error_buffer.end = 0;
+    }
 }
 
 }  // namespace Internal

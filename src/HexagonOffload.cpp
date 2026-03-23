@@ -4,11 +4,13 @@
 #include "Closure.h"
 #include "Elf.h"
 #include "HexagonOffload.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "InjectHostDevBufferCopies.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
+#include "LowerParallelTasks.h"
 #include "Module.h"
 #include "Param.h"
 #include "Substitute.h"
@@ -42,6 +44,7 @@ enum {
     EF_HEXAGON_MACH_V62 = 0x62,
     EF_HEXAGON_MACH_V65 = 0x65,
     EF_HEXAGON_MACH_V66 = 0x66,
+    EF_HEXAGON_MACH_V68 = 0x68,
 };
 
 enum {
@@ -285,7 +288,7 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
             // Pull out the subinstructions. They're the low 13
             // bits of each half-word.
             uint32_t hi = (inst >> 16) & ((1 << 13) - 1);
-            //uint32_t lo = inst & ((1 << 13) - 1);
+            // uint32_t lo = inst & ((1 << 13) - 1);
 
             // We only understand the ones where hi starts with 010
             internal_assert((hi >> 10) == 2);
@@ -362,7 +365,7 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
                 consumed_every_bit |= ((intptr_t)val) == -1;
                 val = ((intptr_t)val) >> 1;
             } else {
-                val = ((uintptr_t)val) >> 1;
+                val = val >> 1;
             }
             consumed_every_bit |= (val == 0);
             inst |= (next_bit << i);
@@ -550,7 +553,9 @@ public:
     uint32_t flags;
 
     HexagonLinker(const Target &target) {
-        if (target.has_feature(Target::HVX_v66)) {
+        if (target.has_feature(Target::HVX_v68)) {
+            flags = Elf::EF_HEXAGON_MACH_V68;
+        } else if (target.has_feature(Target::HVX_v66)) {
             flags = Elf::EF_HEXAGON_MACH_V66;
         } else if (target.has_feature(Target::HVX_v65)) {
             flags = Elf::EF_HEXAGON_MACH_V65;
@@ -603,10 +608,12 @@ public:
         }
 
         static const uint8_t hexagon_plt1[] = {
+            // clang-format off
             0x00, 0x40, 0x00, 0x00,  // { immext (#0) (Relocation:R_HEX_B32_PCREL_X)
             0x0e, 0xc0, 0x49, 0x6a,  //   r14 = add (pc, ##GOTn@PCREL) }  (Relocation:R_HEX_6_PCREL_X)
             0x1c, 0xc0, 0x8e, 0x91,  //   r28 = memw (r14)
             0x00, 0xc0, 0x9c, 0x52,  //   jumpr r28
+            // clang-format on
         };
 
         debug(2) << "Adding PLT entry for symbol " << sym.get_name() << "\n";
@@ -694,12 +701,6 @@ class InjectHexagonRpc : public IRMutator {
 
     Module &device_code;
 
-    Expr state_var(const std::string &name, Type type) {
-        return Let::make(name, state_var_ptr(name, type),
-                         Load::make(type_of<void *>(), name, 0,
-                                    Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
-    }
-
     Expr state_var_ptr(const std::string &name, Type type) {
         Expr &buf = state_bufs[name];
         if (!buf.defined()) {
@@ -711,7 +712,7 @@ class InjectHexagonRpc : public IRMutator {
     }
 
     Expr module_state() {
-        return state_var("hexagon_module_state", type_of<void *>());
+        return Call::make(type_of<void *>(), "halide_hexagon_get_module_state", {state_var_ptr("hexagon_module_state", type_of<void *>())}, Call::Extern);
     }
 
     Expr module_state_ptr() {
@@ -745,17 +746,27 @@ class InjectHexagonRpc : public IRMutator {
         // After moving this to Hexagon, it doesn't need to be marked
         // Hexagon anymore.
         Stmt body;
-        if (is_const_one(loop->extent)) {
+        if (equal(loop->min, loop->max)) {
             body = LetStmt::make(loop->name, loop->min, loop->body);
         } else {
-            body = For::make(loop->name, loop->min, loop->extent, loop->for_type,
+            body = For::make(loop->name, loop->min, loop->max, loop->for_type, loop->partition_policy,
                              DeviceAPI::None, loop->body);
         }
 
         // Build a closure for the device code.
+        // Note that we must do this *before* calling lower_parallel_tasks();
+        // otherwise the Closure may fail to find buffers that are referenced
+        // only in the closure.
         // TODO: Should this move the body of the loop to Hexagon,
         // or the loop itself? Currently, this moves the loop itself.
-        Closure c(body);
+        Closure c;
+        c.include(body);
+
+        std::vector<LoweredFunc> closure_implementations;
+        body = lower_parallel_tasks(body, closure_implementations, hex_name, device_code.target());
+        for (auto &lowered_func : closure_implementations) {
+            device_code.append(lowered_func);
+        }
 
         // A buffer parameter potentially generates 3 scalar parameters (min,
         // extent, stride) per dimension. Pipelines with many buffers may
@@ -846,7 +857,8 @@ class InjectHexagonRpc : public IRMutator {
             LoweredArgument arg(i.first, Argument::InputScalar, i.second, 0, ArgumentEstimates{});
             args.push_back(arg);
         }
-        device_code.append(LoweredFunc(hex_name, args, body, LinkageType::ExternalPlusMetadata));
+        // We need the _argv function but not the _metadata.
+        device_code.append(LoweredFunc(hex_name, args, body, LinkageType::ExternalPlusArgv));
 
         // Generate a call to hexagon_device_run.
         std::vector<Expr> arg_sizes;
@@ -977,7 +989,7 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
         Target::HVX_v62,
         Target::HVX_v65,
         Target::HVX_v66,
-        Target::DisableLLVMLoopOpt,
+        Target::HVX_v68,
     };
     for (Target::Feature i : shared_features) {
         if (host_target.has_feature(i)) {
@@ -1017,14 +1029,15 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     compile_llvm_module_to_object(*llvm_module, object_stream);
 
     int min_debug_level = device_code.name() == runtime_module_name ? 3 : 2;
-    if (debug::debug_level() >= min_debug_level) {
-        debug(0) << "Hexagon device code assembly: "
-                 << "\n";
+    debug(min_debug_level) << [&] {
+        std::stringstream ss;
+        ss << "Hexagon device code assembly: \n";
         llvm::SmallString<4096> assembly;
         llvm::raw_svector_ostream assembly_stream(assembly);
         compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
-        debug(0) << assembly.c_str() << "\n";
-    }
+        ss << assembly.c_str() << "\n";
+        return ss.str();
+    }();
 
     auto obj = Elf::Object::parse_object(object.data(), object.size());
     internal_assert(obj);
@@ -1040,7 +1053,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         // This will cause a difference in MemSize and FileSize like so:
         //        FileSize = (MemSize - size_of_bss)
         // When the Hexagon loader is used on 8998 and later targets,
-        // the difference is filled with zeroes thereby initializing the .bss
+        // the difference is filled with zeros thereby initializing the .bss
         // section.
         bss->set_type(Elf::Section::SHT_PROGBITS);
         std::fill(bss->contents_begin(), bss->contents_end(), 0);
@@ -1087,12 +1100,11 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
         write_entire_file(input.pathname(), shared_object);
 
-        debug(1) << "Signing tool: (" << signer << ")\n";
-        std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
-        int result = system(cmd.c_str());
-        internal_assert(result == 0)
-            << "HL_HEXAGON_CODE_SIGNER failed: result = " << result
-            << " for cmd (" << cmd << ")";
+        auto sign_cmd = split_string(signer, " ");
+        sign_cmd.insert(sign_cmd.end(), {input.pathname(), output.pathname()});
+
+        int result = run_process(std::move(sign_cmd));
+        internal_assert(result == 0) << "HL_HEXAGON_CODE_SIGNER failed: result = " << result;
 
         shared_object = read_entire_file(output.pathname());
     }

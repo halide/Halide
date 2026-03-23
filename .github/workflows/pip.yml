@@ -1,0 +1,179 @@
+name: Build PyPI package
+
+on:
+  push:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  # TODO: detect this from repo somehow: https://github.com/halide/Halide/issues/8406
+  LLVM_VERSION: 22.1.0
+  FLATBUFFERS_VERSION: 23.5.26
+  WABT_VERSION: 1.0.39
+
+concurrency:
+  group: '${{ github.workflow }}-${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+permissions:
+  contents: read  #  to fetch code (actions/checkout)
+
+jobs:
+  build-wheels:
+    name: Build Halide wheels for ${{ matrix.platform_tag }}
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform_tag: manylinux_x86_64
+          - os: windows-latest
+            platform_tag: win_amd64
+          - os: macos-15-intel
+            platform_tag: macosx_x86_64
+          - os: macos-15
+            platform_tag: macosx_arm64
+
+    env:
+      MACOSX_DEPLOYMENT_TARGET: 11
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: lukka/get-cmake@v4.3.0
+        with:
+          cmakeVersion: "~3.28.0"
+
+      ########################################################################
+      # LLVM
+      ########################################################################
+
+      - name: Install LLVM
+        if: matrix.os != 'ubuntu-latest'
+        shell: bash
+        run: |
+          pip install "halide-llvm==${{ env.LLVM_VERSION }}" \
+            --extra-index-url https://pypi.halide-lang.org/simple/
+          echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
+
+      ########################################################################
+      # Wheels
+      ########################################################################
+
+      #- uses: mxschmitt/action-tmate@v3
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.4.0
+        env:
+          CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
+          CIBW_SKIP: "cp3{5,6,7,8,9}* cp314t-*"
+          CIBW_BEFORE_ALL_LINUX: >
+            /opt/python/cp312-cp312/bin/pip install cmake ninja
+            "halide-llvm==${{ env.LLVM_VERSION }}"
+            --extra-index-url https://pypi.halide-lang.org/simple/ &&
+            export PATH="/opt/python/cp312-cp312/bin:$PATH" &&
+            mkdir -p {project}/opt &&
+            ln -s $(halide-llvm --prefix) {project}/opt/llvm &&
+            git clone --depth=1 -b v${{ env.FLATBUFFERS_VERSION }}
+            https://github.com/google/flatbuffers /tmp/fb-src &&
+            cmake -G Ninja -S /tmp/fb-src -B /tmp/fb-build
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX={project}/opt/flatbuffers
+            -DFLATBUFFERS_BUILD_TESTS=NO &&
+            cmake --build /tmp/fb-build --target install &&
+            git clone --depth=1 --recurse-submodules -b ${{ env.WABT_VERSION }}
+            https://github.com/WebAssembly/wabt /tmp/wabt-src &&
+            cmake -G Ninja -S /tmp/wabt-src -B /tmp/wabt-build
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+            -DCMAKE_INSTALL_PREFIX={project}/opt/wabt
+            -DWITH_EXCEPTIONS=ON
+            -DBUILD_TESTS=OFF
+            -DBUILD_TOOLS=OFF
+            -DBUILD_LIBWASM=OFF
+            -DUSE_INTERNAL_SHA256=ON &&
+            cmake --build /tmp/wabt-build --target install
+          CIBW_BEFORE_ALL_MACOS: >
+            git clone --depth=1 -b v${{ env.FLATBUFFERS_VERSION }}
+            https://github.com/google/flatbuffers /tmp/fb-src &&
+            cmake -G Ninja -S /tmp/fb-src -B /tmp/fb-build
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX={project}/opt/flatbuffers
+            -DFLATBUFFERS_BUILD_TESTS=NO &&
+            cmake --build /tmp/fb-build --target install &&
+            git clone --depth=1 --recurse-submodules -b ${{ env.WABT_VERSION }}
+            https://github.com/WebAssembly/wabt /tmp/wabt-src &&
+            cmake -G Ninja -S /tmp/wabt-src -B /tmp/wabt-build
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX={project}/opt/wabt
+            -DWITH_EXCEPTIONS=ON
+            -DBUILD_TESTS=OFF
+            -DBUILD_TOOLS=OFF
+            -DBUILD_LIBWASM=OFF
+            -DUSE_INTERNAL_SHA256=ON &&
+            cmake --build /tmp/wabt-build --target install
+          CIBW_BEFORE_ALL_WINDOWS: >
+            git clone --depth=1 -b v${{ env.FLATBUFFERS_VERSION }}
+            https://github.com/google/flatbuffers %TEMP%\fb-src &&
+            cmake -G Ninja -S %TEMP%\fb-src -B %TEMP%\fb-build
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX={project}/opt/flatbuffers
+            -DFLATBUFFERS_BUILD_TESTS=NO &&
+            cmake --build %TEMP%\fb-build --target install
+          CIBW_ENVIRONMENT_LINUX: >
+            Halide_LLVM_ROOT=/project/opt/llvm
+            CMAKE_PREFIX_PATH=/project/opt
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
+          CIBW_ENVIRONMENT_MACOS: >
+            CMAKE_PREFIX_PATH='${{ github.workspace }}/opt'
+            Python_ROOT_DIR=''
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
+          CIBW_ENVIRONMENT_WINDOWS: >
+            CMAKE_GENERATOR=Ninja
+            CMAKE_PREFIX_PATH='${{ github.workspace }}\opt'
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
+          CIBW_BEFORE_TEST_LINUX: pip install cmake ninja
+          CIBW_TEST_COMMAND: >
+            cmake -G Ninja -S {project}/python_bindings/apps -B build -DCMAKE_BUILD_TYPE=Release &&
+            cmake --build build &&
+            ctest --test-dir build --output-on-failure
+          # Windows puts the Python interpreter in /Scripts, rather than /bin, which CMake doesn't understand.
+          CIBW_TEST_COMMAND_WINDOWS: >
+            cmake -G Ninja -S {project}/python_bindings/apps -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=%VIRTUAL_ENV% &&
+            cmake --build build &&
+            ctest --test-dir build --output-on-failure
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.platform_tag }}
+          path: ./wheelhouse/*.whl
+
+  publish:
+    name: Publish on PyPI
+    needs: build-wheels
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        if: github.event_name == 'push' && github.ref_name == 'main'
+        with:
+          user: upload
+          password: ${{ secrets.HALIDE_PYPI_PASSWORD }}
+          repository-url: https://pypi.halide-lang.org/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        if: github.event_name == 'release' && github.event.action == 'published'

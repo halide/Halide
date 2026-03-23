@@ -101,44 +101,22 @@ define weak_odr half @floor_f16(half %x) nounwind uwtable readnone alwaysinline 
        ret half %y
 }
 
-; These are llvm 3.3 only
-; declare float @llvm.ceil.f32(float) nounwind readnone
-; declare double @llvm.ceil.f64(double) nounwind readnone
-declare float @ceilf(float) nounwind readnone
-declare double @ceil(double) nounwind readnone
+declare float @llvm.ceil.f32(float) nounwind readnone
+declare double @llvm.ceil.f64(double) nounwind readnone
 declare half @llvm.ceil.f16(half) nounwind readnone
 
 define weak_odr float @ceil_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call float @ceilf(float %x) nounwind readnone
+       %y = tail call float @llvm.ceil.f32(float %x) nounwind readnone
        ret float %y
 }
 
 define weak_odr double @ceil_f64(double %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call double @ceil(double %x) nounwind readnone
+       %y = tail call double @llvm.ceil.f64(double %x) nounwind readnone
        ret double %y
 }
 
 define weak_odr half @ceil_f16(half %x) nounwind uwtable readnone alwaysinline {
        %y = tail call half @llvm.ceil.f16(half %x) nounwind readnone
-       ret half %y
-}
-
-declare float @llvm.nearbyint.f32(float) nounwind readnone
-declare double @llvm.nearbyint.f64(double) nounwind readnone
-declare half @llvm.nearbyint.f16(half) nounwind readnone
-
-define weak_odr float @round_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call float @llvm.nearbyint.f32(float %x) nounwind readnone
-       ret float %y
-}
-
-define weak_odr double @round_f64(double %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call double @llvm.nearbyint.f64(double %x) nounwind readnone
-       ret double %y
-}
-
-define weak_odr half @round_f16(half %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call half @llvm.nearbyint.f16(half %x) nounwind readnone
        ret half %y
 }
 
@@ -341,4 +319,30 @@ define weak_odr double @neg_inf_f64() nounwind uwtable readnone alwaysinline {
 
 define weak_odr double @nan_f64() nounwind uwtable readnone alwaysinline {
        ret double 0x7FF8000000000000
+}
+
+; In case scalable vector with un-natural vector size, LLVM doesn't auto-vectorize the above scalar version
+define weak_odr <vscale x 4 x float> @inf_f32nx4() nounwind uwtable readnone alwaysinline {
+       ret <vscale x 4 x float> shufflevector (<vscale x 4 x float> insertelement (<vscale x 4 x float> undef, float 0x7FF0000000000000, i32 0), <vscale x 4 x float> undef, <vscale x 4 x i32> zeroinitializer)
+}
+
+define weak_odr <vscale x 4 x float> @neg_inf_f32nx4() nounwind uwtable readnone alwaysinline {
+       ret <vscale x 4 x float> shufflevector (<vscale x 4 x float> insertelement (<vscale x 4 x float> undef, float 0xFFF0000000000000, i32 0), <vscale x 4 x float> undef, <vscale x 4 x i32> zeroinitializer)
+}
+
+define weak_odr <vscale x 4 x float> @nan_f32nx4() nounwind uwtable readnone alwaysinline {
+       ret <vscale x 4 x float> shufflevector (<vscale x 4 x float> insertelement (<vscale x 4 x float> undef, float 0x7FF8000000000000, i32 0), <vscale x 4 x float> undef, <vscale x 4 x i32> zeroinitializer)
+}
+
+
+define weak_odr <vscale x 2 x double> @inf_f64nx2() nounwind uwtable readnone alwaysinline {
+       ret <vscale x 2 x double> shufflevector (<vscale x 2 x double> insertelement (<vscale x 2 x double> undef, double 0x7FF0000000000000, i32 0), <vscale x 2 x double> undef, <vscale x 2 x i32> zeroinitializer)
+}
+
+define weak_odr <vscale x 2 x double> @neg_inf_f64nx2() nounwind uwtable readnone alwaysinline {
+       ret <vscale x 2 x double> shufflevector (<vscale x 2 x double> insertelement (<vscale x 2 x double> undef, double 0xFFF0000000000000, i32 0), <vscale x 2 x double> undef, <vscale x 2 x i32> zeroinitializer)
+}
+
+define weak_odr <vscale x 2 x double> @nan_f64nx2() nounwind uwtable readnone alwaysinline {
+       ret <vscale x 2 x double> shufflevector (<vscale x 2 x double> insertelement (<vscale x 2 x double> undef, double 0x7FF8000000000000, i32 0), <vscale x 2 x double> undef, <vscale x 2 x i32> zeroinitializer)
 }

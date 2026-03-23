@@ -18,11 +18,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Buffer<float> input = load_and_convert_image(argv[1]);
+    Buffer<float, 3> input = load_and_convert_image(argv[1]);
     int patch_size = atoi(argv[2]);
     int search_area = atoi(argv[3]);
     float sigma = atof(argv[4]);
-    Buffer<float> output(input.width(), input.height(), 3);
+    Buffer<float, 3> output(input.width(), input.height(), 3);
     int timing_iterations = atoi(argv[5]);
 
     nl_means(input, patch_size, search_area, sigma, output);

@@ -7,6 +7,15 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    // LLVM 21 calls getFixedValue() on scalable TypeSize objects in the
+    // AArch64 backend, triggering an assertion. Fixed in LLVM 22 by:
+    // https://github.com/llvm/llvm-project/commit/d1500d12be60 (PR #169764)
+    if (Internal::get_llvm_version() < 220 &&
+        get_jit_target_from_environment().has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM 21 has known getFixedValue() assertion failures on SVE scalable types.\n");
+        return 0;
+    }
+
     // Fit an odd polynomial to sin from 0 to pi/2 using Halide's derivative support
     ImageParam coeffs(Float(64), 1);
     Param<double> learning_rate;
@@ -73,7 +82,7 @@ int main(int argc, char **argv) {
                 // Find a pure var to vectorize over
                 for (auto d : df.update(i).get_schedule().dims()) {
                     if (d.is_pure()) {
-                        df.update(i).vectorize(Var(d.var), 4);
+                        df.update(i).vectorize(VarOrRVar(d.var, d.is_rvar()), 4);
                         break;
                     }
                 }
@@ -134,6 +143,6 @@ int main(int argc, char **argv) {
         return 0;
     } else {
         printf("Did not converge\n");
-        return -1;
+        return 1;
     }
 }

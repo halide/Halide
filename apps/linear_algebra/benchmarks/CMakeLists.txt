@@ -1,7 +1,7 @@
 add_executable(halide_benchmarks halide_benchmarks.cpp)
 target_compile_definitions(halide_benchmarks PRIVATE ENABLE_FTZ_DAZ)
 target_link_libraries(halide_benchmarks PRIVATE halide_blas Halide::Tools)
-set(BENCHMARK_TARGETS halide_benchmarks)
+set(benchmark_targets halide_benchmarks)
 
 find_package(Eigen3 QUIET)
 set(Eigen3 Eigen3::Eigen)
@@ -18,39 +18,41 @@ if (TARGET ${Eigen3})
     add_executable(eigen_benchmarks eigen_benchmarks.cpp)
     target_compile_definitions(eigen_benchmarks PRIVATE EIGEN_DONT_PARALLELIZE ENABLE_FTZ_DAZ)
     target_link_libraries(eigen_benchmarks PRIVATE ${Eigen3} Halide::Tools)
-    list(APPEND BENCHMARK_TARGETS eigen_benchmarks)
+    list(APPEND benchmark_targets eigen_benchmarks)
     message(STATUS "Eigen3: Found")
 else ()
     message(STATUS "Eigen3: Missing")
 endif ()
 
-foreach (BLAS_TARGET IN LISTS BLAS_TARGETS)
-    set(TARGET ${BLAS_TARGET}_benchmarks)
-    add_executable(${TARGET} cblas_benchmarks.cpp)
-    target_compile_definitions(${TARGET} PRIVATE "BLAS_NAME=\"${BLAS_TARGET}\"")
-    target_link_libraries(${TARGET} PRIVATE ${BLAS_TARGET}::${BLAS_TARGET} Halide::Tools)
-    list(APPEND BENCHMARK_TARGETS ${TARGET})
+foreach (blas IN LISTS FOUND_BLASES)
+    set(blas_benchmarks "${blas}_benchmarks")
+    add_executable(${blas_benchmarks} cblas_benchmarks.cpp)
+    target_compile_definitions(${blas_benchmarks} PRIVATE "BLAS_NAME=\"${blas}\"")
+    target_link_libraries(${blas_benchmarks} PRIVATE BLAS::${blas} Halide::Tools)
+    list(APPEND benchmark_targets ${blas_benchmarks})
 endforeach ()
 
 # Large powers of two are a pathological case for the cache, so avoid
 # them for the benchmarks.
-set(BLAS_LEVELS L1 L2 L3)
-list(APPEND BENCHMARK_SIZES 64 128 256 512 1280 2560)
-list(APPEND L1_BENCHMARKS scopy dcopy sscal dscal saxpy daxpy sdot ddot sasum dasum)
-list(APPEND L2_BENCHMARKS sgemv_notrans dgemv_notrans sgemv_trans dgemv_trans sger dger)
-list(APPEND L3_BENCHMARKS sgemm_notrans dgemm_notrans sgemm_transA dgemm_transA sgemm_transB dgemm_transB sgemm_transAB dgemm_transAB)
+set(blas_levels L1 L2 L3)
+list(APPEND benchmark_sizes 64 128 256 512 1280 2560)
+list(APPEND L1_functions scopy dcopy sscal dscal saxpy daxpy sdot ddot sasum dasum)
+list(APPEND L2_functions sgemv_notrans dgemv_notrans sgemv_trans dgemv_trans sger dger)
+list(APPEND L3_functions sgemm_notrans dgemm_notrans sgemm_transA dgemm_transA sgemm_transB dgemm_transB sgemm_transAB dgemm_transAB)
 
-foreach (TARGET IN LISTS BENCHMARK_TARGETS)
-    string(REPLACE "_benchmarks" "" BLA_VENDOR "${TARGET}")
-    foreach (LEVEL IN LISTS BLAS_LEVELS)
-        foreach (FUNC IN LISTS ${LEVEL}_BENCHMARKS)
-            foreach (SIZE IN LISTS BENCHMARK_SIZES)
-                set(TEST_NAME ${BLA_VENDOR}_${FUNC}_${SIZE})
-                add_test(NAME ${TEST_NAME}
-                         COMMAND ${TARGET} ${FUNC} ${SIZE})
-                set_tests_properties("${TEST_NAME}" PROPERTIES
-                                     LABELS "linear_algebra;${BLA_VENDOR};${LEVEL};slow_tests"
-                                     PASS_REGULAR_EXPRESSION "${FUNC}[ \t]+${SIZE}"
+foreach (benchmark IN LISTS benchmark_targets)
+    string(REPLACE "_benchmarks" "" vendor "${benchmark}")
+    foreach (level IN LISTS blas_levels)
+        foreach (func IN LISTS ${level}_functions)
+            foreach (size IN LISTS benchmark_sizes)
+                set(test_name ${vendor}_${func}_${size})
+
+                add_test(NAME ${test_name}
+                         COMMAND ${benchmark} ${func} ${size})
+
+                set_tests_properties("${test_name}" PROPERTIES
+                                     LABELS "linear_algebra;${vendor};${level};slow_tests"
+                                     PASS_REGULAR_EXPRESSION "${func}[ \t]+${size}"
                                      SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
             endforeach ()
         endforeach ()

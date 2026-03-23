@@ -16,5 +16,5 @@ mkfifo $PIPE
 
 HL_TRACE_FILE=${PIPE} HL_NUMTHREADS=8 $1 &
 
-$2 --auto_layout --ignore_tags 0<${PIPE} | \
-${HL_AVCONV} -y -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 "$3"
+$2 --auto_layout --ignore_tags 0<${PIPE} |
+    ${HL_AVCONV} -y -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 "$3"

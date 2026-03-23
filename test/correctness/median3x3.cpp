@@ -65,7 +65,7 @@ int main(int arch, char **argv) {
             uint8_t correct = inp[4];
             if (correct != out(x, y)) {
                 std::cout << "out(" << x << ", " << y << ") = " << out(x, y) << " instead of " << correct << "\n";
-                return -1;
+                return 1;
             }
         }
     }

@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "CodeGen_C.h"
 #include "DeviceArgument.h"
 #include "Expr.h"
 
@@ -54,10 +55,6 @@ struct CodeGen_GPU_Dev {
         return false;
     }
 
-    static bool is_gpu_var(const std::string &name);
-    static bool is_gpu_block_var(const std::string &name);
-    static bool is_gpu_thread_var(const std::string &name);
-
     /** Checks if expr is block uniform, i.e. does not depend on a thread
      * var. */
     static bool is_block_uniform(const Expr &expr);
@@ -73,13 +70,50 @@ struct CodeGen_GPU_Dev {
     static Stmt scalarize_predicated_loads_stores(Stmt &s);
 
     /** An mask describing which type of memory fence to use for the gpu_thread_barrier()
-    * intrinsic.  Not all GPUs APIs support all types.
-    */
+     * intrinsic.  Not all GPUs APIs support all types.
+     */
     enum MemoryFenceType {
         None = 0,    // No fence required (just a sync)
         Device = 1,  // Device/global memory fence
         Shared = 2   // Threadgroup/shared memory fence
     };
+
+    /** Some GPU APIs need to know what floating point mode we're in at kernel
+     * emission time, to emit appropriate pragmas. */
+    bool any_strict_float = false;
+
+public:
+    void set_any_strict_float(bool any_strict_float) {
+        this->any_strict_float = any_strict_float;
+    }
+};
+
+/** A base class for GPU backends that require C-like shader output.
+ * GPU backends derive from and specialize this class. */
+class CodeGen_GPU_C : public CodeGen_C {
+public:
+    /** OpenCL and WGSL use different syntax than C for immediate vectors. This
+    enum defines which style should be used by the backend. */
+    enum class VectorDeclarationStyle {
+        CLikeSyntax = 0,
+        OpenCLSyntax = 1,
+        WGSLSyntax = 2,
+    };
+
+    CodeGen_GPU_C(std::ostream &s, Target t)
+        : CodeGen_C(s, t) {
+    }
+
+protected:
+    using CodeGen_C::visit;
+    void visit(const Shuffle *op) override;
+    void visit(const Call *op) override;
+    void visit(const Mod *op) override;
+
+    std::string print_extern_call(const Call *op) override;
+
+    VectorDeclarationStyle vector_declaration_style = VectorDeclarationStyle::CLikeSyntax;
+    bool abs_returns_unsigned_type{false};
 };
 
 }  // namespace Internal

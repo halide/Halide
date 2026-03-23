@@ -45,7 +45,7 @@ Logger::Logger(LogSeverity severity)
 
 void Logger::finish() noexcept(false) {
     if (!msg.str().empty() && msg.str().back() != '\n') {
-        msg << '\n';
+        msg << "\n";
     }
 
     hannk_log(severity, msg.str().c_str());
@@ -62,12 +62,12 @@ Logger::~Logger() noexcept(false) {
 
 Checker::Checker(const char *condition_string)
     : logger(FATAL) {
-    logger.msg << " Condition Failed: " << condition_string << '\n';
+    logger.msg << " Condition Failed: " << condition_string << "\n";
 }
 
 Checker::Checker(const char *file, int line, const char *condition_string)
     : logger(FATAL, file, line) {
-    logger.msg << " Condition Failed: " << condition_string << '\n';
+    logger.msg << " Condition Failed: " << condition_string << "\n";
 }
 
 Checker::~Checker() noexcept(false) {

@@ -11,6 +11,7 @@
 #include "Buffer.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
+#include "LoopPartitioningDirective.h"
 #include "ModulusRemainder.h"
 #include "Parameter.h"
 #include "PrefetchDirective.h"
@@ -22,6 +23,16 @@ namespace Internal {
 
 class Function;
 
+// The lambda-based IRVisitors and IRMutators use this helper to dispatch
+// to multiple lambdas via function overloading (of `operator()`).
+template<typename... Ts>
+struct LambdaOverloads : Ts... {
+    using Ts::operator()...;
+    explicit LambdaOverloads(Ts... ts)
+        : Ts(std::move(ts))... {
+    }
+};
+
 /** The actual IR nodes begin here. Remember that all the Expr
  * nodes also have a public "type" property */
 
@@ -32,6 +43,23 @@ struct Cast : public ExprNode<Cast> {
     static Expr make(Type t, Expr v);
 
     static const IRNodeType _node_type = IRNodeType::Cast;
+
+    /** Check if the cast is equivalent to a reinterpret. */
+    bool is_reinterpret() const {
+        return (type.is_int_or_uint() &&
+                value.type().is_int_or_uint() &&
+                type.bits() == value.type().bits());
+    }
+};
+
+/** Reinterpret value as another type, without affecting any of the bits
+ * (on little-endian systems). */
+struct Reinterpret : public ExprNode<Reinterpret> {
+    Expr value;
+
+    static Expr make(Type t, Expr v);
+
+    static const IRNodeType _node_type = IRNodeType::Reinterpret;
 };
 
 /** The sum of two expressions */
@@ -180,7 +208,7 @@ struct Not : public ExprNode<Not> {
     static const IRNodeType _node_type = IRNodeType::Not;
 };
 
-/** A ternary operator. Evalutes 'true_value' and 'false_value',
+/** A ternary operator. Evaluates 'true_value' and 'false_value',
  * then selects between them based on 'condition'. Equivalent to
  * the ternary operator in C. */
 struct Select : public ExprNode<Select> {
@@ -221,11 +249,12 @@ struct Load : public ExprNode<Load> {
     static const IRNodeType _node_type = IRNodeType::Load;
 };
 
-/** A linear ramp vector node. This is vector with 'lanes' elements,
- * where element i is 'base' + i*'stride'. This is a convenient way to
- * pass around vectors without busting them up into individual
- * elements. E.g. a dense vector load from a buffer can use a ramp
- * node with stride 1 as the index. */
+/** A linear ramp vector node. This is vector with 'lanes' elements, where
+ * element i is 'base' + i*'stride'. This is a convenient way to pass around
+ * vectors without busting them up into individual elements. E.g. a dense vector
+ * load from a buffer can use a ramp node with stride 1 as the index. The base
+ * and stride can also be vectors, in which case ramp(b, s, l) is the
+ * concatenation of the vectors [b, b + s, b + 2 * s ... ]**/
 struct Ramp : public ExprNode<Ramp> {
     Expr base, stride;
     int lanes;
@@ -235,9 +264,10 @@ struct Ramp : public ExprNode<Ramp> {
     static const IRNodeType _node_type = IRNodeType::Ramp;
 };
 
-/** A vector with 'lanes' elements, in which every element is
- * 'value'. This is a special case of the ramp node above, in which
- * the stride is zero. */
+/** A vector with 'lanes' elements, in which every element is 'value'. This is a
+ * special case of the ramp node above, in which the stride is zero. If the
+ * value is a vector, this is the concatenation of 'lanes' repeated copies of
+ * that vector. */
 struct Broadcast : public ExprNode<Broadcast> {
     Expr value;
     int lanes;
@@ -355,6 +385,8 @@ struct Allocate : public StmtNode<Allocate> {
     Type type;
     MemoryType memory_type;
     std::vector<Expr> extents;
+
+    // A boolean condition that determines if the allocation needs to be made at all.
     Expr condition;
 
     // These override the code generator dependent malloc and free
@@ -367,18 +399,22 @@ struct Allocate : public StmtNode<Allocate> {
     Expr new_expr;
     std::string free_function;
 
+    // Extra padding elements to allow for overreads. Elements in the padding
+    // have undetermined values, but are guaranteed safe to load.
+    int padding;
+
     Stmt body;
 
     static Stmt make(const std::string &name, Type type, MemoryType memory_type,
                      const std::vector<Expr> &extents,
                      Expr condition, Stmt body,
-                     Expr new_expr = Expr(), const std::string &free_function = std::string());
+                     Expr new_expr = Expr(), const std::string &free_function = std::string(), int padding = 0);
 
     /** A routine to check if the extents are all constants, and if so verify
      * the total size is less than 2^31 - 1. If the result is constant, but
      * overflows, this routine asserts. This returns 0 if the extents are
      * not all constants; otherwise, it returns the total constant allocation
-     * size. */
+     * size. Does not include any padding bytes. */
     static int32_t constant_allocation_size(const std::vector<Expr> &extents, const std::string &name);
     int32_t constant_allocation_size() const;
 
@@ -413,12 +449,13 @@ struct Realize : public StmtNode<Realize> {
     static const IRNodeType _node_type = IRNodeType::Realize;
 };
 
-/** A sequence of statements to be executed in-order. 'rest' may be
- * undefined. Used rest.defined() to find out. */
+/** A sequence of statements to be executed in-order. 'first' is never
+    a Block, so this can be treated as a linked list. */
 struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     static Stmt make(Stmt first, Stmt rest);
+
     /** Construct zero or more Blocks to invoke a list of statements in order.
      * This method may not return a Block statement if stmts.size() <= 1. */
     static Stmt make(const std::vector<Stmt> &stmts);
@@ -479,7 +516,7 @@ struct Call : public ExprNode<Call> {
     // (instead of IR nodes). These are matched by name. Note that
     // these are deliberately char* (rather than std::string) so that
     // they can be referenced at static-initialization time without
-    // risking ambiguous initalization order; we use a typedef to simplify
+    // risking ambiguous initialization order; we use a typedef to simplify
     // declaration.
     typedef const char *const ConstString;
 
@@ -492,77 +529,221 @@ struct Call : public ExprNode<Call> {
     // are *not* guaranteed to be stable across time.
     enum IntrinsicOp {
         abs,
+
+        // Absolute difference between two values. absd(a, b) = abs(a - b), but
+        // without overflow issues for integer types.
         absd,
+
+        // Marks the point where assertions on input images should be inserted
         add_image_checks_marker,
+
         alloca,
         bitwise_and,
         bitwise_not,
         bitwise_or,
         bitwise_xor,
+
+        // Converts a boolean to a mask. Scalar bools become -1 (all bits set) when true,
+        // 0 when false. Vector bools are converted to proper vector masks.
         bool_to_mask,
-        bundle,  // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
+
+        // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
+        bundle,
+
+        // Takes a sequence of (condition, function) pairs, and calls the first
+        // function for which the associated condition is true. Caches this
+        // choice and directly calls the associated function on all subsequent
+        // uses. Args to the containing function are passed through to the
+        // callee. Used to implement multi-target switching.
         call_cached_indirect_function,
+
+        // Casts a mask (boolean vector) to a different bit width
         cast_mask,
+
+        // Concatenate bits of the args, with least significant bits as the
+        // first arg (i.e. little-endian)
+        concat_bits,
         count_leading_zeros,
         count_trailing_zeros,
-        declare_box_touched,
         debug_to_file,
+
+        // Declares that a box region of an allocation has been touched (used by bounds inference)
+        declare_box_touched,
+
         div_round_to_zero,
+
+        // A shuffle operation with runtime-varying indices.
         dynamic_shuffle,
+
+        // Extract some contiguous slice of bits from the argument starting at
+        // the nth bit, counting from the least significant bit, with the number
+        // of bits determined by the return type.
+        extract_bits,
+
+        // Extracts a single element from a mask vector
         extract_mask_element,
+
+        get_user_context,
         gpu_thread_barrier,
         halving_add,
         halving_sub,
+
+        // Hexagon HVX gather/scatter operations for indirect memory access
         hvx_gather,
         hvx_scatter,
         hvx_scatter_acc,
         hvx_scatter_release,
+
         if_then_else,
+
+        // Vectorized if-then-else that operates on mask types
         if_then_else_mask,
         image_load,
         image_store,
         lerp,
+
+        // Loop partitioning hints used to help identify the 'steady state' of
+        // loops. likely marks an if condition expression as likely to be true,
+        // or marks the side of a min or max node which dominates in the steady
+        // state.  likely_if_innermost only applies the hint if this is the
+        // innermost loop.
         likely,
         likely_if_innermost,
+
+        // Loads a member from a typed struct (used for halide_buffer_t and
+        // related structures)
+        load_typed_struct_member,
+
         make_struct,
+
+        // Marks an expression to be memoized (computed once and cached)
         memoize_expr,
+
         mod_round_to_zero,
         mul_shift_right,
         mux,
         popcount,
         prefetch,
+
+        // Marks the point where profiling should start counting pipeline instances
+        // (used to exclude bounds queries from profiling)
+        profiling_enable_instance_marker,
+
+        // Promises that a value is clamped to the given range. This allows the compiler
+        // to optimize based on this assumption. promise_clamped is safe (adds a runtime check),
+        // unsafe_promise_clamped skips the check.
         promise_clamped,
+
         random,
+
+        // Registers a destructor function to be called when an object goes out
+        // of scope. Used internally in codegen.
         register_destructor,
-        reinterpret,
+
+        // Runtime assertions. require checks the condition and errors if false.
+        // require_mask is the vectorized version that operates on masks.
         require,
         require_mask,
+
+        // Evaluates both arguments but returns the second one. Used to sequence side effects.
         return_second,
-        rewrite_buffer,
+
+        // Round a floating point value to nearest integer, with ties going to even
+        round,
+
         rounding_halving_add,
-        rounding_halving_sub,
         rounding_mul_shift_right,
         rounding_shift_left,
         rounding_shift_right,
         saturating_add,
         saturating_sub,
+        saturating_cast,
+
+        // Used to implement scatter and gather (see IROperator.h)
         scatter_gather,
+
+        // Vectorized select that operates on mask types (similar to if_then_else_mask)
         select_mask,
+
         shift_left,
         shift_right,
+
+        // Represents a signed integer overflow that occurred. Used to mark overflow points
+        // rather than producing undefined behavior.
         signed_integer_overflow,
+
         size_of_halide_buffer_t,
-        sorted_avg,  // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
-        strict_float,
+
+        // Marks the point in lowering where the outermost skip stages checks
+        // should be introduced.
+        skip_stages_marker,
+
+        // Takes a realization name and a loop variable. Declares that values of
+        // the realization that were stored on earlier loop iterations of the
+        // given loop are potentially loaded in this loop iteration somewhere
+        // after this point. Must occur inside a Realize node and For node of
+        // the given names but outside any corresponding ProducerConsumer
+        // nodes. Communicates to storage folding that sliding window took
+        // place.
+        sliding_window_marker,
+
+        // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
+        sorted_avg,
+
+        // strict floating point ops. These are floating point ops that we would
+        // like to optimize around (or let llvm optimize around) by treating
+        // them as reals and ignoring the existence of nan and inf. Using these
+        // intrinsics instead prevents any such optimizations.
+        strict_add,
+        strict_cast,
+        strict_div,
+        strict_eq,
+        strict_fma,
+        strict_le,
+        strict_lt,
+        strict_max,
+        strict_min,
+        strict_mul,
+        strict_sub,
+
+        // Convert a list of Exprs to a string
         stringify,
+
+        // Query properties of the compiled-for target (resolved at compile-time)
+        target_arch_is,
+        target_bits,
+        target_has_feature,
+        target_natural_vector_size,
+        target_os_is,
+
+        // An undef is a magic value where storing it has no observable effect.
         undef,
+
+        // Mark a code path as unreachable so that it can be dead-code eliminated.
         unreachable,
+
+        // Promise an expression is bounded. Not checked. Injected by the
+        // compiler itself during lowering when an early pass needs to
+        // communicate boundedness to a later pass.
         unsafe_promise_clamped,
+
+        // One-sided variants of widening_add, widening_mul, and widening_sub.
+        // arg[0] + widen(arg[1])
+        widen_right_add,
+        // arg[0] * widen(arg[1])
+        widen_right_mul,
+        // arg[0] - widen(arg[1])
+        widen_right_sub,
+
         widening_add,
         widening_mul,
         widening_shift_left,
         widening_shift_right,
         widening_sub,
+
+        // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
+        get_runtime_vscale,
+
         IntrinsicOpCount  // Sentinel: keep last.
     };
 
@@ -661,7 +842,7 @@ struct Call : public ExprNode<Call> {
     }
 
     bool is_tag() const {
-        return is_intrinsic({Call::likely, Call::likely_if_innermost, Call::strict_float});
+        return is_intrinsic({Call::likely, Call::likely_if_innermost});
     }
 
     /** Returns a pointer to a call node if the expression is a call to
@@ -678,13 +859,28 @@ struct Call : public ExprNode<Call> {
     }
 
     static const Call *as_tag(const Expr &e) {
-        return as_intrinsic(e, {Call::likely, Call::likely_if_innermost, Call::strict_float});
+        return as_intrinsic(e, {Call::likely, Call::likely_if_innermost});
     }
 
     bool is_extern() const {
         return (call_type == Extern ||
                 call_type == ExternCPlusPlus ||
                 call_type == PureExtern);
+    }
+
+    bool is_strict_float_intrinsic() const {
+        return is_intrinsic(
+            {Call::strict_add,
+             Call::strict_cast,
+             Call::strict_div,
+             Call::strict_eq,
+             Call::strict_fma,
+             Call::strict_lt,
+             Call::strict_le,
+             Call::strict_max,
+             Call::strict_min,
+             Call::strict_mul,
+             Call::strict_sub});
     }
 
     static const IRNodeType _node_type = IRNodeType::Call;
@@ -728,26 +924,29 @@ struct Variable : public ExprNode<Variable> {
     static const IRNodeType _node_type = IRNodeType::Variable;
 };
 
-/** A for loop. Execute the 'body' statement for all values of the
- * variable 'name' from 'min' to 'min + extent'. There are four
- * types of For nodes. A 'Serial' for loop is a conventional
- * one. In a 'Parallel' for loop, each iteration of the loop
- * happens in parallel or in some unspecified order. In a
- * 'Vectorized' for loop, each iteration maps to one SIMD lane,
- * and the whole loop is executed in one shot. For this case,
- * 'extent' must be some small integer constant (probably 4, 8, or
- * 16). An 'Unrolled' for loop compiles to a completely unrolled
- * version of the loop. Each iteration becomes its own
- * statement. Again in this case, 'extent' should be a small
- * integer constant. */
+/** A for loop. Execute the 'body' statement for all values of the variable
+ * 'name' from 'min' to 'max' inclusive. There are four types of For nodes. A
+ * 'Serial' for loop is a conventional one. In a 'Parallel' for loop, each
+ * iteration of the loop happens in parallel or in some unspecified order. In a
+ * 'Vectorized' for loop, each iteration maps to one SIMD lane, and the whole
+ * loop is executed in one shot. For this case, the extent (max - min + 1) must
+ * be some small integer constant (probably 4, 8, or 16). An 'Unrolled' for loop
+ * compiles to a completely unrolled version of the loop. Each iteration becomes
+ * its own statement. Again in this case, the extent should be a small integer
+ * constant. */
 struct For : public StmtNode<For> {
     std::string name;
-    Expr min, extent;
+    Expr min, max;
     ForType for_type;
     DeviceAPI device_api;
     Stmt body;
+    Partition partition_policy;
 
-    static Stmt make(const std::string &name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
+    static Stmt make(const std::string &name,
+                     Expr min, Expr max,
+                     ForType for_type, Partition partition_policy,
+                     DeviceAPI device_api,
+                     Stmt body);
 
     bool is_unordered_parallel() const {
         return Halide::Internal::is_unordered_parallel(for_type);
@@ -756,9 +955,14 @@ struct For : public StmtNode<For> {
         return Halide::Internal::is_parallel(for_type);
     }
 
+    Expr extent() const {
+        return Add::make(Sub::make(max, min), 1);
+    }
+
     static const IRNodeType _node_type = IRNodeType::For;
 };
 
+/** Decrement a semaphore 'count' times before executing the body. */
 struct Acquire : public StmtNode<Acquire> {
     Expr semaphore;
     Expr count;
@@ -806,11 +1010,10 @@ struct Shuffle : public ExprNode<Shuffle> {
      * arguments. */
     bool is_interleave() const;
 
-    /** Check if this shuffle can be represented as a broadcast.
-     * For example:
-     * A uint8 shuffle of with 4*n lanes and indices:
-     *     0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
-     * can be represented as a uint32 broadcast with n lanes (factor = 4). */
+    /** Check if this shuffle can be represented as a repeating pattern that
+     * repeats the same shuffle of the single input vector some number of times.
+     * For example: 0, 3, 1, 1,  0, 3, 1, 1, .....,  0, 3, 1, 1
+     */
     bool is_broadcast() const;
     int broadcast_factor() const;
 
@@ -835,6 +1038,10 @@ struct Shuffle : public ExprNode<Shuffle> {
      * arguments. */
     bool is_extract_element() const;
 
+    /** Returns the sequence of vector and lane indices that represent each
+     * entry to be used for the shuffled vector */
+    std::vector<std::pair<int, int>> vector_and_lane_indices() const;
+
     static const IRNodeType _node_type = IRNodeType::Shuffle;
 };
 
@@ -855,6 +1062,21 @@ struct Prefetch : public StmtNode<Prefetch> {
                      Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Prefetch;
+};
+
+/**
+ * Represents a location where storage will be hoisted to for a Func / Realize
+ * node with a given name.
+ *
+ */
+struct HoistedStorage : public StmtNode<HoistedStorage> {
+    std::string name;
+    Stmt body;
+
+    static Stmt make(const std::string &name,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::HoistedStorage;
 };
 
 /** Lock all the Store nodes in the body statement.

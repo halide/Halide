@@ -14,7 +14,7 @@ Func repeat_edge(const Func &source,
 
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
-        Var arg_var = args[i];
+        const Var &arg_var = args[i];
         Expr min = bounds[i].min;
         Expr extent = bounds[i].extent;
 
@@ -39,16 +39,15 @@ Func repeat_edge(const Func &source,
 
 Func constant_exterior(const Func &source, const Tuple &value,
                        const Region &bounds) {
-    std::vector<Var> source_args = source.args();
-    std::vector<Var> args(source_args);
+    std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size())
         << "constant_exterior called with more bounds (" << bounds.size()
-        << ") than dimensions (" << source_args.size()
+        << ") than dimensions (" << args.size()
         << ") Func " << source.name() << " has.\n";
 
-    Expr out_of_bounds = cast<bool>(false);
+    Expr out_of_bounds = Halide::Internal::make_zero(Bool());
     for (size_t i = 0; i < bounds.size(); i++) {
-        Var arg_var = source_args[i];
+        const Var &arg_var = args[i];
         Expr min = bounds[i].min;
         Expr extent = bounds[i].extent;
 
@@ -65,12 +64,13 @@ Func constant_exterior(const Func &source, const Tuple &value,
     Func bounded("constant_exterior");
     if (value.as_vector().size() > 1) {
         std::vector<Expr> def;
+        def.reserve(value.as_vector().size());
         for (size_t i = 0; i < value.as_vector().size(); i++) {
-            def.push_back(select(out_of_bounds, value[i], repeat_edge(source, bounds)(args)[i]));
+            def.push_back(select(out_of_bounds, value[i], likely(repeat_edge(source, bounds)(args)[i])));
         }
         bounded(args) = Tuple(def);
     } else {
-        bounded(args) = select(out_of_bounds, value[0], repeat_edge(source, bounds)(args));
+        bounded(args) = select(out_of_bounds, value[0], likely(repeat_edge(source, bounds)(args)));
     }
 
     return bounded;
@@ -91,7 +91,7 @@ Func repeat_image(const Func &source,
 
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
-        Var arg_var = args[i];
+        const Var &arg_var = args[i];
         Expr min = bounds[i].min;
         Expr extent = bounds[i].extent;
 
@@ -99,10 +99,25 @@ Func repeat_image(const Func &source,
             Expr coord = arg_var - min;  // Enforce zero origin.
             coord = coord % extent;      // Range is 0 to w-1
             coord = coord + min;         // Restore correct min
-
             coord = select(arg_var < min || arg_var >= min + extent, coord,
-                           clamp(likely(arg_var), min, min + extent - 1));
+                           likely(clamp(likely(arg_var), min, min + extent - 1)));
 
+            // In the line above, we want loop partitioning to both cause the
+            // clamp to go away, and also cause the select to go away. For loop
+            // partitioning to make one of these constructs go away we need one
+            // of two things to be true:
+            //
+            // 1) One arg has a likely intrinsic buried somewhere within it, and
+            //    the other arg doesn't.
+            // 2) Both args have likely intrinsics, but in one of the args it is
+            //    not within any inner min/max/select node. This is called an
+            //    'uncaptured' likely.
+            //
+            // The issue with this boundary condition is that the true branch of
+            // the select (coord) may well have a likely within it somewhere
+            // introduced by a loop tail strategy, so condition 1 doesn't
+            // hold. To be more robust, we make condition 2 hold, by introducing
+            // an uncaptured likely to the false branch.
             actuals.push_back(coord);
         } else if (!min.defined() && !extent.defined()) {
             actuals.push_back(arg_var);
@@ -131,7 +146,7 @@ Func mirror_image(const Func &source,
 
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
-        Var arg_var = args[i];
+        const Var &arg_var = args[i];
 
         Expr min = bounds[i].min;
         Expr extent = bounds[i].extent;
@@ -143,7 +158,7 @@ Func mirror_image(const Func &source,
             coord = coord + min;                                             // Restore correct min
             coord = clamp(coord, min, min + extent - 1);
             coord = select(arg_var < min || arg_var >= min + extent, coord,
-                           clamp(likely(arg_var), min, min + extent - 1));
+                           likely(clamp(likely(arg_var), min, min + extent - 1)));
             actuals.push_back(coord);
         } else if (!min.defined() && !extent.defined()) {
             actuals.push_back(arg_var);
@@ -172,7 +187,7 @@ Func mirror_interior(const Func &source,
 
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
-        Var arg_var = args[i];
+        const Var &arg_var = args[i];
 
         Expr min = bounds[i].min;
         Expr extent = bounds[i].extent;
@@ -188,7 +203,7 @@ Func mirror_interior(const Func &source,
 
             // The boundary condition probably doesn't apply
             coord = select(arg_var < min || arg_var >= min + extent, coord,
-                           clamp(likely(arg_var), min, min + extent - 1));
+                           likely(clamp(likely(arg_var), min, min + extent - 1)));
 
             actuals.push_back(coord);
         } else if (!min.defined() && !extent.defined()) {

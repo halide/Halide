@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
             return x + y + c;
         };
         if (check_image(im, func)) {
-            return -1;
+            return 1;
         }
     }
     printf("Success!\n");

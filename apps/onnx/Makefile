@@ -1,13 +1,23 @@
+# Default to the adams 2019 autoscheduler
+AUTOSCHEDULER ?= adams2019
 include ../support/Makefile.inc
+
+ifneq (,$(findstring -m32,$(CXX) $(CC) $(CCFLAGS) $(CXXFLAGS)))
+build:
+	@echo "Not testing this app in a 32-bit build (-m32 found in flags)"
+test: build
+else
 
 PROTOC := $(shell which protoc)
 
 ifdef PROTOC
 
+PROTOC_PREFIX := $(dir $(PROTOC))..
+PROTOBUF_PKG_CONFIG := PKG_CONFIG_PATH=$(PROTOC_PREFIX)/lib/pkgconfig pkg-config protobuf-lite
+
 CXXFLAGS += -DGOOGLE_PROTOBUF_NO_RTTI -Wno-sign-compare -Wno-unused-but-set-variable
-CXXFLAGS += -I$(dir $(PROTOC))../include
-LDFLAGS += -L$(dir $(PROTOC))../lib
-LDFLAGS += -lprotobuf-lite
+CXXFLAGS += $(shell $(PROTOBUF_PKG_CONFIG) --cflags)
+LDFLAGS += $(shell $(PROTOBUF_PKG_CONFIG) --libs)
 
 # Copy onnx.proto to $(BIN)
 $(BIN)/%/onnx/onnx.proto:
@@ -19,7 +29,7 @@ $(BIN)/%/onnx/onnx.proto:
 	fi
 
 # protoc generates two files
-$(BIN)/%/onnx/onnx.pb.cc: $(BIN)/%/onnx/onnx.proto
+$(BIN)/%/onnx/onnx.pb.cc: $(BIN)/%/onnx/onnx.proto $(PROTOC)
 	@sed -i -e 's/package onnx;/package onnx;option optimize_for = LITE_RUNTIME;/g' $<
 	@mkdir -p $(@D)
 	$(PROTOC) --cpp_out=$(@D) --proto_path=$(dir $<) $<
@@ -42,11 +52,11 @@ clean:
 
 # Simple unit test
 $(BIN)/%/onnx_converter_test: onnx_converter_test.cc $(BIN)/%/oclib.a
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(GENERATOR_BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERATOR_DEPS) $(GENERATOR_BIN)/oclib.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(GENERATOR_BIN) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -I$(GENERATOR_BIN) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 # Convolution with autopad=SAME_UPPER isn't supported yet (Also deprecated). TODO Enable this.
 #$(BIN)/%/onnx_model_zoo/mnist/model.onnx:
@@ -72,30 +82,34 @@ $(BIN)/%/onnx_converter_generator_test: onnx_converter_generator_test.cc $(BIN)/
 
 build: $(BIN)/$(HL_TARGET)/onnx_converter_test $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
 
-test: build
+test: build model_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
 
 PYTHON ?= python3
-PYBIND11_CFLAGS = $(shell $(PYTHON)-config --includes) -frtti
+PYBIND11_CFLAGS = $(shell pybind11-config --includes) -frtti -std=c++17
 ifeq ($(UNAME), Darwin)
     # Keep OS X builds from complaining about missing libpython symbols
     PYBIND11_CFLAGS += -undefined dynamic_lookup
 endif
-PY_EXT = $(shell $(PYTHON)-config --extension-suffix)
+# Get the python extension module suffix from python itself. You can
+# also do this with python-config, but that's not resistant to version
+# mismatches between python and python-config. This can happen when
+# using a virtualenv, because virtualenvs override python, but not
+# python-config.
+PY_EXT = $(shell $(PYTHON) -c 'import sysconfig; print(sysconfig.get_config_var("EXT_SUFFIX"))')
 PY_MODEL_EXT = model_cpp$(PY_EXT)
-PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS) -Wno-deprecated-register -Wno-deprecated-declarations
+PYCXXFLAGS = $(PYBIND11_CFLAGS) $(CXXFLAGS) -Wno-deprecated-register
 
 # Python extension for HalideModel
-$(BIN)/%/$(PY_MODEL_EXT): model.cpp $(BIN)/%/oclib.a
+$(BIN)/%/$(PY_MODEL_EXT): model.cpp $(BIN)/%/oclib.a | $(BIN)/%/onnx/onnx_pb.h
 	$(CXX) $(PYCXXFLAGS) -Wall -shared -fPIC -I$(BIN)/$* $^ $(LIBHALIDE_LDFLAGS) -o $@ $(LDFLAGS)
 
-
 model_test: $(BIN)/$(HL_TARGET)/$(PY_MODEL_EXT)
-	PYTHONPATH="$(BIN)/$(HL_TARGET)/:$$PYTHONPATH" $(PYTHON) -m unittest model_test.py -v
+	PYTHONPATH="$(BIN)/$(HL_TARGET)/:$$PYTHONPATH" DYLD_LIBRARY_PATH="$(PROTOC_PREFIX)/lib:$$DYLD_LIBRARY_PATH" $(PYTHON) -m unittest model_test.py -v
 
 halide_as_onnx_backend_test: $(BIN)/$(HL_TARGET)/$(PY_MODEL_EXT)
-	PYTHONPATH="$(BIN)/$(HL_TARGET)/:$$PYTHONPATH" $(PYTHON) -m unittest halide_as_onnx_backend_test.py -v
+	PYTHONPATH="$(BIN)/$(HL_TARGET)/:$$PYTHONPATH" DYLD_LIBRARY_PATH="$(PROTOC_PREFIX)/lib:$$DYLD_LIBRARY_PATH" $(PYTHON) -m unittest halide_as_onnx_backend_test.py -v
 
 # No Protoc
 else
@@ -103,4 +117,5 @@ build:
 	@echo "No protoc in $(PATH), you need to install protocol buffers"
 test: build
 
+endif
 endif

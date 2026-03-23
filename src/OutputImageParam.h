@@ -21,7 +21,7 @@ protected:
     friend class Func;
 
     /** A reference-counted handle on the internal parameter object */
-    Internal::Parameter param;
+    Parameter param;
 
     /** Is this an input or an output? OutputImageParam is the base class for both. */
     Argument::Kind kind = Argument::InputScalar;
@@ -37,7 +37,7 @@ protected:
                                           bool *placeholder_seen) const;
 
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */
-    OutputImageParam(const Internal::Parameter &p, Argument::Kind k, Func f);
+    OutputImageParam(const Parameter &p, Argument::Kind k, Func f);
 
 public:
     /** Construct a null image parameter handle. */
@@ -99,7 +99,7 @@ public:
     Expr channels() const;
 
     /** Get at the internal parameter object representing this ImageParam. */
-    Internal::Parameter parameter() const;
+    Parameter parameter() const;
 
     /** Construct the appropriate argument matching this parameter,
      * for the purpose of generating the right type signature when

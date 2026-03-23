@@ -107,7 +107,7 @@ ComplexExpr mul(ComplexExpr a, float re_b, float im_b) {
 // Specializations for some small DFTs of the first dimension of a
 // Func f.
 ComplexFunc dft2(ComplexFunc f, const string &prefix) {
-    Type type = f.output_types()[0];
+    Type type = f.types()[0];
 
     ComplexFunc F(prefix + "X2");
     F(f.args()) = undef_z(type);
@@ -122,7 +122,7 @@ ComplexFunc dft2(ComplexFunc f, const string &prefix) {
 }
 
 ComplexFunc dft4(ComplexFunc f, int sign, const string &prefix) {
-    Type type = f.output_types()[0];
+    Type type = f.types()[0];
 
     ComplexFunc F(prefix + "X4");
     F(f.args()) = undef_z(type);
@@ -156,7 +156,7 @@ ComplexFunc dft6(ComplexFunc f, int sign, const string &prefix) {
     ComplexExpr W2_3(re_W1_3, -im_W1_3);
     ComplexExpr W4_3 = W1_3;
 
-    Type type = f.output_types()[0];
+    Type type = f.types()[0];
 
     ComplexFunc F(prefix + "X8");
     F(f.args()) = undef_z(type);
@@ -187,7 +187,7 @@ ComplexFunc dft6(ComplexFunc f, int sign, const string &prefix) {
 ComplexFunc dft8(ComplexFunc f, int sign, const string &prefix) {
     const float sqrt2_2 = 0.70710678f;
 
-    Type type = f.output_types()[0];
+    Type type = f.types()[0];
 
     ComplexFunc F(prefix + "X8");
     F(f.args()) = undef_z(type);
@@ -346,7 +346,7 @@ ComplexFunc fft_dim1(ComplexFunc x,
 
         // The vector width is the least common multiple of the previous vector
         // width and the natural vector size for this stage.
-        vector_width = lcm(vector_width, target.natural_vector_size(v.output_types()[0]));
+        vector_width = lcm(vector_width, target.natural_vector_size(v.types()[0]));
 
         // Compute the R point DFT of the subtransform.
         ComplexFunc V = dft1d_c2c(v, R, sign, prefix);
@@ -355,7 +355,7 @@ ComplexFunc fft_dim1(ComplexFunc x,
         // pass. Since the pure stage is undef, we explicitly generate the
         // arg list (because we can't use placeholders in an undef
         // definition).
-        exchange(A({n0, n1}, args)) = undef_z(V.output_types()[0]);
+        exchange(A({n0, n1}, args)) = undef_z(V.types()[0]);
 
         RDom rs(0, R, 0, N / R);
         r_ = rs.x;
@@ -444,7 +444,7 @@ std::pair<FuncType, FuncType> tiled_transpose(FuncType f, int max_tile_size,
     }
 
     const int tile_size =
-        std::min(max_tile_size, target.natural_vector_size(f.output_types()[0]));
+        std::min(max_tile_size, target.natural_vector_size(f.types()[0]));
 
     vector<Var> args = f.args();
     Var x(args[0]), y(args[1]);
@@ -685,7 +685,7 @@ ComplexFunc fft2d_r2c(Func r,
     int N0 = product(R0);
     int N1 = product(R1);
 
-    const int natural_vector_size = target.natural_vector_size(r.output_types()[0]);
+    const int natural_vector_size = target.natural_vector_size(r.types()[0]);
 
     // If this FFT is small, the logic related to zipping and unzipping
     // the FFT may be expensive compared to just brute forcing with a complex
@@ -705,7 +705,7 @@ ComplexFunc fft2d_r2c(Func r,
         result(A({n0, n1}, args)) = dft(A({n0, n1}, args));
         result.bound(n0, 0, N0);
         result.bound(n1, 0, (N1 + 1) / 2 + 1);
-        result.vectorize(n0, std::min(N0, target.natural_vector_size(result.output_types()[0])));
+        result.vectorize(n0, std::min(N0, target.natural_vector_size(result.types()[0])));
         dft.compute_at(result, outer);
         return result;
     }
@@ -731,7 +731,7 @@ ComplexFunc fft2d_r2c(Func r,
     ComplexFunc zipped(prefix + "zipped");
     int zip_width = desc.vector_width;
     if (zip_width <= 0) {
-        zip_width = target.natural_vector_size(r.output_types()[0]);
+        zip_width = target.natural_vector_size(r.types()[0]);
     }
     // Ensure the zip width divides the zipped extent.
     zip_width = gcd(zip_width, N0 / 2);
@@ -871,6 +871,10 @@ ComplexFunc fft2d_r2c(Func r,
     dft.update(4).allow_race_conditions().vectorize(n0z1, vector_size);
     dft.update(5).allow_race_conditions().vectorize(n0z2, vector_size);
 
+    // Intentionally serial
+    dft.update(0).unscheduled();
+    dft.update(3).unscheduled();
+
     // Our result is undefined outside these bounds.
     dft.bound(n0, 0, N0);
     dft.bound(n1, 0, (N1 + 1) / 2 + 1);
@@ -907,7 +911,7 @@ Func fft2d_c2r(ComplexFunc c,
     // If this FFT is small, the logic related to zipping and unzipping
     // the FFT may be expensive compared to just brute forcing with a complex
     // FFT.
-    const int natural_vector_size = target.natural_vector_size(c.output_types()[0]);
+    const int natural_vector_size = target.natural_vector_size(c.types()[0]);
 
     bool skip_zip = N0 < natural_vector_size * 2;
 
@@ -963,7 +967,7 @@ Func fft2d_c2r(ComplexFunc c,
         // The vector width of the zipping performed below.
         int zip_width = desc.vector_width;
         if (zip_width <= 0) {
-            zip_width = gcd(target.natural_vector_size(dft0T.output_types()[0]), N1 / 2);
+            zip_width = gcd(target.natural_vector_size(dft0T.types()[0]), N1 / 2);
         }
 
         // transpose so we can take the DFT of the columns again.

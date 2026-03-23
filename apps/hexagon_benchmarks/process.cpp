@@ -3,6 +3,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef TARGET_HAS_HVX
+#include "HalideRuntimeHexagonHost.h"
+#endif
+
 #include "halide_benchmark.h"
 #include "process.h"
 

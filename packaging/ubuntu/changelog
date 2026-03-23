@@ -1,5 +1,0 @@
-@package_name@ (@CPACK_PACKAGE_VERSION@) UNRELEASED; urgency=low
-
-  * Initial package release.
-
- -- @CPACK_PACKAGE_CONTACT@  @timestamp@ -0000

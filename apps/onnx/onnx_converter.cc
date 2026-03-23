@@ -1,8 +1,10 @@
 #include "onnx_converter.h"
 #include <climits>
-#include <exception>
-#include <math.h>
+#include <numeric>
 #include <unordered_set>
+
+#define _USE_MATH_DEFINES
+#include <math.h>
 
 static Halide::Expr div_up(Halide::Expr num, int denom) {
     return Halide::Internal::simplify((num + denom - 1) / denom);
@@ -774,8 +776,8 @@ Halide::Func generate_padding_expr(
         Halide::Expr pad_before = pads[i];
         Halide::Expr pad_after = input_shape[i + skip_dims] + pad_before - 1;
         padding_extents.emplace_back(pad_before, pad_after);
-        const int64_t *p1 = Halide::Internal::as_const_int(pad_before);
-        const int64_t *p2 =
+        auto p1 = Halide::Internal::as_const_int(pad_before);
+        auto p2 =
             Halide::Internal::as_const_int(pads[rank - skip_dims - i]);
         if (!p1 || *p1 != 0 || !p2 || *p2 != 0) {
             maybe_has_padding = true;
@@ -1089,7 +1091,7 @@ Node convert_conv_node(
         bool supported_shape = true;
         for (int i = 2; i < rank; ++i) {
             const Halide::Expr w_shape_expr = Halide::Internal::simplify(W.shape[i]);
-            const int64_t *dim = Halide::Internal::as_const_int(w_shape_expr);
+            auto dim = Halide::Internal::as_const_int(w_shape_expr);
             if (!dim || *dim != 3) {
                 supported_shape = false;
                 break;
@@ -1912,12 +1914,12 @@ Node convert_split_node(
         axis += inputs[0].shape.size();
     }
     Halide::Expr axis_dim = inputs[0].shape.at(axis);
-    const int64_t *axis_dim_size = Halide::Internal::as_const_int(axis_dim);
+    auto axis_dim_size = Halide::Internal::as_const_int(axis_dim);
 
     if (user_splits.size() == 0) {
         if (axis_dim_size && (*axis_dim_size % num_outputs != 0)) {
             throw std::invalid_argument(
-                "Can't equaly split outputs for node " + node.name());
+                "Can't equally split outputs for node " + node.name());
         }
         Halide::Expr size = Halide::Internal::simplify(axis_dim / num_outputs);
         for (int i = 0; i < num_outputs; ++i) {
@@ -2041,11 +2043,11 @@ Node convert_slice_node(
             Halide::Internal::simplify(starts_tensor.shape[0]);
         const Halide::Expr ends_shape_expr =
             Halide::Internal::simplify(ends_tensor.shape[0]);
-        const int64_t *starts_shape_dim_0 =
+        auto starts_shape_dim_0 =
             Halide::Internal::as_const_int(starts_shape_expr);
-        const int64_t *ends_shape_dim_0 =
+        auto ends_shape_dim_0 =
             Halide::Internal::as_const_int(ends_shape_expr);
-        if (starts_shape_dim_0 == nullptr && ends_shape_dim_0 == nullptr) {
+        if (!starts_shape_dim_0 && !ends_shape_dim_0) {
             throw std::invalid_argument(
                 "Can't statisticaly infer slice dim size for slice node " +
                 node.name());
@@ -2053,7 +2055,7 @@ Node convert_slice_node(
             result.requirements.push_back(starts_shape_expr == ends_shape_expr);
         }
         num_slice_dims =
-            starts_shape_dim_0 != nullptr ? *starts_shape_dim_0 : *ends_shape_dim_0;
+            starts_shape_dim_0 ? *starts_shape_dim_0 : *ends_shape_dim_0;
         if (num_slice_dims != *ends_shape_dim_0) {
             throw std::invalid_argument(
                 "Starts and ends input tensor must have the same shape for "
@@ -2074,9 +2076,9 @@ Node convert_slice_node(
         const Tensor &axes_tensor = inputs[3];
         const Halide::Expr axes_shape_expr =
             Halide::Internal::simplify(axes_tensor.shape[0]);
-        const int64_t *axes_shape_dim_0 =
+        auto axes_shape_dim_0 =
             Halide::Internal::as_const_int(axes_shape_expr);
-        if (axes_shape_dim_0 != nullptr && *axes_shape_dim_0 != num_slice_dims) {
+        if (axes_shape_dim_0 && *axes_shape_dim_0 != num_slice_dims) {
             throw std::invalid_argument(
                 "Axes tensor must have the same shape as starts and ends for slice "
                 "node " +
@@ -2099,9 +2101,9 @@ Node convert_slice_node(
         const Tensor &steps_tensor = inputs[4];
         const Halide::Expr steps_shape_expr =
             Halide::Internal::simplify(steps_tensor.shape[0]);
-        const int64_t *steps_shape_dim_0 =
+        auto steps_shape_dim_0 =
             Halide::Internal::as_const_int(steps_shape_expr);
-        if (steps_shape_dim_0 != nullptr && *steps_shape_dim_0 != num_slice_dims) {
+        if (steps_shape_dim_0 && *steps_shape_dim_0 != num_slice_dims) {
             throw std::invalid_argument(
                 "Steps tensor must have the same shape as starts and ends for slice "
                 "node " +
@@ -2414,7 +2416,7 @@ Node convert_squeeze_node(
     if (implicit) {
         for (int i = 0; i < rank; ++i) {
             const Halide::Expr dim_expr = Halide::Internal::simplify(input.shape[i]);
-            const int64_t *dim = Halide::Internal::as_const_int(dim_expr);
+            auto dim = Halide::Internal::as_const_int(dim_expr);
             if (!dim) {
                 throw std::invalid_argument(
                     "Unknown dimension for input dim " + std::to_string(i) +
@@ -2471,7 +2473,7 @@ Node convert_constant_of_shape(
     Tensor &out = result.outputs[0];
     const Halide::Expr shape_expr =
         Halide::Internal::simplify(inputs[0].shape[0]);
-    const int64_t *shape_dim_0 = Halide::Internal::as_const_int(shape_expr);
+    auto shape_dim_0 = Halide::Internal::as_const_int(shape_expr);
     if (!shape_dim_0) {
         throw std::invalid_argument(
             "Can't infer rank statically for ConstantOfShape node " + node.name());
@@ -2744,7 +2746,7 @@ Node convert_expand_node(
     const int in_rank = input.shape.size();
     const Halide::Expr shape_expr =
         Halide::Internal::simplify(expand_shape.shape[0]);
-    const int64_t *shape_dim_0 = Halide::Internal::as_const_int(shape_expr);
+    auto shape_dim_0 = Halide::Internal::as_const_int(shape_expr);
     if (!shape_dim_0) {
         throw std::invalid_argument(
             "Can't infer rank statically for expand node " + node.name());
@@ -2836,7 +2838,7 @@ Node convert_random_node(
 
     if (!shape.size()) {
         throw std::invalid_argument(
-            "Attribute shape is rquired for node " + node.name());
+            "Attribute shape is required for node " + node.name());
     }
 
     std::vector<Halide::Var> out_vars(shape.size());
@@ -2851,7 +2853,7 @@ Node convert_random_node(
         result.outputs[0].type != onnx::TensorProto_DataType_DOUBLE &&
         result.outputs[0].type != onnx::TensorProto_DataType_FLOAT16) {
         throw std::invalid_argument(
-            "Unsuported dtype attribute for node " + node.name());
+            "Unsupported dtype attribute for node " + node.name());
     }
 
     // Box-Muller Transformation sampler.
@@ -3098,7 +3100,7 @@ Node convert_reshape_node(
     }
     const Halide::Expr shape_expr =
         Halide::Internal::simplify(new_shape.shape[0]);
-    const int64_t *num_dims = Halide::Internal::as_const_int(shape_expr);
+    auto num_dims = Halide::Internal::as_const_int(shape_expr);
     if (!num_dims) {
         throw std::domain_error(
             "Couldn't statically infer the rank of the output of " + node.name());
@@ -3285,7 +3287,7 @@ Node convert_gru_node(
     }
 
     const Halide::Expr dim_expr = Halide::Internal::simplify(inputs[0].shape[0]);
-    const int64_t *dim = Halide::Internal::as_const_int(dim_expr);
+    auto dim = Halide::Internal::as_const_int(dim_expr);
     if (!dim) {
         throw std::domain_error("Unknown number of timesteps");
     }
@@ -3593,7 +3595,7 @@ Node convert_gru_node(
         Hs.push_back(Hu);
     }
 
-    // Y: A tensor concating all the intermediate output values of the hidden.
+    // Y: A tensor concatenating all the intermediate output values of the hidden.
     // It has shape `[seq_length, num_directions, batch_size, hidden_size]`.
     if (node.output_size() >= 1 && !node.output(0).empty()) {
         // Hconcat: concat + unsqueeze
@@ -3683,7 +3685,7 @@ Node convert_rnn_node(
     }
 
     const Halide::Expr dim_expr = Halide::Internal::simplify(inputs[0].shape[0]);
-    const int64_t *dim = Halide::Internal::as_const_int(dim_expr);
+    auto dim = Halide::Internal::as_const_int(dim_expr);
     if (!dim) {
         throw std::domain_error("Unknown number of timesteps");
     }
@@ -3925,7 +3927,7 @@ Node convert_lstm_node(
         throw std::domain_error("Invalid rank");
     }
     const Halide::Expr dim_expr = Halide::Internal::simplify(inputs[0].shape[0]);
-    const int64_t *dim = Halide::Internal::as_const_int(dim_expr);
+    auto dim = Halide::Internal::as_const_int(dim_expr);
     if (!dim) {
         throw std::domain_error("Unknown number of timesteps");
     }
@@ -4722,7 +4724,7 @@ Model convert_model(
             throw std::domain_error("Invalid dimensions for output " + output.name());
         }
         for (int i = 0; i < args.size(); ++i) {
-            const int64_t *dim_value = Halide::Internal::as_const_int(dims[i]);
+            auto dim_value = Halide::Internal::as_const_int(dims[i]);
             if (dim_value) {
                 int dim = static_cast<int>(*dim_value);
                 f.set_estimate(args[i], 0, dim);
@@ -4777,7 +4779,7 @@ static int64_t infer_dim_from_inputs(
             replacement.min, replacement.extent, result);
     }
     result = Halide::Internal::simplify(result);
-    const int64_t *actual_dim = Halide::Internal::as_const_int(result);
+    auto actual_dim = Halide::Internal::as_const_int(result);
     if (!actual_dim) {
         throw std::invalid_argument(
             "Couldn't statically infer one of the dimensions of output " + name);
@@ -4812,7 +4814,7 @@ void compute_output_shapes(
         std::vector<int> &output_shape = (*output_shapes)[name];
         const int rank = t.shape.size();
         for (int i = 0; i < rank; ++i) {
-            const int64_t *dim = Halide::Internal::as_const_int(t.shape[i]);
+            auto dim = Halide::Internal::as_const_int(t.shape[i]);
             if (!dim) {
                 output_shape.push_back(
                     infer_dim_from_inputs(t.shape[i], replacements, name));
@@ -4833,7 +4835,7 @@ void extract_expected_input_shapes(
         const Tensor &t = model.tensors.at(input_name);
         std::vector<int> input_shape;
         for (int i = 0; i < t.shape.size(); ++i) {
-            const int64_t *dim = Halide::Internal::as_const_int(t.shape[i]);
+            auto dim = Halide::Internal::as_const_int(t.shape[i]);
             if (!dim) {
                 // The dimension isn't fixed: use the estimated typical value instead if
                 // one was provided.

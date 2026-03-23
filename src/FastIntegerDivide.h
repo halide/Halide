@@ -26,12 +26,16 @@ namespace Halide {
  * 256. I.e. it interprets the uint8 divisor as a number from 1 to 256
  * inclusive.
  */
-Expr fast_integer_divide(Expr numerator, Expr denominator);
+Expr fast_integer_divide(const Expr &numerator, const Expr &denominator);
+
+/** A variant of the above which rounds towards zero instead of rounding towards
+ * negative infinity. */
+Expr fast_integer_divide_round_to_zero(const Expr &numerator, const Expr &denominator);
 
 /** Use the fast integer division tables to implement a modulo
  * operation via the Euclidean identity: a%b = a - (a/b)*b
  */
-Expr fast_integer_modulo(Expr numerator, Expr denominator);
+Expr fast_integer_modulo(const Expr &numerator, const Expr &denominator);
 
 }  // namespace Halide
 

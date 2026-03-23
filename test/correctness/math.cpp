@@ -50,7 +50,7 @@ bool relatively_equal(value_t a, value_t b, Target target) {
         // For HLSL, try again with a lower error threshold, as it might be using
         // fast but approximated trigonometric functions:
         if (target.supports_device_api(DeviceAPI::D3D12Compute) ||
-            target.supports_device_api(DeviceAPI::OpenGLCompute)) {
+            target.supports_device_api(DeviceAPI::WebGPU)) {
             // this threshold value has been empirically determined since there
             // is no clear documentation on the precision of these algorithms
             const double threshold = .001023;
@@ -118,112 +118,143 @@ struct TestArgs {
     }
 };
 
+// For D3D12Compute, we lower directly to HLSL's pow function if the base is provably positive.
+// This test ensures that lowering is correct.
+void test_pow_positive() {
+    printf("Testing pow(x, y) where x > 0\n");
+    TestArgs<float> args(256, 0.0f, 10.0f);
+    Func test_pow_positive("test_pow_positive");
+    Var x("x"), xi("xi");
+    test_pow_positive(x) = pow(1.5f, args.data(x));
+
+    Target target = get_jit_target_from_environment();
+    if (target.has_gpu_feature()) {
+        test_pow_positive.gpu_tile(x, xi, 16);
+    } else if (target.has_feature(Target::HVX)) {
+        test_pow_positive.hexagon();
+    }
+    Buffer<float> result = test_pow_positive.realize({args.data.extent(0)}, target);
+    for (int i = 0; i < args.data.extent(0); i++) {
+        float c_result = pow(1.5f, args.data(i));
+        if (!relatively_equal(c_result, result(i), target)) {
+            fprintf(stderr, "For pow(1.5f, %.20f) == %.20f from C and %.20f from %s.\n",
+                    (double)args.data(i), (double)c_result, (double)result(i),
+                    target.to_string().c_str());
+            num_errors++;
+        }
+    }
+}
+
 // Using macros to expand name as both a C function and an Expr fragment.
 // It may well be possible to do this without macros, but that is left
 // for another day.
 
 // Version for a one argument function.
-#define fun_1(type_ret, type, name, c_name)                                                  \
-    void test_##type##_##name(Buffer<type> in) {                                             \
-        Target target = get_jit_target_from_environment();                                   \
-        if (!target.supports_type(type_of<type>())) {                                        \
-            return;                                                                          \
-        }                                                                                    \
-        Func test_##name("test_" #name);                                                     \
-        Var x("x"), xi("xi");                                                                \
-        test_##name(x) = name(in(x));                                                        \
-        if (target.has_gpu_feature()) {                                                      \
-            test_##name.gpu_tile(x, xi, 8);                                                  \
-        } else if (target.has_feature(Target::HVX)) {                                        \
-            test_##name.hexagon();                                                           \
-        }                                                                                    \
-        Buffer<type_ret> result = test_##name.realize({in.extent(0)}, target);               \
-        for (int i = 0; i < in.extent(0); i++) {                                             \
-            type_ret c_result = c_name(in(i));                                               \
-            if (!relatively_equal(c_result, result(i), target)) {                            \
-                fprintf(stderr, "For " #name "(%.20f) == %.20f from C and %.20f from %s.\n", \
-                        (double)in(i), (double)c_result, (double)result(i),                  \
-                        target.to_string().c_str());                                         \
-                num_errors++;                                                                \
-            }                                                                                \
-        }                                                                                    \
+#define fun_1(type_ret, type, name, c_name)                                                                \
+    void test_##type##_##name(Buffer<type> in) {                                                           \
+        Type type_of_type = type_of<type>();                                                               \
+        Target target = get_jit_target_from_environment();                                                 \
+        if (!target.supports_type(type_of_type)) {                                                         \
+            return;                                                                                        \
+        }                                                                                                  \
+        if (target.has_feature(Target::Vulkan) && (type_of_type.is_float() && type_of_type.bits() > 32)) { \
+            return;                                                                                        \
+        }                                                                                                  \
+        Func test_##name("test_" #name);                                                                   \
+        Var x("x"), xi("xi");                                                                              \
+        test_##name(x) = name(in(x));                                                                      \
+        if (target.has_gpu_feature()) {                                                                    \
+            test_##name.gpu_tile(x, xi, 16).vectorize(xi, 2);                                              \
+        } else if (target.has_feature(Target::HVX)) {                                                      \
+            test_##name.hexagon();                                                                         \
+        }                                                                                                  \
+        Buffer<type_ret> result = test_##name.realize({in.extent(0)}, target);                             \
+        for (int i = 0; i < in.extent(0); i++) {                                                           \
+            type_ret c_result = c_name(in(i));                                                             \
+            if (!relatively_equal(c_result, result(i), target)) {                                          \
+                fprintf(stderr, "For " #name "(%.20f) == %.20f from C and %.20f from %s.\n",               \
+                        (double)in(i), (double)c_result, (double)result(i),                                \
+                        target.to_string().c_str());                                                       \
+                num_errors++;                                                                              \
+            }                                                                                              \
+        }                                                                                                  \
     }
 
 // Version for a two argument function
-#define fun_2(type_ret, type, name, c_name)                                                         \
-    void test_##type##_##name(Buffer<type> in) {                                                    \
-        Target target = get_jit_target_from_environment();                                          \
-        if (!target.supports_type(type_of<type>())) {                                               \
-            return;                                                                                 \
-        }                                                                                           \
-        Func test_##name("test_" #name);                                                            \
-        Var x("x"), xi("xi");                                                                       \
-        test_##name(x) = name(in(0, x), in(1, x));                                                  \
-        if (target.has_gpu_feature()) {                                                             \
-            test_##name.gpu_tile(x, xi, 8);                                                         \
-        } else if (target.has_feature(Target::HVX)) {                                               \
-            test_##name.hexagon();                                                                  \
-        }                                                                                           \
-        Buffer<type_ret> result = test_##name.realize({in.height()}, target);                       \
-        for (int i = 0; i < in.height(); i++) {                                                     \
-            type_ret c_result = c_name(in(0, i), in(1, i));                                         \
-            if (!relatively_equal(c_result, result(i), target)) {                                   \
-                fprintf(stderr, "For " #name "(%.20f, %.20f) == %.20f from C and %.20f from %s.\n", \
-                        (double)in(0, i), (double)in(1, i), (double)c_result, (double)result(i),    \
-                        target.to_string().c_str());                                                \
-                num_errors++;                                                                       \
-            }                                                                                       \
-        }                                                                                           \
+#define fun_2(type_ret, type, name, c_name)                                                                \
+    void test_##type##_##name(Buffer<type> in) {                                                           \
+        Type type_of_type = type_of<type>();                                                               \
+        Target target = get_jit_target_from_environment();                                                 \
+        if (!target.supports_type(type_of_type)) {                                                         \
+            return;                                                                                        \
+        }                                                                                                  \
+        if (target.has_feature(Target::Vulkan) && (type_of_type.is_float() && type_of_type.bits() > 32)) { \
+            return;                                                                                        \
+        }                                                                                                  \
+        Func test_##name("test_" #name);                                                                   \
+        Var x("x"), xi("xi");                                                                              \
+        test_##name(x) = name(in(0, x), in(1, x));                                                         \
+        if (target.has_gpu_feature()) {                                                                    \
+            test_##name.gpu_tile(x, xi, 16).vectorize(xi, 2);                                              \
+        } else if (target.has_feature(Target::HVX)) {                                                      \
+            test_##name.hexagon();                                                                         \
+        }                                                                                                  \
+        Buffer<type_ret> result = test_##name.realize({in.height()}, target);                              \
+        for (int i = 0; i < in.height(); i++) {                                                            \
+            type_ret c_result = c_name(in(0, i), in(1, i));                                                \
+            if (!relatively_equal(c_result, result(i), target)) {                                          \
+                fprintf(stderr, "For " #name "(%.20f, %.20f) == %.20f from C and %.20f from %s.\n",        \
+                        (double)in(0, i), (double)in(1, i), (double)c_result, (double)result(i),           \
+                        target.to_string().c_str());                                                       \
+                num_errors++;                                                                              \
+            }                                                                                              \
+        }                                                                                                  \
     }
 
-// clang-format off
+#define fun_1_float_types(name)     \
+    fun_1(float, float, name, name) \
+        fun_1(double, double, name, name)
 
-#define fun_1_float_types(name)       \
-    fun_1(float, float, name, name)   \
-    fun_1(double, double, name, name)
+#define fun_2_float_types(name)     \
+    fun_2(float, float, name, name) \
+        fun_2(double, double, name, name)
 
-#define fun_2_float_types(name)       \
-    fun_2(float, float, name, name)   \
-    fun_2(double, double, name, name)
+fun_1_float_types(sqrt);
+fun_1_float_types(sin);
+fun_1_float_types(cos);
+fun_1_float_types(exp);
+fun_1_float_types(log);
+fun_1_float_types(floor);
+fun_1_float_types(ceil);
+fun_1_float_types(trunc);
+fun_1_float_types(asin);
+fun_1_float_types(acos);
+fun_1_float_types(tan);
+fun_1_float_types(atan);
+fun_1_float_types(sinh);
+fun_1_float_types(cosh);
+fun_1_float_types(tanh);
+fun_1_float_types(asinh);
+fun_1_float_types(acosh);
+fun_1_float_types(atanh);
+fun_1_float_types(round);
 
-fun_1_float_types(sqrt)
-fun_1_float_types(sin)
-fun_1_float_types(cos)
-fun_1_float_types(exp)
-fun_1_float_types(log)
-fun_1_float_types(floor)
-fun_1_float_types(ceil)
-fun_1_float_types(trunc)
-fun_1_float_types(asin)
-fun_1_float_types(acos)
-fun_1_float_types(tan)
-fun_1_float_types(atan)
-fun_1_float_types(sinh)
-fun_1_float_types(cosh)
-fun_1_float_types(tanh)
-fun_1_float_types(asinh)
-fun_1_float_types(acosh)
-fun_1_float_types(atanh)
-fun_1_float_types(round)
+fun_2_float_types(pow);
+fun_2_float_types(atan2);
 
-fun_2_float_types(pow)
-fun_2_float_types(atan2)
+fun_1(float, float, abs, fabsf);
+fun_1(double, double, abs, fabs);
+fun_1(uint8_t, int8_t, abs, abs);
+fun_1(uint16_t, int16_t, abs, abs);
+fun_1(uint32_t, int32_t, abs, abs);
 
-fun_1(float, float, abs, fabsf)
-fun_1(double, double, abs, fabs)
-fun_1(uint8_t, int8_t, abs, abs)
-fun_1(uint16_t, int16_t, abs, abs)
-fun_1(uint32_t, int32_t, abs, abs)
-
-fun_2_float_types(absd)
-fun_2(uint8_t, int8_t, absd, absd)
-fun_2(uint16_t, int16_t, absd, absd)
-fun_2(uint32_t, int32_t, absd, absd)
-fun_2(uint8_t, uint8_t, absd, absd)
-fun_2(uint16_t, uint16_t, absd, absd)
-fun_2(uint32_t, uint32_t, absd, absd)
-
-// clang-format on
+fun_2_float_types(absd);
+fun_2(uint8_t, int8_t, absd, absd);
+fun_2(uint16_t, int16_t, absd, absd);
+fun_2(uint32_t, int32_t, absd, absd);
+fun_2(uint8_t, uint8_t, absd, absd);
+fun_2(uint16_t, uint16_t, absd, absd);
+fun_2(uint32_t, uint32_t, absd, absd);
 
 // Note this test is more oriented toward making sure the paths
 // through to math functions all work on a given target rather
@@ -290,12 +321,8 @@ int main(int argc, char **argv) {
     call_1_float_types(ceil, 256, -25, 25);
     call_1_float_types(trunc, 256, -25, 25);
 
-    if (get_jit_target_from_environment().has_feature(Target::OpenGLCompute)) {
-        // GLSL isn't required to support NaN, so keep things real
-        call_2_float_types(pow, 256, 0.0, 10.0, -4.0f, 4.0f);
-    } else {
-        call_2_float_types(pow, 256, -10.0, 10.0, -4.0f, 4.0f);
-    }
+    call_2_float_types(pow, 256, -10.0, 10.0, -4.0f, 4.0f);
+    test_pow_positive();
 
     const int8_t int8_min = std::numeric_limits<int8_t>::min();
     const int16_t int16_min = std::numeric_limits<int16_t>::min();

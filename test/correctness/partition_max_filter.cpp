@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
 
     if (counter.count != expected_loops) {
         printf("Loop was not partitioned into the expected number of cases\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

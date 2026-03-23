@@ -250,7 +250,7 @@ void AllocationPlanner::dump(std::ostream &o) {
             }
         }
         line[kLineWidth] = 0;
-        o << "t=" << std::setfill('0') << std::setw(3) << t << ": " << line << '\n';
+        o << "t=" << std::setfill('0') << std::setw(3) << t << ": " << line << "\n";
     }
 }
 

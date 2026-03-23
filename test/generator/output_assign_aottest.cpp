@@ -7,15 +7,15 @@ using namespace Halide::Runtime;
 
 constexpr int kEdge = 32;
 
-Buffer<int32_t> expected(int extra) {
-    Buffer<int32_t> b(kEdge, kEdge);
+Buffer<int32_t, 2> expected(int extra) {
+    Buffer<int32_t, 2> b(kEdge, kEdge);
     b.for_each_element([&b, extra](int x, int y) {
         b(x, y) = (int32_t)(x + y + extra);
     });
     return b;
 }
 
-void compare(Buffer<int32_t> expected, Buffer<int32_t> actual) {
+void compare(Buffer<int32_t, 2> expected, Buffer<int32_t, 2> actual) {
     expected.for_each_element([expected, actual](int x, int y) {
         if (expected(x, y) != actual(x, y)) {
             printf("expected(%d, %d) = %d, actual(%d, %d) = %d\n",
@@ -26,9 +26,9 @@ void compare(Buffer<int32_t> expected, Buffer<int32_t> actual) {
 }
 
 int main(int argc, char **argv) {
-    Buffer<int32_t> actual0(kEdge, kEdge);
-    Buffer<int32_t> actual1(kEdge, kEdge);
-    Buffer<int32_t> actual2(kEdge, kEdge);
+    Buffer<int32_t, 2> actual0(kEdge, kEdge);
+    Buffer<int32_t, 2> actual1(kEdge, kEdge);
+    Buffer<int32_t, 2> actual2(kEdge, kEdge);
     output_assign(actual0, actual1, actual2);
 
     compare(expected(0), actual0);

@@ -546,7 +546,7 @@ typedef RPC_BINDING_HANDLE handle_t;
 #define RPC_MGR_EPV void
 
 /* rpcdcep.h */
-//#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP | WINAPI_PARTITION_SYSTEM)
+// #if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP | WINAPI_PARTITION_SYSTEM)
 
 typedef struct _RPC_VERSION {
     unsigned short MajorVersion;
@@ -572,7 +572,7 @@ typedef struct _RPC_MESSAGE {
     unsigned long RpcFlags;
 } RPC_MESSAGE, __RPC_FAR *PRPC_MESSAGE;
 
-//#endif /* WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP | WINAPI_PARTITION_SYSTEM) */
+// #endif /* WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP | WINAPI_PARTITION_SYSTEM) */
 
 /* rpcndr.h */
 #ifndef DECLSPEC_NOVTABLE
@@ -635,8 +635,12 @@ typedef struct _RPC_MESSAGE {
 #define THIS void
 #define DECLARE_INTERFACE(iface) interface DECLSPEC_NOVTABLE iface
 #define DECLARE_INTERFACE_(iface, baseiface) interface DECLSPEC_NOVTABLE iface : public baseiface
-#define DECLARE_INTERFACE_IID(iface, iid) interface DECLSPEC_UUID(iid) DECLSPEC_NOVTABLE iface
-#define DECLARE_INTERFACE_IID_(iface, baseiface, iid) interface DECLSPEC_UUID(iid) DECLSPEC_NOVTABLE iface : public baseiface
+#define DECLARE_INTERFACE_IID(iface, iid) \
+    interface DECLSPEC_UUID(iid)          \
+    DECLSPEC_NOVTABLE iface
+#define DECLARE_INTERFACE_IID_(iface, baseiface, iid) \
+    interface DECLSPEC_UUID(iid)                      \
+    DECLSPEC_NOVTABLE iface : public baseiface
 
 #define IFACEMETHOD(method) __override STDMETHOD(method)
 #define IFACEMETHOD_(type, method) __override STDMETHOD_(type, method)
@@ -2301,10 +2305,10 @@ typedef enum D3D12_SHADER_COMPONENT_MAPPING {
 #define D3D12_SHADER_COMPONENT_MAPPING_MASK 0x7
 #define D3D12_SHADER_COMPONENT_MAPPING_SHIFT 3
 #define D3D12_SHADER_COMPONENT_MAPPING_ALWAYS_SET_BIT_AVOIDING_ZEROMEM_MISTAKES (1 << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 4))
-#define D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(Src0, Src1, Src2, Src3) ((((Src0)&D3D12_SHADER_COMPONENT_MAPPING_MASK) |                                                 \
-                                                                          (((Src1)&D3D12_SHADER_COMPONENT_MAPPING_MASK) << D3D12_SHADER_COMPONENT_MAPPING_SHIFT) |       \
-                                                                          (((Src2)&D3D12_SHADER_COMPONENT_MAPPING_MASK) << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 2)) | \
-                                                                          (((Src3)&D3D12_SHADER_COMPONENT_MAPPING_MASK) << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 3)) | \
+#define D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(Src0, Src1, Src2, Src3) ((((Src0) & D3D12_SHADER_COMPONENT_MAPPING_MASK) |                                                 \
+                                                                          (((Src1) & D3D12_SHADER_COMPONENT_MAPPING_MASK) << D3D12_SHADER_COMPONENT_MAPPING_SHIFT) |       \
+                                                                          (((Src2) & D3D12_SHADER_COMPONENT_MAPPING_MASK) << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 2)) | \
+                                                                          (((Src3) & D3D12_SHADER_COMPONENT_MAPPING_MASK) << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 3)) | \
                                                                           D3D12_SHADER_COMPONENT_MAPPING_ALWAYS_SET_BIT_AVOIDING_ZEROMEM_MISTAKES))
 #define D3D12_DECODE_SHADER_4_COMPONENT_MAPPING(ComponentToExtract, Mapping) \
     ((D3D12_SHADER_COMPONENT_MAPPING)((Mapping) >> (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * (ComponentToExtract)) & D3D12_SHADER_COMPONENT_MAPPING_MASK))
@@ -6755,7 +6759,7 @@ interface IDXGIAdapter1 {
 #endif /* __IDXGIAdapter1_INTERFACE_DEFINED__ */
 
 // NOTE(marcos): declaring CreateDXGIFactory "1" since it works on UWP as well
-//HRESULT WINAPI CreateDXGIFactory1(REFIID riid, _COM_Outptr_ void **ppFactory);
+// HRESULT WINAPI CreateDXGIFactory1(REFIID riid, _COM_Outptr_ void **ppFactory);
 typedef HRESULT(WINAPI *PFN_CREATEDXGIFACORY1)(REFIID riid, _COM_Outptr_ void **ppFactory);
 
 DEFINE_GUID(IID_IDXGIObject, 0xaec22fb8, 0x76f3, 0x4639, 0x9b, 0xe0, 0x28, 0xeb, 0x43, 0xa6, 0x7a, 0x2e);

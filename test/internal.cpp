@@ -4,7 +4,6 @@
 #include "CPlusPlusMangle.h"
 #include "CSE.h"
 #include "CodeGen_C.h"
-#include "CodeGen_PyTorch.h"
 #include "Deinterleave.h"
 #include "Func.h"
 #include "Generator.h"
@@ -17,6 +16,7 @@
 #include "Monotonic.h"
 #include "Reduction.h"
 #include "Solve.h"
+#include "SpirvIR.h"
 #include "UniquifyVariableNames.h"
 
 using namespace Halide;
@@ -25,7 +25,6 @@ using namespace Halide::Internal;
 int main(int argc, const char **argv) {
     IRPrinter::test();
     CodeGen_C::test();
-    CodeGen_PyTorch::test();
     ir_equality_test();
     bounds_test();
     expr_match_test();
@@ -41,6 +40,7 @@ int main(int argc, const char **argv) {
     generator_test();
     propagate_estimate_test();
     uniquify_variable_names_test();
+    spirv_ir_test();
 
     printf("Success!\n");
     return 0;

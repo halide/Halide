@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
 
     if (scalar_im() != 6) {
         printf("scalar_im() == %d instead of 6\n", scalar_im());
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

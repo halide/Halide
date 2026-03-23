@@ -8,20 +8,21 @@
 
 import halide as hl
 import numpy as np
-import imageio
+import halide.imageio
 import os.path
 
 
 def main():
-
     # This program defines a single-stage imaging pipeline that
     # brightens an image.
 
     # First we'll load the input image we wish to brighten.
-    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
+    image_path = os.path.join(
+        os.path.dirname(__file__), "../../tutorial/images/rgb.png"
+    )
 
     # We create a hl.Buffer object to wrap the numpy array
-    input = hl.Buffer(imageio.imread(image_path))
+    input = hl.Buffer(halide.imageio.imread(image_path))
     assert input.type() == hl.UInt(8)
 
     # Next we define our hl.Func object that represents our one pipeline
@@ -39,7 +40,7 @@ def main():
 
     # For each pixel of the input image.
     value = input[x, y, c]
-    assert type(value) == hl.Expr
+    assert type(value) is hl.Expr
 
     # Cast it to a floating point value.
     value = hl.cast(hl.Float(32), value)
@@ -87,7 +88,7 @@ def main():
 
     # Save the output for inspection. It should look like a bright parrot.
     # python3-imageio versions <2.5 expect a numpy array
-    imageio.imsave("brighter.png", np.asanyarray(output_image))
+    halide.imageio.imwrite("brighter.png", np.asanyarray(output_image))
     print("Created brighter.png result file.")
 
     print("Success!")

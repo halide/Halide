@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -61,14 +61,13 @@ int main(int argc, char **argv) {
             f.hexagon(y).vectorize(x, 32);
         }
         for (int i = 0; i < 10; i++) {
+            f.update(i).unscheduled();
             if (i & 1) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
                 } else if (target.has_feature(Target::HVX)) {
                     f.update(i).hexagon(y).vectorize(x, 32);
                 }
-            } else {
-                f.update(i);
             }
         }
 
@@ -83,7 +82,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -103,14 +102,13 @@ int main(int argc, char **argv) {
 
         // Schedule the even update steps on the gpu
         for (int i = 0; i < 10; i++) {
+            f.update(i).unscheduled();
             if (i & 1) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
                 } else if (target.has_feature(Target::HVX)) {
                     f.update(i).hexagon(y).vectorize(x, 32);
                 }
-            } else {
-                f.update(i);
             }
         }
 
@@ -125,7 +123,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -146,9 +144,8 @@ int main(int argc, char **argv) {
 
         // Schedule the even update steps on the gpu
         for (int i = 0; i < 10; i++) {
-            if (i & 1) {
-                f.update(i);
-            } else {
+            f.update(i).unscheduled();
+            if ((i & 1) == 0) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
                 } else if (target.has_feature(Target::HVX)) {
@@ -168,6 +165,46 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
+        // A case which requires tuple updates to be atomic, but hides a
+        // dependence in a way that triggered a bug in the past.
+        Func f, g;
+        Var x, y;
+
+        f(x) = Tuple(x + 17, x + 1);
+        constexpr int w = 100;
+
+        RDom r(0, w);
+        f(r) = Tuple(f(r)[0] + 5, f(clamp(f(r)[0], 0, w - 1))[1]);
+        g(x, y) = mux(y, {f(x)[0], f(x)[1]});
+
+        f.compute_root();
+
+        Buffer<int> buf = g.realize({w, 2});
+        Buffer<int> correct(w, 2);
+        for (int x = 0; x < w; x++) {
+            correct(x, 0) = x + 17;
+            correct(x, 1) = x + 1;
+        }
+        for (int r = 0; r < w; r++) {
+            int new_0 = correct(r, 0) + 5;
+            int new_1 = correct(std::min(std::max(correct(r, 0), 0), w - 1), 1);
+            // Tuple element 1 might depend on the old value of tuple element
+            // zero. The new values must be both computed *then* assigned.
+            correct(r, 0) = new_0;
+            correct(r, 1) = new_1;
+        }
+
+        for (int x = 0; x < w; x++) {
+            for (int y = 0; y < 2; y++) {
+                if (buf(x, y) != correct(x, y)) {
+                    printf("buf(%d, %d) = %d instead of %d\n", x, y, buf(x, y), correct(x, y));
                     return -1;
                 }
             }

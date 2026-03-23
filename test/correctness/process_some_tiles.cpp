@@ -5,14 +5,8 @@
 using namespace Halide;
 
 // A version of pow that tracks usage so we can check how many times it was called.
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 int call_count = 0;
-extern "C" DLLEXPORT float my_powf(float x, float y) {
+extern "C" HALIDE_EXPORT_SYMBOL float my_powf(float x, float y) {
     call_count++;
     // We have to read from call_count, or for some reason apple clang removes it entirely.
     assert(call_count != -1);
@@ -85,7 +79,7 @@ int main(int argc, char **argv) {
     // Check the right number of calls to powf occurred
     if (call_count != tile_size * tile_size) {
         printf("call_count = %d instead of %d\n", call_count, tile_size * tile_size);
-        return -1;
+        return 1;
     }
 
     // Check the output is correct
@@ -96,7 +90,7 @@ int main(int argc, char **argv) {
             if (fabs(correct - result(x, y)) > 0.001f) {
                 printf("result(%d, %d) = %f instead of %f\n",
                        x, y, result(x, y), correct);
-                return -1;
+                return 1;
             }
         }
     }

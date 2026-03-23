@@ -179,8 +179,8 @@ std::ostream &emit_value(std::ostream &o, const VALUE &value) {
 template<>
 std::ostream &emit_value<std::string>(std::ostream &o, const std::string &value) {
     std::string v = value;
-    v = replace_all(v, "\\", "\\\\");
-    v = replace_all(v, "\"", "\\\"");
+    v = replace_all(std::move(v), "\\", "\\\\");
+    v = replace_all(std::move(v), "\"", "\\\"");
     o << "\"" << v << "\"";
     return o;
 }
@@ -271,11 +271,13 @@ std::ostream &JSONCompilerLogger::emit_to_stream(std::ostream &o) {
     }
 
     // If these are present, emit them, even if value is zero
-    if (compilation_time.count(Phase::HalideLowering)) {
-        emit_key_value(o, indent, "compilation_time_halide_lowering", compilation_time[Phase::HalideLowering]);
+    if (auto it = compilation_time.find(Phase::HalideLowering);
+        it != compilation_time.end()) {
+        emit_key_value(o, indent, "compilation_time_halide_lowering", it->second);
     }
-    if (compilation_time.count(Phase::LLVM)) {
-        emit_key_value(o, indent, "compilation_time_llvm", compilation_time[Phase::LLVM]);
+    if (auto it = compilation_time.find(Phase::LLVM);
+        it != compilation_time.end()) {
+        emit_key_value(o, indent, "compilation_time_llvm", it->second);
     }
 
     if (!matched_simplifier_rules.empty()) {

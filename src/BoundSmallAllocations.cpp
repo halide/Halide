@@ -17,40 +17,40 @@ class BoundSmallAllocations : public IRMutator {
     // Track constant bounds
     Scope<Interval> scope;
 
-    template<typename T, typename Body>
-    Body visit_let(const T *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
-            const T *op;
+            const LetOrLetStmt *op;
             ScopedBinding<Interval> binding;
-            Frame(const T *op, Scope<Interval> &scope)
+            Frame(const LetOrLetStmt *op, Scope<Interval> &scope)
                 : op(op),
                   binding(scope, op->name, find_constant_bounds(op->value, scope)) {
             }
         };
         std::vector<Frame> frames;
-        Body result;
+        decltype(op->body) result;
 
         do {
             result = op->body;
             frames.emplace_back(op, scope);
-        } while ((op = result.template as<T>()));
+        } while ((op = result.template as<LetOrLetStmt>()));
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            result = T::make(it->op->name, it->op->value, result);
+        for (const auto &frame : reverse_view(frames)) {
+            result = LetOrLetStmt::make(frame.op->name, frame.op->value, result);
         }
 
         return result;
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<LetStmt, Stmt>(op);
+        return visit_let(op);
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Let, Expr>(op);
+        return visit_let(op);
     }
 
     bool in_thread_loop = false;
@@ -59,7 +59,7 @@ class BoundSmallAllocations : public IRMutator {
 
     Stmt visit(const For *op) override {
         Interval min_bounds = find_constant_bounds(op->min, scope);
-        Interval max_bounds = find_constant_bounds(op->min + op->extent - 1, scope);
+        Interval max_bounds = find_constant_bounds(op->max, scope);
         Interval b = Interval::make_union(min_bounds, max_bounds);
         b.min = simplify(b.min);
         b.max = simplify(b.max);
@@ -74,9 +74,7 @@ class BoundSmallAllocations : public IRMutator {
     }
 
     bool must_be_constant(MemoryType memory_type) const {
-        return (memory_type == MemoryType::Register ||
-                (device_api == DeviceAPI::OpenGLCompute &&
-                 memory_type == MemoryType::GPUShared));
+        return memory_type == MemoryType::Register;
     }
 
     Stmt visit(const Realize *op) override {
@@ -125,22 +123,15 @@ class BoundSmallAllocations : public IRMutator {
                 << "Allocation " << op->name << " has a dynamic size. "
                 << "Only fixed-size allocations can be stored in registers. "
                 << "Try storing on the heap or stack instead.";
-
-            user_assert(!(device_api == DeviceAPI::OpenGLCompute &&
-                          op->memory_type == MemoryType::GPUShared))
-                << "Allocation " << op->name << " has a dynamic size. "
-                << "Only fixed-size allocations can be stored in shared memory "
-                << "in OpenGL compute shaders. Try storing in MemoryType::Heap "
-                << "instead.";
         }
 
-        const int64_t *size_ptr = bound.defined() ? as_const_int(bound) : nullptr;
+        auto size_ptr = bound.defined() ? as_const_int(bound) : std::nullopt;
         int64_t size = size_ptr ? *size_ptr : 0;
 
         if (size_ptr && size == 0 && !op->new_expr.defined()) {
             // This allocation is dead
             return Allocate::make(op->name, op->type, op->memory_type, {0}, const_false(),
-                                  mutate(op->body), op->new_expr, op->free_function);
+                                  mutate(op->body), op->new_expr, op->free_function, op->padding);
         }
 
         // 128 bytes is a typical minimum allocation size in
@@ -155,7 +146,7 @@ class BoundSmallAllocations : public IRMutator {
             user_assert(size >= 0 && size < (int64_t)1 << 31)
                 << "Allocation " << op->name << " has a size greater than 2^31: " << bound << "\n";
             return Allocate::make(op->name, op->type, op->memory_type, {(int32_t)size}, op->condition,
-                                  mutate(op->body), op->new_expr, op->free_function);
+                                  mutate(op->body), op->new_expr, op->free_function, op->padding);
         } else {
             return IRMutator::visit(op);
         }

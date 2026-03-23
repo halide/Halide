@@ -10,16 +10,13 @@
 #include "Monotonic.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include "Util.h"
 #include <utility>
 
 namespace Halide {
 namespace Internal {
 
 namespace {
-
-int64_t next_power_of_two(int64_t x) {
-    return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x)));
-}
 
 using std::map;
 using std::string;
@@ -496,6 +493,28 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
     }
 
+    bool found_sliding_marker = false;
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::sliding_window_marker)) {
+            internal_assert(op->args.size() == 2);
+            const StringImm *name = op->args[0].as<StringImm>();
+            internal_assert(name);
+            if (name->value == func.name()) {
+                found_sliding_marker = true;
+            }
+        }
+        return op;
+    }
+
+    Stmt visit(const Block *op) override {
+        Stmt first = mutate(op->first);
+        if (found_sliding_marker) {
+            return Block::make(first, op->rest);
+        } else {
+            return Block::make(first, mutate(op->rest));
+        }
+    }
+
     Stmt visit(const For *op) override {
         if (op->for_type != ForType::Serial && op->for_type != ForType::Unrolled) {
             // We can't proceed into a parallel for loop.
@@ -517,16 +536,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         Box box = box_union(provided, required);
 
         Expr loop_var = Variable::make(Int(32), op->name);
-        Expr loop_min = Variable::make(Int(32), op->name + ".loop_min");
-        Expr loop_max = Variable::make(Int(32), op->name + ".loop_max");
 
         string dynamic_footprint;
 
         Scope<Interval> bounds;
-        bounds.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
+        bounds.push(op->name, Interval(op->min, op->max));
 
         Scope<Interval> steady_bounds;
-        steady_bounds.push(op->name, Interval(simplify(op->min + 1), simplify(op->min + op->extent - 1)));
+        steady_bounds.push(op->name, Interval(simplify(op->min + 1), op->max));
 
         HasExternConsumer has_extern_consumer(func.name());
         body.accept(&has_extern_consumer);
@@ -571,14 +588,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr loop_var = Variable::make(Int(32), op->name);
             Expr steady_state = (op->min < loop_var);
 
-            Expr min_steady = simplify(substitute(steady_state, const_true(), min), true, steady_bounds);
-            Expr max_steady = simplify(substitute(steady_state, const_true(), max), true, steady_bounds);
-            Expr min_initial = simplify(substitute(steady_state, const_false(), min), true, bounds);
-            Expr max_initial = simplify(substitute(steady_state, const_false(), max), true, bounds);
-            Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1), true, bounds);
-            Expr extent_steady = simplify(max_steady - min_steady + 1, true, steady_bounds);
+            Expr min_steady = simplify(substitute(steady_state, const_true(), min), steady_bounds);
+            Expr max_steady = simplify(substitute(steady_state, const_true(), max), steady_bounds);
+            Expr min_initial = simplify(substitute(steady_state, const_false(), min), bounds);
+            Expr max_initial = simplify(substitute(steady_state, const_false(), max), bounds);
+            Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1), bounds);
+            Expr extent_steady = simplify(max_steady - min_steady + 1, steady_bounds);
             Expr extent = Max::make(extent_initial, extent_steady);
-            extent = simplify(common_subexpression_elimination(extent), true, bounds);
+            extent = simplify(common_subexpression_elimination(extent), bounds);
 
             // Find the StorageDim corresponding to dim.
             const std::vector<StorageDim> &storage_dims = func.schedule().storage_dims();
@@ -716,12 +733,12 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             } else {
                 // The max of the extent over all values of the loop variable must be a constant
                 Scope<Interval> scope;
-                scope.push(op->name, Interval(loop_min, loop_max));
+                scope.push(op->name, Interval(op->min, op->max));
                 Expr max_extent = find_constant_bound(extent, Direction::Upper, scope);
                 scope.pop(op->name);
 
                 const int max_fold = 1024;
-                const int64_t *const_max_extent = as_const_int(max_extent);
+                auto const_max_extent = as_const_int(max_extent);
                 if (const_max_extent && *const_max_extent <= max_fold) {
                     factor = static_cast<int>(next_power_of_two(*const_max_extent));
                 } else {
@@ -803,16 +820,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         to_release = max_required - max_required_next;  // This is the last time we use these entries
                     }
 
-                    if (provided.used.defined()) {
-                        to_acquire = select(provided.used, to_acquire, 0);
-                    }
-                    // We should always release the required region, even if we don't use it.
-
                     // On the first iteration, we need to acquire the extent of the region shared
                     // between the producer and consumer, and we need to release it on the last
                     // iteration.
-                    to_acquire = select(loop_var > loop_min, to_acquire, extent);
-                    to_release = select(loop_var < loop_max, to_release, extent);
+                    to_acquire = select(loop_var > op->min, to_acquire, extent);
+                    to_release = select(loop_var < op->max, to_release, extent);
 
                     // We may need dynamic assertions that a positive
                     // amount of the semaphore is acquired/released,
@@ -867,7 +879,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 // for further folding opportunities
                 // recursively.
             } else if (!body.same_as(op->body)) {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+                stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
                 break;
             } else {
                 stmt = op;
@@ -878,17 +890,15 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             }
         }
 
-        // If there's no communication of values from one loop
-        // iteration to the next (which may happen due to sliding),
-        // then we're safe to fold an inner loop.
-        if (box_contains(provided, required)) {
-            body = mutate(body);
-        }
+        // Attempt to fold an inner loop. This will bail out if it encounters a
+        // ProducerConsumer node for the func, or if it hits a sliding window
+        // marker.
+        body = mutate(body);
 
         if (body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
         }
 
         if (func.schedule().async() && !dynamic_footprint.empty()) {
@@ -961,9 +971,9 @@ class StorageFolding : public IRMutator {
             Region bounds = op->bounds;
 
             // Collapse down the extent in the folded dimension
-            for (size_t i = 0; i < folder.dims_folded.size(); i++) {
-                int d = folder.dims_folded[i].dim;
-                Expr f = folder.dims_folded[i].factor;
+            for (const auto &dim : folder.dims_folded) {
+                int d = dim.dim;
+                Expr f = dim.factor;
                 internal_assert(d >= 0 &&
                                 d < (int)bounds.size());
                 bounds[d] = Range(0, f);
@@ -1010,10 +1020,23 @@ public:
     }
 };
 
+class RemoveSlidingWindowMarkers : public IRMutator {
+    using IRMutator::visit;
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::sliding_window_marker)) {
+            return make_zero(op->type);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+};
+
 }  // namespace
 
 Stmt storage_folding(const Stmt &s, const std::map<std::string, Function> &env) {
-    return StorageFolding(env).mutate(s);
+    Stmt stmt = StorageFolding(env).mutate(s);
+    stmt = RemoveSlidingWindowMarkers().mutate(stmt);
+    return stmt;
 }
 
 }  // namespace Internal

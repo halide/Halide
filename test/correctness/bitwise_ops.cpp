@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
         float c = Halide::Internal::reinterpret_bits<float>(input(x));
         if (halide != c && std::isnan(halide) ^ std::isnan(c)) {
             printf("reinterpret<float>(%x) -> %f instead of %f\n", input(x), halide, c);
-            return -1;
+            return 1;
         }
     }
 
@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
         if (im2(x) != correct) {
             printf("%x ^ %x -> %x instead of %x\n",
                    input(x), input(x + 1), im2(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
         if (im3(x) != correct) {
             printf("%x & %x -> %x instead of %x\n",
                    input(x), input(x + 1), im3(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
         if (im4(x) != correct) {
             printf("%x | %x -> %x instead of %x\n",
                    input(x), input(x + 1), im4(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
         if (im5(x) != correct) {
             printf("~%x = %x instead of %x\n",
                    input(x), im5(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
         if (im6(x) != correct) {
             printf("%x << (%x & 0xf) -> %x instead of %x\n",
                    input(x), input(x + 1), im6(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
         if (im7(x) != correct) {
             printf("%x >> (%x & 0xf) -> %x instead of %x\n",
                    input(x), input(x + 1), im7(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
         if (im8(x) != correct) {
             printf("%x >> uint32(%x & 0x1f) -> %x instead of %x\n",
                    input(x), input(x + 1), im8(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
         if (im9(x) != correct) {
             printf("%d >> %d -> %d instead of %d\n",
                    input(x), shift_amount, im9(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
         if (im10(x) != correct) {
             printf("%x << (%x & 0x1f) -> %x instead of %x\n",
                    input(x), input(x + 1), im10(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
         if (im11(x) != correct) {
             printf("%x >> (%x & 0x1f) -> %x instead of %x\n",
                    input(x), input(x + 1), im11(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -176,7 +176,7 @@ int main(int argc, char **argv) {
         if (im12(x) != correct) {
             printf("%x << (-1 * (%x & 0x1f)) -> %x instead of %x\n",
                    input(x), input(x + 1), im12(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -191,7 +191,7 @@ int main(int argc, char **argv) {
         if (im13(x) != correct) {
             printf("%x >> (-1 * (%x & 0x1f)) -> %x instead of %x\n",
                    input(x), input(x + 1), im13(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -206,7 +206,7 @@ int main(int argc, char **argv) {
         if (im14(x) != correct) {
             printf("%x << %x -> %x instead of %x\n",
                    input(x), b14, im14(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -221,7 +221,7 @@ int main(int argc, char **argv) {
         if (im15(x) != correct) {
             printf("%x >> %x -> %x instead of %x\n",
                    input(x), b15, im15(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -236,7 +236,7 @@ int main(int argc, char **argv) {
         if (im16(x) != correct) {
             printf("%x << %x -> %x instead of %x\n",
                    input(x), b16, im16(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -251,7 +251,7 @@ int main(int argc, char **argv) {
         if (im17(x) != correct) {
             printf("%x >> %x -> %x instead of %x\n",
                    input(x), b17, im17(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -265,7 +265,7 @@ int main(int argc, char **argv) {
         if (im18(x) != correct) {
             printf("(int8_t)%x & 0xf0 -> %x instead of %x\n",
                    input(x), im18(x), correct);
-            return -1;
+            return 1;
         }
     }
 

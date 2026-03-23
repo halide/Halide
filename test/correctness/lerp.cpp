@@ -38,11 +38,17 @@ bool convert_to_value<bool>(double interpolated) {
 
 // Prevent iostream from printing 8-bit numbers as character constants.
 template<typename t>
-struct promote_if_char { typedef t promoted; };
+struct promote_if_char {
+    typedef t promoted;
+};
 template<>
-struct promote_if_char<signed char> { typedef int32_t promoted; };
+struct promote_if_char<signed char> {
+    typedef int32_t promoted;
+};
 template<>
-struct promote_if_char<unsigned char> { typedef int32_t promoted; };
+struct promote_if_char<unsigned char> {
+    typedef int32_t promoted;
+};
 
 template<typename value_t>
 bool relatively_equal(value_t a, value_t b) {
@@ -172,11 +178,11 @@ int main(int argc, char **argv) {
                                     std::numeric_limits<int32_t>::min(), 257, 255 * 65535, 1,
                                     "<uint16_t, uint8_t> zero, one uint32_t weight test");
     check_range<uint32_t, uint8_t>(0, 1, 0, 1,
-                                   1 << 31, 1, 0, 1,
+                                   0x80000000, 1, 0, 1,
                                    0, 255, 0, 1,
                                    "<uint32_t, uint8_t> weight test");
     check_range<uint32_t, uint16_t>(0, 1, 0, 1,
-                                    1 << 31, 1, 0, 1,
+                                    0x80000000, 1, 0, 1,
                                     0, 65535, 0, 1,
                                     "<uint32_t, uint16_t> weight test");
 
@@ -194,8 +200,8 @@ int main(int argc, char **argv) {
 #if 0  // takes too long, difficult to test with uint32_t
     // Check all delta values for 32-bit, do it in signed arithmetic
     check_range<int32_t, uint32_t>(std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max(), 0, 1,
-                                   1 << 31, 1, 0, 1,
-                                   0, 1, 1 << 31, 1,
+                                   0x80000000, 1, 0, 1,
+                                   0, 1, 0x80000000, 1,
                                     "<uint32_t, uint32_t> all zero starts");
 #endif
 

@@ -5,15 +5,9 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
-extern "C" DLLEXPORT int dump_to_file(halide_buffer_t *input, const char *filename,
-                                      int desired_min, int desired_extent,
-                                      halide_buffer_t *) {
+extern "C" HALIDE_EXPORT_SYMBOL int dump_to_file(halide_buffer_t *input, const char *filename,
+                                                 int desired_min, int desired_extent,
+                                                 halide_buffer_t *) {
     // Note the final output buffer argument is unused.
     if (input->is_bounds_query()) {
         // Request some range of the input buffer
@@ -65,6 +59,11 @@ bool check_result() {
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] WebAssembly JIT does not support passing arbitrary pointers to/from HalideExtern code.\n");
+        return 0;
+    }
+
     // Define a pipeline that dumps some squares to a file using an
     // external consumer stage.
     Func source;
@@ -97,9 +96,11 @@ int main(int argc, char **argv) {
     sink.realize();
 
     if (!check_result())
-        return -1;
+        return 1;
 
-    // Test ImageParam ExternFuncArgument via passed in image.
+    // Test ImageParam ExternFuncArgument via passed in image. Reset the
+    // source's compute_at level to make it legal to realize in isolation.
+    source.compute_root();
     Buffer<int32_t> buf = source.realize({10});
     ImageParam passed_in(Int(32), 1);
     passed_in.set(buf);
@@ -115,7 +116,7 @@ int main(int argc, char **argv) {
     sink2.realize();
 
     if (!check_result())
-        return -1;
+        return 1;
 
     printf("Success!\n");
     return 0;

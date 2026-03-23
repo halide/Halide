@@ -3,32 +3,23 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 int count = 0;
-extern "C" DLLEXPORT int call_counter(int x, int y) {
+extern "C" HALIDE_EXPORT_SYMBOL int call_counter(int x, int y) {
     count++;
     return 0;
 }
 HalideExtern_2(int, call_counter, int, int);
 
-extern "C" void *my_malloc(void *, size_t x) {
+extern "C" void *my_malloc(JITUserContext *, size_t x) {
     printf("Malloc wasn't supposed to be called!\n");
-    exit(-1);
-}
-
-extern "C" void my_free(void *, void *) {
+    exit(1);
 }
 
 int main(int argc, char **argv) {
     Var x, y;
 
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }
 
@@ -49,7 +40,7 @@ int main(int argc, char **argv) {
         // f should be able to tell that it only needs to compute each value once
         if (count != 101) {
             printf("f was called %d times instead of %d times\n", count, 101);
-            return -1;
+            return 1;
         }
     }
 
@@ -68,7 +59,7 @@ int main(int argc, char **argv) {
         Buffer<int> im = h.realize({100});
         if (count != 202) {
             printf("f was called %d times instead of %d times\n", count, 202);
-            return -1;
+            return 1;
         }
     }
 
@@ -88,7 +79,7 @@ int main(int argc, char **argv) {
         int correct = store_in == MemoryType::Register ? 103 : 102;
         if (count != correct) {
             printf("f was called %d times instead of %d times\n", count, correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -106,7 +97,7 @@ int main(int argc, char **argv) {
         Buffer<int> im = h.realize({100});
         if (count != 101) {
             printf("f was called %d times instead of %d times\n", count, 101);
-            return -1;
+            return 1;
         }
     }
 
@@ -134,7 +125,7 @@ int main(int argc, char **argv) {
         Buffer<int> im = h.realize({100, 4});
         if (count != 404) {
             printf("f was called %d times instead of %d times\n", count, 404);
-            return -1;
+            return 1;
         }
     }
 
@@ -157,7 +148,7 @@ int main(int argc, char **argv) {
         // we can skip the y-1 case in all but the first iteration.
         if (count != 100 * 11) {
             printf("f was called %d times instead of %d times\n", count, 100 * 11);
-            return -1;
+            return 1;
         }
     }
 
@@ -174,7 +165,7 @@ int main(int argc, char **argv) {
 
         if (count != 11 * 11) {
             printf("f was called %d times instead of %d times\n", count, 11 * 11);
-            return -1;
+            return 1;
         }
     }
 
@@ -191,7 +182,7 @@ int main(int argc, char **argv) {
         Buffer<int> im = g.realize({10, 10});
         if (count != 1500) {
             printf("f was called %d times instead of %d times\n", count, 1500);
-            return -1;
+            return 1;
         }
     }
 
@@ -201,7 +192,7 @@ int main(int argc, char **argv) {
         f(x, y) = x * y;
         g(x, y) = f(x, y) + f(x + 1, y) + f(x, y + 1) + f(x + 1, y + 1);
         f.store_at(g, y).compute_at(g, x);
-        g.set_custom_allocator(&my_malloc, &my_free);
+        g.jit_handlers().custom_malloc = my_malloc;
         Buffer<int> im = g.realize({10, 10});
     }
 
@@ -222,7 +213,7 @@ int main(int argc, char **argv) {
         // f should be able to tell that it only needs to compute each value once
         if (count != 6) {
             printf("f was called %d times instead of %d times\n", count, 6);
-            return -1;
+            return 1;
         }
     }
 
@@ -241,7 +232,7 @@ int main(int argc, char **argv) {
         // f should be able to tell that it only needs to compute each value once
         if (count != 34) {
             printf("f was called %d times instead of %d times\n", count, 34);
-            return -1;
+            return 1;
         }
     }
 
@@ -279,7 +270,7 @@ int main(int argc, char **argv) {
 
         if (count != 101) {
             printf("f was called %d times instead of %d times\n", count, 101);
-            return -1;
+            return 1;
         }
     }
 
@@ -296,7 +287,7 @@ int main(int argc, char **argv) {
         Buffer<int> im = g.realize({100});
         if (count != 104) {
             printf("f was called %d times instead of %d times\n", count, 104);
-            return -1;
+            return 1;
         }
     }
 
@@ -319,7 +310,7 @@ int main(int argc, char **argv) {
         Buffer<int> im = g.realize({100});
         if (count != 102) {
             printf("f was called %d times instead of %d times\n", count, 102);
-            return -1;
+            return 1;
         }
     }
 
@@ -341,7 +332,7 @@ int main(int argc, char **argv) {
         v.realize({10, 10});
         if (count != 14 * 14) {
             printf("f was called %d times instead of %d times\n", count, 14 * 14);
-            return -1;
+            return 1;
         }
     }
 
@@ -363,7 +354,7 @@ int main(int argc, char **argv) {
         v.realize({10, 10});
         if (count != 14 * 14) {
             printf("f was called %d times instead of %d times\n", count, 14 * 14);
-            return -1;
+            return 1;
         }
     }
 
@@ -380,7 +371,7 @@ int main(int argc, char **argv) {
         g.realize({10});
         if (count != 7) {
             printf("f was called %d times instead of %d times\n", count, 7);
-            return -1;
+            return 1;
         }
     }
 
@@ -398,7 +389,7 @@ int main(int argc, char **argv) {
         h.realize({10});
         if (count != 10) {
             printf("f was called %d times instead of %d times\n", count, 10);
-            return -1;
+            return 1;
         }
     }
 

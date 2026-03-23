@@ -40,32 +40,32 @@ int main(int argc, char **argv) {
 
         if (fabs(mean - 0.5) > tol) {
             printf("Bad mean: %f\n", mean);
-            return -1;
+            return 1;
         }
 
         if (fabs(variance - 1.0 / 12) > tol) {
             printf("Bad variance: %f\n", variance);
-            return -1;
+            return 1;
         }
 
         if (fabs(mean_dx) > tol) {
             printf("Bad mean_dx: %f\n", mean_dx);
-            return -1;
+            return 1;
         }
 
         if (fabs(variance_dx - 1.0 / 6) > tol) {
             printf("Bad variance_dx: %f\n", variance_dx);
-            return -1;
+            return 1;
         }
 
         if (fabs(mean_dy) > tol) {
             printf("Bad mean_dy: %f\n", mean_dy);
-            return -1;
+            return 1;
         }
 
         if (fabs(variance_dy - 1.0 / 6) > tol) {
             printf("Bad variance_dy: %f\n", variance_dy);
-            return -1;
+            return 1;
         }
     }
 
@@ -101,14 +101,14 @@ int main(int argc, char **argv) {
             printf("The same random seed should produce the same image. "
                    "Instead the mean absolute difference was: %f\n",
                    e1);
-            return -1;
+            return 1;
         }
 
         if (fabs(e2 - 1.0 / 3) > 0.01) {
             printf("Different random seeds should produce different images. "
                    "The mean absolute difference should be 1/3 but was %f\n",
                    e2);
-            return -1;
+            return 1;
         }
     }
 
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
         int correct = 512 * 1024 * 32;
         if (fabs(double(set_bits) / correct - 1) > tol) {
             printf("Set bits was %d instead of %d\n", set_bits, correct);
-            return -1;
+            return 1;
         }
 
         // Check to make sure adjacent bits are uncorrelated.
@@ -136,7 +136,7 @@ int main(int argc, char **argv) {
         set_bits = evaluate<int>(sum(popcount(val2)));
         if (fabs(double(set_bits) / correct - 1) > tol) {
             printf("Set bits was %d instead of %d\n", set_bits, correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -164,12 +164,12 @@ int main(int argc, char **argv) {
 
         if (fabs(f_var - 1.0 / 3) > tol) {
             printf("Variance of f was supposed to be 1/3: %f\n", f_var);
-            return -1;
+            return 1;
         }
 
         if (fabs(g_var - 1.0 / 6) > tol) {
             printf("Variance of g was supposed to be 1/6 %f\n", g_var);
-            return -1;
+            return 1;
         }
     }
 

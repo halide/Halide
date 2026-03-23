@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(bgu)
 
 enable_testing()
@@ -12,14 +12,23 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(bgu.generator bgu_generator.cpp)
-target_link_libraries(bgu.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(bgu.generator SOURCES bgu_generator.cpp)
 
 # Filters
 add_halide_library(bgu FROM bgu.generator)
 add_halide_library(bgu_auto_schedule FROM bgu.generator
                    GENERATOR bgu
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+# Note(antonysigma): experimental GPU schedule failed on the Buildbot worker
+# "halide-testbranch-main-llvm18-x86-64-linux-cmake" with error:
+#
+# CUDA error: CUDA_ERROR_ILLEGAL_ADDRESS cuCtxSynchronize failed
+#
+# Curiously, it works on a low-end GPU: Nvidia GTX 1660S.
+#
+# Uncomment the following code to debug. PARAMS
+# autoscheduler.experimental_gpu_schedule=1
+)
 
 # Main executable
 add_executable(bgu_filter filter.cpp)

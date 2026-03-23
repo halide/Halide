@@ -36,6 +36,11 @@ std::map<std::string, Function> find_transitive_calls(const Function &f);
  * a map of them. */
 std::map<std::string, Function> build_environment(const std::vector<Function> &funcs);
 
+/** Returns the same Functions as build_environment, but returns a vector of
+ * Functions instead, where the order is the order in which the Functions were
+ * first encountered. This is stable to changes in the names of the Functions. */
+std::vector<Function> called_funcs_in_order_found(const std::vector<Function> &funcs);
+
 }  // namespace Internal
 }  // namespace Halide
 

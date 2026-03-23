@@ -4,11 +4,11 @@ namespace {
 
 class EmbedImage : public Halide::Generator<EmbedImage> {
 public:
-    Input<Buffer<float>> input{"input", 3};
-    Output<Buffer<float>> output{"output", 3};
+    Input<Buffer<float, 3>> input{"input"};
+    Output<Buffer<float, 3>> output{"output"};
 
     void generate() {
-        Buffer<float> matrix(3, 3);
+        Buffer<float, 2> matrix(3, 3);
 
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {

@@ -32,21 +32,39 @@ struct float16_t {
     explicit float16_t(float value);
     explicit float16_t(double value);
     explicit float16_t(int value);
+    explicit float16_t(int64_t value);
+    explicit float16_t(uint64_t value);
     // @}
 
     /** Construct a float16_t with the bits initialised to 0. This represents
      * positive zero.*/
     float16_t() = default;
 
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
+    /** Construct a float16_t from compiler's built-in _Float16 type. */
+    explicit float16_t(_Float16 value) {
+        memcpy(&data, &value, sizeof(_Float16));
+    }
+#endif
+
     /// @}
 
-    // Use explicit to avoid accidently raising the precision
+    // Use explicit to avoid accidentally raising the precision
     /** Cast to float */
     explicit operator float() const;
     /** Cast to double */
     explicit operator double() const;
     /** Cast to int */
     explicit operator int() const;
+
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
+    /** Cast to compiler's built-in _Float16 type. */
+    explicit operator _Float16() const {
+        _Float16 result;
+        memcpy(&result, &data, sizeof(_Float16));
+        return result;
+    }
+#endif
 
     /** Get a new float16_t that represents a special value */
     // @{
@@ -127,7 +145,7 @@ static_assert(sizeof(float16_t) == 2, "float16_t should occupy two bytes");
 }  // namespace Halide
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<Halide::float16_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<Halide::float16_t>() {
     return halide_type_t(halide_type_float, 16);
 }
 
@@ -159,6 +177,8 @@ struct bfloat16_t {
     explicit bfloat16_t(float value);
     explicit bfloat16_t(double value);
     explicit bfloat16_t(int value);
+    explicit bfloat16_t(int64_t value);
+    explicit bfloat16_t(uint64_t value);
     // @}
 
     /** Construct a bfloat16_t with the bits initialised to 0. This represents
@@ -167,7 +187,7 @@ struct bfloat16_t {
 
     /// @}
 
-    // Use explicit to avoid accidently raising the precision
+    // Use explicit to avoid accidentally raising the precision
     /** Cast to float */
     explicit operator float() const;
     /** Cast to double */
@@ -254,7 +274,7 @@ static_assert(sizeof(bfloat16_t) == 2, "bfloat16_t should occupy two bytes");
 }  // namespace Halide
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<Halide::bfloat16_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<Halide::bfloat16_t>() {
     return halide_type_t(halide_type_bfloat, 16);
 }
 

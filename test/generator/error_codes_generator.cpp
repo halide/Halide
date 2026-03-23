@@ -4,10 +4,9 @@ namespace {
 
 class ErrorCodes : public Halide::Generator<ErrorCodes> {
 public:
-    Input<Buffer<int32_t>> input{"input", 2};
+    Input<Buffer<int32_t, 2>> input{"input"};
     Input<int> f_explicit_bound{"f_explicit_bound", 1, 0, 64};
-
-    Output<Buffer<int32_t>> output{"output", 2};
+    Output<Buffer<int32_t, 2>> output{"output"};
 
     void generate() {
         assert(!get_target().has_feature(Target::LargeBuffers));

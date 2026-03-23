@@ -7,10 +7,9 @@ class BilateralGrid : public Halide::Generator<BilateralGrid> {
 public:
     GeneratorParam<int> s_sigma{"s_sigma", 8};
 
-    Input<Buffer<float>> input{"input", 2};
+    Input<Buffer<float, 2>> input{"input"};
     Input<float> r_sigma{"r_sigma"};
-
-    Output<Buffer<float>> bilateral_grid{"bilateral_grid", 2};
+    Output<Buffer<float, 2>> bilateral_grid{"bilateral_grid"};
 
     void generate() {
         Var x("x"), y("y"), z("z"), c("c");
@@ -81,11 +80,10 @@ public:
         blury.set_estimate(z, 0, 12);
         bilateral_grid.set_estimates({{0, 1536}, {0, 2560}});
 
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             // nothing
         } else if (get_target().has_gpu_feature()) {
             // 0.50ms on an RTX 2060
-
             Var xi("xi"), yi("yi"), zi("zi");
 
             // Schedule blurz in 8x8 tiles. This is a tile in
@@ -122,16 +120,13 @@ public:
         } else {
             // CPU schedule.
 
-            // 3.98ms on an Intel i9-9960X using 32 threads at 3.7 GHz
-            // using target x86-64-avx2. This is a little less
-            // SIMD-friendly than some of the other apps, so we
-            // benefit from hyperthreading, and don't benefit from
-            // AVX-512, which on my machine reduces the clock to 3.0
-            // GHz.
+            // 2.04ms on an Intel i9-9960X using 32 threads at 3.5 GHz using
+            // target "host". This is a little less SIMD-friendly than some of the
+            // other apps, so we benefit from hyperthreading, and don't benefit
+            // from 512-bit vectors.
 
-            blurz.compute_root()
+            blurz.compute_at(blurx, y)
                 .reorder(c, z, x, y)
-                .parallel(y)
                 .vectorize(x, 8)
                 .unroll(c);
             histogram.compute_at(blurz, y);
@@ -139,17 +134,18 @@ public:
                 .reorder(c, r.x, r.y, x, y)
                 .unroll(c);
             blurx.compute_root()
-                .reorder(c, x, y, z)
-                .parallel(z)
+                .reorder(c, x, z, y)
+                .parallel(y)
                 .vectorize(x, 8)
                 .unroll(c);
-            blury.compute_root()
+            blury.compute_at(bilateral_grid, y)
+                .store_in(MemoryType::Stack)
                 .reorder(c, x, y, z)
-                .parallel(z)
+                .reorder_storage(c, z, x, y)
                 .vectorize(x, 8)
                 .unroll(c);
             bilateral_grid.compute_root()
-                .parallel(y)
+                .parallel(y, 8)
                 .vectorize(x, 8);
         }
 

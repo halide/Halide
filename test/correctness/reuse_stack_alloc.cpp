@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < result.width(); i++) {
         if (result(i) != 2 * i) {
             printf("Error! Allocation did not get reused at %d (%d != %d)\n", i, result(i), 2 * i);
-            return -1;
+            return 1;
         }
     }
 

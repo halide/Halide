@@ -6,6 +6,7 @@
 #include <string.h>
 #include <string>
 
+#include "cxx_mangling.function_info.h"
 #include "cxx_mangling.h"
 #ifdef TEST_CUDA
 #include "cxx_mangling_gpu.h"
@@ -30,19 +31,21 @@ union my_union {
 };
 
 int main(int argc, char **argv) {
-    Buffer<uint8_t> input(100);
+    Buffer<uint8_t, 1> input(100);
 
     for (int32_t i = 0; i < 100; i++) {
         input(i) = i;
     }
 
-    Buffer<double> result(100);
+    Buffer<double, 1> result(100);
 
     const halide_filter_metadata_t *m = HalideTest::AnotherNamespace::cxx_mangling_metadata();
     assert(m != nullptr);
     assert(m->version == halide_filter_metadata_t::VERSION);
     printf("Name is: %s\n", m->name);
     assert(strcmp(m->name, "cxx_mangling") == 0);
+
+    static_assert(HalideTest::AnotherNamespace::cxx_mangling_argument_info().at(21).name == "output");
 
     int ptr_arg = 42;
     int *int_ptr = &ptr_arg;

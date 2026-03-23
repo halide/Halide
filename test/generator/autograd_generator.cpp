@@ -6,16 +6,16 @@ constexpr int kSize = 64;
 
 class Autograd : public Halide::Generator<Autograd> {
 public:
-    Input<Buffer<float>> input_a{"input_a", 1};
-    Input<Buffer<float>> input_b{"input_b", 1};
-    Input<Buffer<float>> input_c{"input_c", 1};
+    Input<Buffer<float, 1>> input_a{"input_a"};
+    Input<Buffer<float, 1>> input_b{"input_b"};
+    Input<Buffer<float, 1>> input_c{"input_c"};
 
     // Test a case for which won't be able to find a derivative
-    Input<Buffer<uint8_t>> lut{"lut", 1};
-    Input<Buffer<uint8_t>> lut_indices{"lut_indices", 1};
+    Input<Buffer<uint8_t, 1>> lut{"lut"};
+    Input<Buffer<uint8_t, 1>> lut_indices{"lut_indices"};
 
-    Output<Buffer<float>> output{"output", 1};
-    Output<Buffer<uint8_t>> output_lut{"output_lut", 1};
+    Output<Buffer<float, 1>> output{"output"};
+    Output<Buffer<uint8_t, 1>> output_lut{"output_lut"};
 
     void generate() {
         lut.dim(0).set_bounds(0, 256);

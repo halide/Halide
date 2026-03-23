@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 
     if (error != 0) {
         printf("Serial version did not match parallel version\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

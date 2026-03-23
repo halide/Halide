@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
         });
         if (count != (int)in.number_of_elements()) {
             printf("count = %d instead of %d\n", count, (int)in.number_of_elements());
-            return -1;
+            return 1;
         }
 
         // Write Halide code that squares it and subtracts 3

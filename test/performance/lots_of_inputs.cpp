@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
         // We may or may not notice if the build bots start taking longer than 15 minutes on one test
         if (t_f > 15 * 60) {
             printf("Took too long\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
 
         if (t_f > 15 * 60) {
             printf("Took too long\n");
-            return -1;
+            return 1;
         }
     }
 

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(harris)
 
 enable_testing()
@@ -12,14 +12,14 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(harris.generator harris_generator.cpp)
-target_link_libraries(harris.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(harris.generator SOURCES harris_generator.cpp)
 
 # Filters
 add_halide_library(harris FROM harris.generator)
 add_halide_library(harris_auto_schedule FROM harris.generator
                    GENERATOR harris
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(harris_filter filter.cpp)

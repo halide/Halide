@@ -4,15 +4,15 @@ all: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/depthwise_separable_conv.generator: depthwise_separable_conv_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(BIN)/%/depthwise_separable_conv.a: $(GENERATOR_BIN)/depthwise_separable_conv.generator
 	@mkdir -p $(@D)
-	$^ -g depthwise_separable_conv -e $(GENERATOR_OUTPUTS) -o $(@D) -f depthwise_separable_conv target=$* auto_schedule=false
+	$^ -g depthwise_separable_conv -e $(GENERATOR_OUTPUTS) -o $(@D) -f depthwise_separable_conv target=$*
 
 $(BIN)/%/depthwise_separable_conv_auto_schedule.a: $(GENERATOR_BIN)/depthwise_separable_conv.generator
 	@mkdir -p $(@D)
-	$^ -g depthwise_separable_conv -e $(GENERATOR_OUTPUTS) -o $(@D) -f depthwise_separable_conv_auto_schedule target=$*-no_runtime auto_schedule=true
+	$^ -g depthwise_separable_conv -e $(GENERATOR_OUTPUTS) -o $(@D) -f depthwise_separable_conv_auto_schedule target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/process: process.cpp $(BIN)/%/depthwise_separable_conv.a $(BIN)/%/depthwise_separable_conv_auto_schedule.a
 	@-mkdir -p $(BIN)
@@ -24,4 +24,3 @@ test: $(BIN)/$(HL_TARGET)/process
 
 clean:
 	rm -rf $(BIN)
-

@@ -22,8 +22,8 @@
 template<class T>
 struct BenchmarksBase {
     typedef T Scalar;
-    typedef Halide::Runtime::Buffer<T> Vector;
-    typedef Halide::Runtime::Buffer<T> Matrix;
+    typedef Halide::Runtime::Buffer<T, 1> Vector;
+    typedef Halide::Runtime::Buffer<T, 2> Matrix;
 
     std::random_device rand_dev;
     std::default_random_engine rand_eng{rand_dev()};
@@ -102,10 +102,10 @@ struct BenchmarksBase {
 struct BenchmarksFloat : public BenchmarksBase<float> {
     BenchmarksFloat(std::string n)
         : BenchmarksBase(n),
-          result(Halide::Runtime::Buffer<float>::make_scalar()) {
+          result(Halide::Runtime::Buffer<float, 0>::make_scalar()) {
     }
 
-    Halide::Runtime::Buffer<float> result;
+    Halide::Runtime::Buffer<float, 0> result;
 
     L1Benchmark(copy, "s", halide_scopy(x.raw_buffer(), y.raw_buffer()));
     L1Benchmark(scal, "s", halide_sscal(alpha, x.raw_buffer()));
@@ -131,10 +131,10 @@ struct BenchmarksFloat : public BenchmarksBase<float> {
 struct BenchmarksDouble : public BenchmarksBase<double> {
     BenchmarksDouble(std::string n)
         : BenchmarksBase(n),
-          result(Halide::Runtime::Buffer<double>::make_scalar()) {
+          result(Halide::Runtime::Buffer<double, 0>::make_scalar()) {
     }
 
-    Halide::Runtime::Buffer<double> result;
+    Halide::Runtime::Buffer<double, 0> result;
 
     L1Benchmark(copy, "d", halide_dcopy(x.raw_buffer(), y.raw_buffer()));
     L1Benchmark(scal, "d", halide_dscal(alpha, x.raw_buffer()));

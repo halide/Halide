@@ -21,11 +21,11 @@ int main(int argc, char **argv) {
     }
 
     // Input may be a PNG8
-    Buffer<uint16_t> input = load_and_convert_image(argv[1]);
+    Buffer<uint16_t, 3> input_rgb = load_and_convert_image(argv[1]);
     // Just take the red channel
-    input.slice(2, 0);
+    Buffer<uint16_t, 2> input = input_rgb.sliced(2, 0);
 
-    Buffer<uint16_t> output(input.width(), input.height());
+    Buffer<uint16_t, 2> output(input.width(), input.height());
     int timing = atoi(argv[2]);
 
     stencil_chain(input, output);

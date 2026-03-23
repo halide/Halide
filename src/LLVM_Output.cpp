@@ -42,7 +42,7 @@ namespace {
 // If data too large, assert.
 // Return the offset at which 'data' was written.
 template<typename T>
-size_t emit_padded(std::ostream &out, T data, size_t size) {
+size_t emit_padded(std::ostream &out, const T &data, size_t size) {
     size_t pos = out.tellp();
     out << data;
     size_t written = (size_t)out.tellp() - pos;
@@ -60,18 +60,18 @@ void emit_big_endian_u32(std::ostream &out, uint32_t value) {
     out << static_cast<uint8_t>((value >> 24) & 0xff)
         << static_cast<uint8_t>((value >> 16) & 0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff)
-        << static_cast<uint8_t>((value)&0xff);
+        << static_cast<uint8_t>((value) & 0xff);
 }
 
 void emit_little_endian_u32(std::ostream &out, uint32_t value) {
-    out << static_cast<uint8_t>((value)&0xff)
+    out << static_cast<uint8_t>((value) & 0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff)
         << static_cast<uint8_t>((value >> 16) & 0xff)
         << static_cast<uint8_t>((value >> 24) & 0xff);
 }
 
 void emit_little_endian_u16(std::ostream &out, uint16_t value) {
-    out << static_cast<uint8_t>((value)&0xff)
+    out << static_cast<uint8_t>((value) & 0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff);
 }
 
@@ -185,7 +185,14 @@ void write_symbol_table(std::ostream &out,
             internal_assert(!err);
             std::string name = symbols.str().str();
             if (name_to_member_index.find(name) != name_to_member_index.end()) {
-                user_warning << "Warning: symbol '" << name << "' seen multiple times in library.\n";
+                bool is_constant = false;
+                is_constant |= name.find("__real@") == 0;
+                is_constant |= name.find("__xmm@") == 0;
+                is_constant |= name.find("__ymm@") == 0;
+                is_constant |= name.find("__zmm@") == 0;
+                if (!is_constant) {
+                    user_warning << "Warning: symbol '" << name << "' seen multiple times in library.\n";
+                }
                 continue;
             }
             name_to_member_index[name] = i;
@@ -321,7 +328,7 @@ namespace {
 // llvm::CloneModule has issues with debug info. As a workaround,
 // serialize it to bitcode in memory, and then parse the bitcode back in.
 std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
-    Internal::debug(2) << "Cloning module " << module_in.getName().str() << "\n";
+    debug(2) << "Cloning module " << module_in.getName().str() << "\n";
 
     // Write the module to a buffer.
     llvm::SmallVector<char, 16> clone_buffer;
@@ -331,17 +338,22 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
     // Read it back in.
     llvm::MemoryBufferRef buffer_ref(llvm::StringRef(clone_buffer.data(), clone_buffer.size()), "clone_buffer");
     auto cloned_module = llvm::parseBitcodeFile(buffer_ref, module_in.getContext());
+
+    // TODO(<add issue>): Add support for returning the error.
+    if (!cloned_module) {
+        llvm::dbgs() << cloned_module.takeError();
+        module_in.print(llvm::dbgs(), nullptr, false, true);
+    }
     internal_assert(cloned_module);
 
     return std::move(cloned_module.get());
 }
 
-}  // namespace
-
 void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
                llvm::CodeGenFileType file_type) {
-    Internal::debug(1) << "emit_file.Compiling to native code...\n";
-    Internal::debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
+    // Make sure to run this with a large stack!
+    debug(1) << "emit_file.Compiling to native code...\n";
+    debug(2) << "Target triple: " << module_in.getTargetTriple().str() << "\n";
 
     auto time_start = std::chrono::high_resolution_clock::now();
 
@@ -360,24 +372,52 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     }
 
     // Build up all of the passes that we want to do to the module.
+
+    // NOTE: use of the "legacy" PassManager here is still required; it is deprecated
+    // for optimization, but is still the only complete API for codegen as of work-in-progress
+    // LLVM14. At the time of this comment (Dec 2021), there is no firm plan as to when codegen will
+    // be fully available in the new PassManager, so don't worry about this 'legacy'
+    // tag until there's any indication that the old APIs start breaking.
+    //
+    // See:
+    // https://lists.llvm.org/pipermail/llvm-dev/2021-April/150100.html
+    // https://releases.llvm.org/13.0.0/docs/ReleaseNotes.html#changes-to-the-llvm-ir
+    // https://groups.google.com/g/llvm-dev/c/HoS07gXx0p8
     llvm::legacy::PassManager pass_manager;
 
-    pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module->getTargetTriple())));
+    const auto &triple = llvm::Triple(module->getTargetTriple());
+    pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(triple));
+    pass_manager.add(llvm::createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
+
+#if LLVM_VERSION >= 220
+    pass_manager.add(new llvm::RuntimeLibraryInfoWrapper(
+        module->getTargetTriple(), target_machine->Options.ExceptionModel,
+        target_machine->Options.FloatABIType,
+        target_machine->Options.EABIVersion,
+        target_machine->Options.MCOptions.ABIName,
+        target_machine->Options.VecLib));
+#endif
 
     // Make sure things marked as always-inline get inlined
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
 
-    // Remove any stale debug info
-    pass_manager.add(llvm::createStripDeadDebugInfoPass());
-
-    // Enable symbol rewriting. This allows code outside libHalide to
-    // use symbol rewriting when compiling Halide code (for example, by
-    // using cl::ParseCommandLineOption and then passing the appropriate
-    // rewrite options via -mllvm flags).
-    pass_manager.add(llvm::createRewriteSymbolsPass());
+    if (target_machine->isPositionIndependent()) {
+        debug(1) << "Target machine is Position Independent!\n";
+    }
 
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
+
+#if LLVM_VERSION < 220
+    if (triple.isMacOSX() && triple.isAArch64()) {
+        // The AArch64 syntax variant is able to display the arguments to SDOT
+        // while the Darwin-specific one is bugged. See this GitHub issue for
+        // more info: https://github.com/llvm/llvm-project/issues/151330
+        enum { Generic = 0,
+               Apple = 1 } variant = Generic;
+        target_machine->Options.MCOptions.OutputAsmVariant = variant;
+    }
+#endif
 
     // Ask the target to add backend passes as necessary.
     target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);
@@ -395,16 +435,22 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     llvm::reportAndResetTimings();
 }
 
+}  // namespace
+
 std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {
     return codegen_llvm(module, context);
 }
 
 void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &out) {
-    emit_file(module, out, llvm::CGFT_ObjectFile);
+    Internal::run_with_large_stack([&]() {
+        emit_file(module, out, llvm::CodeGenFileType::ObjectFile);
+    });
 }
 
 void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
-    emit_file(module, out, llvm::CGFT_AssemblyFile);
+    Internal::run_with_large_stack([&]() {
+        emit_file(module, out, llvm::CodeGenFileType::AssemblyFile);
+    });
 }
 
 void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream &out) {
@@ -572,11 +618,10 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
         return;
     }
 
-    const bool write_symtab = true;
     const auto kind = Internal::get_triple_for_target(target).isOSDarwin() ? llvm::object::Archive::K_BSD : llvm::object::Archive::K_GNU;
     const bool thin = false;
     auto result = llvm::writeArchive(dst_file, new_members,
-                                     write_symtab, kind,
+                                     llvm::SymtabWritingMode::NormalSymtab, kind,
                                      deterministic, thin, nullptr);
     internal_assert(!result)
         << "Failed to write archive: " << dst_file

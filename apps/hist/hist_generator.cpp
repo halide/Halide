@@ -6,8 +6,8 @@ using namespace Halide::ConciseCasts;
 
 class Hist : public Halide::Generator<Hist> {
 public:
-    Input<Buffer<uint8_t>> input{"input", 3};
-    Output<Buffer<uint8_t>> output{"output", 3};
+    Input<Buffer<uint8_t, 3>> input{"input"};
+    Output<Buffer<uint8_t, 3>> output{"output"};
 
     void generate() {
         Var x("x"), y("y"), c("c");
@@ -64,7 +64,7 @@ public:
         }
 
         // Schedule
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             cdf.bound(x, 0, 256);
 
             Var xi("xi"), yi("yi");
@@ -181,6 +181,7 @@ public:
                     .compute_at(hist_rows.in(), y)
                     .vectorize(x, vec);
 
+                hist_rows.update(0).unscheduled();
                 hist_rows.in()
                     .compute_root()
                     .vectorize(x, vec)
@@ -199,7 +200,7 @@ public:
                     .parallel(x)
                     .reorder(ry, x);
 
-                cdf.compute_root();
+                cdf.compute_root().update().unscheduled();
                 output.reorder(c, x, y)
                     .bound(c, 0, 3)
                     .unroll(c)

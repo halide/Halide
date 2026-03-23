@@ -1,5 +1,6 @@
 #include "BoundsInference.h"
 #include "Bounds.h"
+#include "CSE.h"
 #include "ExprUsesVar.h"
 #include "ExternFuncArgument.h"
 #include "Function.h"
@@ -7,11 +8,13 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Inline.h"
+#include "Qualify.h"
 #include "Scope.h"
 #include "Simplify.h"
 
 #include <algorithm>
 #include <iterator>
+#include <numeric>
 
 namespace Halide {
 namespace Internal {
@@ -31,39 +34,29 @@ bool var_name_match(const string &candidate, const string &var) {
     return (candidate == var) || Internal::ends_with(candidate, "." + var);
 }
 
-class DependsOnBoundsInference : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Variable *var) override {
-        if (ends_with(var->name, ".max") ||
-            ends_with(var->name, ".min")) {
-            result = true;
-        }
-    }
-
-    void visit(const Call *op) override {
-        if (op->name == Call::buffer_get_min ||
-            op->name == Call::buffer_get_max) {
-            result = true;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-public:
-    bool result = false;
-    DependsOnBoundsInference() = default;
-};
-
 bool depends_on_bounds_inference(const Expr &e) {
-    DependsOnBoundsInference d;
-    e.accept(&d);
-    return d.result;
+    bool result = false;
+    visit_with(
+        e,
+        [&](auto *, const Variable *var) {
+            if (ends_with(var->name, ".max") ||
+                ends_with(var->name, ".min")) {
+                result = true;
+            }  //
+        },
+        [&](auto *self, const Call *op) {
+            if (op->name == Call::buffer_get_min ||
+                op->name == Call::buffer_get_max) {
+                result = true;
+            } else {
+                self->visit_base(op);
+            }  //
+        });
+    return result;
 }
 
 /** Compute the bounds of the value of some variable defined by an
  * inner let stmt or for loop. E.g. for the stmt:
- *
  *
  * for x from 0 to 10:
  *  let y = x + 2;
@@ -111,10 +104,7 @@ private:
     }
 
     void visit(const For *op) override {
-        // At this stage of lowering, loop_min and loop_max
-        // conveniently exist in scope.
-        Interval in(Variable::make(Int(32), op->name + ".loop_min"),
-                    Variable::make(Int(32), op->name + ".loop_max"));
+        Interval in(op->min, op->max);
 
         if (op->name == var) {
             result = in;
@@ -199,6 +189,52 @@ bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
     return false;
 }
 
+// An inliner that can inline an entire set of functions at once. The inliner in
+// Inline.h only handles with one function at a time.
+class Inliner : public IRMutator {
+public:
+    std::set<Function, Function::Compare> to_inline;
+
+    Expr do_inlining(const Expr &e) {
+        return common_subexpression_elimination(mutate(e));
+    }
+
+protected:
+    std::map<Function, std::map<int, Expr>, Function::Compare> qualified_bodies;
+
+    Expr get_qualified_body(const Function &f, int idx) {
+        auto it = qualified_bodies.find(f);
+        if (it != qualified_bodies.end()) {
+            auto it2 = it->second.find(idx);
+            if (it2 != it->second.end()) {
+                return it2->second;
+            }
+        }
+        Expr e = qualify(f.name() + ".", f.values()[idx]);
+        e = do_inlining(e);
+        qualified_bodies[f][idx] = e;
+        return e;
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->func.defined()) {
+            Function f(op->func);
+            if (to_inline.count(f)) {
+                auto args = mutate(op->args);
+                Expr body = get_qualified_body(f, op->value_index);
+                const vector<string> &func_args = f.args();
+                for (size_t i = 0; i < args.size(); i++) {
+                    body = Let::make(f.name() + "." + func_args[i], args[i], body);
+                }
+                return body;
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
+    using IRMutator::visit;
+};
+
 class BoundsInference : public IRMutator {
 public:
     const vector<Function> &funcs;
@@ -211,6 +247,8 @@ public:
     const FuncValueBounds &func_bounds;
     set<string> in_pipeline, inner_productions, has_extern_consumer;
     const Target target;
+
+    Inliner inliner;
 
     struct CondValue {
         Expr cond;  // Condition on params only (can't depend on loop variable)
@@ -231,6 +269,7 @@ public:
         set<ReductionVariable, ReductionVariable::Compare> rvars;
         string stage_prefix;
         size_t fused_group_index;
+        Inliner *inliner;
 
         // Computed expressions on the left and right-hand sides.
         // Note that a function definition might have different LHS or reduction domain
@@ -246,7 +285,6 @@ public:
             }
 
             // Default case (no specialization)
-            vector<Expr> predicates = def.split_predicate();
             for (const ReductionVariable &rv : def.schedule().rvars()) {
                 rvars.insert(rv);
             }
@@ -257,30 +295,21 @@ public:
             }
             vecs[1] = def.values();
 
+            vector<Expr> predicates = def.split_predicate();
             for (size_t i = 0; i < result.size(); ++i) {
                 for (const Expr &val : vecs[i]) {
-                    if (!predicates.empty()) {
-                        Expr cond_val = Call::make(val.type(),
-                                                   Internal::Call::if_then_else,
-                                                   {likely(predicates[0]), val},
-                                                   Internal::Call::PureIntrinsic);
-                        for (size_t i = 1; i < predicates.size(); ++i) {
-                            cond_val = Call::make(cond_val.type(),
-                                                  Internal::Call::if_then_else,
-                                                  {likely(predicates[i]), cond_val},
-                                                  Internal::Call::PureIntrinsic);
-                        }
-                        result[i].push_back(CondValue(const_true(), cond_val));
-                    } else {
-                        result[i].push_back(CondValue(const_true(), val));
-                    }
+                    Expr cond_val = std::accumulate(
+                        predicates.begin(), predicates.end(), val,
+                        [](const auto &acc, const auto &pred) {
+                            return Call::make(acc.type(), Call::if_then_else, {likely(pred), acc}, Call::PureIntrinsic);
+                        });
+                    result[i].emplace_back(const_true(), cond_val);
                 }
             }
 
-            const vector<Specialization> &specializations = def.specializations();
-            for (size_t i = specializations.size(); i > 0; i--) {
-                Expr s_cond = specializations[i - 1].condition;
-                const Definition &s_def = specializations[i - 1].definition;
+            for (const auto &s : reverse_view(def.specializations())) {
+                const Expr s_cond = s.condition;
+                const Definition &s_def = s.definition;
 
                 // Else case (i.e. specialization condition is false)
                 for (auto &vec : result) {
@@ -547,8 +576,7 @@ public:
                 LoopLevel compute_at = func.schedule().compute_level();
                 LoopLevel store_at = func.schedule().store_level();
 
-                for (size_t i = 0; i < func.schedule().bounds().size(); i++) {
-                    Bound bound = func.schedule().bounds()[i];
+                for (auto bound : func.schedule().bounds()) {
                     string min_var = prefix + bound.var + ".min";
                     string max_var = prefix + bound.var + ".max";
                     Expr min_required = Variable::make(Int(32), min_var);
@@ -656,11 +684,11 @@ public:
             Expr null_handle = make_zero(Handle());
 
             vector<pair<Expr, int>> buffers_to_annotate;
-            for (size_t j = 0; j < args.size(); j++) {
-                if (args[j].is_expr()) {
-                    bounds_inference_args.push_back(args[j].expr);
-                } else if (args[j].is_func()) {
-                    Function input(args[j].func);
+            for (const auto &arg : args) {
+                if (arg.is_expr()) {
+                    bounds_inference_args.push_back(inliner->do_inlining(arg.expr));
+                } else if (arg.is_func()) {
+                    Function input(arg.func);
                     for (int k = 0; k < input.outputs(); k++) {
                         string name = input.name() + ".o" + std::to_string(k) + ".bounds_query." + func.name();
 
@@ -673,11 +701,11 @@ public:
                         bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), name));
                         buffers_to_annotate.emplace_back(bounds_inference_args.back(), input.dimensions());
                     }
-                } else if (args[j].is_image_param() || args[j].is_buffer()) {
-                    Parameter p = args[j].image_param;
-                    Buffer<> b = args[j].buffer;
-                    string name = args[j].is_image_param() ? p.name() : b.name();
-                    int dims = args[j].is_image_param() ? p.dimensions() : b.dimensions();
+                } else if (arg.is_image_param() || arg.is_buffer()) {
+                    Parameter p = arg.image_param;
+                    Buffer<> b = arg.buffer;
+                    string name = arg.is_image_param() ? p.name() : b.name();
+                    int dims = arg.is_image_param() ? p.dimensions() : b.dimensions();
 
                     Expr in_buf = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
 
@@ -776,8 +804,8 @@ public:
             s = Block::make(check, s);
 
             // Wrap in let stmts defining the args
-            for (size_t i = 0; i < lets.size(); i++) {
-                s = LetStmt::make(lets[i].first, lets[i].second, s);
+            for (const auto &let : lets) {
+                s = LetStmt::make(let.first, let.second, s);
             }
 
             return s;
@@ -828,6 +856,7 @@ public:
                 f[i].schedule().compute_level().is_inlined() &&
                 f[i].can_be_inlined()) {
                 inlined[i] = true;
+                inliner.to_inline.insert(f[i]);
             } else {
                 inlined[i] = false;
             }
@@ -849,6 +878,7 @@ public:
             s.fused_group_index = find_fused_group_index(s.func, fused_groups);
             s.compute_exprs();
             s.stage_prefix = s.name + ".s0.";
+            s.inliner = &inliner;
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
@@ -859,27 +889,20 @@ public:
             }
         }
 
-        // Do any pure inlining (TODO: This is currently slow)
-        for (size_t i = f.size(); i > 0; i--) {
-            Function func = f[i - 1];
-            if (inlined[i - 1]) {
-                for (size_t j = 0; j < stages.size(); j++) {
-                    Stage &s = stages[j];
-                    for (size_t k = 0; k < s.exprs.size(); k++) {
-                        CondValue &cond_val = s.exprs[k];
-                        internal_assert(cond_val.value.defined());
-                        cond_val.value = inline_function(cond_val.value, func);
-                    }
-                }
+        // Do any pure inlining
+        for (auto &s : stages) {
+            for (auto &cond_val : s.exprs) {
+                internal_assert(cond_val.value.defined());
+                cond_val.value = inliner.do_inlining(cond_val.value);
             }
         }
 
         // Remove the inlined stages
         vector<Stage> new_stages;
-        for (size_t i = 0; i < stages.size(); i++) {
-            if (!stages[i].func.schedule().compute_level().is_inlined() ||
-                !stages[i].func.can_be_inlined()) {
-                new_stages.push_back(stages[i]);
+        for (const auto &stage : stages) {
+            if (!stage.func.schedule().compute_level().is_inlined() ||
+                !stage.func.can_be_inlined()) {
+                new_stages.push_back(stage);
             }
         }
         new_stages.swap(stages);
@@ -912,9 +935,9 @@ public:
                 // Stage::define_bounds is going to compute a query
                 // halide_buffer_t per producer for bounds inference to
                 // use. We just need to extract those values.
-                for (size_t j = 0; j < args.size(); j++) {
-                    if (args[j].is_func()) {
-                        Function f(args[j].func);
+                for (const auto &arg : args) {
+                    if (arg.is_func()) {
+                        Function f(arg.func);
                         has_extern_consumer.insert(f.name());
                         string stage_name = f.name() + ".s" + std::to_string(f.updates().size());
                         Box b(f.dimensions());
@@ -968,11 +991,11 @@ public:
                     }
 
                     // Dump out the region required of each stage for debugging.
-
                     /*
                     debug(0) << "Box required of " << producer.name
                              << " by " << consumer.name
-                             << " stage " << consumer.stage << ":\n";
+                             << " stage " << consumer.stage << ":\n"
+                             << " used: " << b.used << "\n";
                     for (size_t k = 0; k < b.size(); k++) {
                         debug(0) << "  " << b[k].min << " ... " << b[k].max << "\n";
                     }
@@ -1011,8 +1034,7 @@ public:
 
                 output_box.push_back(Interval(min, (min + extent) - 1));
             }
-            for (size_t i = 0; i < stages.size(); i++) {
-                Stage &s = stages[i];
+            for (auto &s : stages) {
                 if (!s.func.same_as(output)) {
                     continue;
                 }
@@ -1108,7 +1130,7 @@ public:
         map<string, Function> stage_name_to_func;
 
         if (producing >= 0) {
-            fused_group.insert(make_pair(f.name(), stage_index));
+            fused_group.emplace(f.name(), stage_index);
         }
 
         if (!no_pipelines && producing >= 0 && !f.has_extern_definition()) {
@@ -1120,12 +1142,12 @@ public:
                 if (!((pair.func_1 == stages[producing].name) && ((int)pair.stage_1 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
                                                                                                                              f, stage_index,
                                                                                                                              pair.func_1, pair.stage_1, var)) {
-                    fused_group.insert(make_pair(pair.func_1, pair.stage_1));
+                    fused_group.emplace(pair.func_1, pair.stage_1);
                 }
                 if (!((pair.func_2 == stages[producing].name) && ((int)pair.stage_2 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
                                                                                                                              f, stage_index,
                                                                                                                              pair.func_2, pair.stage_2, var)) {
-                    fused_group.insert(make_pair(pair.func_2, pair.stage_2));
+                    fused_group.emplace(pair.func_2, pair.stage_2);
                 }
             }
 
@@ -1137,7 +1159,10 @@ public:
                 auto boxes = boxes_provided(body, empty_scope, func_bounds);
                 for (const auto &fused : fused_group) {
                     string fused_stage_name = fused.first + ".s" + std::to_string(fused.second);
-                    boxes_for_fused_group[fused_stage_name] = boxes[fused.first];
+                    auto it = boxes.find(fused.first);
+                    if (it != boxes.end()) {
+                        boxes_for_fused_group[fused_stage_name] = it->second;
+                    }
                     for (const auto &fn : funcs) {
                         if (fn.name() == fused.first) {
                             stage_name_to_func[fused_stage_name] = fn;
@@ -1167,8 +1192,8 @@ public:
                 }
 
                 if (bounds_needed[i]) {
-                    for (size_t j = 0; j < stages[i].consumers.size(); j++) {
-                        bounds_needed[stages[i].consumers[j]] = true;
+                    for (int consumer : stages[i].consumers) {
+                        bounds_needed[consumer] = true;
                     }
                     body = stages[i].define_bounds(
                         body, f, stage_name, stage_index, op->name, fused_groups,
@@ -1262,16 +1287,15 @@ public:
                                  old_inner_productions.end());
 
         // Rewrap the let/if statements
-        for (size_t i = wrappers.size(); i > 0; i--) {
-            const auto &p = wrappers[i - 1];
-            if (p.first.empty()) {
-                body = IfThenElse::make(p.second, body);
+        for (const auto &[var, value] : reverse_view(wrappers)) {
+            if (var.empty()) {
+                body = IfThenElse::make(value, body);
             } else {
-                body = LetStmt::make(p.first, p.second, body);
+                body = LetStmt::make(var, value, body);
             }
         }
 
-        return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+        return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
     }
 
     Scope<> let_vars_in_scope;
@@ -1309,6 +1333,7 @@ Stmt bounds_inference(Stmt s,
     vector<vector<Function>> fused_func_groups;
     for (const vector<string> &group : fused_groups) {
         vector<Function> fs;
+        fs.reserve(group.size());
         for (const string &fname : group) {
             fs.push_back(env.find(fname)->second);
         }
@@ -1326,9 +1351,9 @@ Stmt bounds_inference(Stmt s,
                           f.definition().schedule().fused_pairs().end(),
                           std::inserter(pairs, pairs.end()));
 
-                for (size_t i = 0; i < f.updates().size(); ++i) {
-                    std::copy(f.updates()[i].schedule().fused_pairs().begin(),
-                              f.updates()[i].schedule().fused_pairs().end(),
+                for (const auto &update : f.updates()) {
+                    std::copy(update.schedule().fused_pairs().begin(),
+                              update.schedule().fused_pairs().end(),
                               std::inserter(pairs, pairs.end()));
                 }
             }
@@ -1336,13 +1361,25 @@ Stmt bounds_inference(Stmt s,
         fused_pairs_in_groups.push_back(pairs);
     }
 
+    // Add a note in the IR for where the outermost dynamic-stage skipping
+    // checks should go. These are injected in a later pass.
+    Expr marker = Call::make(Int(32), Call::skip_stages_marker, {}, Call::Intrinsic);
+    s = Block::make(Evaluate::make(marker), s);
+
+    if (target.has_feature(Target::Profile) || target.has_feature(Target::ProfileByTimer)) {
+        // Add a note in the IR for what profiling should cover, so that it doesn't
+        // include bounds queries as pipeline executions.
+        marker = Call::make(Int(32), Call::profiling_enable_instance_marker, {}, Call::Intrinsic);
+        s = Block::make(Evaluate::make(marker), s);
+    }
+
     // Add a note in the IR for where assertions on input images
     // should go. Those are handled by a later lowering pass.
-    Expr marker = Call::make(Int(32), Call::add_image_checks_marker, {}, Call::Intrinsic);
+    marker = Call::make(Int(32), Call::add_image_checks_marker, {}, Call::Intrinsic);
     s = Block::make(Evaluate::make(marker), s);
 
     // Add a synthetic outermost loop to act as 'root'.
-    s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::None, s);
+    s = For::make("<outermost>", 0, 0, ForType::Serial, Partition::Never, DeviceAPI::None, s);
 
     s = BoundsInference(funcs, fused_func_groups, fused_pairs_in_groups,
                         outputs, func_bounds, target)

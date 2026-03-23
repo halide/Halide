@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(bilateral_grid)
 
 enable_testing()
@@ -12,8 +12,9 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(bilateral_grid.generator bilateral_grid_generator.cpp)
-target_link_libraries(bilateral_grid.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(bilateral_grid.generator
+                     SOURCES bilateral_grid_generator.cpp
+                     LINK_LIBRARIES Halide::Tools)
 
 # Filters
 add_halide_library(bilateral_grid FROM bilateral_grid.generator
@@ -24,7 +25,13 @@ add_halide_library(bilateral_grid_auto_schedule FROM bilateral_grid.generator
                    GENERATOR bilateral_grid
                    STMT bilateral_grid_auto_schedule_STMT
                    SCHEDULE bilateral_grid_auto_schedule_SCHEDULE
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   # Note(antonysigma): With gpu_tile(...,
+                   # TailStrategy::GuardWithIf), the OSX Metal API reports the
+                   # maximum GPU threads of 896 per block. Manually down adjust
+                   # the cache size per block to force a smaller thread count.
+                   PARAMS autoscheduler.last_level_cache_size=10000 autoscheduler.experimental_gpu_schedule=1
+                   )
 
 # Main executable
 add_executable(bilateral_grid_process filter.cpp)

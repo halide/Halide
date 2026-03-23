@@ -9,7 +9,7 @@
 using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
-    Buffer<int> output(100, 30);
+    Buffer<int, 2> output(100, 30);
     const char *code = " .:-~*={}&%#@";
     const int iters = (int)strlen(code) - 1;
 

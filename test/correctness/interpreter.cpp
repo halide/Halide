@@ -9,7 +9,18 @@ int main(int argc, char **argv) {
     if (target.os == Target::Windows &&
         (target.has_feature(Target::OpenCL) ||
          target.has_feature(Target::D3D12Compute))) {
-        printf("[SKIP] workaround for issue #5738\n");
+        printf("[SKIP-WITH-ISSUE-5738] workaround for issue #5738\n");
+        return 0;
+    }
+
+    if (target.has_feature(Target::Vulkan)) {
+        printf("[SKIP] Skipping test for Vulkan (which doesn't support dynamically allocated shared mem)!\n");
+        return 0;
+    }
+
+    // Workaround for https://github.com/halide/Halide/issues/7420
+    if (target.has_feature(Target::WebGPU)) {
+        printf("[SKIP-WITH-ISSUE-7420] workaround for issue #7420\n");
         return 0;
     }
 

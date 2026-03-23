@@ -52,7 +52,7 @@ int main(int argc, char const *argv[]) {
                 printf("im1(%d, %d) = %f, im2(%d, %d) = %f\n",
                        x, y, im1(x, y),
                        x, y, im2(x, y));
-                return -1;
+                return 1;
             }
         }
     }

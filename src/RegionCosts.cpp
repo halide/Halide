@@ -49,8 +49,8 @@ class FindImageInputs : public IRVisitor {
                 }
             }
         }
-        for (size_t i = 0; i < call->args.size(); i++) {
-            call->args[i].accept(this);
+        for (const auto &arg : call->args) {
+            arg.accept(this);
         }
     }
 
@@ -78,6 +78,11 @@ class ExprCost : public IRVisitor {
     void visit(const Cast *op) override {
         op->value.accept(this);
         arith += 1;
+    }
+
+    void visit(const Reinterpret *op) override {
+        op->value.accept(this);
+        // `Reinterpret` is a no-op and does *not* incur any cost.
     }
 
     template<typename T>
@@ -216,37 +221,27 @@ class ExprCost : public IRVisitor {
                 user_warning << "Unknown extern call " << call->name << "\n";
             }
         } else if (call->is_intrinsic()) {
-            // TODO: Improve the cost model. In some architectures (e.g. ARM or
-            // NEON), count_leading_zeros should be as cheap as bitwise ops.
-            // div_round_to_zero and mod_round_to_zero can also get fairly expensive.
-            if (call->is_intrinsic(Call::reinterpret) || call->is_intrinsic(Call::bitwise_and) ||
-                call->is_intrinsic(Call::bitwise_not) || call->is_intrinsic(Call::bitwise_xor) ||
-                call->is_intrinsic(Call::bitwise_or) || call->is_intrinsic(Call::shift_left) ||
-                call->is_intrinsic(Call::shift_right) || call->is_intrinsic(Call::div_round_to_zero) ||
-                call->is_intrinsic(Call::mod_round_to_zero) || call->is_intrinsic(Call::undef) ||
-                call->is_intrinsic(Call::mux)) {
-                arith += 1;
-            } else if (call->is_intrinsic(Call::abs) || call->is_intrinsic(Call::absd) ||
-                       call->is_intrinsic(Call::lerp) || call->is_intrinsic(Call::random) ||
-                       call->is_intrinsic(Call::count_leading_zeros) ||
-                       call->is_intrinsic(Call::count_trailing_zeros)) {
+            if (call->is_intrinsic({Call::lerp,
+                                    Call::div_round_to_zero,
+                                    Call::mod_round_to_zero,
+                                    Call::random})) {
+                // It's an expensive arithmetic intrinsic
                 arith += 5;
-            } else if (Call::as_tag(call)) {
-                // Tags do not result in actual operations.
+            } else if (Call::as_tag(call) ||
+                       call->is_intrinsic({Call::promise_clamped,
+                                           Call::unsafe_promise_clamped,
+                                           Call::undef})) {
+                // These intrinsics entail no actual work
             } else {
-                // For other intrinsics, use 1 for the arithmetic cost.
+                // For other intrinsics (e.g. bitwise ops, fixed-point math),
+                // use 1 for the arithmetic cost.
                 arith += 1;
-                user_warning << "Unhandled intrinsic call " << call->name << "\n";
             }
         }
 
-        for (size_t i = 0; i < call->args.size(); i++) {
-            call->args[i].accept(this);
+        for (const auto &arg : call->args) {
+            arg.accept(this);
         }
-    }
-
-    void visit(const Shuffle *op) override {
-        arith += 1;
     }
 
     void visit(const Let *let) override {
@@ -256,50 +251,63 @@ class ExprCost : public IRVisitor {
 
     // None of the following IR nodes should be encountered when traversing the
     // IR at the level at which the auto scheduler operates.
-    void visit(const Load *) override {
-        internal_error;
+    void fail(const Expr &e) {
+        internal_error << "Unexpected Expr while computing region costs: " << e << "\n"
+                       << "Expected front-end Exprs only.";
     }
-    void visit(const Ramp *) override {
-        internal_error;
+    void fail(const Stmt &s) {
+        internal_error << "Unexpected Stmt while computing region costs:\n"
+                       << s << "\n"
+                       << "Expected front-end Exprs only.";
     }
-    void visit(const Broadcast *) override {
-        internal_error;
+
+    void visit(const Load *op) override {
+        fail(op);
     }
-    void visit(const LetStmt *) override {
-        internal_error;
+    void visit(const Ramp *op) override {
+        fail(op);
     }
-    void visit(const AssertStmt *) override {
-        internal_error;
+    void visit(const Shuffle *op) override {
+        fail(op);
     }
-    void visit(const ProducerConsumer *) override {
-        internal_error;
+    void visit(const Broadcast *op) override {
+        fail(op);
     }
-    void visit(const For *) override {
-        internal_error;
+    void visit(const LetStmt *op) override {
+        fail(op);
     }
-    void visit(const Store *) override {
-        internal_error;
+    void visit(const AssertStmt *op) override {
+        fail(op);
     }
-    void visit(const Provide *) override {
-        internal_error;
+    void visit(const ProducerConsumer *op) override {
+        fail(op);
     }
-    void visit(const Allocate *) override {
-        internal_error;
+    void visit(const For *op) override {
+        fail(op);
     }
-    void visit(const Free *) override {
-        internal_error;
+    void visit(const Store *op) override {
+        fail(op);
     }
-    void visit(const Realize *) override {
-        internal_error;
+    void visit(const Provide *op) override {
+        fail(op);
     }
-    void visit(const Block *) override {
-        internal_error;
+    void visit(const Allocate *op) override {
+        fail(op);
     }
-    void visit(const IfThenElse *) override {
-        internal_error;
+    void visit(const Free *op) override {
+        fail(op);
     }
-    void visit(const Evaluate *) override {
-        internal_error;
+    void visit(const Realize *op) override {
+        fail(op);
+    }
+    void visit(const Block *op) override {
+        fail(op);
+    }
+    void visit(const IfThenElse *op) override {
+        fail(op);
+    }
+    void visit(const Evaluate *op) override {
+        fail(op);
     }
 
 public:
@@ -318,8 +326,8 @@ Expr get_func_value_size(const Function &f) {
     Expr size = 0;
     const vector<Type> &types = f.output_types();
     internal_assert(!types.empty());
-    for (size_t i = 0; i < types.size(); i++) {
-        size += types[i].bytes();
+    for (auto type : types) {
+        size += type.bytes();
     }
     return simplify(size);
 }
@@ -371,7 +379,7 @@ Expr get_func_value_size(const Function &f) {
 
 Cost compute_expr_cost(Expr expr) {
     // TODO: Handle likely
-    //expr = LikelyExpression().mutate(expr);
+    // expr = LikelyExpression().mutate(expr);
     expr = simplify(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
@@ -380,7 +388,7 @@ Cost compute_expr_cost(Expr expr) {
 
 map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
     // TODO: Handle likely
-    //expr = LikelyExpression().mutate(expr);
+    // expr = LikelyExpression().mutate(expr);
     expr = simplify(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
@@ -508,7 +516,7 @@ RegionCosts::stage_detailed_load_costs(const string &func, int stage,
 
     if (curr_f.has_extern_definition()) {
         // TODO(psuriana): We need a better cost for extern function
-        //load_costs.emplace(func, Int(64).max());
+        // load_costs.emplace(func, Int(64).max());
         load_costs.emplace(func, Expr());
     } else {
         Definition def = get_stage_definition(curr_f, stage);
@@ -669,8 +677,9 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f, const set<string> &in
         return {Cost()};
     }
 
-    vector<Cost> func_costs;
     size_t num_stages = f.updates().size() + 1;
+    vector<Cost> func_costs;
+    func_costs.reserve(num_stages);
     for (size_t s = 0; s < num_stages; s++) {
         func_costs.push_back(get_func_stage_cost(f, s, inlines));
     }

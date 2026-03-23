@@ -59,6 +59,18 @@ private:
         }
     }
 
+    Expr visit(const Reinterpret *op) override {
+        Expr value = mutate(op->value);
+        if (!value.defined()) {
+            return Expr();
+        }
+        if (value.same_as(op->value)) {
+            return op;
+        } else {
+            return Reinterpret::make(op->type, std::move(value));
+        }
+    }
+
     Expr visit(const Add *op) override {
         return mutate_binary_operator(op);
     }
@@ -117,10 +129,38 @@ private:
         }
     }
 
+    // Logical and where undefined Exprs are considered true
+    Expr p_and(const Expr &a, const Expr &b) {
+        if (!a.defined()) {
+            return b;
+        } else if (!b.defined()) {
+            return a;
+        } else if (a.same_as(b)) {
+            return a;
+        } else {
+            return a && b;  // Combine the predicates
+        }
+    }
+
+    // Logical or where undefined Exprs are considered true
+    Expr p_or(const Expr &a, const Expr &b) {
+        if (!a.defined() || !b.defined()) {
+            return Expr();
+        } else {
+            return a || b;
+        }
+    }
+
     Expr visit(const Select *op) override {
         Expr cond = mutate(op->condition);
+        Expr old_predicate = predicate;
+        predicate = Expr();
         Expr t = mutate(op->true_value);
+        Expr t_predicate = predicate;
+        predicate = Expr();
         Expr f = mutate(op->false_value);
+        Expr f_predicate = predicate;
+        predicate = old_predicate;
 
         if (!cond.defined()) {
             return Expr();
@@ -134,21 +174,25 @@ private:
             // Swap the cases so that we only need to deal with the
             // case when false is not defined below.
             cond = Not::make(cond);
-            t = f;
-            f = Expr();
+            std::swap(t, f);
+            std::swap(t_predicate, f_predicate);
         }
 
         if (!f.defined()) {
-            // We need to convert this to an if-then-else
-            if (predicate.defined()) {
-                predicate = predicate && cond;
-            } else {
-                predicate = cond;
-            }
+            // We need to convert this to an if-then-else. We can ignore the
+            // f_predicate because we're dropping that side entirely.
+            predicate = p_and(p_and(predicate, t_predicate), cond);
             return t;
-        } else if (cond.same_as(op->condition) &&
-                   t.same_as(op->true_value) &&
-                   f.same_as(op->false_value)) {
+        }
+
+        // Both sides are defined, and both sides may have a predicate, but we
+        // don't care about the predicate of a side if we're evaluating to the
+        // other side.
+        predicate = p_and(p_and(predicate, p_or(!cond, t_predicate)), p_or(cond, f_predicate));
+
+        if (cond.same_as(op->condition) &&
+            t.same_as(op->true_value) &&
+            f.same_as(op->false_value)) {
             return op;
         } else {
             return Select::make(cond, t, f);
@@ -229,38 +273,38 @@ private:
         }
     }
 
-    template<typename T, typename Body>
-    Body visit_let(const T *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
-            const T *op;
+            const LetOrLetStmt *op;
             Expr new_value;
             ScopedBinding<> binding;
-            Frame(const T *op, Expr v, Scope<> &scope)
+            Frame(const LetOrLetStmt *op, Expr v, Scope<> &scope)
                 : op(op), new_value(std::move(v)),
                   binding(!new_value.defined(), scope, op->name) {
             }
         };
         vector<Frame> frames;
 
-        Body result;
+        decltype(op->body) result;
         do {
             frames.emplace_back(op, mutate(op->value), dead_vars);
             result = op->body;
-        } while ((op = result.template as<T>()));
+        } while ((op = result.template as<LetOrLetStmt>()));
 
         result = mutate(result);
 
         if (result.defined()) {
-            for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-                if (!it->new_value.defined()) {
+            for (const auto &frame : reverse_view(frames)) {
+                if (!frame.new_value.defined()) {
                     continue;
                 }
-                predicate = substitute(it->op->name, it->new_value, predicate);
-                if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
-                    result = it->op;
+                predicate = substitute(frame.op->name, frame.new_value, predicate);
+                if (frame.new_value.same_as(frame.op->value) && result.same_as(frame.op->body)) {
+                    result = frame.op;
                 } else {
-                    result = T::make(it->op->name, std::move(it->new_value), result);
+                    result = LetOrLetStmt::make(frame.op->name, std::move(frame.new_value), result);
                 }
             }
         }
@@ -269,11 +313,11 @@ private:
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Let, Expr>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<LetStmt, Stmt>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const AssertStmt *op) override {
@@ -311,8 +355,8 @@ private:
         if (!min.defined()) {
             return Stmt();
         }
-        Expr extent = mutate(op->extent);
-        if (!extent.defined()) {
+        Expr max = mutate(op->max);
+        if (!max.defined()) {
             return Stmt();
         }
         Stmt body = mutate(op->body);
@@ -320,11 +364,11 @@ private:
             return Stmt();
         }
         if (min.same_as(op->min) &&
-            extent.same_as(op->extent) &&
+            max.same_as(op->max) &&
             body.same_as(op->body)) {
             return op;
         } else {
-            return For::make(op->name, min, extent, op->for_type, op->device_api, body);
+            return For::make(op->name, min, max, op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 
@@ -460,7 +504,8 @@ private:
             return op;
         } else {
             return Allocate::make(op->name, op->type, op->memory_type,
-                                  new_extents, condition, body, new_expr, op->free_function);
+                                  new_extents, condition, body, new_expr,
+                                  op->free_function, op->padding);
         }
     }
 
@@ -527,13 +572,12 @@ private:
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            op = it->first;
-            Stmt new_first = std::move(it->second);
+        for (const auto &[block, stmt] : reverse_view(frames)) {
+            Stmt new_first = stmt;
             if (!result.defined()) {
                 result = new_first;
-            } else if (new_first.same_as(op->first) && result.same_as(op->rest)) {
-                result = op;
+            } else if (new_first.same_as(block->first) && result.same_as(block->rest)) {
+                result = block;
             } else {
                 result = Block::make(new_first, result);
             }

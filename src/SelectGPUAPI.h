@@ -16,7 +16,7 @@ namespace Internal {
 
 /** Replace for loops with GPU_Default device_api with an actual
  * device API depending on what's enabled in the target. Choose the
- * first of the following: opencl, cuda, openglcompute, opengl */
+ * first of the following: opencl, cuda */
 Stmt select_gpu_api(const Stmt &s, const Target &t);
 
 }  // namespace Internal

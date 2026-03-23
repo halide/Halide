@@ -13,10 +13,10 @@ int main(int argc, char **argv) {
     // Second layer of MobileNet v2
     const int N = 4, CI = 32, CO = 16, CM = 1, W = 112, H = 112;
 
-    Buffer<float> input(CI, W, H, N);
-    Buffer<float> depthwise_filter(CM, CI, 3, 3);
-    Buffer<float> pointwise_filter(CO, CI * CM);
-    Buffer<float> bias(CO);
+    Buffer<float, 4> input(CI, W, H, N);
+    Buffer<float, 4> depthwise_filter(CM, CI, 3, 3);
+    Buffer<float, 2> pointwise_filter(CO, CI * CM);
+    Buffer<float, 1> bias(CO);
 
     for (int c = 0; c < input.dim(3).extent(); c++) {
         for (int z = 0; z < input.channels(); z++) {
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
         bias(x) = rand();
     }
 
-    Buffer<float> output(CO, W, H, N);
+    Buffer<float, 4> output(CO, W, H, N);
     output.fill(0.0f);
 
     // Manually-tuned version

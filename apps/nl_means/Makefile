@@ -10,11 +10,11 @@ $(GENERATOR_BIN)/nl_means.generator: nl_means_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/nl_means.a: $(GENERATOR_BIN)/nl_means.generator
 	@mkdir -p $(@D)
-	$^ -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means target=$* auto_schedule=false
+	$^ -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means target=$*
 
 $(BIN)/%/nl_means_auto_schedule.a: $(GENERATOR_BIN)/nl_means.generator
 	@mkdir -p $(@D)
-	$^ -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means_auto_schedule target=$*-no_runtime auto_schedule=true
+	$^ -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means_auto_schedule target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/process: process.cpp $(BIN)/%/nl_means.a $(BIN)/%/nl_means_auto_schedule.a
 	@mkdir -p $(@D)

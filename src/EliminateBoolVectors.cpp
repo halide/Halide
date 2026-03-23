@@ -1,3 +1,4 @@
+#include "EliminateBoolVectors.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
@@ -15,8 +16,8 @@ private:
     Scope<Type> lets;
 
     Expr visit(const Variable *op) override {
-        if (lets.contains(op->name)) {
-            return Variable::make(lets.get(op->name), op->name);
+        if (const Type *t = lets.find(op->name)) {
+            return Variable::make(*t, op->name);
         } else {
             return op;
         }
@@ -135,6 +136,8 @@ private:
             return IRMutator::visit(op);
         }
     }
+
+    // FIXME: what about Reinterpret?
 
     Stmt visit(const Store *op) override {
         Expr predicate = op->predicate;
@@ -284,8 +287,8 @@ private:
         return expr;
     }
 
-    template<typename NodeType, typename LetType>
-    NodeType visit_let(const LetType *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         Expr value = mutate(op->value);
 
         // We changed the type of the let, we need to replace the
@@ -302,17 +305,17 @@ private:
         }
 
         if (!value.same_as(op->value) || !body.same_as(op->body)) {
-            return LetType::make(op->name, value, body);
+            return LetOrLetStmt::make(op->name, value, body);
         } else {
             return op;
         }
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Expr>(op);
+        return visit_let(op);
     }
     Stmt visit(const LetStmt *op) override {
-        return visit_let<Stmt>(op);
+        return visit_let(op);
     }
 };
 

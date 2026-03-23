@@ -1,15 +1,15 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(cuda_mat_mul)
 
 # This just checks whether CUDA is available ahead of time to allow
 # skipping this app when CUDA/cuBLAS are not installed on the system.
-find_package(CUDA)
-if (NOT CUDA_FOUND)
+find_package(CUDAToolkit)
+if (NOT CUDAToolkit_FOUND)
     message(WARNING "Could NOT find CUDA")
     return()
 endif ()
 
-if (NOT CUDA_CUBLAS_LIBRARIES)
+if (NOT TARGET CUDA::cublas)
     message(WARNING "Could NOT find cuBLAS")
     return()
 endif ()
@@ -25,19 +25,16 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(mat_mul.generator mat_mul_generator.cpp)
-target_link_libraries(mat_mul.generator PRIVATE Halide::Generator)
+add_halide_generator(mat_mul.generator SOURCES mat_mul_generator.cpp)
 
 # Filters
 add_halide_library(mat_mul FROM mat_mul.generator
-                   TARGETS host
                    FEATURES cuda cuda_capability_50
                    PARAMS size=1024)
 
 # Main executable
 add_executable(runner runner.cpp)
-target_include_directories(runner PRIVATE ${CUDA_INCLUDE_DIRS})
-target_link_libraries(runner PRIVATE Halide::Tools mat_mul ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES})
+target_link_libraries(runner PRIVATE mat_mul Halide::Tools CUDA::cudart CUDA::cublas)
 
 # Test that the app actually works!
 add_test(NAME mat_mul COMMAND runner)

@@ -32,11 +32,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (target.has_feature(Target::OpenGLCompute)) {
-        printf("Skipping test for OpenGLCompute, as it does not support device crops, slices, or copies\n");
-        return 0;
-    }
-
     printf("Test in-place slicing.\n");
     {
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer(hexagon_rpc);
@@ -66,6 +61,32 @@ int main(int argc, char **argv) {
         const int slice_dim = 0;
         const int slice_pos = 31;
         Halide::Runtime::Buffer<int32_t> sliced = gpu_buf.sliced(slice_dim, slice_pos);
+        assert(sliced.raw_buffer()->device_interface != nullptr);
+
+        assert(sliced.dimensions() == 2);
+        assert(sliced.extent(0) == kEdges[1]);
+        assert(sliced.extent(1) == kEdges[2]);
+
+        sliced.copy_to_host();
+        sliced.for_each_element([&](int y, int c) {
+            const int x = slice_pos;
+            assert(sliced(y, c) == x + y * 256 + c * 256 * 256);
+        });
+
+        gpu_buf.copy_to_host();
+        gpu_buf.for_each_element([&](int x, int y, int c) {
+            assert(gpu_buf(x, y, c) == x + y * 256 + c * 256 * 256);
+        });
+    }
+
+    printf("Test nondestructive slicing with given dimensions.\n");
+    {
+        Halide::Runtime::Buffer<int32_t, 3> gpu_buf = make_gpu_buffer(hexagon_rpc);
+        assert(gpu_buf.raw_buffer()->device_interface != nullptr);
+
+        const int slice_dim = 0;
+        const int slice_pos = 31;
+        Halide::Runtime::Buffer<int32_t, 2> sliced = gpu_buf.sliced(slice_dim, slice_pos);
         assert(sliced.raw_buffer()->device_interface != nullptr);
 
         assert(sliced.dimensions() == 2);

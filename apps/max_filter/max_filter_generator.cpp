@@ -8,8 +8,8 @@ using namespace Halide::BoundaryConditions;
 class Max : public Halide::Generator<Max> {
 public:
     GeneratorParam<int> radius_{"radius", 26};
-    Input<Buffer<float>> input_{"input", 3};
-    Output<Buffer<float>> output_{"output", 3};
+    Input<Buffer<float, 3>> input_{"input"};
+    Output<Buffer<float, 3>> output_{"output"};
 
     void generate() {
         Var x("x"), y("y"), c("c"), t("t");
@@ -64,7 +64,7 @@ public:
         }
 
         // Schedule
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             if (get_target().has_gpu_feature()) {
                 // 11.8ms on a 2060 RTX
 

@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
 
     // Check correctness using small-integer matrices
     if (1) {
-        Buffer<float> A(size, size), B(size, size), C(size, size);
+        Buffer<float, 2> A(size, size), B(size, size), C(size, size);
         A.for_each_value([](float &v) { v = (rand() & 3) - 1; });
         B.for_each_value([](float &v) { v = (rand() & 3) - 1; });
         A.set_host_dirty();
@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
 
     // Benchmark it
     {
-        Buffer<float> A(size, size), B(size, size), C(size, size);
+        Buffer<float, 2> A(size, size), B(size, size), C(size, size);
         double t = Halide::Tools::benchmark(5, 5, [&]() {
             mat_mul(A, B, C);
             C.device_sync();

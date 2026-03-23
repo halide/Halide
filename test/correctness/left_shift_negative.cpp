@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
         if (im1(i) != im2(i)) {
             printf("im1(%d) = %d, im2(%d) = %d\n",
                    i, im1(i), i, im2(i));
-            return -1;
+            return 1;
         }
     }
 

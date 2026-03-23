@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
             if (fabs(result(i) - ref[i]) > 0.0001f) {
                 printf("result(%d) = %f instead of %f\n",
                        i, result(i), ref[i]);
-                return -1;
+                return 1;
             }
         }
     }
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
             if (correct[i] != result(i)) {
                 printf("result(%d) = %d instead of %d\n",
                        i, result(i), correct[i]);
-                return -1;
+                return 1;
             }
         }
     }
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
             if (ref[i] != result(i)) {
                 printf("fibonacci(%d) = %d instead of %d\n",
                        i, result(i), ref[i]);
-                return -1;
+                return 1;
             }
         }
     }
@@ -122,10 +122,8 @@ int main(int argc, char **argv) {
         // Walk down the image in vectors
         f.update(0).vectorize(x, 4);
 
-        // Walk across the image in parallel. We need to do an unsafe
-        // reorder operation here to move y to the outer loop, because
-        // we don't have the ability to reorder vars with rvars yet.
-        f.update(1).reorder(Var(r.x.name()), y).parallel(y);
+        // Walk across the image in parallel.
+        f.update(1).reorder(r.x, y).parallel(y);
 
         Buffer<float> result = f.realize({100, 100});
 
@@ -148,7 +146,7 @@ int main(int argc, char **argv) {
                 if (fabs(ref(x, y) - result(x, y)) > 0.0001f) {
                     printf("integral image at (%d, %d) = %f instead of %f\n",
                            x, y, result(x, y), ref(x, y));
-                    return -1;
+                    return 1;
                 }
             }
         }

@@ -20,6 +20,7 @@ class FlattenRamps : public IRMutator {
             Expr base = mutate(op->base);
             Expr stride = mutate(op->stride);
             std::vector<Expr> ramp_elems;
+            ramp_elems.reserve(op->lanes);
             for (int ix = 0; ix < op->lanes; ix++) {
                 ramp_elems.push_back(base + ix * stride);
             }
@@ -70,8 +71,7 @@ class FlattenRamps : public IRMutator {
             int max_constant_offset = 0;
             for (Expr &idx : indices) {
                 idx = simplify(common_subexpression_elimination(idx - min_lane));
-                const int64_t *i = as_const_int(idx);
-                if (i) {
+                if (auto i = as_const_int(idx)) {
                     const_indices.push_back((int)(*i));
                     max_constant_offset = std::max((int)(*i), max_constant_offset);
                 } else {
@@ -81,18 +81,18 @@ class FlattenRamps : public IRMutator {
 
             // If they are, we'll have a full vector of const_indices
             if ((int)const_indices.size() == lanes) {
-
                 // Compute the stride for the underlying strided load
-                int stride = 0;
-                for (int c : const_indices) {
-                    stride = (int)gcd(stride, c);
+                int stride = 0, extent = 1;
+                if (max_constant_offset > 0) {
+                    for (int c : const_indices) {
+                        stride = (int)gcd(stride, c);
+                    }
+                    for (int &c : const_indices) {
+                        c /= stride;
+                    }
+                    // Compute the number of elements loaded
+                    extent = (max_constant_offset / stride) + 1;
                 }
-                for (int &c : const_indices) {
-                    c /= stride;
-                }
-
-                // Compute the number of elements loaded
-                int extent = (int)((max_constant_offset / stride) + 1);
 
                 // If we're gathering from a very large range, it
                 // might be better to just do the gather rather than
@@ -105,12 +105,22 @@ class FlattenRamps : public IRMutator {
                 // in the schedule somehow.
                 const int max_unused_lane_factor = 4;
                 if (extent < max_unused_lane_factor * lanes) {
-                    Expr dense_index = Ramp::make(min_lane, make_const(min_lane.type(), stride), extent);
-                    Expr dense_load =
-                        Load::make(op->type.with_lanes(extent), op->name, dense_index,
-                                   op->image, op->param,
-                                   const_true(extent), ModulusRemainder{});
-                    return Shuffle::make({dense_load}, const_indices);
+                    if (max_constant_offset == 0) {
+                        // It's a load of a broadcast. Convert it to a broadcast of a load
+                        Expr load = Load::make(op->type.element_of(), op->name, min_lane,
+                                               op->image, op->param,
+                                               const_true(), ModulusRemainder{});
+                        return Broadcast::make(load, lanes);
+                    } else {
+                        // Turn it into a dense load and a shuffle
+                        Expr dense_index =
+                            Ramp::make(min_lane, make_const(min_lane.type(), stride), extent);
+                        Expr dense_load =
+                            Load::make(op->type.with_lanes(extent), op->name, dense_index,
+                                       op->image, op->param,
+                                       const_true(extent), ModulusRemainder{});
+                        return Shuffle::make({dense_load}, const_indices);
+                    }
                 }
             }
         }
@@ -118,16 +128,31 @@ class FlattenRamps : public IRMutator {
     }
 };
 
+/** Lower bit concatenation into vector interleaving followed by a vector
+ * reinterpret. */
+class LowerConcatBits : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::concat_bits)) {
+            // Rewrite concat_bits into a shuffle followed by a vector reinterpret.
+            Expr shuf = simplify(Shuffle::make_interleave(op->args));
+            Expr e = Reinterpret::make(op->type, shuf);
+            return mutate(e);
+        }
+
+        return IRMutator::visit(op);
+    }
+};
+
 }  // namespace
 
 Stmt flatten_nested_ramps(const Stmt &s) {
-    FlattenRamps flatten_ramps;
-    return flatten_ramps.mutate(s);
+    return LowerConcatBits().mutate(FlattenRamps().mutate(s));
 }
 
 Expr flatten_nested_ramps(const Expr &e) {
-    FlattenRamps flatten_ramps;
-    return flatten_ramps.mutate(e);
+    return LowerConcatBits().mutate(FlattenRamps().mutate(e));
 }
 
 }  // namespace Internal

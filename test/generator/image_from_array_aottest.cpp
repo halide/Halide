@@ -61,7 +61,7 @@ void compare_vectors(vector<int> const &under_test, vector<int> const &reference
     cout << " instead of ";
     print_vector(reference);
     cout << "\n";
-    exit(-1);
+    exit(1);
 }
 
 void verify_dimension_sizes() {
@@ -94,7 +94,7 @@ void compare_extents(const Image &img, int reference, int dimension) {
         return;
     cout << "Extent of dimension " << dimension << " of " << img.dimensions()
          << " is " << img.dim(dimension).extent() << " instead of " << reference << "\n";
-    exit(-1);
+    exit(1);
 }
 
 template<typename Array, typename T = typename remove_all_extents<Array>::type>
@@ -110,7 +110,7 @@ void verify_image_construction_from_array(Array &vals) {
     if (reference != under_test) {
         cerr << "Start of array: " << reference
              << "Start of image: " << under_test << "\n";
-        exit(-1);
+        exit(1);
     }
 }
 

@@ -42,9 +42,9 @@ typedef struct {
 #define _SCHEDULE_STR(s) #s
 #define _SCHEDULE_NAME(data, direction, schedule) pipeline_##data##_##direction##_##schedule
 #define _SCHEDULE_PAIR(data, direction, schedule) \
-    { _SCHEDULE_STR(scheduled - pipeline(data, direction, schedule)), _SCHEDULE_NAME(data, direction, schedule) }
+    {_SCHEDULE_STR(scheduled - pipeline(data, direction, schedule)), _SCHEDULE_NAME(data, direction, schedule)}
 #define _SCHEDULE_DUMMY_PAIR \
-    { NULL, NULL }
+    {NULL, NULL}
 #define SCHEDULE_FUNCTION_RW(schedule) _SCHEDULE_PAIR(raw_linear_interleaved, rw, schedule)
 
 #ifdef SCHEDULE_ALL
@@ -94,10 +94,10 @@ int main(int argc, char **argv) {
     }
 
     // Setup Halide input buffer with the test buffer
-    auto input = Halide::Runtime::Buffer<uint8_t>::make_interleaved(width, height, 4);
+    auto input = Halide::Runtime::Buffer<uint8_t, 3>::make_interleaved(width, height, 4);
 
     // Setup Halide output buffer
-    auto output = Halide::Runtime::Buffer<uint8_t>::make_interleaved(width, height, 4);
+    auto output = Halide::Runtime::Buffer<uint8_t, 3>::make_interleaved(width, height, 4);
 
     // DMA_step 1: Assign buffer to DMA interface
     input.device_wrap_native(halide_hexagon_dma_device_interface(), reinterpret_cast<uint64_t>(data_in));

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(local_laplacian)
 
 enable_testing()
@@ -12,14 +12,19 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(local_laplacian.generator local_laplacian_generator.cpp)
-target_link_libraries(local_laplacian.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(local_laplacian.generator
+                     SOURCES local_laplacian_generator.cpp
+                     LINK_LIBRARIES Halide::Tools)
 
 # Filters
 add_halide_library(local_laplacian FROM local_laplacian.generator)
 add_halide_library(local_laplacian_auto_schedule FROM local_laplacian.generator
                    GENERATOR local_laplacian
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   # When target=host-cuda or host-metal, limit the GPU shared
+                   # memory per block to avoid gpu kernel launch failure.
+                   PARAMS autoscheduler.last_level_cache_size=30000 autoscheduler.parallelism=4096 autoscheduler.experimental_gpu_schedule=1
+                   )
 
 # Main executable
 add_executable(local_laplacian_process process.cpp)

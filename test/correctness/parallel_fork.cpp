@@ -11,13 +11,7 @@ using namespace Halide::Tools;
 
 std::atomic<int32_t> call_count{0};
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
-extern "C" DLLEXPORT int five_ms(int arg) {
+extern "C" HALIDE_EXPORT_SYMBOL int five_ms(int arg) {
     call_count++;
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
     return arg;
@@ -35,8 +29,9 @@ enum Schedule {
 };
 
 Func make(Schedule schedule) {
-    Var x, y, z;
-    Func both, f, g;
+    Var x("x"), y("y"), z("z");
+    std::string suffix = "_" + std::to_string((int)schedule);
+    Func both("both" + suffix), f("f" + suffix), g("g" + suffix);
 
     f(x, y) = halide_externs::five_ms(x + y);
     g(x, y) = halide_externs::five_ms(x - y);

@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
             int correct = i + 1;
             if (h(i) != correct) {
                 printf("hist(%d) = %d instead of %d\n", i, h(i), correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -43,12 +43,12 @@ int main(int argc, char **argv) {
         // returned a crop of it.
         if (buf.dim(0).extent() != 30 || buf.dim(1).extent() != 20) {
             printf("Incorrect size: %d %d\n", buf.dim(0).extent(), buf.dim(1).extent());
-            return -1;
+            return 1;
         }
 
         if (buf.dim(0).stride() != 1 || buf.dim(1).stride() != 32) {
             printf("Incorrect stride: %d %d\n", buf.dim(0).stride(), buf.dim(1).stride());
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < 20; y++) {
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
                 int correct = x + y;
                 if (buf(x, y) != correct) {
                     printf("buf(%d, %d) = %d instead of %d\n", x, y, buf(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }

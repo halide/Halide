@@ -4,8 +4,8 @@ namespace {
 
 class RDomInput : public Halide::Generator<RDomInput> {
 public:
-    Input<Buffer<uint8_t>> input{"input", 2};
-    Output<Buffer<uint8_t>> output{"output", 2};
+    Input<Buffer<uint8_t, 2>> input{"input"};
+    Output<Buffer<uint8_t, 2>> output{"output"};
 
     void generate() {
         RDom r(input);

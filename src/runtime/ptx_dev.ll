@@ -1,4 +1,11 @@
-declare void @llvm.nvvm.barrier0()
+; The two forward declared intrinsics below refer to the same thing.
+; LLVM 20.1.6 introduced a new naming scheme for these intrinsics
+; We have to declare both, such that we can access them from the Module's
+; getFunction(), but one of those will map to an intrinsic, which we
+; will use to determine which intrinsic is supported by LLVM.
+declare void @llvm.nvvm.barrier0() ; LLVM <=20.1.5
+declare void @llvm.nvvm.barrier.cta.sync.aligned.all(i32) ; LLVM >=20.1.6
+
 declare  i32 @llvm.nvvm.read.ptx.sreg.tid.x()
 declare  i32 @llvm.nvvm.read.ptx.sreg.ctaid.x()
 declare  i32 @llvm.nvvm.read.ptx.sreg.ntid.x()
@@ -153,19 +160,6 @@ define weak_odr float @ceil_f32(float %x) nounwind uwtable readnone alwaysinline
 
 define weak_odr double @ceil_f64(double %x) nounwind uwtable readnone alwaysinline {
        %y = tail call double @__nv_ceil(double %x) nounwind readnone
-       ret double %y
-}
-
-declare float @__nv_nearbyintf(float) nounwind readnone
-declare double @__nv_nearbyint(double) nounwind readnone
-
-define weak_odr float @round_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call float @__nv_nearbyintf(float %x) nounwind readnone
-       ret float %y
-}
-
-define weak_odr double @round_f64(double %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call double @__nv_nearbyint(double %x) nounwind readnone
        ret double %y
 }
 
@@ -410,4 +404,3 @@ define weak_odr i32 @dp2a_u32_u32(<4 x i16> %a, <4 x i8> %b, i32 %i) nounwind re
        %d = tail call i32 asm "dp2a.lo.u32.u32    $0, $1, $3, $4; dp2a.hi.u32.u32    $0, $2, $3, $0;", "=r,r,r,r,r"(i32 %a_lo, i32 %a_hi, i32 %b_32, i32 %i) nounwind readnone
        ret i32 %d
 }
-

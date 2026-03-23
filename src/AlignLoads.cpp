@@ -1,7 +1,6 @@
 #include <algorithm>
 
 #include "AlignLoads.h"
-#include "Bounds.h"
 #include "HexagonAlignment.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -72,14 +71,14 @@ private:
 
         Expr index = mutate(op->index);
         const Ramp *ramp = index.as<Ramp>();
-        const int64_t *const_stride = ramp ? as_const_int(ramp->stride) : nullptr;
+        auto const_stride = ramp ? as_const_int(ramp->stride) : std::nullopt;
         if (!ramp || !const_stride) {
             // We can't handle indirect loads, or loads with
             // non-constant strides.
             return IRMutator::visit(op);
         }
-        if (!(*const_stride == 1 || *const_stride == 2 || *const_stride == 3)) {
-            // Handle ramps with stride 1, 2 or 3 only.
+        if (!(*const_stride == 1 || *const_stride == 2 || *const_stride == 3 || *const_stride == 4)) {
+            // Handle ramps with stride 1, 2, 3 or 4 only.
             return IRMutator::visit(op);
         }
 

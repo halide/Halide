@@ -1,28 +1,46 @@
-cmake_minimum_required(VERSION 3.16...3.20)
+cmake_minimum_required(VERSION 3.28)
 project(Halide
-        VERSION 13.0.0
+        VERSION 22.0.0
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 
 enable_testing()
 
 ##
+# Disable find_package(Halide) inside the build
+##
+
+file(CONFIGURE OUTPUT "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/HalideConfig.cmake"
+     CONTENT [[set(Halide_FOUND 1)
+               set(Halide_VERSION @Halide_VERSION@)]])
+
+file(CONFIGURE OUTPUT "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/HalideHelpersConfig.cmake"
+     CONTENT "set(HalideHelpers_FOUND 1)\n")
+
+##
 # Set up project-wide properties
 ##
 
+# Import useful standard modules
+include(CheckCXXSymbolExists)
+
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
+include(HalideFeatures)
 include(HalideGeneratorHelpers)
-include(MakeShellPath)
-include(CMakeDependentOption)
+include(HalidePackageConfigHelpers)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
-# Warn if the user did not set a build type and is using a single-configuration generator.
-get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-if (NOT IS_MULTI_CONFIG AND NOT CMAKE_BUILD_TYPE)
-    message(WARNING "Single-configuration generators require CMAKE_BUILD_TYPE to be set.")
+# Bail out if the user did not set a build type on a single-config generator.
+get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if (NOT is_multi_config AND CMAKE_BUILD_TYPE STREQUAL "")
+    string(JOIN "" error_message
+           "Halide cannot be built when CMAKE_BUILD_TYPE is empty. "
+           "Please set CMAKE_BUILD_TYPE to one of the standard types: "
+           "Debug, Release, RelWithDebInfo, or MinSizeRel.")
+    message(FATAL_ERROR "${error_message}")
 endif ()
 
 # Windows has file name length restrictions and lacks an RPATH mechanism.
@@ -39,116 +57,203 @@ endif ()
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 # Require standard C++17
-if(NOT CMAKE_CXX_STANDARD)
-    set(CMAKE_CXX_STANDARD 17)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-    set(CMAKE_CXX_EXTENSIONS OFF)
-elseif(CMAKE_CXX_STANDARD LESS 17)
-    message(FATAL_ERROR "Halide requires C++17 or newer")
-endif()
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard to use. Halide requires 17 or higher.")
+option(CMAKE_CXX_STANDARD_REQUIRED "When enabled, the value of CMAKE_CXX_STANDARD is a requirement." ON)
+option(CMAKE_CXX_EXTENSIONS "When enabled, compiler-specific language extensions are enabled (e.g. -std=gnu++17)" OFF)
 
-# Build Halide with ccache if the package is present
-option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)
+if (CMAKE_CXX_STANDARD LESS 17)
+    message(FATAL_ERROR "Halide requires C++17 or newer but CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}")
+endif ()
+
+# Build Halide with ccache if the package is present and the user requested it
+Halide_feature(Halide_CCACHE_BUILD "Build with CCache as best configured for Halide" OFF ADVANCED)
 if (Halide_CCACHE_BUILD)
-    find_program(CCACHE_PROGRAM ccache)
-    if (CCACHE_PROGRAM)
-        # TODO: ccache recommends setting CCACHE_SLOPPINESS=pch_defines,time_macros to
-        # enable precompiled header caching. Our timing found it slightly faster with
-        # just CCACHE_SLOPPINESS=pch_defines, so that's what we're using. Maybe revisit
-        # if issues occur (but we don't use any of the time macros so should be irrelevant).
-        set(Halide_CCACHE_PARAMS CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines
-            CACHE STRING "Parameters to pass through to ccache")
-        set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
-        set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
-        message(STATUS "Enabling ccache usage for building.")
-    else ()
-        message(FATAL_ERROR "Unable to find the program ccache. Set Halide_CCACHE_BUILD to OFF")
+    find_program(CCACHE_PROGRAM ccache REQUIRED)
+
+    set(Halide_CCACHE_PARAMS
+        CCACHE_CPP2=yes
+        CCACHE_HASHDIR=yes
+        CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime
+        CACHE STRING "Parameters to pass through to ccache")
+    mark_as_advanced(Halide_CCACHE_PARAMS)
+
+    set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+
+    # Per https://ccache.dev/manual/latest.html#_precompiled_headers,
+    # we must set -fno-pch-timestamp when using Clang + CCache + PCH
+    if (CMAKE_C_COMPILER_ID MATCHES "Clang")
+        string(APPEND CMAKE_C_FLAGS " -Xclang -fno-pch-timestamp")
+    endif ()
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        string(APPEND CMAKE_CXX_FLAGS " -Xclang -fno-pch-timestamp")
     endif ()
 endif ()
+
+# Detect whether or not ASAN is enabled. Don't cache the result to ensure this
+# check happens every time we reconfigure.
+unset(Halide_ASAN_ENABLED CACHE)
+check_cxx_symbol_exists(HALIDE_INTERNAL_USING_ASAN "${Halide_SOURCE_DIR}/src/Util.h" Halide_ASAN_ENABLED)
+
+if (Halide_ASAN_ENABLED)
+    set(Halide_ANY_SANITIZERS_ENABLED 1)
+else ()
+    set(Halide_ANY_SANITIZERS_ENABLED 0)
+endif ()
+
+# Helper function to set C++ compiler warnings in a sane way
+function(set_halide_compiler_warnings NAME)
+    target_compile_options(
+        ${NAME}
+        PRIVATE
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall>
+
+        # variable length arrays in C++ are a Clang extension, we don't want to use them
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wvla-extension>
+
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wimplicit-fallthrough>
+
+        # GCC warns when these warnings are given to plain-C sources
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Woverloaded-virtual>
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wsuggest-override>
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wno-old-style-cast>
+
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-destructor-override>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-override>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wdeprecated-declarations>
+
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-double-promotion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-conversion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-equal>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-missing-field-initializers>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-shadow>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-sign-conversion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-switch-enum>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-undef>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-function>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-macros>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-parameter>
+
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-c++98-compat-pedantic>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-c++98-compat>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-cast-align>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-comma>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-covered-switch-default>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-documentation-unknown-command>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-documentation>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-exit-time-destructors>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-global-constructors>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-float-conversion>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-conversion>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-float-conversion>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-missing-prototypes>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nonportable-system-include-path>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-reserved-id-macro>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field-in-constructor>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shorten-64-to-32>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-undefined-func-template>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-member-function>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
+
+        $<$<CXX_COMPILER_ID:MSVC>:/W3>
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4141>  # 4141: 'inline' used more than once
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4146>  # 4146: unary minus applied to unsigned type
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4244>  # 4244: conversion, possible loss of data
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # 4267: conversion from 'size_t' to 'int', possible loss of data
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4291>  # 4291: No matching operator delete found
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4503>  # 4503: disable "decorated name length exceeded, name was truncated"
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4800>  # 4800: forcing value to bool 'true' or 'false' (performance warning)
+
+        # No: enable deprecation warnings
+        # $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # 4996: compiler encountered deprecated declaration
+    )
+endfunction()
+
 
 ##
 # Import dependencies
 ##
 
-add_subdirectory(dependencies)
+## Threads
+option(THREADS_PREFER_PTHREAD_FLAG "When enabled, prefer to use the -pthread flag to explicit linking" ON)
+find_package(Threads REQUIRED)
+
+## LLVM
+find_package(Halide_LLVM 21...99 REQUIRED  # Use 99 to fake a minimum-only constraint
+             COMPONENTS WebAssembly X86
+             OPTIONAL_COMPONENTS AArch64 ARM Hexagon NVPTX PowerPC RISCV)
+
+_Halide_pkgdep(Halide_LLVM PACKAGE_VARS Halide_LLVM_SHARED_LIBS)
+
+## Image formats
+
+# This changes how find_xxx() commands work; the default is to find frameworks before
+# standard libraries or headers, but this can be a problem on systems that have Mono
+# installed, as it has a framework with the libjpeg and libpng  headers present -- so
+# CMake finds the headers from Mono but the libraries from Homebrew, and hilarity ensues.
+# Setting this to "last" means we always try the standard libraries before the frameworks.
+set(CMAKE_FIND_FRAMEWORK LAST)
+
+# TODO: these really belong in tools/, but CMake has a weird bug with $<TARGET_NAME_IF_EXISTS:...>
+# https://gitlab.kitware.com/cmake/cmake/-/issues/25033
+find_package(JPEG)
+find_package(PNG)
+
+##
+# Optional features. These settings are defined early so that subdirectories see a consistent view
+
+Halide_feature(Halide_BUILDING_IN_CI "Enable if building in CI" OFF ADVANCED)
+
+Halide_feature(Halide_ENABLE_EXCEPTIONS "Enable exceptions in Halide" ON)
+Halide_feature(Halide_ENABLE_RTTI "Enable RTTI in Halide" ON
+               DEPENDS LLVM_ENABLE_RTTI)
+
+Halide_feature(WITH_AUTOSCHEDULERS "Build the Halide autoschedulers" ON
+               DEPENDS BUILD_SHARED_LIBS)
+Halide_feature(WITH_DOCS "Halide's Doxygen documentation" OFF)
+Halide_feature(WITH_PACKAGING "Halide's CMake package install rules" TOP_LEVEL)
+Halide_feature(WITH_PYTHON_BINDINGS "Halide's native Python module (not the whole pip package)" ON
+               DEPENDS Halide_ENABLE_EXCEPTIONS AND Halide_ENABLE_RTTI)
+Halide_feature(WITH_SERIALIZATION "Include experimental Serialization/Deserialization code" ON)
+Halide_feature(WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
+               "Intercepting JIT compilation with a serialization roundtrip, for test only"
+               OFF ADVANCED
+               DEPENDS WITH_SERIALIZATION)
+Halide_feature(WITH_TESTS "Halide's unit test suite" TOP_LEVEL)
+Halide_feature(WITH_TUTORIALS "Halide's tutorial code" TOP_LEVEL)
+Halide_feature(WITH_UTILS "Optional utility programs for Halide, including HalideTraceViz" TOP_LEVEL)
+
 
 ##
 # Add source directories
-##
 
 add_subdirectory(src)
 add_subdirectory(tools)
 
-##
-# Add tests, tutorials, etc. if we're not being imported into another CMake project.
-##
+if (WITH_TESTS)
+    add_subdirectory(test)
+endif ()
 
-if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    option(WITH_TESTS "Build tests" ON)
-    if (WITH_TESTS)
-        message(STATUS "Building tests enabled")
-        add_subdirectory(test)
-    else ()
-        message(STATUS "Building tests disabled")
-    endif ()
+if (WITH_PYTHON_BINDINGS)
+    add_subdirectory(python_bindings)
+endif ()
 
-    option(WITH_PYTHON_BINDINGS "Build Python bindings" ON)
-    if (WITH_PYTHON_BINDINGS)
-        if (Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS)
-            message(STATUS "Building Python bindings enabled")
-            add_subdirectory(python_bindings)
-        else ()
-            if (NOT Halide_ENABLE_RTTI)
-                message(WARNING "Building Python bindings disabled: must compile with RTTI")
-            endif ()
-            if (NOT Halide_ENABLE_EXCEPTIONS)
-                message(WARNING "Building Python bindings disabled: must compile with exceptions")
-            endif ()
-            set(WITH_PYTHON_BINDINGS OFF CACHE BOOL "Build Python bindings" FORCE)
-        endif ()
-    else ()
-        message(STATUS "Building Python bindings disabled")
-    endif ()
+if (WITH_TUTORIALS)
+    add_subdirectory(tutorial)
+endif ()
 
-    option(WITH_TUTORIALS "Build tutorials" ON)
-    if (WITH_TUTORIALS)
-        message(STATUS "Building tutorials enabled")
-        add_subdirectory(tutorial)
-    else ()
-        message(STATUS "Building tutorials disabled")
-    endif ()
+if (WITH_DOCS)
+    add_subdirectory(doc)
+endif ()
 
-    option(WITH_DOCS "Build documentation" OFF)
-    if (WITH_DOCS)
-        message(STATUS "Building docs enabled")
-        add_subdirectory(doc)
-    else ()
-        message(STATUS "Building docs disabled")
-    endif ()
+if (WITH_UTILS)
+    add_subdirectory(util)
+endif ()
 
-    option(WITH_UTILS "Build utils" ON)
-    if (WITH_UTILS)
-        message(STATUS "Building utils enabled")
-        add_subdirectory(util)
-    else ()
-        message(STATUS "Building utils disabled")
-    endif ()
-
+if (WITH_PACKAGING)
     add_subdirectory(packaging)
-
-    add_custom_target(distrib
-                      COMMAND ${CMAKE_COMMAND} -E echo "\\'distrib\\' is not available under CMake. Use \\'package\\' instead.")
-
-    if (TARGET clang-format AND NOT WIN32)
-        add_custom_target(format COMMAND
-                          find
-                          "${Halide_SOURCE_DIR}/apps"
-                          "${Halide_SOURCE_DIR}/src"
-                          "${Halide_SOURCE_DIR}/tools"
-                          "${Halide_SOURCE_DIR}/test"
-                          "${Halide_SOURCE_DIR}/util"
-                          "${Halide_SOURCE_DIR}/python_bindings"
-                          -name *.cpp -o -name *.h -o -name *.c |
-                          xargs $<TARGET_FILE:clang-format> -i -style=file)
-    endif ()
 endif ()

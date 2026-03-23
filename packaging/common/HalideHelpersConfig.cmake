@@ -1,12 +1,11 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
+@PACKAGE_INIT@
 
 set(Halide_HOST_TARGET @Halide_HOST_TARGET@)
-
-include(CMakeFindDependencyMacro)
-
-set(THREADS_PREFER_PTHREAD_FLAG TRUE)
-find_dependency(Threads)
 
 include(${CMAKE_CURRENT_LIST_DIR}/Halide-Interfaces.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/HalideGeneratorHelpers.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/TargetExportScript.cmake)
+
+check_required_components(${CMAKE_FIND_PACKAGE_NAME})

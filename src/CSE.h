@@ -20,7 +20,7 @@ namespace Internal {
  * test/code_explosion.cpp
  *
  * The last parameter determines whether all common subexpressions are
- * lifted, or only those that the simplifier would not subsitute back
+ * lifted, or only those that the simplifier would not substitute back
  * in (e.g. addition of a constant).
  */
 Expr common_subexpression_elimination(const Expr &, bool lift_all = false);

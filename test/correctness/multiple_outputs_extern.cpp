@@ -1,13 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
-extern "C" DLLEXPORT int flip_x_and_sum(halide_buffer_t *in1, halide_buffer_t *in2, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int flip_x_and_sum(halide_buffer_t *in1, halide_buffer_t *in2, halide_buffer_t *out) {
     int min = out->dim[0].min;
     int max = out->dim[0].min + out->dim[0].extent - 1;
 
@@ -97,7 +91,7 @@ int main(int argc, char **argv) {
         uint8_t correct = 4 * i * i;
         if (h_buf(i) != correct) {
             printf("result(%d) = %d instead of %d\n", i, h_buf(i), correct);
-            return -1;
+            return 1;
         }
     }
 

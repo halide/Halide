@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(stencil_chain)
 
 enable_testing()
@@ -12,8 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(stencil_chain.generator stencil_chain_generator.cpp)
-target_link_libraries(stencil_chain.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(stencil_chain.generator SOURCES stencil_chain_generator.cpp)
 
 # Filters
 add_halide_library(stencil_chain FROM stencil_chain.generator)

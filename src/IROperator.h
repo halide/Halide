@@ -8,8 +8,13 @@
  */
 
 #include <cmath>
+#include <map>
+#include <optional>
 
+#include "ConstantInterval.h"
 #include "Expr.h"
+#include "Scope.h"
+#include "Target.h"
 #include "Tuple.h"
 
 namespace Halide {
@@ -25,21 +30,25 @@ bool is_const(const Expr &e);
 bool is_const(const Expr &e, int64_t v);
 
 /** If an expression is an IntImm or a Broadcast of an IntImm, return
- * a pointer to its value. Otherwise returns nullptr. */
-const int64_t *as_const_int(const Expr &e);
+ * a its value. Otherwise returns std::nullopt. */
+std::optional<int64_t> as_const_int(const Expr &e);
 
 /** If an expression is a UIntImm or a Broadcast of a UIntImm, return
- * a pointer to its value. Otherwise returns nullptr. */
-const uint64_t *as_const_uint(const Expr &e);
+ * its value. Otherwise returns std::nullopt. */
+std::optional<uint64_t> as_const_uint(const Expr &e);
 
 /** If an expression is a FloatImm or a Broadcast of a FloatImm,
- * return a pointer to its value. Otherwise returns nullptr. */
-const double *as_const_float(const Expr &e);
+ * return its value. Otherwise returns std::nullopt. */
+std::optional<double> as_const_float(const Expr &e);
 
-/** Is the expression a constant integer power of two. Also returns
- * log base two of the expression if it is. Only returns true for
- * integer types. */
-bool is_const_power_of_two_integer(const Expr &e, int *bits);
+/** Is the expression a constant integer power of two. Returns log base two of
+ * the expression if it is, or std::nullopt if not. Also returns std::nullopt
+ * for non-integer types. */
+// @{
+std::optional<int> is_const_power_of_two_integer(const Expr &e);
+std::optional<int> is_const_power_of_two_integer(uint64_t);
+std::optional<int> is_const_power_of_two_integer(int64_t);
+// @}
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly greater than zero (in all lanes, if a vector expression) */
@@ -140,10 +149,19 @@ Expr const_true(int lanes = 1);
  * falses, if a lanes argument is given. */
 Expr const_false(int lanes = 1);
 
-/** Attempt to cast an expression to a smaller type while provably not
- * losing information. If it can't be done, return an undefined
- * Expr. */
-Expr lossless_cast(Type t, Expr e);
+/** Attempt to cast an expression to a smaller type while provably not losing
+ * information. If it can't be done, return an undefined Expr.
+ *
+ * Optionally accepts a scope giving the constant bounds of any variables, and a
+ * map that gives the constant bounds of exprs already analyzed to avoid redoing
+ * work across many calls to lossless_cast. It is not safe to use this optional
+ * map in contexts where the same Expr object may take on a different value. For
+ * example: (let x = 4 in some_expr_object) + (let x = 5 in
+ * the_same_expr_object)).  It is safe to use it after uniquify_variable_names
+ * has been run. */
+Expr lossless_cast(Type t, Expr e,
+                   const Scope<ConstantInterval> &scope = Scope<ConstantInterval>::empty_scope(),
+                   std::map<Expr, ConstantInterval, ExprCompare> *cache = nullptr);
 
 /** Attempt to negate x without introducing new IR and without overflow.
  * If it can't be done, return an undefined Expr. */
@@ -205,7 +223,7 @@ void split_into_ands(const Expr &cond, std::vector<Expr> &result);
  * some stack memory for the buffer. If the shape_memory field is
  * undefined, it similarly uses stack memory for the shape. If the
  * shape_memory field is null, it uses the dim field already in the
- * buffer. Other unitialized fields will take on a value of zero in
+ * buffer. Other uninitialized fields will take on a value of zero in
  * the constructed buffer. */
 struct BufferBuilder {
     Expr buffer_memory, shape_memory;
@@ -223,7 +241,7 @@ Expr strided_ramp_base(const Expr &e, int stride = 1);
 
 /** Implementations of division and mod that are specific to Halide.
  * Use these implementations; do not use native C division or mod to
- * simplify Halide expressions. Halide division and modulo satisify
+ * simplify Halide expressions. Halide division and modulo satisfy
  * the Euclidean definition of division for integers a and b:
  *
  /code
@@ -322,6 +340,18 @@ Stmt remove_promises(const Stmt &s);
  * the tagged expression. If not, returns the expression. */
 Expr unwrap_tags(const Expr &e);
 
+template<typename T>
+struct is_printable_arg {
+    static constexpr bool value = std::is_convertible_v<T, const char *> ||
+                                  std::is_convertible_v<T, Halide::Expr>;
+};
+
+template<typename... Args>
+struct all_are_printable_args : meta_and<is_printable_arg<Args>...> {};
+
+template<typename... Args>
+inline constexpr bool all_are_printable_args_v = all_are_printable_args<Args...>::value;
+
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
 }
@@ -342,48 +372,11 @@ Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 
-/** Compute widen(a) + widen(b). The result is always signed. */
-Expr widening_add(Expr a, Expr b);
-/** Compute widen(a) * widen(b). a and b may have different signedness. */
-Expr widening_mul(Expr a, Expr b);
-/** Compute widen(a) - widen(b). The result is always signed. */
-Expr widening_sub(Expr a, Expr b);
-/** Compute widen(a) << b. */
-Expr widening_shift_left(Expr a, Expr b);
-Expr widening_shift_left(Expr a, int b);
-/** Compute widen(a) >> b. */
-Expr widening_shift_right(Expr a, Expr b);
-Expr widening_shift_right(Expr a, int b);
-
-/** Compute saturating_add(a, (1 >> min(b, 0)) / 2) << b. When b is positive
- * indicating a left shift, the rounding term is zero. */
-Expr rounding_shift_left(Expr a, Expr b);
-Expr rounding_shift_left(Expr a, int b);
-/** Compute saturating_add(a, (1 << max(b, 0)) / 2) >> b. When b is negative
- * indicating a left shift, the rounding term is zero. */
-Expr rounding_shift_right(Expr a, Expr b);
-Expr rounding_shift_right(Expr a, int b);
-
-/** Compute saturating_narrow(widen(a) + widen(b)) */
-Expr saturating_add(Expr a, Expr b);
-/** Compute saturating_narrow(widen(a) - widen(b)) */
-Expr saturating_sub(Expr a, Expr b);
-
-/** Compute narrow((widen(a) + widen(b)) / 2) */
-Expr halving_add(Expr a, Expr b);
-/** Compute narrow((widen(a) + widen(b) + 1) / 2) */
-Expr rounding_halving_add(Expr a, Expr b);
-/** Compute narrow((widen(a) - widen(b)) / 2) */
-Expr halving_sub(Expr a, Expr b);
-/** Compute narrow((widen(a) - widen(b) + 1) / 2) */
-Expr rounding_halving_sub(Expr a, Expr b);
-
-/** Compute saturating_narrow(shift_right(widening_mul(a, b), q)) */
-Expr mul_shift_right(Expr a, Expr b, Expr q);
-Expr mul_shift_right(Expr a, Expr b, int q);
-/** Compute saturating_narrow(rounding_shift_right(widening_mul(a, b), q)) */
-Expr rounding_mul_shift_right(Expr a, Expr b, Expr q);
-Expr rounding_mul_shift_right(Expr a, Expr b, int q);
+/** Reset the counters used for random-number seeds in random_float/int/uint.
+ * (Note that the counters are incremented for each call, even if a seed is passed in.)
+ * This is used for multitarget compilation to ensure that each subtarget gets
+ * the same sequence of random numbers. */
+void reset_random_counters();
 
 }  // namespace Internal
 
@@ -675,13 +668,13 @@ inline Expr max(Expr a, float b) {
 }
 
 /** Returns an expression representing the greater of an expressions
- * vector, after doing any necessary type coersion using
+ * vector, after doing any necessary type coercion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4).
  * The expressions are folded from right ie. max(.., max(.., ..)).
  * The arguments can be any mix of types but must all be convertible to Expr. */
 template<typename A, typename B, typename C, typename... Rest,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type * = nullptr>
+         std::enable_if_t<Internal::all_are_convertible<Expr, Rest...>::value> * = nullptr>
 inline Expr max(A &&a, B &&b, C &&c, Rest &&...rest) {
     return max(std::forward<A>(a), max(std::forward<B>(b), std::forward<C>(c), std::forward<Rest>(rest)...));
 }
@@ -710,13 +703,13 @@ inline Expr min(Expr a, float b) {
 }
 
 /** Returns an expression representing the lesser of an expressions
- * vector, after doing any necessary type coersion using
+ * vector, after doing any necessary type coercion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4).
  * The expressions are folded from right ie. min(.., min(.., ..)).
  * The arguments can be any mix of types but must all be convertible to Expr. */
 template<typename A, typename B, typename C, typename... Rest,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type * = nullptr>
+         std::enable_if_t<Internal::all_are_convertible<Expr, Rest...>::value> * = nullptr>
 inline Expr min(A &&a, B &&b, C &&c, Rest &&...rest) {
     return min(std::forward<A>(a), min(std::forward<B>(b), std::forward<C>(c), std::forward<Rest>(rest)...));
 }
@@ -821,7 +814,7 @@ Expr select(Expr condition, Expr true_value, Expr false_value);
  * to the first value for which the condition is true. Returns the
  * final value if all conditions are false. */
 template<typename... Args,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Args...>::value>::type * = nullptr>
+         std::enable_if_t<Internal::all_are_convertible<Expr, Args...>::value> * = nullptr>
 inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args &&...args) {
     return select(std::move(c0), std::move(v0), select(std::move(c1), std::move(v1), std::forward<Args>(args)...));
 }
@@ -829,21 +822,32 @@ inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args &&...args) {
 /** Equivalent of ternary select(), but taking/returning tuples. If the condition is
  * a Tuple, it must match the size of the true and false Tuples. */
 // @{
-Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
-Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
+Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
+Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
 // @}
 
 /** Equivalent of multiway select(), but taking/returning tuples. If the condition is
  * a Tuple, it must match the size of the true and false Tuples. */
 // @{
 template<typename... Args>
-inline Tuple tuple_select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args &&...args) {
-    return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
+inline Tuple select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args &&...args) {
+    return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
 }
-
 template<typename... Args>
-inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args &&...args) {
-    return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
+inline Tuple select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args &&...args) {
+    return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
+}
+// @}
+
+/** select applied to FuncRefs (e.g. select(x < 100, f(x), g(x))) is assumed to
+ * return an Expr. A runtime error is produced if this is applied to
+ * tuple-valued Funcs. In that case you should explicitly cast the second and
+ * third args to Tuple to remove the ambiguity. */
+// @{
+Expr select(const Expr &condition, const FuncRef &true_value, const FuncRef &false_value);
+template<typename... Args>
+inline Expr select(const Expr &c0, const FuncRef &v0, const Expr &c1, const FuncRef &v1, Args &&...args) {
+    return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
 }
 // @}
 
@@ -853,7 +857,7 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
  *                       c == 1, 50,  // Green
  *                               25); // Blue
  * This is tedious when the list is long. The following function
- * provide convinent syntax that allow one to write:
+ * provide convenient syntax that allow one to write:
  * img(x, y, c) = mux(c, {100, 50, 25});
  *
  * As with the select equivalent, if the first argument (the index) is
@@ -863,6 +867,9 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
 Expr mux(const Expr &id, const std::initializer_list<Expr> &values);
 Expr mux(const Expr &id, const std::vector<Expr> &values);
 Expr mux(const Expr &id, const Tuple &values);
+Expr mux(const Expr &id, const std::initializer_list<FuncRef> &values);
+Tuple mux(const Expr &id, const std::initializer_list<Tuple> &values);
+Tuple mux(const Expr &id, const std::vector<Tuple> &values);
 // @}
 
 /** Return the sine of a floating-point expression. If the argument is
@@ -971,8 +978,16 @@ Expr pow(Expr x, Expr y);
  * mantissa. Vectorizes cleanly. */
 Expr erf(const Expr &x);
 
-/** Fast vectorizable approximation to some trigonometric functions for Float(32).
- * Absolute approximation error is less than 1e-5. */
+/** Fused multiply-add. fma(a, b, c) is equivalent to a * b + c, but only
+ * rounded once at the end. For most targets, when not in a strict_float
+ * context, Halide will already generate fma instructions from a * b + c. This
+ * intrinsic's main purpose is to request a true fma inside a strict_float
+ * context. A true fma will be emulated on targets without one. */
+Expr fma(const Expr &, const Expr &, const Expr &);
+
+/** Fast vectorizable approximation to some trigonometric functions for
+ * Float(32).  Absolute approximation error is less than 1e-5. Slow on x86 if
+ * you don't have at least sse 4.1. */
 // @{
 Expr fast_sin(const Expr &x);
 Expr fast_cos(const Expr &x);
@@ -980,19 +995,22 @@ Expr fast_cos(const Expr &x);
 
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
- * mantissa. Vectorizes cleanly. */
+ * mantissa. Vectorizes cleanly. Slow on x86 if you don't
+ * have at least sse 4.1. */
 Expr fast_log(const Expr &x);
 
 /** Fast approximate cleanly vectorizable exp for Float(32). Returns
  * nonsense for inputs that would overflow or underflow. Typically
  * accurate up to the last 5 bits of the mantissa. Gets worse when
- * approaching overflow. Vectorizes cleanly. */
+ * approaching overflow. Vectorizes cleanly. Slow on x86 if you don't
+ * have at least sse 4.1. */
 Expr fast_exp(const Expr &x);
 
 /** Fast approximate cleanly vectorizable pow for Float(32). Returns
  * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
  * mantissa for typical exponents. Gets worse when approaching
- * overflow. Vectorizes cleanly. */
+ * overflow. Vectorizes cleanly. Slow on x86 if you don't
+ * have at least sse 4.1. */
 Expr fast_pow(Expr x, Expr y);
 
 /** Fast approximate inverse for Float(32). Corresponds to the rcpps
@@ -1022,10 +1040,12 @@ Expr floor(Expr x);
 Expr ceil(Expr x);
 
 /** Return the whole number closest to a floating-point expression. If the
- * argument is not floating-point, it is cast to Float(32). The return value
- * is still in floating point, despite being a whole number. On ties, we
- * follow IEEE754 conventions and round to the nearest even number. Vectorizes
- * cleanly. */
+ * argument is not floating-point, it is cast to Float(32). The return value is
+ * still in floating point, despite being a whole number. On ties, we round
+ * towards the nearest even integer. Note that this is not the same as
+ * std::round in C, which rounds away from zero. On platforms without a native
+ * instruction for this, it is emulated, and may be more expensive than
+ * cast<int>(x + 0.5f) or similar. */
 Expr round(Expr x);
 
 /** Return the integer part of a floating-point expression. If the argument is
@@ -1034,21 +1054,21 @@ Expr round(Expr x);
 Expr trunc(Expr x);
 
 /** Returns true if the argument is a Not a Number (NaN). Requires a
-  * floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_nan(Expr x);
 
 /** Returns true if the argument is Inf or -Inf. Requires a
-  * floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_inf(Expr x);
 
 /** Returns true if the argument is a finite value (ie, neither NaN nor Inf).
-  * Requires a floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * Requires a floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_finite(Expr x);
 
 /** Return the fractional part of a floating-point expression. If the argument
@@ -1061,7 +1081,7 @@ Expr reinterpret(Type t, Expr e);
 
 template<typename T>
 Expr reinterpret(Expr e) {
-    return reinterpret(type_of<T>(), e);
+    return reinterpret(type_of<T>(), std::move(e));
 }
 
 /** Return the bitwise and of two expressions (which need not have the
@@ -1173,7 +1193,7 @@ Expr operator>>(Expr x, int y);
  * Some examples:
  * \code
  *
- *     // Since Halide does not have direct type delcarations, casts
+ *     // Since Halide does not have direct type declarations, casts
  *     // below are used to indicate the types of the parameters.
  *     // Such casts not required or expected in actual code where types
  *     // are inferred.
@@ -1370,14 +1390,14 @@ inline Expr unreachable() {
  * computed value, or one or more other expressions in the cache key
  * instead of the parameter dependencies of the computation. The
  * single argument version is completely safe in that the cache key
- * will use the actual computed value -- it is difficult or imposible
+ * will use the actual computed value -- it is difficult or impossible
  * to produce erroneous caching this way. The more-than-one argument
  * version allows generating cache keys that do not uniquely identify
  * the computation and thus can result in caching errors.
  *
  * A potential use for the single argument version is to handle a
  * floating-point parameter that is quantized to a small
- * integer. Mutliple values of the float will produce the same integer
+ * integer. Multiple values of the float will produce the same integer
  * and moving the caching to using the integer for the key is more
  * efficient.
  *
@@ -1433,7 +1453,7 @@ Expr saturating_cast(Type t, Expr e);
  * all backends. (E.g. it is difficult to do this for C++ code
  * generation as it depends on the compiler flags used to compile the
  * generated code. */
-Expr strict_float(Expr e);
+Expr strict_float(const Expr &e);
 
 /** Create an Expr that that promises another Expr is clamped but do
  * not generate code to check the assertion or modify the value. No
@@ -1545,7 +1565,7 @@ f(scatter(3, 5)) = f(select(p, gather(5, 3), gather(3, 5)));
 f(select(p, scatter(3, 5, 5), scatter(1, 2, 3))) = f(select(p, gather(5, 3, 3), gather(2, 3, 1)));
 \endcode
 *
-* Note that in the p == true case, we redudantly load from 3 and write
+* Note that in the p == true case, we redundantly load from 3 and write
 * to 5 twice.
 */
 //@{
@@ -1562,6 +1582,182 @@ Expr gather(const Expr &e, Args &&...args) {
     return gather({e, std::forward<Args>(args)...});
 }
 // @}
+
+/** Extract a contiguous subsequence of the bits of 'e', starting at the bit
+ * index given by 'lsb', where zero is the least-significant bit, returning a
+ * value of type 't'. Any out-of-range bits requested are filled with zeros.
+ *
+ * extract_bits is especially useful when one wants to load a small vector of a
+ * wide type, and treat it as a larger vector of a smaller type. For example,
+ * loading a vector of 32 uint8 values from a uint32 Func can be done as
+ * follows:
+\code
+f8(x) = extract_bits<uint8_t>(f32(x/4), 8*(x%4));
+f8.align_bounds(x, 4).vectorize(x, 32);
+\endcode
+ * Note that the align_bounds call is critical so that the narrow Exprs are
+ * aligned to the wider Exprs. This makes the x%4 term collapse to a
+ * constant. If f8 is an output Func, then constraining the min value of x to be
+ * a known multiple of four would also be sufficient, e.g. via:
+\code
+f8.output_buffer().dim(0).set_min(0);
+\endcode
+ *
+ * See test/correctness/extract_concat_bits.cpp for a complete example. */
+// @{
+Expr extract_bits(Type t, const Expr &e, const Expr &lsb);
+
+template<typename T>
+Expr extract_bits(const Expr &e, const Expr &lsb) {
+    return extract_bits(type_of<T>(), e, lsb);
+}
+// @}
+
+/** Given a number of Exprs of the same type, concatenate their bits producing a
+ * single Expr of the same type code of the input but with more bits. The
+ * number of arguments must be a power of two.
+ *
+ * concat_bits is especially useful when one wants to treat a Func containing
+ * values of a narrow type as a Func containing fewer values of a wider
+ * type. For example, the following code reinterprets vectors of 32 uint8 values
+ * as a vector of 8 uint32s:
+ *
+\code
+f32(x) = concat_bits({f8(4*x), f8(4*x + 1), f8(4*x + 2), f8(4*x + 3)});
+f32.vectorize(x, 8);
+\endcode
+ *
+ * See test/correctness/extract_concat_bits.cpp for a complete example.
+ */
+Expr concat_bits(const std::vector<Expr> &e);
+
+/** Below is a collection of intrinsics for fixed-point programming. Most of
+ * them can be expressed via other means, but this is more natural for some, as
+ * it avoids ghost widened intermediates that don't (or shouldn't) actually show
+ * up in codegen, and doesn't rely on pattern-matching inside the compiler to
+ * succeed to get good instruction selection.
+ *
+ * The semantics of each call are defined in terms of a non-existent 'widen' and
+ * 'narrow' operators, which stand in for casts that double or halve the
+ * bit-width of a type respectively.
+ */
+
+/** Compute a + widen(b). */
+Expr widen_right_add(Expr a, Expr b);
+
+/** Compute a * widen(b). */
+Expr widen_right_mul(Expr a, Expr b);
+
+/** Compute a - widen(b). */
+Expr widen_right_sub(Expr a, Expr b);
+
+/** Compute widen(a) + widen(b). */
+Expr widening_add(Expr a, Expr b);
+
+/** Compute widen(a) * widen(b). a and b may have different signedness, in which
+ * case the result is signed. */
+Expr widening_mul(Expr a, Expr b);
+
+/** Compute widen(a) - widen(b). The result is always signed. */
+Expr widening_sub(Expr a, Expr b);
+
+/** Compute widen(a) << b. */
+//@{
+Expr widening_shift_left(Expr a, Expr b);
+Expr widening_shift_left(Expr a, int b);
+//@}
+
+/** Compute widen(a) >> b. */
+//@{
+Expr widening_shift_right(Expr a, Expr b);
+Expr widening_shift_right(Expr a, int b);
+//@}
+
+/** Compute saturating_narrow(widening_add(a, (1 >> min(b, 0)) / 2) << b).
+ * When b is positive indicating a left shift, the rounding term is zero. */
+//@{
+Expr rounding_shift_left(Expr a, Expr b);
+Expr rounding_shift_left(Expr a, int b);
+//@}
+
+/** Compute saturating_narrow(widening_add(a, (1 << max(b, 0)) / 2) >> b).
+ * When b is negative indicating a left shift, the rounding term is zero. */
+//@{
+Expr rounding_shift_right(Expr a, Expr b);
+Expr rounding_shift_right(Expr a, int b);
+//@}
+
+/** Compute saturating_narrow(widen(a) + widen(b)) */
+Expr saturating_add(Expr a, Expr b);
+
+/** Compute saturating_narrow(widen(a) - widen(b)) */
+Expr saturating_sub(Expr a, Expr b);
+
+/** Compute narrow((widen(a) + widen(b)) / 2) */
+Expr halving_add(Expr a, Expr b);
+
+/** Compute narrow((widen(a) + widen(b) + 1) / 2) */
+Expr rounding_halving_add(Expr a, Expr b);
+
+/** Compute narrow((widen(a) - widen(b)) / 2) */
+Expr halving_sub(Expr a, Expr b);
+
+/** Compute saturating_narrow(shift_right(widening_mul(a, b), q)) */
+//@{
+Expr mul_shift_right(Expr a, Expr b, Expr q);
+Expr mul_shift_right(Expr a, Expr b, int q);
+//@}
+
+/** Compute saturating_narrow(rounding_shift_right(widening_mul(a, b), q)) */
+//@{
+Expr rounding_mul_shift_right(Expr a, Expr b, Expr q);
+Expr rounding_mul_shift_right(Expr a, Expr b, int q);
+//@}
+
+/** Return a boolean Expr for the corresponding field of the Target
+ * being used during lowering; they can be useful in writing library
+ * code without having to plumb a Target through call sites, so that you
+ * can do things like
+ \code
+    Expr e = select(target_arch_is(Target::ARM), something, something_else);
+ \endcode
+ * Note that this doesn't do any checking at runtime to verify that the Target
+ * is valid for the current hardware configuration.
+ */
+//@{
+Expr target_arch_is(Target::Arch arch);
+Expr target_os_is(Target::OS os);
+Expr target_has_feature(Target::Feature feat);
+//@}
+
+/** Return the bit width of the Target used during lowering; this can be useful
+ * in writing library code without having to plumb a Target through call sites,
+ * so that you can do things like
+ \code
+    Expr e = select(target_bits() == 32, something, something_else);
+ \endcode
+ * Note that this doesn't do any checking at runtime to verify that the Target
+ * is valid for the current hardware configuration.
+ */
+Expr target_bits();
+
+/** Return the natural vector width for the given Type for the Target
+ * being used during lowering; this can be useful in writing library
+ * code without having to plumb a Target through call sites, so that you
+ * can do things like
+ \code
+    f.vectorize(x, target_natural_vector_size(Float(32)));
+ \endcode
+ * Note that this doesn't do any checking at runtime to verify that the Target
+ * is valid for the current hardware configuration.
+ */
+//@{
+Expr target_natural_vector_size(Type t);
+template<typename data_t>
+Expr target_natural_vector_size() {
+    return target_natural_vector_size(type_of<data_t>());
+}
+//@}
 
 }  // namespace Halide
 

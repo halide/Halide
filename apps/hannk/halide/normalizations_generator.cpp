@@ -9,10 +9,10 @@ namespace hannk {
 
 class L2Normalization : public Generator<L2Normalization> {
 public:
-    Input<Buffer<uint8_t>> input_{"input", 2};
+    Input<Buffer<uint8_t, 2>> input_{"input"};
     Input<uint8_t> input_zero_{"input_zero"};
 
-    Output<Buffer<uint8_t>> output_{"output", 2};
+    Output<Buffer<uint8_t, 2>> output_{"output"};
 
     void generate() {
         Var x("x"), y("y");
@@ -48,12 +48,20 @@ public:
             .update()
             .atomic()
             .vectorize(rx, vector_size);
+
+        // Normally we'd expect both buffers to be planar, but in unusual
+        // cases, Hannk can transpose the buffers (to normalize along another
+        // dimension), so for those cases, we'll just fall back to less-efficient
+        // code.
+        input_.dim(0).set_stride(Expr());
+        output_.dim(0).set_stride(Expr());
+        output_.specialize(input_.dim(0).stride() == 1 && output_.dim(0).stride() == 1);
     }
 };
 
 class Softmax : public Generator<Softmax> {
 public:
-    Input<Buffer<uint8_t>> input_{"input", 2};
+    Input<Buffer<uint8_t, 2>> input_{"input"};
     // The beta multiplier and shift should have an extra factor of log2(e).
     Input<int16_t> beta_multiplier_{"beta_multiplier"};
     Input<uint16_t> beta_shift_{"beta_shift"};
@@ -61,7 +69,7 @@ public:
     Input<uint8_t> output_zero_{"output_zero"};
     Input<int16_t> output_multiplier_{"output_multiplier"};
     Input<uint16_t> output_shift_{"output_shift"};
-    Output<Buffer<uint8_t>> output_{"output", 2};
+    Output<Buffer<uint8_t, 2>> output_{"output"};
 
     void generate() {
         // The algorithm.
@@ -123,6 +131,14 @@ public:
             .vectorize(rx, vector_size, TailStrategy::GuardWithIf);
 
         inv_sum_exp_row.compute_at(output_, y);
+
+        // Normally we'd expect both buffers to be planar, but in unusual
+        // cases, Hannk can transpose the buffers (to normalize along another
+        // dimension), so for those cases, we'll just fall back to less-efficient
+        // code.
+        input_.dim(0).set_stride(Expr());
+        output_.dim(0).set_stride(Expr());
+        output_.specialize(input_.dim(0).stride() == 1 && output_.dim(0).stride() == 1);
     }
 };
 

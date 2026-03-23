@@ -1,12 +1,17 @@
-#include "Errors.h"
-#include "Halide.h"
 #include "HalidePlugin.h"
+
+#include "ParamParser.h"
 
 namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
 namespace {
+
+struct GradientAutoschedulerParams {
+    /** Maximum level of parallelism available. */
+    int parallelism = 16;
+};
 
 std::map<std::string, Box> inference_bounds(const std::vector<Function> &functions,
                                             const std::vector<Box> &output_bounds) {
@@ -31,11 +36,11 @@ std::vector<int> get_int_bounds(const Box &bounds) {
     std::vector<int> int_bounds;
     int_bounds.reserve(bounds.size());
     for (int i = 0; i < (int)bounds.size(); i++) {
-        Interval interval = bounds[i];
+        const Interval &interval = bounds[i];
         Expr extent = simplify(interval.max - interval.min + 1);
         extent = simplify(substitute_var_estimates(extent));
-        const int64_t *extent_int = as_const_int(extent);
-        user_assert(extent_int != nullptr)
+        auto extent_int = as_const_int(extent);
+        user_assert(extent_int)
             << "extent:" << extent << " is not constant.\n";
         int_bounds.push_back(*extent_int);
     }
@@ -45,10 +50,10 @@ std::vector<int> get_int_bounds(const Box &bounds) {
 std::vector<int> get_rvar_bounds(const std::vector<ReductionVariable> &rvars) {
     std::vector<int> rvar_bounds;
     rvar_bounds.reserve(rvars.size());
-    for (int arg_id = 0; arg_id < (int)rvars.size(); arg_id++) {
-        Expr extent = simplify(substitute_var_estimates(rvars[arg_id].extent));
-        const int64_t *extent_int = as_const_int(extent);
-        user_assert(extent_int != nullptr)
+    for (const auto &rvar : rvars) {
+        Expr extent = simplify(substitute_var_estimates(rvar.extent));
+        auto extent_int = as_const_int(extent);
+        user_assert(extent_int)
             << "extent:" << extent << " is not constant.\n";
         rvar_bounds.push_back(*extent_int);
     }
@@ -86,7 +91,7 @@ int natural_vector_size(const Target &target, const Type &t) {
 
 template<typename FuncOrStage>
 void parallelize_vars_and_rvars_gpu(
-    const MachineParams &params,
+    const GradientAutoschedulerParams &params,
     FuncOrStage func_or_stage,
     bool is_pure_def,
     const std::vector<Var> &vars,
@@ -324,7 +329,7 @@ void parallelize_vars_and_rvars_gpu(
 
 template<typename FuncOrStage>
 void parallelize_vars_and_rvars_cpu(
-    const MachineParams &params,
+    const GradientAutoschedulerParams &params,
     FuncOrStage func_or_stage,
     int natural_vector_size,
     bool is_pure_def,
@@ -528,8 +533,8 @@ void parallelize_vars_and_rvars_cpu(
 
 template<typename FuncOrStage>
 void parallelize_vars_and_rvars(
-    const MachineParams &params,
-    FuncOrStage func_or_stage,
+    const GradientAutoschedulerParams &params,
+    const FuncOrStage &func_or_stage,
     int natural_vector_size,
     bool is_pure_def,
     const std::vector<Var> &vars,
@@ -565,7 +570,7 @@ void parallelize_vars_and_rvars(
     }
 }
 
-void apply_schedule(const MachineParams &params,
+void apply_schedule(const GradientAutoschedulerParams &params,
                     const Target &target,
                     Func func,
                     int update_id,
@@ -605,10 +610,6 @@ void apply_schedule(const MachineParams &params,
         rvars.reserve(reduction_vars.size());
         for (const ReductionVariable &r : reduction_vars) {
             rvars.emplace_back(r.var);
-        }
-        int rdomain_size = 1;
-        for (int b : rvar_bounds) {
-            rdomain_size *= b;
         }
         // Define the thresholds for the pure domain.
         // For CPU we want at least params.parallelism number of elements
@@ -735,7 +736,7 @@ void apply_schedule(const MachineParams &params,
         pure_arg_bounds.reserve(update_args.size());
         int parallelism = 1;
         for (int arg_id = 0; arg_id < (int)update_args.size(); arg_id++) {
-            Expr arg = update_args[arg_id];
+            const Expr &arg = update_args[arg_id];
             const Variable *var = arg.as<Variable>();
             if (var != nullptr &&
                 !var->param.defined() &&
@@ -817,11 +818,9 @@ void apply_schedule(const MachineParams &params,
     schedule_source << ";\n";
 }
 
-}  // namespace
-
 void generate_schedule(const std::vector<Function> &outputs,
                        const Target &target,
-                       const MachineParams &params,
+                       const GradientAutoschedulerParams &params,
                        AutoSchedulerResults *auto_scheduler_results) {
     // The first few steps are the same as src/AutoSchedule.cpp
     // Make an environment map which is used throughout the auto scheduling process.
@@ -908,11 +907,11 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     std::ostringstream schedule_source;
     // Traverse from the consumers to the producers
-    for (auto it = order.rbegin(); it != order.rend(); it++) {
-        Func func(env[*it]);
-        debug(1) << "[gradient_autoscheduler] Processing function:" << *it << "\n";
+    for (const auto &func_name : reverse_view(order)) {
+        Func func(env[func_name]);
+        debug(1) << "[gradient_autoscheduler] Processing function:" << func_name << "\n";
         // Get the bounds in integer constant by substitute all the parameters' estimates.
-        Box bounds = func_bounds[*it];
+        Box bounds = func_bounds[func_name];
         std::vector<int> int_bounds = get_int_bounds(bounds);
         // Scheduling pure definition
         apply_schedule(params, target, func, -1, int_bounds, target.has_gpu_feature(), schedule_source);
@@ -923,23 +922,32 @@ void generate_schedule(const std::vector<Function> &outputs,
         }
     }
 
-    auto_scheduler_results->scheduler_name = "Li2018";
     auto_scheduler_results->schedule_source = schedule_source.str();
     debug(1) << schedule_source.str() << "\n";
 }
 
 struct Li2018 {
-    void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
+    void operator()(const Pipeline &p, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *results) {
+        internal_assert(params_in.name == "Li2018");
+
         std::vector<Function> outputs;
         for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
+        GradientAutoschedulerParams params;
+        {
+            ParamParser parser(params_in.extra);
+            parser.parse("parallelism", &params.parallelism);
+            parser.finish();
+        }
         generate_schedule(outputs, target, params, results);
+        results->autoscheduler_params = params_in;
     }
 };
 
 REGISTER_AUTOSCHEDULER(Li2018)
 
+}  // namespace
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide

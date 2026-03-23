@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 
         if (err != 0) {
             printf("Reordering rvars affected the meaning!\n");
-            return -1;
+            return 1;
         }
     }
 
