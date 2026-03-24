@@ -49,19 +49,15 @@ ExprInterpreter::EvalValue ExprInterpreter::apply_binary(Type t, const EvalValue
     for (int i = 0; i < t.lanes(); ++i) {
         res.lanes[i] = std::visit(
             [&f, &t](auto x, auto y) -> Scalar {
-                if constexpr (std::is_same_v<decltype(x), decltype(y)>) {
-                    auto out = f(x, y);
-                    if (t.is_float()) {
-                        return static_cast<double>(out);
-                    }
-                    if (t.is_int()) {
-                        return static_cast<int64_t>(out);
-                    }
-                    return static_cast<uint64_t>(out);
-                } else {
-                    internal_error << "Type mismatch in binary operation";
-                    return int64_t{0};
+                static_assert(std::is_same_v<decltype(x), decltype(y)>);
+                auto out = f(x, y);
+                if (t.is_float()) {
+                    return static_cast<double>(out);
                 }
+                if (t.is_int()) {
+                    return static_cast<int64_t>(out);
+                }
+                return static_cast<uint64_t>(out);
             },
             a.lanes[i], b.lanes[i]);
     }
@@ -74,19 +70,10 @@ ExprInterpreter::EvalValue ExprInterpreter::apply_cmp(Type t, const EvalValue &a
     for (int i = 0; i < t.lanes(); ++i) {
         res.lanes[i] = std::visit(
             [&f, &t](auto x, auto y) -> Scalar {
-                if constexpr (std::is_same_v<decltype(x), decltype(y)>) {
-                    uint64_t out = f(x, y) ? 1 : 0;
-                    if (t.is_float()) {
-                        return static_cast<double>(out);
-                    }
-                    if (t.is_int()) {
-                        return static_cast<int64_t>(out);
-                    }
-                    return static_cast<uint64_t>(out);
-                } else {
-                    internal_error << "Type mismatch in comparison operation";
-                    return uint64_t{0};
-                }
+                static_assert(std::is_same_v<decltype(x), decltype(y)>);
+                static_assert(std::is_same_v<decltype(f(x, y)), bool>);
+                bool out = f(x, y);
+                return static_cast<uint64_t>(out);
             },
             a.lanes[i], b.lanes[i]);
     }
@@ -103,29 +90,33 @@ ExprInterpreter::EvalValue ExprInterpreter::eval(const Expr &e) {
 }
 
 void ExprInterpreter::truncate(EvalValue &v) {
-    if (!v.type.lanes()) {
-        return;
-    }
     int b = v.type.bits();
-    if (b >= 64 || v.type.is_float()) {
-        return;
-    }
 
-    if (v.type.is_int()) {
-        int64_t m = (1ULL << b) - 1;
-        int64_t sign_bit = 1ULL << (b - 1);
-        for (int j = 0; j < v.type.lanes(); j++) {
-            int64_t val = std::get<int64_t>(v.lanes[j]) & m;
-            if (val & sign_bit) {
-                val |= ~m;
-            }
-            v.lanes[j] = val;
-        }
-    } else {
-        uint64_t m = (1ULL << b) - 1;
-        for (int j = 0; j < v.type.lanes(); j++) {
-            v.lanes[j] = std::get<uint64_t>(v.lanes[j]) & m;
-        }
+    // Floats do not overflow/truncate in the same way,
+    // and shifts >= 64 are Undefined Behavior in C++.
+    if (v.type.is_float() || b >= 64) return;
+
+    uint64_t mask = (1ULL << b) - 1;
+    uint64_t sign_bit = 1ULL << (b - 1);
+
+    for (int j = 0; j < v.type.lanes(); j++) {
+        std::visit(
+            [&](auto &x) {
+                // Only apply truncation to integer variants (int64_t, uint64_t)
+                if constexpr (std::is_integral_v<std::decay_t<decltype(x)>>) {
+                    uint64_t u = static_cast<uint64_t>(x) & mask;
+
+                    // If the underlying variant is signed, perform sign-extension
+                    if constexpr (std::is_signed_v<std::decay_t<decltype(x)>>) {
+                        if (u & sign_bit) {
+                            u |= ~mask;
+                        }
+                    }
+
+                    x = static_cast<std::decay_t<decltype(x)>>(u);
+                }
+            },
+            v.lanes[j]);
     }
 }
 
