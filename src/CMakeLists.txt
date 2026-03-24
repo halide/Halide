@@ -224,8 +224,9 @@ target_sources(
     # keep-sorted end
 )
 
-# The sources that go into libHalide. For the sake of IDE support, headers that
-# exist in src/ but are not public should be included here.
+# The sources that go into libHalide and do not include any LLVM or WASM headers.
+# For the sake of IDE support, headers that exist in src/ but are not public
+# should be included here.
 target_sources(
     Halide
     PRIVATE
