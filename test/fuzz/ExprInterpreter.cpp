@@ -7,6 +7,55 @@
 namespace Halide {
 namespace Internal {
 
+std::ostream &operator<<(std::ostream &o, const ExprInterpreter::EvalValue &val) {
+    o << "(" << val.type << ")";
+    if (val.lanes.size() > 1) {
+        o << "[";
+    }
+    bool first = true;
+    for (const auto &l : val.lanes) {
+        if (!first) {
+            o << ",";
+        }
+        first = false;
+        std::visit(
+            [&o](auto x) {
+                o << x;
+            },
+            l);
+    }
+    if (val.lanes.size() > 1) {
+        o << "]";
+    }
+    return o;
+}
+
+bool ExprInterpreter::EvalValue::is_close(const ExprInterpreter::EvalValue &o, double threshold) const {
+    internal_assert(type.is_float());
+    internal_assert(type == o.type);
+    for (int i = 0; i < lanes.size(); ++i) {
+        if (std::abs(std::get<double>(lanes[i]) - std::get<double>(o.lanes[i])) > threshold) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ExprInterpreter::EvalValue::operator==(const ExprInterpreter::EvalValue &o) const {
+    internal_assert(type == o.type);
+    for (int i = 0; i < lanes.size(); ++i) {
+        bool equal = std::visit(
+            [&](auto x) {
+                return x == std::get<std::decay_t<decltype(x)>>(o.lanes[i]);
+            },
+            lanes[i]);
+        if (!equal) {
+            return false;
+        }
+    }
+    return true;
+}
+
 ExprInterpreter::EvalValue::EvalValue(Type t) : type(t), lanes(t.lanes()) {
     for (int i = 0; i < t.lanes(); ++i) {
         if (t.is_float()) {
@@ -39,14 +88,18 @@ ExprInterpreter::EvalValue ExprInterpreter::apply_unary(Type t, const EvalValue 
     return res;
 }
 
-template<typename F>
+template<bool StrictTypeMatch, typename F>
 ExprInterpreter::EvalValue ExprInterpreter::apply_binary(Type t, const EvalValue &a, const EvalValue &b, F f) {
     EvalValue res(t);
-    internal_assert(a.type == b.type);
+    if constexpr (StrictTypeMatch) {
+        internal_assert(a.type == b.type) << "Binary Type mismatch " << a.type << " != " << b.type;
+    } else {
+        internal_assert(a.type.lanes() == b.type.lanes()) << "Lanes mismatch " << a.type << " != " << b.type;
+    }
     for (int i = 0; i < t.lanes(); ++i) {
         res.lanes[i] = std::visit(
             [&f, &t](auto x, auto y) -> Scalar {
-                if constexpr (std::is_same_v<decltype(x), decltype(y)>) {
+                if constexpr (!StrictTypeMatch || std::is_same_v<decltype(x), decltype(y)>) {
                     auto out = f(x, y);
                     if (t.is_float()) {
                         return static_cast<double>(out);
@@ -56,7 +109,7 @@ ExprInterpreter::EvalValue ExprInterpreter::apply_binary(Type t, const EvalValue
                     }
                     return static_cast<uint64_t>(out);
                 } else {
-                    internal_error << "Binary operator type mismatch";
+                    internal_error << "Binary operator has incompatible types";
                 }
             },
             a.lanes[i], b.lanes[i]);
@@ -89,6 +142,7 @@ ExprInterpreter::EvalValue ExprInterpreter::eval(const Expr &e) {
         return EvalValue();
     }
     e.accept(this);
+    internal_assert(result.lanes.size() == result.type.lanes());
     truncate(result);
     return result;
 }
@@ -267,19 +321,21 @@ void ExprInterpreter::visit(const Div *op) {
         if constexpr (std::is_floating_point_v<decltype(x)>) {
             return x / y;
         } else if constexpr (std::is_signed_v<decltype(x)>) {
-            if (y == 0) {
-                return decltype(x){0};
-            }
+            if (y == 0) return decltype(x){0};
+            // Prevent C++ hardware crash (SIGFPE) on INT_MIN / -1
+            if (y == -1) return static_cast<decltype(x)>(~static_cast<uint64_t>(x) + 1);
+
             auto q = x / y;
             auto r = x % y;
-            if (r != 0 && (r < 0) != (y < 0)) {
-                q -= 1;
+
+            // Euclidean division correction: if the C++ remainder is negative,
+            // the quotient must shift so the remainder becomes positive.
+            if (r < 0) {
+                q += (y < 0) ? 1 : -1;
             }
             return q;
         } else {
-            if (y == 0) {
-                return decltype(x){0};
-            }
+            if (y == 0) return decltype(x){0};
             return x / y;
         }
     });
@@ -288,20 +344,39 @@ void ExprInterpreter::visit(const Div *op) {
 void ExprInterpreter::visit(const Mod *op) {
     result = apply_binary(op->type, eval(op->a), eval(op->b), [](auto x, auto y) {
         if constexpr (std::is_floating_point_v<decltype(x)>) {
-            return std::fmod(x, y);
-        } else if constexpr (std::is_signed_v<decltype(x)>) {
-            if (y == 0) {
-                return decltype(x){0};
+            // Halide doc states floats fallback to fmod
+            if (y == 0.0) return decltype(x){0};
+
+            auto r = std::fmod(x, y);
+
+            // Guarantee positive remainder for floats as well
+            if (r < 0) {
+                r += std::abs(y);
             }
-            auto r = x % y;
-            if (r != 0 && (r < 0) != (y < 0)) {
-                r += y;
-            }
+
             return r;
-        } else {
-            if (y == 0) {
-                return decltype(x){0};
+
+        } else if constexpr (std::is_signed_v<decltype(x)>) {
+            if (y == 0) return decltype(x){0};
+
+            // Prevent C++ hardware crash (SIGFPE) on INT_MIN % -1
+            if (y == -1) return decltype(x){0};
+
+            auto r = x % y;
+
+            // Euclidean modulo correction:
+            // If the C++ remainder is negative, add the absolute value of the divisor.
+            if (r < 0) {
+                r += (y < 0) ? -y : y;
             }
+
+            return r;
+
+        } else {
+            // Unsigned integers natively produce positive remainders
+            // and cannot be negative.
+            if (y == 0) return decltype(x){0};
+
             return x % y;
         }
     });
@@ -545,8 +620,8 @@ void ExprInterpreter::visit(const Call *op) {
             }
         });
     } else if (op->is_intrinsic(Call::shift_left)) {
-        result = apply_binary(op->type, args[0], args[1], [](auto a, auto b) {
-            if constexpr (std::is_integral_v<decltype(a)>) {
+        result = apply_binary<false>(op->type, args[0], args[1], [](auto a, auto b) {
+            if constexpr (std::is_integral_v<decltype(a)> && std::is_integral_v<decltype(b)>) {
                 return a << b;
             } else {
                 internal_error << "shift_left on float";
@@ -554,8 +629,8 @@ void ExprInterpreter::visit(const Call *op) {
             }
         });
     } else if (op->is_intrinsic(Call::shift_right)) {
-        result = apply_binary(op->type, args[0], args[1], [](auto a, auto b) {
-            if constexpr (std::is_integral_v<decltype(a)>) {
+        result = apply_binary<false>(op->type, args[0], args[1], [](auto a, auto b) {
+            if constexpr (std::is_integral_v<decltype(a)> && std::is_integral_v<decltype(b)>) {
                 return a >> b;
             } else {
                 internal_error << "shift_right on float";

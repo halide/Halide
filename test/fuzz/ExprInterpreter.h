@@ -1,7 +1,9 @@
 #ifndef HALIDE_INTERNAL_EXPR_INTERPRETER_H
 #define HALIDE_INTERNAL_EXPR_INTERPRETER_H
 
+#ifndef HALIDE_KEEP_MACROS
 #define HALIDE_KEEP_MACROS
+#endif
 #include <Halide.h>
 
 #include <map>
@@ -22,6 +24,12 @@ public:
 
         EvalValue() = default;
         explicit EvalValue(Type t);
+
+        bool is_close(const EvalValue &o, double threshold) const;
+        bool operator==(const EvalValue &o) const;
+        bool operator!=(const EvalValue &o) const {
+            return !operator==(o);
+        }
     };
 
     std::map<std::string, EvalValue> var_env;
@@ -69,7 +77,7 @@ private:
     template<typename F>
     EvalValue apply_unary(Type t, const EvalValue &a, F f);
 
-    template<typename F>
+    template<bool StrictTypeMatch = true, typename F>
     EvalValue apply_binary(Type t, const EvalValue &a, const EvalValue &b, F f);
 
     template<typename F>
@@ -78,6 +86,8 @@ private:
 public:
     static void test();
 };
+
+std::ostream &operator<<(std::ostream &o, const ExprInterpreter::EvalValue &val);
 
 }  // namespace Internal
 }  // namespace Halide
