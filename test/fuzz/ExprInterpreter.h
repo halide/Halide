@@ -1,6 +1,7 @@
 #ifndef HALIDE_INTERNAL_EXPR_INTERPRETER_H
 #define HALIDE_INTERNAL_EXPR_INTERPRETER_H
 
+#define HALIDE_KEEP_MACROS
 #include <Halide.h>
 
 #include <map>

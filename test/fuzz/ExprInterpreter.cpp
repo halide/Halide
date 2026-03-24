@@ -1,8 +1,4 @@
 #include "ExprInterpreter.h"
-#include "Error.h"
-#include "FindIntrinsics.h"
-#include "IROperator.h"
-#include "StrictifyFloat.h"
 
 #include <algorithm>
 #include <cmath>
@@ -46,18 +42,22 @@ ExprInterpreter::EvalValue ExprInterpreter::apply_unary(Type t, const EvalValue 
 template<typename F>
 ExprInterpreter::EvalValue ExprInterpreter::apply_binary(Type t, const EvalValue &a, const EvalValue &b, F f) {
     EvalValue res(t);
+    internal_assert(a.type == b.type);
     for (int i = 0; i < t.lanes(); ++i) {
         res.lanes[i] = std::visit(
             [&f, &t](auto x, auto y) -> Scalar {
-                static_assert(std::is_same_v<decltype(x), decltype(y)>);
-                auto out = f(x, y);
-                if (t.is_float()) {
-                    return static_cast<double>(out);
+                if constexpr (std::is_same_v<decltype(x), decltype(y)>) {
+                    auto out = f(x, y);
+                    if (t.is_float()) {
+                        return static_cast<double>(out);
+                    }
+                    if (t.is_int()) {
+                        return static_cast<int64_t>(out);
+                    }
+                    return static_cast<uint64_t>(out);
+                } else {
+                    internal_error << "Binary operator type mismatch";
                 }
-                if (t.is_int()) {
-                    return static_cast<int64_t>(out);
-                }
-                return static_cast<uint64_t>(out);
             },
             a.lanes[i], b.lanes[i]);
     }
@@ -67,13 +67,17 @@ ExprInterpreter::EvalValue ExprInterpreter::apply_binary(Type t, const EvalValue
 template<typename F>
 ExprInterpreter::EvalValue ExprInterpreter::apply_cmp(Type t, const EvalValue &a, const EvalValue &b, F f) {
     EvalValue res(t);
+    internal_assert(a.type == b.type);
     for (int i = 0; i < t.lanes(); ++i) {
         res.lanes[i] = std::visit(
             [&f, &t](auto x, auto y) -> Scalar {
-                static_assert(std::is_same_v<decltype(x), decltype(y)>);
-                static_assert(std::is_same_v<decltype(f(x, y)), bool>);
-                bool out = f(x, y);
-                return static_cast<uint64_t>(out);
+                if constexpr (std::is_same_v<decltype(x), decltype(y)>) {
+                    static_assert(std::is_same_v<decltype(f(x, y)), bool>);
+                    bool out = f(x, y);
+                    return static_cast<uint64_t>(out);
+                } else {
+                    internal_error << "Binary operator type mismatch";
+                }
             },
             a.lanes[i], b.lanes[i]);
     }
@@ -94,7 +98,9 @@ void ExprInterpreter::truncate(EvalValue &v) {
 
     // Floats do not overflow/truncate in the same way,
     // and shifts >= 64 are Undefined Behavior in C++.
-    if (v.type.is_float() || b >= 64) return;
+    if (v.type.is_float() || b >= 64) {
+        return;
+    }
 
     uint64_t mask = (1ULL << b) - 1;
     uint64_t sign_bit = 1ULL << (b - 1);
