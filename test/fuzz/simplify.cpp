@@ -1,4 +1,3 @@
-#define HALIDE_KEEP_MACROS
 #include "Halide.h"
 #include <functional>
 

@@ -39,7 +39,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, std::size_t Size) {
 add_library(Halide_fuzz OBJECT)
 add_library(Halide::fuzz ALIAS Halide_fuzz)
 target_sources(Halide_fuzz PRIVATE ExprInterpreter.cpp)
-target_link_libraries(Halide_fuzz PRIVATE Halide::Halide)
+target_link_libraries(Halide_fuzz PRIVATE Halide::Halide Halide::Test)
 
 if (NOT HAVE_LIBFUZZER_FLAGS)
     if (LIB_FUZZING_ENGINE)
