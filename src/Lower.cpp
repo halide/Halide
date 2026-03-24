@@ -94,48 +94,29 @@ namespace {
 class LoweringLogger {
     Stmt last_written;
     std::chrono::time_point<std::chrono::high_resolution_clock> last_time;
-    const char *last_msg;
-
     std::vector<std::pair<double, std::string>> timings;
     bool time_lowering_passes = false;
 
 public:
     LoweringLogger() {
+        last_time = std::chrono::high_resolution_clock::now();
         static bool should_time = !get_env_variable("HL_TIME_LOWERING_PASSES").empty();
         time_lowering_passes = should_time;
     }
 
-    void begin(const char *msg) {
-        debug(1) << "Lowering pass: " << msg << "...\n";
-        last_time = std::chrono::high_resolution_clock::now();
-        last_msg = msg;
-    }
-
-    void begin(const char *msg, int data) {
-        debug(1) << "Lowering pass: " << msg << " " << data << "...\n";
-        last_time = std::chrono::high_resolution_clock::now();
-        last_msg = msg;
-    }
-
-    void end() {
+    void operator()(const string &message, const Stmt &s) {
         auto t = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = t - last_time;
-        timings.emplace_back(diff.count() * 1000, last_msg);
-    }
-
-    void end(const Stmt &s) {
-        auto t = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> diff = t - last_time;
-        timings.emplace_back(diff.count() * 1000, last_msg);
         if (!s.same_as(last_written)) {
-            debug(2) << "Lowering after " << last_msg << "\n"
+            debug(2) << message << "\n"
                      << s << "\n";
             last_written = s;
             last_time = t;
         } else {
-            debug(2) << "Lowering after " << last_msg << " (unchanged)\n\n";
+            debug(2) << message << " (unchanged)\n\n";
             last_time = t;
         }
+        timings.emplace_back(diff.count() * 1000, message);
     }
 
     ~LoweringLogger() {
@@ -192,294 +173,293 @@ void lower_impl(const vector<Function> &output_funcs,
 
     LoweringLogger log;
 
-    log.begin("Creating initial loop nests");
+    debug(1) << "Creating initial loop nests...\n";
     bool any_memoized = false;
     Stmt s = schedule_functions(outputs, fused_groups, env, t, any_memoized);
-    log.end(s);
+    log("Lowering after creating initial loop nests:", s);
 
     if (any_memoized) {
-        log.begin("Injecting memoization");
+        debug(1) << "Injecting memoization...\n";
         s = inject_memoization(s, env, pipeline_name, outputs);
-        log.end(s);
+        log("Lowering after injecting memoization:", s);
     } else {
         debug(1) << "Skipping injecting memoization...\n";
     }
-    log.begin("Injecting tracing");
+    debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, trace_pipeline, env, outputs, t);
-    log.end(s);
+    log("Lowering after injecting tracing:", s);
 
-    log.begin("Adding checks for parameters");
+    debug(1) << "Adding checks for parameters\n";
     s = add_parameter_checks(requirements, s, t);
-    log.end(s);
+    log("Lowering after injecting parameter checks:", s);
 
     // Compute the maximum and minimum possible value of each
     // function. Used in later bounds inference passes.
-    log.begin("Computing bounds of each function's value");
+    debug(1) << "Computing bounds of each function's value\n";
     FuncValueBounds func_bounds = compute_function_value_bounds(order, env);
-    log.end();
 
     // Clamp unsafe instances where a Func f accesses a Func g using
     // an index which depends on a third Func h.
-    log.begin("Clamping unsafe data-dependent accesses");
+    debug(1) << "Clamping unsafe data-dependent accesses\n";
     s = clamp_unsafe_accesses(s, env, func_bounds);
-    log.end(s);
+    log("Lowering after clamping unsafe data-dependent accesses", s);
 
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
     // can still simplify Exprs).
-    log.begin("Bounds inference");
+    debug(1) << "Performing computation bounds inference...\n";
     s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
-    log.end(s);
+    log("Lowering after computation bounds inference:", s);
 
-    log.begin("Asserting that all split factors are positive");
+    debug(1) << "Asserting that all split factors are positive...\n";
     s = add_split_factor_checks(s, env);
-    log.end(s);
+    log("Lowering after asserting that all split factors are positive:", s);
 
-    log.begin("Removing extern loops");
+    debug(1) << "Removing extern loops...\n";
     s = remove_extern_loops(s);
-    log.end(s);
+    log("Lowering after removing extern loops:", s);
 
-    log.begin("Sliding window optimization");
+    debug(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
-    log.end(s);
+    log("Lowering after sliding window:", s);
 
     // This uniquifies the variable names, so we're good to simplify
     // after this point. This lets later passes assume syntactic
     // equivalence means semantic equivalence.
-    log.begin("Uniquifying variable names");
+    debug(1) << "Uniquifying variable names...\n";
     s = uniquify_variable_names(s);
-    log.end(s);
+    log("Lowering after uniquifying variable names:", s);
 
-    log.begin("Simplifying");
+    debug(1) << "Simplifying...\n";
     s = simplify(s);
-    log.end(s);
+    log("Lowering after first simplification:", s);
 
-    log.begin("Simplifying correlated differences");
+    debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
-    log.end(s);
+    log("Lowering after simplifying correlated differences:", s);
 
-    log.begin("Allocation bounds inference");
+    debug(1) << "Performing allocation bounds inference...\n";
     s = allocation_bounds_inference(s, env, func_bounds);
-    log.end(s);
+    log("Lowering after allocation bounds inference:", s);
 
     bool will_inject_host_copies =
         (t.has_gpu_feature() ||
          t.has_feature(Target::HexagonDma) ||
          (t.arch != Target::Hexagon && (t.has_feature(Target::HVX))));
 
-    log.begin("Adding checks for images");
+    debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
-    log.end(s);
+    log("Lowering after injecting image checks:", s);
 
-    log.begin("Removing code that depends on undef values");
+    debug(1) << "Removing code that depends on undef values...\n";
     s = remove_undef(s);
-    log.end(s);
+    log("Lowering after removing code that depends on undef values:", s);
 
-    log.begin("Performing storage folding optimization");
+    debug(1) << "Performing storage folding optimization...\n";
     s = storage_folding(s, env);
-    log.end(s);
+    log("Lowering after storage folding:", s);
 
-    log.begin("Injecting debug_to_file calls");
+    debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, outputs, env);
-    log.end(s);
+    log("Lowering after injecting debug_to_file calls:", s);
 
-    log.begin("Injecting prefetches");
+    debug(1) << "Injecting prefetches...\n";
     s = inject_prefetch(s, env);
-    log.end(s);
+    log("Lowering after injecting prefetches:", s);
 
-    log.begin("Discarding safe promises");
+    debug(1) << "Discarding safe promises...\n";
     s = lower_safe_promises(s);
-    log.end(s);
+    log("Lowering after discarding safe promises:", s);
 
-    log.begin("Dynamically skipping stages");
+    debug(1) << "Dynamically skipping stages...\n";
     s = skip_stages(s, outputs, fused_groups, env);
-    log.end(s);
+    log("Lowering after dynamically skipping stages:", s);
 
-    log.begin("Forking asynchronous producers");
+    debug(1) << "Forking asynchronous producers...\n";
     s = fork_async_producers(s, env);
-    log.end(s);
+    log("Lowering after forking asynchronous producers:", s);
 
-    log.begin("Destructuring tuple-valued realizations");
+    debug(1) << "Destructuring tuple-valued realizations...\n";
     s = split_tuples(s, env);
-    log.end(s);
+    log("Lowering after destructuring tuple-valued realizations:", s);
 
     if (t.has_gpu_feature()) {
-        log.begin("Canonicalizing GPU var names");
+        debug(1) << "Canonicalizing GPU var names...\n";
         s = canonicalize_gpu_vars(s);
-        log.end(s);
+        log("Lowering after canonicalizing GPU var names:", s);
     }
 
-    log.begin("Bounding small realizations");
+    debug(1) << "Bounding small realizations...\n";
     s = simplify_correlated_differences(s);
     s = bound_small_allocations(s);
-    log.end(s);
+    log("Lowering after bounding small realizations:", s);
 
-    log.begin("Performing storage flattening");
+    debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
-    log.end(s);
+    log("Lowering after storage flattening:", s);
 
-    log.begin("Adding atomic mutex allocation");
+    debug(1) << "Adding atomic mutex allocation...\n";
     s = add_atomic_mutex(s, outputs);
-    log.end(s);
+    log("Lowering after adding atomic mutex allocation:", s);
 
-    log.begin("Unpacking buffer arguments");
+    debug(1) << "Unpacking buffer arguments...\n";
     s = unpack_buffers(s);
-    log.end(s);
+    log("Lowering after unpacking buffer arguments:", s);
 
     if (any_memoized) {
-        log.begin("Rewriting memoized allocations");
+        debug(1) << "Rewriting memoized allocations...\n";
         s = rewrite_memoized_allocations(s, env);
-        log.end(s);
+        log("Lowering after rewriting memoized allocations:", s);
     } else {
-        debug(1) << "Skipping rewriting memoized allocations\n";
+        debug(1) << "Skipping rewriting memoized allocations...\n";
     }
 
     if (will_inject_host_copies) {
-        log.begin("Selecting a GPU API for GPU loops");
+        debug(1) << "Selecting a GPU API for GPU loops...\n";
         s = select_gpu_api(s, t);
-        log.end(s);
+        log("Lowering after selecting a GPU API:", s);
 
-        log.begin("Injecting host <-> dev buffer copies");
+        debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s, t);
-        log.end(s);
+        log("Lowering after injecting host <-> dev buffer copies:", s);
 
-        log.begin("Selecting a GPU API for extern stages");
+        debug(1) << "Selecting a GPU API for extern stages...\n";
         s = select_gpu_api(s, t);
-        log.end(s);
+        log("Lowering after selecting a GPU API for extern stages:", s);
     } else {
-        log.begin("Injecting host-dirty marking");
+        debug(1) << "Injecting host-dirty marking...\n";
         s = inject_host_dev_buffer_copies(s, t);
-        log.end(s);
+        log("Lowering after injecting host-dirty marking:", s);
     }
 
-    log.begin("Simplifying");
+    debug(1) << "Simplifying...\n";
     s = simplify(s);
     s = unify_duplicate_lets(s);
-    log.end(s);
+    log("Lowering after second simplification:", s);
 
-    log.begin("Reduce prefetch dimension");
+    debug(1) << "Reduce prefetch dimension...\n";
     s = reduce_prefetch_dimension(s, t);
-    log.end(s);
+    log("Lowering after reduce prefetch dimension:", s);
 
-    log.begin("Simplifying correlated differences");
+    debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
-    log.end(s);
+    log("Lowering after simplifying correlated differences:", s);
 
-    log.begin("Bounding constant extent loops");
+    debug(1) << "Bounding constant extent loops...\n";
     s = bound_constant_extent_loops(s);
-    log.end(s);
+    log("Lowering after bounding constant extent loops:", s);
 
-    log.begin("Unrolling");
+    debug(1) << "Unrolling...\n";
     s = unroll_loops(s);
-    log.end(s);
+    log("Lowering after unrolling:", s);
 
-    log.begin("Vectorizing");
+    debug(1) << "Vectorizing...\n";
     s = vectorize_loops(s, env);
     s = simplify(s);
-    log.end(s);
+    log("Lowering after vectorizing:", s);
 
     if (t.has_gpu_feature() ||
         t.has_feature(Target::Vulkan)) {
-        log.begin("Injecting per-block gpu synchronization");
+        debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
-        log.end(s);
+        log("Lowering after injecting per-block gpu synchronization:", s);
     }
 
-    log.begin("Detecting vector interleavings");
+    debug(1) << "Detecting vector interleavings...\n";
     s = rewrite_interleavings(s);
     s = simplify(s);
-    log.end(s);
+    log("Lowering after rewriting vector interleavings:", s);
 
-    log.begin("Partitioning loops to simplify boundary conditions");
+    debug(1) << "Partitioning loops to simplify boundary conditions...\n";
     s = partition_loops(s);
     s = simplify(s);
-    log.end(s);
+    log("Lowering after partitioning loops:", s);
 
-    log.begin("Staging strided loads");
+    debug(1) << "Staging strided loads...\n";
     s = stage_strided_loads(s);
-    log.end(s);
+    log("Lowering after staging strided loads:", s);
 
-    log.begin("Trimming loops to the region over which they do something");
+    debug(1) << "Trimming loops to the region over which they do something...\n";
     s = trim_no_ops(s);
-    log.end(s);
+    log("Lowering after loop trimming:", s);
 
-    log.begin("Rebasing loops to zero");
+    debug(1) << "Rebasing loops to zero...\n";
     s = rebase_loops_to_zero(s);
-    log.end(s);
+    debug(2) << "Lowering after rebasing loops to zero:\n"
+             << s << "\n\n";
 
-    log.begin("Hoisting loop invariant if statements");
+    debug(1) << "Hoisting loop invariant if statements...\n";
     s = hoist_loop_invariant_if_statements(s);
-    log.end(s);
+    log("Lowering after hoisting loop invariant if statements:", s);
 
-    log.begin("Injecting early frees");
+    debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
-    log.end(s);
+    log("Lowering after injecting early frees:", s);
 
     if (t.has_feature(Target::FuzzFloatStores)) {
-        log.begin("Fuzzing floating point stores");
+        debug(1) << "Fuzzing floating point stores...\n";
         s = fuzz_float_stores(s);
-        log.end(s);
+        log("Lowering after fuzzing floating point stores:", s);
     }
 
-    log.begin("Simplifying correlated differences");
+    debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
-    log.end(s);
+    log("Lowering after simplifying correlated differences:", s);
 
-    log.begin("Bounding small allocations");
+    debug(1) << "Bounding small allocations...\n";
     s = bound_small_allocations(s);
-    log.end(s);
+    log("Lowering after bounding small allocations:", s);
 
     if (t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer)) {
-        log.begin("Injecting profiling");
+        debug(1) << "Injecting profiling...\n";
         s = inject_profiling(s, pipeline_name, env);
-        log.end(s);
+        log("Lowering after injecting profiling:", s);
     }
 
     if (t.has_feature(Target::CUDA)) {
-        log.begin("Injecting warp shuffles");
+        debug(1) << "Injecting warp shuffles...\n";
         s = lower_warp_shuffles(s, t);
-        log.end(s);
+        log("Lowering after injecting warp shuffles:", s);
     }
 
-    log.begin("Simplifying");
+    debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
-    log.end();
 
-    log.begin("Lowering unsafe promises");
+    debug(1) << "Lowering unsafe promises...\n";
     s = lower_unsafe_promises(s, t);
-    log.end(s);
+    log("Lowering after lowering unsafe promises:", s);
 
     if (t.has_feature(Target::AVX512_SapphireRapids)) {
-        log.begin("Extracting tile operations");
+        debug(1) << "Extracting tile operations...\n";
         s = extract_tile_operations(s);
-        log.end(s);
+        log("Lowering after extracting tile operations:", s);
     }
 
-    log.begin("Flattening nested ramps");
+    debug(1) << "Flattening nested ramps...\n";
     s = flatten_nested_ramps(s);
-    log.end(s);
+    log("Lowering after flattening nested ramps:", s);
 
-    log.begin("Removing dead allocations and moving loop invariant code");
+    debug(1) << "Removing dead allocations and moving loop invariant code...\n";
     s = remove_dead_allocations(s);
     s = simplify(s);
     s = hoist_loop_invariant_values(s);
     s = hoist_loop_invariant_if_statements(s);
-    log.end(s);
+    log("Lowering after removing dead allocations and hoisting loop invariants:", s);
 
-    log.begin("Finding intrinsics");
+    debug(1) << "Finding intrinsics...\n";
     // Must be run after the last simplification, because it turns
     // divisions into shifts, which the simplifier reverses.
     s = find_intrinsics(s);
-    log.end(s);
+    log("Lowering after finding intrinsics:", s);
 
-    log.begin("Hoisting prefetches");
+    debug(1) << "Hoisting prefetches...\n";
     s = hoist_prefetches(s);
-    log.end(s);
+    log("Lowering after hoisting prefetches:", s);
 
     if (t.has_feature(Target::NoAsserts)) {
-        log.begin("Stripping asserts");
+        debug(1) << "Stripping asserts...\n";
         s = strip_asserts(s);
-        log.end(s);
+        log("Lowering after stripping asserts:", s);
     }
 
     debug(1) << "Lowering after final simplification:\n"
@@ -487,9 +467,10 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
-            log.begin("Custom lowering pass", i);
-            s = custom_passes[i]->operator()(s);
-            log.end(s);
+            debug(1) << "Running custom lowering pass " << i << "...\n";
+            s = (*custom_passes[i])(s);
+            debug(1) << "Lowering after custom pass " << i << ":\n"
+                     << s << "\n\n";
         }
     }
 
@@ -497,17 +478,19 @@ void lower_impl(const vector<Function> &output_funcs,
     result_module.set_conceptual_code_stmt(s);
 
     if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
-        log.begin("Splitting off Hexagon offload");
+        debug(1) << "Splitting off Hexagon offload...\n";
         s = inject_hexagon_rpc(s, t, result_module);
-        log.end(s);
+        debug(2) << "Lowering after splitting off Hexagon offload:\n"
+                 << s << "\n";
     } else {
         debug(1) << "Skipping Hexagon offload...\n";
     }
 
     if (t.has_gpu_feature()) {
-        log.begin("Offloading GPU loops");
+        debug(1) << "Offloading GPU loops...\n";
         s = inject_gpu_offload(s, t, any_strict_float);
-        log.end(s);
+        debug(2) << "Lowering after splitting off GPU loops:\n"
+                 << s << "\n\n";
     } else {
         debug(1) << "Skipping GPU offload...\n";
     }
@@ -522,7 +505,7 @@ void lower_impl(const vector<Function> &output_funcs,
     vector<InferredArgument> inferred_args = infer_arguments(s, outputs);
 
     std::vector<LoweredFunc> closure_implementations;
-    log.begin("Lowering Parallel Tasks");
+    debug(1) << "Lowering Parallel Tasks...\n";
     s = lower_parallel_tasks(s, closure_implementations, pipeline_name, t);
     // Process any LoweredFunctions added by other passes. In practice, this
     // will likely not work well enough due to ordering issues with
@@ -537,7 +520,8 @@ void lower_impl(const vector<Function> &output_funcs,
     for (auto &lowered_func : closure_implementations) {
         result_module.append(lowered_func);
     }
-    log.end(s);
+    debug(2) << "Lowering after generating parallel tasks and closures:\n"
+             << s << "\n\n";
 
     vector<Argument> public_args = args;
     for (const auto &out : outputs) {
