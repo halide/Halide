@@ -404,6 +404,29 @@ target_sources(
     # keep-sorted end
 )
 
+# LLVM sources live in their own object library so they can have a separate PCH.
+add_library(
+    Halide_LLVM_srcs OBJECT
+    # keep-sorted start case=no
+    CodeGen_ARM.cpp
+    CodeGen_Hexagon.cpp
+    CodeGen_Internal.cpp
+    CodeGen_LLVM.cpp
+    CodeGen_Posix.cpp
+    CodeGen_PowerPC.cpp
+    CodeGen_PTX_Dev.cpp
+    CodeGen_RISCV.cpp
+    CodeGen_WebAssembly.cpp
+    CodeGen_X86.cpp
+    HexagonOffload.cpp
+    JITModule.cpp
+    LLVM_Output.cpp
+    LLVM_Runtime_Linker.cpp
+    Module.cpp
+    WasmExecutor.cpp
+    # keep-sorted end
+)
+
 set(C_TEMPLATE_FILES
     CodeGen_C_prologue
     CodeGen_C_vectors
@@ -575,13 +598,14 @@ if (Halide_WASM_BACKEND STREQUAL "wabt")
     find_package(wabt REQUIRED)
     _Halide_pkgdep(wabt)
 
-    target_link_libraries(Halide PRIVATE wabt::wabt)
-    target_compile_definitions(Halide PRIVATE WITH_WABT)
+    target_compile_definitions(Halide_LLVM_srcs PRIVATE WITH_WABT)
+    target_link_libraries(Halide_LLVM_srcs PRIVATE wabt::wabt)
 elseif (Halide_WASM_BACKEND STREQUAL "V8")
     find_package(V8 REQUIRED)
     _Halide_pkgdep(V8)
-    target_compile_definitions(Halide PRIVATE WITH_V8)
-    target_link_libraries(Halide PRIVATE V8::V8)
+
+    target_compile_definitions(Halide_LLVM_srcs PRIVATE WITH_V8)
+    target_link_libraries(Halide_LLVM_srcs PRIVATE V8::V8)
 elseif (Halide_WASM_BACKEND)
     message(FATAL_ERROR "Unknown Halide_WASM_BACKEND `${Halide_WASM_BACKEND}`")
 endif ()
@@ -670,38 +694,17 @@ if (NOT MSVC)
     set_source_files_properties(Util.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 endif ()
 
-# LLVM sources live in their own object library so they can have a separate PCH.
-add_library(Halide_LLVM_srcs OBJECT
-    CodeGen_ARM.cpp
-    CodeGen_Hexagon.cpp
-    CodeGen_Internal.cpp
-    CodeGen_LLVM.cpp
-    CodeGen_Posix.cpp
-    CodeGen_PowerPC.cpp
-    CodeGen_PTX_Dev.cpp
-    CodeGen_RISCV.cpp
-    CodeGen_WebAssembly.cpp
-    CodeGen_X86.cpp
-    HexagonOffload.cpp
-    JITModule.cpp
-    LLVM_Output.cpp
-    LLVM_Runtime_Linker.cpp
-    Module.cpp
-    WasmExecutor.cpp
-)
-
 target_compile_features(Halide_LLVM_srcs PRIVATE cxx_std_17)
 set_target_properties(Halide_LLVM_srcs PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Mirror compile flags from the main Halide target.
-target_include_directories(Halide_LLVM_srcs PRIVATE
-    "$<TARGET_PROPERTY:Halide,INCLUDE_DIRECTORIES>"
-)
-target_compile_definitions(Halide_LLVM_srcs PRIVATE
+target_compile_definitions(
+    Halide_LLVM_srcs PRIVATE
     "$<TARGET_PROPERTY:Halide,COMPILE_DEFINITIONS>"
     "$<$<STREQUAL:$<TARGET_PROPERTY:Halide,TYPE>,SHARED_LIBRARY>:Halide_EXPORTS>"
 )
-target_compile_options(Halide_LLVM_srcs PRIVATE
+target_compile_options(
+    Halide_LLVM_srcs PRIVATE
     "$<TARGET_PROPERTY:Halide,COMPILE_OPTIONS>"
 )
 
@@ -716,7 +719,7 @@ if (NOT MSVC)
     target_precompile_headers(Halide_LLVM_srcs PRIVATE Halide_llvm_pch.h)
 endif ()
 
-target_sources(Halide PRIVATE $<TARGET_OBJECTS:Halide_LLVM_srcs>)
+target_link_libraries(Halide PRIVATE Halide_LLVM_srcs)
 
 ##
 # Add autoschedulers to the build.
