@@ -883,7 +883,8 @@ struct Call : public ExprNode<Call> {
              Call::strict_sub});
     }
 
-    bool is_integer_intrinsic() const {
+    /** Does not include the strict_float intrinsics. */
+    bool is_arithmetic_intrinsic() const {
         return is_intrinsic(
             {Call::widen_right_add,
              Call::widen_right_mul,

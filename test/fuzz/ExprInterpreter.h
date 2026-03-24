@@ -1,9 +1,7 @@
 #ifndef HALIDE_INTERNAL_EXPR_INTERPRETER_H
 #define HALIDE_INTERNAL_EXPR_INTERPRETER_H
 
-#include "Expr.h"
-#include "IRVisitor.h"
-#include "Type.h"
+#include <Halide.h>
 
 #include <map>
 #include <string>

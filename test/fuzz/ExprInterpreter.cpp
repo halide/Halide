@@ -628,7 +628,7 @@ void ExprInterpreter::visit(const Call *op) {
     } else if (op->is_strict_float_intrinsic()) {
         Expr unstrict = unstrictify_float(op);
         unstrict.accept(this);
-    } else if (op->is_integer_intrinsic()) {
+    } else if (op->is_arithmetic_intrinsic()) {
         Expr lower = lower_intrinsic(op);
         lower.accept(this);
     } else if (op->is_intrinsic(Call::absd)) {

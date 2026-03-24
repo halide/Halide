@@ -5,7 +5,6 @@
 #include "CSE.h"
 #include "CodeGen_C.h"
 #include "Deinterleave.h"
-#include "ExprInterpreter.h"
 #include "Func.h"
 #include "Generator.h"
 #include "IR.h"
@@ -26,7 +25,6 @@ using namespace Halide::Internal;
 int main(int argc, const char **argv) {
     IRPrinter::test();
     CodeGen_C::test();
-    ExprInterpreter::test();
     ir_equality_test();
     bounds_test();
     expr_match_test();
