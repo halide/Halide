@@ -21,6 +21,7 @@ public:
     struct EvalValue {
         Type type;
         std::vector<Scalar> lanes;
+        bool did_overflow{false};
 
         EvalValue() = default;
         explicit EvalValue(Type t);
