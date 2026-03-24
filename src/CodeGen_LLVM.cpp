@@ -3989,7 +3989,7 @@ void CodeGen_LLVM::codegen_asserts(const vector<const AssertStmt *> &asserts) {
 
     // Mix all the conditions together into a bitmask
 
-    Expr bitmask = cast<uint64_t>(1) << 63;
+    Expr bitmask = make_const(UInt(64), ((uint64_t)1) << 63);
     for (size_t i = 0; i < asserts.size(); i++) {
         bitmask = bitmask | (cast<uint64_t>(!asserts[i]->condition) << i);
     }

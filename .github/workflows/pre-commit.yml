@@ -17,13 +17,13 @@ jobs:
     name: Run pre-commit checks
     runs-on: ubuntu-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.head_ref }}
 
-      - uses: actions/setup-python@v5
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v6
+      - uses: astral-sh/setup-uv@v7
 
       - name: Run pre-commit
         id: pre-commit
@@ -57,7 +57,7 @@ jobs:
 
       - name: Upload auto-fix artifacts
         if: ${{ !cancelled() && steps.diff.outputs.has-fixes == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pre-commit-fixes
           path: |

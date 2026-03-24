@@ -1,9 +1,7 @@
 #include "Halide.h"
 #include "fuzz_helpers.h"
 #include <array>
-#include <random>
 #include <stdio.h>
-#include <time.h>
 
 namespace {
 
@@ -12,7 +10,7 @@ using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
-typedef Expr (*make_bin_op_fn)(Expr, Expr);
+using make_bin_op_fn = Expr (*)(Expr, Expr);
 
 constexpr int fuzz_var_count = 5;
 
@@ -23,7 +21,7 @@ std::string fuzz_var(int i) {
 }
 
 // This is modified for each round.
-static Type global_var_type = Int(32);
+Type global_var_type = Int(32);
 
 Expr random_var(FuzzingContext &fuzz) {
     int fuzz_count = fuzz.ConsumeIntegralInRange(0, fuzz_var_count - 1);
@@ -203,87 +201,6 @@ Expr random_expr(FuzzingContext &fuzz, Type t, int depth, bool overflow_undef) {
     return fuzz.PickValueInArray(operations)();
 }
 
-// These are here to enable copy of failed output expressions
-// and pasting them into the test for debugging; they are commented out
-// to avoid "unused function" warnings in some build environments.
-#if 0
-Expr ramp(Expr b, Expr s, int w) {
-    return Ramp::make(b, s, w);
-}
-Expr x1(Expr x) {
-    return Broadcast::make(x, 2);
-}
-Expr x2(Expr x) {
-    return Broadcast::make(x, 2);
-}
-Expr x3(Expr x) {
-    return Broadcast::make(x, 3);
-}
-Expr x4(Expr x) {
-    return Broadcast::make(x, 2);
-}
-Expr x6(Expr x) {
-    return Broadcast::make(x, 6);
-}
-Expr x8(Expr x) {
-    return Broadcast::make(x, 8);
-}
-Expr uint1(Expr x) {
-    return Cast::make(UInt(1), x);
-}
-Expr uint8(Expr x) {
-    return Cast::make(UInt(8), x);
-}
-Expr uint16(Expr x) {
-    return Cast::make(UInt(16), x);
-}
-Expr uint32(Expr x) {
-    return Cast::make(UInt(32), x);
-}
-Expr int8(Expr x) {
-    return Cast::make(Int(8), x);
-}
-Expr int16(Expr x) {
-    return Cast::make(Int(16), x);
-}
-Expr int32(Expr x) {
-    return Cast::make(Int(32), x);
-}
-Expr uint1x2(Expr x) {
-    return Cast::make(UInt(1).with_lanes(2), x);
-}
-Expr uint8x2(Expr x) {
-    return Cast::make(UInt(8).with_lanes(2), x);
-}
-Expr uint16x2(Expr x) {
-    return Cast::make(UInt(16).with_lanes(2), x);
-}
-Expr uint32x2(Expr x) {
-    return Cast::make(UInt(32).with_lanes(2), x);
-}
-Expr uint32x3(Expr x) {
-    return Cast::make(UInt(32).with_lanes(3), x);
-}
-Expr int8x2(Expr x) {
-    return Cast::make(Int(8).with_lanes(2), x);
-}
-Expr int16x2(Expr x) {
-    return Cast::make(Int(16).with_lanes(2), x);
-}
-Expr int16x3(Expr x) {
-    return Cast::make(Int(16).with_lanes(3), x);
-}
-Expr int32x2(Expr x) {
-    return Cast::make(Int(32).with_lanes(2), x);
-}
-#endif
-
-Expr a(Variable::make(global_var_type, fuzz_var(0)));
-Expr b(Variable::make(global_var_type, fuzz_var(1)));
-Expr c(Variable::make(global_var_type, fuzz_var(2)));
-Expr d(Variable::make(global_var_type, fuzz_var(3)));
-Expr e(Variable::make(global_var_type, fuzz_var(4)));
-
 Interval random_interval(FuzzingContext &fuzz, Type t) {
     Interval interval;
 
@@ -299,7 +216,7 @@ Interval random_interval(FuzzingContext &fuzz, Type t) {
         } else if (auto ptr = as_const_uint(t_min)) {
             min_value = *ptr;
         } else {
-            std::cerr << "random_interval failed to find min of: " << t << "\n";
+            debug(0) << "random_interval failed to find min of: " << t << "\n";
         }
         if (auto ptr = as_const_int(t_max)) {
             max_value = *ptr;
@@ -309,7 +226,7 @@ Interval random_interval(FuzzingContext &fuzz, Type t) {
                 max_value = *ptr;
             }
         } else {
-            std::cerr << "random_interval failed to find max of: " << t << "\n";
+            debug(0) << "random_interval failed to find max of: " << t << "\n";
         }
     }
 
@@ -325,11 +242,11 @@ Interval random_interval(FuzzingContext &fuzz, Type t) {
     interval.max = cast(t, max_value);
 
     if (min_value > max_value || (interval.is_bounded() && can_prove(interval.min > interval.max))) {
-        std::cerr << "random_interval failed: ";
-        std::cerr << min_value << " > " << max_value << "\n";
-        std::cerr << interval.min << " > " << interval.max << "\n";
-        std::cerr << interval << "\n";
-        std::cerr << "random_interval failed\n";
+        debug(0) << "random_interval failed: ";
+        debug(0) << min_value << " > " << max_value << "\n";
+        debug(0) << interval.min << " > " << interval.max << "\n";
+        debug(0) << interval << "\n";
+        debug(0) << "random_interval failed\n";
         exit(1);
     }
 
@@ -347,7 +264,7 @@ int sample_interval(FuzzingContext &fuzz, const Interval &interval) {
         } else if (auto ptr = as_const_uint(interval.min)) {
             min_value = *ptr;
         } else {
-            std::cerr << "sample_interval (min) failed: " << interval.min << "\n";
+            debug(0) << "sample_interval (min) failed: " << interval.min << "\n";
             exit(1);
         }
     }
@@ -358,7 +275,7 @@ int sample_interval(FuzzingContext &fuzz, const Interval &interval) {
         } else if (auto ptr = as_const_uint(interval.max)) {
             max_value = *ptr;
         } else {
-            std::cerr << "sample_interval (max) failed: " << interval.max << "\n";
+            debug(0) << "sample_interval (max) failed: " << interval.max << "\n";
             exit(1);
         }
     }
@@ -366,7 +283,7 @@ int sample_interval(FuzzingContext &fuzz, const Interval &interval) {
     return fuzz.ConsumeIntegralInRange<int>(min_value, max_value);
 }
 
-bool test_bounds(Expr test, const Interval &interval, Type t, const map<string, Expr> &vars) {
+bool test_bounds(const Expr &test, const Interval &interval, Type t, const map<string, Expr> &vars) {
     for (int j = 0; j < t.lanes(); j++) {
         Expr a_j = test;
         if (t.lanes() != 1) {
@@ -383,31 +300,31 @@ bool test_bounds(Expr test, const Interval &interval, Type t, const map<string, 
         // This fuzzer only looks for constant bounds, otherwise it's probably overflow.
         if (interval.has_upper_bound()) {
             if (!can_prove(a_j_v <= interval.max)) {
-                std::cerr << "can't prove upper bound: " << (a_j_v <= interval.max) << "\n";
-                for (auto v = vars.begin(); v != vars.end(); v++) {
-                    std::cerr << v->first << " = " << v->second << "\n";
+                debug(0) << "can't prove upper bound: " << (a_j_v <= interval.max) << "\n";
+                for (const auto &[var, val] : vars) {
+                    debug(0) << var << " = " << val << "\n";
                 }
 
-                std::cerr << test << "\n";
-                std::cerr << interval << "\n";
-                std::cerr << "In vector lane " << j << ":\n";
-                std::cerr << a_j << " -> " << a_j_v << "\n";
+                debug(0) << test << "\n";
+                debug(0) << interval << "\n";
+                debug(0) << "In vector lane " << j << ":\n";
+                debug(0) << a_j << " -> " << a_j_v << "\n";
                 return false;
             }
         }
 
         if (interval.has_lower_bound()) {
             if (!can_prove(a_j_v >= interval.min)) {
-                std::cerr << "can't prove lower bound: " << (a_j_v >= interval.min) << "\n";
-                std::cerr << "Expr: " << test << "\n";
-                std::cerr << "Interval: " << interval << "\n";
+                debug(0) << "can't prove lower bound: " << (a_j_v >= interval.min) << "\n";
+                debug(0) << "Expr: " << test << "\n";
+                debug(0) << "Interval: " << interval << "\n";
 
-                for (auto v = vars.begin(); v != vars.end(); v++) {
-                    std::cerr << v->first << " = " << v->second << "\n";
+                for (const auto &[var, val] : vars) {
+                    debug(0) << var << " = " << val << "\n";
                 }
 
-                std::cerr << "In vector lane " << j << ":\n";
-                std::cerr << a_j << " -> " << a_j_v << "\n";
+                debug(0) << "In vector lane " << j << ":\n";
+                debug(0) << a_j << " -> " << a_j_v << "\n";
                 return false;
             }
         }
@@ -415,7 +332,7 @@ bool test_bounds(Expr test, const Interval &interval, Type t, const map<string, 
     return true;
 }
 
-bool test_expression_bounds(FuzzingContext &fuzz, Expr test, int trials, int samples_per_trial) {
+bool test_expression_bounds(FuzzingContext &fuzz, const Expr &test, int trials, int samples_per_trial, bool minimize_failures = true) {
     map<string, Expr> vars;
     for (int i = 0; i < fuzz_var_count; i++) {
         vars[fuzz_var(i)] = Expr();
@@ -425,10 +342,15 @@ bool test_expression_bounds(FuzzingContext &fuzz, Expr test, int trials, int sam
     // ints. This is known to be broken (See
     // https://github.com/halide/Halide/pull/7814)
     bool contains_risky_cast = false;
-    visit_with(test, [&](auto *self, const Cast *op) {
-        contains_risky_cast |= (op->type.is_int() &&
-                                op->type.bits() >= 32 &&
-                                !op->type.can_represent(op->value.type()));
+    visit_with(test, [&](auto *self, const auto *op) {
+        if (!contains_risky_cast) {
+            if constexpr (std::is_same_v<decltype(op), const Cast *>) {
+                contains_risky_cast |= (op->type.is_int() &&
+                                        op->type.bits() >= 32 &&
+                                        !op->type.can_represent(op->value.type()));
+            }
+            self->visit_base(op);
+        }
     });
     if (contains_risky_cast) {
         return true;
@@ -437,10 +359,9 @@ bool test_expression_bounds(FuzzingContext &fuzz, Expr test, int trials, int sam
     for (int i = 0; i < trials; i++) {
         Scope<Interval> scope;
 
-        for (auto v = vars.begin(); v != vars.end(); v++) {
+        for (auto &[var, val] : vars) {
             // This type is used because the variables will be this type for a given round.
-            Interval interval = random_interval(fuzz, global_var_type);
-            scope.push(v->first, interval);
+            scope.push(var, random_interval(fuzz, global_var_type));
         }
 
         Interval interval = bounds_of_expr_in_scope(test, scope);
@@ -466,17 +387,31 @@ bool test_expression_bounds(FuzzingContext &fuzz, Expr test, int trials, int sam
         }
 
         for (int j = 0; j < samples_per_trial; j++) {
-            for (std::map<string, Expr>::iterator v = vars.begin(); v != vars.end(); v++) {
-                Interval interval = scope.get(v->first);
-                v->second = cast(global_var_type, sample_interval(fuzz, interval));
+            for (auto &[var, val] : vars) {
+                val = cast(global_var_type, sample_interval(fuzz, scope.get(var)));
             }
 
             if (!test_bounds(test, interval, test.type(), vars)) {
-                std::cerr << "scope {\n";
-                for (auto v = vars.begin(); v != vars.end(); v++) {
-                    std::cerr << "\t" << v->first << " : " << scope.get(v->first) << "\n";
+                // Try to minimize it to an incorrect sub-expression
+                bool found_failure = false;
+                if (minimize_failures) {
+                    debug(0) << "Attempting to minimize failure...\n";
+                    mutate_with(test, [&](auto *self, const Expr &e) {
+                        self->mutate_base(e);
+                        if (!found_failure && !e.same_as(test)) {
+                            found_failure |= !test_expression_bounds(fuzz, e, trials * 10, samples_per_trial * 10, false);
+                        }
+                        return e;
+                    });
                 }
-                std::cerr << "}\n";
+
+                if (!found_failure) {
+                    debug(0) << "scope {\n";
+                    for (auto v = vars.begin(); v != vars.end(); v++) {
+                        debug(0) << "\t" << v->first << " : " << scope.get(v->first) << "\n";
+                    }
+                    debug(0) << "}\n";
+                }
                 return false;
             }
         }
@@ -488,19 +423,18 @@ bool test_expression_bounds(FuzzingContext &fuzz, Expr test, int trials, int sam
 
 FUZZ_TEST(bounds, FuzzingContext &fuzz) {
     // Number of random expressions to test.
-    const int count = 100;
+    constexpr int count = 100;
     // Depth of the randomly generated expression trees.
-    const int depth = 3;
+    constexpr int depth = 3;
     // Number of trials to test the generated expressions for.
-    const int trials = 10;
+    constexpr int trials = 10;
     // Number of samples of the intervals per trial to test.
-    const int samples = 10;
+    constexpr int samples = 10;
 
-    std::array<int, 6> vector_widths = {1, 2, 3, 4, 6, 8};
     for (int n = 0; n < count; n++) {
-        int width = fuzz.PickValueInArray(vector_widths);
+        int vector_width = fuzz.PickValueInArray({1, 2, 3, 4, 6, 8});
         // This is the type that will be the innermost (leaf) value type.
-        Type expr_type = random_type(fuzz, width);
+        Type expr_type = random_type(fuzz, vector_width);
         Type var_type = random_type(fuzz, 1);
         global_var_type = var_type;
         // Generate a random expr...

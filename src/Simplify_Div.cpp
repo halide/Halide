@@ -8,40 +8,44 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
     Expr a = mutate(op->a, &a_info);
     Expr b = mutate(op->b, &b_info);
 
-    if (info) {
-        if (op->type.is_int_or_uint()) {
-            // ConstantInterval division is integer division, so we can't use
-            // this code path for floats.
-            info->bounds = a_info.bounds / b_info.bounds;
-            info->alignment = a_info.alignment / b_info.alignment;
-            info->cast_to(op->type);
-            info->trim_bounds_using_alignment();
+    ExprInfo div_info;
 
-            // Bounded numerator divided by constantish bounded denominator can
-            // sometimes collapse things to a constant at this point. This
-            // mostly happens when the denominator is a constant and the
-            // numerator span is small (e.g. [23, 29]/10 = 2), but there are
-            // also cases with a bounded denominator (e.g. [5, 7]/[4, 5] = 1).
-            if (info->bounds.is_single_point()) {
-                if (op->type.can_represent(info->bounds.min)) {
-                    return make_const(op->type, info->bounds.min, nullptr);
-                } else {
-                    // Even though this is 'no-overflow-int', if the result
-                    // we calculate can't fit into the destination type,
-                    // we're better off returning an overflow condition than
-                    // a known-wrong value. (Note that no_overflow_int() should
-                    // only be true for signed integers.)
-                    internal_assert(no_overflow_int(op->type)) << op->type << " " << info->bounds;
-                    clear_expr_info(info);
-                    return make_signed_integer_overflow(op->type);
-                }
+    if (op->type.is_int_or_uint()) {
+        // ConstantInterval division is integer division, so we can't use
+        // this code path for floats.
+        div_info.bounds = a_info.bounds / b_info.bounds;
+        div_info.alignment = a_info.alignment / b_info.alignment;
+        div_info.cast_to(op->type);
+        div_info.trim_bounds_using_alignment();
+
+        // Bounded numerator divided by constantish bounded denominator can
+        // sometimes collapse things to a constant at this point. This
+        // mostly happens when the denominator is a constant and the
+        // numerator span is small (e.g. [23, 29]/10 = 2), but there are
+        // also cases with a bounded denominator (e.g. [5, 7]/[4, 5] = 1).
+        if (div_info.bounds.is_single_point()) {
+            if (op->type.can_represent(div_info.bounds.min)) {
+                return make_const(op->type, div_info.bounds.min, info);
+            } else {
+                // Even though this is 'no-overflow-int', if the result
+                // we calculate can't fit into the destination type,
+                // we're better off returning an overflow condition than
+                // a known-wrong value. (Note that no_overflow_int() should
+                // only be true for signed integers.)
+                internal_assert(no_overflow_int(op->type)) << op->type << " " << div_info.bounds;
+                clear_expr_info(info);
+                return make_signed_integer_overflow(op->type);
             }
-        } else {
-            // TODO: Tracking constant integer bounds of floating point values
-            // isn't so useful right now, but if we want integer bounds for
-            // floating point division later, here's the place to put it.
-            clear_expr_info(info);
         }
+    } else {
+        // TODO: Tracking constant integer bounds of floating point values isn't
+        // so useful right now, but if we want integer bounds for floating point
+        // division later, here's the place to put it. Just leave div_info empty
+        // for now (i.e. nothing is known).
+    }
+
+    if (info) {
+        *info = div_info;
     }
 
     bool denominator_non_zero =
@@ -55,9 +59,17 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
 
     if (rewrite(IRMatcher::Overflow() / x, a) ||
         rewrite(x / IRMatcher::Overflow(), b) ||
-        rewrite(x / 1, x) ||
-        rewrite(0 / x, 0) ||
+        rewrite(x / 1, a) ||
+        rewrite(0 / x, a) ||
         false) {
+        if (info) {
+            if (rewrite.result.same_as(a)) {
+                info->intersect(a_info);
+            } else {
+                internal_assert(rewrite.result.same_as(b));
+                info->intersect(b_info);
+            }
+        }
         return rewrite.result;
     }
 

@@ -218,6 +218,7 @@ CMakeSettings.json
 
 # XCode
 *.xcworkspacedata
+!apps/HelloiOS/HelloiOS.xcworkspace/contents.xcworkspacedata
 tools/objc/*.mobileprovision
 tools/objc/BUILD
 xcuserdata
