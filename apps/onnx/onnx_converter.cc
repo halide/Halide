@@ -55,11 +55,11 @@ Halide::Expr inline_func_call(Halide::Expr e) {
     FuncCallInliner inliner;
 
     Halide::Expr r_old = Halide::Internal::simplify(e);
-    Halide::Expr r = inliner.mutate(r_old);
+    Halide::Expr r = inliner(r_old);
 
     while (!r.same_as(r_old)) {
         r_old = Halide::Internal::simplify(r);
-        r = inliner.mutate(r_old);
+        r = inliner(r_old);
     }
 
     return r;
