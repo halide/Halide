@@ -35,6 +35,10 @@ int main(int argc, char **argv) {
         "arm-64-noos-semihosting",
         "arm-64-windows",
         "arm-64-windows-d3d12compute",
+        "arm-64-windows-d3d12compute-d3d12compute_sm60",
+        "arm-64-windows-d3d12compute-d3d12compute_sm62",
+        "arm-64-windows-d3d12compute-d3d12compute_sm66",
+        "arm-64-windows-d3d12compute-d3d12compute_sm69",
         "wasm-32-wasmrt",
         "x86-32-linux",
         "x86-32-osx",
@@ -43,6 +47,11 @@ int main(int argc, char **argv) {
         "x86-64-osx",
         "x86-64-windows",
         "x86-64-windows-d3d12compute",
+        "x86-64-windows-d3d12compute-d3d12compute_sm60",
+        "x86-64-windows-d3d12compute-d3d12compute_sm62",
+        "x86-64-windows-d3d12compute-d3d12compute_sm66",
+        "x86-64-windows-d3d12compute-d3d12compute_sm68",
+        "x86-64-windows-d3d12compute-d3d12compute_sm69",
     };
 
     const auto tmp = Internal::get_test_tmp_dir();

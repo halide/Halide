@@ -1478,6 +1478,16 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx10_1,                ///< Intel AVX10 version 1 support. vector_bits is used to indicate width.
     halide_target_feature_x86_apx,                ///< Intel x86 APX support. Covers initial set of features released as APX: egpr,push2pop2,ppx,ndd .
     halide_target_feature_simulator,              ///< Target is for a simulator environment. Currently only applies to iOS.
+    halide_target_feature_d3d12compute_sm60,      ///< Enable D3D12 Shader Model 6.0 (DXIL, 64-bit types, wave intrinsics). Requires d3d12compute. Uses DXC compiler.
+    halide_target_feature_d3d12compute_sm61,      ///< Enable D3D12 Shader Model 6.1
+    halide_target_feature_d3d12compute_sm62,      ///< Enable D3D12 Shader Model 6.2 (native 16-bit scalar types with -enable-16bit-types)
+    halide_target_feature_d3d12compute_sm63,      ///< Enable D3D12 Shader Model 6.3
+    halide_target_feature_d3d12compute_sm64,      ///< Enable D3D12 Shader Model 6.4
+    halide_target_feature_d3d12compute_sm65,      ///< Enable D3D12 Shader Model 6.5
+    halide_target_feature_d3d12compute_sm66,      ///< Enable D3D12 Shader Model 6.6 (64-bit atomics, packed 8-bit types)
+    halide_target_feature_d3d12compute_sm67,      ///< Enable D3D12 Shader Model 6.7
+    halide_target_feature_d3d12compute_sm68,      ///< Enable D3D12 Shader Model 6.8
+    halide_target_feature_d3d12compute_sm69,      ///< Enable D3D12 Shader Model 6.9 (long vectors 5-1024 lanes, native 16-bit/wave/int64 required)
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
