@@ -216,6 +216,16 @@ void define_enums(py::module &m) {
         .value("AVX10_1", Target::Feature::AVX10_1)
         .value("X86APX", Target::Feature::X86APX)
         .value("Simulator", Target::Feature::Simulator)
+        .value("D3D12ComputeSM60", Target::Feature::D3D12ComputeSM60)
+        .value("D3D12ComputeSM61", Target::Feature::D3D12ComputeSM61)
+        .value("D3D12ComputeSM62", Target::Feature::D3D12ComputeSM62)
+        .value("D3D12ComputeSM63", Target::Feature::D3D12ComputeSM63)
+        .value("D3D12ComputeSM64", Target::Feature::D3D12ComputeSM64)
+        .value("D3D12ComputeSM65", Target::Feature::D3D12ComputeSM65)
+        .value("D3D12ComputeSM66", Target::Feature::D3D12ComputeSM66)
+        .value("D3D12ComputeSM67", Target::Feature::D3D12ComputeSM67)
+        .value("D3D12ComputeSM68", Target::Feature::D3D12ComputeSM68)
+        .value("D3D12ComputeSM69", Target::Feature::D3D12ComputeSM69)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

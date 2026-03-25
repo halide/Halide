@@ -56,6 +56,7 @@
 #define COBJMACROS
 #endif
 #include "mini_d3d12.h"
+#include "mini_dxc.h"
 
 // For all intents and purposes, we always want to use COMPUTE command lists
 // (and queues) ...
@@ -436,6 +437,7 @@ WEAK DXGI_FORMAT FindD3D12FormatForHalideType(void *user_context, halide_type_t 
 WEAK void *lib_d3d12 = nullptr;
 WEAK void *lib_D3DCompiler_47 = nullptr;
 WEAK void *lib_dxgi = nullptr;
+WEAK void *lib_dxcompiler = nullptr;  // DXC: loaded lazily for SM 6.x
 
 struct LibrarySymbol {
     template<typename T>
@@ -456,6 +458,7 @@ WEAK PFN_D3D12_GET_DEBUG_INTERFACE D3D12GetDebugInterface = nullptr;
 WEAK PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignature = nullptr;
 WEAK PFN_D3DCOMPILE D3DCompile = nullptr;
 WEAK PFN_CREATEDXGIFACORY1 CreateDXGIFactory1 = nullptr;
+WEAK PFN_DXC_CREATE_INSTANCE DxcCreateInstance_fp = nullptr;  // DXC factory function
 
 #if defined(__cplusplus) && !defined(_MSC_VER)
 #if defined(__MINGW32__)
@@ -1853,9 +1856,242 @@ WEAK void dump_shader(const char *source, ID3DBlob *compiler_msgs = nullptr) {
         << source << "\n";
 }
 
+// ---- DXC (Shader Model 6.x) support ----
+
+// Parse the SM version from a Halide-emitted HLSL source header.
+// Returns e.g. 60 for "//HALIDE_D3D12_SM 60\n", or 0 if not present.
+static int parse_hlsl_sm_version(const char *source) {
+    const char prefix[] = "//HALIDE_D3D12_SM ";
+    const int prefix_len = 18;  // length of "//HALIDE_D3D12_SM "
+    for (int i = 0; i < prefix_len; ++i) {
+        if (source[i] != prefix[i]) {
+            return 0;
+        }
+    }
+    int sm = 0;
+    for (int i = prefix_len; source[i] >= '0' && source[i] <= '9'; ++i) {
+        sm = sm * 10 + (source[i] - '0');
+    }
+    return sm;
+}
+
+// Copy ASCII/narrow string to wide char buffer (safe for HLSL identifiers and integers).
+static void narrow_to_wide(const char *src, WCHAR *dst, int max_len) {
+    int i = 0;
+    for (; src[i] && i < max_len - 1; ++i) {
+        dst[i] = (WCHAR)(unsigned char)src[i];
+    }
+    dst[i] = 0;
+}
+
+// Append an unsigned integer to a wide char buffer (returns pointer past the last written char).
+static WCHAR *append_uint_wide(WCHAR *dst, WCHAR *end, unsigned int val) {
+    if (dst >= end) {
+        return dst;
+    }
+    if (val == 0) {
+        *dst++ = (WCHAR)'0';
+        return dst;
+    }
+    WCHAR tmp[12];
+    int n = 0;
+    while (val > 0 && n < 12) {
+        tmp[n++] = (WCHAR)('0' + val % 10);
+        val /= 10;
+    }
+    for (int i = n - 1; i >= 0 && dst < end; --i) {
+        *dst++ = tmp[i];
+    }
+    return dst;
+}
+
+// Build a DXC define arg of the form "NAME=VALUE" as a wide string.
+static void build_dxc_define_wide(WCHAR *buf, int buf_len, const WCHAR *name, int value) {
+    WCHAR *p = buf;
+    WCHAR *end = buf + buf_len - 1;
+    for (int i = 0; name[i] && p < end; ++i) {
+        *p++ = name[i];
+    }
+    if (p < end) {
+        *p++ = (WCHAR)'=';
+    }
+    p = append_uint_wide(p, end, (unsigned int)value);
+    *p = 0;
+}
+
+// Lazy DXC loader: loads dxcompiler.dll and resolves DxcCreateInstance on first use.
+WEAK bool D3D12LoadDXC(void *uc) {
+    if (lib_dxcompiler) {
+        return true;
+    }
+    lib_dxcompiler = d3d12_load_library("dxcompiler.dll");
+    if (!lib_dxcompiler) {
+        return false;
+    }
+    DxcCreateInstance_fp = LibrarySymbol::get(uc, lib_dxcompiler, "DxcCreateInstance");
+    return (DxcCreateInstance_fp != nullptr);
+}
+
+// DXC-based shader compilation path for Shader Model 6.x.
+WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_library *library, const char *name,
+                                               int shared_mem_bytes, int threadsX, int threadsY, int threadsZ,
+                                               int sm_version) {
+    TRACELOG;
+
+    if (!D3D12LoadDXC(user_context)) {
+        TRACEFATAL("D3D12Compute: Unable to load dxcompiler.dll. "
+                   "DXC is required for HLSL Shader Model 6.x (d3d12compute_sm60+).");
+        return nullptr;
+    }
+
+    // Create IDxcCompiler3 instance
+    IDxcCompiler3 *compiler = nullptr;
+    HRESULT hr = DxcCreateInstance_fp(CLSID_DxcCompiler, IID_IDxcCompiler3, (LPVOID *)&compiler);
+    if (FAILED(hr) || !compiler) {
+        TRACEFATAL("D3D12Compute: DxcCreateInstance(IDxcCompiler3) failed (HRESULT="
+                   << (void *)(int64_t)hr << ").");
+        return nullptr;
+    }
+
+    // Preprocessor define args for thread counts and shared memory size.
+    // Each define is "-D NAME=VALUE" passed as two separate args.
+    WCHAR def_groupshared[64], def_treads_x[64], def_treads_y[64], def_treads_z[64];
+    build_dxc_define_wide(def_groupshared, 64, (const WCHAR *)L"__GROUPSHARED_SIZE_IN_BYTES", shared_mem_bytes);
+    build_dxc_define_wide(def_treads_x, 64, (const WCHAR *)L"__NUM_TREADS_X", threadsX);
+    build_dxc_define_wide(def_treads_y, 64, (const WCHAR *)L"__NUM_TREADS_Y", threadsY);
+    build_dxc_define_wide(def_treads_z, 64, (const WCHAR *)L"__NUM_TREADS_Z", threadsZ);
+
+    // Entry point (narrow ASCII to wide)
+    WCHAR entry_wide[256];
+    narrow_to_wide(name, entry_wide, 256);
+
+    // Target profile: "cs_6_X" where X = sm_version % 10
+    WCHAR target_profile[16] = {(WCHAR)'c', (WCHAR)'s', (WCHAR)'_', (WCHAR)'6', (WCHAR)'_',
+                                 (WCHAR)('0' + (sm_version % 10)), 0};
+
+    // Build argument array
+    LPCWSTR args[24];
+    UINT32 num_args = 0;
+    args[num_args++] = (LPCWSTR)L"-T";
+    args[num_args++] = target_profile;
+    args[num_args++] = (LPCWSTR)L"-E";
+    args[num_args++] = entry_wide;
+    args[num_args++] = (LPCWSTR)L"-D";
+    args[num_args++] = def_groupshared;
+    args[num_args++] = (LPCWSTR)L"-D";
+    args[num_args++] = def_treads_x;
+    args[num_args++] = (LPCWSTR)L"-D";
+    args[num_args++] = def_treads_y;
+    args[num_args++] = (LPCWSTR)L"-D";
+    args[num_args++] = def_treads_z;
+    if (sm_version >= 62) {
+        args[num_args++] = (LPCWSTR)L"-enable-16bit-types";
+    }
+#if HALIDE_D3D12_DEBUG_SHADERS
+    args[num_args++] = (LPCWSTR)L"-Zi";  // debug info
+    args[num_args++] = (LPCWSTR)L"-Od";  // disable optimizations
+#endif
+
+    // Source buffer (HLSL text passed directly)
+    DxcBuffer source_buffer;
+    source_buffer.Ptr = library->source;
+    source_buffer.Size = (SIZE_T)library->source_length;
+    source_buffer.Encoding = DXC_CP_UTF8;
+
+    // Compile
+    IDxcResult *result_obj = nullptr;
+    hr = compiler->Compile(&source_buffer, args, num_args, /*pIncludeHandler=*/nullptr,
+                           IID_IDxcResult, (LPVOID *)&result_obj);
+    Release_ID3D12Object(compiler);
+
+    if (FAILED(hr) || !result_obj) {
+        TRACEFATAL("D3D12Compute: DXC Compile() call failed (HRESULT=" << (void *)(int64_t)hr << ").");
+        return nullptr;
+    }
+
+    // Check compilation status
+    HRESULT status = S_OK;
+    result_obj->GetStatus(&status);
+
+    if (FAILED(status)) {
+        // Dump DXC error/warning messages
+        IDxcBlobEncoding *errors = nullptr;
+        result_obj->GetErrorBuffer(&errors);
+        const char *error_text = "<no DXC error message>";
+        if (errors && errors->GetBufferSize() > 0) {
+            error_text = (const char *)errors->GetBufferPointer();
+        }
+        BasicPrinter<64 * 1024>(user_context)
+            << "DXC compile error (HRESULT=" << (void *)(int64_t)status << "):\n"
+            << error_text << "\n"
+            << ">>> HLSL shader source dump <<<\n"
+            << library->source << "\n";
+        if (errors) {
+            Release_ID3D12Object(errors);
+        }
+        Release_ID3D12Object(result_obj);
+        return nullptr;
+    }
+
+    // Emit any warnings even on success
+    IDxcBlobEncoding *warnings = nullptr;
+    result_obj->GetErrorBuffer(&warnings);
+    if (warnings && warnings->GetBufferSize() > 0) {
+        BasicPrinter<64 * 1024>(user_context)
+            << "DXC compile warnings:\n"
+            << (const char *)warnings->GetBufferPointer() << "\n";
+    }
+    if (warnings) {
+        Release_ID3D12Object(warnings);
+    }
+
+    // Retrieve compiled DXIL bytecode
+    IDxcBlob *shader_blob = nullptr;
+    result_obj->GetResult(&shader_blob);
+    Release_ID3D12Object(result_obj);
+
+    if (!shader_blob || shader_blob->GetBufferSize() == 0) {
+        TRACEFATAL("D3D12Compute: DXC produced no output DXIL blob.");
+        if (shader_blob) {
+            Release_ID3D12Object(shader_blob);
+        }
+        return nullptr;
+    }
+
+    TRACEPRINT("SUCCESS: DXC compiled HLSL SM " << (sm_version / 10) << "." << (sm_version % 10)
+                                                << " shader with entry '" << name << "'\n");
+
+    // IDxcBlob and ID3DBlob share the same vtable layout (GetBufferPointer/GetBufferSize),
+    // so we can safely reinterpret_cast for storage in d3d12_function.
+    d3d12_function *function = malloct<d3d12_function>();
+    function->shaderBlob = reinterpret_cast<ID3DBlob *>(shader_blob);
+    function->rootSignature = rootSignature;
+    rootSignature->AddRef();
+
+    d3d12_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(device, function);
+    if (pipeline_state == nullptr) {
+        TRACEFATAL("D3D12Compute: Could not allocate pipeline state for DXC shader.");
+        release_object(function);
+        return nullptr;
+    }
+    function->pipeline_state = pipeline_state;
+
+    return function;
+}
+
 WEAK d3d12_function *d3d12_compile_shader(d3d12_device *device, d3d12_library *library, const char *name,
                                           int shared_mem_bytes, int threadsX, int threadsY, int threadsZ) {
     TRACELOG;
+
+    // Dispatch to DXC for SM 6.x shaders (source header "//HALIDE_D3D12_SM NN\n").
+    int sm_version = parse_hlsl_sm_version(library->source);
+    if (sm_version >= 60) {
+        // Round shared memory here too, consistent with FXC path below.
+        shared_mem_bytes = ((shared_mem_bytes > 0 ? shared_mem_bytes : 1) + 0xF) & ~0xF;
+        return d3d12_compile_shader_dxc(device, library, name,
+                                        shared_mem_bytes, threadsX, threadsY, threadsZ,
+                                        sm_version);
+    }
 
     // Round shared memory size up to a non-zero multiple of 16
     TRACEPRINT("groupshared memory size before modification: " << shared_mem_bytes << " bytes\n");
