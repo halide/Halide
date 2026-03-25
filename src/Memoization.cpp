@@ -470,7 +470,7 @@ Stmt inject_memoization(const Stmt &s, const std::map<std::string, Function> &en
 
     InjectMemoization injector(env, memoize_instance++, name, outputs);
 
-    return injector.mutate(s);
+    return injector(s);
 }
 
 namespace {
@@ -563,9 +563,7 @@ private:
 
 Stmt rewrite_memoized_allocations(const Stmt &s, const std::map<std::string, Function> &env) {
 
-    RewriteMemoizedAllocations rewriter(env);
-
-    return rewriter.mutate(s);
+    return RewriteMemoizedAllocations(env)(s);
 }
 
 }  // namespace Internal

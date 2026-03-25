@@ -123,7 +123,7 @@ void JSONCompilerLogger::obfuscate() {
             std::string rule = it.first;
             for (const auto &e : it.second) {
                 ObfuscateNames obfuscater;
-                n[rule].emplace_back(obfuscater.mutate(e));
+                n[rule].emplace_back(obfuscater(e));
             }
         }
         matched_simplifier_rules = n;
@@ -136,8 +136,8 @@ void JSONCompilerLogger::obfuscate() {
             // to post-process output from multiple unrelated Generators
             // and combine Exprs with similar shapes.
             ObfuscateNames obfuscater;
-            auto failed_to_prove = obfuscater.mutate(it.first);
-            auto original_expr = obfuscater.mutate(it.second);
+            auto failed_to_prove = obfuscater(it.first);
+            auto original_expr = obfuscater(it.second);
             n.emplace_back(std::move(failed_to_prove), std::move(original_expr));
         }
         failed_to_prove_exprs = n;

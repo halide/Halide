@@ -785,8 +785,8 @@ class HoistWarpShuffles : public IRMutator {
         Stmt else_case = mutate(op->else_case);
 
         HoistWarpShufflesFromSingleIfStmt hoister;
-        then_case = hoister.mutate(then_case);
-        else_case = hoister.mutate(else_case);
+        then_case = hoister(then_case);
+        else_case = hoister(else_case);
         Stmt s = IfThenElse::make(op->condition, then_case, else_case);
         if (hoister.success) {
             return hoister.rewrap(s);
@@ -794,7 +794,7 @@ class HoistWarpShuffles : public IRMutator {
             // Need to move the ifstmt further inwards instead.
             internal_assert(!else_case.defined()) << "Cannot hoist warp shuffle out of " << s << "\n";
             string pred_name = unique_name('p');
-            s = MoveIfStatementInwards(Variable::make(op->condition.type(), pred_name)).mutate(then_case);
+            s = MoveIfStatementInwards(Variable::make(op->condition.type(), pred_name))(then_case);
             return LetStmt::make(pred_name, op->condition, s);
         }
     }
@@ -824,8 +824,8 @@ class LowerWarpShufflesInEachKernel : public IRMutator {
     Stmt visit(const For *op) override {
         if (op->device_api == DeviceAPI::CUDA && has_lane_loop(op)) {
             Stmt s = op;
-            s = LowerWarpShuffles(cuda_cap).mutate(s);
-            s = HoistWarpShuffles().mutate(s);
+            s = LowerWarpShuffles(cuda_cap)(s);
+            s = HoistWarpShuffles()(s);
             return simplify(s);
         } else {
             return IRMutator::visit(op);
@@ -844,9 +844,9 @@ public:
 
 Stmt lower_warp_shuffles(Stmt s, const Target &t) {
     s = hoist_loop_invariant_values(s);
-    s = SubstituteInLaneVar().mutate(s);
+    s = SubstituteInLaneVar()(s);
     s = simplify(s);
-    s = LowerWarpShufflesInEachKernel(t.get_cuda_capability_lower_bound()).mutate(s);
+    s = LowerWarpShufflesInEachKernel(t.get_cuda_capability_lower_bound())(s);
     return s;
 };
 

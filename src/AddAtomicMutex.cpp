@@ -415,7 +415,7 @@ protected:
             std::string name = unique_name('t');
             index_let = index;
             index = Variable::make(index.type(), name);
-            body = ReplaceStoreIndexWithVar(op->producer_name, index).mutate(body);
+            body = ReplaceStoreIndexWithVar(op->producer_name, index)(body);
         }
         // This generates a pointer to the mutex array
         Expr mutex_array = Variable::make(
@@ -454,8 +454,8 @@ Stmt add_atomic_mutex(Stmt s, const std::vector<Function> &outputs) {
     CheckAtomicValidity check;
     s.accept(&check);
     if (check.any_atomic) {
-        s = RemoveUnnecessaryMutexUse().mutate(s);
-        s = AddAtomicMutex(outputs).mutate(s);
+        s = RemoveUnnecessaryMutexUse()(s);
+        s = AddAtomicMutex(outputs)(s);
     }
     return s;
 }
