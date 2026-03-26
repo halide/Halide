@@ -880,8 +880,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
             // Detect min/max/bitwise patterns by examining the expression structure.
             // Each has the form op(load, rhs) where rhs is independent of the buffer.
             auto detect_rhs = [&](const Expr &a, const Expr &b) -> Expr {
-                if (equal(a, equiv_load) && !expr_uses_var(b, op->name)) { return b; }
-                if (equal(b, equiv_load) && !expr_uses_var(a, op->name)) { return a; }
+                if (equal(a, equiv_load) && !expr_uses_var(b, op->name)) {
+                    return b;
+                }
+                if (equal(b, equiv_load) && !expr_uses_var(a, op->name)) {
+                    return a;
+                }
                 return Expr();
             };
             Expr rhs;
@@ -1768,13 +1772,12 @@ void CodeGen_D3D12Compute_Dev::init_module() {
 #endif
         // DXC (SM 6.x) rejects FXC-specific float literals 1.#IND / 1.#INF.
         // Use asfloat() with IEEE 754 bit patterns instead.
-        << (sm >= 60
-                ? "float nan_f32()     { return asfloat(0x7fc00000u); } \n"
-                  "float neg_inf_f32() { return asfloat(0xff800000u); } \n"
-                  "float inf_f32()     { return asfloat(0x7f800000u); } \n"
-                : "float nan_f32()     { return  1.#IND; } \n"
-                  "float neg_inf_f32() { return -1.#INF; } \n"
-                  "float inf_f32()     { return +1.#INF; } \n")
+        << (sm >= 60 ? "float nan_f32()     { return asfloat(0x7fc00000u); } \n"
+                       "float neg_inf_f32() { return asfloat(0xff800000u); } \n"
+                       "float inf_f32()     { return asfloat(0x7f800000u); } \n" :
+                       "float nan_f32()     { return  1.#IND; } \n"
+                       "float neg_inf_f32() { return -1.#INF; } \n"
+                       "float inf_f32()     { return +1.#INF; } \n")
         << "#define float_from_bits asfloat \n"
         // pow() in HLSL has the same semantics as C if
         // x > 0.  Otherwise, we need to emulate C
