@@ -545,7 +545,8 @@ struct d3d12_buffer {
         ReadOnly,
         WriteOnly,
         Upload,
-        ReadBack
+        ReadBack,
+        Texture
     } type;
 
     // NOTE(marcos): it's UNSAFE to cache a pointer to a 'halide_buffer_t' here
@@ -553,6 +554,11 @@ struct d3d12_buffer {
     // runtime module.
 
     halide_type_t halide_type;
+
+    UINT textureDims;   // 1, 2, or 3 (only valid when type == Texture)
+    UINT textureWidth;
+    UINT textureHeight;
+    UINT textureDepth;
 
     struct transfer_t {
         d3d12_buffer *staging;
@@ -874,11 +880,13 @@ WEAK void release_d3d12_object<d3d12_frame>(d3d12_frame *frame) {
 }
 
 extern WEAK halide_device_interface_t d3d12compute_device_interface;
+extern WEAK halide_device_interface_t d3d12compute_image_device_interface;
 
 WEAK d3d12_buffer *peel_buffer(struct halide_buffer_t *hbuffer) {
     TRACELOG;
     halide_abort_if_false(user_context, (hbuffer != nullptr));
-    halide_abort_if_false(user_context, (hbuffer->device_interface == &d3d12compute_device_interface));
+    halide_abort_if_false(user_context, (hbuffer->device_interface == &d3d12compute_device_interface ||
+                                         hbuffer->device_interface == &d3d12compute_image_device_interface));
     d3d12_buffer *dbuffer = reinterpret_cast<d3d12_buffer *>(hbuffer->device);
     halide_abort_if_false(user_context, (dbuffer != nullptr));
     return dbuffer;
@@ -888,7 +896,8 @@ WEAK const d3d12_buffer *peel_buffer(const struct halide_buffer_t *hbuffer) {
     return peel_buffer(const_cast<halide_buffer_t *>(hbuffer));
 }
 
-WEAK int wrap_buffer(void *user_context, struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
+WEAK int wrap_buffer(void *user_context, struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer,
+                     halide_device_interface_t *device_interface = &d3d12compute_device_interface) {
     halide_abort_if_false(user_context, (hbuffer->device == 0));
     if (hbuffer->device != 0) {
         return halide_error_code_device_wrap_native_failed;
@@ -909,7 +918,7 @@ WEAK int wrap_buffer(void *user_context, struct halide_buffer_t *hbuffer, d3d12_
     dbuffer->halide_type = hbuffer->type;
     hbuffer->device = reinterpret_cast<uint64_t>(dbuffer);
     halide_abort_if_false(user_context, (hbuffer->device_interface == nullptr));
-    hbuffer->device_interface = &d3d12compute_device_interface;
+    hbuffer->device_interface = device_interface;
     hbuffer->device_interface->impl->use_module();
 
     return halide_error_code_success;
@@ -1479,6 +1488,75 @@ WEAK d3d12_buffer *new_buffer(d3d12_device *device, size_t length) {
     d3d12_buffer *pBuffer = malloct<d3d12_buffer>();
     *pBuffer = buffer;
     pBuffer->mallocd = true;
+    return pBuffer;
+}
+
+WEAK d3d12_buffer *new_texture_buffer(d3d12_device *device, UINT width, UINT height, UINT depth, UINT dims, DXGI_FORMAT format) {
+    TRACELOG;
+
+    D3D12_RESOURCE_DESC desc = {};
+    {
+        desc.Alignment = 0;
+        desc.MipLevels = 1;
+        desc.Format = format;
+        desc.SampleDesc.Count = 1;
+        desc.SampleDesc.Quality = 0;
+        desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+        switch (dims) {
+        case 1:
+            desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE1D;
+            desc.Width = width;
+            desc.Height = 1;
+            desc.DepthOrArraySize = 1;
+            break;
+        case 2:
+            desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+            desc.Width = width;
+            desc.Height = height;
+            desc.DepthOrArraySize = 1;
+            break;
+        case 3:
+            desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+            desc.Width = width;
+            desc.Height = height;
+            desc.DepthOrArraySize = depth;
+            break;
+        default:
+            halide_abort_if_false(user_context, false);
+            return nullptr;
+        }
+    }
+
+    D3D12_HEAP_PROPERTIES heapProps = {};
+    {
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+        heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+        heapProps.CreationNodeMask = 0;
+        heapProps.VisibleNodeMask = 0;
+    }
+
+    ID3D12Resource *resource = nullptr;
+    HRESULT result = (*device)->CreateCommittedResource(
+        &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
+        D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&resource));
+    if (D3DErrorCheck(result, resource, nullptr, "Unable to create Direct3D 12 texture")) {
+        return nullptr;
+    }
+
+    d3d12_buffer *pBuffer = malloct<d3d12_buffer>();
+    *pBuffer = {};
+    pBuffer->resource = resource;
+    pBuffer->format = format;
+    pBuffer->type = d3d12_buffer::Texture;
+    pBuffer->textureDims = dims;
+    pBuffer->textureWidth = width;
+    pBuffer->textureHeight = height;
+    pBuffer->textureDepth = (dims == 3) ? depth : 1;
+    pBuffer->state = D3D12_RESOURCE_STATE_COMMON;
+    pBuffer->mallocd = true;
+    __atomic_store_n(&pBuffer->ref_count, 0, __ATOMIC_SEQ_CST);
     return pBuffer;
 }
 
@@ -2279,6 +2357,40 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
         break;
     }
 
+    case d3d12_buffer::Texture: {
+        TRACELEVEL(1, "UAV (Texture)\n");
+
+        D3D12_UNORDERED_ACCESS_VIEW_DESC uavd = {};
+        uavd.Format = input_buffer->format;
+        switch (input_buffer->textureDims) {
+        case 1:
+            uavd.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE1D;
+            uavd.Texture1D.MipSlice = 0;
+            break;
+        case 2:
+            uavd.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+            uavd.Texture2D.MipSlice = 0;
+            uavd.Texture2D.PlaneSlice = 0;
+            break;
+        case 3:
+            uavd.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
+            uavd.Texture3D.MipSlice = 0;
+            uavd.Texture3D.FirstWSlice = 0;
+            uavd.Texture3D.WSize = (UINT)-1;
+            break;
+        default:
+            halide_abort_if_false(user_context, false);
+            break;
+        }
+
+        halide_abort_if_false(user_context, (index < ResourceBindingLimits[UAV]));
+        D3D12_CPU_DESCRIPTOR_HANDLE hDescUAV = binder->CPU[UAV];
+        binder->CPU[UAV].ptr += binder->descriptorSize;
+
+        (*device)->CreateUnorderedAccessView(input_buffer->resource, nullptr, &uavd, hDescUAV);
+        break;
+    }
+
     case d3d12_buffer::Unknown:
     case d3d12_buffer::Upload:
     case d3d12_buffer::ReadBack:
@@ -2947,6 +3059,56 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
     return halide_error_code_success;
 }
 
+WEAK int halide_d3d12compute_image_device_malloc(void *user_context, halide_buffer_t *buf) {
+    TRACELOG;
+
+    TRACEPRINT("user_context: " << user_context << " | halide_buffer_t: " << buf << "\n");
+
+    if (buf->device) {
+        TRACEPRINT("(this buffer already has a device allocation...)\n");
+        return halide_error_code_success;
+    }
+
+    // Textures require 1-3 dimensions, scalar element type
+    int dims = buf->dimensions;
+    if (dims < 1 || dims > 3) {
+        error(user_context) << "D3D12Compute texture buffers must have 1-3 dimensions (got " << dims << ")";
+        return halide_error_code_device_malloc_failed;
+    }
+
+    // Only scalar (1-lane) element types are supported for textures
+    halide_type_t scalar_type = buf->type;
+    scalar_type.lanes = 1;
+    DXGI_FORMAT fmt = FindD3D12FormatForHalideType(user_context, scalar_type);
+    if (fmt == DXGI_FORMAT_UNKNOWN) {
+        error(user_context) << "D3D12Compute: unsupported element type for texture: " << buf->type;
+        return halide_error_code_device_malloc_failed;
+    }
+
+    UINT width = (UINT)buf->dim[0].extent;
+    UINT height = (dims >= 2) ? (UINT)buf->dim[1].extent : 1;
+    UINT depth  = (dims >= 3) ? (UINT)buf->dim[2].extent : 1;
+
+    D3D12ContextHolder d3d12_context(user_context, true);
+    if (d3d12_context.error()) {
+        return d3d12_context.error();
+    }
+
+    d3d12_buffer *d3d12_buf = new_texture_buffer(d3d12_context.device, width, height, depth, (UINT)dims, fmt);
+    if (d3d12_buf == nullptr) {
+        TRACEFATAL("D3D12: Failed to allocate texture " << width << "x" << height << "x" << depth);
+        return halide_error_code_device_malloc_failed;
+    }
+
+    if (wrap_buffer(user_context, buf, d3d12_buf, &d3d12compute_image_device_interface)) {
+        TRACEFATAL("D3D12: unable to wrap halide buffer and D3D12 texture.");
+        error(user_context) << "D3D12: unable to wrap halide buffer and D3D12 texture";
+        return halide_error_code_device_wrap_native_failed;
+    }
+
+    return halide_error_code_success;
+}
+
 WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *buf) {
     TRACELOG;
 
@@ -3121,6 +3283,166 @@ WEAK void do_multidimensional_copy(d3d12_device *device, const device_copy &c,
 }
 
 }  // namespace
+
+WEAK int halide_d3d12compute_image_copy_to_device(void *user_context, halide_buffer_t *buffer) {
+    TRACELOG;
+
+    halide_abort_if_false(user_context, buffer);
+    halide_abort_if_false(user_context, buffer->host && buffer->device);
+
+    D3D12ContextHolder d3d12_context(user_context, true);
+    if (d3d12_context.error()) {
+        return d3d12_context.error();
+    }
+
+    d3d12_buffer *tex_buf = peel_buffer(buffer);
+    halide_abort_if_false(user_context, tex_buf->type == d3d12_buffer::Texture);
+
+    UINT elem_bytes = (UINT)buffer->type.bytes();
+    UINT src_row_bytes = tex_buf->textureWidth * elem_bytes;
+    // D3D12 requires staging buffer rows to be aligned to 256 bytes.
+    UINT row_pitch = ((src_row_bytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) /
+                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) * D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+    size_t staging_size = (size_t)row_pitch * tex_buf->textureHeight * tex_buf->textureDepth;
+
+    size_t staging_byte_offset = suballocate(d3d12_context.device, &upload, staging_size);
+    void *staging_base = buffer_contents(&upload);
+
+    // Copy row-by-row to respect the 256-byte pitch alignment in the staging buffer.
+    const char *host_src = (const char *)buffer->host;
+    char *stg_dst = (char *)staging_base + staging_byte_offset;
+    for (UINT d = 0; d < tex_buf->textureDepth; d++) {
+        for (UINT h = 0; h < tex_buf->textureHeight; h++) {
+            memcpy(stg_dst + ((size_t)d * tex_buf->textureHeight + h) * row_pitch,
+                   host_src + ((size_t)d * tex_buf->textureHeight + h) * src_row_bytes,
+                   src_row_bytes);
+        }
+    }
+
+    d3d12_frame *frame = acquire_frame(d3d12_context.device);
+    d3d12_compute_command_list *cmdList = frame->cmd_list;
+
+    // Transition texture to COPY_DEST (from whatever state it was last left in)
+    D3D12_RESOURCE_BARRIER barrier = {};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    barrier.Transition.pResource = tex_buf->resource;
+    barrier.Transition.StateBefore = tex_buf->state;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    (*cmdList)->ResourceBarrier(1, &barrier);
+
+    D3D12_TEXTURE_COPY_LOCATION dst_loc = {};
+    dst_loc.pResource = tex_buf->resource;
+    dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    dst_loc.SubresourceIndex = 0;
+
+    D3D12_TEXTURE_COPY_LOCATION src_loc = {};
+    src_loc.pResource = upload.resource;
+    src_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    src_loc.PlacedFootprint.Offset = staging_byte_offset;
+    src_loc.PlacedFootprint.Footprint.Format = tex_buf->format;
+    src_loc.PlacedFootprint.Footprint.Width = tex_buf->textureWidth;
+    src_loc.PlacedFootprint.Footprint.Height = tex_buf->textureHeight;
+    src_loc.PlacedFootprint.Footprint.Depth = tex_buf->textureDepth;
+    src_loc.PlacedFootprint.Footprint.RowPitch = row_pitch;
+
+    (*cmdList)->CopyTextureRegion(&dst_loc, 0, 0, 0, &src_loc, nullptr);
+
+    // Transition back to UNORDERED_ACCESS
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    (*cmdList)->ResourceBarrier(1, &barrier);
+    tex_buf->state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+    enqueue_frame(frame);
+    wait_until_completed(frame);
+
+    // Decrement the ref_count that suballocate() incremented — the GPU work is done.
+    __atomic_sub_fetch(&upload.ref_count, 1, __ATOMIC_SEQ_CST);
+
+    return halide_error_code_success;
+}
+
+WEAK int halide_d3d12compute_image_copy_to_host(void *user_context, halide_buffer_t *buffer) {
+    TRACELOG;
+
+    halide_abort_if_false(user_context, buffer);
+    halide_abort_if_false(user_context, buffer->host && buffer->device);
+
+    D3D12ContextHolder d3d12_context(user_context, true);
+    if (d3d12_context.error()) {
+        return d3d12_context.error();
+    }
+
+    d3d12_buffer *tex_buf = peel_buffer(buffer);
+    halide_abort_if_false(user_context, tex_buf->type == d3d12_buffer::Texture);
+
+    UINT elem_bytes = (UINT)buffer->type.bytes();
+    UINT src_row_bytes = tex_buf->textureWidth * elem_bytes;
+    // D3D12 requires staging buffer rows to be aligned to 256 bytes.
+    UINT row_pitch = ((src_row_bytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) /
+                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) * D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+    size_t staging_size = (size_t)row_pitch * tex_buf->textureHeight * tex_buf->textureDepth;
+
+    size_t staging_byte_offset = suballocate(d3d12_context.device, &readback, staging_size);
+
+    d3d12_frame *frame = acquire_frame(d3d12_context.device);
+    d3d12_compute_command_list *cmdList = frame->cmd_list;
+
+    // Transition texture to COPY_SOURCE (from whatever state it was last left in)
+    D3D12_RESOURCE_BARRIER barrier = {};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    barrier.Transition.pResource = tex_buf->resource;
+    barrier.Transition.StateBefore = tex_buf->state;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    (*cmdList)->ResourceBarrier(1, &barrier);
+
+    D3D12_TEXTURE_COPY_LOCATION src_loc = {};
+    src_loc.pResource = tex_buf->resource;
+    src_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    src_loc.SubresourceIndex = 0;
+
+    D3D12_TEXTURE_COPY_LOCATION dst_loc = {};
+    dst_loc.pResource = readback.resource;
+    dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    dst_loc.PlacedFootprint.Offset = staging_byte_offset;
+    dst_loc.PlacedFootprint.Footprint.Format = tex_buf->format;
+    dst_loc.PlacedFootprint.Footprint.Width = tex_buf->textureWidth;
+    dst_loc.PlacedFootprint.Footprint.Height = tex_buf->textureHeight;
+    dst_loc.PlacedFootprint.Footprint.Depth = tex_buf->textureDepth;
+    dst_loc.PlacedFootprint.Footprint.RowPitch = row_pitch;
+
+    (*cmdList)->CopyTextureRegion(&dst_loc, 0, 0, 0, &src_loc, nullptr);
+
+    // Transition back to UNORDERED_ACCESS
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    (*cmdList)->ResourceBarrier(1, &barrier);
+    tex_buf->state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+    enqueue_frame(frame);
+    wait_until_completed(frame);
+
+    // Decrement the ref_count that suballocate() incremented — the GPU work is done.
+    __atomic_sub_fetch(&readback.ref_count, 1, __ATOMIC_SEQ_CST);
+
+    // Unpack row-by-row from the padded staging buffer to the dense host buffer.
+    void *staging_data = buffer_contents(&readback);
+    const char *stg_src = (const char *)staging_data + staging_byte_offset;
+    char *host_dst = (char *)buffer->host;
+    for (UINT d = 0; d < tex_buf->textureDepth; d++) {
+        for (UINT h = 0; h < tex_buf->textureHeight; h++) {
+            memcpy(host_dst + ((size_t)d * tex_buf->textureHeight + h) * src_row_bytes,
+                   stg_src + ((size_t)d * tex_buf->textureHeight + h) * row_pitch,
+                   src_row_bytes);
+        }
+    }
+
+    return halide_error_code_success;
+}
 
 WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t *buffer) {
     TRACELOG;
@@ -3754,6 +4076,11 @@ WEAK const struct halide_device_interface_t *halide_d3d12compute_device_interfac
     return &d3d12compute_device_interface;
 }
 
+WEAK const struct halide_device_interface_t *halide_d3d12compute_image_device_interface() {
+    TRACELOG;
+    return &d3d12compute_image_device_interface;
+}
+
 namespace {
 WEAK __attribute__((destructor)) void halide_d3d12compute_cleanup() {
     TRACELOG;
@@ -3804,6 +4131,42 @@ WEAK halide_device_interface_t d3d12compute_device_interface = {
     halide_device_detach_native,
     nullptr,
     &d3d12compute_device_interface_impl};
+
+WEAK halide_device_interface_impl_t d3d12compute_image_device_interface_impl = {
+    halide_use_jit_module,
+    halide_release_jit_module,
+    halide_d3d12compute_image_device_malloc,
+    halide_d3d12compute_device_free,
+    halide_d3d12compute_device_sync,
+    halide_d3d12compute_device_release,
+    halide_d3d12compute_image_copy_to_host,
+    halide_d3d12compute_image_copy_to_device,
+    halide_d3d12compute_device_and_host_malloc,
+    halide_d3d12compute_device_and_host_free,
+    halide_d3d12compute_buffer_copy,
+    halide_d3d12compute_device_crop,
+    halide_d3d12compute_device_slice,
+    halide_d3d12compute_device_release_crop,
+    halide_d3d12compute_wrap_buffer,
+    halide_d3d12compute_detach_buffer};
+
+WEAK halide_device_interface_t d3d12compute_image_device_interface = {
+    halide_device_malloc,
+    halide_device_free,
+    halide_device_sync,
+    halide_device_release,
+    halide_copy_to_host,
+    halide_copy_to_device,
+    halide_device_and_host_malloc,
+    halide_device_and_host_free,
+    halide_buffer_copy,
+    halide_device_crop,
+    halide_device_slice,
+    halide_device_release_crop,
+    halide_device_wrap_native,
+    halide_device_detach_native,
+    nullptr,
+    &d3d12compute_image_device_interface_impl};
 
 }  // namespace D3D12Compute
 }  // namespace Internal
