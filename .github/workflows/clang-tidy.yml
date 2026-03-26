@@ -7,6 +7,7 @@ on:
       - '**.c'
       - '**.cpp'
       - 'run-clang-tidy.sh'
+      - 'tools/clang-tidy-filter.sh'
       - '**.clang-tidy'
       - '.github/workflows/clang-tidy.yml'
 
