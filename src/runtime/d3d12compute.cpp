@@ -1935,9 +1935,11 @@ WEAK void dump_shader(const char *source, ID3DBlob *compiler_msgs = nullptr) {
 
 // ---- DXC (Shader Model 6.x) support ----
 
+namespace {
+
 // Parse the SM version from a Halide-emitted HLSL source header.
 // Returns e.g. 60 for "//HALIDE_D3D12_SM 60\n", or 0 if not present.
-static int parse_hlsl_sm_version(const char *source) {
+int parse_hlsl_sm_version(const char *source) {
     const char prefix[] = "//HALIDE_D3D12_SM ";
     const int prefix_len = 18;  // length of "//HALIDE_D3D12_SM "
     for (int i = 0; i < prefix_len; ++i) {
@@ -1953,7 +1955,7 @@ static int parse_hlsl_sm_version(const char *source) {
 }
 
 // Copy ASCII/narrow string to wide char buffer (safe for HLSL identifiers and integers).
-static void narrow_to_wide(const char *src, WCHAR *dst, int max_len) {
+void narrow_to_wide(const char *src, WCHAR *dst, int max_len) {
     int i = 0;
     for (; src[i] && i < max_len - 1; ++i) {
         dst[i] = (WCHAR)(unsigned char)src[i];
@@ -1962,7 +1964,7 @@ static void narrow_to_wide(const char *src, WCHAR *dst, int max_len) {
 }
 
 // Append an unsigned integer to a wide char buffer (returns pointer past the last written char).
-static WCHAR *append_uint_wide(WCHAR *dst, WCHAR *end, unsigned int val) {
+WCHAR *append_uint_wide(WCHAR *dst, WCHAR *end, unsigned int val) {
     if (dst >= end) {
         return dst;
     }
@@ -1983,7 +1985,7 @@ static WCHAR *append_uint_wide(WCHAR *dst, WCHAR *end, unsigned int val) {
 }
 
 // Build a DXC define arg of the form "NAME=VALUE" as a wide string.
-static void build_dxc_define_wide(WCHAR *buf, int buf_len, const WCHAR *name, int value) {
+void build_dxc_define_wide(WCHAR *buf, int buf_len, const WCHAR *name, int value) {
     WCHAR *p = buf;
     WCHAR *end = buf + buf_len - 1;
     for (int i = 0; name[i] && p < end; ++i) {
@@ -1995,6 +1997,8 @@ static void build_dxc_define_wide(WCHAR *buf, int buf_len, const WCHAR *name, in
     p = append_uint_wide(p, end, (unsigned int)value);
     *p = 0;
 }
+
+}  // namespace
 
 // Windows API declarations needed for loading DXC by full path.
 // These live in kernel32.dll which is always available on Windows.
