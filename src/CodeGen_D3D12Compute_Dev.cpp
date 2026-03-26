@@ -3,11 +3,11 @@
 #include <sstream>
 #include <utility>
 
+#include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
-#include "CSE.h"
 #include "Debug.h"
 #include "DeviceArgument.h"
 #include "EliminateBoolVectors.h"
