@@ -12,6 +12,7 @@
 #include "DeviceArgument.h"
 #include "EliminateBoolVectors.h"
 #include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
