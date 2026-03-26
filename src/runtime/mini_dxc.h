@@ -38,17 +38,30 @@ DEFINE_GUID(IID_IDxcBlob,
 DEFINE_GUID(IID_IDxcBlobEncoding,
             0x7241d424, 0x2646, 0x4191, 0x97, 0xc0, 0x98, 0xe9, 0x6e, 0x42, 0xfc, 0x68);
 
-// IID_IDxcBlobUtf8: {3DA636C9-BA71-4024-A301-30CBE17E3BF0}
+// IID_IDxcBlobUtf8: {3DA636C9-BA71-4024-A301-30CBF125305B}
 DEFINE_GUID(IID_IDxcBlobUtf8,
-            0x3da636c9, 0xba71, 0x4024, 0xa3, 0x01, 0x30, 0xcb, 0xe1, 0x7e, 0x3b, 0xf0);
+            0x3da636c9, 0xba71, 0x4024, 0xa3, 0x01, 0x30, 0xcb, 0xf1, 0x25, 0x30, 0x5b);
 
 // IID_IDxcResult: {58346CDA-DDE7-4497-9461-6F87AF5E0659}
 DEFINE_GUID(IID_IDxcResult,
             0x58346cda, 0xdde7, 0x4497, 0x94, 0x61, 0x6f, 0x87, 0xaf, 0x5e, 0x06, 0x59);
 
-// IID_IDxcCompiler3: {228B4D35-AAB1-4424-A100-30023112E96D}
+// IID_IDxcCompiler3: {228B4687-5A6A-4730-900C-9702B2203F54}
 DEFINE_GUID(IID_IDxcCompiler3,
-            0x228b4d35, 0xaab1, 0x4424, 0xa1, 0x00, 0x30, 0x02, 0x31, 0x12, 0xe9, 0x6d);
+            0x228b4687, 0x5a6a, 0x4730, 0x90, 0x0c, 0x97, 0x02, 0xb2, 0x20, 0x3f, 0x54);
+
+// IDxcCompiler (v1) fallback: stable since DXC 1.0, present in all DXC builds.
+// IID_IDxcCompiler: {8C210BF3-011F-4422-8D70-6F9ACB8DB617}
+DEFINE_GUID(IID_IDxcCompiler,
+            0x8c210bf3, 0x011f, 0x4422, 0x8d, 0x70, 0x6f, 0x9a, 0xcb, 0x8d, 0xb6, 0x17);
+
+// IDxcLibrary: needed to create source blobs for IDxcCompiler v1.
+// CLSID_DxcLibrary: {6245D6AF-66E0-48FD-80B4-4D271796748C}
+DEFINE_GUID(CLSID_DxcLibrary,
+            0x6245d6af, 0x66e0, 0x48fd, 0x80, 0xb4, 0x4d, 0x27, 0x17, 0x96, 0x74, 0x8c);
+// IID_IDxcLibrary: {E5204DC7-D18C-4C3C-BDFB-851673980FE7}
+DEFINE_GUID(IID_IDxcLibrary,
+            0xe5204dc7, 0xd18c, 0x4c3c, 0xbd, 0xfb, 0x85, 0x16, 0x73, 0x98, 0x0f, 0xe7);
 
 // ---- DxcBuffer ----
 // Describes a source buffer or compiled object for DXC operations.
@@ -66,14 +79,18 @@ typedef interface IDxcBlob IDxcBlob;
 typedef interface IDxcBlobEncoding IDxcBlobEncoding;
 typedef interface IDxcBlobUtf8 IDxcBlobUtf8;
 typedef interface IDxcResult IDxcResult;
+typedef interface IDxcCompiler IDxcCompiler;
 typedef interface IDxcCompiler3 IDxcCompiler3;
+typedef interface IDxcLibrary IDxcLibrary;
 typedef interface IDxcIncludeHandler IDxcIncludeHandler;
 #else
 typedef struct IDxcBlob IDxcBlob;
 typedef struct IDxcBlobEncoding IDxcBlobEncoding;
 typedef struct IDxcBlobUtf8 IDxcBlobUtf8;
 typedef struct IDxcResult IDxcResult;
+typedef struct IDxcCompiler IDxcCompiler;
 typedef struct IDxcCompiler3 IDxcCompiler3;
+typedef struct IDxcLibrary IDxcLibrary;
 typedef struct IDxcIncludeHandler IDxcIncludeHandler;
 #endif
 
@@ -260,6 +277,53 @@ struct IDxcIncludeHandler {
 };
 
 #endif /* C style */
+
+// ---- IDxcLibrary (extends IUnknown) ----
+// Used to create source blobs for IDxcCompiler v1.
+// Only CreateBlobWithEncodingFromPinned is declared here; the earlier slots
+// (SetMalloc, CreateBlobFromBlob, CreateBlobFromFile) are placeholders that
+// must match the real vtable order.
+#if defined(__cplusplus) && !defined(CINTERFACE)
+
+MIDL_INTERFACE("E5204DC7-D18C-4C3C-BDFB-851673980FE7")
+IDxcLibrary : public IUnknown {
+public:
+    virtual HRESULT STDMETHODCALLTYPE SetMalloc(void *pMalloc) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateBlobFromBlob(IDxcBlob *pBlob, UINT32 offset, UINT32 length,
+                                                         _COM_Outptr_ IDxcBlob **ppResult) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateBlobFromFile(LPCWSTR pFileName, UINT32 *pCodePage,
+                                                         _COM_Outptr_ IDxcBlobEncoding **pBlobEncoding) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateBlobWithEncodingFromPinned(
+        LPCVOID pText, UINT32 size, UINT32 codePage,
+        _COM_Outptr_ IDxcBlobEncoding **pBlobEncoding) = 0;
+};
+
+#endif /* C++ only — C-style vtable omitted (not used) */
+
+// ---- IDxcCompiler (v1, extends IUnknown) ----
+// The original DXC compiler interface; present in all DXC builds including the
+// Windows 11 inbox version. Used as fallback when IDxcCompiler3 is unavailable.
+// Only Compile() is declared here; Preprocess/Disassemble placeholders omitted
+// because we never call them.
+#if defined(__cplusplus) && !defined(CINTERFACE)
+
+MIDL_INTERFACE("8C210BF3-011F-4422-8D70-6F9ACB374E6F")
+IDxcCompiler : public IUnknown {
+public:
+    virtual HRESULT STDMETHODCALLTYPE Compile(
+        IDxcBlob *pSource,
+        _In_opt_ LPCWSTR pSourceName,
+        LPCWSTR pEntryPoint,
+        LPCWSTR pTargetProfile,
+        _In_opt_count_(argCount) LPCWSTR *pArguments,
+        UINT32 argCount,
+        _In_opt_ const void *pDefines,
+        UINT32 defineCount,
+        _In_opt_ IDxcIncludeHandler *pIncludeHandler,
+        _COM_Outptr_ IDxcResult **ppResult) = 0;
+};
+
+#endif /* C++ only */
 
 // ---- IDxcCompiler3 (extends IUnknown) ----
 // Primary interface for compiling HLSL source to DXIL.
