@@ -504,6 +504,67 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         }
         rhs << ")";
         print_assignment(op->type, rhs.str());
+    } else if (op->is_intrinsic(Call::image_load)) {
+        // image_load(<name>, <buffer>, <x>, <x-extent>, [<y>, <y-extent>, [<z>, <z-extent>]])
+        // dims = (args.size() - 2) / 2
+        int dims = ((int)op->args.size() - 2) / 2;
+        internal_assert(dims >= 1 && dims <= 3);
+
+        const StringImm *name_imm = op->args[0].as<StringImm>();
+        if (!name_imm) {
+            // vectorized access — use the value from Broadcast
+            internal_assert(op->args[0].as<Broadcast>());
+            name_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+        }
+        internal_assert(name_imm);
+
+        // Collect per-dimension coordinate expressions (args[2], args[4], args[6])
+        vector<string> coords;
+        for (int i = 0; i < dims; i++) {
+            coords.push_back(print_expr(op->args[i * 2 + 2]));
+        }
+
+        ostringstream rhs;
+        rhs << print_name(name_imm->value) << "[";
+        if (dims == 1) {
+            rhs << coords[0];
+        } else if (dims == 2) {
+            rhs << "uint2(" << coords[0] << ", " << coords[1] << ")";
+        } else {
+            rhs << "uint3(" << coords[0] << ", " << coords[1] << ", " << coords[2] << ")";
+        }
+        rhs << "]";
+
+        print_assignment(op->type, rhs.str());
+    } else if (op->is_intrinsic(Call::image_store)) {
+        // image_store(<name>, <buffer>, <x>, [<y>, [<z>,]] <value>)
+        // dims = args.size() - 3  (name, buffer, value are fixed; rest are coords)
+        int dims = (int)op->args.size() - 3;
+        internal_assert(dims >= 1 && dims <= 3);
+
+        const StringImm *name_imm = op->args[0].as<StringImm>();
+        if (!name_imm) {
+            internal_assert(op->args[0].as<Broadcast>());
+            name_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+        }
+        internal_assert(name_imm);
+
+        // Coords are args[2..2+dims-1], value is args.back()
+        vector<string> coords;
+        for (int i = 0; i < dims; i++) {
+            coords.push_back(print_expr(op->args[i + 2]));
+        }
+        string value = print_expr(op->args.back());
+
+        stream << get_indent() << print_name(name_imm->value) << "[";
+        if (dims == 1) {
+            stream << coords[0];
+        } else if (dims == 2) {
+            stream << "uint2(" << coords[0] << ", " << coords[1] << ")";
+        } else {
+            stream << "uint3(" << coords[0] << ", " << coords[1] << ", " << coords[2] << ")";
+        }
+        stream << "] = " << value << ";\n";
     } else if ((op->name == "pow_f16" || op->name == "pow_f32") && can_prove(op->args[0] > 0)) {
         // If we know pow(x, y) is called with x > 0, we can use HLSL's pow
         // directly.
@@ -1583,13 +1644,20 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         stream << ",\n";
         stream << " ";
         if (arg.is_buffer) {
-            // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
-            // all buffers as UAVs since there is no way the runtime can know
-            // if a given halide_buffer_t is read-only (SRV) or read-write...
-            stream << "RW"
-                   << "Buffer"
-                   << "<" << print_type(arg.type) << ">"
-                   << " " << print_name(arg.name);
+            if (arg.memory_type == MemoryType::GPUTexture) {
+                int dims = arg.dimensions;
+                internal_assert(dims >= 1 && dims <= 3) << "D3D12Compute texture must have 1-3 dimensions\n";
+                stream << "RWTexture" << dims << "D"
+                       << "<" << print_type(arg.type) << ">"
+                       << " " << print_name(arg.name);
+            } else {
+                // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
+                // all buffers as UAVs since there is no way the runtime can know
+                // if a given halide_buffer_t is read-only (SRV) or read-write...
+                stream << "RWBuffer"
+                       << "<" << print_type(arg.type) << ">"
+                       << " " << print_name(arg.name);
+            }
             Allocation alloc;
             alloc.type = arg.type;
             allocations.push(arg.name, alloc);
