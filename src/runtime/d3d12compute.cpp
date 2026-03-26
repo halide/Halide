@@ -76,13 +76,13 @@
 
 WEAK void d3d12_debug_dump();
 
-#define d3d12_panic(...)                                                         \
-    do {                                                                         \
-        /* Print the fatal message via halide_print (non-aborting) FIRST so it  \
-           is always visible, even though d3d12_debug_dump() aborts below. */   \
+#define d3d12_panic(...)                                                       \
+    do {                                                                       \
+        /* Print the fatal message via halide_print (non-aborting) FIRST so it \
+           is always visible, even though d3d12_debug_dump() aborts below. */  \
         BasicPrinter<4096>(nullptr) << "D3D12 FATAL: " << __VA_ARGS__ << "\n"  \
-                                    << "vvvvv D3D12 Begin Debug Dump vvvvv\n";  \
-        d3d12_debug_dump(); /* aborts via halide_error inside */                 \
+                                    << "vvvvv D3D12 Begin Debug Dump vvvvv\n"; \
+        d3d12_debug_dump(); /* aborts via halide_error inside */               \
     } while (0)
 
 // v trace and logging utilities for debugging v

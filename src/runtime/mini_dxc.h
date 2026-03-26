@@ -289,13 +289,13 @@ MIDL_INTERFACE("E5204DC7-D18C-4C3C-BDFB-851673980FE7")
 IDxcLibrary : public IUnknown {
 public:
     virtual HRESULT STDMETHODCALLTYPE SetMalloc(void *pMalloc) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateBlobFromBlob(IDxcBlob *pBlob, UINT32 offset, UINT32 length,
-                                                         _COM_Outptr_ IDxcBlob **ppResult) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateBlobFromFile(LPCWSTR pFileName, UINT32 *pCodePage,
-                                                         _COM_Outptr_ IDxcBlobEncoding **pBlobEncoding) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateBlobFromBlob(IDxcBlob * pBlob, UINT32 offset, UINT32 length,
+                                                         _COM_Outptr_ IDxcBlob * *ppResult) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateBlobFromFile(LPCWSTR pFileName, UINT32 * pCodePage,
+                                                         _COM_Outptr_ IDxcBlobEncoding * *pBlobEncoding) = 0;
     virtual HRESULT STDMETHODCALLTYPE CreateBlobWithEncodingFromPinned(
         LPCVOID pText, UINT32 size, UINT32 codePage,
-        _COM_Outptr_ IDxcBlobEncoding **pBlobEncoding) = 0;
+        _COM_Outptr_ IDxcBlobEncoding * *pBlobEncoding) = 0;
 };
 
 #endif /* C++ only — C-style vtable omitted (not used) */
@@ -311,11 +311,11 @@ MIDL_INTERFACE("8C210BF3-011F-4422-8D70-6F9ACB374E6F")
 IDxcCompiler : public IUnknown {
 public:
     virtual HRESULT STDMETHODCALLTYPE Compile(
-        IDxcBlob *pSource,
+        IDxcBlob * pSource,
         _In_opt_ LPCWSTR pSourceName,
         LPCWSTR pEntryPoint,
         LPCWSTR pTargetProfile,
-        _In_opt_count_(argCount) LPCWSTR *pArguments,
+        _In_opt_count_(argCount) LPCWSTR * pArguments,
         UINT32 argCount,
         _In_opt_ const void *pDefines,
         UINT32 defineCount,
