@@ -76,14 +76,13 @@
 
 WEAK void d3d12_debug_dump();
 
-#define d3d12_panic(...)                               \
-    do {                                               \
-        error err(nullptr);                            \
-        err << __VA_ARGS__ << "\n";                    \
-        err << "vvvvv D3D12 Begin Debug Dump vvvvv\n"; \
-        d3d12_debug_dump();                            \
-        err << "^^^^^ D3D12  End  Debug Dump ^^^^^\n"; \
-        err << "D3D12 HALT !!!\n";                     \
+#define d3d12_panic(...)                                                         \
+    do {                                                                         \
+        /* Print the fatal message via halide_print (non-aborting) FIRST so it  \
+           is always visible, even though d3d12_debug_dump() aborts below. */   \
+        BasicPrinter<4096>(nullptr) << "D3D12 FATAL: " << __VA_ARGS__ << "\n"  \
+                                    << "vvvvv D3D12 Begin Debug Dump vvvvv\n";  \
+        d3d12_debug_dump(); /* aborts via halide_error inside */                 \
     } while (0)
 
 // v trace and logging utilities for debugging v
@@ -1997,12 +1996,56 @@ static void build_dxc_define_wide(WCHAR *buf, int buf_len, const WCHAR *name, in
     *p = 0;
 }
 
+// Windows API declarations needed for loading DXC by full path.
+// These live in kernel32.dll which is always available on Windows.
+extern "C" {
+// Returns the full path of the EXE module (hModule=nullptr) or a loaded DLL.
+unsigned long __stdcall GetModuleFileNameA(void *hModule, char *lpFilename, unsigned long nSize);
+// Loads a DLL; when LOAD_WITH_ALTERED_SEARCH_PATH (0x8) is set and lpLibFileName
+// contains a path, the DLL's directory is searched first for its dependencies.
+void *__stdcall LoadLibraryExA(const char *lpLibFileName, void *hFile, unsigned long dwFlags);
+}
+// Flag: use the DLL's own directory (not the EXE directory) for dependency search.
+static const unsigned long kLoadWithAlteredSearchPath = 0x00000008UL;
+
 // Lazy DXC loader: loads dxcompiler.dll and resolves DxcCreateInstance on first use.
+//
+// We load dxcompiler.dll by its FULL PATH from the EXE's directory so that:
+//   1. We get the SDK copy, not a system/inbox dxcompiler.dll (Windows 11 ships
+//      one in System32 that may not expose IDxcCompiler3).
+//   2. With LOAD_WITH_ALTERED_SEARCH_PATH, dxcompiler.dll searches its OWN
+//      directory for dxil.dll (DXIL validator), so both DLLs must reside beside
+//      the EXE (the PowerShell test script copies them there).
 WEAK bool D3D12LoadDXC(void *uc) {
     if (lib_dxcompiler) {
         return true;
     }
-    lib_dxcompiler = d3d12_load_library("dxcompiler.dll");
+
+    // Build full path: <exe_dir>\dxcompiler.dll
+    char path[512];
+    unsigned long n = GetModuleFileNameA(nullptr, path, (unsigned long)(sizeof(path) - 20));
+    if (n > 0) {
+        // Trim to the directory portion (last backslash).
+        char *last_sep = path;
+        for (char *p = path; *p; p++) {
+            if (*p == '\\' || *p == '/') last_sep = p;
+        }
+        char *dst = last_sep + 1;
+        for (const char *src = "dxcompiler.dll"; *src;) {
+            *dst++ = *src++;
+        }
+        *dst = '\0';
+        lib_dxcompiler = LoadLibraryExA(path, nullptr, kLoadWithAlteredSearchPath);
+        if (lib_dxcompiler) {
+            TRACEPRINT("D3D12Compute: Loaded DXC from: " << path << "\n");
+        }
+    }
+
+    // Fallback: let Windows search PATH / system directories.
+    if (!lib_dxcompiler) {
+        lib_dxcompiler = d3d12_load_library("dxcompiler.dll");
+    }
+
     if (!lib_dxcompiler) {
         return false;
     }
@@ -2022,15 +2065,6 @@ WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_librar
         return nullptr;
     }
 
-    // Create IDxcCompiler3 instance
-    IDxcCompiler3 *compiler = nullptr;
-    HRESULT hr = DxcCreateInstance_fp(CLSID_DxcCompiler, IID_IDxcCompiler3, (LPVOID *)&compiler);
-    if (FAILED(hr) || !compiler) {
-        TRACEFATAL("D3D12Compute: DxcCreateInstance(IDxcCompiler3) failed (HRESULT="
-                   << (void *)(int64_t)hr << ").");
-        return nullptr;
-    }
-
     // Preprocessor define args for thread counts and shared memory size.
     // Each define is "-D NAME=VALUE" passed as two separate args.
     WCHAR def_groupshared[64], def_treads_x[64], def_treads_y[64], def_treads_z[64];
@@ -2047,7 +2081,7 @@ WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_librar
     WCHAR target_profile[16] = {(WCHAR)'c', (WCHAR)'s', (WCHAR)'_', (WCHAR)'6', (WCHAR)'_',
                                  (WCHAR)('0' + (sm_version % 10)), 0};
 
-    // Build argument array
+    // Build argument array (shared by both compiler paths)
     LPCWSTR args[24];
     UINT32 num_args = 0;
     args[num_args++] = (LPCWSTR)L"-T";
@@ -2070,21 +2104,70 @@ WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_librar
     args[num_args++] = (LPCWSTR)L"-Od";  // disable optimizations
 #endif
 
-    // Source buffer (HLSL text passed directly)
-    DxcBuffer source_buffer;
-    source_buffer.Ptr = library->source;
-    source_buffer.Size = (SIZE_T)library->source_length;
-    source_buffer.Encoding = DXC_CP_UTF8;
-
-    // Compile
+    // Compile: prefer IDxcCompiler3 (modern DxcBuffer API, DXC 1.6+).
+    // Fall back to IDxcCompiler v1 (present in all DXC builds, including the
+    // Windows 11 inbox version that may not expose IDxcCompiler3).
     IDxcResult *result_obj = nullptr;
-    hr = compiler->Compile(&source_buffer, args, num_args, /*pIncludeHandler=*/nullptr,
-                           IID_IDxcResult, (LPVOID *)&result_obj);
-    Release_ID3D12Object(compiler);
+    HRESULT hr;
 
-    if (FAILED(hr) || !result_obj) {
-        TRACEFATAL("D3D12Compute: DXC Compile() call failed (HRESULT=" << (void *)(int64_t)hr << ").");
-        return nullptr;
+    IDxcCompiler3 *compiler3 = nullptr;
+    hr = DxcCreateInstance_fp(CLSID_DxcCompiler, IID_IDxcCompiler3, (LPVOID *)&compiler3);
+    if (SUCCEEDED(hr) && compiler3) {
+        // IDxcCompiler3 path: pass source as DxcBuffer, no blob creation needed.
+        DxcBuffer source_buffer;
+        source_buffer.Ptr = library->source;
+        source_buffer.Size = (SIZE_T)library->source_length;
+        source_buffer.Encoding = DXC_CP_UTF8;
+        hr = compiler3->Compile(&source_buffer, args, num_args, nullptr,
+                                IID_IDxcResult, (LPVOID *)&result_obj);
+        Release_ID3D12Object(compiler3);
+        if (FAILED(hr) || !result_obj) {
+            TRACEFATAL("D3D12Compute: IDxcCompiler3::Compile() failed (HRESULT=" << (void *)(int64_t)hr << ").");
+            return nullptr;
+        }
+    } else {
+        // IDxcCompiler v1 fallback (E_NOINTERFACE for IDxcCompiler3 on older/inbox DXC).
+        BasicPrinter<256>(nullptr) << "D3D12Compute: IDxcCompiler3 not available (HRESULT="
+                                   << (void *)(int64_t)hr << "), falling back to IDxcCompiler v1.\n";
+        IDxcCompiler *compiler1 = nullptr;
+        hr = DxcCreateInstance_fp(CLSID_DxcCompiler, IID_IDxcCompiler, (LPVOID *)&compiler1);
+        if (FAILED(hr) || !compiler1) {
+            TRACEFATAL("D3D12Compute: DxcCreateInstance failed for IDxcCompiler3 and IDxcCompiler (HRESULT="
+                       << (void *)(int64_t)hr << ").");
+            return nullptr;
+        }
+
+        // Create a pinned source blob via IDxcLibrary (avoids a copy).
+        IDxcLibrary *dxc_lib = nullptr;
+        hr = DxcCreateInstance_fp(CLSID_DxcLibrary, IID_IDxcLibrary, (LPVOID *)&dxc_lib);
+        if (FAILED(hr) || !dxc_lib) {
+            Release_ID3D12Object(compiler1);
+            TRACEFATAL("D3D12Compute: DxcCreateInstance(IDxcLibrary) failed (HRESULT=" << (void *)(int64_t)hr << ").");
+            return nullptr;
+        }
+        IDxcBlobEncoding *source_enc = nullptr;
+        hr = dxc_lib->CreateBlobWithEncodingFromPinned(library->source,
+                                                       (UINT32)library->source_length,
+                                                       DXC_CP_UTF8, &source_enc);
+        Release_ID3D12Object(dxc_lib);
+        if (FAILED(hr) || !source_enc) {
+            Release_ID3D12Object(compiler1);
+            TRACEFATAL("D3D12Compute: IDxcLibrary::CreateBlobWithEncodingFromPinned failed.");
+            return nullptr;
+        }
+
+        // IDxcCompiler v1: takes IDxcBlob* (IDxcBlobEncoding extends IDxcBlob).
+        // Defines are passed via the args array ("-D NAME=VALUE") rather than the
+        // pDefines struct, so we pass nullptr/0 for the define parameters.
+        hr = compiler1->Compile((IDxcBlob *)source_enc, nullptr, entry_wide,
+                                target_profile, args, num_args,
+                                nullptr, 0, nullptr, &result_obj);
+        Release_ID3D12Object(compiler1);
+        Release_ID3D12Object(source_enc);
+        if (FAILED(hr) || !result_obj) {
+            TRACEFATAL("D3D12Compute: IDxcCompiler::Compile() failed (HRESULT=" << (void *)(int64_t)hr << ").");
+            return nullptr;
+        }
     }
 
     // Check compilation status

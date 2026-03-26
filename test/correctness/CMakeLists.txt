@@ -76,6 +76,7 @@ tests(GROUPS correctness
       custom_error_reporter.cpp
       custom_jit_context.cpp
       custom_lowering_pass.cpp
+      d3d12compute_sm6x.cpp
       dead_realization_in_specialization.cpp
       debug_to_file.cpp
       debug_to_file_multiple_outputs.cpp
