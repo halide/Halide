@@ -555,7 +555,7 @@ struct d3d12_buffer {
 
     halide_type_t halide_type;
 
-    UINT textureDims;   // 1, 2, or 3 (only valid when type == Texture)
+    UINT textureDims;  // 1, 2, or 3 (only valid when type == Texture)
     UINT textureWidth;
     UINT textureHeight;
     UINT textureDepth;
@@ -2012,8 +2012,8 @@ WEAK bool D3D12LoadDXC(void *uc) {
 
 // DXC-based shader compilation path for Shader Model 6.x.
 WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_library *library, const char *name,
-                                               int shared_mem_bytes, int threadsX, int threadsY, int threadsZ,
-                                               int sm_version) {
+                                              int shared_mem_bytes, int threadsX, int threadsY, int threadsZ,
+                                              int sm_version) {
     TRACELOG;
 
     if (!D3D12LoadDXC(user_context)) {
@@ -2045,7 +2045,7 @@ WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_librar
 
     // Target profile: "cs_6_X" where X = sm_version % 10
     WCHAR target_profile[16] = {(WCHAR)'c', (WCHAR)'s', (WCHAR)'_', (WCHAR)'6', (WCHAR)'_',
-                                 (WCHAR)('0' + (sm_version % 10)), 0};
+                                (WCHAR)('0' + (sm_version % 10)), 0};
 
     // Build argument array
     LPCWSTR args[24];
@@ -3087,7 +3087,7 @@ WEAK int halide_d3d12compute_image_device_malloc(void *user_context, halide_buff
 
     UINT width = (UINT)buf->dim[0].extent;
     UINT height = (dims >= 2) ? (UINT)buf->dim[1].extent : 1;
-    UINT depth  = (dims >= 3) ? (UINT)buf->dim[2].extent : 1;
+    UINT depth = (dims >= 3) ? (UINT)buf->dim[2].extent : 1;
 
     D3D12ContextHolder d3d12_context(user_context, true);
     if (d3d12_context.error()) {
@@ -3302,7 +3302,8 @@ WEAK int halide_d3d12compute_image_copy_to_device(void *user_context, halide_buf
     UINT src_row_bytes = tex_buf->textureWidth * elem_bytes;
     // D3D12 requires staging buffer rows to be aligned to 256 bytes.
     UINT row_pitch = ((src_row_bytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) /
-                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) * D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) *
+                     D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
     size_t staging_size = (size_t)row_pitch * tex_buf->textureHeight * tex_buf->textureDepth;
 
     size_t staging_byte_offset = suballocate(d3d12_context.device, &upload, staging_size);
@@ -3382,7 +3383,8 @@ WEAK int halide_d3d12compute_image_copy_to_host(void *user_context, halide_buffe
     UINT src_row_bytes = tex_buf->textureWidth * elem_bytes;
     // D3D12 requires staging buffer rows to be aligned to 256 bytes.
     UINT row_pitch = ((src_row_bytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) /
-                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) * D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) *
+                     D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
     size_t staging_size = (size_t)row_pitch * tex_buf->textureHeight * tex_buf->textureDepth;
 
     size_t staging_byte_offset = suballocate(d3d12_context.device, &readback, staging_size);

@@ -119,7 +119,7 @@ struct IDxcBlob {
 MIDL_INTERFACE("7241D424-2646-4191-97C0-98E96E42FC68")
 IDxcBlobEncoding : public IDxcBlob {
 public:
-    virtual HRESULT STDMETHODCALLTYPE GetEncoding(_Out_ BOOL *pKnown, _Out_ UINT32 *pCodePage) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetEncoding(_Out_ BOOL * pKnown, _Out_ UINT32 * pCodePage) = 0;
 };
 
 #else /* C style */
@@ -198,9 +198,9 @@ struct IDxcBlobUtf8 {
 MIDL_INTERFACE("58346CDA-DDE7-4497-9461-6F87AF5E0659")
 IDxcResult : public IUnknown {
 public:
-    virtual HRESULT STDMETHODCALLTYPE GetStatus(_Out_ HRESULT *pStatus) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetResult(_COM_Outptr_ IDxcBlob **ppResult) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetErrorBuffer(_COM_Outptr_ IDxcBlobEncoding **ppErrors) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetStatus(_Out_ HRESULT * pStatus) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetResult(_COM_Outptr_ IDxcBlob * *ppResult) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetErrorBuffer(_COM_Outptr_ IDxcBlobEncoding * *ppErrors) = 0;
 };
 
 #else /* C style */
@@ -240,7 +240,7 @@ IDxcIncludeHandler : public IUnknown {
 public:
     virtual HRESULT STDMETHODCALLTYPE LoadSource(
         _In_z_ LPCWSTR pFilename,
-        _COM_Outptr_result_maybenull_ IDxcBlob **ppIncludeSource) = 0;
+        _COM_Outptr_result_maybenull_ IDxcBlob * *ppIncludeSource) = 0;
 };
 
 #else /* C style */
@@ -296,9 +296,9 @@ typedef struct IDxcCompiler3Vtbl {
                                         REFIID riid,
                                         _COM_Outptr_ LPVOID *ppResult);
     HRESULT(STDMETHODCALLTYPE *Disassemble)(IDxcCompiler3 *This,
-                                             _In_ const DxcBuffer *pObject,
-                                             REFIID riid,
-                                             _COM_Outptr_ LPVOID *ppResult);
+                                            _In_ const DxcBuffer *pObject,
+                                            REFIID riid,
+                                            _COM_Outptr_ LPVOID *ppResult);
     END_INTERFACE
 } IDxcCompiler3Vtbl;
 
