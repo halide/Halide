@@ -474,6 +474,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
 
         // Collect per-dimension coordinate expressions (args[2], args[4], args[6])
         vector<string> coords;
+        coords.reserve(dims);
         for (int i = 0; i < dims; i++) {
             coords.push_back(print_expr(op->args[i * 2 + 2]));
         }
@@ -505,6 +506,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
 
         // Coords are args[2..2+dims-1], value is args.back()
         vector<string> coords;
+        coords.reserve(dims);
         for (int i = 0; i < dims; i++) {
             coords.push_back(print_expr(op->args[i + 2]));
         }
@@ -878,8 +880,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
             // Detect min/max/bitwise patterns by examining the expression structure.
             // Each has the form op(load, rhs) where rhs is independent of the buffer.
             auto detect_rhs = [&](const Expr &a, const Expr &b) -> Expr {
-                if (equal(a, equiv_load) && !expr_uses_var(b, op->name)) return b;
-                if (equal(b, equiv_load) && !expr_uses_var(a, op->name)) return a;
+                if (equal(a, equiv_load) && !expr_uses_var(b, op->name)) { return b; }
+                if (equal(b, equiv_load) && !expr_uses_var(a, op->name)) { return a; }
                 return Expr();
             };
             Expr rhs;
