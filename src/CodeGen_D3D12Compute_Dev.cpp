@@ -9,6 +9,7 @@
 #include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "DeviceArgument.h"
+#include "EliminateBoolVectors.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
@@ -771,6 +772,14 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Select *op) {
+    if (op->type.is_vector()) {
+        // A vector of bool was recursively introduced while
+        // performing codegen. Eliminate it.
+        Expr equiv = eliminate_bool_vectors(op);
+        equiv.accept(this);
+        return;
+    }
+
     ostringstream rhs;
     string true_val = print_expr(op->true_value);
     string false_val = print_expr(op->false_value);
@@ -1047,6 +1056,11 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                                                                   const vector<DeviceArgument> &args) {
 
     debug(2) << "Adding D3D12Compute kernel " << name << "\n";
+
+    debug(2) << "Eliminating bool vectors\n";
+    s = eliminate_bool_vectors(s);
+    debug(2) << "After eliminating bool vectors:\n"
+             << s << "\n";
 
     // Figure out which arguments should be passed in constant.
     // Such arguments should be:
