@@ -724,12 +724,16 @@ void IRPrinter::visit(const IntImm *op) {
     if (op->type == Int(32)) {
         stream << imm_int(op->value);
     } else {
-        stream << typep(op->type) << imm_int(op->value);
+        stream << ansi_imm_int << op->value << "_i" << op->type.bits() << ansi_reset;
     }
 }
 
 void IRPrinter::visit(const UIntImm *op) {
-    stream << typep(op->type) << imm_int(op->value);
+    if (op->type.bits() == 1) {
+        stream << ansi_imm_int << (op->value ? "true" : "false") << ansi_reset;
+    } else {
+        stream << ansi_imm_int << op->value << "_u" << op->type.bits() << ansi_reset;
+    }
 }
 
 void IRPrinter::visit(const FloatImm *op) {
