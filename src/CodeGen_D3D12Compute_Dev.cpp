@@ -582,6 +582,67 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         // HLSL's round intrinsic has the correct semantics for our rounding.
         Expr equiv = Call::make(op->type, "round", op->args, Call::PureExtern);
         equiv.accept(this);
+    } else if (op->is_strict_float_intrinsic()) {
+        // Emit strict float intrinsics as HLSL 'precise'-qualified temporaries.
+        // The 'precise' qualifier prevents the HLSL compiler from reordering or
+        // fusing these operations (e.g. forming FMAs, reassociating additions).
+        // We use a "precise:" cache key prefix so that strict and non-strict
+        // evaluations of the same sub-expression don't share a variable.
+        string rhs;
+        if (op->is_intrinsic(Call::strict_fma)) {
+            string a = print_expr(op->args[0]);
+            string b = print_expr(op->args[1]);
+            string c = print_expr(op->args[2]);
+            rhs = "mad(" + a + ", " + b + ", " + c + ")";
+        } else if (op->is_intrinsic(Call::strict_add)) {
+            string a = print_expr(op->args[0]);
+            string b = print_expr(op->args[1]);
+            rhs = a + " + " + b;
+        } else if (op->is_intrinsic(Call::strict_sub)) {
+            string a = print_expr(op->args[0]);
+            string b = print_expr(op->args[1]);
+            rhs = a + " - " + b;
+        } else if (op->is_intrinsic(Call::strict_mul)) {
+            string a = print_expr(op->args[0]);
+            string b = print_expr(op->args[1]);
+            rhs = a + " * " + b;
+        } else if (op->is_intrinsic(Call::strict_div)) {
+            string a = print_expr(op->args[0]);
+            string b = print_expr(op->args[1]);
+            rhs = a + " / " + b;
+        } else if (op->is_intrinsic(Call::strict_min)) {
+            string a = print_expr(op->args[0]);
+            string b = print_expr(op->args[1]);
+            rhs = "min(" + a + ", " + b + ")";
+        } else if (op->is_intrinsic(Call::strict_max)) {
+            string a = print_expr(op->args[0]);
+            string b = print_expr(op->args[1]);
+            rhs = "max(" + a + ", " + b + ")";
+        } else if (op->is_intrinsic(Call::strict_lt)) {
+            string a = print_expr(op->args[0]);
+            string b = print_expr(op->args[1]);
+            rhs = a + " < " + b;
+        } else if (op->is_intrinsic(Call::strict_le)) {
+            string a = print_expr(op->args[0]);
+            string b = print_expr(op->args[1]);
+            rhs = a + " <= " + b;
+        } else if (op->is_intrinsic(Call::strict_eq)) {
+            string a = print_expr(op->args[0]);
+            string b = print_expr(op->args[1]);
+            rhs = a + " == " + b;
+        } else {
+            internal_assert(op->is_intrinsic(Call::strict_cast));
+            rhs = "(" + print_type(op->type) + ")(" + print_expr(op->args[0]) + ")";
+        }
+        const string key = "precise:" + rhs;
+        const auto it = cache.find(key);
+        if (it == cache.end()) {
+            id = unique_name('_');
+            stream << get_indent() << "precise " << print_type(op->type) << " " << id << " = " << rhs << ";\n";
+            cache[key] = id;
+        } else {
+            id = it->second;
+        }
     } else {
         CodeGen_GPU_C::visit(op);
     }
