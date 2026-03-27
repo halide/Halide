@@ -12,6 +12,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
+#include "StrictifyFloat.h"
 
 #define DEBUG_TYPES (0)
 
@@ -141,6 +142,7 @@ protected:
         void visit(const FloatImm *op) override;
 
         Scope<> groupshared_allocations;
+        bool emit_precise = false;
     };
 
     std::ostringstream src_stream;
@@ -389,6 +391,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         // If we know pow(x, y) is called with x > 0, we can use HLSL's pow
         // directly.
         Expr equiv = Call::make(op->type, "pow", op->args, Call::PureExtern);
+        equiv.accept(this);
+    } else if (op->is_strict_float_intrinsic()) {
+        ScopedValue old_emit_precise(emit_precise, true);
+        Expr equiv = op->is_intrinsic(Call::strict_fma) ?
+                         Call::make(op->type, "fma", op->args, Call::PureExtern) :
+                         unstrictify_float(op);
         equiv.accept(this);
     } else if (op->is_intrinsic(Call::round)) {
         // HLSL's round intrinsic has the correct semantics for our rounding.
@@ -832,7 +840,25 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type type, const string &rhs) {
     string rhs_modified = print_reinforced_cast(type, rhs);
-    return CodeGen_GPU_C::print_assignment(type, rhs_modified);
+    const char *precise_flag = (type.is_float() && emit_precise) ? "precise " : "";
+    const string cache_key = precise_flag + rhs_modified;
+
+    auto cached = cache.find(cache_key);
+    if (cached == cache.end()) {
+        id = unique_name('_');
+        const char *const_flag = output_kind == CPlusPlusImplementation ? " const " : "";
+        if (type.is_handle()) {
+            // Don't print void *, which might lose useful type information. just use auto.
+            stream << get_indent() << "auto *";
+        } else {
+            stream << get_indent() << precise_flag << print_type(type, AppendSpace);
+        }
+        stream << const_flag << id << " = " << rhs_modified << ";\n";
+        cache[cache_key] = id;
+    } else {
+        id = cached->second;
+    }
+    return id;
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type type, const string &value_expr) {
@@ -1259,10 +1285,6 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
 
 void CodeGen_D3D12Compute_Dev::init_module() {
     debug(2) << "D3D12Compute device codegen init_module\n";
-
-    // TODO: we could support strict float intrinsics with the precise qualifier
-    internal_assert(!any_strict_float)
-        << "strict float intrinsics not yet supported in d3d12compute backend";
 
     // wipe the internal kernel source
     src_stream.str("");
