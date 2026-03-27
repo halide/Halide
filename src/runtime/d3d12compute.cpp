@@ -2032,7 +2032,9 @@ WEAK bool D3D12LoadDXC(void *uc) {
         // Trim to the directory portion (last backslash).
         char *last_sep = path;
         for (char *p = path; *p; p++) {
-            if (*p == '\\' || *p == '/') last_sep = p;
+            if (*p == '\\' || *p == '/') {
+                last_sep = p;
+            }
         }
         char *dst = last_sep + 1;
         for (const char *src = "dxcompiler.dll"; *src;) {
