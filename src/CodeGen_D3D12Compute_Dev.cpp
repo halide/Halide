@@ -573,6 +573,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         Expr equiv = Call::make(op->type, "pow", op->args, Call::PureExtern);
         equiv.accept(this);
     } else if (op->is_strict_float_intrinsic()) {
+        // Emit with HLSL 'precise' qualifier, which prevents the compiler from
+        // reordering or fusing these operations (e.g. reassociating additions or
+        // collapsing separate mul+add into an FMA).
+        // Note: HLSL fma() is double-only; for float use mad() instead.
         ScopedValue old_emit_precise(emit_precise, true);
         Expr equiv = op->is_intrinsic(Call::strict_fma) ?
                          Call::make(op->type, op->type.bits() == 64 ? "fma" : "mad", op->args, Call::PureExtern) :
@@ -609,6 +613,15 @@ string hex_literal(T value) {
     hex << "0x" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex
         << value;
     return hex.str();
+}
+
+// Return the HLSL bit-reinterpret intrinsic name for a given type.
+// These names are fixed regardless of SM level (legacy aliases always work).
+string hlsl_reinterpret_name(Type t) {
+    if (t.is_float()) {
+        return t.bits() == 16 ? "asfloat16" : "asfloat";
+    }
+    return t.is_int() ? "asint" : "asuint";
 }
 
 }  // namespace
@@ -690,7 +703,7 @@ struct StoragePackUnpack {
         // the smallest type granularity in HLSL SM 5.1 allows is 32bit types):
         if (op->type.bits() == 32) {
             // loading a 32bit word? great! just reinterpret as float/int/uint
-            rhs << "as" << cg.print_type(op->type.element_of())
+            rhs << hlsl_reinterpret_name(op->type.element_of())
                 << "("
                 << cg.print_name(op->name)
                 << "[" << cg.print_expr(op->index) << "]"
@@ -754,7 +767,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
         if (promoted_type != op->type) {
             shared_promotion_required = true;
             // NOTE(marcos): might need to resort to StoragePackUnpack::unpack_load() here
-            promotion_str = "as" + print_type(promoted_type);
+            promotion_str = hlsl_reinterpret_name(promoted_type);
         }
     }
 
@@ -1029,7 +1042,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
         if (promoted_type != op->value.type()) {
             shared_promotion_required = true;
             // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here
-            promotion_str = "as" + print_type(promoted_type);
+            promotion_str = hlsl_reinterpret_name(promoted_type);
         }
     }
 
@@ -1680,9 +1693,53 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     const bool use_dxc = (sm >= 60);
 
     if (use_dxc) {
-        // DXC (SM 6.x) does not support FXC-style resource/uniform parameters to entry
-        // functions. Declare all resources globally with explicit register bindings and
-        // put scalar uniforms in a constant buffer. The runtime binds:
+        // DXC (SM 6.x): resources must be at global module scope, not function
+        // parameters. When multiple kernels share a module, arg names can clash.
+        // Prefix every arg name with the kernel name to guarantee uniqueness.
+        std::map<string, string> dxc_renames;
+        for (const auto &arg : args) {
+            dxc_renames[arg.name] = name + "_" + arg.name;
+        }
+
+        // Mutate Load/Store/Variable nodes in the body to use the prefixed names.
+        class RenameKernelArgs : public IRMutator {
+            using IRMutator::visit;
+            const std::map<string, string> &renames;
+            Expr visit(const Load *op) override {
+                auto it = renames.find(op->name);
+                if (it != renames.end()) {
+                    return Load::make(op->type, it->second,
+                                      mutate(op->index), op->image, op->param,
+                                      mutate(op->predicate), op->alignment);
+                }
+                return IRMutator::visit(op);
+            }
+            Stmt visit(const Store *op) override {
+                auto it = renames.find(op->name);
+                if (it != renames.end()) {
+                    return Store::make(it->second, mutate(op->value),
+                                       mutate(op->index), op->param,
+                                       mutate(op->predicate), op->alignment);
+                }
+                return IRMutator::visit(op);
+            }
+            Expr visit(const Variable *op) override {
+                auto it = renames.find(op->name);
+                if (it != renames.end()) {
+                    return Variable::make(op->type, it->second,
+                                          op->image, op->param, op->reduction_domain);
+                }
+                return IRMutator::visit(op);
+            }
+
+        public:
+            RenameKernelArgs(const std::map<string, string> &r)
+                : renames(r) {}
+        };
+        s = RenameKernelArgs(dxc_renames)(s);
+
+        // Declare all resources globally with explicit register bindings and
+        // put scalar uniforms in a per-kernel constant buffer. The runtime binds:
         //   - scalar args → cbuffer at register(b0)
         //   - buffer args → UAV at register(u0), register(u1), ...
         int uav_index = 0;
@@ -1692,28 +1749,30 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 has_scalars = true;
                 continue;
             }
+            const string &pname = dxc_renames.at(arg.name);
             if (arg.memory_type == MemoryType::GPUTexture) {
                 int dims = arg.dimensions;
                 internal_assert(dims >= 1 && dims <= 3) << "D3D12Compute texture must have 1-3 dimensions\n";
                 stream << "RWTexture" << dims << "D"
                        << "<" << print_type(arg.type) << ">"
-                       << " " << print_name(arg.name)
+                       << " " << print_name(pname)
                        << " : register(u" << uav_index++ << ");\n";
             } else {
                 stream << "RWBuffer"
                        << "<" << print_type(arg.type) << ">"
-                       << " " << print_name(arg.name)
+                       << " " << print_name(pname)
                        << " : register(u" << uav_index++ << ");\n";
             }
             Allocation alloc;
             alloc.type = arg.type;
-            allocations.push(arg.name, alloc);
+            allocations.push(pname, alloc);
         }
         if (has_scalars) {
-            stream << "cbuffer _halide_uniform_args : register(b0) {\n";
+            stream << "cbuffer " << name << "_uniforms : register(b0) {\n";
             for (const auto &arg : args) {
                 if (!arg.is_buffer) {
-                    stream << " " << print_type(arg.type) << " " << print_name(arg.name) << ";\n";
+                    const string &pname = dxc_renames.at(arg.name);
+                    stream << " " << print_type(arg.type) << " " << print_name(pname) << ";\n";
                 }
             }
             stream << "};\n";
@@ -1774,9 +1833,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     close_scope("kernel " + name);
 
     for (const auto &arg : args) {
-        // Remove buffer arguments from allocation scope
+        // Remove buffer arguments from allocation scope.
+        // DXC allocations were pushed under prefixed names; FXC under original names.
         if (arg.is_buffer) {
-            allocations.pop(arg.name);
+            allocations.pop(use_dxc ? (name + "_" + arg.name) : arg.name);
         }
     }
 
