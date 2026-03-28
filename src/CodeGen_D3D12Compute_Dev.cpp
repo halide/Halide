@@ -372,7 +372,33 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Shuffle *op) 
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
-    if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+    if (op->is_intrinsic(Call::bool_to_mask)) {
+        if (op->args[0].type().is_vector()) {
+            // The argument is already a mask of the right width. Just
+            // sign-extend to the expected type.
+            op->args[0].accept(this);
+        } else {
+            // The argument is a scalar bool. Casting it to an int
+            // produces zero or one. Convert it to -1 of the requested
+            // type.
+            Expr equiv = -Cast::make(op->type, op->args[0]);
+            equiv.accept(this);
+        }
+    } else if (op->is_intrinsic(Call::cast_mask)) {
+        internal_assert(op->args.size() == 1);
+        // Sign-extension is fine
+        Expr equiv = Cast::make(op->type, op->args[0]);
+        equiv.accept(this);
+    } else if (op->is_intrinsic(Call::select_mask)) {
+        internal_assert(op->args.size() == 3);
+        string cond = print_expr(op->args[0]);
+        string true_val = print_expr(op->args[1]);
+        string false_val = print_expr(op->args[2]);
+
+        ostringstream rhs;
+        rhs << "(" << cond << " ? " << true_val << " : " << false_val << ")";
+        print_assignment(op->type, rhs.str());
+    } else if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
         auto fence_type_ptr = as_const_int(op->args[0]);
