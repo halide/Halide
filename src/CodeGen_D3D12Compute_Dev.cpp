@@ -27,8 +27,6 @@ using std::vector;
 
 namespace {
 
-ostringstream nil;
-
 class CodeGen_D3D12Compute_Dev : public CodeGen_GPU_Dev {
 public:
     CodeGen_D3D12Compute_Dev(const Target &target);
