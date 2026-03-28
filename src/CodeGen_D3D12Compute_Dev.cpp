@@ -81,7 +81,6 @@ protected:
             alias("floor", "floor");
             alias("ceil", "ceil");
             alias("trunc", "trunc");
-            alias("pow", "pow");
             alias("asin", "asin");
             alias("acos", "acos");
             alias("tan", "tan");
@@ -386,7 +385,21 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         }
         stream << get_indent() << "GroupMemoryBarrierWithGroupSync();\n";
         print_assignment(op->type, "0");
-    } else if (op->name == "pow_f32" && can_prove(op->args[0] > 0)) {
+    } else if ((op->name == "pow_f16" || op->name == "pow_f32" || op->name == "pow_f64") && op->type.is_vector()) {
+        internal_assert(op->args.size() == 2);
+        const string x = print_expr(op->args[0]);
+        const string y = print_expr(op->args[1]);
+        ostringstream rhs;
+        rhs << print_type(op->type) << "(";
+        for (int i = 0; i < op->type.lanes(); ++i) {
+            rhs << op->name << "(" << x << "[" << i << "], " << y << "[" << i << "])";
+            if (i < op->type.lanes() - 1) {
+                rhs << ", ";
+            }
+        }
+        rhs << ")";
+        print_assignment(op->type, rhs.str());
+    } else if ((op->name == "pow_f16" || op->name == "pow_f32") && can_prove(op->args[0] > 0)) {
         // If we know pow(x, y) is called with x > 0, we can use HLSL's pow
         // directly.
         Expr equiv = Call::make(op->type, "pow", op->args, Call::PureExtern);
@@ -1025,7 +1038,7 @@ void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
     // support predication.
     s = scalarize_predicated_loads_stores(s);
 
-    debug(2) << "CodeGen_D3D12Compute_Dev: after removing predication: \n"
+    debug(2) << "CodeGen_D3D12Compute_Dev: after removing predication:\n"
              << s;
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
@@ -1350,32 +1363,38 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "#define asuint32 asuint\n"
         << "\n"
 #endif
-        << "float nan_f32()     { return  1.#IND; } \n"  // Quiet NaN with minimum fractional value.
-        << "float neg_inf_f32() { return -1.#INF; } \n"
-        << "float inf_f32()     { return +1.#INF; } \n"
-        << "#define float_from_bits asfloat \n"
+        << "float nan_f32()     { return  1.#IND; }\n"  // Quiet NaN with minimum fractional value.
+        << "float neg_inf_f32() { return -1.#INF; }\n"
+        << "float inf_f32()     { return +1.#INF; }\n"
+        << "#define float_from_bits asfloat\n"
         // pow() in HLSL has the same semantics as C if
         // x > 0.  Otherwise, we need to emulate C
         // behavior.
         // TODO(shoaibkamil): Can we simplify this?
-        << "float pow_f32(float x, float y) { \n"
-        << "  if (x > 0.0) {                  \n"
-        << "    return pow(x, y);             \n"
-        << "  } else if (y == 0.0) {          \n"
-        << "    return 1.0f;                  \n"
-        << "  } else if (trunc(y) == y) {     \n"
-        << "    if (fmod(y, 2) == 0) {        \n"
-        << "      return pow(abs(x), y);      \n"
-        << "    } else {                      \n"
-        << "      return -pow(abs(x), y);     \n"
-        << "    }                             \n"
-        << "  } else {                        \n"
-        << "    return nan_f32();             \n"
-        << "  }                               \n"
-        << "}                                 \n"
-        << "#define asinh(x) (log(x + sqrt(x*x + 1))) \n"
-        << "#define acosh(x) (log(x + sqrt(x*x - 1))) \n"
-        << "#define atanh(x) (log((1+x)/(1-x))/2) \n"
+        << "float pow_f32(float x, float y) {\n"
+        << "  if (x > 0.0) {\n"
+        << "    return pow(x, y);\n"
+        << "  } else if (y == 0.0) {\n"
+        << "    return 1.0f;\n"
+        << "  } else if (trunc(y) == y) {\n"
+        << "    if (fmod(y, 2) == 0) {\n"
+        << "      return pow(abs(x), y);\n"
+        << "    } else {\n"
+        << "      return -pow(abs(x), y);\n"
+        << "    }\n"
+        << "  } else {\n"
+        << "    return nan_f32();\n"
+        << "  }\n"
+        << "}\n"
+        << "half pow_f16(half x, half y) {\n"
+        << "  return half(pow_f32(float(x), float(y)));\n"
+        << "}\n"
+        << "double pow_f64(double x, double y) {\n"
+        << "  return double(pow_f32(float(x), float(y)));\n"
+        << "}\n"
+        << "#define asinh(x) (log(x + sqrt(x*x + 1)))\n"
+        << "#define acosh(x) (log(x + sqrt(x*x - 1)))\n"
+        << "#define atanh(x) (log((1+x)/(1-x))/2)\n"
         << "\n";
     //<< "}\n"; // close namespace
 
