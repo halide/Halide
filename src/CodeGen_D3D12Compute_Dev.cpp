@@ -129,6 +129,7 @@ protected:
         void visit(const For *) override;
         void visit(const Ramp *op) override;
         void visit(const Broadcast *op) override;
+        void visit(const Shuffle *op) override;
         void visit(const Call *op) override;
         void visit(const Load *op) override;
         void visit(const Store *op) override;
@@ -362,6 +363,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op
     rhs << ")";
 
     print_assignment(op->type.with_lanes(op->lanes), rhs.str());
+}
+
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Shuffle *op) {
+    // HLSL uses WGSL-like syntax for vector shuffles, not the CLike syntax which is the default.
+    ScopedValue vector_style{vector_declaration_style, VectorDeclarationStyle::WGSLSyntax};
+    CodeGen_GPU_C::visit(op);
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
