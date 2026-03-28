@@ -141,7 +141,6 @@ protected:
         void visit(const Free *op) override;
         void visit(const Cast *op) override;
         void visit(const Atomic *op) override;
-        void visit(const Shuffle *op) override;
         void visit(const AssertStmt *op) override;
         void visit(const FloatImm *op) override;
 
@@ -1367,80 +1366,6 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast *op) {
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const AssertStmt *op) {
     user_warning << "Ignoring assertion inside D3D12Compute kernel: " << op->condition << "\n";
-}
-
-void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Shuffle *op) {
-    if (op->is_interleave()) {
-        int op_lanes = op->type.lanes();
-        int num_vectors = (int)op->vectors.size();
-        int arg_lanes = op->vectors[0].type().lanes();
-        if (num_vectors == 1) {
-            print_assignment(op->type, print_expr(op->vectors[0]));
-            return;
-        }
-        vector<string> arg_exprs(num_vectors);
-        for (int i = 0; i < num_vectors; i++) {
-            arg_exprs[i] = print_expr(op->vectors[i]);
-        }
-        ostringstream rhs;
-        rhs << print_type(op->type) << "(";
-        for (int i = 0; i < op_lanes; i++) {
-            int src = i % num_vectors;
-            int lane = i / num_vectors;
-            rhs << arg_exprs[src];
-            if (arg_lanes > 1) {
-                rhs << "[" << lane << "]";
-            }
-            if (i < op_lanes - 1) {
-                rhs << ", ";
-            }
-        }
-        rhs << ")";
-        print_assignment(op->type, rhs.str());
-    } else if (op->is_extract_element()) {
-        // Extract a single scalar from a vector using subscript.
-        ostringstream rhs;
-        rhs << print_expr(op->vectors[0]) << "[" << op->indices[0] << "]";
-        print_assignment(op->type, rhs.str());
-    } else {
-        // Generic shuffle or slice: build output vector element by element.
-        int total_src_lanes = 0;
-        vector<string> src_exprs;
-        vector<int> src_offsets;
-        for (const auto &v : op->vectors) {
-            src_offsets.push_back(total_src_lanes);
-            src_exprs.push_back(print_expr(v));
-            total_src_lanes += v.type().lanes();
-        }
-        int out_lanes = op->type.lanes();
-        ostringstream rhs;
-        if (out_lanes > 1) {
-            rhs << print_type(op->type) << "(";
-        }
-        for (int i = 0; i < out_lanes; i++) {
-            int idx = op->indices[i];
-            // Find source vector for this index
-            int src = (int)src_exprs.size() - 1;
-            for (int s = 0; s + 1 < (int)op->vectors.size(); s++) {
-                if (idx < src_offsets[s + 1]) {
-                    src = s;
-                    break;
-                }
-            }
-            int lane = idx - src_offsets[src];
-            rhs << src_exprs[src];
-            if (op->vectors[src].type().lanes() > 1) {
-                rhs << "[" << lane << "]";
-            }
-            if (i < out_lanes - 1) {
-                rhs << ", ";
-            }
-        }
-        if (out_lanes > 1) {
-            rhs << ")";
-        }
-        print_assignment(op->type, rhs.str());
-    }
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Atomic *op) {
