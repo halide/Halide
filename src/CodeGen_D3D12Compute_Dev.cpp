@@ -394,7 +394,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
     } else if (op->is_strict_float_intrinsic()) {
         ScopedValue old_emit_precise(emit_precise, true);
         Expr equiv = op->is_intrinsic(Call::strict_fma) ?
-                         Call::make(op->type, "fma", op->args, Call::PureExtern) :
+                         Call::make(op->type, op->type.bits() == 64 ? "fma" : "mad", op->args, Call::PureExtern) :
                          unstrictify_float(op);
         equiv.accept(this);
     } else if (op->is_intrinsic(Call::round)) {
