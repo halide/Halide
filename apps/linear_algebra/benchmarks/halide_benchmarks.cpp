@@ -14,6 +14,7 @@
 #include "clock.h"
 #include "halide_blas.h"
 #include "macros.h"
+#include <cstdlib>
 #include <iostream>
 #include <random>
 #include <string>
@@ -82,8 +83,8 @@ struct BenchmarksBase {
         } else if (benchmark == "gemm_transAB") {
             bench_gemm_transAB(size);
         } else {
-            std::cout << "subroutine: <" << benchmark << "> not known\n";
-            return;
+            std::cerr << "subroutine: <" << benchmark << "> not known\n";
+            std::exit(1);
         }
     }
 
@@ -161,8 +162,8 @@ struct BenchmarksDouble : public BenchmarksBase<double> {
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        std::cout << "USAGE: halide_benchmarks <subroutine> <size>\n";
-        return 0;
+        std::cerr << "USAGE: halide_benchmarks <subroutine> <size>\n";
+        return 1;
     }
 
     std::string subroutine = argv[1];
@@ -174,6 +175,9 @@ int main(int argc, char *argv[]) {
         BenchmarksFloat("Halide").run(subroutine, size);
     } else if (type == 'd') {
         BenchmarksDouble("Halide").run(subroutine, size);
+    } else {
+        std::cerr << "type: '" << type << "' not known. Expected 's' or 'd'.\n";
+        return 1;
     }
 
     return 0;
