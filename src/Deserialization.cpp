@@ -47,7 +47,7 @@ public:
     std::map<std::string, Parameter> deserialize_parameters(const std::vector<uint8_t> &data);
 
 private:
-    // Helper function to deserialize a homogenous vector from a flatbuffer vector,
+    // Helper function to deserialize a homogeneous vector from a flatbuffer vector,
     // does not apply to union types like Stmt and Expr or enum types like MemoryType
     template<typename src, typename dst>
     std::vector<dst> deserialize_vector(const flatbuffers::Vector<::flatbuffers::Offset<src>> *flatbuffer_vec,
@@ -539,12 +539,12 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         const auto *for_stmt = (const Serialize::For *)stmt;
         const auto name = deserialize_string(for_stmt->name());
         const auto min = deserialize_expr(for_stmt->min_type(), for_stmt->min());
-        const auto extent = deserialize_expr(for_stmt->extent_type(), for_stmt->extent());
+        const auto max = deserialize_expr(for_stmt->max_type(), for_stmt->max());
         const ForType for_type = deserialize_for_type(for_stmt->for_type());
         const Partition partition_policy = deserialize_partition(for_stmt->partition_policy());
         const DeviceAPI device_api = deserialize_device_api(for_stmt->device_api());
         const auto body = deserialize_stmt(for_stmt->body_type(), for_stmt->body());
-        return For::make(name, min, extent, for_type, partition_policy, device_api, body);
+        return For::make(name, min, max, for_type, partition_policy, device_api, body);
     }
     case Serialize::Stmt::Store: {
         const auto *store_stmt = (const Serialize::Store *)stmt;
@@ -1036,11 +1036,11 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
 Specialization Deserializer::deserialize_specialization(const Serialize::Specialization *specialization) {
     user_assert(specialization != nullptr);
     const auto condition = deserialize_expr(specialization->condition_type(), specialization->condition());
-    const auto defintion = deserialize_definition(specialization->definition());
+    const auto definition = deserialize_definition(specialization->definition());
     const auto failure_message = deserialize_string(specialization->failure_message());
     Specialization hl_specialization;
     hl_specialization.condition = condition;
-    hl_specialization.definition = defintion;
+    hl_specialization.definition = definition;
     hl_specialization.failure_message = failure_message;
     return hl_specialization;
 }
@@ -1334,7 +1334,7 @@ Buffer<> Deserializer::deserialize_buffer(const Serialize::Buffer *buffer) {
         dense_buffer_dimensions.push_back(dense_dim);
     }
     // To handle cropped buffer, we create a dense buffer and serialize into it,
-    // then create a (potential sparse) buffer with orignal dimension infos and copy from the dense buffer
+    // then create a (potential sparse) buffer with original dimension infos and copy from the dense buffer
     auto fake_dense_buffer = Buffer<>(type, nullptr, dimensions, dense_buffer_dimensions.data(), name + "_dense_fake");
     auto dense_buffer = Buffer<>::make_with_shape_of(fake_dense_buffer, nullptr, nullptr, name + "_dense_tmp");
     memcpy(dense_buffer.data(), buffer->data()->data(), buffer->data()->size());

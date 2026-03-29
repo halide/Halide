@@ -35,7 +35,7 @@ class SelectGPUAPI : public IRMutator {
         internal_assert(op);
 
         if (op->device_api != selected_api) {
-            return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, selected_api, op->body);
+            return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, selected_api, op->body);
         }
         return stmt;
     }
@@ -50,7 +50,7 @@ public:
 }  // namespace
 
 Stmt select_gpu_api(const Stmt &s, const Target &t) {
-    return SelectGPUAPI(t).mutate(s);
+    return SelectGPUAPI(t)(s);
 }
 
 }  // namespace Internal

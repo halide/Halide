@@ -3,6 +3,7 @@
 
 #include <cstdio>
 #include <fstream>
+#include <regex>
 
 using namespace Halide;
 
@@ -117,11 +118,13 @@ int alignment_constraints() {
     Target target = get_jit_target_from_environment();
     target.set_feature(Target::NoRuntime);
 
+    std::regex pattern(R"((align 16)|(llvm\.masked\.load[^\n]*, i32 16))");
+
     std::string unaligned_ll_file = Internal::get_test_tmp_dir() + "unaligned.ll";
     Internal::ensure_no_file_exists(unaligned_ll_file);
     unaligned.compile_to_llvm_assembly(unaligned_ll_file, {p_unaligned}, "unaligned", target);
     std::string unaligned_code = load_file_to_string(unaligned_ll_file);
-    if (unaligned_code.find("align 16") != std::string::npos) {
+    if (std::regex_search(unaligned_code, pattern)) {
         printf("Found aligned load from unaligned buffer!\n");
         return 1;
     }
@@ -130,7 +133,7 @@ int alignment_constraints() {
     Internal::ensure_no_file_exists(aligned_ll_file);
     aligned.compile_to_llvm_assembly(aligned_ll_file, {p_aligned}, "aligned", target);
     std::string aligned_code = load_file_to_string(aligned_ll_file);
-    if (aligned_code.find("align 16") == std::string::npos) {
+    if (!std::regex_search(aligned_code, pattern)) {
         printf("Did not find aligned load from aligned buffer!\n");
         return 1;
     }

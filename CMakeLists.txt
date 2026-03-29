@@ -1,22 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
-
-option(Halide_USE_FETCHCONTENT "When Halide is top-level, use FetchContent for build-time dependencies." ON)
-if (Halide_USE_FETCHCONTENT)
-    list(APPEND CMAKE_PROJECT_TOP_LEVEL_INCLUDES "${CMAKE_CURRENT_LIST_DIR}/cmake/dependencies.cmake")
-endif ()
-
-# TODO: remove this after updating build bots.
-if (NOT DEFINED VCPKG_OVERLAY_PORTS)
-    set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_LIST_DIR}/cmake/vcpkg")
-endif ()
-
-# TODO: remove this after updating build bots.
-if (NOT DEFINED VCPKG_MANIFEST_FEATURES)
-    set(VCPKG_MANIFEST_FEATURES developer)
-endif ()
-
 project(Halide
-        VERSION 20.0.0
+        VERSION 22.0.0
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 
@@ -42,7 +26,6 @@ include(CheckCXXSymbolExists)
 
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
-include(BundleStatic)
 include(HalideFeatures)
 include(HalideGeneratorHelpers)
 include(HalidePackageConfigHelpers)
@@ -200,7 +183,7 @@ option(THREADS_PREFER_PTHREAD_FLAG "When enabled, prefer to use the -pthread fla
 find_package(Threads REQUIRED)
 
 ## LLVM
-find_package(Halide_LLVM 18...99 REQUIRED  # Use 99 to fake a minimum-only constraint
+find_package(Halide_LLVM 21...99 REQUIRED  # Use 99 to fake a minimum-only constraint
              COMPONENTS WebAssembly X86
              OPTIONAL_COMPONENTS AArch64 ARM Hexagon NVPTX PowerPC RISCV)
 
@@ -223,14 +206,11 @@ find_package(PNG)
 ##
 # Optional features. These settings are defined early so that subdirectories see a consistent view
 
-Halide_feature(Halide_BUNDLE_STATIC "Bundle Halide's static dependencies" OFF ADVANCED
-               DEPENDS NOT BUILD_SHARED_LIBS)
+Halide_feature(Halide_BUILDING_IN_CI "Enable if building in CI" OFF ADVANCED)
 
 Halide_feature(Halide_ENABLE_EXCEPTIONS "Enable exceptions in Halide" ON)
 Halide_feature(Halide_ENABLE_RTTI "Enable RTTI in Halide" ON
                DEPENDS LLVM_ENABLE_RTTI)
-Halide_feature(Halide_BUNDLE_STATIC "Bundle Halide's static dependencies" OFF ADVANCED
-               DEPENDS NOT BUILD_SHARED_LIBS)
 
 Halide_feature(WITH_AUTOSCHEDULERS "Build the Halide autoschedulers" ON
                DEPENDS BUILD_SHARED_LIBS)

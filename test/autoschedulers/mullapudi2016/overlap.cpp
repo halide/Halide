@@ -5,7 +5,8 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
         printf("[SKIP] Autoschedulers do not support WebAssembly.\n");
         return 0;
     }
@@ -21,6 +22,12 @@ int main(int argc, char **argv) {
     Buffer<float> input = lambda(x, y, sin(x) + cos(y) + 1.0f).realize({2200, 2200});
 
     int num_levels = 10;
+
+    if (target.arch == Target::X86 && target.bits == 32) {
+        // Work around a slowdown in LLVM that seems to trigger in this particular case:
+        // https://github.com/llvm/llvm-project/issues/156114
+        num_levels = 3;
+    }
 
     std::vector<Func> down;
     for (int i = 0; i < num_levels; i++) {
@@ -44,11 +51,10 @@ int main(int argc, char **argv) {
         up[i](x, y) = (up[i - 1](x / 2, y) + up[i - 1]((x + 1) / 2, y)) / 2;
     }
 
-    // Provide esitmates for pipeline outputs
+    // Provide estimates for pipeline outputs
     up[num_levels - 1].set_estimates({{0, 1500}, {0, 1500}});
 
     // Auto-schedule the pipeline
-    Target target = get_jit_target_from_environment();
     Pipeline p(up[num_levels - 1]);
 
     p.apply_autoscheduler(target, get_mullapudi2016_test_params(target.has_gpu_feature()));

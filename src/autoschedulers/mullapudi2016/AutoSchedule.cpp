@@ -25,7 +25,7 @@ struct ArchParams {
     /** True iff we are scheduling for GPU */
     bool is_gpu_schedule{false};
 
-    /** Maximum level of parallelism avalaible. */
+    /** Maximum level of parallelism available. */
     int parallelism{};
 
     /** Size of the last-level cache (in bytes). */
@@ -1000,9 +1000,14 @@ public:
         case 2: {
             const auto &x = vars.front();
             const auto &y = vars.back();
-            internal_assert(x.strategy == y.strategy);
+            const auto tail_strategy = std::any_of(
+                                           vars.begin(), vars.end(), [](const auto &v) {
+                                               return v.strategy == TailStrategy::GuardWithIf;
+                                           }) ?
+                                           TailStrategy::GuardWithIf :
+                                           TailStrategy::Auto;
 
-            f.tile(x.v, y.v, x.outer, y.outer, x.inner, y.inner, x.factor, y.factor);
+            f.tile(x.v, y.v, x.outer, y.outer, x.inner, y.inner, x.factor, y.factor, tail_strategy);
             oss << "tile("
                 << x.v.name() << ", "
                 << y.v.name() << ", "  //
@@ -1029,7 +1034,15 @@ public:
             const auto &x = vars[0];
             const auto &y = vars[1];
             const auto &z = vars[2];
-            f.tile({x.v, y.v, z.v}, {x.outer, y.outer, z.outer}, {x.inner, y.inner, z.inner}, {x.factor, y.factor, z.factor});
+
+            const auto tail_strategy = std::any_of(
+                                           vars.begin(), vars.end(), [](const auto &v) {
+                                               return v.strategy == TailStrategy::GuardWithIf;
+                                           }) ?
+                                           TailStrategy::GuardWithIf :
+                                           TailStrategy::Auto;
+
+            f.tile({x.v, y.v, z.v}, {x.outer, y.outer, z.outer}, {x.inner, y.inner, z.inner}, {x.factor, y.factor, z.factor}, tail_strategy);
 
             oss << "tile({"
                 << x.v.name() << ", "
@@ -1090,7 +1103,7 @@ private:
  * it cannot be reordered without failing internal assertions.
  *
  * This class is designed to intercept these Halide scheduling calls to make
- * them indempotent; the Halide schedules methods are called only once no matter
+ * them idempotent; the Halide schedules methods are called only once no matter
  * how the dimensions are reordered repeatedly.
  */
 class GPUTilingDedup {
@@ -1209,7 +1222,10 @@ public:
         VarOrRVar outer{var + "_o", v.is_rvar};
         VarOrRVar inner{var + "_i", v.is_rvar};
 
-        split_info entry{v, outer, inner, factor, TailStrategy::Auto};
+        split_info entry{v, outer, inner, factor,
+                         can_prove(factor >= min_n_threads) ?
+                             TailStrategy::Auto :
+                             TailStrategy::GuardWithIf};
         const auto [_, insertion_happened] = parallelize.try_emplace(var, entry);
         if (!insertion_happened) {
             return std::nullopt;
@@ -1715,7 +1731,7 @@ struct Partitioner {
     pair<map<string, Expr>, GroupAnalysis> find_best_tile_config(const Group &g);
 
     // Estimate the benefit (arithmetic + memory) of 'new_grouping' over 'old_grouping'.
-    // Positive values indicates that 'new_grouping' may be preferrable over 'old_grouping'.
+    // Positive values indicates that 'new_grouping' may be preferable over 'old_grouping'.
     // When 'ensure_parallelism' is set to true, this will return an undefined cost
     // if the estimated parallelism is smaller than the machine parameters.
     // If 'no_redundant_work' is set, we only consider the arithmetic cost, i.e. if
@@ -2627,6 +2643,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
 Partitioner::Group Partitioner::merge_groups(const Group &prod_group,
                                              const Group &cons_group) {
     vector<FStage> group_members;
+    group_members.reserve(prod_group.members.size() + cons_group.members.size());
     for (const auto &s : prod_group.members) {
         group_members.push_back(s);
     }
@@ -3320,6 +3337,7 @@ void Partitioner::generate_group_cpu_schedule(
     if (!outer_dims.empty()) {
 
         vector<VarOrRVar> ordering;
+        ordering.reserve(inner_dims.size() + outer_dims.size());
         for (const auto &v : inner_dims) {
             ordering.push_back(v);
         }
@@ -3400,7 +3418,7 @@ void Partitioner::generate_group_cpu_schedule(
                     } else {
                         f_handle.reorder(seq, v);
                         sched.push_schedule(f_handle.name(), g.output.stage_num,
-                                            "reorder(" + seq_var + ", " + var + ")",
+                                            concat_strings("reorder(", seq_var, ", ", var, ")"),
                                             {seq_var, var});
                     }
                 }

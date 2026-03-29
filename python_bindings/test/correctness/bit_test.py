@@ -19,7 +19,7 @@ def test(fn):
 
     fn(input_bools, True, output_bools)
     for i in range(0, 4):
-        assert output_bools[i] == True
+        assert output_bools[i]
 
     fn(input_bools, False, output_bools)
     for i in range(0, 4):

@@ -108,7 +108,8 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 #define DECLARE_LL_INITMOD(mod) \
     DECLARE_INITMOD(mod##_ll)
 
-// Universal CPP Initmods. Please keep sorted alphabetically.
+// Universal CPP Initmods.
+// keep-sorted start ignore_prefixes=//
 DECLARE_CPP_INITMOD(alignment_128)
 DECLARE_CPP_INITMOD(alignment_32)
 DECLARE_CPP_INITMOD(alignment_64)
@@ -175,8 +176,7 @@ DECLARE_CPP_INITMOD(timer_profiler)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
-// TODO(https://github.com/halide/Halide/issues/7248)
-// DECLARE_CPP_INITMOD(webgpu)
+// DECLARE_CPP_INITMOD(webgpu)  // TODO(https://github.com/halide/Halide/issues/7248)
 DECLARE_CPP_INITMOD(webgpu_dawn)
 DECLARE_CPP_INITMOD(webgpu_emscripten)
 DECLARE_CPP_INITMOD(windows_clock)
@@ -189,11 +189,14 @@ DECLARE_CPP_INITMOD(windows_threads)
 DECLARE_CPP_INITMOD(windows_threads_tsan)
 DECLARE_CPP_INITMOD(windows_yield)
 DECLARE_CPP_INITMOD(write_debug_image)
+// keep-sorted end
 
-// Universal LL Initmods. Please keep sorted alphabetically.
+// Universal LL Initmods
+// keep-sorted start
 DECLARE_LL_INITMOD(posix_math)
-DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
+DECLARE_LL_INITMOD(win32_math)
+// keep-sorted end
 
 // Various conditional initmods follow (both LL and CPP).
 #ifdef WITH_METAL
@@ -285,21 +288,25 @@ DECLARE_NO_INITMOD(windows_vulkan)
 #endif  // WITH_VULKAN
 
 #ifdef WITH_X86
-DECLARE_LL_INITMOD(x86_amx)
-DECLARE_LL_INITMOD(x86_avx512)
-DECLARE_LL_INITMOD(x86_avx2)
-DECLARE_LL_INITMOD(x86_avx)
+// keep-sorted start by_regex=["INITMOD\\(.+"]
 DECLARE_LL_INITMOD(x86)
-DECLARE_LL_INITMOD(x86_sse41)
+DECLARE_LL_INITMOD(x86_amx)
+DECLARE_LL_INITMOD(x86_avx)
+DECLARE_LL_INITMOD(x86_avx2)
+DECLARE_LL_INITMOD(x86_avx512)
 DECLARE_CPP_INITMOD(x86_cpu_features)
+DECLARE_LL_INITMOD(x86_sse41)
+// keep-sorted end
 #else
-DECLARE_NO_INITMOD(x86_amx)
-DECLARE_NO_INITMOD(x86_avx512)
-DECLARE_NO_INITMOD(x86_avx2)
-DECLARE_NO_INITMOD(x86_avx)
+// keep-sorted start by_regex=["INITMOD\\(.+"]
 DECLARE_NO_INITMOD(x86)
-DECLARE_NO_INITMOD(x86_sse41)
+DECLARE_NO_INITMOD(x86_amx)
+DECLARE_NO_INITMOD(x86_avx)
+DECLARE_NO_INITMOD(x86_avx2)
+DECLARE_NO_INITMOD(x86_avx512)
 DECLARE_NO_INITMOD(x86_cpu_features)
+DECLARE_NO_INITMOD(x86_sse41)
+// keep-sorted end
 #endif  // WITH_X86
 
 #ifdef WITH_POWERPC
@@ -376,35 +383,15 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64");
             }
         } else {  // 64-bit
-#if LLVM_VERSION >= 190
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128-Fn32");
             } else if (target.os == Target::OSX) {
-#if LLVM_VERSION >= 200
                 return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-n32:64-S128-Fn32");
-#else
-                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128-Fn32");
-#endif
             } else if (target.os == Target::Windows) {
                 return llvm::DataLayout("e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128-Fn32");
             } else {
-#if LLVM_VERSION >= 200
                 return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32");
-#else
-                return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32");
-#endif
             }
-#else
-            if (target.os == Target::IOS) {
-                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
-            } else if (target.os == Target::OSX) {
-                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
-            } else if (target.os == Target::Windows) {
-                return llvm::DataLayout("e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128");
-            } else {
-                return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128");
-            }
-#endif
         }
     } else if (target.arch == Target::POWERPC) {
         if (target.bits == 32) {
@@ -445,16 +432,15 @@ std::optional<llvm::VersionTuple> get_os_version_constraint(const llvm::Triple &
         return std::nullopt;
     }
 
+    // These version constraints track the minimum deployment targets
+    // supported by the latest Xcode version, which is currently 26.2.
+    // See the table here: https://developer.apple.com/support/xcode/
     if (triple.isMacOSX() && triple.isX86()) {
-        // At time of writing (January 2025), this is one version prior
-        // to the oldest version still supported by Apple.
-        return llvm::VersionTuple(12, 0, 0);
+        return llvm::VersionTuple(11, 0, 0);
     }
 
     if (triple.isiOS()) {
-        // At time of writing (January 2025), this is one version prior
-        // to the oldest version still supported by Apple.
-        return llvm::VersionTuple(17, 0, 0);
+        return llvm::VersionTuple(15, 0, 0);
     }
 
     llvm::VersionTuple t = triple.getMinimumSupportedOSVersion();
@@ -596,6 +582,11 @@ llvm::Triple get_triple_for_target(const Target &target) {
         // Return default-constructed triple. Must be set later.
     }
 
+    if (target.has_feature(Target::Simulator)) {
+        user_assert(target.os == Target::IOS) << "Simulator only supported for iOS\n";
+        triple.setEnvironment(llvm::Triple::Simulator);
+    }
+
     // Setting a minimum OS version here enables LLVM to include platform
     // metadata in the MachO object file. Without this, Xcode 15's ld
     // issues warnings about missing the "platform load command".
@@ -646,11 +637,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
             }
         }
         module->setDataLayout(data_layout);
-#if LLVM_VERSION >= 210
         module->setTargetTriple(triple);
-#else
-        module->setTargetTriple(triple.str());
-#endif
     }
 
     // Link them all together
@@ -694,6 +681,29 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
         convert_weak_to_linkonce(gv);
+    }
+
+    // Implement a quick-and-dirty trick to drop runtime functions for the runtime
+    // in case you want to replace them with your own version.
+    // WARNING: Do expect this environment variable to disappear in the future.
+    // Consider this an undocumented and unstable feature. @zvookin has better
+    // ideas for a more sustainable solution involving renaming those functions.
+    if (const char *drop_str = getenv("HL_RUNTIME_DROP_FUNCS")) {
+        int start = 0;
+        int len = strlen(drop_str);
+        while (start < len) {
+            int stop = start;
+            while (drop_str[stop] != 0 && drop_str[stop] != ',') {
+                stop++;
+            }
+            std::string_view func_name(drop_str + start, stop - start);
+            llvm::Function *func = modules[0]->getFunction(func_name);
+            user_assert(func) << "[HL_RUNTIME_DROP_FUNCS] No runtime function found by the name: " << func_name;
+            func->deleteBody();
+            func->setLinkage(llvm::GlobalValue::ExternalLinkage);
+
+            start = stop + 1;
+        }
     }
 
     // Enumerate the functions.
@@ -866,6 +876,13 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     // so convert all of them to linkonce
     constexpr bool allow_stripping_all_weak_functions = true;
     link_modules(modules, t, allow_stripping_all_weak_functions);
+
+    // The initmods are compiled by clang and have some attributes associated with
+    // them that are irrelevant to Wasm. Strip them out.
+    for (llvm::Function &F : *modules[0]) {
+        F.removeFnAttr("target-features");
+        F.removeFnAttr("target-cpu");
+    }
 
     return std::move(modules[0]);
 }
@@ -1104,7 +1121,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // multiple versions of a filter for different levels of x86 -- weak
                 // linking will pick one of the alignment modules unpredictably.
                 // Another way to go is to query the CPU features and align by
-                // 64 oonly if the procesor has AVX-512.
+                // 64 oonly if the processor has AVX-512.
                 // The choice to go 64 all the time is for simplicity and on the idea
                 // that it won't be a noticeable cost in the majority of x86 usage.
                 modules.push_back(get_initmod_alignment_64(c, bits_64, debug));
@@ -1317,7 +1334,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         }
         if (t.has_feature(Target::WebGPU)) {
             if (t.os == Target::Windows) {
-                // TOOD: Test on Windows and enable this.
+                // TODO: Test on Windows and enable this.
                 // See https://github.com/halide/Halide/issues/7249
                 user_error << "WebGPU runtime not yet supported on Windows.\n";
             } else {
@@ -1395,7 +1412,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
         // be inlined to be used.
         //
         // However libdevice has a few routines that are marked
-        // "noinline" which must either be changed to alow inlining or
+        // "noinline" which must either be changed to allow inlining or
         // preserved in generated code. This preserves the intent of
         // keeping these routines out-of-line and hence called by
         // not marking them AvailableExternally.
@@ -1406,11 +1423,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
     }
 
     llvm::Triple triple("nvptx64--");
-#if LLVM_VERSION >= 210
     modules[0]->setTargetTriple(triple);
-#else
-    modules[0]->setTargetTriple(triple.str());
-#endif
 
     llvm::DataLayout dl("e-i64:64-v16:16-v32:32-n16:32:64");
     modules[0]->setDataLayout(dl);

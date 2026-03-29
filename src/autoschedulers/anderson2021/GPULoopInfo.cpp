@@ -1,5 +1,4 @@
 #include "GPULoopInfo.h"
-#include "Errors.h"
 #include "LoopNest.h"
 
 namespace Halide {

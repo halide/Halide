@@ -44,6 +44,7 @@ set_target_properties(Halide_RunGenMain PROPERTIES EXPORT_NAME RunGenMain)
 target_sources(Halide_RunGenMain INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/RunGenMain.cpp>)
 target_sources(Halide_RunGenMain INTERFACE FILE_SET HEADERS FILES RunGen.h)
 target_link_libraries(Halide_RunGenMain INTERFACE Halide::Runtime Halide::ImageIO Halide::Tools)
+target_compile_features(Halide_RunGenMain INTERFACE cxx_std_17)
 
 ##
 # Generator meta-target
@@ -102,4 +103,3 @@ set_target_properties(Halide_ThreadPool PROPERTIES EXPORT_NAME ThreadPool)
 
 target_link_libraries(Halide_ThreadPool INTERFACE Threads::Threads)
 target_sources(Halide_ThreadPool INTERFACE FILE_SET HEADERS FILES halide_thread_pool.h)
-

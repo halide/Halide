@@ -244,10 +244,6 @@ class ExprCost : public IRVisitor {
         }
     }
 
-    void visit(const Shuffle *op) override {
-        arith += 1;
-    }
-
     void visit(const Let *let) override {
         let->value.accept(this);
         let->body.accept(this);
@@ -255,50 +251,63 @@ class ExprCost : public IRVisitor {
 
     // None of the following IR nodes should be encountered when traversing the
     // IR at the level at which the auto scheduler operates.
-    void visit(const Load *) override {
-        internal_error;
+    void fail(const Expr &e) {
+        internal_error << "Unexpected Expr while computing region costs: " << e << "\n"
+                       << "Expected front-end Exprs only.";
     }
-    void visit(const Ramp *) override {
-        internal_error;
+    void fail(const Stmt &s) {
+        internal_error << "Unexpected Stmt while computing region costs:\n"
+                       << s << "\n"
+                       << "Expected front-end Exprs only.";
     }
-    void visit(const Broadcast *) override {
-        internal_error;
+
+    void visit(const Load *op) override {
+        fail(op);
     }
-    void visit(const LetStmt *) override {
-        internal_error;
+    void visit(const Ramp *op) override {
+        fail(op);
     }
-    void visit(const AssertStmt *) override {
-        internal_error;
+    void visit(const Shuffle *op) override {
+        fail(op);
     }
-    void visit(const ProducerConsumer *) override {
-        internal_error;
+    void visit(const Broadcast *op) override {
+        fail(op);
     }
-    void visit(const For *) override {
-        internal_error;
+    void visit(const LetStmt *op) override {
+        fail(op);
     }
-    void visit(const Store *) override {
-        internal_error;
+    void visit(const AssertStmt *op) override {
+        fail(op);
     }
-    void visit(const Provide *) override {
-        internal_error;
+    void visit(const ProducerConsumer *op) override {
+        fail(op);
     }
-    void visit(const Allocate *) override {
-        internal_error;
+    void visit(const For *op) override {
+        fail(op);
     }
-    void visit(const Free *) override {
-        internal_error;
+    void visit(const Store *op) override {
+        fail(op);
     }
-    void visit(const Realize *) override {
-        internal_error;
+    void visit(const Provide *op) override {
+        fail(op);
     }
-    void visit(const Block *) override {
-        internal_error;
+    void visit(const Allocate *op) override {
+        fail(op);
     }
-    void visit(const IfThenElse *) override {
-        internal_error;
+    void visit(const Free *op) override {
+        fail(op);
     }
-    void visit(const Evaluate *) override {
-        internal_error;
+    void visit(const Realize *op) override {
+        fail(op);
+    }
+    void visit(const Block *op) override {
+        fail(op);
+    }
+    void visit(const IfThenElse *op) override {
+        fail(op);
+    }
+    void visit(const Evaluate *op) override {
+        fail(op);
     }
 
 public:
@@ -668,8 +677,9 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f, const set<string> &in
         return {Cost()};
     }
 
-    vector<Cost> func_costs;
     size_t num_stages = f.updates().size() + 1;
+    vector<Cost> func_costs;
+    func_costs.reserve(num_stages);
     for (size_t s = 0; s < num_stages; s++) {
         func_costs.push_back(get_func_stage_cost(f, s, inlines));
     }

@@ -333,7 +333,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     int64_t working_set_c{0};
                     c->compute_working_set_from_features(&working_set_c, features);
                     working_set_here += working_set_c;
-                    continue;  // no need to recompute fetures
+                    continue;  // no need to recompute features
                 }
             }
 
@@ -509,11 +509,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         // done by Funcs inside this loop to values computed
         // outside of it to figure out how much data we'll be
         // streaming onto the core.
-        vector<const FunctionDAG::Edge *> pending;
+        vector<const FunctionDAG::Edge *> pending(stage->incoming_edges.begin(), stage->incoming_edges.end());
         set<const FunctionDAG::Node *> done;
-        for (const auto *e : stage->incoming_edges) {
-            pending.push_back(e);
-        }
         while (!pending.empty()) {
             const auto *e = pending.back();
             pending.pop_back();

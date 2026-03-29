@@ -10,7 +10,7 @@ x, y, c, k = hl.vars("x y c k")
 
 def _func_list(name, size):
     """Return a list containing `size` Funcs, named `name_n` for n in 0..size-1."""
-    return [hl.Func("%s_%d" % (name, i)) for i in range(size)]
+    return [hl.Func(f"{name}_{i}") for i in range(size)]
 
 
 def _downsample(f):
@@ -84,7 +84,7 @@ class local_laplacian:
 
         # Make the processed Gaussian pyramid.
         gPyramid = _func_list("gPyramid", J)
-        # Do a lookup into a lut with 256 entires per intensity level
+        # Do a lookup into a lut with 256 entries per intensity level
         level = k * (1.0 / (g.levels - 1))
         idx = gray[x, y] * hl.f32(g.levels - 1) * 256.0
         idx = hl.clamp(hl.i32(idx), 0, (g.levels - 1) * 256)

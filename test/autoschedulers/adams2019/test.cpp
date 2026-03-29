@@ -28,6 +28,7 @@ bool test_caching(Pipeline &p1, Pipeline &p2, const Target &target) {
             // Turn off caching.
             {"disable_memoized_features", "1"},
             {"disable_memoized_blocks", "1"},
+            {"beam_size", "4"},
         });
 
     // Turn off caching.
@@ -902,6 +903,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::cout << "adams2019 testing passed\n";
+    std::cout << "Success!\n";
     return 0;
 }

@@ -661,8 +661,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
             stage_scope_with_concrete_rvar_bounds.set_containing_scope(&scope);
             stage_scope_with_symbolic_rvar_bounds.set_containing_scope(&scope);
             for (const auto &rv : sched.rvars()) {
-                Expr min = simplify(apply_param_estimates.mutate(rv.min));
-                Expr max = simplify(apply_param_estimates.mutate(rv.min + rv.extent - 1));
+                Expr min = simplify(apply_param_estimates(rv.min));
+                Expr max = simplify(apply_param_estimates(rv.min + rv.extent - 1));
                 stage_scope_with_concrete_rvar_bounds.push(rv.var, Interval(min, max));
                 min = Variable::make(Int(32), consumer.name() + "." + rv.var + ".min");
                 max = Variable::make(Int(32), consumer.name() + "." + rv.var + ".max");
@@ -695,8 +695,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                     const auto &req = node.region_required[j];
                     auto &comp = node.region_computed[j];
                     comp.depends_on_estimate = depends_on_estimate(comp.in.min) || depends_on_estimate(comp.in.max);
-                    comp.in.min = simplify(apply_param_estimates.mutate(comp.in.min));
-                    comp.in.max = simplify(apply_param_estimates.mutate(comp.in.max));
+                    comp.in.min = simplify(apply_param_estimates(comp.in.min));
+                    comp.in.max = simplify(apply_param_estimates(comp.in.max));
                     if (equal(comp.in.min, req.min) && equal(comp.in.max, req.max)) {
                         comp.equals_required = true;
                     } else {
@@ -921,7 +921,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
 
             stage.index = s;
 
-            exprs = apply_param_estimates.mutate(exprs);
+            exprs = apply_param_estimates(exprs);
 
             // For this stage scope we want symbolic bounds for the rvars
 
@@ -949,8 +949,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                             << edge.producer->func.name() << " -> " << edge.consumer->name << "\n";
                         bool min_dependent = depends_on_estimate(in.min);
                         bool max_dependent = depends_on_estimate(in.max);
-                        Expr min_value = simplify(apply_param_estimates.mutate(in.min));
-                        Expr max_value = simplify(apply_param_estimates.mutate(in.max));
+                        Expr min_value = simplify(apply_param_estimates(in.min));
+                        Expr max_value = simplify(apply_param_estimates(in.max));
                         Edge::BoundInfo min(min_value, *edge.consumer, min_dependent);
                         Edge::BoundInfo max(max_value, *edge.consumer, max_dependent);
                         edge.bounds.emplace_back(std::move(min), std::move(max));

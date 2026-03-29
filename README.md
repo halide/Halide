@@ -4,7 +4,7 @@ Halide is a programming language designed to make it easier to write
 high-performance image and array processing code on modern machines. Halide
 currently targets:
 
-- CPU architectures: X86, ARM, Hexagon, PowerPC, RISC-V
+- CPU architectures: X86, ARM, Hexagon, PowerPC, RISC-V, WebAssembly
 - Operating systems: Linux, Windows, macOS, Android, iOS, Qualcomm QuRT
 - GPU Compute APIs: CUDA, OpenCL, Apple Metal, Microsoft Direct X 12, Vulkan
 
@@ -21,9 +21,9 @@ For more detail about what Halide is, see https://halide-lang.org.
 
 For API documentation see https://halide-lang.org/docs.
 
-For some example code, read through the tutorials online
-at https://halide-lang.org/tutorials. The corresponding code is in the
-`tutorials/` directory. Larger examples are in the `apps/` directory.
+For some example code, read through the tutorials online at
+https://halide-lang.org/tutorials. The corresponding code is in the `tutorials/`
+directory. Larger examples are in the `apps/` directory.
 
 If you've acquired a full source distribution and want to build Halide, see the
 [notes below](#building-halide).
@@ -32,9 +32,9 @@ If you've acquired a full source distribution and want to build Halide, see the
 
 ## Pip
 
-As of Halide 19.0.0, we provide binary wheels on PyPI. Halide provides bindings
-for C++ and Python. Even if you only intend to use Halide from C++, pip may be
-the easiest way to get a binary build of Halide.
+We provide binary wheels on PyPI. Halide provides bindings for C++ and Python.
+Even if you only intend to use Halide from C++, pip may be the easiest way to
+get a binary build of Halide.
 
 Full releases may be installed with `pip` like so:
 
@@ -42,11 +42,18 @@ Full releases may be installed with `pip` like so:
 $ pip install halide
 ```
 
-Every commit to `main` is published to Test PyPI as a development version and
-these may be installed with a few extra flags:
+Every commit to `main` is published to our [package index][halide-pypi] as a
+development version. If you use [uv](https://docs.astral.sh/uv/), you can pin
+the nightly Halide in a project like so:
 
 ```shell
-$ pip install halide --pre --extra-index-url https://test.pypi.org/simple
+$ uv add halide --prerelease=allow --index https://pypi.halide-lang.org/simple
+```
+
+Or install directly with `pip`:
+
+```shell
+$ pip install halide --pre --extra-index-url https://pypi.halide-lang.org/simple
 ```
 
 Currently, we provide wheels for: Windows x86-64, macOS x86-64, macOS arm64, and
@@ -59,8 +66,8 @@ installed it in. On Windows, you will need to add the virtual environment root
 directory to `CMAKE_PREFIX_PATH`. This can be done by running
 `set CMAKE_PREFIX_PATH=%VIRTUAL_ENV%` in `cmd`.
 
-Other build systems can find the Halide root path by running `python -c 
-"import halide; print(halide.install_dir())"`.
+Other build systems can find the Halide root path by running
+`python -c "import halide; print(halide.install_dir())"`.
 
 ## Homebrew
 
@@ -73,23 +80,16 @@ $ brew install halide
 
 ## Binary tarballs
 
-The latest version of Halide can always be found on GitHub
-at https://github.com/halide/Halide/releases
+The latest version of Halide can always be found on GitHub at
+https://github.com/halide/Halide/releases
 
 We provide binary releases for many popular platforms and architectures,
 including 32/64-bit x86 Windows, 64-bit x86/ARM macOS, and 32/64-bit x86/ARM
 Ubuntu Linux.
 
-The macOS releases are built using XCode's command-line tools with Apple Clang
-500.2.76. This means that we link against libc++ instead of libstdc++. You may
-need to adjust compiler options accordingly if you're using an older XCode which
-does not default to libc++.
-
-We use a recent Ubuntu LTS to build the Linux releases; if your distribution is
-too old, it might not have the requisite glibc. 
-
-Nightly builds of Halide and the LLVM versions we use in CI are also available
-at https://buildbot.halide-lang.org/
+The Linux tarballs are built on a recent Ubuntu LTS; if your distribution is too
+old, it might not have the requisite glibc. The [pip wheels](#pip) are built for
+manylinux_2_28 and are more broadly compatible.
 
 ## Vcpkg
 
@@ -102,8 +102,7 @@ $ vcpkg install halide:x64-windows # or x64-linux/x64-osx
 
 One caveat: vcpkg installs only the minimum Halide backends required to compile
 code for the active platform. If you want to include all the backends, you
-should install `halide[target-all]:x64-windows` instead. Note that since this
-will build LLVM, it will take a _lot_ of disk space (up to 100GB).
+should install `halide[target-all]:x64-windows` instead.
 
 ## Other package managers
 
@@ -124,7 +123,7 @@ These are the **tested** host toolchain and platform combinations for building
 and running the Halide compiler library.
 
 | Compiler   | Version      | OS                     | Architectures |
-|------------|--------------|------------------------|---------------|
+| ---------- | ------------ | ---------------------- | ------------- |
 | GCC        | 9.5          | Ubuntu Linux 20.04 LTS | x86, x64      |
 | GCC        | 11.4         | Ubuntu Linux 22.04 LTS | ARM32, ARM64  |
 | MSVC       | 2022 (19.37) | Windows 11 (22631)     | x86, x64      |
@@ -151,24 +150,41 @@ issue.
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, or trunk. At the time of writing,
-this means versions 20, 19, and 18 are supported, but 17 is not.
+this means versions 23, 22, and 21 are supported, but 20 is not.
 
-It is simplest to get a binary release of LLVM on macOS by using
-[Homebrew](https://brew.sh). Just run `brew install llvm`. On Debian flavors of
-Linux, the [LLVM APT repo](https://apt.llvm.org) is best; use the provided
-installation script. We know of no suitable official binary releases for
-Windows, however the ones we use in CI can usually be found at
-https://buildbot.halide-lang.org, along with tarballs for our other tested
-platforms. See [the section on Windows](#windows) below for further advice.
-
-If your OS does not have packages for LLVM, or you want more control over the
-configuration, you can build it yourself. First check it out from GitHub:
+We publish the LLVM builds we use in CI as Python packages on our
+[package index][halide-pypi]. This is the easiest way to get a suitable LLVM on
+any platform. From the Halide source tree, install with
+[uv](https://docs.astral.sh/uv/):
 
 ```shell
-$ git clone --depth 1 --branch llvmorg-19.1.5 https://github.com/llvm/llvm-project.git
+$ uv sync --group ci-llvm-22 --no-install-project
+$ export Halide_LLVM_ROOT=$(halide-llvm --prefix)
 ```
 
-(LLVM 19.1.5 is the most recent released LLVM at the time of writing. For
+Replace `22` with the desired LLVM major version (`21`, `22`, `23`, or `main`).
+Binary wheels are available for Linux (x86-64, x86-32, AArch64, ARMv7), macOS
+(x86-64, ARM64), and Windows (x86-64, x86-32).
+
+On macOS, [Homebrew](https://brew.sh) is also a good option:
+`brew install llvm`. On Debian flavors of Linux, the
+[LLVM APT repo](https://apt.llvm.org) works well; use the provided installation
+script.
+
+<details>
+<summary>Building LLVM from source (advanced)</summary>
+
+> [!WARNING] Building LLVM from source requires significant time, disk space,
+> and RAM. Prefer the pre-built binaries above unless you need a custom
+> configuration.
+
+First check it out from GitHub:
+
+```shell
+$ git clone --depth 1 --branch llvmorg-21.1.8 https://github.com/llvm/llvm-project.git
+```
+
+(LLVM 21.1.8 is the most recent released LLVM at the time of writing. For
 current trunk, use `main` instead)
 
 Then build it like so:
@@ -210,20 +226,20 @@ Note that you _must_ add `clang` and `lld` to `LLVM_ENABLE_PROJECTS` and
 exception handling (EH) and RTTI if you don't want the Python bindings. We
 recommend enabling the full set to simplify builds during development.
 
+</details>
+
 ## Building Halide with CMake
 
 This is discussed in greater detail in [BuildingHalideWithCMake.md]. CMake
 version 3.28+ is required to build Halide.
 
-[BuildingHalideWithCMake.md]: doc/BuildingHalideWithCMake.md
-
 ### MacOS and Linux
 
-Follow the above instructions to build LLVM or acquire a suitable binary
-release. Then change directory to the Halide repository and run:
+After [acquiring LLVM](#acquiring-llvm), change directory to the Halide
+repository and run:
 
 ```shell
-$ cmake -G Ninja  -S . -B build -DCMAKE_BUILD_TYPE=Release -DHalide_LLVM_ROOT=$LLVM_ROOT
+$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DHalide_LLVM_ROOT=$LLVM_ROOT
 $ cmake --build build
 ```
 
@@ -231,6 +247,16 @@ Setting `-DHalide_LLVM_ROOT` is not required if you have a suitable system-wide
 version installed. However, if you have multiple LLVMs installed, it can pick
 between them. Do not use a relative path for `Halide_LLVM_ROOT`. It can cause
 problems on some systems.
+
+If you use [Homebrew](https://brew.sh/) on macOS, you can use the provided CMake
+preset:
+
+```shell
+$ cmake --preset=macOS -S . -B build
+$ cmake --build build
+```
+
+This automatically finds LLVM from Homebrew's install path.
 
 ### Windows
 
@@ -267,14 +293,12 @@ D:\vcpkg> .\bootstrap-vcpkg.bat -disableMetrics
 CMake projects should use: "-DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems/vcpkg.cmake"
 ```
 
-When using the toolchain file, vcpkg will automatically build all the necessary
-dependencies. However, as stated above, be aware that acquiring LLVM this way
-may use over 100 GB of disk space for its build trees and take a very long time
-to build. You can manually delete the build trees afterward, but vcpkg will not
-do this automatically.
-
-See [BuildingHalideWithCMake.md](./doc/BuildingHalideWithCMake.md#vcpkg-presets)
-for directions to use Vcpkg for everything _except_ LLVM.
+Halide includes a `vcpkg-configuration.json` that automatically configures
+[overlay ports](https://learn.microsoft.com/en-us/vcpkg/concepts/overlay-ports)
+and overlay triplets. These overlays redirect LLVM and Python to system
+installations, so vcpkg only builds the smaller dependencies (flatbuffers, wabt,
+pybind11, etc.). You must have LLVM and Python installed separately (see
+[Acquiring LLVM](#acquiring-llvm) above).
 
 #### Building Halide
 
@@ -288,9 +312,17 @@ D:\Halide> cmake -G Ninja -S . -B build ^
                  -DCMAKE_BUILD_TYPE=Release
 ```
 
-Then run the build with:
+Or use a CMake preset (e.g. for a Visual Studio build):
 
 ```
+D:\Halide> cmake --preset=win64  &:: or win32 for 32-bit
+D:\Halide> cmake --build build\win64
+```
+
+For a Ninja-based build with vcpkg:
+
+```
+D:\Halide> cmake --preset=release-vcpkg -S . -B build
 D:\Halide> cmake --build build
 ```
 
@@ -303,13 +335,17 @@ D:\Halide> ctest --test-dir build --output-on-failure
 Subsets of the tests can be selected with `-L` and include `correctness`,
 `generator`, `error`, and the other directory names under `tests/`.
 
-#### Building LLVM (optional)
+<details>
+<summary>Building LLVM from source on Windows (advanced)</summary>
 
-Follow these steps if you want to build LLVM yourself. First, download LLVM's
-sources (these instructions use the 19.1.5 release).
+> [!WARNING] Building LLVM from source requires significant time, disk space,
+> and RAM. Prefer the pre-built `halide-llvm` binaries (see
+> [Acquiring LLVM](#acquiring-llvm)) unless you need a custom configuration.
+
+First, download LLVM's sources (these instructions use the 21.1.8 release).
 
 ```
-D:\> git clone --depth 1 --branch llvm-org-19.1.5 https://github.com/llvm/llvm-project.git
+D:\> git clone --depth 1 --branch llvmorg-21.1.8 https://github.com/llvm/llvm-project.git
 ```
 
 As above, run `vcvarsall.bat` to pick between x86 and x64. Then configure LLVM
@@ -347,10 +383,12 @@ D:\> cmake --install build --prefix llvm-install
 You can substitute `Debug` for `Release` in the above `cmake` commands if you
 want a debug build.
 
-To use this with Halide, but still allow vcpkg to manage other dependencies, you
-must add two flags to Halide's CMake configure command line. First, disable LLVM
-with `-DVCPKG_OVERLAY_PORTS=cmake/vcpkg`. Second, point CMake to our newly built
-Halide with `-DHalide_LLVM_ROOT=D:/llvm-install`.
+To use this with Halide, but still allow vcpkg to manage other dependencies,
+point CMake to your LLVM with `-DHalide_LLVM_ROOT=D:/llvm-install`. The overlay
+ports in `vcpkg-configuration.json` automatically prevent vcpkg from trying to
+build its own LLVM.
+
+</details>
 
 #### If all else fails...
 
@@ -364,10 +402,9 @@ commands that were run, as well as the environment variables they were run with.
 
 ## Building Halide with make
 
-> [!WARNING]
-> We do not provide support for the Makefile. Feel free to use it, but if
-> anything goes wrong, switch to the CMake build. Note also that the Makefile
-> cannot build the Python bindings or produce install packages.
+> [!WARNING] We do not provide support for the Makefile. Feel free to use it,
+> but if anything goes wrong, switch to the CMake build. Note also that the
+> Makefile cannot build the Python bindings or produce install packages.
 
 *TL;DR*: Have LLVM 17 (or greater) installed and run `make` in the root
 directory of the repository (where this README is).
@@ -384,7 +421,7 @@ Now you should be able to just run `make` in the root directory of the Halide
 source tree. `make run_tests` will run the JIT test suite, and `make test_apps`
 will make sure all the apps compile and run (but won't check their output).
 
-When building the tests, you can set the AOT compilation target with the 
+When building the tests, you can set the AOT compilation target with the
 `HL_TARGET` environment variable.
 
 ### Building Halide out-of-tree with make
@@ -420,7 +457,7 @@ output can be parsed programmatically by starting from the code in
 We have more documentation in `doc/`, the following links might be helpful:
 
 | Document                                      | Description                                                               |
-|-----------------------------------------------|---------------------------------------------------------------------------|
+| --------------------------------------------- | ------------------------------------------------------------------------- |
 | [CMake build](doc/BuildingHalideWithCMake.md) | How to configure and build Halide using CMake.                            |
 | [CMake package](doc/HalideCMakePackage.md)    | How to use the Halide CMake package to build your code.                   |
 | [Hexagon](doc/Hexagon.md)                     | How to use the Hexagon backend.                                           |
@@ -434,7 +471,10 @@ The following links are of greater interest to developers wishing to contribute
 code to Halide:
 
 | Document                                 | Description                                                                                                   |
-|------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | [CMake developer](doc/CodeStyleCMake.md) | Guidelines for authoring new CMake code.                                                                      |
 | [FuzzTesting](doc/FuzzTesting.md)        | Information about fuzz testing the Halide compiler (rather than pipelines). Intended for internal developers. |
 | [Testing](doc/Testing.md)                | Information about our test organization and debugging tips. Intended for internal developers.                 |
+
+[buildinghalidewithcmake.md]: doc/BuildingHalideWithCMake.md
+[halide-pypi]: https://pypi.halide-lang.org/simple

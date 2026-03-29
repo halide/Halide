@@ -1,8 +1,10 @@
 #include "onnx_converter.h"
 #include <climits>
-#include <exception>
-#include <math.h>
+#include <numeric>
 #include <unordered_set>
+
+#define _USE_MATH_DEFINES
+#include <math.h>
 
 static Halide::Expr div_up(Halide::Expr num, int denom) {
     return Halide::Internal::simplify((num + denom - 1) / denom);
@@ -53,11 +55,11 @@ Halide::Expr inline_func_call(Halide::Expr e) {
     FuncCallInliner inliner;
 
     Halide::Expr r_old = Halide::Internal::simplify(e);
-    Halide::Expr r = inliner.mutate(r_old);
+    Halide::Expr r = inliner(r_old);
 
     while (!r.same_as(r_old)) {
         r_old = Halide::Internal::simplify(r);
-        r = inliner.mutate(r_old);
+        r = inliner(r_old);
     }
 
     return r;
@@ -1917,7 +1919,7 @@ Node convert_split_node(
     if (user_splits.size() == 0) {
         if (axis_dim_size && (*axis_dim_size % num_outputs != 0)) {
             throw std::invalid_argument(
-                "Can't equaly split outputs for node " + node.name());
+                "Can't equally split outputs for node " + node.name());
         }
         Halide::Expr size = Halide::Internal::simplify(axis_dim / num_outputs);
         for (int i = 0; i < num_outputs; ++i) {
@@ -2836,7 +2838,7 @@ Node convert_random_node(
 
     if (!shape.size()) {
         throw std::invalid_argument(
-            "Attribute shape is rquired for node " + node.name());
+            "Attribute shape is required for node " + node.name());
     }
 
     std::vector<Halide::Var> out_vars(shape.size());
@@ -2851,7 +2853,7 @@ Node convert_random_node(
         result.outputs[0].type != onnx::TensorProto_DataType_DOUBLE &&
         result.outputs[0].type != onnx::TensorProto_DataType_FLOAT16) {
         throw std::invalid_argument(
-            "Unsuported dtype attribute for node " + node.name());
+            "Unsupported dtype attribute for node " + node.name());
     }
 
     // Box-Muller Transformation sampler.
@@ -3593,7 +3595,7 @@ Node convert_gru_node(
         Hs.push_back(Hu);
     }
 
-    // Y: A tensor concating all the intermediate output values of the hidden.
+    // Y: A tensor concatenating all the intermediate output values of the hidden.
     // It has shape `[seq_length, num_directions, batch_size, hidden_size]`.
     if (node.output_size() >= 1 && !node.output(0).empty()) {
         // Hconcat: concat + unsqueeze

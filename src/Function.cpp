@@ -1,7 +1,5 @@
 #include <atomic>
 #include <cstdlib>
-#include <memory>
-#include <set>
 #include <utility>
 
 #include "CSE.h"
@@ -168,10 +166,10 @@ struct FunctionContents {
         if (!extern_function_name.empty()) {
             for (ExternFuncArgument &i : extern_arguments) {
                 if (i.is_expr()) {
-                    i.expr = mutator->mutate(i.expr);
+                    i.expr = (*mutator)(i.expr);
                 }
             }
-            extern_proxy_expr = mutator->mutate(extern_proxy_expr);
+            extern_proxy_expr = (*mutator)(extern_proxy_expr);
         }
     }
 };
@@ -397,7 +395,7 @@ struct PrintTypeList {
         }
         const char *comma = "";
         for (const auto &t : self.list_) {
-            if constexpr (std::is_same<Type, T>::value) {
+            if constexpr (std::is_same_v<Type, T>) {
                 s << comma << t;
             } else {
                 s << comma << t.type();
@@ -837,14 +835,14 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
     // memory leaks. We need to break these cycles.
     WeakenFunctionPtrs weakener(contents.get());
     for (auto &arg : args) {
-        arg = weakener.mutate(arg);
+        arg = weakener(arg);
     }
     for (auto &value : values) {
-        value = weakener.mutate(value);
+        value = weakener(value);
     }
     if (check.reduction_domain.defined()) {
         check.reduction_domain.set_predicate(
-            weakener.mutate(check.reduction_domain.predicate()));
+            weakener(check.reduction_domain.predicate()));
     }
 
     Definition r(args, values, check.reduction_domain, false);
@@ -1250,50 +1248,36 @@ const Call *Function::is_wrapper() const {
     }
 }
 
-namespace {
-
-// Replace all calls to functions listed in 'substitutions' with their wrappers.
-class SubstituteCalls : public IRMutator {
-    using IRMutator::visit;
-
-    const map<FunctionPtr, FunctionPtr> &substitutions;
-
-    Expr visit(const Call *c) override {
-        Expr expr = IRMutator::visit(c);
-        c = expr.as<Call>();
-        internal_assert(c);
-
-        if ((c->call_type == Call::Halide) &&
-            c->func.defined() &&
-            substitutions.count(c->func)) {
-            auto it = substitutions.find(c->func);
-            internal_assert(it != substitutions.end())
-                << "Function not in environment: " << c->func->name << "\n";
-            FunctionPtr subs = it->second;
-            debug(4) << "...Replace call to Func \"" << c->name << "\" with "
-                     << "\"" << subs->name << "\"\n";
-            expr = Call::make(c->type, subs->name, c->args, c->call_type,
-                              subs, c->value_index,
-                              c->image, c->param);
-        }
-        return expr;
-    }
-
-public:
-    SubstituteCalls(const map<FunctionPtr, FunctionPtr> &substitutions)
-        : substitutions(substitutions) {
-    }
-};
-
-}  // anonymous namespace
-
 Function &Function::substitute_calls(const map<FunctionPtr, FunctionPtr> &substitutions) {
     debug(4) << "Substituting calls in " << name() << "\n";
     if (substitutions.empty()) {
         return *this;
     }
-    SubstituteCalls subs_calls(substitutions);
-    contents->mutate(&subs_calls);
+
+    // Replace all calls to functions listed in 'substitutions' with their wrappers.
+    auto m = LambdaMutator{
+        [&](auto *self, const Call *c) {
+            Expr expr = self->visit_base(c);
+            c = expr.as<Call>();
+            internal_assert(c);
+
+            if ((c->call_type == Call::Halide) &&
+                c->func.defined() &&
+                substitutions.count(c->func)) {
+                auto it = substitutions.find(c->func);
+                internal_assert(it != substitutions.end())
+                    << "Function not in environment: " << c->func->name << "\n";
+                FunctionPtr subs = it->second;
+                debug(4) << "...Replace call to Func \"" << c->name << "\" with "
+                         << "\"" << subs->name << "\"\n";
+                expr = Call::make(c->type, subs->name, c->args, c->call_type,
+                                  subs, c->value_index,
+                                  c->image, c->param);
+            }
+            return expr;
+        }};
+
+    contents->mutate(&m);
     return *this;
 }
 

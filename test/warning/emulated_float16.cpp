@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
 
     // Make sure target has no float16 native support
     Target t = get_host_target();
-    for (auto &feature : {Target::F16C, Target::ARMFp16}) {
+    for (auto &feature : {Target::F16C, Target::ARMFp16, Target::SVE, Target::SVE2}) {
         t = t.without_feature(feature);
     }
 

@@ -19,11 +19,17 @@ Expr Simplify::visit(const IntImm *op, ExprInfo *info) {
 }
 
 Expr Simplify::visit(const UIntImm *op, ExprInfo *info) {
-    if (info && Int(64).can_represent(op->value)) {
+    if (info) {
+        // Pretend it's an int constant that has been cast to uint.
         int64_t v = (int64_t)(op->value);
         info->bounds = ConstantInterval::single_point(v);
         info->alignment = ModulusRemainder(0, v);
+        // If it's not representable as an int64, this will wrap the alignment appropriately:
         info->cast_to(op->type);
+        // Be as informative as we can with bounds for out-of-range uint64s
+        if ((int64_t)op->value < 0) {
+            info->bounds = ConstantInterval::bounded_below(INT64_MAX);
+        }
     } else {
         clear_expr_info(info);
     }
@@ -47,6 +53,7 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *info) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::broadcast(value, lanes), op->type);
     if (rewrite(broadcast(broadcast(x, c0), lanes), broadcast(x, c0 * lanes)) ||
+        rewrite(broadcast(IRMatcher::Overflow(), lanes), IRMatcher::Overflow()) ||
         false) {
         return mutate(rewrite.result, info);
     }
@@ -68,7 +75,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
         return value;
     }
 
-    if (info && op->type.is_int()) {
+    if (info && op->type.is_int_or_uint()) {
         switch (op->op) {
         case VectorReduce::Add:
             // Alignment of result is the alignment of the arg. Bounds
@@ -122,7 +129,8 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
     case VectorReduce::Add: {
         auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
         if (rewrite(h_add(x * broadcast(y, arg_lanes), lanes), h_add(x, lanes) * broadcast(y, lanes)) ||
-            rewrite(h_add(broadcast(x, arg_lanes) * y, lanes), h_add(y, lanes) * broadcast(x, lanes))) {
+            rewrite(h_add(broadcast(x, arg_lanes) * y, lanes), h_add(y, lanes) * broadcast(x, lanes)) ||
+            rewrite(h_add(broadcast(x, arg_lanes), lanes), broadcast(x * factor, lanes))) {
             return mutate(rewrite.result, info);
         }
         break;
@@ -215,7 +223,7 @@ Expr Simplify::visit(const Variable *op, ExprInfo *info) {
             *info = *b;
         }
         if (b->bounds.is_single_point()) {
-            return make_const(op->type, b->bounds.min);
+            return make_const(op->type, b->bounds.min, nullptr);
         }
     } else if (info && !no_overflow_int(op->type)) {
         info->bounds = ConstantInterval::bounds_of_type(op->type);
@@ -267,8 +275,8 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *info) {
             r = mod_imp(base_info.alignment.remainder, m);
         }
         info->alignment = {m, r};
-        info->trim_bounds_using_alignment();
         info->cast_to(op->type);
+        info->trim_bounds_using_alignment();
     }
 
     // A somewhat torturous way to check if the stride is zero,
@@ -279,10 +287,14 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *info) {
     if (rewrite(ramp(x, 0, lanes), broadcast(x, lanes)) ||
         rewrite(ramp(ramp(x, c0, c2), broadcast(c1, c4), c3),
                 ramp(x, c0, c2 * c3),
-                c1 == c0 * fold(c2)) ||
-        false) {
+                // In the multiply below, it's important c0 is on the
+                // right. When folding constants, binary ops take their type
+                // from the RHS. c2 is an int64 lane count but c0 has the type
+                // we want for the comparison.
+                c1 == c2 * c0) ||
 
-        return rewrite.result;
+        false) {
+        return mutate(rewrite.result, info);
     }
 
     if (base.same_as(op->base) &&
@@ -340,7 +352,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
         Expr new_index = b_index->value;
         int new_lanes = new_index.type().lanes();
         Expr load = Load::make(op->type.with_lanes(new_lanes), op->name, b_index->value,
-                               op->image, op->param, const_true(new_lanes), align);
+                               op->image, op->param, const_true(new_lanes, nullptr), align);
         return Broadcast::make(load, b_index->lanes);
     } else if (s_index &&
                is_const_one(predicate) &&
@@ -351,7 +363,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
         for (const Expr &new_index : s_index->vectors) {
             int new_lanes = new_index.type().lanes();
             Expr load = Load::make(op->type.with_lanes(new_lanes), op->name, new_index,
-                                   op->image, op->param, const_true(new_lanes), ModulusRemainder{});
+                                   op->image, op->param, const_true(new_lanes, nullptr), ModulusRemainder{});
             loaded_vecs.emplace_back(std::move(load));
         }
         return Shuffle::make(loaded_vecs, s_index->indices);

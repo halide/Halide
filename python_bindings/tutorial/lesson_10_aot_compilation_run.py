@@ -28,13 +28,13 @@ def main():
     # code.
 
     # Let's make some input data to test with:
-    input = np.empty((640, 480), dtype=np.uint8, order='F')
+    input = np.empty((640, 480), dtype=np.uint8, order="F")
     for y in range(480):
         for x in range(640):
             input[x, y] = (x ^ (y + 1)) & 0xFF
 
     # And the memory where we want to write our output:
-    output = np.empty((640, 480), dtype=np.uint8, order='F')
+    output = np.empty((640, 480), dtype=np.uint8, order="F")
 
     offset_value = 5
 
@@ -50,8 +50,9 @@ def main():
             correct_val[0] = input_val
             # we add over a uint8 value (will properly model overflow)
             correct_val[0] += offset_value
-            assert output_val == correct_val[0], \
-                "output(%d, %d) was %d instead of %d" % (x, y, output_val, correct_val)
+            assert output_val == correct_val[0], (
+                f"output({x}, {y}) was {output_val} instead of {correct_val}"
+            )
 
     # Everything worked!
     print("Success!")

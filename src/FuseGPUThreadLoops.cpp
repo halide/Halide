@@ -31,6 +31,7 @@ using std::vector;
 namespace {
 
 class ExtractBlockSize : public IRVisitor {
+protected:
     Expr block_extent[3], block_count[3];
     string block_var_name[3];
 
@@ -39,7 +40,7 @@ class ExtractBlockSize : public IRVisitor {
     void found_thread_for(int dim, const string &name, const Expr &extent) {
         internal_assert(dim >= 0 && dim < 3);
         if (!block_extent[dim].defined()) {
-            block_extent[dim] = extent;
+            block_extent[dim] = simplify(extent);
         } else {
             block_extent[dim] = simplify(Max::make(extent, block_extent[dim]));
         }
@@ -55,16 +56,16 @@ class ExtractBlockSize : public IRVisitor {
     void visit(const For *op) override {
         for (int i = 0; i < 3; i++) {
             if (ends_with(op->name, gpu_thread_name(i))) {
-                found_thread_for(i, op->name, op->extent);
+                found_thread_for(i, op->name, op->extent());
             } else if (ends_with(op->name, gpu_block_name(i))) {
-                found_block_for(i, op->name, op->extent);
+                found_block_for(i, op->name, op->extent());
             }
         }
 
         IRVisitor::visit(op);
 
         Scope<Interval> scope;
-        scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
+        scope.push(op->name, Interval(op->min, op->max));
         // For non-rectangular thread loops, use a bounding box. We'll inject if statements later.
         for (Expr &e : block_extent) {
             if (e.defined() && expr_uses_var(e, op->name)) {
@@ -123,6 +124,7 @@ public:
 };
 
 class NormalizeDimensionality : public IRMutator {
+protected:
     using IRMutator::visit;
 
     const ExtractBlockSize &block_size;
@@ -141,7 +143,7 @@ class NormalizeDimensionality : public IRMutator {
             return s;
         }
         while (max_depth < block_size.threads_dimensions()) {
-            s = For::make(gpu_thread_name(max_depth), 0, 1, ForType::GPUThread,
+            s = For::make(gpu_thread_name(max_depth), 0, 0, ForType::GPUThread,
                           Partition::Never, device_api, s);
             max_depth++;
         }
@@ -184,6 +186,7 @@ public:
 };
 
 class ReplaceForWithIf : public IRMutator {
+protected:
     using IRMutator::visit;
 
     const ExtractBlockSize &block_size;
@@ -205,10 +208,10 @@ class ReplaceForWithIf : public IRMutator {
             Expr var = Variable::make(Int(32), gpu_thread_name(dim));
             body = substitute(op->name, var + op->min, body);
 
-            if (equal(op->extent, block_size.num_threads(dim))) {
+            if (can_prove(op->extent() == block_size.num_threads(dim))) {
                 return body;
             } else {
-                Expr cond = var < op->extent;
+                Expr cond = var <= op->max;
                 return IfThenElse::make(cond, body, Stmt());
             }
         } else {
@@ -223,6 +226,7 @@ public:
 };
 
 class ExtractSharedAndHeapAllocations : public IRMutator {
+protected:
     using IRMutator::visit;
 
     struct IntInterval {
@@ -289,7 +293,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
 public:
     vector<SharedAllocation> allocations;
 
-private:
+protected:
     map<string, SharedAllocation *> shared;
 
     bool in_threads = false;
@@ -300,7 +304,10 @@ private:
 
     string thread_id_var_name, num_threads_var_name;
 
-    bool may_merge_allocs_of_different_type;
+    const bool may_merge_allocs_of_different_type =
+        device_api != DeviceAPI::D3D12Compute &&
+        device_api != DeviceAPI::Vulkan &&
+        device_api != DeviceAPI::WebGPU;
 
     // A loop on the host used to compute the shared memory size
     Stmt host_side_preamble;
@@ -337,7 +344,7 @@ private:
 
         // Expand any new shared allocations found in the body using the loop bounds.
         Scope<Interval> scope;
-        scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
+        scope.push(op->name, Interval(op->min, op->max));
         for (SharedAllocation &s : allocations) {
             // If the size depends on the loop variable, take the max
             // over all loop iterations
@@ -363,7 +370,7 @@ private:
                     precompute_allocation_size(s);
                     break;
                 case Monotonic::Increasing:
-                    s.size = substitute(op->name, simplify(op->min + op->extent - 1), s.size);
+                    s.size = substitute(op->name, op->max, s.size);
                     break;
                 case Monotonic::Constant:
                     // The size expression used the variable, but we
@@ -378,7 +385,7 @@ private:
             }
             if (in_threads && op->is_parallel()) {
                 // For parallel inner loops, make a separate slice per loop iteration
-                s.size *= op->extent;
+                s.size *= op->extent();
             }
         }
 
@@ -390,13 +397,13 @@ private:
         }
 
         Expr new_min = mutate(op->min);
-        Expr new_extent = mutate(op->extent);
+        Expr new_max = mutate(op->max);
 
         if (host_side_preamble.defined()) {
             string loop_name = unique_name('t');
             Expr v = Variable::make(Int(32), loop_name);
             host_side_preamble = substitute(op->name, v, host_side_preamble);
-            host_side_preamble = For::make(loop_name, new_min, new_extent,
+            host_side_preamble = For::make(loop_name, new_min, new_max,
                                            ForType::Serial, Partition::Never, DeviceAPI::None, host_side_preamble);
             if (old_preamble.defined()) {
                 host_side_preamble = Block::make(old_preamble, host_side_preamble);
@@ -405,7 +412,7 @@ private:
             host_side_preamble = old_preamble;
         }
 
-        return For::make(op->name, new_min, new_extent,
+        return For::make(op->name, new_min, new_max,
                          op->for_type, op->partition_policy,
                          op->device_api, body);
     }
@@ -904,7 +911,7 @@ public:
                             : alloc_name(alloc_name), cluster_name(cluster_name), offset(offset) {
                         }
                     } rewriter{alloc.name, name, offset};
-                    s = rewriter.mutate(s);
+                    s = rewriter(s);
                 }
 
                 // Define the group offset in terms of the previous group in the cluster
@@ -1030,10 +1037,7 @@ public:
     ExtractSharedAndHeapAllocations(DeviceAPI d)
         : device_api(d),
           thread_id_var_name(unique_name('t')),
-          num_threads_var_name(unique_name('t')),
-          may_merge_allocs_of_different_type(device_api != DeviceAPI::D3D12Compute &&
-                                             device_api != DeviceAPI::Vulkan &&
-                                             device_api != DeviceAPI::WebGPU) {
+          num_threads_var_name(unique_name('t')) {
     }
 };  // namespace Internal
 
@@ -1041,6 +1045,7 @@ public:
 // block. Should only be run after shared allocations have already
 // been extracted.
 class ExtractRegisterAllocations : public IRMutator {
+protected:
     using IRMutator::visit;
 
     struct RegisterAllocation {
@@ -1082,7 +1087,7 @@ class ExtractRegisterAllocations : public IRMutator {
 
             // Expand any new register allocations found in the body using the loop bounds.
             Scope<Interval> scope;
-            scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
+            scope.push(op->name, Interval(op->min, op->max));
 
             // Expand the inner allocations using the loop bounds.
             for (RegisterAllocation &s : allocations) {
@@ -1098,7 +1103,7 @@ class ExtractRegisterAllocations : public IRMutator {
                 allocations.swap(old);
             }
 
-            return For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->partition_policy, op->device_api, body);
+            return For::make(op->name, mutate(op->min), mutate(op->max), op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 
@@ -1206,6 +1211,7 @@ public:
 };
 
 class InjectThreadBarriers : public IRMutator {
+protected:
     bool in_threads = false, injected_barrier;
 
     using IRMutator::visit;
@@ -1258,7 +1264,7 @@ class InjectThreadBarriers : public IRMutator {
                 // synchronizations within the block
                 body = Block::make(body, make_barrier(0));
             }
-            return For::make(op->name, op->min, op->extent,
+            return For::make(op->name, op->min, op->max,
                              op->for_type, op->partition_policy, op->device_api, body);
         } else {
             return IRMutator::visit(op);
@@ -1360,6 +1366,7 @@ public:
 };
 
 class FuseGPUThreadLoopsSingleKernel : public IRMutator {
+protected:
     using IRMutator::visit;
     const ExtractBlockSize &block_size;
     ExtractSharedAndHeapAllocations &block_allocations;
@@ -1373,7 +1380,7 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
                      << body << "\n\n";
 
             NormalizeDimensionality n(block_size, op->device_api);
-            body = n.mutate(body);
+            body = n(body);
 
             debug(3) << "Normalized dimensionality:\n"
                      << body << "\n\n";
@@ -1382,7 +1389,7 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             ExtractRegisterAllocations register_allocs;
             ForType innermost_loop_type = ForType::GPUThread;
             if (block_size.threads_dimensions()) {
-                body = register_allocs.mutate(body);
+                body = register_allocs(body);
                 if (register_allocs.has_lane_loop) {
                     innermost_loop_type = ForType::GPULane;
                 }
@@ -1394,14 +1401,14 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             if (register_allocs.has_thread_loop) {
                 // If there's no loop over threads, everything is already synchronous.
                 InjectThreadBarriers i{block_allocations, register_allocs};
-                body = i.mutate(body);
+                body = i(body);
             }
 
             debug(3) << "Injected synchronization:\n"
                      << body << "\n\n";
 
             ReplaceForWithIf f(block_size);
-            body = f.mutate(body);
+            body = f(body);
 
             debug(3) << "Replaced for with if:\n"
                      << body << "\n\n";
@@ -1410,13 +1417,13 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             string thread_id = gpu_thread_name(0);
             // Add back in any register-level allocations
             body = register_allocs.rewrap(body, thread_id);
-            body = For::make(thread_id, 0, block_size_x, innermost_loop_type, op->partition_policy, op->device_api, body);
+            body = For::make(thread_id, 0, block_size_x - 1, innermost_loop_type, op->partition_policy, op->device_api, body);
 
             // Rewrap the whole thing in other loops over threads
             for (int i = 1; i < block_size.threads_dimensions(); i++) {
                 thread_id = gpu_thread_name(i);
                 body = register_allocs.rewrap(body, thread_id);
-                body = For::make(thread_id, 0, block_size.num_threads(i),
+                body = For::make(thread_id, 0, block_size.num_threads(i) - 1,
                                  ForType::GPUThread, op->partition_policy, op->device_api, body);
             }
             thread_id.clear();
@@ -1433,7 +1440,7 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             if (body.same_as(op->body)) {
                 return op;
             } else {
-                return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+                return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
             }
         } else {
             return IRMutator::visit(op);
@@ -1448,6 +1455,7 @@ public:
 };
 
 class FuseGPUThreadLoops : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
@@ -1463,17 +1471,17 @@ class FuseGPUThreadLoops : public IRMutator {
             // Do the analysis of thread block size and shared memory
             // usage.
             ExtractBlockSize block_size;
-            Stmt loop = Stmt(op);
-            loop.accept(&block_size);
+            block_size(op);
+            Stmt loop(op);
 
             ExtractSharedAndHeapAllocations block_allocations(op->device_api);
-            loop = block_allocations.mutate(loop);
+            loop = block_allocations(loop);
 
             debug(3) << "Pulled out shared allocations:\n"
                      << loop << "\n\n";
 
             // Mutate the inside of the kernel
-            loop = FuseGPUThreadLoopsSingleKernel(block_size, block_allocations).mutate(loop);
+            loop = FuseGPUThreadLoopsSingleKernel(block_size, block_allocations)(loop);
 
             loop = block_allocations.rewrap_kernel_launch(loop, block_size, op->device_api);
 
@@ -1485,6 +1493,7 @@ class FuseGPUThreadLoops : public IRMutator {
 };
 
 class ZeroGPULoopMins : public IRMutator {
+protected:
     bool in_non_glsl_gpu = false;
     using IRMutator::visit;
 
@@ -1503,7 +1512,7 @@ class ZeroGPULoopMins : public IRMutator {
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + op->min;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = For::make(op->name, 0, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+            stmt = For::make(op->name, 0, simplify(op->max - op->min), op->for_type, op->partition_policy, op->device_api, body);
         }
         return stmt;
     }
@@ -1516,13 +1525,14 @@ public:
 
 // Also used by InjectImageIntrinsics
 Stmt zero_gpu_loop_mins(const Stmt &s) {
-    return ZeroGPULoopMins().mutate(s);
+    return ZeroGPULoopMins()(s);
 }
 
 namespace {
 
 // Find the inner most GPU block of a statement.
 class FindInnermostGPUBlock : public IRVisitor {
+protected:
     using IRVisitor::visit;
 
     void visit(const For *op) override {
@@ -1540,6 +1550,7 @@ public:
 // Given a condition and a loop, add the condition
 // to the loop body.
 class AddConditionToALoop : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
@@ -1547,7 +1558,7 @@ class AddConditionToALoop : public IRMutator {
             return IRMutator::visit(op);
         }
 
-        return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api,
+        return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api,
                          IfThenElse::make(condition, op->body, Stmt()));
     }
 
@@ -1562,6 +1573,7 @@ public:
 // Push if statements between GPU blocks through all GPU blocks.
 // Throw error if the if statement has an else clause.
 class NormalizeIfStatements : public IRMutator {
+protected:
     using IRMutator::visit;
 
     bool inside_gpu_blocks = false;
@@ -1579,10 +1591,10 @@ class NormalizeIfStatements : public IRMutator {
             return IRMutator::visit(op);
         }
         FindInnermostGPUBlock find;
-        op->accept(&find);
+        find(op);
         if (find.found_gpu_block != nullptr) {
             internal_assert(!op->else_case.defined()) << "Found an if statement with else case between two GPU blocks.\n";
-            return AddConditionToALoop(op->condition, find.found_gpu_block).mutate(op->then_case);
+            return AddConditionToALoop(op->condition, find.found_gpu_block)(op->then_case);
         }
         return IRMutator::visit(op);
     }
@@ -1594,9 +1606,9 @@ Stmt fuse_gpu_thread_loops(Stmt s) {
     // NormalizeIfStatements pushes the predicates between GPU blocks
     // into the innermost GPU block. FuseGPUThreadLoops would then
     // merge the predicate into the merged GPU thread.
-    s = NormalizeIfStatements().mutate(s);
-    s = FuseGPUThreadLoops().mutate(s);
-    s = ZeroGPULoopMins().mutate(s);
+    s = NormalizeIfStatements()(s);
+    s = FuseGPUThreadLoops()(s);
+    s = ZeroGPULoopMins()(s);
     return s;
 }
 

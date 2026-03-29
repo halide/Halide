@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <iomanip>
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -120,11 +121,15 @@ public:
 
     ~LoweringLogger() {
         if (time_lowering_passes) {
+            double total = 0.0;
             debug(0) << "Lowering pass runtimes:\n";
             std::sort(timings.begin(), timings.end());
             for (const auto &p : timings) {
-                debug(0) << " " << p.first << " ms : " << p.second << "\n";
+                total += p.first;
+                debug(0) << std::setw(10) << std::fixed << std::setprecision(3) << p.first << " ms : "
+                         << p.second << "\n";
             }
+            debug(0) << std::setw(10) << std::fixed << std::setprecision(3) << total << " ms in total\n";
         }
     }
 };
@@ -149,11 +154,6 @@ void lower_impl(const vector<Function> &output_funcs,
 
     bool any_strict_float = strictify_float(env, t);
     result_module.set_any_strict_float(any_strict_float);
-
-    // Output functions should all be computed and stored at root.
-    for (const Function &f : outputs) {
-        Func(f).compute_root().store_root();
-    }
 
     // Finalize all the LoopLevels
     for (auto &iter : env) {
@@ -231,7 +231,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after uniquifying variable names:", s);
 
     debug(1) << "Simplifying...\n";
-    s = simplify(s, false);  // Storage folding and allocation bounds inference needs .loop_max symbols
+    s = simplify(s);
     log("Lowering after first simplification:", s);
 
     debug(1) << "Simplifying correlated differences...\n";
@@ -326,6 +326,10 @@ void lower_impl(const vector<Function> &output_funcs,
         debug(1) << "Selecting a GPU API for extern stages...\n";
         s = select_gpu_api(s, t);
         log("Lowering after selecting a GPU API for extern stages:", s);
+    } else {
+        debug(1) << "Injecting host-dirty marking...\n";
+        s = inject_host_dev_buffer_copies(s, t);
+        log("Lowering after injecting host-dirty marking:", s);
     }
 
     debug(1) << "Simplifying...\n";
@@ -464,7 +468,7 @@ void lower_impl(const vector<Function> &output_funcs,
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
             debug(1) << "Running custom lowering pass " << i << "...\n";
-            s = custom_passes[i]->mutate(s);
+            s = (*custom_passes[i])(s);
             debug(1) << "Lowering after custom pass " << i << ":\n"
                      << s << "\n\n";
         }
@@ -484,7 +488,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_gpu_feature()) {
         debug(1) << "Offloading GPU loops...\n";
-        s = inject_gpu_offload(s, t);
+        s = inject_gpu_offload(s, t, any_strict_float);
         debug(2) << "Lowering after splitting off GPU loops:\n"
                  << s << "\n\n";
     } else {
@@ -574,23 +578,19 @@ void lower_impl(const vector<Function> &output_funcs,
     // We're about to drop the environment and outputs vector, which
     // contain the only strong refs to Functions that may still be
     // pointed to by the IR. So make those refs strong.
-    class StrengthenRefs : public IRMutator {
-        using IRMutator::visit;
-        Expr visit(const Call *c) override {
-            Expr expr = IRMutator::visit(c);
-            c = expr.as<Call>();
-            internal_assert(c);
-            if (c->func.defined()) {
-                FunctionPtr ptr = c->func;
-                ptr.strengthen();
-                expr = Call::make(c->type, c->name, c->args, c->call_type,
-                                  ptr, c->value_index,
-                                  c->image, c->param);
-            }
-            return expr;
+    s = mutate_with(s, [&](auto *self, const Call *c) {
+        Expr expr = self->visit_base(c);
+        c = expr.as<Call>();
+        internal_assert(c);
+        if (c->func.defined()) {
+            FunctionPtr ptr = c->func;
+            ptr.strengthen();
+            expr = Call::make(c->type, c->name, c->args, c->call_type,
+                              ptr, c->value_index,
+                              c->image, c->param);
         }
-    };
-    s = StrengthenRefs().mutate(s);
+        return expr;
+    });
 
     LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
 

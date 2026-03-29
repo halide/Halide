@@ -133,7 +133,6 @@ struct x86Intrinsic {
     };
 };
 
-// clang-format off
 const x86Intrinsic intrinsic_defs[] = {
     // AVX2/SSSE3 LLVM intrinsics for pabs fail in JIT. The integer wrappers
     // just call `llvm.abs` (which requires a second argument).
@@ -295,17 +294,16 @@ const x86Intrinsic intrinsic_defs[] = {
     {"tileloadd64_i8", Int(8, 1024), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
     {"tileloadd64_i8", UInt(8, 1024), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
     {"tileloadd64_bf16", BFloat(16, 512), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
-    {"tdpbssd", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), Int(8, 1024), Int(8, 1024)},  Target::AVX512_SapphireRapids},
+    {"tdpbssd", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), Int(8, 1024), Int(8, 1024)}, Target::AVX512_SapphireRapids},
     {"tdpbsud", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), Int(8, 1024), UInt(8, 1024)}, Target::AVX512_SapphireRapids},
     {"tdpbusd", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), UInt(8, 1024), Int(8, 1024)}, Target::AVX512_SapphireRapids},
     {"tdpbuud", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), UInt(8, 1024), UInt(8, 1024)}, Target::AVX512_SapphireRapids},
     {"tdpbf16ps", Float(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Float(32, 256), BFloat(16, 512), BFloat(16, 512)}, Target::AVX512_SapphireRapids},
-    {"tilezero_i32", Int(32, 256), "tile_zero", {Int(16), Int(16)},  Target::AVX512_SapphireRapids},
+    {"tilezero_i32", Int(32, 256), "tile_zero", {Int(16), Int(16)}, Target::AVX512_SapphireRapids},
     {"tilezero_f32", Float(32, 256), "tile_zero", {Int(16), Int(16)}, Target::AVX512_SapphireRapids},
     {"tilestored64_i32", Int(32), "tile_store", {Int(16), Int(16), Handle(), Int(64), Int(64), Int(32, 256)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
     {"tilestored64_f32", Int(32), "tile_store", {Int(16), Int(16), Handle(), Int(64), Int(64), Float(32, 256)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
 };
-// clang-format on
 
 void CodeGen_X86::init_module() {
     CodeGen_Posix::init_module();
@@ -526,7 +524,8 @@ void CodeGen_X86::visit(const Cast *op) {
     if (target.has_feature(Target::F16C) &&
         dst.code() == Type::Float &&
         src.code() == Type::Float &&
-        (dst.bits() == 16 || src.bits() == 16)) {
+        (dst.bits() == 16 || src.bits() == 16) &&
+        src.bits() <= 32) {  // Don't use for narrowing casts from double - it results in a libm call
         // Node we use code() == Type::Float instead of is_float(), because we
         // don't want to catch bfloat casts.
 
@@ -549,7 +548,6 @@ void CodeGen_X86::visit(const Cast *op) {
         Expr pattern;
     };
 
-    // clang-format off
     static Pattern patterns[] = {
         // This isn't rounding_mul_shift_right(i16, i16, 15) because it doesn't
         // saturate the result.
@@ -557,7 +555,6 @@ void CodeGen_X86::visit(const Cast *op) {
 
         {"f32_to_bf16", bf16(wild_f32x_)},
     };
-    // clang-format on
 
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
@@ -569,13 +566,36 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
 
-    if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
-        if (src.bits() < dst.bits() && dst.bits() <= 32) {
+    if (const Call *widening_op = Call::as_intrinsic(op->value, {Call::widening_mul, Call::widening_add, Call::widening_sub})) {
+        bool should_upcast_args_to_dst_type =
+            dst.can_represent(widening_op->args[0].type()) &&
+            dst.can_represent(widening_op->args[1].type()) &&
             // LLVM/x86 really doesn't like 8 -> 16 bit multiplication. If we're
             // widening to 32-bits after a widening multiply, LLVM prefers to see a
             // widening multiply directly to 32-bits. This may result in extra
             // casts, so simplify to remove them.
-            value = codegen(simplify(Mul::make(Cast::make(dst, mul->args[0]), Cast::make(dst, mul->args[1]))));
+            ((widening_op->is_intrinsic(Call::widening_mul) &&
+              src.bits() < dst.bits() &&
+              dst.bits() <= 32) ||
+             // X86 doesn't have uint to float conversions before avx512
+             (!target.has_feature(Target::AVX512) &&
+              src.is_uint() &&
+              src.bits() >= 32 &&
+              dst.is_float()));
+
+        if (should_upcast_args_to_dst_type) {
+            Expr arg0 = Cast::make(dst, widening_op->args[0]);
+            Expr arg1 = Cast::make(dst, widening_op->args[1]);
+            Expr equiv;
+            if (widening_op->is_intrinsic(Call::widening_mul)) {
+                equiv = arg0 * arg1;
+            } else if (widening_op->is_intrinsic(Call::widening_add)) {
+                equiv = arg0 + arg1;
+            } else {
+                internal_assert(widening_op->is_intrinsic(Call::widening_sub));
+                equiv = arg0 - arg1;
+            }
+            value = codegen(simplify(equiv));
             return;
         }
     }
@@ -584,13 +604,6 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
-    if (op->is_intrinsic(Call::round)) {
-        value = call_overloaded_intrin(op->type, "round", op->args);
-        if (value) {
-            return;
-        }
-    }
-
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors beyond this point.
         CodeGen_Posix::visit(op);
@@ -783,7 +796,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             SingleArg = 1 << 2,
         };
     };
-    // clang-format off
+
     // These patterns are roughly sorted "best to worst", in case there are two
     // patterns that match the expression.
     static const Pattern patterns[] = {
@@ -819,7 +832,6 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         {VectorReduce::Add, 8, u64(absd(wild_u8x_, wild_u8x_)), "sum_of_absolute_differences", {}},
 
     };
-    // clang-format on
 
     std::vector<Expr> matches;
     for (const Pattern &p : patterns) {
@@ -960,7 +972,7 @@ string CodeGen_X86::mcpu_target() const {
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
         return "sapphirerapids";
     } else if (target.has_feature(Target::AVX512_Zen5)) {
-        return (LLVM_VERSION >= 190) ? "znver5" : "znver4";
+        return "znver5";
     } else if (target.has_feature(Target::AVX512_Zen4)) {
         return "znver4";
     } else if (target.has_feature(Target::AVX512_Cannonlake)) {
@@ -1041,7 +1053,7 @@ string CodeGen_X86::mcpu_tune() const {
     case Target::Processor::ZnVer4:
         return "znver4";
     case Target::Processor::ZnVer5:
-        return (LLVM_VERSION >= 190) ? "znver5" : "znver4";
+        return "znver5";
 
     case Target::Processor::ProcessorGeneric:
         break;
@@ -1151,11 +1163,11 @@ int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
     // type if we can.
     int vec_bits = t.lanes() * t.bits();
     int natural_vec_bits = target.natural_vector_size(t) * t.bits();
-    // clang-format off
+
     int slice_bits = ((vec_bits > 256 && natural_vec_bits > 256) ? 512 :
                       (vec_bits > 128 && natural_vec_bits > 128) ? 256 :
                                                                    128);
-    // clang-format on
+
     return slice_bits / t.bits();
 }
 

@@ -1,20 +1,49 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
 
-ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+CLEANUP_FILES=()
+# shellcheck disable=SC2329
+cleanup() { rm -rf "${CLEANUP_FILES[@]}"; }
+trap cleanup EXIT
 
-usage() { echo "Usage: $0 [-j MAX_PROCESS_COUNT] [-f]" 1>&2; exit 1; }
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
-get_thread_count () {
-  ([ -x "$(command -v nproc)" ] && nproc) ||
-  ([ -x "$(command -v sysctl)" ] && sysctl -n hw.physicalcpu)
+##
+
+# We standardize a common LLVM/Clang version for this script.
+# Note that this is totally independent of the version of LLVM that you
+# are using to build Halide itself. If you don't have the right version
+# installed, you can usually install what you need easily via:
+#
+#   sudo apt-get install llvm-X clang-X libclang-X-dev clang-tidy-X
+#   export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-X
+#
+# On macOS:
+#
+#   brew install llvm@X
+#   export CLANG_TIDY_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@X
+#
+# Where X matches the EXPECTED_VERSION below.
+
+EXPECTED_VERSION=21
+
+##
+
+usage() {
+    echo "Usage: $0 [-j MAX_PROCESS_COUNT] [-f]" 1>&2
+    exit 1
+}
+
+get_thread_count() {
+    ([ -x "$(command -v nproc)" ] && nproc) ||
+        ([ -x "$(command -v sysctl)" ] && sysctl -n hw.physicalcpu)
 }
 
 if [ "$(uname)" == "Darwin" ]; then
-  patch_file () { sed -i '' -E "$@"; }
+    _DEFAULT_LLVM_LOCATION="/opt/homebrew/opt/llvm@$EXPECTED_VERSION"
 else
-  patch_file () { sed -i -E "$@"; }
+    _DEFAULT_LLVM_LOCATION="/usr/lib/llvm-$EXPECTED_VERSION"
 fi
 
 J=$(get_thread_count)
@@ -24,7 +53,10 @@ while getopts ":j:f" o; do
     case "${o}" in
         j)
             J="${OPTARG}"
-            [[ "${J}" =~ ^[0-9]+$ ]] || ( echo "-j requires an integer argument"; usage )
+            [[ ${J} =~ ^[0-9]+$ ]] || (
+                echo "-j requires an integer argument"
+                usage
+            )
             ;;
         f)
             FIX="-fix"
@@ -34,110 +66,80 @@ while getopts ":j:f" o; do
             ;;
     esac
 done
-shift $((OPTIND-1))
+shift $((OPTIND - 1))
 
 echo "Using ${J} processes."
 if [ -n "${FIX}" ]; then
     echo "Operating in -fix mode!"
 fi
 
-# We are currently standardized on using LLVM/Clang 19 for this script.
-# Note that this is totally independent of the version of LLVM that you
-# are using to build Halide itself. If you don't have LLVM19 installed,
-# you can usually install what you need easily via:
-#
-# sudo apt-get install llvm-19 clang-19 libclang-19-dev clang-tidy-19
-# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-19
-#
-# On macOS:
-#
-# brew install llvm@19
-# export CLANG_TIDY_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@19
-
 if [ -z "$CLANG_TIDY_LLVM_INSTALL_DIR" ]; then
-  echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script."
-  exit
+    if [ -d "${_DEFAULT_LLVM_LOCATION}" ]; then
+        CLANG_TIDY_LLVM_INSTALL_DIR="${_DEFAULT_LLVM_LOCATION}"
+    else
+        echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script."
+        exit
+    fi
 fi
 
 echo "CLANG_TIDY_LLVM_INSTALL_DIR = ${CLANG_TIDY_LLVM_INSTALL_DIR}"
 
 VERSION=$("${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy" --version)
-if [[ ${VERSION} =~ .*version\ 19.* ]]
-then
-    echo "clang-tidy version 19 found."
+if [[ ${VERSION} =~ .*version\ $EXPECTED_VERSION.* ]]; then
+    echo "clang-tidy version $EXPECTED_VERSION found."
 else
-    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 19 install!"
+    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM $EXPECTED_VERSION install!"
     exit 1
 fi
 
-
 # Use a temp folder for the CMake stuff here, so it's fresh & correct every time
-CLANG_TIDY_BUILD_DIR=$(mktemp -d)
+if [[ -z ${CLANG_TIDY_BUILD_DIR} ]]; then
+    CLANG_TIDY_BUILD_DIR=$(mktemp -d)
+    CLEANUP_FILES+=("${CLANG_TIDY_BUILD_DIR}")
+else
+    mkdir -p "${CLANG_TIDY_BUILD_DIR}"
+fi
+
 echo "CLANG_TIDY_BUILD_DIR = ${CLANG_TIDY_BUILD_DIR}"
 
-# Specify Halide_LLVM_SHARED_LIBS=ON because some installers may provide only that.
-echo Building compile_commands.json...
-cmake -G Ninja -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev \
-      -DCMAKE_C_COMPILER="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang" \
-      -DCMAKE_CXX_COMPILER="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang++" \
-      -DCMAKE_BUILD_TYPE=Debug \
-      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-      -DHalide_CLANG_TIDY_BUILD=ON \
-      -DHalide_LLVM_ROOT="${CLANG_TIDY_LLVM_INSTALL_DIR}" \
-      > /dev/null
+export CC="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang"
+export CXX="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang++"
 
-[ -a "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" ]
+export CMAKE_GENERATOR=Ninja
+export CMAKE_BUILD_TYPE=Debug
+export CMAKE_EXPORT_COMPILE_COMMANDS=ON
+export Halide_LLVM_ROOT="${CLANG_TIDY_LLVM_INSTALL_DIR}"
 
-# We need to remove -arch flags where -target flags also exist. These break our fake runtime compilation steps on macOS
-echo Patching compile_commands.json...
-patch_file '/-target/ s/-arch *[^ ]+//' "${CLANG_TIDY_BUILD_DIR}/compile_commands.json"
+if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
+    export CMAKE_TOOLCHAIN_FILE="${ROOT_DIR}/cmake/toolchain.macos-homebrew.cmake"
+fi
 
-# We must populate the includes directory to check things outside of src/
-echo Building HalideIncludes...
-cmake --build "${CLANG_TIDY_BUILD_DIR}" -j "${J}" --target HalideIncludes
+echo Configuring Halide...
+cmake -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev -DWITH_TESTS=OFF
 
-echo Building flatbuffer stuff...
-cmake --build "${CLANG_TIDY_BUILD_DIR}" -j "${J}" --target generate_fb_header
+[ -e "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" ]
 
-RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy
+echo Building Halide...
+cmake --build "${CLANG_TIDY_BUILD_DIR}" -j "${J}"
 
-# We deliberately skip apps/ and test/ for now, as the compile commands won't include
-# generated headers files from Generators.
-#
-# Skip DefaultCostModel.cpp as it relies on cost_model.h.
-# Skip GenGen.cpp and RunGenMain.cpp as they bring clang-tidy to its knees,
-# for reasons that aren't entirely clear yet.
-echo Finding targets...
-CLANG_TIDY_TARGETS=$(find \
-     "${ROOT_DIR}/src" \
-     "${ROOT_DIR}/python_bindings" \
-     "${ROOT_DIR}/tools" \
-     "${ROOT_DIR}/util" \
-     \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) -and -not -wholename "*/.*" \
-     ! -name DefaultCostModel.cpp \
-     ! -name GenGen.cpp \
-     ! -name RunGenMain.cpp)
+echo Merging runtime compilation database...
+jq -s 'add' "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" \
+    <(sed 's/,$//' "${CLANG_TIDY_BUILD_DIR}"/src/runtime/*.json | jq -s '.') \
+    >"${CLANG_TIDY_BUILD_DIR}/compile_commands_merged.json"
+mv "${CLANG_TIDY_BUILD_DIR}/compile_commands_merged.json" "${CLANG_TIDY_BUILD_DIR}/compile_commands.json"
 
-# clang-tidy doesn't have a sane way to exclude third-party headers (e.g. pybind11),
-# so we will instead build an include filter
-CLANG_TIDY_HEADER_FILTER=".*/src/.*|.*/python_bindings/.*|.*/tools/.*|.*/util/.*"
+echo "Running clang-tidy..."
 
-echo Running clang-tidy...
-${RUN_CLANG_TIDY} \
+export PYTHONUNBUFFERED=1
+export CLANG_TIDY_REAL_BINARY="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy"
+export CLANG_TIDY_ROOT_DIR="${ROOT_DIR}"
+"${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy" \
     ${FIX} \
     -j "${J}" \
-    -header-filter="${CLANG_TIDY_HEADER_FILTER}" \
     -quiet \
     -p "${CLANG_TIDY_BUILD_DIR}" \
-    -clang-tidy-binary "${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy" \
+    -clang-tidy-binary "${ROOT_DIR}/tools/clang-tidy-filter.sh" \
     -clang-apply-replacements-binary "${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-apply-replacements" \
-    ${CLANG_TIDY_TARGETS} \
-    2>&1 | grep -v "warnings generated" | sed "s|.*/||"
+    "$@"
 
-RESULT=${PIPESTATUS[0]}
-
-echo "run-clang-tidy finished with status ${RESULT}"
-
-rm -rf "${CLANG_TIDY_BUILD_DIR}"
-
-exit "${RESULT}"
+echo "Success!"

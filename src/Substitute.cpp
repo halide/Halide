@@ -12,6 +12,7 @@ using std::string;
 namespace {
 
 class Substitute : public IRMutator {
+protected:
     const map<string, Expr> &replace;
     Scope<> hidden;
 
@@ -83,17 +84,17 @@ public:
 
     Stmt visit(const For *op) override {
         Expr new_min = mutate(op->min);
-        Expr new_extent = mutate(op->extent);
+        Expr new_max = mutate(op->max);
         hidden.push(op->name);
         Stmt new_body = mutate(op->body);
         hidden.pop(op->name);
 
         if (new_min.same_as(op->min) &&
-            new_extent.same_as(op->extent) &&
+            new_max.same_as(op->max) &&
             new_body.same_as(op->body)) {
             return op;
         } else {
-            return For::make(op->name, new_min, new_extent, op->for_type, op->partition_policy, op->device_api, new_body);
+            return For::make(op->name, new_min, new_max, op->for_type, op->partition_policy, op->device_api, new_body);
         }
     }
 };
@@ -104,63 +105,53 @@ Expr substitute(const string &name, const Expr &replacement, const Expr &expr) {
     map<string, Expr> m;
     m[name] = replacement;
     Substitute s(m);
-    return s.mutate(expr);
+    return s(expr);
 }
 
 Stmt substitute(const string &name, const Expr &replacement, const Stmt &stmt) {
     map<string, Expr> m;
     m[name] = replacement;
     Substitute s(m);
-    return s.mutate(stmt);
+    return s(stmt);
 }
 
 Expr substitute(const map<string, Expr> &m, const Expr &expr) {
     Substitute s(m);
-    return s.mutate(expr);
+    return s(expr);
 }
 
 Stmt substitute(const map<string, Expr> &m, const Stmt &stmt) {
     Substitute s(m);
-    return s.mutate(stmt);
+    return s(stmt);
 }
 
 namespace {
 
-class SubstituteExpr : public IRMutator {
-public:
-    Expr find, replacement;
-
-    using IRMutator::mutate;
-
-    Expr mutate(const Expr &e) override {
+template<typename T>
+auto substitute_impl(const Expr &find, const Expr &replacement, const T &ir) {
+    return mutate_with(ir, [&](auto *self, const Expr &e) {
         if (equal(e, find)) {
             return replacement;
-        } else {
-            return IRMutator::mutate(e);
         }
-    }
-};
+        return self->mutate_base(e);
+    });
+}
 
 }  // namespace
 
 Expr substitute(const Expr &find, const Expr &replacement, const Expr &expr) {
-    SubstituteExpr s;
-    s.find = find;
-    s.replacement = replacement;
-    return s.mutate(expr);
+    return substitute_impl(find, replacement, expr);
 }
 
 Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
-    SubstituteExpr s;
-    s.find = find;
-    s.replacement = replacement;
-    return s.mutate(stmt);
+    return substitute_impl(find, replacement, stmt);
 }
 
 namespace {
 
 /** Substitute an expr for a var in a graph. */
 class GraphSubstitute : public IRGraphMutator {
+protected:
     string var;
     Expr value;
 
@@ -213,25 +204,25 @@ public:
 }  // namespace
 
 Expr graph_substitute(const string &name, const Expr &replacement, const Expr &expr) {
-    return GraphSubstitute(name, replacement).mutate(expr);
+    return GraphSubstitute(name, replacement)(expr);
 }
 
 Stmt graph_substitute(const string &name, const Expr &replacement, const Stmt &stmt) {
-    return GraphSubstitute(name, replacement).mutate(stmt);
+    return GraphSubstitute(name, replacement)(stmt);
 }
 
 Expr graph_substitute(const Expr &find, const Expr &replacement, const Expr &expr) {
-    return GraphSubstituteExpr(find, replacement).mutate(expr);
+    return GraphSubstituteExpr(find, replacement)(expr);
 }
 
 Stmt graph_substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
-    return GraphSubstituteExpr(find, replacement).mutate(stmt);
+    return GraphSubstituteExpr(find, replacement)(stmt);
 }
 
 namespace {
 
 class SubstituteInAllLets : public IRGraphMutator {
-
+protected:
     using IRGraphMutator::visit;
 
     Expr visit(const Let *op) override {
@@ -244,11 +235,11 @@ class SubstituteInAllLets : public IRGraphMutator {
 }  // namespace
 
 Expr substitute_in_all_lets(const Expr &expr) {
-    return SubstituteInAllLets().mutate(expr);
+    return SubstituteInAllLets()(expr);
 }
 
 Stmt substitute_in_all_lets(const Stmt &stmt) {
-    return SubstituteInAllLets().mutate(stmt);
+    return SubstituteInAllLets()(stmt);
 }
 
 }  // namespace Internal

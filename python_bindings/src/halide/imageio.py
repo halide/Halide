@@ -1,6 +1,6 @@
 try:
     import imageio.v2 as imageio
-except:
+except ImportError:
     import imageio
 import numpy as np
 

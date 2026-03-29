@@ -1,5 +1,4 @@
 import halide as hl
-import numpy as np
 
 
 def test_tuple_select():
@@ -71,10 +70,7 @@ def test_tuple_select():
                                               (x-100, y-200))
         # fmt: on
     except hl.HalideError as e:
-        assert (
-            "select() on Tuples may not mix Expr and Tuple for the condition elements."
-            in str(e)
-        )
+        assert "select(): Expected Tuple but got Expr: ((x + y) < 100)" in str(e)
     else:
         assert False, "Did not see expected exception!"
 
@@ -83,7 +79,9 @@ def test_tuple_select():
         f = hl.Func("f")
         f[x, y] = hl.select((x < 30, y < 30), (x, y, 0), (1, 2, 3, 4))
     except hl.HalideError as e:
-        assert "select() on Tuples requires all Tuples to have identical sizes." in str(e)
+        assert "select() on Tuples requires all Tuples to have identical sizes." in str(
+            e
+        )
     else:
         assert False, "Did not see expected exception!"
 

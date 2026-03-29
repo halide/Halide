@@ -9,11 +9,10 @@ WEAK_INLINE int halide_profiler_set_current_func(halide_profiler_instance_state 
         // Use empty volatile asm blocks to prevent code motion. Otherwise
         // llvm reorders or elides the stores.
         volatile int *ptr = &(instance->current_func);
-        // clang-format off
-        asm volatile ("":::);
+
+        asm volatile("" :::);
         *ptr = func;
-        asm volatile ("":::);
-        // clang-format on
+        asm volatile("" :::);
     }
     return 0;
 }

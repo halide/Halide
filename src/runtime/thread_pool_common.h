@@ -185,7 +185,7 @@ struct work_queue_t {
     // whether the thread pool has been initialized.
     bool shutdown, initialized;
 
-    // The number of threads that are currently commited to possibly block
+    // The number of threads that are currently committed to possibly block
     // via outstanding jobs queued or being actively worked on. Used to limit
     // the number of iterations of parallel for loops that are invoked so as
     // to prevent deadlock due to oversubscription of threads.
@@ -253,6 +253,27 @@ WEAK void dump_job_state() {
 
 WEAK void worker_thread(void *);
 
+WEAK void worker_thread_stall(work *owned_job) {
+    work_queue.owners_sleeping++;
+    owned_job->owner_is_sleeping = true;
+    work_queue.wake_owners.wait(&work_queue.mutex);
+    owned_job->owner_is_sleeping = false;
+    work_queue.owners_sleeping--;
+}
+
+WEAK void worker_thread_idle() {
+    work_queue.workers_sleeping++;
+    if (work_queue.a_team_size > work_queue.target_a_team_size) {
+        // Transition to B team
+        work_queue.a_team_size--;
+        work_queue.wake_b_team.wait(&work_queue.mutex);
+        work_queue.a_team_size++;
+    } else {
+        work_queue.wake_a_team.wait(&work_queue.mutex);
+    }
+    work_queue.workers_sleeping--;
+}
+
 WEAK void worker_thread_already_locked(work *owned_job) {
     while (owned_job ? owned_job->running() : !work_queue.shutdown) {
         work *job = work_queue.jobs;
@@ -272,7 +293,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             } else if (owned_job->parent_job && owned_job->parent_job->exit_status != halide_error_code_success) {
                 owned_job->exit_status = owned_job->parent_job->exit_status;
                 // The wakeup can likely be only done under certain conditions, but it is only happening
-                // in when an error has already occured and it seems more important to ensure reliable
+                // in when an error has already occurred and it seems more important to ensure reliable
                 // termination than to optimize this path.
                 work_queue.wake_owners.broadcast();
                 continue;
@@ -281,7 +302,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
 
         dump_job_state();
 
-        // Find a job to run, prefering things near the top of the stack.
+        // Find a job to run, preferring things near the top of the stack.
         while (job) {
             print_job(job, "", "Considering job ");
             // Only schedule tasks with enough free worker threads
@@ -330,23 +351,13 @@ WEAK void worker_thread_already_locked(work *owned_job) {
 
         if (!job) {
             // There is no runnable job. Go to sleep.
+            // The "stall" and "idle" function calls are not strictly necessary
+            // and could be inlined here, but having symbols for these situations
+            // is very informative when profiling.
             if (owned_job) {
-                work_queue.owners_sleeping++;
-                owned_job->owner_is_sleeping = true;
-                work_queue.wake_owners.wait(&work_queue.mutex);
-                owned_job->owner_is_sleeping = false;
-                work_queue.owners_sleeping--;
+                worker_thread_stall(owned_job);
             } else {
-                work_queue.workers_sleeping++;
-                if (work_queue.a_team_size > work_queue.target_a_team_size) {
-                    // Transition to B team
-                    work_queue.a_team_size--;
-                    work_queue.wake_b_team.wait(&work_queue.mutex);
-                    work_queue.a_team_size++;
-                } else {
-                    work_queue.wake_a_team.wait(&work_queue.mutex);
-                }
-                work_queue.workers_sleeping--;
+                worker_thread_idle();
             }
             continue;
         }

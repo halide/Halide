@@ -1364,7 +1364,6 @@ constexpr size_t count_buffers(const std::array<::HalideFunctionInfo::ArgumentIn
     return buffer_count;
 }
 
-// clang-format off
 constexpr char arginfo_to_sigchar(::HalideFunctionInfo::ArgumentInfo arg) {
     if (arg.kind == HalideFunctionInfo::InputBuffer) {
         return '@';
@@ -1372,9 +1371,9 @@ constexpr char arginfo_to_sigchar(::HalideFunctionInfo::ArgumentInfo arg) {
         return '#';
     } else {
 
-        #define HANDLE_CASE(CODE, BITS, CHAR)        \
-            case halide_type_t(CODE, BITS).as_u32(): \
-                return (CHAR);
+#define HANDLE_CASE(CODE, BITS, CHAR)        \
+    case halide_type_t(CODE, BITS).as_u32(): \
+        return (CHAR);
 
         switch (arg.type.as_u32()) {
             HANDLE_CASE(halide_type_bfloat, 16, '!')
@@ -1393,13 +1392,12 @@ constexpr char arginfo_to_sigchar(::HalideFunctionInfo::ArgumentInfo arg) {
             HANDLE_CASE(halide_type_handle, 64, 'P')
         }
 
-        #undef HANDLE_CASE
+#undef HANDLE_CASE
     }
 
     // Shouldn't ever get here, but if we do, we'll fail at *compile* time
     abort();
 }
-// clang-format on
 
 template<size_t arg_count, size_t... Indices>
 constexpr std::array<char, arg_count + 1> compute_signature_impl(const std::array<::HalideFunctionInfo::ArgumentInfo, arg_count> args,
@@ -1588,10 +1586,10 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    constexpr auto usig = compute_signature(metadata_tester_ucon_argument_info());
-    if (strcmp(&usig[0], "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+    constexpr auto ucon_sig = compute_signature(metadata_tester_ucon_argument_info());
+    if (strcmp(&ucon_sig[0], "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
         // NOLINTNEXTLINE(clang-diagnostic-unreachable-code)
-        std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &usig[0] << "\n";
+        std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &ucon_sig[0] << "\n";
         exit(1);
     }
 

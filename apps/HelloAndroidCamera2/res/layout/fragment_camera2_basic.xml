@@ -20,5 +20,5 @@
             android:gravity="center"
             android:text="@string/toggle" />
     </LinearLayout>
-    
+
 </LinearLayout>

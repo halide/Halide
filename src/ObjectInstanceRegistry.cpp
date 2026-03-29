@@ -14,7 +14,7 @@ ObjectInstanceRegistry &ObjectInstanceRegistry::get_registry() {
 void ObjectInstanceRegistry::register_instance(void *this_ptr, size_t size, Kind kind,
                                                void *subject_ptr) {
     ObjectInstanceRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     uintptr_t key = (uintptr_t)this_ptr;
     internal_assert(registry.instances.find(key) == registry.instances.end());
     registry.instances[key] = InstanceInfo(size, kind, subject_ptr);
@@ -23,7 +23,7 @@ void ObjectInstanceRegistry::register_instance(void *this_ptr, size_t size, Kind
 /* static */
 void ObjectInstanceRegistry::unregister_instance(void *this_ptr) {
     ObjectInstanceRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     uintptr_t key = (uintptr_t)this_ptr;
     std::map<uintptr_t, InstanceInfo>::iterator it = registry.instances.find(key);
     internal_assert(it != registry.instances.end());
@@ -36,7 +36,7 @@ ObjectInstanceRegistry::instances_in_range(void *start, size_t size) {
     std::vector<std::pair<void *, ObjectInstanceRegistry::Kind>> results;
 
     ObjectInstanceRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
 
     std::map<uintptr_t, InstanceInfo>::const_iterator it =
         registry.instances.lower_bound((uintptr_t)start);

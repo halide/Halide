@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "halide_thread_pool.h"
 #include "test_sharding.h"
 
 #include <algorithm>
@@ -357,7 +358,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
     Buffer<T> b = init<T, BIG>(t, 2, WIDTH, HEIGHT);
 
     // Filter the input values for the operation to be tested.
-    // Cannot divide by zero, so remove zeroes from b.
+    // Cannot divide by zero, so remove zeros from b.
     // Also, cannot divide the most negative number by -1.
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
@@ -462,7 +463,7 @@ bool f_mod() {
     Buffer<T> out(WIDTH, HEIGHT);
 
     // Filter the input values for the operation to be tested.
-    // Cannot divide by zero, so remove zeroes from b.
+    // Cannot divide by zero, so remove zeros from b.
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
             if (b(i, j) == 0.0) {
@@ -540,6 +541,18 @@ void add_test_div_mod(int vector_width, ScheduleVariant scheduling, Target targe
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
+    // LLVM's performSignExtendInRegCombine in the AArch64 backend asserts
+    // when it encounters SIGN_EXTEND_INREG from i1 on SVE vectors. Halide's
+    // division lowering produces select(cond, -1, 0) which LLVM canonicalizes
+    // to sext i1, triggering the assertion. Fixed on LLVM main by:
+    // https://github.com/llvm/llvm-project/commit/ffb7a9f0ec80 (PR #177976)
+    if (target.has_feature(Target::SVE2) &&
+        Internal::get_llvm_version() < 230) {
+        printf("[SKIP] LLVM %d has a known SVE bug in performSignExtendInRegCombine (PR #177976).\n",
+               Internal::get_llvm_version());
+        return 0;
+    }
+
     ScheduleVariant scheduling = CPU;
     if (target.has_gpu_feature()) {
         scheduling = TiledGPU;
@@ -574,11 +587,19 @@ int main(int argc, char **argv) {
 
     using Sharder = Halide::Internal::Test::Sharder;
     Sharder sharder;
+
+    std::vector<std::future<bool>> futures;
+
+    Halide::Tools::ThreadPool<bool> pool;
     for (size_t t = 0; t < tasks.size(); t++) {
         if (!sharder.should_run(t)) continue;
         const auto &task = tasks.at(t);
-        if (!task.fn()) {
-            exit(-1);
+        futures.push_back(pool.async(task.fn));
+    }
+
+    for (auto &f : futures) {
+        if (!f.get()) {
+            return 1;
         }
     }
 

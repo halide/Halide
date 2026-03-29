@@ -5,32 +5,35 @@ to use Halide in your own CMake projects, see [HalideCMakePackage.md]. If you
 are looking for Halide's CMake coding guidelines, see [CodeStyleCMake.md].
 
 <!-- TOC -->
-* [Building Halide with CMake](#building-halide-with-cmake)
-* [Installing CMake](#installing-cmake)
-  * [Cross-platform](#cross-platform)
-  * [Windows](#windows)
-  * [macOS](#macos)
-  * [Ubuntu Linux](#ubuntu-linux)
-  * [Optional: Install Ninja](#optional-install-ninja)
-* [Dependencies](#dependencies)
-  * [Summary](#summary)
-  * [Installing dependencies](#installing-dependencies)
-    * [vcpkg](#vcpkg)
-    * [Windows](#windows-1)
-    * [Homebrew](#homebrew)
-    * [Ubuntu / Debian](#ubuntu--debian)
-    * [Python](#python)
-* [Building Halide](#building-halide)
-  * [Basic build](#basic-build)
-    * [Windows](#windows-2)
-    * [macOS and Linux](#macos-and-linux)
-  * [CMake Presets](#cmake-presets)
-    * [Common presets](#common-presets)
-    * [Vcpkg presets](#vcpkg-presets)
-    * [Sanitizer presets](#sanitizer-presets)
-  * [Build options](#build-options)
-  * [Installing](#installing)
-* [Building Halide with pip](#building-halide-with-pip)
+
+- [Building Halide with CMake](#building-halide-with-cmake)
+- [Installing CMake](#installing-cmake)
+  - [Cross-platform](#cross-platform)
+  - [Windows](#windows)
+  - [macOS](#macos)
+  - [Ubuntu Linux](#ubuntu-linux)
+  - [Optional: Install Ninja](#optional-install-ninja)
+- [Dependencies](#dependencies)
+  - [Summary](#summary)
+  - [Installing dependencies](#installing-dependencies)
+    - [vcpkg](#vcpkg)
+    - [Windows](#windows-1)
+    - [Homebrew](#homebrew)
+    - [Ubuntu / Debian](#ubuntu--debian)
+    - [Python](#python)
+- [Building Halide](#building-halide)
+  - [Basic build](#basic-build)
+    - [Windows](#windows-2)
+    - [macOS and Linux](#macos-and-linux)
+  - [CMake Presets](#cmake-presets)
+    - [Common presets](#common-presets)
+    - [Vcpkg presets](#vcpkg-presets)
+    - [Sanitizer presets](#sanitizer-presets)
+  - [Build options](#build-options)
+  - [Installing](#installing)
+- [Building Halide with pip](#building-halide-with-pip)
+  - [Using ccache with pip builds](#using-ccache-with-pip-builds)
+
 <!-- TOC -->
 
 # Installing CMake
@@ -52,7 +55,7 @@ via `pip` into a [virtual environment][venv]. There are binary wheels available
 for nearly all relevant platforms, including:
 
 | OS                | x86-32             | x86-64             | ARM64                      |
-|-------------------|--------------------|--------------------|----------------------------|
+| ----------------- | ------------------ | ------------------ | -------------------------- |
 | Windows           | :white_check_mark: | :white_check_mark: | :white_check_mark:         |
 | macOS             | :x:                | 10.10+             | 11.0+ (incl. `universal2`) |
 | Linux (musl 1.1+) | :white_check_mark: | :white_check_mark: | :white_check_mark:         |
@@ -72,9 +75,9 @@ $ python -m pip install cmake
 ```
 
 If you don't want Python to manage your CMake installation, you can either
-follow the platform-specific instructions below or install CMake
-from [Kitware's binary releases][cmake-download]. If all else fails, you might
-need to build CMake from source (e.g. on 32-bit ARM). In that case, follow the
+follow the platform-specific instructions below or install CMake from
+[Kitware's binary releases][cmake-download]. If all else fails, you might need
+to build CMake from source (e.g. on 32-bit ARM). In that case, follow the
 directions posted on [Kitware's website][cmake-from-source].
 
 ## Windows
@@ -82,13 +85,13 @@ directions posted on [Kitware's website][cmake-from-source].
 On Windows, there are two primary methods for installing an up-to-date CMake:
 
 1. You can get CMake through the Visual Studio 2022 installer.
-2. You can use Windows's built-in package manager, [winget][winget]:
+2. You can use Windows's built-in package manager, [winget]:
    ```shell
    winget install Kitware.CMake
    ```
 
-We prefer the first option for its simplicity. See
-Microsoft's [documentation][vs-cmake-docs] for more details.
+We prefer the first option for its simplicity. See Microsoft's
+[documentation][vs-cmake-docs] for more details.
 
 ## macOS
 
@@ -102,11 +105,11 @@ $ brew install cmake
 
 There are a few good ways to install CMake on Ubuntu:
 
-1. If you're running 24.04 LTS, then simply running
-   `sudo apt install cmake` will install CMake 3.28.
+1. If you're running 24.04 LTS, then simply running `sudo apt install cmake`
+   will install CMake 3.28.
 2. If you're running an older LTS or would like to use the newest CMake, try
-   installing via the [snap store][snap store]: `snap install cmake`. Note this
-   will conflict with an APT-provided CMake.
+   installing via the [snap store]: `snap install cmake`. Note this will
+   conflict with an APT-provided CMake.
 3. Kitware also provides an [APT repository][cmake-apt] with up-to-date
    releases. Compatible with 20.04 LTS+ and is the best option for 32-bit ARM.
 
@@ -123,11 +126,11 @@ and it is the only generator capable of producing accurate incremental builds.
 
 It is available in most package repositories:
 
-* Python: `pipx install ninja`
-* Visual Studio Installer: alongside CMake
-* winget: `winget install Ninja-build.Ninja`
-* Homebrew: `brew install ninja`
-* APT: `apt install ninja-build`
+- Python: `pipx install ninja`
+- Visual Studio Installer: alongside CMake
+- winget: `winget install Ninja-build.Ninja`
+- Homebrew: `brew install ninja`
+- APT: `apt install ninja-build`
 
 You can also place a [pre-built binary][ninja-download] from their website in
 the PATH.
@@ -140,14 +143,14 @@ The following is a complete list of required and optional dependencies for
 building the core pieces of Halide.
 
 | Dependency    | Version            | Required when...           | Notes                                               |
-|---------------|--------------------|----------------------------|-----------------------------------------------------|
+| ------------- | ------------------ | -------------------------- | --------------------------------------------------- |
 | [LLVM]        | _see policy below_ | _always_                   | WebAssembly and X86 targets are required.           |
 | [Clang]       | `==LLVM`           | _always_                   |                                                     |
 | [LLD]         | `==LLVM`           | _always_                   |                                                     |
 | [flatbuffers] | `~=23.5.26`        | `WITH_SERIALIZATION=ON`    |                                                     |
-| [wabt]        | `==1.0.36`         | `Halide_WASM_BACKEND=wabt` | Does not have a stable API; exact version required. |
+| [wabt]        | `==1.0.39`         | `Halide_WASM_BACKEND=wabt` | Does not have a stable API; exact version required. |
 | [V8]          | trunk              | `Halide_WASM_BACKEND=V8`   | Difficult to build. See [WebAssembly.md]            |
-| [Python]      | `>=3.8`            | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
+| [Python]      | `>=3.10`           | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
 | [pybind11]    | `~=2.11.1`         | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
 
 Halide maintains the following compatibility policy with LLVM: Halide version
@@ -159,14 +162,14 @@ build it yourself.
 To build the apps, documentation, and tests, an extended set is needed.
 
 | Dependency                      | Required when...                  | Notes                                                                       |
-|---------------------------------|-----------------------------------|-----------------------------------------------------------------------------|
-| [CUDA Toolkit][FindCUDAToolkit] | building `apps/cuda_mat_mul`      | When compiling Halide pipelines that use CUDA, only the drivers are needed. |
-| [Doxygen][FindDoxygen]          | `WITH_DOCS=ON`                    |                                                                             |
-| [Eigen3][Eigen3CMake]           | building `apps/linear_algebra`    |                                                                             |
-| [libjpeg][FindJPEG]             | `WITH_TESTS=ON`                   | Optionally used by `halide_image_io.h` and `Halide::ImageIO` in CMake.      |
-| [libpng][FindPNG]               | `WITH_TESTS=ON`                   | (same as libjpeg)                                                           |
-| [BLAS][FindBLAS]                | building `apps/linear_algebra`    | [ATLAS] and [OpenBLAS] are supported implementations                        |
-| [OpenCL][FindOpenCL]            | compiling pipelines with `opencl` |                                                                             |
+| ------------------------------- | --------------------------------- | --------------------------------------------------------------------------- |
+| [CUDA Toolkit][findcudatoolkit] | building `apps/cuda_mat_mul`      | When compiling Halide pipelines that use CUDA, only the drivers are needed. |
+| [Doxygen][finddoxygen]          | `WITH_DOCS=ON`                    |                                                                             |
+| [Eigen3][eigen3cmake]           | building `apps/linear_algebra`    |                                                                             |
+| [libjpeg][findjpeg]             | `WITH_TESTS=ON`                   | Optionally used by `halide_image_io.h` and `Halide::ImageIO` in CMake.      |
+| [libpng][findpng]               | `WITH_TESTS=ON`                   | (same as libjpeg)                                                           |
+| [BLAS][findblas]                | building `apps/linear_algebra`    | [ATLAS] and [OpenBLAS] are supported implementations                        |
+| [OpenCL][findopencl]            | compiling pipelines with `opencl` |                                                                             |
 
 It is best practice to configure your environment so that CMake can find
 dependencies without package-specific hints. For instance, if you want CMake to
@@ -186,26 +189,18 @@ for these packages is linked in the table above.
 
 Halide has first-class support for using [vcpkg] to manage dependencies. The
 list of dependencies and features is contained inside `vcpkg.json` at the root
-of the repository.
+of the repository. LLVM and Python must be provided by the system; vcpkg handles
+the remaining dependencies (flatbuffers, wabt, pybind11, libjpeg, libpng, etc.).
 
-By default, a minimum set of LLVM backends will be enabled to compile JIT code
-for the host and the serialization feature will be enabled. When using the vcpkg
-toolchain file, you can set `-DVCPKG_MANIFEST_FEATURES=developer`
-to enable building all dependencies (except Doxygen, which is not available on
-vcpkg).
+Halide includes a `vcpkg-configuration.json` file that automatically configures
+[overlay ports][vcpkg-overlay] and overlay triplets. The overlay ports redirect
+LLVM and Python to system installations, preventing vcpkg from trying to build
+them. This configuration is applied automatically when vcpkg is used from the
+Halide source tree.
 
-By default, running `vcpkg install` will try to build all of LLVM. This is often
-undesirable as it takes very long to do and consumes a lot of disk space,
-especially as `vcpkg` requires special configuration to disable the debug build.
-It will _also_ attempt to build Python 3 as a dependency of pybind11.
-
-To mitigate this issue, we provide a [vcpkg-overlay] that disables building LLVM
-and Python. When using the vcpkg toolchain, you can enable it by setting
-`-DVCPKG_OVERLAY_PORTS=cmake/vcpkg`.
-
-If you do choose to use vcpkg to build LLVM (the easiest way on Windows), note
-that it is safe to delete the intermediate build files and caches in
-`D:\vcpkg\buildtrees` and `%APPDATA%\local\vcpkg`.
+When using the vcpkg toolchain file, you can set
+`-DVCPKG_MANIFEST_FEATURES=developer` to enable building all test dependencies
+(except Doxygen, which is not available on vcpkg).
 
 For convenience, we provide [CMake presets](#cmake-presets) that set these flags
 appropriately per-platform. They are documented further below.
@@ -215,7 +210,7 @@ appropriately per-platform. They are documented further below.
 On Windows, we recommend using `vcpkg` to install library dependencies.
 
 To build the documentation, you will need to install [Doxygen]. This can be done
-either from the [Doxygen website][doxygen-download] or through [winget][winget]:
+either from the [Doxygen website][doxygen-download] or through [winget]:
 
 ```shell
 $ winget install DimitriVanHeesch.Doxygen
@@ -229,29 +224,31 @@ necessary, it is convenient to install Python system-wide on Windows (i.e.
 `C:\Program Files`) because CMake looks at standard paths and registry keys.
 This removes the need to manually set the `PATH`.
 
-Once Python is installed, you can install the Python module dependencies either
-globally or in a [virtual environment][venv] by running
+Once Python is installed, you can install the Python module dependencies in a
+[virtual environment][venv] by running
 
 ```shell
-$ python -m pip install -r requirements.txt
+$ uv sync
 ```
 
 from the root of the repository.
 
 ### Homebrew
 
-On macOS, it is possible to install all dependencies via [Homebrew][homebrew]:
+On macOS, it is possible to install all dependencies via [Homebrew]:
 
 ```shell
-$ brew install llvm flatbuffers wabt python pybind11 doxygen eigen libpng libjpeg openblas
+$ brew install llvm flatbuffers wabt python pybind11 doxygen eigen libpng libjpeg-turbo openblas
 ```
 
 The `llvm` package includes `clang`, `clang-format`, and `lld`, too. To ensure
-CMake can find the keg-only dependencies, set the following:
+CMake can find LLVM, set the following cache variable:
 
 ```shell
-$ export CMAKE_PREFIX_PATH="/opt/homebrew:/opt/homebrew/opt/llvm:/opt/homebrew/opt/jpeg"
+$ cmake ... -DHalide_ROOT=/opt/homebrew/opt/llvm
 ```
+
+Or use the `macOS` CMake preset, which does this for you.
 
 ### Ubuntu / Debian
 
@@ -260,20 +257,19 @@ module dependencies):
 
 ```
 $ sudo apt install clang-tools lld llvm-dev libclang-dev liblld-dev \
-    libpng-dev libjpeg-dev libgl-dev python3-dev python3-numpy python3-scipy \
-    python3-imageio python3-pybind11 libopenblas-dev libeigen3-dev \ 
+    libpng-dev libjpeg-dev libgl-dev python3-dev python3-numpy \
+    python3-imageio python3-pybind11 libopenblas-dev libeigen3-dev \
     libatlas-base-dev doxygen
 ```
 
 ### Python
 
 When running the Python package, you will need to install additional
-dependencies. These are tabulated in `requirements.txt` and may be installed
-with:
+dependencies. These are tabulated as constraints in `pyproject.toml` and
+resolved to specific versions in `uv.lock`. They may be installed by running:
 
 ```shell
-$ python -m pip install -U pip "setuptools[core]" wheel
-$ python -m pip install -r requirements.txt
+$ uv sync --no-install-project
 ```
 
 # Building Halide
@@ -358,15 +354,15 @@ standard types: `Debug`, `RelWithDebInfo`, `MinSizeRel`, or `Release`.
 
 ## CMake Presets
 
+Halide provides several [presets][cmake_presets] to make the above commands more
+convenient.
+
 ### Common presets
 
-Halide provides several [presets][cmake_presets] to make the above commands more
-convenient. The following CMake preset commands correspond to the longer ones
-above.
+These presets do not use vcpkg. They assume that all dependencies are available
+via the system (e.g. Homebrew on macOS, APT on Linux).
 
 ```shell
-$ cmake --preset=win64    # VS 2022 generator, 64-bit build, vcpkg deps
-$ cmake --preset=win32    # VS 2022 generator, 32-bit build, vcpkg deps
 $ cmake --preset=macOS    # Ninja generator, macOS host build, Homebrew deps
 $ cmake --preset=debug    # Debug mode, any single-config generator / compiler
 $ cmake --preset=release  # Release mode, any single-config generator / compiler
@@ -374,23 +370,16 @@ $ cmake --preset=release  # Release mode, any single-config generator / compiler
 
 ### Vcpkg presets
 
-Halide provides two sets of corresponding vcpkg-enabled presets: _base_ and
-_full_.
+The following presets use vcpkg to manage non-LLVM dependencies. LLVM and Python
+must be provided by the system.
 
-| Base preset     | Full preset          |
-|-----------------|----------------------|
-| `win32`         | `win32-vcpkg-full`   |
-| `win64`         | `win64-vcpkg-full`   |
-| `macOS-vcpkg`   | `macOS-vcpkg-full`   |
-| `debug-vcpkg`   | `debug-vcpkg-full`   |
-| `release-vcpkg` | `release-vcpkg-full` |
-
-In simple terms, the base presets rely on the system to provide LLVM and Python,
-while the full presets delegate this to vcpkg (which consumes a large amount of
-hard disk space and time).
-
-The `macOS-vcpkg` preset adds `/opt/homebrew/opt/llvm` to
-`CMAKE_PREFIX_PATH`.
+| Preset          | Description                                   |
+| --------------- | --------------------------------------------- |
+| `win32`         | Visual Studio 2022 generator, 32-bit build    |
+| `win64`         | Visual Studio 2022 generator, 64-bit build    |
+| `macOS-vcpkg`   | macOS build with vcpkg + Homebrew LLVM        |
+| `debug-vcpkg`   | Debug build for any single-config generator   |
+| `release-vcpkg` | Release build for any single-config generator |
 
 ### Sanitizer presets
 
@@ -398,8 +387,8 @@ There are also presets to use some Clang sanitizers with the CMake build; at
 present, only Fuzzer and ASAN (Address Sanitizer) are supported, and only on
 linux-x86-64.
 
-* `linux-x64-asan`: Use the Address Sanitizer
-* `linux-x64-fuzzer`: Use the Clang fuzzer plugin
+- `linux-x64-asan`: Use the Address Sanitizer
+- `linux-x64-fuzzer`: Use the Clang fuzzer plugin
 
 To use these, you must build LLVM with additional options:
 
@@ -415,9 +404,8 @@ following are the most consequential and control how Halide is actually
 compiled.
 
 | Option                                   | Default               | Description                                                                                       |
-|------------------------------------------|-----------------------|---------------------------------------------------------------------------------------------------|
+| ---------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------- |
 | [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.              |
-| `Halide_BUNDLE_STATIC`                   | `OFF`                 | When building Halide as a static library, merge static library dependencies into libHalide.a.     |
 | `Halide_LLVM_SHARED_LIBS`                | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                     |
 | `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                   |
 | `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                            |
@@ -425,13 +413,13 @@ compiled.
 | `WITH_AUTOSCHEDULERS`                    | `ON`                  | Enable building the autoschedulers. Requires `BUILD_SHARED_LIBS`.                                 |
 | `WITH_SERIALIZATION`                     | `ON`                  | Include experimental Serialization/Deserialization features                                       |
 
-The following options are disabled by default when building Halide through the [
-`add_subdirectory`][add_subdirectory]
-or [`FetchContent`][fetchcontent] mechanisms. They control whether non-essential
-targets (like tests and documentation) are built.
+The following options are disabled by default when building Halide through the
+[ `add_subdirectory`][add_subdirectory] or [`FetchContent`][fetchcontent]
+mechanisms. They control whether non-essential targets (like tests and
+documentation) are built.
 
 | Option                 | Default | Description                                                      |
-|------------------------|---------|------------------------------------------------------------------|
+| ---------------------- | ------- | ---------------------------------------------------------------- |
 | `WITH_DOCS`            | `OFF`   | Enable building the documentation via Doxygen                    |
 | `WITH_PACKAGING`       | `ON`    | Include the `install()` rules for Halide.                        |
 | `WITH_PYTHON_BINDINGS` | `ON`    | Enable building Python 3 bindings                                |
@@ -443,19 +431,18 @@ The following options are _advanced_ and should not be required in typical
 workflows. Generally, these are used by Halide's own CI infrastructure, or as
 escape hatches for third-party packagers.
 
-| Option                      | Default                                                            | Description                                                                              |
-|-----------------------------|--------------------------------------------------------------------|------------------------------------------------------------------------------------------|
-| `Halide_CLANG_TIDY_BUILD`   | `OFF`                                                              | Used internally to generate fake compile jobs for runtime files when running clang-tidy. |
-| `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                      |
-| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                            |
-| `Halide_VERSION_OVERRIDE`   | `${Halide_VERSION}`                                                | Override the VERSION for libHalide.                                                      |
-| `Halide_SOVERSION_OVERRIDE` | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version).   |
+| Option                      | Default                                                            | Description                                                                            |
+| --------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                    |
+| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                          |
+| `Halide_VERSION_OVERRIDE`   | `${Halide_VERSION}`                                                | Override the VERSION for libHalide.                                                    |
+| `Halide_SOVERSION_OVERRIDE` | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version). |
 
 The following options control whether to build certain test subsets. They only
 apply when `WITH_TESTS=ON`:
 
 | Option                    | Default    | Description                           |
-|---------------------------|------------|---------------------------------------|
+| ------------------------- | ---------- | ------------------------------------- |
 | `WITH_TEST_AUTO_SCHEDULE` | `ON`       | enable the auto-scheduling tests      |
 | `WITH_TEST_CORRECTNESS`   | `ON`       | enable the correctness tests          |
 | `WITH_TEST_ERROR`         | `ON`       | enable the expected-error tests       |
@@ -468,7 +455,7 @@ apply when `WITH_TESTS=ON`:
 The following option selects the execution engine for in-process WASM testing:
 
 | Option                | Default | Description                                                                              |
-|-----------------------|---------|------------------------------------------------------------------------------------------|
+| --------------------- | ------- | ---------------------------------------------------------------------------------------- |
 | `Halide_WASM_BACKEND` | `wabt`  | Select the backend for WASM testing. Can be `wabt`, `V8` or a false value such as `OFF`. |
 
 ## Installing
@@ -501,10 +488,9 @@ install it into the currently active Python environment.
 
 However, this comes with a few caveats:
 
-1. `Halide_USE_FETCHCONTENT` is disabled, so the environment must be prepared
-   for CMake to find its dependencies. This is easiest to do by setting either
-   `CMAKE_PREFIX_PATH` to pre-built dependencies or by setting
-   `CMAKE_TOOLCHAIN_FILE` to vcpkg.
+1. The environment must be prepared for CMake to find its dependencies. This is
+   easiest to do by setting either `CMAKE_PREFIX_PATH` to pre-built dependencies
+   or by setting `CMAKE_TOOLCHAIN_FILE` to vcpkg.
 2. The build settings are fixed, meaning that `wabt` is required on non-Windows
    systems, `flatbuffers` is always required, and the Python bindings must be
    built.
@@ -514,113 +500,119 @@ However, this comes with a few caveats:
 Even so, this is a very good method of installing Halide. It supports both
 Python and C++ `find_package` workflows.
 
+## Using ccache with pip builds
 
-[ATLAS]: http://math-atlas.sourceforge.net/
+Because Python's build infrastructure creates temporary CMake build directories,
+simply setting `CMAKE_CXX_COMPILER_LAUNCHER` to `ccache` is insufficient to
+produce a well-cached build. The following settings should serve as a starting
+point to configure your environment (assuming `$PWD` is the repository root) for
+using `ccache` with `pip install .`.
 
-[BuildingHalideWithCMake.md]: ./BuildingHalideWithCMake.md
+```shell
+# Point CMake to ccache
+export CMAKE_C_COMPILER_LAUNCHER=ccache
+export CMAKE_CXX_COMPILER_LAUNCHER=ccache
 
-[Clang]: https://clang.llvm.org
+# Settings to make ccache try to ignore the build directory
+export CCACHE_BASEDIR=$PWD
+export CCACHE_NOHASHDIR=true
 
-[CodeStyleCMake.md]: ./CodeStyleCMake.md
+# Enable caching of pre-compiled headers and rewrite debug paths
+# -Xclang -fno-pch-timestamp is only necessary when using Clang (not GCC)
+export CCACHE_SLOPPINESS=include_file_ctime,include_file_mtime,pch_defines,time_macros
+export CFLAGS="-Xclang -fno-pch-timestamp -fdebug-prefix-map=$PWD=."
+export CXXFLAGS="$CFLAGS"
 
-[Eigen3CMake]: https://eigen.tuxfamily.org/dox/TopicCMakeGuide.html
+# Locate the temporary build beneath $PWD so that CCACHE_BASEDIR works
+export TMPDIR=$PWD/build/tmp
 
-[Eigen3]: http://eigen.tuxfamily.org/index.php?title=Main_Page
+# If using uv, don't create a temporary venv
+export UV_NO_BUILD_ISOLATION=1
+```
 
-[FindBLAS]: https://cmake.org/cmake/help/latest/module/FindBLAS.html
+See the CCache documentation on [compiling in different directories] and on
+using [precompiled headers] for more information about these settings. To check
+that ccache is working, run,
 
-[FindCUDAToolkit]: https://cmake.org/cmake/help/latest/module/FindCUDAToolkit.html
+```shell
+$ uv pip install .  # first run, populate cache
+Resolved 4 packages in 397ms
+      Built halide @ file:///Users/areinking/dev/Halide
+Prepared 1 package in 29.17s
+Installed 1 package in 8ms
+ + halide==20.0.0.dev87+gf6c939fd3.d20250724 (from file:///Users/areinking/dev/Halide)
+$ ccache -z
+Statistics zeroed
+$ uv pip install .  # second run, reload from cache
+Resolved 4 packages in 338ms
+      Built halide @ file:///Users/areinking/dev/Halide
+Prepared 1 package in 10.82s
+Uninstalled 1 package in 7ms
+Installed 1 package in 6ms
+ ~ halide==20.0.0.dev87+gf6c939fd3.d20250724 (from file:///Users/areinking/dev/Halide)
+$ ccache -s
+Cacheable calls:   1079 / 1080 (99.91%)
+  Hits:            1079 / 1079 (100.0%)
+    Direct:        1079 / 1079 (100.0%)
+    Preprocessed:     0 / 1079 ( 0.00%)
+  Misses:             0 / 1079 ( 0.00%)
+Uncacheable calls:    1 / 1080 ( 0.09%)
+Local storage:
+  Cache size (GB):  2.2 / 30.0 ( 7.24%)
+  Hits:            1079 / 1079 (100.0%)
+  Misses:             0 / 1079 ( 0.00%)
+```
 
-[FindCUDA]: https://cmake.org/cmake/help/latest/module/FindCUDA.html
-
-[FindDoxygen]: https://cmake.org/cmake/help/latest/module/FindDoxygen.html
-
-[FindJPEG]: https://cmake.org/cmake/help/latest/module/FindJPEG.html
-
-[FindOpenCL]: https://cmake.org/cmake/help/latest/module/FindOpenCL.html
-
-[FindPNG]: https://cmake.org/cmake/help/latest/module/FindPNG.html
-
-[FindPython]: https://cmake.org/cmake/help/latest/module/FindPython.html
-
-[HalideCMakePackage.md]: ./HalideCMakePackage.md
-
-[LLVM]: https://github.com/llvm/llvm-project
-
-[Ninja]: https://ninja-build.org/
-
-[OpenBLAS]: https://www.openblas.net/
-
-[V8]: https://v8.dev
-
-[WebAssembly.md]: ./WebAssembly.md
+On this test system (an M3 MacBook Pro), the build is three times faster, with a
+100% cache hit rate!
 
 [add_subdirectory]: https://cmake.org/cmake/help/latest/command/add_subdirectory.html
-
+[atlas]: http://math-atlas.sourceforge.net/
 [brew-cmake]: https://formulae.brew.sh/cask/cmake#default
-
 [build_shared_libs]: https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html
-
+[clang]: https://clang.llvm.org
 [cmake-apt]: https://apt.kitware.com/
-
 [cmake-docs]: https://cmake.org/cmake/help/latest/
-
 [cmake-download]: https://cmake.org/download/
-
 [cmake-from-source]: https://cmake.org/install/
-
 [cmake-install]: https://cmake.org/cmake/help/latest/manual/cmake.1.html#install-a-project
-
 [cmake-user-interaction]: https://cmake.org/cmake/help/latest/guide/user-interaction/index.html#setting-build-variables
-
 [cmake_build_type]: https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html
-
 [cmake_presets]: https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html
-
-[doxygen-download]: https://www.doxygen.nl/download.html
-
+[codestylecmake.md]: ./CodeStyleCMake.md
+[compiling in different directories]: https://ccache.dev/manual/4.11.3.html#_compiling_in_different_directories
 [doxygen]: https://www.doxygen.nl/index.html
-
-[enable_testing]: https://cmake.org/cmake/help/latest/command/enable_testing.html
-
+[doxygen-download]: https://www.doxygen.nl/download.html
+[eigen3cmake]: https://eigen.tuxfamily.org/dox/TopicCMakeGuide.html
 [fetchcontent]: https://cmake.org/cmake/help/latest/module/FetchContent.html
-
+[findblas]: https://cmake.org/cmake/help/latest/module/FindBLAS.html
+[findcudatoolkit]: https://cmake.org/cmake/help/latest/module/FindCUDAToolkit.html
+[finddoxygen]: https://cmake.org/cmake/help/latest/module/FindDoxygen.html
+[findjpeg]: https://cmake.org/cmake/help/latest/module/FindJPEG.html
+[findopencl]: https://cmake.org/cmake/help/latest/module/FindOpenCL.html
+[findpng]: https://cmake.org/cmake/help/latest/module/FindPNG.html
 [find_package]: https://cmake.org/cmake/help/latest/command/find_package.html
-
 [flatbuffers]: https://github.com/google/flatbuffers
-
+[halidecmakepackage.md]: ./HalideCMakePackage.md
 [homebrew]: https://brew.sh
-
-[libjpeg]: https://www.libjpeg-turbo.org/
-
-[libpng]: http://www.libpng.org/pub/png/libpng.html
-
 [lld]: https://lld.llvm.org/
-
+[llvm]: https://github.com/llvm/llvm-project
 [msvc-cmd]: https://learn.microsoft.com/en-us/cpp/build/building-on-the-command-line
-
+[ninja]: https://ninja-build.org/
 [ninja-download]: https://github.com/ninja-build/ninja/releases
-
+[openblas]: https://www.openblas.net/
 [pipx]: https://pipx.pypa.io/stable/
-
+[precompiled headers]: https://ccache.dev/manual/4.11.3.html#_precompiled_headers
 [pybind11]: https://github.com/pybind/pybind11
-
 [pypi-cmake]: https://pypi.org/project/cmake/
-
 [python]: https://www.python.org/downloads/
-
 [snap store]: https://snapcraft.io/cmake
-
-[vcpkg-overlay]: https://learn.microsoft.com/en-us/vcpkg/concepts/overlay-ports
-
+[v8]: https://v8.dev
 [vcpkg]: https://github.com/Microsoft/vcpkg
-
+[vcpkg-overlay]: https://learn.microsoft.com/en-us/vcpkg/concepts/overlay-ports
 [vcvarsall]: https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line#developer_command_file_locations
-
 [venv]: https://docs.python.org/3/tutorial/venv.html
-
 [vs-cmake-docs]: https://docs.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio
-
 [wabt]: https://github.com/WebAssembly/wabt
-
+[webassembly.md]: ./WebAssembly.md
 [winget]: https://learn.microsoft.com/en-us/windows/package-manager/winget/

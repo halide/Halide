@@ -137,6 +137,10 @@ int main(int argc, char **argv) {
     return SimdOpCheckTest::main<SimdOpCheckPowerPC>(
         argc, argv,
         {
+            // IMPORTANT:
+            // When adding new targets here, make sure to also update
+            // can_run_code in simd_op_check.h to include any new features used.
+
             Target("powerpc-32-linux"),
             Target("powerpc-32-linux-vsx"),
             Target("powerpc-32-linux-power_arch_2_07"),

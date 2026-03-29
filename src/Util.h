@@ -84,7 +84,7 @@ namespace Halide {
  *
  * otherwise, it is assumed to be an appropriate pathname.
  *
- * Any error in loading will assert-fail. */
+ * Any error in loading will cause an assertion failure. */
 void load_plugin(const std::string &lib_name);
 
 namespace Internal {
@@ -95,9 +95,9 @@ namespace Internal {
  * common implementation behavior as much as possible.
  */
 template<typename DST, typename SRC,
-         typename std::enable_if<std::is_floating_point<SRC>::value>::type * = nullptr>
+         std::enable_if_t<std::is_floating_point_v<SRC>> * = nullptr>
 DST safe_numeric_cast(SRC s) {
-    if (std::is_integral<DST>::value) {
+    if (std::is_integral_v<DST>) {
         // Treat float -> int as a saturating cast; this is handled
         // in different ways by different compilers, so an arbitrary but safe
         // choice like this is reasonable.
@@ -112,9 +112,9 @@ DST safe_numeric_cast(SRC s) {
 }
 
 template<typename DST, typename SRC,
-         typename std::enable_if<std::is_integral<SRC>::value>::type * = nullptr>
+         std::enable_if_t<std::is_integral_v<SRC>> * = nullptr>
 DST safe_numeric_cast(SRC s) {
-    if (std::is_integral<DST>::value) {
+    if (std::is_integral_v<DST>) {
         // any-int -> signed-int is technically UB if value won't fit;
         // in practice, common compilers implement such conversions as done below
         // (as verified by exhaustive testing on Clang for x86-64). We could
@@ -122,8 +122,8 @@ DST safe_numeric_cast(SRC s) {
         // avoids possible wrather of UBSan and similar debug helpers.
         // (Yes, using sizeof for this comparison is a little odd for the uint->int
         // case, but the intent is to match existing common behavior, which this does.)
-        if (std::is_integral<SRC>::value && std::is_signed<DST>::value && sizeof(DST) < sizeof(SRC)) {
-            using UnsignedSrc = typename std::make_unsigned<SRC>::type;
+        if (std::is_integral_v<SRC> && std::is_signed_v<DST> && sizeof(DST) < sizeof(SRC)) {
+            using UnsignedSrc = std::make_unsigned_t<SRC>;
             return (DST)(s & (UnsignedSrc)(-1));
         }
     }
@@ -176,8 +176,12 @@ bool starts_with(const std::string &str, const std::string &prefix);
 /** Test if the first string ends with the second string */
 bool ends_with(const std::string &str, const std::string &suffix);
 
-/** Replace all matches of the second string in the first string with the last string */
-std::string replace_all(const std::string &str, const std::string &find, const std::string &replace);
+/** Replace all matches of the second string in the first string with the last string.
+ * The string to search-and-replace in is passed by value, offering the ability to
+ * std::move() a string in if you're not interested in keeping the original string.
+ * This is useful when the original string does not contain the find-string, causing
+ * this function to return the same string without any copies being made. */
+std::string replace_all(std::string str, const std::string &find, const std::string &replace);
 
 /** Split the source string using 'delim' as the divider. */
 std::vector<std::string> split_string(const std::string &source, const std::string &delim);
@@ -203,6 +207,13 @@ std::string join_strings(const std::vector<T> &sources, const std::string &delim
         need_delim = true;
     }
     return result;
+}
+
+template<typename... Args>
+std::string concat_strings(Args &&...args) {
+    std::stringstream ss;
+    (ss << ... << args);
+    return ss.str();
 }
 
 /** Perform a left fold of a vector. Returns a default-constructed
@@ -360,6 +371,13 @@ public:
     TemporaryFile &operator=(TemporaryFile &&) = delete;
 };
 
+/** Run an executable with the given arguments without going through
+ * the shell. The first element of args should be the program name/path.
+ * If a name without a path-separator is given, it will be searched for
+ * in the PATH. Returns the exit code of the process, or -1 if the process
+ * could not be started. */
+int run_process(std::vector<std::string> args);
+
 /** Routines to test if math would overflow for signed integers with
  * the given number of bits. */
 // @{
@@ -422,12 +440,12 @@ void halide_toc_impl(const char *file, int line);
 
 // statically cast a value from one type to another: this is really just
 // some syntactic sugar around static_cast<>() to avoid compiler warnings
-// regarding 'bool' in some compliation configurations.
+// regarding 'bool' in some compilation configurations.
 template<typename TO>
 struct StaticCast {
     template<typename FROM>
     constexpr static TO value(const FROM &from) {
-        if constexpr (std::is_same<TO, bool>::value) {
+        if constexpr (std::is_same_v<TO, bool>) {
             return from != 0;
         } else {
             return static_cast<TO>(from);
@@ -442,10 +460,10 @@ template<typename TO>
 struct IsRoundtrippable {
     template<typename FROM>
     constexpr static bool value(const FROM &from) {
-        if constexpr (std::is_convertible<FROM, TO>::value) {
-            if constexpr (std::is_arithmetic<TO>::value &&
-                          std::is_arithmetic<FROM>::value &&
-                          !std::is_same<TO, FROM>::value) {
+        if constexpr (std::is_convertible_v<FROM, TO>) {
+            if constexpr (std::is_arithmetic_v<TO> &&
+                          std::is_arithmetic_v<FROM> &&
+                          !std::is_same_v<TO, FROM>) {
                 const TO to = static_cast<TO>(from);
                 const FROM roundtripped = static_cast<FROM>(to);
                 return roundtripped == from;
@@ -528,9 +546,9 @@ void set_compiler_stack_size(size_t);
 constexpr size_t default_compiler_stack_size = 32 * 1024 * 1024;
 
 /** Return how much stack size the compiler should use for calls that
- * go through run_with_large_stack below. Currently that's lowering
- * and codegen. If no call to set_compiler_stack_size has been made,
- * this checks the value of the environment variable
+ * go through run_with_large_stack below. Currently that's lowering,
+ * codegen, and JIT compilation. If no call to set_compiler_stack_size
+ * has been made, this checks the value of the environment variable
  * HL_COMPILER_STACK_SIZE. If that's unset, it returns
  * default_compiler_stack_size, defined above. */
 size_t get_compiler_stack_size();

@@ -155,6 +155,14 @@ public:
         // Scheduling is done inside blur_cols_transpose.
         output = blur;
 
+        // Hardcode all CPU/GPU kernel bounds via Halide's constant bound propagation.
+        input.dim(0).set_bounds(0, 1536).set_stride(1);
+        input.dim(1).set_bounds(0, 2560).set_stride(1536);
+        input.dim(2).set_bounds(0, 3).set_stride(1536 * 2560);
+        output.dim(0).set_bounds(0, 1536).set_stride(1);
+        output.dim(1).set_bounds(0, 2560).set_stride(1536);
+        output.dim(2).set_bounds(0, 3).set_stride(1536 * 2560);
+
         // Estimates
         {
             input.dim(0).set_estimate(0, 1536);

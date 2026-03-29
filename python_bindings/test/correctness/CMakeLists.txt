@@ -7,6 +7,7 @@ add_library(the_sort_function MODULE the_sort_function.c)
 target_link_libraries(the_sort_function PRIVATE Halide::Runtime)
 
 set(tests
+    # keep-sorted start
     addconstant_test.py
     atomics.py
     autodiff.py
@@ -20,16 +21,19 @@ set(tests
     extern.py
     float_precision_test.py
     iroperator.py
+    memoize.py
     multi_method_module_test.py
     multipass_constraints.py
     pystub.py
     rdom.py
     realize_warnings.py
+    serialization.py
     target.py
     tuple_select.py
     type.py
     user_context_test.py
     var.py
+    # keep-sorted end
     )
 
 set(PY_GENERATORS "${CMAKE_CURRENT_SOURCE_DIR}/../generators")

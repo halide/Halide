@@ -4,6 +4,11 @@
 #ifndef HALIDE_IMAGE_IO_H
 #define HALIDE_IMAGE_IO_H
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4996)  // disable unsafe CRT function warnings
+#endif
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -116,7 +121,7 @@ template<>
 inline bool convert(const int64_t &in) {
     return in != 0;
 }
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline bool convert(const _Float16 &in) {
     return (float)in != 0;
@@ -171,7 +176,7 @@ template<>
 inline uint8_t convert(const int64_t &in) {
     return convert<uint8_t, uint64_t>(in);
 }
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline uint8_t convert(const _Float16 &in) {
     return (uint8_t)std::lround((float)in * 255.0f);
@@ -223,7 +228,7 @@ template<>
 inline uint16_t convert(const int64_t &in) {
     return convert<uint16_t, uint64_t>(in);
 }
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline uint16_t convert(const _Float16 &in) {
     return (uint16_t)std::lround((float)in * 65535.0f);
@@ -275,7 +280,7 @@ template<>
 inline uint32_t convert(const int64_t &in) {
     return convert<uint32_t, uint64_t>(in);
 }
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline uint32_t convert(const _Float16 &in) {
     return (uint32_t)std::llround((float)in * 4294967295.0);
@@ -327,7 +332,7 @@ template<>
 inline uint64_t convert(const int64_t &in) {
     return convert<uint64_t, uint64_t>(in);
 }
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline uint64_t convert(const _Float16 &in) {
     return convert<uint64_t, uint32_t>((uint32_t)std::llround((float)in * 4294967295.0));
@@ -379,7 +384,7 @@ template<>
 inline int8_t convert(const int64_t &in) {
     return convert<uint8_t, int64_t>(in);
 }
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline int8_t convert(const _Float16 &in) {
     return convert<uint8_t, float>((float)in);
@@ -431,7 +436,7 @@ template<>
 inline int16_t convert(const int64_t &in) {
     return convert<uint16_t, int64_t>(in);
 }
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline int16_t convert(const _Float16 &in) {
     return convert<uint16_t, float>((float)in);
@@ -483,7 +488,7 @@ template<>
 inline int32_t convert(const int64_t &in) {
     return convert<uint32_t, int64_t>(in);
 }
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline int32_t convert(const _Float16 &in) {
     return convert<uint32_t, float>((float)in);
@@ -535,7 +540,7 @@ template<>
 inline int64_t convert(const int64_t &in) {
     return convert<uint64_t, int64_t>(in);
 }
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline int64_t convert(const _Float16 &in) {
     return convert<uint64_t, float>((float)in);
@@ -550,7 +555,7 @@ inline int64_t convert(const double &in) {
     return convert<uint64_t, double>(in);
 }
 
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 // Convert to f16
 template<>
 inline _Float16 convert(const bool &in) {
@@ -639,7 +644,7 @@ template<>
 inline float convert(const int64_t &in) {
     return convert<float, uint64_t>(in);
 }
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline float convert(const _Float16 &in) {
     return (float)in;
@@ -691,7 +696,7 @@ template<>
 inline double convert(const int64_t &in) {
     return convert<double, uint64_t>(in);
 }
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline double convert(const _Float16 &in) {
     return (double)in;
@@ -842,7 +847,7 @@ void read_big_endian_row(const uint8_t *src, int y, ImageType *im) {
 // Multibyte elements are written in big-endian layout.
 template<typename ElemType, typename ImageType>
 void write_big_endian_row(const ImageType &im, int y, uint8_t *dst) {
-    auto im_typed = im.template as<typename std::add_const<ElemType>::type, AnyDims>();
+    auto im_typed = im.template as<std::add_const_t<ElemType>, AnyDims>();
     const int xmin = im_typed.dim(0).min();
     const int xmax = im_typed.dim(0).max();
     if (im_typed.dimensions() > 2) {
@@ -2367,7 +2372,7 @@ struct ImageTypeWithElemType {
 // Given something like ImageType<Foo>, produce typedef ImageType<const Bar, AnyDims>
 template<typename ImageType, typename ElemType>
 struct ImageTypeWithConstElemType {
-    using type = decltype(std::declval<ImageType>().template as<typename std::add_const<ElemType>::type, AnyDims>());
+    using type = decltype(std::declval<ImageType>().template as<std::add_const_t<ElemType>, AnyDims>());
 };
 
 template<typename ImageType, Internal::CheckFunc check>
@@ -2447,7 +2452,7 @@ FormatInfo best_save_format(const ImageType &im, const std::set<FormatInfo> &inf
 struct ImageTypeConversion {
     // Convert an Image from one ElemType to another, where the src and
     // dst types are statically known (e.g. Buffer<uint8_t> -> Buffer<float>).
-    // Note that this does conversion with scaling -- intepreting integers
+    // Note that this does conversion with scaling -- interpreting integers
     // as fixed-point numbers between 0 and 1 -- not merely C-style casting.
     //
     // You'd normally call this with an explicit type for DstElemType and
@@ -2455,7 +2460,7 @@ struct ImageTypeConversion {
     //     Buffer<uint8_t> src = ...;
     //     Buffer<float> dst = convert_image<float>(src);
     template<typename DstElemType, typename ImageType,
-             typename std::enable_if<ImageType::has_static_halide_type && !std::is_void<DstElemType>::value>::type * = nullptr>
+             std::enable_if_t<ImageType::has_static_halide_type && !std::is_void_v<DstElemType>> * = nullptr>
     static auto convert_image(const ImageType &src) ->
         typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type {
         // The enable_if ensures this will never fire; this is here primarily
@@ -2485,7 +2490,7 @@ struct ImageTypeConversion {
     //     Buffer<uint8_t> src = ...;
     //     Buffer<float> dst = convert_image<float>(src);
     template<typename DstElemType, typename ImageType,
-             typename std::enable_if<!ImageType::has_static_halide_type && !std::is_void<DstElemType>::value>::type * = nullptr>
+             std::enable_if_t<!ImageType::has_static_halide_type && !std::is_void_v<DstElemType>> * = nullptr>
     static auto convert_image(const ImageType &src) ->
         typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type {
         // The enable_if ensures this will never fire; this is here primarily
@@ -2496,7 +2501,7 @@ struct ImageTypeConversion {
 
         const halide_type_t src_type = src.type();
         switch (src_type.element_of().as_u32()) {
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
         case halide_type_t(halide_type_float, 16).as_u32():
             return convert_image<DstElemType>(src.template as<_Float16, AnyDims>());
 #endif
@@ -2534,7 +2539,7 @@ struct ImageTypeConversion {
     // (e.g. Buffer<uint8_t> -> Buffer<>(halide_type_t)).
     template<typename DstElemType = void,
              typename ImageType,
-             typename std::enable_if<ImageType::has_static_halide_type && std::is_void<DstElemType>::value>::type * = nullptr>
+             std::enable_if_t<ImageType::has_static_halide_type && std::is_void_v<DstElemType>> * = nullptr>
     static auto convert_image(const ImageType &src, const halide_type_t &dst_type) ->
         typename Internal::ImageTypeWithElemType<ImageType, void>::type {
         // The enable_if ensures this will never fire; this is here primarily
@@ -2545,7 +2550,7 @@ struct ImageTypeConversion {
         // Call the appropriate static-to-static conversion routine
         // based on the desired dst type.
         switch (dst_type.element_of().as_u32()) {
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
         case halide_type_t(halide_type_float, 16).as_u32():
             return convert_image<_Float16>(src);
 #endif
@@ -2583,7 +2588,7 @@ struct ImageTypeConversion {
     // (e.g. Buffer<>(halide_type_t) -> Buffer<>(halide_type_t)).
     template<typename DstElemType = void,
              typename ImageType,
-             typename std::enable_if<!ImageType::has_static_halide_type && std::is_void<DstElemType>::value>::type * = nullptr>
+             std::enable_if_t<!ImageType::has_static_halide_type && std::is_void_v<DstElemType>> * = nullptr>
     static auto convert_image(const ImageType &src, const halide_type_t &dst_type) ->
         typename Internal::ImageTypeWithElemType<ImageType, void>::type {
         // The enable_if ensures this will never fire; this is here primarily
@@ -2790,5 +2795,9 @@ void convert_and_save_image(ImageType &im, const std::string &filename) {
 
 }  // namespace Tools
 }  // namespace Halide
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #endif  // HALIDE_IMAGE_IO_H

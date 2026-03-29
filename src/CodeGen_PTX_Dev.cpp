@@ -220,6 +220,12 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 }
 
 void CodeGen_PTX_Dev::init_module() {
+    // This class uses multiple inheritance. It's a GPU device code generator,
+    // and also an llvm-based one. Both of these track strict_float presence,
+    // but OffloadGPULoops only sets the GPU device code generator flag, so here
+    // we set the CodeGen_LLVM flag to match.
+    CodeGen_LLVM::any_strict_float = CodeGen_GPU_Dev::any_strict_float;
+
     init_context();
 
     module = get_initial_module_for_ptx_device(target, context);
@@ -248,6 +254,13 @@ void CodeGen_PTX_Dev::init_module() {
         auto *fn = declare_intrin_overload(i.name, i.ret_type, i.intrin_name, std::move(i.arg_types));
         function_does_not_access_memory(fn);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
+    }
+
+    if (CodeGen_GPU_Dev::any_strict_float) {
+        set_strict_fp_math();
+        in_strict_float = target.has_feature(Target::StrictFloat);
+    } else {
+        set_fast_fp_math();
     }
 }
 
@@ -465,7 +478,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
     // TODO: Support rewriting to arbitrary calls in IRMatch and use that instead
     // of expr_match here. That would probably allow avoiding the redundant swapping
     // operands logic.
-    // clang-format off
     static const Pattern patterns[] = {
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_i8x)), "dp4a"},
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_u8x)), "dp4a"},
@@ -480,7 +492,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
         {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
     };
-    // clang-format on
 
     const int input_lanes = op->value.type().lanes();
     const int factor = input_lanes / op->type.lanes();
@@ -527,7 +538,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                 Expr b_slice = Shuffle::make_slice(b, i + l * factor, 1, p.factor);
                 i_slice = Call::make(i_slice.type(), p.name, {a_slice, b_slice, i_slice}, Call::PureExtern);
             }
-            i_slice = RewriteLoadsAs32Bit().mutate(i_slice);
+            i_slice = RewriteLoadsAs32Bit()(i_slice);
             i_slice = simplify(i_slice);
             i_slice = common_subexpression_elimination(i_slice);
             result.push_back(i_slice);
@@ -577,19 +588,22 @@ string CodeGen_PTX_Dev::mattrs() const {
         return "+ptx71";
     } else if (target.has_feature(Target::CUDACapability80)) {
         return "+ptx70";
-    } else if (target.has_feature(Target::CUDACapability70) ||
-               target.has_feature(Target::CUDACapability75)) {
+    } else if (target.has_feature(Target::CUDACapability75)) {
+        return "+ptx63";
+    } else if (target.has_feature(Target::CUDACapability70)) {
         return "+ptx60";
     } else if (target.has_feature(Target::CUDACapability61)) {
         return "+ptx50";
     } else if (target.features_any_of({Target::CUDACapability32,
                                        Target::CUDACapability50})) {
-        // Need ptx isa 4.0.
+        // sm_32 needs ptx isa 4.0 even though it seems to break the ordering
         return "+ptx40";
-    } else {
-        // Use the default. For llvm 3.5 it's ptx 3.2.
-        return "";
+    } else if (target.features_any_of({Target::CUDACapability35,
+                                       Target::CUDACapability30})) {
+        return "+ptx32";
     }
+    // Let LLVM pick
+    return "";
 }
 
 bool CodeGen_PTX_Dev::use_soft_float_abi() const {
@@ -604,30 +618,27 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     /*int argc = sizeof(argv)/sizeof(char*);*/
     /*cl::ParseCommandLineOptions(argc, argv, "Halide PTX internal compiler\n");*/
 
-    llvm::Triple triple(module->getTargetTriple());
-
-    // Allocate target machine
-
+    // Allocate target machine (similar to code in CodeGen_Internal.cpp make_target_machine)
     std::string err_str;
-    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(triple.str(), err_str);
-    internal_assert(llvm_target) << err_str << "\n";
+    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(
+        module->getTargetTriple(),
+        err_str);
+    auto triple = llvm::Triple(module->getTargetTriple());
+    internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     TargetOptions options;
-    options.AllowFPOpFusion = FPOpFusion::Fast;
-    options.UnsafeFPMath = true;
-    options.NoInfsFPMath = true;
-    options.NoNaNsFPMath = true;
-    options.HonorSignDependentRoundingFPMathOption = false;
+    options.AllowFPOpFusion = CodeGen_GPU_Dev::any_strict_float ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
+#if LLVM_VERSION < 230
+    options.NoInfsFPMath = !CodeGen_GPU_Dev::any_strict_float;
+    options.NoNaNsFPMath = !CodeGen_GPU_Dev::any_strict_float;
+#endif
+    options.HonorSignDependentRoundingFPMathOption = !CodeGen_GPU_Dev::any_strict_float;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
 
     std::unique_ptr<TargetMachine>
         target_machine(llvm_target->createTargetMachine(
-#if LLVM_VERSION >= 210
             triple,
-#else
-            triple.str(),
-#endif
             mcpu_target(), mattrs(), options,
             llvm::Reloc::PIC_,
             llvm::CodeModel::Small,
@@ -697,11 +708,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     using OptimizationLevel = llvm::OptimizationLevel;
     OptimizationLevel level = OptimizationLevel::O3;
 
-#if LLVM_VERSION < 190
-    target_machine->registerPassBuilderCallbacks(pb, /*PopulateClassToPassNames=*/false);
-#else
     target_machine->registerPassBuilderCallbacks(pb);
-#endif
 
     mpm = pb.buildPerModuleDefaultPipeline(level);
     mpm.run(*module, mam);
@@ -757,11 +764,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         f.write(buffer.data(), buffer.size());
         f.close();
 
-        string cmd = "ptxas --gpu-name " + mcpu_target() + " " + ptx.pathname() + " -o " + sass.pathname();
-        if (system(cmd.c_str()) == 0) {
-            cmd = "nvdisasm " + sass.pathname();
-            int ret = system(cmd.c_str());
-            (void)ret;  // Don't care if it fails
+        if (run_process({"ptxas", "--gpu-name", mcpu_target(), ptx.pathname(), "-o", sass.pathname()}) == 0) {
+            (void)run_process({"nvdisasm", sass.pathname()});  // Don't care if it fails
         }
 
         // Note: It works to embed the contents of the .sass file in

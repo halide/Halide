@@ -124,7 +124,7 @@ public:
 
     /** Retrieve the value referred to by a name */
     template<typename T2 = T,
-             typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+             typename = std::enable_if_t<!std::is_void_v<T2>>>
     T2 get(const std::string &name) const {
         typename std::map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
@@ -140,7 +140,7 @@ public:
 
     /** Return a reference to an entry. Does not consider the containing scope. */
     template<typename T2 = T,
-             typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+             typename = std::enable_if_t<!std::is_void_v<T2>>>
     T2 &ref(const std::string &name) {
         typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
@@ -155,7 +155,7 @@ public:
      * (scope.contains(foo)) { ... scope.get(foo) ... } to avoid doing two
      * lookups. */
     template<typename T2 = T,
-             typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+             typename = std::enable_if_t<!std::is_void_v<T2>>>
     const T2 *find(const std::string &name) const {
         typename std::map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
@@ -171,7 +171,7 @@ public:
     /** A version of find that returns a non-const pointer, but ignores
      * containing scope. */
     template<typename T2 = T,
-             typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+             typename = std::enable_if_t<!std::is_void_v<T2>>>
     T2 *shallow_find(const std::string &name) {
         typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
@@ -219,7 +219,7 @@ public:
      * to pop the same value without doing a fresh lookup.
      */
     template<typename T2 = T,
-             typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+             typename = std::enable_if_t<!std::is_void_v<T2>>>
     PushToken push(const std::string &name, T2 &&value) {
         auto it = table.try_emplace(name).first;
         it->second.push(std::forward<T2>(value));
@@ -227,7 +227,7 @@ public:
     }
 
     template<typename T2 = T,
-             typename = typename std::enable_if<std::is_same<T2, void>::value>::type>
+             typename = std::enable_if_t<std::is_void_v<T2>>>
     PushToken push(const std::string &name) {
         auto it = table.try_emplace(name).first;
         it->second.push();
@@ -283,7 +283,7 @@ public:
         }
 
         template<typename T2 = T,
-                 typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+                 typename = std::enable_if_t<!std::is_void_v<T2>>>
         const T2 &value() {
             return iter->second.top_ref();
         }

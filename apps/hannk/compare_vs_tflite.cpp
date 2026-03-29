@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
 
     ModelRunner runner;
 
-    // Default the exernal delegate to disabled, since it may
+    // Default the external delegate to disabled, since it may
     // need extra setup to work (eg LD_LIBRARY_PATH or --external_delegate_path)
     runner.do_run[ModelRunner::kExternalDelegate] = false;
 

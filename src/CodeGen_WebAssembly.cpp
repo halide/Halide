@@ -58,20 +58,11 @@ struct WasmIntrinsic {
     Target::Feature feature = Target::FeatureEnd;
 };
 
-// clang-format off
 const WasmIntrinsic intrinsic_defs[] = {
     {"llvm.sadd.sat.v8i16", Int(16, 8), "saturating_add", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
     {"llvm.uadd.sat.v8i16", UInt(16, 8), "saturating_add", {UInt(16, 8), UInt(16, 8)}, Target::WasmSimd128},
     {"llvm.sadd.sat.v16i8", Int(8, 16), "saturating_add", {Int(8, 16), Int(8, 16)}, Target::WasmSimd128},
     {"llvm.uadd.sat.v16i8", UInt(8, 16), "saturating_add", {UInt(8, 16), UInt(8, 16)}, Target::WasmSimd128},
-
-#if LLVM_VERSION < 200
-    // TODO: Are these really different than the standard llvm.*sub.sat.*?
-    {"llvm.wasm.sub.sat.signed.v16i8", Int(8, 16), "saturating_sub", {Int(8, 16), Int(8, 16)}, Target::WasmSimd128},
-    {"llvm.wasm.sub.sat.unsigned.v16i8", UInt(8, 16), "saturating_sub", {UInt(8, 16), UInt(8, 16)}, Target::WasmSimd128},
-    {"llvm.wasm.sub.sat.signed.v8i16", Int(16, 8), "saturating_sub", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
-    {"llvm.wasm.sub.sat.unsigned.v8i16", UInt(16, 8), "saturating_sub", {UInt(16, 8), UInt(16, 8)}, Target::WasmSimd128},
-#endif
 
     {"llvm.wasm.avgr.unsigned.v16i8", UInt(8, 16), "rounding_halving_add", {UInt(8, 16), UInt(8, 16)}, Target::WasmSimd128},
     {"llvm.wasm.avgr.unsigned.v8i16", UInt(16, 8), "rounding_halving_add", {UInt(16, 8), UInt(16, 8)}, Target::WasmSimd128},
@@ -119,7 +110,6 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"llvm.nearbyint.f32", Float(32), "nearbyint", {Float(32)}},
     {"llvm.nearbyint.f64", Float(64), "nearbyint", {Float(64)}},
 };
-// clang-format on
 
 void CodeGen_WebAssembly::init_module() {
     CodeGen_Posix::init_module();
@@ -152,7 +142,6 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         Target::Feature required_feature;
     };
 
-    // clang-format off
     static const Pattern patterns[] = {
         {"int_to_double", f64(wild_i32x_), Target::WasmSimd128},
         {"int_to_double", f64(wild_u32x_), Target::WasmSimd128},
@@ -163,7 +152,6 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         {"widen_integer", i64(wild_i32x_), Target::WasmSimd128},
         {"widen_integer", u64(wild_u32x_), Target::WasmSimd128},
     };
-    // clang-format on
 
     if (op->type.is_vector()) {
         std::vector<Expr> matches;
@@ -189,6 +177,33 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
             codegen(equiv);
             return;
         }
+
+        // Work around an LLVM bug where
+        // WebAssemblyTargetLowering::isVectorLoadExtDesirable assumes the
+        // operand of a vector extend is always a load, but LLVM's optimizer may
+        // insert a freeze node between the load and the extend, causing a
+        // cast<LoadSDNode> assertion failure. Use an optimization fence to
+        // prevent the DAG combiner from seeing through to the load. See
+        // https://github.com/halide/Halide/issues/8928 and
+        // https://github.com/llvm/llvm-project/issues/184676
+        if (op->type.is_int_or_uint() &&
+            op->value.type().is_int_or_uint() &&
+            op->type.bits() > op->value.type().bits()) {
+            // Check if the value is a Load. Loads are sometimes hiding behind
+            // let bindings.
+            bool is_load = op->value.as<Load>();
+            if (const Variable *var = op->value.as<Variable>()) {
+                llvm::Value *v = sym_get(var->name, false);
+                is_load = v && llvm::isa<llvm::LoadInst>(v);
+            }
+            if (is_load) {
+                llvm::Value *v = codegen(op->value);
+                v = optimization_fence(v);
+                value = builder->CreateIntCast(v, llvm_type_of(op->type),
+                                               op->value.type().is_int());
+                return;
+            }
+        }
     }
 
     CodeGen_Posix::visit(op);
@@ -201,7 +216,6 @@ void CodeGen_WebAssembly::visit(const Call *op) {
         Target::Feature required_feature;
     };
 
-    // clang-format off
     static const Pattern patterns[] = {
         {"q15mulr_sat_s", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15), Target::WasmSimd128},
         {"saturating_narrow", i8_sat(wild_i16x_), Target::WasmSimd128},
@@ -221,7 +235,6 @@ void CodeGen_WebAssembly::visit(const Call *op) {
         {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
         {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
     };
-    // clang-format on
 
     if (op->type.is_vector()) {
         std::vector<Expr> matches;
@@ -295,7 +308,7 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
         const char *intrin;
         Target::Feature required_feature;
     };
-    // clang-format off
+
     static const Pattern patterns[] = {
         {VectorReduce::Add, 2, i16(wild_i8x_), "pairwise_widening_add", Target::WasmSimd128},
         {VectorReduce::Add, 2, u16(wild_u8x_), "pairwise_widening_add", Target::WasmSimd128},
@@ -307,7 +320,6 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
 
         {VectorReduce::Add, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", Target::WasmSimd128},
     };
-    // clang-format on
 
     // Other values will be added soon, so this switch isn't actually pointless
     using ValuePtr = llvm::Value *;
@@ -388,7 +400,7 @@ string CodeGen_WebAssembly::mattrs() const {
     }
     // PIC implies +mutable-globals because the PIC ABI used by the linker
     // depends on importing and exporting mutable globals. Also -pthread implies
-    // mutable-globals too, so quitely enable it if either of these are specified.
+    // mutable-globals too, so quietly enable it if either of these are specified.
     if (use_pic() || target.has_feature(Target::WasmThreads)) {
         attrs.emplace_back("+mutable-globals");
     }

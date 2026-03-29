@@ -59,7 +59,7 @@ class BoundSmallAllocations : public IRMutator {
 
     Stmt visit(const For *op) override {
         Interval min_bounds = find_constant_bounds(op->min, scope);
-        Interval max_bounds = find_constant_bounds(op->min + op->extent - 1, scope);
+        Interval max_bounds = find_constant_bounds(op->max, scope);
         Interval b = Interval::make_union(min_bounds, max_bounds);
         b.min = simplify(b.min);
         b.max = simplify(b.max);
@@ -156,7 +156,7 @@ class BoundSmallAllocations : public IRMutator {
 }  // namespace
 
 Stmt bound_small_allocations(const Stmt &s) {
-    return BoundSmallAllocations().mutate(s);
+    return BoundSmallAllocations()(s);
 }
 
 }  // namespace Internal

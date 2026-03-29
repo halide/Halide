@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
             _grad_loss_output_lut_wrt_lut_indices
 
         Note that the outputs with "_dummy" prefixes are placeholder
-        outputs that are always filled with zeroes; in those cases,
+        outputs that are always filled with zeros; in those cases,
         there is no derivative for the output/input pairing, but we
         emit an output nevertheless so that the function signature
         is always mechanically predictable from the list of inputs and outputs.

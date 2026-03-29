@@ -56,6 +56,11 @@ SHELL = bash
 CXX ?= g++
 PREFIX ?= /usr/local
 LLVM_CONFIG ?= llvm-config
+
+ifneq ($(shell $(LLVM_CONFIG) --version > /dev/null && echo OK),OK)
+$(error "Error: could not find or run llvm-config. Set LLVM_CONFIG to point to the llvm-config binary for the version of llvm you want to build Halide against, and set CLANG to point to the corresponding version of clang.")
+endif
+
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1.\2/')
 
@@ -64,7 +69,11 @@ LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir | sed -e 's/\\/\//g' -e 's/\([a-zA
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
 # Apparently there is no llvm_config flag to get canonical paths to tools,
 # so we'll just construct one relative to --src-root and hope that is stable everywhere.
-LLVM_SYSTEM_LIBS=$(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/[\/&]/\\&/g' | sed 's/-llibxml2.tbd/-lxml2/')
+LLVM_SYSTEM_LIBS = $(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/[\/&]/\\&/g' | sed 's/-llibxml2.tbd/-lxml2/')
+ifeq ($(UNAME), Darwin)
+# homebrew LLVM on macos likes to depend on things in /opt/homebrew/lib without explicitly adding that linker flag
+LLVM_SYSTEM_LIBS += -L$(shell brew --prefix | sed -e 's/[\/&]/\\&/g')\/lib
+endif
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
 # Note, removing -D_GLIBCXX_ASSERTIONS is a workaround for https://reviews.llvm.org/D142279
@@ -272,7 +281,7 @@ TEST_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 TEST_CXX_FLAGS += -fvisibility=hidden -fvisibility-inlines-hidden
 
 # In the tests, enable the debug() and internal_assert() macros
-TEST_CXX_FLAGS += -DHALIDE_KEEP_MACROS
+TEST_CXX_FLAGS += -DHALIDE_KEEP_MACROS=
 
 # gcc 4.8 fires a bogus warning on old versions of png.h
 ifneq (,$(findstring g++,$(CXX_VERSION)))
@@ -362,9 +371,37 @@ TEST_CXX_FLAGS += -DTEST_CUDA
 TEST_CXX_FLAGS += -I/usr/local/cuda/include
 endif
 
-# Compiling the tutorials requires libpng
-LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
-LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
+ifeq (,$(shell pkg-config --exists libpng && echo yes))
+ifeq ($(UNAME), Darwin)
+$(error libpng not found. Please install with: brew install libpng)
+else
+$(error libpng not found. Please install with: sudo apt install libpng-dev)
+endif
+endif
+
+ifeq (,$(shell pkg-config --exists libjpeg && echo yes))
+ifeq ($(UNAME), Darwin)
+# Thanks to a schism between libjpeg and libjpeg-turbo, Homebrew
+# and many other distributions (Ubuntu, Debian, Fedora, Firefox,
+# Chrome, etc.) refuse to use the IJG's libjpeg. Instead, the
+# open-source world appears to have adopted libjpeg-turbo.
+# Users can override the search by setting PKG_CONFIG_PATH.
+# See: https://libjpeg-turbo.org/About/Jpeg-9
+$(error libjpeg not found. Please install with: brew install jpeg-turbo)
+else
+$(error libjpeg not found. Please install with: sudo apt install libjpeg-turbo8-dev)
+endif
+endif
+
+# Find libjpeg and libpng. The code to set IMAGE_IO_LIBS is duplicated
+# in apps/support/Makefile.inc and any changes here should be repeated
+# there.
+
+LIBPNG_LIBS_DEFAULT = $(shell pkg-config libpng --libs)
+LIBPNG_CXX_FLAGS ?= $(shell pkg-config libpng --cflags)
+LIBJPEG_LIBS ?= $(shell pkg-config libjpeg --libs)
+LIBJPEG_CXX_FLAGS ?= $(shell pkg-config libjpeg --cflags)
+
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
 ifneq (,$(findstring -m32,$(CXX)))
 ifneq (,$(findstring x86_64,$(LIBPNG_LIBS_DEFAULT)))
@@ -372,17 +409,6 @@ LIBPNG_LIBS ?= -lpng
 endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
-
-# Workaround brew Cellar path for libpng-config output.
-LIBJPEG_LINKER_PATH ?= $(shell echo $(LIBPNG_LIBS_DEFAULT) | sed -e'/-L.*[/][Cc]ellar[/]libpng/!d;s=\(.*\)/[Cc]ellar/libpng/.*=\1/lib=')
-LIBJPEG_LIBS ?= $(LIBJPEG_LINKER_PATH) -ljpeg
-
-# There's no libjpeg-config, unfortunately. We should look for
-# jpeglib.h one directory level up from png.h . Also handle
-# Mac OS brew installs where libpng-config returns paths
-# into the PNG cellar.
-LIBPNG_INCLUDE_DIRS = $(filter -I%,$(LIBPNG_CXX_FLAGS))
-LIBJPEG_CXX_FLAGS ?= $(shell echo $(LIBPNG_INCLUDE_DIRS) | sed -e'/[Cc]ellar[/]libpng/!s=\(.*\)=\1/..=;s=\(.*\)/[Cc]ellar/libpng/.*=\1/include=')
 
 IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
@@ -414,7 +440,7 @@ HEXAGON_RUNTIME_LIBS = \
   $(HEXAGON_RUNTIME_LIBS_DIR)/v65/libhalide_hexagon_remote_skel.so \
   $(HEXAGON_RUNTIME_LIBS_DIR)/v65/signed_by_debug/libhalide_hexagon_remote_skel.so
 
-# Keep this list sorted in alphabetical order.
+# keep-sorted start skip_lines=1 case=no
 SOURCE_FILES = \
   AbstractGenerator.cpp \
   AddAtomicMutex.cpp \
@@ -430,15 +456,15 @@ SOURCE_FILES = \
   AsyncProducers.cpp \
   AutoScheduleUtils.cpp \
   BoundaryConditions.cpp \
+  BoundConstantExtentLoops.cpp \
   Bounds.cpp \
   BoundsInference.cpp \
-  BoundConstantExtentLoops.cpp \
   BoundSmallAllocations.cpp \
   Buffer.cpp \
   Callable.cpp \
   CanonicalizeGPUVars.cpp \
-  Closure.cpp \
   ClampUnsafeAccesses.cpp \
+  Closure.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
   CodeGen_D3D12Compute_Dev.cpp \
@@ -448,12 +474,12 @@ SOURCE_FILES = \
   CodeGen_LLVM.cpp \
   CodeGen_Metal_Dev.cpp \
   CodeGen_OpenCL_Dev.cpp \
-  CodeGen_Vulkan_Dev.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
   CodeGen_PyTorch.cpp \
   CodeGen_RISCV.cpp \
+  CodeGen_Vulkan_Dev.cpp \
   CodeGen_WebAssembly.cpp \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
@@ -465,6 +491,7 @@ SOURCE_FILES = \
   Debug.cpp \
   DebugArguments.cpp \
   DebugToFile.cpp \
+  DecomposeVectorShuffle.cpp \
   Definition.cpp \
   Deinterleave.cpp \
   Derivative.cpp \
@@ -554,7 +581,6 @@ SOURCE_FILES = \
   Simplify_And.cpp \
   Simplify_Call.cpp \
   Simplify_Cast.cpp \
-  Simplify_Reinterpret.cpp \
   Simplify_Div.cpp \
   Simplify_EQ.cpp \
   Simplify_Exprs.cpp \
@@ -566,6 +592,7 @@ SOURCE_FILES = \
   Simplify_Mul.cpp \
   Simplify_Not.cpp \
   Simplify_Or.cpp \
+  Simplify_Reinterpret.cpp \
   Simplify_Select.cpp \
   Simplify_Shuffle.cpp \
   Simplify_Stmts.cpp \
@@ -600,6 +627,7 @@ SOURCE_FILES = \
   VectorizeLoops.cpp \
   WasmExecutor.cpp \
   WrapCalls.cpp
+# keep-sorted end
 
  C_TEMPLATE_FILES = \
    CodeGen_C_prologue \
@@ -613,7 +641,7 @@ HTML_TEMPLATE_FILES = \
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
 # Also *don't* include anything that's only used internally (eg SpirvIR.h).
-# Keep this list sorted in alphabetical order.
+# keep-sorted start skip_lines=1 case=no
 HEADER_FILES = \
   AbstractGenerator.h \
   AddAtomicMutex.h \
@@ -629,9 +657,9 @@ HEADER_FILES = \
   AsyncProducers.h \
   AutoScheduleUtils.h \
   BoundaryConditions.h \
+  BoundConstantExtentLoops.h \
   Bounds.h \
   BoundsInference.h \
-  BoundConstantExtentLoops.h \
   BoundSmallAllocations.h \
   Buffer.h \
   Callable.h \
@@ -645,21 +673,22 @@ HEADER_FILES = \
   CodeGen_LLVM.h \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenCL_Dev.h \
-  CodeGen_Vulkan_Dev.h \
   CodeGen_Posix.h \
   CodeGen_PTX_Dev.h \
   CodeGen_PyTorch.h \
   CodeGen_Targets.h \
+  CodeGen_Vulkan_Dev.h \
   CodeGen_WebGPU_Dev.h \
   CompilerLogger.h \
   ConciseCasts.h \
-  CPlusPlusMangle.h \
   ConstantBounds.h \
   ConstantInterval.h \
+  CPlusPlusMangle.h \
   CSE.h \
   Debug.h \
   DebugArguments.h \
   DebugToFile.h \
+  DecomposeVectorShuffle.h \
   Definition.h \
   Deinterleave.h \
   Derivative.h \
@@ -708,7 +737,6 @@ HEADER_FILES = \
   IROperator.h \
   IRPrinter.h \
   IRVisitor.h \
-  WasmExecutor.h \
   JITModule.h \
   Lambda.h \
   Lerp.h \
@@ -741,8 +769,8 @@ HEADER_FILES = \
   PythonExtensionGen.h \
   Qualify.h \
   Random.h \
-  Realization.h \
   RDom.h \
+  Realization.h \
   RealizationOrder.h \
   RebaseLoopsToZero.h \
   Reduction.h \
@@ -785,11 +813,14 @@ HEADER_FILES = \
   Util.h \
   Var.h \
   VectorizeLoops.h \
+  WasmExecutor.h \
   WrapCalls.h
+# keep-sorted end
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
 
+# keep-sorted start skip_lines=1
 RUNTIME_CPP_COMPONENTS = \
   aarch64_cpu_features \
   alignment_128 \
@@ -869,6 +900,7 @@ RUNTIME_CPP_COMPONENTS = \
   to_string \
   trace_helper \
   tracing \
+  vulkan \
   wasm_cpu_features \
   webgpu_dawn \
   webgpu_emscripten \
@@ -886,9 +918,10 @@ RUNTIME_CPP_COMPONENTS = \
   windows_vulkan \
   windows_yield \
   write_debug_image \
-  vulkan \
   x86_cpu_features \
+# keep-sorted end
 
+# keep-sorted start skip_lines=1
 RUNTIME_LL_COMPONENTS = \
   aarch64 \
   arm \
@@ -905,6 +938,7 @@ RUNTIME_LL_COMPONENTS = \
   x86_avx2 \
   x86_avx512 \
   x86_sse41
+# keep-sorted end
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeD3D12Compute.h \
@@ -1252,22 +1286,25 @@ PERFORMANCE_TESTS = $(shell ls $(ROOT_DIR)/test/performance/*.cpp)
 ERROR_TESTS = $(shell ls $(ROOT_DIR)/test/error/*.cpp)
 WARNING_TESTS = $(shell ls $(ROOT_DIR)/test/warning/*.cpp)
 RUNTIME_TESTS = $(shell ls $(ROOT_DIR)/test/runtime/*.cpp)
+FUZZ_TESTS = $(filter-out %halide_fuzz_main.cpp, $(shell ls $(ROOT_DIR)/test/fuzz/*.cpp))
 GENERATOR_EXTERNAL_TESTS := $(shell ls $(ROOT_DIR)/test/generator/*test.cpp)
 GENERATOR_EXTERNAL_TEST_GENERATOR := $(shell ls $(ROOT_DIR)/test/generator/*_generator.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls $(ROOT_DIR)/tutorial/*.cpp))
 MULLAPUDI2016_TESTS = $(shell ls $(ROOT_DIR)/test/autoschedulers/mullapudi2016/*.cpp)
-LI2018_TESTS = $(shell ls $(ROOT_DIR)/test/autoschedulers/li2018/test.cpp)
-ADAMS2019_TESTS = $(shell ls $(ROOT_DIR)/test/autoschedulers/adams2019/test.cpp)
+LI2018_TESTS = $(filter-out %_generator.cpp, $(shell ls $(ROOT_DIR)/test/autoschedulers/li2018/*.cpp))
+ADAMS2019_TESTS = $(filter-out %_generator.cpp, $(shell ls $(ROOT_DIR)/test/autoschedulers/adams2019/*.cpp))
+COMMON_AUTOSCHEDULER_TESTS = $(shell ls $(ROOT_DIR)/test/autoschedulers/common/*.cpp)
 
 test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=quiet_correctness_%) $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.c=quiet_correctness_%)
 test_performance: $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=performance_%)
 test_error: $(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=error_%)
 test_warning: $(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=warning_%)
 test_runtime: $(RUNTIME_TESTS:$(ROOT_DIR)/test/runtime/%.cpp=runtime_%)
+test_fuzz: $(FUZZ_TESTS:$(ROOT_DIR)/test/fuzz/%.cpp=fuzz_%)
 test_tutorial: $(TUTORIALS:$(ROOT_DIR)/tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=valgrind_%)
 test_avx512: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=avx512_%)
-test_autoschedulers: test_mullapudi2016 test_li2018 test_adams2019
+test_autoschedulers: test_mullapudi2016 test_li2018 test_adams2019 test_common_autoscheduler
 test_auto_schedule: test_autoschedulers
 
 .PHONY: test_correctness_multi_gpu
@@ -1359,11 +1396,13 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 	$(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=$(BIN_DIR)/error_%) \
 	$(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=$(BIN_DIR)/warning_%) \
 	$(RUNTIME_TESTS:$(ROOT_DIR)/test/runtime/%.cpp=$(BIN_DIR)/runtime_%) \
+	$(FUZZ_TESTS:$(ROOT_DIR)/test/fuzz/%.cpp=$(BIN_DIR)/fuzz_%) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=$(BIN_DIR)/$(TARGET)/generator_aot_%) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%) \
 	$(MULLAPUDI2016_TESTS:$(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp=$(BIN_DIR)/mullapudi2016_%) \
 	$(LI2018_TESTS:$(ROOT_DIR)/test/autoschedulers/li2018/%.cpp=$(BIN_DIR)/li2018_%) \
-	$(ADAMS2019_TESTS:$(ROOT_DIR)/test/autoschedulers/adams2019/%.cpp=$(BIN_DIR)/adams2019_%)
+	$(ADAMS2019_TESTS:$(ROOT_DIR)/test/autoschedulers/adams2019/%.cpp=$(BIN_DIR)/adams2019_%) \
+	$(COMMON_AUTOSCHEDULER_TESTS:$(ROOT_DIR)/test/autoschedulers/common/%.cpp=$(BIN_DIR)/common_autoscheduler_%)
 
 clean_generator:
 	rm -rf $(BIN_DIR)/*.generator
@@ -1436,6 +1475,9 @@ $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime: $(ROOT_DIR)/test/correctness/op
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(TEST_LD_FLAGS) -o $@
 
+$(BIN_DIR)/fuzz_%: $(ROOT_DIR)/test/fuzz/%.cpp $(ROOT_DIR)/test/fuzz/halide_fuzz_main.cpp $(ROOT_DIR)/test/fuzz/fuzz_helpers.h $(ROOT_DIR)/test/fuzz/halide_fuzz_main.h $(TEST_DEPS)
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $(filter %.cpp,$^) -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@ -DHALIDE_FUZZER_BACKEND=0
+
 # Error tests that link against libHalide
 $(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
@@ -1473,8 +1515,14 @@ $(BIN_DIR)/mullapudi2016_%: $(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp 
 $(BIN_DIR)/li2018_%: $(ROOT_DIR)/test/autoschedulers/li2018/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
+$(BIN_DIR)/adams2019_test_function_dag: $(ROOT_DIR)/test/autoschedulers/adams2019/test_function_dag.cpp $(SRC_DIR)/autoschedulers/adams2019/FunctionDAG.cpp $(SRC_DIR)/autoschedulers/common/ASLog.cpp $(TEST_DEPS)
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< $(SRC_DIR)/autoschedulers/adams2019/FunctionDAG.cpp $(SRC_DIR)/autoschedulers/common/ASLog.cpp -I$(INCLUDE_DIR) -I$(SRC_DIR)/autoschedulers/adams2019 -I$(SRC_DIR)/autoschedulers/common $(TEST_LD_FLAGS) -o $@
+
 $(BIN_DIR)/adams2019_%: $(ROOT_DIR)/test/autoschedulers/adams2019/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
+
+$(BIN_DIR)/common_autoscheduler_%: $(ROOT_DIR)/test/autoschedulers/common/%.cpp $(TEST_DEPS)
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR)/autoschedulers/common $(TEST_LD_FLAGS) -o $@
 
 # TODO(srj): this doesn't auto-delete, why not?
 .INTERMEDIATE: $(BIN_DIR)/%.generator
@@ -1711,7 +1759,7 @@ $(FILTERS_DIR)/nested_externs_%.a: $(BIN_DIR)/nested_externs.generator
 	$(CURDIR)/$< -g nested_externs_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context-c_plus_plus_name_mangling
 
 # Similarly, gpu_multi needs two different kernels to test compilation caching.
-# Also requies user-context.
+# Also requires user-context.
 $(FILTERS_DIR)/gpu_multi_context_threaded_%.a: $(BIN_DIR)/gpu_multi_context_threaded.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g gpu_multi_context_threaded_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
@@ -2023,6 +2071,11 @@ quiet_correctness_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
 	@cd $(TMP_DIR) ; ( $(CURDIR)/$< 2>stderr_$*.txt > stdout_$*.txt && echo -n . ) || ( echo ; echo FAILED TEST: $* ; cat stdout_$*.txt stderr_$*.txt ; false )
 
+fuzz_%: $(BIN_DIR)/fuzz_%
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$<
+	@-echo
+
 valgrind_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; valgrind --error-exitcode=-1 $(CURDIR)/$<
@@ -2115,6 +2168,18 @@ adams2019_test: $(BIN_DIR)/adams2019_test $(BIN_ADAMS2019) $(SRC_DIR)/autoschedu
 	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(BIN_ADAMS2019)) $(realpath $(SRC_DIR)/autoschedulers/adams2019/baseline.weights)
 	@-echo
 
+adams2019_test_function_dag: $(BIN_DIR)/adams2019_test_function_dag
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$<
+	@-echo
+
+test_common_autoscheduler: $(COMMON_AUTOSCHEDULER_TESTS:$(ROOT_DIR)/test/autoschedulers/common/%.cpp=common_autoscheduler_%)
+
+common_autoscheduler_%: $(BIN_DIR)/common_autoscheduler_%
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$<
+	@-echo
+
 time_compilation_test_%: $(BIN_DIR)/test_%
 	$(TIME_COMPILATION) compile_times_correctness.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_test_%=test_%)
 
@@ -2139,7 +2204,6 @@ TEST_APPS=\
 	local_laplacian \
 	max_filter \
 	nl_means \
-	onnx \
 	resize \
 	resnet_50 \
 	stencil_chain \
@@ -2359,12 +2423,21 @@ ifeq ($(UNAME), Darwin)
 endif
 
 # Build some common tools
-$(DISTRIB_DIR)/bin/featurization_to_sample $(DISTRIB_DIR)/bin/get_host_target: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
-	@mkdir -p $(@D)
+# Use an intermediate target to avoid parallel build race condition
+# (multi-target rules with shared recipes run the recipe multiple times in parallel)
+.PHONY: build_common_autoscheduler_tools
+build_common_autoscheduler_tools: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+	@mkdir -p $(DISTRIB_DIR)/bin
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/common/Makefile $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 	for TOOL in featurization_to_sample get_host_target; do \
 		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
 	done
+
+$(DISTRIB_DIR)/bin/featurization_to_sample: build_common_autoscheduler_tools
+	@# Built by build_common_autoscheduler_tools
+
+$(DISTRIB_DIR)/bin/get_host_target: build_common_autoscheduler_tools
+	@# Built by build_common_autoscheduler_tools
 
 # Adams2019 also includes autotuning tools
 $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_adams2019.$(PLUGIN_EXT)

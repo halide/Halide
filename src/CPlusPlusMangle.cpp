@@ -990,7 +990,6 @@ void cplusplus_mangle_test() {
     {
         // Test a whole ton of substitutions on type.
         std::vector<halide_handle_cplusplus_type> type_info;
-        std::vector<ExternFuncArgument> args;
         for (int i = 0; i < 100; i++) {
             std::stringstream oss;
             oss << i;
@@ -1002,6 +1001,8 @@ void cplusplus_mangle_test() {
                 {}, {halide_handle_cplusplus_type::Pointer}));
             type_info.push_back(t);
         }
+        std::vector<ExternFuncArgument> args;
+        args.reserve(200);
         for (int i = 0; i < 200; i++) {
             args.emplace_back(make_zero(Handle(1, &type_info[i % 100])));
         }
@@ -1016,7 +1017,6 @@ void cplusplus_mangle_test() {
     {
         // Test a whole ton of substitutions on names.
         std::vector<halide_handle_cplusplus_type> type_info;
-        std::vector<ExternFuncArgument> args;
         for (int i = 0; i < 25; i++) {
             std::stringstream oss;
             oss << i;
@@ -1028,6 +1028,8 @@ void cplusplus_mangle_test() {
                 {}, {halide_handle_cplusplus_type::Pointer}));
             type_info.push_back(t);
         }
+        std::vector<ExternFuncArgument> args;
+        args.reserve(50);
         for (int i = 0; i < 50; i++) {
             args.emplace_back(make_zero(Handle(1, &type_info[i % 25])));
         }
@@ -1043,9 +1045,9 @@ void cplusplus_mangle_test() {
         // Stack up a bunch of pointers and qualifiers.
         // int test_function(int * const, int *const*const, int *const*const*const*, ...);
         std::vector<halide_handle_cplusplus_type> type_info;
-        std::vector<ExternFuncArgument> args;
         for (size_t i = 1; i <= 8; i++) {
             std::vector<uint8_t> mods;
+            mods.reserve(i);
             for (size_t j = 0; j < i; j++) {
                 mods.push_back(halide_handle_cplusplus_type::Pointer | halide_handle_cplusplus_type::Const);
             }
@@ -1054,6 +1056,8 @@ void cplusplus_mangle_test() {
                 {}, {}, mods));
             type_info.push_back(t);
         }
+        std::vector<ExternFuncArgument> args;
+        args.reserve(type_info.size());
         for (const auto &ti : type_info) {
             args.emplace_back(make_zero(Handle(1, &ti)));
         }

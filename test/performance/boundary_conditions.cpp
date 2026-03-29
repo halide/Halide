@@ -87,7 +87,14 @@ int main(int argc, char **argv) {
 
     // Workaround for https://github.com/halide/Halide/issues/7420
     if (target.has_feature(Target::WebGPU)) {
-        printf("[SKIP] workaround for issue #7420 (performance 2x as slow as expected)\n");
+        printf("[SKIP-WITH-ISSUE-7420] workaround for issue #7420 (performance 2x as slow as expected)\n");
+        return 0;
+    }
+
+    if (Halide::Internal::get_llvm_version() < 220 &&
+        get_jit_target_from_environment().has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
+               Halide::Internal::get_llvm_version());
         return 0;
     }
 

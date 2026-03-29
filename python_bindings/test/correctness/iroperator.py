@@ -1,7 +1,10 @@
 import contextlib
-import halide as hl
-import sys
 import io
+import math
+import sys
+
+import halide as hl
+
 
 # redirect_stdout() requires Python3, alas
 @contextlib.contextmanager
@@ -26,7 +29,7 @@ def test_print_expr():
         f.realize(buf)
         expected = "0 is what the 1 and 3.141500 saw\n"
         actual = output.getvalue()
-        assert expected == actual, "Expected: %s, Actual: %s" % (expected, actual)
+        assert expected == actual, f"Expected: {expected}, Actual: {actual}"
 
 
 def test_print_when():
@@ -39,7 +42,7 @@ def test_print_when():
         f.realize(buf)
         expected = "9 is result at 3\n"
         actual = output.getvalue()
-        assert expected == actual, "Expected: %s, Actual: %s" % (expected, actual)
+        assert expected == actual, f"Expected: {expected}, Actual: {actual}"
 
 
 def test_select():
@@ -56,6 +59,30 @@ def test_select():
     assert b[1] == 1
     assert b[2] == 48
     assert b[3] == 3
+
+
+def test_select_bad_argmax():
+    x = hl.Var()
+    f = hl.Func()
+    f[x] = hl.sin(hl.f32(math.pi) * x / 16.0)
+
+    r = hl.RDom([(0, 10)])
+    g = hl.Func()
+
+    g[()] = (0, f.type().min())
+    try:
+        g[()] = hl.select(f[r] > g[()][1], (f[r], r), g[()])
+    except hl.HalideError as e:
+        assert (
+            "Error: The second and third arguments to a select do not have a matching type:"
+            in str(e)
+        )
+
+    g[()] = hl.select(f[r] > g[()][1], (r, f[r]), g[()])
+
+    idx, val = g.realize([])
+    assert idx[()] == 8
+    assert val[()] == 1.0
 
 
 def test_mux():
@@ -104,5 +131,6 @@ if __name__ == "__main__":
     test_print_expr()
     test_print_when()
     test_select()
+    test_select_bad_argmax()
     test_mux()
     test_minmax()

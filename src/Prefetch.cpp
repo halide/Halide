@@ -1,5 +1,6 @@
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 #include "Bounds.h"
@@ -19,6 +20,7 @@ namespace Internal {
 using std::map;
 using std::set;
 using std::string;
+using std::unordered_map;
 using std::vector;
 
 /**
@@ -42,20 +44,23 @@ namespace {
 // Collect the bounds of all the externally referenced buffers in a stmt.
 class CollectExternalBufferBounds : public IRVisitor {
 public:
-    map<string, Box> buffers;
+    unordered_map<string, Box> buffers;
 
     using IRVisitor::visit;
 
     void add_buffer_bounds(const string &name, const Buffer<> &image, const Parameter &param, int dims) {
-        Box b;
+        if (buffers.find(name) != buffers.end()) {
+            return;
+        }
+        Box b(dims);
         for (int i = 0; i < dims; ++i) {
             string dim_name = std::to_string(i);
-            Expr buf_min_i = Variable::make(Int(32), name + ".min." + dim_name,
+            Expr buf_min_i = Variable::make(Int(32), concat_strings(name, ".min.", i),
                                             image, param, ReductionDomain());
-            Expr buf_extent_i = Variable::make(Int(32), name + ".extent." + dim_name,
+            Expr buf_extent_i = Variable::make(Int(32), concat_strings(name, ".extent.", i),
                                                image, param, ReductionDomain());
             Expr buf_max_i = buf_min_i + buf_extent_i - 1;
-            b.push_back(Interval(buf_min_i, buf_max_i));
+            b[i] = Interval(buf_min_i, buf_max_i);
         }
         buffers.emplace(name, b);
     }
@@ -74,13 +79,13 @@ public:
 
 class InjectPrefetch : public IRMutator {
 public:
-    InjectPrefetch(const map<string, Function> &e, const map<string, Box> &buffers)
+    InjectPrefetch(const map<string, Function> &e, const unordered_map<string, Box> &buffers)
         : env(e), external_buffers(buffers) {
     }
 
-private:
+protected:
     const map<string, Function> &env;
-    const map<string, Box> &external_buffers;
+    const unordered_map<string, Box> &external_buffers;
     Scope<Box> buffer_bounds;
 
     using IRMutator::visit;
@@ -187,7 +192,7 @@ public:
         : env(e), prefix(prefix), prefetch_list(prefetches) {
     }
 
-private:
+protected:
     const map<string, Function> &env;
     const string &prefix;
     const vector<PrefetchDirective> &prefetch_list;
@@ -246,7 +251,7 @@ private:
 
         Stmt stmt;
         if (!body.same_as(op->body)) {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, std::move(body));
+            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, std::move(body));
         } else {
             stmt = op;
         }
@@ -260,6 +265,7 @@ private:
 // Reduce the prefetch dimension if bigger than 'max_dim'. It keeps the 'max_dim'
 // innermost dimensions and replaces the rests with for-loops.
 class ReducePrefetchDimension : public IRMutator {
+protected:
     using IRMutator::visit;
 
     const size_t max_dim;
@@ -300,7 +306,7 @@ class ReducePrefetchDimension : public IRMutator {
 
             stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
-                stmt = For::make(index_names[i], 0, prefetch->args[(i + max_dim) * 2 + 2],
+                stmt = For::make(index_names[i], 0, prefetch->args[(i + max_dim) * 2 + 2] - 1,
                                  ForType::Serial, Partition::Auto, DeviceAPI::None, stmt);
             }
             debug(5) << "\nReduce prefetch to " << max_dim << " dim:\n"
@@ -321,6 +327,7 @@ public:
 // prefetch. This will split the prefetch call into multiple calls by adding
 // an outer for-loop around the prefetch.
 class SplitPrefetch : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Expr max_byte_size;
@@ -371,7 +378,7 @@ class SplitPrefetch : public IRMutator {
             vector<Expr> args = {base, std::move(new_offset), std::move(new_extent), std::move(new_stride)};
             stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
-                stmt = For::make(index_names[i], 0, extents[i],
+                stmt = For::make(index_names[i], 0, extents[i] - 1,
                                  ForType::Serial, Partition::Auto, DeviceAPI::None, stmt);
             }
             debug(5) << "\nSplit prefetch to max of " << max_byte_size << " bytes:\n"
@@ -400,6 +407,7 @@ void traverse_block(const Stmt &s, Fn &&f) {
 }
 
 class HoistPrefetches : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const Block *op) override {
@@ -432,14 +440,14 @@ class HoistPrefetches : public IRMutator {
 Stmt inject_placeholder_prefetch(const Stmt &s, const map<string, Function> &env,
                                  const string &prefix,
                                  const vector<PrefetchDirective> &prefetches) {
-    Stmt stmt = InjectPlaceholderPrefetch(env, prefix, prefetches).mutate(s);
+    Stmt stmt = InjectPlaceholderPrefetch(env, prefix, prefetches)(s);
     return stmt;
 }
 
 Stmt inject_prefetch(const Stmt &s, const map<string, Function> &env) {
     CollectExternalBufferBounds finder;
     s.accept(&finder);
-    return InjectPrefetch(env, finder.buffers).mutate(s);
+    return InjectPrefetch(env, finder.buffers)(s);
 }
 
 Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
@@ -461,17 +469,17 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
     }
     internal_assert(max_dim > 0);
 
-    stmt = ReducePrefetchDimension(max_dim).mutate(stmt);
+    stmt = ReducePrefetchDimension(max_dim)(stmt);
     if (max_byte_size.defined()) {
         // If the max byte size is specified, we may need to tile
         // the prefetch
-        stmt = SplitPrefetch(max_byte_size).mutate(stmt);
+        stmt = SplitPrefetch(max_byte_size)(stmt);
     }
     return stmt;
 }
 
 Stmt hoist_prefetches(const Stmt &s) {
-    return HoistPrefetches().mutate(s);
+    return HoistPrefetches()(s);
 }
 
 }  // namespace Internal

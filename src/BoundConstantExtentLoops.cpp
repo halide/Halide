@@ -12,6 +12,7 @@ namespace Internal {
 
 namespace {
 class BoundLoops : public IRMutator {
+protected:
     using IRMutator::visit;
 
     std::vector<std::pair<std::string, Expr>> lets;
@@ -46,7 +47,8 @@ class BoundLoops : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        if (is_const(op->extent)) {
+        Expr extent = simplify(op->extent());
+        if (is_const(extent)) {
             // Nothing needs to be done
             return IRMutator::visit(op);
         }
@@ -54,7 +56,6 @@ class BoundLoops : public IRMutator {
         if (op->for_type == ForType::Unrolled ||
             op->for_type == ForType::Vectorized) {
             // Give it one last chance to simplify to an int
-            Expr extent = simplify(op->extent);
             Stmt body = op->body;
             const IntImm *e = extent.as<IntImm>();
 
@@ -67,7 +68,6 @@ class BoundLoops : public IRMutator {
                 extent = remove_likelies(extent);
                 extent = substitute_in_all_lets(extent);
                 extent = simplify(extent,
-                                  true,
                                   Scope<Interval>::empty_scope(),
                                   Scope<ModulusRemainder>::empty_scope(),
                                   facts);
@@ -82,8 +82,8 @@ class BoundLoops : public IRMutator {
                 if (extent_upper.defined()) {
                     e = extent_upper.as<IntImm>();
                     body =
-                        IfThenElse::make(likely_if_innermost(Variable::make(Int(32), op->name) <
-                                                             op->min + op->extent),
+                        IfThenElse::make(likely_if_innermost(Variable::make(Int(32), op->name) <=
+                                                             op->max),
                                          body);
                 }
             }
@@ -93,7 +93,7 @@ class BoundLoops : public IRMutator {
                 // to a serial loop.
                 user_warning << "HL_PERMIT_FAILED_UNROLL is allowing us to unroll a non-constant loop into a serial loop. Did you mean to do this?\n";
                 body = mutate(body);
-                return For::make(op->name, op->min, op->extent,
+                return For::make(op->name, op->min, op->max,
                                  ForType::Serial, op->partition_policy, op->device_api, std::move(body));
             }
 
@@ -103,7 +103,7 @@ class BoundLoops : public IRMutator {
                 << "Loop over " << op->name << " has extent " << extent << ".\n";
             body = mutate(body);
 
-            return For::make(op->name, op->min, e,
+            return For::make(op->name, op->min, (op->min + e) - 1,
                              op->for_type, op->partition_policy, op->device_api, std::move(body));
         } else {
             return IRMutator::visit(op);
@@ -129,7 +129,7 @@ public:
 }  // namespace
 
 Stmt bound_constant_extent_loops(const Stmt &s) {
-    return BoundLoops().mutate(s);
+    return BoundLoops()(s);
 }
 
 }  // namespace Internal

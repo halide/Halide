@@ -4,6 +4,7 @@
 #include "Closure.h"
 #include "Elf.h"
 #include "HexagonOffload.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "InjectHostDevBufferCopies.h"
@@ -607,10 +608,12 @@ public:
         }
 
         static const uint8_t hexagon_plt1[] = {
+            // clang-format off
             0x00, 0x40, 0x00, 0x00,  // { immext (#0) (Relocation:R_HEX_B32_PCREL_X)
             0x0e, 0xc0, 0x49, 0x6a,  //   r14 = add (pc, ##GOTn@PCREL) }  (Relocation:R_HEX_6_PCREL_X)
             0x1c, 0xc0, 0x8e, 0x91,  //   r28 = memw (r14)
             0x00, 0xc0, 0x9c, 0x52,  //   jumpr r28
+            // clang-format on
         };
 
         debug(2) << "Adding PLT entry for symbol " << sym.get_name() << "\n";
@@ -690,7 +693,7 @@ public:
 };
 
 Stmt replace_params(const Stmt &s, const std::map<std::string, Parameter> &replacements) {
-    return ReplaceParams(replacements).mutate(s);
+    return ReplaceParams(replacements)(s);
 }
 
 class InjectHexagonRpc : public IRMutator {
@@ -743,10 +746,10 @@ class InjectHexagonRpc : public IRMutator {
         // After moving this to Hexagon, it doesn't need to be marked
         // Hexagon anymore.
         Stmt body;
-        if (is_const_one(loop->extent)) {
+        if (equal(loop->min, loop->max)) {
             body = LetStmt::make(loop->name, loop->min, loop->body);
         } else {
-            body = For::make(loop->name, loop->min, loop->extent, loop->for_type, loop->partition_policy,
+            body = For::make(loop->name, loop->min, loop->max, loop->for_type, loop->partition_policy,
                              DeviceAPI::None, loop->body);
         }
 
@@ -1050,7 +1053,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         // This will cause a difference in MemSize and FileSize like so:
         //        FileSize = (MemSize - size_of_bss)
         // When the Hexagon loader is used on 8998 and later targets,
-        // the difference is filled with zeroes thereby initializing the .bss
+        // the difference is filled with zeros thereby initializing the .bss
         // section.
         bss->set_type(Elf::Section::SHT_PROGBITS);
         std::fill(bss->contents_begin(), bss->contents_end(), 0);
@@ -1097,12 +1100,11 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
         write_entire_file(input.pathname(), shared_object);
 
-        debug(1) << "Signing tool: (" << signer << ")\n";
-        std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
-        int result = system(cmd.c_str());
-        internal_assert(result == 0)
-            << "HL_HEXAGON_CODE_SIGNER failed: result = " << result
-            << " for cmd (" << cmd << ")";
+        auto sign_cmd = split_string(signer, " ");
+        sign_cmd.insert(sign_cmd.end(), {input.pathname(), output.pathname()});
+
+        int result = run_process(std::move(sign_cmd));
+        internal_assert(result == 0) << "HL_HEXAGON_CODE_SIGNER failed: result = " << result;
 
         shared_object = read_entire_file(output.pathname());
     }

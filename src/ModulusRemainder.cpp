@@ -365,15 +365,27 @@ void modulus_remainder_test() {
 }
 
 int64_t gcd(int64_t a, int64_t b) {
-    if (a < b) {
-        std::swap(a, b);
+    // We don't care about factors of -1, so we're going to do this unsigned so
+    // that we can take an absolute value without worrying about INT64_MIN.
+    uint64_t ua = (uint64_t)a;
+    uint64_t ub = (uint64_t)b;
+
+    if (a < 0) {
+        ua = -ua;
     }
-    while (b != 0) {
-        int64_t tmp = b;
-        b = a % b;
-        a = tmp;
+    if (b < 0) {
+        ub = -ub;
     }
-    return a;
+
+    if (ua < ub) {
+        std::swap(ua, ub);
+    }
+    while (ub != 0) {
+        uint64_t tmp = ub;
+        ub = ua % ub;
+        ua = tmp;
+    }
+    return (int64_t)(ua);
 }
 
 int64_t lcm(int64_t a, int64_t b) {
@@ -410,13 +422,17 @@ ModulusRemainder operator*(const ModulusRemainder &a, const ModulusRemainder &b)
     if (a.modulus == 0) {
         // a is constant
         if (mul_with_overflow(64, a.remainder, b.modulus, &m) &&
-            mul_with_overflow(64, a.remainder, b.remainder, &r)) {
+            mul_with_overflow(64, a.remainder, b.remainder, &r) &&
+            // a.remainder may have been negative
+            (m > 0 || mul_with_overflow(64, m, -1, &m))) {
             return {m, r};
         }
     } else if (b.modulus == 0) {
         // b is constant
         if (mul_with_overflow(64, a.modulus, b.remainder, &m) &&
-            mul_with_overflow(64, a.remainder, b.remainder, &r)) {
+            mul_with_overflow(64, a.remainder, b.remainder, &r) &&
+            // b.remainder may have been negative
+            (m > 0 || mul_with_overflow(64, m, -1, &m))) {
             return {m, r};
         }
     } else if (a.remainder == 0 && b.remainder == 0) {
@@ -447,6 +463,7 @@ ModulusRemainder operator*(const ModulusRemainder &a, const ModulusRemainder &b)
 }
 
 ModulusRemainder operator/(const ModulusRemainder &a, const ModulusRemainder &b) {
+
     // What can we say about:
     // floor((m1 * x + r1) / (m2 * y + r2))
 
@@ -456,8 +473,13 @@ ModulusRemainder operator/(const ModulusRemainder &a, const ModulusRemainder &b)
     // (m1 / r2) * x + floor(r1 / r2)
     // E.g. (8x + 3) / 2 -> (4x + 1)
 
-    if (b.modulus == 0 && b.remainder != 0) {
-        if (mod(a.modulus, b.remainder) == 0) {
+    if (b.modulus == 0) {
+        if (b.remainder == 0 || b.remainder == INT64_MIN) {
+            return {0, 0};
+        } else if (b.remainder < 0) {
+            // In Euclidean division, a / -b == -(a / b)
+            return ModulusRemainder{0, 0} - (a / -b.remainder);
+        } else if (mod(a.modulus, b.remainder) == 0) {
             int64_t m = a.modulus / b.remainder;
             int64_t r = mod(div_imp(a.remainder, b.remainder), m);
             return {m, r};
@@ -552,6 +574,7 @@ ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b)
     // 2w + 1
     int64_t modulus = gcd(a.modulus, b.modulus);
     modulus = gcd(modulus, b.remainder);
+
     int64_t remainder = mod(a.remainder, modulus);
 
     if (b.remainder == 0 && remainder != 0) {

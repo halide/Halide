@@ -27,8 +27,8 @@
  *
  * If you are looking for a binary release, we suggest using pip to install
  * either a <a href="https://pypi.org/project/halide">stable release</a> or
- * a <a href="https://test.pypi.org/project/halide">nightly build</a> from
- * Test PyPI.
+ * a <a href="https://pypi.halide-lang.org/simple/halide">nightly build</a> from
+ * our own PyPI index.
  *
  * If you plan to build your program with CMake, you might be interested in
  * documentation for <a href="https://github.com/halide/Halide/blob/main/doc/HalideCMakePackage.md">

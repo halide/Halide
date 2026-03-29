@@ -84,6 +84,7 @@ struct Target {
     enum Feature {
         JIT = halide_target_feature_jit,
         Debug = halide_target_feature_debug,
+        EnableBacktraces = halide_target_feature_enable_backtraces,
         NoAsserts = halide_target_feature_no_asserts,
         NoBoundsQuery = halide_target_feature_no_bounds_query,
         SSE41 = halide_target_feature_sse41,
@@ -182,6 +183,7 @@ struct Target {
         Semihosting = halide_target_feature_semihosting,
         AVX10_1 = halide_target_feature_avx10_1,
         X86APX = halide_target_feature_x86_apx,
+        Simulator = halide_target_feature_simulator,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
@@ -260,7 +262,7 @@ struct Target {
     bool supports_type(const Type &t) const;
 
     /** Does this target allow using a certain type on a certain device.
-     * This is the prefered version of this routine.
+     * This is the preferred version of this routine.
      */
     bool supports_type(const Type &t, DeviceAPI device) const;
 

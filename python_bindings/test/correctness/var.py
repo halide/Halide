@@ -48,10 +48,10 @@ def test_var():
     assert repr(x) == "<halide.Var 'x'>"
 
     # This verifies that halide.Var is implicitly convertible to halide.Expr
-    r = hl.random_int(x)
+    assert type(hl.random_int(x)) is hl.Expr
 
     # This verifies that halide.Var is explicitly convertible to halide.Expr
-    r = hl.random_int(hl.Expr(x))
+    assert type(hl.random_int(hl.Expr(x))) is hl.Expr
 
 
 if __name__ == "__main__":

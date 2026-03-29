@@ -6,32 +6,56 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 ##
 
-EXPECTED_VERSION=19
+# We standardize a common LLVM/Clang version for this script.
+# Note that this is totally independent of the version of LLVM that you
+# are using to build Halide itself. If you don't have the right version
+# installed, you can usually install what you need easily via:
+#
+#   sudo apt-get install llvm-X clang-X libclang-X-dev clang-tidy-X
+#   export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-X
+#
+# On macOS:
+#
+#   brew install llvm@X
+#   export CLANG_TIDY_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@X
+#
+# Where X matches the EXPECTED_VERSION below.
+
+EXPECTED_VERSION=21
 
 ##
 
-usage() { echo -e "Usage: $0 [-c]" 1>&2; exit 1; }
+usage() {
+    echo -e "Usage: $0 [-c]" 1>&2
+    exit 1
+}
+
+if [ "$(uname)" == "Darwin" ]; then
+    _DEFAULT_LLVM_LOCATION="/opt/homebrew/opt/llvm@$EXPECTED_VERSION"
+else
+    _DEFAULT_LLVM_LOCATION="/usr/lib/llvm-$EXPECTED_VERSION"
+fi
 
 # Fix the formatting in-place
 MODE_FLAGS=(-i --sort-includes)
 
 while getopts "c" o; do
     case "${o}" in
-    c)
-        # Only check the files and print formatting errors
-        MODE_FLAGS=(--dry-run -Werror)
-        ;;
-    *)
-        usage
-        ;;
+        c)
+            # Only check the files and print formatting errors
+            MODE_FLAGS=(--dry-run -Werror)
+            ;;
+        *)
+            usage
+            ;;
     esac
 done
 shift $((OPTIND - 1))
 
-if [[ "${MODE_FLAGS[*]}" =~ "-i" ]]; then
+if [[ ${MODE_FLAGS[*]} =~ "-i" ]]; then
     if ! git diff-files --quiet --ignore-submodules; then
         echo -e "\033[0;31m" # RED
-        echo "WARNING: There are still uncommited changes in your working tree."
+        echo "WARNING: There are still uncommitted changes in your working tree."
         echo "         Reverting this formatting action will be difficult."
         echo -e "\033[0m" # RESET
         git diff-files --ignore-submodules
@@ -43,22 +67,13 @@ if [[ "${MODE_FLAGS[*]}" =~ "-i" ]]; then
     fi
 fi
 
-# We are currently standardized on using LLVM/Clang19 for this script.
-# Note that this is totally independent of the version of LLVM that you
-# are using to build Halide itself. If you don't have LLVM19 installed,
-# you can usually install what you need easily via:
-#
-# sudo apt-get install llvm-19 clang-19 libclang-19-dev clang-tidy-19
-# export CLANG_FORMAT_LLVM_INSTALL_DIR=/usr/lib/llvm-19
-#
-# On macOS:
-#
-# brew install llvm@19
-# export CLANG_FORMAT_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@19
-
 if [ -z "$CLANG_FORMAT_LLVM_INSTALL_DIR" ]; then
-    echo "CLANG_FORMAT_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script."
-    exit 1
+    if [ -d "${_DEFAULT_LLVM_LOCATION}" ]; then
+        CLANG_FORMAT_LLVM_INSTALL_DIR="${_DEFAULT_LLVM_LOCATION}"
+    else
+        echo "CLANG_FORMAT_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script."
+        exit 1
+    fi
 fi
 
 echo "CLANG_FORMAT_LLVM_INSTALL_DIR=${CLANG_FORMAT_LLVM_INSTALL_DIR}"
@@ -76,13 +91,13 @@ fi
 # Note that we specifically exclude files starting with . in order
 # to avoid finding emacs backup files
 find "${ROOT_DIR}/apps" \
-     "${ROOT_DIR}/src" \
-     "${ROOT_DIR}/tools" \
-     "${ROOT_DIR}/test" \
-     "${ROOT_DIR}/util" \
-     "${ROOT_DIR}/python_bindings" \
-     -not -path "${ROOT_DIR}/src/runtime/hexagon_remote/bin/src/*" \
-     \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) -and -not -wholename "*/.*" \
-     -print0 | xargs -0 "${CLANG_FORMAT}" "${MODE_FLAGS[@]}" -style=file
+    "${ROOT_DIR}/src" \
+    "${ROOT_DIR}/tools" \
+    "${ROOT_DIR}/test" \
+    "${ROOT_DIR}/util" \
+    "${ROOT_DIR}/python_bindings" \
+    -not -path "${ROOT_DIR}/src/runtime/hexagon_remote/bin/src/*" \
+    \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) -and -not -wholename "*/.*" \
+    -print0 | xargs -0 "${CLANG_FORMAT}" "${MODE_FLAGS[@]}" -style=file
 
 exit "${PIPESTATUS[1]}"

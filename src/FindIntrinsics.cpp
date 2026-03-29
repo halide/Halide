@@ -1,20 +1,17 @@
 #include "FindIntrinsics.h"
 #include "CSE.h"
-#include "CodeGen_Internal.h"
-#include "ConciseCasts.h"
 #include "ConstantBounds.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
+#include "IRVisitor.h"
 #include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
 
-using namespace Halide::ConciseCasts;
-
 namespace {
 
-// This routine provides a guard on the return type of intrisics such that only
+// This routine provides a guard on the return type of intrinsics such that only
 // these types will ever be considered in the visiting that happens here.
 bool find_intrinsics_for_type(const Type &t) {
     // Currently, we only try to find and replace intrinsics for vector types that aren't bools.
@@ -79,7 +76,7 @@ Expr find_and_subtract(const Expr &e, const Expr &round) {
         if (a.defined()) {
             return Sub::make(a, sub->b);
         }
-        // We can't recurse into the negatve part of a subtract.
+        // We can't recurse into the negative part of a subtract.
     } else if (can_prove(e == round)) {
         return make_zero(e.type());
     }
@@ -597,6 +594,9 @@ protected:
             auto is_x_same_int = op->type.is_int() && is_int(x, bits);
             auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
             auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
+            auto is_y_same_int = op->type.is_int() && is_int(y, bits);
+            auto is_y_same_uint = op->type.is_uint() && is_uint(y, bits);
+            auto is_y_same_int_or_uint = is_y_same_int || is_y_same_uint;
             auto x_y_same_sign = (is_int(x) && is_int(y)) || (is_uint(x) && is_uint(y));
 
             if (
@@ -662,9 +662,9 @@ protected:
                         rounding_halving_add(x, y),
                         is_x_same_int_or_uint) ||
 
-                rewrite(halving_add(widening_add(x, 1), y),
+                rewrite(halving_add(widening_add(x, 1), cast(op->type, y)),
                         rounding_halving_add(x, y),
-                        is_x_same_int_or_uint) ||
+                        is_x_same_int_or_uint && is_y_same_int_or_uint) ||
 
                 rewrite(rounding_shift_right(widening_add(x, y), 1),
                         rounding_halving_add(x, y),
@@ -731,7 +731,7 @@ protected:
             // We can't do everything we want here with rewrite rules alone. So, we rewrite them
             // to rounding_shifts with the widening still in place, and narrow it after the rewrite
             // succeeds.
-            // clang-format off
+
             if (rewrite(max(min(rounding_shift_right(x, y), upper), lower), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
                 rewrite(rounding_shift_right(x, y), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
                 rewrite(rounding_shift_left(x, y), rounding_shift_left(x, y), is_x_wide_int_or_uint) ||
@@ -756,7 +756,6 @@ protected:
                     }
                 }
             }
-            // clang-format on
         }
 
         if (value.same_as(op->value)) {
@@ -889,7 +888,7 @@ protected:
         }
 
         if (no_overflow(op->type)) {
-            // clang-format off
+
             if (rewrite(halving_add(x + y, 1), rounding_halving_add(x, y)) ||
                 rewrite(halving_add(x, y + 1), rounding_halving_add(x, y)) ||
                 rewrite(halving_add(x + 1, y), rounding_halving_add(x, y)) ||
@@ -900,7 +899,6 @@ protected:
                 false) {
                 return mutate(rewrite.result);
             }
-            // clang-format on
         }
 
         // Move widening casts inside widening arithmetic outside the arithmetic,
@@ -1120,6 +1118,7 @@ protected:
 // because each let in a chain has a wider value than the
 // ones it refers to.
 class SubstituteInWideningLets : public IRMutator {
+protected:
     using IRMutator::visit;
 
     bool widens(const Expr &e) {
@@ -1219,7 +1218,7 @@ class SubstituteInWideningLets : public IRMutator {
 
             if (should_replace) {
                 size_t start_of_new_lets = frames.size();
-                value = extractor.mutate(value);
+                value = extractor(value);
                 // Mutate any subexpressions the extractor decided to
                 // leave behind, in case they in turn depend on lets
                 // we've decided to substitute in.
@@ -1265,16 +1264,16 @@ class SubstituteInWideningLets : public IRMutator {
 }  // namespace
 
 Stmt find_intrinsics(const Stmt &s) {
-    Stmt stmt = SubstituteInWideningLets().mutate(s);
-    stmt = FindIntrinsics().mutate(stmt);
+    Stmt stmt = SubstituteInWideningLets()(s);
+    stmt = FindIntrinsics()(stmt);
     // In case we want to hoist widening ops back out
     stmt = common_subexpression_elimination(stmt);
     return stmt;
 }
 
 Expr find_intrinsics(const Expr &e) {
-    Expr expr = SubstituteInWideningLets().mutate(e);
-    expr = FindIntrinsics().mutate(expr);
+    Expr expr = SubstituteInWideningLets()(e);
+    expr = FindIntrinsics()(expr);
     expr = common_subexpression_elimination(expr);
     return expr;
 }
@@ -1650,11 +1649,11 @@ class LowerIntrinsics : public IRMutator {
 }  // namespace
 
 Expr lower_intrinsics(const Expr &e) {
-    return LowerIntrinsics().mutate(e);
+    return LowerIntrinsics()(e);
 }
 
 Stmt lower_intrinsics(const Stmt &s) {
-    return LowerIntrinsics().mutate(s);
+    return LowerIntrinsics()(s);
 }
 
 }  // namespace Internal

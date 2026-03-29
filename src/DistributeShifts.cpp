@@ -196,7 +196,7 @@ private:
 }  // namespace
 
 Stmt distribute_shifts(const Stmt &s, bool multiply_adds) {
-    return DistributeShiftsAsMuls(multiply_adds).mutate(s);
+    return DistributeShiftsAsMuls(multiply_adds)(s);
 }
 
 }  // namespace Internal

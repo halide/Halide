@@ -1,37 +1,39 @@
 # Halide Bindings for Python
 
 <!-- TOC -->
-* [Halide Bindings for Python](#halide-bindings-for-python)
-  * [Acquiring the Python bindings](#acquiring-the-python-bindings)
-  * [Building the Python bindings](#building-the-python-bindings)
-    * [Using CMake directly](#using-cmake-directly)
-    * [Using wheel infrastructure](#using-wheel-infrastructure)
-  * [Documentation and Examples](#documentation-and-examples)
-  * [Differences from C++ API](#differences-from-c-api)
-  * [Example of Simple Usage](#example-of-simple-usage)
-  * [Halide Generators In Python](#halide-generators-in-python)
-    * [Writing a Generator in Python](#writing-a-generator-in-python)
-      * [`hl.generator("name")`](#hlgeneratorname)
-      * [hl.GeneratorParam](#hlgeneratorparam)
-      * [hl.InputBuffer, hl.InputScalar](#hlinputbuffer-hlinputscalar)
-      * [hl.OutputBuffer, hl.OutputScalar](#hloutputbuffer-hloutputscalar)
-      * [Names](#names)
-      * [generate() method](#generate-method)
-      * [Types for Inputs and Outputs](#types-for-inputs-and-outputs)
-    * [Using a Generator for JIT compilation](#using-a-generator-for-jit-compilation)
-    * [Using a Generator for AOT compilation](#using-a-generator-for-aot-compilation)
-    * [Calling Generator-Produced code from Python](#calling-generator-produced-code-from-python)
-    * [Advanced Generator-Related Topics](#advanced-generator-related-topics)
-      * [Generator Aliases](#generator-aliases)
-      * [Dynamic Inputs and Outputs](#dynamic-inputs-and-outputs)
-      * [Calling a Generator Directly](#calling-a-generator-directly)
-      * [The Lifecycle Of A Generator](#the-lifecycle-of-a-generator)
-      * [Notable Differences Between C++ and Python Generators](#notable-differences-between-c-and-python-generators)
-  * [Keeping Up To Date](#keeping-up-to-date)
-  * [License](#license)
+
+- [Halide Bindings for Python](#halide-bindings-for-python)
+  - [Acquiring the Python bindings](#acquiring-the-python-bindings)
+  - [Building the Python bindings](#building-the-python-bindings)
+    - [Using CMake directly](#using-cmake-directly)
+    - [Using wheel infrastructure](#using-wheel-infrastructure)
+  - [Documentation and Examples](#documentation-and-examples)
+  - [Differences from C++ API](#differences-from-c-api)
+  - [Example of Simple Usage](#example-of-simple-usage)
+  - [Halide Generators In Python](#halide-generators-in-python)
+    - [Writing a Generator in Python](#writing-a-generator-in-python)
+      - [`hl.generator("name")`](#hlgeneratorname)
+      - [hl.GeneratorParam](#hlgeneratorparam)
+      - [hl.InputBuffer, hl.InputScalar](#hlinputbuffer-hlinputscalar)
+      - [hl.OutputBuffer, hl.OutputScalar](#hloutputbuffer-hloutputscalar)
+      - [Names](#names)
+      - [generate() method](#generate-method)
+      - [Types for Inputs and Outputs](#types-for-inputs-and-outputs)
+    - [Using a Generator for JIT compilation](#using-a-generator-for-jit-compilation)
+    - [Using a Generator for AOT compilation](#using-a-generator-for-aot-compilation)
+    - [Calling Generator-Produced code from Python](#calling-generator-produced-code-from-python)
+    - [Advanced Generator-Related Topics](#advanced-generator-related-topics)
+      - [Generator Aliases](#generator-aliases)
+      - [Dynamic Inputs and Outputs](#dynamic-inputs-and-outputs)
+      - [Calling a Generator Directly](#calling-a-generator-directly)
+      - [The Lifecycle Of A Generator](#the-lifecycle-of-a-generator)
+      - [Notable Differences Between C++ and Python Generators](#notable-differences-between-c-and-python-generators)
+  - [Keeping Up To Date](#keeping-up-to-date)
+  - [License](#license)
+
 <!-- TOC -->
 
-Halide provides Python bindings for most of its public API. Python 3.8 (or
+Halide provides Python bindings for most of its public API. Python 3.10 (or
 higher) is required. The Python bindings are supported on 64-bit Linux, OSX, and
 Windows systems.
 
@@ -40,8 +42,8 @@ can write [Generators](#halide-generators-in-python) using the Python bindings,
 which can simplify build-system integration (since no C++ metacompilation step
 is required).
 
-You can also use existing Halide Generators (written in either C++ or Python)
-to produce Python extensions that can be used within Python code.
+You can also use existing Halide Generators (written in either C++ or Python) to
+produce Python extensions that can be used within Python code.
 
 ## Acquiring the Python bindings
 
@@ -53,11 +55,11 @@ installed with `pip` like so:
 $ pip install halide
 ```
 
-Every commit to `main` is published to Test PyPI as a development version and
-these may be installed with a few extra flags:
+Every commit to `main` is published to a private PyPI index as a development
+version and these may be installed with a few extra flags:
 
 ```shell
-$ pip install halide --pre --extra-index-url https://test.pypi.org/simple
+$ pip install halide --pre --extra-index-url https://pypi.halide-lang.org/simple
 ```
 
 Currently, we provide wheels for: Windows x86-64, macOS x86-64, macOS arm64, and
@@ -72,25 +74,40 @@ bindings require Halide to be built with RTTI and exceptions **enabled**, which
 in turn requires LLVM to be built with RTTI, but this is not the default for
 LLVM.
 
-### Using CMake directly
-
 Before configuring with CMake, you should ensure you have prerequisite packages
 installed in your local Python environment. The best way to get set up is to use
-a virtual environment:
+a virtual environment with `uv`:
 
 ```shell
-$ python3 -m venv venv
-$ . venv/bin/activate
-$ python3 -m pip install -U pip "setuptools[core]" wheel
-$ python3 -m pip install -r requirements.txt
+$ uv sync --no-install-project
 ```
 
-Then build and install Halide:
+If you don't have LLVM installed already, you can try using the same ones the
+buildbots use by adding `--group ci-llvm-<VERSION>` to the `uv sync` command,
+where `<VERSION>` is the LLVM major version number (e.g. `23`) or `main`.
+
+If you install `ci-llvm-*`, you can set
+`Halide_LLVM_ROOT=$(halide-llvm --prefix)` in your environment.
+
+Ensure you have `flatbuffers` and `wabt` installed, too. (The wheel build does
+not use vcpkg for manylinux compatibility reasons, so these must be available as
+system packages or installed from source.)
+
+### Using wheel infrastructure
+
+When using `uv`, this entire workflow can be run via:
 
 ```shell
-$ cmake -G Ninja -S . -B build \
-        -DCMAKE_BUILD_TYPE=Release \ 
-        -DWITH_PYTHON_BINDINGS=ON
+$ uv pip install . --no-build-isolation
+```
+
+### Using CMake directly
+
+Assuming dependencies are available, you can build the Python bindings directly
+with CMake:
+
+```shell
+$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
 $ cmake --build build
 $ cmake --install build --prefix .local
 ```
@@ -100,30 +117,6 @@ package:
 
 ```shell
 $ export PYTHONPATH="$PWD/.local/lib/python3/site-packages"
-```
-
-### Using wheel infrastructure
-
-You can also follow the same procedure that we use to build the published
-wheels. First, create a virtual environment as before, but omit
-`requirements.txt`
-
-```shell
-$ python3 -m venv venv
-$ . venv/bin/activate
-$ python3 -m pip install -U pip "setuptools[core]" wheel
-```
-
-Next, ensure you have installed Halide's dependencies to locations where CMake
-can find them, given your environment. The variables `Halide_LLVM_ROOT`,
-`flatbuffers_ROOT`, and `wabt_ROOT` specify locations for the relevant packages
-directly. If they are all installed to a common prefix, you can add it to the
-environment variable `CMAKE_PREFIX_PATH`.
-
-Then it should be as simple as:
-
-```shell
-$ pip install .
 ```
 
 ## Documentation and Examples
@@ -162,8 +155,8 @@ with some differences where the C++ idiom is either inappropriate or impossible:
 
 - `Func` and `Buffer` access is done using `[]` rather than `()`
 
-  - For zero-dimensional `Func` and `Buffer`, you must explicitly specify
-    `[()]` -- that is, use an empty tuple as the index -- because `[]` is not
+  - For zero-dimensional `Func` and `Buffer`, you must explicitly specify `[()]`
+    -- that is, use an empty tuple as the index -- because `[]` is not
     syntactically acceptable in Python.
 
 - Some classes in the Halide API aren't provided because standard Python idioms
@@ -178,8 +171,8 @@ with some differences where the C++ idiom is either inappropriate or impossible:
   aren't allowed, so some convenience methods are missing from `Halide::Var`
 
 - Templated types (notably `Halide::Buffer<>` and `Halide::Param<>`) aren't
-  provided, for obvious reasons; only the equivalents of
-  `Halide::Buffer<void>` and `Halide::Param<void>` are supported.
+  provided, for obvious reasons; only the equivalents of `Halide::Buffer<void>`
+  and `Halide::Param<void>` are supported.
 
 - The functions in `Halide::ConciseCasts` are present in the toplevel Halide
   module in Python, rather than a submodule: e.g., use `halide.i8_sat()`, not
@@ -215,8 +208,8 @@ with some differences where the C++ idiom is either inappropriate or impossible:
 
 - Some exceptions are the "incorrect" type (compared to C++ expectations).
 
-- Many hooks to override runtime functions (e.g. Func::set_error_handler)
-  aren't yet implemented.
+- Many hooks to override runtime functions (e.g. Func::set_error_handler) aren't
+  yet implemented.
 
 - The following parts of the Halide public API are currently missing entirely
   from the Python bindings (but are all likely to be supported at some point in
@@ -238,8 +231,8 @@ edge = 512
 k = 20.0 / float(edge)
 
 # Simple formula
-x, y, c = hl.Var('x'), hl.Var('y'), hl.Var('c')
-f = hl.Func('f')
+x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
+f = hl.Func("f")
 e = hl.sin(x * ((c + 1) / 3.0) * k) * hl.cos(y * ((c + 1) / 3.0) * k)
 f[x, y, c] = hl.cast(hl.UInt(8), e * 255.0)
 f.vectorize(x, 8).parallel(y)
@@ -297,8 +290,8 @@ A Python Generator is a class that:
 - declares a `generate()` method that fill in the Halide IR needed to define all
   the Outputs
 - optionally declares a `configure()` method to dynamically add Inputs or
-  Outputs to the pipeline, based on (e.g.) the values of `GeneratorParam`
-  values or other external inputs
+  Outputs to the pipeline, based on (e.g.) the values of `GeneratorParam` values
+  or other external inputs
 
 Let's look at a fairly simple example:
 
@@ -308,13 +301,13 @@ Let's look at a fairly simple example:
 ```python
 import halide as hl
 
-x = hl.Var('x')
-y = hl.Var('y')
+x = hl.Var("x")
+y = hl.Var("y")
 
 _operators = {
-    'xor': lambda a, b: a ^ b,
-    'and': lambda a, b: a & b,
-    'or': lambda a, b: a | b
+    "xor": lambda a, b: a ^ b,
+    "and": lambda a, b: a & b,
+    "or": lambda a, b: a | b,
 }
 
 
@@ -444,8 +437,8 @@ way required, but is recommended to improve readability.)
 
 For all the Input and Output fields of Generators, you can specify native Python
 types (instead of `hl.Type`) for certain cases that are unambiguous. At present,
-we allow `bool` as an alias for `hl.Bool()`, `int` as an alias for
-`hl.Int(32)`, and `float` as an alias for `hl.Float(32)`.
+we allow `bool` as an alias for `hl.Bool()`, `int` as an alias for `hl.Int(32)`,
+and `float` as an alias for `hl.Float(32)`.
 
 ### Using a Generator for JIT compilation
 
@@ -473,10 +466,10 @@ assert input_buf.dtype == np.uint8
 output_buf = np.empty(input_buf.shape, dtype=input_buf.dtype)
 
 # Note, Python code throws exception for error conditions rather than returning an int
-or_filter(input_buf, 0x7f, output_buf)
+or_filter(input_buf, 0x7F, output_buf)
 
 # Note also that we can use named arguments for any/all, in the Python manner:
-or_filter(mask=0x7f, input=input_buf, output=output_buf)
+or_filter(mask=0x7F, input=input_buf, output=output_buf)
 
 imageio.imwrite("/tmp/or.png", output_buf)
 ```
@@ -498,8 +491,8 @@ with hl.GeneratorContext(t):
 
 ### Using a Generator for AOT compilation
 
-If you are using CMake, the simplest thing is to use
-`add_halide_library` and `add_halide_python_extension_library()`:
+If you are using CMake, the simplest thing is to use `add_halide_library` and
+`add_halide_python_extension_library()`:
 
 ```cmake
 # Build a Halide library as you usually would, but be sure to include `PYTHON_EXTENSION`
@@ -523,9 +516,9 @@ add_halide_python_extension_library(my_extension
 This compiles the Generator code in `logical_op_generator.py` with the
 registered name `logical_op_generator` to produce the target `xor_filter`, and
 then wraps the compiled output with a Python extension. The result will be a
-shared library of the form `<target>.<soabi>.so`, where `<soabi>` describes 
-the specific Python version and platform (e.g., `cpython-310-darwin` for 
-Python 3.10 on OSX.)
+shared library of the form `<target>.<soabi>.so`, where `<soabi>` describes the
+specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10
+on OSX.)
 
 Note that you can combine multiple Halide libraries into a single Python module;
 this is convenient for packaging, but also because all the libraries in a single
@@ -544,8 +537,8 @@ add_halide_python_extension_library(my_extension
 
 Note that you must take care to ensure that all of the `add_halide_library`
 targets specified use the same Halide runtime; it may be necessary to use
-`add_halide_runtime`
-to define an explicit runtime that is shared by all the targets:
+`add_halide_runtime` to define an explicit runtime that is shared by all the
+targets:
 
 ```cmake
 add_halide_runtime(my_runtime)
@@ -576,11 +569,10 @@ produce a static library containing the object code, and a C++ header file with
 a forward declaration. `target` specifies a Halide `Target` string describing
 the OS, architecture, features, etc. that should be used for compilation. Any
 other arguments to the command line that don't begin with `-` are presumed to
-name
-`GeneratorParam` values to set.
+name `GeneratorParam` values to set.
 
-There are other flags and options too, of course; use `python3
-/path/to/my/generator.py -help` to see a list with explanations.
+There are other flags and options too, of course; use
+`python3 /path/to/my/generator.py -help` to see a list with explanations.
 
 (Unfortunately, there isn't (yet) a way to produce a Python Extension just by
 running a Generator; the logic for `add_halide_python_extension_library` is
@@ -605,7 +597,7 @@ assert input_buf.dtype == np.uint8
 output_buf = np.empty(input_buf.shape, dtype=input_buf.dtype)
 
 # Note, Python code throws exception for error conditions rather than returning an int
-xor_filter(input_buf, 0xff, output_buf)
+xor_filter(input_buf, 0xFF, output_buf)
 
 # Note also that we can use named arguments for any/all, in the Python manner:
 # xor_filter(input=input_buf, mask=0xff, output=output_buf)
@@ -621,13 +613,13 @@ By default, numpy uses "C-style"
 [row-major](https://docs.scipy.org/doc/numpy-1.13.0/reference/internals.html)
 order, which sounds like the right option for Halide; however, this nomenclature
 assumes the matrix-math convention of ordering axes as `[rows, cols]`, whereas
-Halide (and imaging code in general) generally assumes `[x, y]` (i.e., `[cols,
-rows]`). Thus, what you usually want in Halide is column-major ordering. This
-means numpy arrays, by default, come with the wrong memory layout for Halide.
-But if you construct the numpy arrays yourself (like above), you can pass
-`order='F'` to make numpy use the Halide-compatible memory layout. If you're
-passing in an array constructed somewhere else, the easiest thing to do is to
-`.transpose()` it before passing it to your Halide code.
+Halide (and imaging code in general) generally assumes `[x, y]` (i.e.,
+`[cols, rows]`). Thus, what you usually want in Halide is column-major ordering.
+This means numpy arrays, by default, come with the wrong memory layout for
+Halide. But if you construct the numpy arrays yourself (like above), you can
+pass `order='F'` to make numpy use the Halide-compatible memory layout. If
+you're passing in an array constructed somewhere else, the easiest thing to do
+is to `.transpose()` it before passing it to your Halide code.
 
 ### Advanced Generator-Related Topics
 
@@ -643,11 +635,10 @@ via the build system. To define alias(es) for a Generator, just add the
 @hl.alias(
     xor_generator={"op": "xor"},
     and_generator={"op": "and"},
-    or_generator={"op": "or"}
+    or_generator={"op": "or"},
 )
 @hl.generator("logical_op_generator")
-class LogicalOpGenerator:
-    ...
+class LogicalOpGenerator: ...
 ```
 
 #### Dynamic Inputs and Outputs
@@ -660,13 +651,13 @@ option to pass an offset to be added after the logical operator is done:
 ```python
 import halide as hl
 
-x = hl.Var('x')
-y = hl.Var('y')
+x = hl.Var("x")
+y = hl.Var("y")
 
 _operators = {
-    'xor': lambda a, b: a ^ b,
-    'and': lambda a, b: a & b,
-    'or': lambda a, b: a | b
+    "xor": lambda a, b: a ^ b,
+    "and": lambda a, b: a & b,
+    "or": lambda a, b: a | b,
 }
 
 
@@ -722,8 +713,7 @@ This method is named `call()` and looks like this:
 
 ```python
 @classmethod
-def call(cls, *args, **kwargs):
-    ...
+def call(cls, *args, **kwargs): ...
 ```
 
 It takes the inputs (specified either by-name or by-position in the usual Python
@@ -738,7 +728,7 @@ import LogicalOpFilter
 x, y = hl.Var(), hl.Var()
 
 input_buf = hl.Buffer(hl.UInt(8), [2, 2])
-mask_value = 0x7f
+mask_value = 0x7F
 
 # Inputs by-position
 func_out = LogicalOpFilter.call(input_buf, mask_value)
@@ -747,10 +737,10 @@ func_out = LogicalOpFilter.call(input_buf, mask_value)
 func_out = LogicalOpFilter.call(mask=mask_value, input=input_buf)
 
 # Above again, but with generator_params
-func_out = LogicalOpFilter.call(input_buf, mask_value,
-                                generator_params={"op": "and"})
-func_out = LogicalOpFilter.call(generator_params={"op": "and"},
-                                input=input_buf, mask=mask_value)
+func_out = LogicalOpFilter.call(input_buf, mask_value, generator_params={"op": "and"})
+func_out = LogicalOpFilter.call(
+    generator_params={"op": "and"}, input=input_buf, mask=mask_value
+)
 ```
 
 #### The Lifecycle Of A Generator
@@ -769,9 +759,9 @@ something like this:
   `add_input()` or `add_output()` to dynamically add inputs and/or outputs.
 - If any `Input` or `Output` members were defined with unspecified type or
   dimensions (e.g. `some_input = hl.InputBuffer(None, 3)`), those types and
-  dimensions are filled in from `GeneratorParam` values (e.g.
-  `some_input.type` in this case). If any types or dimensions are left
-  unspecified after this step, an exception will be thrown.
+  dimensions are filled in from `GeneratorParam` values (e.g. `some_input.type`
+  in this case). If any types or dimensions are left unspecified after this
+  step, an exception will be thrown.
 - If the Generator is being invoked via its `call()` method (see below), the
   default values for `Inputs` will be replaced by the values from the argument
   list.
@@ -797,11 +787,11 @@ If you have written C++ Generators in Halide in the past, you might notice some
 features are missing and/or different for Python Generators. Among the
 differences are:
 
-- In C++, you can create a Generator, then call `set_generatorparam_value()`
-  to alter the values of GeneratorParams. In Python, there is no public method
-  to alter a GeneratorParam after the Generator is created; instead, you must
-  pass a dict of GeneratorParam values to the constructor, after which the
-  values are immutable for that Generator instance.
+- In C++, you can create a Generator, then call `set_generatorparam_value()` to
+  alter the values of GeneratorParams. In Python, there is no public method to
+  alter a GeneratorParam after the Generator is created; instead, you must pass
+  a dict of GeneratorParam values to the constructor, after which the values are
+  immutable for that Generator instance.
 - Array Inputs/Outputs: in our experience, they are pretty rarely used, it
   complicates the implementation in nontrivial ways, and the majority of use
   cases for them can all be reasonably supported by dynamically adding inputs or

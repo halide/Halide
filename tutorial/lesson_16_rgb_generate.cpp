@@ -23,7 +23,7 @@
 // source tree.
 
 #include "Halide.h"
-#include <stdio.h>
+#include <cstdio>
 
 using namespace Halide;
 

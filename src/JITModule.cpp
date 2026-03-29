@@ -21,6 +21,7 @@
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
+#include "Util.h"
 #include "WasmExecutor.h"
 
 namespace Halide {
@@ -28,9 +29,84 @@ namespace Internal {
 
 using std::string;
 
+// On 32-bit targets, LLVM JIT code may reference libgcc helper functions
+// that dlsym can't always resolve (e.g. under QEMU, or when the host
+// compiler inlined them). We provide wrappers and register them in a
+// builtins map that getSymbolAddress consults as a fallback.
+
 #if defined(__GNUC__) && defined(__i386__)
 extern "C" unsigned long __udivdi3(unsigned long a, unsigned long b);
+
+static const std::map<std::string, uint64_t> i386_builtins = {
+    {"__udivdi3", (uintptr_t)&__udivdi3},
+};
 #endif
+
+// On arm-32, LLVM generates calls to __sync_* libgcc functions for atomic
+// operations. We provide wrappers using GCC's __sync_* builtins, guarded
+// by the __GCC_HAVE_SYNC_COMPARE_AND_SWAP_N predefined macros.
+#if defined(__arm__)
+
+static void halide__sync_synchronize() {
+    __sync_synchronize();
+}
+
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_1
+static uint8_t halide__sync_lock_test_and_set_1(volatile uint8_t *ptr, uint8_t val) {
+    return __sync_lock_test_and_set(ptr, val);
+}
+#endif
+
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4
+static uint32_t halide__sync_fetch_and_add_4(volatile uint32_t *ptr, uint32_t val) {
+    return __sync_fetch_and_add(ptr, val);
+}
+static uint32_t halide__sync_fetch_and_sub_4(volatile uint32_t *ptr, uint32_t val) {
+    return __sync_fetch_and_sub(ptr, val);
+}
+static uint32_t halide__sync_fetch_and_or_4(volatile uint32_t *ptr, uint32_t val) {
+    return __sync_fetch_and_or(ptr, val);
+}
+static uint32_t halide__sync_fetch_and_and_4(volatile uint32_t *ptr, uint32_t val) {
+    return __sync_fetch_and_and(ptr, val);
+}
+static uint32_t halide__sync_val_compare_and_swap_4(volatile uint32_t *ptr, uint32_t oldval, uint32_t newval) {
+    return __sync_val_compare_and_swap(ptr, oldval, newval);
+}
+#endif
+
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8
+static uint64_t halide__sync_fetch_and_add_8(volatile uint64_t *ptr, uint64_t val) {
+    return __sync_fetch_and_add(ptr, val);
+}
+static uint64_t halide__sync_fetch_and_sub_8(volatile uint64_t *ptr, uint64_t val) {
+    return __sync_fetch_and_sub(ptr, val);
+}
+static uint64_t halide__sync_val_compare_and_swap_8(volatile uint64_t *ptr, uint64_t oldval, uint64_t newval) {
+    return __sync_val_compare_and_swap(ptr, oldval, newval);
+}
+#endif
+
+static const std::map<std::string, uint64_t> arm32_sync_builtins = {
+    {"__sync_synchronize", (uintptr_t)&halide__sync_synchronize},
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_1
+    {"__sync_lock_test_and_set_1", (uintptr_t)&halide__sync_lock_test_and_set_1},
+#endif
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4
+    {"__sync_fetch_and_add_4", (uintptr_t)&halide__sync_fetch_and_add_4},
+    {"__sync_fetch_and_sub_4", (uintptr_t)&halide__sync_fetch_and_sub_4},
+    {"__sync_fetch_and_or_4", (uintptr_t)&halide__sync_fetch_and_or_4},
+    {"__sync_fetch_and_and_4", (uintptr_t)&halide__sync_fetch_and_and_4},
+    {"__sync_val_compare_and_swap_4", (uintptr_t)&halide__sync_val_compare_and_swap_4},
+#endif
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8
+    {"__sync_fetch_and_add_8", (uintptr_t)&halide__sync_fetch_and_add_8},
+    {"__sync_fetch_and_sub_8", (uintptr_t)&halide__sync_fetch_and_sub_8},
+    {"__sync_val_compare_and_swap_8", (uintptr_t)&halide__sync_val_compare_and_swap_8},
+#endif
+};
+
+#endif  // defined(__arm__)
 
 #ifdef _WIN32
 void *get_symbol_address(const char *s) {
@@ -78,19 +154,50 @@ void load_vulkan() {
         debug(1) << "Vulkan support code already linked in...\n";
     } else {
         debug(1) << "Looking for Vulkan support code...\n";
+
+        const auto try_load = [](const char *libname) -> string {
+            debug(1) << "Trying " << libname << "... ";
+            string error;
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently(libname, &error);
+            debug(1) << (error.empty() ? "found!\n" : "not found.\n");
+            return error;
+        };
+
         string error;
-#if defined(__linux__)
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.so.1", &error);
-        user_assert(error.empty()) << "Could not find libvulkan.so.1\n";
-#elif defined(__APPLE__)
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.1.dylib", &error);
-        user_assert(error.empty()) << "Could not find libvulkan.1.dylib\n";
+
+        auto env_libname = get_env_variable("HL_VK_LOADER_LIB");
+        if (!env_libname.empty()) {
+            error = try_load(env_libname.c_str());
+        }
+
+        // First, attempt to find the versioned library (per the Vulkan API docs), otherwise
+        // fallback to unversioned libs, and known common paths
+        if (!error.empty()) {
+            const char *libnames[] = {
+#if defined(__APPLE__)
+                "libvulkan.1.dylib",
+                "libvulkan.dylib",
+                "/usr/local/lib/libvulkan.dylib",
+                "libMoltenVK.dylib",
+                "vulkan.framework/vulkan",
+                "MoltenVK.framework/MoltenVK"
 #elif defined(_WIN32)
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("vulkan-1.dll", &error);
-        user_assert(error.empty()) << "Could not find vulkan-1.dll\n";
+                "vulkan-1.dll",
 #else
-        internal_error << "JIT support for Vulkan only available on Linux, OS X and Windows!\n";
+                "libvulkan.so.1",
+                "libvulkan.so",
 #endif
+            };
+
+            for (const char *libname : libnames) {
+                error = try_load(libname);
+                if (error.empty()) {
+                    break;
+                }
+            }
+        }
+        user_assert(error.empty()) << "Could not find a Vulkan loader library: " << error << "\n"
+                                   << "(Try setting the env var HL_VK_LOADER_LIB to an explicit path to fix this.)\n";
     }
 }
 
@@ -215,25 +322,6 @@ public:
             }
         }
         uint64_t result = SectionMemoryManager::getSymbolAddress(name);
-#if defined(__GNUC__) && defined(__i386__)
-        // This is a workaround for an odd corner case (cross-compiling + testing
-        // Python bindings x86-32 on an x86-64 system): __udivdi3 is a helper function
-        // that GCC uses to do u64/u64 division on 32-bit systems; it's usually included
-        // by the linker on these systems as needed. When we JIT, LLVM will include references
-        // to this call; MCJIT fixes up these references by doing (roughly) dlopen(NULL)
-        // to look up the symbol. For normal JIT tests, this works fine, as dlopen(NULL)
-        // finds the test executable, which has the right lookups to locate it inside libHalide.so.
-        // If, however, we are running a JIT-via-Python test, dlopen(NULL) returns the
-        // CPython executable... which apparently *doesn't* include this as an exported
-        // function, so the lookup fails and crashiness ensues. So our workaround here is
-        // a bit icky, but expedient: check for this name if we can't find it elsewhere,
-        // and if so, return the one we know should be present. (Obviously, if other runtime
-        // helper functions of this sort crop up in the future, this should be expanded
-        // into a "builtins map".)
-        if (result == 0 && name == "__udivdi3") {
-            result = (uint64_t)&__udivdi3;
-        }
-#endif
         internal_assert(result != 0)
             << "HalideJITMemoryManager: unable to find address for " << name << "\n";
         return result;
@@ -264,20 +352,19 @@ JITModule::JITModule(const Module &m, const LoweredFunc &fn,
     llvm::reportAndResetTimings();
 }
 
-void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
-                               const std::vector<JITModule> &dependencies,
-                               const std::vector<std::string> &requested_exports) {
+namespace {
+void compile_module_impl(
+    IntrusivePtr<JITModuleContents> &jit_module,
+    std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
+    const std::vector<JITModule> &dependencies,
+    const std::vector<std::string> &requested_exports) {
 
     // Ensure that LLVM is initialized
     CodeGen_LLVM::initialize_llvm();
 
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
-#if LLVM_VERSION >= 210
     debug(2) << "Target triple: " << m->getTargetTriple().str() << "\n";
-#else
-    debug(2) << "Target triple: " << m->getTargetTriple() << "\n";
-#endif
     string error_string;
 
     llvm::for_each(*m, set_function_attributes_from_halide_target_options);
@@ -317,33 +404,19 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     if ((target.arch == Target::Arch::X86 && target.bits == 32) ||
         (target.arch == Target::Arch::ARM && target.bits == 32) ||
         target.os == Target::Windows) {
-// Fallback to RTDyld-based linking to workaround errors:
-// i386: "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
-// ARM 32bit: Unsupported target machine architecture in ELF object shared runtime-jitted-objectbuffer
-// Windows 64-bit: JIT session error: could not register eh-frame: __register_frame function not found
-#if LLVM_VERSION >= 210
+        // Fallback to RTDyld-based linking to workaround errors:
+        // i386: "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
+        // ARM 32bit: Unsupported target machine architecture in ELF object shared runtime-jitted-objectbuffer
+        // Windows 64-bit: JIT session error: could not register eh-frame: __register_frame function not found
         linkerBuilder = [&](llvm::orc::ExecutionSession &session) {
             return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&](const llvm::MemoryBuffer &) {
                 return std::make_unique<HalideJITMemoryManager>(dependencies);
             });
         };
-#else
-        linkerBuilder = [&](llvm::orc::ExecutionSession &session, const llvm::Triple &) {
-            return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&]() {
-                return std::make_unique<HalideJITMemoryManager>(dependencies);
-            });
-        };
-#endif
     } else {
-#if LLVM_VERSION >= 210
         linkerBuilder = [](llvm::orc::ExecutionSession &session) {
             return std::make_unique<llvm::orc::ObjectLinkingLayer>(session);
         };
-#else
-        linkerBuilder = [](llvm::orc::ExecutionSession &session, const llvm::Triple &) {
-            return std::make_unique<llvm::orc::ObjectLinkingLayer>(session);
-        };
-#endif
     }
 
     auto JIT = llvm::cantFail(llvm::orc::LLJITBuilder()
@@ -385,6 +458,25 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
             }
         }
     }
+
+    // On 32-bit targets, add libgcc builtins that dlsym can't find.
+#if defined(__GNUC__) && defined(__i386__)
+    for (const auto &[sym_name, sym_addr] : i386_builtins) {
+        auto name = symbolStringPool->intern(sym_name);
+        if (!newSymbols.count(name)) {
+            newSymbols.insert({name, {llvm::orc::ExecutorAddr(sym_addr), JITSymbolFlags::Exported}});
+        }
+    }
+#endif
+#if defined(__arm__)
+    for (const auto &[sym_name, sym_addr] : arm32_sync_builtins) {
+        auto name = symbolStringPool->intern(sym_name);
+        if (!newSymbols.count(name)) {
+            newSymbols.insert({name, {llvm::orc::ExecutorAddr(sym_addr), JITSymbolFlags::Exported}});
+        }
+    }
+#endif
+
     err = JIT->getMainJITDylib().define(orc::absoluteSymbols(std::move(newSymbols)));
     internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
@@ -393,6 +485,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     debug(1) << "JIT compiling " << module_name
              << " for " << target.to_string() << "\n";
 
+    using Symbol = JITModule::Symbol;
     std::map<std::string, Symbol> exports;
 
     Symbol entrypoint;
@@ -419,6 +512,18 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     jit_module->entrypoint = entrypoint;
     jit_module->argv_entrypoint = argv_entrypoint;
     jit_module->name = function_name;
+}
+}  // namespace
+
+void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
+                               const std::vector<JITModule> &dependencies,
+                               const std::vector<std::string> &requested_exports) {
+    // LLJIT's SimpleCompiler triggers LLVM's AsmPrinter, which can use a large
+    // amount of stack (observed stack overflows on macOS worker threads with
+    // 512KB default stacks). Use run_with_large_stack to ensure enough space.
+    run_with_large_stack([&]() {
+        compile_module_impl(jit_module, std::move(m), function_name, target, dependencies, requested_exports);
+    });
 }
 
 /*static*/
@@ -1000,7 +1105,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
  * JITSharedRuntime::release_all is called, the global state is reset
  * and any newly compiled Funcs will get a new runtime. */
 std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Target &target, bool create) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
 
     std::vector<JITModule> result;
 
@@ -1074,7 +1179,7 @@ void JITSharedRuntime::populate_jit_handlers(JITUserContext *jit_user_context, c
 }
 
 void JITSharedRuntime::release_all() {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
 
     for (int i = MaxRuntimeKind; i > 0; i--) {
         shared_runtimes((RuntimeKind)(i - 1)) = JITModule();
@@ -1090,7 +1195,7 @@ JITHandlers JITSharedRuntime::set_default_handlers(const JITHandlers &handlers) 
 }
 
 void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
 
     if (size != default_cache_size) {
         default_cache_size = size;
@@ -1099,22 +1204,22 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
 }
 
 void JITSharedRuntime::memoization_cache_evict(uint64_t eviction_key) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     shared_runtimes(MainShared).memoization_cache_evict(eviction_key);
 }
 
 void JITSharedRuntime::reuse_device_allocations(bool b) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     shared_runtimes(MainShared).reuse_device_allocations(b);
 }
 
 int JITSharedRuntime::get_num_threads() {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     return shared_runtimes(MainShared).get_num_threads();
 }
 
 int JITSharedRuntime::set_num_threads(int n) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     return shared_runtimes(MainShared).set_num_threads(n);
 }
 

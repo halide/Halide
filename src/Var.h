@@ -20,7 +20,7 @@ class Var {
     /* The expression representing the Var. Guaranteed to be an
      * Internal::Variable of type Int(32). Created once on
      * construction of the Var to avoid making a fresh Expr every time
-     * the Var is used in a context in which is will be converted to
+     * the Var is used in a context in which it will be converted to
      * one. */
     Expr e;
 
@@ -164,8 +164,13 @@ public:
     }
 };
 
+/** A compile-time template struct representing an implicit variable.
+ * This is used to implement the placeholder variable _ and the predeclared
+ * implicit variables _0 through _9. The template parameter N specifies the
+ * implicit variable index, or -1 for the placeholder. */
 template<int N = -1>
 struct ImplicitVar {
+    /** Convert this ImplicitVar to a Var. */
     Var to_var() const {
         if (N >= 0) {
             return Var::implicit(N);
@@ -174,9 +179,11 @@ struct ImplicitVar {
         }
     }
 
+    /** Implicit conversion to Var. */
     operator Var() const {
         return to_var();
     }
+    /** Implicit conversion to Expr. */
     operator Expr() const {
         return to_var();
     }

@@ -37,6 +37,16 @@ public:
 
         extra_func_output = add_output<Func>("extra_func_output", Float(64), 2);
 
+        extra_tuple_func_output = add_output<Func>("extra_tuple_func_output", {Float(64), Int(32)}, 2);
+
+        extra_tuple_buffer_output_static_dims =
+            add_output<Buffer<void, 2>>("extra_tuple_buffer_output_static_dims", {Float(64), Int(32)});
+        extra_tuple_buffer_output_dynamic_dims =
+            add_output<Buffer<>>("extra_tuple_buffer_output_dynamic_dims", {Float(64), Int(32)}, 2);
+
+        extra_tuple_buffer_output_unset_types = add_output<Buffer<>>("extra_tuple_buffer_output_unset_types", 2);
+        extra_tuple_buffer_output_unset_types->set_type({Float(64), Int(32)});
+
         // This is ok: you can't *examine* an Input or Output here, but you can call
         // set_type() iff the type is unspecified. (This allows you to base the type on,
         // e.g., the value in get_target(), or the value of any GeneratorParam.)
@@ -89,6 +99,22 @@ public:
 
         (*extra_buffer_output)(x, y, c) = cast<float>(output(x, y, c));
         (*extra_func_output)(x, y) = cast<double>(output(x, y, 0));
+
+        (*extra_tuple_func_output)(x, y) = {
+            cast<double>(output(x, y, 0)),
+            cast<int>(output(x, y, 1))};
+
+        (*extra_tuple_buffer_output_static_dims)(x, y) = {
+            cast<double>(output(x, y, 0)),
+            cast<int>(output(x, y, 1))};
+
+        (*extra_tuple_buffer_output_dynamic_dims)(x, y) = {
+            cast<double>(output(x, y, 0)),
+            cast<int>(output(x, y, 1))};
+
+        (*extra_tuple_buffer_output_unset_types)(x, y) = {
+            cast<double>(output(x, y, 0)),
+            cast<int>(output(x, y, 1))};
     }
 
 private:
@@ -102,6 +128,10 @@ private:
 
     Output<Buffer<float, 3>> *extra_buffer_output;
     Output<Func> *extra_func_output;
+    Output<Func> *extra_tuple_func_output;
+    Output<Buffer<void, 2>> *extra_tuple_buffer_output_static_dims;
+    Output<Buffer<>> *extra_tuple_buffer_output_dynamic_dims;
+    Output<Buffer<>> *extra_tuple_buffer_output_unset_types;
 };
 
 }  // namespace

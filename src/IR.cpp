@@ -342,20 +342,20 @@ Stmt ProducerConsumer::make_consume(const std::string &name, Stmt body) {
 }
 
 Stmt For::make(const std::string &name,
-               Expr min, Expr extent,
+               Expr min, Expr max,
                ForType for_type, Partition partition_policy,
                DeviceAPI device_api,
                Stmt body) {
     internal_assert(min.defined()) << "For of undefined\n";
-    internal_assert(extent.defined()) << "For of undefined\n";
+    internal_assert(max.defined()) << "For of undefined\n";
     internal_assert(min.type() == Int(32)) << "For with non-integer min\n";
-    internal_assert(extent.type() == Int(32)) << "For with non-integer extent\n";
+    internal_assert(max.type() == Int(32)) << "For with non-integer max\n";
     internal_assert(body.defined()) << "For of undefined\n";
 
     For *node = new For;
     node->name = name;
     node->min = std::move(min);
-    node->extent = std::move(extent);
+    node->max = std::move(max);
     node->for_type = for_type;
     node->partition_policy = partition_policy;
     node->device_api = device_api;
@@ -659,7 +659,6 @@ const char *const intrinsic_op_names[] = {
     "require",
     "require_mask",
     "return_second",
-    "rewrite_buffer",
     "round",
     "rounding_halving_add",
     "rounding_mul_shift_right",
@@ -678,8 +677,10 @@ const char *const intrinsic_op_names[] = {
     "sliding_window_marker",
     "sorted_avg",
     "strict_add",
+    "strict_cast",
     "strict_div",
     "strict_eq",
+    "strict_fma",
     "strict_le",
     "strict_lt",
     "strict_max",
@@ -772,7 +773,7 @@ Expr Variable::make(Type type, const std::string &name, Buffer<> image, Paramete
 Expr Shuffle::make(const std::vector<Expr> &vectors,
                    const std::vector<int> &indices) {
     internal_assert(!vectors.empty()) << "Shuffle of zero vectors.\n";
-    internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
+    internal_assert(!indices.empty()) << "Shuffle with zero indices.\n";
     Type element_ty = vectors.front().type().element_of();
     int input_lanes = 0;
     for (const Expr &i : vectors) {
@@ -848,6 +849,7 @@ Expr Shuffle::make_slice(Expr vector, int begin, int stride, int size) {
     }
 
     std::vector<int> indices;
+    indices.reserve(size);
     for (int i = 0; i < size; i++) {
         indices.push_back(begin + i * stride);
     }

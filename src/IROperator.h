@@ -223,7 +223,7 @@ void split_into_ands(const Expr &cond, std::vector<Expr> &result);
  * some stack memory for the buffer. If the shape_memory field is
  * undefined, it similarly uses stack memory for the shape. If the
  * shape_memory field is null, it uses the dim field already in the
- * buffer. Other unitialized fields will take on a value of zero in
+ * buffer. Other uninitialized fields will take on a value of zero in
  * the constructed buffer. */
 struct BufferBuilder {
     Expr buffer_memory, shape_memory;
@@ -241,7 +241,7 @@ Expr strided_ramp_base(const Expr &e, int stride = 1);
 
 /** Implementations of division and mod that are specific to Halide.
  * Use these implementations; do not use native C division or mod to
- * simplify Halide expressions. Halide division and modulo satisify
+ * simplify Halide expressions. Halide division and modulo satisfy
  * the Euclidean definition of division for integers a and b:
  *
  /code
@@ -342,12 +342,15 @@ Expr unwrap_tags(const Expr &e);
 
 template<typename T>
 struct is_printable_arg {
-    static constexpr bool value = std::is_convertible<T, const char *>::value ||
-                                  std::is_convertible<T, Halide::Expr>::value;
+    static constexpr bool value = std::is_convertible_v<T, const char *> ||
+                                  std::is_convertible_v<T, Halide::Expr>;
 };
 
 template<typename... Args>
 struct all_are_printable_args : meta_and<is_printable_arg<Args>...> {};
+
+template<typename... Args>
+inline constexpr bool all_are_printable_args_v = all_are_printable_args<Args...>::value;
 
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
@@ -665,13 +668,13 @@ inline Expr max(Expr a, float b) {
 }
 
 /** Returns an expression representing the greater of an expressions
- * vector, after doing any necessary type coersion using
+ * vector, after doing any necessary type coercion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4).
  * The expressions are folded from right ie. max(.., max(.., ..)).
  * The arguments can be any mix of types but must all be convertible to Expr. */
 template<typename A, typename B, typename C, typename... Rest,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type * = nullptr>
+         std::enable_if_t<Internal::all_are_convertible<Expr, Rest...>::value> * = nullptr>
 inline Expr max(A &&a, B &&b, C &&c, Rest &&...rest) {
     return max(std::forward<A>(a), max(std::forward<B>(b), std::forward<C>(c), std::forward<Rest>(rest)...));
 }
@@ -700,13 +703,13 @@ inline Expr min(Expr a, float b) {
 }
 
 /** Returns an expression representing the lesser of an expressions
- * vector, after doing any necessary type coersion using
+ * vector, after doing any necessary type coercion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4).
  * The expressions are folded from right ie. min(.., min(.., ..)).
  * The arguments can be any mix of types but must all be convertible to Expr. */
 template<typename A, typename B, typename C, typename... Rest,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type * = nullptr>
+         std::enable_if_t<Internal::all_are_convertible<Expr, Rest...>::value> * = nullptr>
 inline Expr min(A &&a, B &&b, C &&c, Rest &&...rest) {
     return min(std::forward<A>(a), min(std::forward<B>(b), std::forward<C>(c), std::forward<Rest>(rest)...));
 }
@@ -811,7 +814,7 @@ Expr select(Expr condition, Expr true_value, Expr false_value);
  * to the first value for which the condition is true. Returns the
  * final value if all conditions are false. */
 template<typename... Args,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Args...>::value>::type * = nullptr>
+         std::enable_if_t<Internal::all_are_convertible<Expr, Args...>::value> * = nullptr>
 inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args &&...args) {
     return select(std::move(c0), std::move(v0), select(std::move(c1), std::move(v1), std::forward<Args>(args)...));
 }
@@ -854,7 +857,7 @@ inline Expr select(const Expr &c0, const FuncRef &v0, const Expr &c1, const Func
  *                       c == 1, 50,  // Green
  *                               25); // Blue
  * This is tedious when the list is long. The following function
- * provide convinent syntax that allow one to write:
+ * provide convenient syntax that allow one to write:
  * img(x, y, c) = mux(c, {100, 50, 25});
  *
  * As with the select equivalent, if the first argument (the index) is
@@ -974,6 +977,13 @@ Expr pow(Expr x, Expr y);
  * Float(32). Accurate up to the last three bits of the
  * mantissa. Vectorizes cleanly. */
 Expr erf(const Expr &x);
+
+/** Fused multiply-add. fma(a, b, c) is equivalent to a * b + c, but only
+ * rounded once at the end. For most targets, when not in a strict_float
+ * context, Halide will already generate fma instructions from a * b + c. This
+ * intrinsic's main purpose is to request a true fma inside a strict_float
+ * context. A true fma will be emulated on targets without one. */
+Expr fma(const Expr &, const Expr &, const Expr &);
 
 /** Fast vectorizable approximation to some trigonometric functions for
  * Float(32).  Absolute approximation error is less than 1e-5. Slow on x86 if
@@ -1183,7 +1193,7 @@ Expr operator>>(Expr x, int y);
  * Some examples:
  * \code
  *
- *     // Since Halide does not have direct type delcarations, casts
+ *     // Since Halide does not have direct type declarations, casts
  *     // below are used to indicate the types of the parameters.
  *     // Such casts not required or expected in actual code where types
  *     // are inferred.
@@ -1380,14 +1390,14 @@ inline Expr unreachable() {
  * computed value, or one or more other expressions in the cache key
  * instead of the parameter dependencies of the computation. The
  * single argument version is completely safe in that the cache key
- * will use the actual computed value -- it is difficult or imposible
+ * will use the actual computed value -- it is difficult or impossible
  * to produce erroneous caching this way. The more-than-one argument
  * version allows generating cache keys that do not uniquely identify
  * the computation and thus can result in caching errors.
  *
  * A potential use for the single argument version is to handle a
  * floating-point parameter that is quantized to a small
- * integer. Mutliple values of the float will produce the same integer
+ * integer. Multiple values of the float will produce the same integer
  * and moving the caching to using the integer for the key is more
  * efficient.
  *
@@ -1555,7 +1565,7 @@ f(scatter(3, 5)) = f(select(p, gather(5, 3), gather(3, 5)));
 f(select(p, scatter(3, 5, 5), scatter(1, 2, 3))) = f(select(p, gather(5, 3, 3), gather(2, 3, 1)));
 \endcode
 *
-* Note that in the p == true case, we redudantly load from 3 and write
+* Note that in the p == true case, we redundantly load from 3 and write
 * to 5 twice.
 */
 //@{

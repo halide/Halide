@@ -4,7 +4,8 @@ Bilateral histogram.
 
 from bilateral_grid import bilateral_grid
 from bilateral_grid_Adams2019 import bilateral_grid_Adams2019
-from bilateral_grid_Li2018 import bilateral_grid_Li2018
+
+# from bilateral_grid_Li2018 import bilateral_grid_Li2018
 from bilateral_grid_Mullapudi2016 import bilateral_grid_Mullapudi2016
 import halide.imageio
 import numpy as np
@@ -14,8 +15,8 @@ import timeit
 
 def main():
     if len(sys.argv) < 4:
-        print("Usage: %s input.png output.png range_sigma" % sys.argv[0])
-        print("e.g. %s input.png output.png 0.1 10" % sys.argv[0])
+        print(f"Usage: {sys.argv[0]} input.png output.png range_sigma")
+        print(f"e.g. {sys.argv[0]} input.png output.png 0.1 10")
         sys.exit(1)
 
     input_path = sys.argv[1]
@@ -23,7 +24,7 @@ def main():
     output_path = sys.argv[3]
     timing_iterations = 10
 
-    print("Reading from %s ..." % input_path)
+    print(f"Reading from {input_path} ...")
     input_buf_u8 = halide.imageio.imread(input_path)
     assert input_buf_u8.dtype == np.uint8
     # Convert to float32
@@ -45,14 +46,14 @@ def main():
     }
 
     for name, fn in tests.items():
-        print("Running %s... " % name, end="")
+        print(f"Running {name}... ", end="")
         t = timeit.Timer(lambda: fn(input_buf, r_sigma, output_buf))
         avg_time_sec = t.timeit(number=timing_iterations) / timing_iterations
         print("time: %fms" % (avg_time_sec * 1e3))
 
     output_buf *= 255.0
     output_buf_u8 = output_buf.astype(np.uint8)
-    print("Saving to %s ..." % output_path)
+    print(f"Saving to {output_path} ...")
     halide.imageio.imwrite(output_path, output_buf_u8)
 
     print("Success!")

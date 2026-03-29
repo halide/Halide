@@ -132,7 +132,7 @@ public:
             if (w > 1) {
                 // LLVM no longer generates division instructions with
                 // fast-math on (instead it uses the approximate
-                // reciprocal, a newtown rhapson step, and a
+                // reciprocal, a newtown raphson step, and a
                 // multiplication by the numerator).
                 // check("divps", 2*w, f32_1 / f32_2);
             }
@@ -411,23 +411,25 @@ public:
             check(use_avx512 ? "vrsqrt*ps" : "vrsqrtps*ymm", 8, fast_inverse_sqrt(f32_1));
             check(use_avx512 ? "vrcp*ps" : "vrcpps*ymm", 8, fast_inverse(f32_1));
 
-#if 0
-            // Not implemented in the front end.
-            check("vandnps", 8, bool1 & (!bool2));
-            check("vandps", 8, bool1 & bool2);
-            check("vorps", 8, bool1 | bool2);
-            check("vxorps", 8, bool1 ^ bool2);
-#endif
+            // Some llvm's don't use kandw, but instead predicate the computation of bool_2
+            // using the result of bool_1
+            // check(use_avx512 ? "kandw" : "vandps", 8, bool_1 & bool_2);
+            check(use_avx512 ? "korb" : "vorps", 8, bool_1 | bool_2);
+            check(use_avx512 ? "kxorb" : "vxorps", 8, bool_1 ^ bool_2);
 
             check("vaddps*ymm", 8, f32_1 + f32_2);
             check("vaddpd*ymm", 4, f64_1 + f64_2);
             check("vmulps*ymm", 8, f32_1 * f32_2);
             check("vmulpd*ymm", 4, f64_1 * f64_2);
+            check("vfmadd*ps*ymm", 8, f32_1 * f32_2 + f32_3);
+            check("vfmadd*pd*ymm", 4, f64_1 * f64_2 + f64_3);
+            check("vfmadd*ps*ymm", 8, fma(f32_1, f32_2, f32_3));
+            check("vfmadd*pd*ymm", 4, fma(f64_1, f64_2, f64_3));
             check("vsubps*ymm", 8, f32_1 - f32_2);
             check("vsubpd*ymm", 4, f64_1 - f64_2);
-            // LLVM no longer generates division instruction when fast-math is on
-            // check("vdivps", 8, f32_1 / f32_2);
-            // check("vdivpd", 4, f64_1 / f64_2);
+
+            check("vdivps", 8, strict_float(f32_1 / f32_2));
+            check("vdivpd", 4, strict_float(f64_1 / f64_2));
             check("vminps*ymm", 8, min(f32_1, f32_2));
             check("vminpd*ymm", 4, min(f64_1, f64_2));
             check("vmaxps*ymm", 8, max(f32_1, f32_2));
@@ -702,6 +704,10 @@ int main(int argc, char **argv) {
     return SimdOpCheckTest::main<SimdOpCheckX86>(
         argc, argv,
         {
+            // IMPORTANT:
+            // When adding new targets here, make sure to also update
+            // can_run_code in simd_op_check.h to include any new features used.
+
             Target("x86-32-linux"),
             Target("x86-32-linux-sse41"),
             // Always turn on f16c when using avx. Sandy Bridge had avx without
@@ -718,6 +724,7 @@ int main(int argc, char **argv) {
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4"),
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avxvnni-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_zen5"),
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avxvnni-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
+
             // Can be enabled when AVX10 and APX support are stable in LLVM.
             // Target("x86-64-linux-avx10_1-vector_bits_256-x86apx"),
         });

@@ -19,10 +19,10 @@
 
 #include "Halide.h"
 #include <algorithm>
-#include <stdio.h>
+#include <cstdio>
 using namespace Halide;
 
-int main(int argc, char **argv) {
+int main() {
 
     // So far Funcs (such as the one below) have evaluated to a single
     // scalar value for each point in their domain.
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
                                   132);         // Blue value
 
     // Since this pattern appears quite often, Halide provides a
-    // syntatic sugar to write the code above as the following,
+    // syntactic sugar to write the code above as the following,
     // using the "mux" function.
     // color_image(x, y, c) = mux(c, {245, 42, 132});
 
@@ -214,11 +214,11 @@ int main(int argc, char **argv) {
 
             // Construct from a pair of Exprs
             Complex(Expr r, Expr i)
-                : real(r), imag(i) {
+                : real(std::move(r)), imag(std::move(i)) {
             }
 
             // Construct from a call to a Func by treating it as a Tuple
-            Complex(FuncRef t)
+            Complex(const FuncRef &t)
                 : Complex(Tuple(t)) {
             }
 

@@ -26,6 +26,10 @@ namespace Halide {
  * human-readable form */
 std::ostream &operator<<(std::ostream &stream, const Expr &);
 
+/** Emit a tuple on an output stream (such as std::cout) in
+ * human-readable form */
+std::ostream &operator<<(std::ostream &stream, const Tuple &);
+
 /** Emit a halide type on an output stream (such as std::cout) in
  * human-readable form */
 std::ostream &operator<<(std::ostream &stream, const Type &);
@@ -61,7 +65,7 @@ class Closure;
 struct Interval;
 struct ConstantInterval;
 struct ModulusRemainder;
-enum class IRNodeType;
+enum class IRNodeType : uint8_t;
 
 /** Emit a halide node type on an output stream (such as std::cout) in
  * human-readable form */

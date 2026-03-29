@@ -27,26 +27,26 @@ void define_get(py::class_<Func> &func_class) {
 }
 
 template<typename LHS, typename RHS>
+void setitem_impl(Func &func, const LHS &lhs, const RHS &rhs) {
+    if constexpr (std::is_same_v<RHS, UnevaluatedFuncRefExpr>) {
+        static_cast<UnevaluatedFuncRefExpr>(rhs).define_update(func(lhs));
+    } else {
+        func(lhs) = rhs;
+    }
+}
+
+template<typename LHS, typename RHS>
 void define_set(py::class_<Func> &func_class) {
     func_class
-        .def("__setitem__",
-             [](Func &func, const LHS &lhs, const RHS &rhs) -> Stage {
-                 return func(lhs) = rhs;
-             })
-        .def("__setitem__",
-             [](Func &func, const std::vector<LHS> &lhs, const RHS &rhs) -> Stage {
-                 return func(lhs) = rhs;
-             });
+        .def("__setitem__", setitem_impl<LHS, RHS>)
+        .def("__setitem__", setitem_impl<std::vector<LHS>, RHS>);
 }
 
 // See the usages below this function to see why we are specializing this function.
 template<typename RHS>
 void define_set_func_ref(py::class_<Func> &func_class) {
     func_class
-        .def("__setitem__",
-             [](Func &func, const FuncRef &lhs, const RHS &rhs) -> Stage {
-                 return func(lhs) = rhs;
-             });
+        .def("__setitem__", setitem_impl<FuncRef, RHS>);
 }
 
 // Special case: there is no implicit conversion of double in C++ Halide
@@ -55,7 +55,7 @@ template<>
 void define_set_func_ref<double>(py::class_<Func> &func_class) {
     func_class
         .def("__setitem__",
-             [](Func &func, const FuncRef &lhs, const double &rhs) -> Stage {
+             [](Func &func, const FuncRef &lhs, const double &rhs) {
                  // Implicitly convert rhs to single precision. Issue warnings if
                  // we detect loss of precision.
                  float f = rhs;
@@ -67,7 +67,7 @@ void define_set_func_ref<double>(py::class_<Func> &func_class) {
                      std::string msg = os.str();
                      PyErr_WarnEx(nullptr, msg.c_str(), 1);
                  }
-                 return func(lhs) = Expr(f);
+                 func(lhs) = Expr(f);
              });
 }
 
@@ -197,6 +197,8 @@ void define_func(py::module &m) {
             .def("type", &Func::type)
             .def("types", &Func::types)
 
+            .def("split_vars", &Func::split_vars)
+
             .def("bound", &Func::bound, py::arg("var"), py::arg("min"), py::arg("extent"))
 
             .def("reorder_storage", (Func & (Func::*)(const std::vector<Var> &)) & Func::reorder_storage, py::arg("dims"))
@@ -215,7 +217,7 @@ void define_func(py::module &m) {
             .def("async_", &Func::async)
             .def("ring_buffer", &Func::ring_buffer)
             .def("bound_storage", &Func::bound_storage)
-            .def("memoize", &Func::memoize)
+            .def("memoize", &Func::memoize, py::arg("eviction_key") = EvictionKey())
             .def("compute_inline", &Func::compute_inline)
             .def("compute_root", &Func::compute_root)
             .def("store_root", &Func::store_root)
@@ -351,20 +353,20 @@ void define_func(py::module &m) {
             .def("is_extern", &Func::is_extern)
             .def("extern_function_name", &Func::extern_function_name)
 
-            .def("define_extern",                                                                                                                                                                    //
-                 (void(Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, const std::vector<Type> &, const std::vector<Var> &, NameMangling, DeviceAPI)) & Func::define_extern,  //
+            .def("define_extern",                                                                                                                                                                                //
+                 static_cast<void (Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, const std::vector<Type> &, const std::vector<Var> &, NameMangling, DeviceAPI)>(&Func::define_extern),  //
                  py::arg("function_name"), py::arg("params"), py::arg("types"), py::arg("arguments"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
 
-            .def("define_extern",                                                                                                                          //
-                 (void(Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, Type, int, NameMangling, DeviceAPI)) & Func::define_extern,  //
+            .def("define_extern",                                                                                                                                      //
+                 static_cast<void (Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, Type, int, NameMangling, DeviceAPI)>(&Func::define_extern),  //
                  py::arg("function_name"), py::arg("params"), py::arg("type"), py::arg("dimensionality"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
 
-            .def("define_extern",                                                                                                                                               //
-                 (void(Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, const std::vector<Type> &, int, NameMangling, DeviceAPI)) & Func::define_extern,  //
+            .def("define_extern",                                                                                                                                                           //
+                 static_cast<void (Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, const std::vector<Type> &, int, NameMangling, DeviceAPI)>(&Func::define_extern),  //
                  py::arg("function_name"), py::arg("params"), py::arg("types"), py::arg("dimensionality"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
 
-            .def("define_extern",                                                                                                                                               //
-                 (void(Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, Type, const std::vector<Var> &, NameMangling, DeviceAPI)) & Func::define_extern,  //
+            .def("define_extern",                                                                                                                                                           //
+                 static_cast<void (Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, Type, const std::vector<Var> &, NameMangling, DeviceAPI)>(&Func::define_extern),  //
                  py::arg("function_name"), py::arg("params"), py::arg("type"), py::arg("arguments"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
 
             .def("output_buffer", &Func::output_buffer)
@@ -404,12 +406,12 @@ void define_func(py::module &m) {
                  },
                  py::arg("dst"), py::arg("target") = Target())
 
-            .def("in_", (Func(Func::*)(const Func &))&Func::in, py::arg("f"))
-            .def("in_", (Func(Func::*)(const std::vector<Func> &fs))&Func::in, py::arg("fs"))
-            .def("in_", (Func(Func::*)())&Func::in)
+            .def("in_", static_cast<Func (Func::*)(const Func &)>(&Func::in), py::arg("f"))
+            .def("in_", static_cast<Func (Func::*)(const std::vector<Func> &fs)>(&Func::in), py::arg("fs"))
+            .def("in_", static_cast<Func (Func::*)()>(&Func::in))
 
-            .def("clone_in", (Func(Func::*)(const Func &))&Func::clone_in, py::arg("f"))
-            .def("clone_in", (Func(Func::*)(const std::vector<Func> &fs))&Func::clone_in, py::arg("fs"))
+            .def("clone_in", static_cast<Func (Func::*)(const Func &)>(&Func::clone_in), py::arg("f"))
+            .def("clone_in", static_cast<Func (Func::*)(const std::vector<Func> &fs)>(&Func::clone_in), py::arg("fs"))
 
             .def("copy_to_device", &Func::copy_to_device, py::arg("device_api") = DeviceAPI::Default_GPU)
             .def("copy_to_host", &Func::copy_to_host)
@@ -462,17 +464,20 @@ void define_func(py::module &m) {
     define_set_func_ref<Tuple>(func_class);
     define_set_func_ref<int>(func_class);
     define_set_func_ref<double>(func_class);
+    define_set_func_ref<UnevaluatedFuncRefExpr>(func_class);
 
     // LHS(Var, ...Var) is LHS of an ordinary Func definition.
     define_set<Var, FuncRef>(func_class);
     define_set<Var, Expr>(func_class);
     define_set<Var, Tuple>(func_class);
+    define_set<Var, UnevaluatedFuncRefExpr>(func_class);
     // define_set<Var, std::vector<Var>>(func_class);
 
     // LHS(Expr, ...Expr) can only be LHS of an update definition.
     define_set<Expr, FuncRef>(func_class);
     define_set<Expr, Expr>(func_class);
     define_set<Expr, Tuple>(func_class);
+    define_set<Expr, UnevaluatedFuncRefExpr>(func_class);
 
     add_schedule_methods(func_class);
 

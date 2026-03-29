@@ -15,7 +15,7 @@ void check(Expr test, Expr expected, Type required_type) {
 
     // Make sure the pattern is robust to CSE. We only enforce this
     // for types with well-defined overflow for now.
-    if (test.type().bits() < 32 || test.type().is_uint()) {
+    if (test.type().can_overflow()) {
         auto bundle = [](const Expr &e) {
             return Call::make(e.type(), Call::bundle, {e, e}, Call::PureIntrinsic);
         };
@@ -131,7 +131,10 @@ int main(int argc, char **argv) {
     Expr u8y = make_leaf(UInt(8, 4), "u8y");
     Expr u8z = make_leaf(UInt(8, 4), "u8w");
     Expr u8w = make_leaf(UInt(8, 4), "u8z");
+    Expr i16x = make_leaf(Int(16, 4), "i16x");
     Expr u16x = make_leaf(UInt(16, 4), "u16x");
+    Expr i16y = make_leaf(Int(16, 4), "i16y");
+    Expr u16y = make_leaf(UInt(16, 4), "u16y");
     Expr u32x = make_leaf(UInt(32, 4), "u32x");
     Expr u32y = make_leaf(UInt(32, 4), "u32y");
     Expr i32x = make_leaf(Int(32, 4), "i32x");
@@ -169,6 +172,21 @@ int main(int argc, char **argv) {
     check(i32(i8x) * i8y, i32(widening_mul(i8x, i8y)));
     check(u32(u8x) * u8y, u32(widening_mul(u8x, u8y)));
     check(f32(f16x) * f32(f16y), widening_mul(f16x, f16y));
+
+    // Check mixed float/int promotion
+    check(widening_mul(i8x, f16y), widening_mul(f16(i8x), f16y));
+    check(widening_mul(i8x, f32y), widening_mul(f32(i8x), f32y));
+    check(widening_mul(u8x, f16y), widening_mul(f16(u8x), f16y));
+    check(widening_mul(u8x, f32y), widening_mul(f32(u8x), f32y));
+    check(widening_mul(i16x, f32y), widening_mul(f32(i16x), f32y));
+    check(widening_mul(u16x, f32y), widening_mul(f32(u16x), f32y));
+
+    check(widening_mul(f16x, i8y), widening_mul(f16x, f16(i8y)));
+    check(widening_mul(f32x, i8y), widening_mul(f32x, f32(i8y)));
+    check(widening_mul(f16x, u8y), widening_mul(f16x, f16(u8y)));
+    check(widening_mul(f32x, u8y), widening_mul(f32x, f32(u8y)));
+    check(widening_mul(f32x, i16y), widening_mul(f32x, f32(i16y)));
+    check(widening_mul(f32x, u16y), widening_mul(f32x, f32(u16y)));
 
     // Widening mul allows mixed signs
     check(i16(i8x) * u8y, widening_mul(i8x, u8y), Int(16, 4));
@@ -375,6 +393,16 @@ int main(int argc, char **argv) {
         g(x) = rounding_shift_right(f(x), 0) + u8(rounding_shift_left(u16(f(x)), 11));
 
         g.compile_jit();
+    }
+
+    // Mixed integer-floating-point used to crash codegen
+    {
+        Func f, q, s;
+        q(x) = cast<int8_t>(0);
+        s(x) = cast(Float(16), 1.0f);
+        f(x) = widening_mul(q(x), s(x));
+
+        f.compile_jit();
     }
 
     printf("Success!\n");

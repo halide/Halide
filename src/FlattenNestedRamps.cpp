@@ -20,6 +20,7 @@ class FlattenRamps : public IRMutator {
             Expr base = mutate(op->base);
             Expr stride = mutate(op->stride);
             std::vector<Expr> ramp_elems;
+            ramp_elems.reserve(op->lanes);
             for (int ix = 0; ix < op->lanes; ix++) {
                 ramp_elems.push_back(base + ix * stride);
             }
@@ -147,11 +148,11 @@ class LowerConcatBits : public IRMutator {
 }  // namespace
 
 Stmt flatten_nested_ramps(const Stmt &s) {
-    return LowerConcatBits().mutate(FlattenRamps().mutate(s));
+    return LowerConcatBits()(FlattenRamps()(s));
 }
 
 Expr flatten_nested_ramps(const Expr &e) {
-    return LowerConcatBits().mutate(FlattenRamps().mutate(e));
+    return LowerConcatBits()(FlattenRamps()(e));
 }
 
 }  // namespace Internal

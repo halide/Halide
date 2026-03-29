@@ -10,16 +10,30 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
     ExprInfo value_info;
     Expr value = mutate(op->value, &value_info);
 
-    if (info) {
-        if (no_overflow(op->type) && !op->type.can_represent(value_info.bounds)) {
-            // If there's overflow in a no-overflow type (e.g. due to casting
-            // from a UInt(64) to an Int(32)), then forget everything we know
-            // about the Expr. The expression may or may not overflow. We don't
-            // know.
-            *info = ExprInfo{};
-        } else {
+    if (info && no_overflow(op->type) && !op->type.can_represent(value_info.bounds)) {
+        // If there's overflow in a no-overflow type (e.g. due to casting
+        // from a UInt(64) to an Int(32)), then forget everything we know
+        // about the Expr. The expression may or may not overflow. We don't
+        // know.
+        *info = ExprInfo{};
+    } else {
+        int64_t old_min = value_info.bounds.min;
+        bool old_min_defined = value_info.bounds.min_defined;
+        value_info.cast_to(op->type);
+        if (op->type.is_uint() && op->type.bits() == 64 && old_min_defined && old_min > 0) {
+            // It's impossible for a cast *to* a uint64 in Halide to lower the
+            // min. Casts to uint64_t don't overflow for any source type.
+            value_info.bounds.min_defined = true;
+            value_info.bounds.min = old_min;
+        }
+        value_info.trim_bounds_using_alignment();
+        if (info) {
             *info = value_info;
-            info->cast_to(op->type);
+        }
+        // It's possible we just reduced to a constant. E.g. if we cast an
+        // even number to uint1 we get zero.
+        if (value_info.bounds.is_single_point()) {
+            return make_const(op->type, value_info.bounds.min, info);
         }
     }
 
@@ -33,67 +47,48 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         clear_expr_info(info);
         return make_signed_integer_overflow(op->type);
     } else if (value.type() == op->type) {
+        if (info) {
+            *info = value_info;
+        }
         return value;
     } else if (op->type.is_int() &&
                (f = as_const_float(value)) &&
                std::isfinite(*f)) {
         // float -> int
-        // Recursively call mutate just to set the bounds
-        return mutate(make_const(op->type, safe_numeric_cast<int64_t>(*f)), info);
+        return make_const(op->type, safe_numeric_cast<int64_t>(*f), info);
     } else if (op->type.is_uint() &&
                (f = as_const_float(value)) &&
                std::isfinite(*f)) {
         // float -> uint
-        // Recursively call mutate just to set the bounds
-        return mutate(make_const(op->type, safe_numeric_cast<uint64_t>(*f)), info);
+        return make_const(op->type, safe_numeric_cast<uint64_t>(*f), info);
     } else if (op->type.is_float() &&
                (f = as_const_float(value))) {
         // float -> float
-        return make_const(op->type, *f);
+        return make_const(op->type, *f, info);
     } else if (op->type.is_int() &&
                (i = as_const_int(value))) {
         // int -> int
-        // Recursively call mutate just to set the bounds
-        return mutate(make_const(op->type, *i), info);
+        return make_const(op->type, *i, info);
     } else if (op->type.is_uint() &&
                (i = as_const_int(value))) {
         // int -> uint
-        return make_const(op->type, safe_numeric_cast<uint64_t>(*i));
+        return make_const(op->type, safe_numeric_cast<uint64_t>(*i), info);
     } else if (op->type.is_float() &&
                (i = as_const_int(value))) {
         // int -> float
-        return mutate(make_const(op->type, safe_numeric_cast<double>(*i)), info);
+        return make_const(op->type, safe_numeric_cast<double>(*i), info);
     } else if (op->type.is_int() &&
-               (u = as_const_uint(value)) &&
-               op->type.bits() < value.type().bits()) {
-        // uint -> int narrowing
-        // Recursively call mutate just to set the bounds
-        return mutate(make_const(op->type, safe_numeric_cast<int64_t>(*u)), info);
-    } else if (op->type.is_int() &&
-               (u = as_const_uint(value)) &&
-               op->type.bits() == value.type().bits()) {
-        // uint -> int reinterpret
-        // Recursively call mutate just to set the bounds
-        return mutate(make_const(op->type, safe_numeric_cast<int64_t>(*u)), info);
-    } else if (op->type.is_int() &&
-               (u = as_const_uint(value)) &&
-               op->type.bits() > value.type().bits()) {
-        // uint -> int widening
-        if (op->type.can_represent(*u) || op->type.bits() < 32) {
-            // If the type can represent the value or overflow is well-defined.
-            // Recursively call mutate just to set the bounds
-            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(*u)), info);
-        } else {
-            return make_signed_integer_overflow(op->type);
-        }
+               (u = as_const_uint(value))) {
+        // uint -> int.
+        return make_const(op->type, safe_numeric_cast<int64_t>(*u), info);
     } else if (op->type.is_uint() &&
                (u = as_const_uint(value))) {
         // uint -> uint
-        return mutate(make_const(op->type, *u), info);
+        return make_const(op->type, *u, info);
     } else if (op->type.is_float() &&
                (u = as_const_uint(value))) {
         // uint -> float
-        return make_const(op->type, safe_numeric_cast<double>(*u));
+        return make_const(op->type, safe_numeric_cast<double>(*u), info);
     } else if (cast &&
                op->type.code() == cast->type.code() &&
                op->type.bits() < cast->type.bits()) {
@@ -113,8 +108,8 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         // directly.
         return mutate(Cast::make(op->type, cast->value), info);
     } else if (cast &&
-               (op->type.is_int() || op->type.is_uint()) &&
-               (cast->type.is_int() || cast->type.is_uint()) &&
+               op->type.is_int_or_uint() &&
+               cast->type.is_int_or_uint() &&
                op->type.bits() <= cast->type.bits() &&
                op->type.bits() <= op->value.type().bits()) {
         // If this is a cast between integer types, where the
@@ -122,7 +117,11 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         // inner cast's argument, the inner cast can be
         // eliminated. The inner cast is either a sign extend
         // or a zero extend, and the outer cast truncates the extended bits
-        return mutate(Cast::make(op->type, cast->value), info);
+        if (op->type == cast->value.type()) {
+            return mutate(cast->value, info);
+        } else {
+            return mutate(Cast::make(op->type, cast->value), info);
+        }
     } else if (broadcast_value) {
         // cast(broadcast(x)) -> broadcast(cast(x))
         return mutate(Broadcast::make(Cast::make(op->type.with_lanes(broadcast_value->value.type().lanes()), broadcast_value->value), broadcast_value->lanes), info);

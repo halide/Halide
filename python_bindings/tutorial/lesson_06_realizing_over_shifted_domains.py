@@ -13,7 +13,6 @@ import halide as hl
 
 
 def main():
-
     # The last lesson was quite involved, and scheduling complex
     # multi-stage pipelines is ahead of us. As an interlude, let's
     # consider something easy: evaluating funcs over rectangular

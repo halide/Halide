@@ -6,6 +6,7 @@
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
+#include "DecomposeVectorShuffle.h"
 #include "DistributeShifts.h"
 #include "IREquality.h"
 #include "IRMatch.h"
@@ -45,8 +46,25 @@ namespace {
 //
 // v8r has no relation to anything.
 Target complete_arm_target(Target t) {
+    if (t.os == Target::OSX) {
+        // The Apple M1 implements the full ARM v8.4a spec.
+        t.set_feature(Target::ARMv84a);
+    }
+
+    auto add_implied_feature_if_supported = [](Target &t, Target::Feature super, Target::Feature implied) {
+        if (t.has_feature(super)) {
+            t.set_feature(implied);
+        }
+    };
+
+    // ARMFp16 implies ARMv8.2-A; we don't know of any devices where
+    // that doesn't hold. The cascade loop below will set ARMv81a and ARMv8a.
+    add_implied_feature_if_supported(t, Target::ARMFp16, Target::ARMv82a);
+
     constexpr int num_arm_v8_features = 10;
     static const Target::Feature arm_v8_features[num_arm_v8_features] = {
+        // The following loop depends on this array being sorted correctly.
+        // keep-sorted start numeric=yes order=desc
         Target::ARMv89a,
         Target::ARMv88a,
         Target::ARMv87a,
@@ -57,12 +75,30 @@ Target complete_arm_target(Target t) {
         Target::ARMv82a,
         Target::ARMv81a,
         Target::ARMv8a,
+        // keep-sorted end
     };
 
     for (int i = 0; i < num_arm_v8_features - 1; i++) {
-        if (t.has_feature(arm_v8_features[i])) {
-            t.set_feature(arm_v8_features[i + 1]);
-        }
+        add_implied_feature_if_supported(t,
+                                         arm_v8_features[i],
+                                         arm_v8_features[i + 1]);
+    }
+
+    static const Target::Feature features_with_fp16[] = {
+        Target::SVE,
+        Target::SVE2,
+    };
+
+    for (const auto &f : features_with_fp16) {
+        add_implied_feature_if_supported(t, f, Target::ARMFp16);
+    }
+
+    static const Target::Feature features_with_dotprod[] = {
+        Target::SVE2,
+    };
+
+    for (const auto &f : features_with_dotprod) {
+        add_implied_feature_if_supported(t, f, Target::ARMDotProd);
     }
 
     return t;
@@ -141,7 +177,6 @@ public:
     CodeGen_ARM(const Target &);
 
 protected:
-    using codegen_func_t = std::function<Value *(int lanes, const std::vector<Value *> &)>;
     using CodeGen_Posix::visit;
 
     /** Similar to llvm_type_of, but allows providing a VectorTypeConstraint to
@@ -161,9 +196,6 @@ protected:
     void compile_func(const LoweredFunc &f,
                       const std::string &simple_name, const std::string &extern_name) override;
 
-    void begin_func(LinkageType linkage, const std::string &simple_name,
-                    const std::string &extern_name, const std::vector<LoweredArgument> &args) override;
-
     /** Nodes for which we want to emit specific ARM vector intrinsics */
     // @{
     void visit(const Cast *) override;
@@ -178,6 +210,25 @@ protected:
     void visit(const Call *) override;
     void visit(const LT *) override;
     void visit(const LE *) override;
+
+    llvm::Type *get_vector_type_from_value(llvm::Value *vec_or_scalar, int n);
+    Value *concat_vectors(const std::vector<llvm::Value *> &) override;
+    Value *slice_vector(Value *vec, int start, int extent) override;
+    Value *create_undef_vector_like(Value *ref_vec, int lanes);
+
+    /** Extract a sub vector from a vector, all the elements in the sub vector must be in the src vector.
+     * Specialized for scalable vector */
+    Value *extract_scalable_vector(Value *vec, int start, int extract_size);
+
+    /** Insert a vector into the "start" position of a base vector.
+     * Specialized for scalable vector */
+    Value *insert_scalable_vector(Value *base_vec, Value *new_vec, int start);
+
+    Value *interleave_vectors(const std::vector<Value *> &) override;
+    Value *shuffle_vectors(Value *a, Value *b, const std::vector<int> &indices) override;
+    Value *shuffle_scalable_vectors_general(Value *a, Value *b, const std::vector<int> &indices);
+    Value *codegen_shuffle_indices(int bits, const std::vector<int> &indices);
+    Value *codegen_whilelt(int total_lanes, int start, int end);
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
     bool codegen_dot_product_vector_reduce(const VectorReduce *, const Expr &);
     bool codegen_pairwise_vector_reduce(const VectorReduce *, const Expr &);
@@ -186,12 +237,6 @@ protected:
     Type upgrade_type_for_arithmetic(const Type &t) const override;
     Type upgrade_type_for_argument_passing(const Type &t) const override;
     Type upgrade_type_for_storage(const Type &t) const override;
-
-    /** Helper function to perform codegen of vector operation in a way that
-     * total_lanes are divided into slices, codegen is performed for each slice
-     * and results are concatenated into total_lanes.
-     */
-    Value *codegen_with_lanes(int slice_lanes, int total_lanes, const std::vector<Expr> &args, codegen_func_t &cg_func);
 
     /** Various patterns to peephole match against */
     struct Pattern {
@@ -202,8 +247,9 @@ protected:
             : intrin(intrin), pattern(std::move(p)) {
         }
     };
-    vector<Pattern> casts, calls, averagings, negations;
+    vector<Pattern> casts, calls, negations;
 
+    int natural_vector_size(const Halide::Type &t) const;
     string mcpu_target() const override;
     string mcpu_tune() const override;
     string mattrs() const override;
@@ -234,6 +280,8 @@ protected:
             return Shuffle::make_concat({const_true(true_lanes), const_false(false_lanes)});
         }
     }
+
+    friend struct DecomposeVectorShuffle<CodeGen_ARM, Value *>;
 };
 
 CodeGen_ARM::CodeGen_ARM(const Target &target)
@@ -361,7 +409,6 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     negations.emplace_back("saturating_negate", -max(wild_i8x_, -127));
     negations.emplace_back("saturating_negate", -max(wild_i16x_, -32767));
     negations.emplace_back("saturating_negate", -max(wild_i32x_, -(0x7fffffff)));
-    // clang-format on
 }
 
 constexpr int max_intrinsic_args = 4;
@@ -391,7 +438,6 @@ struct ArmIntrinsic {
     };
 };
 
-// clang-format off
 const ArmIntrinsic intrinsic_defs[] = {
     // TODO(https://github.com/halide/Halide/issues/8093):
     // Some of the Arm intrinsic have the same name between Neon and SVE2 but with different behavior. For example,
@@ -404,7 +450,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vabs", "abs", UInt(32, 2), "abs", {Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
     {"llvm.fabs", "llvm.fabs", Float(16, 4), "abs", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
     {"llvm.fabs", "llvm.fabs", Float(32, 2), "abs", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
-    {"llvm.fabs", "llvm.fabs", Float(64, 2), "abs", {Float(64, 2)},  ArmIntrinsic::SveNoPredicate},
+    {"llvm.fabs", "llvm.fabs", Float(64, 2), "abs", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
     {"llvm.fabs.f16", "llvm.fabs.f16", Float(16), "abs", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
     {"llvm.fabs.f32", "llvm.fabs.f32", Float(32), "abs", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
     {"llvm.fabs.f64", "llvm.fabs.f64", Float(64), "abs", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
@@ -580,12 +626,12 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vrshiftn", nullptr, UInt(32, 2), "rounding_shift_right_narrow", {UInt(64, 2), Int(64, 2)}},
 
     // arm64 expects a 32-bit constant.
-    {nullptr, "rshrn", Int(8, 8), "rounding_shift_right_narrow", {Int(16, 8), UInt(32)}},
-    {nullptr, "rshrn", UInt(8, 8), "rounding_shift_right_narrow", {UInt(16, 8), UInt(32)}},
-    {nullptr, "rshrn", Int(16, 4), "rounding_shift_right_narrow", {Int(32, 4), UInt(32)}},
-    {nullptr, "rshrn", UInt(16, 4), "rounding_shift_right_narrow", {UInt(32, 4), UInt(32)}},
-    {nullptr, "rshrn", Int(32, 2), "rounding_shift_right_narrow", {Int(64, 2), UInt(32)}},
-    {nullptr, "rshrn", UInt(32, 2), "rounding_shift_right_narrow", {UInt(64, 2), UInt(32)}},
+    {nullptr, "rshrn", Int(8, 8), "rounding_shift_right_narrow", {Int(16, 8), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "rshrn", UInt(8, 8), "rounding_shift_right_narrow", {UInt(16, 8), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "rshrn", Int(16, 4), "rounding_shift_right_narrow", {Int(32, 4), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "rshrn", UInt(16, 4), "rounding_shift_right_narrow", {UInt(32, 4), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "rshrn", Int(32, 2), "rounding_shift_right_narrow", {Int(64, 2), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "rshrn", UInt(32, 2), "rounding_shift_right_narrow", {UInt(64, 2), UInt(32)}, ArmIntrinsic::SveUnavailable},
 
     // SHRN - Shift right narrow (by immediate in [1, output bits])
     // LLVM pattern matches these.
@@ -828,6 +874,9 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vabdl_i32x2", "vabdl_i32x2", UInt(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
     {"vabdl_u32x2", "vabdl_u32x2", Int(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
     {"vabdl_u32x2", "vabdl_u32x2", UInt(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+
+    // FMLAL - Fused widening multiply-add
+    {nullptr, "fmlal_f32x8", Float(32, 8), "widening_fma", {Float(32, 8), Float(16, 8), Float(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable | ArmIntrinsic::RequireFp16},
 };
 
 // List of fp16 math functions which we can avoid "emulated" equivalent code generation.
@@ -865,7 +914,6 @@ const std::map<string, string> float16_transcendental_remapping = {
     {"tan_f16", "tan_f32"},
     {"tanh_f16", "tanh_f32"},
 };
-// clang-format on
 
 llvm::Type *CodeGen_ARM::llvm_type_with_constraint(const Type &t, bool scalars_are_vectors,
                                                    VectorTypeConstraint constraint) {
@@ -978,6 +1026,15 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
 void CodeGen_ARM::init_module() {
     CodeGen_Posix::init_module();
 
+    // TODO: https://github.com/halide/Halide/issues/8872
+    // if (target.features_any_of({Target::SVE, Target::SVE2})) {
+    if (target.has_feature(Target::SVE2)) {
+        user_assert(target.vector_bits != 0) << "For SVE/SVE2 support, Target::vector_bits must be set. For generator target strings, add \"vector_bits_<bits>\".\n";
+        user_assert((target.vector_bits % 128) == 0) << "For SVE/SVE2 support, Target::vector_bits must be a multiple of 128.\n";
+    } else if (target.has_feature(Target::SVE)) {
+        user_warning << "Halide does not support SVE for now. Use SVE2 if your target device supports it.\n";
+    }
+
     const bool has_neon = !target.has_feature(Target::NoNEON);
     const bool has_sve = target.has_feature(Target::SVE2);
     if (!(has_neon || has_sve)) {
@@ -1000,7 +1057,7 @@ void CodeGen_ARM::init_module() {
     }
 
     for (const ArmIntrinsic &intrin : intrinsic_defs) {
-        if (intrin.flags & ArmIntrinsic::RequireFp16 && !target.has_feature(Target::ARMFp16)) {
+        if ((intrin.flags & ArmIntrinsic::RequireFp16) && !target.has_feature(Target::ARMFp16)) {
             continue;
         }
 
@@ -1016,11 +1073,11 @@ void CodeGen_ARM::init_module() {
         }
 
         // This makes up to three passes defining intrinsics for 64-bit,
-        // 128-bit, and, if SVE is avaailable, whatever the SVE target width
+        // 128-bit, and, if SVE is available, whatever the SVE target width
         // is. Some variants will not result in a definition getting added based
         // on the target and the intrinsic flags. The intrinsic width may be
-        // scaled and one of two opcodes may be selected by different
-        // interations of this loop.
+        // scaled, and one of two opcodes may be selected by different
+        // iterations of this loop.
         for (const auto flavor : flavors) {
             const bool is_sve = (flavor == SIMDFlavors::SVE);
 
@@ -1045,15 +1102,17 @@ void CodeGen_ARM::init_module() {
                 continue;
             }
 
-            string full_name = intrin_name;
-            const bool is_vanilla_intrinsic = starts_with(full_name, "llvm.");
-            if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
-                if (target.bits == 32) {
-                    full_name = "llvm.arm.neon." + full_name;
-                } else {
-                    full_name = (is_sve ? "llvm.aarch64.sve." : "llvm.aarch64.neon.") + full_name;
+            const auto full_name = [&]() -> string {
+                const bool is_vanilla_intrinsic = starts_with(intrin_name, "llvm.");
+                if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
+                    const char *prefix =
+                        target.bits == 32 ? "llvm.arm.neon." :
+                        is_sve            ? "llvm.aarch64.sve." :
+                                            "llvm.aarch64.neon.";
+                    return concat_strings(prefix, intrin_name);
                 }
-            }
+                return intrin_name;
+            }();
 
             int width_factor = 1;
             if (!((intrin.ret_type.lanes <= 1) && (intrin.flags & ArmIntrinsic::NoMangle))) {
@@ -1073,7 +1132,12 @@ void CodeGen_ARM::init_module() {
 
             Type ret_type = intrin.ret_type;
             ret_type = ret_type.with_lanes(ret_type.lanes() * width_factor);
-            internal_assert(ret_type.bits() * ret_type.lanes() <= 128 * width_factor) << full_name << "\n";
+            if (!(intrin.flags & ArmIntrinsic::NoMangle)) {
+                internal_assert(ret_type.bits() * ret_type.lanes() <= 128 * width_factor)
+                    << "Invalid intrinsic `" << full_name << "`: "
+                    << ret_type.bits() << " * " << ret_type.lanes()
+                    << " > 128 * " << width_factor;
+            }
             vector<Type> arg_types;
             arg_types.reserve(4);
             for (halide_type_t i : intrin.arg_types) {
@@ -1135,40 +1199,31 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
 
     LoweredFunc func = f;
 
+    // Make sure run-time vscale is equal to compile-time vscale.
+    // Avoiding the assert on inner functions is both an efficiency and a correctness issue
+    // as the assertion code may not compile in all contexts.
+    if (f.linkage != LinkageType::Internal) {
+        int effective_vscale = target_vscale();
+        if (effective_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
+            Expr runtime_vscale = Call::make(Int(32), Call::get_runtime_vscale, {}, Call::PureIntrinsic);
+            Expr compiletime_vscale = Expr(effective_vscale);
+            Expr error = Call::make(Int(32), "halide_error_vscale_invalid",
+                                    {simple_name, runtime_vscale, compiletime_vscale}, Call::Extern);
+            func.body = Block::make(AssertStmt::make(runtime_vscale == compiletime_vscale, error), func.body);
+        }
+    }
+
     if (target.os != Target::IOS && target.os != Target::OSX) {
         // Substitute in strided loads to get vld2/3/4 emission. We don't do it
         // on Apple silicon, because doing a dense load and then shuffling is
         // actually faster.
-        func.body = SubstituteInStridedLoads().mutate(func.body);
+        func.body = SubstituteInStridedLoads()(func.body);
     }
     // Look for opportunities to turn a + (b << c) into umlal/smlal
     // and a - (b << c) into umlsl/smlsl.
     func.body = distribute_shifts(func.body, /* multiply_adds */ true);
 
     CodeGen_Posix::compile_func(func, simple_name, extern_name);
-}
-
-void CodeGen_ARM::begin_func(LinkageType linkage, const std::string &simple_name,
-                             const std::string &extern_name, const std::vector<LoweredArgument> &args) {
-    CodeGen_Posix::begin_func(linkage, simple_name, extern_name, args);
-
-    // TODO(https://github.com/halide/Halide/issues/8092): There is likely a
-    // better way to ensure this is only generated for the outermost function
-    // that is being compiled. Avoiding the assert on inner functions is both an
-    // efficiency and a correctness issue as the assertion code may not compile
-    // in all contexts.
-    if (linkage != LinkageType::Internal) {
-        int effective_vscale = target_vscale();
-        if (effective_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
-            // Make sure run-time vscale is equal to compile-time vscale
-            Expr runtime_vscale = Call::make(Int(32), Call::get_runtime_vscale, {}, Call::PureIntrinsic);
-            Value *val_runtime_vscale = codegen(runtime_vscale);
-            Value *val_compiletime_vscale = ConstantInt::get(i32_t, effective_vscale);
-            Value *cond = builder->CreateICmpEQ(val_runtime_vscale, val_compiletime_vscale);
-            create_assertion(cond, Call::make(Int(32), "halide_error_vscale_invalid",
-                                              {simple_name, runtime_vscale, Expr(effective_vscale)}, Call::Extern));
-        }
-    }
 }
 
 void CodeGen_ARM::visit(const Cast *op) {
@@ -1208,7 +1263,9 @@ void CodeGen_ARM::visit(const Cast *op) {
     }
 
     // LLVM fptoui generates fcvtzs or fcvtzu in inconsistent way
-    if (op->value.type().is_float() && op->type.is_int_or_uint()) {
+    if (op->value.type().is_float() &&
+        op->type.is_int_or_uint() &&
+        !target.has_feature(Target::SVE2)) {
         if (Value *v = call_overloaded_intrin(op->type, "fp_to_int", {op->value})) {
             value = v;
             return;
@@ -1219,74 +1276,97 @@ void CodeGen_ARM::visit(const Cast *op) {
 }
 
 void CodeGen_ARM::visit(const Add *op) {
-    if (simd_intrinsics_disabled() ||
-        !op->type.is_vector() ||
-        !target.has_feature(Target::ARMDotProd) ||
-        !op->type.is_int_or_uint() ||
-        op->type.bits() != 32) {
+    struct Pattern {
+        Expr pattern;
+        const char *intrin;
+    };
+
+    if (simd_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
 
-    struct Pattern {
-        Expr pattern;
-        const char *intrin;
-        Type coeff_type = UInt(8);
-    };
+    // FMLAL
+    if (op->type.is_vector() && op->type.is_float() && op->type.bits() == 32 &&
+        target.features_all_of({Target::ARMv84a, Target::ARMFp16})) {
+        // Initial value
+        Expr a = Variable::make(Float(32, 0), "a");
+        // Values
+        Expr b = Variable::make(Float(16, 0), "b");
+        Expr c = Variable::make(Float(16, 0), "c");
 
-    // Initial values.
-    Expr init_i32 = Variable::make(Int(32, 0), "init");
-    Expr init_u32 = Variable::make(UInt(32, 0), "init");
-    // Values
-    Expr a_i8 = Variable::make(Int(8, 0), "a"), b_i8 = Variable::make(Int(8, 0), "b");
-    Expr c_i8 = Variable::make(Int(8, 0), "c"), d_i8 = Variable::make(Int(8, 0), "d");
-    Expr a_u8 = Variable::make(UInt(8, 0), "a"), b_u8 = Variable::make(UInt(8, 0), "b");
-    Expr c_u8 = Variable::make(UInt(8, 0), "c"), d_u8 = Variable::make(UInt(8, 0), "d");
-    // Coefficients
-    Expr ac_i8 = Variable::make(Int(8, 0), "ac"), bc_i8 = Variable::make(Int(8, 0), "bc");
-    Expr cc_i8 = Variable::make(Int(8, 0), "cc"), dc_i8 = Variable::make(Int(8, 0), "dc");
-    Expr ac_u8 = Variable::make(UInt(8, 0), "ac"), bc_u8 = Variable::make(UInt(8, 0), "bc");
-    Expr cc_u8 = Variable::make(UInt(8, 0), "cc"), dc_u8 = Variable::make(UInt(8, 0), "dc");
+        static const Pattern patterns[] = {
+            {a + widening_mul(b, c), "widening_fma"},
+            {widening_mul(b, c) + a, "widening_fma"},
+        };
 
-    Expr ma_i8 = widening_mul(a_i8, ac_i8);
-    Expr mb_i8 = widening_mul(b_i8, bc_i8);
-    Expr mc_i8 = widening_mul(c_i8, cc_i8);
-    Expr md_i8 = widening_mul(d_i8, dc_i8);
-
-    Expr ma_u8 = widening_mul(a_u8, ac_u8);
-    Expr mb_u8 = widening_mul(b_u8, bc_u8);
-    Expr mc_u8 = widening_mul(c_u8, cc_u8);
-    Expr md_u8 = widening_mul(d_u8, dc_u8);
-
-    static const Pattern patterns[] = {
-        // Signed variants.
-        {(init_i32 + widening_add(ma_i8, mb_i8)) + widening_add(mc_i8, md_i8), "dot_product"},
-        {init_i32 + (widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8)), "dot_product"},
-        {widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8), "dot_product"},
-
-        // Unsigned variants.
-        {(init_u32 + widening_add(ma_u8, mb_u8)) + widening_add(mc_u8, md_u8), "dot_product"},
-        {init_u32 + (widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8)), "dot_product"},
-        {widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8), "dot_product"},
-    };
-
-    std::map<std::string, Expr> matches;
-    for (const Pattern &p : patterns) {
-        if (expr_match(p.pattern, op, matches)) {
-            Expr init;
-            auto it = matches.find("init");
-            if (it == matches.end()) {
-                init = make_zero(op->type);
-            } else {
-                init = it->second;
+        std::map<std::string, Expr> matches;
+        for (const Pattern &p : patterns) {
+            if (expr_match(p.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, p.intrin, {matches["a"], matches["b"], matches["c"]});
+                if (value) {
+                    return;
+                }
             }
-            Expr values = Shuffle::make_interleave({matches["a"], matches["b"],
-                                                    matches["c"], matches["d"]});
-            Expr coeffs = Shuffle::make_interleave({matches["ac"], matches["bc"],
-                                                    matches["cc"], matches["dc"]});
-            value = call_overloaded_intrin(op->type, p.intrin, {init, values, coeffs});
-            if (value) {
-                return;
+        }
+    }
+
+    // SDOT, UDOT
+    if (op->type.is_vector() && target.has_feature(Target::ARMDotProd) && op->type.is_int_or_uint() && op->type.bits() == 32) {
+        // Initial values.
+        Expr init_i32 = Variable::make(Int(32, 0), "init");
+        Expr init_u32 = Variable::make(UInt(32, 0), "init");
+        // Values
+        Expr a_i8 = Variable::make(Int(8, 0), "a"), b_i8 = Variable::make(Int(8, 0), "b");
+        Expr c_i8 = Variable::make(Int(8, 0), "c"), d_i8 = Variable::make(Int(8, 0), "d");
+        Expr a_u8 = Variable::make(UInt(8, 0), "a"), b_u8 = Variable::make(UInt(8, 0), "b");
+        Expr c_u8 = Variable::make(UInt(8, 0), "c"), d_u8 = Variable::make(UInt(8, 0), "d");
+        // Coefficients
+        Expr ac_i8 = Variable::make(Int(8, 0), "ac"), bc_i8 = Variable::make(Int(8, 0), "bc");
+        Expr cc_i8 = Variable::make(Int(8, 0), "cc"), dc_i8 = Variable::make(Int(8, 0), "dc");
+        Expr ac_u8 = Variable::make(UInt(8, 0), "ac"), bc_u8 = Variable::make(UInt(8, 0), "bc");
+        Expr cc_u8 = Variable::make(UInt(8, 0), "cc"), dc_u8 = Variable::make(UInt(8, 0), "dc");
+
+        Expr ma_i8 = widening_mul(a_i8, ac_i8);
+        Expr mb_i8 = widening_mul(b_i8, bc_i8);
+        Expr mc_i8 = widening_mul(c_i8, cc_i8);
+        Expr md_i8 = widening_mul(d_i8, dc_i8);
+
+        Expr ma_u8 = widening_mul(a_u8, ac_u8);
+        Expr mb_u8 = widening_mul(b_u8, bc_u8);
+        Expr mc_u8 = widening_mul(c_u8, cc_u8);
+        Expr md_u8 = widening_mul(d_u8, dc_u8);
+
+        static const Pattern patterns[] = {
+            // Signed variants.
+            {(init_i32 + widening_add(ma_i8, mb_i8)) + widening_add(mc_i8, md_i8), "dot_product"},
+            {init_i32 + (widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8)), "dot_product"},
+            {widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8), "dot_product"},
+
+            // Unsigned variants.
+            {(init_u32 + widening_add(ma_u8, mb_u8)) + widening_add(mc_u8, md_u8), "dot_product"},
+            {init_u32 + (widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8)), "dot_product"},
+            {widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8), "dot_product"},
+        };
+
+        std::map<std::string, Expr> matches;
+        for (const Pattern &p : patterns) {
+            if (expr_match(p.pattern, op, matches)) {
+                Expr init;
+                auto it = matches.find("init");
+                if (it == matches.end()) {
+                    init = make_zero(op->type);
+                } else {
+                    init = it->second;
+                }
+                Expr values = Shuffle::make_interleave({matches["a"], matches["b"],
+                                                        matches["c"], matches["d"]});
+                Expr coeffs = Shuffle::make_interleave({matches["ac"], matches["bc"],
+                                                        matches["cc"], matches["dc"]});
+                value = call_overloaded_intrin(op->type, p.intrin, {init, values, coeffs});
+                if (value) {
+                    return;
+                }
             }
         }
     }
@@ -1311,51 +1391,22 @@ void CodeGen_ARM::visit(const Sub *op) {
     }
 
     // Peep-hole (0 - b) pattern to generate "negate" instruction
-    if (is_const_zero(op->a)) {
-        if (target_vscale() != 0) {
-            if ((op->type.bits() >= 8 && op->type.is_int())) {
-                if (Value *v = call_overloaded_intrin(op->type, "negate", {op->b})) {
-                    value = v;
-                    return;
-                }
-            } else if (op->type.bits() >= 16 && op->type.is_float()) {
-                ScopedFastMath guard(this);
-                value = builder->CreateFNeg(codegen(op->b));
-                return;
-            }
-        } else {
-            // llvm.neon.neg/fneg intrinsic doesn't seem to exist. Instead,
-            // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
-            if (op->type.is_float() &&
-                (op->type.bits() >= 32 || is_float16_and_has_feature(op->type))) {
-                Constant *a;
-                if (op->type.bits() == 16) {
-                    a = ConstantFP::getNegativeZero(f16_t);
-                } else if (op->type.bits() == 32) {
-                    a = ConstantFP::getNegativeZero(f32_t);
-                } else if (op->type.bits() == 64) {
-                    a = ConstantFP::getNegativeZero(f64_t);
-                } else {
-                    a = nullptr;
-                    internal_error << "Unknown bit width for floating point type: " << op->type << "\n";
-                }
-
-                Value *b = codegen(op->b);
-
-                if (op->type.lanes() > 1) {
-                    a = get_splat(op->type.lanes(), a);
-                }
-                ScopedFastMath guard(this);
-                value = builder->CreateFSub(a, b);
-                return;
-            }
+    if (is_const_zero(op->a) &&
+        (target_vscale() != 0 && op->type.is_vector()) &&
+        (op->type.bits() >= 8 && op->type.is_int())) {
+        if (Value *v = call_overloaded_intrin(op->type, "negate", {op->b})) {
+            value = v;
+            return;
         }
     }
 
+    // llvm.neon.neg/fneg intrinsic doesn't seem to exist. Instead,
     // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
-    if (op->type.is_float() &&
+    if (is_const_zero(op->a) &&
+        op->type.is_float() &&
         (op->type.bits() >= 32 || is_float16_and_has_feature(op->type)) &&
-        is_const_zero(op->a)) {
+        (op->type.is_vector() || !target.has_feature(Target::Feature::SVE2))) {
+
         Constant *a;
         if (op->type.bits() == 16) {
             a = ConstantFP::getNegativeZero(f16_t);
@@ -1383,7 +1434,9 @@ void CodeGen_ARM::visit(const Sub *op) {
 
 void CodeGen_ARM::visit(const Min *op) {
     // Use a 2-wide vector for scalar floats.
-    if (!simd_intrinsics_disabled() && (op->type.is_float() || op->type.is_vector())) {
+    if (!simd_intrinsics_disabled() &&
+        ((op->type.is_float() && !target.has_feature(Target::SVE2)) ||
+         op->type.is_vector())) {
         value = call_overloaded_intrin(op->type, "min", {op->a, op->b});
         if (value) {
             return;
@@ -1395,7 +1448,9 @@ void CodeGen_ARM::visit(const Min *op) {
 
 void CodeGen_ARM::visit(const Max *op) {
     // Use a 2-wide vector for scalar floats.
-    if (!simd_intrinsics_disabled() && (op->type.is_float() || op->type.is_vector())) {
+    if (!simd_intrinsics_disabled() &&
+        ((op->type.is_float() && !target.has_feature(Target::SVE2)) ||
+         op->type.is_vector())) {
         value = call_overloaded_intrin(op->type, "max", {op->a, op->b});
         if (value) {
             return;
@@ -1448,17 +1503,13 @@ void CodeGen_ARM::visit(const Store *op) {
             is_float16_and_has_feature(elt) ||
             elt == Int(8) || elt == Int(16) || elt == Int(32) || elt == Int(64) ||
             elt == UInt(8) || elt == UInt(16) || elt == UInt(32) || elt == UInt(64)) {
-            // TODO(zvookin): Handle vector_bits_*.
+            const int target_vector_bits = native_vector_bits();
             if (vec_bits % 128 == 0) {
                 type_ok_for_vst = true;
-                int target_vector_bits = target.vector_bits;
-                if (target_vector_bits == 0) {
-                    target_vector_bits = 128;
-                }
                 intrin_type = intrin_type.with_lanes(target_vector_bits / t.bits());
             } else if (vec_bits % 64 == 0) {
                 type_ok_for_vst = true;
-                auto intrin_bits = (vec_bits % 128 == 0 || target.has_feature(Target::SVE2)) ? 128 : 64;
+                auto intrin_bits = (vec_bits % 128 == 0 || target.has_feature(Target::SVE2)) ? target_vector_bits : 64;
                 intrin_type = intrin_type.with_lanes(intrin_bits / t.bits());
             }
         }
@@ -1467,7 +1518,9 @@ void CodeGen_ARM::visit(const Store *op) {
     if (ramp && is_const_one(ramp->stride) &&
         shuffle && shuffle->is_interleave() &&
         type_ok_for_vst &&
-        2 <= shuffle->vectors.size() && shuffle->vectors.size() <= 4) {
+        2 <= shuffle->vectors.size() && shuffle->vectors.size() <= 4 &&
+        // TODO: we could handle predicated_store once shuffle_vector gets robust for scalable vectors
+        !is_predicated_store) {
 
         const int num_vecs = shuffle->vectors.size();
         vector<Value *> args(num_vecs);
@@ -1486,7 +1539,6 @@ void CodeGen_ARM::visit(const Store *op) {
         for (int i = 0; i < num_vecs; ++i) {
             args[i] = codegen(shuffle->vectors[i]);
         }
-        Value *store_pred_val = codegen(op->predicate);
 
         bool is_sve = target.has_feature(Target::SVE2);
 
@@ -1532,8 +1584,8 @@ void CodeGen_ARM::visit(const Store *op) {
         llvm::FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
         internal_assert(fn);
 
-        // SVE2 supports predication for smaller than whole vector size.
-        internal_assert(target.has_feature(Target::SVE2) || (t.lanes() >= intrin_type.lanes()));
+        // Scalable vector supports predication for smaller than whole vector size.
+        internal_assert(target_vscale() > 0 || (t.lanes() >= intrin_type.lanes()));
 
         for (int i = 0; i < t.lanes(); i += intrin_type.lanes()) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
@@ -1554,15 +1606,10 @@ void CodeGen_ARM::visit(const Store *op) {
                 slice_args.push_back(ConstantInt::get(i32_t, alignment));
             } else {
                 if (is_sve) {
-                    // Set the predicate argument
+                    // Set the predicate argument to mask active lanes
                     auto active_lanes = std::min(t.lanes() - i, intrin_type.lanes());
-                    Value *vpred_val;
-                    if (is_predicated_store) {
-                        vpred_val = slice_vector(store_pred_val, i, intrin_type.lanes());
-                    } else {
-                        Expr vpred = make_vector_predicate_1s_0s(active_lanes, intrin_type.lanes() - active_lanes);
-                        vpred_val = codegen(vpred);
-                    }
+                    Expr vpred = make_vector_predicate_1s_0s(active_lanes, intrin_type.lanes() - active_lanes);
+                    Value *vpred_val = codegen(vpred);
                     slice_args.push_back(vpred_val);
                 }
                 // Set the pointer argument
@@ -1595,7 +1642,7 @@ void CodeGen_ARM::visit(const Store *op) {
             // Basically we can deal with vanilla codegen,
             // but to avoid LLVM error, process with the multiple of natural_lanes
             const int natural_lanes = target.natural_vector_size(op->value.type());
-            if (ramp->lanes % natural_lanes) {
+            if (ramp->lanes % natural_lanes && !emit_atomic_stores) {
                 int aligned_lanes = align_up(ramp->lanes, natural_lanes);
                 // Use predicate to prevent overrun
                 Expr vpred;
@@ -1662,6 +1709,7 @@ void CodeGen_ARM::visit(const Store *op) {
                 vpred_val = convert_fixed_or_scalable_vector_type(vpred_val, pred_type);
                 if (is_predicated_store) {
                     Value *sliced_store_vpred_val = slice_vector(store_pred_val, i, natural_lanes);
+                    sliced_store_vpred_val = convert_fixed_or_scalable_vector_type(sliced_store_vpred_val, pred_type);
                     vpred_val = builder->CreateAnd(vpred_val, sliced_store_vpred_val);
                 }
 
@@ -1783,74 +1831,6 @@ void CodeGen_ARM::visit(const Load *op) {
                 CodeGen_Posix::visit(op);
                 return;
             }
-        } else if (stride && (2 <= stride->value && stride->value <= 4)) {
-            // Structured load ST2/ST3/ST4 of SVE
-
-            Expr base = ramp->base;
-            ModulusRemainder align = op->alignment;
-
-            int aligned_stride = gcd(stride->value, align.modulus);
-            int offset = 0;
-            if (aligned_stride == stride->value) {
-                offset = mod_imp((int)align.remainder, aligned_stride);
-            } else {
-                const Add *add = base.as<Add>();
-                if (const IntImm *add_c = add ? add->b.as<IntImm>() : base.as<IntImm>()) {
-                    offset = mod_imp(add_c->value, stride->value);
-                }
-            }
-
-            if (offset) {
-                base = simplify(base - offset);
-            }
-
-            Value *load_pred_val = codegen(op->predicate);
-
-            // We need to slice the result in to native vector lanes to use sve intrin.
-            // LLVM will optimize redundant ld instructions afterwards
-            const int slice_lanes = target.natural_vector_size(op->type);
-            vector<Value *> results;
-            for (int i = 0; i < op->type.lanes(); i += slice_lanes) {
-                int load_base_i = i * stride->value;
-                Expr slice_base = simplify(base + load_base_i);
-                Expr slice_index = Ramp::make(slice_base, stride, slice_lanes);
-                std::ostringstream instr;
-                instr << "llvm.aarch64.sve.ld"
-                      << stride->value
-                      << ".sret.nxv"
-                      << slice_lanes
-                      << (op->type.is_float() ? 'f' : 'i')
-                      << op->type.bits();
-                llvm::Type *elt = llvm_type_of(op->type.element_of());
-                llvm::Type *slice_type = get_vector_type(elt, slice_lanes);
-                StructType *sret_type = StructType::get(module->getContext(), std::vector(stride->value, slice_type));
-                std::vector<llvm::Type *> arg_types{get_vector_type(i1_t, slice_lanes), ptr_t};
-                llvm::FunctionType *fn_type = FunctionType::get(sret_type, arg_types, false);
-                FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
-
-                // Set the predicate argument
-                int active_lanes = std::min(op->type.lanes() - i, slice_lanes);
-
-                Expr vpred = make_vector_predicate_1s_0s(active_lanes, slice_lanes - active_lanes);
-                Value *vpred_val = codegen(vpred);
-                vpred_val = convert_fixed_or_scalable_vector_type(vpred_val, get_vector_type(vpred_val->getType()->getScalarType(), slice_lanes));
-                if (is_predicated_load) {
-                    Value *sliced_load_vpred_val = slice_vector(load_pred_val, i, slice_lanes);
-                    vpred_val = builder->CreateAnd(vpred_val, sliced_load_vpred_val);
-                }
-
-                Value *elt_ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
-                CallInst *load_i = builder->CreateCall(fn, {vpred_val, elt_ptr});
-                add_tbaa_metadata(load_i, op->name, slice_index);
-                // extract one element out of returned struct
-                Value *extracted = builder->CreateExtractValue(load_i, offset);
-                results.push_back(extracted);
-            }
-
-            // Retrieve original lanes
-            value = concat_vectors(results);
-            value = slice_vector(value, 0, op->type.lanes());
-            return;
         } else if (op->index.type().is_vector()) {
             // General Gather Load
 
@@ -1903,6 +1883,7 @@ void CodeGen_ARM::visit(const Load *op) {
                 Value *vpred_val = codegen(vpred);
                 if (is_predicated_load) {
                     Value *sliced_load_vpred_val = slice_vector(load_pred_val, i, natural_lanes);
+                    sliced_load_vpred_val = convert_fixed_or_scalable_vector_type(sliced_load_vpred_val, vpred_val->getType());
                     vpred_val = builder->CreateAnd(vpred_val, sliced_load_vpred_val);
                 }
 
@@ -1940,26 +1921,424 @@ void CodeGen_ARM::visit(const Shuffle *op) {
         load->type.lanes() == stride * op->type.lanes()) {
 
         value = codegen_dense_vector_load(load, nullptr, /* slice_to_native */ false);
-        value = shuffle_vectors(value, op->indices);
-    } else {
-        CodeGen_Posix::visit(op);
+        value = CodeGen_Posix::shuffle_vectors(value, op->indices);
+        return;
     }
+
+    if (target_vscale() == 0) {
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
+    const int total_lanes = op->type.lanes();
+    if (op->type.bits() == 1) {
+        // Peep-hole pattern that matches SVE "whilelt" which represents particular pattern of
+        // vector predicate. e.g. 11100000 (active_lanes=3, all_lanes=8)
+        if (op->is_concat() && op->vectors.size() == 2 &&
+            op->type.is_int_or_uint() &&
+            is_power_of_two(total_lanes) &&
+            total_lanes >= 2 * target_vscale() && total_lanes <= 16 * target_vscale() &&
+            is_const_one(op->vectors[0]) && is_const_zero(op->vectors[1])) {
+
+            int active_lanes = op->vectors[0].type().lanes();
+            value = codegen_whilelt(op->type.lanes(), 0, active_lanes);
+            return;
+        } else {
+            // Rewrite to process 1bit type vector as 8 bit vector, and then cast back
+            std::vector<Expr> vecs_i8;
+            vecs_i8.reserve(op->vectors.size());
+            for (const auto &vec_i1 : op->vectors) {
+                Type upgraded_type = vec_i1.type().with_bits(8);
+                vecs_i8.emplace_back(Cast::make(upgraded_type, vec_i1));
+            }
+            Expr equiv = Shuffle::make(vecs_i8, op->indices);
+            equiv = Cast::make(op->type, equiv);
+            equiv = common_subexpression_elimination(equiv);
+            value = codegen(equiv);
+            return;
+        }
+    } else if (op->is_concat() && op->vectors.size() == 2) {
+        // Here, we deal with some specific patterns of concat(a, b).
+        // Others are decomposed by CodeGen_LLVM at first,
+        // which in turn calls CodeGen_ARM::concat_vectors().
+
+        if (const Broadcast *bc_1 = op->vectors[1].as<Broadcast>()) {
+            // Common pattern where padding is appended to align lanes.
+            // Create broadcast of padding with dst lanes, then insert vec[0] at lane 0.
+            Value *val_0 = codegen(op->vectors[0]);
+            Value *val_1_scalar = codegen(bc_1->value);
+            Value *padding = builder->CreateVectorSplat(llvm::ElementCount::getScalable(total_lanes / target_vscale()), val_1_scalar);
+            value = insert_scalable_vector(padding, val_0, 0);
+            return;
+        }
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+llvm::Type *CodeGen_ARM::get_vector_type_from_value(Value *vec_or_scalar, int n) {
+    llvm::Type *t = vec_or_scalar->getType();
+    llvm::Type *elt = t->isVectorTy() ? get_vector_element_type(t) : t;
+    return CodeGen_Posix::get_vector_type(elt, n);
+}
+
+Value *CodeGen_ARM::concat_vectors(const vector<Value *> &vecs) {
+    // Override only for scalable vector which includes
+    // the case where scalars are concatenated into scalable vector.
+    if (target_vscale() == 0 ||
+        vecs.size() <= 1 ||
+        isa<FixedVectorType>(vecs[0]->getType())) {
+        return CodeGen_Posix::concat_vectors(vecs);
+    }
+
+    int total_lanes = 0;
+    for (auto *v : vecs) {
+        total_lanes += get_vector_num_elements(v->getType());
+    }
+
+    llvm::Type *concat_type = get_vector_type(get_vector_element_type(vecs[0]->getType()), total_lanes);
+    Value *ret = UndefValue::get(concat_type);
+    int insert_index = 0;
+    for (auto *v : vecs) {
+        ret = insert_scalable_vector(ret, v, insert_index);
+        insert_index += get_vector_num_elements(v->getType());
+    }
+    return ret;
+}
+
+Value *CodeGen_ARM::slice_vector(llvm::Value *vec, int start, int slice_size) {
+    // Override only for scalable vector
+    if (target_vscale() == 0 ||
+        !is_scalable_vector(vec)) {
+        return CodeGen_Posix::slice_vector(vec, start, slice_size);
+    }
+
+    const int vec_lanes = get_vector_num_elements(vec->getType());
+    if (slice_size == 1) {
+        return builder->CreateExtractElement(vec, ConstantInt::get(i64_t, start, true));
+    } else if (start == 0) {
+        if (vec_lanes == slice_size) {
+            return vec;
+        } else if (vec_lanes < slice_size) {
+            return insert_scalable_vector(UndefValue::get(get_vector_type_from_value(vec, slice_size)), vec, 0);
+        } else {
+            auto *dst_type = get_vector_type_from_value(vec, slice_size);
+            Value *val_index = ConstantInt::get(i64_t, 0, true);
+            return builder->CreateExtractVector(dst_type, vec, val_index);
+        }
+    } else {
+        const int extract_size = std::min(vec_lanes - start, slice_size);
+        Value *extracted = extract_scalable_vector(vec, start, extract_size);
+        if (slice_size == extract_size) {
+            return extracted;
+        } else {
+            Value *sliced = UndefValue::get(get_vector_type_from_value(vec, slice_size));
+            sliced = insert_scalable_vector(sliced, extracted, 0);
+            return sliced;
+        }
+    }
+}
+
+Value *CodeGen_ARM::create_undef_vector_like(Value *ref_vec, int lanes) {
+    llvm::Type *elt = get_vector_element_type(ref_vec->getType());
+    return PoisonValue::get(get_vector_type(elt, lanes));
+}
+
+Value *CodeGen_ARM::extract_scalable_vector(Value *vec, int start, int extract_size) {
+    internal_assert(target_vscale() > 0 && is_scalable_vector(vec));
+    internal_assert(start + extract_size <= get_vector_num_elements(vec->getType()));  // No overrun
+
+    if (extract_size == 1) {
+        return builder->CreateExtractElement(vec, ConstantInt::get(i64_t, start, true));
+    } else {
+        // To follow the requirement of ‘llvm.vector.extract’ intrinsic that
+        // idx must be a constant multiple of the known-minimum vector length of the result type,
+        // the extraction is performed as multiple sub-extraction, where the worst case is extraction of scalar.
+        std::vector<Value *> sub_slices;
+        int i = 0;
+        while (i < extract_size) {
+            int sub_extract_pos = start + i;
+            for (int sub_extract_size = extract_size - i; sub_extract_size > 0; --sub_extract_size) {
+                if (sub_extract_pos % sub_extract_size == 0) {
+                    Value *sub_extracted;
+                    if (sub_extract_size == 1) {
+                        sub_extracted = builder->CreateExtractElement(vec, sub_extract_pos);
+                    } else {
+                        // In vector operation, index needs to be normalized by vscale
+                        internal_assert(sub_extract_pos % target_vscale() == 0);
+                        Value *idx_val = ConstantInt::get(i64_t, sub_extract_pos / target_vscale(), true);
+                        llvm::Type *sub_extract_type = get_vector_type_from_value(vec, sub_extract_size);
+                        sub_extracted = builder->CreateExtractVector(sub_extract_type, vec, idx_val);
+                    }
+                    sub_slices.push_back(sub_extracted);
+
+                    i += sub_extract_size;
+                    break;
+                }
+            }
+        }
+        Value *extracted = concat_vectors(sub_slices);
+        return extracted;
+    }
+}
+
+Value *CodeGen_ARM::insert_scalable_vector(Value *base_vec, Value *new_vec, int start) {
+    const int base_lanes = get_vector_num_elements(base_vec->getType());
+    const int new_vec_lanes = get_vector_num_elements(new_vec->getType());
+    llvm::Type *element_type = get_vector_element_type(base_vec->getType());
+
+    internal_assert(start + new_vec_lanes <= base_lanes);
+
+    if (base_lanes == 1 && new_vec_lanes == 1) {
+        return new_vec;
+    }
+
+    internal_assert(target_vscale() > 0 && is_scalable_vector(base_vec));
+
+    if (!new_vec->getType()->isVectorTy()) {
+        return builder->CreateInsertElement(base_vec, new_vec, start);
+    } else if (start % new_vec_lanes == 0) {
+        // Most of the ordinal use cases are this pattern
+        // In vector operation, index needs to be normalized by vscale
+        Value *val_start_index = ConstantInt::get(i64_t, start / target_vscale(), true);
+        return builder->CreateInsertVector(base_vec->getType(), base_vec, new_vec, val_start_index);
+    }
+
+    // To follow the requirement of ‘llvm.vector.insert’ intrinsic that
+    // idx must be a constant multiple of subvec’s known minimum vector length,
+    // insertion is performed in multiple sub slices.
+    Value *ret = base_vec;
+    int extract_index = 0;
+    int insert_index = start;
+    int sub_slice_size = std::min(start, new_vec_lanes);
+
+    while (extract_index < new_vec_lanes) {
+        if (extract_index + sub_slice_size <= new_vec_lanes &&  // Condition to not overrun
+            extract_index % sub_slice_size == 0 &&              // Requirement of LLVM intrinsic
+            insert_index % sub_slice_size == 0) {               // Requirement of LLVM intrinsic
+
+            if (sub_slice_size == 1) {
+                Value *sub_slice = builder->CreateExtractElement(new_vec, extract_index);
+                ret = builder->CreateInsertElement(ret, sub_slice, insert_index);
+            } else {
+                // In vector operation, index needs to be normalized by vscale
+                internal_assert(extract_index % target_vscale() == 0);
+                internal_assert(insert_index % target_vscale() == 0);
+                Value *val_extract_index = ConstantInt::get(i64_t, extract_index / target_vscale(), true);
+                Value *val_insert_index = ConstantInt::get(i64_t, insert_index / target_vscale(), true);
+                llvm::Type *sub_sliced_type = get_vector_type(element_type, sub_slice_size);
+                Value *sub_slice = builder->CreateExtractVector(sub_sliced_type, new_vec, val_extract_index);
+                ret = builder->CreateInsertVector(base_vec->getType(), ret, sub_slice, val_insert_index);
+            }
+            insert_index += sub_slice_size;
+            extract_index += sub_slice_size;
+        } else {
+            // move on to next candidate
+            --sub_slice_size;
+        }
+    }
+    return ret;
+}
+
+Value *CodeGen_ARM::interleave_vectors(const std::vector<Value *> &vecs) {
+    if (simd_intrinsics_disabled() || target_vscale() == 0 ||
+        vecs.size() < 2 ||
+        !is_scalable_vector(vecs[0])) {
+        return CodeGen_Posix::interleave_vectors(vecs);
+    }
+
+    // Lower into llvm.vector.interleave intrinsic.
+    // LLVM only supports non-power-of-2 strides (e.g. 3) for scalable
+    // vectors starting in LLVM 22.
+#if LLVM_VERSION >= 220
+    const std::set<int> supported_strides{2, 3, 4, 8};
+#else
+    const std::set<int> supported_strides{2, 4, 8};
+#endif
+    const int stride = vecs.size();
+    const int src_lanes = get_vector_num_elements(vecs[0]->getType());
+
+    if (supported_strides.find(stride) != supported_strides.end() &&
+        is_power_of_two(src_lanes) &&
+        src_lanes % target_vscale() == 0 &&
+        src_lanes / target_vscale() > 1) {
+
+        llvm::Type *elt = get_vector_element_type(vecs[0]->getType());
+        llvm::Type *ret_type = get_vector_type(elt, src_lanes * stride);
+
+        std::string instr = concat_strings("llvm.vector.interleave", stride, mangle_llvm_type(ret_type));
+
+        std::vector<llvm::Type *> arg_types(stride, vecs[0]->getType());
+        llvm::FunctionType *fn_type = FunctionType::get(ret_type, arg_types, false);
+        FunctionCallee fn = module->getOrInsertFunction(instr, fn_type);
+
+        CallInst *interleave = builder->CreateCall(fn, vecs);
+        return interleave;
+    }
+
+    return CodeGen_Posix::interleave_vectors(vecs);
+};
+
+Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &indices) {
+    if (simd_intrinsics_disabled() || target_vscale() == 0 ||
+        !is_scalable_vector(a)) {
+        return CodeGen_Posix::shuffle_vectors(a, b, indices);
+    }
+
+    internal_assert(a->getType() == b->getType());
+    llvm::Type *src_type = a->getType();
+    llvm::Type *elt = get_vector_element_type(src_type);
+    const int bits = elt->getScalarSizeInBits();
+    // note: lanes are multiplied by vscale
+    const int natural_lanes = natural_vector_size(Int(bits));
+    const int src_lanes = get_vector_num_elements(src_type);
+    const int dst_lanes = indices.size();
+
+    if (src_type->isVectorTy()) {
+        // i1 -> shuffle with i8 -> i1
+        if (src_type->getScalarSizeInBits() == 1) {
+            internal_assert(src_type->isIntegerTy()) << "1 bit floating point type is unexpected\n";
+            a = builder->CreateIntCast(a, VectorType::get(i8_t, dyn_cast<llvm::VectorType>(src_type)), false);
+            b = builder->CreateIntCast(b, VectorType::get(i8_t, dyn_cast<llvm::VectorType>(src_type)), false);
+            Value *v = shuffle_vectors(a, b, indices);
+            return builder->CreateIntCast(v, VectorType::get(i1_t, dyn_cast<llvm::VectorType>(v->getType())), false);
+        }
+
+        // Check if deinterleaved slice
+        {
+            // Get the stride of slice
+            int slice_stride = 0;
+            const int start_index = indices[0];
+            if (dst_lanes > 1) {
+                const int stride = indices[1] - start_index;
+                bool stride_equal = true;
+                for (int i = 2; i < dst_lanes; ++i) {
+                    stride_equal &= (indices[i] == start_index + i * stride);
+                }
+                slice_stride = stride_equal ? stride : 0;
+            }
+
+            // Lower slice with stride into llvm.vector.deinterleave intrinsic
+#if LLVM_VERSION >= 220
+            const std::set<int> supported_strides{2, 3, 4, 8};
+#else
+            const std::set<int> supported_strides{2, 4, 8};
+#endif
+            if (supported_strides.find(slice_stride) != supported_strides.end() &&
+                dst_lanes * slice_stride == src_lanes &&
+                indices.front() < slice_stride &&  // Start position cannot be larger than stride
+                is_power_of_two(dst_lanes) &&
+                dst_lanes % target_vscale() == 0 &&
+                dst_lanes / target_vscale() > 1) {
+
+                std::string instr = concat_strings("llvm.vector.deinterleave", slice_stride, mangle_llvm_type(a->getType()));
+
+                // We cannot mix FixedVector and ScalableVector, so dst_type must be scalable
+                llvm::Type *dst_type = get_vector_type(elt, dst_lanes / target_vscale(), VectorTypeConstraint::VScale);
+                StructType *sret_type = StructType::get(*context, std::vector(slice_stride, dst_type));
+                std::vector<llvm::Type *> arg_types{a->getType()};
+                llvm::FunctionType *fn_type = FunctionType::get(sret_type, arg_types, false);
+                FunctionCallee fn = module->getOrInsertFunction(instr, fn_type);
+
+                CallInst *deinterleave = builder->CreateCall(fn, {a});
+                // extract one element out of the returned struct
+                Value *extracted = builder->CreateExtractValue(deinterleave, indices.front());
+
+                return extracted;
+            }
+        }
+    }
+
+    // Perform vector shuffle by decomposing the operation to multiple native shuffle steps
+    // which calls shuffle_scalable_vectors_general() which emits TBL/TBL2 instruction
+    DecomposeVectorShuffle shuffler(*this, a, b, get_vector_num_elements(a->getType()), natural_lanes);
+    return shuffler.run(indices);
+}
+
+Value *CodeGen_ARM::shuffle_scalable_vectors_general(Value *a, Value *b, const std::vector<int> &indices) {
+    internal_assert(a) << "Must provide a valid vector operand";
+    internal_assert(!indices.empty()) << "Cannot shuffle with empty indices";
+
+    llvm::Type *elt = get_vector_element_type(a->getType());
+    const int bits = elt->getScalarSizeInBits();
+    const int natural_lanes = natural_vector_size(Int(bits));
+    const int src_lanes = get_vector_num_elements(a->getType());
+    const int dst_lanes = indices.size();
+    llvm::Type *dst_type = get_vector_type(elt, dst_lanes);
+
+    internal_assert(target_vscale() > 0 && is_scalable_vector(a)) << "Only deal with scalable vectors\n";
+    internal_assert(src_lanes == natural_lanes && dst_lanes == natural_lanes)
+        << "Only deal with vector with natural_lanes\n";
+
+    // We select TBL or TBL2 intrinsic depending on indices range
+    int highest_lane = *std::max_element(indices.begin(), indices.end());
+    internal_assert(highest_lane >= 0)
+        << "highest_lane was "
+        << (highest_lane == SliceIndexNone            ? "SliceIndexNone" :
+            highest_lane == SliceIndexCarryPrevResult ? "SliceIndexCarryPrevResult" :
+                                                        "")
+        << " (" << highest_lane << ")";
+
+    bool use_tbl = highest_lane < src_lanes;
+    internal_assert(use_tbl || b) << "'b' must be valid in case of tbl2\n";
+
+    auto instr = concat_strings("llvm.aarch64.sve.", use_tbl ? "tbl" : "tbl2", mangle_llvm_type(dst_type));
+
+    Value *val_indices = codegen_shuffle_indices(bits, indices);
+    llvm::Type *vt_natural = get_vector_type(elt, natural_lanes);
+    std::vector<llvm::Type *> llvm_arg_types;
+    std::vector<llvm::Value *> llvm_arg_vals;
+    if (use_tbl) {
+        llvm_arg_types = {vt_natural, val_indices->getType()};
+        llvm_arg_vals = {a, val_indices};
+    } else {
+        llvm_arg_types = {vt_natural, vt_natural, val_indices->getType()};
+        llvm_arg_vals = {a, b, val_indices};
+    }
+    llvm::FunctionType *fn_type = FunctionType::get(vt_natural, llvm_arg_types, false);
+    FunctionCallee fn = module->getOrInsertFunction(instr, fn_type);
+
+    Value *v = builder->CreateCall(fn, llvm_arg_vals);
+    return v;
+}
+
+Value *CodeGen_ARM::codegen_shuffle_indices(int bits, const std::vector<int> &indices) {
+    const int lanes = indices.size();
+    llvm::Type *index_type = IntegerType::get(module->getContext(), bits);
+    llvm::Type *index_vec_type = get_vector_type(index_type, lanes);
+
+    std::vector<Constant *> llvm_indices(lanes);
+    for (int i = 0; i < lanes; i++) {
+        int idx = indices[i];
+        llvm_indices[i] = idx >= 0 ? ConstantInt::get(index_type, idx) : UndefValue::get(index_type);
+    }
+
+    Value *v = ConstantVector::get(llvm_indices);
+    v = builder->CreateInsertVector(index_vec_type, UndefValue::get(index_vec_type),
+                                    v, ConstantInt::get(i64_t, 0));
+    return v;
+}
+
+Value *CodeGen_ARM::codegen_whilelt(int total_lanes, int start, int end) {
+    // Generates SVE "whilelt" instruction which represents vector predicate pattern of
+    // e.g. 11100000 (total_lanes = 8 , start = 0, end = 3)
+    //     -> @llvm.aarch64.sve.whilelt.nxv8i1.i32(i32 0, i32 3)
+    internal_assert(target_vscale() > 0);
+    internal_assert(total_lanes % target_vscale() == 0);
+    std::string instr = concat_strings("llvm.aarch64.sve.whilelt.nxv", total_lanes / target_vscale(), "i1.i32");
+
+    llvm::Type *pred_type = get_vector_type(llvm_type_of(Int(1)), total_lanes);
+    llvm::FunctionType *fn_type = FunctionType::get(pred_type, {i32_t, i32_t}, false);
+    FunctionCallee fn = module->getOrInsertFunction(instr, fn_type);
+
+    value = builder->CreateCall(fn, {ConstantInt::get(i32_t, start), ConstantInt::get(i32_t, end)});
+    return value;
 }
 
 void CodeGen_ARM::visit(const Ramp *op) {
     if (target_vscale() != 0 && op->type.is_int_or_uint()) {
         if (is_const_zero(op->base) && is_const_one(op->stride)) {
-            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
-                internal_assert(args.empty());
-                // Generate stepvector intrinsic for ScalableVector
-                return builder->CreateStepVector(llvm_type_of(op->type.with_lanes(lanes)));
-            };
-
-            // codgen with next-power-of-two lanes, because if we sliced into natural_lanes(e.g. 4),
-            // it would produce {0,1,2,3,0,1,..} instead of {0,1,2,3,4,5,..}
-            const int ret_lanes = op->type.lanes();
-            const int aligned_lanes = next_power_of_two(ret_lanes);
-            value = codegen_with_lanes(aligned_lanes, ret_lanes, {}, cg_func);
+            value = builder->CreateStepVector(llvm_type_of(op->type));
             return;
         } else {
             Expr broadcast_base = Broadcast::make(op->base, op->lanes);
@@ -1999,12 +2378,8 @@ void CodeGen_ARM::visit(const Call *op) {
         // llvm's roundeven intrinsic reliably lowers to the correct
         // instructions on aarch64, but despite having the same instruction
         // available, it doesn't seem to work for arm-32.
-        if (target.bits == 64) {
-            value = call_overloaded_intrin(op->type, "round", op->args);
-            if (value) {
-                return;
-            }
-        } else {
+        if (target.bits == 32) {
+            // So let's call the fallback to make sure it's vectorizable.
             value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
             return;
         }
@@ -2144,7 +2519,7 @@ bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, cons
         Target::Feature required_feature;
         std::vector<int> extra_operands;
     };
-    // clang-format off
+
     static const Pattern patterns[] = {
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd},
         {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
@@ -2167,7 +2542,6 @@ bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, cons
         {VectorReduce::Add, 4, i64(wild_u16x_), "dot_product", Target::SVE2, {1}},
         {VectorReduce::Add, 4, u64(wild_u16x_), "dot_product", Target::SVE2, {1}},
     };
-    // clang-format on
 
     int factor = op->value.type().lanes() / op->type.lanes();
     vector<Expr> matches;
@@ -2299,11 +2673,11 @@ bool CodeGen_ARM::codegen_pairwise_vector_reduce(const VectorReduce *op, const E
 bool CodeGen_ARM::codegen_across_vector_reduce(const VectorReduce *op, const Expr &init) {
     if (target_vscale() == 0) {
         // Leave this to vanilla codegen to emit "llvm.vector.reduce." intrinsic,
-        // which doesn't support scalable vector in LLVM 14
         return false;
     }
 
     if (op->op != VectorReduce::Add &&
+        op->op != VectorReduce::Mul &&
         op->op != VectorReduce::Max &&
         op->op != VectorReduce::Min) {
         return false;
@@ -2313,87 +2687,37 @@ bool CodeGen_ARM::codegen_across_vector_reduce(const VectorReduce *op, const Exp
     const int output_lanes = op->type.lanes();
     const int native_lanes = target.natural_vector_size(op->type);
     const int input_lanes = val.type().lanes();
-    const int input_bits = op->type.bits();
-    Type elt = op->type.element_of();
 
     if (output_lanes != 1 || input_lanes < 2) {
         return false;
     }
 
-    Expr (*binop)(Expr, Expr) = nullptr;
-    std::string op_name;
-    switch (op->op) {
-    case VectorReduce::Add:
-        binop = Add::make;
-        op_name = "add";
-        break;
-    case VectorReduce::Min:
-        binop = Min::make;
-        op_name = "min";
-        break;
-    case VectorReduce::Max:
-        binop = Max::make;
-        op_name = "max";
-        break;
-    default:
-        internal_error << "unreachable";
-    }
-
-    if (input_lanes == native_lanes) {
-        std::stringstream name;  // e.g. llvm.aarch64.sve.sminv.nxv4i32
-        name << "llvm.aarch64.sve."
-             << (op->type.is_float() ? "f" : op->type.is_int() ? "s" :
-                                                                 "u")
-             << op_name << "v"
-             << ".nxv" << (native_lanes / target_vscale()) << (op->type.is_float() ? "f" : "i") << input_bits;
-
-        // Integer add accumulation output is 64 bit only
-        const bool type_upgraded = op->op == VectorReduce::Add && op->type.is_int_or_uint();
-        const int output_bits = type_upgraded ? 64 : input_bits;
-        Type intrin_ret_type = op->type.with_bits(output_bits);
-
-        const string intrin_name = name.str();
-
-        Expr pred = const_true(native_lanes);
-        vector<Expr> args{pred, op->value};
-
-        // Make sure the declaration exists, or the codegen for
-        // call will assume that the args should scalarize.
-        if (!module->getFunction(intrin_name)) {
-            vector<llvm::Type *> arg_types;
-            for (const Expr &e : args) {
-                arg_types.push_back(llvm_type_with_constraint(e.type(), false, VectorTypeConstraint::VScale));
-            }
-            FunctionType *func_t = FunctionType::get(llvm_type_with_constraint(intrin_ret_type, false, VectorTypeConstraint::VScale),
-                                                     arg_types, false);
-            llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, intrin_name, module.get());
-        }
-
-        Expr equiv = Call::make(intrin_ret_type, intrin_name, args, Call::PureExtern);
-        if (type_upgraded) {
-            equiv = Cast::make(op->type, equiv);
-        }
-        if (init.defined()) {
-            equiv = binop(init, equiv);
-        }
-        equiv = common_subexpression_elimination(equiv);
-        equiv.accept(this);
-        return true;
-
-    } else if (input_lanes < native_lanes) {
-        // Create equivalent where lanes==native_lanes by padding data which doesn't affect the result
+    if (input_lanes % native_lanes == 0) {
+        // Leave this to vanilla codegen to emit "llvm.vector.reduce." intrinsic
+        return false;
+    } else {
+        // Create equivalent where lanes==native_lanes*n by padding data which doesn't affect the result
         Expr padding;
-        const int inactive_lanes = native_lanes - input_lanes;
+        const int inactive_lanes = align_up(input_lanes, native_lanes) - input_lanes;
+        Expr (*binop)(Expr, Expr) = nullptr;
+        Type elt = op->type.element_of();
 
         switch (op->op) {
         case VectorReduce::Add:
             padding = make_zero(elt.with_lanes(inactive_lanes));
+            binop = Add::make;
+            break;
+        case VectorReduce::Mul:
+            padding = make_one(elt.with_lanes(inactive_lanes));
+            binop = Mul::make;
             break;
         case VectorReduce::Min:
-            padding = elt.with_lanes(inactive_lanes).min();
+            padding = elt.with_lanes(inactive_lanes).max();
+            binop = Min::make;
             break;
         case VectorReduce::Max:
-            padding = elt.with_lanes(inactive_lanes).max();
+            padding = elt.with_lanes(inactive_lanes).min();
+            binop = Max::make;
             break;
         default:
             internal_error << "unreachable";
@@ -2432,43 +2756,19 @@ Type CodeGen_ARM::upgrade_type_for_storage(const Type &t) const {
     return CodeGen_Posix::upgrade_type_for_storage(t);
 }
 
-Value *CodeGen_ARM::codegen_with_lanes(int slice_lanes, int total_lanes,
-                                       const std::vector<Expr> &args, codegen_func_t &cg_func) {
-    std::vector<Value *> llvm_args;
-    // codegen args
-    for (const auto &arg : args) {
-        llvm_args.push_back(codegen(arg));
-    }
-
-    if (slice_lanes == total_lanes) {
-        // codegen op
-        return cg_func(slice_lanes, llvm_args);
-    }
-
-    std::vector<Value *> results;
-    for (int start = 0; start < total_lanes; start += slice_lanes) {
-        std::vector<Value *> sliced_args;
-        for (auto &llvm_arg : llvm_args) {
-            Value *v = llvm_arg;
-            if (get_vector_num_elements(llvm_arg->getType()) == total_lanes) {
-                // Except for scalar argument which some ops have, arguments are sliced
-                v = slice_vector(llvm_arg, start, slice_lanes);
-            }
-            sliced_args.push_back(v);
-        }
-        // codegen op
-        value = cg_func(slice_lanes, sliced_args);
-        results.push_back(value);
-    }
-    // Restore the results into vector with total_lanes
-    value = concat_vectors(results);
-    return slice_vector(value, 0, total_lanes);
+int CodeGen_ARM::natural_vector_size(const Halide::Type &t) const {
+    internal_assert(t.bits() > 1) << "natural_vector_size requested with 1 bits\n";
+    return native_vector_bits() / t.bits();
 }
 
 string CodeGen_ARM::mcpu_target() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
             return "swift";
+        } else if (target.has_feature(Target::ARMv82a)) {
+            return "cortex-a55";
+        } else if (target.has_feature(Target::ARMv8a)) {
+            return "cortex-a32";
         } else {
             return "cortex-a9";
         }
@@ -2495,7 +2795,10 @@ string CodeGen_ARM::mattrs() const {
         attrs.emplace_back("+fullfp16");
     }
     if (target.has_feature(Target::ARMv8a)) {
-        attrs.emplace_back("+v8a");
+        // The ARM (32-bit) backend calls this feature "v8"; the AArch64
+        // backend calls it "v8a". The dotted sub-versions (v8.1a, v8.2a,
+        // etc.) use the same names in both backends.
+        attrs.emplace_back(target.bits == 32 ? "+v8" : "+v8a");
     }
     if (target.has_feature(Target::ARMv81a)) {
         attrs.emplace_back("+v8.1a");
@@ -2508,6 +2811,9 @@ string CodeGen_ARM::mattrs() const {
     }
     if (target.has_feature(Target::ARMv84a)) {
         attrs.emplace_back("+v8.4a");
+        if (target.has_feature(Target::ARMFp16)) {
+            attrs.emplace_back("+fp16fml");
+        }
     }
     if (target.has_feature(Target::ARMv85a)) {
         attrs.emplace_back("+v8.5a");
@@ -2542,7 +2848,8 @@ string CodeGen_ARM::mattrs() const {
         if (target.has_feature(Target::SVE2)) {
             attrs.emplace_back("+sve2");
         } else if (target.has_feature(Target::SVE)) {
-            attrs.emplace_back("+sve");
+            // TODO: https://github.com/halide/Halide/issues/8872
+            // attrs.emplace_back("+sve");
         }
         if (target.os == Target::IOS || target.os == Target::OSX) {
             attrs.emplace_back("+reserve-x18");
@@ -2561,17 +2868,13 @@ bool CodeGen_ARM::use_soft_float_abi() const {
 }
 
 int CodeGen_ARM::native_vector_bits() const {
-    if (target.has_feature(Target::SVE) || target.has_feature(Target::SVE2)) {
-        return std::max(target.vector_bits, 128);
-    } else {
-        return 128;
-    }
+    return std::max(target_vscale(), 1) * 128;
 }
 
 int CodeGen_ARM::target_vscale() const {
-    if (target.features_any_of({Target::SVE, Target::SVE2})) {
-        user_assert(target.vector_bits != 0) << "For SVE/SVE2 support, target_vector_bits=<size> must be set in target.\n";
-        user_assert((target.vector_bits % 128) == 0) << "For SVE/SVE2 support, target_vector_bits must be a multiple of 128.\n";
+    // TODO: https://github.com/halide/Halide/issues/8872
+    // if (target.features_any_of({Target::SVE, Target::SVE2})) {
+    if (target.has_feature(Target::SVE2)) {
         return target.vector_bits / 128;
     }
 

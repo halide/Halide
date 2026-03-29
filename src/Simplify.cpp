@@ -15,9 +15,7 @@ using std::pair;
 using std::string;
 using std::vector;
 
-Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
-    : remove_dead_code(r) {
-
+Simplify::Simplify(const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) {
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
         ExprInfo info;
@@ -91,7 +89,7 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
     Simplify::VarInfo info;
     info.old_uses = info.new_uses = 0;
     if (const Variable *v = fact.as<Variable>()) {
-        info.replacement = const_false(fact.type().lanes());
+        info.replacement = Halide::Internal::const_false(fact.type().lanes());
         simplify->var_info.push(v->name, info);
         pop_list.push_back(v);
     } else if (const NE *ne = fact.as<NE>()) {
@@ -178,7 +176,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
     Simplify::VarInfo info;
     info.old_uses = info.new_uses = 0;
     if (const Variable *v = fact.as<Variable>()) {
-        info.replacement = const_true(fact.type().lanes());
+        info.replacement = Halide::Internal::const_true(fact.type().lanes());
         simplify->var_info.push(v->name, info);
         pop_list.push_back(v);
     } else if (const EQ *eq = fact.as<EQ>()) {
@@ -325,30 +323,16 @@ template<typename T>
 T substitute_facts_impl(const T &t,
                         const std::set<Expr, IRDeepCompare> &truths,
                         const std::set<Expr, IRDeepCompare> &falsehoods) {
-    class Substitutor : public IRMutator {
-        const std::set<Expr, IRDeepCompare> &truths, &falsehoods;
-
-    public:
-        using IRMutator::mutate;
-        Expr mutate(const Expr &e) override {
-            if (!e.type().is_bool()) {
-                return IRMutator::mutate(e);
-            } else if (truths.count(e)) {
+    return mutate_with(t, [&](auto *self, const Expr &e) {
+        if (e.type().is_bool()) {
+            if (truths.count(e)) {
                 return make_one(e.type());
             } else if (falsehoods.count(e)) {
                 return make_zero(e.type());
-            } else {
-                return IRMutator::mutate(e);
             }
         }
-
-        Substitutor(const std::set<Expr, IRDeepCompare> &t,
-                    const std::set<Expr, IRDeepCompare> &f)
-            : truths(t), falsehoods(f) {
-        }
-    } substitutor(truths, falsehoods);
-
-    return substitutor.mutate(t);
+        return self->mutate_base(e);
+    });
 }
 }  // namespace
 
@@ -375,12 +359,13 @@ Simplify::ScopedFact::~ScopedFact() {
     }
 }
 
-Expr simplify(const Expr &e, bool remove_dead_let_stmts,
+Expr simplify(const Expr &e,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
-    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
+    facts.reserve(assumptions.size());
     for (const Expr &a : assumptions) {
         facts.push_back(m.scoped_truth(a));
     }
@@ -391,12 +376,13 @@ Expr simplify(const Expr &e, bool remove_dead_let_stmts,
     return result;
 }
 
-Stmt simplify(const Stmt &s, bool remove_dead_let_stmts,
+Stmt simplify(const Stmt &s,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
-    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
+    facts.reserve(assumptions.size());
     for (const Expr &a : assumptions) {
         facts.push_back(m.scoped_truth(a));
     }
@@ -428,7 +414,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
 
     Expr orig = e;
 
-    e = simplify(e, true, bounds);
+    e = simplify(e, bounds);
 
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses
@@ -463,7 +449,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
             std::vector<pair<Type, string>> out_vars;
         } renamer;
 
-        e = renamer.mutate(e);
+        e = renamer(e);
 
         // Look for a concrete counter-example with random probing
         static std::mt19937 rng(0);
@@ -494,6 +480,155 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
     }
 
     return is_const_one(e);
+}
+
+Simplify::ExprInfo::BitsKnown Simplify::ExprInfo::to_bits_known(const Type &type) const {
+    BitsKnown result = {0, 0};
+
+    if (!(type.is_int() || type.is_uint())) {
+        // Let's not claim we know anything about the bit patterns of
+        // non-integer types for now.
+        return result;
+    }
+
+    // Identify the largest power of two in the modulus to get some low bits
+    if (alignment.modulus) {
+        result.mask = largest_power_of_two_factor(alignment.modulus) - 1;
+        result.value = result.mask & alignment.remainder;
+    } else {
+        // This value is just a constant
+        result.mask = (uint64_t)(-1);
+        result.value = alignment.remainder;
+        return result;
+    }
+
+    // Compute a mask which is 1 for all the leading zeros of a uint64
+    auto leading_zeros_mask = [](uint64_t x) {
+        if (x == 0) {
+            // They're all leading zeros, but clz64 is UB on zero. Really we
+            // should have returned early above, but it's hard to guarantee that
+            // the alignment analysis catches constants at the same time as
+            // bounds analysis does.
+            return (uint64_t)-1;
+        } else if ((int64_t)x < 0) {
+            // There are no leading zeros, but we can't shift left by 64
+            return (uint64_t)0;
+        }
+        return (uint64_t)(-1) << (64 - clz64(x));
+    };
+
+    if (bounds.min_defined && bounds.max_defined) {
+        // Any leading bits in common between the min and the max are known.
+        result.mask |= leading_zeros_mask(bounds.min ^ bounds.max);
+        result.value |= bounds.min & result.mask;
+    } else {
+        // If we only have a bound on one side, we may still be able to infer
+        // something about high bits.
+
+        // The bounds and the type tell us a bunch of high bits are zero or one
+        if (type.is_uint()) {
+            // Narrow uints are always zero-extended.
+            if (type.bits() < 64) {
+                result.mask |= (uint64_t)(-1) << type.bits();
+            }
+
+            // A lower bound might tell us that there are some leading ones, and an
+            // upper bound might tell us that there are some leading
+            // zeros. Unfortunately we'll never learn about leading ones, because to
+            // know that there's a leading one from the bounds would require knowing
+            // that the min is at least 2^63, and ConstantInterval can't represent
+            // mins that large.
+            if (bounds.max_defined) {
+                result.mask |= leading_zeros_mask(bounds.max);
+            }
+
+        } else {
+            internal_assert(type.is_int());
+            // A mask which is 1 for the sign bit and above.
+            uint64_t sign_bit_and_above = (uint64_t)(-1) << (type.bits() - 1);
+            if (bounds >= 0) {
+                // We know this int is positive, so the sign bit and above are zero.
+                result.mask |= sign_bit_and_above;
+            } else if (bounds < 0) {
+                // This int is negative, so the sign bit and above are one.
+                result.mask |= sign_bit_and_above;
+                result.value |= sign_bit_and_above;
+            }
+        }
+    }
+
+    return result;
+}
+
+void Simplify::ExprInfo::from_bits_known(Simplify::ExprInfo::BitsKnown known, const Type &type) {
+    // Normalize everything to 64-bits by sign- or zero-extending known bits for
+    // the type.
+
+    // A mask which is one for all the new bits resulting from sign or zero
+    // extension.
+    uint64_t missing_bits = 0;
+    if (type.bits() < 64) {
+        missing_bits = (uint64_t)(-1) << type.bits();
+    }
+
+    if (missing_bits) {
+        if (type.is_uint()) {
+            // For a uint the high bits are known to be zero
+            known.mask |= missing_bits;
+            known.value &= ~missing_bits;
+        } else if (type.is_int()) {
+            // For an int we need to know the sign to know the high bits
+            bool sign_bit_known = (known.mask >> (type.bits() - 1)) & 1;
+            bool negative = (known.value >> (type.bits() - 1)) & 1;
+            if (!sign_bit_known) {
+                // We don't know the sign bit, so we don't know any of the
+                // extended bits. Mark them as unknown in the mask and zero them
+                // out in the value too just for ease of debugging.
+                known.mask &= ~missing_bits;
+                known.value &= ~missing_bits;
+            } else if (negative) {
+                // We know the sign bit is 1, so all of the extended bits are 1
+                // too.
+                known.mask |= missing_bits;
+                known.value |= missing_bits;
+            } else if (!negative) {
+                // We know the sign bit is zero, so all of the extended bits are
+                // zero too.
+                known.mask |= missing_bits;
+                known.value &= ~missing_bits;
+            }
+        }
+    }
+
+    // We can get the trailing one bits by adding one and taking the largest
+    // power of two factor. Note that this works out correctly when we know all
+    // the bits - the modulus comes out as zero, and the remainder is the entire
+    // number, which is how we represent constants in ModulusRemainder.
+    alignment.modulus = largest_power_of_two_factor(known.mask + 1);
+    alignment.remainder = known.value & (alignment.modulus - 1);
+
+    if ((int64_t)known.mask < 0) {
+        // We know some leading bits
+
+        // Set all unknown bits to zero
+        uint64_t min_val = known.value & known.mask;
+        // Set all unknown bits to one
+        uint64_t max_val = known.value | ~known.mask;
+
+        if (type.is_uint() && (int64_t)known.value < 0) {
+            // We know it's out of range at the top end for our ConstantInterval
+            // class. At the time of writing, to_bits_known can't produce this
+            // directly, and bits_known is never propagated through other
+            // operations, so this code is unreachable. Nonetheless we'll do the
+            // best job we can at representing this case in case this code
+            // becomes reachable in future.
+            bounds = ConstantInterval::bounded_below((1ULL << 63) - 1);
+        } else {
+            // In all other cases, the bounds are representable as an int64
+            // and don't span zero (because we know the high bit).
+            bounds = ConstantInterval{(int64_t)min_val, (int64_t)max_val};
+        }
+    }
 }
 
 }  // namespace Internal

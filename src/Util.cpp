@@ -18,11 +18,16 @@
 
 #ifdef _MSC_VER
 #include <io.h>
+#include <process.h>  // For _spawnvp
 #else
 #include <cstdlib>
+#include <spawn.h>
 #include <sys/mman.h>  // For mmap
+#include <sys/wait.h>
 #include <unistd.h>
+extern char **environ;
 #endif
+
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -31,9 +36,11 @@
 #include <linux/limits.h>  // For PATH_MAX
 #include <ucontext.h>      // For swapcontext
 #endif
+
 #if defined(_MSC_VER) && !defined(NOMINMAX)
 #define NOMINMAX
 #endif
+
 #ifdef _WIN32
 #include <Objbase.h>  // needed for CoCreateGuid
 #include <Shlobj.h>   // needed for SHGetFolderPath
@@ -41,6 +48,7 @@
 #else
 #include <dlfcn.h>
 #endif
+
 #ifdef __APPLE__
 #define CAN_GET_RUNNING_PROGRAM_NAME
 #include <mach-o/dyld.h>
@@ -262,14 +270,13 @@ bool ends_with(const string &str, const string &suffix) {
     return true;
 }
 
-string replace_all(const string &str, const string &find, const string &replace) {
+string replace_all(string str, const string &find, const string &replace) {
     size_t pos = 0;
-    string result = str;
-    while ((pos = result.find(find, pos)) != string::npos) {
-        result.replace(pos, find.length(), replace);
+    while ((pos = str.find(find, pos)) != string::npos) {
+        str.replace(pos, find.length(), replace);
         pos += replace.length();
     }
-    return result;
+    return str;
 }
 
 std::vector<std::string> split_string(const std::string &source, const std::string &delim) {
@@ -388,7 +395,7 @@ std::string get_windows_tmp_dir() {
     std::string tmp = from_utf16(wlocal_path);
     CoTaskMemFree(wlocal_path);
 
-    tmp = replace_all(tmp, "\\", "/");
+    tmp = replace_all(std::move(tmp), "\\", "/");
     if (tmp.back() != '/') tmp += '/';
     tmp += "Temp/";
     return tmp;
@@ -496,6 +503,32 @@ void write_entire_file(const std::string &pathname, const void *source, size_t s
     f.flush();
     internal_assert(f.good()) << "Unable to write file: " << pathname;
     f.close();
+}
+
+int run_process(std::vector<std::string> args) {
+    internal_assert(!args.empty()) << "run_process called with empty args\n";
+
+    std::vector<char *> argv;
+    argv.reserve(args.size() + 1);
+    for (auto &a : args) {
+        argv.push_back(a.data());
+    }
+    argv.push_back(nullptr);
+
+    debug(2) << "Running process: " << PrintSpan(args) << "\n";
+
+#ifdef _WIN32
+    // Wait for completion; return the child's exit code.
+    int rc = _spawnvp(_P_WAIT, argv[0], argv.data());
+    return (rc >= 0) ? rc : -1;
+#else
+    pid_t pid = 0;
+    int status = posix_spawnp(&pid, argv[0], nullptr, nullptr, argv.data(), environ);
+    if (status != 0 || waitpid(pid, &status, 0) == -1) {
+        return -1;
+    }
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+#endif
 }
 
 bool add_would_overflow(int bits, int64_t a, int64_t b) {

@@ -18,26 +18,31 @@ Expr Simplify::visit(const Select *op, ExprInfo *info) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value), op->type);
 
-    // clang-format off
-    if (EVAL_IN_LAMBDA
-        (rewrite(select(IRMatcher::likely(true), x, y), x) ||
-         rewrite(select(IRMatcher::likely(false), x, y), y) ||
-         rewrite(select(IRMatcher::likely_if_innermost(true), x, y), x) ||
-         rewrite(select(IRMatcher::likely_if_innermost(false), x, y), y) ||
-         rewrite(select(1, x, y), x) ||
-         rewrite(select(0, x, y), y) ||
-         rewrite(select(x, y, y), y) ||
+    if (EVAL_IN_LAMBDA  //
+        (rewrite(select(IRMatcher::likely(true), x, y), true_value) ||
+         rewrite(select(IRMatcher::likely(false), x, y), false_value) ||
+         rewrite(select(IRMatcher::likely_if_innermost(true), x, y), true_value) ||
+         rewrite(select(IRMatcher::likely_if_innermost(false), x, y), false_value) ||
+         rewrite(select(1, x, y), true_value) ||
+         rewrite(select(0, x, y), false_value) ||
+         rewrite(select(x, y, y), false_value) ||
          rewrite(select(x, likely(y), y), false_value) ||
          rewrite(select(x, y, likely(y)), true_value) ||
          rewrite(select(x, likely_if_innermost(y), y), false_value) ||
          rewrite(select(x, y, likely_if_innermost(y)), true_value) ||
          false)) {
+        if (info) {
+            if (rewrite.result.same_as(true_value)) {
+                *info = t_info;
+            } else {
+                internal_assert(rewrite.result.same_as(false_value));
+                *info = f_info;
+            }
+        }
         return rewrite.result;
     }
-    // clang-format on
 
-    // clang-format off
-    if (EVAL_IN_LAMBDA
+    if (EVAL_IN_LAMBDA  //
         (rewrite(select(x != y, z, w), select(x == y, w, z)) ||
          rewrite(select(x <= y, z, w), select(y < x, w, z)) ||
          rewrite(select(x, select(y, z, w), z), select(x && !y, w, z)) ||
@@ -153,9 +158,9 @@ Expr Simplify::visit(const Select *op, ExprInfo *info) {
          rewrite(select(x, max(w, y), max(z, w)), max(w, select(x, y, z))) ||
          rewrite(select(x, max(w, y), max(w, z)), max(w, select(x, y, z))) ||
 
-         rewrite(select(0 < x, min(x*c0, c1), x*c0), min(x*c0, c1), c1 >= 0 && c0 >= 0) ||
+         rewrite(select(0 < x, min(x * c0, c1), x * c0), min(x * c0, c1), c1 >= 0 && c0 >= 0) ||
          rewrite(select(x < c0, 0, min(x, c0) + c1), 0, c0 == -c1) ||
-         rewrite(select(0 < x, ((x*c0) + c1) / x, y), select(0 < x, c0 - 1, y), c1 == -1) ||
+         rewrite(select(0 < x, ((x * c0) + c1) / x, y), select(0 < x, c0 - 1, y), c1 == -1) ||
 
          rewrite(select(x, select(y, z, min(w, z)), min(u, z)), min(select(x, select(y, z, w), u), z)) ||
          rewrite(select(x, select(y, min(w, z), z), min(u, z)), min(select(x, select(y, w, z), u), z)) ||
@@ -226,7 +231,6 @@ Expr Simplify::visit(const Select *op, ExprInfo *info) {
            rewrite(select(x, true, y), x || y))))) {
         return mutate(rewrite.result, info);
     }
-    // clang-format on
 
     if (condition.same_as(op->condition) &&
         true_value.same_as(op->true_value) &&

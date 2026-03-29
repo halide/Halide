@@ -167,7 +167,7 @@ public:
 
 Expr step_forwards(Expr e, const Scope<Expr> &linear) {
     StepForwards step(linear);
-    e = step.mutate(e);
+    e = step(e);
     if (!step.success) {
         return Expr();
     } else {
@@ -246,7 +246,7 @@ class LoopCarryOverLoop : public IRMutator {
     Stmt lift_carried_values_out_of_stmt(const Stmt &orig_stmt) {
         debug(4) << "About to lift carried values out of stmt: " << orig_stmt << "\n";
 
-        // The stmts, as graphs (lets subtituted in). We must only use
+        // The stmts, as graphs (lets substituted in). We must only use
         // graph-aware methods to touch these, lest we incur
         // exponential runtime.
         Stmt graph_stmt = substitute_in_all_lets(orig_stmt);
@@ -550,15 +550,15 @@ class LoopCarry : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        if (op->for_type == ForType::Serial && !is_const_one(op->extent)) {
+        if (op->for_type == ForType::Serial && !equal(op->min, op->max)) {
             Stmt stmt;
             Stmt body = mutate(op->body);
             LoopCarryOverLoop carry(op->name, in_consume, max_carried_values);
-            body = carry.mutate(body);
+            body = carry(body);
             if (body.same_as(op->body)) {
                 stmt = op;
             } else {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+                stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
             }
 
             // Inject the scratch buffer allocations.
@@ -567,7 +567,7 @@ class LoopCarry : public IRMutator {
                 stmt = Allocate::make(alloc.name, alloc.type, MemoryType::Stack, {alloc.size}, const_true(), stmt);
             }
             if (!carry.allocs.empty()) {
-                stmt = IfThenElse::make(op->extent > 0, stmt);
+                stmt = IfThenElse::make(op->min <= op->max, stmt);
             }
             return stmt;
         } else {
@@ -583,9 +583,8 @@ public:
 
 }  // namespace
 
-Stmt loop_carry(Stmt s, int max_carried_values) {
-    s = LoopCarry(max_carried_values).mutate(s);
-    return s;
+Stmt loop_carry(const Stmt &s, int max_carried_values) {
+    return LoopCarry(max_carried_values)(s);
 }
 
 }  // namespace Internal

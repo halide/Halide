@@ -101,20 +101,17 @@ define weak_odr half @floor_f16(half %x) nounwind uwtable readnone alwaysinline 
        ret half %y
 }
 
-; These are llvm 3.3 only
-; declare float @llvm.ceil.f32(float) nounwind readnone
-; declare double @llvm.ceil.f64(double) nounwind readnone
-declare float @ceilf(float) nounwind readnone
-declare double @ceil(double) nounwind readnone
+declare float @llvm.ceil.f32(float) nounwind readnone
+declare double @llvm.ceil.f64(double) nounwind readnone
 declare half @llvm.ceil.f16(half) nounwind readnone
 
 define weak_odr float @ceil_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call float @ceilf(float %x) nounwind readnone
+       %y = tail call float @llvm.ceil.f32(float %x) nounwind readnone
        ret float %y
 }
 
 define weak_odr double @ceil_f64(double %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call double @ceil(double %x) nounwind readnone
+       %y = tail call double @llvm.ceil.f64(double %x) nounwind readnone
        ret double %y
 }
 

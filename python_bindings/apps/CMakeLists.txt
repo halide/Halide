@@ -31,16 +31,19 @@ set(TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../apps/images>
 set(APPS
     bilateral_grid
     blur
+    identity
     interpolate
     local_laplacian)
 
 set(GENERATORS_bilateral_grid   bilateral_grid bilateral_grid_Adams2019 bilateral_grid_Li2018 bilateral_grid_Mullapudi2016)
+set(GENERATORS_blur             blur)
+set(GENERATORS_identity         identity)
 set(GENERATORS_interpolate      interpolate interpolate_Mullapudi2016)
 set(GENERATORS_local_laplacian  local_laplacian local_laplacian_Mullapudi2016)
-set(GENERATORS_blur             blur)
 
 set(ARGS_bilateral_grid   ${TEST_IMAGES_DIR}/gray.png 0.1 ${TEST_TMPDIR}/out.png)
 set(ARGS_blur             ${TEST_IMAGES_DIR}/gray.png ${TEST_TMPDIR}/out.png)
+set(ARGS_identity         "")
 set(ARGS_interpolate      ${TEST_IMAGES_DIR}/rgba.png ${TEST_TMPDIR}/out.png)
 set(ARGS_local_laplacian  ${TEST_IMAGES_DIR}/rgba.png 8 1 1 ${TEST_TMPDIR}/out.png)
 

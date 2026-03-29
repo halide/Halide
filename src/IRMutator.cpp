@@ -45,63 +45,59 @@ Expr IRMutator::visit(const Reinterpret *op) {
     return Reinterpret::make(op->type, std::move(value));
 }
 
-namespace {
-template<typename T>
-Expr mutate_binary_operator(IRMutator *mutator, const T *op) {
-    Expr a = mutator->mutate(op->a);
-    Expr b = mutator->mutate(op->b);
-    if (a.same_as(op->a) &&
-        b.same_as(op->b)) {
-        return op;
-    }
-    return T::make(std::move(a), std::move(b));
-}
-}  // namespace
+#define mutate_binary_operator \
+    Expr a = mutate(op->a);    \
+    Expr b = mutate(op->b);    \
+    if (a.same_as(op->a) &&    \
+        b.same_as(op->b)) {    \
+        return op;             \
+    }                          \
+    return std::decay_t<decltype(*op)>::make(std::move(a), std::move(b))
 
 Expr IRMutator::visit(const Add *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Sub *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Mul *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Div *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Mod *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Min *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Max *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const EQ *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const NE *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const LT *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const LE *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const GT *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const GE *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const And *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Or *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 
 Expr IRMutator::visit(const Not *op) {
@@ -202,14 +198,14 @@ Stmt IRMutator::visit(const ProducerConsumer *op) {
 
 Stmt IRMutator::visit(const For *op) {
     Expr min = mutate(op->min);
-    Expr extent = mutate(op->extent);
+    Expr max = mutate(op->max);
     Stmt body = mutate(op->body);
     if (min.same_as(op->min) &&
-        extent.same_as(op->extent) &&
+        max.same_as(op->max) &&
         body.same_as(op->body)) {
         return op;
     }
-    return For::make(op->name, std::move(min), std::move(extent),
+    return For::make(op->name, std::move(min), std::move(max),
                      op->for_type, op->partition_policy, op->device_api, std::move(body));
 }
 

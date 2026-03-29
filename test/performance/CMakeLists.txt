@@ -6,12 +6,14 @@ endif()
 
 tests(GROUPS performance
       SOURCES
+      # keep-sorted start
       async_gpu.cpp
       blend_tail_strategies.cpp
       block_transpose.cpp
       boundary_conditions.cpp
       clamped_vector_load.cpp
       const_division.cpp
+      device_copy.cpp
       fast_inverse.cpp
       fast_pow.cpp
       fast_sine_cosine.cpp
@@ -26,6 +28,7 @@ tests(GROUPS performance
       tiled_matmul.cpp
       vectorize.cpp
       wrap.cpp
+      # keep-sorted end
       )
 
 tests(GROUPS performance multithreaded
@@ -43,10 +46,6 @@ tests(GROUPS performance multithreaded
       stack_vs_heap.cpp
       thread_safe_jit_callable.cpp
       )
-
-# Make sure that performance tests do not run in parallel with other tests,
-# since doing so might make them flaky.
-set_tests_properties(${TEST_NAMES} PROPERTIES RUN_SERIAL TRUE)
 
 # This test needs rdynamic or equivalent
 set_target_properties(performance_fast_pow PROPERTIES ENABLE_EXPORTS TRUE)

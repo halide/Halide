@@ -35,7 +35,7 @@ protected:
         if (is_no_op(body)) {
             return body;
         } else {
-            return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+            return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 
@@ -116,6 +116,7 @@ protected:
 };
 
 class GenerateProducerBody : public NoOpCollapsingMutator {
+protected:
     const string &func;
     vector<Expr> sema;
     std::set<string> producers_dropped;
@@ -146,26 +147,12 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
             // to schedule those Funcs as async too. Check for any consume nodes
             // where the producer has gone to the consumer side of the fork
             // node.
-            class FindBadConsumeNodes : public IRVisitor {
-                const std::set<string> &producers_dropped;
-                using IRVisitor::visit;
-
-                void visit(const ProducerConsumer *op) override {
-                    if (!op->is_producer && producers_dropped.count(op->name)) {
-                        found = op->name;
-                    }
+            visit_with(body, [&](auto *self, const ProducerConsumer *op) {
+                if (!op->is_producer && producers_dropped.count(op->name)) {
+                    bad_producer_nesting_error(op->name, func);
                 }
-
-            public:
-                string found;
-                FindBadConsumeNodes(const std::set<string> &p)
-                    : producers_dropped(p) {
-                }
-            } finder(producers_dropped);
-            body.accept(&finder);
-            if (!finder.found.empty()) {
-                bad_producer_nesting_error(finder.found, func);
-            }
+                self->visit_base(op);
+            });
 
             while (!sema.empty()) {
                 Expr release = Call::make(Int(32), "halide_semaphore_release", {sema.back(), 1}, Call::Extern);
@@ -299,6 +286,7 @@ public:
 };
 
 class GenerateConsumerBody : public NoOpCollapsingMutator {
+protected:
     const string &func;
     vector<Expr> sema;
 
@@ -356,6 +344,7 @@ public:
 };
 
 class CloneAcquire : public IRMutator {
+protected:
     using IRMutator::visit;
 
     const string &old_name;
@@ -404,6 +393,7 @@ public:
 };
 
 class ForkAsyncProducers : public IRMutator {
+protected:
     using IRMutator::visit;
 
     const map<string, Function> &env;
@@ -428,8 +418,8 @@ class ForkAsyncProducers : public IRMutator {
             sema_vars.push_back(Variable::make(type_of<halide_semaphore_t *>(), sema_names.back()));
         }
 
-        Stmt producer = GenerateProducerBody(name, sema_vars, cloned_acquires).mutate(body);
-        Stmt consumer = GenerateConsumerBody(name, sema_vars).mutate(body);
+        Stmt producer = GenerateProducerBody(name, sema_vars, cloned_acquires)(body);
+        Stmt consumer = GenerateConsumerBody(name, sema_vars)(body);
 
         // Recurse on both sides
         producer = mutate(producer);
@@ -448,7 +438,7 @@ class ForkAsyncProducers : public IRMutator {
             // of the producer and consumer.
             const vector<string> &clones = cloned_acquires[sema_name];
             for (const auto &i : clones) {
-                body = CloneAcquire(sema_name, i).mutate(body);
+                body = CloneAcquire(sema_name, i)(body);
                 body = LetStmt::make(i, sema_space, body);
             }
 
@@ -507,6 +497,7 @@ public:
 // simple failure case, error_async_require_fail. One has not been
 // written for the complex nested case yet.)
 class InitializeSemaphores : public IRMutator {
+protected:
     using IRMutator::visit;
 
     const Type sema_type = type_of<halide_semaphore_t *>();
@@ -572,6 +563,7 @@ class InitializeSemaphores : public IRMutator {
 // A class to support stmt_uses_vars queries that repeatedly hit the same
 // sub-stmts. Used to support TightenProducerConsumerNodes below.
 class CachingStmtUsesVars : public IRMutator {
+protected:
     const Scope<> &query;
     bool found_use = false;
     std::map<Stmt, bool> cache;
@@ -627,6 +619,7 @@ public:
 
 // Tighten the scope of consume nodes as much as possible to avoid needless synchronization.
 class TightenProducerConsumerNodes : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt make_producer_consumer(const string &name, bool is_producer, Stmt body, const Scope<> &scope, CachingStmtUsesVars &uses_vars) {
@@ -717,6 +710,7 @@ public:
 
 // Update indices to add ring buffer.
 class UpdateIndices : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const Provide *op) override {
@@ -748,15 +742,15 @@ public:
 
 // Inject ring buffering.
 class InjectRingBuffering : public IRMutator {
+protected:
     using IRMutator::visit;
 
     struct Loop {
         std::string name;
-        Expr min;
         Expr extent;
 
-        Loop(std::string n, Expr m, Expr e)
-            : name(std::move(n)), min(std::move(m)), extent(std::move(e)) {
+        Loop(std::string n, Expr e)
+            : name(std::move(n)), extent(std::move(e)) {
         }
     };
 
@@ -778,13 +772,12 @@ class InjectRingBuffering : public IRMutator {
             int loop_index = hoist_storage_loop_index[op->name] + 1;
             Expr current_index = Variable::make(Int(32), loops[loop_index].name);
             while (++loop_index < (int)loops.size()) {
-                current_index = current_index *
-                                    (loops[loop_index].extent - loops[loop_index].min) +
+                current_index = current_index * loops[loop_index].extent +
                                 Variable::make(Int(32), loops[loop_index].name);
             }
             current_index = current_index % f.schedule().ring_buffer();
             // Adds an extra index for to the all of the references of f.
-            body = UpdateIndices(op->name, current_index).mutate(body);
+            body = UpdateIndices(op->name, current_index)(body);
 
             if (f.schedule().async()) {
                 Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.ring_buffer");
@@ -817,7 +810,7 @@ class InjectRingBuffering : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        loops.emplace_back(op->name, op->min, op->extent);
+        loops.emplace_back(op->name, op->extent());
         Stmt mutated = IRMutator::visit(op);
         loops.pop_back();
         return mutated;
@@ -832,6 +825,7 @@ public:
 // Broaden the scope of acquire nodes to pack trailing work into the
 // same task and to potentially reduce the nesting depth of tasks.
 class ExpandAcquireNodes : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const Block *op) override {
@@ -934,6 +928,7 @@ class ExpandAcquireNodes : public IRMutator {
 };
 
 class TightenForkNodes : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt make_fork(const Stmt &first, const Stmt &rest) {
@@ -1021,12 +1016,12 @@ class TightenForkNodes : public IRMutator {
 }  // namespace
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
-    s = TightenProducerConsumerNodes(env).mutate(s);
-    s = InjectRingBuffering(env).mutate(s);
-    s = ForkAsyncProducers(env).mutate(s);
-    s = ExpandAcquireNodes().mutate(s);
-    s = TightenForkNodes().mutate(s);
-    s = InitializeSemaphores().mutate(s);
+    s = TightenProducerConsumerNodes(env)(s);
+    s = InjectRingBuffering(env)(s);
+    s = ForkAsyncProducers(env)(s);
+    s = ExpandAcquireNodes()(s);
+    s = TightenForkNodes()(s);
+    s = InitializeSemaphores()(s);
     return s;
 }
 

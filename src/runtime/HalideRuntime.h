@@ -23,7 +23,7 @@
 // our CMake build, so that we ensure that the in-build metadata (eg soversion)
 // matches, but keeping the canonical version here makes it easier to keep
 // downstream build systems (eg Blaze/Bazel) properly in sync with the source.
-#define HALIDE_VERSION_MAJOR 20
+#define HALIDE_VERSION_MAJOR 22
 #define HALIDE_VERSION_MINOR 0
 #define HALIDE_VERSION_PATCH 0
 
@@ -98,6 +98,9 @@ extern "C" {
 #define HALIDE_RUNTIME_ASAN_DETECTED
 #endif
 
+#if !defined(HALIDE_CPP_COMPILER_HAS_FLOAT16)
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 0
+
 #if !defined(HALIDE_RUNTIME_ASAN_DETECTED)
 
 // clang had _Float16 added as a reserved name in clang 8, but
@@ -105,10 +108,11 @@ extern "C" {
 // Ideally there would be a better way to detect if the type
 // is supported, even in a compiler independent fashion, but
 // coming up with one has proven elusive.
-#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__)
+#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__) && !defined(__wasm__)
 #if defined(__is_identifier)
 #if !__is_identifier(_Float16)
-#define HALIDE_CPP_COMPILER_HAS_FLOAT16
+#undef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 1
 #endif
 #endif
 #endif
@@ -117,12 +121,17 @@ extern "C" {
 // For now, we say that if >= v12, and compiling on x86 or arm,
 // we assume support. This may need revision.
 #if defined(__GNUC__) && (__GNUC__ >= 12)
-#if defined(__x86_64__) || (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) || ((defined(__arm__) || defined(__aarch64__)) && (__GNUC__ >= 13))
-#define HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if defined(__x86_64__) ||                                              \
+    (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) ||     \
+    (defined(__arm__) && (__GNUC__ >= 13) && __ARM_FP16_FORMAT_IEEE) || \
+    (defined(__aarch64__) && (__GNUC__ >= 13))
+#undef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 1
 #endif
 #endif
 
 #endif  // !HALIDE_RUNTIME_ASAN_DETECTED
+#endif  // !defined(HALIDE_CPP_COMPILER_HAS_FLOAT16)
 
 #endif  // !COMPILING_HALIDE_RUNTIME
 
@@ -258,7 +267,7 @@ typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int)
 
 /** A task representing a serial for loop evaluated over some range.
  * Note that task_parent is a pass through argument that should be
- * passed to any dependent taks that are invoked using halide_do_parallel_tasks
+ * passed to any dependent tasks that are invoked using halide_do_parallel_tasks
  * underneath this call. */
 typedef int (*halide_loop_task_t)(void *user_context, int min, int extent,
                                   uint8_t *closure, void *task_parent);
@@ -642,20 +651,18 @@ struct halide_trace_event_t {
  *
  * halide_trace returns a unique ID which will be passed to future
  * events that "belong" to the earlier event as the parent id. The
- * ownership hierarchy looks like:
+ * ownership hierarchy follows the realization stack.
  *
  * begin_pipeline
- * +--trace_tag (if any)
- * +--trace_tag (if any)
+ * +--tag (if any)
+ * +--tag (if any)
  * ...
- * +--begin_realization
- * |  +--produce
- * |  |  +--load/store
- * |  |  +--end_produce
- * |  +--consume
- * |  |  +--load
- * |  |  +--end_consume
- * |  +--end_realization
+ * +--(begin_realization|produce|consume)
+ * |  +-- ... recursively more realizations/produces/consumes ...
+ * |      +-- load
+ * |      +-- store
+ * |      +-- ... recursively more end events ...
+ * |  +--(end_realization|end_produce|end_consume)
  * +--end_pipeline
  *
  * Threading means that ownership cannot be inferred from the ordering
@@ -664,8 +671,8 @@ struct halide_trace_event_t {
  * realization. Within a single production, the ordering of events is
  * meaningful.
  *
- * Note that all trace_tag events (if any) will occur just after the begin_pipeline
- * event, but before any begin_realization events. All trace_tags for a given Func
+ * Note that all tag events (if any) will occur just after the begin_pipeline
+ * event, but before any begin_realization events. All tags for a given Func
  * will be emitted in the order added.
  */
 // @}
@@ -950,7 +957,7 @@ extern int halide_get_gpu_device(void *user_context);
 /** Set the soft maximum amount of memory, in bytes, that the LRU
  *  cache will use to memoize Func results.  This is not a strict
  *  maximum in that concurrency and simultaneous use of memoized
- *  reults larger than the cache size can both cause it to
+ *  results larger than the cache size can both cause it to
  *  temporariliy be larger than the size specified here.
  */
 extern void halide_memoization_cache_set_size(int64_t size);
@@ -978,7 +985,7 @@ extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *ca
 
 /** Given a cache key for a memoized result, currently constructed
  *  from the Func name and top-level Func name plus the arguments of
- *  the computation, store the result in the cache for futre access by
+ *  the computation, store the result in the cache for future access by
  *  halide_memoization_cache_lookup. (The internals of the cache key
  *  should be considered opaque by this function.) Data is copied out
  *  from the inputs and inputs are unmodified. The last argument is a
@@ -1351,14 +1358,19 @@ extern int halide_error_vscale_invalid(void *user_context, const char *func_name
 // @}
 
 /** Optional features a compilation Target can have.
- * Be sure to keep this in sync with the Feature enum in Target.h and the implementation of
- * get_runtime_compatible_target in Target.cpp if you add a new feature.
+ *
+ * Be sure to keep this in sync with:
+ *  1. the Feature enum in Target.h,
+ *  2. the implementation of get_runtime_compatible_target in Target.cpp,
+ *  3. PyEnums.cpp,
+ * if you add a new feature.
  */
 typedef enum halide_target_feature_t {
-    halide_target_feature_jit = 0,          ///< Generate code that will run immediately inside the calling process.
-    halide_target_feature_debug,            ///< Turn on debug info and output for runtime code.
-    halide_target_feature_no_asserts,       ///< Disable all runtime checks, for slightly tighter code.
-    halide_target_feature_no_bounds_query,  ///< Disable the bounds querying functionality.
+    halide_target_feature_jit = 0,            ///< Generate code that will run immediately inside the calling process.
+    halide_target_feature_debug,              ///< Turn on debug info and output for runtime code.
+    halide_target_feature_enable_backtraces,  ///< Preserve frame pointers and include unwind tables to support accurate backtraces for debugging and profiling.
+    halide_target_feature_no_asserts,         ///< Disable all runtime checks, for slightly tighter code.
+    halide_target_feature_no_bounds_query,    ///< Disable the bounds querying functionality.
 
     halide_target_feature_sse41,    ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
     halide_target_feature_avx,      ///< Use AVX 1 instructions. Only relevant on x86.
@@ -1465,6 +1477,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_semihosting,            ///< Used together with Target::NoOS for the baremetal target built with semihosting library and run with semihosting mode where minimum I/O communication with a host PC is available.
     halide_target_feature_avx10_1,                ///< Intel AVX10 version 1 support. vector_bits is used to indicate width.
     halide_target_feature_x86_apx,                ///< Intel x86 APX support. Covers initial set of features released as APX: egpr,push2pop2,ppx,ndd .
+    halide_target_feature_simulator,              ///< Target is for a simulator environment. Currently only applies to iOS.
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
@@ -1541,8 +1554,19 @@ typedef struct halide_dimension_t {
 }  // extern "C"
 #endif
 
-typedef enum { halide_buffer_flag_host_dirty = 1,
-               halide_buffer_flag_device_dirty = 2 } halide_buffer_flags;
+#if __cplusplus > 201100L || _MSVC_LANG > 201100L || __STDC_VERSION__ > 202300L
+// In C++, an underlying type is required to let the user define their own flag
+// values, without those values being undefined behavior when passed around as
+// this enum typedef.
+#define BUFFER_FLAGS_UNDERLYING_TYPE : uint64_t
+#else
+#define BUFFER_FLAGS_UNDERLYING_TYPE
+#endif
+typedef enum BUFFER_FLAGS_UNDERLYING_TYPE {
+    halide_buffer_flag_host_dirty = 1,
+    halide_buffer_flag_device_dirty = 2
+} halide_buffer_flags;
+#undef BUFFER_FLAGS_UNDERLYING_TYPE
 
 /**
  * The raw representation of an image passed around by generated
@@ -1985,7 +2009,7 @@ struct halide_profiler_state {
 
     /** If this callback is defined, the profiler asserts that there is a single
      * live instance, and then uses it to get the current func and number of
-     * active threads insted of reading the fields in the instance. This is used
+     * active threads instead of reading the fields in the instance. This is used
      * so that the profiler can follow along with execution that occurs
      * elsewhere (e.g. on an accelerator). */
     void (*get_remote_profiler_state)(int *func, int *active_workers);
@@ -2028,7 +2052,7 @@ extern void halide_profiler_shutdown(void);
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
 
-/** These routines are called to temporarily disable and then reenable
+/** These routines are called to temporarily disable and then re-enable
  * the profiler. */
 //@{
 extern void halide_profiler_lock(struct halide_profiler_state *);
@@ -2134,7 +2158,7 @@ HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of() {
     return halide_type_t(halide_type_handle, 64);
 }
 
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<_Float16>() {
     return halide_type_t(halide_type_float, 16);

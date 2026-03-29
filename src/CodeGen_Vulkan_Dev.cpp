@@ -147,6 +147,8 @@ protected:
         void store_at_scalar_index(const Store *op, SpvId index_id, SpvId variable_id, Type value_type, Type storage_type, SpvStorageClass storage_class, SpvId value_id);
         void store_at_vector_index(const Store *op, SpvId variable_id, Type value_type, Type storage_type, SpvStorageClass storage_class, SpvId value_id);
 
+        SpvId apply_storage_buffer_offset(SpvId variable_id, SpvId index_id);
+
         SpvFactory::Components split_vector(Type type, SpvId value_id);
         SpvId join_vector(Type type, const SpvFactory::Components &value_components);
         SpvId fill_vector(Type type, SpvId value_id);
@@ -201,6 +203,7 @@ protected:
             {"fast_pow_f32", GLSLstd450Pow},
             {"floor_f16", GLSLstd450Floor},
             {"floor_f32", GLSLstd450Floor},
+            {"fma", GLSLstd450Fma},
             {"log_f16", GLSLstd450Log},
             {"log_f32", GLSLstd450Log},
             {"sin_f16", GLSLstd450Sin},
@@ -237,8 +240,11 @@ protected:
         using StorageAccessMap = std::unordered_map<SpvId, StorageAccess>;
         StorageAccessMap storage_access_map;
 
+        using StorageBufferOffsetMap = std::unordered_map<SpvId, SpvId>;
+        StorageBufferOffsetMap storage_buffer_offset_map;
+
         // Defines the binding information for a specialization constant
-        // that is exported by the module and can be overriden at runtime
+        // that is exported by the module and can be overridden at runtime
         struct SpecializationBinding {
             SpvId constant_id = 0;
             uint32_t type_size = 0;
@@ -255,7 +261,7 @@ protected:
         };
         using SharedMemoryUsage = std::vector<SharedMemoryAllocation>;
 
-        // Defines the specialization constants used for dynamically overiding the dispatch size
+        // Defines the specialization constants used for dynamically overriding the dispatch size
         struct WorkgroupSizeBinding {
             SpvId local_size_constant_id[3] = {0, 0, 0};  // zero if unused
         };
@@ -418,7 +424,8 @@ struct FindWorkGroupSize : public IRVisitor {
             // Save & validate the workgroup size
             int index = thread_loop_workgroup_index(loop->name);
             if (index >= 0) {
-                const IntImm *literal = loop->extent.as<IntImm>();
+                Expr extent = simplify(loop->extent());
+                const IntImm *literal = extent.as<IntImm>();
                 if (literal != nullptr) {
                     uint32_t new_wg_size = literal->value;
                     user_assert(workgroup_size[index] == 0 || workgroup_size[index] == new_wg_size)
@@ -1189,9 +1196,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
             e.accept(this);
         }
     } else if (op->is_strict_float_intrinsic()) {
-        // TODO: Enable/Disable RelaxedPrecision flags?
-        Expr e = unstrictify_float(op);
-        e.accept(this);
+        if (op->is_intrinsic(Call::strict_fma)) {
+            Expr builtin_call = Call::make(op->type, "fma", op->args, Call::PureExtern);
+            builtin_call.accept(this);
+        } else {
+            // TODO: Enable/Disable RelaxedPrecision flags?
+            Expr e = unstrictify_float(op);
+            e.accept(this);
+        }
     } else if (op->is_intrinsic(Call::IntrinsicOp::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         // b > a, so the following works without widening:
@@ -1372,6 +1384,27 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Select *op) {
     builder.update_id(result_id);
 }
 
+SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::apply_storage_buffer_offset(SpvId variable_id, SpvId index_id) {
+    auto offset_map_it = storage_buffer_offset_map.find(variable_id);
+    if (offset_map_it == storage_buffer_offset_map.end()) {
+        return index_id;
+    }
+
+    SpvId offset_id = offset_map_it->second;
+    SpvId index_type_id = builder.declare_type(Int(32));
+    SpvId adjusted_index_id = builder.reserve_id(SpvResultId);
+
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::apply_storage_buffer_offset(): "
+             << "variable_id=" << variable_id << " "
+             << "index_type_id=" << index_type_id << " "
+             << "index_id=" << index_id << " "
+             << "offset_id=" << offset_id << " "
+             << "adjusted_index_id=" << adjusted_index_id << "\n";
+
+    builder.append(SpvFactory::integer_add(index_type_id, adjusted_index_id, index_id, offset_id));
+    return adjusted_index_id;
+}
+
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::load_from_scalar_index(const Load *op, SpvId index_id, SpvId variable_id, Type value_type, Type storage_type, SpvStorageClass storage_class) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::load_from_scalar_index(): "
              << "index_id=" << index_id << " "
@@ -1391,7 +1424,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::load_from_scalar_index(const Load *op, S
 
     uint32_t zero = 0;
     SpvId src_id = SpvInvalidId;
-    SpvId src_index_id = index_id;
+    SpvId src_index_id = apply_storage_buffer_offset(variable_id, index_id);
     if (storage_class == SpvStorageClassUniform) {
         if (builder.is_struct_type(base_type_id)) {
             SpvId zero_id = builder.declare_constant(UInt(32), &zero);
@@ -1489,7 +1522,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_scalar_index(const Store *op, S
 
     uint32_t zero = 0;
     SpvId dst_id = SpvInvalidId;
-    SpvId dst_index_id = index_id;
+    SpvId dst_index_id = apply_storage_buffer_offset(variable_id, index_id);
 
     SpvId ptr_type_id = builder.declare_pointer_type(storage_type, storage_class);
     if (storage_class == SpvStorageClassUniform) {
@@ -1683,7 +1716,7 @@ std::pair<std::string, uint32_t> simt_intrinsic(const std::string &name) {
 }  // anonymous namespace
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(For): name=" << op->name << " min=" << op->min << " extent=" << op->extent << "\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(For): name=" << op->name << " min=" << op->min << " max=" << op->max << "\n";
 
     if (is_gpu(op->for_type)) {
         // This should always be true at this point in codegen
@@ -1710,24 +1743,22 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
         }
     } else {
 
-        debug(2) << "  (serial for loop): min=" << op->min << " extent=" << op->extent << "\n";
+        debug(2) << "  (serial for loop): min=" << op->min << " max=" << op->max << "\n";
 
         internal_assert(op->for_type == ForType::Serial) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit unhandled For type: " << op->for_type << "\n";
-        user_assert(op->min.type() == op->extent.type());
+        user_assert(op->min.type() == op->max.type());
         user_assert(op->min.type().is_int() || op->min.type().is_uint());
 
         op->min.accept(this);
         SpvId min_id = builder.current_id();
-        op->extent.accept(this);
-        SpvId extent_id = builder.current_id();
+        op->max.accept(this);
+        SpvId max_id = builder.current_id();
 
         // Compute max.
         Type index_type = op->min.type();
         SpvId index_type_id = builder.declare_type(index_type);
         SpvStorageClass storage_class = SpvStorageClassFunction;
         SpvId index_var_type_id = builder.declare_pointer_type(index_type_id, storage_class);
-        SpvId max_id = builder.reserve_id(SpvResultId);
-        builder.append(SpvFactory::integer_add(index_type_id, max_id, min_id, extent_id));
 
         // Declare loop var
         const std::string loop_var_name = unique_name(std::string("k") + std::to_string(kernel_index) + "_loop_idx");
@@ -1757,7 +1788,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
             SpvId loop_test_type_id = builder.declare_type(Bool());
             SpvId loop_test_id = builder.reserve_id(SpvResultId);
             builder.append(SpvFactory::load(index_type_id, loop_index_id, loop_var_id));
-            builder.append(SpvFactory::integer_less_than(loop_test_type_id, loop_test_id, loop_index_id, max_id, index_type.is_uint()));
+            builder.append(SpvFactory::integer_less_than_equal(loop_test_type_id, loop_test_id, loop_index_id, max_id, index_type.is_int()));
             builder.append(SpvFactory::conditional_branch(loop_test_id, body_block_id, merge_block_id));
         }
         builder.leave_block();
@@ -2055,31 +2086,21 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
         debug(3) << "\n";
 
         if (arg_ids.size() == 1) {
-
             // 1 argument, just do a simple assignment via a cast
             SpvId result_id = cast_type(op->type, op->vectors[0].type(), arg_ids[0]);
             builder.update_id(result_id);
 
         } else if (arg_ids.size() == 2) {
-
-            // 2 arguments, use a composite insert to update even and odd indices
-            uint32_t even_idx = 0;
-            uint32_t odd_idx = 1;
-            SpvFactory::Indices even_indices;
-            SpvFactory::Indices odd_indices;
-            for (int i = 0; i < op_lanes; ++i) {
-                even_indices.push_back(even_idx);
-                odd_indices.push_back(odd_idx);
-                even_idx += 2;
-                odd_idx += 2;
+            // 2 arguments, use vector-shuffle with logical indices indexing into (vec1[0], vec1[1], ..., vec2[0], vec2[1], ...)
+            SpvFactory::Indices logical_indices;
+            for (int i = 0; i < arg_lanes; ++i) {
+                logical_indices.push_back(uint32_t(i));
+                logical_indices.push_back(uint32_t(i + arg_lanes));
             }
 
             SpvId type_id = builder.declare_type(op->type);
-            SpvId value_id = builder.declare_null_constant(op->type);
-            SpvId partial_id = builder.reserve_id(SpvResultId);
             SpvId result_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::composite_insert(type_id, partial_id, arg_ids[0], value_id, even_indices));
-            builder.append(SpvFactory::composite_insert(type_id, result_id, arg_ids[1], partial_id, odd_indices));
+            builder.append(SpvFactory::vector_shuffle(type_id, result_id, arg_ids[0], arg_ids[1], logical_indices));
             builder.update_id(result_id);
 
         } else {
@@ -2109,7 +2130,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
     } else if (op->is_extract_element()) {
         int idx = op->indices[0];
         internal_assert(idx >= 0);
-        internal_assert(idx <= op->vectors[0].type().lanes());
+        internal_assert(idx < op->vectors[0].type().lanes());
         if (op->vectors[0].type().is_vector()) {
             SpvFactory::Indices indices = {(uint32_t)idx};
             SpvId type_id = builder.declare_type(op->type);
@@ -2260,6 +2281,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::reset() {
     SymbolScope empty;
     symbol_table.swap(empty);
     storage_access_map.clear();
+    storage_buffer_offset_map.clear();
     descriptor_set_table.clear();
     reset_workgroup_size();
 }
@@ -2345,7 +2367,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_header(SpvBinary &spirv_header) {
     // ... [4] Dynamic workgroup dimensions bound to specialization constants
     // ....... [0] Constant id to use for local_size_x (zero if it was statically declared and not bound to a specialization constant)
     // ....... [1] Constant id to use for local_size_y
-    // ....... [2] Constant id ot use for local_size_z
+    // ....... [2] Constant id to use for local_size_z
     //
     // NOTE: Halide's Vulkan runtime consumes this header prior to compiling.
     //
@@ -2599,6 +2621,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_entry_point(const Stmt &s, SpvId
     builder.add_entry_point(kernel_func_id, SpvExecutionModelGLCompute, entry_point_variables);
 }
 
+namespace {
+
+uint32_t align_offset(uint32_t offset, uint32_t alignment) {
+    return (offset + (alignment - 1)) & ~(alignment - 1);
+}
+
+}  // namespace
+
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint32_t entry_point_index,
                                                             const std::string &entry_point_name,
                                                             const std::vector<DeviceArgument> &args) {
@@ -2622,7 +2652,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
 
     // GLSL-style: each input buffer is a runtime array in a buffer struct
     // All other params get passed in as a single uniform block
-    // First, need to count scalar parameters to construct the uniform struct
+    // First, need to count scalar parameters and buffer parameters to construct the uniform struct
+    uint32_t scalar_arg_count = 0;
+    uint32_t buffer_arg_count = 0;
     SpvBuilder::StructMemberTypes param_struct_members;
     for (const auto &arg : args) {
         if (!arg.is_buffer) {
@@ -2635,11 +2667,21 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
 
             SpvId arg_type_id = builder.declare_type(arg.type);
             param_struct_members.push_back(arg_type_id);
+            scalar_arg_count++;
+        } else {
+            buffer_arg_count++;
         }
     }
 
+    // Add a buffer offset parameter for each buffer (one Int32 per buffer)
+    // to support crops at arbitrary index offsets.
+    Type offset_type = Int(32);
+    SpvId offset_type_id = builder.declare_type(offset_type);
+    param_struct_members.insert(param_struct_members.end(), size_t(buffer_arg_count), offset_type_id);
+
     // Add a binding for a uniform buffer packed with all scalar args
     uint32_t binding_counter = 0;
+    SpvId param_pack_var_id = SpvInvalidId;
     if (!param_struct_members.empty()) {
 
         const std::string struct_name = std::string("k") + std::to_string(kernel_index) + std::string("_args_struct");
@@ -2648,6 +2690,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
         // Add a decoration describing the offset for each parameter struct member
         uint32_t param_member_index = 0;
         uint32_t param_member_offset = 0;
+
+        // First, add decorations for each scalar arg
         for (const auto &arg : args) {
             if (!arg.is_buffer) {
                 SpvBuilder::Literals param_offset_literals = {param_member_offset};
@@ -2657,13 +2701,24 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
             }
         }
 
+        // Force alignment for the parameter offset (e.g. all Int32 members in Uniform blocks must be 4-byte aligned)
+        param_member_offset = align_offset(param_member_offset, offset_type.bytes());
+
+        // Next, add a decoration for the storage buffer offsets
+        for (uint32_t b = 0; b < buffer_arg_count; b++) {
+            SpvBuilder::Literals param_offset_literals = {param_member_offset};
+            builder.add_struct_annotation(param_struct_type_id, param_member_index, SpvDecorationOffset, param_offset_literals);
+            param_member_offset += offset_type.bytes();
+            param_member_index++;
+        }
+
         // Add a Block decoration for the parameter pack itself
         builder.add_annotation(param_struct_type_id, SpvDecorationBlock);
 
         // Add a variable for the parameter pack
         const std::string param_pack_var_name = std::string("k") + std::to_string(kernel_index) + std::string("_args_var");
         SpvId param_pack_ptr_type_id = builder.declare_pointer_type(param_struct_type_id, SpvStorageClassUniform);
-        SpvId param_pack_var_id = builder.declare_global_variable(param_pack_var_name, param_pack_ptr_type_id, SpvStorageClassUniform);
+        param_pack_var_id = builder.declare_global_variable(param_pack_var_name, param_pack_ptr_type_id, SpvStorageClassUniform);
 
         // We always pass in the parameter pack as the first binding
         SpvBuilder::Literals binding_index = {0};
@@ -2673,7 +2728,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
         descriptor_set.uniform_buffer_count++;
         binding_counter++;
 
-        // Declare all the args with appropriate offsets into the parameter struct
+        // Declare all the scalar args with appropriate offsets into the parameter struct
         uint32_t scalar_index = 0;
         for (const auto &arg : args) {
             if (!arg.is_buffer) {
@@ -2693,6 +2748,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
     }
 
     // Add bindings for all device buffers declared as GLSL-style buffer blocks in uniform storage
+    // and adjust the indices with the appropriate storage buffer offsets (to support arbitrary crops)
+    uint32_t buffer_index = 0;
     for (const auto &arg : args) {
         if (arg.is_buffer) {
 
@@ -2742,6 +2799,24 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
             access.storage_class = storage_class;
             storage_access_map[buffer_block_var_id] = access;
             descriptor_set.storage_buffer_count++;
+
+            // Load the storage buffer offset for this buffer from the uniform struct
+            // These offsets are stored *after* all scalar args in the uniform struct
+            if (param_pack_var_id != SpvInvalidId) {
+                uint32_t buffer_offset_index_param = scalar_arg_count + buffer_index;
+                SpvId buffer_offset_index_param_id = builder.declare_constant(UInt(32), &buffer_offset_index_param);
+                SpvId index_ptr_type_id = builder.declare_pointer_type(offset_type_id, SpvStorageClassUniform);
+                SpvFactory::Indices buffer_offset_index_access_indices = {buffer_offset_index_param_id};
+                SpvId buffer_offset_index_access_chain = builder.declare_access_chain(index_ptr_type_id, param_pack_var_id, buffer_offset_index_access_indices);
+
+                SpvId buffer_offset_index_id = builder.reserve_id(SpvResultId);
+                builder.append(SpvFactory::load(offset_type_id, buffer_offset_index_id, buffer_offset_index_access_chain));
+
+                // Store the mapping from the parameter defining the buffer index offset to the variable it should be applied to
+                storage_buffer_offset_map[buffer_block_var_id] = buffer_offset_index_id;
+            }
+
+            buffer_index++;
         }
     }
 

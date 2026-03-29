@@ -110,6 +110,7 @@ struct trace : public PrinterBase {
     }
 };
 
+// NOLINTBEGIN(bugprone-macro-parentheses)
 #define TRACEPRINT(msg) trace() << msg;
 #define TRACELEVEL(level, msg) \
     if (level <= HALIDE_D3D12_TRACE_LEVEL) TRACEPRINT(msg);
@@ -119,6 +120,7 @@ struct trace : public PrinterBase {
 #define TRACEERROR(msg) TRACELEVEL(-2, "ERROR: " << msg);
 #define TRACEWARN(msg) TRACELEVEL(-1, "WARNING: " << msg);
 #define TRACEINFO(msg) TRACELEVEL(0, msg);
+// NOLINTEND(bugprone-macro-parentheses)
 
 #ifdef HALIDE_D3D12_TRACE_TIME
 #define TRACETIME_CHECKPOINT() halide_current_time_ns(user_context)
@@ -966,6 +968,7 @@ WEAK void D3D12LoadDependencies(void *user_context) {
 
     // Windows x64 follows the LLP64 integer type convention:
     // https://msdn.microsoft.com/en-us/library/windows/desktop/aa383751(v=vs.85).aspx
+    // NOLINTBEGIN(misc-redundant-expression)
     static_assert(sizeof(BOOL) == (32 / 8));      // BOOL      must be  32 bits
     static_assert(sizeof(CHAR) == (8 / 8));       // CHAR      must be   8 bits
     static_assert(sizeof(SHORT) == (16 / 8));     // SHORT     must be  16 bits
@@ -979,8 +982,10 @@ WEAK void D3D12LoadDependencies(void *user_context) {
     static_assert(sizeof(INT) == (32 / 8));       // INT       must be  32 bits
     static_assert(sizeof(UINT) == (32 / 8));      // UINT      must be  32 bits
     static_assert(sizeof(IID) == (128 / 8));      // COM GUIDs must be 128 bits
+    // NOLINTEND(misc-redundant-expression)
 
     // Paranoid checks (I am not taking any chances...)
+    // NOLINTBEGIN(misc-redundant-expression)
     static_assert(sizeof(INT8) == (8 / 8));
     static_assert(sizeof(INT16) == (16 / 8));
     static_assert(sizeof(INT32) == (32 / 8));
@@ -994,6 +999,7 @@ WEAK void D3D12LoadDependencies(void *user_context) {
 #else
     static_assert(sizeof(SIZE_T) == (32 / 8));
 #endif
+    // NOLINTEND(misc-redundant-expression)
 }
 
 #if HALIDE_D3D12_PIX
@@ -1011,7 +1017,7 @@ WEAK ID3D12Device *D3D12CreateDeviceForAdapter(IDXGIAdapter1 *adapter) {
 
     DXGI_ADAPTER_DESC1 desc = {};
     if (FAILED(dxgiAdapter->GetDesc1(&desc))) {
-        TRACEFATAL("Unable to retrieve information (DXGI_ADAPTER_DESC1) about the selectd adapter.");
+        TRACEFATAL("Unable to retrieve information (DXGI_ADAPTER_DESC1) about the selected adapter.");
         return nullptr;
     }
     char Description[128];
@@ -1319,7 +1325,7 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12
 
     d3d12_buffer buffer = {};
     ID3D12Resource *resource = nullptr;
-    // A commited resource manages its own private heap:
+    // A committed resource manages its own private heap:
     HRESULT result = (*device)->CreateCommittedResource(pHeapProperties, HeapFlags, pDesc, InitialResourceState, pOptimizedClearValue, IID_PPV_ARGS(&resource));
     if (D3DErrorCheck(result, resource, nullptr, "Unable to create the Direct3D 12 buffer")) {
         return buffer;
@@ -2527,7 +2533,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
 
     // TODO(marcos): acquire_context will acquire the context lock and hold it
     // until it gets released by release_context; it should be possible to simply
-    // hold it to obtain 'device_ret' and 'queue_ret' and release it immediatley
+    // hold it to obtain 'device_ret' and 'queue_ret' and release it immediately
     // after -- as a safe-guard, increment the reference count of the underlying
     // ID3D12Device and ID3D12CommandQueue COM objects.
     halide_mutex_lock(&thread_lock);
@@ -2596,7 +2602,7 @@ WEAK void d3d12_debug_dump() {
 
 using namespace Halide::Runtime::Internal::D3D12Compute;
 
-// NOTE(marcos): purposedly disabling cache on 'master' for now
+// NOTE(marcos): purposely disabling cache on 'master' for now
 WEAK bool enable_allocation_cache = false;
 static constexpr int MaxBuffersInCache = 32;
 WEAK d3d12_buffer *buffer_pool[MaxBuffersInCache] = {};
@@ -3195,7 +3201,7 @@ WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct h
     // NOTE(marcos): it would be nice to have some "zero-copy" behavior here by
     // allocating the device memory and MapBuffering it to the host memory, but
     // sadly, even with a "dedicated" d3d12 staging heap just for this buffer,
-    // d3d12 has no bi-directional system memory heap (a sigle resource that is
+    // d3d12 has no bi-directional system memory heap (a single resource that is
     // capable of both upload and readback). One possible workaround is to just
     // suballocate from two common heaps (one used for uploads and another for
     // readbacks) and dynamically change buffer->host accordingly. However, if

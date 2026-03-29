@@ -37,7 +37,7 @@ public:
 
         // Make the processed Gaussian pyramid.
         Func gPyramid[maxJ];
-        // Do a lookup into a lut with 256 entires per intensity level
+        // Do a lookup into a lut with 256 entries per intensity level
         Expr level = k * (1.0f / (levels - 1));
         Expr idx = gray(x, y) * cast<float>(levels - 1) * 256.0f;
         idx = clamp(cast<int>(idx), 0, (levels - 1) * 256);

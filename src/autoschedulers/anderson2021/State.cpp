@@ -970,21 +970,32 @@ bool State::mark_gpu_threads(LoopNest::StageScheduleState *state,
                     internal_assert(edge_chain.back()->producer == producer_node);
 
                     if (edge_chain.size() > 1) {
-                        std::string s = func.name();
-                        for (size_t i = 0; i < edge_chain.size() - 1; ++i) {
-                            s = edge_chain.at(i)->producer->func.name() + ".clone_in(" + s + ")";
+                        std::stringstream ss;
+                        for (size_t i = edge_chain.size() - 1; i > 0; --i) {
+                            ss << edge_chain.at(i - 1)->producer->func.name() << ".clone_in(";
                         }
-                        aslog(1) << "Chain with length > 1: " << producer_node->func.name() << ".in(" << s << ")\n";
+                        ss << func.name();
+                        for (size_t i = edge_chain.size() - 1; i > 0; --i) {
+                            ss << ")";
+                        }
+                        aslog(1) << "Chain with length > 1: " << producer_node->func.name() << ".in(" << ss.str() << ")\n";
                         continue;
                     }
 
                     auto clone_in_chain = func;
-                    auto clone_in_chain_source_str = func.name();
-
                     for (size_t i = 0; i < edge_chain.size() - 1; ++i) {
                         clone_in_chain = Func(edge_chain.at(i)->producer->func).clone_in(clone_in_chain);
-                        clone_in_chain_source_str = edge_chain.at(i)->producer->func.name() + ".clone_in(" + clone_in_chain_source_str + ")";
                     }
+
+                    std::stringstream clone_ss;
+                    for (size_t i = edge_chain.size() - 1; i > 0; --i) {
+                        clone_ss << edge_chain.at(i - 1)->producer->func.name() << ".clone_in(";
+                    }
+                    clone_ss << func.name();
+                    for (size_t i = edge_chain.size() - 1; i > 0; --i) {
+                        clone_ss << ")";
+                    }
+                    auto clone_in_chain_source_str = clone_ss.str();
 
                     Func producer(producer_node->func);
                     producer.in(clone_in_chain).store_in(MemoryType::Register).compute_at(func, v.var.var);

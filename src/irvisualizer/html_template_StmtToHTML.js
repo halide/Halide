@@ -58,7 +58,7 @@ function addHighlight(selector) {
 addHighlight('#ir-code-pane');
 addHighlight('#device-code-pane');
 
-/* Scroll to code programmatically. Unusued at the moment, but could be great for jumping back from assembly/device code to the stmt. */
+/* Scroll to code programmatically. Unused at the moment, but could be great for jumping back from assembly/device code to the stmt. */
 function scrollToCode(id) {  // eslint-disable-line no-unused-vars
     let container = document.getElementById('ir-code-pane');
     let scrollToObject = document.getElementById(id);
