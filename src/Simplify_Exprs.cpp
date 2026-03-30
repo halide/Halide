@@ -132,7 +132,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
             rewrite(h_add(broadcast(x, arg_lanes) * y, lanes), h_add(y, lanes) * broadcast(x, lanes)) ||
             rewrite(h_add(broadcast(x, arg_lanes), lanes), broadcast(x * factor, lanes)) ||
             rewrite(h_add(broadcast(x, c0), lanes), broadcast(h_add(x, lanes / c0), c0), lanes % c0 == 0) ||
-            rewrite(h_add(broadcast(x, c0), lanes), broadcast(h_add(x, 1) * (c0 / lanes), lanes), c0 % lanes == 0) ||
+            rewrite(h_add(broadcast(x, c0), lanes), broadcast(h_add(x, 1) * cast(op->type.element_of(), (c0 / lanes)), lanes), c0 % lanes == 0) ||
             false) {
             return mutate(rewrite.result, info);
         }
