@@ -1591,6 +1591,7 @@ void CodeGen_ARM::visit(const Store *op) {
             // Note the predicate asked by Store op is set as interleaved vectors,
             // but what we want is the original one,
             // so we need to either deinterleave or get the vector from the input of Shuffle.
+            // And we make sure the deinterleaved predicates are all the same.
 
             // Dig through let expressions
             Expr rhs = op->predicate;
@@ -1600,18 +1601,30 @@ void CodeGen_ARM::visit(const Store *op) {
             }
 
             Expr vpred_predicated_store;
+            bool predicates_are_same = true;
             const Shuffle *shuffle = rhs.as<Shuffle>();
             if (shuffle && shuffle->is_interleave() && shuffle->vectors.size() == static_cast<size_t>(num_vecs)) {
                 vpred_predicated_store = shuffle->vectors[0];
+                for (int i = 1; i < num_vecs; ++i) {
+                    predicates_are_same &= can_prove(vpred_predicated_store == shuffle->vectors[i]);
+                }
+            } else {
+                vpred_predicated_store = Shuffle::make_slice(op->predicate, 0, num_vecs, t.lanes());
+                for (int i = 1; i < num_vecs; ++i) {
+                    predicates_are_same &= can_prove(vpred_predicated_store == Shuffle::make_slice(op->predicate, i, num_vecs, t.lanes()));
+                }
+            }
+
+            if (predicates_are_same) {
                 // Codegen the lets
                 for (auto &let : lets_pred) {
                     sym_push(let.first, codegen(let.second));
                 }
+                vpred_predicated_store_val = codegen(vpred_predicated_store);
             } else {
-                vpred_predicated_store = Shuffle::make_slice(op->predicate, 0, num_vecs, t.lanes());
+                CodeGen_Posix::visit(op);
+                return;
             }
-
-            vpred_predicated_store_val = codegen(vpred_predicated_store);
         }
 
         for (int i = 0; i < t.lanes(); i += intrin_type.lanes()) {
@@ -1634,7 +1647,7 @@ void CodeGen_ARM::visit(const Store *op) {
             } else {
                 if (is_sve) {
                     // Set the predicate argument
-                    // Use predicate to inactivate tail if t.lanes() is not the multiple of intrin_type.lanes()
+                    // Use predicate to deactivate tail if t.lanes() is not the multiple of intrin_type.lanes()
                     auto active_lanes = std::min(t.lanes() - i, intrin_type.lanes());
                     auto inactive_lanes = intrin_type.lanes() - active_lanes;
                     Value *vpred;
