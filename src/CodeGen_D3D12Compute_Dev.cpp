@@ -620,6 +620,11 @@ string hlsl_reinterpret_name(Type t) {
     if (t.is_float()) {
         return t.bits() == 16 ? "asfloat16" : "asfloat";
     }
+    // 16-bit integer variants (asuint16/asint16) require SM 6.2+, but that is
+    // the same requirement as using float16_t/uint16_t scalars at all.
+    if (t.bits() == 16) {
+        return t.is_int() ? "asint16" : "asuint16";
+    }
     return t.is_int() ? "asint" : "asuint";
 }
 
@@ -756,11 +761,12 @@ struct StoragePackUnpack {
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
 
-    // elements in a threadgroup shared buffer are always 32bits:
-    // must reinterpret (and maybe unpack) bits.
+    // SM 5.1 groupshared buffers are always 32-bit; sub-32-bit loads need a
+    // bit-reinterpret cast. SM 6.2+ supports 16-bit natively — no cast needed.
+    const int sm = target.get_d3d12compute_capability_lower_bound();
     bool shared_promotion_required = false;
     string promotion_str = "";
-    if (groupshared_allocations.contains(op->name)) {
+    if (groupshared_allocations.contains(op->name) && sm < 62) {
         internal_assert(allocations.contains(op->name));
         Type promoted_type = op->type.with_bits(32).with_lanes(1);
         if (promoted_type != op->type) {
@@ -1030,11 +1036,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
 
     Type value_type = op->value.type();
 
-    // elements in a threadgroup shared buffer are always 32bits:
-    // must reinterpret (and maybe pack) bits.
+    // SM 5.1 groupshared buffers are always 32-bit; sub-32-bit stores need a
+    // bit-reinterpret cast. SM 6.2+ supports 16-bit natively — no cast needed.
+    const int sm = target.get_d3d12compute_capability_lower_bound();
     bool shared_promotion_required = false;
     string promotion_str = "";
-    if (groupshared_allocations.contains(op->name)) {
+    if (groupshared_allocations.contains(op->name) && sm < 62) {
         const auto *alloc = allocations.find(op->name);
         internal_assert(alloc);
         Type promoted_type = alloc->type;
@@ -1533,18 +1540,19 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     FindSharedAllocationsAndUniquify fsa;
     s = fsa(s);
 
+    const int sm = target.get_d3d12compute_capability_lower_bound();
     uint32_t total_shared_bytes = 0;
     for (const Stmt &sop : fsa.allocs) {
         const Allocate *op = sop.as<Allocate>();
         internal_assert(op->extents.size() == 1);
         internal_assert(op->type.lanes() == 1);
-        // In D3D12/HLSL, only 32bit types (int/uint/float) are supported (even
-        // though things are changing with newer shader models). Since there is
-        // no uint8 type, we'll have to emulate it with 32bit types...
-        // This will also require pack/unpack logic with bit-masking and aliased
-        // type reinterpretation via asfloat()/asuint() in the shader code... :(
+        // SM 5.1 only supports 32-bit types in groupshared memory; promote
+        // sub-32-bit types and use bit reinterpretation on load/store.
+        // SM 6.2+ supports 16-bit types natively — no promotion needed.
         Type smem_type = op->type;
-        smem_type.with_bits(32);
+        if (sm < 62) {
+            smem_type = smem_type.with_bits(32);
+        }
         stream << "groupshared"
                << " " << print_type(smem_type)
                << " " << print_name(op->name);
@@ -1614,7 +1622,6 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     };
     FindThreadGroupSize ftg;
     s.accept(&ftg);
-    const int sm = target.get_d3d12compute_capability_lower_bound();
     const bool use_dxc = (sm >= 60);
 
     if (use_dxc) {
