@@ -316,7 +316,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
 };
 
 Stmt sloppy_unpredicate_loads_and_stores(const Stmt &s) {
-    return SloppyUnpredicateLoadsAndStores().mutate(s);
+    return SloppyUnpredicateLoadsAndStores()(s);
 }
 
 class InjectHVXLocks : public IRMutator {
@@ -463,7 +463,7 @@ private:
 
 Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
     InjectHVXLocks i(target);
-    body = i.mutate(body);
+    body = i(body);
     if (i.uses_hvx) {
         body = acquire_hvx_context(body, target);
     }

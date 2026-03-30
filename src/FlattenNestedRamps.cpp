@@ -148,11 +148,11 @@ class LowerConcatBits : public IRMutator {
 }  // namespace
 
 Stmt flatten_nested_ramps(const Stmt &s) {
-    return LowerConcatBits().mutate(FlattenRamps().mutate(s));
+    return LowerConcatBits()(FlattenRamps()(s));
 }
 
 Expr flatten_nested_ramps(const Expr &e) {
-    return LowerConcatBits().mutate(FlattenRamps().mutate(e));
+    return LowerConcatBits()(FlattenRamps()(e));
 }
 
 }  // namespace Internal

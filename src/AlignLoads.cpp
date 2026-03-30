@@ -165,7 +165,7 @@ private:
 }  // namespace
 
 Stmt align_loads(const Stmt &s, int alignment, int min_bytes_to_align) {
-    return AlignLoads(alignment, min_bytes_to_align).mutate(s);
+    return AlignLoads(alignment, min_bytes_to_align)(s);
 }
 
 }  // namespace Internal

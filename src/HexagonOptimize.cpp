@@ -331,7 +331,7 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
             }
             // Mutate the operands with the given mutator.
             for (Expr &op : matches) {
-                op = op_mutator->mutate(op);
+                op = (*op_mutator)(op);
             }
 
             x = replace_pattern(x, matches, p);
@@ -2291,8 +2291,8 @@ Stmt optimize_hexagon_shuffles(const Stmt &s, int lut_alignment) {
 Stmt scatter_gather_generator(Stmt s) {
     // Generate vscatter-vgather instruction if target >= v65
     s = substitute_in_all_lets(s);
-    s = ScatterGatherGenerator().mutate(s);
-    s = SyncronizationBarriers().mutate(s);
+    s = ScatterGatherGenerator()(s);
+    s = SyncronizationBarriers()(s);
     s = common_subexpression_elimination(s);
     return s;
 }
@@ -2316,24 +2316,24 @@ Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
     // Pattern match VectorReduce IR node. Handle vector reduce instructions
     // before OptimizePatterns to prevent being mutated by patterns like
     // (v0 + v1 * c) -> add_mpy
-    s = VectorReducePatterns().mutate(s);
+    s = VectorReducePatterns()(s);
     debug(4) << "Hexagon: Lowering after VectorReducePatterns\n"
              << s << "\n";
 
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
-    s = OptimizePatterns(t).mutate(s);
+    s = OptimizePatterns(t)(s);
     debug(4) << "Hexagon: Lowering after OptimizePatterns\n"
              << s << "\n";
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
-    s = EliminateInterleaves(t, t.natural_vector_size(Int(8))).mutate(s);
+    s = EliminateInterleaves(t, t.natural_vector_size(Int(8)))(s);
     debug(4) << "Hexagon: Lowering after EliminateInterleaves\n"
              << s << "\n";
 
     // There may be interleaves left over that we can fuse with other
     // operations.
-    s = FuseInterleaves().mutate(s);
+    s = FuseInterleaves()(s);
     debug(4) << "Hexagon: Lowering after FuseInterleaves\n"
              << s << "\n";
     return s;

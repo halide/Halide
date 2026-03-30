@@ -34,73 +34,48 @@ public:
      * these in your subclass to mutate sub-expressions and
      * sub-statements.
      */
-    virtual Expr mutate(const Expr &expr);
-    virtual Stmt mutate(const Stmt &stmt);
+    inline Expr operator()(const Expr &expr) {
+        return mutate(expr);
+    }
+
+    inline Stmt operator()(const Stmt &stmt) {
+        return mutate(stmt);
+    }
+
+    // Like mutate_with_changes, but discard the changes flag.
+    std::vector<Expr> operator()(const std::vector<Expr> &exprs) {
+        return mutate_with_changes(exprs).first;
+    }
 
     // Mutate all the Exprs and return the new list in ret, along with
     // a flag that is true iff at least one item in the list changed.
     std::pair<std::vector<Expr>, bool> mutate_with_changes(const std::vector<Expr> &);
 
+protected:
+    virtual Expr mutate(const Expr &expr);
+    virtual Stmt mutate(const Stmt &stmt);
     // Like mutate_with_changes, but discard the changes flag.
     std::vector<Expr> mutate(const std::vector<Expr> &exprs) {
         return mutate_with_changes(exprs).first;
     }
 
-protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement mutate_expr/mutate_stmt())
     template<typename T>
     friend struct ExprNode;
     template<typename T>
     friend struct StmtNode;
+    template<typename Mutator, typename... Args>
+    friend std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args &&...args);
 
-    virtual Expr visit(const IntImm *);
-    virtual Expr visit(const UIntImm *);
-    virtual Expr visit(const FloatImm *);
-    virtual Expr visit(const StringImm *);
-    virtual Expr visit(const Cast *);
-    virtual Expr visit(const Reinterpret *);
-    virtual Expr visit(const Add *);
-    virtual Expr visit(const Sub *);
-    virtual Expr visit(const Mul *);
-    virtual Expr visit(const Div *);
-    virtual Expr visit(const Mod *);
-    virtual Expr visit(const Min *);
-    virtual Expr visit(const Max *);
-    virtual Expr visit(const EQ *);
-    virtual Expr visit(const NE *);
-    virtual Expr visit(const LT *);
-    virtual Expr visit(const LE *);
-    virtual Expr visit(const GT *);
-    virtual Expr visit(const GE *);
-    virtual Expr visit(const And *);
-    virtual Expr visit(const Or *);
-    virtual Expr visit(const Not *);
-    virtual Expr visit(const Select *);
-    virtual Expr visit(const Load *);
-    virtual Expr visit(const Ramp *);
-    virtual Expr visit(const Broadcast *);
-    virtual Expr visit(const Let *);
-    virtual Stmt visit(const LetStmt *);
-    virtual Stmt visit(const AssertStmt *);
-    virtual Stmt visit(const ProducerConsumer *);
-    virtual Stmt visit(const Store *);
-    virtual Stmt visit(const Provide *);
-    virtual Stmt visit(const Allocate *);
-    virtual Stmt visit(const Free *);
-    virtual Stmt visit(const Realize *);
-    virtual Stmt visit(const Block *);
-    virtual Stmt visit(const Fork *);
-    virtual Stmt visit(const IfThenElse *);
-    virtual Stmt visit(const Evaluate *);
-    virtual Expr visit(const Call *);
-    virtual Expr visit(const Variable *);
-    virtual Stmt visit(const For *);
-    virtual Stmt visit(const Acquire *);
-    virtual Expr visit(const Shuffle *);
-    virtual Stmt visit(const Prefetch *);
-    virtual Stmt visit(const HoistedStorage *);
-    virtual Stmt visit(const Atomic *);
-    virtual Expr visit(const VectorReduce *);
+#define HALIDE_DECL_VISIT_EXPR(T) \
+    virtual Expr visit(const T *op);
+    HALIDE_FOR_EACH_IR_EXPR(HALIDE_DECL_VISIT_EXPR)
+#undef HALIDE_DECL_VISIT_EXPR
+
+#define HALIDE_DECL_VISIT_STMT(T) \
+    virtual Stmt visit(const T *op);
+    HALIDE_FOR_EACH_IR_STMT(HALIDE_DECL_VISIT_STMT)
+#undef HALIDE_DECL_VISIT_STMT
 };
 
 /** A mutator that caches and reapplies previously done mutations so
@@ -111,10 +86,17 @@ protected:
     std::map<Expr, Expr, ExprCompare> expr_replacements;
     std::map<Stmt, Stmt, Stmt::Compare> stmt_replacements;
 
-public:
     using IRMutator::mutate;
     Stmt mutate(const Stmt &s) override;
     Expr mutate(const Expr &e) override;
+
+public:
+    inline Expr operator()(const Expr &expr) {
+        return mutate(expr);
+    }
+    inline Stmt operator()(const Stmt &stmt) {
+        return mutate(stmt);
+    }
 };
 
 /** A lambda-based IR mutator that accepts multiple lambdas for different
@@ -130,6 +112,9 @@ struct LambdaMutator final : IRMutator {
     auto visit_base(const T *op) {
         return IRMutator::visit(op);
     }
+
+public:
+    using IRMutator::mutate;
 
 private:
     LambdaOverloads<Lambdas...> handlers;
@@ -149,150 +134,18 @@ private:
     }
 
 protected:
-    Expr visit(const IntImm *op) override {
-        return this->visit_impl(op);
+#define HALIDE_CALL_VISIT_EXPR_IMPL(T) \
+    Expr visit(const T *op) override { \
+        return this->visit_impl(op);   \
     }
-    Expr visit(const UIntImm *op) override {
-        return this->visit_impl(op);
+    HALIDE_FOR_EACH_IR_EXPR(HALIDE_CALL_VISIT_EXPR_IMPL)
+#undef HALIDE_CALL_VISIT_EXPR_IMPL
+#define HALIDE_CALL_VISIT_STMT_IMPL(T) \
+    Stmt visit(const T *op) override { \
+        return this->visit_impl(op);   \
     }
-    Expr visit(const FloatImm *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const StringImm *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Cast *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Reinterpret *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Add *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Sub *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Mul *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Div *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Mod *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Min *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Max *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const EQ *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const NE *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const LT *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const LE *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const GT *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const GE *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const And *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Or *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Not *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Select *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Load *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Ramp *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Broadcast *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Let *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const LetStmt *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const AssertStmt *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const ProducerConsumer *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const Store *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const Provide *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const Allocate *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const Free *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const Realize *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const Block *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const Fork *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const IfThenElse *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const Evaluate *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Call *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Variable *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const For *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const Acquire *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const Shuffle *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const Prefetch *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const HoistedStorage *op) override {
-        return this->visit_impl(op);
-    }
-    Stmt visit(const Atomic *op) override {
-        return this->visit_impl(op);
-    }
-    Expr visit(const VectorReduce *op) override {
-        return this->visit_impl(op);
-    }
+    HALIDE_FOR_EACH_IR_STMT(HALIDE_CALL_VISIT_STMT_IMPL)
+#undef HALIDE_CALL_VISIT_STMT_IMPL
 };
 
 /** A lambda-based IR mutator that accepts multiple lambdas for overloading
@@ -312,6 +165,7 @@ struct LambdaMutatorGeneric final : IRMutator {
         return IRMutator::mutate(op);
     }
 
+public:
     Expr mutate(const Expr &e) override {
         if constexpr (std::is_invocable_v<decltype(handlers), LambdaMutatorGeneric *, const Expr &>) {
             return handlers(this, e);
@@ -338,7 +192,7 @@ auto mutate_with(const T &ir, Lambdas &&...lambdas) {
     using Generic = LambdaMutatorGeneric<Overloads>;
     if constexpr (std::is_invocable_v<Overloads, Generic *, const Expr &> ||
                   std::is_invocable_v<Overloads, Generic *, const Stmt &>) {
-        return LambdaMutatorGeneric{std::forward<Lambdas>(lambdas)...}.mutate(ir);
+        return LambdaMutatorGeneric{std::forward<Lambdas>(lambdas)...}(ir);
     } else {
         LambdaMutator mutator{std::forward<Lambdas>(lambdas)...};
         // Each lambda must take two args: (auto *self, <some-pointer> op).
@@ -350,7 +204,7 @@ auto mutate_with(const T &ir, Lambdas &&...lambdas) {
              ...);
         static_assert(all_take_two_args,
                       "All mutate_with lambdas must take two arguments: (auto *self, const T *op)");
-        return mutator.mutate(ir);
+        return mutator(ir);
     }
 }
 
