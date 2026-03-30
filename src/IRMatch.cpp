@@ -406,7 +406,7 @@ public:
 }  // namespace
 
 Expr with_lanes(const Expr &x, int lanes) {
-    return WithLanes(lanes).mutate(x);
+    return WithLanes(lanes)(x);
 }
 
 }  // namespace Internal

@@ -82,7 +82,9 @@ repos:
       - id: mdformat
         args: [ --number, --wrap=80 ]
         additional_dependencies:
-          - mdformat-gfm
+          # Upstream mdformat-gfm declined to work around GitHub's rendering
+          # quirks. See: https://github.com/hukkin/mdformat-gfm/issues/58
+          - git+https://github.com/halide/mdformat-gfm.git@fce9859
           - mdformat-ruff
           - mdformat-shfmt
 

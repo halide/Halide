@@ -95,6 +95,7 @@ target_sources(
     Debug.h
     DebugArguments.h
     DebugToFile.h
+    DecomposeVectorShuffle.h
     Definition.h
     Deinterleave.h
     Derivative.h
@@ -279,6 +280,7 @@ target_sources(
     Debug.cpp
     DebugArguments.cpp
     DebugToFile.cpp
+    DecomposeVectorShuffle.cpp
     Definition.cpp
     Deinterleave.cpp
     Derivative.cpp
@@ -518,6 +520,11 @@ target_compile_definitions(Halide PRIVATE WITH_OPENCL)
 target_compile_definitions(Halide PRIVATE WITH_SPIRV)
 target_compile_definitions(Halide PRIVATE WITH_VULKAN)
 target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
+
+if (WITH_COMPILER_PROFILING)
+    target_compile_definitions(Halide PRIVATE WITH_COMPILER_PROFILING)
+endif()
+
 
 ##
 # Flatbuffers and Serialization dependencies.

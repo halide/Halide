@@ -21,6 +21,11 @@ if (NOT TARGET Halide::Test)
     # Make internal_assert, debug, etc. available to tests
     target_compile_definitions(Halide_test INTERFACE HALIDE_KEEP_MACROS)
 
+    # Disable warnings about standard C functions that have more secure replacements
+    # in the Windows API.
+    target_compile_definitions(Halide_test INTERFACE
+                               $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>)
+
     # Everyone gets to see the common headers
     target_include_directories(Halide_test
                                INTERFACE

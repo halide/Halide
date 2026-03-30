@@ -606,7 +606,10 @@ protected:
                                    const std::function<llvm::Value *(llvm::Value *)> &fn);
 
     /** Get number of vector elements, taking into account scalable vectors. Returns 1 for scalars. */
+    // @{
     int get_vector_num_elements(const llvm::Type *t);
+    int get_vector_num_elements(const llvm::Value *v);
+    // @}
 
     /** Interface to abstract vector code generation as LLVM is now
      * providing multiple options to express even simple vector

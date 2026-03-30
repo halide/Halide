@@ -414,7 +414,7 @@ public:
 };
 
 class HoistStorage : public IRMutator {
-
+protected:
     struct HoistedAllocationInfo {
         string name;
         Type type;
@@ -504,8 +504,9 @@ class HoistStorage : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
-        if (hoisted_storages_map.count(op->name) > 0) {
-            HoistedStorageData &hoisted_storage_data = hoisted_storages[hoisted_storages_map[op->name]];
+        if (auto it = hoisted_storages_map.find(op->name);
+            it != hoisted_storages_map.end()) {
+            HoistedStorageData &hoisted_storage_data = hoisted_storages[it->second];
 
             auto expand_and_bound = [&](Expr e) {
                 // Iterate from innermost outwards
@@ -579,6 +580,7 @@ class HoistStorage : public IRMutator {
 // Realizations, stores, and loads must all be on types that are
 // multiples of 8-bits. This really only affects bools
 class PromoteToMemoryType : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Type upgrade(Type t) {
@@ -639,9 +641,9 @@ Stmt storage_flattening(Stmt s,
             tuple_env[p.first] = {p.second, 0};
         }
     }
-    s = FlattenDimensions(tuple_env, outputs, target).mutate(s);
-    s = HoistStorage().mutate(s);
-    s = PromoteToMemoryType().mutate(s);
+    s = FlattenDimensions(tuple_env, outputs, target)(s);
+    s = HoistStorage()(s);
+    s = PromoteToMemoryType()(s);
 
     return s;
 }

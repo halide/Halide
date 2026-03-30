@@ -17,7 +17,15 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         // know.
         *info = ExprInfo{};
     } else {
+        int64_t old_min = value_info.bounds.min;
+        bool old_min_defined = value_info.bounds.min_defined;
         value_info.cast_to(op->type);
+        if (op->type.is_uint() && op->type.bits() == 64 && old_min_defined && old_min > 0) {
+            // It's impossible for a cast *to* a uint64 in Halide to lower the
+            // min. Casts to uint64_t don't overflow for any source type.
+            value_info.bounds.min_defined = true;
+            value_info.bounds.min = old_min;
+        }
         value_info.trim_bounds_using_alignment();
         if (info) {
             *info = value_info;
@@ -25,7 +33,7 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         // It's possible we just reduced to a constant. E.g. if we cast an
         // even number to uint1 we get zero.
         if (value_info.bounds.is_single_point()) {
-            return make_const(op->type, value_info.bounds.min, nullptr);
+            return make_const(op->type, value_info.bounds.min, info);
         }
     }
 

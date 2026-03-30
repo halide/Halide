@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Download auto-fix artifacts
         id: download
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: pre-commit-fixes
           path: /tmp/pre-commit-fixes
@@ -44,7 +44,7 @@ jobs:
           echo "::warning::PR #${{ steps.pr.outputs.number }} does not allow maintainer edits. Cannot push auto-fixes to fork."
           echo "skip=true" >> "$GITHUB_ENV"
 
-      - uses: actions/create-github-app-token@v2
+      - uses: actions/create-github-app-token@v3
         if: steps.download.outcome == 'success' && env.skip != 'true'
         id: app-token
         with:
@@ -58,7 +58,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: steps.download.outcome == 'success' && env.skip != 'true'
         with:
           repository: ${{ steps.pr.outputs.head-repo }}

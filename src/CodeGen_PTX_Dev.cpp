@@ -538,7 +538,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                 Expr b_slice = Shuffle::make_slice(b, i + l * factor, 1, p.factor);
                 i_slice = Call::make(i_slice.type(), p.name, {a_slice, b_slice, i_slice}, Call::PureExtern);
             }
-            i_slice = RewriteLoadsAs32Bit().mutate(i_slice);
+            i_slice = RewriteLoadsAs32Bit()(i_slice);
             i_slice = simplify(i_slice);
             i_slice = common_subexpression_elimination(i_slice);
             result.push_back(i_slice);
@@ -630,8 +630,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     options.AllowFPOpFusion = CodeGen_GPU_Dev::any_strict_float ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
 #if LLVM_VERSION < 230
     options.NoInfsFPMath = !CodeGen_GPU_Dev::any_strict_float;
-#endif
     options.NoNaNsFPMath = !CodeGen_GPU_Dev::any_strict_float;
+#endif
     options.HonorSignDependentRoundingFPMathOption = !CodeGen_GPU_Dev::any_strict_float;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;

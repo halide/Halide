@@ -331,7 +331,7 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
             }
             // Mutate the operands with the given mutator.
             for (Expr &op : matches) {
-                op = op_mutator->mutate(op);
+                op = (*op_mutator)(op);
             }
 
             x = replace_pattern(x, matches, p);
@@ -1521,8 +1521,8 @@ class EliminateInterleaves : public IRMutator {
         }
 
         if (const Load *load = x.as<Load>()) {
-            if (buffers.contains(load->name)) {
-                BufferState &state = buffers.ref(load->name);
+            if (auto *state_ptr = buffers.shallow_find(load->name)) {
+                BufferState &state = *state_ptr;
                 if (state != BufferState::NotInterleaved) {
                     state = BufferState::Interleaved;
                     return x;
@@ -1814,8 +1814,9 @@ class EliminateInterleaves : public IRMutator {
                                    op->func, op->value_index, op->image, op->param);
             // Add the interleave back to the result of the call.
             return native_interleave(expr);
-        } else if (deinterleaving_alts.find(op->name) != deinterleaving_alts.end() && hvx_target >= deinterleaving_alts[op->name].first &&
-
+        } else if (auto it = deinterleaving_alts.find(op->name);
+                   it != deinterleaving_alts.end() &&
+                   hvx_target >= it->second.first &&
                    yields_removable_interleave(args)) {
             // This call has a deinterleaving alternative, and the
             // arguments are interleaved, so we should use the
@@ -1823,14 +1824,17 @@ class EliminateInterleaves : public IRMutator {
             for (Expr &i : args) {
                 i = remove_interleave(i);
             }
-            return Call::make(op->type, deinterleaving_alts[op->name].second, args, op->call_type);
-        } else if (interleaving_alts.count(op->name) && hvx_target >= interleaving_alts[op->name].first && is_native_deinterleave(args[0])) {
+            return Call::make(op->type, it->second.second, args, op->call_type);
+        } else if (auto it = interleaving_alts.find(op->name);
+                   it != interleaving_alts.end() &&
+                   hvx_target >= it->second.first &&
+                   is_native_deinterleave(args[0])) {
             // This is an interleaving alternative with a
             // deinterleave, which can be generated when we
             // deinterleave storage. Revert back to the interleaving
             // op so we can remove the deinterleave.
             Expr arg = args[0].as<Call>()->args[0];
-            return Call::make(op->type, interleaving_alts[op->name].second, {arg}, op->call_type,
+            return Call::make(op->type, it->second.second, {arg}, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         } else if (changed) {
             return Call::make(op->type, op->name, args, op->call_type,
@@ -1937,7 +1941,7 @@ class EliminateInterleaves : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        if (buffers.contains(op->name)) {
+        if (auto *buf_state = buffers.shallow_find(op->name)) {
             if ((op->type.lanes() * op->type.bits()) % (native_vector_bits * 2) == 0) {
                 // This is a double vector load, we might be able to
                 // deinterleave the storage of this buffer.
@@ -1959,8 +1963,7 @@ class EliminateInterleaves : public IRMutator {
             } else {
                 // This is not a double vector load, so we can't
                 // deinterleave the storage of this buffer.
-                BufferState &state = buffers.ref(op->name);
-                state = BufferState::NotInterleaved;
+                *buf_state = BufferState::NotInterleaved;
             }
         }
         Expr expr = IRMutator::visit(op);
@@ -2224,16 +2227,18 @@ class SyncronizationBarriers : public IRMutator {
     // Creates entry in sync map for the stmt requiring a
     // scatter-release instruction before it.
     void check_hazard(const string &name) {
-        if (in_flight.find(name) == in_flight.end()) {
+        auto it = in_flight.find(name);
+        if (it == in_flight.end()) {
             return;
         }
         // Sync Needed. Add the scatter-release before the first different For
         // loop lock between the curr_path and the hazard src location.
-        size_t min_size = std::min(in_flight[name].size(), curr_path.size());
+        const auto &flight_path = it->second;
+        size_t min_size = std::min(flight_path.size(), curr_path.size());
         size_t i = 0;
         // Find the first different For loop block.
         for (; i < min_size; i++) {
-            if (in_flight[name][i] != curr_path[i]) {
+            if (flight_path[i] != curr_path[i]) {
                 break;
             }
         }
@@ -2266,9 +2271,9 @@ public:
         curr = &s;
         Stmt new_s = IRMutator::mutate(s);
         // Wrap the stmt with scatter-release if any hazard was detected.
-        if (sync.find(&s) != sync.end()) {
+        if (auto it = sync.find(&s); it != sync.end()) {
             Stmt scatter_sync =
-                Evaluate::make(Call::make(Int(32), Call::hvx_scatter_release, {sync[&s]}, Call::Intrinsic));
+                Evaluate::make(Call::make(Int(32), Call::hvx_scatter_release, {it->second}, Call::Intrinsic));
             return Block::make(scatter_sync, new_s);
         }
         return new_s;
@@ -2286,8 +2291,8 @@ Stmt optimize_hexagon_shuffles(const Stmt &s, int lut_alignment) {
 Stmt scatter_gather_generator(Stmt s) {
     // Generate vscatter-vgather instruction if target >= v65
     s = substitute_in_all_lets(s);
-    s = ScatterGatherGenerator().mutate(s);
-    s = SyncronizationBarriers().mutate(s);
+    s = ScatterGatherGenerator()(s);
+    s = SyncronizationBarriers()(s);
     s = common_subexpression_elimination(s);
     return s;
 }
@@ -2311,24 +2316,24 @@ Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
     // Pattern match VectorReduce IR node. Handle vector reduce instructions
     // before OptimizePatterns to prevent being mutated by patterns like
     // (v0 + v1 * c) -> add_mpy
-    s = VectorReducePatterns().mutate(s);
+    s = VectorReducePatterns()(s);
     debug(4) << "Hexagon: Lowering after VectorReducePatterns\n"
              << s << "\n";
 
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
-    s = OptimizePatterns(t).mutate(s);
+    s = OptimizePatterns(t)(s);
     debug(4) << "Hexagon: Lowering after OptimizePatterns\n"
              << s << "\n";
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
-    s = EliminateInterleaves(t, t.natural_vector_size(Int(8))).mutate(s);
+    s = EliminateInterleaves(t, t.natural_vector_size(Int(8)))(s);
     debug(4) << "Hexagon: Lowering after EliminateInterleaves\n"
              << s << "\n";
 
     // There may be interleaves left over that we can fuse with other
     // operations.
-    s = FuseInterleaves().mutate(s);
+    s = FuseInterleaves()(s);
     debug(4) << "Hexagon: Lowering after FuseInterleaves\n"
              << s << "\n";
     return s;

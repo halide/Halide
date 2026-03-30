@@ -22,7 +22,15 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
 
     if (rewrite(IRMatcher::Overflow() - x, a) ||
         rewrite(x - IRMatcher::Overflow(), b) ||
-        rewrite(x - 0, x)) {
+        rewrite(x - 0, a)) {
+        if (info) {
+            if (rewrite.result.same_as(a)) {
+                info->intersect(a_info);
+            } else {
+                internal_assert(rewrite.result.same_as(b));
+                info->intersect(b_info);
+            }
+        }
         return rewrite.result;
     }
 

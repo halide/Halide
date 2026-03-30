@@ -297,7 +297,7 @@ public:
                 : image_params(image_params) {
             }
         } hook_up_image_params(image_params);
-        e = hook_up_image_params.mutate(e);
+        e = hook_up_image_params(e);
 
         class HasInlineReduction : public Internal::IRVisitor {
             using Internal::IRVisitor::visit;

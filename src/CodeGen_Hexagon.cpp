@@ -171,7 +171,7 @@ Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
     // Modify the stmt to add a call to halide_qurt_hvx_lock, and
     // register a destructor to call halide_qurt_hvx_unlock.
     Stmt check_hvx_lock = call_halide_qurt_hvx_lock(target);
-    Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
+    Expr dummy_obj = reinterpret(Handle(), make_one(UInt(64)));
     Expr hvx_unlock =
         Call::make(Handle(), Call::register_destructor,
                    {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj},
@@ -317,7 +317,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
 };
 
 Stmt sloppy_unpredicate_loads_and_stores(const Stmt &s) {
-    return SloppyUnpredicateLoadsAndStores().mutate(s);
+    return SloppyUnpredicateLoadsAndStores()(s);
 }
 
 class InjectHVXLocks : public IRMutator {
@@ -464,7 +464,7 @@ private:
 
 Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
     InjectHVXLocks i(target);
-    body = i.mutate(body);
+    body = i(body);
     if (i.uses_hvx) {
         body = acquire_hvx_context(body, target);
     }

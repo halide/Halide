@@ -111,27 +111,7 @@ export CMAKE_EXPORT_COMPILE_COMMANDS=ON
 export Halide_LLVM_ROOT="${CLANG_TIDY_LLVM_INSTALL_DIR}"
 
 if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
-    # Homebrew clang 21 is badly misconfigured and needs help finding the
-    # system headers, even though it uses system libc++ by default.
-    SDKROOT="$(xcrun --show-sdk-path)"
-    # TOOLCHAINROOT="$(xcrun --show-toolchain-path)"
-    TOOLCHAINROOT="$(cd "$(dirname "$(xcrun --find clang)")"/../.. && pwd)"
-    RCDIR="$(xcrun clang -print-resource-dir)"
-    cat >"${CLANG_TIDY_BUILD_DIR}/toolchain.cmake" <<EOF
-set(CMAKE_SYSROOT "${SDKROOT}")
-set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES
-    "${RCDIR}/include"
-    "${SDKROOT}/usr/include"
-    "${TOOLCHAINROOT}/usr/include"
-    "${SDKROOT}/System/Library/Frameworks"
-    "${SDKROOT}/System/Library/SubFrameworks"
-)
-set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
-    "${SDKROOT}/usr/include/c++/v1"
-    \${CMAKE_C_STANDARD_INCLUDE_DIRECTORIES}
-)
-EOF
-    export CMAKE_TOOLCHAIN_FILE="${CLANG_TIDY_BUILD_DIR}/toolchain.cmake"
+    export CMAKE_TOOLCHAIN_FILE="${ROOT_DIR}/cmake/toolchain.macos-homebrew.cmake"
 fi
 
 echo Configuring Halide...
@@ -148,32 +128,18 @@ jq -s 'add' "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" \
     >"${CLANG_TIDY_BUILD_DIR}/compile_commands_merged.json"
 mv "${CLANG_TIDY_BUILD_DIR}/compile_commands_merged.json" "${CLANG_TIDY_BUILD_DIR}/compile_commands.json"
 
-# Wrapper filters noisy "N warnings generated." from each clang-tidy invocation.
-CLANG_TIDY_FILTER="${CLANG_TIDY_BUILD_DIR}/clang-tidy-filter.sh"
-cat >"${CLANG_TIDY_FILTER}" <<WRAPPER
-#!/usr/bin/env bash
-"${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy" "\$@" 2>&1 | grep -v '^[[:digit:]]\+ warnings\? generated\.\$'
-exit "\${PIPESTATUS[0]}"
-WRAPPER
-chmod +x "${CLANG_TIDY_FILTER}"
+echo "Running clang-tidy..."
 
-echo Running clang-tidy...
 export PYTHONUNBUFFERED=1
+export CLANG_TIDY_REAL_BINARY="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy"
+export CLANG_TIDY_ROOT_DIR="${ROOT_DIR}"
 "${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy" \
     ${FIX} \
     -j "${J}" \
     -quiet \
     -p "${CLANG_TIDY_BUILD_DIR}" \
-    -clang-tidy-binary "${CLANG_TIDY_FILTER}" \
+    -clang-tidy-binary "${ROOT_DIR}/tools/clang-tidy-filter.sh" \
     -clang-apply-replacements-binary "${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-apply-replacements" \
     "$@"
 
-CLANG_TIDY_EXIT_CODE=$?
-
-if [ "$CLANG_TIDY_EXIT_CODE" -eq 0 ]; then
-    echo "Success!"
-else
-    echo "clang-tidy failed with exit code $CLANG_TIDY_EXIT_CODE"
-fi
-
-exit "$CLANG_TIDY_EXIT_CODE"
+echo "Success!"

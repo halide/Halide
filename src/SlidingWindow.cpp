@@ -86,7 +86,7 @@ public:
 // Perform all the substitutions in a scope
 Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
     ExpandExpr ee(scope);
-    Expr result = ee.mutate(e);
+    Expr result = ee(e);
     debug(4) << "Expanded " << e << " into " << result << "\n";
     return result;
 }
@@ -270,9 +270,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             for (int i = 0; i < func.dimensions(); i++) {
                 // Look up the region required of this function's last stage
                 string var = prefix + func_args[i];
-                internal_assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
-                Expr min_req = scope.get(var + ".min");
-                Expr max_req = scope.get(var + ".max");
+                const auto *min_val = scope.find(var + ".min");
+                const auto *max_val = scope.find(var + ".max");
+                internal_assert(min_val && max_val);
+                Expr min_req = *min_val;
+                Expr max_req = *max_val;
                 min_req = expand_expr(min_req, scope);
                 max_req = expand_expr(max_req, scope);
 
@@ -612,7 +614,7 @@ public:
     Interval new_bounds;
 
     Stmt translate_loop(const Stmt &s) {
-        return RollFunc(func, dim_idx, loop_var, old_bounds, new_bounds).mutate(s);
+        return RollFunc(func, dim_idx, loop_var, old_bounds, new_bounds)(s);
     }
 };
 
@@ -817,7 +819,7 @@ class SlidingWindow : public IRMutator {
             set<int> &slid_dims = slid_dimensions[func.name()];
             size_t old_slid_dims_size = slid_dims.size();
             SlidingWindowOnFunctionAndLoop slider(func, name, prev_loop_min, slid_dims);
-            body = slider.mutate(body);
+            body = slider(body);
 
             if (func.schedule().memory_type() == MemoryType::Register &&
                 slider.old_bounds.has_lower_bound()) {
@@ -845,7 +847,7 @@ class SlidingWindow : public IRMutator {
                                       {name + ".loop_min", loop_min},
                                   },
                                   body);
-                body = SubstitutePrefetchVar(name, new_name).mutate(body);
+                body = SubstitutePrefetchVar(name, new_name)(body);
 
                 name = new_name;
 
@@ -921,7 +923,7 @@ class AddLoopMinOrig : public IRMutator {
 }  // namespace
 
 Stmt sliding_window(const Stmt &s, const map<string, Function> &env) {
-    return SlidingWindow(env).mutate(AddLoopMinOrig().mutate(s));
+    return SlidingWindow(env)(AddLoopMinOrig()(s));
 }
 
 }  // namespace Internal
