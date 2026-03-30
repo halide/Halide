@@ -506,7 +506,6 @@ SOURCE_FILES = \
   EmulateFloat16Math.cpp \
   Error.cpp \
   Expr.cpp \
-  ExprInterpreter.cpp \
   ExtractTileOperations.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
@@ -704,7 +703,6 @@ HEADER_FILES = \
   EmulateFloat16Math.h \
   Error.h \
   Expr.h \
-  ExprInterpreter.h \
   ExprUsesVar.h \
   Extern.h \
   ExternFuncArgument.h \
@@ -1475,7 +1473,7 @@ $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime: $(ROOT_DIR)/test/correctness/op
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(TEST_LD_FLAGS) -o $@
 
-$(BIN_DIR)/fuzz_%: $(ROOT_DIR)/test/fuzz/%.cpp $(ROOT_DIR)/test/fuzz/halide_fuzz_main.cpp $(ROOT_DIR)/test/fuzz/fuzz_helpers.h $(ROOT_DIR)/test/fuzz/halide_fuzz_main.h $(TEST_DEPS)
+$(BIN_DIR)/fuzz_%: $(ROOT_DIR)/test/fuzz/%.cpp $(ROOT_DIR)/test/fuzz/halide_fuzz_main.cpp $(ROOT_DIR)/test/fuzz/fuzz_helpers.h $(ROOT_DIR)/test/fuzz/halide_fuzz_main.h $(ROOT_DIR)/test/fuzz/ExprInterpreter.cpp $(ROOT_DIR)/test/fuzz/ExprInterpreter.h $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $(filter %.cpp,$^) -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@ -DHALIDE_FUZZER_BACKEND=0
 
 # Error tests that link against libHalide
