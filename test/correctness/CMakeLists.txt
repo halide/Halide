@@ -125,6 +125,7 @@ tests(GROUPS correctness
       fuse.cpp
       fuse_gpu_threads.cpp
       fused_where_inner_extent_is_zero.cpp
+      fuzz_extract_lanes.cpp
       fuzz_float_stores.cpp
       fuzz_schedule.cpp
       gameoflife.cpp
@@ -221,6 +222,7 @@ tests(GROUPS correctness
       math.cpp
       median3x3.cpp
       memoize_cloned.cpp
+      metal_long_vectors.cpp
       metal_precompiled_shaders.cpp
       min_extent.cpp
       mod.cpp

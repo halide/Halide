@@ -33,6 +33,11 @@ bool should_extract(const Expr &e, bool lift_all) {
         return false;
     }
 
+    if (const Call *c = e.as<Call>()) {
+        // Calls with side effects should not be moved.
+        return c->is_pure() || c->call_type == Call::Halide;
+    }
+
     if (lift_all) {
         return true;
     }

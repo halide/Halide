@@ -37,7 +37,8 @@ endif ()
 set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 ##
-# Lists of source files. Keep ALL lists sorted in alphabetical order.
+# Lists of source files. Keep ALL lists sorted in case-insensitive alphabetical order.
+# (neo)vim users can use ":sort i" in visual line mode.
 ##
 
 # The externally-visible header files that go into making Halide.h.
@@ -146,6 +147,7 @@ target_sources(
     IRVisitor.h
     JITModule.h
     Lambda.h
+    LegalizeVectors.h
     Lerp.h
     LICM.h
     LLVM_Output.h
@@ -325,6 +327,7 @@ target_sources(
     IRVisitor.cpp
     JITModule.cpp
     Lambda.cpp
+    LegalizeVectors.cpp
     Lerp.cpp
     LICM.cpp
     LLVM_Output.cpp
