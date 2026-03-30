@@ -506,12 +506,12 @@ Stmt legalize_vectors_in_device_loop(const For *op) {
             debug(3) << "Nothing got lifted out\n";
             break;
         } else {
-            debug(3) << "Atfer lifting exceeding vectors:\n"
+            debug(3) << "After lifting exceeding vectors:\n"
                      << m3 << "\n";
         }
     }
 
-    Stmt m4 = LegalizeVectors(max_lanes).mutate(m3);
+    Stmt m4 = LegalizeVectors(max_lanes)(m3);
     if (!m4.same_as(m3)) {
         debug(3) << "After legalizing vectors:\n"
                  << m4 << "\n";
