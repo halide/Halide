@@ -47,8 +47,26 @@ bool test_simplification(Expr a, Expr b, const map<string, Expr> &vars) {
         return false;
     }
 
-    Expr a_v = simplify(substitute(vars, a));
-    Expr b_v = simplify(substitute(vars, b));
+    Expr a_v = substitute(vars, a);
+    try {
+        a_v = simplify(a_v);
+    } catch (InternalError &e) {
+        std::cerr << "Simplifier failed to simplify expression:\n"
+                  << a_v << "\n";
+        std::cerr << e.what() << "\n";
+        return false;
+    }
+
+    Expr b_v = substitute(vars, b);
+    try {
+        b_v = simplify(b_v);
+    } catch (InternalError &e) {
+        std::cerr << "Simplifier failed to simplify expression:\n"
+                  << b_v << "\n";
+        std::cerr << e.what() << "\n";
+        return false;
+    }
+
     // If the simplifier didn't produce constants, there must be
     // undefined behavior in this expression. Ignore it.
     if (!Internal::is_const(a_v) || !Internal::is_const(b_v)) {
@@ -72,7 +90,15 @@ bool test_simplification(Expr a, Expr b, const map<string, Expr> &vars) {
 }
 
 bool test_expression(RandomExpressionGenerator &reg, Expr test, int samples) {
-    Expr simplified = simplify(test);
+    Expr simplified;
+    try {
+        simplified = simplify(test);
+    } catch (InternalError &e) {
+        std::cerr << "Simplifier failed to simplify expression:\n"
+                  << test << "\n";
+        std::cerr << e.what() << "\n";
+        return false;
+    }
 
     map<string, Expr> vars;
     for (const auto &fuzz_var : reg.fuzz_vars) {
@@ -125,7 +151,7 @@ FUZZ_TEST(simplify, FuzzingContext &fuzz) {
     // FIXME: These need to be disabled (otherwise crashes and/or failures):
     // reg.gen_ramp_of_vector = false;
     // reg.gen_broadcast_of_vector = false;
-    reg.gen_vector_reduce = false;
+    // reg.gen_vector_reduce = false;
     reg.gen_reinterpret = false;
     reg.gen_shuffles = false;
 
