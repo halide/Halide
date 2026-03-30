@@ -309,6 +309,7 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
 // vector lane. This means loads and stores to them need to be
 // rewritten slightly.
 class RewriteAccessToVectorAlloc : public IRMutator {
+protected:
     Expr var;
     string alloc;
     int lanes;
@@ -363,6 +364,7 @@ class SerializeLoops : public IRMutator {
 
 // Wrap a vectorized predicate around a Load/Store node.
 class PredicateLoadStore : public IRMutator {
+protected:
     string var;
     Expr vector_predicate;
     int lanes;
@@ -480,6 +482,7 @@ struct VectorizedVar {
 // Substitutes a vector for a scalar var in a Stmt. Used on the
 // body of every vectorized loop.
 class VectorSubs : public IRMutator {
+protected:
     // A list of vectorized loop vars encountered so far. The last
     // element corresponds to the most inner vectorized loop.
     std::vector<VectorizedVar> vectorized_vars;
@@ -541,8 +544,8 @@ class VectorSubs : public IRMutator {
     }
 
     Expr visit(const Variable *op) override {
-        if (replacements.count(op->name) > 0) {
-            return replacements[op->name];
+        if (auto it = replacements.find(op->name); it != replacements.end()) {
+            return it->second;
         } else if (scope.contains(op->name)) {
             string widened_name = get_widened_var_name(op->name);
             return Variable::make(vector_scope.get(widened_name).type(), widened_name);
@@ -862,12 +865,12 @@ class VectorSubs : public IRMutator {
             Stmt predicated_stmt;
             if (vectorize_predicate) {
                 PredicateLoadStore p(vectorized_vars.front().name, cond);
-                predicated_stmt = p.mutate(then_case);
+                predicated_stmt = p(then_case);
                 vectorize_predicate = p.is_vectorized();
             }
             if (vectorize_predicate && else_case.defined()) {
                 PredicateLoadStore p(vectorized_vars.front().name, !cond);
-                predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case));
+                predicated_stmt = Block::make(predicated_stmt, p(else_case));
                 vectorize_predicate = p.is_vectorized();
             }
 
@@ -994,11 +997,12 @@ class VectorSubs : public IRMutator {
             // them according to the current loop level.
             for (const auto &[var, val] : containing_lets) {
                 // Skip if this var wasn't vectorized.
-                if (!scope.contains(var)) {
+                const auto *scope_val = scope.find(var);
+                if (!scope_val) {
                     continue;
                 }
                 string vectorized_name = get_widened_var_name(var);
-                Expr vectorized_value = mutate(scope.get(var));
+                Expr vectorized_value = mutate(*scope_val);
                 vector_scope.push(vectorized_name, vectorized_value);
             }
 
@@ -1072,7 +1076,7 @@ class VectorSubs : public IRMutator {
         // Rewrite loads and stores to this allocation like so:
         // foo[x] -> foo[x*lanes + v]
         for (const auto &vv : vectorized_vars) {
-            body = RewriteAccessToVectorAlloc(vv.name + ".from_zero", op->name, vv.lanes).mutate(body);
+            body = RewriteAccessToVectorAlloc(vv.name + ".from_zero", op->name, vv.lanes)(body);
         }
 
         body = mutate(body);
@@ -1314,7 +1318,7 @@ class VectorSubs : public IRMutator {
         // better luck vectorizing it.
 
         if (serialize_inner_loops) {
-            s = SerializeLoops().mutate(s);
+            s = SerializeLoops()(s);
         }
         // We'll need the original scalar versions of any containing lets.
         for (const auto &[var, value] : reverse_view(containing_lets)) {
@@ -1410,6 +1414,7 @@ public:
 };  // namespace
 
 class FindVectorizableExprsInAtomicNode : public IRMutator {
+protected:
     // An Atomic node protects all accesses to a given buffer. We
     // consider a name "poisoned" if it depends on an access to this
     // buffer. We can't lift or vectorize anything that has been
@@ -1451,8 +1456,7 @@ class FindVectorizableExprsInAtomicNode : public IRMutator {
     Stmt visit(const Store *op) override {
         // A store poisons all subsequent loads, but loads before the
         // first store can be lifted.
-        mutate(op->index);
-        mutate(op->value);
+        IRMutator::visit(op);
         poisoned_names.push(op->name);
         return op;
     }
@@ -1502,6 +1506,7 @@ public:
 };
 
 class LiftVectorizableExprsOutOfSingleAtomicNode : public IRMutator {
+protected:
     const std::set<Expr, ExprCompare> &liftable;
 
     using IRMutator::visit;
@@ -1556,6 +1561,7 @@ public:
 };
 
 class LiftVectorizableExprsOutOfAllAtomicNodes : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const Atomic *op) override {
@@ -1582,6 +1588,7 @@ public:
 
 // Vectorize all loops marked as such in a Stmt
 class VectorizeLoops : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const For *for_loop) override {
@@ -1597,7 +1604,7 @@ class VectorizeLoops : public IRMutator {
             }
 
             VectorizedVar vectorized_var = {for_loop->name, for_loop->min, (int)extent->value};
-            stmt = VectorSubs(vectorized_var).mutate(for_loop->body);
+            stmt = VectorSubs(vectorized_var)(for_loop->body);
         } else {
             stmt = IRMutator::visit(for_loop);
         }
@@ -1630,6 +1637,7 @@ bool all_stores_in_scope(const Stmt &stmt, const Scope<> &scope) {
 /** Drop any atomic nodes protecting buffers that are only accessed
  * from a single thread. */
 class RemoveUnnecessaryAtomics : public IRMutator {
+protected:
     using IRMutator::visit;
 
     // Allocations made from within this same thread
@@ -1664,7 +1672,7 @@ class RemoveUnnecessaryAtomics : public IRMutator {
 };
 
 Stmt vectorize_statement(const Stmt &stmt) {
-    return VectorizeLoops().mutate(stmt);
+    return VectorizeLoops()(stmt);
 }
 
 }  // namespace
@@ -1672,9 +1680,9 @@ Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env) {
     // Limit the scope of atomic nodes to just the necessary stuff.
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.
-    Stmt s = LiftVectorizableExprsOutOfAllAtomicNodes(env).mutate(stmt);
+    Stmt s = LiftVectorizableExprsOutOfAllAtomicNodes(env)(stmt);
     s = vectorize_statement(s);
-    s = RemoveUnnecessaryAtomics().mutate(s);
+    s = RemoveUnnecessaryAtomics()(s);
     return s;
 }
 

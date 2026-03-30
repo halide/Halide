@@ -156,7 +156,7 @@ class BoundSmallAllocations : public IRMutator {
 }  // namespace
 
 Stmt bound_small_allocations(const Stmt &s) {
-    return BoundSmallAllocations().mutate(s);
+    return BoundSmallAllocations()(s);
 }
 
 }  // namespace Internal

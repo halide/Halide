@@ -250,33 +250,33 @@ struct FuncScheduleContents {
     }
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
-    void mutate(IRMutator *mutator) {
+    void mutate(IRMutator &mutator) {
         for (Bound &b : bounds) {
             if (b.min.defined()) {
-                b.min = mutator->mutate(b.min);
+                b.min = mutator(b.min);
             }
             if (b.extent.defined()) {
-                b.extent = mutator->mutate(b.extent);
+                b.extent = mutator(b.extent);
             }
             if (b.modulus.defined()) {
-                b.modulus = mutator->mutate(b.modulus);
+                b.modulus = mutator(b.modulus);
             }
             if (b.remainder.defined()) {
-                b.remainder = mutator->mutate(b.remainder);
+                b.remainder = mutator(b.remainder);
             }
         }
         for (Bound &b : estimates) {
             if (b.min.defined()) {
-                b.min = mutator->mutate(b.min);
+                b.min = mutator(b.min);
             }
             if (b.extent.defined()) {
-                b.extent = mutator->mutate(b.extent);
+                b.extent = mutator(b.extent);
             }
             if (b.modulus.defined()) {
-                b.modulus = mutator->mutate(b.modulus);
+                b.modulus = mutator(b.modulus);
             }
             if (b.remainder.defined()) {
-                b.remainder = mutator->mutate(b.remainder);
+                b.remainder = mutator(b.remainder);
             }
         }
     }
@@ -313,23 +313,23 @@ struct StageScheduleContents {
     }
 
     // Pass an IRMutator through to all Exprs referenced in the StageScheduleContents
-    void mutate(IRMutator *mutator) {
+    void mutate(IRMutator &mutator) {
         for (ReductionVariable &r : rvars) {
             if (r.min.defined()) {
-                r.min = mutator->mutate(r.min);
+                r.min = mutator(r.min);
             }
             if (r.extent.defined()) {
-                r.extent = mutator->mutate(r.extent);
+                r.extent = mutator(r.extent);
             }
         }
         for (Split &s : splits) {
             if (s.factor.defined()) {
-                s.factor = mutator->mutate(s.factor);
+                s.factor = mutator(s.factor);
             }
         }
         for (PrefetchDirective &p : prefetches) {
             if (p.offset.defined()) {
-                p.offset = mutator->mutate(p.offset);
+                p.offset = mutator(p.offset);
             }
         }
     }
@@ -521,7 +521,7 @@ void FuncSchedule::accept(IRVisitor *visitor) const {
 
 void FuncSchedule::mutate(IRMutator *mutator) {
     if (contents.defined()) {
-        contents->mutate(mutator);
+        contents->mutate(*mutator);
     }
 }
 
@@ -665,7 +665,7 @@ void StageSchedule::accept(IRVisitor *visitor) const {
 
 void StageSchedule::mutate(IRMutator *mutator) {
     if (contents.defined()) {
-        contents->mutate(mutator);
+        contents->mutate(*mutator);
     }
 }
 

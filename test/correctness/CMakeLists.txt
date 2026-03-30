@@ -80,6 +80,7 @@ tests(GROUPS correctness
       debug_to_file.cpp
       debug_to_file_multiple_outputs.cpp
       debug_to_file_reorder.cpp
+      decompose_vector_shuffle.cpp
       deferred_loop_level.cpp
       deinterleave4.cpp
       device_buffer_copies_with_profile.cpp
@@ -127,7 +128,6 @@ tests(GROUPS correctness
       fuzz_extract_lanes.cpp
       fuzz_float_stores.cpp
       fuzz_schedule.cpp
-      fuzz_simplify.cpp
       gameoflife.cpp
       gather.cpp
       gpu_alloc_group_profiling.cpp
@@ -358,7 +358,6 @@ tests(GROUPS correctness
       vectorized_initialization.cpp
       vectorized_load_from_vectorized_allocation.cpp
       vectorized_reduction_bug.cpp
-      widening_lerp.cpp
       widening_reduction.cpp
       # keep-sorted end
 )

@@ -2065,7 +2065,7 @@ public:
     void set_estimate(const TBase &value) {
         this->check_gio_access();
         user_assert(value == nullptr) << "nullptr is the only valid estimate for Input<PointerType>";
-        Expr e = reinterpret(type_of<T2>(), cast<uint64_t>(0));
+        Expr e = reinterpret(type_of<T2>(), make_zero(UInt(64)));
         for (Parameter &p : this->parameters_) {
             p.set_estimate(e);
         }

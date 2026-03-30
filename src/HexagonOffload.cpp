@@ -693,7 +693,7 @@ public:
 };
 
 Stmt replace_params(const Stmt &s, const std::map<std::string, Parameter> &replacements) {
-    return ReplaceParams(replacements).mutate(s);
+    return ReplaceParams(replacements)(s);
 }
 
 class InjectHexagonRpc : public IRMutator {

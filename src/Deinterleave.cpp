@@ -199,8 +199,7 @@ private:
 Stmt collect_strided_stores(const Stmt &stmt, const std::string &name, int stride, int max_stores,
                             std::vector<Stmt> lets, std::vector<Stmt> &stores) {
 
-    StoreCollector collect(name, stride, max_stores, lets, stores);
-    return collect.mutate(stmt);
+    return StoreCollector(name, stride, max_stores, lets, stores)(stmt);
 }
 
 class ExtractLanes : public IRMutator {
@@ -813,8 +812,7 @@ Expr extract_lanes(const Expr &original_expr, int starting_lane, int lane_stride
              << "(start:" << starting_lane << ", stride:" << lane_stride << ", new_lanes:" << new_lanes << "): "
              << original_expr << " of Type: " << original_expr.type() << "\n";
     Type original_type = original_expr.type();
-    ExtractLanes d(starting_lane, lane_stride, new_lanes, lets, requested_sliced_lets);
-    Expr e = d.mutate(original_expr);
+    Expr e = ExtractLanes(starting_lane, lane_stride, new_lanes, lets, requested_sliced_lets)(original_expr);
     e = common_subexpression_elimination(e);
     debug(3) << "   => " << e << "\n";
     Type final_type = e.type();
@@ -1208,7 +1206,7 @@ public:
 }  // namespace
 
 Stmt rewrite_interleavings(const Stmt &s) {
-    return Interleaver().mutate(s);
+    return Interleaver()(s);
 }
 
 namespace {

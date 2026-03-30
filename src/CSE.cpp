@@ -191,6 +191,7 @@ public:
 };
 
 class RemoveLets : public IRGraphMutator {
+protected:
     using IRGraphMutator::visit;
 
     Scope<Expr> scope;
@@ -223,6 +224,7 @@ class RemoveLets : public IRGraphMutator {
 };
 
 class CSEEveryExprInStmt : public IRMutator {
+protected:
     bool lift_all;
     using IRMutator::visit;
 
@@ -274,7 +276,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
 
     debug(4) << "\n\n\nInput to CSE " << e << "\n";
 
-    e = RemoveLets().mutate(e);
+    e = RemoveLets()(e);
 
     debug(4) << "After removing lets: " << e << "\n";
 
@@ -282,6 +284,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     // the same name as the temporaries we intend to introduce. Find any such
     // Vars so that we know not to use those names.
     class UniqueNameProvider : public IRGraphVisitor {
+    protected:
         using IRGraphVisitor::visit;
 
         const char prefix = 't';  // Annoyingly, this can't be static because this is a local class.
@@ -308,14 +311,17 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
             } while (vars.count(name));
             return name;
         }
-    } namer;
-    e.accept(&namer);
+    };
+    UniqueNameProvider namer;
+    {
+        e.accept(&namer);
+    }
 
     GVN gvn;
-    e = gvn.mutate(e);
+    e = gvn(e);
 
     ComputeUseCounts count_uses(gvn, lift_all);
-    count_uses.include(e);
+    count_uses(e);
 
     debug(4) << "Canonical form without lets " << e << "\n";
 
@@ -336,7 +342,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
 
     // Rebuild the expr to include references to the variables:
     Replacer replacer(replacements);
-    e = replacer.mutate(e);
+    e = replacer(e);
 
     debug(4) << "With variables " << e << "\n";
 
@@ -345,7 +351,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
         // Drop this variable as an acceptable replacement for this expr.
         replacer.erase(value);
         // Use containing lets in the value.
-        e = Let::make(var, replacer.mutate(value), e);
+        e = Let::make(var, replacer(value), e);
     }
 
     debug(4) << "With lets: " << e << "\n";
@@ -354,7 +360,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
 }
 
 Stmt common_subexpression_elimination(const Stmt &s, bool lift_all) {
-    return CSEEveryExprInStmt(lift_all).mutate(s);
+    return CSEEveryExprInStmt(lift_all)(s);
 }
 
 // Testing code.
@@ -393,8 +399,7 @@ public:
 
 void check(const Expr &in, const Expr &correct) {
     Expr result = common_subexpression_elimination(in);
-    NormalizeVarNames n;
-    result = n.mutate(result);
+    result = NormalizeVarNames()(result);
     internal_assert(equal(result, correct))
         << "Incorrect CSE:\n"
         << in

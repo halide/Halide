@@ -133,7 +133,7 @@ public:
 };
 
 Stmt substitute_in(const string &name, const Expr &value, bool calls, bool provides, const Stmt &s) {
-    return SubstituteIn(name, value, calls, provides).mutate(s);
+    return SubstituteIn(name, value, calls, provides)(s);
 }
 
 class AddPredicates : public IRGraphMutator {
@@ -177,7 +177,7 @@ public:
 };
 
 Stmt add_predicates(const Expr &cond, const Function &func, ApplySplitResult::Type type, const Stmt &s) {
-    return AddPredicates(cond, func, type).mutate(s);
+    return AddPredicates(cond, func, type)(s);
 }
 
 // Build a loop nest about a provide node using a schedule
@@ -1004,7 +1004,7 @@ Stmt inject_stmt(Stmt root, Stmt injected, const LoopLevel &level) {
         return Block::make(root, injected);
     }
     InjectStmt injector(injected, level);
-    root = injector.mutate(root);
+    root = injector(root);
     internal_assert(injector.found_level);
     return root;
 }
@@ -1091,7 +1091,7 @@ Stmt substitute_fused_bounds(Stmt s, const map<string, Interval> &replacements) 
         }
     } subs(replacements);
 
-    return subs.mutate(s);
+    return subs(s);
 }
 
 // Add letstmts inside each parent loop that define the corresponding child loop
@@ -1128,7 +1128,7 @@ Stmt add_loop_var_aliases(Stmt s, const map<string, set<string>> &loop_var_alias
         }
     } add_aliases(loop_var_aliases);
 
-    return add_aliases.mutate(s);
+    return add_aliases(s);
 }
 
 // Shift the iteration domain of a loop nest by some factor.
@@ -1161,8 +1161,7 @@ public:
         if (shifts.empty()) {
             return node;
         }
-        ShiftLoopNest visitor(shifts);
-        return visitor.mutate(node);
+        return ShiftLoopNest(shifts)(node);
     }
 };
 
@@ -2612,7 +2611,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
         } else {
             debug(1) << "Injecting realization of " << funcs << "\n";
             InjectFunctionRealization injector(funcs, is_output_list, target, env);
-            s = injector.mutate(s);
+            s = injector(s);
             internal_assert(injector.found_store_level() && injector.found_compute_level() && injector.found_hoist_storage_level());
         }
 
@@ -2625,7 +2624,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
     s = root_loop->body;
 
     // We can also remove all the loops over __outermost now.
-    s = RemoveLoopsOverOutermost().mutate(s);
+    s = RemoveLoopsOverOutermost()(s);
 
     return s;
 }
