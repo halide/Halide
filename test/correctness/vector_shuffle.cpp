@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
         printf("Testing vector size %d...\n", vec_size);
         std::vector<int> indices0, indices1;
 
-        // Test 1: All indices: foreward/backward and combined
+        // Test 1: All indices: forward/backward and combined
         for (int i = 0; i < vec_size; ++i) {
             indices0.push_back(i);                 // forward
             indices1.push_back(vec_size - i - 1);  // backward
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
         if (test_with_indices(target, indices1, indices1)) {
             return 1;
         }
-        printf("  All indices mixed forware / backward...\n");
+        printf("  All indices mixed forward / backward...\n");
         if (test_with_indices(target, indices0, indices1)) {
             return 1;
         }

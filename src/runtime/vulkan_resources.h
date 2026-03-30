@@ -999,7 +999,7 @@ int vk_setup_compute_pipeline(void *user_context,
             } else {
                 // dynamic allocation
                 if (shared_mem_constant_id > 0) {
-                    error(user_context) << "Vulkan: Multiple dynamic shared memory allocations found! Only one is suported!!";
+                    error(user_context) << "Vulkan: Multiple dynamic shared memory allocations found! Only one is supported!!";
                     result = VK_ERROR_TOO_MANY_OBJECTS;
                     break;
                 }
@@ -1866,7 +1866,7 @@ int vk_device_crop_from_offset(void *user_context,
     // get the allocated region for the device
     MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(src->device);
     if (device_region == nullptr) {
-        error(user_context) << "Vulkan: Failed to crop region! Invalide device region!";
+        error(user_context) << "Vulkan: Failed to crop region! Invalid device region!";
         return halide_error_code_device_crop_failed;
     }
 
