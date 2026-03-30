@@ -461,13 +461,20 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         Expr equiv = Cast::make(op->type, op->args[0]);
         equiv.accept(this);
     } else if (op->is_intrinsic(Call::select_mask)) {
+        // Component-wise select using an integer mask (0 = false, -1 = true).
+        // DXC (SM 6.x) rejects ?: for non-scalar conditions; use select() instead.
+        // FXC (SM 5.1) does not have select(); ?: works for vector conditions there.
         internal_assert(op->args.size() == 3);
         string cond = print_expr(op->args[0]);
         string true_val = print_expr(op->args[1]);
         string false_val = print_expr(op->args[2]);
-
+        const int sm = target.get_d3d12compute_capability_lower_bound();
         ostringstream rhs;
-        rhs << "(" << cond << " ? " << true_val << " : " << false_val << ")";
+        if (sm >= 60) {
+            rhs << "select(" << cond << ", " << true_val << ", " << false_val << ")";
+        } else {
+            rhs << "(" << cond << " ? " << true_val << " : " << false_val << ")";
+        }
         print_assignment(op->type, rhs.str());
     } else if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
@@ -1577,7 +1584,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                      << "' exceeds the SM 5.1 limit of 32KB: " << total_shared_bytes << " bytes required.\n";
         }
         Allocation alloc;
-        alloc.type = op->type;
+        alloc.type = smem_type;  // use promoted type (32-bit at SM 5.1, native at SM 6.2+)
         allocations.push(op->name, alloc);
     }
 
@@ -1660,6 +1667,25 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 if (it != renames.end()) {
                     return Variable::make(op->type, it->second,
                                           op->image, op->param, op->reduction_domain);
+                }
+                return IRMutator::visit(op);
+            }
+            Expr visit(const Call *op) override {
+                // image_load/image_store carry the buffer name as args[0] StringImm.
+                if ((op->is_intrinsic(Call::image_load) || op->is_intrinsic(Call::image_store)) &&
+                    !op->args.empty()) {
+                    if (const StringImm *name_imm = op->args[0].as<StringImm>()) {
+                        auto it = renames.find(name_imm->value);
+                        if (it != renames.end()) {
+                            vector<Expr> new_args = op->args;
+                            new_args[0] = StringImm::make(it->second);
+                            for (size_t i = 1; i < new_args.size(); ++i) {
+                                new_args[i] = mutate(new_args[i]);
+                            }
+                            return Call::make(op->type, op->name, new_args, op->call_type,
+                                              op->func, op->value_index, op->image, op->param);
+                        }
+                    }
                 }
                 return IRMutator::visit(op);
             }
