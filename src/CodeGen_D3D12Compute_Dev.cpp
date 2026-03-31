@@ -1237,13 +1237,9 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(T
         return value_expr;
     }
 
-    // SM 6.2+ has native 16-bit types; asint/asuint don't accept int16_t/uint16_t.
-    const int sm = target.get_d3d12compute_capability_lower_bound();
-    if (sm >= 62 && type.bits() == 16) {
-        return value_expr;
-    }
-
-    // HLSL SM 5.1 only supports 32bit integer types; smaller integer types have
+    // Sub-32-bit integer narrowing via shift-up/shift-down.
+    // This works at all SM levels because HLSL shift operators promote to int32,
+    // so asint/asuint always receive a 32-bit argument even with native int16_t.
     // to be placed in 32bit integers, with special attention to signed integers
     // that require propagation of the sign bit (MSB):
     // a) for signed types: shift-up then shift-down
@@ -1299,16 +1295,8 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     internal_assert(!source_type.is_float());
 
     // SM 6.0+ supports native 64-bit integers; use a plain cast.
-    // SM 6.2+ supports native 16-bit types; the sub-32-bit emulation below
-    // uses asint/asuint which do not accept int16_t/uint16_t in DXC.
-    {
-        const int sm = target.get_d3d12compute_capability_lower_bound();
-        if (target_type.bits() == 64 || source_type.bits() == 64) {
-            return print_vanilla_cast(target_type, value_expr);
-        }
-        if (sm >= 62 && (target_type.bits() == 16 || source_type.bits() == 16)) {
-            return print_vanilla_cast(target_type, value_expr);
-        }
+    if (target_type.bits() == 64 || source_type.bits() == 64) {
+        return print_vanilla_cast(target_type, value_expr);
     }
 
     // HLSL (SM 5.1) only supports 32bit integers (signed and unsigned)...
@@ -1730,7 +1718,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             for (const auto &arg : args) {
                 if (!arg.is_buffer) {
                     const string &pname = dxc_renames.at(arg.name);
-                    stream << " " << print_type(arg.type) << " " << print_name(pname) << ";\n";
+                    // The runtime always packs scalar uniforms as 32-bit values;
+                    // declare them as 32-bit here to match the cbuffer layout.
+                    Type cbuf_type = arg.type.with_bits(std::max((int)arg.type.bits(), 32));
+                    stream << " " << print_type(cbuf_type) << " " << print_name(pname) << ";\n";
                 }
             }
             stream << "};\n";
