@@ -479,7 +479,12 @@ struct Wild {
 
 template<int i>
 std::ostream &operator<<(std::ostream &s, const Wild<i> &op) {
-    s << "_" << i;
+    constexpr const char *names[] = {"x", "y", "z", "w", "u", "v"};
+    if constexpr (i < std::size(names)) {
+        s << names[i];
+    } else {
+        s << "_" << i;
+    }
     return s;
 }
 
