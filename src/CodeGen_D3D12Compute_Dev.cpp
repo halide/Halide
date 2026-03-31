@@ -317,6 +317,19 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_storage_type(Type
     return print_type_maybe_storage(type, true, DoNotAppendSpace);
 }
 
+// Return the HLSL bit-reinterpret intrinsic name for a given type.
+// At SM 6.2+, 16-bit types use asfloat16/asint16/asuint16.
+// At SM 5.1, only the 32-bit variants (asfloat/asint/asuint) exist.
+string hlsl_reinterpret_name(Type t) {
+    if (t.is_float()) {
+        return t.bits() == 16 ? "asfloat16" : "asfloat";
+    }
+    if (t.bits() == 16) {
+        return t.is_int() ? "asint16" : "asuint16";
+    }
+    return t.is_int() ? "asint" : "asuint";
+}
+
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type type, const Expr &e) {
     if (type == e.type()) {
         return print_expr(e);
@@ -624,20 +637,6 @@ string hex_literal(T value) {
     hex << "0x" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex
         << value;
     return hex.str();
-}
-
-// Return the HLSL bit-reinterpret intrinsic name for a given type.
-// These names are fixed regardless of SM level (legacy aliases always work).
-string hlsl_reinterpret_name(Type t) {
-    if (t.is_float()) {
-        return t.bits() == 16 ? "asfloat16" : "asfloat";
-    }
-    // 16-bit integer variants (asuint16/asint16) require SM 6.2+, but that is
-    // the same requirement as using float16_t/uint16_t scalars at all.
-    if (t.bits() == 16) {
-        return t.is_int() ? "asint16" : "asuint16";
-    }
-    return t.is_int() ? "asint" : "asuint";
 }
 
 }  // namespace
