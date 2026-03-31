@@ -320,9 +320,14 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_storage_type(Type
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type type, const Expr &e) {
     if (type == e.type()) {
         return print_expr(e);
-    } else {
-        return print_reinterpret_cast(type, print_expr(e));
     }
+    // SM 6.2+ native 16-bit types need asfloat16/asint16/asuint16;
+    // print_reinterpret_cast always emits the 32-bit variant.
+    const int sm = target.get_d3d12compute_capability_lower_bound();
+    if (sm >= 62 && (type.bits() == 16 || e.type().bits() == 16)) {
+        return hlsl_reinterpret_name(type.element_of()) + "(" + print_expr(e) + ")";
+    }
+    return print_reinterpret_cast(type, print_expr(e));
 }
 
 namespace {
@@ -1237,9 +1242,14 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(T
         return value_expr;
     }
 
-    // Sub-32-bit integer narrowing via shift-up/shift-down.
-    // This works at all SM levels because HLSL shift operators promote to int32,
-    // so asint/asuint always receive a 32-bit argument even with native int16_t.
+    // SM 6.2+ native 16-bit types: DXC keeps 16-bit types through shift operators,
+    // and asint/asuint reject int16_t/uint16_t arguments. Skip the emulation.
+    const int sm = target.get_d3d12compute_capability_lower_bound();
+    if (sm >= 62 && type.bits() == 16) {
+        return value_expr;
+    }
+
+    // HLSL SM 5.1 only supports 32bit integer types; smaller integer types have
     // to be placed in 32bit integers, with special attention to signed integers
     // that require propagation of the sign bit (MSB):
     // a) for signed types: shift-up then shift-down
@@ -1255,8 +1265,12 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(T
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(Type type, const string &value_expr) {
+    // Always emit the 32-bit variant (asint/asuint/asfloat).
+    // This is correct for SM 5.1 shift patterns where intermediate values are
+    // always 32-bit, and for print_cast which also operates on 32-bit values.
+    // For SM 6.2+ native 16-bit reinterprets, print_reinterpret() handles it
+    // directly via hlsl_reinterpret_name().
     type = type.element_of();
-
     string cast_expr;
     cast_expr += "as";
     switch (type.code()) {
@@ -1294,8 +1308,12 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     internal_assert(!target_type.is_float());
     internal_assert(!source_type.is_float());
 
-    // SM 6.0+ supports native 64-bit integers; use a plain cast.
-    if (target_type.bits() == 64 || source_type.bits() == 64) {
+    // SM 6.0+ supports native 64-bit integers; SM 6.2+ supports native 16-bit
+    // types. In both cases the sub-32-bit emulation below (which relies on
+    // asint/asuint) is unnecessary and would fail — use a plain cast instead.
+    const int sm = target.get_d3d12compute_capability_lower_bound();
+    if (target_type.bits() == 64 || source_type.bits() == 64 ||
+        (sm >= 62 && (target_type.bits() == 16 || source_type.bits() == 16))) {
         return print_vanilla_cast(target_type, value_expr);
     }
 
@@ -1662,11 +1680,22 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 // image_load/image_store carry the buffer name as args[0] StringImm.
                 if ((op->is_intrinsic(Call::image_load) || op->is_intrinsic(Call::image_store)) &&
                     !op->args.empty()) {
-                    if (const StringImm *name_imm = op->args[0].as<StringImm>()) {
+                    // args[0] is the buffer name as StringImm, possibly
+                    // wrapped in Broadcast for vectorized texture access.
+                    const StringImm *name_imm = op->args[0].as<StringImm>();
+                    if (!name_imm) {
+                        if (const Broadcast *b = op->args[0].as<Broadcast>()) {
+                            name_imm = b->value.as<StringImm>();
+                        }
+                    }
+                    if (name_imm) {
                         auto it = renames.find(name_imm->value);
                         if (it != renames.end()) {
                             vector<Expr> new_args = op->args;
-                            new_args[0] = StringImm::make(it->second);
+                            Expr renamed = StringImm::make(it->second);
+                            new_args[0] = op->args[0].as<Broadcast>()
+                                              ? Broadcast::make(renamed, op->args[0].as<Broadcast>()->lanes)
+                                              : renamed;
                             for (size_t i = 1; i < new_args.size(); ++i) {
                                 new_args[i] = mutate(new_args[i]);
                             }
