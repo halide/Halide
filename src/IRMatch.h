@@ -1981,7 +1981,20 @@ struct VectorReduceOp {
 
 template<typename A, typename B, VectorReduce::Operator reduce_op>
 inline std::ostream &operator<<(std::ostream &s, const VectorReduceOp<A, B, reduce_op> &op) {
-    s << "vector_reduce(" << reduce_op << ", " << op.a << ", " << op.lanes << ")";
+    if constexpr (reduce_op == VectorReduce::Add) {
+        s << "h_add(";
+    } else if constexpr (reduce_op == VectorReduce::Min) {
+        s << "h_min(";
+    } else if constexpr (reduce_op == VectorReduce::Max) {
+        s << "h_max(";
+    } else if constexpr (reduce_op == VectorReduce::And) {
+        s << "h_and(";
+    } else if constexpr (reduce_op == VectorReduce::Or) {
+        s << "h_or(";
+    } else {
+        s << "vector_reduce(" << reduce_op << ", ";
+    }
+    s << op.a << ", " << op.lanes << ")";
     return s;
 }
 
