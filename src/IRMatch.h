@@ -2972,6 +2972,13 @@ struct Rewriter {
 #endif
         if (before.template match<0>(unwrap(instance), state)) {
             build_replacement(after);
+            internal_assert(result.type() == output_type)
+                << "Simplifier changed the type of an expression!\n"
+                << "Expected type: " << Type(output_type) << "\n"
+                << "Actual type: " << result.type() << "\n"
+                << "Result: " << result << "\n"
+                << "Instance: " << instance << "\n"
+                << "Rule: " << before << " -> " << after << "\n";
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
 #endif
