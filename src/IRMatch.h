@@ -704,7 +704,7 @@ struct BinOp {
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state, halide_type_t type_hint) const noexcept {
+    Expr make(MatcherState &state, halide_type_t type_hint) const {
         Expr ea, eb;
         if (std::is_same_v<A, IntLiteral>) {
             eb = b.make(state, type_hint);
