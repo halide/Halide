@@ -878,7 +878,7 @@ private:
             }
 
             // Gather load where index range is bounded within certain value. e.g. LUT
-            // In this case, Halide tries to tranform it into contiguous load + Call::dynamic_shuffle
+            // In this case, Halide tries to transform it into contiguous load + Call::dynamic_shuffle
             // which is lowered to TBL instruction. (see OptimizeShuffles.cpp)
             if (has_sve()) {
                 const int width = base_vec_bits;

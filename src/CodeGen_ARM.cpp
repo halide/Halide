@@ -2430,7 +2430,7 @@ void CodeGen_ARM::visit(const Call *op) {
         Value *src_a = slice_vector(src, 0, natural_lanes);
         Value *src_b = (src_lanes > natural_lanes) ? slice_vector(src, natural_lanes, natural_lanes) : nullptr;
 
-        // Cast index to interger with the same bits as LUT data
+        // Cast index to integer with the same bits as LUT data
         Type index_type = UInt(lut_type.bits()).with_lanes(dst_lanes);
         Expr indices = cast(index_type, op->args[1]);
         Value *val_indices = codegen(indices);
