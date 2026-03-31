@@ -127,6 +127,7 @@ tests(GROUPS correctness
       fused_where_inner_extent_is_zero.cpp
       fuzz_float_stores.cpp
       fuzz_schedule.cpp
+      fuzz_sliding_window.cpp
       gameoflife.cpp
       gather.cpp
       gpu_alloc_group_profiling.cpp
