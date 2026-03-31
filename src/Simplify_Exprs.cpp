@@ -202,13 +202,13 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
             rewrite(h_or(broadcast(x, c0), lanes), broadcast(h_or(x, lanes / c0), c0), lanes % c0 == 0) ||
             rewrite(h_or(broadcast(x, c0), lanes), broadcast(h_or(x, 1), lanes), c0 >= lanes) ||
             // type of arg_lanes is somewhat indeterminate
-            rewrite(h_or(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), lanes),
+            rewrite(h_or(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), 1),
                     x + min(y * (arg_lanes - 1), 0) < z) ||
-            rewrite(h_or(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), lanes),
+            rewrite(h_or(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), 1),
                     x + min(y * (arg_lanes - 1), 0) <= z) ||
-            rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
+            rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
                     x < y + max(z * (arg_lanes - 1), 0)) ||
-            rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
+            rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
                     x <= y + max(z * (arg_lanes - 1), 0)) ||
             false) {
             return mutate(rewrite.result, info);
