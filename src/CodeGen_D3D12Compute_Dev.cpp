@@ -193,7 +193,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
                 oss << "double";
             } else {
                 user_error << "HLSL SM 5.1 does not support 64-bit float. "
-                           << "Use target feature d3d12compute_sm60 or higher.\n";
+                           << "Use target feature hlsl_sm60 or higher.\n";
                 oss << "double";
             }
             break;
@@ -267,7 +267,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
                 }
             } else {
                 user_error << "HLSL SM 5.1 does not support 64-bit integers. "
-                           << "Use target feature d3d12compute_sm60 or higher.\n";
+                           << "Use target feature hlsl_sm60 or higher.\n";
             }
             break;
         default:
@@ -297,7 +297,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
             oss << "vector<" << scalar << ", " << type.lanes() << ">";
         } else {
             user_error << "Unsupported vector width in HLSL: " << type << ". "
-                       << "Vectors wider than 4 elements require d3d12compute_sm69.\n";
+                       << "Vectors wider than 4 elements require hlsl_sm69.\n";
         }
         break;
     }
@@ -948,7 +948,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
             } else if (is_atomic_add) {
                 user_assert(false)
                     << "D3D12Compute: float atomic add requires SM 6.6+ "
-                    << "(add d3d12compute_sm66 to your target features). "
+                    << "(add hlsl_sm66 to your target features). "
                     << "Type was: " << t << "\n";
             } else {
                 user_assert(false)

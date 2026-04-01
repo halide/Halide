@@ -2,9 +2,9 @@
 //
 // Each sub-test is guarded by the minimum SM version it requires.
 // Run with, e.g.:
-//   HL_JIT_TARGET=x86-64-windows-d3d12compute_sm60   (64-bit types)
-//   HL_JIT_TARGET=x86-64-windows-d3d12compute_sm62   (+ 16-bit types)
-//   HL_JIT_TARGET=x86-64-windows-d3d12compute_sm66   (+ float atomics)
+//   HL_JIT_TARGET=x86-64-windows-hlsl_sm60   (64-bit types)
+//   HL_JIT_TARGET=x86-64-windows-hlsl_sm62   (+ 16-bit types)
+//   HL_JIT_TARGET=x86-64-windows-hlsl_sm66   (+ float atomics)
 
 #include "Halide.h"
 #include <cstdio>
@@ -161,14 +161,14 @@ int main(int argc, char **argv) {
 
     if (!t.has_feature(Target::D3D12Compute)) {
         printf("[SKIP] D3D12Compute not in target.\n");
-        printf("       Set HL_JIT_TARGET=x86-64-windows-d3d12compute_sm60 (or _sm62/_sm66)\n");
+        printf("       Set HL_JIT_TARGET=x86-64-windows-hlsl_sm60 (or _sm62/_sm66)\n");
         return 0;
     }
 
     int sm = t.get_d3d12compute_capability_lower_bound();
     if (sm < 60) {
         printf("[SKIP] SM %d: no SM 6.x features to test.\n", sm);
-        printf("       Set HL_JIT_TARGET=x86-64-windows-d3d12compute_sm60 (or _sm62/_sm66)\n");
+        printf("       Set HL_JIT_TARGET=x86-64-windows-hlsl_sm60 (or _sm62/_sm66)\n");
         return 0;
     }
 

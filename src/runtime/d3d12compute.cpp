@@ -2067,7 +2067,7 @@ WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_librar
 
     if (!D3D12LoadDXC(user_context)) {
         TRACEFATAL("D3D12Compute: Unable to load dxcompiler.dll. "
-                   "DXC is required for HLSL Shader Model 6.x (d3d12compute_sm60+).");
+                   "DXC is required for HLSL Shader Model 6.x (hlsl_sm60+).");
         return nullptr;
     }
 
