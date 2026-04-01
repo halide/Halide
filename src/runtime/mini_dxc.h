@@ -170,7 +170,7 @@ struct IDxcBlobEncoding {
 // ---- IDxcBlobUtf8 (extends IDxcBlobEncoding) ----
 #if defined(__cplusplus) && !defined(CINTERFACE)
 
-MIDL_INTERFACE("3DA636C9-BA71-4024-A301-30CBE17E3BF0")
+MIDL_INTERFACE("3DA636C9-BA71-4024-A301-30CBF125305B")
 IDxcBlobUtf8 : public IDxcBlobEncoding {
 public:
     virtual LPCSTR STDMETHODCALLTYPE GetStringPointer() = 0;
@@ -307,7 +307,7 @@ public:
 // because we never call them.
 #if defined(__cplusplus) && !defined(CINTERFACE)
 
-MIDL_INTERFACE("8C210BF3-011F-4422-8D70-6F9ACB374E6F")
+MIDL_INTERFACE("8C210BF3-011F-4422-8D70-6F9ACB8DB617")
 IDxcCompiler : public IUnknown {
 public:
     virtual HRESULT STDMETHODCALLTYPE Compile(
@@ -329,7 +329,7 @@ public:
 // Primary interface for compiling HLSL source to DXIL.
 #if defined(__cplusplus) && !defined(CINTERFACE)
 
-MIDL_INTERFACE("228B4D35-AAB1-4424-A100-30023112E96D")
+MIDL_INTERFACE("228B4687-5A6A-4730-900C-9702B2203F54")
 IDxcCompiler3 : public IUnknown {
 public:
     virtual HRESULT STDMETHODCALLTYPE Compile(
