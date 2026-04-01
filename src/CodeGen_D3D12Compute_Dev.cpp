@@ -1734,8 +1734,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                        << " " << print_name(pname)
                        << " : register(u" << uav_index++ << ");\n";
             } else {
+                // HLSL typed buffers (RWBuffer) only support 32-bit element types
+                // (int/uint/float). The D3D12 runtime sets the correct DXGI format
+                // (e.g. R16_SINT) and the GPU handles 32↔16 bit conversion.
+                Type buf_type = arg.type.with_bits(std::max((int)arg.type.bits(), 32));
                 stream << "RWBuffer"
-                       << "<" << print_type(arg.type) << ">"
+                       << "<" << print_type(buf_type) << ">"
                        << " " << print_name(pname)
                        << " : register(u" << uav_index++ << ");\n";
             }
@@ -1789,8 +1793,11 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                     // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
                     // all buffers as UAVs since there is no way the runtime can know
                     // if a given halide_buffer_t is read-only (SRV) or read-write...
+                    // HLSL typed buffers only support 32-bit element types;
+                    // the DXGI format handles the actual element size.
+                    Type buf_type = arg.type.with_bits(std::max((int)arg.type.bits(), 32));
                     stream << "RWBuffer"
-                           << "<" << print_type(arg.type) << ">"
+                           << "<" << print_type(buf_type) << ">"
                            << " " << print_name(arg.name);
                 }
                 Allocation alloc;
