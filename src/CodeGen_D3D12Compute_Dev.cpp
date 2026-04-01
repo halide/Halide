@@ -1242,10 +1242,12 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(T
     }
 
     // SM 6.2+ native 16-bit types: DXC keeps 16-bit types through shift operators,
-    // and asint/asuint reject int16_t/uint16_t arguments. Skip the emulation.
+    // and asint/asuint reject int16_t/uint16_t arguments. Use an explicit cast
+    // instead of the shift-up/shift-down pattern to ensure correct narrowing
+    // (e.g. when a cbuffer int32_t is assigned to an int16_t variable).
     const int sm = target.get_d3d12compute_capability_lower_bound();
     if (sm >= 62 && type.bits() == 16) {
-        return value_expr;
+        return print_type(type) + "(" + value_expr + ")";
     }
 
     // HLSL SM 5.1 only supports 32bit integer types; smaller integer types have

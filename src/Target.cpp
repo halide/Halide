@@ -776,16 +776,16 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_realizations", Target::TraceRealizations},
     {"trace_pipeline", Target::TracePipeline},
     {"d3d12compute", Target::D3D12Compute},
-    {"hlsl_sm60", Target::D3D12ComputeSM60},
-    {"hlsl_sm61", Target::D3D12ComputeSM61},
-    {"hlsl_sm62", Target::D3D12ComputeSM62},
-    {"hlsl_sm63", Target::D3D12ComputeSM63},
-    {"hlsl_sm64", Target::D3D12ComputeSM64},
-    {"hlsl_sm65", Target::D3D12ComputeSM65},
-    {"hlsl_sm66", Target::D3D12ComputeSM66},
-    {"hlsl_sm67", Target::D3D12ComputeSM67},
-    {"hlsl_sm68", Target::D3D12ComputeSM68},
-    {"hlsl_sm69", Target::D3D12ComputeSM69},
+    {"hlsl_sm60", Target::D3D12Compute_HLSL_60},
+    {"hlsl_sm61", Target::D3D12Compute_HLSL_61},
+    {"hlsl_sm62", Target::D3D12Compute_HLSL_62},
+    {"hlsl_sm63", Target::D3D12Compute_HLSL_63},
+    {"hlsl_sm64", Target::D3D12Compute_HLSL_64},
+    {"hlsl_sm65", Target::D3D12Compute_HLSL_65},
+    {"hlsl_sm66", Target::D3D12Compute_HLSL_66},
+    {"hlsl_sm67", Target::D3D12Compute_HLSL_67},
+    {"hlsl_sm68", Target::D3D12Compute_HLSL_68},
+    {"hlsl_sm69", Target::D3D12Compute_HLSL_69},
     {"strict_float", Target::StrictFloat},
     {"tsan", Target::TSAN},
     {"asan", Target::ASAN},
@@ -1149,16 +1149,16 @@ void Target::validate_features() const {
     // D3D12Compute SM version features require D3D12Compute to also be set.
     if (!has_feature(D3D12Compute)) {
         do_check_bad(*this, {
-                                D3D12ComputeSM60,
-                                D3D12ComputeSM61,
-                                D3D12ComputeSM62,
-                                D3D12ComputeSM63,
-                                D3D12ComputeSM64,
-                                D3D12ComputeSM65,
-                                D3D12ComputeSM66,
-                                D3D12ComputeSM67,
-                                D3D12ComputeSM68,
-                                D3D12ComputeSM69,
+                                D3D12Compute_HLSL_60,
+                                D3D12Compute_HLSL_61,
+                                D3D12Compute_HLSL_62,
+                                D3D12Compute_HLSL_63,
+                                D3D12Compute_HLSL_64,
+                                D3D12Compute_HLSL_65,
+                                D3D12Compute_HLSL_66,
+                                D3D12Compute_HLSL_67,
+                                D3D12Compute_HLSL_68,
+                                D3D12Compute_HLSL_69,
                             });
     }
 }
@@ -1408,34 +1408,34 @@ int Target::get_d3d12compute_capability_lower_bound() const {
     if (!has_feature(Target::D3D12Compute)) {
         return -1;
     }
-    if (has_feature(Target::D3D12ComputeSM60)) {
+    if (has_feature(Target::D3D12Compute_HLSL_60)) {
         return 60;
     }
-    if (has_feature(Target::D3D12ComputeSM61)) {
+    if (has_feature(Target::D3D12Compute_HLSL_61)) {
         return 61;
     }
-    if (has_feature(Target::D3D12ComputeSM62)) {
+    if (has_feature(Target::D3D12Compute_HLSL_62)) {
         return 62;
     }
-    if (has_feature(Target::D3D12ComputeSM63)) {
+    if (has_feature(Target::D3D12Compute_HLSL_63)) {
         return 63;
     }
-    if (has_feature(Target::D3D12ComputeSM64)) {
+    if (has_feature(Target::D3D12Compute_HLSL_64)) {
         return 64;
     }
-    if (has_feature(Target::D3D12ComputeSM65)) {
+    if (has_feature(Target::D3D12Compute_HLSL_65)) {
         return 65;
     }
-    if (has_feature(Target::D3D12ComputeSM66)) {
+    if (has_feature(Target::D3D12Compute_HLSL_66)) {
         return 66;
     }
-    if (has_feature(Target::D3D12ComputeSM67)) {
+    if (has_feature(Target::D3D12Compute_HLSL_67)) {
         return 67;
     }
-    if (has_feature(Target::D3D12ComputeSM68)) {
+    if (has_feature(Target::D3D12Compute_HLSL_68)) {
         return 68;
     }
-    if (has_feature(Target::D3D12ComputeSM69)) {
+    if (has_feature(Target::D3D12Compute_HLSL_69)) {
         return 69;
     }
     return 51;  // default: SM 5.1 (FXC)
@@ -1725,16 +1725,16 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         VulkanV12,
         VulkanV13,
 
-        D3D12ComputeSM60,
-        D3D12ComputeSM61,
-        D3D12ComputeSM62,
-        D3D12ComputeSM63,
-        D3D12ComputeSM64,
-        D3D12ComputeSM65,
-        D3D12ComputeSM66,
-        D3D12ComputeSM67,
-        D3D12ComputeSM68,
-        D3D12ComputeSM69,
+        D3D12Compute_HLSL_60,
+        D3D12Compute_HLSL_61,
+        D3D12Compute_HLSL_62,
+        D3D12Compute_HLSL_63,
+        D3D12Compute_HLSL_64,
+        D3D12Compute_HLSL_65,
+        D3D12Compute_HLSL_66,
+        D3D12Compute_HLSL_67,
+        D3D12Compute_HLSL_68,
+        D3D12Compute_HLSL_69,
 
         ARMv8a,
         ARMv81a,
@@ -1877,34 +1877,34 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // Same trick as CUDA: -1 (unused) becomes large when cast to unsigned, so min gives the true lower bound.
     int d3d12_sm = std::min((unsigned)d3d12_sm_a, (unsigned)d3d12_sm_b);
     if (d3d12_sm < 60) {
-        output.features.reset(D3D12ComputeSM60);
+        output.features.reset(D3D12Compute_HLSL_60);
     }
     if (d3d12_sm < 61) {
-        output.features.reset(D3D12ComputeSM61);
+        output.features.reset(D3D12Compute_HLSL_61);
     }
     if (d3d12_sm < 62) {
-        output.features.reset(D3D12ComputeSM62);
+        output.features.reset(D3D12Compute_HLSL_62);
     }
     if (d3d12_sm < 63) {
-        output.features.reset(D3D12ComputeSM63);
+        output.features.reset(D3D12Compute_HLSL_63);
     }
     if (d3d12_sm < 64) {
-        output.features.reset(D3D12ComputeSM64);
+        output.features.reset(D3D12Compute_HLSL_64);
     }
     if (d3d12_sm < 65) {
-        output.features.reset(D3D12ComputeSM65);
+        output.features.reset(D3D12Compute_HLSL_65);
     }
     if (d3d12_sm < 66) {
-        output.features.reset(D3D12ComputeSM66);
+        output.features.reset(D3D12Compute_HLSL_66);
     }
     if (d3d12_sm < 67) {
-        output.features.reset(D3D12ComputeSM67);
+        output.features.reset(D3D12Compute_HLSL_67);
     }
     if (d3d12_sm < 68) {
-        output.features.reset(D3D12ComputeSM68);
+        output.features.reset(D3D12Compute_HLSL_68);
     }
     if (d3d12_sm < 69) {
-        output.features.reset(D3D12ComputeSM69);
+        output.features.reset(D3D12Compute_HLSL_69);
     }
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
