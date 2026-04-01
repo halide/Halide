@@ -163,7 +163,7 @@ static int test_strict_float64(const Target &t) {
     // Compute in float64 with strict ops, store as float32.
     // Use integer literals (3, 1) so Halide folds them to FloatImm(Float(64))
     // rather than Cast(Float(64), IntImm) nodes, matching the pattern of the
-    // working test_float64 in hlsl_sm6x.cpp.
+    // working test_float64 in d3d12compute_sm6x.cpp.
     f(x) = cast<float>(strict_float(cast<double>(x) * 3 + 1));
     f.gpu_tile(x, xo, xi, 32);
 
