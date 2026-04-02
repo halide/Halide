@@ -276,20 +276,20 @@ fun_2(uint32_t, uint32_t, absd, absd);
         test_##type##_##name(args.data);                        \
     } while (0)
 
-#define call_1_float_types(name, steps, start, end)     \
-    do {                                                \
-        call_1(float, name, steps, start, end);         \
-        if (!skip_double) {                             \
-            call_1(double, name, steps, start, end);    \
-        }                                               \
+#define call_1_float_types(name, steps, start, end)  \
+    do {                                             \
+        call_1(float, name, steps, start, end);      \
+        if (!skip_double) {                          \
+            call_1(double, name, steps, start, end); \
+        }                                            \
     } while (0)
 
-#define call_2_float_types(name, steps, start1, end1, start2, end2)     \
-    do {                                                                \
-        call_2(float, name, steps, start1, end1, start2, end2);         \
-        if (!skip_double) {                                             \
-            call_2(double, name, steps, start1, end1, start2, end2);    \
-        }                                                               \
+#define call_2_float_types(name, steps, start1, end1, start2, end2)  \
+    do {                                                             \
+        call_2(float, name, steps, start1, end1, start2, end2);      \
+        if (!skip_double) {                                          \
+            call_2(double, name, steps, start1, end1, start2, end2); \
+        }                                                            \
     } while (0)
 
 }  // namespace
