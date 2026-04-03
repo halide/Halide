@@ -2026,22 +2026,25 @@ WEAK bool D3D12LoadDXC(void *uc) {
     }
 
     // Build full path: <exe_dir>\dxcompiler.dll
-    char path[512];
-    unsigned long n = GetModuleFileNameA(nullptr, path, (unsigned long)(sizeof(path) - 20));
-    if (n > 0) {
-        // Trim to the directory portion (last backslash).
-        char *last_sep = path;
-        for (char *p = path; *p; p++) {
-            if (*p == '\\' || *p == '/') {
-                last_sep = p;
+    constexpr const char dll_name[] = "dxcompiler.dll";
+    char path[MAX_PATH];
+    static_assert(MAX_PATH > sizeof(dll_name), "path buffer too small");
+
+    DWORD n = GetModuleFileNameA(nullptr, path, sizeof(path));
+    if (n > 0 && n < sizeof(path)) {
+        // Trim to the directory portion (last separator).
+        char *last_sep = strrchr(path, '\\');
+        if (!last_sep) {
+            last_sep = strrchr(path, '/');
+        }
+        if (last_sep) {
+            // Verify the DLL name fits after the separator.
+            size_t dir_len = (size_t)(last_sep + 1 - path);
+            if (dir_len + sizeof(dll_name) <= sizeof(path)) {
+                memcpy(last_sep + 1, dll_name, sizeof(dll_name));
+                lib_dxcompiler = LoadLibraryExA(path, nullptr, kLoadWithAlteredSearchPath);
             }
         }
-        char *dst = last_sep + 1;
-        for (const char *src = "dxcompiler.dll"; *src;) {
-            *dst++ = *src++;
-        }
-        *dst = '\0';
-        lib_dxcompiler = LoadLibraryExA(path, nullptr, kLoadWithAlteredSearchPath);
         if (lib_dxcompiler) {
             TRACEPRINT("D3D12Compute: Loaded DXC from: " << path << "\n");
         }
