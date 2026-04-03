@@ -38,7 +38,7 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/gaussian_blur.generator
 
 $(BIN)/%/filter: filter.cpp $(LIBS) $(BIN)/%/blurs.h
 	@mkdir -p $(@D)
-	$(CXX) -fopenmp $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 test: $(BIN)/$(HL_TARGET)/filter
 	$< ../images/gray.png 10
