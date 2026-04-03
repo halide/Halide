@@ -479,7 +479,12 @@ struct Wild {
 
 template<int i>
 std::ostream &operator<<(std::ostream &s, const Wild<i> &op) {
-    s << "_" << i;
+    constexpr const char *names[] = {"x", "y", "z", "w", "u", "v"};
+    if constexpr (i < std::size(names)) {
+        s << names[i];
+    } else {
+        s << "_" << i;
+    }
     return s;
 }
 
@@ -704,7 +709,7 @@ struct BinOp {
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state, halide_type_t type_hint) const noexcept {
+    Expr make(MatcherState &state, halide_type_t type_hint) const {
         Expr ea, eb;
         if (std::is_same_v<A, IntLiteral>) {
             eb = b.make(state, type_hint);
@@ -1976,7 +1981,20 @@ struct VectorReduceOp {
 
 template<typename A, typename B, VectorReduce::Operator reduce_op>
 inline std::ostream &operator<<(std::ostream &s, const VectorReduceOp<A, B, reduce_op> &op) {
-    s << "vector_reduce(" << reduce_op << ", " << op.a << ", " << op.lanes << ")";
+    if constexpr (reduce_op == VectorReduce::Add) {
+        s << "h_add(";
+    } else if constexpr (reduce_op == VectorReduce::Min) {
+        s << "h_min(";
+    } else if constexpr (reduce_op == VectorReduce::Max) {
+        s << "h_max(";
+    } else if constexpr (reduce_op == VectorReduce::And) {
+        s << "h_and(";
+    } else if constexpr (reduce_op == VectorReduce::Or) {
+        s << "h_or(";
+    } else {
+        s << "vector_reduce(" << reduce_op << ", ";
+    }
+    s << op.a << ", " << op.lanes << ")";
     return s;
 }
 

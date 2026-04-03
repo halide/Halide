@@ -363,12 +363,10 @@ public:
                 int factor = fuzz.ConsumeIntegralInRange(2, 4);
                 int input_lanes = t.lanes() * factor;
                 if (input_lanes <= 32) {
-                    VectorReduce::Operator ops[] = {
-                        VectorReduce::Add,
-                        VectorReduce::Min,
-                        VectorReduce::Max,
-                    };
-                    auto op = fuzz.PickValueInArray(ops);
+                    auto op =
+                        t.is_bool() ?
+                            fuzz.PickValueInArray({VectorReduce::And, VectorReduce::Or}) :
+                            fuzz.PickValueInArray({VectorReduce::Add, VectorReduce::Min, VectorReduce::Max});
                     Expr val = random_expr(t.with_lanes(input_lanes), depth);
                     internal_assert(val.type().lanes() == input_lanes) << val;
                     return VectorReduce::make(op, val, t.lanes());
