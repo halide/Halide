@@ -2035,9 +2035,9 @@ WEAK bool D3D12LoadDXC(void *uc) {
     DWORD n = GetModuleFileNameA(nullptr, path, sizeof(path));
     if (n > 0 && n < sizeof(path)) {
         // Trim to the directory portion (last separator).
-        char *last_sep = strrchr(path, '\\');
+        char *last_sep = (char *)strrchr(path, '\\');
         if (!last_sep) {
-            last_sep = strrchr(path, '/');
+            last_sep = (char *)strrchr(path, '/');
         }
         if (last_sep) {
             // Verify the DLL name fits after the separator.
@@ -3523,7 +3523,10 @@ WEAK int halide_d3d12compute_image_copy_to_host(void *user_context, halide_buffe
     wait_until_completed(frame);
 
     // Decrement the ref_count that suballocate() incremented — the GPU work is done.
-    atomic_sub_fetch_sequentially_consistent(&readback.ref_count, 1);
+    {
+        using namespace Halide::Runtime::Internal::Synchronization;
+        atomic_sub_fetch_sequentially_consistent(&readback.ref_count, 1);
+    }
 
     // Unpack row-by-row from the padded staging buffer to the dense host buffer.
     void *staging_data = buffer_contents(&readback);
