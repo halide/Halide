@@ -1,7 +1,6 @@
 #include "PurifyIndexMath.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -26,7 +25,7 @@ class PurifyIndexMath : public IRMutator {
 }  // namespace
 
 Expr purify_index_math(const Expr &s) {
-    return PurifyIndexMath().mutate(s);
+    return PurifyIndexMath()(s);
 }
 
 }  // namespace Internal

@@ -125,12 +125,12 @@ public:
 Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Function> &env) {
     // Temporarily wrap the produce nodes for the output functions in
     // realize nodes so that we know when to write the debug outputs.
-    s = AddDummyRealizations(outputs).mutate(s);
+    s = AddDummyRealizations(outputs)(s);
 
-    s = DebugToFile(env).mutate(s);
+    s = DebugToFile(env)(s);
 
     // Remove the realize node we wrapped around the output
-    s = RemoveDummyRealizations(outputs).mutate(s);
+    s = RemoveDummyRealizations(outputs)(s);
 
     return s;
 }

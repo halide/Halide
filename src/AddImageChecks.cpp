@@ -103,6 +103,7 @@ class TrimStmtToPartsThatAccessBuffers : public IRMutator {
     bool touches_buffer = false;
     const map<string, FindBuffers::Result> &buffers;
 
+protected:
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
@@ -185,10 +186,10 @@ Stmt add_image_checks_inner(Stmt s,
 
     // Add the input buffer(s) and annotate which output buffers are
     // used on host.
-    s.accept(&finder);
+    finder(s);
 
     Scope<Interval> empty_scope;
-    Stmt sub_stmt = TrimStmtToPartsThatAccessBuffers(bufs).mutate(s);
+    Stmt sub_stmt = TrimStmtToPartsThatAccessBuffers(bufs)(s);
     map<string, Box> boxes = boxes_touched(sub_stmt, empty_scope, fb);
 
     // Now iterate through all the buffers, creating a list of lets
@@ -225,7 +226,7 @@ Stmt add_image_checks_inner(Stmt s,
             string extent_name = concat_strings(name, ".extent.", i);
             string stride_name = concat_strings(name, ".stride.", i);
             replace_with_required[min_name] = Variable::make(Int(32), min_name + ".required");
-            replace_with_required[extent_name] = simplify(Variable::make(Int(32), extent_name + ".required"));
+            replace_with_required[extent_name] = Variable::make(Int(32), extent_name + ".required");
             replace_with_required[stride_name] = Variable::make(Int(32), stride_name + ".required");
         }
     }
@@ -737,6 +738,7 @@ Stmt add_image_checks(const Stmt &s,
     // Checks for images go at the marker deposited by computation
     // bounds inference.
     class Injector : public IRMutator {
+    protected:
         using IRMutator::visit;
 
         Expr visit(const Variable *op) override {
@@ -794,9 +796,10 @@ Stmt add_image_checks(const Stmt &s,
                  bool will_inject_host_copies)
             : outputs(outputs), t(t), order(order), env(env), fb(fb), will_inject_host_copies(will_inject_host_copies) {
         }
-    } injector(outputs, t, order, env, fb, will_inject_host_copies);
+    };
+    Injector injector(outputs, t, order, env, fb, will_inject_host_copies);
 
-    return injector.mutate(s);
+    return injector(s);
 }
 
 }  // namespace Internal
