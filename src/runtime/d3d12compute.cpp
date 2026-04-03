@@ -47,6 +47,7 @@
 #include "device_interface.h"
 #include "gpu_context_common.h"
 #include "printer.h"
+#include "runtime_atomics.h"
 #include "scoped_mutex_lock.h"
 
 #if !defined(INITGUID)
@@ -2027,8 +2028,9 @@ WEAK bool D3D12LoadDXC(void *uc) {
 
     // Build full path: <exe_dir>\dxcompiler.dll
     constexpr const char dll_name[] = "dxcompiler.dll";
-    char path[MAX_PATH];
-    static_assert(MAX_PATH > sizeof(dll_name), "path buffer too small");
+    constexpr size_t kMaxPath = 4096;
+    char path[kMaxPath];
+    static_assert(kMaxPath > sizeof(dll_name), "path buffer too small");
 
     DWORD n = GetModuleFileNameA(nullptr, path, sizeof(path));
     if (n > 0 && n < sizeof(path)) {
