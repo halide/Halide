@@ -1941,27 +1941,43 @@ namespace {
 // Parse the SM version from a Halide-emitted HLSL source header.
 // Returns e.g. 60 for "//HALIDE_D3D12_SM 60\n", or 0 if not present.
 int parse_hlsl_sm_version(const char *source) {
-    const char prefix[] = "//HALIDE_D3D12_SM ";
-    const int prefix_len = 18;  // length of "//HALIDE_D3D12_SM "
-    for (int i = 0; i < prefix_len; ++i) {
-        if (source[i] != prefix[i]) {
+    constexpr const char prefix[] = "//HALIDE_D3D12_SM ";
+    constexpr size_t prefix_len = sizeof(prefix) - 1;  // exclude null terminator
+
+    if (strncmp(source, prefix, prefix_len) != 0) {
+        return 0;
+    }
+
+    const char *p = source + prefix_len;
+    if (*p < '0' || *p > '9') {
+        return 0;  // no digits after prefix
+    }
+
+    int sm = 0;
+    for (; *p >= '0' && *p <= '9'; ++p) {
+        int digit = *p - '0';
+        if (__builtin_mul_overflow(sm, 10, &sm) ||
+            __builtin_add_overflow(sm, digit, &sm)) {
             return 0;
         }
-    }
-    int sm = 0;
-    for (int i = prefix_len; source[i] >= '0' && source[i] <= '9'; ++i) {
-        sm = sm * 10 + (source[i] - '0');
     }
     return sm;
 }
 
 // Copy ASCII/narrow string to wide char buffer (safe for HLSL identifiers and integers).
-void narrow_to_wide(const char *src, WCHAR *dst, int max_len) {
+// Returns the number of characters written, excluding the null terminator.
+// A return value >= max_len indicates truncation.
+int narrow_to_wide(const char *src, WCHAR *dst, int max_len) {
+    if (max_len <= 0) {
+        return 0;
+    }
     int i = 0;
     for (; src[i] && i < max_len - 1; ++i) {
         dst[i] = (WCHAR)(unsigned char)src[i];
     }
     dst[i] = 0;
+    // If we stopped because of the limit rather than a null, signal truncation.
+    return src[i] ? max_len : i;
 }
 
 // Append an unsigned integer to a wide char buffer (returns pointer past the last written char).
@@ -1969,18 +1985,21 @@ WCHAR *append_uint_wide(WCHAR *dst, WCHAR *end, unsigned int val) {
     if (dst >= end) {
         return dst;
     }
-    if (val == 0) {
-        *dst++ = (WCHAR)'0';
-        return dst;
-    }
-    WCHAR tmp[12];
-    int n = 0;
-    while (val > 0 && n < 12) {
-        tmp[n++] = (WCHAR)('0' + val % 10);
+    WCHAR *start = dst;
+    // Write digits in reverse order.
+    do {
+        if (dst >= end) {
+            // Truncated mid-number; caller gets a partial result.
+            break;
+        }
+        *dst++ = (WCHAR)('0' + val % 10);
         val /= 10;
-    }
-    for (int i = n - 1; i >= 0 && dst < end; --i) {
-        *dst++ = tmp[i];
+    } while (val > 0);
+    // Reverse in place.
+    for (WCHAR *lo = start, *hi = dst - 1; lo < hi; ++lo, --hi) {
+        WCHAR tmp = *lo;
+        *lo = *hi;
+        *hi = tmp;
     }
     return dst;
 }
