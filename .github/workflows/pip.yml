@@ -70,7 +70,7 @@ jobs:
       #- uses: mxschmitt/action-tmate@v3
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.4.0
+        uses: pypa/cibuildwheel@v3.4.1
         env:
           CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
           CIBW_SKIP: "cp3{5,6,7,8,9}* cp314t-*"
