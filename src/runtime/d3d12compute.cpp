@@ -2035,9 +2035,13 @@ WEAK bool D3D12LoadDXC(void *uc) {
     DWORD n = GetModuleFileNameA(nullptr, path, sizeof(path));
     if (n > 0 && n < sizeof(path)) {
         // Trim to the directory portion (last separator).
-        char *last_sep = (char *)strrchr(path, '\\');
-        if (!last_sep) {
-            last_sep = (char *)strrchr(path, '/');
+        // Use manual scan since strrchr is not available in the runtime.
+        char *last_sep = nullptr;
+        for (char *p = path + n - 1; p >= path; --p) {
+            if (*p == '\\' || *p == '/') {
+                last_sep = p;
+                break;
+            }
         }
         if (last_sep) {
             // Verify the DLL name fits after the separator.
