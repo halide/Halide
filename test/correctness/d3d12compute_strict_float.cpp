@@ -13,17 +13,19 @@
 
 using namespace Halide;
 
-static uint32_t f32_bits(float f) {
-    uint32_t u;
-    memcpy(&u, &f, sizeof(u));
-    return u;
+namespace {
+    uint32_t f32_bits(float f) {
+        uint32_t u;
+        memcpy(&u, &f, sizeof(u));
+        return u;
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Correctness: each strict_float op produces the expected value.
 // ---------------------------------------------------------------------------
 
-static int test_strict_arithmetic(const Target &t) {
+int test_strict_arithmetic(const Target &t) {
     Var x("x"), xo("xo"), xi("xi");
 
     // strict_float(a + b), strict_float(a - b), strict_float(a * b), strict_float(a / b)
@@ -126,8 +128,8 @@ static int test_fma_separation(const Target &t) {
 
     bool saw_difference = false;
     for (int i = 0; i < 1024; i++) {
-        uint32_t bits_fma = f32_bits(out_fma(i));
-        uint32_t bits_strict = f32_bits(out_strict(i));
+        uint32_t bits_fma = ::f32_bits(out_fma(i));
+        uint32_t bits_strict = ::f32_bits(out_strict(i));
         if (bits_fma == bits_strict) {
             continue;
         }

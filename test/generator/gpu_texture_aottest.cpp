@@ -32,15 +32,13 @@ int main(int argc, char **argv) {
 #endif
 
 #if defined(TEST_OPENCL)
-    {
-        const auto *interface = halide_opencl_device_interface();
-        assert(interface->compute_capability != nullptr);
-        int major, minor;
-        int err = interface->compute_capability(nullptr, &major, &minor);
-        if (err != 0 || (major == 1 && minor < 2)) {
-            printf("[SKIP] OpenCL %d.%d is less than required 1.2.\n", major, minor);
-            return 0;
-        }
+    const auto *interface = halide_opencl_device_interface();
+    assert(interface->compute_capability != nullptr);
+    int major, minor;
+    int err = interface->compute_capability(nullptr, &major, &minor);
+    if (err != 0 || (major == 1 && minor < 2)) {
+        printf("[SKIP] OpenCL %d.%d is less than required 1.2.\n", major, minor);
+        return 0;
     }
 #endif
 
