@@ -990,6 +990,13 @@ struct Shuffle : public ExprNode<Shuffle> {
      * interleaving of vectors of the same length. */
     static Expr make_interleave(const std::vector<Expr> &vectors);
 
+    /** Convenience constructor for making a shuffle representing an in-place
+     * transpose of a row-major matrix with the given number of columns. The
+     * output, interpreted as a row-major matrix, therefore has than number of
+     * rows. For example, to turn the vector RGBRGBRGBRGB into RRRRGGGGBBBB cols
+     * would be 3, and to do the reverse cols would be 4. */
+    static Expr make_transpose(Expr e, int cols);
+
     /** Convenience constructor for making a shuffle representing a
      * concatenation of the vectors. */
     static Expr make_concat(const std::vector<Expr> &vectors);
@@ -1009,6 +1016,13 @@ struct Shuffle : public ExprNode<Shuffle> {
     /** Check if this shuffle is an interleaving of the vector
      * arguments. */
     bool is_interleave() const;
+
+    /** Check if this shuffle is an in-place transpose of a single vector. The
+     * factor is the number of columns of the source matrix, or equivalently,
+     * the number of rows of the destination matrix, interpreting a vector as a
+     * matrix stored row-major. */
+    bool is_transpose() const;
+    int transpose_factor() const;
 
     /** Check if this shuffle can be represented as a repeating pattern that
      * repeats the same shuffle of the single input vector some number of times.
