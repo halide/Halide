@@ -6,276 +6,241 @@
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
 
-#include "box_blur.h"
-#include "box_blur_incremental.h"
-#include "box_blur_log.h"
-#include "gaussian_blur.h"
-#include "gaussian_blur_direct.h"
+// These lists should be kept in sync with the build, which must build at least
+// what's listed here.
+#define FOR_ALL_UPSAMPLE_ORDERS(X) X(2) X(3) X(4)
+#define FOR_ALL_DOWNSAMPLE_ORDERS(A, X) X(A, 1) X(A, 2) X(A, 3)
+#define FOR_ALL_FACTORS(A, B, X) X(A, B, 2) X(A, B, 4) X(A, B, 8) X(A, B, 16)
 
-#include "box_blur_pyramid_f32.h"
-#include "box_blur_pyramid_u16.h"
-#include "box_blur_pyramid_u8.h"
+#include "blurs.h"
 
 #include "halide_benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Tools;
+using namespace Halide::Runtime;
+
+// An openmp-based do-par-for, for comparing the Halide thread pool to a simple
+// static partition with openmp.
+int static_do_par_for(void *user_context, halide_task_t f, int min, int extent, uint8_t *closure) {
+#pragma omp parallel for schedule(static)
+    for (int i = min; i < min + extent; i++) {
+        f(user_context, i, closure);
+    }
+    return 0;
+}
+
+double compute_PSNR(const Buffer<float> &a, const Buffer<float> &b) {
+    double err = 0;
+    uint64_t count = 0;
+    for (int y = 0; y < a.height(); y++) {
+        double row_err = 0;
+        for (int x = 0; x < a.width(); x++) {
+            double delta = a(x, y) - b(x, y);
+            row_err += delta * delta;
+            count++;
+        }
+        err += row_err;
+    }
+    return -10.0 * log10((double)err / count);
+}
 
 int main(int argc, char **argv) {
     if (argc != 3) {
-        printf("Usage: %s in out\n", argv[0]);
+        printf("Usage: %s input.png <sigma>\n", argv[0]);
         return 1;
     }
 
-    Halide::Runtime::Buffer<uint8_t> input = load_and_convert_image(argv[1]);
+    Buffer<float> input = load_and_convert_image(argv[1]);
+    const char *sigma_str = argv[2];
+    float sigma = std::atof(sigma_str);
 
-    Halide::Runtime::Buffer<uint8_t> output8(input.width(), input.height());
-    output8.fill(0);
-    Halide::Runtime::Buffer<uint16_t> output16(input.width(), input.height());
-    output16.fill(0);
-    Halide::Runtime::Buffer<float> output32(input.width(), input.height());
-    output32.fill(0);
+    Buffer<float> memcpy_output(input.width(), input.height());
+    Buffer<float> direct_output(input.width(), input.height());
+    Buffer<float> reference_output(input.width(), input.height());
+    Buffer<float> resample_output(input.width(), input.height());
+    direct_output.fill(0);
+    resample_output.fill(0);
 
-    const bool save_output = output8.number_of_elements() <= 1024 * 1024;
-
-    const int max_radius = 2048;
-    Halide::Runtime::Buffer<uint8_t> padded8(input.width() + max_radius * 2,
-                                             input.height() + max_radius * 2);
-    padded8.fill(0);
-    padded8.set_min(-max_radius, -max_radius);
-    padded8.cropped(0, 0, input.width()).cropped(1, 0, input.height()).copy_from(input);
-
-    auto padded16 = Halide::Runtime::Buffer<uint16_t>::make_with_shape_of(padded8);
-    padded16.for_each_value([](uint16_t &x, uint8_t y) { x = y * 256; }, padded8);
-
-    auto padded32 = Halide::Runtime::Buffer<float>::make_with_shape_of(padded8);
-    padded32.for_each_value([](float &x, uint8_t y) { x = y / 255.0f; }, padded8);
-
-    /*
-    for (int r = 1; r < 20; r *= 2) {
-        double best_manual = benchmark([&]() {
-            gaussian_blur_direct(input, r, output);
-            output.device_sync();
-        });
-        printf("Gaussian blur (direct) (%d): %gms\n", r, best_manual * 1e3);
+    // Enable to use openmp instead of Halide's built-in threadpool
+    if (false) {
+        halide_set_custom_do_par_for(static_do_par_for);
     }
 
-    for (int r = 1; r <= 1024; r *= 2) {
-        double best_manual = benchmark([&]() {
-            gaussian_blur(input, r, output);
-            output.device_sync();
-        });
-        printf("Gaussian blur (recursive) (%d): %gms\n", r, best_manual * 1e3);
-        convert_and_save_image(output, "out_" + std::to_string(r) + ".png");
-    }
-    */
-
-    /*
-    for (int r = 1; r <= 512; r *= 2) {
-        // Assume a padded input
-        Halide::Runtime::Buffer<uint8_t> scratch(nullptr, 0, 0);
-        box_blur(input, r, output.width(), output.height(), scratch, output);
-        scratch.allocate();
-        printf("%d kilobytes of scratch\n", (int)(scratch.size_in_bytes() / 1024));
-
-        double best_manual = benchmark(3, 3, [&]() {
-            box_blur(padded, r, output.width(), output.height(), scratch, output);
-            output.device_sync();
-        });
-        printf("Box blur (recursive) (%d): %gms\n", r, best_manual * 1e3);
-    }
-    */
-
-    auto throughput = [&](int r, double seconds) {
-        return (output8.width()) * (output8.height()) / (1000000 * seconds);
+    // Convert from seconds to rounded microseconds
+    auto to_us = [](double seconds) {
+        return (int)std::round(seconds * 1e6);
     };
 
-    std::vector<int> radii = {1, 2, 3};
-    for (int r = 1; r < 256; r *= 2) {
-        radii.push_back(4 * r);
-        radii.push_back(5 * r);
-        radii.push_back(6 * r);
-        radii.push_back(7 * r);
+    std::map<std::tuple<int, int, int>, decltype(&gaussian_blur_direct)> fns = {
+#define REG(U, D, F) {{U, D, F}, &gaussian_blur_##U##_##D##_##F},
+#define REG1(U, D) FOR_ALL_FACTORS(U, D, REG)
+#define REG2(U) FOR_ALL_DOWNSAMPLE_ORDERS(U, REG1)
+        FOR_ALL_UPSAMPLE_ORDERS(REG2)};
+
+    // Benchmark memcpy run using the same thread pool, to get a sense of where
+    // the memory bandwidth limit is.
+    double memcpy_time = benchmark([&]() {
+        int strip = (input.height() + 31) / 32;
+        auto task = [&](int y) {
+            int rows = std::min(strip, input.height() - y * strip);
+            std::memcpy(&memcpy_output(0, y * strip),
+                        &input(0, y * strip),
+                        input.width() * rows * sizeof(float));
+        };
+        auto trampoline = [](void *user_context, int y, uint8_t *closure) {
+            decltype(task) *t = (decltype(task) *)closure;
+            (*t)(y);
+            return 0;
+        };
+        halide_do_par_for(nullptr, trampoline, 0,
+                          (input.height() + strip - 1) / strip,
+                          (uint8_t *)(&task));
+    });
+    printf("Memcpy: %d us\n", to_us(memcpy_time));
+
+    struct Result {
+        std::string name;
+        double time;
+        double PSNR;
+    };
+
+    Buffer<float> impulse(2048, 16), impulse_response(2048, 16);
+    impulse.fill(0.f);
+    for (int i = 0; i < 16; i++) {
+        impulse(1024 - i, i) = 1.f;
     }
 
-    // radii.clear();
-    // radii.push_back(100);
+    // Go out to 8 * sigma on each side for ground truth.
+    gaussian_blur_direct(input, sigma, 8, reference_output);
 
-    for (int r : radii) {
-        {
-            float t8 = 0, t16 = 0, t32 = 0;
-
-            // Compute the output in tiles in x. We do the tiling outside
-            // of Halide because inside Halide we're going to do a
-            // sum-scan over x, and the indexing gets complicated.
-            const int xtile = output8.width() / 4096 + 1;
-
-            // The output width may not be a multiple of the number of
-            // tiles. If we overlap the tiles slightly, then to reach the
-            // end of an output of width w exactly we must have:
-            //
-            // w == tile_stride * (xtile - 1) + tile_width
-            //
-            // where tile_width >= tile_stride
-            //
-            // This is satisfied by:
-            const int tile_stride = output8.width() / xtile;
-            const int tile_width = output8.width() - tile_stride * (xtile - 1);
-
-            assert(output8.width() == tile_stride * (xtile - 1) + tile_width);
-
-            const int strip_height = 512;
-
-            auto tile = [&](halide_buffer_t *buf) {
-                buf->dimensions++;
-                buf->dim[2] = buf->dim[1];
-                buf->dim[0].extent = tile_width;
-                buf->dim[1].min = 0;
-                buf->dim[1].extent = xtile;
-                buf->dim[1].stride = tile_stride;
-            };
-            if (1) {
-                auto translated = padded8;
-                translated.set_min(r - max_radius, r - max_radius);
-                translated.crop(0, 0, output8.width() + 2 * r + 16);
-                translated.crop(1, 0, output8.height() + 2 * r);
-                auto out_window = output8;
-                tile(out_window);
-                double best_manual = benchmark(3, 3, [&]() {
-                    for (int y = 0; y < output8.height(); y += strip_height) {
-                        auto iw = translated;
-                        iw.translate(1, -y);
-                        iw.crop(1, 0, strip_height + 2 * r);
-                        auto ow = out_window;
-                        ow.translate(2, -y);
-                        ow.crop(2, 0, strip_height);
-                        box_blur_pyramid_u8(iw, 2 * r + 1, tile_width, tile_stride, ow);
-                    }
-                });
-                t8 = throughput(r, best_manual);
-                if (save_output) {
-                    convert_and_save_image(output8, "out_8_pyramid_" + std::to_string(r) + ".png");
-                }
-            }
-            if (1) {
-                auto translated = padded16;
-                translated.set_min(r - max_radius, r - max_radius);
-                translated.crop(0, 0, output8.width() + 2 * r + 16);
-                translated.crop(1, 0, output8.height() + 2 * r);
-                auto out_window = output16;
-                tile(out_window);
-                double best_manual = benchmark(3, 3, [&]() {
-                    for (int y = 0; y < output8.height(); y += strip_height) {
-                        auto iw = translated;
-                        iw.translate(1, -y);
-                        iw.crop(1, 0, strip_height + 2 * r);
-                        auto ow = out_window;
-                        ow.translate(2, -y);
-                        ow.crop(2, 0, strip_height);
-                        box_blur_pyramid_u16(iw, 2 * r + 1, tile_width, tile_stride, ow);
-                    }
-                });
-                t16 = throughput(r, best_manual);
-                if (save_output) {
-                    convert_and_save_image(output16, "out_16_pyramid_" + std::to_string(r) + ".png");
-                }
-            }
-            if (1) {
-                auto translated = padded32;
-                translated.set_min(r - max_radius, r - max_radius);
-                translated.crop(0, 0, output8.width() + 2 * r + 16);
-                translated.crop(1, 0, output8.height() + 2 * r);
-                auto out_window = output32;
-                tile(out_window);
-                double best_manual = benchmark(3, 3, [&]() {
-                    for (int y = 0; y < output8.height(); y += strip_height) {
-                        auto iw = translated;
-                        iw.translate(1, -y);
-                        iw.crop(1, 0, strip_height + 2 * r);
-                        auto ow = out_window;
-                        ow.translate(2, -y);
-                        ow.crop(2, 0, strip_height);
-                        box_blur_pyramid_f32(iw, 2 * r + 1, tile_width, tile_stride, ow);
-                    }
-                });
-                t32 = throughput(r, best_manual);
-                if (save_output) {
-                    convert_and_save_image(output32, "out_32_pyramid_" + std::to_string(r) + ".png");
-                }
-            }
-
-            printf("Box blur (pyramid) (%4d): %6.1f %6.1f %6.1f\n", 2 * r + 1, t8, t16, t32);
-        }
-        {
-            const int N = 8;
-
-            const int strip_height = 512;
-
-            double best_manual = benchmark(3, 3, [&]() {
-                for (int yo = 0; yo < output8.height(); yo += strip_height) {
-
-                    int h = std::min(strip_height, output8.height() - yo);
-
-                    const int slices = 16;  // set this to num_cores
-                    const int slice_size = (h + slices - 1) / slices;
-
-                    struct Task {
-                        int yo, N, r, h, slice_size;
-                        Halide::Runtime::Buffer<uint8_t> &padded;
-                        Halide::Runtime::Buffer<uint8_t> &output;
-                    } task{yo, N, r, h, slice_size, padded8, output8};
-
-                    auto one_strip = [](void *ucon, int s, uint8_t *closure) {
-                        Task *t = (Task *)closure;
-                        const int w = t->output.width();
-                        const int r = t->r;
-                        const int yo = t->yo;
-                        const int h = t->h;
-                        Halide::Runtime::Buffer<uint32_t> scratch1(w + 2 * r + 1);
-                        Halide::Runtime::Buffer<uint32_t> scratch2(w + 2 * r + 1);
-                        scratch1.set_min(-1);
-                        scratch2.set_min(-1);
-                        int y_start = yo + std::min(s * t->slice_size, h - t->slice_size);
-                        int y_end = y_start + t->slice_size;
-                        bool valid = false;
-                        for (int y = y_start; y < y_end; y++) {
-                            Halide::Runtime::Buffer<uint8_t> in_slice =
-                                t->padded
-                                    .cropped(0, -r, w + 2 * r + 16)
-                                    .cropped(1, y - r - 1, 2 * r + 2);
-                            Halide::Runtime::Buffer<uint8_t> out_slice =
-                                t->output.sliced(1, y);
-                            in_slice.set_min(0, -1);
-                            out_slice.set_min(0);
-                            box_blur_incremental(in_slice, scratch1, valid, r, w, scratch2, out_slice);
-                            out_slice.device_sync();
-                            valid = true;
-                            std::swap(scratch1, scratch2);
-                        }
-                        return 0;
-                    };
-
-                    halide_do_par_for(nullptr, one_strip, 0, slices, (uint8_t *)&task);
-                }
-            });
-            printf("Box blur (incremental) (%d): %g\n", 2 * r + 1, throughput(r, best_manual));
-            if (save_output) {
-                convert_and_save_image(output8, "out_" + std::to_string(r) + ".png");
-            }
-        }
+    // Ground truth impulse response
+    for (int i = 0; i < impulse.height(); i++) {
+        gaussian_blur_direct(impulse.cropped(1, i, 1),
+                             sigma, 8,
+                             impulse_response.cropped(1, i, 1));
+        std::string filename = ("impulse_response_" +
+                                std::to_string(sigma) + ".tiff");
+        auto sheared = impulse_response;
+        sheared.raw_buffer()->dim[1].stride--;
+        sheared.crop(0, 1024 - 4 * sigma, 8 * sigma);
+        save_image(sheared, filename.c_str());
     }
 
-    /*
-    for (int r = 1; r < 256; r *= 2) {
-
-        double best_manual = benchmark(3, 3, [&]() {
-            box_blur_log(input, r, output);
-            output.device_sync();
+    std::vector<Result> results;
+    for (int trunc : {3, 4, 5}) {
+        double direct_time = benchmark([&]() {
+            direct_output.device_sync();
+            gaussian_blur_direct(input, sigma, trunc, direct_output);
         });
-        printf("Box blur (sparse/dense) (%d): %gms\n", r, best_manual * 1e3);
+        double PSNR = compute_PSNR(direct_output, reference_output);
+        printf("Direct (sigma=%s, radius=%d): %d us %g db\n", sigma_str,
+               (int)std::ceilf(trunc * sigma), to_us(direct_time), PSNR);
+        results.emplace_back(Result{"Direct " + std::to_string(trunc) + " sigma", direct_time, PSNR});
     }
 
-    printf("Success!\n");
-    */
+    for (const auto &[config, fn] : fns) {
+        const int up_order = std::get<0>(config);
+        const int down_order = std::get<1>(config);
+        const int factor = std::get<2>(config);
+
+        // The variance of one of our resampling filters
+        auto var = [=](int o) {
+            // Our resampling filters are o boxes of size f, and o - 1 [1 1]
+            // filters to pad out to o * f.
+            return o * ((float)factor * factor - 1) / 12 + (o - 1) / 4.0f;
+        };
+        double variance_from_resampling = var(up_order) + var(down_order);
+        if (variance_from_resampling >= sigma * sigma) {
+            // It's resampling by too much to hit the desired blur
+            continue;
+        }
+
+        // If we're profiling, we'd prefer to profile as we go,
+        // rather than once at the end.
+        halide_profiler_reset();
+
+        double resample_time = benchmark([&]() {
+            fns[{up_order, down_order, factor}](input, sigma, 5, resample_output);
+            resample_output.device_sync();
+        });
+
+        // Enable to inspect output
+        if (false) {
+            std::string filename = "gaussian_blur_" + std::to_string(sigma) + ".png";
+            convert_and_save_image(resample_output, filename.c_str());
+        }
+
+        double PSNR = compute_PSNR(resample_output, reference_output);
+
+        // Enable to dump impulse responses for inspection
+        if (false) {
+            for (int i = 0; i < impulse.height(); i++) {
+                auto impulse_slice = impulse.cropped(1, i, 1);
+                auto response_slice = impulse_response.cropped(1, i, 1);
+                // Broadcast it vertically by enough to satisfy the schedule's requirements
+                impulse_slice.raw_buffer()->dim[1].min = 0;
+                impulse_slice.raw_buffer()->dim[1].stride = 0;
+                impulse_slice.raw_buffer()->dim[1].extent = 16;
+                response_slice.raw_buffer()->dim[1].min = 0;
+                response_slice.raw_buffer()->dim[1].stride = 0;
+                response_slice.raw_buffer()->dim[1].extent = 16;
+                fns[{up_order, down_order, factor}](impulse_slice,
+                                                    sigma, 5,
+                                                    response_slice);
+            }
+            std::string filename = ("impulse_response_" +
+                                    std::to_string(sigma) + "_" +
+                                    std::to_string(up_order) + "_" +
+                                    std::to_string(down_order) + "_" +
+                                    std::to_string(factor) + ".tiff");
+            auto sheared = impulse_response;
+            sheared.raw_buffer()->dim[1].stride--;
+            sheared.crop(0, 1024 - 4 * sigma, 8 * sigma);
+            save_image(sheared, filename.c_str());
+        }
+
+        printf("Approx (sigma=%s up_order=%d down_order=%d factor=%d): %d us %g db\n",
+               sigma_str, up_order, down_order, factor, to_us(resample_time), PSNR);
+        results.emplace_back(
+            Result{("up_order=" + std::to_string(up_order) +
+                    " down_order=" + std::to_string(down_order) +
+                    " factor=" + std::to_string(factor)),
+                   resample_time,
+                   PSNR});
+        halide_profiler_report(nullptr);
+    }
+
+    // Print the pareto-dominant options.
+
+    // In theory, quantization to 16-bit produces a psnr of ~100, and
+    // quantization to 8-bit produces a PSNR of ~60. We'll consider anything
+    // above that upper limit good, and anything below the lower limit
+    // unacceptable.
+
+    // The expected error from quantization is half a level, making
+    // theoretical PSNR easy to compute:
+    double min_PSNR = -20 * log10(0.5 / 255.0);
+
+    printf("-------------------------------------\n");
+    printf("Pareto-dominant options for sigma=%s:\n", sigma_str);
+    // Sort by decreasing PSNR
+    std::sort(results.begin(), results.end(), [=](const Result &a, const Result &b) {
+        return a.PSNR > b.PSNR;
+    });
+    double best_time = 1e9;
+    for (const Result &r : results) {
+        if (r.PSNR < min_PSNR) {
+            break;
+        }
+        // PSNR is getting worse as we iterate, so the Pareto-dominant
+        // options are the ones that are the fastest seen.
+        if (r.time < best_time) {
+            printf(" %s: %d us %g db\n", r.name.c_str(), to_us(r.time), r.PSNR);
+            best_time = r.time;
+        }
+    }
+    printf("-------------------------------------\n");
+
     return 0;
 }

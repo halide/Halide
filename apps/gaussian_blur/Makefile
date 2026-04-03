@@ -2,76 +2,46 @@ include ../support/Makefile.inc
 
 all: $(BIN)/$(HL_TARGET)/filter
 
-test: $(BIN)/$(HL_TARGET)/out.png
-
 $(GENERATOR_BIN)/gaussian_blur.generator: gaussian_blur_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
-$(GENERATOR_BIN)/box_blur.generator: box_blur_generator.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
+LIBS := $(BIN)/%/gaussian_blur_direct.a $(BIN)/%/runtime.a
+HEADERS := gaussian_blur_direct.h
+define GAUSSIAN_BLUR
+LIBS += $(BIN)/%/gaussian_blur_$(1)_$(2)_$(3).a
+HEADERS += gaussian_blur_$(1)_$(2)_$(3).h
+$(BIN)/%/gaussian_blur_$(1)_$(2)_$(3).a: $(GENERATOR_BIN)/gaussian_blur.generator
+	@mkdir -p $$(@D)
+	$$< -g gaussian_blur -f gaussian_blur_$(1)_$(2)_$(3) -e $(GENERATOR_OUTPUTS),stmt_html -o $(BIN)/$$* target=$$*-no_runtime upsample_order=$(1) downsample_order=$(2) factor=$(3)
+endef
 
-$(GENERATOR_BIN)/box_blur_incremental.generator: box_blur_incremental_generator.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
+$(foreach upsample_order,2 3 4, \
+$(foreach downsample_order,1 2 3, \
+$(foreach factor,2 4 8 16, \
+$(eval $(call GAUSSIAN_BLUR,$(upsample_order),$(downsample_order),$(factor))))))
 
-$(BIN)/%/gaussian_blur.a: $(GENERATOR_BIN)/gaussian_blur.generator
-	@mkdir -p $(@D)
-	$< -g gaussian_blur -f gaussian_blur -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime 
+# combined header
+$(BIN)/%/blurs.h: 
+	rm -f $@
+	$(foreach h,$(HEADERS),echo '#include "$(h)"' >> $@;)
 
 $(BIN)/%/gaussian_blur_direct.a: $(GENERATOR_BIN)/gaussian_blur.generator
 	@mkdir -p $(@D)
-	$< -g gaussian_blur_direct -f gaussian_blur_direct -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime
-
-$(BIN)/%/box_blur.a: $(GENERATOR_BIN)/box_blur.generator
-	@mkdir -p $(@D)
-	$< -g box_blur -f box_blur -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime 
-
-$(BIN)/%/box_blur_log.a: $(GENERATOR_BIN)/box_blur.generator
-	@mkdir -p $(@D)
-	$< -g box_blur_log -f box_blur_log -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime
-
-
-$(BIN)/%/box_blur_pyramid_u8.a: $(GENERATOR_BIN)/box_blur.generator
-	@mkdir -p $(@D)
-	$< -g box_blur_pyramid -f box_blur_pyramid_u8 -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime input.type=uint8 output.type=uint8
-
-$(BIN)/%/box_blur_pyramid_u16.a: $(GENERATOR_BIN)/box_blur.generator
-	@mkdir -p $(@D)
-	$< -g box_blur_pyramid -f box_blur_pyramid_u16 -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime input.type=uint16 output.type=uint16
-
-$(BIN)/%/box_blur_pyramid_f32.a: $(GENERATOR_BIN)/box_blur.generator
-	@mkdir -p $(@D)
-	$< -g box_blur_pyramid -f box_blur_pyramid_f32 -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime input.type=float32 output.type=float32
-
-$(BIN)/%/box_blur_incremental.a: $(GENERATOR_BIN)/box_blur_incremental.generator
-	@mkdir -p $(@D)
-	$< -g box_blur_incremental -f box_blur_incremental -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime 
+	$< -g gaussian_blur_direct -f gaussian_blur_direct -e $(GENERATOR_OUTPUTS),stmt_html -o $(BIN)/$* target=$*-no_runtime
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/gaussian_blur.generator 
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN)/$* target=$*
 
-LIBS= \
-	$(BIN)/%/gaussian_blur.a \
-	$(BIN)/%/gaussian_blur_direct.a \
-	$(BIN)/%/box_blur.a \
-	$(BIN)/%/box_blur_log.a \
-	$(BIN)/%/box_blur_pyramid_u8.a \
-	$(BIN)/%/box_blur_pyramid_u16.a \
-	$(BIN)/%/box_blur_pyramid_f32.a \
-	$(BIN)/%/box_blur_incremental.a \
-	$(BIN)/%/runtime.a
+.PRECIOUS: $(LIBS) $(BIN)/%/blurs.h
 
-.PRECIOUS: $(LIBS)
-
-$(BIN)/%/filter: filter.cpp $(LIBS) 
+$(BIN)/%/filter: filter.cpp $(LIBS) $(BIN)/%/blurs.h
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
+	$(CXX) -fopenmp $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
-$(BIN)/%/out.png: $(BIN)/%/filter
-	$< gray_big.png $(BIN)/$*/out.png
+test: $(BIN)/$(HL_TARGET)/filter
+	$< ../images/gray.png 10
 
 clean:
 	rm -rf $(BIN)

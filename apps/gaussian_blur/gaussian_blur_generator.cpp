@@ -4,237 +4,277 @@
 #include "Halide.h"
 
 using namespace Halide;
-using namespace Halide::BoundaryConditions;
 
-class GaussianBlur : public Generator<GaussianBlur> {
-public:
-    Input<Buffer<uint8_t>> input{"input", 2};
-    Input<float> sigma{"sigma"};
+Expr div_up(const Expr &a, const Expr &b) {
+    return (a + b - 1) / b;
+}
 
-    Output<Buffer<uint8_t>> output{"output", 2};
+Expr align_up(const Expr &a, const Expr &b) {
+    return div_up(a, b) * b;
+}
 
-    Var x{"x"}, y{"y"};
+Var x{"x"}, y{"y"}, yo{"yo"}, yi{"yi"}, xo{"xo"}, xi{"xi"}, p{"p"};
 
-    Func blur_cols_transpose(Func in, Expr height, Expr radius) {
+Func direct_gaussian_blur(Func input, const Expr &sigma, const Expr &trunc, const LoopLevel &tiles, const LoopLevel &rows, const Target &target) {
+    Func kernel{"kernel"};
+    kernel(x) = exp(-(x * x) / (2 * sigma * sigma));
+    kernel.compute_root();
 
-        Func blur32, blur64;
-        RDom ry(0, height + radius * 3);
+    Expr radius = cast<int>(ceil(trunc * sigma));
+    RDom r(-radius, 2 * radius + 1);
 
-        for (int bits : {32, 64}) {
+    Func kernel_sum{"kernel_sum"};
+    kernel_sum() = sum(kernel(r));
+    kernel_sum.compute_root();
 
-            Func blur{"blur_" + std::to_string(bits)};
+    Func kernel_normalized{"kernel_normalized"};
+    kernel_normalized(x) = kernel(x) / kernel_sum();
+    kernel_normalized.compute_root();
 
-            Type t = UInt(bits);
+    Func blur_y{"blur_y"}, blur_y_sum{"blur_y_sum"}, blur_x{"blur_x"}, blur_x_sum{"blur_x_sum"};
+    blur_y(x, y) = sum(kernel_normalized(r) * input(x, y + r), blur_y_sum);
+    blur_x(x, y) = sum(kernel_normalized(r) * blur_y(x + r, y), blur_x_sum);
 
-            // This is going to work up to radius 256, after which we'll
-            // get overflow.
-            Expr scale = pow(cast(t, radius), 3);
+    const int vec = target.natural_vector_size<float>();
 
-            // Pure definition: do nothing.
-            blur(x, y) = undef(t);
+    blur_y_sum
+        .align_bounds(x, vec)
+        .store_at(tiles)
+        .compute_at(rows)
+        .vectorize(x, vec, TailStrategy::RoundUp)
+        .update()
+        .unroll(r, 2)
+        .reorder(x, r)
+        .vectorize(x, vec, TailStrategy::RoundUp);
 
-            // Update 0-2: set the top row of the result to the input.
-            blur(x, -1) = scale * cast(t, in(x, 0));  // Tracks output
-            blur(x, -2) = blur(x, -1);
-            blur(x, -3) = blur(x, -1);
-
-            Func in16;
-            in16(x, y) = cast<int16_t>(in(x, y));
-
-            // A Gaussian blur can be done as an IIR filter. The taps on
-            // the input are 1, -3, 3, 1, spaced apart by the radius. The
-            // taps on the previous three outputs are 3, -3, 1. The input
-            // taps represent the third derivative of the kernel you get
-            // if you iterate a box filter three times, and the taps on
-            // the output are effectively triple integration of that
-            // result. The following expression computes this IIR, nested
-            // such that there's only one multiplication by three. Values
-            // that have just been upcast from 8 to 16-bit are nested
-            // together so that widening subtracts can be used on
-            // architectures that support them (e.g. ARM).
-            Expr v = (blur(x, ry - 3) +
-                      (in16(x, ry) -
-                       in16(x, ry - radius * 3)) +
-                      3 * ((blur(x, ry - 1) -
-                            blur(x, ry - 2)) +
-                           (in16(x, ry - radius * 2) -
-                            in16(x, ry - radius))));
-
-            // Sign-extend then treat it as a uint32 with wrap-around. We
-            // know that the result can't possibly be negative in the end,
-            // so this gives us an extra bit of headroom while
-            // accumulating.
-            v = cast(UInt(bits), cast(Int(bits), v));
-
-            // Update 3
-            blur(x, ry) = v;
-
-            if (bits == 32) {
-                blur32 = blur;
-            } else {
-                blur64 = blur;
-            }
-        }
-
-        Func blur;
-        blur(x, y) = select(radius >= 256, cast<float>(blur64(x, y)), cast<float>(blur32(x, y)));
-
-        // Transpose the blur and normalize.
-        Func transpose("transpose");
-
-        Expr inv_scale = 1.0f / pow(cast<float>(radius), 3);
-
-        transpose(x, y) = cast<uint8_t>(round(clamp(blur(y, x + (radius * 3) / 2 - 1) * inv_scale, 0.0f, 255.0f)));
-
-        const int vec = get_target().natural_vector_size<uint8_t>();
-
-        // CPU schedule.  Split the transpose into tiles of
-        // rows. Parallelize over strips.
-        Var xo, yo, xi, yi, strip;
-        transpose.compute_root()
-            .tile(x, y, xo, yo, x, y, vec, vec)
-            .vectorize(x)
-            .reorder(x, y, xo, yo)
-            .parallel(yo)
-            .specialize(radius >= 256);
-
-        for (Func b : {blur32, blur64}) {
-            // Run the filter on each row of tiles (which corresponds to a strip of
-            // columns in the input).
-            b.compute_at(transpose, yo);
-
-            for (int i = 0; i < 3; i++) {
-                b.update(i).vectorize(x, vec);
-            }
-
-            // Vectorize computations within the strips.
-            b.update(3)
-                .reorder(x, ry)
-                .vectorize(x, vec);
-        }
-
-        // Load the input strip required in a pre-pass so that we
-        // don't incur stalls due to memory latency when running the
-        // IIR.
-        in.in()
-            .compute_at(transpose, yo)
-            .vectorize(in.args()[0]);
-
-        return transpose;
-    }
-
-    void generate() {
-
-        // Convolve by the third derivative of a cubic approximation
-        // to a Gaussian. This is equivalent to doing a box blur three
-        // times.
-
-        // We need to pick a radius for the box blur that achieves our
-        // desired gaussian sigma. If that box blur has "r" taps,
-        // then its variance is (r^2 - 1) / 12. Iterated three times
-        // we get variance (r^2 - 1) / 4.  Solving v = (r^2 - 1)/4 for
-        // r we get: r = sqrt(4v + 1)
-
-        Expr variance = sigma * sigma;
-        Expr radius = cast<int>(round(sqrt(4 * variance + 1)));
-
-        Expr width = input.width();
-        Expr height = input.height();
-
-        Func clamped = BoundaryConditions::repeat_edge(input, {{0, width}, {0, height}});
-
-        // First, blur the columns of the input.
-        Func blury_T = blur_cols_transpose(clamped, height, radius);
-
-        // Blur the columns again (the rows of the original).
-        Func blur = blur_cols_transpose(blury_T, width, radius);
-
-        output = blur;
-    }
-};
-
-HALIDE_REGISTER_GENERATOR(GaussianBlur, gaussian_blur)
-
-#include "Halide.h"
+    return blur_x;
+}
 
 using namespace Halide;
 using namespace Halide::BoundaryConditions;
 
 class GaussianBlurDirect : public Generator<GaussianBlurDirect> {
 public:
-    Input<Buffer<uint8_t>> input{"input", 2};
+    Input<Buffer<float>> input{"input", 2};
     Input<float> sigma{"sigma"};
-
-    Output<Buffer<uint8_t>> output{"output", 2};
-
-    Var x{"x"}, y{"y"};
+    Input<int> trunc{"trunc"};
+    Output<Buffer<float>> output{"output", 2};
 
     void generate() {
+        Func clamped = BoundaryConditions::repeat_edge(input);
 
-        Func kernel;
-        kernel(x) = exp(-(x * x) / (2 * sigma * sigma));
-        kernel(0) /= 2;
-        kernel.compute_root();
+        LoopLevel tiles, rows;
+        output = direct_gaussian_blur(clamped, sigma, trunc, tiles, rows, target);
 
-        Expr radius = cast<int>(ceil(3 * sigma));
-        RDom r(0, radius);
+        const int vec = natural_vector_size<float>();
 
-        Func kernel_sum;
-        kernel_sum() = sum(kernel(r));
-        kernel_sum.compute_root();
+        const int tasks = 32;
 
-        const int32_t scale = 64 * 256;
-
-        Func kernel_normalized_1;
-        kernel_normalized_1(x) = cast<int16_t>(round(scale * kernel(x) / kernel_sum()));
-        kernel_normalized_1.compute_root();
-        // This kernel approximately adds up to 'scale'
-
-        Func kernel_quantized_sum;
-        kernel_quantized_sum() += kernel_normalized_1(r);
-        kernel_quantized_sum.compute_root();
-
-        // Make the kernel exactly add up to 'scale'
-        Func kernel_normalized_2;
-        Expr correction = cast<int16_t>(scale - kernel_quantized_sum());
-        kernel_normalized_2(x) = cast<int16_t>(kernel_normalized_1(x) +
-                                               select(x == 0, correction, 0));
-        kernel_normalized_2.compute_root();
-
-        Expr width = input.width();
-        Expr height = input.height();
-        Func clamped = BoundaryConditions::repeat_edge(input, {{0, width}, {0, height}});
-
-        Func blur_y("blur_y"), blur_y_32("blur_y_32"), blur_x("blur_x"), blur_x_32("blur_x_32");
-        blur_y_32(x, y) +=
-            (cast<int32_t>(kernel_normalized_2(r)) *
-             (cast<int16_t>(clamped(x, y + r)) +
-              clamped(x, y - r)));
-        blur_y(x, y) = cast<uint8_t>((blur_y_32(x, y) + scale) / (2 * scale));
-        blur_x_32(x, y) +=
-            (cast<int32_t>(kernel_normalized_2(r)) *
-             (cast<int16_t>(blur_y(x + r, y)) +
-              blur_y(x - r, y)));
-        blur_x(x, y) = cast<uint8_t>((blur_x_32(x, y) + scale) / (2 * scale));
-
-        output = blur_x;
-
-        const int vec = natural_vector_size<uint8_t>();
-
-        Var yo, yi;
-        blur_x.compute_root()
+        output.compute_root()
             .reorder(x, y)
-            .split(y, yo, yi, 64, TailStrategy::GuardWithIf)
+            .split(y, yo, yi, div_up(output.height(), tasks), TailStrategy::GuardWithIf)
             .vectorize(x, vec)
             .parallel(yo);
 
-        blur_y.compute_at(blur_x, yo)
-            .vectorize(x, vec);
-
-        clamped.store_at(blur_x, yo)
-            .compute_at(blur_y, y)
-            .vectorize(_0, vec);
+        tiles.set({Func{output}, yo});
+        rows.set({Func{output}, yi});
     }
 };
 
 HALIDE_REGISTER_GENERATOR(GaussianBlurDirect, gaussian_blur_direct)
+
+class GaussianBlur : public Generator<GaussianBlur> {
+public:
+    GeneratorParam<int> factor{"factor", 8},
+        upsample_order{"upsample_order", 3},
+        downsample_order{"downsample_order", 2},
+        passes{"passes", 2};
+
+    Input<Buffer<float>> input{"input", 2};
+    Input<float> sigma{"sigma"};
+    Input<int> trunc{"trunc"};
+    Output<Buffer<float>> output{"output", 2};
+
+    Var x{"x"}, y{"y"};
+
+    std::pair<Func, float> make_resampling_kernel(int order) {
+        // Make a downsampling/upsampling kernel for the given factor. Use some
+        // number of boxes.
+        RDom r_box(0, factor);
+        Func box{"box"};
+        box(x) = select(x >= 0 && x < factor, 1.0f / factor, 0.f);
+        Func kernel = box;
+        for (int i = 1; i < order; i++) {
+            Func next;
+            next(x) = sum(kernel(x - r_box) * box(r_box));
+            kernel = next;
+            kernel.compute_root();
+
+            // Add a [1 1] filter as well, so that we add 'order' to the width
+            // of the kernel, instead of order - 1. This gives a modest boost in
+            // PSNR at no cost.
+            next = Func{};
+            next(x) = (kernel(x) + kernel(x - 1)) * 0.5f;
+            kernel = next;
+            kernel.compute_root();
+        }
+        // Compute the variance of the downsampling/upsampling kernel. It's
+        // 'order' discrete box distributions.
+        float variance = order * ((float)factor * factor - 1) / 12;
+        // plus our 'order - 1' [1 1] filters, which each have variance 1/4
+        variance += (order - 1) / 4.0f;
+        return {kernel, variance};
+    }
+
+    void generate() {
+        // See the interactive doc impulse_viewer.html for an explanation of this algorithm.
+
+        const int vec = natural_vector_size<float>();
+
+        auto [up_kernel, up_variance] = make_resampling_kernel(upsample_order);
+        auto [down_kernel, down_variance] = make_resampling_kernel(downsample_order);
+
+        Func clamped_y{"clamped_y"};
+        clamped_y(x, y) = input(x, clamp(y, input.dim(1).min(), input.dim(1).max()));
+
+        RDom rf(0, factor), rp(0, downsample_order);
+        RDom rx(0, (int)factor * downsample_order);
+
+        Expr shift = (((int)upsample_order - downsample_order) * factor) / 2;
+
+        Func down_y_phases{"down_y_phases"};
+        down_y_phases(x, y, p) += clamped_y(x, factor * y + rf + shift) * down_kernel(rf + p * factor);
+
+        Func down_y{"down_y"};
+        down_y(x, y) += down_y_phases(x, y + rp, rp);
+
+        Func clamped_x{"clamped_x"};
+        clamped_x(x, y) = down_y(clamp(likely(x), input.dim(0).min(), input.dim(0).max()), y);
+
+        Func down_x{"down_x"};
+        down_x(x, y) += clamped_x(factor * x + rx + shift, y) * down_kernel(rx);
+
+        // We're going to blur at low res using a smaller filter. Upsampling and
+        // downsampling already blur, so we'd better account for that.
+        Expr sigma_lo = sqrt(max(sigma * sigma - up_variance - down_variance, 1e-4f)) / factor;
+
+        // Clamp in y again, so that we don't compute lots of entire padding rows of down_x
+        Func clamped_y_2{"clamped_y_2"};
+        clamped_y_2(x, y) = down_x(x, clamp(y, -(int)upsample_order, div_up(input.height(), factor)));
+
+        LoopLevel tiles, rows;
+        Func blurred = direct_gaussian_blur(clamped_y_2, sigma_lo, trunc, tiles, rows, target);
+
+        // Treat upsampling as applying a multi-phase filter and interleaving the results
+        Expr e = 0.f;
+        for (int i = 0; i < upsample_order; i++) {
+            e += blurred(x - i, y) * (up_kernel(i * factor + p) * factor);
+        }
+        Func up_x_phases{"up_x_phases"};
+        up_x_phases(x, y, p) = e;
+
+        Func up_x{"up_x"};
+        up_x(x, y) = up_x_phases(x / factor, y, x % factor);
+
+        e = 0.f;
+        for (int i = 0; i < upsample_order; i++) {
+            e += up_x(x, y - i) * (up_kernel(i * factor + p) * factor);
+        }
+        Func up_y_phases{"up_y_phases"};
+        up_y_phases(x, y, p) = e;
+
+        output(x, y) = up_y_phases(x, y / factor, y % factor);
+
+        const int tasks = 32;
+
+        if (false) {
+            // One pass - lots of redundant recompute on the
+            // downsample. Generally slower.
+            down_x.in()
+                .store_at(tiles)
+                .compute_at(rows)
+                .vectorize(x, vec, TailStrategy::RoundUp)
+                .split(Var::outermost(), Var::outermost(), yo, 1)
+                .rename(y, yi);
+
+        } else {
+            // Two-pass. Less redundant recompute, more thread pool overhead.
+            Expr strip = div_up(div_up(output.height(), factor) + upsample_order, tasks);
+            down_x
+                .in()
+                .compute_root()
+                .split(y, yo, yi, strip, TailStrategy::GuardWithIf)
+                .vectorize(x, vec * 2, TailStrategy::RoundUp)
+                .parallel(yo);
+        }
+
+        clamped_x
+            .compute_at(down_x.in(), x)
+            .vectorize(x, vec);
+
+        RVar rxo, rxi;
+        down_x
+            .compute_at(down_x.in(), x)
+            .vectorize(x)
+            .update()
+            .split(rx, rxo, rxi, factor)
+            .unroll(rxo)
+            .vectorize(x)
+            .atomic()
+            .vectorize(rxi);
+
+        down_y_phases.in()
+            .store_at(down_x.in(), yo)
+            .compute_at(down_x.in(), yi)
+            .reorder(p, x, y)
+            .unroll(p)
+            .vectorize(x, vec, TailStrategy::RoundUp)
+            .fold_storage(y, downsample_order);
+
+        down_y.update().unroll(rp);
+
+        down_y_phases
+            .compute_at(down_y_phases.in(), x)
+            .unroll(p)
+            .vectorize(x)
+            .update()
+            .reorder(p, x, rf, y)
+            .vectorize(x)
+            .unroll(p)
+            .unroll(rf);
+
+        blurred
+            .store_in(MemoryType::Stack)
+            .compute_at(rows)
+            .vectorize(x, vec * 2, TailStrategy::RoundUp);
+
+        tiles.set({Func{up_x}, y});
+        rows.set({Func{up_x}, y});  // was output yi
+
+        up_x.store_at(output, yo)
+            .compute_at(output, yi)  // was rows
+            .align_bounds(x, vec * factor)
+            .vectorize(x, vec * factor, TailStrategy::RoundUp);
+
+        Expr rows_at_a_time = std::min((int)factor, 8);
+        Expr slice = div_up(output.height(), tasks);
+        slice = align_up(slice, rows_at_a_time);
+
+        output
+            .never_partition(y)
+            .align_bounds(y, rows_at_a_time)
+            .split(y, yo, yi, slice, TailStrategy::ShiftInwards)
+            .reorder(yi, x)
+            .unroll(yi, rows_at_a_time)
+            .reorder(x, yi)
+            .vectorize(x, vec * 2)
+            .parallel(yo);
+
+        output.set_host_alignment(64);
+        output.dim(1).set_min(0);
+        output.dim(1).set_stride((output.dim(1).stride() / 16) * 16);
+        output.dim(0).set_min(0);
+    }
+};
+
+HALIDE_REGISTER_GENERATOR(GaussianBlur, gaussian_blur)

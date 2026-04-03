@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fast Gaussian Blur via Resampling</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  body { font-family: sans-serif; margin: 20px; background: #f5f5f5; }
+  .controls { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .controls label { font-weight: bold; }
+  .controls select, .controls input { margin-left: 4px; }
+  #chart-container { background: white; border-radius: 8px; padding: 16px; max-width: 1000px; }
+  canvas { width: 100% !important; }
+  .slider-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  #offset-slider { width: 300px; }
+  #animate-btn { padding: 4px 16px; cursor: pointer; }
+  #filter-info { margin: 16px 0; line-height: 1.8; }
+  .btn-group { display: inline-flex; }
+  .mode-btn, .domain-btn, .compare-domain-btn { padding: 4px 12px; cursor: pointer; border: 1px solid #999; background: #e0e0e0; margin: 0; }
+  .btn-group > :first-child { border-radius: 4px 0 0 4px; }
+  .btn-group > :last-child { border-radius: 0 4px 4px 0; }
+  .btn-group > :not(:first-child) { border-left: none; }
+  .mode-btn.active, .domain-btn.active, .compare-domain-btn.active { background: #4a90d9; color: white; border-color: #3a7bc8; }
+  .preset-btn { padding: 3px 10px; cursor: pointer; border: 1px solid #999; background: #e0e0e0; border-radius: 4px; font-size: 12px; }
+  .preset-btn:hover { background: #d0d0d0; }
+  #error-msg { color: red; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h2>Fast Gaussian Blur via Resampling</h2>
+<p style="color:#666; margin-top:-8px;">By Andrew Adams, Karima Ma, and Claude Code</p>
+
+<div style="max-width:1000px; margin-bottom:20px; line-height:1.6;">
+<p>
+A large Gaussian blur can be computed cheaply by downsampling the image, blurring at low resolution,
+and upsampling back. This page lets you explore the accuracy of this approximation for different
+choices of downsample factor, and prefilter/interpolator order.
+</p>
+<p>
+The method works as follows: For a target blur with standard deviation &sigma;, downsample by a factor <em>f</em> using a prefilter
+of order <em>d</em>, blur at low resolution with a Gaussian of standard deviation
+&sigma;<sub>lo</sub>&nbsp;=&nbsp;&radic;(&sigma;&sup2;&nbsp;&minus;&nbsp;V<sub>up</sub>&nbsp;&minus;&nbsp;V<sub>down</sub>)&nbsp;/&nbsp;<em>f</em>,
+where V<sub>up</sub> and V<sub>down</sub> are the variances of the interpolator and prefilter respectively,
+then upsample with an interpolator of order <em>u</em>.
+</p>
+<p>
+The prefilter and interpolator of order <em>o</em> at factor <em>f</em> are constructed as the convolution of <em>o</em> box filters of size <em>f</em> and <em>o</em>&nbsp;&minus;&nbsp;1 copies of [1,&nbsp;1], giving a filter of width <em>o</em>&middot;<em>f</em>.
+The prefilter is normalized to sum to 1. The interpolator is normalized so that
+its polyphase components each sum to 1 (equivalently, it sums to <em>f</em>).
+</p>
+<p>
+Use the controls below to vary the parameters and observe the impulse response of the approximation
+(red) overlaid on the true Gaussian (blue). The Pareto plot below shows the
+quality&ndash;cost tradeoff across all parameter combinations.
+</p>
+<p>
+This is not a new idea! Like Andrew, these ideas come from the early 80s. See for example
+Burt and Adelson's <a href="https://doi.org/10.1109/TCOM.1983.1095851">"The Laplacian Pyramid as a Compact Image Code"</a> (1983),
+or more recently <a href="https://doi.org/10.1145/2024156.2024209">Convolution Pyramids</a> by Farbman et al. (2011).
+We're not claiming credit for filtering by resampling &mdash; we're just providing some notes on
+how to do it right and why it's a good method.
+</p>
+<p>
+This opinion comes from our work "Finding Fast Filters", to appear at SIGGRAPH 2026 (link to come),
+in which we automatically searched a large space of filter implementations and found that the single
+most effective way to make a Gaussian blur fast is by resampling. You can make it faster still by
+doing the low-resolution blur using
+<a href="https://doi.org/10.1109/78.599954">tail-cancelling IIRs</a> (Wang &amp; Smith 1997) and
+<a href="https://doi.org/10.1109/TCS.1986.1085930">frequency response masking</a> (Lim 1986) &mdash;
+this matters most at low &sigma;, where the downsampling factor is small.
+You can also make it slightly more accurate by tuning the filters with gradient descent.
+But the most important trick for low-pass filters is simply to run them at low resolution.
+</p>
+<p><strong>TL;DR:</strong> For a very accurate fast Gaussian blur, downsample by a factor of
+roughly &sigma;/2 using 3rd-order prefilter and interpolator. For large &sigma; this achieves high PSNR at a cost of
+under 8 multiplies per output pixel, regardless of &sigma;.</p>
+</div>
+
+<div class="controls">
+  <label>Sigma: <input type="range" id="sigma-slider" min="0" max="1000" value="500" style="width:200px;">
+  <span id="sigma-val" style="display:inline-block; width:3em; text-align:right;">8</span></label>
+  <label>Interpolator order (u): <select id="up">
+    <option selected>1</option><option>2</option><option>3</option><option>4</option>
+  </select></label>
+  <label>Prefilter order (d): <select id="down">
+    <option selected>1</option><option>2</option><option>3</option><option>4</option>
+  </select></label>
+  <label>Factor (f): <select id="factor">
+    <option>2</option><option>4</option><option selected>8</option><option>16</option>
+  </select></label>
+  <label><input type="checkbox" id="naive-sigma"> Use naive σ<sub>lo</sub> = σ/f</label>
+</div>
+
+<div class="slider-row">
+  <label>Pixel offset: <input type="range" id="offset-slider" min="0" max="15" value="0">
+  <span id="offset-val">0</span></label>
+  <span class="btn-group">
+    <button class="mode-btn" data-mode="all">All phases</button>
+    <button class="mode-btn active" data-mode="animate">Animate</button>
+    <button class="mode-btn" data-mode="single">Single phase</button>
+  </span>
+</div>
+
+<div id="filter-info">
+  <div><strong>Prefilter:</strong> <span id="down-filter"></span> <span id="down-stats"></span></div>
+  <div><strong>Interpolator:</strong> <span id="up-filter"></span> <span id="up-stats"></span></div>
+  <div><strong>Low-res blur sigma:</strong> <span id="sigma-lo"></span></div>
+  <div><strong>Low-res blur diameter:</strong> <span id="blur-diameter"></span></div>
+  <div><strong>Average multiplies per output pixel (in 2D):</strong> <span id="muls-per-pixel"></span></div>
+  <div><strong>PSNR:</strong> <span id="psnr-display"></span></div>
+</div>
+
+<div style="margin-bottom:8px;">
+  <span class="btn-group">
+    <button class="domain-btn active" data-domain="spatial">Spatial domain</button>
+    <button class="domain-btn" data-domain="frequency">Frequency domain</button>
+  </span>
+</div>
+<div id="chart-container">
+  <canvas id="chart"></canvas>
+</div>
+<div id="error-msg"></div>
+
+<div style="max-width:1000px; margin-top:20px; line-height:1.6;">
+<h3>Interesting cases</h3>
+<table style="border-collapse:collapse; width:100%;">
+<tr style="border-bottom:1px solid #ddd;">
+<td style="padding:8px; vertical-align:top; white-space:nowrap;">
+  <button class="preset-btn" data-sigma="16" data-up="1" data-down="4" data-factor="8" data-mode="animate" data-domain="spatial">Spatial</button>
+  <button class="preset-btn" data-sigma="16" data-up="1" data-down="4" data-factor="8" data-mode="animate" data-domain="frequency">Freq</button>
+</td>
+<td style="padding:8px;">
+  <strong>Low-quality interpolator</strong> (σ=16, u=1, d=4, f=8): A low-order interpolator leaves aliased copies of the low-resolution signal in the output, resulting in unwanted high frequencies. These look like stair steps in the spatial domain and red humps at multiples of the low-res max frequency in the frequency domain.
+</td>
+</tr>
+<tr style="border-bottom:1px solid #ddd;">
+<td style="padding:8px; vertical-align:top; white-space:nowrap;">
+  <button class="preset-btn" data-sigma="16" data-up="4" data-down="1" data-factor="8" data-mode="animate" data-domain="spatial">Spatial</button>
+  <button class="preset-btn" data-sigma="16" data-up="4" data-down="1" data-factor="8" data-mode="animate" data-domain="frequency">Freq</button>
+</td>
+<td style="padding:8px;">
+  <strong>Low-quality prefilter</strong> (σ=16, u=4, d=1, f=8): A low-order prefilter doesn't attenuate frequencies above the low-res Nyquist limit enough, so these leak into the low frequencies of the output, causing error at low frequencies. Intuitively, if you downsample an impulse by just averaging down non-overlapping boxes, at low resolution you get the same thing no matter where in its box the original impulse was. The subpixel location was lost. In the spatial domain these look like impulse responses that shift according to the pixel offset. In the frequency domain the magnitude is correct, but the phase is wrong, resulting in a red hump of RMS error in the low frequencies.
+</td>
+</tr>
+<tr style="border-bottom:1px solid #ddd;">
+<td style="padding:8px; vertical-align:top; white-space:nowrap;">
+  <button class="preset-btn" data-sigma="12" data-up="4" data-down="4" data-factor="16" data-mode="animate" data-domain="spatial">Spatial</button>
+  <button class="preset-btn" data-sigma="12" data-up="4" data-down="4" data-factor="16" data-mode="animate" data-domain="frequency">Freq</button>
+</td>
+<td style="padding:8px;">
+  <strong>Subsampling too much</strong> (σ=12, u=4, d=4, f=16): Subsampling too aggressively means the ground truth spectrum extends beyond the low-res Nyquist limit. Aliasing is inevitable, regardless of the prefilter and interpolator. In the spatial domain the blur is too wide, and in the frequency domain there is a red hump of RMS error in the low frequencies. Limit the downsampling factor to at most σ/2.
+</td>
+</tr>
+<tr style="border-bottom:1px solid #ddd;">
+<td style="padding:8px; vertical-align:top; white-space:nowrap;">
+  <button class="preset-btn" data-sigma="16" data-up="3" data-down="3" data-factor="8" data-mode="animate" data-domain="spatial" data-naive-sigma="true">Spatial</button>
+  <button class="preset-btn" data-sigma="16" data-up="3" data-down="3" data-factor="8" data-mode="animate" data-domain="frequency" data-naive-sigma="true">Freq</button>
+</td>
+<td style="padding:8px;">
+  <strong>Ignoring resampling filter variance</strong> (σ=16, u=3, d=3, f=8): A common mistake is to simply use σ<sub>lo</sub>&nbsp;=&nbsp;σ/f instead of the correct formula that subtracts the variance of the prefilter and interpolator. This over-blurs, producing an impulse response that is too wide. Compare with the sweet spot below.
+</td>
+</tr>
+<tr style="border-bottom:1px solid #ddd;">
+<td style="padding:8px; vertical-align:top; white-space:nowrap;">
+  <button class="preset-btn" data-sigma="12" data-up="3" data-down="2" data-factor="8" data-mode="animate" data-domain="spatial">u=3,d=2</button>
+  <button class="preset-btn" data-sigma="12" data-up="2" data-down="3" data-factor="8" data-mode="animate" data-domain="spatial">u=2,d=3</button>
+</td>
+<td style="padding:8px;">
+  <strong>Transpose symmetry</strong> (σ=12, f=8): Swapping interpolator and prefilter orders gives identical PSNR but visibly different artifacts. The u=3,d=2 case has an impulse response that changes with the pixel offset (bad low frequencies), while the u=2,d=3 case produces a piecewise linear output (bad high frequencies). See the <a href="#proof">proof below</a>.
+</td>
+</tr>
+<tr>
+<td style="padding:8px; vertical-align:top; white-space:nowrap;">
+  <button class="preset-btn" data-sigma="16" data-up="3" data-down="3" data-factor="8" data-mode="animate" data-domain="spatial">Spatial</button>
+  <button class="preset-btn" data-sigma="16" data-up="3" data-down="3" data-factor="8" data-mode="animate" data-domain="frequency">Freq</button>
+</td>
+<td style="padding:8px;">
+  <strong>The sweet spot</strong> (σ=16, u=3, d=3, f=8): 3rd-order filters at factor σ/2 avoid all the issues above, giving excellent quality at under 8 multiplies per pixel, regardless of σ.
+</td>
+</tr>
+</table>
+</div>
+
+<h3>Pareto: Quality vs Throughput</h3>
+<p style="max-width:1000px; line-height:1.6;">
+Each point below represents one combination of interpolator order, prefilter order, and downsample
+factor for the current &sigma;. The x-axis is PSNR (higher is better) and the y-axis is multiplies
+per pixel (lower is better). Blue points lie on the Pareto frontier &mdash; no other setting is both
+cheaper and more accurate. The currently selected setting is highlighted in red. Click any point to
+update the controls above and view its impulse response. Note that points on the Pareto frontier typically have u=d or u=d+1. There's no point using a high-order filter for one if you're not also using a high-order filter for the other.
+</p>
+<div id="pareto-container" style="background:white;border-radius:8px;padding:16px;max-width:1000px;">
+  <canvas id="pareto-chart"></canvas>
+</div>
+
+<h3>Common Alternative Algorithms</h3>
+<div style="max-width:1000px; line-height:1.6;">
+<p>The chart below compares several popular Gaussian blur approximations vs the one we recommend.</p>
+<div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:8px;">
+  <label>σ: <input type="range" id="compare-sigma-slider" min="0" max="1000" value="500" style="width:200px;">
+  <span id="compare-sigma-val" style="display:inline-block; width:3em; text-align:right;">8</span></label>
+  <span class="btn-group">
+    <button class="compare-domain-btn active" data-domain="spatial">Spatial domain</button>
+    <button class="compare-domain-btn" data-domain="frequency">Frequency domain</button>
+  </span>
+</div>
+<div style="background:white;border-radius:8px;padding:12px;">
+  <canvas id="compare-chart"></canvas>
+  <div style="font-size:11px; color:#888; margin-top:4px;">Dashed/shaded regions show error vs ground truth for each method.</div>
+</div>
+
+<table style="border-collapse:collapse; width:100%; margin-top:16px; font-size:14px;">
+<tr style="border-bottom:2px solid #999;">
+  <th style="padding:6px; text-align:left; min-width:160px;">Method</th>
+  <th style="padding:6px; text-align:left; min-width:120px;">2D muls/pixel</th>
+  <th style="padding:6px; text-align:left;">Pros</th>
+  <th style="padding:6px; text-align:left;">Cons</th>
+</tr>
+<tr style="border-bottom:1px solid #ddd;">
+  <td style="padding:6px; vertical-align:top;"><strong>Truncated Gaussian</strong></td>
+  <td style="padding:6px; vertical-align:top;">2&times;(8&sigma;+1)</td>
+  <td style="padding:6px; vertical-align:top;">Exact (to truncation); simple; fully parallel. Easy to vectorize &mdash; can even be run on tensor cores (<a href="https://arxiv.org/abs/2512.02371">Zhang et al. 2026</a>).</td>
+  <td style="padding:6px; vertical-align:top;">Cost is O(&sigma;). Impractical for large &sigma;. Truncation at 3&sigma; saves ~25% but introduces visible error.</td>
+</tr>
+<tr style="border-bottom:1px solid #ddd;">
+  <td style="padding:6px; vertical-align:top;"><strong>Triple box blur</strong><br><span style="font-size:12px; color:#666;">Wells 1986</span></td>
+  <td style="padding:6px; vertical-align:top;">2&times;4 = 8<br><span style="font-size:12px; color:#666;">(with Heckbert 1986)</span></td>
+  <td style="padding:6px; vertical-align:top;">O(1) per pixel via running sums; simple to implement. Can be fused into a single pass per dimension using repeated integration (<a href="https://doi.org/10.1145/15886.15921">Heckbert 1986</a>).</td>
+  <td style="padding:6px; vertical-align:top;">Poor approximation quality (piecewise quadratic, not smooth). Visible flat top and short tails. Integer-width constraint limits precision. Prone to catastrophic cancellation on HDR inputs. Parallelization and vectorization straightforward, but adds to complexity of implementation and cost per pixel.</td>
+</tr>
+<tr style="border-bottom:1px solid #ddd;">
+  <td style="padding:6px; vertical-align:top;"><strong>Young&ndash;Van Vliet</strong><br><span style="font-size:12px; color:#666;">Young &amp; Van Vliet 1995</span></td>
+  <td style="padding:6px; vertical-align:top;">16<br><span style="font-size:12px; color:#666;">(3rd-order IIR)</span></td>
+  <td style="padding:6px; vertical-align:top;">O(1) per pixel regardless of &sigma;; simple coefficient computation.</td>
+  <td style="padding:6px; vertical-align:top;">Sequential along each dimension. Moderate accuracy. Poorly behaved for very large &sigma;. Parallelization possible but non-trivial (see <a href="https://dl.acm.org/doi/10.1145/2070781.2024210">Nehab et al. 2011</a>). Vectorization possible by transposing or using <a href="https://doi.org/10.1109/29.32286">scattered look-ahead</a> (Parhi &amp; Messerschmitt 1989), at additional cost. Prone to numerical instability on HDR input data. Boundary conditions tricky to get right (see <a href="https://doi.org/10.1109/TSP.2006.871980">Triggs &amp; Sdika 2006</a>).</td>
+</tr>
+<tr style="border-bottom:1px solid #ddd;">
+  <td style="padding:6px; vertical-align:top;"><strong>Deriche</strong><br><span style="font-size:12px; color:#666;">Deriche 1993</span></td>
+  <td style="padding:6px; vertical-align:top;">32<br><span style="font-size:12px; color:#666;">(4th-order IIR)</span></td>
+  <td style="padding:6px; vertical-align:top;">Excellent accuracy; O(1) per pixel.</td>
+  <td style="padding:6px; vertical-align:top;">Sequential along each dimension. Higher cost than YVV (4th vs 3rd order). Same parallelization and numerical stability challenges. Note: comparison with YVV is somewhat unfair due to different orders.</td>
+</tr>
+<tr>
+  <td style="padding:6px; vertical-align:top;"><strong>Our preferred method (resampling)</strong></td>
+  <td style="padding:6px; vertical-align:top;">~8<br><span style="font-size:12px; color:#666;">(u=d=3, f=&sigma;/2)</span></td>
+  <td style="padding:6px; vertical-align:top;">Excellent accuracy; O(1) per pixel; fully data-parallel; naturally vectorizable.</td>
+  <td style="padding:6px; vertical-align:top;">Not strictly shift-invariant, which might be a showstopper in some contexts. Complex implementation with lots of details to get right, especially if you add <a href="https://doi.org/10.1109/78.599954">TIIRs</a> and/or <a href="https://doi.org/10.1109/TCS.1986.1085930">FRM</a> to accelerate the low-res blur.</td>
+</tr>
+</table>
+
+<h4 style="margin-top:16px;">References</h4>
+<ul style="font-size:13px; line-height:1.8;">
+<li>Burt, P.J. &amp; Adelson, E.H. (1983). <a href="https://doi.org/10.1109/TCOM.1983.1095851"><em>The Laplacian Pyramid as a Compact Image Code.</em></a> IEEE Trans. Communications 31(4):532&ndash;540.</li>
+<li>Heckbert, P. (1986). <a href="https://doi.org/10.1145/15886.15921"><em>Filtering by repeated integration.</em></a> ACM SIGGRAPH Computer Graphics 20(4):315&ndash;321.</li>
+<li>Lim, Y.C. (1986). <a href="https://doi.org/10.1109/TCS.1986.1085930"><em>Frequency-response masking approach for the synthesis of sharp linear phase digital filters.</em></a> IEEE Trans. Circuits and Systems 33(4):357&ndash;364.</li>
+<li>Wells, W.M. (1986). <a href="https://doi.org/10.1109/TPAMI.1986.4767776"><em>Efficient synthesis of Gaussian filters by cascaded uniform filters.</em></a> IEEE TPAMI 8(2):234&ndash;239.</li>
+<li>Parhi, K.K. &amp; Messerschmitt, D.G. (1989). <a href="https://doi.org/10.1109/29.32286"><em>Pipeline interleaving and parallelism in recursive digital filters &mdash; Part I: Pipelining using scattered look-ahead and decomposition.</em></a> IEEE Trans. ASSP 37(7):1099&ndash;1117.</li>
+<li>Deriche, R. (1993). <a href="https://hal.inria.fr/inria-00074778"><em>Recursively implementing the Gaussian and its derivatives.</em></a> INRIA Research Report 1893.</li>
+<li>Young, I.T. &amp; Van Vliet, L.J. (1995). <a href="https://doi.org/10.1016/0165-1684(95)00020-E"><em>Recursive implementation of the Gaussian filter.</em></a> Signal Processing 44(2):139&ndash;151.</li>
+<li>Wang, A. &amp; Smith, J.O. (1997). <a href="https://doi.org/10.1109/78.599954"><em>On fast FIR filters implemented as tail-canceling IIR filters.</em></a> IEEE Trans. Signal Processing 45(6):1415&ndash;1427.</li>
+<li>Triggs, B. &amp; Sdika, M. (2006). <a href="https://doi.org/10.1109/TSP.2006.871980"><em>Boundary conditions for Young&ndash;van Vliet recursive filtering.</em></a> IEEE Trans. Signal Processing 54(6):2365&ndash;2367.</li>
+<li>Farbman, Z., Fattal, R. &amp; Lischinski, D. (2011). <a href="https://doi.org/10.1145/2024156.2024209"><em>Convolution Pyramids.</em></a> ACM Trans. Graphics (SIGGRAPH Asia) 30(6):175.</li>
+<li>Nehab, D. et al. (2011). <a href="https://doi.org/10.1145/2070781.2024210"><em>GPU-efficient recursive filtering and summed-area tables.</em></a> ACM TOG 30(6):176.</li>
+<li>Zhang, Y., Gerstmann, D., Adams, A. &amp; Ahmad, M.B.S. (2026). <a href="https://arxiv.org/abs/2512.02371"><em>Pushing Tensor Accelerators beyond MatMul in a User-Schedulable Language.</em></a> CGO 2026.</li>
+</ul>
+</div>
+
+<script>
+// Radix-2 FFT. Input: arrays of real and imaginary parts (length must be power of 2).
+// Operates in-place.
+function fft(re, im) {
+  const n = re.length;
+  // Bit-reversal permutation
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      [re[i], re[j]] = [re[j], re[i]];
+      [im[i], im[j]] = [im[j], im[i]];
+    }
+  }
+  // Cooley-Tukey
+  for (let len = 2; len <= n; len *= 2) {
+    const ang = -2 * Math.PI / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let curRe = 1, curIm = 0;
+      for (let j = 0; j < len / 2; j++) {
+        const a = i + j, b = i + j + len / 2;
+        const tRe = curRe * re[b] - curIm * im[b];
+        const tIm = curRe * im[b] + curIm * re[b];
+        re[b] = re[a] - tRe; im[b] = im[a] - tIm;
+        re[a] += tRe; im[a] += tIm;
+        const newCurRe = curRe * wRe - curIm * wIm;
+        curIm = curRe * wIm + curIm * wRe;
+        curRe = newCurRe;
+      }
+    }
+  }
+}
+
+// Inverse FFT via: ifft(x) = conj(fft(conj(x))) / N
+function ifft(re, im) {
+  const n = re.length;
+  for (let i = 0; i < n; i++) im[i] = -im[i];
+  fft(re, im);
+  for (let i = 0; i < n; i++) { re[i] /= n; im[i] = -im[i] / n; }
+}
+
+// Compute spectrum for a real signal, returning freqs, real, imag, and magnitude.
+// peakIndex is treated as the origin (circular-shifted to index 0 before FFT).
+function spectrum(signal, peakIndex) {
+  if (peakIndex === undefined) {
+    let maxVal = -Infinity;
+    peakIndex = 0;
+    for (let i = 0; i < signal.length; i++) {
+      if (signal[i] > maxVal) { maxVal = signal[i]; peakIndex = i; }
+    }
+  }
+  let n = 1;
+  while (n < signal.length) n *= 2;
+  n *= 4; // oversample for smoother curve
+  const re = new Array(n).fill(0);
+  const im = new Array(n).fill(0);
+  // Circular shift so that peakIndex maps to index 0
+  for (let i = 0; i < signal.length; i++) {
+    const dst = ((i - peakIndex) % n + n) % n;
+    re[dst] = signal[i];
+  }
+  fft(re, im);
+  const half = n / 2 + 1;
+  const freqs = new Array(half);
+  const outRe = new Array(half);
+  const outIm = new Array(half);
+  const mag = new Array(half);
+  for (let i = 0; i < half; i++) {
+    freqs[i] = i / n;
+    outRe[i] = re[i];
+    outIm[i] = im[i];
+    mag[i] = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
+  }
+  return { freqs, re: outRe, im: outIm, mag };
+}
+
+function convolve(a, b) {
+  const out = Array(a.length + b.length - 1).fill(0);
+  for (let i = 0; i < a.length; i++)
+    for (let j = 0; j < b.length; j++)
+      out[i + j] += a[i] * b[j];
+  return out;
+}
+
+function computeFilter(order, factor) {
+  const box = Array(factor).fill(1);
+  let kernel = box;
+  for (let i = 0; i < order - 1; i++) kernel = convolve(kernel, box);
+  for (let i = 0; i < order - 1; i++) kernel = convolve(kernel, [1, 1]);    
+  return kernel;
+}
+
+function filterVariance(kernel) {
+  const sum = kernel.reduce((a, b) => a + b, 0);
+  let mean = 0;
+  for (let i = 0; i < kernel.length; i++) mean += i * kernel[i] / sum;
+  let variance = 0;
+  for (let i = 0; i < kernel.length; i++) variance += (i - mean) * (i - mean) * kernel[i] / sum;
+  return variance;
+}
+
+function updateFilters() {
+  const sigma = getSigma();
+  const up = parseInt(document.getElementById('up').value);
+  const down = parseInt(document.getElementById('down').value);
+  const factor = parseInt(document.getElementById('factor').value);
+  const downKernel = computeFilter(down, factor);
+  const upKernel = computeFilter(up, factor);
+  const downVar = filterVariance(downKernel);
+  const upVar = filterVariance(upKernel);
+  const fmtKernel = (k) => k.length <= 12 ? '[' + k.join(', ') + ']' : '[' + k.slice(0, 12).join(', ') + ', ...]';
+  document.getElementById('down-filter').textContent = fmtKernel(downKernel);
+  document.getElementById('down-stats').textContent = `(variance=${downVar.toFixed(3)}, σ=${Math.sqrt(downVar).toFixed(3)})`;
+  document.getElementById('up-filter').textContent = fmtKernel(upKernel);
+  document.getElementById('up-stats').textContent = `(variance=${upVar.toFixed(3)}, σ=${Math.sqrt(upVar).toFixed(3)})`;
+  const naive = document.getElementById('naive-sigma').checked;
+  const sigmaLo = naive ? sigma / factor : Math.sqrt(Math.max(sigma * sigma - upVar - downVar, 1e-4)) / factor;
+  document.getElementById('sigma-lo').textContent = sigmaLo.toFixed(4) + (naive ? ' (naive)' : '');
+  const diameter = 2 * Math.ceil(4 * sigmaLo) + 1;
+  document.getElementById('blur-diameter').textContent = diameter;
+  const muls = down + down / factor + up + up / factor + 2 * diameter / (factor * factor);
+  document.getElementById('muls-per-pixel').textContent = muls.toFixed(2);
+}
+// --- Alternative algorithm impulse responses ---
+
+// Truncated Gaussian at 3 sigma
+function truncatedGaussian3(sigma) {
+  return gaussianKernel(sigma, 3);
+}
+
+// N-fold box blur with optimal width selection.
+// Each box is either floor(wIdeal) or ceil(wIdeal). We pick the number that
+// round up (k) vs down (n-k) to minimize |actual_variance - sigma^2|,
+// subject to the constraint that the total filter width is odd.
+function nBoxBlur(sigma, n) {
+  const targetVar = sigma * sigma;
+  const wIdeal = Math.sqrt(12 * targetVar / n + 1);
+  const wLo = Math.max(1, Math.floor(wIdeal));
+  const wHi = wLo + 1;
+  // Total filter width = sum of box widths - (n-1). For odd total: sum must have same parity as n-1.
+  // sum = (n-k)*wLo + k*wHi = n*wLo + k. Parity constraint: (n*wLo + k) % 2 === (n-1) % 2.
+  // Total width = sum - (n-1). For odd total: sum parity must equal n % 2.
+  const sumParityTarget = n % 2;
+  const baseSum = n * wLo;
+  // k must satisfy (baseSum + k) % 2 === sumParityTarget
+  // Start k at 0 or 1 to match parity, then step by 2
+  let kStart = ((baseSum % 2) === sumParityTarget) ? 0 : 1;
+  let bestK = kStart;
+  let bestErr = Infinity;
+  for (let k = kStart; k <= n; k += 2) {
+    const variance = ((n - k) * (wLo * wLo - 1) + k * (wHi * wHi - 1)) / 12;
+    const err = Math.abs(variance - targetVar);
+    if (err < bestErr) { bestErr = err; bestK = k; }
+  }
+  // Build the kernel: bestK boxes of wHi, (n-bestK) boxes of wLo
+  let kernel = null;
+  for (let i = 0; i < n; i++) {
+    const w = (i < bestK) ? wHi : wLo;
+    const box = new Array(w).fill(1 / w);
+    kernel = kernel ? convolve(kernel, box) : box;
+  }
+  return kernel;
+}
+
+function tripleBoxBlur(sigma) { return nBoxBlur(sigma, 3); }
+
+// Young-Van Vliet recursive (IIR) Gaussian approximation
+function youngVanVliet(sigma) {
+  // Compute q
+  let q;
+  if (sigma >= 2.5) {
+    q = 0.98711 * sigma - 0.96330;
+  } else {
+    q = 3.97156 - 4.14554 * Math.sqrt(1 - 0.26891 * sigma);
+  }
+  const q2 = q * q, q3 = q2 * q;
+  const b0 = 1.57825 + 2.44413 * q + 1.4281 * q2 + 0.422205 * q3;
+  const b1 = (2.44413 * q + 2.85619 * q2 + 1.26661 * q3) / b0;
+  const b2 = -(1.4281 * q2 + 1.26661 * q3) / b0;
+  const b3 = (0.422205 * q3) / b0;
+  const B = 1 - (b1 + b2 + b3);
+
+  // Apply to an impulse to get the impulse response
+  const radius = Math.ceil(4 * sigma);
+  const size = 2 * radius + 1;
+  const input = new Array(size).fill(0);
+  input[radius] = 1;
+
+  // Forward pass
+  const w = new Array(size).fill(0);
+  for (let n = 0; n < size; n++) {
+    w[n] = B * input[n]
+      + b1 * (n >= 1 ? w[n - 1] : 0)
+      + b2 * (n >= 2 ? w[n - 2] : 0)
+      + b3 * (n >= 3 ? w[n - 3] : 0);
+  }
+
+  // Backward pass
+  const y = new Array(size).fill(0);
+  for (let n = size - 1; n >= 0; n--) {
+    y[n] = B * w[n]
+      + b1 * (n + 1 < size ? y[n + 1] : 0)
+      + b2 * (n + 2 < size ? y[n + 2] : 0)
+      + b3 * (n + 3 < size ? y[n + 3] : 0);
+  }
+
+  return y;
+}
+
+// Deriche recursive (4th-order IIR) Gaussian approximation
+// Using Deriche (1993) coefficients via Getreuer's verified parameterization.
+// Two complex conjugate pole pairs: alpha_k, lambda_k for k=1,2.
+function deriche(sigma) {
+  // Complex alpha (numerator weights) and lambda (pole parameters)
+  // alpha = [0.84 + 1.8675i, -0.34015 - 0.1299i] (plus conjugates)
+  // lambda = [1.783 + 0.6318i, 1.723 + 1.997i] (plus conjugates)
+  //
+  // Each pair contributes: alpha_k / (1 - exp(-lambda_k/sigma) * z^-1)
+  // We expand the product of two such pairs into a 4th-order IIR.
+
+  // Pole pair 1: lambda = 1.783 ± 0.6318i
+  const e0 = Math.exp(-1.783 / sigma);
+  const cos0 = Math.cos(0.6318 / sigma);
+  const sin0 = Math.sin(0.6318 / sigma);
+  // Pole pair 2: lambda = 1.723 ± 1.997i
+  const e1 = Math.exp(-1.723 / sigma);
+  const cos1 = Math.cos(1.997 / sigma);
+  const sin1 = Math.sin(1.997 / sigma);
+
+  // Denominator coefficients (from expanding (1 - p1*z^-1)(1 - p1'*z^-1)(1 - p2*z^-1)(1 - p2'*z^-1))
+  const d1 = -2 * (e0 * cos0 + e1 * cos1);
+  const d2 = 4 * e0 * e1 * cos0 * cos1 + e0 * e0 + e1 * e1;
+  const d3 = -2 * (e0 * e0 * e1 * cos1 + e0 * e1 * e1 * cos0);
+  const d4 = e0 * e0 * e1 * e1;
+
+  // Numerator: expand sum of alpha_k/(1-p_k*z^-1) over all 4 poles,
+  // multiplied by the denominators of the other poles.
+  // alpha_1 = 0.84 + 1.8675i, alpha_2 = conj(alpha_1)
+  // alpha_3 = -0.34015 - 0.1299i, alpha_4 = conj(alpha_3)
+  // Causal numerator n(z) = alpha_1 * (1-p2*z^-1)(1-p2'*z^-1) * (1-p1'*z^-1)
+  //                       + alpha_1'* (1-p2*z^-1)(1-p2'*z^-1) * (1-p1*z^-1)
+  //                       + alpha_3 * (1-p1*z^-1)(1-p1'*z^-1) * (1-p2'*z^-1)
+  //                       + alpha_3'* (1-p1*z^-1)(1-p1'*z^-1) * (1-p2*z^-1)
+  // This is complex but the result is real. Compute using the ITK/Farneback form:
+  const A1 = 0.84, B1 = 1.8675;       // alpha_1 = A1 + B1*i
+  const A2 = -0.34015, B2 = -0.1299;  // alpha_3 = A2 + B2*i
+
+  const n0f = A1 + A2;
+  const n1f = e1 * (B2 * sin1 - (A2 + 2 * A1) * cos1)
+            + e0 * (B1 * sin0 - (A1 + 2 * A2) * cos0);
+  const n2f = 2 * e0 * e1 * ((A1 + A2) * cos1 * cos0
+            - B1 * cos1 * sin0 - B2 * cos0 * sin1)
+            + A2 * e0 * e0 + A1 * e1 * e1;
+  const n3f = e0 * e0 * e1 * (B2 * sin1 - A2 * cos1)
+            + e0 * e1 * e1 * (B1 * sin0 - A1 * cos0);
+
+  // Backward numerator: H-(z) = H+(z^-1) - h+[0] ensures h-[-n] = h+[n] for n>=1
+  const m1 = n1f - n0f * d1;
+  const m2 = n2f - n0f * d2;
+  const m3 = n3f - n0f * d3;
+  const m4 = -n0f * d4;
+
+  // Apply to an impulse (parallel form: y = y+ + y-)
+  const radius = Math.ceil(4 * sigma);
+  const size = 2 * radius + 1;
+  const x = new Array(size).fill(0);
+  x[radius] = 1;
+
+  // Forward (causal) pass
+  const yf = new Array(size).fill(0);
+  for (let n = 0; n < size; n++) {
+    yf[n] = n0f * x[n]
+           + n1f * (n >= 1 ? x[n - 1] : 0)
+           + n2f * (n >= 2 ? x[n - 2] : 0)
+           + n3f * (n >= 3 ? x[n - 3] : 0)
+           - d1 * (n >= 1 ? yf[n - 1] : 0)
+           - d2 * (n >= 2 ? yf[n - 2] : 0)
+           - d3 * (n >= 3 ? yf[n - 3] : 0)
+           - d4 * (n >= 4 ? yf[n - 4] : 0);
+  }
+
+  // Backward (anti-causal) pass on input
+  const yb = new Array(size).fill(0);
+  for (let n = size - 1; n >= 0; n--) {
+    yb[n] = m1 * (n + 1 < size ? x[n + 1] : 0)
+           + m2 * (n + 2 < size ? x[n + 2] : 0)
+           + m3 * (n + 3 < size ? x[n + 3] : 0)
+           + m4 * (n + 4 < size ? x[n + 4] : 0)
+           - d1 * (n + 1 < size ? yb[n + 1] : 0)
+           - d2 * (n + 2 < size ? yb[n + 2] : 0)
+           - d3 * (n + 3 < size ? yb[n + 3] : 0)
+           - d4 * (n + 4 < size ? yb[n + 4] : 0);
+  }
+
+  // Sum and normalize to unit sum
+  const y = new Array(size);
+  for (let n = 0; n < size; n++) y[n] = yf[n] + yb[n];
+  const sum = y.reduce((a, b) => a + b, 0);
+  if (sum > 0) for (let n = 0; n < size; n++) y[n] /= sum;
+  return y;
+}
+
+// Generate a normalized Gaussian kernel truncated at trunc*sigma
+function gaussianKernel(sigma, trunc) {
+  const radius = Math.ceil(trunc * sigma);
+  const size = 2 * radius + 1;
+  const kernel = new Array(size);
+  let sum = 0;
+  for (let i = 0; i < size; i++) {
+    const x = i - radius;
+    kernel[i] = Math.exp(-0.5 * x * x / (sigma * sigma));
+    sum += kernel[i];
+  }
+  for (let i = 0; i < size; i++) kernel[i] /= sum;
+  return kernel;
+}
+
+// Compute ground truth impulse response: a single Gaussian truncated at 4 sigma
+function computeGroundTruth(sigma) {
+  return gaussianKernel(sigma, 4);
+}
+
+// Compute approximate impulse response for given params.
+// Optional sigmaLoOverride to use a different low-res sigma.
+function computeApproximate(sigma, up, down, factor, sigmaLoOverride) {
+  const numPhases = 16;
+  const downKernel = computeFilter(down, factor);
+  const upKernel = computeFilter(up, factor);
+  const downVar = filterVariance(downKernel);
+  const upVar = filterVariance(upKernel);
+  const downSum = downKernel.reduce((a, b) => a + b, 0);
+  const upSum = upKernel.reduce((a, b) => a + b, 0);
+  const sigmaLo = sigmaLoOverride !== undefined ? sigmaLoOverride
+    : Math.sqrt(Math.max(sigma * sigma - upVar - downVar, 1e-4)) / factor;
+  const loKernel = gaussianKernel(sigmaLo, 5);
+
+  const gt = computeGroundTruth(sigma);
+  const outLen = gt.length;
+  const radius = Math.ceil(4 * sigma);
+  const inputLen = 2 * radius + numPhases;
+  const center = radius + numPhases / 2;
+
+  const rows = [];
+  for (let p = 0; p < numPhases; p++) {
+    // Start with zeros, place impulse at center - p (always in bounds)
+    let signal = new Array(inputLen).fill(0);
+    signal[center - p] = 1;
+
+    // Convolve with prefilter
+    signal = convolve(signal, downKernel);
+    for (let i = 0; i < signal.length; i++) signal[i] /= downSum;
+
+    // Subsample by factor
+    const subsampled = [];
+    for (let i = 0; i < signal.length; i += factor) {
+      subsampled.push(signal[i]);
+    }
+
+    // Convolve with low-res Gaussian
+    let blurred = convolve(subsampled, loKernel);
+
+    // Zero-fill by factor
+    const zerofilled = new Array((blurred.length - 1) * factor + 1).fill(0);
+    for (let i = 0; i < blurred.length; i++) {
+      zerofilled[i * factor] = blurred[i];
+    }
+
+    // Convolve with interpolator
+    let interpolated = convolve(zerofilled, upKernel);
+    for (let i = 0; i < interpolated.length; i++) interpolated[i] *= factor / upSum;
+
+    // Shift back by p to undo the impulse offset
+    const shifted = new Array(interpolated.length).fill(0);
+    for (let i = 0; i < interpolated.length; i++) {
+      const src = i - p;
+      if (src >= 0 && src < interpolated.length) shifted[i] = interpolated[src];
+    }
+
+    // Crop to outLen values. The center of mass shifts by half each kernel's
+    // length through convolutions, and zero-fill scales by factor:
+    //   prefilter shifts by (K_d-1)/2
+    //   subsample divides by factor
+    //   lo blur shifts by (K_lo-1)/2
+    //   zero-fill multiplies by factor
+    //   interpolator shifts by (K_u-1)/2
+    // Net shift from input center: (K_d-1)/2 + (K_lo-1)/2*factor + (K_u-1)/2
+    // Plus (center - radius) to account for the extra padding in the input buffer
+    const downHalf = (downKernel.length - 1) / 2;
+    const upHalf = (upKernel.length - 1) / 2;
+    const loHalf = (loKernel.length - 1) / 2;
+    const cropStart = Math.round(numPhases / 2 + downHalf + loHalf * factor + upHalf);
+    rows.push(shifted.slice(cropStart, cropStart + outLen));
+  }
+  return rows;
+}
+
+// Plugin to draw a vertical dotted line at the low-res Nyquist frequency
+let freqDomainLines = null; // { maxFreq, nyquist } set when in frequency domain
+const freqLinesPlugin = {
+  id: 'freqLines',
+  afterDraw(chart) {
+    if (!freqDomainLines) return;
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y;
+    const ctx = chart.ctx;
+    ctx.save();
+    const lines = [
+      { freq: freqDomainLines.nyquist, label: 'Low-res Nyquist' },
+      { freq: freqDomainLines.maxFreq, label: 'Max low-res frequency' }
+    ];
+    for (const line of lines) {
+      const xPx = xScale.getPixelForValue(line.freq);
+      if (xPx < xScale.left || xPx > xScale.right) continue;
+      ctx.beginPath();
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth = 1;
+      ctx.moveTo(xPx, yScale.top);
+      ctx.lineTo(xPx, yScale.bottom);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(line.label, xPx + 4, yScale.top + 12);
+    }
+    ctx.restore();
+  }
+};
+
+const ctx = document.getElementById('chart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      { label: 'Ground Truth', data: [], borderColor: 'rgba(54,162,235,1)', backgroundColor: 'rgba(54,162,235,0.1)', borderWidth: 2, pointRadius: 1, fill: true },
+      { label: 'Approximate', data: [], borderColor: 'rgba(255,99,132,1)', backgroundColor: 'rgba(255,99,132,0.1)', borderWidth: 2, pointRadius: 1, fill: true }
+    ]
+  },
+  options: {
+    animation: false,
+    scales: {
+      x: { title: { display: true, text: 'Pixel' }, min: undefined, max: undefined,
+           ticks: { callback: (v) => typeof v === 'number' ? Math.round(v * 100) / 100 : v } },
+      y: { title: { display: true, text: 'Weight' }, beginAtZero: true, min: undefined, max: undefined }
+    },
+    plugins: {
+      title: { display: true, text: '', font: { size: 14 } }
+    }
+  },
+  plugins: [freqLinesPlugin]
+});
+
+// Comparison chart
+const compareCtx = document.getElementById('compare-chart').getContext('2d');
+const compareChart = new Chart(compareCtx, {
+  type: 'line',
+  data: { labels: [], datasets: [] },
+  options: {
+    animation: false,
+    scales: {
+      x: { title: { display: true, text: 'Pixel' } },
+      y: { title: { display: true, text: 'Weight' }, beginAtZero: true }
+    },
+    plugins: {
+      title: { display: true, text: '', font: { size: 14 } },
+      legend: { display: true }
+    }
+  }
+});
+
+// Map slider [0, 1000] to sigma with log spacing: sigma = 2^(10*t), range [1, 1024]
+function sliderToSigma(sliderId) {
+  const t = parseInt(document.getElementById(sliderId).value) / 1000;
+  return Math.round(Math.pow(2, 8 * t) * 10) / 10;
+}
+
+function getSigma() {
+  const sigma = sliderToSigma('sigma-slider');
+  document.getElementById('sigma-val').textContent = sigma;
+  return sigma;
+}
+
+function sigmaToSlider(sigma) {
+  return Math.round(Math.log2(sigma) / 8 * 1000);
+}
+
+function getCompareSigma() {
+  return sliderToSigma('compare-sigma-slider');
+}
+
+function updateCompareChart() {
+  const sigma = getCompareSigma();
+  document.getElementById('compare-sigma-val').textContent = sigma;
+  const domain = document.querySelector('.compare-domain-btn.active').dataset.domain;
+
+  const gt = computeGroundTruth(sigma);
+  const oursF = Math.max(1, Math.floor(sigma / 2));
+  let ours, oursPhase0;
+  if (oursF <= 1) {
+    // At factor 1, just use a direct Gaussian blur (no resampling)
+    oursPhase0 = gaussianKernel(sigma, 4);
+    ours = [oursPhase0];
+  } else {
+    ours = computeApproximate(sigma, 3, 3, oursF);
+    oursPhase0 = ours[0];
+  }
+
+  const trunc3 = truncatedGaussian3(sigma);
+  const tripleBox = tripleBoxBlur(sigma);
+  const yvv = youngVanVliet(sigma);
+  const drc = deriche(sigma);
+
+  const outLen = gt.length;
+  function centerPad(kernel) {
+    if (kernel.length >= outLen) {
+      const start = Math.floor((kernel.length - outLen) / 2);
+      return kernel.slice(start, start + outLen);
+    }
+    const pad = new Array(outLen).fill(0);
+    const offset = Math.floor((outLen - kernel.length) / 2);
+    for (let i = 0; i < kernel.length; i++) pad[offset + i] = kernel[i];
+    return pad;
+  }
+
+  const trunc3Padded = centerPad(trunc3);
+  const tripleBoxPadded = centerPad(tripleBox);
+  const yvvPadded = centerPad(yvv);
+  const drcPadded = centerPad(drc);
+  const oursPadded = centerPad(oursPhase0);
+
+  const psnrTrunc3 = computePSNR(gt, [trunc3Padded]);
+  const psnrTripleBox = computePSNR(gt, [tripleBoxPadded]);
+  const psnrYvv = computePSNR(gt, [yvvPadded]);
+  const psnrDrc = computePSNR(gt, [drcPadded]);
+  const psnrOurs = computePSNR(gt, ours.map(r => centerPad(r)));
+
+  const sd = (k) => Math.sqrt(filterVariance(k)).toFixed(2);
+  const algos = [
+    { name: `Ground Truth (4σ, σ=${sd(gt)})`, data: gt, color: 'rgba(54,162,235,1)', width: 2.5 },
+    { name: `Truncated 3σ (σ=${sd(trunc3)}, ${psnrTrunc3.toFixed(1)} dB)`, data: trunc3Padded, color: 'rgba(255,159,64,0.9)', width: 1.5 },
+    { name: `3x box (σ=${sd(tripleBox)}, ${psnrTripleBox.toFixed(1)} dB)`, data: tripleBoxPadded, color: 'rgba(153,102,255,0.9)', width: 1.5 },
+    { name: `YVV (σ=${sd(yvv)}, ${psnrYvv.toFixed(1)} dB)`, data: yvvPadded, color: 'rgba(75,192,192,0.9)', width: 1.5 },
+    { name: `Deriche (σ=${sd(drc)}, ${psnrDrc.toFixed(1)} dB)`, data: drcPadded, color: 'rgba(220,120,60,0.9)', width: 1.5 },
+    { name: `Ours u=3,d=3,f=${oursF} (σ=${sd(oursPhase0)}, ${psnrOurs.toFixed(1)} dB)`, data: oursPadded, color: 'rgba(255,99,132,1)', width: 1.5 }
+  ];
+
+  if (domain === 'spatial') {
+    const halfW = 4 * sigma;
+    compareChart.data.labels = [];
+    const datasets = algos.map(a => ({
+      label: a.name,
+      data: a.data.map((v, i) => ({ x: i - (a.data.length - 1) / 2, y: v })),
+      borderColor: a.color, backgroundColor: 'transparent',
+      borderWidth: a.width, pointRadius: 0, fill: false
+    }));
+    // Add spatial error curves (skip ground truth at index 0)
+    const gtCenter = (gt.length - 1) / 2;
+    for (let i = 1; i < algos.length; i++) {
+      const errData = algos[i].data.map((v, j) => ({
+        x: j - (algos[i].data.length - 1) / 2,
+        y: v - (gt[j] || 0)
+      }));
+      datasets.push({
+        label: `${algos[i].name} error`,
+        data: errData,
+        borderColor: algos[i].color,
+        backgroundColor: algos[i].color.replace(/[\d.]+\)$/, '0.08)'),
+        borderWidth: 1, pointRadius: 0,
+        borderDash: [4, 4], fill: true
+      });
+    }
+    compareChart.data.datasets = datasets;
+    compareChart.options.scales.x.type = 'linear';
+    compareChart.options.scales.x.title.text = 'Pixel';
+    compareChart.options.scales.y.title.text = 'Weight';
+    const gtPeak = Math.max(...gt);
+    compareChart.options.scales.y.beginAtZero = false;
+    compareChart.options.scales.y.min = -gtPeak / 8;
+    compareChart.options.scales.y.max = 9 * gtPeak / 8;
+    compareChart.options.scales.x.min = -halfW;
+    compareChart.options.scales.x.max = halfW;
+  } else {
+    const center = (outLen - 1) / 2;
+    const specs = algos.map(a => spectrum(a.data, center));
+    const gtSpec = specs[0];
+    compareChart.data.labels = [];
+    const datasets = algos.map((a, i) => ({
+      label: a.name, data: toXY(specs[i].freqs, specs[i].mag),
+      borderColor: a.color, backgroundColor: 'transparent',
+      borderWidth: a.width, pointRadius: 0, fill: false
+    }));
+    // Add error curves for each approximation (skip ground truth at index 0)
+    for (let i = 1; i < algos.length; i++) {
+      const errMag = specs[i].freqs.map((_, k) => {
+        const dRe = specs[i].re[k] - gtSpec.re[k];
+        const dIm = specs[i].im[k] - gtSpec.im[k];
+        return Math.sqrt(dRe * dRe + dIm * dIm);
+      });
+      datasets.push({
+        label: `${algos[i].name} error`,
+        data: toXY(specs[i].freqs, errMag),
+        borderColor: algos[i].color,
+        backgroundColor: algos[i].color.replace(/[\d.]+\)$/, '0.08)'),
+        borderWidth: 1, pointRadius: 0,
+        borderDash: [4, 4], fill: true
+      });
+    }
+    compareChart.data.datasets = datasets;
+    compareChart.options.scales.x.type = 'linear';
+    compareChart.options.scales.x.title.text = 'Normalized frequency';
+    compareChart.options.scales.y.title.text = 'Magnitude';
+    const gtFreqPeak = Math.max(...specs[0].mag);
+    compareChart.options.scales.y.beginAtZero = false;
+    compareChart.options.scales.y.min = -gtFreqPeak / 8;
+    compareChart.options.scales.y.max = 9 * gtFreqPeak / 8;
+    compareChart.options.scales.x.min = 0;
+    compareChart.options.scales.x.max = Math.round(Math.min(1.5 / sigma, 0.5) * 1000) / 1000;
+  }
+
+  const domainNote = '';
+  compareChart.options.plugins.title.text = `Algorithm comparison (σ=${sigma.toFixed(1)})${domainNote}`;
+  // Hide error curve legend entries
+  compareChart.options.plugins.legend = {
+    position: 'right',
+    labels: {
+      filter: (item) => !item.text.endsWith(' error'),
+      font: { size: 11 }
+    }
+  };
+  compareChart.update();
+}
+
+// Zoom state: null means fully zoomed out (use defaults)
+let zoomState = null; // { xMin, xMax, yMin, yMax }
+let defaultBounds = null; // { xMin, xMax, yMin, yMax } set after each data update
+
+function applyZoom() {
+  if (zoomState) {
+    chart.options.scales.x.min = zoomState.xMin;
+    chart.options.scales.x.max = zoomState.xMax;
+    chart.options.scales.y.min = zoomState.yMin;
+    chart.options.scales.y.max = zoomState.yMax;
+  } else if (defaultBounds) {
+    chart.options.scales.x.min = defaultBounds.xMin;
+    chart.options.scales.x.max = defaultBounds.xMax;
+    chart.options.scales.y.min = defaultBounds.yMin;
+    chart.options.scales.y.max = defaultBounds.yMax;
+  }
+  chart.update();
+}
+
+document.getElementById('chart').addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (!defaultBounds) return;
+
+  const rect = chart.canvas.getBoundingClientRect();
+  const xScale = chart.scales.x;
+  const yScale = chart.scales.y;
+
+  // Get data coordinates under cursor
+  const canvasX = e.clientX - rect.left;
+  const canvasY = e.clientY - rect.top;
+  const dataX = xScale.getValueForPixel(canvasX);
+  const dataY = yScale.getValueForPixel(canvasY);
+
+  const cur = zoomState || { ...defaultBounds };
+  const zoomFactor = e.deltaY < 0 ? 0.8 : 1.25; // scroll up = zoom in
+
+  // Zoom around cursor position
+  let xMin = dataX - (dataX - cur.xMin) * zoomFactor;
+  let xMax = dataX + (cur.xMax - dataX) * zoomFactor;
+  let yMin = dataY - (dataY - cur.yMin) * zoomFactor;
+  let yMax = dataY + (cur.yMax - dataY) * zoomFactor;
+
+  // Clamp to default bounds (max zoom out)
+  xMin = Math.max(xMin, defaultBounds.xMin);
+  xMax = Math.min(xMax, defaultBounds.xMax);
+  yMin = Math.max(yMin, defaultBounds.yMin);
+  yMax = Math.min(yMax, defaultBounds.yMax);
+
+  // If we've hit the default bounds, reset to null
+  if (xMin <= defaultBounds.xMin && xMax >= defaultBounds.xMax &&
+      yMin <= defaultBounds.yMin && yMax >= defaultBounds.yMax) {
+    zoomState = null;
+  } else {
+    zoomState = { xMin, xMax, yMin, yMax };
+  }
+  applyZoom();
+}, { passive: false });
+
+// Pan by dragging
+let panning = false;
+let panStart = { x: 0, y: 0 };
+let panBoundsStart = null;
+
+document.getElementById('chart').addEventListener('mousedown', (e) => {
+  if (e.button !== 0 || !defaultBounds) return;
+  panning = true;
+  panStart = { x: e.clientX, y: e.clientY };
+  panBoundsStart = { ...(zoomState || defaultBounds) };
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!panning) return;
+  const xScale = chart.scales.x;
+  const yScale = chart.scales.y;
+  // Convert pixel delta to data delta
+  const dxPx = e.clientX - panStart.x;
+  const dyPx = e.clientY - panStart.y;
+  const dxData = (panBoundsStart.xMax - panBoundsStart.xMin) * dxPx / (xScale.right - xScale.left);
+  const dyData = (panBoundsStart.yMax - panBoundsStart.yMin) * dyPx / (yScale.bottom - yScale.top);
+
+  let xMin = panBoundsStart.xMin - dxData;
+  let xMax = panBoundsStart.xMax - dxData;
+  let yMin = panBoundsStart.yMin + dyData;
+  let yMax = panBoundsStart.yMax + dyData;
+
+  // Clamp so we don't pan beyond default bounds
+  if (xMin < defaultBounds.xMin) { xMax += defaultBounds.xMin - xMin; xMin = defaultBounds.xMin; }
+  if (xMax > defaultBounds.xMax) { xMin -= xMax - defaultBounds.xMax; xMax = defaultBounds.xMax; }
+  if (yMin < defaultBounds.yMin) { yMax += defaultBounds.yMin - yMin; yMin = defaultBounds.yMin; }
+  if (yMax > defaultBounds.yMax) { yMin -= yMax - defaultBounds.yMax; yMax = defaultBounds.yMax; }
+
+  xMin = Math.max(xMin, defaultBounds.xMin);
+  xMax = Math.min(xMax, defaultBounds.xMax);
+  yMin = Math.max(yMin, defaultBounds.yMin);
+  yMax = Math.min(yMax, defaultBounds.yMax);
+
+  zoomState = { xMin, xMax, yMin, yMax };
+  applyZoom();
+});
+
+document.addEventListener('mouseup', () => { panning = false; });
+
+// Pareto chart
+const paretoCtx = document.getElementById('pareto-chart').getContext('2d');
+
+// Custom plugin to draw labels on Pareto-frontier points
+const paretoLabelPlugin = {
+  id: 'paretoLabels',
+  afterDraw(chart) {
+    if (!chart._paretoLabels) return;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = '#333';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    for (const lbl of chart._paretoLabels) {
+      const meta = chart.getDatasetMeta(lbl.datasetIndex);
+      const pt = meta.data[lbl.index];
+      if (pt) ctx.fillText(lbl.text, pt.x + 6, pt.y - 4);
+    }
+    ctx.restore();
+  }
+};
+
+const paretoChart = new Chart(paretoCtx, {
+  type: 'scatter',
+  data: { datasets: [] },
+  options: {
+    animation: false,
+    scales: {
+      x: { title: { display: true, text: 'PSNR (dB)' } },
+      y: {
+        title: { display: true, text: 'Multiplies per pixel' },
+        ticks: {
+          callback: (value) => value > 0 ? (1 / value).toFixed(1) : ''
+        }
+      }
+    },
+    plugins: {
+      title: { display: true, text: 'Quality vs Throughput', font: { size: 14 } },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `${ctx.raw.label}  (${(1/ctx.raw.y).toFixed(1)} muls/px, ${ctx.raw.x.toFixed(1)} dB)`
+        }
+      },
+      legend: { display: true }
+    }
+  },
+  plugins: [paretoLabelPlugin]
+});
+
+function computeMulsPerPixel(up, down, factor) {
+  const upKernel = computeFilter(up, factor);
+  const downKernel = computeFilter(down, factor);
+  const upVar = filterVariance(upKernel);
+  const downVar = filterVariance(downKernel);
+  const sigma = getSigma();
+  const sigmaLo = Math.sqrt(Math.max(sigma * sigma - upVar - downVar, 1e-4)) / factor;
+  const diameter = 2 * Math.ceil(4 * sigmaLo) + 1;
+  return down + down / factor + up + up / factor + 2 * diameter / (factor * factor);
+}
+
+// gt is a 1D kernel, ap is an array of rows (one per phase)
+function computePSNR(gt, ap) {
+  const gtMax = Math.max(...gt);
+  let mse = 0, count = 0;
+  for (let r = 0; r < ap.length; r++) {
+    for (let i = 0; i < Math.max(gt.length, ap[r].length); i++) {
+      const d = (gt[i] || 0) - (ap[r][i] || 0);
+      mse += d * d;
+      count++;
+    }
+  }
+  mse /= count;
+  return mse > 0 ? -10 * Math.log10(mse / (gtMax * gtMax)) : Infinity;
+}
+
+const UPS = [1, 2, 3, 4];
+const DOWNS = [1, 2, 3, 4];
+const FACTORS = [2, 4, 8, 16];
+
+function updatePareto() {
+  const sigma = getSigma();
+  const gt = computeGroundTruth(sigma);
+
+  const points = [];
+  for (const up of UPS) {
+    for (const down of DOWNS) {
+      if (up < down) continue;
+      for (const factor of FACTORS) {
+        const ap = computeApproximate(sigma, up, down, factor);
+        const psnr = computePSNR(gt, ap);
+        const muls = computeMulsPerPixel(up, down, factor);
+        points.push({ psnr, throughput: 1 / muls, up, down, factor,
+          label: `u=${up} d=${down} f=${factor}` });
+      }
+    }
+  }
+
+  // Compute Pareto frontier: sorted by PSNR ascending, keep points with increasing throughput
+  points.sort((a, b) => a.psnr - b.psnr);
+  const frontier = [];
+  let bestThroughput = -Infinity;
+  for (let i = points.length - 1; i >= 0; i--) {
+    if (points[i].throughput >= bestThroughput) {
+      bestThroughput = points[i].throughput;
+      frontier.push(points[i]);
+    }
+  }
+  frontier.sort((a, b) => a.psnr - b.psnr);
+
+  const frontierSet = new Set(frontier);
+  const nonFrontier = points.filter(p => !frontierSet.has(p));
+
+  // Highlight currently selected point (canonicalize so u >= d)
+  let curUp = parseInt(document.getElementById('up').value);
+  let curDown = parseInt(document.getElementById('down').value);
+  const curFactor = parseInt(document.getElementById('factor').value);
+  if (curUp < curDown) { const tmp = curUp; curUp = curDown; curDown = tmp; }
+
+  const isSelected = (p) => p.up === curUp && p.down === curDown && p.factor === curFactor;
+
+  // Store points for click handling
+  paretoChart._allPoints = points;
+
+  paretoChart.data.datasets = [
+    {
+      label: 'Non-optimal',
+      data: nonFrontier.map(p => ({ x: p.psnr, y: p.throughput, label: p.label })),
+      backgroundColor: nonFrontier.map(p => isSelected(p) ? 'rgba(255,99,132,1)' : 'rgba(180,180,180,0.5)'),
+      pointRadius: nonFrontier.map(p => isSelected(p) ? 9 : 5)
+    },
+    {
+      label: 'Pareto frontier',
+      data: frontier.map(p => ({ x: p.psnr, y: p.throughput, label: p.label })),
+      backgroundColor: frontier.map(p => isSelected(p) ? 'rgba(255,99,132,1)' : 'rgba(54,162,235,0.8)'),
+      pointRadius: frontier.map(p => isSelected(p) ? 9 : 7),
+      showLine: true,
+      borderColor: 'rgba(54,162,235,0.4)',
+      borderWidth: 1,
+      fill: false
+    }
+  ];
+
+  // Set up labels for frontier points
+  paretoChart._paretoLabels = frontier.map((p, i) => ({
+    datasetIndex: 1, index: i, text: p.label
+  }));
+
+  paretoChart.options.plugins.title.text = `Quality vs Throughput (σ=${sigma})`;
+  paretoChart.update();
+}
+
+document.getElementById('pareto-chart').addEventListener('click', (e) => {
+  const elems = paretoChart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, false);
+  if (elems.length === 0) return;
+  const { datasetIndex, index } = elems[0];
+  const pt = paretoChart.data.datasets[datasetIndex].data[index];
+  if (!pt || !pt.label) return;
+  // Parse "u=2 d=1 f=4" format
+  const m = pt.label.match(/u=(\d+)\s+d=(\d+)\s+f=(\d+)/);
+  if (!m) return;
+  document.getElementById('up').value = m[1];
+  document.getElementById('down').value = m[2];
+  document.getElementById('factor').value = m[3];
+  updateFilters();
+  update();
+  updatePareto();
+});
+
+function spatialDatasets(gt, ap, offset, factor, mode) {
+  const gtMax = Math.max(...gt);
+  if (mode === 'all') {
+    const maxLen = Math.max(gt.length, ...ap.map(r => r.length));
+    const labels = Array.from({length: maxLen}, (_, i) => i);
+    const datasets = [
+      { label: 'Ground Truth', data: gt, borderColor: 'rgba(54,162,235,1)', backgroundColor: 'rgba(54,162,235,0.1)', borderWidth: 2, pointRadius: 1, fill: false }
+    ];
+    const numPhases = factor;
+    for (let i = 0; i < numPhases; i++) {
+      const hue = 0 + i * (40 / numPhases);
+      datasets.push({
+        label: i === 0 ? 'Approximate' : `phase ${i}`,
+        data: ap[i],
+        borderColor: `hsl(${hue}, 80%, ${45 + i * 20 / numPhases}%)`,
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false
+      });
+    }
+    return { labels, datasets, bounds: { xMin: 0, xMax: maxLen - 1, yMin: 0, yMax: gtMax * 1.2 }, filterLegend: true };
+  } else {
+    const apRow = ap[offset];
+    const len = Math.max(gt.length, apRow.length);
+    const labels = Array.from({length: len}, (_, i) => i);
+    const datasets = [
+      { label: 'Ground Truth', data: gt, borderColor: 'rgba(54,162,235,1)', backgroundColor: 'rgba(54,162,235,0.1)', borderWidth: 2, pointRadius: 1, fill: true },
+      { label: 'Approximate', data: apRow, borderColor: 'rgba(255,99,132,1)', backgroundColor: 'rgba(255,99,132,0.1)', borderWidth: 2, pointRadius: 1, fill: true }
+    ];
+    return { labels, datasets, bounds: { xMin: 0, xMax: len - 1, yMin: 0, yMax: gtMax * 1.2 }, filterLegend: false };
+  }
+}
+
+function toXY(freqs, mag) {
+  return freqs.map((f, i) => ({ x: f, y: mag[i] }));
+}
+
+function frequencyDatasets(gt, ap, offset, factor, mode, sigma, up, down, naive) {
+  const downKernel = computeFilter(down, factor);
+  const upKernel = computeFilter(up, factor);
+  const downSum = downKernel.reduce((a, b) => a + b, 0);
+  const upSum = upKernel.reduce((a, b) => a + b, 0);
+  const downVar = filterVariance(downKernel);
+  const upVar = filterVariance(upKernel);
+  const sigmaLo = naive ? sigma / factor : Math.sqrt(Math.max(sigma * sigma - upVar - downVar, 1e-4)) / factor;
+  const loKernel = gaussianKernel(sigmaLo, 5);
+
+  const outLen = gt.length;
+  // Round center up to a multiple of factor so subsample alignment is stable as sigma changes
+  const radius = Math.ceil(Math.ceil(4 * sigma) / factor) * factor;
+  const inputLen = 2 * radius;
+  const center = radius;
+
+  // Run pipeline for phase 0, capturing intermediates
+  let signal = new Array(inputLen).fill(0);
+  signal[center] = 1;
+
+  // After prefilter
+  let prefiltered = convolve(signal, downKernel);
+  for (let i = 0; i < prefiltered.length; i++) prefiltered[i] /= downSum;
+
+  // After subsample (scale by factor to preserve energy)
+  const subsampled = [];
+  for (let i = 0; i < prefiltered.length; i += factor) subsampled.push(prefiltered[i] * factor);
+
+  // After low-res blur
+  let blurred = convolve(subsampled, loKernel);
+
+  // After zero-fill
+  const zerofilled = new Array((blurred.length - 1) * factor + 1).fill(0);
+  for (let i = 0; i < blurred.length; i++) zerofilled[i * factor] = blurred[i];
+
+  // After interpolator (final) — factor scaling already applied at subsample
+  let final_ = convolve(zerofilled, upKernel);
+  for (let i = 0; i < final_.length; i++) final_[i] /= upSum;
+
+  // Zero-fill low-res signals to high-res: insert factor-1 zeros between samples.
+  // DFT of zero-filled signal = periodic repetition of original DFT, giving exact copies.
+  function zeroFillToHiRes(loSig) {
+    const hi = new Array(loSig.length * factor).fill(0);
+    for (let i = 0; i < loSig.length; i++) hi[i * factor] = loSig[i];
+    return hi;
+  }
+
+  const subsampledHR = zeroFillToHiRes(subsampled);
+  const blurredHR = zeroFillToHiRes(blurred);
+
+  const gtCenter = (gt.length - 1) / 2;
+  const gtSpec = spectrum(gt, gtCenter);
+  const prefilteredSpec = spectrum(prefiltered, center);
+  const subsampledSpec = spectrum(subsampledHR, center);
+  const blurredSpec = spectrum(blurredHR, center);
+  const finalSpec = spectrum(final_, center);
+
+  // RMS error across phases
+  const len = Math.max(gt.length, ...ap.map(r => r.length));
+  let n = 1;
+  while (n < len) n *= 2;
+  n *= 4;
+  const half = n / 2 + 1;
+  const avgPower = new Array(half).fill(0);
+  const numPhases = factor;
+  for (let p = 0; p < numPhases; p++) {
+    const err = new Array(len).fill(0);
+    for (let i = 0; i < len; i++) err[i] = (ap[p][i] || 0) - (gt[i] || 0);
+    const errSpec = spectrum(err, gtCenter);
+    for (let i = 0; i < half; i++) avgPower[i] += errSpec.mag[i] * errSpec.mag[i];
+  }
+  const rmsMag = avgPower.map(v => Math.sqrt(v / numPhases));
+
+  const yMax = Math.max(...gtSpec.mag) * 1.1;
+
+  const datasets = [
+    { label: 'Ground Truth', data: toXY(gtSpec.freqs, gtSpec.mag),
+      borderColor: 'rgba(54,162,235,1)', backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: 0, fill: false },
+    { label: 'After prefilter', data: toXY(prefilteredSpec.freqs, prefilteredSpec.mag),
+      borderColor: 'rgba(255,159,64,0.7)', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, fill: false },
+    { label: 'After subsample', data: toXY(subsampledSpec.freqs, subsampledSpec.mag),
+      borderColor: 'rgba(153,102,255,0.7)', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, fill: false },
+    { label: 'After low-res blur', data: toXY(blurredSpec.freqs, blurredSpec.mag),
+      borderColor: 'rgba(75,192,192,0.7)', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, fill: false },
+    { label: 'Final (phase 0)', data: toXY(finalSpec.freqs, finalSpec.mag),
+      borderColor: 'rgba(255,99,132,1)', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, fill: false },
+    { label: 'RMS Error', data: toXY(gtSpec.freqs, rmsMag),
+      borderColor: 'rgba(255,0,0,0.6)', backgroundColor: 'rgba(255,0,0,0.08)', borderWidth: 1.5, pointRadius: 0, borderDash: [4, 4], fill: true }
+  ];
+  return { labels: [], datasets, bounds: { xMin: 0, xMax: 0.5, yMin: 0, yMax }, filterLegend: false };
+}
+
+// Cache for expensive computations. Invalidated when sigma/up/down/factor change.
+let computeCache = { key: null, gt: null, ap: null, freqResult: null };
+
+function getCached(sigma, up, down, factor, naive) {
+  const key = `${sigma}_${up}_${down}_${factor}_${naive}`;
+  if (computeCache.key !== key) {
+    const gt = computeGroundTruth(sigma);
+    const sigmaLoOverride = naive ? sigma / factor : undefined;
+    const ap = computeApproximate(sigma, up, down, factor, sigmaLoOverride);
+    const freqResult = frequencyDatasets(gt, ap, 0, factor, 'single', sigma, up, down, naive);
+    computeCache = { key, gt, ap, freqResult };
+  }
+  return computeCache;
+}
+
+function update() {
+  const sigma = getSigma();
+  const up = parseInt(document.getElementById('up').value);
+  const down = parseInt(document.getElementById('down').value);
+  const factor = parseInt(document.getElementById('factor').value);
+  const offset = parseInt(document.getElementById('offset-slider').value);
+  const mode = document.querySelector('.mode-btn.active').dataset.mode;
+  const domain = document.querySelector('.domain-btn.active').dataset.domain;
+  document.getElementById('offset-val').textContent = offset;
+  document.getElementById('error-msg').textContent = '';
+
+  const slider = document.getElementById('offset-slider');
+  const effectiveMode = (domain === 'frequency') ? 'all' : mode;
+  slider.disabled = (effectiveMode === 'all');
+
+  try {
+    const naive = document.getElementById('naive-sigma').checked;
+    const cached = getCached(sigma, up, down, factor, naive);
+    const gt = cached.gt;
+    const ap = cached.ap;
+
+    const result = domain === 'frequency'
+      ? cached.freqResult
+      : spatialDatasets(gt, ap, offset, factor, effectiveMode);
+
+    chart.data.labels = result.labels;
+    chart.data.datasets = result.datasets;
+    const legendLimit = result.filterLegend ? (domain === 'frequency' ? 3 : 1) : 999;
+    chart.options.plugins.legend = result.filterLegend
+      ? { labels: { filter: (item) => item.datasetIndex <= legendLimit } }
+      : {};
+    freqDomainLines = domain === 'frequency' ? { maxFreq: 1.0 / factor, nyquist: 0.5 / factor } : null;
+    chart.options.scales.x.type = domain === 'frequency' ? 'linear' : 'category';
+    chart.options.scales.x.title.text = domain === 'frequency' ? 'Normalized frequency' : 'Pixel';
+    chart.options.scales.y.title.text = domain === 'frequency' ? 'Amplitude' : 'Weight';
+    chart.options.scales.y.beginAtZero = domain !== 'frequency';
+    defaultBounds = result.bounds;
+
+    const psnr = computePSNR(gt, ap);
+    document.getElementById('psnr-display').textContent = `${psnr.toFixed(1)} dB`;
+    chart.options.plugins.title.text = `σ=${sigma}  u=${up}  d=${down}  f=${factor}  offset=${offset}/16`;
+    applyZoom();
+  } catch (e) {
+    document.getElementById('error-msg').textContent = e.message;
+  }
+}
+
+document.querySelectorAll('#up, #down, #factor, #offset-slider, #sigma-slider, #naive-sigma').forEach(el =>
+  el.addEventListener('input', () => { updateFilters(); update(); updatePareto(); })
+);
+
+let compareRafPending = false;
+document.getElementById('compare-sigma-slider').addEventListener('input', () => {
+  document.getElementById('compare-sigma-val').textContent = getCompareSigma();
+  if (!compareRafPending) {
+    compareRafPending = true;
+    requestAnimationFrame(() => {
+      compareRafPending = false;
+      updateCompareChart();
+    });
+  }
+});
+
+document.querySelectorAll('.compare-domain-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.compare-domain-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateCompareChart();
+  });
+});
+
+let animTimer = null;
+function updateDisplayMode() {
+  clearInterval(animTimer);
+  const mode = document.querySelector('.mode-btn.active').dataset.mode;
+  const domain = document.querySelector('.domain-btn.active').dataset.domain;
+  if (mode === 'animate' && domain !== 'frequency') {
+    animTimer = setInterval(() => {
+      const slider = document.getElementById('offset-slider');
+      slider.value = (parseInt(slider.value) + 1) % 16;
+      update();
+    }, 250);
+  }
+  update();
+}
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateDisplayMode();
+  });
+});
+document.querySelectorAll('.domain-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.domain-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    zoomState = null;
+    updateDisplayMode();
+  });
+});
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const d = btn.dataset;
+    document.getElementById('sigma-slider').value = sigmaToSlider(parseFloat(d.sigma));
+    document.getElementById('sigma-val').textContent = d.sigma;
+    document.getElementById('up').value = d.up;
+    document.getElementById('down').value = d.down;
+    document.getElementById('factor').value = d.factor;
+    document.getElementById('naive-sigma').checked = (d.naiveSigma === 'true');
+    // Set display mode
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.mode-btn[data-mode="${d.mode}"]`).classList.add('active');
+    // Set domain
+    document.querySelectorAll('.domain-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.domain-btn[data-domain="${d.domain}"]`).classList.add('active');
+    zoomState = null;
+    updateFilters();
+    updatePareto();
+    updateDisplayMode();
+    updateCompareChart();
+    // Scroll to the chart
+    document.getElementById('chart-container').scrollIntoView({ behavior: 'smooth' });
+  });
+});
+
+updateFilters();
+update();
+updatePareto();
+updateDisplayMode();
+updateCompareChart();
+</script>
+
+<div style="max-width:1000px; margin-top:40px; line-height:1.6;">
+<h3 id="proof">Appendix: Transpose Symmetry</h3>
+<p>
+You may notice that swapping the interpolator and prefilter orders (e.g. u=3,&nbsp;d=2 vs
+u=2,&nbsp;d=3) produces <em>identical</em> PSNR despite visibly different impulse responses. This is
+not a bug &mdash; it is mathematically guaranteed. For this reason we only plot Pareto points where u &#8805; d &mdash; swapping u and d preserves PSNR and cost, so that variant lands in exactly the same place on the plot.
+</p>
+<p>
+<strong>Claim:</strong> Swapping the interpolator and prefilter orders transposes the overall
+linear operator, preserving the Frobenius norm of the error.
+</p>
+<p>
+<strong>Proof:</strong> Write the pipeline as a matrix acting on the input signal:
+</p>
+<p style="text-align:center;">
+<em>M</em> = <em>U</em> &middot; <em>Z</em> &middot; <em>G</em><sub>lo</sub> &middot; <em>S</em> &middot; <em>D</em>
+</p>
+<p>
+where <em>D</em> is convolution with the prefilter, <em>S</em> is subsampling by <em>f</em>,
+<em>G</em><sub>lo</sub> is the low-resolution Gaussian blur, <em>Z</em> is zero-fill upsampling by
+<em>f</em>, and <em>U</em> is convolution with the interpolator.
+</p>
+<p>
+Two key facts:
+</p>
+<ol>
+<li>For a symmetric convolution filter <em>F</em>, the matrix is symmetric: <em>F</em><sup>T</sup> = <em>F</em>.</li>
+<li>The transpose of subsampling is zero-fill, and vice versa: <em>S</em><sup>T</sup> = <em>Z</em> and <em>Z</em><sup>T</sup> = <em>S</em> (up to the factor of <em>f</em> which cancels between the two).</li>
+</ol>
+<p>
+Taking the transpose:
+</p>
+<p style="text-align:center;">
+<em>M</em><sup>T</sup> = (<em>U</em> &middot; <em>Z</em> &middot; <em>G</em><sub>lo</sub> &middot; <em>S</em> &middot; <em>D</em>)<sup>T</sup>
+= <em>D</em><sup>T</sup> &middot; <em>S</em><sup>T</sup> &middot; <em>G</em><sub>lo</sub><sup>T</sup> &middot; <em>Z</em><sup>T</sup> &middot; <em>U</em><sup>T</sup>
+= <em>D</em> &middot; <em>Z</em> &middot; <em>G</em><sub>lo</sub> &middot; <em>S</em> &middot; <em>U</em>
+</p>
+<p>
+This is exactly the pipeline with the prefilter and interpolator swapped. Furthermore, the sum of
+their variances is the same (it depends only on <em>u</em>&nbsp;+&nbsp;<em>d</em>), so
+&sigma;<sub>lo</sub> and hence <em>G</em><sub>lo</sub> are unchanged.
+</p>
+<p>
+Since the ground truth Gaussian <em>G</em> is also a symmetric convolution
+(<em>G</em><sup>T</sup>&nbsp;=&nbsp;<em>G</em>), the Frobenius norm of the error is preserved:
+</p>
+<p style="text-align:center;">
+&Vert;<em>M</em><sup>T</sup> &minus; <em>G</em>&Vert;<sub>F</sub>
+= &Vert;(<em>M</em> &minus; <em>G</em>)<sup>T</sup>&Vert;<sub>F</sub>
+= &Vert;<em>M</em> &minus; <em>G</em>&Vert;<sub>F</sub>
+</p>
+<p>
+The total mean squared error across all phases &mdash; and therefore the PSNR &mdash; is identical.
+The individual phase responses (rows of <em>M</em> vs rows of <em>M</em><sup>T</sup>) differ, which
+is why the artifacts look different, but their total energy is the same. &square;
+</p>
+</div>
+
+</body>
+</html>
