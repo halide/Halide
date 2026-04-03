@@ -14,12 +14,12 @@
 using namespace Halide;
 
 namespace {
-    uint32_t f32_bits(float f) {
-        uint32_t u;
-        memcpy(&u, &f, sizeof(u));
-        return u;
-    }
+uint32_t f32_bits(float f) {
+    uint32_t u;
+    memcpy(&u, &f, sizeof(u));
+    return u;
 }
+}  // namespace
 
 // ---------------------------------------------------------------------------
 // Correctness: each strict_float op produces the expected value.
