@@ -1941,16 +1941,25 @@ namespace {
 // Parse the SM version from a Halide-emitted HLSL source header.
 // Returns e.g. 60 for "//HALIDE_D3D12_SM 60\n", or 0 if not present.
 int parse_hlsl_sm_version(const char *source) {
-    const char prefix[] = "//HALIDE_D3D12_SM ";
-    const int prefix_len = 18;  // length of "//HALIDE_D3D12_SM "
-    for (int i = 0; i < prefix_len; ++i) {
-        if (source[i] != prefix[i]) {
+    constexpr const char prefix[] = "//HALIDE_D3D12_SM ";
+    constexpr size_t prefix_len = sizeof(prefix) - 1;  // exclude null terminator
+
+    if (strncmp(source, prefix, prefix_len) != 0) {
+        return 0;
+    }
+
+    const char *p = source + prefix_len;
+    if (*p < '0' || *p > '9') {
+        return 0;  // no digits after prefix
+    }
+
+    int sm = 0;
+    for (; *p >= '0' && *p <= '9'; ++p) {
+        int digit = *p - '0';
+        if (__builtin_mul_overflow(sm, 10, &sm) ||
+            __builtin_add_overflow(sm, digit, &sm)) {
             return 0;
         }
-    }
-    int sm = 0;
-    for (int i = prefix_len; source[i] >= '0' && source[i] <= '9'; ++i) {
-        sm = sm * 10 + (source[i] - '0');
     }
     return sm;
 }
