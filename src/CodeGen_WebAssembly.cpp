@@ -42,6 +42,8 @@ protected:
     void visit(const Cast *) override;
     void visit(const Call *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
+
+    llvm::Value *optimization_fence(llvm::Value *v) override;
 };
 
 CodeGen_WebAssembly::CodeGen_WebAssembly(const Target &t)
@@ -198,7 +200,11 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
             }
             if (is_load) {
                 llvm::Value *v = codegen(op->value);
-                v = optimization_fence(v);
+                // In general we don't emit optimization fences in the
+                // webassembly backend, because they cause LLVM internal
+                // errors. However in this specific case it's necessary as a
+                // workaround, so we call the base class version explicitly.
+                v = CodeGen_LLVM::optimization_fence(v);
                 value = builder->CreateIntCast(v, llvm_type_of(op->type),
                                                op->value.type().is_int());
                 return;
@@ -370,6 +376,12 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
     }
 
     CodeGen_Posix::codegen_vector_reduce(op, init);
+}
+
+llvm::Value *CodeGen_WebAssembly::optimization_fence(llvm::Value *v) {
+    // As of llvm 23, using an arithmetic fence intrinsic causes all kinds of
+    // errors in LLVM's webassembly backend.
+    return v;
 }
 
 string CodeGen_WebAssembly::mcpu_target() const {
