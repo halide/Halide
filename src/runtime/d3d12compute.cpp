@@ -1976,18 +1976,21 @@ WCHAR *append_uint_wide(WCHAR *dst, WCHAR *end, unsigned int val) {
     if (dst >= end) {
         return dst;
     }
-    if (val == 0) {
-        *dst++ = (WCHAR)'0';
-        return dst;
-    }
-    WCHAR tmp[12];
-    int n = 0;
-    while (val > 0 && n < 12) {
-        tmp[n++] = (WCHAR)('0' + val % 10);
+    WCHAR *start = dst;
+    // Write digits in reverse order.
+    do {
+        if (dst >= end) {
+            // Truncated mid-number; caller gets a partial result.
+            break;
+        }
+        *dst++ = (WCHAR)('0' + val % 10);
         val /= 10;
-    }
-    for (int i = n - 1; i >= 0 && dst < end; --i) {
-        *dst++ = tmp[i];
+    } while (val > 0);
+    // Reverse in place.
+    for (WCHAR *lo = start, *hi = dst - 1; lo < hi; ++lo, --hi) {
+        WCHAR tmp = *lo;
+        *lo = *hi;
+        *hi = tmp;
     }
     return dst;
 }
