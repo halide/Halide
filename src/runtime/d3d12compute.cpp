@@ -1967,6 +1967,7 @@ int parse_hlsl_sm_version(const char *source) {
 // Copy ASCII/narrow string to wide char buffer (safe for HLSL identifiers and integers).
 // Returns the number of characters written, excluding the null terminator.
 // A return value >= max_len indicates truncation.
+[[nodiscard]]
 int narrow_to_wide(const char *src, WCHAR *dst, int max_len) {
     if (max_len <= 0) {
         return 0;
