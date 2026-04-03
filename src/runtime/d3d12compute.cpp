@@ -1956,12 +1956,19 @@ int parse_hlsl_sm_version(const char *source) {
 }
 
 // Copy ASCII/narrow string to wide char buffer (safe for HLSL identifiers and integers).
-void narrow_to_wide(const char *src, WCHAR *dst, int max_len) {
+// Returns the number of characters written, excluding the null terminator.
+// A return value >= max_len indicates truncation.
+int narrow_to_wide(const char *src, WCHAR *dst, int max_len) {
+    if (max_len <= 0) {
+        return 0;
+    }
     int i = 0;
     for (; src[i] && i < max_len - 1; ++i) {
         dst[i] = (WCHAR)(unsigned char)src[i];
     }
     dst[i] = 0;
+    // If we stopped because of the limit rather than a null, signal truncation.
+    return src[i] ? max_len : i;
 }
 
 // Append an unsigned integer to a wide char buffer (returns pointer past the last written char).
