@@ -1986,7 +1986,7 @@ WCHAR *append_uint_wide(WCHAR *dst, WCHAR *end, unsigned int val) {
 }
 
 // Build a DXC define arg of the form "NAME=VALUE" as a wide string.
-void build_dxc_define_wide(WCHAR *buf, int buf_len, const WCHAR *name, int value) {
+void build_dxc_define_wide(WCHAR *buf, int buf_len, const WCHAR *name, unsigned int value) {
     WCHAR *p = buf;
     WCHAR *end = buf + buf_len - 1;
     for (int i = 0; name[i] && p < end; ++i) {
@@ -1995,7 +1995,7 @@ void build_dxc_define_wide(WCHAR *buf, int buf_len, const WCHAR *name, int value
     if (p < end) {
         *p++ = (WCHAR)'=';
     }
-    p = append_uint_wide(p, end, (unsigned int)value);
+    p = append_uint_wide(p, end, value);
     *p = 0;
 }
 
