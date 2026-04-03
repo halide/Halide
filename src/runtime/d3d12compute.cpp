@@ -1986,7 +1986,7 @@ WCHAR *append_uint_wide(WCHAR *dst, WCHAR *end, unsigned int val) {
 }
 
 // Build a DXC define arg of the form "NAME=VALUE" as a wide string.
-void build_dxc_define_wide(WCHAR *buf, int buf_len, const WCHAR *name, int value) {
+void build_dxc_define_wide(WCHAR *buf, int buf_len, const WCHAR *name, unsigned int value) {
     WCHAR *p = buf;
     WCHAR *end = buf + buf_len - 1;
     for (int i = 0; name[i] && p < end; ++i) {
@@ -1995,7 +1995,7 @@ void build_dxc_define_wide(WCHAR *buf, int buf_len, const WCHAR *name, int value
     if (p < end) {
         *p++ = (WCHAR)'=';
     }
-    p = append_uint_wide(p, end, (unsigned int)value);
+    p = append_uint_wide(p, end, value);
     *p = 0;
 }
 
@@ -2083,10 +2083,10 @@ WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_librar
     // Preprocessor define args for thread counts and shared memory size.
     // Each define is "-D NAME=VALUE" passed as two separate args.
     WCHAR def_groupshared[64], def_treads_x[64], def_treads_y[64], def_treads_z[64];
-    build_dxc_define_wide(def_groupshared, 64, (const WCHAR *)L"__GROUPSHARED_SIZE_IN_BYTES", shared_mem_bytes);
-    build_dxc_define_wide(def_treads_x, 64, (const WCHAR *)L"__NUM_TREADS_X", threadsX);
-    build_dxc_define_wide(def_treads_y, 64, (const WCHAR *)L"__NUM_TREADS_Y", threadsY);
-    build_dxc_define_wide(def_treads_z, 64, (const WCHAR *)L"__NUM_TREADS_Z", threadsZ);
+    build_dxc_define_wide(def_groupshared, 64, (const WCHAR *)L"__GROUPSHARED_SIZE_IN_BYTES", (unsigned int)shared_mem_bytes);
+    build_dxc_define_wide(def_treads_x, 64, (const WCHAR *)L"__NUM_TREADS_X", (unsigned int)threadsX);
+    build_dxc_define_wide(def_treads_y, 64, (const WCHAR *)L"__NUM_TREADS_Y", (unsigned int)threadsY);
+    build_dxc_define_wide(def_treads_z, 64, (const WCHAR *)L"__NUM_TREADS_Z", (unsigned int)threadsZ);
 
     // Entry point (narrow ASCII to wide)
     WCHAR entry_wide[256];

@@ -57,25 +57,22 @@ int main(int argc, char **argv) {
 
     gpu_texture(input, output);
 
-#if defined(TEST_OPENCL)
-    if (input.raw_buffer()->device_interface != halide_opencl_image_device_interface()) {
-        printf("Expected input to be copied to OpenCL texture storage\n");
+    using image_device_interface_fn = const struct halide_device_interface_t *(*)();
+    #if defined(TEST_OPENCL)
+    image_device_interface_fn image_device_interface = halide_opencl_image_device_interface;
+    constexpr const char *image_device_name = "OpenCL";
+    #elif defined(TEST_D3D12COMPUTE)
+    image_device_interface_fn image_device_interface = halide_d3d12compute_image_device_interface;
+    constexpr const char *image_device_name = "D3D12";
+    #endif
+    if (input.raw_buffer()->device_interface != image_device_interface()) {
+        printf("Expected input to be copied to %s texture storage\n", image_device_name);
         return 1;
     }
-    if (output.raw_buffer()->device_interface != halide_opencl_image_device_interface()) {
-        printf("Expected output to be copied to OpenCL texture storage\n");
+    if (output.raw_buffer()->device_interface != image_device_interface()) {
+        printf("Expected output to be copied to %s texture storage\n", image_device_name);
         return 1;
     }
-#elif defined(TEST_D3D12COMPUTE)
-    if (input.raw_buffer()->device_interface != halide_d3d12compute_image_device_interface()) {
-        printf("Expected input to be copied to D3D12 texture storage\n");
-        return 1;
-    }
-    if (output.raw_buffer()->device_interface != halide_d3d12compute_image_device_interface()) {
-        printf("Expected output to be copied to D3D12 texture storage\n");
-        return 1;
-    }
-#endif
 
     output.copy_to_host();
 
