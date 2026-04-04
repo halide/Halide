@@ -225,8 +225,9 @@ target_sources(
     # keep-sorted end
 )
 
-# The sources that go into libHalide. For the sake of IDE support, headers that
-# exist in src/ but are not public should be included here.
+# The sources that go into libHalide and do not include any LLVM or WASM headers.
+# For the sake of IDE support, headers that exist in src/ but are not public
+# should be included here.
 target_sources(
     Halide
     PRIVATE
@@ -254,24 +255,14 @@ target_sources(
     CanonicalizeGPUVars.cpp
     ClampUnsafeAccesses.cpp
     Closure.cpp
-    CodeGen_ARM.cpp
     CodeGen_C.cpp
     CodeGen_D3D12Compute_Dev.cpp
     CodeGen_GPU_Dev.cpp
-    CodeGen_Hexagon.cpp
-    CodeGen_Internal.cpp
-    CodeGen_LLVM.cpp
     CodeGen_Metal_Dev.cpp
     CodeGen_OpenCL_Dev.cpp
-    CodeGen_Posix.cpp
-    CodeGen_PowerPC.cpp
-    CodeGen_PTX_Dev.cpp
     CodeGen_PyTorch.cpp
-    CodeGen_RISCV.cpp
     CodeGen_Vulkan_Dev.cpp
-    CodeGen_WebAssembly.cpp
     CodeGen_WebGPU_Dev.cpp
-    CodeGen_X86.cpp
     CompilerLogger.cpp
     ConstantBounds.cpp
     ConstantInterval.cpp
@@ -307,7 +298,6 @@ target_sources(
     FuseGPUThreadLoops.cpp
     FuzzFloatStores.cpp
     Generator.cpp
-    HexagonOffload.cpp
     HexagonOptimize.cpp
     ImageParam.cpp
     InferArguments.cpp
@@ -323,18 +313,14 @@ target_sources(
     IROperator.cpp
     IRPrinter.cpp
     IRVisitor.cpp
-    JITModule.cpp
     Lambda.cpp
     Lerp.cpp
     LICM.cpp
-    LLVM_Output.cpp
-    LLVM_Runtime_Linker.cpp
     LoopCarry.cpp
     Lower.cpp
     LowerParallelTasks.cpp
     LowerWarpShuffles.cpp
     Memoization.cpp
-    Module.cpp
     ModulusRemainder.cpp
     Monotonic.cpp
     ObjectInstanceRegistry.cpp
@@ -415,8 +401,30 @@ target_sources(
     Util.cpp
     Var.cpp
     VectorizeLoops.cpp
-    WasmExecutor.cpp
     WrapCalls.cpp
+    # keep-sorted end
+)
+
+# LLVM sources live in their own object library so they can have a separate PCH.
+add_library(
+    Halide_LLVM_srcs OBJECT
+    # keep-sorted start case=no
+    CodeGen_ARM.cpp
+    CodeGen_Hexagon.cpp
+    CodeGen_Internal.cpp
+    CodeGen_LLVM.cpp
+    CodeGen_Posix.cpp
+    CodeGen_PowerPC.cpp
+    CodeGen_PTX_Dev.cpp
+    CodeGen_RISCV.cpp
+    CodeGen_WebAssembly.cpp
+    CodeGen_X86.cpp
+    HexagonOffload.cpp
+    JITModule.cpp
+    LLVM_Output.cpp
+    LLVM_Runtime_Linker.cpp
+    Module.cpp
+    WasmExecutor.cpp
     # keep-sorted end
 )
 
@@ -591,13 +599,14 @@ if (Halide_WASM_BACKEND STREQUAL "wabt")
     find_package(wabt REQUIRED)
     _Halide_pkgdep(wabt)
 
-    target_link_libraries(Halide PRIVATE wabt::wabt)
-    target_compile_definitions(Halide PRIVATE WITH_WABT)
+    target_compile_definitions(Halide_LLVM_srcs PRIVATE WITH_WABT)
+    target_link_libraries(Halide_LLVM_srcs PRIVATE wabt::wabt)
 elseif (Halide_WASM_BACKEND STREQUAL "V8")
     find_package(V8 REQUIRED)
     _Halide_pkgdep(V8)
-    target_compile_definitions(Halide PRIVATE WITH_V8)
-    target_link_libraries(Halide PRIVATE V8::V8)
+
+    target_compile_definitions(Halide_LLVM_srcs PRIVATE WITH_V8)
+    target_link_libraries(Halide_LLVM_srcs PRIVATE V8::V8)
 elseif (Halide_WASM_BACKEND)
     message(FATAL_ERROR "Unknown Halide_WASM_BACKEND `${Halide_WASM_BACKEND}`")
 endif ()
@@ -668,6 +677,50 @@ else ()
         Halide PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>"
     )
 endif ()
+
+##
+# Precompiled headers
+##
+
+# On MSVC, cmake_pch.cxx compiles to a real .obj whose _PchSym_ markers leak
+# into the auto-generated exports.def (via CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS),
+# causing LNK2001/LNK4022. Disable PCH on MSVC entirely to avoid this.
+if (NOT MSVC)
+    # Non-LLVM sources get a PCH covering the most expensive standard library
+    # headers.
+    target_precompile_headers(Halide PRIVATE Halide_pch.h)
+
+    # Util.cpp implements run_with_large_stack(), which requires _XOPEN_SOURCE
+    # to be defined before any includes. The PCH force-include violates this.
+    set_source_files_properties(Util.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+endif ()
+
+target_compile_features(Halide_LLVM_srcs PRIVATE cxx_std_17)
+set_target_properties(Halide_LLVM_srcs PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# Mirror compile flags from the main Halide target.
+target_compile_definitions(
+    Halide_LLVM_srcs PRIVATE
+    "$<TARGET_PROPERTY:Halide,COMPILE_DEFINITIONS>"
+    "$<$<STREQUAL:$<TARGET_PROPERTY:Halide,TYPE>,SHARED_LIBRARY>:Halide_EXPORTS>"
+)
+target_compile_options(
+    Halide_LLVM_srcs PRIVATE
+    "$<TARGET_PROPERTY:Halide,COMPILE_OPTIONS>"
+)
+
+foreach (backend IN LISTS Halide_LLVM_COMPONENTS)
+    target_link_libraries(Halide_LLVM_srcs PRIVATE Halide_LLVM::${backend})
+endforeach ()
+
+# On MSVC, cmake_pch.cxx compiles to a real .obj whose _PchSym_ markers leak
+# into the auto-generated exports.def (via CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS),
+# causing LNK2001/LNK4022. Disable the LLVM PCH on MSVC to avoid this.
+if (NOT MSVC)
+    target_precompile_headers(Halide_LLVM_srcs PRIVATE Halide_llvm_pch.h)
+endif ()
+
+target_link_libraries(Halide PRIVATE Halide_LLVM_srcs)
 
 ##
 # Add autoschedulers to the build.
