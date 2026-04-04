@@ -1337,10 +1337,6 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_msan,$(GENERATOR_AOTCPP_
 # https://github.com/halide/Halide/issues/7272
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbrot,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/4916
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOTCPP_TESTS))
-
 # Build requirements are finicky, testing non-C++ backend is good enough here
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_multi_context_threaded,$(GENERATOR_AOTCPP_TESTS))
 
@@ -1557,10 +1553,6 @@ $(FILTERS_DIR)/%.halide_generated.cpp: $(FILTERS_DIR)/%.a
 $(FILTERS_DIR)/%.registration.cpp: $(FILTERS_DIR)/%.a
 	@echo $@ produced implicitly by $^
 
-$(FILTERS_DIR)/%.stub.h: $(BIN_DIR)/%.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -g $* -n $* -o $(CURDIR)/$(FILTERS_DIR) -e cpp_stub
-
 $(FILTERS_DIR)/cxx_mangling_externs.o: $(ROOT_DIR)/test/generator/cxx_mangling_externs.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) -c $(filter-out %.h,$^) $(GEN_AOT_INCLUDES) -o $@
@@ -1722,28 +1714,6 @@ endif
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling: $(FILTERS_DIR)/cxx_mangling_externs.o
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling.halide_generated.cpp $(FILTERS_DIR)/cxx_mangling_externs.o $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o
 
-$(BUILD_DIR)/stubuser_generator.o: $(FILTERS_DIR)/stubtest.stub.h $(FILTERS_DIR)/configure.stub.h
-$(BIN_DIR)/stubuser.generator: $(BUILD_DIR)/stubtest_generator.o $(BUILD_DIR)/configure_generator.o
-
-# stubtest has input and output funcs with undefined types and array sizes; this is fine for stub
-# usage (the types can be inferred), but for AOT compilation, we must make the types
-# concrete via generator args.
-STUBTEST_GENERATOR_ARGS=\
-	untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3 \
-	simple_input.type=float32 \
-	array_input.type=float32 array_input.size=2 \
-	int_arg.size=2 \
-	tuple_output.type=float32,float32 \
-	vectorize=true
-
-$(FILTERS_DIR)/stubtest.a: $(BIN_DIR)/stubtest.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -g stubtest -f stubtest $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(STUBTEST_GENERATOR_ARGS)
-
-$(FILTERS_DIR)/stubuser_auto.a: $(BIN_DIR)/stubuser.generator $(BIN_MULLAPUDI2016)
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -g stubuser $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f stubuser_auto target=$(TARGET)-no_runtime autoscheduler=Mullapudi2016 -p $(BIN_MULLAPUDI2016)
-
 $(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(BIN_MULLAPUDI2016)
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime autoscheduler=Mullapudi2016 -d 1 -p $(BIN_MULLAPUDI2016)
@@ -1849,15 +1819,10 @@ $(BIN_DIR)/$(TARGET)/generator_aotcpp_define_extern_opencl: $(ROOT_DIR)/test/gen
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) -o $@
 
-# By default, %_jittest.cpp depends on libHalide, plus the stubs for the Generator. These are external tests that use the JIT.
-$(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(TEST_DEPS) $(FILTERS_DIR)/%.stub.h $(BUILD_DIR)/%_generator.o
+# By default, %_jittest.cpp depends on libHalide. These are external tests that use the JIT.
+$(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(TEST_DEPS) $(BUILD_DIR)/%_generator.o
 	@mkdir -p $(@D)
 	$(CXX) -g $(TEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support $(TEST_LD_FLAGS) -o $@
-
-# stubuser is run with autoscheduling too
-$(BIN_DIR)/$(TARGET)/generator_aot_stubuser: $(ROOT_DIR)/test/generator/stubuser_aottest.cpp $(FILTERS_DIR)/stubuser.a $(FILTERS_DIR)/stubuser.h $(FILTERS_DIR)/stubuser_auto.a $(FILTERS_DIR)/stubuser_auto.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
 # generator_aot_multitarget is run multiple times, with different env vars.
 generator_aot_multitarget: $(BIN_DIR)/$(TARGET)/generator_aot_multitarget

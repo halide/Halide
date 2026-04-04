@@ -32,7 +32,6 @@ enum class OutputFileType {
     compiler_log,
     conceptual_stmt,
     conceptual_stmt_html,
-    cpp_stub,
     device_code,
     featurization,
     function_info_header,

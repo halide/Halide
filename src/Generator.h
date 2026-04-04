@@ -240,14 +240,6 @@
  * The registered name of the Generator is provided must match the same rules as
  * Input names, above.
  *
- * Note that the class name of the generated Stub class will match the registered
- * name by default; if you want to vary it (typically, to include namespaces),
- * you can add it as an optional third argument:
- *
- * \code
- *      HALIDE_REGISTER_GENERATOR(ExampleGen, jit_example, SomeNamespace::JitExampleStub)
- * \endcode
- *
  * Note that a Generator is always executed with a specific Target assigned to it,
  * that you can access via the get_target() method. (You should *not* use the
  * global get_target_from_environment(), etc. methods provided in Target.h)
@@ -444,7 +436,6 @@ public:
 protected:
     friend class GeneratorBase;
     friend class GeneratorParamInfo;
-    friend class StubEmitter;
 
     void check_value_readable() const;
     void check_value_writable() const;
@@ -1252,135 +1243,11 @@ namespace Internal {
 template<typename T2>
 class GeneratorInput_Buffer;
 
-/**
- * StubInputBuffer is the placeholder that a Stub uses when it requires
- * a Buffer for an input (rather than merely a Func or Expr). It is constructed
- * to allow only two possible sorts of input:
- * -- Assignment of an Input<Buffer<>>, with compatible type and dimensions,
- * essentially allowing us to pipe a parameter from an enclosing Generator to an internal Stub.
- * -- Assignment of a Buffer<>, with compatible type and dimensions,
- * causing the Input<Buffer<>> to become a precompiled buffer in the generated code.
- */
-template<typename T = void, int Dims = Buffer<>::AnyDims>
-class StubInputBuffer {
-    friend class StubInput;
-    template<typename T2>
-    friend class GeneratorInput_Buffer;
-    template<typename T2, int D2>
-    friend class StubInputBuffer;
-
-    Parameter parameter_;
-
-    HALIDE_NO_USER_CODE_INLINE explicit StubInputBuffer(const Parameter &p)
-        : parameter_(p) {
-        // Create an empty 1-element buffer with the right runtime typing and dimensions,
-        // which we'll use only to pass to can_convert_from() to verify this
-        // Parameter is compatible with our constraints.
-        Buffer<> other(p.type(), nullptr, std::vector<int>(p.dimensions(), 1));
-        internal_assert((Buffer<T, Dims>::can_convert_from(other)));
-    }
-
-    template<typename T2, int D2>
-    HALIDE_NO_USER_CODE_INLINE static Parameter parameter_from_buffer(const Buffer<T2, D2> &b) {
-        internal_assert(b.defined());
-        user_assert((Buffer<T, Dims>::can_convert_from(b)));
-        Parameter p(b.type(), true, b.dimensions());
-        p.set_buffer(b);
-        return p;
-    }
-
-public:
-    StubInputBuffer() = default;
-
-    // *not* explicit -- this ctor should only be used when you want
-    // to pass a literal Buffer<> for a Stub Input; this Buffer<> will be
-    // compiled into the Generator's product, rather than becoming
-    // a runtime Parameter.
-    template<typename T2, int D2>
-    StubInputBuffer(const Buffer<T2, D2> &b)
-        : parameter_(parameter_from_buffer(b)) {
-    }
-
-    template<typename T2>
-    static std::vector<Parameter> to_parameter_vector(const StubInputBuffer<T2> &t) {
-        return {t.parameter_};
-    }
-
-    template<typename T2>
-    static std::vector<Parameter> to_parameter_vector(const std::vector<StubInputBuffer<T2>> &v) {
-        std::vector<Parameter> r;
-        r.reserve(v.size());
-        for (const auto &s : v) {
-            r.push_back(s.parameter_);
-        }
-        return r;
-    }
-};
-
-class AbstractGenerator;
-
-class StubOutputBufferBase {
-protected:
-    Func f;
-    std::shared_ptr<AbstractGenerator> generator;
-
-    Target get_target() const;
-
-    StubOutputBufferBase();
-    explicit StubOutputBufferBase(const Func &f, const std::shared_ptr<AbstractGenerator> &generator);
-
-public:
-    Realization realize(std::vector<int32_t> sizes);
-
-    template<typename... Args>
-    Realization realize(Args &&...args) {
-        return f.realize(std::forward<Args>(args)..., get_target());
-    }
-
-    template<typename Dst>
-    void realize(Dst dst) {
-        f.realize(dst, get_target());
-    }
-};
-
-/**
- * StubOutputBuffer is the placeholder that a Stub uses when it requires
- * a Buffer for an output (rather than merely a Func). It is constructed
- * to allow only two possible sorts of things:
- * -- Assignment to an Output<Buffer<>>, with compatible type and dimensions,
- * essentially allowing us to pipe a parameter from the result of a Stub to an
- * enclosing Generator
- * -- Realization into a Buffer<>; this is useful only in JIT compilation modes
- * (and shouldn't be usable otherwise)
- *
- * It is deliberate that StubOutputBuffer is not (easily) convertible to Func.
- */
-template<typename T = void>
-class StubOutputBuffer : public StubOutputBufferBase {
-    template<typename T2>
-    friend class GeneratorOutput_Buffer;
-    explicit StubOutputBuffer(const Func &fn, const std::shared_ptr<AbstractGenerator> &gen)
-        : StubOutputBufferBase(fn, gen) {
-    }
-
-public:
-    StubOutputBuffer() = default;
-
-    static std::vector<StubOutputBuffer<T>> to_output_buffers(const std::vector<Func> &v,
-                                                              const std::shared_ptr<AbstractGenerator> &gen) {
-        std::vector<StubOutputBuffer<T>> result;
-        for (const Func &f : v) {
-            result.push_back(StubOutputBuffer<T>(f, gen));
-        }
-        return result;
-    }
-};
-
-// This is a union-like class that allows for convenient initialization of Stub Inputs
-// via initializer-list syntax; it is only used in situations where the
-// downstream consumer will be able to explicitly check that each value is
-// of the expected/required kind.
-class StubInput {
+// This is a union-like class that allows for convenient initialization of
+// bound inputs via initializer-list syntax; it is only used in situations
+// where the downstream consumer will be able to explicitly check that each
+// value is of the expected/required kind.
+class BoundInput {
     const ArgInfoKind kind_;
     // Exactly one of the following fields should be defined:
     const Parameter parameter_;
@@ -1389,17 +1256,13 @@ class StubInput {
 
 public:
     // *not* explicit.
-    template<typename T2>
-    StubInput(const StubInputBuffer<T2> &b)
-        : kind_(ArgInfoKind::Buffer), parameter_(b.parameter_), func_(), expr_() {
-    }
-    StubInput(const Parameter &p)
+    BoundInput(const Parameter &p)
         : kind_(ArgInfoKind::Buffer), parameter_(p), func_(), expr_() {
     }
-    StubInput(const Func &f)
+    BoundInput(const Func &f)
         : kind_(ArgInfoKind::Function), parameter_(), func_(f), expr_() {
     }
-    StubInput(const Expr &e)
+    BoundInput(const Expr &e)
         : kind_(ArgInfoKind::Scalar), parameter_(), func_(), expr_(e) {
     }
 
@@ -1554,14 +1417,12 @@ protected:
     Parameter parameter() const;
 
     void init_internals();
-    void set_inputs(const std::vector<StubInput> &inputs);
+    void set_inputs(const std::vector<BoundInput> &inputs);
     bool inputs_set = false;
 
     virtual void set_def_min_max();
 
     void verify_internals() override;
-
-    friend class StubEmitter;
 
     virtual std::string get_c_type() const = 0;
 
@@ -1674,11 +1535,11 @@ protected:
 
     std::string get_c_type() const override {
         if (TBase::has_static_halide_type) {
-            return "Halide::Internal::StubInputBuffer<" +
+            return "Halide::Buffer<" +
                    halide_type_to_c_type(TBase::static_halide_type()) +
                    ">";
         } else {
-            return "Halide::Internal::StubInputBuffer<>";
+            return "Halide::Buffer<>";
         }
     }
 
@@ -1721,12 +1582,6 @@ public:
     Expr operator()(std::vector<Expr> args) const {
         this->check_gio_access();
         return Func(*this)(std::move(args));
-    }
-
-    template<typename T2>
-    operator StubInputBuffer<T2>() const {
-        user_assert(!this->is_array()) << "Cannot assign an array type to a non-array type for Input " << this->name();
-        return StubInputBuffer<T2>(this->parameters_.at(0));
     }
 
     operator Func() const {
@@ -2360,7 +2215,6 @@ protected:
                         int d);
 
     friend class GeneratorBase;
-    friend class StubEmitter;
 
     void init_internals();
     void resize(size_t size);
@@ -2580,11 +2434,11 @@ protected:
 
     HALIDE_NO_USER_CODE_INLINE std::string get_c_type() const override {
         if (TBase::has_static_halide_type) {
-            return "Halide::Internal::StubOutputBuffer<" +
+            return "Halide::Buffer<" +
                    halide_type_to_c_type(TBase::static_halide_type()) +
                    ">";
         } else {
-            return "Halide::Internal::StubOutputBuffer<>";
+            return "Halide::Buffer<>";
         }
     }
 
@@ -2622,16 +2476,6 @@ public:
         user_assert(!this->funcs_.at(0).defined());
         this->funcs_.at(0)(_) = buffer(_);
 
-        return *this;
-    }
-
-    // Allow assignment from a StubOutputBuffer to an Output<Buffer>;
-    // this allows us to pipeline the results of a Stub to the results
-    // of the enclosing Generator.
-    template<typename T2>
-    GeneratorOutput_Buffer<T> &operator=(const StubOutputBuffer<T2> &stub_output_buffer) {
-        this->check_gio_access();
-        assign_from_func(stub_output_buffer.f);
         return *this;
     }
 
@@ -2867,12 +2711,6 @@ public:
     template<typename T2, int D2>
     GeneratorOutput<T> &operator=(Buffer<T2, D2> &buffer) {
         Super::operator=(buffer);
-        return *this;
-    }
-
-    template<typename T2>
-    GeneratorOutput<T> &operator=(const Internal::StubOutputBuffer<T2> &stub_output_buffer) {
-        Super::operator=(stub_output_buffer);
         return *this;
     }
 
@@ -3420,7 +3258,7 @@ public:
 
 protected:
     GeneratorBase(size_t size);
-    void set_generator_names(const std::string &registered_name, const std::string &stub_name);
+    void set_generator_names(const std::string &registered_name);
 
     // Note that it is explicitly legal to override init_from_context(), so that you can (say)
     // create a modified context with a different Target (eg with features enabled or disabled), but...
@@ -3545,15 +3383,13 @@ private:
     friend class GeneratorInputBase;
     friend class GeneratorOutputBase;
     friend class GeneratorParamInfo;
-    friend class StubOutputBufferBase;
-
     const size_t size;
 
     // Lazily-allocated-and-inited struct with info about our various Params.
     // Do not access directly: use the param_info() getter.
     std::unique_ptr<GeneratorParamInfo> param_info_ptr;
 
-    std::string generator_registered_name, generator_stub_name;
+    std::string generator_registered_name;
     Pipeline pipeline;
 
     struct Requirement {
@@ -3589,7 +3425,7 @@ private:
     void get_jit_target_from_environment();
     void get_target_from_environment();
 
-    void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
+    void set_inputs_vector(const std::vector<std::vector<BoundInput>> &inputs);
 
     static void check_input_is_singular(Internal::GeneratorInputBase *in);
     static void check_input_is_array(Internal::GeneratorInputBase *in);
@@ -3600,20 +3436,19 @@ private:
     // causing the Input<Buffer<>> to become a precompiled buffer in the generated code.
     // -- we are assigningit to an Input<Func>, in which case we just Func-wrap the Buffer<>.
     template<typename T, int Dims>
-    std::vector<StubInput> build_input(size_t i, const Buffer<T, Dims> &arg) {
+    std::vector<BoundInput> build_input(size_t i, const Buffer<T, Dims> &arg) {
         auto *in = param_info().inputs().at(i);
         check_input_is_singular(in);
         const auto k = in->kind();
         if (k == Internal::ArgInfoKind::Buffer) {
             Halide::Buffer<> b = arg;
-            StubInputBuffer<> sib(b);
-            StubInput si(sib);
-            return {si};
+            Parameter p(b.type(), true, b.dimensions());
+            p.set_buffer(b);
+            return {BoundInput(p)};
         } else if (k == Internal::ArgInfoKind::Function) {
             Halide::Func f(arg.name() + "_im");
             f(Halide::_) = arg(Halide::_);
-            StubInput si(f);
-            return {si};
+            return {BoundInput(f)};
         } else {
             check_input_kind(in, Internal::ArgInfoKind::Buffer);  // just to trigger assertion
             return {};
@@ -3623,19 +3458,17 @@ private:
     // Allow Input<Buffer<>> if:
     // -- we are assigning it to another Input<Buffer<>> (with compatible type and dimensions),
     // allowing us to simply pipe a parameter from an enclosing Generator to the Invoker.
-    // -- we are assigningit to an Input<Func>, in which case we just Func-wrap the Input<Buffer<>>.
+    // -- we are assigning it to an Input<Func>, in which case we just Func-wrap the Input<Buffer<>>.
     template<typename T, int Dims>
-    std::vector<StubInput> build_input(size_t i, const GeneratorInput<Buffer<T, Dims>> &arg) {
+    std::vector<BoundInput> build_input(size_t i, const GeneratorInput<Buffer<T, Dims>> &arg) {
         auto *in = param_info().inputs().at(i);
         check_input_is_singular(in);
         const auto k = in->kind();
         if (k == Internal::ArgInfoKind::Buffer) {
-            StubInputBuffer<> sib = arg;
-            StubInput si(sib);
-            return {si};
+            return {BoundInput(arg.parameters_.at(0))};
         } else if (k == Internal::ArgInfoKind::Function) {
             Halide::Func f = arg.funcs().at(0);
-            StubInput si(f);
+            BoundInput si(f);
             return {si};
         } else {
             check_input_kind(in, Internal::ArgInfoKind::Buffer);  // just to trigger assertion
@@ -3644,22 +3477,22 @@ private:
     }
 
     // Allow Func iff we are assigning it to an Input<Func> (with compatible type and dimensions).
-    std::vector<StubInput> build_input(size_t i, const Func &arg) {
+    std::vector<BoundInput> build_input(size_t i, const Func &arg) {
         auto *in = param_info().inputs().at(i);
         check_input_kind(in, Internal::ArgInfoKind::Function);
         check_input_is_singular(in);
         const Halide::Func &f = arg;
-        StubInput si(f);
+        BoundInput si(f);
         return {si};
     }
 
     // Allow vector<Func> iff we are assigning it to an Input<Func[]> (with compatible type and dimensions).
-    std::vector<StubInput> build_input(size_t i, const std::vector<Func> &arg) {
+    std::vector<BoundInput> build_input(size_t i, const std::vector<Func> &arg) {
         auto *in = param_info().inputs().at(i);
         check_input_kind(in, Internal::ArgInfoKind::Function);
         check_input_is_array(in);
         // My kingdom for a list comprehension...
-        std::vector<StubInput> siv;
+        std::vector<BoundInput> siv;
         siv.reserve(arg.size());
         for (const auto &f : arg) {
             siv.emplace_back(f);
@@ -3668,20 +3501,20 @@ private:
     }
 
     // Expr must be Input<Scalar>.
-    std::vector<StubInput> build_input(size_t i, const Expr &arg) {
+    std::vector<BoundInput> build_input(size_t i, const Expr &arg) {
         auto *in = param_info().inputs().at(i);
         check_input_kind(in, Internal::ArgInfoKind::Scalar);
         check_input_is_singular(in);
-        StubInput si(arg);
+        BoundInput si(arg);
         return {si};
     }
 
     // (Array form)
-    std::vector<StubInput> build_input(size_t i, const std::vector<Expr> &arg) {
+    std::vector<BoundInput> build_input(size_t i, const std::vector<Expr> &arg) {
         auto *in = param_info().inputs().at(i);
         check_input_kind(in, Internal::ArgInfoKind::Scalar);
         check_input_is_array(in);
-        std::vector<StubInput> siv;
+        std::vector<BoundInput> siv;
         siv.reserve(arg.size());
         for (const auto &value : arg) {
             siv.emplace_back(value);
@@ -3693,23 +3526,23 @@ private:
     // Use is_arithmetic since some Expr conversions are explicit.
     template<typename T,
              std::enable_if_t<std::is_arithmetic_v<T>> * = nullptr>
-    std::vector<StubInput> build_input(size_t i, const T &arg) {
+    std::vector<BoundInput> build_input(size_t i, const T &arg) {
         auto *in = param_info().inputs().at(i);
         check_input_kind(in, Internal::ArgInfoKind::Scalar);
         check_input_is_singular(in);
         // We must use an explicit Expr() ctor to preserve the type
         Expr e(arg);
-        StubInput si(e);
+        BoundInput si(e);
         return {si};
     }
 
     // (Array form)
     template<typename T, std::enable_if_t<std::is_arithmetic_v<T>> * = nullptr>
-    std::vector<StubInput> build_input(size_t i, const std::vector<T> &arg) {
+    std::vector<BoundInput> build_input(size_t i, const std::vector<T> &arg) {
         auto *in = param_info().inputs().at(i);
         check_input_kind(in, Internal::ArgInfoKind::Scalar);
         check_input_is_array(in);
-        std::vector<StubInput> siv;
+        std::vector<BoundInput> siv;
         siv.reserve(arg.size());
         for (const auto &value : arg) {
             // We must use an explicit Expr() ctor to preserve the type;
@@ -3721,7 +3554,7 @@ private:
     }
 
     template<typename... Args, size_t... Indices>
-    std::vector<std::vector<StubInput>> build_inputs(const std::tuple<const Args &...> &t, std::index_sequence<Indices...>) {
+    std::vector<std::vector<BoundInput>> build_inputs(const std::tuple<const Args &...> &t, std::index_sequence<Indices...>) {
         return {build_input(Indices, std::get<Indices>(t))...};
     }
 
@@ -3758,7 +3591,6 @@ public:
     void bind_input(const std::string &name, const std::vector<Func> &v) override;
     void bind_input(const std::string &name, const std::vector<Expr> &v) override;
 
-    bool emit_cpp_stub(const std::string &stub_file_path) override;
     bool emit_hlpipe(const std::string &hlpipe_file_path) override;
 
     GeneratorBase(const GeneratorBase &) = delete;
@@ -3814,10 +3646,9 @@ public:
 
     // This is public but intended only for use by the HALIDE_REGISTER_GENERATOR() macro.
     static std::unique_ptr<T> create(const Halide::GeneratorContext &context,
-                                     const std::string &registered_name,
-                                     const std::string &stub_name) {
+                                     const std::string &registered_name) {
         auto g = create(context);
-        g->set_generator_names(registered_name, stub_name);
+        g->set_generator_names(registered_name);
         return g;
     }
 
@@ -4055,14 +3886,14 @@ namespace halide_register_generator {
 struct halide_global_ns;
 };
 
-#define _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME)                         \
+#define HALIDE_REGISTER_GENERATOR(GEN_CLASS_NAME, GEN_REGISTRY_NAME)                                                          \
     namespace halide_register_generator {                                                                                     \
     struct halide_global_ns;                                                                                                  \
     namespace GEN_REGISTRY_NAME##_ns {                                                                                        \
         std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);                \
         std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context) {               \
             using GenType = std::remove_pointer_t<decltype(new GEN_CLASS_NAME)>; /* NOLINT(bugprone-macro-parentheses) */     \
-            return GenType::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME);                                  \
+            return GenType::create(context, #GEN_REGISTRY_NAME);                                                              \
         }                                                                                                                     \
     }                                                                                                                         \
     namespace {                                                                                                               \
@@ -4071,39 +3902,6 @@ struct halide_global_ns;
     }                                                                                                                         \
     static_assert(std::is_same_v<::halide_register_generator::halide_global_ns, halide_register_generator::halide_global_ns>, \
                   "HALIDE_REGISTER_GENERATOR must be used at global scope");
-
-#define _HALIDE_REGISTER_GENERATOR2(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
-    _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, GEN_REGISTRY_NAME)
-
-#define _HALIDE_REGISTER_GENERATOR3(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME) \
-    _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME)
-
-// MSVC has a broken implementation of variadic macros: it expands __VA_ARGS__
-// as a single token in argument lists (rather than multiple tokens).
-// Jump through some hoops to work around this.
-#define __HALIDE_REGISTER_ARGCOUNT_IMPL(_1, _2, _3, COUNT, ...) \
-    COUNT
-
-#define _HALIDE_REGISTER_ARGCOUNT_IMPL(ARGS) \
-    __HALIDE_REGISTER_ARGCOUNT_IMPL ARGS
-
-#define _HALIDE_REGISTER_ARGCOUNT(...) \
-    _HALIDE_REGISTER_ARGCOUNT_IMPL((__VA_ARGS__, 3, 2, 1, 0))
-
-#define ___HALIDE_REGISTER_CHOOSER(COUNT) \
-    _HALIDE_REGISTER_GENERATOR##COUNT
-
-#define __HALIDE_REGISTER_CHOOSER(COUNT) \
-    ___HALIDE_REGISTER_CHOOSER(COUNT)
-
-#define _HALIDE_REGISTER_CHOOSER(COUNT) \
-    __HALIDE_REGISTER_CHOOSER(COUNT)
-
-#define _HALIDE_REGISTER_GENERATOR_PASTE(A, B) \
-    A B
-
-#define HALIDE_REGISTER_GENERATOR(...) \
-    _HALIDE_REGISTER_GENERATOR_PASTE(_HALIDE_REGISTER_CHOOSER(_HALIDE_REGISTER_ARGCOUNT(__VA_ARGS__)), (__VA_ARGS__))
 
 // HALIDE_REGISTER_GENERATOR_ALIAS() can be used to create an an alias-with-a-particular-set-of-param-values
 // for a given Generator in the build system. Normally, you wouldn't want to do this;

@@ -208,7 +208,6 @@ function(_Halide_library_from_generator TARGET)
     set(compiler_log_extension ".halide_compiler_log")
     set(conceptual_stmt_extension ".conceptual.stmt")
     set(conceptual_stmt_html_extension ".conceptual.stmt.html")
-    # set(cpp_stub_extension ".stub.h")  # not implemented
     set(device_code_extension ".device_code")
     set(featurization_extension ".featurization")
     set(function_info_header_extension ".function_info.h")
@@ -477,7 +476,6 @@ function(add_halide_library TARGET)
 
     # See Module.cpp for list of extra outputs. The following outputs intentionally do not appear:
     # - `c_header` is always generated
-    # - `cpp_stub` is not available
     # - `object` is selected for CMake-target-compile
     # - `static_library` is selected for cross-compile
     set(extra_output_names

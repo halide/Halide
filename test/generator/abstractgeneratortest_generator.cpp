@@ -131,11 +131,6 @@ public:
         _halide_user_assert(false) << "OOPS";
     }
 
-    bool emit_cpp_stub(const std::string & /*stub_file_path*/) override {
-        // not supported
-        return false;
-    }
-
     bool emit_hlpipe(const std::string & /*hlpipe_file_path*/) override {
         // not supported
         return false;

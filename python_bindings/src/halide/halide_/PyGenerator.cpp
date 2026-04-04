@@ -87,12 +87,6 @@ public:
         generator_.attr("_bind_input")(v);
     }
 
-    bool emit_cpp_stub(const std::string & /*stub_file_path*/) override {
-        // Python Generators don't support this (and *never* will, so don't ask),
-        // but don't throw an error, just return false.
-        return false;
-    }
-
     bool emit_hlpipe(const std::string & /*hlpipe_file_path*/) override {
         // Python Generators don't support this yet ...
         // but don't throw an error, just return false.

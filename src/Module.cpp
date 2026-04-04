@@ -38,7 +38,6 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::c_header, {"c_header", ".h", IsSingle}},
         {OutputFileType::c_source, {"c_source", ".halide_generated.cpp", IsSingle}},
         {OutputFileType::compiler_log, {"compiler_log", ".halide_compiler_log", IsSingle}},
-        {OutputFileType::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
         {OutputFileType::featurization, {"featurization", ".featurization", IsMulti}},
         {OutputFileType::function_info_header, {"function_info_header", ".function_info.h", IsSingle}},
         {OutputFileType::hlpipe, {"hlpipe", ".hlpipe", IsSingle}},
