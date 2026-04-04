@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
 #if !defined(TEST_OPENCL) && !defined(TEST_D3D12COMPUTE)
     printf("[SKIP] No GPU texture target enabled.\n");
     return 0;
-#endif
+#else
 
 #if defined(TEST_OPENCL)
     const auto *interface = halide_opencl_device_interface();
@@ -57,7 +57,6 @@ int main(int argc, char **argv) {
 
     gpu_texture(input, output);
 
-#if defined(TEST_OPENCL) || defined(TEST_D3D12COMPUTE)
     {
         using image_device_interface_fn = const struct halide_device_interface_t *(*)();
 #if defined(TEST_OPENCL)
@@ -76,7 +75,6 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
-#endif
 
     output.copy_to_host();
 
@@ -92,4 +90,5 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
+#endif
 }

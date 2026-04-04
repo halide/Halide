@@ -2110,7 +2110,10 @@ WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_librar
 
     // Entry point (narrow ASCII to wide)
     WCHAR entry_wide[256];
-    narrow_to_wide(name, entry_wide, 256);
+    if (narrow_to_wide(name, entry_wide, 256) >= 256) {
+        error(user_context) << "d3d12compute: entry point name too long (truncated)\n";
+        return nullptr;
+    }
 
     // Target profile: "cs_6_X" where X = sm_version % 10
     WCHAR target_profile[16] = {(WCHAR)'c', (WCHAR)'s', (WCHAR)'_', (WCHAR)'6', (WCHAR)'_',
