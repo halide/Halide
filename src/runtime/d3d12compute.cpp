@@ -2036,8 +2036,9 @@ static const unsigned long kLoadWithAlteredSearchPath = 0x00000008UL;
 // Lazy DXC loader: loads dxcompiler.dll and resolves DxcCreateInstance on first use.
 //
 // We load dxcompiler.dll by its FULL PATH from the EXE's directory so that:
-//   1. We get the SDK copy, not a system/inbox dxcompiler.dll (Windows 11 ships
-//      one in System32 that may not expose IDxcCompiler3).
+//   1. We get the SDK copy, not the OS-bundled ("inbox") dxcompiler.dll. Windows 11
+//      ships a dxcompiler.dll in System32 as part of the base OS install; it is
+//      typically older than the SDK version and may not expose IDxcCompiler3.
 //   2. With LOAD_WITH_ALTERED_SEARCH_PATH, dxcompiler.dll searches its OWN
 //      directory for dxil.dll (DXIL validator), so both DLLs must reside beside
 //      the EXE (the PowerShell test script copies them there).
@@ -2144,7 +2145,7 @@ WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_librar
 
     // Compile: prefer IDxcCompiler3 (modern DxcBuffer API, DXC 1.6+).
     // Fall back to IDxcCompiler v1 (present in all DXC builds, including the
-    // Windows 11 inbox version that may not expose IDxcCompiler3).
+    // OS-bundled (inbox) version that may not expose IDxcCompiler3).
     IDxcResult *result_obj = nullptr;
     HRESULT hr;
 
@@ -2164,7 +2165,7 @@ WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_librar
             return nullptr;
         }
     } else {
-        // IDxcCompiler v1 fallback (E_NOINTERFACE for IDxcCompiler3 on older/inbox DXC).
+        // IDxcCompiler v1 fallback (E_NOINTERFACE for IDxcCompiler3 on older or OS-bundled DXC).
         BasicPrinter<256>(nullptr) << "D3D12Compute: IDxcCompiler3 not available (HRESULT="
                                    << (void *)(int64_t)hr << "), falling back to IDxcCompiler v1.\n";
         IDxcCompiler *compiler1 = nullptr;
