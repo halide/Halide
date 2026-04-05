@@ -3,6 +3,7 @@
 #include <sstream>
 #include <utility>
 
+#include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_GPU_Dev.h"
@@ -10,6 +11,8 @@
 #include "Debug.h"
 #include "DeviceArgument.h"
 #include "EliminateBoolVectors.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
@@ -138,6 +141,7 @@ protected:
         void visit(const Free *op) override;
         void visit(const Cast *op) override;
         void visit(const Atomic *op) override;
+        void visit(const AssertStmt *op) override;
         void visit(const FloatImm *op) override;
 
         Scope<> groupshared_allocations;
@@ -164,27 +168,37 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
         // dispatch, there is no need to complicate things with packoffset.
     }
 
+    const int sm = target.get_d3d12compute_capability_lower_bound();
+
     if (type.is_float()) {
         switch (type.bits()) {
         case 16:
-            // 16-bit floating point value. This data type is provided only for language compatibility.
-            // Direct3D 10 shader targets map all half data types to float data types.
-            // A half data type cannot be used on a uniform global variable (use the /Gec flag if this functionality is desired).
-            oss << "half";
+            if (sm >= 62) {
+                // SM 6.2+: native 16-bit float with -enable-16bit-types
+                oss << "float16_t";
+            } else {
+                // SM 5.1/6.0/6.1: 'half' is a float32 alias in FXC; use it for language compat.
+                oss << "half";
+            }
             break;
         case 32:
-            oss << "float";
+            if (sm >= 62) {
+                oss << "float32_t";
+            } else {
+                oss << "float";
+            }
             break;
         case 64:
-            // "64-bit floating point value. You cannot use double precision values as inputs and outputs for a stream.
-            //  To pass double precision values between shaders, declare each double as a pair of uint data types.
-            //  Then, use the asdouble function to pack each double into the pair of uints and the asuint function to
-            //  unpack the pair of uints back into the double."
-            user_error << "HLSL (SM 5.1) does not have transparent support for 'double' types.\n";
-            oss << "double";
+            if (sm >= 60) {
+                oss << "double";
+            } else {
+                user_error << "HLSL SM 5.1 does not support 64-bit float. "
+                           << "Use target feature hlsl_sm60 or higher.\n";
+                oss << "double";
+            }
             break;
         default:
-            user_error << "Can't represent a float with this many bits in HLSL (SM 5.1): " << type << "\n";
+            user_error << "Can't represent a float with this many bits in HLSL: " << type << "\n";
         }
     } else {
         switch (type.bits()) {
@@ -192,21 +206,67 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
             oss << "bool";
             break;
         case 8:
-        case 16:
-        case 32:
+            // Native scalar int8_t/uint8_t in HLSL is not yet landed in the spec.
+            // Tracked at https://github.com/microsoft/hlsl-specs/pull/538
+            // Until that ships in a released SM level, always emit int/uint and
+            // rely on the existing shift/mask emulation for sub-32-bit values.
             if (type.is_uint()) {
                 oss << "u";
             }
             oss << "int";
 #if DEBUG_TYPES
-            oss << type.bits();
+            oss << "8";
 #endif
             break;
+        case 16:
+            if (sm >= 62) {
+                // SM 6.2+: native 16-bit integers
+                if (type.is_uint()) {
+                    oss << "uint16_t";
+                } else {
+                    oss << "int16_t";
+                }
+            } else {
+                if (type.is_uint()) {
+                    oss << "u";
+                }
+                oss << "int";
+#if DEBUG_TYPES
+                oss << "16";
+#endif
+            }
+            break;
+        case 32:
+            if (sm >= 62) {
+                if (type.is_uint()) {
+                    oss << "uint32_t";
+                } else {
+                    oss << "int32_t";
+                }
+            } else {
+                if (type.is_uint()) {
+                    oss << "u";
+                }
+                oss << "int";
+#if DEBUG_TYPES
+                oss << "32";
+#endif
+            }
+            break;
         case 64:
-            user_error << "HLSL (SM 5.1) does not support 64-bit integers.\n";
+            if (sm >= 60) {
+                if (type.is_uint()) {
+                    oss << "uint64_t";
+                } else {
+                    oss << "int64_t";
+                }
+            } else {
+                user_error << "HLSL SM 5.1 does not support 64-bit integers. "
+                           << "Use target feature hlsl_sm60 or higher.\n";
+            }
             break;
         default:
-            user_error << "Can't represent an integer with this many bits in HLSL (SM 5.1): " << type << "\n";
+            user_error << "Can't represent an integer with this many bits in HLSL: " << type << "\n";
         }
     }
     switch (type.lanes()) {
@@ -223,12 +283,18 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
         oss << ")";
 #endif
         break;
-    case 8:
-    case 16:
-        // TODO(marcos): are there 8-wide and 16-wide types in HLSL?
-        // (CodeGen_GLSLBase seems to happily generate invalid vector types)
     default:
-        user_error << "Unsupported vector width in HLSL (SM 5.1): " << type << "\n";
+        if (type.lanes() >= 5 && type.lanes() <= 1024 && sm >= 69) {
+            // SM 6.9+ long vector: rewrite "TYPE" as "vector<TYPE, N>".
+            string scalar = oss.str();
+            oss.str("");
+            oss.clear();
+            oss << "vector<" << scalar << ", " << type.lanes() << ">";
+        } else {
+            user_error << "Unsupported vector width in HLSL: " << type << ". "
+                       << "Vectors wider than 4 elements require hlsl_sm69.\n";
+        }
+        break;
     }
 
     if (space == AppendSpace) {
@@ -246,12 +312,30 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_storage_type(Type
     return print_type_maybe_storage(type, true, DoNotAppendSpace);
 }
 
+// Return the HLSL bit-reinterpret intrinsic name for a given type.
+// At SM 6.2+, 16-bit types use asfloat16/asint16/asuint16.
+// At SM 5.1, only the 32-bit variants (asfloat/asint/asuint) exist.
+string hlsl_reinterpret_name(Type t) {
+    if (t.is_float()) {
+        return t.bits() == 16 ? "asfloat16" : "asfloat";
+    }
+    if (t.bits() == 16) {
+        return t.is_int() ? "asint16" : "asuint16";
+    }
+    return t.is_int() ? "asint" : "asuint";
+}
+
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type type, const Expr &e) {
     if (type == e.type()) {
         return print_expr(e);
-    } else {
-        return print_reinterpret_cast(type, print_expr(e));
     }
+    // SM 6.2+ native 16-bit types need asfloat16/asint16/asuint16;
+    // print_reinterpret_cast always emits the 32-bit variant.
+    const int sm = target.get_d3d12compute_capability_lower_bound();
+    if (sm >= 62 && (type.bits() == 16 || e.type().bits() == 16)) {
+        return hlsl_reinterpret_name(type.element_of()) + "(" + print_expr(e) + ")";
+    }
+    return print_reinterpret_cast(type, print_expr(e));
 }
 
 namespace {
@@ -390,13 +474,20 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         Expr equiv = Cast::make(op->type, op->args[0]);
         equiv.accept(this);
     } else if (op->is_intrinsic(Call::select_mask)) {
+        // Component-wise select using an integer mask (0 = false, -1 = true).
+        // DXC (SM 6.x) rejects ?: for non-scalar conditions; use select() instead.
+        // FXC (SM 5.1) does not have select(); ?: works for vector conditions there.
         internal_assert(op->args.size() == 3);
         string cond = print_expr(op->args[0]);
         string true_val = print_expr(op->args[1]);
         string false_val = print_expr(op->args[2]);
-
+        const int sm = target.get_d3d12compute_capability_lower_bound();
         ostringstream rhs;
-        rhs << "(" << cond << " ? " << true_val << " : " << false_val << ")";
+        if (sm >= 60) {
+            rhs << "select(" << cond << ", " << true_val << ", " << false_val << ")";
+        } else {
+            rhs << "(" << cond << " ? " << true_val << " : " << false_val << ")";
+        }
         print_assignment(op->type, rhs.str());
     } else if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
@@ -432,12 +523,79 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         }
         rhs << ")";
         print_assignment(op->type, rhs.str());
+    } else if (op->is_intrinsic(Call::image_load)) {
+        // image_load(<name>, <buffer>, <x>, <x-extent>, [<y>, <y-extent>, [<z>, <z-extent>]])
+        // dims = (args.size() - 2) / 2
+        int dims = ((int)op->args.size() - 2) / 2;
+        internal_assert(dims >= 1 && dims <= 3);
+
+        const StringImm *name_imm = op->args[0].as<StringImm>();
+        if (!name_imm) {
+            // vectorized access — use the value from Broadcast
+            internal_assert(op->args[0].as<Broadcast>());
+            name_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+        }
+        internal_assert(name_imm);
+
+        // Collect per-dimension coordinate expressions (args[2], args[4], args[6])
+        vector<string> coords;
+        coords.reserve(dims);
+        for (int i = 0; i < dims; i++) {
+            coords.push_back(print_expr(op->args[i * 2 + 2]));
+        }
+
+        ostringstream rhs;
+        rhs << print_name(name_imm->value) << "[";
+        if (dims == 1) {
+            rhs << coords[0];
+        } else if (dims == 2) {
+            rhs << "uint2(" << coords[0] << ", " << coords[1] << ")";
+        } else {
+            rhs << "uint3(" << coords[0] << ", " << coords[1] << ", " << coords[2] << ")";
+        }
+        rhs << "]";
+
+        print_assignment(op->type, rhs.str());
+    } else if (op->is_intrinsic(Call::image_store)) {
+        // image_store(<name>, <buffer>, <x>, [<y>, [<z>,]] <value>)
+        // dims = args.size() - 3  (name, buffer, value are fixed; rest are coords)
+        int dims = (int)op->args.size() - 3;
+        internal_assert(dims >= 1 && dims <= 3);
+
+        const StringImm *name_imm = op->args[0].as<StringImm>();
+        if (!name_imm) {
+            internal_assert(op->args[0].as<Broadcast>());
+            name_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+        }
+        internal_assert(name_imm);
+
+        // Coords are args[2..2+dims-1], value is args.back()
+        vector<string> coords;
+        coords.reserve(dims);
+        for (int i = 0; i < dims; i++) {
+            coords.push_back(print_expr(op->args[i + 2]));
+        }
+        string value = print_expr(op->args.back());
+
+        stream << get_indent() << print_name(name_imm->value) << "[";
+        if (dims == 1) {
+            stream << coords[0];
+        } else if (dims == 2) {
+            stream << "uint2(" << coords[0] << ", " << coords[1] << ")";
+        } else {
+            stream << "uint3(" << coords[0] << ", " << coords[1] << ", " << coords[2] << ")";
+        }
+        stream << "] = " << value << ";\n";
     } else if ((op->name == "pow_f16" || op->name == "pow_f32") && can_prove(op->args[0] > 0)) {
         // If we know pow(x, y) is called with x > 0, we can use HLSL's pow
         // directly.
         Expr equiv = Call::make(op->type, "pow", op->args, Call::PureExtern);
         equiv.accept(this);
     } else if (op->is_strict_float_intrinsic()) {
+        // Emit with HLSL 'precise' qualifier, which prevents the compiler from
+        // reordering or fusing these operations (e.g. reassociating additions or
+        // collapsing separate mul+add into an FMA).
+        // Note: HLSL fma() is double-only; for float use mad() instead.
         ScopedValue old_emit_precise(emit_precise, true);
         Expr equiv = op->is_intrinsic(Call::strict_fma) ?
                          Call::make(op->type, op->type.bits() == 64 ? "fma" : "mad", op->args, Call::PureExtern) :
@@ -555,7 +713,7 @@ struct StoragePackUnpack {
         // the smallest type granularity in HLSL SM 5.1 allows is 32bit types):
         if (op->type.bits() == 32) {
             // loading a 32bit word? great! just reinterpret as float/int/uint
-            rhs << "as" << cg.print_type(op->type.element_of())
+            rhs << hlsl_reinterpret_name(op->type.element_of())
                 << "("
                 << cg.print_name(op->name)
                 << "[" << cg.print_expr(op->index) << "]"
@@ -609,17 +767,18 @@ struct StoragePackUnpack {
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
 
-    // elements in a threadgroup shared buffer are always 32bits:
-    // must reinterpret (and maybe unpack) bits.
+    // SM 5.1 groupshared buffers are always 32-bit; sub-32-bit loads need a
+    // bit-reinterpret cast. SM 6.2+ supports 16-bit natively — no cast needed.
+    const int sm = target.get_d3d12compute_capability_lower_bound();
     bool shared_promotion_required = false;
     string promotion_str = "";
-    if (groupshared_allocations.contains(op->name)) {
+    if (groupshared_allocations.contains(op->name) && sm < 62) {
         internal_assert(allocations.contains(op->name));
         Type promoted_type = op->type.with_bits(32).with_lanes(1);
         if (promoted_type != op->type) {
             shared_promotion_required = true;
             // NOTE(marcos): might need to resort to StoragePackUnpack::unpack_load() here
-            promotion_str = "as" + print_type(promoted_type);
+            promotion_str = hlsl_reinterpret_name(promoted_type);
         }
     }
 
@@ -730,20 +889,170 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
     user_assert(is_const_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
 
+    if (emit_atomic_stores) {
+        // Atomic stores: scalar only; vectorized atomics are not supported in HLSL.
+        user_assert(op->value.type().is_scalar())
+            << "D3D12Compute does not support vectorized atomic stores.\n";
+
+        const int sm = target.get_d3d12compute_capability_lower_bound();
+        Type t = op->value.type();
+        string id_index = print_expr(op->index);
+        string dest = print_name(op->name) + "[" + id_index + "]";
+
+        // Detect atomic add: value = load + delta where delta is independent of the buffer.
+        Expr equiv_load = Load::make(t, op->name, op->index, Buffer<>(),
+                                     op->param, op->predicate, op->alignment);
+        Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
+        bool is_atomic_add = !expr_uses_var(delta, op->name);
+
+        if (is_atomic_add && t.is_int_or_uint()) {
+            // InterlockedAdd works on int/uint in UAV buffers and groupshared.
+            // Pre-evaluate delta so any temporaries are emitted before the call.
+            string delta_str = print_expr(delta);
+            stream << get_indent() << "InterlockedAdd(" << dest << ", " << delta_str << ");\n";
+        } else if (t.is_float()) {
+            // Float atomics: only add is supported, and only for SM 6.6+.
+            if (is_atomic_add && t.bits() == 32 && sm >= 66) {
+                // SM 6.6+: float32 atomic add via CAS loop.
+                // DXC 1.8 does not expose InterlockedAddF32 for typed UAV resources;
+                // use InterlockedCompareExchangeFloatBitwise instead.
+                string delta_str = print_expr(delta);
+                stream << get_indent() << "{\n";
+                stream << get_indent() << "    float _hfatomic_old, _hfatomic_orig;\n";
+                stream << get_indent() << "    [allow_uav_condition]\n";
+                stream << get_indent() << "    do {\n";
+                stream << get_indent() << "        _hfatomic_old = " << dest << ";\n";
+                stream << get_indent() << "        InterlockedCompareExchangeFloatBitwise("
+                       << dest << ", _hfatomic_old, _hfatomic_old + " << delta_str
+                       << ", _hfatomic_orig);\n";
+                stream << get_indent() << "    } while (asuint(_hfatomic_orig) != asuint(_hfatomic_old));\n";
+                stream << get_indent() << "}\n";
+            } else if (is_atomic_add && t.bits() == 64) {
+                // float64 atomic add is not supported in HLSL typed UAV buffers.
+                // InterlockedCompareExchangeFloatBitwise only accepts float32; there is
+                // no InterlockedCompareExchangeDoubleBitwise.  InterlockedCompareExchange64
+                // exists but requires the buffer to be typed as uint64_t (not double),
+                // which would need a different buffer declaration and load/store rewrites.
+                // Until that refactor is done, reject this at compile time.
+                user_assert(false)
+                    << "D3D12Compute: float64 atomic add is not supported in HLSL. "
+                    << "HLSL has no InterlockedCompareExchangeDoubleBitwise; "
+                    << "InterlockedCompareExchange64 requires a uint64_t-typed UAV, not RWBuffer<double>.\n";
+            } else if (is_atomic_add) {
+                user_assert(false)
+                    << "D3D12Compute: float atomic add requires SM 6.6+ "
+                    << "(add hlsl_sm66 to your target features). "
+                    << "Type was: " << t << "\n";
+            } else {
+                user_assert(false)
+                    << "D3D12Compute: only atomic add is supported for float types in HLSL "
+                    << "(SM 6.6+ for float32/float64). Type was: " << t << "\n";
+            }
+            cache.clear();
+            return;
+        } else if (t.is_int_or_uint()) {
+            // Detect min/max/bitwise patterns by examining the expression structure.
+            // Each has the form op(load, rhs) where rhs is independent of the buffer.
+            auto detect_rhs = [&](const Expr &a, const Expr &b) -> Expr {
+                if (equal(a, equiv_load) && !expr_uses_var(b, op->name)) {
+                    return b;
+                }
+                if (equal(b, equiv_load) && !expr_uses_var(a, op->name)) {
+                    return a;
+                }
+                return Expr();
+            };
+            Expr rhs;
+            if (const Min *mn = op->value.as<Min>()) {
+                if ((rhs = detect_rhs(mn->a, mn->b)).defined()) {
+                    stream << get_indent() << "InterlockedMin(" << dest << ", "
+                           << print_expr(rhs) << ");\n";
+                    cache.clear();
+                    return;
+                }
+            }
+            if (const Max *mx = op->value.as<Max>()) {
+                if ((rhs = detect_rhs(mx->a, mx->b)).defined()) {
+                    stream << get_indent() << "InterlockedMax(" << dest << ", "
+                           << print_expr(rhs) << ");\n";
+                    cache.clear();
+                    return;
+                }
+            }
+            if (const Call *c = op->value.as<Call>()) {
+                if (c->is_intrinsic(Call::bitwise_and) && c->args.size() == 2) {
+                    if ((rhs = detect_rhs(c->args[0], c->args[1])).defined()) {
+                        stream << get_indent() << "InterlockedAnd(" << dest << ", "
+                               << print_expr(rhs) << ");\n";
+                        cache.clear();
+                        return;
+                    }
+                }
+                if (c->is_intrinsic(Call::bitwise_or) && c->args.size() == 2) {
+                    if ((rhs = detect_rhs(c->args[0], c->args[1])).defined()) {
+                        stream << get_indent() << "InterlockedOr(" << dest << ", "
+                               << print_expr(rhs) << ");\n";
+                        cache.clear();
+                        return;
+                    }
+                }
+                if (c->is_intrinsic(Call::bitwise_xor) && c->args.size() == 2) {
+                    if ((rhs = detect_rhs(c->args[0], c->args[1])).defined()) {
+                        stream << get_indent() << "InterlockedXor(" << dest << ", "
+                               << print_expr(rhs) << ");\n";
+                        cache.clear();
+                        return;
+                    }
+                }
+            }
+            // Generic integer atomic: use InterlockedExchange for plain assignment,
+            // or fall back to a compare-and-swap loop for other patterns.
+            if (!expr_uses_var(op->value, op->name)) {
+                // Value is independent of current buffer contents: plain atomic exchange.
+                stream << get_indent() << "InterlockedExchange(" << dest << ", "
+                       << print_expr(op->value) << ", " << unique_name("_halide_atom_old") << ");\n";
+            } else {
+                // CAS loop for unrecognised integer RMW.
+                string old_var = unique_name("_halide_atom_old");
+                string new_var = unique_name("_halide_atom_new");
+                stream << get_indent() << "{\n";
+                indent += 2;
+                stream << get_indent() << print_type(t) << " " << old_var << ", " << new_var << ";\n";
+                stream << get_indent() << "[loop] do {\n";
+                indent += 2;
+                stream << get_indent() << old_var << " = " << dest << ";\n";
+                cache.clear();
+                stream << get_indent() << new_var << " = " << print_expr(op->value) << ";\n";
+                stream << get_indent() << "InterlockedCompareExchange("
+                       << dest << ", " << old_var << ", " << new_var << ", " << old_var << ");\n";
+                indent -= 2;
+                stream << get_indent() << "} while (" << old_var << " != " << new_var << ");\n";
+                indent -= 2;
+                stream << get_indent() << "}\n";
+            }
+        } else {
+            user_assert(false)
+                << "D3D12Compute: unsupported type for atomic operation: " << t << "\n";
+        }
+        cache.clear();
+        return;
+    }
+
     Type value_type = op->value.type();
 
-    // elements in a threadgroup shared buffer are always 32bits:
-    // must reinterpret (and maybe pack) bits.
+    // SM 5.1 groupshared buffers are always 32-bit; sub-32-bit stores need a
+    // bit-reinterpret cast. SM 6.2+ supports 16-bit natively — no cast needed.
+    const int sm = target.get_d3d12compute_capability_lower_bound();
     bool shared_promotion_required = false;
     string promotion_str = "";
-    if (groupshared_allocations.contains(op->name)) {
+    if (groupshared_allocations.contains(op->name) && sm < 62) {
         const auto *alloc = allocations.find(op->name);
         internal_assert(alloc);
         Type promoted_type = alloc->type;
         if (promoted_type != op->value.type()) {
             shared_promotion_required = true;
             // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here
-            promotion_str = "as" + print_type(promoted_type);
+            promotion_str = hlsl_reinterpret_name(promoted_type);
         }
     }
 
@@ -921,8 +1230,17 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(Type type, const string &value_expr) {
-    if (type.is_float() || type.is_bool() || type.bits() == 32) {
+    if (type.is_float() || type.is_bool() || type.bits() >= 32) {
         return value_expr;
+    }
+
+    // SM 6.2+ native 16-bit types: DXC keeps 16-bit types through shift operators,
+    // and asint/asuint reject int16_t/uint16_t arguments. Use an explicit cast
+    // instead of the shift-up/shift-down pattern to ensure correct narrowing
+    // (e.g. when a cbuffer int32_t is assigned to an int16_t variable).
+    const int sm = target.get_d3d12compute_capability_lower_bound();
+    if (sm >= 62 && type.bits() == 16) {
+        return print_type(type) + "(" + value_expr + ")";
     }
 
     // HLSL SM 5.1 only supports 32bit integer types; smaller integer types have
@@ -941,8 +1259,12 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(T
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(Type type, const string &value_expr) {
+    // Always emit the 32-bit variant (asint/asuint/asfloat).
+    // This is correct for SM 5.1 shift patterns where intermediate values are
+    // always 32-bit, and for print_cast which also operates on 32-bit values.
+    // For SM 6.2+ native 16-bit reinterprets, print_reinterpret() handles it
+    // directly via hlsl_reinterpret_name().
     type = type.element_of();
-
     string cast_expr;
     cast_expr += "as";
     switch (type.code()) {
@@ -979,6 +1301,15 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     // let the integer cast zoo begin...
     internal_assert(!target_type.is_float());
     internal_assert(!source_type.is_float());
+
+    // SM 6.0+ supports native 64-bit integers; SM 6.2+ supports native 16-bit
+    // types. In both cases the sub-32-bit emulation below (which relies on
+    // asint/asuint) is unnecessary and would fail — use a plain cast instead.
+    const int sm = target.get_d3d12compute_capability_lower_bound();
+    if (target_type.bits() == 64 || source_type.bits() == 64 ||
+        (sm >= 62 && (target_type.bits() == 16 || source_type.bits() == 16))) {
+        return print_vanilla_cast(target_type, value_expr);
+    }
 
     // HLSL (SM 5.1) only supports 32bit integers (signed and unsigned)...
     // integer downcasting-to (or upcasting-from) lower bit integers require
@@ -1047,18 +1378,51 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast *op) {
     print_assignment(target_type, cast_expr);
 }
 
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const AssertStmt *op) {
+    user_warning << "Ignoring assertion inside D3D12Compute kernel: " << op->condition << "\n";
+}
+
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Atomic *op) {
-    // TODO: atomics
-    user_assert(false) << "Atomics operations are not supported inside D3D12Compute kernel.\n";
+    user_assert(op->mutex_name.empty())
+        << "D3D12Compute does not support atomic operations that require a mutex lock.\n";
+    ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
+    CodeGen_GPU_C::visit(op);
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const FloatImm *op) {
-    // TODO(marcos): just a pass-through for now, but we might consider doing
-    // something different, such as adding the suffic 'u' to the integer that
-    // gets passed to float_from_bits() to eliminate HLSL shader warnings; we
-    // have seen division-by-zero shader warnings, and we postulated that it
-    // could be indirectly related to compiler assumptions on signed integer
-    // overflow when float_from_bits() is called, but we don't know for sure
+    // For SM 6.2+ native float16_t, use asfloat16() with the exact uint16 bit
+    // pattern to avoid a DXC -Wconversion warning (float->float16_t narrowing).
+    // float_from_bits is defined as asfloat() which returns float32; when the
+    // result is assigned to a float16_t variable DXC warns about the truncation.
+    const int sm = target.get_d3d12compute_capability_lower_bound();
+    if (sm >= 62 && op->type.bits() == 16) {
+        const uint16_t bits = float16_t(op->value).to_bits();
+        ostringstream oss;
+        oss << "asfloat16((uint16_t)" << bits << "u /* " << op->value << " */)";
+        print_assignment(op->type, oss.str());
+        return;
+    }
+    if (op->type.bits() == 64) {
+        // The base class emits (double)float_from_bits(uint32) which truncates to
+        // float precision.  Use asdouble(lo, hi) for exact double bit patterns.
+        if (std::isnan(op->value)) {
+            print_assignment(op->type, "nan_f64()");
+        } else if (std::isinf(op->value)) {
+            print_assignment(op->type, op->value > 0 ? "inf_f64()" : "neg_inf_f64()");
+        } else {
+            union {
+                uint64_t as_uint;
+                double as_double;
+            } u;
+            u.as_double = op->value;
+            const uint32_t lo = (uint32_t)(u.as_uint & 0xFFFFFFFFu);
+            const uint32_t hi = (uint32_t)(u.as_uint >> 32);
+            ostringstream oss;
+            oss << "asdouble(" << lo << "u, " << hi << "u /* " << op->value << " */)";
+            print_assignment(op->type, oss.str());
+        }
+        return;
+    }
     CodeGen_GPU_C::visit(op);
 }
 
@@ -1101,10 +1465,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
 
     debug(2) << "Adding D3D12Compute kernel " << name << "\n";
 
-    debug(2) << "Eliminating bool vectors\n";
+    // HLSL has no bool vector type; lower bool vectors to integer masks.
     s = eliminate_bool_vectors(s);
-    debug(2) << "After eliminating bool vectors:\n"
-             << s << "\n";
 
     // Figure out which arguments should be passed in constant.
     // Such arguments should be:
@@ -1206,18 +1568,19 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     FindSharedAllocationsAndUniquify fsa;
     s = fsa(s);
 
+    const int sm = target.get_d3d12compute_capability_lower_bound();
     uint32_t total_shared_bytes = 0;
     for (const Stmt &sop : fsa.allocs) {
         const Allocate *op = sop.as<Allocate>();
         internal_assert(op->extents.size() == 1);
         internal_assert(op->type.lanes() == 1);
-        // In D3D12/HLSL, only 32bit types (int/uint/float) are supported (even
-        // though things are changing with newer shader models). Since there is
-        // no uint8 type, we'll have to emulate it with 32bit types...
-        // This will also require pack/unpack logic with bit-masking and aliased
-        // type reinterpretation via asfloat()/asuint() in the shader code... :(
+        // SM 5.1 only supports 32-bit types in groupshared memory; promote
+        // sub-32-bit types and use bit reinterpretation on load/store.
+        // SM 6.2+ supports 16-bit types natively — no promotion needed.
         Type smem_type = op->type;
-        smem_type.with_bits(32);
+        if (sm < 62) {
+            smem_type = smem_type.with_bits(32);
+        }
         stream << "groupshared"
                << " " << print_type(smem_type)
                << " " << print_name(op->name);
@@ -1242,7 +1605,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                      << "' exceeds the SM 5.1 limit of 32KB: " << total_shared_bytes << " bytes required.\n";
         }
         Allocation alloc;
-        alloc.type = op->type;
+        alloc.type = smem_type;  // use promoted type (32-bit at SM 5.1, native at SM 6.2+)
         allocations.push(op->name, alloc);
     }
 
@@ -1287,6 +1650,131 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     };
     FindThreadGroupSize ftg;
     s.accept(&ftg);
+    const bool use_dxc = (sm >= 60);
+
+    if (use_dxc) {
+        // DXC (SM 6.x): resources must be at global module scope, not function
+        // parameters. When multiple kernels share a module, arg names can clash.
+        // Prefix every arg name with the kernel name to guarantee uniqueness.
+        std::map<string, string> dxc_renames;
+        for (const auto &arg : args) {
+            dxc_renames[arg.name] = name + "_" + arg.name;
+        }
+
+        // Mutate Load/Store/Variable nodes in the body to use the prefixed names.
+        class RenameKernelArgs : public IRMutator {
+            using IRMutator::visit;
+            const std::map<string, string> &renames;
+            Expr visit(const Load *op) override {
+                auto it = renames.find(op->name);
+                if (it != renames.end()) {
+                    return Load::make(op->type, it->second,
+                                      mutate(op->index), op->image, op->param,
+                                      mutate(op->predicate), op->alignment);
+                }
+                return IRMutator::visit(op);
+            }
+            Stmt visit(const Store *op) override {
+                auto it = renames.find(op->name);
+                if (it != renames.end()) {
+                    return Store::make(it->second, mutate(op->value),
+                                       mutate(op->index), op->param,
+                                       mutate(op->predicate), op->alignment);
+                }
+                return IRMutator::visit(op);
+            }
+            Expr visit(const Variable *op) override {
+                auto it = renames.find(op->name);
+                if (it != renames.end()) {
+                    return Variable::make(op->type, it->second,
+                                          op->image, op->param, op->reduction_domain);
+                }
+                return IRMutator::visit(op);
+            }
+            Expr visit(const Call *op) override {
+                // image_load/image_store carry the buffer name as args[0] StringImm.
+                if ((op->is_intrinsic(Call::image_load) || op->is_intrinsic(Call::image_store)) &&
+                    !op->args.empty()) {
+                    // args[0] is the buffer name as StringImm, possibly
+                    // wrapped in Broadcast for vectorized texture access.
+                    const StringImm *name_imm = op->args[0].as<StringImm>();
+                    if (!name_imm) {
+                        if (const Broadcast *b = op->args[0].as<Broadcast>()) {
+                            name_imm = b->value.as<StringImm>();
+                        }
+                    }
+                    if (name_imm) {
+                        auto it = renames.find(name_imm->value);
+                        if (it != renames.end()) {
+                            vector<Expr> new_args = op->args;
+                            Expr renamed = StringImm::make(it->second);
+                            new_args[0] = op->args[0].as<Broadcast>() ? Broadcast::make(renamed, op->args[0].as<Broadcast>()->lanes) : renamed;
+                            for (size_t i = 1; i < new_args.size(); ++i) {
+                                new_args[i] = mutate(new_args[i]);
+                            }
+                            return Call::make(op->type, op->name, new_args, op->call_type,
+                                              op->func, op->value_index, op->image, op->param);
+                        }
+                    }
+                }
+                return IRMutator::visit(op);
+            }
+
+        public:
+            RenameKernelArgs(const std::map<string, string> &r)
+                : renames(r) {
+            }
+        };
+        s = RenameKernelArgs(dxc_renames)(s);
+
+        // Declare all resources globally with explicit register bindings and
+        // put scalar uniforms in a per-kernel constant buffer. The runtime binds:
+        //   - scalar args → cbuffer at register(b0)
+        //   - buffer args → UAV at register(u0), register(u1), ...
+        int uav_index = 0;
+        bool has_scalars = false;
+        for (const auto &arg : args) {
+            if (!arg.is_buffer) {
+                has_scalars = true;
+                continue;
+            }
+            const string &pname = dxc_renames.at(arg.name);
+            if (arg.memory_type == MemoryType::GPUTexture) {
+                int dims = arg.dimensions;
+                internal_assert(dims >= 1 && dims <= 3) << "D3D12Compute texture must have 1-3 dimensions\n";
+                stream << "RWTexture" << dims << "D"
+                       << "<" << print_type(arg.type) << ">"
+                       << " " << print_name(pname)
+                       << " : register(u" << uav_index++ << ");\n";
+            } else {
+                // HLSL typed buffers (RWBuffer) only support 32-bit element types
+                // (int/uint/float). The D3D12 runtime sets the correct DXGI format
+                // (e.g. R16_SINT) and the GPU handles 32↔16 bit conversion.
+                Type buf_type = arg.type.with_bits(std::max((int)arg.type.bits(), 32));
+                stream << "RWBuffer"
+                       << "<" << print_type(buf_type) << ">"
+                       << " " << print_name(pname)
+                       << " : register(u" << uav_index++ << ");\n";
+            }
+            Allocation alloc;
+            alloc.type = arg.type;
+            allocations.push(pname, alloc);
+        }
+        if (has_scalars) {
+            stream << "cbuffer " << name << "_uniforms : register(b0) {\n";
+            for (const auto &arg : args) {
+                if (!arg.is_buffer) {
+                    const string &pname = dxc_renames.at(arg.name);
+                    // The runtime always packs scalar uniforms as 32-bit values;
+                    // declare them as 32-bit here to match the cbuffer layout.
+                    Type cbuf_type = arg.type.with_bits(std::max((int)arg.type.bits(), 32));
+                    stream << " " << print_type(cbuf_type) << " " << print_name(pname) << ";\n";
+                }
+            }
+            stream << "};\n";
+        }
+    }
+
     // for undetermined 'numthreads' dimensions, insert placeholders to the code
     // such as '__NUM_TREADS_X' that will later be patched when D3DCompile() is
     // invoked in halide_d3d12compute_run()
@@ -1303,24 +1791,36 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
            << "uint3 tgroup_index  : SV_GroupID,\n"
            << " "
            << "uint3 tid_in_tgroup : SV_GroupThreadID";
-    for (const auto &arg : args) {
-        stream << ",\n";
-        stream << " ";
-        if (arg.is_buffer) {
-            // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
-            // all buffers as UAVs since there is no way the runtime can know
-            // if a given halide_buffer_t is read-only (SRV) or read-write...
-            stream << "RW"
-                   << "Buffer"
-                   << "<" << print_type(arg.type) << ">"
-                   << " " << print_name(arg.name);
-            Allocation alloc;
-            alloc.type = arg.type;
-            allocations.push(arg.name, alloc);
-        } else {
-            stream << "uniform"
-                   << " " << print_type(arg.type)
-                   << " " << print_name(arg.name);
+    if (!use_dxc) {
+        for (const auto &arg : args) {
+            stream << ",\n";
+            stream << " ";
+            if (arg.is_buffer) {
+                if (arg.memory_type == MemoryType::GPUTexture) {
+                    int dims = arg.dimensions;
+                    internal_assert(dims >= 1 && dims <= 3) << "D3D12Compute texture must have 1-3 dimensions\n";
+                    stream << "RWTexture" << dims << "D"
+                           << "<" << print_type(arg.type) << ">"
+                           << " " << print_name(arg.name);
+                } else {
+                    // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
+                    // all buffers as UAVs since there is no way the runtime can know
+                    // if a given halide_buffer_t is read-only (SRV) or read-write...
+                    // HLSL typed buffers only support 32-bit element types;
+                    // the DXGI format handles the actual element size.
+                    Type buf_type = arg.type.with_bits(std::max((int)arg.type.bits(), 32));
+                    stream << "RWBuffer"
+                           << "<" << print_type(buf_type) << ">"
+                           << " " << print_name(arg.name);
+                }
+                Allocation alloc;
+                alloc.type = arg.type;
+                allocations.push(arg.name, alloc);
+            } else {
+                stream << "uniform"
+                       << " " << print_type(arg.type)
+                       << " " << print_name(arg.name);
+            }
         }
     }
     stream << ")\n";
@@ -1332,9 +1832,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     close_scope("kernel " + name);
 
     for (const auto &arg : args) {
-        // Remove buffer arguments from allocation scope
+        // Remove buffer arguments from allocation scope.
+        // DXC allocations were pushed under prefixed names; FXC under original names.
         if (arg.is_buffer) {
-            allocations.pop(arg.name);
+            allocations.pop(use_dxc ? (name + "_" + arg.name) : arg.name);
         }
     }
 
@@ -1347,6 +1848,12 @@ void CodeGen_D3D12Compute_Dev::init_module() {
     // wipe the internal kernel source
     src_stream.str("");
     src_stream.clear();
+
+    // Emit SM version marker for runtime to select FXC (SM 5.1) vs DXC (SM 6.x)
+    int sm = d3d12compute_c.get_target().get_d3d12compute_capability_lower_bound();
+    if (sm >= 60) {
+        src_stream << "//HALIDE_D3D12_SM " << sm << "\n";
+    }
 
     // compiler control pragmas
     src_stream
@@ -1396,9 +1903,17 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "#define asuint32 asuint\n"
         << "\n"
 #endif
-        << "float nan_f32()     { return  1.#IND; }\n"  // Quiet NaN with minimum fractional value.
-        << "float neg_inf_f32() { return -1.#INF; }\n"
-        << "float inf_f32()     { return +1.#INF; }\n"
+        // asfloat() with IEEE 754 bit patterns is valid HLSL since SM 4.0 and
+        // accepted by both FXC and DXC.  The old FXC-specific literals 1.#IND /
+        // 1.#INF are not part of the HLSL spec and are rejected by DXC even when
+        // targeting cs_5_1, so always use the portable form.
+        << "float nan_f32()     { return asfloat(0x7fc00000u); }\n"
+           "float neg_inf_f32() { return asfloat(0xff800000u); }\n"
+           "float inf_f32()     { return asfloat(0x7f800000u); }\n"
+           // asdouble(lowbits, highbits) is valid since SM 4.0 in both FXC and DXC.
+           "double nan_f64()     { return asdouble(0x00000000u, 0x7ff80000u); }\n"
+           "double neg_inf_f64() { return asdouble(0x00000000u, 0xfff00000u); }\n"
+           "double inf_f64()     { return asdouble(0x00000000u, 0x7ff00000u); }\n"
         << "#define float_from_bits asfloat\n"
         // pow() in HLSL has the same semantics as C if
         // x > 0.  Otherwise, we need to emulate C

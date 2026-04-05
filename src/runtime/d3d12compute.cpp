@@ -47,6 +47,7 @@
 #include "device_interface.h"
 #include "gpu_context_common.h"
 #include "printer.h"
+#include "runtime_atomics.h"
 #include "scoped_mutex_lock.h"
 
 #if !defined(INITGUID)
@@ -56,6 +57,7 @@
 #define COBJMACROS
 #endif
 #include "mini_d3d12.h"
+#include "mini_dxc.h"
 
 // For all intents and purposes, we always want to use COMPUTE command lists
 // (and queues) ...
@@ -75,14 +77,13 @@
 
 WEAK void d3d12_debug_dump();
 
-#define d3d12_panic(...)                               \
-    do {                                               \
-        error err(nullptr);                            \
-        err << __VA_ARGS__ << "\n";                    \
-        err << "vvvvv D3D12 Begin Debug Dump vvvvv\n"; \
-        d3d12_debug_dump();                            \
-        err << "^^^^^ D3D12  End  Debug Dump ^^^^^\n"; \
-        err << "D3D12 HALT !!!\n";                     \
+#define d3d12_panic(...)                                                       \
+    do {                                                                       \
+        /* Print the fatal message via halide_print (non-aborting) FIRST so it \
+           is always visible, even though d3d12_debug_dump() aborts below. */  \
+        BasicPrinter<4096>(nullptr) << "D3D12 FATAL: " << __VA_ARGS__ << "\n"  \
+                                    << "vvvvv D3D12 Begin Debug Dump vvvvv\n"; \
+        d3d12_debug_dump(); /* aborts via halide_error inside */               \
     } while (0)
 
 // v trace and logging utilities for debugging v
@@ -436,6 +437,7 @@ WEAK DXGI_FORMAT FindD3D12FormatForHalideType(void *user_context, halide_type_t 
 WEAK void *lib_d3d12 = nullptr;
 WEAK void *lib_D3DCompiler_47 = nullptr;
 WEAK void *lib_dxgi = nullptr;
+WEAK void *lib_dxcompiler = nullptr;  // DXC: loaded lazily for SM 6.x
 
 struct LibrarySymbol {
     template<typename T>
@@ -456,6 +458,7 @@ WEAK PFN_D3D12_GET_DEBUG_INTERFACE D3D12GetDebugInterface = nullptr;
 WEAK PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignature = nullptr;
 WEAK PFN_D3DCOMPILE D3DCompile = nullptr;
 WEAK PFN_CREATEDXGIFACORY1 CreateDXGIFactory1 = nullptr;
+WEAK PFN_DXC_CREATE_INSTANCE DxcCreateInstance_fp = nullptr;  // DXC factory function
 
 #if defined(__cplusplus) && !defined(_MSC_VER)
 #if defined(__MINGW32__)
@@ -542,7 +545,8 @@ struct d3d12_buffer {
         ReadOnly,
         WriteOnly,
         Upload,
-        ReadBack
+        ReadBack,
+        Texture
     } type;
 
     // NOTE(marcos): it's UNSAFE to cache a pointer to a 'halide_buffer_t' here
@@ -550,6 +554,11 @@ struct d3d12_buffer {
     // runtime module.
 
     halide_type_t halide_type;
+
+    UINT textureDims;  // 1, 2, or 3 (only valid when type == Texture)
+    UINT textureWidth;
+    UINT textureHeight;
+    UINT textureDepth;
 
     struct transfer_t {
         d3d12_buffer *staging;
@@ -871,11 +880,13 @@ WEAK void release_d3d12_object<d3d12_frame>(d3d12_frame *frame) {
 }
 
 extern WEAK halide_device_interface_t d3d12compute_device_interface;
+extern WEAK halide_device_interface_t d3d12compute_image_device_interface;
 
 WEAK d3d12_buffer *peel_buffer(struct halide_buffer_t *hbuffer) {
     TRACELOG;
     halide_abort_if_false(user_context, (hbuffer != nullptr));
-    halide_abort_if_false(user_context, (hbuffer->device_interface == &d3d12compute_device_interface));
+    halide_abort_if_false(user_context, (hbuffer->device_interface == &d3d12compute_device_interface ||
+                                         hbuffer->device_interface == &d3d12compute_image_device_interface));
     d3d12_buffer *dbuffer = reinterpret_cast<d3d12_buffer *>(hbuffer->device);
     halide_abort_if_false(user_context, (dbuffer != nullptr));
     return dbuffer;
@@ -885,7 +896,8 @@ WEAK const d3d12_buffer *peel_buffer(const struct halide_buffer_t *hbuffer) {
     return peel_buffer(const_cast<halide_buffer_t *>(hbuffer));
 }
 
-WEAK int wrap_buffer(void *user_context, struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
+WEAK int wrap_buffer(void *user_context, struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer,
+                     halide_device_interface_t *device_interface = &d3d12compute_device_interface) {
     halide_abort_if_false(user_context, (hbuffer->device == 0));
     if (hbuffer->device != 0) {
         return halide_error_code_device_wrap_native_failed;
@@ -906,7 +918,7 @@ WEAK int wrap_buffer(void *user_context, struct halide_buffer_t *hbuffer, d3d12_
     dbuffer->halide_type = hbuffer->type;
     hbuffer->device = reinterpret_cast<uint64_t>(dbuffer);
     halide_abort_if_false(user_context, (hbuffer->device_interface == nullptr));
-    hbuffer->device_interface = &d3d12compute_device_interface;
+    hbuffer->device_interface = device_interface;
     hbuffer->device_interface->impl->use_module();
 
     return halide_error_code_success;
@@ -1479,6 +1491,75 @@ WEAK d3d12_buffer *new_buffer(d3d12_device *device, size_t length) {
     return pBuffer;
 }
 
+WEAK d3d12_buffer *new_texture_buffer(d3d12_device *device, UINT width, UINT height, UINT depth, UINT dims, DXGI_FORMAT format) {
+    TRACELOG;
+
+    D3D12_RESOURCE_DESC desc = {};
+    {
+        desc.Alignment = 0;
+        desc.MipLevels = 1;
+        desc.Format = format;
+        desc.SampleDesc.Count = 1;
+        desc.SampleDesc.Quality = 0;
+        desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+        switch (dims) {
+        case 1:
+            desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE1D;
+            desc.Width = width;
+            desc.Height = 1;
+            desc.DepthOrArraySize = 1;
+            break;
+        case 2:
+            desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+            desc.Width = width;
+            desc.Height = height;
+            desc.DepthOrArraySize = 1;
+            break;
+        case 3:
+            desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+            desc.Width = width;
+            desc.Height = height;
+            desc.DepthOrArraySize = depth;
+            break;
+        default:
+            halide_abort_if_false(user_context, false);
+            return nullptr;
+        }
+    }
+
+    D3D12_HEAP_PROPERTIES heapProps = {};
+    {
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+        heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+        heapProps.CreationNodeMask = 0;
+        heapProps.VisibleNodeMask = 0;
+    }
+
+    ID3D12Resource *resource = nullptr;
+    HRESULT result = (*device)->CreateCommittedResource(
+        &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
+        D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&resource));
+    if (D3DErrorCheck(result, resource, nullptr, "Unable to create Direct3D 12 texture")) {
+        return nullptr;
+    }
+
+    d3d12_buffer *pBuffer = malloct<d3d12_buffer>();
+    *pBuffer = {};
+    pBuffer->resource = resource;
+    pBuffer->format = format;
+    pBuffer->type = d3d12_buffer::Texture;
+    pBuffer->textureDims = dims;
+    pBuffer->textureWidth = width;
+    pBuffer->textureHeight = height;
+    pBuffer->textureDepth = (dims == 3) ? depth : 1;
+    pBuffer->state = D3D12_RESOURCE_STATE_COMMON;
+    pBuffer->mallocd = true;
+    __atomic_store_n(&pBuffer->ref_count, 0, __ATOMIC_SEQ_CST);
+    return pBuffer;
+}
+
 WEAK size_t suballocate(d3d12_device *device, d3d12_buffer *staging, size_t num_bytes) {
     TRACELOG;
 
@@ -1853,9 +1934,364 @@ WEAK void dump_shader(const char *source, ID3DBlob *compiler_msgs = nullptr) {
         << source << "\n";
 }
 
+// ---- DXC (Shader Model 6.x) support ----
+
+namespace {
+
+// Parse the SM version from a Halide-emitted HLSL source header.
+// Returns e.g. 60 for "//HALIDE_D3D12_SM 60\n", or 0 if not present.
+int parse_hlsl_sm_version(const char *source) {
+    constexpr const char prefix[] = "//HALIDE_D3D12_SM ";
+    constexpr size_t prefix_len = sizeof(prefix) - 1;  // exclude null terminator
+
+    if (strncmp(source, prefix, prefix_len) != 0) {
+        return 0;
+    }
+
+    const char *p = source + prefix_len;
+    if (*p < '0' || *p > '9') {
+        return 0;  // no digits after prefix
+    }
+
+    int sm = 0;
+    for (; *p >= '0' && *p <= '9'; ++p) {
+        int digit = *p - '0';
+        if (__builtin_mul_overflow(sm, 10, &sm) ||
+            __builtin_add_overflow(sm, digit, &sm)) {
+            return 0;
+        }
+    }
+    return sm;
+}
+
+// Copy ASCII/narrow string to wide char buffer (safe for HLSL identifiers and integers).
+// Returns the number of characters written, excluding the null terminator.
+// A return value >= max_len indicates truncation.
+[[nodiscard]]
+int narrow_to_wide(const char *src, WCHAR *dst, int max_len) {
+    if (max_len <= 0) {
+        return 0;
+    }
+    int i = 0;
+    for (; src[i] && i < max_len - 1; ++i) {
+        dst[i] = (WCHAR)(unsigned char)src[i];
+    }
+    dst[i] = 0;
+    // If we stopped because of the limit rather than a null, signal truncation.
+    return src[i] ? max_len : i;
+}
+
+// Append an unsigned integer to a wide char buffer (returns pointer past the last written char).
+WCHAR *append_uint_wide(WCHAR *dst, WCHAR *end, unsigned int val) {
+    if (dst >= end) {
+        return dst;
+    }
+    WCHAR *start = dst;
+    // Write digits in reverse order.
+    do {
+        if (dst >= end) {
+            // Truncated mid-number; caller gets a partial result.
+            break;
+        }
+        *dst++ = (WCHAR)('0' + val % 10);
+        val /= 10;
+    } while (val > 0);
+    // Reverse in place.
+    for (WCHAR *lo = start, *hi = dst - 1; lo < hi; ++lo, --hi) {
+        WCHAR tmp = *lo;
+        *lo = *hi;
+        *hi = tmp;
+    }
+    return dst;
+}
+
+// Build a DXC define arg of the form "NAME=VALUE" as a wide string.
+void build_dxc_define_wide(WCHAR *buf, int buf_len, const WCHAR *name, unsigned int value) {
+    WCHAR *p = buf;
+    WCHAR *end = buf + buf_len - 1;
+    for (int i = 0; name[i] && p < end; ++i) {
+        *p++ = name[i];
+    }
+    if (p < end) {
+        *p++ = (WCHAR)'=';
+    }
+    p = append_uint_wide(p, end, value);
+    *p = 0;
+}
+
+}  // namespace
+
+// Windows API declarations needed for loading DXC by full path.
+// These live in kernel32.dll which is always available on Windows.
+extern "C" {
+// Returns the full path of the EXE module (hModule=nullptr) or a loaded DLL.
+unsigned long __stdcall GetModuleFileNameA(void *hModule, char *lpFilename, unsigned long nSize);
+// Loads a DLL; when LOAD_WITH_ALTERED_SEARCH_PATH (0x8) is set and lpLibFileName
+// contains a path, the DLL's directory is searched first for its dependencies.
+void *__stdcall LoadLibraryExA(const char *lpLibFileName, void *hFile, unsigned long dwFlags);
+}
+// Flag: use the DLL's own directory (not the EXE directory) for dependency search.
+static const unsigned long kLoadWithAlteredSearchPath = 0x00000008UL;
+
+// Lazy DXC loader: loads dxcompiler.dll and resolves DxcCreateInstance on first use.
+//
+// We load dxcompiler.dll by its FULL PATH from the EXE's directory so that:
+//   1. We get the SDK copy, not the OS-bundled ("inbox") dxcompiler.dll. Windows 11
+//      ships a dxcompiler.dll in System32 as part of the base OS install; it is
+//      typically older than the SDK version and may not expose IDxcCompiler3.
+//   2. With LOAD_WITH_ALTERED_SEARCH_PATH, dxcompiler.dll searches its OWN
+//      directory for dxil.dll (DXIL validator), so both DLLs must reside beside
+//      the EXE (the PowerShell test script copies them there).
+WEAK bool D3D12LoadDXC(void *uc) {
+    if (lib_dxcompiler) {
+        return true;
+    }
+
+    // Build full path: <exe_dir>\dxcompiler.dll
+    constexpr const char dll_name[] = "dxcompiler.dll";
+    constexpr size_t kMaxPath = 4096;
+    char path[kMaxPath];
+    static_assert(kMaxPath > sizeof(dll_name), "path buffer too small");
+
+    DWORD n = GetModuleFileNameA(nullptr, path, sizeof(path));
+    if (n > 0 && n < sizeof(path)) {
+        // Trim to the directory portion (last separator).
+        // Use manual scan since strrchr is not available in the runtime.
+        char *last_sep = nullptr;
+        for (char *p = path + n - 1; p >= path; --p) {
+            if (*p == '\\' || *p == '/') {
+                last_sep = p;
+                break;
+            }
+        }
+        if (last_sep) {
+            // Verify the DLL name fits after the separator.
+            size_t dir_len = (size_t)(last_sep + 1 - path);
+            if (dir_len + sizeof(dll_name) <= sizeof(path)) {
+                memcpy(last_sep + 1, dll_name, sizeof(dll_name));
+                lib_dxcompiler = LoadLibraryExA(path, nullptr, kLoadWithAlteredSearchPath);
+            }
+        }
+        if (lib_dxcompiler) {
+            TRACEPRINT("D3D12Compute: Loaded DXC from: " << path << "\n");
+        }
+    }
+
+    // Fallback: let Windows search PATH / system directories.
+    if (!lib_dxcompiler) {
+        lib_dxcompiler = d3d12_load_library("dxcompiler.dll");
+    }
+
+    if (!lib_dxcompiler) {
+        return false;
+    }
+    DxcCreateInstance_fp = LibrarySymbol::get(uc, lib_dxcompiler, "DxcCreateInstance");
+    return (DxcCreateInstance_fp != nullptr);
+}
+
+// DXC-based shader compilation path for Shader Model 6.x.
+WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_library *library, const char *name,
+                                              int shared_mem_bytes, int threadsX, int threadsY, int threadsZ,
+                                              int sm_version) {
+    TRACELOG;
+
+    if (!D3D12LoadDXC(user_context)) {
+        TRACEFATAL("D3D12Compute: Unable to load dxcompiler.dll. "
+                   "DXC is required for HLSL Shader Model 6.x (hlsl_sm60+).");
+        return nullptr;
+    }
+
+    // Preprocessor define args for thread counts and shared memory size.
+    // Each define is "-D NAME=VALUE" passed as two separate args.
+    WCHAR def_groupshared[64], def_treads_x[64], def_treads_y[64], def_treads_z[64];
+    build_dxc_define_wide(def_groupshared, 64, (const WCHAR *)L"__GROUPSHARED_SIZE_IN_BYTES", (unsigned int)shared_mem_bytes);
+    build_dxc_define_wide(def_treads_x, 64, (const WCHAR *)L"__NUM_TREADS_X", (unsigned int)threadsX);
+    build_dxc_define_wide(def_treads_y, 64, (const WCHAR *)L"__NUM_TREADS_Y", (unsigned int)threadsY);
+    build_dxc_define_wide(def_treads_z, 64, (const WCHAR *)L"__NUM_TREADS_Z", (unsigned int)threadsZ);
+
+    // Entry point (narrow ASCII to wide)
+    WCHAR entry_wide[256];
+    if (narrow_to_wide(name, entry_wide, 256) >= 256) {
+        error(user_context) << "d3d12compute: entry point name too long (truncated)\n";
+        return nullptr;
+    }
+
+    // Target profile: "cs_6_X" where X = sm_version % 10
+    WCHAR target_profile[16] = {(WCHAR)'c', (WCHAR)'s', (WCHAR)'_', (WCHAR)'6', (WCHAR)'_',
+                                (WCHAR)('0' + (sm_version % 10)), 0};
+
+    // Build argument array (shared by both compiler paths)
+    LPCWSTR args[24];
+    UINT32 num_args = 0;
+    args[num_args++] = (LPCWSTR)L"-T";
+    args[num_args++] = target_profile;
+    args[num_args++] = (LPCWSTR)L"-E";
+    args[num_args++] = entry_wide;
+    args[num_args++] = (LPCWSTR)L"-D";
+    args[num_args++] = def_groupshared;
+    args[num_args++] = (LPCWSTR)L"-D";
+    args[num_args++] = def_treads_x;
+    args[num_args++] = (LPCWSTR)L"-D";
+    args[num_args++] = def_treads_y;
+    args[num_args++] = (LPCWSTR)L"-D";
+    args[num_args++] = def_treads_z;
+    if (sm_version >= 62) {
+        args[num_args++] = (LPCWSTR)L"-enable-16bit-types";
+    }
+#if HALIDE_D3D12_DEBUG_SHADERS
+    args[num_args++] = (LPCWSTR)L"-Zi";  // debug info
+    args[num_args++] = (LPCWSTR)L"-Od";  // disable optimizations
+#endif
+
+    // Compile: prefer IDxcCompiler3 (modern DxcBuffer API, DXC 1.6+).
+    // Fall back to IDxcCompiler v1 (present in all DXC builds, including the
+    // OS-bundled (inbox) version that may not expose IDxcCompiler3).
+    IDxcResult *result_obj = nullptr;
+    HRESULT hr;
+
+    IDxcCompiler3 *compiler3 = nullptr;
+    hr = DxcCreateInstance_fp(CLSID_DxcCompiler, IID_IDxcCompiler3, (LPVOID *)&compiler3);
+    if (SUCCEEDED(hr) && compiler3) {
+        // IDxcCompiler3 path: pass source as DxcBuffer, no blob creation needed.
+        DxcBuffer source_buffer;
+        source_buffer.Ptr = library->source;
+        source_buffer.Size = (SIZE_T)library->source_length;
+        source_buffer.Encoding = DXC_CP_UTF8;
+        hr = compiler3->Compile(&source_buffer, args, num_args, nullptr,
+                                IID_IDxcResult, (LPVOID *)&result_obj);
+        Release_ID3D12Object(compiler3);
+        if (FAILED(hr) || !result_obj) {
+            TRACEFATAL("D3D12Compute: IDxcCompiler3::Compile() failed (HRESULT=" << (void *)(int64_t)hr << ").");
+            return nullptr;
+        }
+    } else {
+        // IDxcCompiler v1 fallback (E_NOINTERFACE for IDxcCompiler3 on older or OS-bundled DXC).
+        BasicPrinter<256>(nullptr) << "D3D12Compute: IDxcCompiler3 not available (HRESULT="
+                                   << (void *)(int64_t)hr << "), falling back to IDxcCompiler v1.\n";
+        IDxcCompiler *compiler1 = nullptr;
+        hr = DxcCreateInstance_fp(CLSID_DxcCompiler, IID_IDxcCompiler, (LPVOID *)&compiler1);
+        if (FAILED(hr) || !compiler1) {
+            TRACEFATAL("D3D12Compute: DxcCreateInstance failed for IDxcCompiler3 and IDxcCompiler (HRESULT="
+                       << (void *)(int64_t)hr << ").");
+            return nullptr;
+        }
+
+        // Create a pinned source blob via IDxcLibrary (avoids a copy).
+        IDxcLibrary *dxc_lib = nullptr;
+        hr = DxcCreateInstance_fp(CLSID_DxcLibrary, IID_IDxcLibrary, (LPVOID *)&dxc_lib);
+        if (FAILED(hr) || !dxc_lib) {
+            Release_ID3D12Object(compiler1);
+            TRACEFATAL("D3D12Compute: DxcCreateInstance(IDxcLibrary) failed (HRESULT=" << (void *)(int64_t)hr << ").");
+            return nullptr;
+        }
+        IDxcBlobEncoding *source_enc = nullptr;
+        hr = dxc_lib->CreateBlobWithEncodingFromPinned(library->source,
+                                                       (UINT32)library->source_length,
+                                                       DXC_CP_UTF8, &source_enc);
+        Release_ID3D12Object(dxc_lib);
+        if (FAILED(hr) || !source_enc) {
+            Release_ID3D12Object(compiler1);
+            TRACEFATAL("D3D12Compute: IDxcLibrary::CreateBlobWithEncodingFromPinned failed.");
+            return nullptr;
+        }
+
+        // IDxcCompiler v1: takes IDxcBlob* (IDxcBlobEncoding extends IDxcBlob).
+        // Defines are passed via the args array ("-D NAME=VALUE") rather than the
+        // pDefines struct, so we pass nullptr/0 for the define parameters.
+        hr = compiler1->Compile((IDxcBlob *)source_enc, nullptr, entry_wide,
+                                target_profile, args, num_args,
+                                nullptr, 0, nullptr, &result_obj);
+        Release_ID3D12Object(compiler1);
+        Release_ID3D12Object(source_enc);
+        if (FAILED(hr) || !result_obj) {
+            TRACEFATAL("D3D12Compute: IDxcCompiler::Compile() failed (HRESULT=" << (void *)(int64_t)hr << ").");
+            return nullptr;
+        }
+    }
+
+    // Check compilation status
+    HRESULT status = S_OK;
+    result_obj->GetStatus(&status);
+
+    if (FAILED(status)) {
+        // Dump DXC error/warning messages
+        IDxcBlobEncoding *errors = nullptr;
+        result_obj->GetErrorBuffer(&errors);
+        const char *error_text = "<no DXC error message>";
+        if (errors && errors->GetBufferSize() > 0) {
+            error_text = (const char *)errors->GetBufferPointer();
+        }
+        BasicPrinter<64 * 1024>(user_context)
+            << "DXC compile error (HRESULT=" << (void *)(int64_t)status << "):\n"
+            << error_text << "\n"
+            << ">>> HLSL shader source dump <<<\n"
+            << library->source << "\n";
+        if (errors) {
+            Release_ID3D12Object(errors);
+        }
+        Release_ID3D12Object(result_obj);
+        return nullptr;
+    }
+
+    // Emit any warnings even on success
+    IDxcBlobEncoding *warnings = nullptr;
+    result_obj->GetErrorBuffer(&warnings);
+    if (warnings && warnings->GetBufferSize() > 0) {
+        BasicPrinter<64 * 1024>(user_context)
+            << "DXC compile warnings:\n"
+            << (const char *)warnings->GetBufferPointer() << "\n";
+    }
+    if (warnings) {
+        Release_ID3D12Object(warnings);
+    }
+
+    // Retrieve compiled DXIL bytecode
+    IDxcBlob *shader_blob = nullptr;
+    result_obj->GetResult(&shader_blob);
+    Release_ID3D12Object(result_obj);
+
+    if (!shader_blob || shader_blob->GetBufferSize() == 0) {
+        TRACEFATAL("D3D12Compute: DXC produced no output DXIL blob.");
+        if (shader_blob) {
+            Release_ID3D12Object(shader_blob);
+        }
+        return nullptr;
+    }
+
+    TRACEPRINT("SUCCESS: DXC compiled HLSL SM " << (sm_version / 10) << "." << (sm_version % 10)
+                                                << " shader with entry '" << name << "'\n");
+
+    // IDxcBlob and ID3DBlob share the same vtable layout (GetBufferPointer/GetBufferSize),
+    // so we can safely reinterpret_cast for storage in d3d12_function.
+    d3d12_function *function = malloct<d3d12_function>();
+    function->shaderBlob = reinterpret_cast<ID3DBlob *>(shader_blob);
+    function->rootSignature = rootSignature;
+    rootSignature->AddRef();
+
+    d3d12_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(device, function);
+    if (pipeline_state == nullptr) {
+        TRACEFATAL("D3D12Compute: Could not allocate pipeline state for DXC shader.");
+        release_object(function);
+        return nullptr;
+    }
+    function->pipeline_state = pipeline_state;
+
+    return function;
+}
+
 WEAK d3d12_function *d3d12_compile_shader(d3d12_device *device, d3d12_library *library, const char *name,
                                           int shared_mem_bytes, int threadsX, int threadsY, int threadsZ) {
     TRACELOG;
+
+    // Dispatch to DXC for SM 6.x shaders (source header "//HALIDE_D3D12_SM NN\n").
+    int sm_version = parse_hlsl_sm_version(library->source);
+    if (sm_version >= 60) {
+        // Round shared memory here too, consistent with FXC path below.
+        shared_mem_bytes = ((shared_mem_bytes > 0 ? shared_mem_bytes : 1) + 0xF) & ~0xF;
+        return d3d12_compile_shader_dxc(device, library, name,
+                                        shared_mem_bytes, threadsX, threadsY, threadsZ,
+                                        sm_version);
+    }
 
     // Round shared memory size up to a non-zero multiple of 16
     TRACEPRINT("groupshared memory size before modification: " << shared_mem_bytes << " bytes\n");
@@ -2040,6 +2476,40 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
 
         (*device)->CreateUnorderedAccessView(pResource, pCounterResource, &uavd, hDescUAV);
 
+        break;
+    }
+
+    case d3d12_buffer::Texture: {
+        TRACELEVEL(1, "UAV (Texture)\n");
+
+        D3D12_UNORDERED_ACCESS_VIEW_DESC uavd = {};
+        uavd.Format = input_buffer->format;
+        switch (input_buffer->textureDims) {
+        case 1:
+            uavd.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE1D;
+            uavd.Texture1D.MipSlice = 0;
+            break;
+        case 2:
+            uavd.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+            uavd.Texture2D.MipSlice = 0;
+            uavd.Texture2D.PlaneSlice = 0;
+            break;
+        case 3:
+            uavd.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
+            uavd.Texture3D.MipSlice = 0;
+            uavd.Texture3D.FirstWSlice = 0;
+            uavd.Texture3D.WSize = (UINT)-1;
+            break;
+        default:
+            halide_abort_if_false(user_context, false);
+            break;
+        }
+
+        halide_abort_if_false(user_context, (index < ResourceBindingLimits[UAV]));
+        D3D12_CPU_DESCRIPTOR_HANDLE hDescUAV = binder->CPU[UAV];
+        binder->CPU[UAV].ptr += binder->descriptorSize;
+
+        (*device)->CreateUnorderedAccessView(input_buffer->resource, nullptr, &uavd, hDescUAV);
         break;
     }
 
@@ -2711,6 +3181,56 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
     return halide_error_code_success;
 }
 
+WEAK int halide_d3d12compute_image_device_malloc(void *user_context, halide_buffer_t *buf) {
+    TRACELOG;
+
+    TRACEPRINT("user_context: " << user_context << " | halide_buffer_t: " << buf << "\n");
+
+    if (buf->device) {
+        TRACEPRINT("(this buffer already has a device allocation...)\n");
+        return halide_error_code_success;
+    }
+
+    // Textures require 1-3 dimensions, scalar element type
+    int dims = buf->dimensions;
+    if (dims < 1 || dims > 3) {
+        error(user_context) << "D3D12Compute texture buffers must have 1-3 dimensions (got " << dims << ")";
+        return halide_error_code_device_malloc_failed;
+    }
+
+    // Only scalar (1-lane) element types are supported for textures
+    halide_type_t scalar_type = buf->type;
+    scalar_type.lanes = 1;
+    DXGI_FORMAT fmt = FindD3D12FormatForHalideType(user_context, scalar_type);
+    if (fmt == DXGI_FORMAT_UNKNOWN) {
+        error(user_context) << "D3D12Compute: unsupported element type for texture: " << buf->type;
+        return halide_error_code_device_malloc_failed;
+    }
+
+    UINT width = (UINT)buf->dim[0].extent;
+    UINT height = (dims >= 2) ? (UINT)buf->dim[1].extent : 1;
+    UINT depth = (dims >= 3) ? (UINT)buf->dim[2].extent : 1;
+
+    D3D12ContextHolder d3d12_context(user_context, true);
+    if (d3d12_context.error()) {
+        return d3d12_context.error();
+    }
+
+    d3d12_buffer *d3d12_buf = new_texture_buffer(d3d12_context.device, width, height, depth, (UINT)dims, fmt);
+    if (d3d12_buf == nullptr) {
+        TRACEFATAL("D3D12: Failed to allocate texture " << width << "x" << height << "x" << depth);
+        return halide_error_code_device_malloc_failed;
+    }
+
+    if (wrap_buffer(user_context, buf, d3d12_buf, &d3d12compute_image_device_interface)) {
+        TRACEFATAL("D3D12: unable to wrap halide buffer and D3D12 texture.");
+        error(user_context) << "D3D12: unable to wrap halide buffer and D3D12 texture";
+        return halide_error_code_device_wrap_native_failed;
+    }
+
+    return halide_error_code_success;
+}
+
 WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *buf) {
     TRACELOG;
 
@@ -2885,6 +3405,171 @@ WEAK void do_multidimensional_copy(d3d12_device *device, const device_copy &c,
 }
 
 }  // namespace
+
+WEAK int halide_d3d12compute_image_copy_to_device(void *user_context, halide_buffer_t *buffer) {
+    TRACELOG;
+
+    halide_abort_if_false(user_context, buffer);
+    halide_abort_if_false(user_context, buffer->host && buffer->device);
+
+    D3D12ContextHolder d3d12_context(user_context, true);
+    if (d3d12_context.error()) {
+        return d3d12_context.error();
+    }
+
+    d3d12_buffer *tex_buf = peel_buffer(buffer);
+    halide_abort_if_false(user_context, tex_buf->type == d3d12_buffer::Texture);
+
+    UINT elem_bytes = (UINT)buffer->type.bytes();
+    UINT src_row_bytes = tex_buf->textureWidth * elem_bytes;
+    // D3D12 requires staging buffer rows to be aligned to 256 bytes.
+    UINT row_pitch = ((src_row_bytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) /
+                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) *
+                     D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+    size_t staging_size = (size_t)row_pitch * tex_buf->textureHeight * tex_buf->textureDepth;
+
+    size_t staging_byte_offset = suballocate(d3d12_context.device, &upload, staging_size);
+    void *staging_base = buffer_contents(&upload);
+
+    // Copy row-by-row to respect the 256-byte pitch alignment in the staging buffer.
+    const char *host_src = (const char *)buffer->host;
+    char *stg_dst = (char *)staging_base + staging_byte_offset;
+    for (UINT d = 0; d < tex_buf->textureDepth; d++) {
+        for (UINT h = 0; h < tex_buf->textureHeight; h++) {
+            memcpy(stg_dst + ((size_t)d * tex_buf->textureHeight + h) * row_pitch,
+                   host_src + ((size_t)d * tex_buf->textureHeight + h) * src_row_bytes,
+                   src_row_bytes);
+        }
+    }
+
+    d3d12_frame *frame = acquire_frame(d3d12_context.device);
+    d3d12_compute_command_list *cmdList = frame->cmd_list;
+
+    // Transition texture to COPY_DEST (from whatever state it was last left in)
+    D3D12_RESOURCE_BARRIER barrier = {};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    barrier.Transition.pResource = tex_buf->resource;
+    barrier.Transition.StateBefore = tex_buf->state;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    (*cmdList)->ResourceBarrier(1, &barrier);
+
+    D3D12_TEXTURE_COPY_LOCATION dst_loc = {};
+    dst_loc.pResource = tex_buf->resource;
+    dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    dst_loc.SubresourceIndex = 0;
+
+    D3D12_TEXTURE_COPY_LOCATION src_loc = {};
+    src_loc.pResource = upload.resource;
+    src_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    src_loc.PlacedFootprint.Offset = staging_byte_offset;
+    src_loc.PlacedFootprint.Footprint.Format = tex_buf->format;
+    src_loc.PlacedFootprint.Footprint.Width = tex_buf->textureWidth;
+    src_loc.PlacedFootprint.Footprint.Height = tex_buf->textureHeight;
+    src_loc.PlacedFootprint.Footprint.Depth = tex_buf->textureDepth;
+    src_loc.PlacedFootprint.Footprint.RowPitch = row_pitch;
+
+    (*cmdList)->CopyTextureRegion(&dst_loc, 0, 0, 0, &src_loc, nullptr);
+
+    // Transition back to UNORDERED_ACCESS
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    (*cmdList)->ResourceBarrier(1, &barrier);
+    tex_buf->state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+    enqueue_frame(frame);
+    wait_until_completed(frame);
+
+    // Decrement the ref_count that suballocate() incremented — the GPU work is done.
+    __atomic_sub_fetch(&upload.ref_count, 1, __ATOMIC_SEQ_CST);
+
+    return halide_error_code_success;
+}
+
+WEAK int halide_d3d12compute_image_copy_to_host(void *user_context, halide_buffer_t *buffer) {
+    TRACELOG;
+
+    halide_abort_if_false(user_context, buffer);
+    halide_abort_if_false(user_context, buffer->host && buffer->device);
+
+    D3D12ContextHolder d3d12_context(user_context, true);
+    if (d3d12_context.error()) {
+        return d3d12_context.error();
+    }
+
+    d3d12_buffer *tex_buf = peel_buffer(buffer);
+    halide_abort_if_false(user_context, tex_buf->type == d3d12_buffer::Texture);
+
+    UINT elem_bytes = (UINT)buffer->type.bytes();
+    UINT src_row_bytes = tex_buf->textureWidth * elem_bytes;
+    // D3D12 requires staging buffer rows to be aligned to 256 bytes.
+    UINT row_pitch = ((src_row_bytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) /
+                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) *
+                     D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+    size_t staging_size = (size_t)row_pitch * tex_buf->textureHeight * tex_buf->textureDepth;
+
+    size_t staging_byte_offset = suballocate(d3d12_context.device, &readback, staging_size);
+
+    d3d12_frame *frame = acquire_frame(d3d12_context.device);
+    d3d12_compute_command_list *cmdList = frame->cmd_list;
+
+    // Transition texture to COPY_SOURCE (from whatever state it was last left in)
+    D3D12_RESOURCE_BARRIER barrier = {};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    barrier.Transition.pResource = tex_buf->resource;
+    barrier.Transition.StateBefore = tex_buf->state;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    (*cmdList)->ResourceBarrier(1, &barrier);
+
+    D3D12_TEXTURE_COPY_LOCATION src_loc = {};
+    src_loc.pResource = tex_buf->resource;
+    src_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    src_loc.SubresourceIndex = 0;
+
+    D3D12_TEXTURE_COPY_LOCATION dst_loc = {};
+    dst_loc.pResource = readback.resource;
+    dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    dst_loc.PlacedFootprint.Offset = staging_byte_offset;
+    dst_loc.PlacedFootprint.Footprint.Format = tex_buf->format;
+    dst_loc.PlacedFootprint.Footprint.Width = tex_buf->textureWidth;
+    dst_loc.PlacedFootprint.Footprint.Height = tex_buf->textureHeight;
+    dst_loc.PlacedFootprint.Footprint.Depth = tex_buf->textureDepth;
+    dst_loc.PlacedFootprint.Footprint.RowPitch = row_pitch;
+
+    (*cmdList)->CopyTextureRegion(&dst_loc, 0, 0, 0, &src_loc, nullptr);
+
+    // Transition back to UNORDERED_ACCESS
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    (*cmdList)->ResourceBarrier(1, &barrier);
+    tex_buf->state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+    enqueue_frame(frame);
+    wait_until_completed(frame);
+
+    // Decrement the ref_count that suballocate() incremented — the GPU work is done.
+    {
+        using namespace Halide::Runtime::Internal::Synchronization;
+        atomic_sub_fetch_sequentially_consistent(&readback.ref_count, 1);
+    }
+
+    // Unpack row-by-row from the padded staging buffer to the dense host buffer.
+    void *staging_data = buffer_contents(&readback);
+    const char *stg_src = (const char *)staging_data + staging_byte_offset;
+    char *host_dst = (char *)buffer->host;
+    for (UINT d = 0; d < tex_buf->textureDepth; d++) {
+        for (UINT h = 0; h < tex_buf->textureHeight; h++) {
+            memcpy(host_dst + ((size_t)d * tex_buf->textureHeight + h) * src_row_bytes,
+                   stg_src + ((size_t)d * tex_buf->textureHeight + h) * row_pitch,
+                   src_row_bytes);
+        }
+    }
+
+    return halide_error_code_success;
+}
 
 WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t *buffer) {
     TRACELOG;
@@ -3518,6 +4203,11 @@ WEAK const struct halide_device_interface_t *halide_d3d12compute_device_interfac
     return &d3d12compute_device_interface;
 }
 
+WEAK const struct halide_device_interface_t *halide_d3d12compute_image_device_interface() {
+    TRACELOG;
+    return &d3d12compute_image_device_interface;
+}
+
 namespace {
 WEAK __attribute__((destructor)) void halide_d3d12compute_cleanup() {
     TRACELOG;
@@ -3568,6 +4258,42 @@ WEAK halide_device_interface_t d3d12compute_device_interface = {
     halide_device_detach_native,
     nullptr,
     &d3d12compute_device_interface_impl};
+
+WEAK halide_device_interface_impl_t d3d12compute_image_device_interface_impl = {
+    halide_use_jit_module,
+    halide_release_jit_module,
+    halide_d3d12compute_image_device_malloc,
+    halide_d3d12compute_device_free,
+    halide_d3d12compute_device_sync,
+    halide_d3d12compute_device_release,
+    halide_d3d12compute_image_copy_to_host,
+    halide_d3d12compute_image_copy_to_device,
+    halide_d3d12compute_device_and_host_malloc,
+    halide_d3d12compute_device_and_host_free,
+    halide_d3d12compute_buffer_copy,
+    halide_d3d12compute_device_crop,
+    halide_d3d12compute_device_slice,
+    halide_d3d12compute_device_release_crop,
+    halide_d3d12compute_wrap_buffer,
+    halide_d3d12compute_detach_buffer};
+
+WEAK halide_device_interface_t d3d12compute_image_device_interface = {
+    halide_device_malloc,
+    halide_device_free,
+    halide_device_sync,
+    halide_device_release,
+    halide_copy_to_host,
+    halide_copy_to_device,
+    halide_device_and_host_malloc,
+    halide_device_and_host_free,
+    halide_buffer_copy,
+    halide_device_crop,
+    halide_device_slice,
+    halide_device_release_crop,
+    halide_device_wrap_native,
+    halide_device_detach_native,
+    nullptr,
+    &d3d12compute_image_device_interface_impl};
 
 }  // namespace D3D12Compute
 }  // namespace Internal
