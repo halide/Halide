@@ -21,8 +21,13 @@ namespace Internal {
 
 namespace {
 
+using SpanQueryType = std::function<std::vector<int>(const Type &)>;
+
 class OptimizeShuffles : public IRMutator {
     int lut_alignment;
+    int native_vector_bits;
+    SpanQueryType get_max_span_sizes;
+    bool align_loads_with_native_vector;
     Scope<Interval> bounds;
     std::vector<std::pair<std::string, Expr>> lets;
 
@@ -67,7 +72,7 @@ class OptimizeShuffles : public IRMutator {
         if (allocations_to_pad.count(op->name)) {
             op = s.as<Allocate>();
             internal_assert(op);
-            int padding = 128 / op->type.bytes();  // One native vector
+            int padding = native_vector_bits / op->type.bits();  // One native vector
             return Allocate::make(op->name, op->type, op->memory_type,
                                   op->extents, op->condition,
                                   op->body, op->new_expr, op->free_function,
@@ -99,34 +104,40 @@ class OptimizeShuffles : public IRMutator {
                 ((unaligned_index_bounds.max + align) / align) * align - 1};
             ModulusRemainder alignment(align, 0);
 
-            for (const Interval &index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
-                Expr index_span = span_of_bounds(index_bounds);
-                index_span = common_subexpression_elimination(index_span);
-                index_span = simplify(index_span);
+            const int native_vector_size = native_vector_bits / op->type.bits();
 
-                if (can_prove(index_span < 256)) {
-                    // This is a lookup within an up to 256 element array. We
-                    // can use dynamic_shuffle for this.
-                    int const_extent = as_const_int(index_span) ? *as_const_int(index_span) + 1 : 256;
-                    Expr base = simplify(index_bounds.min);
+            for (const auto &max_span_size : get_max_span_sizes(op->type)) {
 
-                    // Load all of the possible indices loaded from the
-                    // LUT. Note that for clamped ramps, this loads up to 1
-                    // vector past the max, so we will add padding to the
-                    // allocation accordingly (if we're the one that made it).
-                    allocations_to_pad.insert(op->name);
-                    Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
-                                          Ramp::make(base, 1, const_extent),
-                                          op->image, op->param, const_true(const_extent), alignment);
+                for (const Interval &index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
+                    Expr index_span = span_of_bounds(index_bounds);
+                    index_span = common_subexpression_elimination(index_span);
+                    index_span = simplify(index_span);
 
-                    // We know the size of the LUT is not more than 256, so we
-                    // can safely cast the index to 8 bit, which
-                    // dynamic_shuffle requires.
-                    index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
-                    return Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
+                    if (can_prove(index_span < max_span_size)) {
+                        // This is a lookup within an up to max_span_size element array. We
+                        // can use dynamic_shuffle for this.
+                        int const_extent = as_const_int(index_span) ? *as_const_int(index_span) + 1 : max_span_size;
+                        if (align_loads_with_native_vector) {
+                            const_extent = align_up(const_extent, native_vector_size);
+                        }
+                        Expr base = simplify(index_bounds.min);
+
+                        // Load all of the possible indices loaded from the
+                        // LUT. Note that for clamped ramps, this loads up to 1
+                        // vector past the max, so we will add padding to the
+                        // allocation accordingly (if we're the one that made it).
+                        allocations_to_pad.insert(op->name);
+                        Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
+                                              Ramp::make(base, 1, const_extent),
+                                              op->image, op->param, const_true(const_extent), alignment);
+
+                        // Target dependent codegen needs to cast the type of index to what it accepts
+                        index = simplify(index - base);
+                        return Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
+                    }
+                    // Only the first iteration of this loop is aligned.
+                    alignment = ModulusRemainder();
                 }
-                // Only the first iteration of this loop is aligned.
-                alignment = ModulusRemainder();
             }
         }
         if (!index.same_as(op->index)) {
@@ -137,14 +148,17 @@ class OptimizeShuffles : public IRMutator {
     }
 
 public:
-    OptimizeShuffles(int lut_alignment)
-        : lut_alignment(lut_alignment) {
+    OptimizeShuffles(int lut_alignment, int native_vector_bits, SpanQueryType get_max_span_sizes, bool align_loads_with_native_vector)
+        : lut_alignment(lut_alignment),
+          native_vector_bits(native_vector_bits),
+          get_max_span_sizes(std::move(get_max_span_sizes)),
+          align_loads_with_native_vector(align_loads_with_native_vector) {
     }
 };
 }  // namespace
 
-Stmt optimize_shuffles(Stmt s, int lut_alignment) {
-    s = OptimizeShuffles(lut_alignment)(s);
+Stmt optimize_shuffles(Stmt s, int lut_alignment, int native_vector_bits, SpanQueryType get_max_span_sizes, bool align_loads_with_native_vector) {
+    s = OptimizeShuffles(lut_alignment, native_vector_bits, std::move(get_max_span_sizes), align_loads_with_native_vector)(s);
     return s;
 }
 

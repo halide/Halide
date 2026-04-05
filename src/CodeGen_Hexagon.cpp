@@ -1935,7 +1935,9 @@ void CodeGen_Hexagon::visit(const Call *op) {
             auto max_index = as_const_int(op->args[3]);
             internal_assert(min_index && max_index);
             Value *lut = codegen(op->args[0]);
-            Value *idx = codegen(op->args[1]);
+            // Cast the index to 8 bit
+            Expr index = cast(UInt(8).with_lanes(op->type.lanes()), op->args[1]);
+            Value *idx = codegen(index);
             value = vlut(lut, idx, *min_index, *max_index);
             return;
         } else if (op->is_intrinsic(Call::abs)) {
