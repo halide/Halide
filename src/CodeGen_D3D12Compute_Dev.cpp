@@ -206,22 +206,17 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
             oss << "bool";
             break;
         case 8:
-            if (sm >= 66) {
-                // SM 6.6+: native 8-bit integers
-                if (type.is_uint()) {
-                    oss << "uint8_t";
-                } else {
-                    oss << "int8_t";
-                }
-            } else {
-                if (type.is_uint()) {
-                    oss << "u";
-                }
-                oss << "int";
-#if DEBUG_TYPES
-                oss << "8";
-#endif
+            // Native scalar int8_t/uint8_t in HLSL is not yet landed in the spec.
+            // Tracked at https://github.com/microsoft/hlsl-specs/pull/538
+            // Until that ships in a released SM level, always emit int/uint and
+            // rely on the existing shift/mask emulation for sub-32-bit values.
+            if (type.is_uint()) {
+                oss << "u";
             }
+            oss << "int";
+#if DEBUG_TYPES
+            oss << "8";
+#endif
             break;
         case 16:
             if (sm >= 62) {
@@ -932,19 +927,17 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
                        << ", _hfatomic_orig);\n";
                 stream << get_indent() << "    } while (asuint(_hfatomic_orig) != asuint(_hfatomic_old));\n";
                 stream << get_indent() << "}\n";
-            } else if (is_atomic_add && t.bits() == 64 && sm >= 66) {
-                // SM 6.6+: float64 atomic add via CAS loop.
-                string delta_str = print_expr(delta);
-                stream << get_indent() << "{\n";
-                stream << get_indent() << "    double _hdatomic_old, _hdatomic_orig;\n";
-                stream << get_indent() << "    [allow_uav_condition]\n";
-                stream << get_indent() << "    do {\n";
-                stream << get_indent() << "        _hdatomic_old = " << dest << ";\n";
-                stream << get_indent() << "        InterlockedCompareExchangeFloatBitwise("
-                       << dest << ", _hdatomic_old, _hdatomic_old + " << delta_str
-                       << ", _hdatomic_orig);\n";
-                stream << get_indent() << "    } while (asuint64(_hdatomic_orig) != asuint64(_hdatomic_old));\n";
-                stream << get_indent() << "}\n";
+            } else if (is_atomic_add && t.bits() == 64) {
+                // float64 atomic add is not supported in HLSL typed UAV buffers.
+                // InterlockedCompareExchangeFloatBitwise only accepts float32; there is
+                // no InterlockedCompareExchangeDoubleBitwise.  InterlockedCompareExchange64
+                // exists but requires the buffer to be typed as uint64_t (not double),
+                // which would need a different buffer declaration and load/store rewrites.
+                // Until that refactor is done, reject this at compile time.
+                user_assert(false)
+                    << "D3D12Compute: float64 atomic add is not supported in HLSL. "
+                    << "HLSL has no InterlockedCompareExchangeDoubleBitwise; "
+                    << "InterlockedCompareExchange64 requires a uint64_t-typed UAV, not RWBuffer<double>.\n";
             } else if (is_atomic_add) {
                 user_assert(false)
                     << "D3D12Compute: float atomic add requires SM 6.6+ "
@@ -1407,6 +1400,27 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const FloatImm *op)
         ostringstream oss;
         oss << "asfloat16((uint16_t)" << bits << "u /* " << op->value << " */)";
         print_assignment(op->type, oss.str());
+        return;
+    }
+    if (op->type.bits() == 64) {
+        // The base class emits (double)float_from_bits(uint32) which truncates to
+        // float precision.  Use asdouble(lo, hi) for exact double bit patterns.
+        if (std::isnan(op->value)) {
+            print_assignment(op->type, "nan_f64()");
+        } else if (std::isinf(op->value)) {
+            print_assignment(op->type, op->value > 0 ? "inf_f64()" : "neg_inf_f64()");
+        } else {
+            union {
+                uint64_t as_uint;
+                double as_double;
+            } u;
+            u.as_double = op->value;
+            const uint32_t lo = (uint32_t)(u.as_uint & 0xFFFFFFFFu);
+            const uint32_t hi = (uint32_t)(u.as_uint >> 32);
+            ostringstream oss;
+            oss << "asdouble(" << lo << "u, " << hi << "u /* " << op->value << " */)";
+            print_assignment(op->type, oss.str());
+        }
         return;
     }
     CodeGen_GPU_C::visit(op);
@@ -1889,14 +1903,17 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "#define asuint32 asuint\n"
         << "\n"
 #endif
-        // DXC (SM 6.x) rejects FXC-specific float literals 1.#IND / 1.#INF.
-        // Use asfloat() with IEEE 754 bit patterns instead.
-        << (sm >= 60 ? "float nan_f32()     { return asfloat(0x7fc00000u); }\n"
-                       "float neg_inf_f32() { return asfloat(0xff800000u); }\n"
-                       "float inf_f32()     { return asfloat(0x7f800000u); }\n" :
-                       "float nan_f32()     { return  1.#IND; }\n"  // Quiet NaN with minimum fractional value.
-                       "float neg_inf_f32() { return -1.#INF; }\n"
-                       "float inf_f32()     { return +1.#INF; }\n")
+        // asfloat() with IEEE 754 bit patterns is valid HLSL since SM 4.0 and
+        // accepted by both FXC and DXC.  The old FXC-specific literals 1.#IND /
+        // 1.#INF are not part of the HLSL spec and are rejected by DXC even when
+        // targeting cs_5_1, so always use the portable form.
+        << "float nan_f32()     { return asfloat(0x7fc00000u); }\n"
+           "float neg_inf_f32() { return asfloat(0xff800000u); }\n"
+           "float inf_f32()     { return asfloat(0x7f800000u); }\n"
+           // asdouble(lowbits, highbits) is valid since SM 4.0 in both FXC and DXC.
+           "double nan_f64()     { return asdouble(0x00000000u, 0x7ff80000u); }\n"
+           "double neg_inf_f64() { return asdouble(0x00000000u, 0xfff00000u); }\n"
+           "double inf_f64()     { return asdouble(0x00000000u, 0x7ff00000u); }\n"
         << "#define float_from_bits asfloat\n"
         // pow() in HLSL has the same semantics as C if
         // x > 0.  Otherwise, we need to emulate C
