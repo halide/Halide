@@ -340,6 +340,7 @@ const halide_scalar_value_t *make_scalar(double v) {
 }
 
 template<>
+[[maybe_unused]]
 const halide_scalar_value_t *make_scalar(void *v) {
     halide_scalar_value_t *s = new halide_scalar_value_t();
     s->u.handle = v;

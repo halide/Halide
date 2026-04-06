@@ -43,7 +43,7 @@ int deallocate_block(void *user_context, MemoryBlock *block) {
     return halide_error_code_success;
 }
 
-int conform_block(void *user_context, MemoryRequest *request) {
+[[maybe_unused]] int conform_block(void *user_context, MemoryRequest *request) {
 
     debug(user_context) << "Test : conform_block ("
                         << "request_size=" << int32_t(request->size) << " "
