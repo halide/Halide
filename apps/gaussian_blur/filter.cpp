@@ -22,6 +22,7 @@ using namespace Halide::Runtime;
 
 // An openmp-based do-par-for, for comparing the Halide thread pool to a simple
 // static partition with openmp.
+#ifdef _OPENMP
 int static_do_par_for(void *user_context, halide_task_t f, int min, int extent, uint8_t *closure) {
 #pragma omp parallel for schedule(static)
     for (int i = min; i < min + extent; i++) {
@@ -29,6 +30,7 @@ int static_do_par_for(void *user_context, halide_task_t f, int min, int extent, 
     }
     return 0;
 }
+#endif
 
 double compute_PSNR(const Buffer<float> &a, const Buffer<float> &b) {
     double err = 0;
@@ -63,9 +65,11 @@ int main(int argc, char **argv) {
     resample_output.fill(0);
 
     // Enable to use openmp instead of Halide's built-in threadpool
+#ifdef _OPENMP
     if (false) {
         halide_set_custom_do_par_for(static_do_par_for);
     }
+#endif
 
     // Convert from seconds to rounded microseconds
     auto to_us = [](double seconds) {
