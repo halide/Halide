@@ -179,14 +179,14 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
             rewrite(h_and(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
             rewrite(h_and(broadcast(x, c0), lanes), broadcast(h_and(x, lanes / c0), c0), lanes % c0 == 0) ||
             rewrite(h_and(broadcast(x, c0), lanes), broadcast(h_and(x, 1), lanes), c0 >= lanes) ||
-            (lanes == 1 && rewrite(h_and(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), lanes),
-                                   x + max(y * (arg_lanes - 1), 0) < z)) ||
-            (lanes == 1 && rewrite(h_and(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), lanes),
-                                   x + max(y * (arg_lanes - 1), 0) <= z)) ||
-            (lanes == 1 && rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
-                                   x < y + min(z * (arg_lanes - 1), 0))) ||
-            (lanes == 1 && rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
-                                   x <= y + min(z * (arg_lanes - 1), 0))) ||
+            rewrite(h_and(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), 1),
+                    x + max(y * (arg_lanes - 1), 0) < z) ||
+            rewrite(h_and(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), 1),
+                    x + max(y * (arg_lanes - 1), 0) <= z) ||
+            rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+                    x < y + min(z * (arg_lanes - 1), 0)) ||
+            rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+                    x <= y + min(z * (arg_lanes - 1), 0)) ||
             false) {
             return mutate(rewrite.result, info);
         }
