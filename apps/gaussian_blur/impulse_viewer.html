@@ -56,22 +56,19 @@ Use the controls below to vary the parameters and observe the impulse response o
 quality&ndash;cost tradeoff across all parameter combinations.
 </p>
 <p>
-This is not a new idea! Like Andrew, these ideas come from the early 80s. See for example
+Filtering by resampling has a long history. Like Andrew, these ideas come from the early 80s. There are many ways to do it &mdash; see for example
 Burt and Adelson's <a href="https://doi.org/10.1109/TCOM.1983.1095851">"The Laplacian Pyramid as a Compact Image Code"</a> (1983),
 or more recently <a href="https://doi.org/10.1145/2024156.2024209">Convolution Pyramids</a> by Farbman et al. (2011).
-We're not claiming credit for filtering by resampling &mdash; we're just providing some notes on
-how to do it right and why it's a good method.
+However, if you want the best performance and quality, precisely <em>how</em> you perform the resampling and low-resolution filtering matters a lot.
 </p>
 <p>
 This opinion comes from our work "Finding Fast Filters", to appear at SIGGRAPH 2026 (link to come),
-in which we automatically searched a large space of filter implementations and found that the single
-most effective way to make a Gaussian blur fast is by resampling. You can make it faster still by
+in which we automatically searched a large space of filter implementations and found that the most impactful way to make a Gaussian blur fast is by operating at a single <span class="math">\sigma</span>-dependent reduced resolution. Pyramids are unnecessary. You can make it faster still by
 doing the low-resolution blur using
 <a href="https://doi.org/10.1109/78.599954">tail-cancelling IIRs</a> (Wang &amp; Smith 1997) and
 <a href="https://doi.org/10.1109/TCS.1986.1085930">frequency response masking</a> (Lim 1986) &mdash;
 this matters most at low <span class="math">\sigma</span>, where the downsampling factor is small.
-You can also make it slightly more accurate by tuning the filters with gradient descent.
-But the most important trick for low-pass filters is simply to run them at low resolution.
+You can also make it slightly more accurate by tuning the filters with gradient descent. For the purpose of this page we’ll avoid such complexities.
 </p>
 <p><strong>TL;DR:</strong> For a very accurate fast Gaussian blur, downsample by a factor of
 roughly <span class="math">\sigma/2</span> using 3rd-order prefilter and interpolator. For large <span class="math">\sigma</span> this achieves high PSNR at a cost of
@@ -150,7 +147,7 @@ under 8 multiplies per output pixel, regardless of <span class="math">\sigma</sp
   <button class="preset-btn" data-sigma="16" data-up="4" data-down="1" data-factor="8" data-mode="animate" data-domain="frequency">Freq</button>
 </td>
 <td style="padding:8px;">
-  <strong>Low-quality prefilter</strong> (σ=16, u=4, d=1, f=8): A low-order prefilter doesn't attenuate frequencies above the low-res Nyquist limit enough, so these leak into the low frequencies of the output, causing error at low frequencies. Intuitively, if you downsample an impulse by just averaging down non-overlapping boxes, at low resolution you get the same thing no matter where in its box the original impulse was. The subpixel location was lost. In the spatial domain these look like impulse responses that shift according to the pixel offset. In the frequency domain the magnitude is correct, but the phase is wrong, resulting in a red hump of RMS error in the low frequencies.
+  <strong>Low-quality prefilter</strong> (σ=16, u=4, d=1, f=8): A low-order prefilter doesn't attenuate frequencies above the low-res Nyquist limit enough, so these leak into the low frequencies of the output, causing error at low frequencies. Intuitively, if you downsample an impulse by just averaging down non-overlapping boxes, at low resolution you get the same thing no matter where in its box the original impulse was. The subpixel location was lost. In the spatial domain these look like impulse responses that shift according to the pixel offset. In the frequency domain this shows up as a red hump of RMS error in the low frequencies.
 </td>
 </tr>
 <tr style="border-bottom:1px solid #ddd;">
@@ -171,13 +168,12 @@ under 8 multiplies per output pixel, regardless of <span class="math">\sigma</sp
   <strong>Ignoring resampling filter variance</strong> (σ=16, u=3, d=3, f=8): A common mistake is to simply use <span class="math">\sigma_\text{lo} = \sigma / f</span> instead of the correct formula that subtracts the variance of the prefilter and interpolator. This over-blurs, producing an impulse response that is too wide. Compare with the sweet spot above.
 </td>
 </tr>
-<tr style="border-bottom:1px solid #ddd;">
-<td style="padding:8px; vertical-align:top; white-space:nowrap;">
+<tr style="border-bottom:1px solid #ddd;"><td style="padding:8px; vertical-align:top; white-space:nowrap;">
   <button class="preset-btn" data-sigma="12" data-up="3" data-down="2" data-factor="8" data-mode="animate" data-domain="spatial">u=3,d=2</button>
   <button class="preset-btn" data-sigma="12" data-up="2" data-down="3" data-factor="8" data-mode="animate" data-domain="spatial">u=2,d=3</button>
 </td>
 <td style="padding:8px;">
-  <strong>Transpose symmetry</strong> (σ=12, f=8): Swapping interpolator and prefilter orders gives identical PSNR but visibly different artifacts. The u=3,d=2 case has an impulse response that changes with the pixel offset (bad low frequencies), while the u=2,d=3 case produces a piecewise linear output (bad high frequencies). See the <a href="#proof">proof below</a>.
+  <strong>Transpose symmetry</strong> (σ=12, f=8): Swapping interpolator and prefilter orders gives identical PSNR but visibly different artifacts. The u=3,d=2 case either blurs slightly too much or slightly too little depending on the pixel offset (bad low frequencies), while the u=2,d=3 case produces a piecewise linear output (bad high frequencies). See the <a href="#proof">proof below</a>.
 </td>
 </tr>
 </table>
@@ -187,9 +183,9 @@ under 8 multiplies per output pixel, regardless of <span class="math">\sigma</sp
 <p style="max-width:1000px; line-height:1.6;">
 Each point below represents one combination of interpolator order, prefilter order, and downsample
 factor for the current <span class="math">\sigma</span>. The x-axis is PSNR (higher is better) and the y-axis is multiplies
-per pixel (lower is better). Blue points lie on the Pareto frontier &mdash; no other setting is both
+per pixel (fewer is better). Blue points lie on the Pareto frontier &mdash; no other setting is both
 cheaper and more accurate. The currently selected setting is highlighted in red. Click any point to
-view its impulse response on the right. Note that points on the Pareto frontier typically have u=d or u=d+1. There's no point using a high-order filter for one if you're not also using a high-order filter for the other.
+view its impulse response on the right. Note that points on the Pareto frontier typically have u=d or u=d+1. High-quality prefilters are wasted on low-quality interpolators, and vice-versa.
 </p>
 <div style="margin-bottom:8px;">
   <label>σ: <input type="range" id="pareto-sigma-slider" min="0" max="1000" value="500" style="width:200px;">
@@ -228,7 +224,7 @@ view its impulse response on the right. Note that points on the Pareto frontier 
 
 <h3>Common Alternative Algorithms</h3>
 <div style="max-width:1000px; line-height:1.6;">
-<p>The chart below compares several popular Gaussian blur approximations vs the one we recommend.</p>
+<p>The chart below compares several popular Gaussian blur approximations vs the one we recommend. Click on each in the legend to show or hide each one. The error vs ground truth is shown as a dashed/shaded region of the matching color.</p>
 <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:8px;">
   <label>σ: <input type="range" id="compare-sigma-slider" min="0" max="1000" value="500" style="width:200px;">
   <span id="compare-sigma-val" style="display:inline-block; width:3em; text-align:right;">8</span></label>
@@ -239,7 +235,6 @@ view its impulse response on the right. Note that points on the Pareto frontier 
 </div>
 <div style="background:white;border-radius:8px;padding:12px;">
   <canvas id="compare-chart"></canvas>
-  <div style="font-size:11px; color:#888; margin-top:4px;">Dashed/shaded regions show error vs ground truth for each method.</div>
 </div>
 
 <table style="border-collapse:collapse; width:100%; margin-top:16px; font-size:14px;">
@@ -271,7 +266,7 @@ view its impulse response on the right. Note that points on the Pareto frontier 
   <td style="padding:6px; vertical-align:top;"><strong>Deriche</strong><br><span style="font-size:12px; color:#666;">Deriche 1993</span></td>
   <td style="padding:6px; vertical-align:top;">32<br><span style="font-size:12px; color:#666;">(4th-order IIR)</span></td>
   <td style="padding:6px; vertical-align:top;">Excellent accuracy; O(1) per pixel.</td>
-  <td style="padding:6px; vertical-align:top;">Sequential along each dimension. Higher cost than YVV (4th vs 3rd order). Same parallelization and numerical stability challenges. Note: comparison with YVV is somewhat unfair due to different orders.</td>
+  <td style="padding:6px; vertical-align:top;">Sequential along each dimension. Higher cost than YVV (4th vs 3rd order). Same parallelization and numerical stability challenges.</td>
 </tr>
 <tr>
   <td style="padding:6px; vertical-align:top;"><strong>Our preferred method (resampling)</strong></td>
@@ -967,7 +962,10 @@ document.getElementById('chart').addEventListener('wheel', (e) => {
   const dataY = yScale.getValueForPixel(canvasY);
 
   const cur = zoomState || { ...defaultBounds };
-  const zoomFactor = e.deltaY < 0 ? 0.8 : 1.25; // scroll up = zoom in
+  // Scale zoom by delta magnitude — normalizes trackpad (small deltas, high freq)
+  // vs mouse wheel (large deltas, low freq). Clamp delta to avoid huge jumps.
+  const delta = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 100);
+  const zoomFactor = Math.pow(1.003, delta); // ~0.74 at -100, ~1.35 at +100
 
   // Zoom around cursor position
   let xMin = dataX - (dataX - cur.xMin) * zoomFactor;
@@ -980,6 +978,21 @@ document.getElementById('chart').addEventListener('wheel', (e) => {
   xMax = Math.min(xMax, defaultBounds.xMax);
   yMin = Math.max(yMin, defaultBounds.yMin);
   yMax = Math.min(yMax, defaultBounds.yMax);
+
+  // Clamp to max 1024x zoom
+  const maxZoom = 1024;
+  const defXRange = defaultBounds.xMax - defaultBounds.xMin;
+  const defYRange = defaultBounds.yMax - defaultBounds.yMin;
+  if ((xMax - xMin) < defXRange / maxZoom) {
+    const mid = (xMin + xMax) / 2;
+    xMin = mid - defXRange / maxZoom / 2;
+    xMax = mid + defXRange / maxZoom / 2;
+  }
+  if ((yMax - yMin) < defYRange / maxZoom) {
+    const mid = (yMin + yMax) / 2;
+    yMin = mid - defYRange / maxZoom / 2;
+    yMax = mid + defYRange / maxZoom / 2;
+  }
 
   // If we've hit the default bounds, reset to null
   if (xMin <= defaultBounds.xMin && xMax >= defaultBounds.xMax &&
@@ -1102,7 +1115,22 @@ const paretoChart = new Chart(paretoCtx, {
           label: (ctx) => `${ctx.raw.label}  (${(1/ctx.raw.y).toFixed(1)} muls/px, ${ctx.raw.x.toFixed(1)} dB)`
         }
       },
-      legend: { display: true }
+      legend: {
+        display: true,
+        labels: {
+          generateLabels: (chart) => {
+            const colors = { 'Non-optimal': 'rgba(180,180,180,0.5)', 'Pareto frontier': 'rgba(54,162,235,0.8)' };
+            return chart.data.datasets.map((ds, i) => ({
+              text: ds.label,
+              fillStyle: colors[ds.label] || ds.backgroundColor,
+              strokeStyle: ds.borderColor || 'transparent',
+              lineWidth: ds.borderWidth || 0,
+              hidden: !chart.isDatasetVisible(i),
+              datasetIndex: i
+            }));
+          }
+        }
+      }
     }
   },
   plugins: [paretoLabelPlugin]
@@ -1459,7 +1487,7 @@ function frequencyDatasets(gt, ap, offset, factor, mode, sigma, up, down, naive)
       borderColor: 'rgba(153,102,255,0.7)', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, fill: false },
     { label: 'After low-res blur', data: toXY(blurredSpec.freqs, blurredSpec.mag),
       borderColor: 'rgba(75,192,192,0.7)', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, fill: false },
-    { label: 'Final (phase 0)', data: toXY(finalSpec.freqs, finalSpec.mag),
+    { label: 'Approximate (offset 0)', data: toXY(finalSpec.freqs, finalSpec.mag),
       borderColor: 'rgba(255,99,132,1)', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, fill: false },
     { label: 'RMS Error', data: toXY(gtSpec.freqs, rmsMag),
       borderColor: 'rgba(255,0,0,0.6)', backgroundColor: 'rgba(255,0,0,0.08)', borderWidth: 1.5, pointRadius: 0, borderDash: [4, 4], fill: true }
