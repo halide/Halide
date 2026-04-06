@@ -476,7 +476,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize(const Expr &e) {
     builder.update_id(result_id);
 }
 
-SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::map_type_to_pair(const Type &t) {
+[[maybe_unused]] SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::map_type_to_pair(const Type &t) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::map_type_to_pair(): " << t << "\n";
     SpvId base_type_id = builder.declare_type(t);
     SpvBuilder::StructMemberTypes member_type_ids = {base_type_id, base_type_id};

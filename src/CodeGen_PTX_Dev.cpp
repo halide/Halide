@@ -551,7 +551,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
     CodeGen_LLVM::codegen_vector_reduce(op, init);
 }
 
-string CodeGen_PTX_Dev::march() const {
+[[maybe_unused]] string CodeGen_PTX_Dev::march() const {
     return "nvptx64";
 }
 

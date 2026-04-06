@@ -223,11 +223,11 @@ std::optional<T> getsysctl(const char *name) {
     return std::make_optional(value);
 }
 
-bool sysctl_is_set(const char *name) {
+[[maybe_unused]] bool sysctl_is_set(const char *name) {
     return getsysctl<int>(name).value_or(0);
 }
 
-bool is_armv7s() {
+[[maybe_unused]] bool is_armv7s() {
     return getsysctl<cpu_type_t>("hw.cputype") == CPU_TYPE_ARM &&
            getsysctl<cpu_subtype_t>("hw.cpusubtype") == CPU_SUBTYPE_ARM_V7S;
 }
