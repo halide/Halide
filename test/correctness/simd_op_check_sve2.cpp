@@ -1419,6 +1419,12 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
+    if (Internal::get_llvm_version() < 220) {
+        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
+               Internal::get_llvm_version());
+        return 0;
+    }
+
     return SimdOpCheckTest::main<SimdOpCheckArmSve>(
         argc, argv,
         {
