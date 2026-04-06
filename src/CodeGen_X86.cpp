@@ -1304,7 +1304,7 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
     // A helper to iterate over all pairs of entries in v, separated by some
     // power-of-two spacing.
     auto for_all_pairs = [&](size_t log_step, auto fn) {
-        size_t step = 1 << log_step;
+        size_t step = (size_t)1 << log_step;
         for (size_t i = 0; i < v.size(); i++) {
             // Pair each vector with the one separated by the step.
             size_t j = i ^ step;
