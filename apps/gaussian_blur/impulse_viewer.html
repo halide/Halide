@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <title>Fast Gaussian Blur via Resampling</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>
 <style>
   body { font-family: sans-serif; margin: 20px; background: #f5f5f5; }
   .controls { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
@@ -16,11 +18,11 @@
   #animate-btn { padding: 4px 16px; cursor: pointer; }
   #filter-info { margin: 16px 0; line-height: 1.8; }
   .btn-group { display: inline-flex; }
-  .mode-btn, .domain-btn, .compare-domain-btn { padding: 4px 12px; cursor: pointer; border: 1px solid #999; background: #e0e0e0; margin: 0; }
+  .mode-btn, .domain-btn, .compare-domain-btn, .pareto-domain-btn, .pareto-mode-btn { padding: 4px 12px; cursor: pointer; border: 1px solid #999; background: #e0e0e0; margin: 0; }
   .btn-group > :first-child { border-radius: 4px 0 0 4px; }
   .btn-group > :last-child { border-radius: 0 4px 4px 0; }
   .btn-group > :not(:first-child) { border-left: none; }
-  .mode-btn.active, .domain-btn.active, .compare-domain-btn.active { background: #4a90d9; color: white; border-color: #3a7bc8; }
+  .mode-btn.active, .domain-btn.active, .compare-domain-btn.active, .pareto-domain-btn.active, .pareto-mode-btn.active { background: #4a90d9; color: white; border-color: #3a7bc8; }
   .preset-btn { padding: 3px 10px; cursor: pointer; border: 1px solid #999; background: #e0e0e0; border-radius: 4px; font-size: 12px; }
   .preset-btn:hover { background: #d0d0d0; }
   #error-msg { color: red; margin-top: 8px; }
@@ -37,16 +39,16 @@ and upsampling back. This page lets you explore the accuracy of this approximati
 choices of downsample factor, and prefilter/interpolator order.
 </p>
 <p>
-The method works as follows: For a target blur with standard deviation &sigma;, downsample by a factor <em>f</em> using a prefilter
-of order <em>d</em>, blur at low resolution with a Gaussian of standard deviation
-&sigma;<sub>lo</sub>&nbsp;=&nbsp;&radic;(&sigma;&sup2;&nbsp;&minus;&nbsp;V<sub>up</sub>&nbsp;&minus;&nbsp;V<sub>down</sub>)&nbsp;/&nbsp;<em>f</em>,
-where V<sub>up</sub> and V<sub>down</sub> are the variances of the interpolator and prefilter respectively,
-then upsample with an interpolator of order <em>u</em>.
+The method works as follows: For a target blur with standard deviation <span class="math">\sigma</span>, downsample by a factor <span class="math">f</span> using a prefilter
+of order <span class="math">d</span>, blur at low resolution with a Gaussian of standard deviation
+<span class="math">\sigma_\text{lo} = \sqrt{\sigma^2 - V_\text{up} - V_\text{down}} \;/\; f</span>,
+where <span class="math">V_\text{up}</span> and <span class="math">V_\text{down}</span> are the variances of the interpolator and prefilter respectively,
+then upsample with an interpolator of order <span class="math">u</span>.
 </p>
 <p>
-The prefilter and interpolator of order <em>o</em> at factor <em>f</em> are constructed as the convolution of <em>o</em> box filters of size <em>f</em> and <em>o</em>&nbsp;&minus;&nbsp;1 copies of [1,&nbsp;1], giving a filter of width <em>o</em>&middot;<em>f</em>.
+The prefilter and interpolator of order <span class="math">o</span> at factor <span class="math">f</span> are constructed as the convolution of <span class="math">o</span> box filters of size <span class="math">f</span> and <span class="math">o - 1</span> copies of <span class="math">[1,\;1]</span>, giving a filter of width <span class="math">o \cdot f</span>.
 The prefilter is normalized to sum to 1. The interpolator is normalized so that
-its polyphase components each sum to 1 (equivalently, it sums to <em>f</em>).
+its polyphase components each sum to 1 (equivalently, it sums to <span class="math">f</span>).
 </p>
 <p>
 Use the controls below to vary the parameters and observe the impulse response of the approximation
@@ -67,13 +69,13 @@ most effective way to make a Gaussian blur fast is by resampling. You can make i
 doing the low-resolution blur using
 <a href="https://doi.org/10.1109/78.599954">tail-cancelling IIRs</a> (Wang &amp; Smith 1997) and
 <a href="https://doi.org/10.1109/TCS.1986.1085930">frequency response masking</a> (Lim 1986) &mdash;
-this matters most at low &sigma;, where the downsampling factor is small.
+this matters most at low <span class="math">\sigma</span>, where the downsampling factor is small.
 You can also make it slightly more accurate by tuning the filters with gradient descent.
 But the most important trick for low-pass filters is simply to run them at low resolution.
 </p>
 <p><strong>TL;DR:</strong> For a very accurate fast Gaussian blur, downsample by a factor of
-roughly &sigma;/2 using 3rd-order prefilter and interpolator. For large &sigma; this achieves high PSNR at a cost of
-under 8 multiplies per output pixel, regardless of &sigma;.</p>
+roughly <span class="math">\sigma/2</span> using 3rd-order prefilter and interpolator. For large <span class="math">\sigma</span> this achieves high PSNR at a cost of
+under 8 multiplies per output pixel, regardless of <span class="math">\sigma</span>.</p>
 </div>
 
 <div class="controls">
@@ -126,6 +128,15 @@ under 8 multiplies per output pixel, regardless of &sigma;.</p>
 <table style="border-collapse:collapse; width:100%;">
 <tr style="border-bottom:1px solid #ddd;">
 <td style="padding:8px; vertical-align:top; white-space:nowrap;">
+  <button class="preset-btn" data-sigma="16" data-up="3" data-down="3" data-factor="8" data-mode="animate" data-domain="spatial">Spatial</button>
+  <button class="preset-btn" data-sigma="16" data-up="3" data-down="3" data-factor="8" data-mode="animate" data-domain="frequency">Freq</button>
+</td>
+<td style="padding:8px;">
+  <strong>The sweet spot</strong> (σ=16, u=3, d=3, f=8): 3rd-order filters at factor σ/2 avoid all the issues below, giving excellent quality at under 8 multiplies per pixel, regardless of σ.
+</td>
+</tr>
+<tr style="border-bottom:1px solid #ddd;">
+<td style="padding:8px; vertical-align:top; white-space:nowrap;">
   <button class="preset-btn" data-sigma="16" data-up="1" data-down="4" data-factor="8" data-mode="animate" data-domain="spatial">Spatial</button>
   <button class="preset-btn" data-sigma="16" data-up="1" data-down="4" data-factor="8" data-mode="animate" data-domain="frequency">Freq</button>
 </td>
@@ -157,7 +168,7 @@ under 8 multiplies per output pixel, regardless of &sigma;.</p>
   <button class="preset-btn" data-sigma="16" data-up="3" data-down="3" data-factor="8" data-mode="animate" data-domain="frequency" data-naive-sigma="true">Freq</button>
 </td>
 <td style="padding:8px;">
-  <strong>Ignoring resampling filter variance</strong> (σ=16, u=3, d=3, f=8): A common mistake is to simply use σ<sub>lo</sub>&nbsp;=&nbsp;σ/f instead of the correct formula that subtracts the variance of the prefilter and interpolator. This over-blurs, producing an impulse response that is too wide. Compare with the sweet spot below.
+  <strong>Ignoring resampling filter variance</strong> (σ=16, u=3, d=3, f=8): A common mistake is to simply use <span class="math">\sigma_\text{lo} = \sigma / f</span> instead of the correct formula that subtracts the variance of the prefilter and interpolator. This over-blurs, producing an impulse response that is too wide. Compare with the sweet spot above.
 </td>
 </tr>
 <tr style="border-bottom:1px solid #ddd;">
@@ -169,28 +180,50 @@ under 8 multiplies per output pixel, regardless of &sigma;.</p>
   <strong>Transpose symmetry</strong> (σ=12, f=8): Swapping interpolator and prefilter orders gives identical PSNR but visibly different artifacts. The u=3,d=2 case has an impulse response that changes with the pixel offset (bad low frequencies), while the u=2,d=3 case produces a piecewise linear output (bad high frequencies). See the <a href="#proof">proof below</a>.
 </td>
 </tr>
-<tr>
-<td style="padding:8px; vertical-align:top; white-space:nowrap;">
-  <button class="preset-btn" data-sigma="16" data-up="3" data-down="3" data-factor="8" data-mode="animate" data-domain="spatial">Spatial</button>
-  <button class="preset-btn" data-sigma="16" data-up="3" data-down="3" data-factor="8" data-mode="animate" data-domain="frequency">Freq</button>
-</td>
-<td style="padding:8px;">
-  <strong>The sweet spot</strong> (σ=16, u=3, d=3, f=8): 3rd-order filters at factor σ/2 avoid all the issues above, giving excellent quality at under 8 multiplies per pixel, regardless of σ.
-</td>
-</tr>
 </table>
 </div>
 
 <h3>Pareto: Quality vs Throughput</h3>
 <p style="max-width:1000px; line-height:1.6;">
 Each point below represents one combination of interpolator order, prefilter order, and downsample
-factor for the current &sigma;. The x-axis is PSNR (higher is better) and the y-axis is multiplies
+factor for the current <span class="math">\sigma</span>. The x-axis is PSNR (higher is better) and the y-axis is multiplies
 per pixel (lower is better). Blue points lie on the Pareto frontier &mdash; no other setting is both
 cheaper and more accurate. The currently selected setting is highlighted in red. Click any point to
-update the controls above and view its impulse response. Note that points on the Pareto frontier typically have u=d or u=d+1. There's no point using a high-order filter for one if you're not also using a high-order filter for the other.
+view its impulse response on the right. Note that points on the Pareto frontier typically have u=d or u=d+1. There's no point using a high-order filter for one if you're not also using a high-order filter for the other.
 </p>
-<div id="pareto-container" style="background:white;border-radius:8px;padding:16px;max-width:1000px;">
-  <canvas id="pareto-chart"></canvas>
+<div style="margin-bottom:8px;">
+  <label>σ: <input type="range" id="pareto-sigma-slider" min="0" max="1000" value="500" style="width:200px;">
+  <span id="pareto-sigma-val" style="display:inline-block; width:3em; text-align:right;">8</span></label>
+</div>
+<div style="display:flex; gap:12px; max-width:1000px; flex-wrap:wrap;">
+<div id="pareto-container" style="background:white;border-radius:8px;padding:12px;flex:1;min-width:380px;">
+  <canvas id="pareto-chart" style="height:400px;"></canvas>
+</div>
+<div style="flex:1;min-width:340px;">
+  <div style="margin-bottom:6px; font-size:13px;">
+    <strong>Impulse response for selected point:</strong>
+    <span id="pareto-ir-title" style="color:#666;"></span>
+  </div>
+  <div style="margin-bottom:6px;">
+    <span class="btn-group">
+      <button class="pareto-domain-btn active" data-domain="spatial">Spatial</button>
+      <button class="pareto-domain-btn" data-domain="frequency">Freq</button>
+    </span>
+    <span class="btn-group" style="margin-left:8px;">
+      <button class="pareto-mode-btn" data-mode="all">All phases</button>
+      <button class="pareto-mode-btn active" data-mode="animate">Animate</button>
+      <button class="pareto-mode-btn" data-mode="single">Single</button>
+    </span>
+    <label style="margin-left:8px; font-size:12px;">Offset: <input type="range" id="pareto-offset-slider" min="0" max="15" value="0" style="width:80px;">
+    <span id="pareto-offset-val">0</span></label>
+  </div>
+  <div style="background:white;border-radius:8px;padding:12px;">
+    <canvas id="pareto-ir-chart" style="height:360px;"></canvas>
+  </div>
+  <div style="font-size:12px; margin-top:4px; color:#666;">
+    <span id="pareto-ir-info"></span>
+  </div>
+</div>
 </div>
 
 <h3>Common Alternative Algorithms</h3>
@@ -218,9 +251,9 @@ update the controls above and view its impulse response. Note that points on the
 </tr>
 <tr style="border-bottom:1px solid #ddd;">
   <td style="padding:6px; vertical-align:top;"><strong>Truncated Gaussian</strong></td>
-  <td style="padding:6px; vertical-align:top;">2&times;(8&sigma;+1)</td>
+  <td style="padding:6px; vertical-align:top;"><span class="math">2(8\sigma+1)</span></td>
   <td style="padding:6px; vertical-align:top;">Exact (to truncation); simple; fully parallel. Easy to vectorize &mdash; can even be run on tensor cores (<a href="https://arxiv.org/abs/2512.02371">Zhang et al. 2026</a>).</td>
-  <td style="padding:6px; vertical-align:top;">Cost is O(&sigma;). Impractical for large &sigma;. Truncation at 3&sigma; saves ~25% but introduces visible error.</td>
+  <td style="padding:6px; vertical-align:top;">Cost is <span class="math">O(\sigma)</span>. Impractical for large <span class="math">\sigma</span>. Truncation at <span class="math">3\sigma</span> saves ~25% but introduces visible error.</td>
 </tr>
 <tr style="border-bottom:1px solid #ddd;">
   <td style="padding:6px; vertical-align:top;"><strong>Triple box blur</strong><br><span style="font-size:12px; color:#666;">Wells 1986</span></td>
@@ -231,8 +264,8 @@ update the controls above and view its impulse response. Note that points on the
 <tr style="border-bottom:1px solid #ddd;">
   <td style="padding:6px; vertical-align:top;"><strong>Young&ndash;Van Vliet</strong><br><span style="font-size:12px; color:#666;">Young &amp; Van Vliet 1995</span></td>
   <td style="padding:6px; vertical-align:top;">16<br><span style="font-size:12px; color:#666;">(3rd-order IIR)</span></td>
-  <td style="padding:6px; vertical-align:top;">O(1) per pixel regardless of &sigma;; simple coefficient computation.</td>
-  <td style="padding:6px; vertical-align:top;">Sequential along each dimension. Moderate accuracy. Poorly behaved for very large &sigma;. Parallelization possible but non-trivial (see <a href="https://dl.acm.org/doi/10.1145/2070781.2024210">Nehab et al. 2011</a>). Vectorization possible by transposing or using <a href="https://doi.org/10.1109/29.32286">scattered look-ahead</a> (Parhi &amp; Messerschmitt 1989), at additional cost. Prone to numerical instability on HDR input data. Boundary conditions tricky to get right (see <a href="https://doi.org/10.1109/TSP.2006.871980">Triggs &amp; Sdika 2006</a>).</td>
+  <td style="padding:6px; vertical-align:top;">O(1) per pixel regardless of <span class="math">\sigma</span>; simple coefficient computation.</td>
+  <td style="padding:6px; vertical-align:top;">Sequential along each dimension. Moderate accuracy. Poorly behaved for very large <span class="math">\sigma</span>. Parallelization possible but non-trivial (see <a href="https://dl.acm.org/doi/10.1145/2070781.2024210">Nehab et al. 2011</a>). Vectorization possible by transposing or using <a href="https://doi.org/10.1109/29.32286">scattered look-ahead</a> (Parhi &amp; Messerschmitt 1989), at additional cost. Prone to numerical instability on HDR input data. Boundary conditions tricky to get right (see <a href="https://doi.org/10.1109/TSP.2006.871980">Triggs &amp; Sdika 2006</a>).</td>
 </tr>
 <tr style="border-bottom:1px solid #ddd;">
   <td style="padding:6px; vertical-align:top;"><strong>Deriche</strong><br><span style="font-size:12px; color:#666;">Deriche 1993</span></td>
@@ -242,7 +275,7 @@ update the controls above and view its impulse response. Note that points on the
 </tr>
 <tr>
   <td style="padding:6px; vertical-align:top;"><strong>Our preferred method (resampling)</strong></td>
-  <td style="padding:6px; vertical-align:top;">~8<br><span style="font-size:12px; color:#666;">(u=d=3, f=&sigma;/2)</span></td>
+  <td style="padding:6px; vertical-align:top;">~8<br><span style="font-size:12px; color:#666;">(<span class="math">u\!=\!d\!=\!3,\; f\!=\!\sigma/2</span>)</span></td>
   <td style="padding:6px; vertical-align:top;">Excellent accuracy; O(1) per pixel; fully data-parallel; naturally vectorizable.</td>
   <td style="padding:6px; vertical-align:top;">Not strictly shift-invariant, which might be a showstopper in some contexts. Complex implementation with lots of details to get right, especially if you add <a href="https://doi.org/10.1109/78.599954">TIIRs</a> and/or <a href="https://doi.org/10.1109/TCS.1986.1085930">FRM</a> to accelerate the low-res blur.</td>
 </tr>
@@ -1017,10 +1050,30 @@ const paretoLabelPlugin = {
     ctx.fillStyle = '#333';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
-    for (const lbl of chart._paretoLabels) {
+    const angle = -40 * Math.PI / 180; // 40 degrees upward
+    // Collect pixel positions of all Pareto points
+    const pts = chart._paretoLabels.map(lbl => {
       const meta = chart.getDatasetMeta(lbl.datasetIndex);
       const pt = meta.data[lbl.index];
-      if (pt) ctx.fillText(lbl.text, pt.x + 6, pt.y - 4);
+      return pt ? { x: pt.x, y: pt.y, text: lbl.text } : null;
+    }).filter(Boolean);
+    const labelled = [];
+    for (let i = 0; i < pts.length; i++) {
+      // Skip if a previously labelled point is within 10px above and to the left
+      let skip = false;
+      for (const lp of labelled) {
+        if (lp.x > pts[i].x - 12 && lp.x < pts[i].x && lp.y < pts[i].y && lp.y > pts[i].y - 12) {
+          skip = true;
+          break;
+        }
+      }
+      if (skip) continue;
+      labelled.push(pts[i]);
+      ctx.save();
+      ctx.translate(pts[i].x + 10, pts[i].y - 4);
+      ctx.rotate(angle);
+      ctx.fillText(pts[i].text, 0, 0);
+      ctx.restore();
     }
     ctx.restore();
   }
@@ -1031,9 +1084,11 @@ const paretoChart = new Chart(paretoCtx, {
   data: { datasets: [] },
   options: {
     animation: false,
+    maintainAspectRatio: false,
     scales: {
-      x: { title: { display: true, text: 'PSNR (dB)' } },
+      x: { title: { display: true, text: 'PSNR (dB)' }, min: 10, max: 100 },
       y: {
+        max: 1/1.8,
         title: { display: true, text: 'Multiplies per pixel' },
         ticks: {
           callback: (value) => value > 0 ? (1 / value).toFixed(1) : ''
@@ -1155,22 +1210,132 @@ function updatePareto() {
   paretoChart.update();
 }
 
+// Pareto impulse response mini-chart
+const paretoIRCtx = document.getElementById('pareto-ir-chart').getContext('2d');
+const paretoIRChart = new Chart(paretoIRCtx, {
+  type: 'line',
+  data: { labels: [], datasets: [] },
+  options: {
+    animation: false,
+    maintainAspectRatio: false,
+    scales: {
+      x: { title: { display: true, text: 'Pixel' }, min: undefined, max: undefined,
+           ticks: { callback: (v) => typeof v === 'number' ? Math.round(v * 100) / 100 : v } },
+      y: { title: { display: true, text: 'Weight' }, beginAtZero: true, min: undefined, max: undefined }
+    },
+    plugins: {
+      title: { display: false }
+    }
+  }
+});
+
+let paretoIRState = { up: 1, down: 1, factor: 8 };
+
+function updateParetoIR() {
+  const sigma = getSigma();
+  const up = paretoIRState.up;
+  const down = paretoIRState.down;
+  const factor = paretoIRState.factor;
+  const offset = parseInt(document.getElementById('pareto-offset-slider').value);
+  const mode = document.querySelector('.pareto-mode-btn.active').dataset.mode;
+  const domain = document.querySelector('.pareto-domain-btn.active').dataset.domain;
+  document.getElementById('pareto-offset-val').textContent = offset;
+
+  const effectiveMode = (domain === 'frequency') ? 'all' : mode;
+  document.getElementById('pareto-offset-slider').disabled = (effectiveMode === 'all');
+
+  const gt = computeGroundTruth(sigma);
+  const naive = false;
+  const ap = computeApproximate(sigma, up, down, factor);
+
+  if (domain === 'frequency') {
+    const result = frequencyDatasets(gt, ap, 0, factor, 'single', sigma, up, down, naive);
+    paretoIRChart.data.labels = result.labels;
+    paretoIRChart.data.datasets = result.datasets;
+    paretoIRChart.options.plugins.legend = {};
+    paretoIRChart.options.scales.x.type = 'linear';
+    paretoIRChart.options.scales.x.title.text = 'Normalized frequency';
+    paretoIRChart.options.scales.y.title.text = 'Amplitude';
+    paretoIRChart.options.scales.y.beginAtZero = false;
+    paretoIRChart.options.scales.y.min = result.bounds.yMin;
+    paretoIRChart.options.scales.y.max = result.bounds.yMax;
+    paretoIRChart.options.scales.x.min = result.bounds.xMin;
+    paretoIRChart.options.scales.x.max = result.bounds.xMax;
+  } else {
+    const result = spatialDatasets(gt, ap, offset, factor, effectiveMode);
+    paretoIRChart.data.labels = result.labels;
+    paretoIRChart.data.datasets = result.datasets;
+    const legendLimit = result.filterLegend ? 1 : 999;
+    paretoIRChart.options.plugins.legend = result.filterLegend
+      ? { labels: { filter: (item) => item.datasetIndex <= legendLimit } }
+      : {};
+    paretoIRChart.options.scales.x.type = 'category';
+    paretoIRChart.options.scales.x.title.text = 'Pixel';
+    paretoIRChart.options.scales.y.title.text = 'Weight';
+    paretoIRChart.options.scales.y.beginAtZero = true;
+    paretoIRChart.options.scales.y.min = result.bounds.yMin;
+    paretoIRChart.options.scales.y.max = result.bounds.yMax;
+    paretoIRChart.options.scales.x.min = result.bounds.xMin;
+    paretoIRChart.options.scales.x.max = result.bounds.xMax;
+  }
+
+  const psnr = computePSNR(gt, ap);
+  document.getElementById('pareto-ir-title').textContent =
+    `u=${up}, d=${down}, f=${factor} — PSNR: ${psnr.toFixed(1)} dB`;
+  paretoIRChart.update();
+}
+
 document.getElementById('pareto-chart').addEventListener('click', (e) => {
   const elems = paretoChart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, false);
   if (elems.length === 0) return;
   const { datasetIndex, index } = elems[0];
   const pt = paretoChart.data.datasets[datasetIndex].data[index];
   if (!pt || !pt.label) return;
-  // Parse "u=2 d=1 f=4" format
   const m = pt.label.match(/u=(\d+)\s+d=(\d+)\s+f=(\d+)/);
   if (!m) return;
+  // Update main controls
   document.getElementById('up').value = m[1];
   document.getElementById('down').value = m[2];
   document.getElementById('factor').value = m[3];
   updateFilters();
   update();
   updatePareto();
+  // Update mini IR chart
+  paretoIRState = { up: parseInt(m[1]), down: parseInt(m[2]), factor: parseInt(m[3]) };
+  updateParetoIR();
 });
+
+// Pareto IR controls
+document.getElementById('pareto-offset-slider').addEventListener('input', updateParetoIR);
+document.querySelectorAll('.pareto-domain-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.pareto-domain-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateParetoIRDisplayMode();
+  });
+});
+document.querySelectorAll('.pareto-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.pareto-mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateParetoIRDisplayMode();
+  });
+});
+
+let paretoIRAnimTimer = null;
+function updateParetoIRDisplayMode() {
+  clearInterval(paretoIRAnimTimer);
+  const mode = document.querySelector('.pareto-mode-btn.active').dataset.mode;
+  const domain = document.querySelector('.pareto-domain-btn.active').dataset.domain;
+  if (mode === 'animate' && domain !== 'frequency') {
+    paretoIRAnimTimer = setInterval(() => {
+      const slider = document.getElementById('pareto-offset-slider');
+      slider.value = (parseInt(slider.value) + 1) % 16;
+      updateParetoIR();
+    }, 250);
+  }
+  updateParetoIR();
+}
 
 function spatialDatasets(gt, ap, offset, factor, mode) {
   const gtMax = Math.max(...gt);
@@ -1364,9 +1529,26 @@ function update() {
   }
 }
 
+function syncSigmaSliders(sourceId) {
+  const val = document.getElementById(sourceId).value;
+  document.getElementById('sigma-slider').value = val;
+  document.getElementById('pareto-sigma-slider').value = val;
+  const sigma = getSigma();
+  document.getElementById('sigma-val').textContent = sigma;
+  document.getElementById('pareto-sigma-val').textContent = sigma;
+}
 document.querySelectorAll('#up, #down, #factor, #offset-slider, #sigma-slider, #naive-sigma').forEach(el =>
-  el.addEventListener('input', () => { updateFilters(); update(); updatePareto(); })
+  el.addEventListener('input', () => {
+    syncSigmaSliders('sigma-slider');
+    updateFilters(); update(); updatePareto();
+    paretoIRState = { up: parseInt(document.getElementById('up').value), down: parseInt(document.getElementById('down').value), factor: parseInt(document.getElementById('factor').value) };
+    updateParetoIR();
+  })
 );
+document.getElementById('pareto-sigma-slider').addEventListener('input', () => {
+  syncSigmaSliders('pareto-sigma-slider');
+  updateFilters(); update(); updatePareto(); updateParetoIR();
+});
 
 let compareRafPending = false;
 document.getElementById('compare-sigma-slider').addEventListener('input', () => {
@@ -1421,8 +1603,11 @@ document.querySelectorAll('.domain-btn').forEach(btn => {
 document.querySelectorAll('.preset-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const d = btn.dataset;
-    document.getElementById('sigma-slider').value = sigmaToSlider(parseFloat(d.sigma));
+    const sliderVal = sigmaToSlider(parseFloat(d.sigma));
+    document.getElementById('sigma-slider').value = sliderVal;
+    document.getElementById('pareto-sigma-slider').value = sliderVal;
     document.getElementById('sigma-val').textContent = d.sigma;
+    document.getElementById('pareto-sigma-val').textContent = d.sigma;
     document.getElementById('up').value = d.up;
     document.getElementById('down').value = d.down;
     document.getElementById('factor').value = d.factor;
@@ -1447,15 +1632,16 @@ updateFilters();
 update();
 updatePareto();
 updateDisplayMode();
+updateParetoIRDisplayMode();
 updateCompareChart();
 </script>
 
 <div style="max-width:1000px; margin-top:40px; line-height:1.6;">
 <h3 id="proof">Appendix: Transpose Symmetry</h3>
 <p>
-You may notice that swapping the interpolator and prefilter orders (e.g. u=3,&nbsp;d=2 vs
-u=2,&nbsp;d=3) produces <em>identical</em> PSNR despite visibly different impulse responses. This is
-not a bug &mdash; it is mathematically guaranteed. For this reason we only plot Pareto points where u &#8805; d &mdash; swapping u and d preserves PSNR and cost, so that variant lands in exactly the same place on the plot.
+You may notice that swapping the interpolator and prefilter orders (e.g. <span class="math">u=3, d=2</span> vs
+<span class="math">u=2, d=3</span>) produces <em>identical</em> PSNR despite visibly different impulse responses. This is
+not a bug &mdash; it is mathematically guaranteed. For this reason we only plot Pareto points where <span class="math">u \ge d</span> &mdash; swapping <span class="math">u</span> and <span class="math">d</span> preserves PSNR and cost, so that variant lands in exactly the same place on the plot.
 </p>
 <p>
 <strong>Claim:</strong> Swapping the interpolator and prefilter orders transposes the overall
@@ -1464,49 +1650,52 @@ linear operator, preserving the Frobenius norm of the error.
 <p>
 <strong>Proof:</strong> Write the pipeline as a matrix acting on the input signal:
 </p>
-<p style="text-align:center;">
-<em>M</em> = <em>U</em> &middot; <em>Z</em> &middot; <em>G</em><sub>lo</sub> &middot; <em>S</em> &middot; <em>D</em>
-</p>
+<p style="text-align:center;" class="math-display">M = U \cdot Z \cdot G_\text{lo} \cdot S \cdot D</p>
 <p>
-where <em>D</em> is convolution with the prefilter, <em>S</em> is subsampling by <em>f</em>,
-<em>G</em><sub>lo</sub> is the low-resolution Gaussian blur, <em>Z</em> is zero-fill upsampling by
-<em>f</em>, and <em>U</em> is convolution with the interpolator.
+where <span class="math">D</span> is convolution with the prefilter, <span class="math">S</span> is subsampling by <span class="math">f</span>,
+<span class="math">G_\text{lo}</span> is the low-resolution Gaussian blur, <span class="math">Z</span> is zero-fill upsampling by
+<span class="math">f</span>, and <span class="math">U</span> is convolution with the interpolator.
 </p>
 <p>
 Two key facts:
 </p>
 <ol>
-<li>For a symmetric convolution filter <em>F</em>, the matrix is symmetric: <em>F</em><sup>T</sup> = <em>F</em>.</li>
-<li>The transpose of subsampling is zero-fill, and vice versa: <em>S</em><sup>T</sup> = <em>Z</em> and <em>Z</em><sup>T</sup> = <em>S</em> (up to the factor of <em>f</em> which cancels between the two).</li>
+<li>For a symmetric convolution filter <span class="math">F</span>, the matrix is symmetric: <span class="math">F^\top = F</span>.</li>
+<li>The transpose of subsampling is zero-fill, and vice versa: <span class="math">S^\top = Z</span> and <span class="math">Z^\top = S</span> (up to the factor of <span class="math">f</span> which cancels between the two).</li>
 </ol>
 <p>
 Taking the transpose:
 </p>
-<p style="text-align:center;">
-<em>M</em><sup>T</sup> = (<em>U</em> &middot; <em>Z</em> &middot; <em>G</em><sub>lo</sub> &middot; <em>S</em> &middot; <em>D</em>)<sup>T</sup>
-= <em>D</em><sup>T</sup> &middot; <em>S</em><sup>T</sup> &middot; <em>G</em><sub>lo</sub><sup>T</sup> &middot; <em>Z</em><sup>T</sup> &middot; <em>U</em><sup>T</sup>
-= <em>D</em> &middot; <em>Z</em> &middot; <em>G</em><sub>lo</sub> &middot; <em>S</em> &middot; <em>U</em>
+<p style="text-align:center;" class="math-display">
+M^\top = (U \cdot Z \cdot G_\text{lo} \cdot S \cdot D)^\top = D^\top \cdot S^\top \cdot G_\text{lo}^\top \cdot Z^\top \cdot U^\top = D \cdot Z \cdot G_\text{lo} \cdot S \cdot U
 </p>
 <p>
 This is exactly the pipeline with the prefilter and interpolator swapped. Furthermore, the sum of
-their variances is the same (it depends only on <em>u</em>&nbsp;+&nbsp;<em>d</em>), so
-&sigma;<sub>lo</sub> and hence <em>G</em><sub>lo</sub> are unchanged.
+their variances is the same (it depends only on <span class="math">u + d</span>), so
+<span class="math">\sigma_\text{lo}</span> and hence <span class="math">G_\text{lo}</span> are unchanged.
 </p>
 <p>
-Since the ground truth Gaussian <em>G</em> is also a symmetric convolution
-(<em>G</em><sup>T</sup>&nbsp;=&nbsp;<em>G</em>), the Frobenius norm of the error is preserved:
+Since the ground truth Gaussian <span class="math">G</span> is also a symmetric convolution
+(<span class="math">G^\top = G</span>), the Frobenius norm of the error is preserved:
 </p>
-<p style="text-align:center;">
-&Vert;<em>M</em><sup>T</sup> &minus; <em>G</em>&Vert;<sub>F</sub>
-= &Vert;(<em>M</em> &minus; <em>G</em>)<sup>T</sup>&Vert;<sub>F</sub>
-= &Vert;<em>M</em> &minus; <em>G</em>&Vert;<sub>F</sub>
+<p style="text-align:center;" class="math-display">
+\|M^\top - G\|_F = \|(M - G)^\top\|_F = \|M - G\|_F
 </p>
 <p>
 The total mean squared error across all phases &mdash; and therefore the PSNR &mdash; is identical.
-The individual phase responses (rows of <em>M</em> vs rows of <em>M</em><sup>T</sup>) differ, which
-is why the artifacts look different, but their total energy is the same. &square;
+The individual phase responses (rows of <span class="math">M</span> vs rows of <span class="math">M^\top</span>) differ, which
+is why the artifacts look different, but their total energy is the same. <span class="math">\blacksquare</span>
 </p>
 </div>
 
+<script>
+// Render all KaTeX math
+document.querySelectorAll('.math').forEach(el => {
+  katex.render(el.textContent, el, { throwOnError: false });
+});
+document.querySelectorAll('.math-display').forEach(el => {
+  katex.render(el.textContent, el, { throwOnError: false, displayMode: true });
+});
+</script>
 </body>
 </html>
