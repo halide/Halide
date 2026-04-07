@@ -152,11 +152,11 @@ under 8 multiplies per output pixel, regardless of <span class="math">\sigma</sp
 </tr>
 <tr style="border-bottom:1px solid #ddd;">
 <td style="padding:8px; vertical-align:top; white-space:nowrap;">
-  <button class="preset-btn" data-sigma="16" data-up="4" data-down="4" data-factor="16" data-mode="animate" data-domain="spatial">Spatial</button>
-  <button class="preset-btn" data-sigma="16" data-up="4" data-down="4" data-factor="16" data-mode="animate" data-domain="frequency">Freq</button>
+  <button class="preset-btn" data-sigma="8" data-up="4" data-down="4" data-factor="8" data-mode="animate" data-domain="spatial">Spatial</button>
+  <button class="preset-btn" data-sigma="8" data-up="4" data-down="4" data-factor="8" data-mode="animate" data-domain="frequency">Freq</button>
 </td>
 <td style="padding:8px;">
-  <strong>Subsampling too much</strong> (σ=16, u=4, d=4, f=16): The prefilter has finite support, so it can't perfectly bandlimit the signal before subsampling &mdash; some energy above the low-res Nyquist leaks through and aliases into the low frequencies. At f&nbsp;&asymp;&nbsp;&sigma;/2 this doesn't matter, because the low-res Gaussian blur is wide enough to discard those frequencies. But as f increases toward &sigma;, the prefilter and interpolator consume most of the variance budget (their variance grows as f&sup2;), leaving a very narrow low-res blur that can't suppress the aliased energy. The result is visible low-frequency error. Limit the downsampling factor to at most &sigma;/2.
+  <strong>Subsampling too much</strong> (σ=8, u=4, d=4, f=8): The prefilter has finite support, so it can't perfectly bandlimit the signal before subsampling &mdash; some energy above the low-res Nyquist leaks through and aliases into the low frequencies. At f&nbsp;&asymp;&nbsp;&sigma;/2 this doesn't matter, because the low-res Gaussian blur is wide enough to discard those frequencies. But as f increases toward &sigma;, the prefilter and interpolator consume most of the variance budget (their variance grows as f&sup2;), leaving a very narrow low-res blur that can't suppress the aliased energy. The result is visible low-frequency error. Limit the downsampling factor to at most &sigma;/2.
 </td>
 </tr>
 <tr style="border-bottom:1px solid #ddd;">
