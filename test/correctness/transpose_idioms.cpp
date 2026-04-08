@@ -83,6 +83,13 @@ void check(Func g) {
 }
 
 int main(int argc, char **argv) {
+    if (Internal::get_llvm_version() < 220 &&
+        get_jit_target_from_environment().has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
+               Internal::get_llvm_version());
+        return 0;
+    }
+
     Var x{"x"}, y{"y"}, xi{"xi"}, yi{"yi"};
 
     // In each case we'll say g(x, y) = f(y, x) and tile it. We will try power
