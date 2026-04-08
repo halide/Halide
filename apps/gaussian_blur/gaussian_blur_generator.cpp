@@ -144,7 +144,6 @@ public:
 
         Func down_y_phases{"down_y_phases"};
         down_y_phases(x, y, p) += clamped_y(x, factor * y + rf + shift) * down_kernel(rf + p * factor);
-
         Func down_y{"down_y"};
         down_y(x, y) += down_y_phases(x, y + rp, rp);
 
@@ -223,6 +222,8 @@ public:
             .atomic()
             .vectorize(rxi);
 
+        down_y.update().unroll(rp);
+
         down_y_phases.in()
             .store_at(down_x.in(), yo)
             .compute_at(down_x.in(), yi)
@@ -231,8 +232,6 @@ public:
             .vectorize(x, vec, TailStrategy::RoundUp)
             .fold_storage(y, downsample_order);
 
-        down_y.update().unroll(rp);
-
         down_y_phases
             .compute_at(down_y_phases.in(), x)
             .unroll(p)
@@ -240,8 +239,8 @@ public:
             .update()
             .reorder(p, x, rf, y)
             .vectorize(x)
-            .unroll(p)
-            .unroll(rf);
+            .unroll(rf)
+            .unroll(p);
 
         blurred
             .store_in(MemoryType::Stack)

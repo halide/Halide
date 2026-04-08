@@ -32,6 +32,85 @@ int static_do_par_for(void *user_context, halide_task_t f, int min, int extent, 
 }
 #endif
 
+std::atomic<int> pending{0};
+std::atomic<bool> shutdown{false};
+struct worker {
+    std::thread thread;
+    halide_task_t task = nullptr;
+    int first = 0;
+    int last = 0;
+    uint8_t *closure = nullptr;
+
+    // When go is false, the main thread is messing with the fields above. When
+    // go is true, they are frozen.
+    std::atomic<bool> go{false};
+
+    void run() {
+        while (true) {
+            while (go.load() == false) {};
+            if (shutdown.load()) {
+                return;
+            }
+            int f = first, l = last;
+            uint8_t *c = closure;
+            halide_task_t t = task;
+            go.store(false);
+            for (int i = f; i < l; i++) {
+                t(nullptr, i, c);
+                pending--;
+            }
+        }
+    }
+
+    worker(int i) : thread([=]() { run(); }) {
+    }
+};
+
+// Use a deque rather than a std::vector, because a worker contains an atomic
+// field and you can't just move those around in memory. A deque keeps things at
+// the same address.
+std::deque<worker> workers;
+
+void init_thread_pool() {
+    // We want to use however many worker threads Halide would, so run a trivial
+    // for loop and check how many it decided to use.
+    halide_default_do_par_for(nullptr, [](void *, int, uint8_t *) { return 0; }, 0, 256, nullptr);
+    int num_workers = halide_get_num_threads() - 1;  // -1 because the main thread will also work
+    printf("%d worker threads\n", num_workers);
+    for (int i = 0; i < num_workers; i++) {
+        workers.emplace_back(i);
+    }
+}
+
+void shutdown_thread_pool() {
+    shutdown.store(true);
+    for (auto &w : workers) {
+        w.go.store(true);
+        w.thread.join();
+    }
+}
+
+int lock_free_do_par_for(void *user_context, halide_task_t f, int min, int extent, uint8_t *closure) {
+    int num_workers = (int)workers.size();
+    int tasks_per_worker = (extent + num_workers) / (num_workers + 1);
+    pending.store(extent - tasks_per_worker);
+    for (int w = 0, i = tasks_per_worker; w < num_workers; w++, i += tasks_per_worker) {
+        auto &worker = workers[w];
+        while (worker.go.load() == true) {}
+        worker.task = f;
+        worker.first = min + i;
+        worker.last = std::min(worker.first + tasks_per_worker, min + extent);
+        worker.closure = closure;
+        worker.go.store(true);
+    }
+    for (int i = 0; i < tasks_per_worker; i++) {
+        f(nullptr, min + i, closure);
+    }
+    while (pending.load() > 0) {
+    }
+    return 0;
+}
+
 double compute_PSNR(const Buffer<float> &a, const Buffer<float> &b) {
     double err = 0;
     uint64_t count = 0;
@@ -71,13 +150,16 @@ int main(int argc, char **argv) {
     }
 #endif
 
+    halide_set_custom_do_par_for(lock_free_do_par_for);
+    init_thread_pool();
+
     // Convert from seconds to rounded microseconds
     auto to_us = [](double seconds) {
         return (int)std::round(seconds * 1e6);
     };
 
     std::map<std::tuple<int, int, int>, decltype(&gaussian_blur_direct)> fns = {
-#define REG(U, D, F) {{U, D, F}, &gaussian_blur_##U##_##D##_##F},
+#define REG(U, D, F) {{F, U, D}, &gaussian_blur_##U##_##D##_##F},
 #define REG1(U, D) FOR_ALL_FACTORS(U, D, REG)
 #define REG2(U) FOR_ALL_DOWNSAMPLE_ORDERS(U, REG1)
         FOR_ALL_UPSAMPLE_ORDERS(REG2)};
@@ -144,9 +226,9 @@ int main(int argc, char **argv) {
     }
 
     for (const auto &[config, fn] : fns) {
-        const int up_order = std::get<0>(config);
-        const int down_order = std::get<1>(config);
-        const int factor = std::get<2>(config);
+        const int up_order = std::get<1>(config);
+        const int down_order = std::get<2>(config);
+        const int factor = std::get<0>(config);
 
         // The variance of one of our resampling filters
         auto var = [=](int o) {
@@ -165,7 +247,7 @@ int main(int argc, char **argv) {
         halide_profiler_reset();
 
         double resample_time = benchmark([&]() {
-            fns[{up_order, down_order, factor}](input, sigma, 5, resample_output);
+            fn(input, sigma, 5, resample_output);
             resample_output.device_sync();
         });
 
@@ -245,6 +327,8 @@ int main(int argc, char **argv) {
         }
     }
     printf("-------------------------------------\n");
+
+    shutdown_thread_pool();
 
     return 0;
 }
