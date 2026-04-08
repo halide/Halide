@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <thread>
 
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
@@ -46,19 +47,13 @@ struct worker {
     std::atomic<bool> go{false};
 
     void run() {
-        while (true) {
-            while (go.load() == false) {};
-            if (shutdown.load()) {
-                return;
-            }
-            int f = first, l = last;
-            uint8_t *c = closure;
-            halide_task_t t = task;
-            go.store(false);
-            for (int i = f; i < l; i++) {
-                t(nullptr, i, c);
+        while (!shutdown.load()) {
+            if (!go.load()) continue;
+            for (int i = first; i < last; i++) {
+                task(nullptr, i, closure);
                 pending--;
             }
+            go.store(false);
         }
     }
 
@@ -85,7 +80,6 @@ void init_thread_pool() {
 void shutdown_thread_pool() {
     shutdown.store(true);
     for (auto &w : workers) {
-        w.go.store(true);
         w.thread.join();
     }
 }
@@ -246,8 +240,10 @@ int main(int argc, char **argv) {
         // rather than once at the end.
         halide_profiler_reset();
 
+        auto f = fn;
+        
         double resample_time = benchmark([&]() {
-            fn(input, sigma, 5, resample_output);
+            f(input, sigma, 5, resample_output);
             resample_output.device_sync();
         });
 
