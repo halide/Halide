@@ -484,7 +484,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         const int sm = target.get_d3d12compute_capability_lower_bound();
         ostringstream rhs;
         if (sm >= 60) {
-            rhs << "select(" << cond << ", " << true_val << ", " << false_val << ")";
+            // select() requires a bool condition; the mask is an integer
+            // (0 = false, -1 = true) so cast it to bool to satisfy DXC.
+            Type cond_type = op->args[0].type();
+            Type bool_type = UInt(1, cond_type.lanes());
+            string bool_cond = "((" + print_type(bool_type) + ")" + cond + ")";
+            rhs << "select(" << bool_cond << ", " << true_val << ", " << false_val << ")";
         } else {
             rhs << "(" << cond << " ? " << true_val << " : " << false_val << ")";
         }
@@ -1009,8 +1014,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
             // or fall back to a compare-and-swap loop for other patterns.
             if (!expr_uses_var(op->value, op->name)) {
                 // Value is independent of current buffer contents: plain atomic exchange.
+                string old_var = unique_name("_halide_atom_old");
+                stream << get_indent() << print_type(t) << " " << old_var << ";\n";
                 stream << get_indent() << "InterlockedExchange(" << dest << ", "
-                       << print_expr(op->value) << ", " << unique_name("_halide_atom_old") << ");\n";
+                       << print_expr(op->value) << ", " << old_var << ");\n";
             } else {
                 // CAS loop for unrecognised integer RMW.
                 string old_var = unique_name("_halide_atom_old");

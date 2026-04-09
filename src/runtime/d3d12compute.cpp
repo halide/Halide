@@ -3551,10 +3551,7 @@ WEAK int halide_d3d12compute_image_copy_to_host(void *user_context, halide_buffe
     wait_until_completed(frame);
 
     // Decrement the ref_count that suballocate() incremented — the GPU work is done.
-    {
-        using namespace Halide::Runtime::Internal::Synchronization;
-        atomic_sub_fetch_sequentially_consistent(&readback.ref_count, 1);
-    }
+    __atomic_sub_fetch(&readback.ref_count, 1, __ATOMIC_SEQ_CST);
 
     // Unpack row-by-row from the padded staging buffer to the dense host buffer.
     void *staging_data = buffer_contents(&readback);

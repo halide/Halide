@@ -620,12 +620,15 @@ target_export_script(Halide
 set_halide_compiler_warnings(Halide)
 
 if (CMAKE_GENERATOR MATCHES "Visual Studio")
-    # We could expose the /MP flag to all targets, but that might end up saturating the build
-    # since multiple MSBuild projects might get built in parallel, each of which compiling their
-    # source files in parallel; the Halide library itself is a "knot" point of the build graph,
-    # so compiling its files in parallel should not oversubscribe the system
-    target_compile_options(Halide PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/MP>)
+    # /MP is intentionally omitted here: Simplify_*.cpp and IRMatch.h have deep
+    # template instantiations that exhaust MSVC heap under parallel compilation.
+    # MSBuild already parallelises across projects; intra-project /MP multiplies
+    # memory pressure and triggers C1002 / D8040.
 endif ()
+
+# Raise MSVC's compiler heap limit for template-heavy TUs (IRMatch.h,
+# Simplify_*.cpp).  500% of the default is sufficient in practice.
+target_compile_options(Halide PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/Zm500>)
 
 target_compile_definitions(Halide
                            PRIVATE
