@@ -306,12 +306,27 @@ WEAK bool D3DErrorCheck(HRESULT result, ID3D12T *object, void *user_context, con
     return false;
 }
 
+// Returns true if the Halide type is 64-bit (double, int64_t, uint64_t).
+// These types have no native DXGI format; the runtime represents them as
+// pairs of R32_UINT elements and the HLSL codegen emits pack/unpack code.
+WEAK bool is_64bit_type(halide_type_t type) {
+    return type.bits == 64;
+}
+
 WEAK DXGI_FORMAT FindD3D12FormatForHalideType(void *user_context, halide_type_t type) {
     // DXGI Formats:
     // https://msdn.microsoft.com/en-us/library/windows/desktop/bb173059(v=vs.85).aspx
 
+    // 64-bit types (double, int64_t, uint64_t) have no DXGI typed-buffer format.
+    // We represent them as pairs of uint32 elements using R32_UINT.
+    // The codegen emits asdouble/asuint pack/unpack and the element count is
+    // doubled in number_of_elements_for_uav().
+    if (is_64bit_type(type)) {
+        return DXGI_FORMAT_R32_UINT;
+    }
+
     // indexing scheme: [code][lane][bits]
-    const DXGI_FORMAT FORMATS[3][4][4] =
+    const DXGI_FORMAT FORMATS[3][4][3] =
         {
             // halide_type_int
             {
@@ -320,28 +335,24 @@ WEAK DXGI_FORMAT FindD3D12FormatForHalideType(void *user_context, halide_type_t 
                     DXGI_FORMAT_R8_SINT,   //  8 bits
                     DXGI_FORMAT_R16_SINT,  // 16 bits
                     DXGI_FORMAT_R32_SINT,  // 32 bits
-                    DXGI_FORMAT_UNKNOWN,   // 64 bits
                 },
                 // 2 lanes
                 {
                     DXGI_FORMAT_R8G8_SINT,
                     DXGI_FORMAT_R16G16_SINT,
                     DXGI_FORMAT_R32G32_SINT,
-                    DXGI_FORMAT_UNKNOWN,
                 },
                 // 3 lanes
                 {
                     DXGI_FORMAT_UNKNOWN,
                     DXGI_FORMAT_UNKNOWN,
                     DXGI_FORMAT_R32G32B32_SINT,
-                    DXGI_FORMAT_UNKNOWN,
                 },
                 // 4 lanes
                 {
                     DXGI_FORMAT_R8G8B8A8_SINT,
                     DXGI_FORMAT_R16G16B16A16_SINT,
                     DXGI_FORMAT_R32G32B32A32_SINT,
-                    DXGI_FORMAT_UNKNOWN,
                 }},
             // halide_type_uint
             {
@@ -350,28 +361,24 @@ WEAK DXGI_FORMAT FindD3D12FormatForHalideType(void *user_context, halide_type_t 
                     DXGI_FORMAT_R8_UINT,
                     DXGI_FORMAT_R16_UINT,
                     DXGI_FORMAT_R32_UINT,
-                    DXGI_FORMAT_UNKNOWN,
                 },
                 // 2 lanes
                 {
                     DXGI_FORMAT_R8G8_UINT,
                     DXGI_FORMAT_R16G16_UINT,
                     DXGI_FORMAT_R32G32_UINT,
-                    DXGI_FORMAT_UNKNOWN,
                 },
                 // 3 lanes
                 {
                     DXGI_FORMAT_UNKNOWN,
                     DXGI_FORMAT_UNKNOWN,
                     DXGI_FORMAT_R32G32B32_UINT,
-                    DXGI_FORMAT_UNKNOWN,
                 },
                 // 4 lanes
                 {
                     DXGI_FORMAT_R8G8B8A8_UINT,
                     DXGI_FORMAT_R16G16B16A16_UINT,
                     DXGI_FORMAT_R32G32B32A32_UINT,
-                    DXGI_FORMAT_UNKNOWN,
                 }},
             // halide_type_float
             {
@@ -380,28 +387,24 @@ WEAK DXGI_FORMAT FindD3D12FormatForHalideType(void *user_context, halide_type_t 
                     DXGI_FORMAT_UNKNOWN,
                     DXGI_FORMAT_R16_FLOAT,
                     DXGI_FORMAT_R32_FLOAT,
-                    DXGI_FORMAT_UNKNOWN,
                 },
                 // 2 lanes
                 {
                     DXGI_FORMAT_UNKNOWN,
                     DXGI_FORMAT_R16G16_FLOAT,
                     DXGI_FORMAT_R32G32_FLOAT,
-                    DXGI_FORMAT_UNKNOWN,
                 },
                 // 3 lanes
                 {
                     DXGI_FORMAT_UNKNOWN,
                     DXGI_FORMAT_UNKNOWN,
                     DXGI_FORMAT_R32G32B32_FLOAT,
-                    DXGI_FORMAT_UNKNOWN,
                 },
                 // 4 lanes
                 {
                     DXGI_FORMAT_UNKNOWN,
                     DXGI_FORMAT_R16G16B16A16_FLOAT,
                     DXGI_FORMAT_R32G32B32A32_FLOAT,
-                    DXGI_FORMAT_UNKNOWN,
                 }},
         };
 
@@ -418,9 +421,6 @@ WEAK DXGI_FORMAT FindD3D12FormatForHalideType(void *user_context, halide_type_t 
         break;
     case 4:
         i = 2;
-        break;
-    case 8:
-        i = 3;
         break;
     default:
         halide_abort_if_false(user_context, false);
@@ -663,6 +663,13 @@ WEAK size_t number_of_elements(void *user_context, const halide_buffer_t *buffer
 
     size_t elements = size_in_bytes / element_size;
     halide_abort_if_false(user_context, (size_in_bytes % element_size) == 0);
+
+    // 64-bit types are represented as pairs of uint32 elements in the UAV
+    // (there is no DXGI format for 64-bit scalars).  Each logical element
+    // occupies two R32_UINT slots, so double the count for the UAV descriptor.
+    if (is_64bit_type(buffer->type)) {
+        elements *= 2;
+    }
 
     return elements;
 }
@@ -3722,13 +3729,12 @@ WEAK int halide_d3d12compute_run(void *user_context,
                     halide_type_t arg_type = arg_types[i];
                     arg_sizes[i] = arg_type.bytes();
                     halide_abort_if_false(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
-                    // We can ignore vector arguments since they never show up in constant
-                    // blocks. Having to worry about scalar parameters only is convenient
-                    // since in HLSL SM 5.1 all scalar types are 32bit:
                     halide_abort_if_false(user_context, arg_type.lanes == 1);
                     halide_abort_if_false(user_context, arg_sizes[i] > 0);
-                    halide_abort_if_false(user_context, arg_sizes[i] <= 4);
-                    size_t packed_size = 4;  // force the final "packed" argument to be 32bit
+                    halide_abort_if_false(user_context, arg_sizes[i] <= 8);
+                    // Sub-32-bit scalars are widened to 32-bit in the cbuffer layout;
+                    // 64-bit scalars (double, int64_t, uint64_t) occupy 8 bytes.
+                    size_t packed_size = (arg_sizes[i] <= 4) ? 4 : 8;
                     total_uniform_args_size = (total_uniform_args_size + packed_size - 1) & ~(packed_size - 1);
                     total_uniform_args_size += packed_size;
                 }
@@ -3752,54 +3758,64 @@ WEAK int halide_d3d12compute_run(void *user_context,
             }
             uint8_t *uniform_bytes = (uint8_t *)buffer_contents(&uniform_buffer);
             size_t offset = 0;
-            int32_t uniform_word = 0;
-            const size_t uniform_size = 4;
             for (size_t i = 0; i < num_kernel_args; i++) {
                 if (arg_is_buffer[i]) {
                     continue;
                 }
                 const halide_type_t arg_type = arg_types[i];
-                if (arg_type.code == halide_type_float) {
-                    halide_abort_if_false(user_context, (arg_type.bits == 32));
-                    float &uniform_value = ((float &)uniform_word);
-                    uniform_value = *((float *)args[i]);
-                    TRACELEVEL(3, "args[" << i << "] -> float32 = " << uniform_value << "\n");
-                } else if (arg_type.code == halide_type_int) {
-                    int32_t &uniform_value = ((int32_t &)uniform_word);
-                    if (arg_type.bits == 1) {
-                        uniform_value = *((int8_t *)args[i]);
-                        uniform_value = (uniform_value == 0) ? 0 : 1;
-                    } else if (arg_type.bits == 8) {
-                        uniform_value = *((int8_t *)args[i]);
-                    } else if (arg_type.bits == 16) {
-                        uniform_value = *((int16_t *)args[i]);
-                    } else if (arg_type.bits == 32) {
-                        uniform_value = *((int32_t *)args[i]);
-                    } else {
-                        halide_abort_if_false(user_context, false);
-                    }
-                    TRACELEVEL(3, "args[" << i << "] -> int32 = " << uniform_value << "\n");
-                } else if (arg_type.code == halide_type_uint) {
-                    uint32_t &uniform_value = ((uint32_t &)uniform_word);
-                    if (arg_type.bits == 1) {
-                        uniform_value = *((uint8_t *)args[i]);
-                        uniform_value = (uniform_value == 0) ? 0 : 1;
-                    } else if (arg_type.bits == 8) {
-                        uniform_value = *((uint8_t *)args[i]);
-                    } else if (arg_type.bits == 16) {
-                        uniform_value = *((uint16_t *)args[i]);
-                    } else if (arg_type.bits == 32) {
-                        uniform_value = *((uint32_t *)args[i]);
-                    } else {
-                        halide_abort_if_false(user_context, false);
-                    }
-                    TRACELEVEL(3, "args[" << i << "] -> uint32 = " << uniform_value << "\n");
+                size_t packed_size = (arg_type.bytes() <= 4) ? 4 : 8;
+                // Align to packed_size boundary
+                offset = (offset + packed_size - 1) & ~(packed_size - 1);
+
+                if (arg_type.bits == 64) {
+                    // 64-bit scalars (double, int64_t, uint64_t): copy 8 bytes directly.
+                    uint64_t val64 = *((uint64_t *)args[i]);
+                    memcpy(&uniform_bytes[offset], &val64, 8);
+                    TRACELEVEL(3, "args[" << i << "] -> 64bit = 0x" << val64 << "\n");
                 } else {
-                    halide_abort_if_false(user_context, false);
+                    // Sub-32-bit values are widened to 32-bit; 32-bit copied directly.
+                    int32_t uniform_word = 0;
+                    if (arg_type.code == halide_type_float) {
+                        halide_abort_if_false(user_context, (arg_type.bits == 32));
+                        float &uniform_value = ((float &)uniform_word);
+                        uniform_value = *((float *)args[i]);
+                        TRACELEVEL(3, "args[" << i << "] -> float32 = " << uniform_value << "\n");
+                    } else if (arg_type.code == halide_type_int) {
+                        int32_t &uniform_value = ((int32_t &)uniform_word);
+                        if (arg_type.bits == 1) {
+                            uniform_value = *((int8_t *)args[i]);
+                            uniform_value = (uniform_value == 0) ? 0 : 1;
+                        } else if (arg_type.bits == 8) {
+                            uniform_value = *((int8_t *)args[i]);
+                        } else if (arg_type.bits == 16) {
+                            uniform_value = *((int16_t *)args[i]);
+                        } else if (arg_type.bits == 32) {
+                            uniform_value = *((int32_t *)args[i]);
+                        } else {
+                            halide_abort_if_false(user_context, false);
+                        }
+                        TRACELEVEL(3, "args[" << i << "] -> int32 = " << uniform_value << "\n");
+                    } else if (arg_type.code == halide_type_uint) {
+                        uint32_t &uniform_value = ((uint32_t &)uniform_word);
+                        if (arg_type.bits == 1) {
+                            uniform_value = *((uint8_t *)args[i]);
+                            uniform_value = (uniform_value == 0) ? 0 : 1;
+                        } else if (arg_type.bits == 8) {
+                            uniform_value = *((uint8_t *)args[i]);
+                        } else if (arg_type.bits == 16) {
+                            uniform_value = *((uint16_t *)args[i]);
+                        } else if (arg_type.bits == 32) {
+                            uniform_value = *((uint32_t *)args[i]);
+                        } else {
+                            halide_abort_if_false(user_context, false);
+                        }
+                        TRACELEVEL(3, "args[" << i << "] -> uint32 = " << uniform_value << "\n");
+                    } else {
+                        halide_abort_if_false(user_context, false);
+                    }
+                    memcpy(&uniform_bytes[offset], &uniform_word, 4);
                 }
-                memcpy(&uniform_bytes[offset], &uniform_word, uniform_size);
-                offset = (offset + uniform_size - 1) & ~(uniform_size - 1);
-                offset += uniform_size;
+                offset += packed_size;
             }
             halide_abort_if_false(user_context, offset == total_uniform_args_size);
         }
@@ -4074,11 +4090,17 @@ WEAK int d3d12compute_device_crop_from_offset(void *user_context,
     halide_abort_if_false(user_context, (new_handle->halide_type == dst->type));
     halide_abort_if_false(user_context, (src->device_interface == dst->device_interface));
 
-    new_handle->offset = old_handle->offset + offset;
-    new_handle->offsetInBytes = new_handle->offset * dst->type.bytes() * dst->type.lanes;
+    // For 64-bit types the UAV uses R32_UINT with 2x element count, so the
+    // crop offset (in logical elements) must be doubled to stay in UAV units.
+    int64_t uav_offset = offset;
+    if (is_64bit_type(dst->type)) {
+        uav_offset *= 2;
+    }
+    new_handle->offset = old_handle->offset + uav_offset;
+    new_handle->offsetInBytes = (old_handle->offset + offset) * dst->type.bytes() * dst->type.lanes;
     // for some reason, 'dst->number_of_elements()' is always returning 1
     // later on when 'set_input()' is called...
-    new_handle->elements = old_handle->elements - offset;
+    new_handle->elements = old_handle->elements - uav_offset;
 
     TRACEPRINT(
         "--- "

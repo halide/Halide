@@ -17,8 +17,7 @@ int find_pi() {
     }
 
     // Vulkan lacks trig functions for 64-bit floats ... skip
-    // D3D12 typed buffers have no DXGI format for 64-bit types ... skip
-    if ((target.has_feature(Target::Vulkan) || target.has_feature(Target::D3D12Compute)) &&
+    if (target.has_feature(Target::Vulkan) &&
         (type.is_float() && type.bits() > 32)) {
         return 0;
     }

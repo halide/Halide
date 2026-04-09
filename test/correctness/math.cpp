@@ -298,11 +298,10 @@ int main(int argc, char **argv) {
     printf("host is:      %s\n", get_host_target().to_string().c_str());
     printf("HL_JIT_TARGET is: %s\n", get_jit_target_from_environment().to_string().c_str());
 
-    // D3D12 typed buffers have no DXGI format for float64; skip double tests.
     Target jit_target = get_jit_target_from_environment();
-    bool skip_double = jit_target.has_feature(Target::D3D12Compute);
+    bool skip_double = !jit_target.supports_type(Float(64));
     if (skip_double) {
-        printf("Skipping double tests (D3D12 has no 64-bit buffer format)\n");
+        printf("Skipping double tests (target does not support float64)\n");
     }
 
     call_1_float_types(abs, 256, -1000, 1000);

@@ -103,6 +103,33 @@ protected:
             alias("fast_inverse", "rcp");
             alias("fast_inverse_sqrt", "rsqrt");
 #undef alias
+            // HLSL intrinsics that lack native double-precision overloads.
+            // When called with double args, DXC silently casts to float, losing
+            // precision. The codegen emits explicit (double)func((float)x) casts
+            // to make the truncation visible and silence -Wconversion.
+            hlsl_float_only_intrinsics.insert("sqrt");
+            hlsl_float_only_intrinsics.insert("abs");
+            hlsl_float_only_intrinsics.insert("floor");
+            hlsl_float_only_intrinsics.insert("ceil");
+            hlsl_float_only_intrinsics.insert("trunc");
+            hlsl_float_only_intrinsics.insert("round");
+            hlsl_float_only_intrinsics.insert("sin");
+            hlsl_float_only_intrinsics.insert("cos");
+            hlsl_float_only_intrinsics.insert("tan");
+            hlsl_float_only_intrinsics.insert("asin");
+            hlsl_float_only_intrinsics.insert("acos");
+            hlsl_float_only_intrinsics.insert("atan");
+            hlsl_float_only_intrinsics.insert("atan2");
+            hlsl_float_only_intrinsics.insert("exp");
+            hlsl_float_only_intrinsics.insert("log");
+            hlsl_float_only_intrinsics.insert("sinh");
+            hlsl_float_only_intrinsics.insert("cosh");
+            hlsl_float_only_intrinsics.insert("tanh");
+            hlsl_float_only_intrinsics.insert("asinh");
+            hlsl_float_only_intrinsics.insert("acosh");
+            hlsl_float_only_intrinsics.insert("atanh");
+            hlsl_float_only_intrinsics.insert("rcp");
+            hlsl_float_only_intrinsics.insert("rsqrt");
         }
         void add_kernel(Stmt stmt,
                         const std::string &name,
@@ -145,6 +172,8 @@ protected:
         void visit(const FloatImm *op) override;
 
         Scope<> groupshared_allocations;
+        Scope<> uav_buffer_args;  // kernel buffer args that use RWBuffer UAV bindings
+        std::set<std::string> hlsl_float_only_intrinsics;  // no native double overload
         bool emit_precise = false;
     };
 
@@ -339,6 +368,14 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type 
 }
 
 namespace {
+
+// Returns true if the given type is 64-bit (double, int64_t, uint64_t).
+// These types have no DXGI typed-buffer format; the runtime stores them as
+// pairs of R32_UINT elements and the codegen emits pack/unpack code.
+bool is_buffer_64bit(Type t) {
+    return t.bits() == 64;
+}
+
 string simt_intrinsic(const string &name) {
     if (ends_with(name, gpu_thread_name(0))) {
         return "tid_in_tgroup.x";
@@ -528,6 +565,54 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         }
         rhs << ")";
         print_assignment(op->type, rhs.str());
+    } else if (op->type.is_float() && op->type.bits() == 64 &&
+               extern_function_name_map.count(op->name)) {
+        // HLSL math intrinsics and double:
+        //  - Some intrinsics (sqrt, abs, floor, ceil, trunc) have native double
+        //    overloads but NOT for vector types — unroll vectors into scalar calls.
+        //  - Others (sin, cos, tan, exp, log, ...) have NO double overload at all;
+        //    DXC silently casts to float, losing precision.  Emit explicit
+        //    (double)func((float)x) to make the truncation visible and warning-free.
+        string hlsl_name = extern_function_name_map.at(op->name);
+        bool float_only = hlsl_float_only_intrinsics.count(hlsl_name) > 0;
+        vector<string> arg_strs;
+        for (const auto &a : op->args) {
+            arg_strs.push_back(print_expr(a));
+        }
+        int lanes = op->type.lanes();
+
+        // Helper: emit one scalar call, with optional float cast for float-only intrinsics.
+        auto emit_one_call = [&](ostringstream &o, const string &lane_suffix) {
+            if (float_only) {
+                o << "(double)" << hlsl_name << "(";
+                for (size_t a = 0; a < arg_strs.size(); ++a) {
+                    if (a > 0) o << ", ";
+                    o << "(float)" << arg_strs[a] << lane_suffix;
+                }
+                o << ")";
+            } else {
+                o << hlsl_name << "(";
+                for (size_t a = 0; a < arg_strs.size(); ++a) {
+                    if (a > 0) o << ", ";
+                    o << arg_strs[a] << lane_suffix;
+                }
+                o << ")";
+            }
+        };
+
+        ostringstream rhs;
+        if (lanes == 1) {
+            emit_one_call(rhs, "");
+        } else {
+            rhs << print_type(op->type) << "(";
+            for (int i = 0; i < lanes; ++i) {
+                string idx = "[" + std::to_string(i) + "]";
+                emit_one_call(rhs, idx);
+                if (i < lanes - 1) rhs << ", ";
+            }
+            rhs << ")";
+        }
+        print_assignment(op->type, rhs.str());
     } else if (op->is_intrinsic(Call::image_load)) {
         // image_load(<name>, <buffer>, <x>, <x-extent>, [<y>, <y-extent>, [<z>, <z-extent>]])
         // dims = (args.size() - 2) / 2
@@ -608,8 +693,26 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         equiv.accept(this);
     } else if (op->is_intrinsic(Call::round)) {
         // HLSL's round intrinsic has the correct semantics for our rounding.
-        Expr equiv = Call::make(op->type, "round", op->args, Call::PureExtern);
-        equiv.accept(this);
+        // DXC has no double overload, so for double types use explicit float cast.
+        if (op->type.is_float() && op->type.bits() == 64) {
+            int lanes = op->type.lanes();
+            string arg = print_expr(op->args[0]);
+            ostringstream rhs;
+            if (lanes == 1) {
+                rhs << "(double)round((float)" << arg << ")";
+            } else {
+                rhs << print_type(op->type) << "(";
+                for (int i = 0; i < lanes; ++i) {
+                    rhs << "(double)round((float)" << arg << "[" << i << "])";
+                    if (i < lanes - 1) rhs << ", ";
+                }
+                rhs << ")";
+            }
+            print_assignment(op->type, rhs.str());
+        } else {
+            Expr equiv = Call::make(op->type, "round", op->args, Call::PureExtern);
+            equiv.accept(this);
+        }
     } else {
         CodeGen_GPU_C::visit(op);
     }
@@ -779,12 +882,77 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     string promotion_str = "";
     if (groupshared_allocations.contains(op->name) && sm < 62) {
         internal_assert(allocations.contains(op->name));
-        Type promoted_type = op->type.with_bits(32).with_lanes(1);
+        // Promote sub-32-bit types to 32-bit; 64-bit types stay as-is.
+        Type promoted_type = op->type.with_bits(std::max((int)op->type.bits(), 32)).with_lanes(1);
         if (promoted_type != op->type) {
             shared_promotion_required = true;
             // NOTE(marcos): might need to resort to StoragePackUnpack::unpack_load() here
             promotion_str = hlsl_reinterpret_name(promoted_type);
         }
+    }
+
+    // 64-bit UAV buffer loads: the RWBuffer is declared as uint with 2x elements.
+    // Each logical 64-bit element at index i maps to buf[2*i] (lo) and buf[2*i+1] (hi).
+    // This only applies to kernel buffer args (UAVs), not groupshared or local arrays
+    // which use native 64-bit HLSL types directly.
+    bool is_64bit_uav = uav_buffer_args.contains(op->name) &&
+                        is_buffer_64bit(op->type);
+
+    if (is_64bit_uav) {
+        string buf = print_name(op->name);
+        Type elem_type = op->type.element_of();
+
+        // Helper lambda: emit the HLSL expression that reconstructs a 64-bit
+        // scalar from two consecutive uint elements at the given base index.
+        auto emit_64bit_unpack = [&](const string &base_idx) -> string {
+            string lo = buf + "[" + base_idx + "]";
+            string hi = buf + "[" + base_idx + " + 1]";
+            if (elem_type.is_float()) {
+                return "asdouble(" + lo + ", " + hi + ")";
+            } else if (elem_type.is_uint()) {
+                return "((uint64_t)" + hi + " << 32) | (uint64_t)" + lo;
+            } else {
+                return "(int64_t)(((uint64_t)" + hi + " << 32) | (uint64_t)" + lo + ")";
+            }
+        };
+
+        Expr ramp_base = is_ramp_one(op->index);
+        if (ramp_base.defined()) {
+            // Contiguous vector load: unroll lane by lane.
+            internal_assert(op->type.is_vector());
+            string base_expr = print_expr(ramp_base);
+            string base_var = unique_name("_64base");
+            stream << get_indent() << "uint " << base_var << " = 2 * (" << base_expr << ");\n";
+
+            id = unique_name('_');
+            stream << get_indent() << print_type(op->type) << " " << id << ";\n";
+            for (int i = 0; i < op->type.lanes(); ++i) {
+                string slot = base_var + " + " + std::to_string(2 * i);
+                stream << get_indent() << id << "[" << i << "] = "
+                       << emit_64bit_unpack(slot) << ";\n";
+            }
+        } else if (op->index.type().is_vector()) {
+            // Gather: each lane has an independent index.
+            internal_assert(op->type.is_vector());
+            string idx_vec = print_expr(op->index);
+
+            id = unique_name('_');
+            stream << get_indent() << print_type(op->type) << " " << id << ";\n";
+            for (int i = 0; i < op->type.lanes(); ++i) {
+                string lane_base = unique_name("_64idx");
+                stream << get_indent() << "uint " << lane_base
+                       << " = 2 * " << idx_vec << "[" << i << "];\n";
+                stream << get_indent() << id << "[" << i << "] = "
+                       << emit_64bit_unpack(lane_base) << ";\n";
+            }
+        } else {
+            // Scalar load.
+            string idx = print_expr(op->index);
+            string base_var = unique_name("_64idx");
+            stream << get_indent() << "uint " << base_var << " = 2 * (" << idx << ");\n";
+            print_assignment(op->type, emit_64bit_unpack(base_var));
+        }
+        return;
     }
 
     // If we're loading a contiguous ramp, "unroll" the ramp into loads:
@@ -901,6 +1069,17 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
 
         const int sm = target.get_d3d12compute_capability_lower_bound();
         Type t = op->value.type();
+
+        // 64-bit atomics cannot operate on the RWBuffer<uint> pair encoding.
+        // HLSL has no 64-bit Interlocked* intrinsics for typed UAV buffers.
+        if (uav_buffer_args.contains(op->name) && is_buffer_64bit(t)) {
+            user_assert(false)
+                << "D3D12Compute: atomic operations on 64-bit buffer types are not supported. "
+                << "The buffer is stored as RWBuffer<uint> pairs; HLSL has no 64-bit "
+                << "Interlocked* intrinsics for typed UAV buffers. "
+                << "Type was: " << t << "\n";
+        }
+
         string id_index = print_expr(op->index);
         string dest = print_name(op->name) + "[" + id_index + "]";
 
@@ -933,16 +1112,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
                 stream << get_indent() << "    } while (asuint(_hfatomic_orig) != asuint(_hfatomic_old));\n";
                 stream << get_indent() << "}\n";
             } else if (is_atomic_add && t.bits() == 64) {
-                // float64 atomic add is not supported in HLSL typed UAV buffers.
-                // InterlockedCompareExchangeFloatBitwise only accepts float32; there is
-                // no InterlockedCompareExchangeDoubleBitwise.  InterlockedCompareExchange64
-                // exists but requires the buffer to be typed as uint64_t (not double),
-                // which would need a different buffer declaration and load/store rewrites.
-                // Until that refactor is done, reject this at compile time.
                 user_assert(false)
                     << "D3D12Compute: float64 atomic add is not supported in HLSL. "
-                    << "HLSL has no InterlockedCompareExchangeDoubleBitwise; "
-                    << "InterlockedCompareExchange64 requires a uint64_t-typed UAV, not RWBuffer<double>.\n";
+                    << "HLSL has no InterlockedCompareExchangeDoubleBitwise.\n";
             } else if (is_atomic_add) {
                 user_assert(false)
                     << "D3D12Compute: float atomic add requires SM 6.6+ "
@@ -1061,6 +1233,78 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
             // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here
             promotion_str = hlsl_reinterpret_name(promoted_type);
         }
+    }
+
+    // 64-bit UAV buffer stores: the RWBuffer is declared as uint with 2x elements.
+    // Each logical 64-bit element at index i maps to buf[2*i] (lo) and buf[2*i+1] (hi).
+    // This only applies to kernel buffer args (UAVs), not groupshared or local arrays.
+    bool is_64bit_uav = uav_buffer_args.contains(op->name) &&
+                        is_buffer_64bit(value_type);
+
+    if (is_64bit_uav) {
+        string buf = print_name(op->name);
+        Type elem_type = value_type.element_of();
+
+        // Helper lambda: emit statements that pack a 64-bit scalar value
+        // into two consecutive uint elements at the given base index.
+        auto emit_64bit_pack = [&](const string &base_idx, const string &val_expr) {
+            if (elem_type.is_float()) {
+                // asuint(double_val, out_lo, out_hi)
+                string lo = unique_name("_lo");
+                string hi = unique_name("_hi");
+                stream << get_indent() << "uint " << lo << ", " << hi << ";\n";
+                stream << get_indent() << "asuint(" << val_expr << ", " << lo << ", " << hi << ");\n";
+                stream << get_indent() << buf << "[" << base_idx << "] = " << lo << ";\n";
+                stream << get_indent() << buf << "[" << base_idx << " + 1] = " << hi << ";\n";
+            } else {
+                // int64_t or uint64_t: split into lo/hi uint words
+                string u64_expr = val_expr;
+                if (elem_type.is_int()) {
+                    u64_expr = "(uint64_t)(" + val_expr + ")";
+                }
+                stream << get_indent() << buf << "[" << base_idx << "] = (uint)("
+                       << u64_expr << ");\n";
+                stream << get_indent() << buf << "[" << base_idx << " + 1] = (uint)("
+                       << u64_expr << " >> 32);\n";
+            }
+        };
+
+        string val_str = print_expr(op->value);
+
+        Expr ramp_base = is_ramp_one(op->index);
+        if (ramp_base.defined()) {
+            // Contiguous vector store: unroll lane by lane.
+            internal_assert(value_type.is_vector());
+            string base_expr = print_expr(ramp_base);
+            string base_var = unique_name("_64base");
+            stream << get_indent() << "uint " << base_var << " = 2 * (" << base_expr << ");\n";
+
+            for (int i = 0; i < value_type.lanes(); ++i) {
+                string slot = base_var + " + " + std::to_string(2 * i);
+                string lane_val = val_str + "[" + std::to_string(i) + "]";
+                emit_64bit_pack(slot, lane_val);
+            }
+        } else if (op->index.type().is_vector()) {
+            // Scatter: each lane has an independent index.
+            internal_assert(value_type.is_vector());
+            string idx_vec = print_expr(op->index);
+
+            for (int i = 0; i < value_type.lanes(); ++i) {
+                string lane_base = unique_name("_64idx");
+                stream << get_indent() << "uint " << lane_base
+                       << " = 2 * " << idx_vec << "[" << i << "];\n";
+                string lane_val = val_str + "[" + std::to_string(i) + "]";
+                emit_64bit_pack(lane_base, lane_val);
+            }
+        } else {
+            // Scalar store.
+            string idx = print_expr(op->index);
+            string base_var = unique_name("_64idx");
+            stream << get_indent() << "uint " << base_var << " = 2 * (" << idx << ");\n";
+            emit_64bit_pack(base_var, val_str);
+        }
+        cache.clear();
+        return;
     }
 
     // If we're writing a contiguous ramp, "unroll" the ramp into stores:
@@ -1584,9 +1828,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         // SM 5.1 only supports 32-bit types in groupshared memory; promote
         // sub-32-bit types and use bit reinterpretation on load/store.
         // SM 6.2+ supports 16-bit types natively — no promotion needed.
+        // Promote sub-32-bit types to 32-bit for SM < 6.2; 64-bit stays as-is.
         Type smem_type = op->type;
         if (sm < 62) {
-            smem_type = smem_type.with_bits(32);
+            smem_type = smem_type.with_bits(std::max((int)smem_type.bits(), 32));
         }
         stream << "groupshared"
                << " " << print_type(smem_type)
@@ -1754,10 +1999,18 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                        << " " << print_name(pname)
                        << " : register(u" << uav_index++ << ");\n";
             } else {
-                // HLSL typed buffers (RWBuffer) only support 32-bit element types
-                // (int/uint/float). The D3D12 runtime sets the correct DXGI format
-                // (e.g. R16_SINT) and the GPU handles 32↔16 bit conversion.
-                Type buf_type = arg.type.with_bits(std::max((int)arg.type.bits(), 32));
+                // HLSL typed buffers (RWBuffer) only support up-to 32-bit element
+                // types (int/uint/float). The D3D12 runtime sets the correct DXGI
+                // format (e.g. R16_SINT) and the GPU handles 32<->16 bit conversion.
+                // 64-bit types (double, int64_t, uint64_t) have no DXGI format;
+                // the runtime stores them as pairs of R32_UINT elements and the
+                // codegen emits asdouble/asuint pack/unpack on load/store.
+                Type buf_type;
+                if (is_buffer_64bit(arg.type)) {
+                    buf_type = UInt(32);  // RWBuffer<uint> with 2x element count
+                } else {
+                    buf_type = arg.type.with_bits(std::max((int)arg.type.bits(), 32));
+                }
                 stream << "RWBuffer"
                        << "<" << print_type(buf_type) << ">"
                        << " " << print_name(pname)
@@ -1766,6 +2019,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             Allocation alloc;
             alloc.type = arg.type;
             allocations.push(pname, alloc);
+            if (arg.is_buffer && arg.memory_type != MemoryType::GPUTexture) {
+                uav_buffer_args.push(pname);
+            }
         }
         if (has_scalars) {
             stream << "cbuffer " << name << "_uniforms : register(b0) {\n";
@@ -1813,9 +2069,15 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                     // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
                     // all buffers as UAVs since there is no way the runtime can know
                     // if a given halide_buffer_t is read-only (SRV) or read-write...
-                    // HLSL typed buffers only support 32-bit element types;
+                    // HLSL typed buffers only support up-to 32-bit element types;
                     // the DXGI format handles the actual element size.
-                    Type buf_type = arg.type.with_bits(std::max((int)arg.type.bits(), 32));
+                    // 64-bit types use RWBuffer<uint> with 2x elements (see DXC path).
+                    Type buf_type;
+                    if (is_buffer_64bit(arg.type)) {
+                        buf_type = UInt(32);
+                    } else {
+                        buf_type = arg.type.with_bits(std::max((int)arg.type.bits(), 32));
+                    }
                     stream << "RWBuffer"
                            << "<" << print_type(buf_type) << ">"
                            << " " << print_name(arg.name);
@@ -1823,6 +2085,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 Allocation alloc;
                 alloc.type = arg.type;
                 allocations.push(arg.name, alloc);
+                if (arg.memory_type != MemoryType::GPUTexture) {
+                    uav_buffer_args.push(arg.name);
+                }
             } else {
                 stream << "uniform"
                        << " " << print_type(arg.type)

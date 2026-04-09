@@ -24,14 +24,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // D3D12 typed buffers have no DXGI format for 64-bit element types.
-    bool no_64bit = t.has_feature(Target::D3D12Compute);
-
     std::vector<Type> type_vec;
     for (auto ty : {Int(8), Int(16), Int(32), Int(64),
                     UInt(8), UInt(16), UInt(32), UInt(64),
                     Float(32)}) {
-        if (no_64bit && ty.bits() == 64) continue;
+        if (!t.supports_type(ty)) continue;
         type_vec.push_back(ty);
     }
     const int n_types = (int)type_vec.size();
@@ -44,7 +41,7 @@ int main(int argc, char **argv) {
     Func out("out");
 
     Type result_type = UInt(64);
-    if (!t.supports_type(result_type) || no_64bit) {
+    if (!t.supports_type(result_type)) {
         result_type = UInt(32);
     }
     Expr e = cast(result_type, 0);
