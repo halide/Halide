@@ -87,6 +87,13 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (Internal::get_llvm_version() < 220 &&
+        target.has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
+               Internal::get_llvm_version());
+        return 0;
+    }
+
     // Set the target features to use for dumping to assembly
     target.set_features({Target::NoRuntime, Target::NoAsserts, Target::NoBoundsQuery});
 
