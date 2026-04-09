@@ -4172,7 +4172,16 @@ WEAK int halide_d3d12compute_wrap_buffer(void *user_context, struct halide_buffe
     sbuffer.type = d3d12_buffer::ReadWrite;
     sbuffer.state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
-    auto result = wrap_buffer(user_context, halide_buf, &sbuffer);
+    // Choose the correct device interface based on resource dimension:
+    // textures must use the image interface so that subsequent copy_to_host,
+    // copy_to_device, etc. take the texture code paths.
+    D3D12_RESOURCE_DESC rdesc = pResource->GetDesc();
+    halide_device_interface_t *dev_iface =
+        (rdesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+            ? &d3d12compute_device_interface
+            : &d3d12compute_image_device_interface;
+
+    auto result = wrap_buffer(user_context, halide_buf, &sbuffer, dev_iface);
     if (result) {
         return result;
     }
