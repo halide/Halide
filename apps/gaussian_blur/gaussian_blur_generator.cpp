@@ -37,15 +37,22 @@ Func direct_gaussian_blur(Func input, const Expr &sigma, const Expr &trunc, cons
 
     const int vec = target.natural_vector_size<float>();
 
-    blur_y_sum
-        .align_bounds(x, vec)
-        .store_at(tiles)
-        .compute_at(rows)
-        .vectorize(x, vec, TailStrategy::RoundUp)
-        .update()
-        .unroll(r, 2)
-        .reorder(x, r)
-        .vectorize(x, vec, TailStrategy::RoundUp);
+    if (target.has_gpu_feature()) {
+        blur_y.in()
+            .compute_root()
+            .never_partition(x, y)
+            .gpu_tile(x, y, xi, yi, 32, 8);
+    } else {
+        blur_y_sum
+            .align_bounds(x, vec)
+            .store_at(tiles)
+            .compute_at(rows)
+            .vectorize(x, vec, TailStrategy::RoundUp)
+            .update()
+            .unroll(r, 2)
+            .reorder(x, r)
+            .vectorize(x, vec, TailStrategy::RoundUp);
+    }
 
     return blur_x;
 }
@@ -70,11 +77,17 @@ public:
 
         const int tasks = 32;
 
-        output.compute_root()
-            .reorder(x, y)
-            .split(y, yo, yi, div_up(output.height(), tasks), TailStrategy::GuardWithIf)
-            .vectorize(x, vec)
-            .parallel(yo);
+        if (get_target().has_gpu_feature()) {
+            output.compute_root()
+                .never_partition(x, y)
+                .gpu_tile(x, y, xi, yi, 32, 8);
+        } else {
+            output.compute_root()
+                .reorder(x, y)
+                .split(y, yo, yi, div_up(output.height(), tasks), TailStrategy::GuardWithIf)
+                .vectorize(x, vec)
+                .parallel(yo);
+        }
 
         tiles.set({Func{output}, yo});
         rows.set({Func{output}, yi});
@@ -105,7 +118,7 @@ public:
         box(x) = select(x >= 0 && x < factor, 1.0f / factor, 0.f);
         Func kernel = box;
         for (int i = 1; i < order; i++) {
-            Func next;
+            Func next{"kernel_" + std::to_string(i)};
             next(x) = sum(kernel(x - r_box) * box(r_box));
             kernel = next;
             kernel.compute_root();
@@ -117,6 +130,12 @@ public:
             next(x) = (kernel(x) + kernel(x - 1)) * 0.5f;
             kernel = next;
             kernel.compute_root();
+        }
+        if (order > 1) {
+            // Just compute it now and embed it as constant data
+            Buffer<float> k = kernel.realize({factor * order});
+            kernel = Func{};
+            kernel(x) = k(x);
         }
         // Compute the variance of the downsampling/upsampling kernel. It's
         // 'order' discrete box distributions.
@@ -186,88 +205,126 @@ public:
 
         const int tasks = 32;
 
-        if (false) {
-            // One pass - lots of redundant recompute on the
-            // downsample. Generally slower.
+        if (get_target().has_gpu_feature()) {
+            // GPU schedule
+
+            Var xii{"xii"}, yii{"yii"};
+
+            output.compute_root()
+                .never_partition(x, y)
+                .align_bounds(x, factor)
+                .align_bounds(y, factor)
+                .gpu_tile(x, y, xi, yi, 32 * factor, 2 * factor, TailStrategy::GuardWithIf)
+                .tile(xi, yi, xi, yi, xii, yii, factor, factor)
+                .vectorize(xii)
+                .unroll(yii);
+
+            blurred.in()
+                .compute_root()
+                .never_partition(x, y)
+                .gpu_tile(x, y, xi, yi, 32, 1);
+
             down_x.in()
-                .store_at(tiles)
-                .compute_at(rows)
-                .vectorize(x, vec, TailStrategy::RoundUp)
-                .split(Var::outermost(), Var::outermost(), yo, 1)
-                .rename(y, yi);
+                .compute_root()
+                .never_partition(x, y)
+                .gpu_tile(x, y, xi, yi, 32, 1);
+
+            down_y.in()
+                .compute_at(down_x.in(), x)
+                .split(x, x, xi, 32, TailStrategy::GuardWithIf)
+                .gpu_threads(xi, y);
+
+            down_y_phases.update().unroll(rf);
+            down_y.update().unroll(rp);
+            down_x.update().unroll(rx);
 
         } else {
-            // Two-pass. Less redundant recompute, more thread pool overhead.
-            Expr strip = div_up(div_up(output.height(), factor) + upsample_order, tasks);
+
+            // CPU schedule
+
+            if (false) {
+                // One pass - lots of redundant recompute on the
+                // downsample. Generally slower.
+                down_x.in()
+                    .store_at(tiles)
+                    .compute_at(rows)
+                    .vectorize(x, vec, TailStrategy::RoundUp)
+                    .split(Var::outermost(), Var::outermost(), yo, 1)
+                    .rename(y, yi);
+
+            } else {
+                // Two-pass. Less redundant recompute, more thread pool overhead.
+                Expr strip = div_up(div_up(output.height(), factor) + upsample_order, tasks);
+                down_x
+                    .in()
+                    .compute_root()
+                    .split(y, yo, yi, strip, TailStrategy::GuardWithIf)
+                    .vectorize(x, vec * 2, TailStrategy::RoundUp)
+                    .parallel(yo);
+            }
+
+            clamped_x
+                .compute_at(down_x.in(), x)
+                .vectorize(x, vec);
+
+            RVar rxo, rxi;
             down_x
-                .in()
-                .compute_root()
-                .split(y, yo, yi, strip, TailStrategy::GuardWithIf)
-                .vectorize(x, vec * 2, TailStrategy::RoundUp)
+                .compute_at(down_x.in(), x)
+                .vectorize(x)
+                .update()
+                .split(rx, rxo, rxi, factor)
+                .unroll(rxo)
+                .vectorize(x)
+                .atomic()
+                .vectorize(rxi);
+
+            down_y.update().unroll(rp);
+
+            down_y_phases.in()
+                .store_at(down_x.in(), yo)
+                .compute_at(down_x.in(), yi)
+                .reorder(p, x, y)
+                .unroll(p)
+                .vectorize(x, vec, TailStrategy::RoundUp)
+                .fold_storage(y, downsample_order);
+
+            down_y_phases
+                .compute_at(down_y_phases.in(), x)
+                .unroll(p)
+                .vectorize(x)
+                .update()
+                .reorder(p, x, rf, y)
+                .vectorize(x)
+                .unroll(rf)
+                .unroll(p);
+
+            blurred
+                .store_in(MemoryType::Stack)
+                .compute_at(rows)
+                .vectorize(x, vec * 2, TailStrategy::RoundUp);
+
+            tiles.set({Func{up_x}, y});
+            rows.set({Func{up_x}, y});
+
+            up_x.store_at(output, yo)
+                .compute_at(output, yi)
+                .align_bounds(x, vec * factor)
+                .vectorize(x, vec * factor, TailStrategy::RoundUp);
+
+            Expr rows_at_a_time = std::min((int)factor, 8);
+            Expr slice = div_up(output.height(), tasks);
+            slice = align_up(slice, rows_at_a_time);
+
+            output
+                .never_partition(y)
+                .align_bounds(y, rows_at_a_time)
+                .split(y, yo, yi, slice, TailStrategy::ShiftInwards)
+                .reorder(yi, x)
+                .unroll(yi, rows_at_a_time)
+                .reorder(x, yi)
+                .vectorize(x, vec * 2)
                 .parallel(yo);
         }
-
-        clamped_x
-            .compute_at(down_x.in(), x)
-            .vectorize(x, vec);
-
-        RVar rxo, rxi;
-        down_x
-            .compute_at(down_x.in(), x)
-            .vectorize(x)
-            .update()
-            .split(rx, rxo, rxi, factor)
-            .unroll(rxo)
-            .vectorize(x)
-            .atomic()
-            .vectorize(rxi);
-
-        down_y.update().unroll(rp);
-
-        down_y_phases.in()
-            .store_at(down_x.in(), yo)
-            .compute_at(down_x.in(), yi)
-            .reorder(p, x, y)
-            .unroll(p)
-            .vectorize(x, vec, TailStrategy::RoundUp)
-            .fold_storage(y, downsample_order);
-
-        down_y_phases
-            .compute_at(down_y_phases.in(), x)
-            .unroll(p)
-            .vectorize(x)
-            .update()
-            .reorder(p, x, rf, y)
-            .vectorize(x)
-            .unroll(rf)
-            .unroll(p);
-
-        blurred
-            .store_in(MemoryType::Stack)
-            .compute_at(rows)
-            .vectorize(x, vec * 2, TailStrategy::RoundUp);
-
-        tiles.set({Func{up_x}, y});
-        rows.set({Func{up_x}, y});  // was output yi
-
-        up_x.store_at(output, yo)
-            .compute_at(output, yi)  // was rows
-            .align_bounds(x, vec * factor)
-            .vectorize(x, vec * factor, TailStrategy::RoundUp);
-
-        Expr rows_at_a_time = std::min((int)factor, 8);
-        Expr slice = div_up(output.height(), tasks);
-        slice = align_up(slice, rows_at_a_time);
-
-        output
-            .never_partition(y)
-            .align_bounds(y, rows_at_a_time)
-            .split(y, yo, yi, slice, TailStrategy::ShiftInwards)
-            .reorder(yi, x)
-            .unroll(yi, rows_at_a_time)
-            .reorder(x, yi)
-            .vectorize(x, vec * 2)
-            .parallel(yo);
 
         output.set_host_alignment(64);
         output.dim(1).set_min(0);

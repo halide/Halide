@@ -6,20 +6,22 @@ $(GENERATOR_BIN)/gaussian_blur.generator: gaussian_blur_generator.cpp $(GENERATO
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
-LIBS := $(BIN)/%/gaussian_blur_direct.a $(BIN)/%/runtime.a
+LIBS := $(BIN)/%/gaussian_blur_direct.a
 HEADERS := gaussian_blur_direct.h
 define GAUSSIAN_BLUR
 LIBS += $(BIN)/%/gaussian_blur_$(1)_$(2)_$(3).a
 HEADERS += gaussian_blur_$(1)_$(2)_$(3).h
 $(BIN)/%/gaussian_blur_$(1)_$(2)_$(3).a: $(GENERATOR_BIN)/gaussian_blur.generator
 	@mkdir -p $$(@D)
-	$$< -g gaussian_blur -f gaussian_blur_$(1)_$(2)_$(3) -e $(GENERATOR_OUTPUTS),stmt_html -o $(BIN)/$$* target=$$*-no_runtime upsample_order=$(1) downsample_order=$(2) factor=$(3)
+	$$< -g gaussian_blur -f gaussian_blur_$(1)_$(2)_$(3) -e $(GENERATOR_OUTPUTS),conceptual_stmt_html -o $(BIN)/$$* target=$$*-no_runtime upsample_order=$(1) downsample_order=$(2) factor=$(3)
 endef
 
 $(foreach upsample_order,2 3 4, \
 $(foreach downsample_order,1 2 3, \
 $(foreach factor,2 4 8 16, \
 $(eval $(call GAUSSIAN_BLUR,$(upsample_order),$(downsample_order),$(factor))))))
+
+LIBS += $(BIN)/%/runtime.a
 
 # combined header
 $(BIN)/%/blurs.h: 
@@ -28,7 +30,7 @@ $(BIN)/%/blurs.h:
 
 $(BIN)/%/gaussian_blur_direct.a: $(GENERATOR_BIN)/gaussian_blur.generator
 	@mkdir -p $(@D)
-	$< -g gaussian_blur_direct -f gaussian_blur_direct -e $(GENERATOR_OUTPUTS),stmt_html -o $(BIN)/$* target=$*-no_runtime
+	$< -g gaussian_blur_direct -f gaussian_blur_direct -e $(GENERATOR_OUTPUTS),conceptual_stmt_html -o $(BIN)/$* target=$*-no_runtime
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/gaussian_blur.generator 
 	@mkdir -p $(@D)

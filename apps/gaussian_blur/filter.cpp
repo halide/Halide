@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <iostream>
 #include <thread>
 
@@ -21,89 +22,134 @@
 using namespace Halide::Tools;
 using namespace Halide::Runtime;
 
-// An openmp-based do-par-for, for comparing the Halide thread pool to a simple
-// static partition with openmp.
-#ifdef _OPENMP
-int static_do_par_for(void *user_context, halide_task_t f, int min, int extent, uint8_t *closure) {
-#pragma omp parallel for schedule(static)
-    for (int i = min; i < min + extent; i++) {
-        f(user_context, i, closure);
-    }
-    return 0;
-}
+// The built-in Halide thread pool is terrible for this app because there are
+// few tasks and they are very small. The workers serialize fighting over access
+// to the task queue. Here we define a custom thread pool for this app. Work is
+// statically partitioned. Threads are assigned work by the main thread by
+// setting some per-thread fields protected by atomics. Workers access minimal
+// shared state, and workers never sleep. You absolutely wouldn't want to use
+// this thread pool in production, because it soaks up all available CPU cycles
+// whether or not Halide code is running, and static partitioning of work is not
+// very robust to things like big.little systems. However, it's good for
+// comparing blur configurations without just measuring thread-pool overhead.
+struct LockFreeThreadPool {
+    // The number of work items done on the current job (we do not support
+    // nested parallelism).
+    std::atomic<int> completed{0};
+
+    // A flag to tell the workers to terminate
+    std::atomic<bool> shutdown{false};
+
+    static inline void pause() {
+#if defined(__i386__) || defined(__x86_64__)
+        asm volatile("pause" ::: "memory");
+#elif defined(__aarch64__) || defined(__arm__)
+        asm volatile("yield" ::: "memory");
 #endif
+    }
 
-std::atomic<int> pending{0};
-std::atomic<bool> shutdown{false};
-struct worker {
-    std::thread thread;
-    halide_task_t task = nullptr;
-    int first = 0;
-    int last = 0;
-    uint8_t *closure = nullptr;
+    // A worker thread
+    struct Worker {
+        LockFreeThreadPool *pool = nullptr;
+        std::thread thread;
 
-    // When go is false, the main thread is messing with the fields above. When
-    // go is true, they are frozen.
-    std::atomic<bool> go{false};
+        // When go is false, the main thread is messing with the fields below. When
+        // go is true, they are frozen.
+        std::atomic<bool> go{false};
 
-    void run() {
-        while (!shutdown.load()) {
-            if (!go.load()) continue;
-            for (int i = first; i < last; i++) {
-                task(nullptr, i, closure);
-                pending--;
+        // The task to perform, and which loop iterations this thread is
+        // responsible for.
+        halide_task_t task = nullptr;
+        int first = 0, last = 0;
+        uint8_t *closure = nullptr;
+
+        void run() {
+            auto *s = &(pool->shutdown);
+            auto *c = &(pool->completed);
+            while (!s->load(std::memory_order_relaxed)) {
+                if (!go.load(std::memory_order_acquire)) {
+                    pause();
+                    continue;
+                }
+                for (int i = first; i < last; i++) {
+                    task(nullptr, i, closure);
+                }
+                c->fetch_add(last - first, std::memory_order_release);
+                go.store(false, std::memory_order_release);
             }
-            go.store(false);
+        }
+
+        Worker(LockFreeThreadPool *p, int i) : pool(p), thread([=]() { run(); }) {
+        }
+    };
+
+    // Use a deque rather than a std::vector, because a worker contains an atomic
+    // field and you can't just move those around in memory. A deque keeps things at
+    // the same address.
+    std::deque<Worker> workers;
+
+    LockFreeThreadPool() {
+        // We want to use however many worker threads Halide would, so run a trivial
+        // for loop and check how many it decided to use.
+        halide_default_do_par_for(nullptr, [](void *, int, uint8_t *) { return 0; }, 0, 256, nullptr);
+        int num_workers = halide_get_num_threads() - 1;  // -1 because the main thread will also work
+        for (int i = 0; i < num_workers; i++) {
+            workers.emplace_back(this, i);
         }
     }
 
-    worker(int i) : thread([=]() { run(); }) {
+    void terminate() {
+        shutdown.store(true);
+        for (auto &w : workers) {
+            w.thread.join();
+        }
+        workers.clear();
     }
-};
 
-// Use a deque rather than a std::vector, because a worker contains an atomic
-// field and you can't just move those around in memory. A deque keeps things at
-// the same address.
-std::deque<worker> workers;
+    ~LockFreeThreadPool() {
+        terminate();
+    }
 
-void init_thread_pool() {
-    // We want to use however many worker threads Halide would, so run a trivial
-    // for loop and check how many it decided to use.
-    halide_default_do_par_for(nullptr, [](void *, int, uint8_t *) { return 0; }, 0, 256, nullptr);
-    int num_workers = halide_get_num_threads() - 1;  // -1 because the main thread will also work
-    printf("%d worker threads\n", num_workers);
-    for (int i = 0; i < num_workers; i++) {
-        workers.emplace_back(i);
-    }
-}
+    int do_par_for(void *user_context, halide_task_t f, int min, int extent, uint8_t *closure) {
+        int num_workers = (int)workers.size();
 
-void shutdown_thread_pool() {
-    shutdown.store(true);
-    for (auto &w : workers) {
-        w.thread.join();
-    }
-}
+        // Decide how many tasks each worker will perform, accounting for the
+        // fact that this thread will also work.
+        int tasks_per_worker = (extent + num_workers) / (num_workers + 1);
 
-int lock_free_do_par_for(void *user_context, halide_task_t f, int min, int extent, uint8_t *closure) {
-    int num_workers = (int)workers.size();
-    int tasks_per_worker = (extent + num_workers) / (num_workers + 1);
-    pending.store(extent - tasks_per_worker);
-    for (int w = 0, i = tasks_per_worker; w < num_workers; w++, i += tasks_per_worker) {
-        auto &worker = workers[w];
-        while (worker.go.load() == true) {}
-        worker.task = f;
-        worker.first = min + i;
-        worker.last = std::min(worker.first + tasks_per_worker, min + extent);
-        worker.closure = closure;
-        worker.go.store(true);
+        completed.store(0);
+        int i = 0;
+        int worker_tasks = 0;
+        for (int w = 0; w < num_workers; w++, i += tasks_per_worker) {
+            auto &worker = workers[w];
+            // Wait for the worker to be idle.
+            while (worker.go.load(std::memory_order_acquire) == true) {
+                pause();
+            }
+            // Set the task for it to perform.
+            worker.task = f;
+            worker.first = min + i;
+            worker.last = std::min(worker.first + tasks_per_worker, min + extent);
+            worker.closure = closure;
+            // Release it to work.
+            if (worker.last > worker.first) {
+                worker_tasks += worker.last - worker.first;
+                worker.go.store(true, std::memory_order_release);
+            } else {
+                break;
+            }
+        }
+        // Do the rest of the work myself.
+        for (; i < extent; i++) {
+            f(user_context, min + i, closure);
+        }
+        // Wait for the workers to finish.
+        while (completed.load() < worker_tasks) {
+            pause();
+        }
+        return 0;
     }
-    for (int i = 0; i < tasks_per_worker; i++) {
-        f(nullptr, min + i, closure);
-    }
-    while (pending.load() > 0) {
-    }
-    return 0;
-}
+} *global_thread_pool = nullptr;
 
 double compute_PSNR(const Buffer<float> &a, const Buffer<float> &b) {
     double err = 0;
@@ -136,27 +182,33 @@ int main(int argc, char **argv) {
     Buffer<float> resample_output(input.width(), input.height());
     direct_output.fill(0);
     resample_output.fill(0);
-
-    // Enable to use openmp instead of Halide's built-in threadpool
-#ifdef _OPENMP
-    if (false) {
-        halide_set_custom_do_par_for(static_do_par_for);
-    }
-#endif
-
-    halide_set_custom_do_par_for(lock_free_do_par_for);
-    init_thread_pool();
-
-    // Convert from seconds to rounded microseconds
-    auto to_us = [](double seconds) {
-        return (int)std::round(seconds * 1e6);
-    };
+    reference_output.fill(0);
 
     std::map<std::tuple<int, int, int>, decltype(&gaussian_blur_direct)> fns = {
 #define REG(U, D, F) {{F, U, D}, &gaussian_blur_##U##_##D##_##F},
 #define REG1(U, D) FOR_ALL_FACTORS(U, D, REG)
 #define REG2(U) FOR_ALL_DOWNSAMPLE_ORDERS(U, REG1)
         FOR_ALL_UPSAMPLE_ORDERS(REG2)};
+
+    /*
+    for (int i = 0; i < 1; i++) {
+        fns[{4, 3, 3}](input, sigma, 8, resample_output);
+        resample_output.device_sync();
+    }
+    return 0;
+    */
+
+    // TODO: Don't make the thread pool if we're using the cuda schedule
+    LockFreeThreadPool pool;
+    global_thread_pool = &pool;
+    halide_set_custom_do_par_for([](void *user_context, halide_task_t f, int min, int extent, uint8_t *closure) {
+        return global_thread_pool->do_par_for(user_context, f, min, extent, closure);
+    });
+
+    // Convert from seconds to rounded microseconds
+    auto to_us = [](double seconds) {
+        return (int)std::round(seconds * 1e6);
+    };
 
     // Benchmark memcpy run using the same thread pool, to get a sense of where
     // the memory bandwidth limit is.
@@ -185,67 +237,48 @@ int main(int argc, char **argv) {
         double PSNR;
     };
 
-    Buffer<float> impulse(2048, 16), impulse_response(2048, 16);
-    impulse.fill(0.f);
-    for (int i = 0; i < 16; i++) {
-        impulse(1024 - i, i) = 1.f;
-    }
-
     // Go out to 8 * sigma on each side for ground truth.
     gaussian_blur_direct(input, sigma, 8, reference_output);
 
-    // Ground truth impulse response
-    for (int i = 0; i < impulse.height(); i++) {
-        gaussian_blur_direct(impulse.cropped(1, i, 1),
-                             sigma, 8,
-                             impulse_response.cropped(1, i, 1));
-        std::string filename = ("impulse_response_" +
-                                std::to_string(sigma) + ".tiff");
-        auto sheared = impulse_response;
-        sheared.raw_buffer()->dim[1].stride--;
-        sheared.crop(0, 1024 - 4 * sigma, 8 * sigma);
-        save_image(sheared, filename.c_str());
+    if (reference_output.device_dirty()) {
+        reference_output.copy_to_host();
+        // We're comparing GPU kernels. Turn off the CPU thread-pool.
+        halide_set_custom_do_par_for(halide_default_do_par_for);
+        pool.terminate();
     }
 
+    // Direct blur, truncated at various sigma
     std::vector<Result> results;
     for (int trunc : {3, 4, 5}) {
         double direct_time = benchmark([&]() {
-            direct_output.device_sync();
             gaussian_blur_direct(input, sigma, trunc, direct_output);
+            direct_output.device_sync();
         });
+        direct_output.copy_to_host();
         double PSNR = compute_PSNR(direct_output, reference_output);
         printf("Direct (sigma=%s, radius=%d): %d us %g db\n", sigma_str,
                (int)std::ceilf(trunc * sigma), to_us(direct_time), PSNR);
         results.emplace_back(Result{"Direct " + std::to_string(trunc) + " sigma", direct_time, PSNR});
     }
+    // If profiling, we're going to report as we go, rather than once at the
+    // end.
+    halide_profiler_report(nullptr);
+    halide_profiler_reset();
 
+    // Resampling-base blur
     for (const auto &[config, fn] : fns) {
+        const int factor = std::get<0>(config);
         const int up_order = std::get<1>(config);
         const int down_order = std::get<2>(config);
-        const int factor = std::get<0>(config);
 
-        // The variance of one of our resampling filters
-        auto var = [=](int o) {
-            // Our resampling filters are o boxes of size f, and o - 1 [1 1]
-            // filters to pad out to o * f.
-            return o * ((float)factor * factor - 1) / 12 + (o - 1) / 4.0f;
-        };
-        double variance_from_resampling = var(up_order) + var(down_order);
-        if (variance_from_resampling >= sigma * sigma) {
-            // It's resampling by too much to hit the desired blur
-            continue;
-        }
-
-        // If we're profiling, we'd prefer to profile as we go,
-        // rather than once at the end.
-        halide_profiler_reset();
-
+        // Capturing a structured binding in a lambda is a C++20 extension.
         auto f = fn;
-        
         double resample_time = benchmark([&]() {
             f(input, sigma, 5, resample_output);
             resample_output.device_sync();
         });
+
+        resample_output.copy_to_host();
 
         // Enable to inspect output
         if (false) {
@@ -255,33 +288,6 @@ int main(int argc, char **argv) {
 
         double PSNR = compute_PSNR(resample_output, reference_output);
 
-        // Enable to dump impulse responses for inspection
-        if (false) {
-            for (int i = 0; i < impulse.height(); i++) {
-                auto impulse_slice = impulse.cropped(1, i, 1);
-                auto response_slice = impulse_response.cropped(1, i, 1);
-                // Broadcast it vertically by enough to satisfy the schedule's requirements
-                impulse_slice.raw_buffer()->dim[1].min = 0;
-                impulse_slice.raw_buffer()->dim[1].stride = 0;
-                impulse_slice.raw_buffer()->dim[1].extent = 16;
-                response_slice.raw_buffer()->dim[1].min = 0;
-                response_slice.raw_buffer()->dim[1].stride = 0;
-                response_slice.raw_buffer()->dim[1].extent = 16;
-                fns[{up_order, down_order, factor}](impulse_slice,
-                                                    sigma, 5,
-                                                    response_slice);
-            }
-            std::string filename = ("impulse_response_" +
-                                    std::to_string(sigma) + "_" +
-                                    std::to_string(up_order) + "_" +
-                                    std::to_string(down_order) + "_" +
-                                    std::to_string(factor) + ".tiff");
-            auto sheared = impulse_response;
-            sheared.raw_buffer()->dim[1].stride--;
-            sheared.crop(0, 1024 - 4 * sigma, 8 * sigma);
-            save_image(sheared, filename.c_str());
-        }
-
         printf("Approx (sigma=%s up_order=%d down_order=%d factor=%d): %d us %g db\n",
                sigma_str, up_order, down_order, factor, to_us(resample_time), PSNR);
         results.emplace_back(
@@ -290,19 +296,16 @@ int main(int argc, char **argv) {
                     " factor=" + std::to_string(factor)),
                    resample_time,
                    PSNR});
+
         halide_profiler_report(nullptr);
+        halide_profiler_reset();
     }
 
     // Print the pareto-dominant options.
 
-    // In theory, quantization to 16-bit produces a psnr of ~100, and
-    // quantization to 8-bit produces a PSNR of ~60. We'll consider anything
-    // above that upper limit good, and anything below the lower limit
-    // unacceptable.
-
-    // The expected error from quantization is half a level, making
-    // theoretical PSNR easy to compute:
-    double min_PSNR = -20 * log10(0.5 / 255.0);
+    // For reference, quantization to 16-bit produces a psnr of ~100, and
+    // quantization to 8-bit produces a PSNR of ~60. So anything above 100 is
+    // overkill, and anything below 60 probably isn't good enough.
 
     printf("-------------------------------------\n");
     printf("Pareto-dominant options for sigma=%s:\n", sigma_str);
@@ -312,9 +315,6 @@ int main(int argc, char **argv) {
     });
     double best_time = 1e9;
     for (const Result &r : results) {
-        if (r.PSNR < min_PSNR) {
-            break;
-        }
         // PSNR is getting worse as we iterate, so the Pareto-dominant
         // options are the ones that are the fastest seen.
         if (r.time < best_time) {
@@ -323,8 +323,6 @@ int main(int argc, char **argv) {
         }
     }
     printf("-------------------------------------\n");
-
-    shutdown_thread_pool();
 
     return 0;
 }
