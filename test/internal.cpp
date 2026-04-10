@@ -9,7 +9,6 @@
 #include "Generator.h"
 #include "IR.h"
 #include "IREquality.h"
-#include "IRGraphCXXPrinter.h"
 #include "IRMatch.h"
 #include "IRPrinter.h"
 #include "Interval.h"
@@ -25,7 +24,6 @@ using namespace Halide::Internal;
 
 int main(int argc, const char **argv) {
     IRPrinter::test();
-    IRGraphCXXPrinter::test();
     CodeGen_C::test();
     ir_equality_test();
     bounds_test();

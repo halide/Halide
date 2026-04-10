@@ -1,11 +1,5 @@
 #include "IRGraphCXXPrinter.h"
 
-#include "Expr.h"
-#include "Function.h"
-#include "IR.h"
-#include "IREquality.h"
-#include "IROperator.h"
-
 #include <sstream>
 
 namespace Halide {

@@ -6,9 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "Expr.h"
-#include "IR.h"
-#include "IRVisitor.h"
+#include <Halide.h>
 
 namespace Halide {
 namespace Internal {

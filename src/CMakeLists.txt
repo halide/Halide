@@ -139,7 +139,6 @@ target_sources(
     IntrusivePtr.h
     IR.h
     IREquality.h
-    IRGraphCXXPrinter.h
     IRMatch.h
     IRMutator.h
     IROperator.h
@@ -319,7 +318,6 @@ target_sources(
     Interval.cpp
     IR.cpp
     IREquality.cpp
-    IRGraphCXXPrinter.cpp
     IRMatch.cpp
     IRMutator.cpp
     IROperator.cpp

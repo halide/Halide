@@ -36,19 +36,23 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, std::size_t Size) {
 }
 ]] HAVE_LIBFUZZER_FLAGS)
 
-add_library(Halide_fuzz INTERFACE)
+add_library(Halide_fuzz OBJECT)
 add_library(Halide::fuzz ALIAS Halide_fuzz)
+
+target_sources(Halide_fuzz PRIVATE IRGraphCXXPrinter.cpp)
+target_link_libraries(Halide_fuzz PRIVATE Halide::Test)
 
 if (NOT HAVE_LIBFUZZER_FLAGS)
     if (LIB_FUZZING_ENGINE)
         message(FATAL_ERROR "Cannot set LIB_FUZZING_ENGINE when not building with -fsanitize=fuzzer or a compatible fuzzing engine.")
     endif ()
-    target_sources(Halide_fuzz INTERFACE halide_fuzz_main.cpp halide_fuzz_main.h)
-    target_compile_definitions(Halide_fuzz INTERFACE HALIDE_FUZZER_BACKEND=HALIDE_FUZZER_BACKEND_STDLIB)
+    target_sources(Halide_fuzz PRIVATE halide_fuzz_main.cpp halide_fuzz_main.h)
+    target_compile_definitions(Halide_fuzz PUBLIC HALIDE_FUZZER_BACKEND=HALIDE_FUZZER_BACKEND_STDLIB)
 else ()
-    target_link_libraries(Halide_fuzz INTERFACE ${LIB_FUZZING_ENGINE})
-    target_compile_definitions(Halide_fuzz INTERFACE HALIDE_FUZZER_BACKEND=HALIDE_FUZZER_BACKEND_LIBFUZZER)
+    target_link_libraries(Halide_fuzz PUBLIC ${LIB_FUZZING_ENGINE})
+    target_compile_definitions(Halide_fuzz PUBLIC HALIDE_FUZZER_BACKEND=HALIDE_FUZZER_BACKEND_LIBFUZZER)
 endif ()
+
 
 foreach (fuzzer IN LISTS TEST_NAMES)
     target_link_libraries("${fuzzer}" PRIVATE Halide::fuzz)
