@@ -40,7 +40,7 @@ std::ostream &operator<<(std::ostream &o, const ExprInterpreter::EvalValue &val)
 bool ExprInterpreter::EvalValue::is_close(const ExprInterpreter::EvalValue &o, double threshold) const {
     internal_assert(type.is_float());
     internal_assert(type == o.type);
-    for (int i = 0; i < lanes.size(); ++i) {
+    for (size_t i = 0; i < lanes.size(); ++i) {
         if (std::abs(std::get<double>(lanes[i]) - std::get<double>(o.lanes[i])) > threshold) {
             return false;
         }
@@ -50,7 +50,7 @@ bool ExprInterpreter::EvalValue::is_close(const ExprInterpreter::EvalValue &o, d
 
 bool ExprInterpreter::EvalValue::operator==(const ExprInterpreter::EvalValue &o) const {
     internal_assert(type == o.type);
-    for (int i = 0; i < lanes.size(); ++i) {
+    for (size_t i = 0; i < lanes.size(); ++i) {
         bool equal = std::visit(
             [&](auto x) {
                 return x == std::get<std::decay_t<decltype(x)>>(o.lanes[i]);
@@ -156,7 +156,7 @@ ExprInterpreter::EvalValue ExprInterpreter::eval(const Expr &e) {
         return EvalValue();
     }
     e.accept(this);
-    internal_assert(result.lanes.size() == result.type.lanes());
+    internal_assert((int)result.lanes.size() == result.type.lanes());
     truncate(result);
     debug(2) << "Evaluated " << e << " to be " << result << "\n";
     return result;
@@ -692,24 +692,26 @@ void ExprInterpreter::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::shift_left)) {
         result = apply_binary<false>(op->type, args[0], args[1], [&op](auto a, auto b, bool &overflow) {
             if constexpr (std::is_integral_v<decltype(a)> && std::is_integral_v<decltype(b)>) {
-                if (has_undefined_overflow(op->type)) {
-                    internal_assert((std::is_same_v<decltype(a), int64_t>));
+                if constexpr (std::is_same_v<decltype(a), int64_t>) {
+                    if (has_undefined_overflow(op->type)) {
+                        internal_assert((std::is_same_v<decltype(a), int64_t>));
 
-                    int bits = op->type.bits();
-                    int64_t shift_amount = static_cast<int64_t>(b);
+                        int bits = op->type.bits();
+                        int64_t shift_amount = static_cast<int64_t>(b);
 
-                    // Shifting by a negative amount or >= the bit-width drops bits / triggers overflow
-                    if (shift_amount < 0 || shift_amount >= bits) {
-                        overflow = true;
-                    } else {
-                        // To avoid dropping the most significant bits (including the sign bit),
-                        // 'a' must be strictly bounded by [-2^(bits - 1 - b), 2^(bits - 1 - b) - 1].
-                        // We use 1ULL to prevent C++ UB when shifting into the sign bit.
-                        int64_t max_val = static_cast<int64_t>((1ULL << (bits - 1 - shift_amount)) - 1);
-                        int64_t min_val = -max_val - 1;
-
-                        if (a < min_val || a > max_val) {
+                        // Shifting by a negative amount or >= the bit-width drops bits / triggers overflow
+                        if (shift_amount < 0 || shift_amount >= bits) {
                             overflow = true;
+                        } else {
+                            // To avoid dropping the most significant bits (including the sign bit),
+                            // 'a' must be strictly bounded by [-2^(bits - 1 - b), 2^(bits - 1 - b) - 1].
+                            // We use 1ULL to prevent C++ UB when shifting into the sign bit.
+                            int64_t max_val = static_cast<int64_t>((1ULL << (bits - 1 - shift_amount)) - 1);
+                            int64_t min_val = -max_val - 1;
+
+                            if (a < min_val || a > max_val) {
+                                overflow = true;
+                            }
                         }
                     }
                 }
