@@ -181,21 +181,31 @@ int main(int argc, char **argv) {
         // vector predicate on one of the two vectors, to be sure the simplifier
         // is transforming the predicate correctly. We can't predicate both,
         // because the vectorizer can't handle it and generates a scalar tail.
+
         {
-            Func f{"f"}, g{"g"};
-            f(x, y) = x + 100 * y;
-            g(x, y) = f(y, x);
-            f.compute_root();
+            // LLVM 22/23 have a codegen bug for some x86 versions here, so skip with AVX512
+            // See: https://github.com/llvm/llvm-project/issues/191304
+            if (Internal::get_llvm_version() >= 220 &&
+                Internal::get_llvm_version() < 240 &&
+                get_jit_target_from_environment().has_feature(Target::AVX512)) {
+                printf("Skipping one subtest for LLVM %d with AVX-512 due to known backend bugs.\n",
+                       Internal::get_llvm_version());
+            } else {
+                Func f{"f"}, g{"g"};
+                f(x, y) = x + 100 * y;
+                g(x, y) = f(y, x);
+                f.compute_root();
 
-            g
-                .never_partition(x, y)
-                .split(x, x, xi, 13, TailStrategy::Predicate)
-                .split(y, y, yi, 11, TailStrategy::ShiftInwards)
-                .reorder(xi, yi, x, y)
-                .vectorize(xi)
-                .vectorize(yi);
+                g
+                    .never_partition(x, y)
+                    .split(x, x, xi, 13, TailStrategy::Predicate)
+                    .split(y, y, yi, 11, TailStrategy::ShiftInwards)
+                    .reorder(xi, yi, x, y)
+                    .vectorize(xi)
+                    .vectorize(yi);
 
-            check(g);
+                check(g);
+            }
         }
         {
             Func f{"f"}, g{"g"};
