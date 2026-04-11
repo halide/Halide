@@ -614,7 +614,7 @@ vector<Expr> substitute_self_reference(const vector<Expr> &values, const string 
     vector<Expr> result;
     result.reserve(values.size());
     for (const auto &val : values) {
-        result.push_back(subs.mutate(val));
+        result.push_back(subs(val));
     }
     return result;
 }

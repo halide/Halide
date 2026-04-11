@@ -51,7 +51,20 @@ add_tutorial(lesson_01_basics.cpp)
 add_tutorial(lesson_02_input_image.cpp WITH_IMAGE_IO)
 add_tutorial(lesson_03_debugging_1.cpp)
 add_tutorial(lesson_04_debugging_2.cpp GROUPS multithreaded)
-add_tutorial(lesson_05_scheduling_1.cpp GROUPS multithreaded)
+
+if (Halide_BUILDING_IN_CI AND
+    Halide_LLVM_VERSION VERSION_LESS 22 AND
+    Halide_HOST_TARGET MATCHES "arm-64-linux")
+    # We can't reliably detect SVE2 without having first built Halide, but the
+    # SVE2 backend has the below LLVM issue which has been fixed in LLVM 22.
+    # This issue breaks lesson 5 on the GitHub Actions ARM64 runners, which have
+    # SVE2 support.
+    # "Request for a fixed element count on a scalable object"
+    # See: https://github.com/llvm/llvm-project/issues/160127
+else ()
+    add_tutorial(lesson_05_scheduling_1.cpp GROUPS multithreaded)
+endif ()
+
 add_tutorial(lesson_06_realizing_over_shifted_domains.cpp)
 add_tutorial(lesson_07_multi_stage_pipelines.cpp WITH_IMAGE_IO)
 add_tutorial(lesson_08_scheduling_2.cpp WITH_IMAGE_IO WITH_OPENMP GROUPS multithreaded)

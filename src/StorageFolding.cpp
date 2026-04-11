@@ -691,8 +691,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                                               op->name,
                                               sema_var,
                                               dim,
-                                              storage_dim)
-                               .mutate(body);
+                                              storage_dim)(body);
 
                     if (storage_dim.fold_forward) {
                         can_fold_forwards = true;
@@ -791,7 +790,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 } else {
                     head = dynamic_footprint;
                 }
-                body = FoldStorageOfFunction(func.name(), (int)i - 1, factor, head).mutate(body);
+                body = FoldStorageOfFunction(func.name(), (int)i - 1, factor, head)(body);
             }
 
             // If the producer is async, it can run ahead by
@@ -961,7 +960,7 @@ class StorageFolding : public IRMutator {
         } else {
             debug(3) << "Attempting to fold " << op->name << " automatically or explicitly\n";
         }
-        body = folder.mutate(body);
+        body = folder(body);
 
         if (body.same_as(op->body)) {
             return op;
@@ -1034,8 +1033,8 @@ class RemoveSlidingWindowMarkers : public IRMutator {
 }  // namespace
 
 Stmt storage_folding(const Stmt &s, const std::map<std::string, Function> &env) {
-    Stmt stmt = StorageFolding(env).mutate(s);
-    stmt = RemoveSlidingWindowMarkers().mutate(stmt);
+    Stmt stmt = StorageFolding(env)(s);
+    stmt = RemoveSlidingWindowMarkers()(stmt);
     return stmt;
 }
 

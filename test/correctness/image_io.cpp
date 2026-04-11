@@ -278,7 +278,7 @@ int main(int argc, char **argv) {
     do_test<uint32_t>();
     do_test<uint64_t>();
     do_test<float>();
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
     do_test<_Float16>();
 #endif
     do_test<double>();

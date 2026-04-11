@@ -74,6 +74,17 @@ Expr element(FuncRef f, int i) {
 int main(int argc, char **argv) {
     Var x, y, c;
 
+    // SVE2 backend has the below LLVM issue which has been fixed in LLVM 22.
+    // "LLVM ERROR: Don't know how to widen the operands for INSERT_SUBVECTOR"
+    // https://github.com/llvm/llvm-project/issues/160134
+    // https://github.com/llvm/llvm-project/issues/169300
+    if (Internal::get_llvm_version() < 220 &&
+        get_jit_target_from_environment().has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
+               Internal::get_llvm_version());
+        return 0;
+    }
+
     // TODO: Is this still true?
     // As of May 26 2016, this test causes a segfault due to
     // permissions failure on ARM-32 trying to execute a

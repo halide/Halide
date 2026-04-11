@@ -102,32 +102,32 @@ struct ReductionDomainContents {
     }
 
     // Pass an IRVisitor through to all Exprs referenced in the ReductionDomainContents
-    void accept(IRVisitor *visitor) {
+    void accept(IRVisitor &visitor) {
         for (const ReductionVariable &rvar : domain) {
             if (rvar.min.defined()) {
-                rvar.min.accept(visitor);
+                visitor(rvar.min);
             }
             if (rvar.extent.defined()) {
-                rvar.extent.accept(visitor);
+                visitor(rvar.extent);
             }
         }
         if (predicate.defined()) {
-            predicate.accept(visitor);
+            visitor(predicate);
         }
     }
 
     // Pass an IRMutator through to all Exprs referenced in the ReductionDomainContents
-    void mutate(IRMutator *mutator) {
+    void mutate(IRMutator &mutator) {
         for (ReductionVariable &rvar : domain) {
             if (rvar.min.defined()) {
-                rvar.min = mutator->mutate(rvar.min);
+                rvar.min = mutator(rvar.min);
             }
             if (rvar.extent.defined()) {
-                rvar.extent = mutator->mutate(rvar.extent);
+                rvar.extent = mutator(rvar.extent);
             }
         }
         if (predicate.defined()) {
-            predicate = mutator->mutate(predicate);
+            predicate = mutator(predicate);
         }
     }
 };
@@ -196,7 +196,7 @@ public:
 void ReductionDomain::set_predicate(const Expr &p) {
     // The predicate can refer back to the RDom. We need to break
     // those cycles to prevent a leak.
-    contents->predicate = DropSelfReferences(p, *this).mutate(p);
+    contents->predicate = DropSelfReferences(p, *this)(p);
 }
 
 void ReductionDomain::where(Expr predicate) {
@@ -223,13 +223,13 @@ bool ReductionDomain::frozen() const {
 
 void ReductionDomain::accept(IRVisitor *visitor) const {
     if (contents.defined()) {
-        contents->accept(visitor);
+        contents->accept(*visitor);
     }
 }
 
 void ReductionDomain::mutate(IRMutator *mutator) {
     if (contents.defined()) {
-        contents->mutate(mutator);
+        contents->mutate(*mutator);
     }
 }
 

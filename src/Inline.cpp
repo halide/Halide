@@ -181,15 +181,13 @@ public:
     }
 };
 
-Stmt inline_function(Stmt s, const Function &f) {
-    Inliner i(f);
-    s = i.mutate(s);
-    return s;
+Stmt inline_function(const Stmt &s, const Function &f) {
+    return Inliner(f)(s);
 }
 
 Expr inline_function(Expr e, const Function &f) {
     Inliner i(f);
-    e = i.mutate(e);
+    e = i(e);
     // TODO: making this > 1 should be desirable,
     // but explodes compiletimes in some situations.
     if (i.found > 0) {

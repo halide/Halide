@@ -387,6 +387,8 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
 
     const auto &triple = llvm::Triple(module->getTargetTriple());
     pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(triple));
+    pass_manager.add(llvm::createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
+
 #if LLVM_VERSION >= 220
     pass_manager.add(new llvm::RuntimeLibraryInfoWrapper(
         module->getTargetTriple(), target_machine->Options.ExceptionModel,

@@ -1,11 +1,8 @@
-#include <map>
 #include <utility>
 
 #include "EarlyFree.h"
-#include "ExprUsesVar.h"
-#include "IREquality.h"
 #include "IRMutator.h"
-#include "InjectHostDevBufferCopies.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
@@ -159,7 +156,7 @@ class InjectEarlyFrees : public IRMutator {
             InjectMarker inject_marker;
             inject_marker.func = alloc->name;
             inject_marker.last_use = last_use.last_use;
-            stmt = inject_marker.mutate(stmt);
+            stmt = inject_marker(stmt);
         } else {
             stmt = Allocate::make(alloc->name, alloc->type, alloc->memory_type,
                                   alloc->extents, alloc->condition,
@@ -174,7 +171,7 @@ class InjectEarlyFrees : public IRMutator {
 
 Stmt inject_early_frees(const Stmt &s) {
     InjectEarlyFrees early_frees;
-    return early_frees.mutate(s);
+    return early_frees(s);
 }
 
 }  // namespace Internal

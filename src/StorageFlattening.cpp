@@ -414,7 +414,7 @@ public:
 };
 
 class HoistStorage : public IRMutator {
-
+protected:
     struct HoistedAllocationInfo {
         string name;
         Type type;
@@ -580,6 +580,7 @@ class HoistStorage : public IRMutator {
 // Realizations, stores, and loads must all be on types that are
 // multiples of 8-bits. This really only affects bools
 class PromoteToMemoryType : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Type upgrade(Type t) {
@@ -640,9 +641,9 @@ Stmt storage_flattening(Stmt s,
             tuple_env[p.first] = {p.second, 0};
         }
     }
-    s = FlattenDimensions(tuple_env, outputs, target).mutate(s);
-    s = HoistStorage().mutate(s);
-    s = PromoteToMemoryType().mutate(s);
+    s = FlattenDimensions(tuple_env, outputs, target)(s);
+    s = HoistStorage()(s);
+    s = PromoteToMemoryType()(s);
 
     return s;
 }
