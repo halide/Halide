@@ -137,7 +137,7 @@ ExprInterpreter::EvalValue ExprInterpreter::apply_cmp(Type t, const EvalValue &a
     internal_assert(a.type == b.type);
     for (int i = 0; i < t.lanes(); ++i) {
         res.lanes[i] = std::visit(
-            [&f, &t](auto x, auto y) -> Scalar {
+            [&f](auto x, auto y) -> Scalar {
                 if constexpr (std::is_same_v<decltype(x), decltype(y)>) {
                     static_assert(std::is_same_v<decltype(f(x, y)), bool>);
                     bool out = f(x, y);
