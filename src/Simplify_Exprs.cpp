@@ -147,8 +147,10 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
             rewrite(h_min(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
             rewrite(h_min(broadcast(x, c0), 1), h_min(x, 1)) ||
             rewrite(h_min(broadcast(x, c0), lanes), broadcast(h_min(x, lanes / c0), c0), lanes % c0 == 0) ||
-            rewrite(h_min(ramp(x, y, arg_lanes), 1), x + min(y * (arg_lanes - 1), 0)) ||
-            rewrite(h_min(ramp(x, y, arg_lanes), lanes), ramp(x + min(y * (factor - 1), 0), y * factor, lanes)) ||
+            rewrite(h_min(broadcast(x, c0), lanes), broadcast(h_min(x, 1), lanes), c0 % lanes == 0) ||
+            (no_overflow(op->type) &&
+             (rewrite(h_min(ramp(x, y, arg_lanes), 1), x + min(y * (arg_lanes - 1), 0)) ||
+              rewrite(h_min(ramp(x, y, arg_lanes), lanes), ramp(x + min(y * (factor - 1), 0), y * factor, lanes)))) ||
             false) {
             return mutate(rewrite.result, info);
         }
@@ -163,8 +165,10 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
             rewrite(h_max(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
             rewrite(h_max(broadcast(x, c0), 1), h_max(x, 1)) ||
             rewrite(h_max(broadcast(x, c0), lanes), broadcast(h_max(x, lanes / c0), c0), lanes % c0 == 0) ||
-            rewrite(h_max(ramp(x, y, arg_lanes), 1), x + max(y * (arg_lanes - 1), 0)) ||
-            rewrite(h_max(ramp(x, y, arg_lanes), lanes), ramp(x + max(y * (factor - 1), 0), y * factor, lanes)) ||
+            rewrite(h_max(broadcast(x, c0), lanes), broadcast(h_max(x, 1), lanes), c0 % lanes == 0) ||
+            (no_overflow(op->type) &&
+             (rewrite(h_max(ramp(x, y, arg_lanes), 1), x + max(y * (arg_lanes - 1), 0)) ||
+              rewrite(h_max(ramp(x, y, arg_lanes), lanes), ramp(x + max(y * (factor - 1), 0), y * factor, lanes)))) ||
             false) {
             return mutate(rewrite.result, info);
         }

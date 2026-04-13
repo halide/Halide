@@ -258,7 +258,7 @@ public:
                 return Cast::make(t, random_expr(subtype, depth, overflow_undef));
             });
         }
-        if (gen_reinterpret) {
+        if ((t.bits() * t.lanes() % 8 == 0) && gen_reinterpret) {
             // Reinterpret (different bit width, changes lane count)
             ops.push_back([&]() -> Expr {
                 int total_bits = t.bits() * t.lanes();
@@ -271,7 +271,7 @@ public:
                     }
                 }
                 // Should at least be able to preserve the existing bit width and change signedness.
-                internal_assert(!valid_widths.empty());
+                internal_assert(!valid_widths.empty()) << t;
                 int other_bits = fuzz.PickValueInVector(valid_widths);
                 int other_lanes = total_bits / other_bits;
                 Type other = (fuzz.ConsumeBool() ? Int(other_bits) : UInt(other_bits)).with_lanes(other_lanes);

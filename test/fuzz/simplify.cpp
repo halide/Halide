@@ -180,10 +180,6 @@ FUZZ_TEST(simplify, FuzzingContext &fuzz) {
     // FIXME: UInt64 fails!
     reg.fuzz_types = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
     // FIXME: These need to be disabled (otherwise crashes and/or failures):
-    // reg.gen_ramp_of_vector = false;
-    // reg.gen_broadcast_of_vector = false;
-    // reg.gen_vector_reduce = false;
-    reg.gen_reinterpret = false;
     reg.gen_shuffles = false;
 
     int width = fuzz.PickValueInArray({1, 2, 3, 4, 6, 8});
