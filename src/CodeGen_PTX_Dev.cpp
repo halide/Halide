@@ -83,7 +83,6 @@ protected:
     void codegen_vector_reduce(const VectorReduce *op, const Expr &init) override;
     // @}
 
-    std::string march() const;
     std::string mcpu_target() const override;
     std::string mcpu_tune() const override;
     std::string mattrs() const override;
@@ -549,10 +548,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         return;
     }
     CodeGen_LLVM::codegen_vector_reduce(op, init);
-}
-
-[[maybe_unused]] string CodeGen_PTX_Dev::march() const {
-    return "nvptx64";
 }
 
 string CodeGen_PTX_Dev::mcpu_target() const {
