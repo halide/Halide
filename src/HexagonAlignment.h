@@ -6,6 +6,7 @@
  */
 
 #include "IR.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
@@ -38,7 +39,7 @@ bool is_hexagon_aligned(const T *op, int required_alignment, int *aligned_offset
     }
 
     bool known_alignment = (op->alignment.modulus % native_lanes) == 0;
-    int64_t remainder = op->alignment.remainder % native_lanes;
+    int64_t remainder = mod_imp(op->alignment.remainder, native_lanes);
     if (known_alignment && aligned_offset != nullptr) {
         *aligned_offset = static_cast<int>(remainder);
     }
