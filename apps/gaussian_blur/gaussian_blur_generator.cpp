@@ -165,6 +165,12 @@ public:
 
         Expr shift = (((int)upsample_order - downsample_order) * factor) / 2;
 
+        // We'll slice the prefilter in y up into "downsample_order" parts, so
+        // that we can load an input value once and multiply it by everything
+        // we're going to multiply it by. This avoids having to keep any inputs
+        // in cache. This is equivalent to processing groups of columns of the
+        // downsample matrix at a time (i.e. splatting) rather than rows
+        // (i.e. gathering).
         Func down_y_phases{"down_y_phases"};
         down_y_phases(x, y, p) += clamped_y(x, factor * y + rf + shift) * down_kernel(rf + p * factor);
         Func down_y{"down_y"};
