@@ -324,5 +324,7 @@ int main(int argc, char **argv) {
     }
     printf("-------------------------------------\n");
 
+    printf("Success!\n");
+
     return 0;
 }

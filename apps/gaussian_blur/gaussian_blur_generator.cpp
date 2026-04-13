@@ -15,7 +15,12 @@ Expr align_up(const Expr &a, const Expr &b) {
 
 Var x{"x"}, y{"y"}, yo{"yo"}, yi{"yi"}, xo{"xo"}, xi{"xi"}, p{"p"};
 
-Func direct_gaussian_blur(Func input, const Expr &sigma, const Expr &trunc, const LoopLevel &tiles, const LoopLevel &rows, const Target &target) {
+Func direct_gaussian_blur(Func input,
+                          const Expr &sigma,
+                          const Expr &trunc,
+                          const LoopLevel &tiles,
+                          const LoopLevel &rows,
+                          const Target &target) {
     Func kernel{"kernel"};
     kernel(x) = exp(-(x * x) / (2 * sigma * sigma));
     kernel.compute_root();
@@ -100,8 +105,7 @@ class GaussianBlur : public Generator<GaussianBlur> {
 public:
     GeneratorParam<int> factor{"factor", 8},
         upsample_order{"upsample_order", 3},
-        downsample_order{"downsample_order", 2},
-        passes{"passes", 2};
+        downsample_order{"downsample_order", 2};
 
     Input<Buffer<float>> input{"input", 2};
     Input<float> sigma{"sigma"};

@@ -2197,6 +2197,7 @@ TEST_APPS=\
 	camera_pipe \
 	conv_layer \
 	fft \
+	gaussian_blur \
 	hist \
 	interpolate \
 	lens_blur \
