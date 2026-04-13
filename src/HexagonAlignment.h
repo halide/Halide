@@ -13,7 +13,7 @@ namespace Internal {
 
 template<typename T>
 bool is_hexagon_aligned(const T *op, int required_alignment, int *aligned_offset) {
-    int native_lanes;
+    int64_t native_lanes;
     if constexpr (std::is_same_v<T, Load>) {
         native_lanes = required_alignment / op->type.bytes();
     } else {
