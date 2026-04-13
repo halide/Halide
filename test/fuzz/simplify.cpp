@@ -1,6 +1,7 @@
 #include "Halide.h"
 #include <functional>
 
+#include "IRGraphCXXPrinter.h"
 #include "fuzz_helpers.h"
 #include "random_expr_generator.h"
 
@@ -153,6 +154,13 @@ FUZZ_TEST(simplify, FuzzingContext &fuzz) {
             return e;
         });
         std::cerr << "Final test case: " << test << "\n";
+
+        std::cerr << "\n\nC++ code:\n\n";
+        IRGraphCXXPrinter printer(std::cerr);
+        printer.print(test);
+        std::cerr << "Expr final_expr = " << printer.node_names[test.get()] << ";\n";
+        std::cerr << "\n\n";
+
         return 1;
     }
 
