@@ -256,13 +256,12 @@ int main(int argc, char **argv) {
     halide_profiler_report(nullptr);
     halide_profiler_reset();
 
-    // Resampling-base blur
     for (const auto &[config, fn] : fns) {
         const int factor = std::get<0>(config);
         const int up_order = std::get<1>(config);
         const int down_order = std::get<2>(config);
 
-        // Capturing a structured binding in a lambda is a C++20 extension.
+        // Capturing a structured binding is a lambda is a C++20 extension.
         auto f = fn;
         double resample_time = benchmark([&]() {
             f(input, sigma, 5, resample_output);
