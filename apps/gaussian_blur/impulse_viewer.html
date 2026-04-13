@@ -387,7 +387,7 @@ function computeFilter(order, factor) {
   const box = Array(factor).fill(1);
   let kernel = box;
   for (let i = 0; i < order - 1; i++) kernel = convolve(kernel, box);
-  for (let i = 0; i < order - 1; i++) kernel = convolve(kernel, [1, 1]);    
+  for (let i = 0; i < order - 1; i++) kernel = convolve(kernel, [1, 1]);
   return kernel;
 }
 
