@@ -190,15 +190,6 @@ int main(int argc, char **argv) {
 #define REG2(U) FOR_ALL_DOWNSAMPLE_ORDERS(U, REG1)
         FOR_ALL_UPSAMPLE_ORDERS(REG2)};
 
-    /*
-    for (int i = 0; i < 1; i++) {
-        fns[{4, 3, 3}](input, sigma, 8, resample_output);
-        resample_output.device_sync();
-    }
-    return 0;
-    */
-
-    // TODO: Don't make the thread pool if we're using the cuda schedule
     LockFreeThreadPool pool;
     global_thread_pool = &pool;
     halide_set_custom_do_par_for([](void *user_context, halide_task_t f, int min, int extent, uint8_t *closure) {
