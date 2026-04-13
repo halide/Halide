@@ -1565,6 +1565,9 @@ void CodeGen_ARM::visit(const Store *op) {
                       << (intrin_type.lanes() / target_vscale())
                       << (t.is_float() ? 'f' : 'i')
                       << t.bits();
+#if LLVM_VERSION >= 230
+                instr << ".p0";
+#endif
                 arg_types = vector<llvm::Type *>(num_vecs, intrin_llvm_type);
                 arg_types.emplace_back(get_vector_type(i1_t, intrin_type.lanes() / target_vscale(), VectorTypeConstraint::VScale));  // predicate
                 arg_types.emplace_back(ptr_t);
