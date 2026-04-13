@@ -126,7 +126,6 @@ protected:
 
         // Scalarize expressions
         void scalarize(const Expr &e);
-        SpvId map_type_to_pair(const Type &t);
 
         // Workgroup size
         void reset_workgroup_size();
@@ -474,15 +473,6 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize(const Expr &e) {
         result_id = composite_id;
     }
     builder.update_id(result_id);
-}
-
-[[maybe_unused]] SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::map_type_to_pair(const Type &t) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::map_type_to_pair(): " << t << "\n";
-    SpvId base_type_id = builder.declare_type(t);
-    SpvBuilder::StructMemberTypes member_type_ids = {base_type_id, base_type_id};
-    const std::string struct_name = std::string("_struct_") + type_to_c_type(t, false, false) + std::string("_pair");
-    SpvId struct_type_id = builder.declare_struct(struct_name, member_type_ids);
-    return struct_type_id;
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Variable *var) {
