@@ -1696,7 +1696,9 @@ void CodeGen_ARM::visit(const Store *op) {
                   << vscale_natural_lanes
                   << (elt == Float(32) || elt == Float(64) ? 'f' : 'i')
                   << elt.bits();
-
+#if LLVM_VERSION >= 230
+            instr << ".p0";
+#endif
             vector<llvm::Type *> arg_types{slice_type, pred_type, elt_ptr->getType(), slice_index_type};
             llvm::FunctionType *fn_type = FunctionType::get(void_t, arg_types, false);
             FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
