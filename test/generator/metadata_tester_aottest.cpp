@@ -339,14 +339,6 @@ const halide_scalar_value_t *make_scalar(double v) {
     return s;
 }
 
-template<>
-[[maybe_unused]]
-const halide_scalar_value_t *make_scalar(void *v) {
-    halide_scalar_value_t *s = new halide_scalar_value_t();
-    s->u.handle = v;
-    return s;
-}
-
 constexpr int64_t NO_VALUE = (int64_t)0xFFFFFFFFFFFFFFFF;
 
 int64_t const *const *make_int64_array(const std::vector<int64_t> &v) {
