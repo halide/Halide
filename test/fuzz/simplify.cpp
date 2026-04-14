@@ -12,7 +12,7 @@ using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
-struct SimpilfyResult : public std::variant<Expr, InternalError> {
+struct SimplifyResult : std::variant<Expr, InternalError> {
     using std::variant<Expr, InternalError>::variant;
     bool ok() const {
         return index() == 0;
@@ -25,7 +25,7 @@ struct SimpilfyResult : public std::variant<Expr, InternalError> {
     }
 };
 
-SimpilfyResult safe_simplify(const Expr &e) {
+SimplifyResult safe_simplify(const Expr &e) {
     try {
         return simplify(e);
     } catch (InternalError &err) {
@@ -42,20 +42,20 @@ bool test_simplification(Expr a, Expr b, const map<string, Expr> &vars) {
                   << a << "\n";
         return false;
     }
-    SimpilfyResult sb = safe_simplify(b);
+    SimplifyResult sb = safe_simplify(b);
     if (sb.failed() || !equal(b, (Expr)sb)) {
         // Test all sub-expressions in pre-order traversal to minimize
         bool found_failure = false;
         mutate_with(a, [&](auto *self, const Expr &e) {
             self->mutate_base(e);
             Expr s, ss;
-            if (SimpilfyResult res = safe_simplify(e); res.ok()) {
+            if (SimplifyResult res = safe_simplify(e); res.ok()) {
                 s = res;
             } else {
                 found_failure = true;
                 return e;
             }
-            if (SimpilfyResult res = safe_simplify(s); res.ok()) {
+            if (SimplifyResult res = safe_simplify(s); res.ok()) {
                 ss = res;
             } else {
                 found_failure = true;
@@ -84,14 +84,14 @@ bool test_simplification(Expr a, Expr b, const map<string, Expr> &vars) {
     }
 
     Expr a_v = substitute(vars, a);
-    if (SimpilfyResult res = safe_simplify(a_v); res.ok()) {
+    if (SimplifyResult res = safe_simplify(a_v); res.ok()) {
         a_v = res;
     } else {
         return false;
     }
 
     Expr b_v = substitute(vars, b);
-    if (SimpilfyResult res = safe_simplify(b_v); res.ok()) {
+    if (SimplifyResult res = safe_simplify(b_v); res.ok()) {
         b_v = res;
     } else {
         return false;
@@ -121,7 +121,7 @@ bool test_simplification(Expr a, Expr b, const map<string, Expr> &vars) {
 
 bool test_expression(RandomExpressionGenerator &reg, Expr test, int samples) {
     Expr simplified;
-    if (SimpilfyResult res = safe_simplify(test); res.ok()) {
+    if (SimplifyResult res = safe_simplify(test); res.ok()) {
         simplified = res;
     } else {
         return false;
@@ -150,7 +150,7 @@ bool test_expression(RandomExpressionGenerator &reg, Expr test, int samples) {
     return true;
 }
 
-SimpilfyResult simplify_at_depth(int limit, const Expr &in) {
+SimplifyResult simplify_at_depth(int limit, const Expr &in) {
     try {
         return mutate_with(in, [&](auto *self, const Expr &e) {
             if (limit == 0) {
@@ -193,7 +193,7 @@ FUZZ_TEST(simplify, FuzzingContext &fuzz) {
             self->mutate_base(e);
             if (e.type().bits() && !found_failure) {
                 for (int i = 1; i < 4 && !found_failure; i++) {
-                    SimpilfyResult limited_res = simplify_at_depth(i, e);
+                    SimplifyResult limited_res = simplify_at_depth(i, e);
                     if (limited_res.failed()) {
                         found_failure = true;
                         return e;
