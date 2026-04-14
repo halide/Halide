@@ -1543,7 +1543,7 @@ void CodeGen_ARM::visit(const Store *op) {
         // Declare the function
         std::ostringstream instr;
         vector<llvm::Type *> arg_types;
-        llvm::Type *intrin_llvm_type = llvm_type_with_constraint(intrin_type, false, is_sve ? VectorTypeConstraint::VScale : VectorTypeConstraint::Fixed);
+        llvm::Type *intrin_llvm_type = llvm_type_with_constraint(intrin_type, true, is_sve ? VectorTypeConstraint::VScale : VectorTypeConstraint::Fixed);
         if (target.bits == 32) {
             instr << "llvm.arm.neon.vst"
                   << num_vecs
