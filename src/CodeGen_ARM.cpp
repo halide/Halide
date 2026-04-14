@@ -1663,9 +1663,7 @@ void CodeGen_ARM::visit(const Store *op) {
     if (ramp && is_const_one(ramp->stride) &&
         shuffle && shuffle->is_interleave() &&
         type_ok_for_vst &&
-        2 <= shuffle->vectors.size() && shuffle->vectors.size() <= 4 &&
-        // TODO: we could handle predicated_store once shuffle_vector gets robust for scalable vectors
-        !is_predicated_store) {
+        2 <= shuffle->vectors.size() && shuffle->vectors.size() <= 4) {
 
         const int num_vecs = shuffle->vectors.size();
         vector<Value *> args(num_vecs);
@@ -1710,6 +1708,9 @@ void CodeGen_ARM::visit(const Store *op) {
                       << (intrin_type.lanes() / target_vscale())
                       << (t.is_float() ? 'f' : 'i')
                       << t.bits();
+#if LLVM_VERSION >= 230
+                instr << ".p0";
+#endif
                 arg_types = vector<llvm::Type *>(num_vecs, intrin_llvm_type);
                 arg_types.emplace_back(get_vector_type(i1_t, intrin_type.lanes() / target_vscale(), VectorTypeConstraint::VScale));  // predicate
                 arg_types.emplace_back(ptr_t);
@@ -1732,6 +1733,48 @@ void CodeGen_ARM::visit(const Store *op) {
         // Scalable vector supports predication for smaller than whole vector size.
         internal_assert(target_vscale() > 0 || (t.lanes() >= intrin_type.lanes()));
 
+        Value *vpred_predicated_store_val = nullptr;
+        vector<pair<string, Expr>> lets_pred;
+        if (is_sve && is_predicated_store) {
+            // Note the predicate asked by Store op is set as interleaved vectors,
+            // but what we want is the original one,
+            // so we need to either deinterleave or get the vector from the input of Shuffle.
+            // And we make sure the deinterleaved predicates are all the same.
+
+            // Dig through let expressions
+            Expr rhs = op->predicate;
+            while (const Let *let = rhs.as<Let>()) {
+                rhs = let->body;
+                lets_pred.emplace_back(let->name, let->value);
+            }
+
+            Expr vpred_predicated_store;
+            bool predicates_are_same = true;
+            const Shuffle *shuffle = rhs.as<Shuffle>();
+            if (shuffle && shuffle->is_interleave() && shuffle->vectors.size() == static_cast<size_t>(num_vecs)) {
+                vpred_predicated_store = shuffle->vectors[0];
+                for (int i = 1; i < num_vecs; ++i) {
+                    predicates_are_same &= can_prove(vpred_predicated_store == shuffle->vectors[i]);
+                }
+            } else {
+                vpred_predicated_store = Shuffle::make_slice(op->predicate, 0, num_vecs, t.lanes());
+                for (int i = 1; i < num_vecs; ++i) {
+                    predicates_are_same &= can_prove(vpred_predicated_store == Shuffle::make_slice(op->predicate, i, num_vecs, t.lanes()));
+                }
+            }
+
+            if (predicates_are_same) {
+                // Codegen the lets
+                for (auto &let : lets_pred) {
+                    sym_push(let.first, codegen(let.second));
+                }
+                vpred_predicated_store_val = codegen(vpred_predicated_store);
+            } else {
+                CodeGen_Posix::visit(op);
+                return;
+            }
+        }
+
         for (int i = 0; i < t.lanes(); i += intrin_type.lanes()) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.lanes() * num_vecs);
@@ -1751,11 +1794,22 @@ void CodeGen_ARM::visit(const Store *op) {
                 slice_args.push_back(ConstantInt::get(i32_t, alignment));
             } else {
                 if (is_sve) {
-                    // Set the predicate argument to mask active lanes
+                    // Set the predicate argument
+                    // Use predicate to deactivate tail if t.lanes() is not the multiple of intrin_type.lanes()
                     auto active_lanes = std::min(t.lanes() - i, intrin_type.lanes());
-                    Expr vpred = make_vector_predicate_1s_0s(active_lanes, intrin_type.lanes() - active_lanes);
-                    Value *vpred_val = codegen(vpred);
-                    slice_args.push_back(vpred_val);
+                    auto inactive_lanes = intrin_type.lanes() - active_lanes;
+                    Value *vpred;
+                    if (is_predicated_store) {
+                        vpred = slice_vector(vpred_predicated_store_val, i, active_lanes);
+                        if (inactive_lanes > 0) {
+                            Value *tail = codegen(const_false(inactive_lanes));
+                            vpred = concat_vectors({vpred, tail});
+                        }
+                    } else {
+                        vpred = codegen(make_vector_predicate_1s_0s(active_lanes, inactive_lanes));
+                    }
+
+                    slice_args.push_back(vpred);
                 }
                 // Set the pointer argument
                 slice_args.push_back(ptr);
@@ -1775,6 +1829,9 @@ void CodeGen_ARM::visit(const Store *op) {
 
         // pop the lets from the symbol table
         for (auto &let : lets) {
+            sym_pop(let.first);
+        }
+        for (auto &let : lets_pred) {
             sym_pop(let.first);
         }
 
@@ -1838,7 +1895,9 @@ void CodeGen_ARM::visit(const Store *op) {
                   << vscale_natural_lanes
                   << (elt == Float(32) || elt == Float(64) ? 'f' : 'i')
                   << elt.bits();
-
+#if LLVM_VERSION >= 230
+            instr << ".p0";
+#endif
             vector<llvm::Type *> arg_types{slice_type, pred_type, elt_ptr->getType(), slice_index_type};
             llvm::FunctionType *fn_type = FunctionType::get(void_t, arg_types, false);
             FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
@@ -2013,6 +2072,9 @@ void CodeGen_ARM::visit(const Load *op) {
                   << vscale_natural_lanes
                   << (elt == Float(32) || elt == Float(64) ? 'f' : 'i')
                   << elt.bits();
+#if LLVM_VERSION >= 230
+            instr << ".p0";
+#endif
 
             llvm::FunctionType *fn_type = FunctionType::get(slice_type, {pred_type, elt_ptr->getType(), slice_index_type}, false);
             FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);

@@ -208,7 +208,7 @@ function(_Halide_library_from_generator TARGET)
     set(compiler_log_extension ".halide_compiler_log")
     set(conceptual_stmt_extension ".conceptual.stmt")
     set(conceptual_stmt_html_extension ".conceptual.stmt.html")
-    # set(cpp_stub_extension ".stub.h")  # not implemented
+    # set(cpp_stub_extension ".stub.h")  # handled by add_halide_stub()
     set(device_code_extension ".device_code")
     set(featurization_extension ".featurization")
     set(function_info_header_extension ".function_info.h")
@@ -466,6 +466,83 @@ function(_Halide_set_osx_arch TARGET TRIPLE)
 endfunction()
 
 ##
+# Function to generate a C++ stub header from a Halide generator.
+#
+# Stubs allow one Generator to compose another at Halide compile time by
+# inlining the sub-generator's pipeline definition. The stub header provides
+# a type-safe C++ interface (Inputs, Outputs, GeneratorParams structs and a
+# static generate() method) for the sub-generator.
+#
+# The generated <name>.stub.h must be available when compiling the composite
+# generator, and the composite generator executable must link the component
+# generators' sources so that their HALIDE_REGISTER_GENERATOR factory
+# functions are present at link time.
+#
+# Usage:
+#   add_halide_stub(<target> FROM <generator_target>
+#                   [GENERATOR <name>]
+#                   [OUTPUT_DIR <dir>])
+#
+# The GENERATOR name defaults to TARGET and controls both the -g flag and the
+# output filename (<GENERATOR>.stub.h).
+##
+
+function(add_halide_stub TARGET)
+    set(options "")
+    set(oneValueArgs FROM GENERATOR OUTPUT_DIR)
+    set(multiValueArgs "")
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    if (NOT ARG_FROM)
+        message(FATAL_ERROR "add_halide_stub requires FROM specifying a generator target")
+    endif ()
+
+    if (NOT ARG_GENERATOR)
+        set(ARG_GENERATOR "${TARGET}")
+    endif ()
+
+    if (NOT ARG_OUTPUT_DIR)
+        set(ARG_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+    endif ()
+
+    cmake_path(SET ARG_OUTPUT_DIR "${ARG_OUTPUT_DIR}")
+    cmake_path(ABSOLUTE_PATH ARG_OUTPUT_DIR BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" NORMALIZE)
+
+    _Halide_compute_generator_cmd(
+        FROM "${ARG_FROM}"
+        OUT_COMMAND generator_cmd
+        OUT_DEPENDS generator_cmd_deps
+    )
+
+    # Absolute path to the generated stub header.
+    cmake_path(SET stub_file NORMALIZE "${ARG_OUTPUT_DIR}/${ARG_GENERATOR}.stub.h")
+
+    # Relative path for add_custom_command OUTPUT (avoids Xcode .rule file collisions).
+    cmake_path(RELATIVE_PATH stub_file BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+               OUTPUT_VARIABLE stub_file_rel)
+
+    add_custom_command(
+        OUTPUT "${stub_file_rel}"
+        COMMAND ${generator_cmd}
+        -g "${ARG_GENERATOR}"
+        -n "${ARG_GENERATOR}"
+        -o "${ARG_OUTPUT_DIR}"
+        -e cpp_stub
+        DEPENDS ${generator_cmd_deps}
+        VERBATIM
+    )
+
+    add_library("${TARGET}" INTERFACE)
+    add_custom_target("${TARGET}.update" DEPENDS "${stub_file}")
+    set_property(TARGET "${TARGET}.update" PROPERTY FOLDER "Halide Internal")
+    add_dependencies("${TARGET}" "${TARGET}.update")
+    target_sources("${TARGET}" INTERFACE
+                   FILE_SET HEADERS
+                   BASE_DIRS "${ARG_OUTPUT_DIR}"
+                   FILES "${stub_file}")
+endfunction()
+
+##
 # Function to simplify writing the CMake rules for invoking a generator executable
 # and getting a usable CMake library out of it.
 ##
@@ -477,7 +554,7 @@ function(add_halide_library TARGET)
 
     # See Module.cpp for list of extra outputs. The following outputs intentionally do not appear:
     # - `c_header` is always generated
-    # - `cpp_stub` is not available
+    # - `cpp_stub` is handled by add_halide_stub()
     # - `object` is selected for CMake-target-compile
     # - `static_library` is selected for cross-compile
     set(extra_output_names
