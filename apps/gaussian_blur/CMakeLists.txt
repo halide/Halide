@@ -19,16 +19,16 @@ add_halide_library(gaussian_blur_direct FROM gaussian_blur.generator
                    GENERATOR gaussian_blur_direct)
 
 set(VARIANTS "")
-foreach(U IN ITEMS 2 3 4)
-foreach(D IN ITEMS 1 2 3)
-foreach(F IN ITEMS 2 4 8 16)
-    add_halide_library(gaussian_blur_${U}_${D}_${F} FROM gaussian_blur.generator
-                       GENERATOR gaussian_blur
-                       USE_RUNTIME gaussian_blur_direct.runtime
-                       PARAMS upsample_order=${U} downsample_order=${D} factor=${F})
-    list(APPEND VARIANTS gaussian_blur_${U}_${D}_${F})
-endforeach ()
-endforeach ()
+foreach (U IN ITEMS 2 3 4)
+    foreach (D IN ITEMS 1 2 3)
+        foreach (F IN ITEMS 2 4 8 16)
+            add_halide_library(gaussian_blur_${U}_${D}_${F} FROM gaussian_blur.generator
+                               GENERATOR gaussian_blur
+                               USE_RUNTIME gaussian_blur_direct.runtime
+                               PARAMS upsample_order=${U} downsample_order=${D} factor=${F})
+            list(APPEND VARIANTS gaussian_blur_${U}_${D}_${F})
+        endforeach ()
+    endforeach ()
 endforeach ()
 
 
@@ -36,9 +36,9 @@ endforeach ()
 set(BLURS_H "${CMAKE_CURRENT_BINARY_DIR}/blurs.h")
 set(BLURS_H_CONTENT "")
 string(APPEND BLURS_H_CONTENT "#include \"gaussian_blur_direct.h\"\n")
-foreach(V IN LISTS VARIANTS)
+foreach (V IN LISTS VARIANTS)
     string(APPEND BLURS_H_CONTENT "#include \"${V}.h\"\n")
-endforeach()
+endforeach ()
 file(GENERATE OUTPUT "${BLURS_H}" CONTENT "${BLURS_H_CONTENT}")
 
 # Main executable
