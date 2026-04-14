@@ -172,7 +172,10 @@ class InjectFoldingCheck : public IRMutator {
                     body = mutate(op->body);
                 } else {
                     // Update valid range based on bounds written to.
-                    Box b = box_provided(body, func.name());
+                    Box provided = box_provided(body, func.name());
+                    Box required = box_required(body, func.name());
+                    required.used = Expr();
+                    Box b = box_union(provided, required);
                     Expr old_leading_edge =
                         Load::make(Int(32), head + "_next", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
 
