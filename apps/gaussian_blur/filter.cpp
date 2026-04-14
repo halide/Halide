@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
@@ -257,7 +258,7 @@ int main(int argc, char **argv) {
         direct_output.copy_to_host();
         double PSNR = compute_PSNR(direct_output, reference_output);
         printf("Direct (sigma=%s, radius=%d): %d us %g db\n", sigma_str,
-               (int)std::ceilf(trunc * sigma), to_us(direct_time), PSNR);
+               (int)std::ceil(trunc * sigma), to_us(direct_time), PSNR);
         results.emplace_back(Result{"Direct " + std::to_string(trunc) + " sigma", direct_time, PSNR});
     }
     // If profiling, we're going to report as we go, rather than once at the
