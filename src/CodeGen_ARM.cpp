@@ -1235,58 +1235,6 @@ void CodeGen_ARM::init_module() {
     }
 }
 
-// Traverse the IR graph and gather lanes of vector type.
-// Note: we could derive this from CodeGen_C::TypeInfoGatherer
-class VectorLanesGatherer : public IRGraphVisitor {
-private:
-    using IRGraphVisitor::include;
-    using IRGraphVisitor::visit;
-
-    void include_lanes(const Type &t) {
-        if (t.is_vector()) {
-            if (!t.is_handle()) {
-                // Vector-handle types can be seen when processing (e.g.)
-                // require() statements that are vectorized, but they
-                // will all be scalarized away prior to use, so don't emit
-                // them.
-                lanes_used.insert(t.lanes());
-            }
-        }
-    }
-
-protected:
-    void include(const Expr &e) override {
-        include_lanes(e.type());
-        IRGraphVisitor::include(e);
-    }
-
-    void visit(const Ramp *op) override {
-        include_lanes(op->type.with_lanes(op->lanes));
-        IRGraphVisitor::visit(op);
-    }
-
-    void visit(const Broadcast *op) override {
-        include_lanes(op->type.with_lanes(op->lanes));
-        IRGraphVisitor::visit(op);
-    }
-
-    void visit(const Call *op) override {
-        include_lanes(op->type);
-        if (op->is_intrinsic()) {
-            Expr lowered = lower_intrinsic(op);
-            if (lowered.defined()) {
-                lowered.accept(this);
-                return;
-            }
-        }
-
-        IRGraphVisitor::visit(op);
-    }
-
-public:
-    std::set<int> lanes_used;
-};
-
 void CodeGen_ARM::compile_func(const LoweredFunc &f,
                                const string &simple_name,
                                const string &extern_name) {
@@ -1307,9 +1255,35 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     // TODO: Target::SVE not supported https://github.com/halide/Halide/issues/8872
     feasible_vscale = 0;
     if (target.features_any_of({Target::SVE2})) {
-        VectorLanesGatherer vector_lanes_gatherer;
-        func.body.accept(&vector_lanes_gatherer);
-        feasible_vscale = check_feasible_vscale(target.vector_bits, vector_lanes_gatherer.lanes_used, simple_name);
+        std::set<int> lanes_used;
+        mutate_with(func.body, [&](auto *self, const Expr &e) {
+            Type t = e.type();
+            if (const auto *op = e.as<Ramp>()) {
+                t = op->type.with_lanes(op->lanes);
+            } else if (const auto *op = e.as<Broadcast>()) {
+                t = op->type.with_lanes(op->lanes);
+            } else if (const auto *op = e.as<Call>()) {
+                if (op->is_intrinsic()) {
+                    Expr lowered = lower_intrinsic(op);
+                    if (lowered.defined()) {
+                        return self->mutate_base(lowered);
+                    }
+                }
+            }
+
+            if (t.is_vector()) {
+                if (!t.is_handle()) {
+                    // Vector-handle types can be seen when processing (e.g.)
+                    // require() statements that are vectorized, but they
+                    // will all be scalarized away prior to use, so don't emit
+                    // them.
+                    lanes_used.insert(t.lanes());
+                }
+            }
+            return self->mutate_base(e);
+        });
+
+        feasible_vscale = check_feasible_vscale(target.vector_bits, lanes_used, simple_name);
     }
 
     if (feasible_vscale > 0) {
