@@ -18,7 +18,7 @@ add_halide_generator(gaussian_blur.generator SOURCES gaussian_blur_generator.cpp
 add_halide_library(gaussian_blur_direct FROM gaussian_blur.generator
                    GENERATOR gaussian_blur_direct)
 
-set(VARIANTS "")
+set(VARIANTS gaussian_blur_direct)
 foreach (U IN ITEMS 2 3 4)
     foreach (D IN ITEMS 1 2 3)
         foreach (F IN ITEMS 2 4 8 16)
@@ -31,23 +31,13 @@ foreach (U IN ITEMS 2 3 4)
     endforeach ()
 endforeach ()
 
-
 # Generate combined header blurs.h that includes all variant headers
-set(BLURS_H "${CMAKE_CURRENT_BINARY_DIR}/blurs.h")
-set(BLURS_H_CONTENT "")
-string(APPEND BLURS_H_CONTENT "#include \"gaussian_blur_direct.h\"\n")
-foreach (V IN LISTS VARIANTS)
-    string(APPEND BLURS_H_CONTENT "#include \"${V}.h\"\n")
-endforeach ()
-file(GENERATE OUTPUT "${BLURS_H}" CONTENT "${BLURS_H_CONTENT}")
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/blurs.h"
+     CONTENT "$<JOIN:$<LIST:TRANSFORM,${VARIANTS},REPLACE,^(.+)$,#include \"\\1.h\">,\n>")
 
 # Main executable
 add_executable(gaussian_blur_filter filter.cpp)
-target_link_libraries(gaussian_blur_filter
-                      PRIVATE
-                      Halide::ImageIO
-                      gaussian_blur_direct
-                      ${VARIANTS})
+target_link_libraries(gaussian_blur_filter PRIVATE Halide::ImageIO ${VARIANTS})
 target_include_directories(gaussian_blur_filter PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
 # Test that the app actually works!
