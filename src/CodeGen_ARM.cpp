@@ -1563,6 +1563,9 @@ void CodeGen_ARM::visit(const Store *op) {
                       << (intrin_type.lanes() / target_vscale())
                       << (t.is_float() ? 'f' : 'i')
                       << t.bits();
+#if LLVM_VERSION >= 230
+                instr << ".p0";
+#endif
                 arg_types = vector<llvm::Type *>(num_vecs, intrin_llvm_type);
                 arg_types.emplace_back(get_vector_type(i1_t, intrin_type.lanes() / target_vscale(), VectorTypeConstraint::VScale));  // predicate
                 arg_types.emplace_back(ptr_t);
@@ -1747,7 +1750,9 @@ void CodeGen_ARM::visit(const Store *op) {
                   << vscale_natural_lanes
                   << (elt == Float(32) || elt == Float(64) ? 'f' : 'i')
                   << elt.bits();
-
+#if LLVM_VERSION >= 230
+            instr << ".p0";
+#endif
             vector<llvm::Type *> arg_types{slice_type, pred_type, elt_ptr->getType(), slice_index_type};
             llvm::FunctionType *fn_type = FunctionType::get(void_t, arg_types, false);
             FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
@@ -1922,6 +1927,9 @@ void CodeGen_ARM::visit(const Load *op) {
                   << vscale_natural_lanes
                   << (elt == Float(32) || elt == Float(64) ? 'f' : 'i')
                   << elt.bits();
+#if LLVM_VERSION >= 230
+            instr << ".p0";
+#endif
 
             llvm::FunctionType *fn_type = FunctionType::get(slice_type, {pred_type, elt_ptr->getType(), slice_index_type}, false);
             FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
