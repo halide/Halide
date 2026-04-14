@@ -172,7 +172,7 @@ protected:
         void visit(const FloatImm *op) override;
 
         Scope<> groupshared_allocations;
-        Scope<> uav_buffer_args;  // kernel buffer args that use RWBuffer UAV bindings
+        Scope<> uav_buffer_args;                           // kernel buffer args that use RWBuffer UAV bindings
         std::set<std::string> hlsl_float_only_intrinsics;  // no native double overload
         bool emit_precise = false;
     };
