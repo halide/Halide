@@ -3,8 +3,8 @@
 
 #include "AlignLoads.h"
 #include "CSE.h"
-#include "CodeGen_Internal.h"
 #include "CodeGen_CPU.h"
+#include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "HexagonOptimize.h"
 #include "IREquality.h"
@@ -1770,7 +1770,7 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
     function_does_not_access_memory(fn);
     fn->addFnAttr(llvm::Attribute::NoUnwind);
     return CodeGen_CPU::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
-                                      fn, std::move(args));
+                                    fn, std::move(args));
 }
 
 Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
@@ -1793,7 +1793,7 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
     function_does_not_access_memory(fn);
     fn->addFnAttr(llvm::Attribute::NoUnwind);
     return CodeGen_CPU::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
-                                      fn, std::move(args));
+                                    fn, std::move(args));
 }
 
 string CodeGen_Hexagon::mcpu_target() const {

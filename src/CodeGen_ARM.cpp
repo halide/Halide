@@ -2,8 +2,8 @@
 #include <sstream>
 
 #include "CSE.h"
-#include "CodeGen_Internal.h"
 #include "CodeGen_CPU.h"
+#include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
 #include "DecomposeVectorShuffle.h"
