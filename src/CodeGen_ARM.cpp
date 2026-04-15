@@ -1256,30 +1256,9 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     feasible_vscale = 0;
     if (target.features_any_of({Target::SVE2})) {
         std::set<int> lanes_used;
-        mutate_with(func.body, [&](auto *self, const Expr &e) {
-            Type t = e.type();
-            if (const auto *op = e.as<Ramp>()) {
-                t = op->type.with_lanes(op->lanes);
-            } else if (const auto *op = e.as<Broadcast>()) {
-                t = op->type.with_lanes(op->lanes);
-            } else if (const auto *op = e.as<Call>()) {
-                if (op->is_intrinsic()) {
-                    Expr lowered = lower_intrinsic(op);
-                    if (lowered.defined()) {
-                        return self->mutate_base(lowered);
-                    }
-                }
-            }
 
-            if (t.is_vector()) {
-                if (!t.is_handle()) {
-                    // Vector-handle types can be seen when processing (e.g.)
-                    // require() statements that are vectorized, but they
-                    // will all be scalarized away prior to use, so don't emit
-                    // them.
-                    lanes_used.insert(t.lanes());
-                }
-            }
+        mutate_with(func.body, [&](auto *self, const Expr &e) {
+            lanes_used.insert(e.type().lanes());
             return self->mutate_base(e);
         });
 
