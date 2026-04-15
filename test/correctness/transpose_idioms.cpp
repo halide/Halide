@@ -183,10 +183,10 @@ int main(int argc, char **argv) {
         // because the vectorizer can't handle it and generates a scalar tail.
 
         {
-            // LLVM 22/23 have a codegen bug for some x86 versions here, so skip with AVX512
+            // LLVM 22 has a codegen bug for some x86 versions here, so skip with AVX512
             // See: https://github.com/llvm/llvm-project/issues/191304
             if (Internal::get_llvm_version() >= 220 &&
-                Internal::get_llvm_version() < 240 &&
+                Internal::get_llvm_version() < 230 &&
                 get_jit_target_from_environment().has_feature(Target::AVX512)) {
                 printf("Skipping one subtest for LLVM %d with AVX-512 due to known backend bugs.\n",
                        Internal::get_llvm_version());
