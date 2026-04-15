@@ -14,6 +14,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
+#include "OptimizeShuffles.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Util.h"
@@ -227,6 +228,7 @@ protected:
     Value *interleave_vectors(const std::vector<Value *> &) override;
     Value *shuffle_vectors(Value *a, Value *b, const std::vector<int> &indices) override;
     Value *shuffle_scalable_vectors_general(Value *a, Value *b, const std::vector<int> &indices);
+    Value *shuffle_scalable_vectors_general_llvm(Value *a, Value *b, Value *indices, int min_index, int max_index);
     Value *codegen_shuffle_indices(int bits, const std::vector<int> &indices);
     Value *codegen_whilelt(int total_lanes, int start, int end);
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
@@ -1222,6 +1224,22 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     // Look for opportunities to turn a + (b << c) into umlal/smlal
     // and a - (b << c) into umlsl/smlsl.
     func.body = distribute_shifts(func.body, /* multiply_adds */ true);
+
+    if (target_vscale() > 0) {
+        debug(1) << "ARM: Optimizing shuffles...\n";
+        const int lut_alignment = 16;
+
+        auto max_span_query = [&](const Type &lut_type) -> std::vector<int> {
+            int vl = natural_vector_size(lut_type);
+            // SVE2 has TBL and TBL2 (TBL with two src vectors) LLVM intrinsic.
+            // We prioritize TBL with single src vector in favor of performance.
+            return {vl, vl * 2};
+        };
+
+        func.body = optimize_shuffles(func.body, lut_alignment, native_vector_bits(), max_span_query, true);
+        debug(2) << "ARM: Lowering after optimizing shuffles:\n"
+                 << func.body << "\n\n";
+    }
 
     CodeGen_Posix::compile_func(func, simple_name, extern_name);
 }
@@ -2312,7 +2330,7 @@ Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &
     }
 
     // Perform vector shuffle by decomposing the operation to multiple native shuffle steps
-    // which calls shuffle_scalable_vectors_general() which emits TBL/TBL2 instruction
+    // which calls shuffle_scalable_vectors_general() which emits TBL/TBL2 LLVM intrinsic.
     DecomposeVectorShuffle shuffler(*this, a, b, get_vector_num_elements(a->getType()), natural_lanes);
     return shuffler.run(indices);
 }
@@ -2322,18 +2340,9 @@ Value *CodeGen_ARM::shuffle_scalable_vectors_general(Value *a, Value *b, const s
     internal_assert(!indices.empty()) << "Cannot shuffle with empty indices";
 
     llvm::Type *elt = get_vector_element_type(a->getType());
-    const int bits = elt->getScalarSizeInBits();
-    const int natural_lanes = natural_vector_size(Int(bits));
-    const int src_lanes = get_vector_num_elements(a->getType());
-    const int dst_lanes = indices.size();
-    llvm::Type *dst_type = get_vector_type(elt, dst_lanes);
-
-    internal_assert(target_vscale() > 0 && is_scalable_vector(a)) << "Only deal with scalable vectors\n";
-    internal_assert(src_lanes == natural_lanes && dst_lanes == natural_lanes)
-        << "Only deal with vector with natural_lanes\n";
-
-    // We select TBL or TBL2 intrinsic depending on indices range
-    int highest_lane = *std::max_element(indices.begin(), indices.end());
+    Value *val_indices = codegen_shuffle_indices(elt->getScalarSizeInBits(), indices);
+    auto [min_itr, max_itr] = std::minmax_element(indices.begin(), indices.end());
+    int highest_lane = *max_itr;
     internal_assert(highest_lane >= 0)
         << "highest_lane was "
         << (highest_lane == SliceIndexNone            ? "SliceIndexNone" :
@@ -2341,21 +2350,39 @@ Value *CodeGen_ARM::shuffle_scalable_vectors_general(Value *a, Value *b, const s
                                                         "")
         << " (" << highest_lane << ")";
 
-    bool use_tbl = highest_lane < src_lanes;
+    return shuffle_scalable_vectors_general_llvm(a, b, val_indices, *min_itr, *max_itr);
+}
+
+Value *CodeGen_ARM::shuffle_scalable_vectors_general_llvm(Value *a, Value *b, Value *indices, int min_index, int max_index) {
+    internal_assert(a) << "Must provide a valid vector operand";
+    internal_assert(indices) << "Must provide a valid indices";
+
+    llvm::Type *elt = get_vector_element_type(a->getType());
+    const int bits = elt->getScalarSizeInBits();
+    const int natural_lanes = natural_vector_size(Int(bits));
+    const int src_lanes = get_vector_num_elements(a->getType());
+    const int dst_lanes = get_vector_num_elements(indices->getType());
+    llvm::Type *dst_type = get_vector_type(elt, dst_lanes);
+
+    internal_assert(target_vscale() > 0 && is_scalable_vector(a)) << "Only deal with scalable vectors\n";
+    internal_assert(src_lanes == natural_lanes && dst_lanes == natural_lanes)
+        << "Only deal with vector with natural_lanes\n";
+
+    // We select TBL or TBL2 intrinsic depending on indices range
+    const bool use_tbl = max_index < src_lanes;
     internal_assert(use_tbl || b) << "'b' must be valid in case of tbl2\n";
 
     auto instr = concat_strings("llvm.aarch64.sve.", use_tbl ? "tbl" : "tbl2", mangle_llvm_type(dst_type));
 
-    Value *val_indices = codegen_shuffle_indices(bits, indices);
     llvm::Type *vt_natural = get_vector_type(elt, natural_lanes);
     std::vector<llvm::Type *> llvm_arg_types;
     std::vector<llvm::Value *> llvm_arg_vals;
     if (use_tbl) {
-        llvm_arg_types = {vt_natural, val_indices->getType()};
-        llvm_arg_vals = {a, val_indices};
+        llvm_arg_types = {vt_natural, indices->getType()};
+        llvm_arg_vals = {a, indices};
     } else {
-        llvm_arg_types = {vt_natural, vt_natural, val_indices->getType()};
-        llvm_arg_vals = {a, b, val_indices};
+        llvm_arg_types = {vt_natural, vt_natural, indices->getType()};
+        llvm_arg_vals = {a, b, indices};
     }
     llvm::FunctionType *fn_type = FunctionType::get(vt_natural, llvm_arg_types, false);
     FunctionCallee fn = module->getOrInsertFunction(instr, fn_type);
@@ -2445,6 +2472,41 @@ void CodeGen_ARM::visit(const Call *op) {
             value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
             return;
         }
+    } else if (op->is_intrinsic(Call::dynamic_shuffle)) {
+        internal_assert(target_vscale() > 0);
+        internal_assert(op->args.size() == 4);
+        const auto min_index = as_const_int(op->args[2]);
+        const auto max_index = as_const_int(op->args[3]);
+        internal_assert(min_index.has_value() && max_index.has_value());
+
+        Type lut_type = op->args[0].type();
+        const int src_lanes = lut_type.lanes();
+        const int dst_lanes = op->args[1].type().lanes();
+        const int natural_lanes = natural_vector_size(lut_type);
+
+        debug(3) << "dynamic_shuffle: [" << *min_index << ", " << *max_index << "]"
+                 << ", natural_lanes:" << natural_lanes << ", src_lanes:" << src_lanes << "\n";
+
+        Value *src = codegen(op->args[0]);
+        internal_assert(src_lanes <= natural_lanes * 2) << "src is too long to dynamic_shuffle\n";
+        Value *src_a = slice_vector(src, 0, natural_lanes);
+        Value *src_b = (src_lanes > natural_lanes) ? slice_vector(src, natural_lanes, natural_lanes) : nullptr;
+
+        // Cast index to integer with the same bits as LUT data
+        Type index_type = UInt(lut_type.bits()).with_lanes(dst_lanes);
+        Expr indices = cast(index_type, op->args[1]);
+        Value *val_indices = codegen(indices);
+
+        std::vector<Value *> slices;
+        const int num_slices = align_up(dst_lanes, natural_lanes) / natural_lanes;
+        slices.reserve(num_slices);
+        for (int i = 0; i < num_slices; i++) {
+            Value *indices_slice = slice_vector(val_indices, i * natural_lanes, natural_lanes);
+            Value *dst_slice = shuffle_scalable_vectors_general_llvm(src_a, src_b, indices_slice, *min_index, *max_index);
+            slices.push_back(dst_slice);
+        }
+        value = slice_vector(concat_vectors(slices), 0, dst_lanes);
+        return;
     }
 
     if (op->type.is_vector()) {
