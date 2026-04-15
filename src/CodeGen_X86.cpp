@@ -1,5 +1,5 @@
 #include "CodeGen_Internal.h"
-#include "CodeGen_Posix.h"
+#include "CodeGen_CPU.h"
 #include "ConciseCasts.h"
 #include "ConstantBounds.h"
 #include "Debug.h"
@@ -73,7 +73,7 @@ Target complete_x86_target(Target t) {
 }
 
 /** A code generator that emits x86 code from a given Halide stmt. */
-class CodeGen_X86 : public CodeGen_Posix {
+class CodeGen_X86 : public CodeGen_CPU {
 public:
     /** Create an x86 code generator. Processor features can be
      * enabled using the appropriate flags in the target struct. */
@@ -88,7 +88,7 @@ protected:
 
     int vector_lanes_for_slice(const Type &t) const;
 
-    using CodeGen_Posix::visit;
+    using CodeGen_CPU::visit;
 
     void init_module() override;
 
@@ -116,7 +116,7 @@ private:
 };
 
 CodeGen_X86::CodeGen_X86(Target t)
-    : CodeGen_Posix(complete_x86_target(t)) {
+    : CodeGen_CPU(complete_x86_target(t)) {
 }
 
 const int max_intrinsic_args = 6;
@@ -306,7 +306,7 @@ const x86Intrinsic intrinsic_defs[] = {
 };
 
 void CodeGen_X86::init_module() {
-    CodeGen_Posix::init_module();
+    CodeGen_CPU::init_module();
 
     for (const x86Intrinsic &i : intrinsic_defs) {
         if (i.feature != Target::FeatureEnd && !target.has_feature(i.feature)) {
@@ -384,7 +384,7 @@ void CodeGen_X86::visit(const Add *op) {
             return;
         }
     }
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_X86::visit(const Sub *op) {
@@ -407,7 +407,7 @@ void CodeGen_X86::visit(const Sub *op) {
             }
         }
     }
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_X86::visit(const GT *op) {
@@ -440,7 +440,7 @@ void CodeGen_X86::visit(const GT *op) {
         value = concat_vectors(result);
         value = slice_vector(value, 0, t.lanes());
     } else {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
     }
 }
 
@@ -472,7 +472,7 @@ void CodeGen_X86::visit(const EQ *op) {
         value = concat_vectors(result);
         value = slice_vector(value, 0, t.lanes());
     } else {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
     }
 }
 
@@ -513,7 +513,7 @@ void CodeGen_X86::visit(const Select *op) {
         value = concat_vectors(result);
         value = slice_vector(value, 0, t.lanes());
     } else {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
     }
 }
 
@@ -539,7 +539,7 @@ void CodeGen_X86::visit(const Cast *op) {
 
     if (!dst.is_vector()) {
         // We only have peephole optimizations for vectors after this point.
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
@@ -600,13 +600,13 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_X86::visit(const Call *op) {
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors beyond this point.
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
@@ -773,12 +773,12 @@ void CodeGen_X86::visit(const Call *op) {
         return;
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     if (op->op != VectorReduce::Add && op->op != VectorReduce::SaturatingAdd) {
-        CodeGen_Posix::codegen_vector_reduce(op, init);
+        CodeGen_CPU::codegen_vector_reduce(op, init);
         return;
     }
     const int factor = op->value.type().lanes() / op->type.lanes();
@@ -926,12 +926,12 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         }
     }
 
-    CodeGen_Posix::codegen_vector_reduce(op, init);
+    CodeGen_CPU::codegen_vector_reduce(op, init);
 }
 
 void CodeGen_X86::visit(const Allocate *op) {
     ScopedBinding<MemoryType> bind(mem_type, op->name, op->memory_type);
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_X86::visit(const Load *op) {
@@ -946,7 +946,7 @@ void CodeGen_X86::visit(const Load *op) {
             return;
         }
     }
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_X86::visit(const Store *op) {
@@ -962,7 +962,7 @@ void CodeGen_X86::visit(const Store *op) {
             return;
         }
     }
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 string CodeGen_X86::mcpu_target() const {
@@ -1173,13 +1173,13 @@ int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
 
 }  // namespace
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_X86(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_X86(const Target &target) {
     return std::make_unique<CodeGen_X86>(target);
 }
 
 #else  // WITH_X86
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_X86(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_X86(const Target &target) {
     user_error << "x86 not enabled for this build of Halide.\n";
     return nullptr;
 }

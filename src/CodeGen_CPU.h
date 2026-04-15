@@ -1,5 +1,5 @@
-#ifndef HALIDE_CODEGEN_POSIX_H
-#define HALIDE_CODEGEN_POSIX_H
+#ifndef HALIDE_CODEGEN_CPU_H
+#define HALIDE_CODEGEN_CPU_H
 
 /** \file
  * Defines a base-class for code-generators on posixy cpu platforms
@@ -10,19 +10,21 @@
 namespace Halide {
 namespace Internal {
 
-/** A code generator that emits posix code from a given Halide stmt. */
-class CodeGen_Posix : public CodeGen_LLVM {
+/** A base class for LLVM-based CPU code generators. This means targets that
+ * have a stack and a heap and halide_malloc, as opposed to targets like CUDA
+ * which expose memory differently. */
+class CodeGen_CPU : public CodeGen_LLVM {
 public:
-    /** Create an posix code generator. Processor features can be
-     * enabled using the appropriate arguments */
-    CodeGen_Posix(const Target &t);
+    /** Create a CPU code generator. Processor features can be enabled using the
+     * appropriate arguments */
+    CodeGen_CPU(const Target &t);
 
 protected:
     using CodeGen_LLVM::visit;
 
-    /** Posix implementation of Allocate. Small constant-sized allocations go
-     * on the stack. The rest go on the heap by calling "halide_malloc"
-     * and "halide_free" in the standard library. */
+    /** Implementation of Allocate. Small constant-sized allocations go on the
+     * stack. The rest go on the heap by calling "halide_malloc" and
+     * "halide_free" in the standard library. */
     // @{
     void visit(const Allocate *) override;
     void visit(const Free *) override;

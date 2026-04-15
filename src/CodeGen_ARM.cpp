@@ -3,7 +3,7 @@
 
 #include "CSE.h"
 #include "CodeGen_Internal.h"
-#include "CodeGen_Posix.h"
+#include "CodeGen_CPU.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
 #include "DecomposeVectorShuffle.h"
@@ -171,13 +171,13 @@ class SubstituteInStridedLoads : public IRMutator {
 };
 
 /** A code generator that emits ARM code from a given Halide stmt. */
-class CodeGen_ARM : public CodeGen_Posix {
+class CodeGen_ARM : public CodeGen_CPU {
 public:
     /** Create an ARM code generator for the given arm target. */
     CodeGen_ARM(const Target &);
 
 protected:
-    using CodeGen_Posix::visit;
+    using CodeGen_CPU::visit;
 
     /** Similar to llvm_type_of, but allows providing a VectorTypeConstraint to
      * force Fixed or VScale vector results. */
@@ -285,7 +285,7 @@ protected:
 };
 
 CodeGen_ARM::CodeGen_ARM(const Target &target)
-    : CodeGen_Posix(complete_arm_target(target)) {
+    : CodeGen_CPU(complete_arm_target(target)) {
 
     // TODO(https://github.com/halide/Halide/issues/8088): See if
     // use_llvm_vp_intrinsics can replace architecture specific code in this
@@ -1024,7 +1024,7 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
 }
 
 void CodeGen_ARM::init_module() {
-    CodeGen_Posix::init_module();
+    CodeGen_CPU::init_module();
 
     // TODO: https://github.com/halide/Halide/issues/8872
     // if (target.features_any_of({Target::SVE, Target::SVE2})) {
@@ -1223,7 +1223,7 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     // and a - (b << c) into umlsl/smlsl.
     func.body = distribute_shifts(func.body, /* multiply_adds */ true);
 
-    CodeGen_Posix::compile_func(func, simple_name, extern_name);
+    CodeGen_CPU::compile_func(func, simple_name, extern_name);
 }
 
 void CodeGen_ARM::visit(const Cast *op) {
@@ -1272,7 +1272,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_ARM::visit(const Add *op) {
@@ -1282,7 +1282,7 @@ void CodeGen_ARM::visit(const Add *op) {
     };
 
     if (simd_intrinsics_disabled()) {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
@@ -1371,12 +1371,12 @@ void CodeGen_ARM::visit(const Add *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_ARM::visit(const Sub *op) {
     if (simd_intrinsics_disabled()) {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
@@ -1429,7 +1429,7 @@ void CodeGen_ARM::visit(const Sub *op) {
         return;
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_ARM::visit(const Min *op) {
@@ -1443,7 +1443,7 @@ void CodeGen_ARM::visit(const Min *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_ARM::visit(const Max *op) {
@@ -1457,19 +1457,19 @@ void CodeGen_ARM::visit(const Max *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_ARM::visit(const Store *op) {
     // Predicated store
     const bool is_predicated_store = !is_const_one(op->predicate);
     if (is_predicated_store && !target.has_feature(Target::SVE2)) {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
     if (simd_intrinsics_disabled()) {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
@@ -1478,7 +1478,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
     // We only deal with ramps here except for SVE2
     if (!ramp && !target.has_feature(Target::SVE2)) {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
@@ -1625,7 +1625,7 @@ void CodeGen_ARM::visit(const Store *op) {
                 }
                 vpred_predicated_store_val = codegen(vpred_predicated_store);
             } else {
-                CodeGen_Posix::visit(op);
+                CodeGen_CPU::visit(op);
                 return;
             }
         }
@@ -1786,7 +1786,7 @@ void CodeGen_ARM::visit(const Store *op) {
     // If the stride is one or minus one, we can deal with that using vanilla codegen
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
     if (stride && (stride->value == 1 || stride->value == -1)) {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
@@ -1812,19 +1812,19 @@ void CodeGen_ARM::visit(const Store *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_ARM::visit(const Load *op) {
     // Predicated load
     const bool is_predicated_load = !is_const_one(op->predicate);
     if (is_predicated_load && !target.has_feature(Target::SVE2)) {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
     if (simd_intrinsics_disabled()) {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
@@ -1832,7 +1832,7 @@ void CodeGen_ARM::visit(const Load *op) {
 
     // We only deal with ramps here
     if (!ramp && !target.has_feature(Target::SVE2)) {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
@@ -1840,7 +1840,7 @@ void CodeGen_ARM::visit(const Load *op) {
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
     if (stride && (-1 <= stride->value && stride->value <= 1) &&
         !target.has_feature(Target::SVE2)) {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
@@ -1867,7 +1867,7 @@ void CodeGen_ARM::visit(const Load *op) {
 
     if (target.has_feature(Target::SVE2)) {
         if (stride && stride->value < 1) {
-            CodeGen_Posix::visit(op);
+            CodeGen_CPU::visit(op);
             return;
         } else if (stride && stride->value == 1) {
             const int natural_lanes = target.natural_vector_size(op->type);
@@ -1887,7 +1887,7 @@ void CodeGen_ARM::visit(const Load *op) {
                 value = slice_vector(value, 0, ramp->lanes);
                 return;
             } else {
-                CodeGen_Posix::visit(op);
+                CodeGen_CPU::visit(op);
                 return;
             }
         } else if (op->index.type().is_vector()) {
@@ -1963,7 +1963,7 @@ void CodeGen_ARM::visit(const Load *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_ARM::visit(const Shuffle *op) {
@@ -1983,12 +1983,12 @@ void CodeGen_ARM::visit(const Shuffle *op) {
         load->type.lanes() == stride * op->type.lanes()) {
 
         value = codegen_dense_vector_load(load, nullptr, /* slice_to_native */ false);
-        value = CodeGen_Posix::shuffle_vectors(value, op->indices);
+        value = CodeGen_CPU::shuffle_vectors(value, op->indices);
         return;
     }
 
     if (target_vscale() == 0) {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
@@ -2035,13 +2035,13 @@ void CodeGen_ARM::visit(const Shuffle *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 llvm::Type *CodeGen_ARM::get_vector_type_from_value(Value *vec_or_scalar, int n) {
     llvm::Type *t = vec_or_scalar->getType();
     llvm::Type *elt = t->isVectorTy() ? get_vector_element_type(t) : t;
-    return CodeGen_Posix::get_vector_type(elt, n);
+    return CodeGen_CPU::get_vector_type(elt, n);
 }
 
 Value *CodeGen_ARM::concat_vectors(const vector<Value *> &vecs) {
@@ -2050,7 +2050,7 @@ Value *CodeGen_ARM::concat_vectors(const vector<Value *> &vecs) {
     if (target_vscale() == 0 ||
         vecs.size() <= 1 ||
         isa<FixedVectorType>(vecs[0]->getType())) {
-        return CodeGen_Posix::concat_vectors(vecs);
+        return CodeGen_CPU::concat_vectors(vecs);
     }
 
     int total_lanes = 0;
@@ -2072,7 +2072,7 @@ Value *CodeGen_ARM::slice_vector(llvm::Value *vec, int start, int slice_size) {
     // Override only for scalable vector
     if (target_vscale() == 0 ||
         !is_scalable_vector(vec)) {
-        return CodeGen_Posix::slice_vector(vec, start, slice_size);
+        return CodeGen_CPU::slice_vector(vec, start, slice_size);
     }
 
     const int vec_lanes = get_vector_num_elements(vec->getType());
@@ -2206,7 +2206,7 @@ Value *CodeGen_ARM::interleave_vectors(const std::vector<Value *> &vecs) {
     if (simd_intrinsics_disabled() || target_vscale() == 0 ||
         vecs.size() < 2 ||
         !is_scalable_vector(vecs[0])) {
-        return CodeGen_Posix::interleave_vectors(vecs);
+        return CodeGen_CPU::interleave_vectors(vecs);
     }
 
     // Lower into llvm.vector.interleave intrinsic.
@@ -2238,13 +2238,13 @@ Value *CodeGen_ARM::interleave_vectors(const std::vector<Value *> &vecs) {
         return interleave;
     }
 
-    return CodeGen_Posix::interleave_vectors(vecs);
+    return CodeGen_CPU::interleave_vectors(vecs);
 };
 
 Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &indices) {
     if (simd_intrinsics_disabled() || target_vscale() == 0 ||
         !is_scalable_vector(a)) {
-        return CodeGen_Posix::shuffle_vectors(a, b, indices);
+        return CodeGen_CPU::shuffle_vectors(a, b, indices);
     }
 
     internal_assert(a->getType() == b->getType());
@@ -2411,7 +2411,7 @@ void CodeGen_ARM::visit(const Ramp *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_ARM::visit(const Call *op) {
@@ -2519,7 +2519,7 @@ void CodeGen_ARM::visit(const Call *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_ARM::visit(const LT *op) {
@@ -2529,11 +2529,11 @@ void CodeGen_ARM::visit(const LT *op) {
         // See https://bugs.llvm.org/show_bug.cgi?id=45036
         llvm::IRBuilderBase::FastMathFlagGuard guard(*builder);
         builder->clearFastMathFlags();
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_ARM::visit(const LE *op) {
@@ -2543,16 +2543,16 @@ void CodeGen_ARM::visit(const LE *op) {
         // See https://bugs.llvm.org/show_bug.cgi?id=45036
         llvm::IRBuilderBase::FastMathFlagGuard guard(*builder);
         builder->clearFastMathFlags();
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
         return;
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     if (simd_intrinsics_disabled()) {
-        CodeGen_Posix::codegen_vector_reduce(op, init);
+        CodeGen_CPU::codegen_vector_reduce(op, init);
         return;
     }
 
@@ -2565,7 +2565,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     if (codegen_across_vector_reduce(op, init)) {
         return;
     }
-    CodeGen_Posix::codegen_vector_reduce(op, init);
+    CodeGen_CPU::codegen_vector_reduce(op, init);
 }
 
 bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, const Expr &init) {
@@ -2801,21 +2801,21 @@ Type CodeGen_ARM::upgrade_type_for_arithmetic(const Type &t) const {
     if (is_float16_and_has_feature(t)) {
         return t;
     }
-    return CodeGen_Posix::upgrade_type_for_arithmetic(t);
+    return CodeGen_CPU::upgrade_type_for_arithmetic(t);
 }
 
 Type CodeGen_ARM::upgrade_type_for_argument_passing(const Type &t) const {
     if (is_float16_and_has_feature(t)) {
         return t;
     }
-    return CodeGen_Posix::upgrade_type_for_argument_passing(t);
+    return CodeGen_CPU::upgrade_type_for_argument_passing(t);
 }
 
 Type CodeGen_ARM::upgrade_type_for_storage(const Type &t) const {
     if (is_float16_and_has_feature(t)) {
         return t;
     }
-    return CodeGen_Posix::upgrade_type_for_storage(t);
+    return CodeGen_CPU::upgrade_type_for_storage(t);
 }
 
 int CodeGen_ARM::natural_vector_size(const Halide::Type &t) const {
@@ -2951,13 +2951,13 @@ bool CodeGen_ARM::supports_call_as_float16(const Call *op) const {
 
 }  // namespace
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_ARM(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_ARM(const Target &target) {
     return std::make_unique<CodeGen_ARM>(target);
 }
 
 #else  // WITH_ARM || WITH_AARCH64
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_ARM(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_ARM(const Target &target) {
     user_error << "ARM not enabled for this build of Halide.\n";
     return nullptr;
 }

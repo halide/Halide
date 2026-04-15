@@ -2,7 +2,7 @@
 
 #include "CSE.h"
 #include "CodeGen_Internal.h"
-#include "CodeGen_Posix.h"
+#include "CodeGen_CPU.h"
 #include "Debug.h"
 #include "IR.h"
 #include "IROperator.h"
@@ -18,11 +18,11 @@ using std::vector;
 
 using namespace llvm;
 
-CodeGen_Posix::CodeGen_Posix(const Target &t)
+CodeGen_CPU::CodeGen_CPU(const Target &t)
     : CodeGen_LLVM(t) {
 }
 
-Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, const Expr &condition) {
+Value *CodeGen_CPU::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, const Expr &condition) {
     // Compute size from list of extents checking for overflow.
 
     Expr overflow = make_zero(UInt(64));
@@ -74,7 +74,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     return codegen(total_size);
 }
 
-CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type, MemoryType memory_type,
+CodeGen_CPU::Allocation CodeGen_CPU::create_allocation(const std::string &name, Type type, MemoryType memory_type,
                                                            const std::vector<Expr> &extents, const Expr &condition,
                                                            const Expr &new_expr, std::string free_function, int padding) {
     Value *llvm_size = nullptr;
@@ -313,7 +313,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     return allocation;
 }
 
-void CodeGen_Posix::free_allocation(const std::string &name) {
+void CodeGen_CPU::free_allocation(const std::string &name) {
     Allocation alloc = allocations.get(name);
 
     if (alloc.stack_bytes) {
@@ -333,7 +333,7 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
     sym_pop(name);
 }
 
-string CodeGen_Posix::get_allocation_name(const std::string &n) {
+string CodeGen_CPU::get_allocation_name(const std::string &n) {
     if (const auto *alloc = allocations.find(n)) {
         return alloc->name;
     } else {
@@ -341,7 +341,7 @@ string CodeGen_Posix::get_allocation_name(const std::string &n) {
     }
 }
 
-void CodeGen_Posix::visit(const Allocate *alloc) {
+void CodeGen_CPU::visit(const Allocate *alloc) {
     if (sym_exists(alloc->name)) {
         user_error << "Can't have two different buffers with the same name: "
                    << alloc->name << "\n";
@@ -360,7 +360,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     }
 }
 
-void CodeGen_Posix::visit(const Free *stmt) {
+void CodeGen_CPU::visit(const Free *stmt) {
     free_allocation(stmt->name);
 }
 
