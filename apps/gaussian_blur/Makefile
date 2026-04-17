@@ -24,7 +24,7 @@ $(eval $(call GAUSSIAN_BLUR,$(upsample_order),$(downsample_order),$(factor))))))
 LIBS += $(BIN)/%/runtime.a
 
 # combined header
-$(BIN)/%/blurs.h: 
+$(BIN)/%/blurs.h:
 	rm -f $@
 	$(foreach h,$(HEADERS),echo '#include "$(h)"' >> $@;)
 
@@ -32,7 +32,7 @@ $(BIN)/%/gaussian_blur_direct.a: $(GENERATOR_BIN)/gaussian_blur.generator
 	@mkdir -p $(@D)
 	$< -g gaussian_blur_direct -f gaussian_blur_direct -e $(GENERATOR_OUTPUTS),conceptual_stmt_html -o $(BIN)/$* target=$*-no_runtime
 
-$(BIN)/%/runtime.a: $(GENERATOR_BIN)/gaussian_blur.generator 
+$(BIN)/%/runtime.a: $(GENERATOR_BIN)/gaussian_blur.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN)/$* target=$*
 

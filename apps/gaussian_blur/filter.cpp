@@ -1,9 +1,16 @@
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
 #include <iostream>
 #include <thread>
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#elif defined(__i386__) || defined(__x86_64__)
+#include <immintrin.h>
+#endif
 
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
@@ -40,10 +47,13 @@ struct LockFreeThreadPool {
     // A flag to tell the workers to terminate
     std::atomic<bool> shutdown{false};
 
-    static inline void pause() {
-#if defined(__i386__) || defined(__x86_64__)
-        asm volatile("pause" ::: "memory");
+    static void pause() {
+#if defined(_M_IX86) || defined(_M_X64) || defined(__i386__) || defined(__x86_64__)
+        _mm_pause();
+#elif defined(_M_ARM) || defined(_M_ARM64)
+        __yield();
 #elif defined(__aarch64__) || defined(__arm__)
+        // GCC lacks __yield(). See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105416
         asm volatile("yield" ::: "memory");
 #endif
     }
@@ -248,7 +258,7 @@ int main(int argc, char **argv) {
         direct_output.copy_to_host();
         double PSNR = compute_PSNR(direct_output, reference_output);
         printf("Direct (sigma=%s, radius=%d): %d us %g db\n", sigma_str,
-               (int)std::ceilf(trunc * sigma), to_us(direct_time), PSNR);
+               (int)std::ceil(trunc * sigma), to_us(direct_time), PSNR);
         results.emplace_back(Result{"Direct " + std::to_string(trunc) + " sigma", direct_time, PSNR});
     }
     // If profiling, we're going to report as we go, rather than once at the
