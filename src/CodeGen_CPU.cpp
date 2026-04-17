@@ -1,8 +1,8 @@
 #include <iostream>
 
 #include "CSE.h"
-#include "CodeGen_Internal.h"
 #include "CodeGen_CPU.h"
+#include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "IR.h"
 #include "IROperator.h"
@@ -75,8 +75,8 @@ Value *CodeGen_CPU::codegen_allocation_size(const std::string &name, Type type, 
 }
 
 CodeGen_CPU::Allocation CodeGen_CPU::create_allocation(const std::string &name, Type type, MemoryType memory_type,
-                                                           const std::vector<Expr> &extents, const Expr &condition,
-                                                           const Expr &new_expr, std::string free_function, int padding) {
+                                                       const std::vector<Expr> &extents, const Expr &condition,
+                                                       const Expr &new_expr, std::string free_function, int padding) {
     Value *llvm_size = nullptr;
     int64_t stack_bytes = 0;
     int32_t constant_bytes = Allocate::constant_allocation_size(extents, name);

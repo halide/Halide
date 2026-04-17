@@ -1,6 +1,6 @@
 #include "CSE.h"
-#include "CodeGen_Internal.h"
 #include "CodeGen_CPU.h"
+#include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "IREquality.h"
 #include "IRMatch.h"
