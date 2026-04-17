@@ -31,6 +31,7 @@ CUDA_FN(CUresult, cuModuleLoadData, (CUmodule * module, const void *image));
 CUDA_FN(CUresult, cuModuleLoadDataEx, (CUmodule * module, const void *image, unsigned int numOptions, CUjit_option *options, void **optionValues));
 CUDA_FN(CUresult, cuModuleUnload, (CUmodule module));
 CUDA_FN(CUresult, cuModuleGetFunction, (CUfunction * hfunc, CUmodule hmod, const char *name));
+CUDA_FN(CUresult, cuFuncGetAttribute, (int *pi, CUfunction_attribute attrib, CUfunction hfunc));
 CUDA_FN_3020(CUresult, cuMemAlloc, cuMemAlloc_v2, (CUdeviceptr * dptr, size_t bytesize));
 CUDA_FN_3020(CUresult, cuMemFree, cuMemFree_v2, (CUdeviceptr dptr));
 CUDA_FN_3020(CUresult, cuMemcpyHtoD, cuMemcpyHtoD_v2, (CUdeviceptr dstDevice, const void *srcHost, size_t ByteCount));

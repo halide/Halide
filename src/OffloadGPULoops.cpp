@@ -7,6 +7,7 @@
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_PTX_Dev.h"
+#include "CodeGen_TileIR_Dev.h"
 #include "CodeGen_Vulkan_Dev.h"
 #include "CodeGen_WebGPU_Dev.h"
 #include "ExprUsesVar.h"
@@ -54,17 +55,30 @@ private:
             internal_assert(is_const_zero(op->min));
         }
 
+        // Only count loops whose for_type is GPU-parallel (GPUThread/
+        // GPULane/GPUBlock) or Vectorized. For the CUDATileIR backend,
+        // thread loops are remapped to Vectorized. Halide's vectorizer
+        // may fall back to Serial for loops that can't be vectorized
+        // (e.g. around atomics); those should NOT contribute to the
+        // launch thread count even though the loop name still has a
+        // thread_id_* suffix.
+        bool is_thread_like = op->for_type == ForType::GPUThread ||
+                              op->for_type == ForType::GPULane ||
+                              op->for_type == ForType::Vectorized;
+        bool is_block_like = op->for_type == ForType::GPUBlock;
+
         for (int i = 0; i < 3; i++) {
-            if (ends_with(op->name, gpu_thread_name(i))) {
+            if (is_thread_like && ends_with(op->name, gpu_thread_name(i))) {
                 num_threads[i] = simplify(op->extent());
             }
-            if (ends_with(op->name, gpu_block_name(i))) {
+            if (is_block_like && ends_with(op->name, gpu_block_name(i))) {
                 num_blocks[i] = simplify(op->extent());
             }
         }
 
         op->body.accept(this);
     }
+
 
     void visit(const LetStmt *op) override {
         if (expr_uses_var(shared_mem_size, op->name)) {
@@ -132,6 +146,18 @@ class InjectGpuOffload : public IRMutator {
 
         ExtractBounds bounds;
         loop->accept(&bounds);
+        if (loop->device_api == DeviceAPI::CUDATileIR) {
+            // CUDATileIR maps each tile-op lane to SIMD-within-a-thread;
+            // we launch one thread per block regardless of what
+            // ExtractBounds found from thread_id_* loop names (which may
+            // be stale for serial loops left behind after vectorization).
+            // TODO: kernels that use tensor-core ops need more threads;
+            // tileiras embeds REQNTID in the kernel ELF — reading that
+            // at launch time is the right fix.
+            for (int i = 0; i < 3; i++) {
+                bounds.num_threads[i] = 1;
+            }
+        }
         debug(2) << "Kernel bounds: ("
                  << bounds.num_threads[0] << ", "
                  << bounds.num_threads[1] << ", "
@@ -253,7 +279,7 @@ public:
         // host arch or os.
         device_target.os = Target::OSUnknown;
         device_target.arch = Target::ArchUnknown;
-        if (target.has_feature(Target::CUDA)) {
+        if (target.has_feature(Target::CUDA) && !target.has_feature(Target::CUDATileIR)) {
             cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(device_target);
         }
         if (target.has_feature(Target::OpenCL)) {
@@ -270,6 +296,9 @@ public:
         }
         if (target.has_feature(Target::WebGPU)) {
             cgdev[DeviceAPI::WebGPU] = new_CodeGen_WebGPU_Dev(device_target);
+        }
+        if (target.has_feature(Target::CUDATileIR)) {
+            cgdev[DeviceAPI::CUDATileIR] = new_CodeGen_TileIR_Dev(device_target);
         }
 
         for (auto &i : cgdev) {

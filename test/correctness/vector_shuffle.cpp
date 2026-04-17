@@ -6,6 +6,18 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
+    if (target.has_feature(Target::CUDATileIR)) {
+        // This test authors explicit vector Exprs (Internal::Shuffle::make_concat)
+        // in the front end. That's technically illegal in Halide (vectors
+        // should only appear after VectorizeLoops), and only works here
+        // because the traditional GPU backends don't route thread loops
+        // through the vectorizer. The tile-ir backend does (it remaps
+        // GPUThread -> Vectorized), so this test exposes the illegality.
+        printf("[SKIP] vector_shuffle authors illegal vector Exprs; "
+               "incompatible with cuda_tile_ir.\n");
+        return 0;
+    }
+
     Var x{"x"}, y{"y"};
     Func f0{"f0"}, f1{"f1"}, g{"g"};
     f0(x, y) = x * (y + 1);

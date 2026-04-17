@@ -92,7 +92,7 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
         name = "metal";
     } else if (d == DeviceAPI::OpenCL) {
         name = "opencl";
-    } else if (d == DeviceAPI::CUDA) {
+    } else if (d == DeviceAPI::CUDA || d == DeviceAPI::CUDATileIR) {
         name = "cuda";
     } else if (d == DeviceAPI::Hexagon) {
         name = "hexagon";
@@ -146,7 +146,9 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
 }
 
 DeviceAPI get_default_device_api_for_target(const Target &target) {
-    if (target.has_feature(Target::Metal)) {
+    if (target.has_feature(Target::CUDATileIR)) {
+        return DeviceAPI::CUDATileIR;
+    } else if (target.has_feature(Target::Metal)) {
         return DeviceAPI::Metal;
     } else if (target.has_feature(Target::OpenCL)) {
         return DeviceAPI::OpenCL;
@@ -176,6 +178,7 @@ Expr make_device_interface_call(DeviceAPI device_api, MemoryType memory_type) {
     std::string interface_name;
     switch (device_api) {
     case DeviceAPI::CUDA:
+    case DeviceAPI::CUDATileIR:
         interface_name = "halide_cuda_device_interface";
         break;
     case DeviceAPI::OpenCL:

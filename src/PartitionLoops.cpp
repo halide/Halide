@@ -867,6 +867,7 @@ class RenormalizeGPULoops : public IRMutator {
 
     Stmt visit(const For *op) override {
         bool old_in_gpu_loop = in_gpu_loop;
+        bool old_in_thread_loop = in_thread_loop;
         Stmt stmt;
 
         if (in_gpu_loop || is_gpu(op->for_type)) {
@@ -874,14 +875,22 @@ class RenormalizeGPULoops : public IRMutator {
             in_gpu_loop = true;
         }
 
-        if (ends_with(op->name, gpu_thread_name(0))) {
-            internal_assert(!in_thread_loop);
+        // CUDATileIR kernels have thread loops remapped to vectorized,
+        // so treat the entire block body as "in thread loop" to prevent
+        // restructuring that assumes thread loop structure.
+        if (op->device_api == DeviceAPI::CUDATileIR && op->for_type == ForType::GPUBlock) {
+            in_thread_loop = true;
+        }
+
+        if (ends_with(op->name, gpu_thread_name(0)) && !in_thread_loop) {
             in_thread_loop = true;
             stmt = IRMutator::visit(op);
             in_thread_loop = false;
         } else {
             stmt = IRMutator::visit(op);
         }
+
+        in_thread_loop = old_in_thread_loop;
 
         if (in_gpu_loop && !old_in_gpu_loop) {
             // This was the outermost GPU loop. Dump any lifted lets here.

@@ -480,6 +480,7 @@ SOURCE_FILES = \
   CodeGen_PTX_Dev.cpp \
   CodeGen_PyTorch.cpp \
   CodeGen_RISCV.cpp \
+  CodeGen_TileIR_Dev.cpp \
   CodeGen_WebAssembly.cpp \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
@@ -568,6 +569,7 @@ SOURCE_FILES = \
   RebaseLoopsToZero.cpp \
   Reduction.cpp \
   RegionCosts.cpp \
+  RemapCUDATileIRLoops.cpp \
   RemoveDeadAllocations.cpp \
   RemoveExternLoops.cpp \
   RemoveUndef.cpp \
@@ -602,6 +604,7 @@ SOURCE_FILES = \
   SlidingWindow.cpp \
   Solve.cpp \
   SpirvIR.cpp \
+  TileIR.cpp \
   SplitTuples.cpp \
   StageStridedLoads.cpp \
   StmtToHTML.cpp \

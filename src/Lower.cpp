@@ -29,6 +29,7 @@
 #include "ExtractTileOperations.h"
 #include "FindCalls.h"
 #include "FindIntrinsics.h"
+#include "CodeGen_TileIR_Dev.h"
 #include "FlattenNestedRamps.h"
 #include "Func.h"
 #include "Function.h"
@@ -54,6 +55,7 @@
 #include "Qualify.h"
 #include "RealizationOrder.h"
 #include "RebaseLoopsToZero.h"
+#include "RemapCUDATileIRLoops.h"
 #include "RemoveDeadAllocations.h"
 #include "RemoveExternLoops.h"
 #include "RemoveUndef.h"
@@ -319,6 +321,12 @@ void lower_impl(const vector<Function> &output_funcs,
         s = select_gpu_api(s, t);
         log("Lowering after selecting a GPU API:", s);
 
+        if (t.has_feature(Target::CUDATileIR)) {
+            debug(1) << "Remapping CUDATileIR GPU thread loops to vectorized...\n";
+            s = remap_cuda_tile_ir_loops(s);
+            log("Lowering after remapping CUDATileIR loops:", s);
+        }
+
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s, t);
         log("Lowering after injecting host <-> dev buffer copies:", s);
@@ -416,7 +424,7 @@ void lower_impl(const vector<Function> &output_funcs,
         log("Lowering after injecting profiling:", s);
     }
 
-    if (t.has_feature(Target::CUDA)) {
+    if (t.has_feature(Target::CUDA) && !t.has_feature(Target::CUDATileIR)) {
         debug(1) << "Injecting warp shuffles...\n";
         s = lower_warp_shuffles(s, t);
         log("Lowering after injecting warp shuffles:", s);
@@ -435,9 +443,20 @@ void lower_impl(const vector<Function> &output_funcs,
         log("Lowering after extracting tile operations:", s);
     }
 
-    debug(1) << "Flattening nested ramps...\n";
-    s = flatten_nested_ramps(s);
-    log("Lowering after flattening nested ramps:", s);
+    // Before flatten_nested_ramps destroys the nested-vector shape info,
+    // let the CUDA Tile IR backend pattern-match MMA-shaped reductions
+    // and rewrite them into a backend-friendly intrinsic.
+    if (t.has_feature(Target::CUDATileIR)) {
+        debug(1) << "Lowering CUDA Tile IR MMA patterns...\n";
+        s = lower_cuda_tile_mma(s);
+        log("Lowering after CUDA Tile IR MMA rewrites:", s);
+    }
+
+    if (!t.has_feature(Target::CUDATileIR)) {
+        debug(1) << "Flattening nested ramps...\n";
+        s = flatten_nested_ramps(s);
+        log("Lowering after flattening nested ramps:", s);
+    }
 
     debug(1) << "Removing dead allocations and moving loop invariant code...\n";
     s = remove_dead_allocations(s);

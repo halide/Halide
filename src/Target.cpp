@@ -766,6 +766,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx10_1", Target::AVX10_1},
     {"x86apx", Target::X86APX},
     {"simulator", Target::Simulator},
+    {"cuda_tile_ir", Target::CUDATileIR},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -1005,6 +1006,11 @@ void do_check_bad(const Target &t, const std::initializer_list<Target::Feature> 
 }  // namespace
 
 void Target::validate_features() const {
+    // CUDATileIR requires CUDA to be set (for the runtime)
+    if (has_feature(CUDATileIR)) {
+        user_assert(has_feature(CUDA))
+            << "Target feature cuda_tile_ir requires cuda to also be set.\n";
+    }
     // Note that the features don't have to be exhaustive, but enough to avoid obvious mistakes is good.
     if (arch == X86) {
         do_check_bad(*this, {
@@ -1271,7 +1277,8 @@ bool Target::has_gpu_feature() const {
             has_feature(Metal) ||
             has_feature(D3D12Compute) ||
             has_feature(Vulkan) ||
-            has_feature(WebGPU));
+            has_feature(WebGPU) ||
+            has_feature(CUDATileIR));
 }
 
 int Target::get_cuda_capability_lower_bound() const {
@@ -1413,6 +1420,8 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
         }
     } else if (device == DeviceAPI::WebGPU) {
         return t.bits() < 64;
+    } else if (device == DeviceAPI::CUDATileIR) {
+        // Same type support as CUDA for now
     }
 
     return true;
@@ -1436,6 +1445,9 @@ bool Target::supports_device_api(DeviceAPI api) const {
 }
 
 DeviceAPI Target::get_required_device_api() const {
+    if (has_feature(Target::CUDATileIR)) {
+        return DeviceAPI::CUDATileIR;
+    }
     if (has_feature(Target::CUDA)) {
         return DeviceAPI::CUDA;
     }
@@ -1479,6 +1491,8 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::Vulkan;
     case DeviceAPI::WebGPU:
         return Target::WebGPU;
+    case DeviceAPI::CUDATileIR:
+        return Target::CUDATileIR;
     default:
         return Target::FeatureEnd;
     }

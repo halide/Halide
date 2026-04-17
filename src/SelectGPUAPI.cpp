@@ -25,6 +25,13 @@ class SelectGPUAPI : public IRMutator {
         if (op->device_api == DeviceAPI::Default_GPU) {
             selected_api = default_api;
         }
+        // When CUDATileIR is the active backend, route plain CUDA loops
+        // through it too. The tile-ir runtime uses the cuda driver, so
+        // correctness is preserved.
+        if (selected_api == DeviceAPI::CUDA &&
+            default_api == DeviceAPI::CUDATileIR) {
+            selected_api = DeviceAPI::CUDATileIR;
+        }
 
         DeviceAPI old_parent_api = parent_api;
         parent_api = selected_api;

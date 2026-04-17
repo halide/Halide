@@ -83,6 +83,7 @@ target_sources(
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
+    CodeGen_TileIR_Dev.h
     CodeGen_Vulkan_Dev.h
     CodeGen_WebGPU_Dev.h
     CompilerLogger.h
@@ -180,6 +181,7 @@ target_sources(
     RebaseLoopsToZero.h
     Reduction.h
     RegionCosts.h
+    RemapCUDATileIRLoops.h
     RemoveDeadAllocations.h
     RemoveExternLoops.h
     RemoveUndef.h
@@ -264,6 +266,7 @@ target_sources(
     CodeGen_PTX_Dev.cpp
     CodeGen_PyTorch.cpp
     CodeGen_RISCV.cpp
+    CodeGen_TileIR_Dev.cpp
     CodeGen_Vulkan_Dev.cpp
     CodeGen_WebAssembly.cpp
     CodeGen_WebGPU_Dev.cpp
@@ -353,6 +356,7 @@ target_sources(
     RebaseLoopsToZero.cpp
     Reduction.cpp
     RegionCosts.cpp
+    RemapCUDATileIRLoops.cpp
     RemoveDeadAllocations.cpp
     RemoveExternLoops.cpp
     RemoveUndef.cpp
@@ -388,6 +392,8 @@ target_sources(
     Solve.cpp
     SpirvIR.cpp
     SpirvIR.h
+    TileIR.cpp
+    TileIR.h
     SplitTuples.cpp
     StageStridedLoads.cpp
     StmtToHTML.cpp

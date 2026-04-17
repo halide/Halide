@@ -26,7 +26,8 @@ void define_enums(py::module &m) {
         .value("Vulkan", DeviceAPI::Vulkan)
         .value("OpenCL", DeviceAPI::OpenCL)
         .value("Metal", DeviceAPI::Metal)
-        .value("Hexagon", DeviceAPI::Hexagon);
+        .value("Hexagon", DeviceAPI::Hexagon)
+        .value("CUDATileIR", DeviceAPI::CUDATileIR);
 
     py::enum_<LinkageType>(m, "LinkageType")
         .value("External", LinkageType::External)
@@ -216,6 +217,7 @@ void define_enums(py::module &m) {
         .value("AVX10_1", Target::Feature::AVX10_1)
         .value("X86APX", Target::Feature::X86APX)
         .value("Simulator", Target::Feature::Simulator)
+        .value("CUDATileIR", Target::Feature::CUDATileIR)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

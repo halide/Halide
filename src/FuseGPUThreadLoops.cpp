@@ -1472,8 +1472,68 @@ class FuseGPUThreadLoops : public IRMutator {
             debug(3) << "Pulled out shared allocations:\n"
                      << loop << "\n\n";
 
-            // Mutate the inside of the kernel
-            loop = FuseGPUThreadLoopsSingleKernel(block_size, block_allocations).mutate(loop);
+            // CUDATileIR kernels have thread loops remapped to
+            // vectorized before this pass runs. Skip thread fusion
+            // but still process shared/heap allocations above. Call
+            // rewrap_block so heap allocations get populated into
+            // global_allocations and hoisted via rewrap_kernel_launch.
+            // rewrap_block must be applied INSIDE the gpu_block loops
+            // since the allocation offsets reference block vars.
+            if (op->device_api != DeviceAPI::CUDATileIR) {
+                // Mutate the inside of the kernel
+                loop = FuseGPUThreadLoopsSingleKernel(block_size, block_allocations).mutate(loop);
+            } else {
+                // rewrap_block emits LetStmts for allocation offsets that
+                // reference all the gpu_block index variables, so it must
+                // be applied INSIDE the innermost gpu_block loop. Walk
+                // through the loop nest (including LetStmts, IfThenElse,
+                // ProducerConsumer, etc.) to find the innermost gpu_block
+                // body, apply rewrap_block there, then reconstruct.
+                class RewrapInnermost : public IRMutator {
+                    ExtractSharedAndHeapAllocations &block_allocations;
+                    const ExtractBlockSize &block_size;
+                    using IRMutator::visit;
+
+                    bool has_gpu_block(const Stmt &s) {
+                        class HasBlock : public IRVisitor {
+                            using IRVisitor::visit;
+                            void visit(const For *op) override {
+                                if (op->for_type == ForType::GPUBlock) {
+                                    found = true;
+                                } else {
+                                    IRVisitor::visit(op);
+                                }
+                            }
+                        public:
+                            bool found = false;
+                        };
+                        HasBlock v;
+                        s.accept(&v);
+                        return v.found;
+                    }
+
+                    Stmt visit(const For *op) override {
+                        if (op->for_type == ForType::GPUBlock) {
+                            Stmt body = mutate(op->body);
+                            if (!has_gpu_block(op->body)) {
+                                // This is the innermost gpu_block; rewrap its body.
+                                body = block_allocations.rewrap_block(body, block_size);
+                            }
+                            return For::make(op->name, op->min, op->max,
+                                             op->for_type, op->partition_policy,
+                                             op->device_api, body);
+                        }
+                        return IRMutator::visit(op);
+                    }
+
+                public:
+                    RewrapInnermost(ExtractSharedAndHeapAllocations &ba,
+                                    const ExtractBlockSize &bs)
+                        : block_allocations(ba), block_size(bs) {}
+                };
+                RewrapInnermost rewrapper{block_allocations, block_size};
+                loop = rewrapper.mutate(loop);
+            }
 
             loop = block_allocations.rewrap_kernel_launch(loop, block_size, op->device_api);
 
@@ -1495,7 +1555,8 @@ class ZeroGPULoopMins : public IRMutator {
                           (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
                           (op->device_api == DeviceAPI::Metal) ||
                           (op->device_api == DeviceAPI::D3D12Compute) ||
-                          (op->device_api == DeviceAPI::Vulkan);
+                          (op->device_api == DeviceAPI::Vulkan) ||
+                          (op->device_api == DeviceAPI::CUDATileIR);
 
         Stmt stmt = IRMutator::visit(op);
         if (is_gpu(op->for_type) && !is_const_zero(op->min)) {

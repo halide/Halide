@@ -1469,6 +1469,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx10_1,                ///< Intel AVX10 version 1 support. vector_bits is used to indicate width.
     halide_target_feature_x86_apx,                ///< Intel x86 APX support. Covers initial set of features released as APX: egpr,push2pop2,ppx,ndd .
     halide_target_feature_simulator,              ///< Target is for a simulator environment. Currently only applies to iOS.
+    halide_target_feature_cuda_tile_ir,           ///< Enable NVIDIA Tile IR backend for GPU code generation (uses CUDA runtime).
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 

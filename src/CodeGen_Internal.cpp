@@ -415,7 +415,10 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         q = q & ~b_zero;
     }
 
-    q = simplify(common_subexpression_elimination(q));
+    // Do not call simplify() here: its canonicalization would rewrite
+    // `x & (2^k - 1)` back into `x % 2^k`, reintroducing the exact Mod
+    // node this helper is meant to lower.
+    q = common_subexpression_elimination(q);
 
     return q;
 }
@@ -466,7 +469,10 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         q = q & ~b_zero;
     }
 
-    q = simplify(common_subexpression_elimination(q));
+    // Do not call simplify() here: its canonicalization would rewrite
+    // `x & (2^k - 1)` back into `x % 2^k`, reintroducing the exact Mod
+    // node this helper is meant to lower.
+    q = common_subexpression_elimination(q);
 
     return q;
 }
