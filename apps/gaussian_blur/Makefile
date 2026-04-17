@@ -1,6 +1,9 @@
 include ../support/Makefile.inc
 
-all: $(BIN)/$(HL_TARGET)/filter
+.PHONY: build clean test
+.SECONDARY:
+
+build: $(BIN)/$(HL_TARGET)/filter
 
 $(GENERATOR_BIN)/gaussian_blur.generator: gaussian_blur_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
