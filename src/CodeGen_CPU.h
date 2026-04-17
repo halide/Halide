@@ -2,7 +2,7 @@
 #define HALIDE_CODEGEN_CPU_H
 
 /** \file
- * Defines a base-class for code-generators on posixy cpu platforms
+ * Defines a base-class for LLVM-based code-generators for CPU-like architectures.
  */
 
 #include "CodeGen_LLVM.h"
@@ -10,9 +10,12 @@
 namespace Halide {
 namespace Internal {
 
-/** A base class for LLVM-based CPU code generators. This means targets that
- * have a stack and a heap and halide_malloc, as opposed to targets like CUDA
- * which expose memory differently. */
+/** A base class for LLVM-based CPU code generators. Currently this mostly
+ * concerns the memory model. This is a base class for targets that have a stack
+ * and a heap and halide_malloc, as opposed to targets like CUDA which expose
+ * memory differently. This is not intended to be restricted to *just* the
+ * memory model though - anything shared across CPU-like architectures
+ * (e.g. support for common syscalls) can be placed here too. */
 class CodeGen_CPU : public CodeGen_LLVM {
 public:
     /** Create a CPU code generator. Processor features can be enabled using the
