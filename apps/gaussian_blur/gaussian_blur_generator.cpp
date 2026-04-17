@@ -226,8 +226,13 @@ public:
                 .align_bounds(y, factor)
                 .gpu_tile(x, y, xi, yi, 32 * factor, 2 * factor, TailStrategy::GuardWithIf)
                 .tile(xi, yi, xi, yi, xii, yii, factor, factor)
-                .vectorize(xii)
                 .unroll(yii);
+
+            if (get_target().has_feature(Target::CUDA)) {
+                output.vectorize(xii);
+            } else {
+                output.unroll(xii);
+            }
 
             blurred.in()
                 .compute_root()
