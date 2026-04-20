@@ -538,7 +538,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                 Expr b_slice = Shuffle::make_slice(b, i + l * factor, 1, p.factor);
                 i_slice = Call::make(i_slice.type(), p.name, {a_slice, b_slice, i_slice}, Call::PureExtern);
             }
-            i_slice = RewriteLoadsAs32Bit().mutate(i_slice);
+            i_slice = RewriteLoadsAs32Bit()(i_slice);
             i_slice = simplify(i_slice);
             i_slice = common_subexpression_elimination(i_slice);
             result.push_back(i_slice);

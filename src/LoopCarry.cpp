@@ -167,7 +167,7 @@ public:
 
 Expr step_forwards(Expr e, const Scope<Expr> &linear) {
     StepForwards step(linear);
-    e = step.mutate(e);
+    e = step(e);
     if (!step.success) {
         return Expr();
     } else {
@@ -554,7 +554,7 @@ class LoopCarry : public IRMutator {
             Stmt stmt;
             Stmt body = mutate(op->body);
             LoopCarryOverLoop carry(op->name, in_consume, max_carried_values);
-            body = carry.mutate(body);
+            body = carry(body);
             if (body.same_as(op->body)) {
                 stmt = op;
             } else {
@@ -583,9 +583,8 @@ public:
 
 }  // namespace
 
-Stmt loop_carry(Stmt s, int max_carried_values) {
-    s = LoopCarry(max_carried_values).mutate(s);
-    return s;
+Stmt loop_carry(const Stmt &s, int max_carried_values) {
+    return LoopCarry(max_carried_values)(s);
 }
 
 }  // namespace Internal

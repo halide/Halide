@@ -127,7 +127,7 @@ public:
 }  // namespace
 
 Expr strictify_float(const Expr &e) {
-    return Strictify{}.mutate(e);
+    return Strictify{}(e);
 }
 
 Expr unstrictify_float(const Call *op) {

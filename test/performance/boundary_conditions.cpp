@@ -91,6 +91,13 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (Halide::Internal::get_llvm_version() < 220 &&
+        get_jit_target_from_environment().has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
+               Halide::Internal::get_llvm_version());
+        return 0;
+    }
+
     ImageParam input(Float(32), 2);
     ImageParam padded_input(Float(32), 2);
 

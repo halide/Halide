@@ -676,7 +676,6 @@ struct BufferSize {
 void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
                                                     const string &name,
                                                     const vector<DeviceArgument> &args) {
-
     debug(2) << "Adding Metal kernel " << name << "\n";
 
     // Figure out which arguments should be passed in constant.

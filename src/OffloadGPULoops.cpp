@@ -44,7 +44,7 @@ public:
         }
     }
 
-private:
+protected:
     bool found_shared = false;
 
     using IRVisitor::visit;
@@ -87,6 +87,7 @@ private:
 };
 
 class InjectGpuOffload : public IRMutator {
+protected:
     /** Child code generator for device kernels. */
     map<DeviceAPI, unique_ptr<CodeGen_GPU_Dev>> cgdev;
 
@@ -131,7 +132,7 @@ class InjectGpuOffload : public IRMutator {
             << "A concrete device API should have been selected before codegen.";
 
         ExtractBounds bounds;
-        loop->accept(&bounds);
+        bounds(loop);
         debug(2) << "Kernel bounds: ("
                  << bounds.num_threads[0] << ", "
                  << bounds.num_threads[1] << ", "

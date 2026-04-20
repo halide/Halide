@@ -116,7 +116,7 @@ Expr add_let_expression(const Expr &expr,
                         const map<string, Expr> &let_var_mapping,
                         const vector<string> &let_variables) {
     // TODO: find a faster way to do this
-    Expr ret = StripLets().mutate(expr);
+    Expr ret = StripLets()(expr);
     bool changed = true;
     vector<bool> injected(let_variables.size(), false);
     while (changed) {
@@ -593,7 +593,7 @@ protected:
 }  // namespace
 
 Expr substitute_call_arg_with_pure_arg(Func f, int variable_id, const Expr &e) {
-    return simplify(SubstituteCallArgWithPureArg(std::move(f), variable_id).mutate(e));
+    return simplify(SubstituteCallArgWithPureArg(std::move(f), variable_id)(e));
 }
 
 }  // namespace Internal
