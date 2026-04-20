@@ -151,12 +151,15 @@ bool associative_op_pattern_match(const Expr &e,
                 match.emplace(iter.first, iter.second);
             } else {
                 if (iter.first != match_iter->first || !equal(iter.second, match_iter->second)) {
+                    debug(5) << "Failed to match: (" << iter.first << ", " << iter.second << ") != ("
+                             << match_iter->first << ", " << match_iter->second << ")\n";
                     return false;
                 }
             }
         }
         return true;
     }
+    debug(5) << "expr_match(" << op << ", " << e << ") == false\n";
     return false;
 }
 
@@ -538,7 +541,7 @@ void associativity_test() {
 
         for (const Expr &e : {cast<uint8_t>(min(cast<uint16_t>(x) + y, 255)),
                               select(x > 255 - y, make_const(UInt(8), 255), x + y),
-                              select(x < -y, x + y, make_const(UInt(8), 255)),
+                              select(x < ~y, x + y, make_const(UInt(8), 255)),
                               saturating_add(x, y),
                               saturating_add(y, x),
                               saturating_cast<uint8_t>(widening_add(x, y))}) {
