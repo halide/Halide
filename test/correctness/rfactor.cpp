@@ -831,6 +831,59 @@ int argmin_rfactor_test() {
     return 0;
 }
 
+int saturating_add_rfactor_test() {
+    Func f("f"), g("g"), ref("ref");
+    Var x("x"), y("y"), z("z");
+
+    f(x) = cast<uint8_t>(x);
+    f.compute_root();
+
+    Param<int> inner_extent;
+    RDom r(10, inner_extent);
+    inner_extent.set(6);
+    uint8_t max_int = 255;
+
+    g() = Tuple(cast<uint8_t>(0), cast<uint8_t>(0));
+    g() = Tuple(select(g()[0] > max_int - 3 * f(r.x), max_int, g()[0] + 3 * f(r.x)),
+                select(g()[1] > max_int - 9 * f(r.x), max_int, 9 * f(r.x) + g()[1]));
+
+    RVar rxi("rxi"), rxo("rxo");
+    g.update(0).split(r.x, rxo, rxi, 2);
+
+    Var u("u");
+    Func intm = g.update(0).rfactor(rxo, u);
+    intm.compute_root();
+    intm.update(0).vectorize(u, 2);
+
+    Realization rn = g.realize();
+    Buffer<uint8_t> im1(rn[0]);
+    Buffer<uint8_t> im2(rn[1]);
+
+    auto func1 = [](int x, int y, int z) {
+        int ret = 0;
+        for (int i = 10; i < 16; i++) {
+            ret += 3 * i;
+        }
+        return std::min(ret, 255);
+    };
+    if (check_image(im1, func1)) {
+        return 1;
+    }
+
+    auto func2 = [](int x, int y, int z) {
+        int ret = 0;
+        for (int i = 10; i < 16; i++) {
+            ret += 9 * i;
+        }
+        return std::min(ret, 255);
+    };
+    if (check_image(im2, func2)) {
+        return 1;
+    }
+
+    return 0;
+}
+
 enum class InlineReductionVariant {
     ArgMin,
     ArgMax,
@@ -1282,6 +1335,7 @@ int main(int argc, char **argv) {
         {"check allocation bound test", check_allocation_bound_test},
         {"rfactor tile reorder test: checking output img correctness...", rfactor_tile_reorder_test},
         {"complex multiply rfactor test", complex_multiply_rfactor_test},
+        {"saturating add rfactor test", saturating_add_rfactor_test},
         {"argmin rfactor test", argmin_rfactor_test},
         {"inline reductions test (argmin)", inline_reductions_test<InlineReductionVariant::ArgMin>},
         {"inline reductions test (argmax)", inline_reductions_test<InlineReductionVariant::ArgMax>},
