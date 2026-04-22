@@ -15,6 +15,7 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include "Util.h"
 #include "VectorizeLoops.h"
 
 namespace Halide {
@@ -1291,35 +1292,27 @@ protected:
                 std::string full_b_var_name = unique_name('b');
                 Expr full_b_var = Variable::make(b.type(), full_b_var_name);
 
-                int total_iters = b_shape_mr.total_lanes() / output_lanes;
-                std::vector<int> peeled_dims;
+                std::vector<int> peeled_dims, loop_extents;
                 peeled_dims.reserve(containing_loops.size());
+                loop_extents.reserve(containing_loops.size());
                 for (const auto &loop : containing_loops) {
                     peeled_dims.push_back(loop.dim);
+                    loop_extents.push_back(loop.extent);
                 }
                 std::vector<Stmt> block;
-                block.reserve(total_iters);
-                for (int n = 0; n < total_iters; n++) {
-                    // Decompose n into per-loop iteration values (innermost
-                    // loop first, matching the order in containing_loops).
-                    std::vector<int> v(containing_loops.size());
-                    int rem = n;
-                    for (size_t j = 0; j < containing_loops.size(); j++) {
-                        int e = containing_loops[j].extent;
-                        v[j] = rem % e;
-                        rem /= e;
-                    }
-
-                    std::vector<int> indices = b_shape_mr.shuffle_from_slice(peeled_dims, v);
-                    Expr b_slice = Shuffle::make({full_b_var}, indices);
-
+                block.reserve(b_shape_mr.total_lanes() / output_lanes);
+                for_each_coordinate(loop_extents, [&](const std::vector<int> &v) {
+                    // v is the loop iteration multi-index (innermost first,
+                    // matching the order in containing_loops).
+                    Expr b_slice = Shuffle::make({full_b_var},
+                                                 b_shape_mr.shuffle_from_slice(peeled_dims, v));
                     Stmt this_store = store_template;
                     for (size_t j = 0; j < containing_loops.size(); j++) {
                         this_store = substitute(containing_loops[j].name, v[j], this_store);
                     }
                     this_store = substitute(b_var_name, b_slice, this_store);
                     block.push_back(this_store);
-                }
+                });
                 s = Block::make(block);
                 s = LetStmt::make(full_b_var_name, b, s);
             }

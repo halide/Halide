@@ -7,6 +7,7 @@
 #include "IRVisitor.h"
 #include "ModulusRemainder.h"
 #include "Simplify.h"
+#include "Util.h"
 
 #include <numeric>
 #include <optional>
@@ -587,23 +588,16 @@ std::vector<int> MultiRamp::shuffle_from_permuted(const std::vector<int> &perm) 
     // this->lanes[perm[k]] as its innermost lane counts.
     int d = dimensions();
     internal_assert((int)perm.size() == d);
-    int total = total_lanes();
-    std::vector<int> indices(total);
-    std::vector<int> i(d);
-    for (int n = 0; n < total; n++) {
-        int rem = n;
+    std::vector<int> indices;
+    indices.reserve(total_lanes());
+    for_each_coordinate(lanes, [&](const std::vector<int> &coord) {
+        int permuted_flat = 0, M = 1;
         for (int k = 0; k < d; k++) {
-            i[k] = rem % lanes[k];
-            rem /= lanes[k];
-        }
-        int permuted_flat = 0;
-        int M = 1;
-        for (int k = 0; k < d; k++) {
-            permuted_flat += i[perm[k]] * M;
+            permuted_flat += coord[perm[k]] * M;
             M *= lanes[perm[k]];
         }
-        indices[n] = permuted_flat;
-    }
+        indices.push_back(permuted_flat);
+    });
     return indices;
 }
 
@@ -613,19 +607,16 @@ std::vector<Expr> MultiRamp::flatten() const {
         return {base};
     }
     int inner_lanes = lanes[0];
-    int outer_total = total_lanes() / inner_lanes;
+    std::vector<int> outer_sizes(lanes.begin() + 1, lanes.end());
     std::vector<Expr> result;
-    result.reserve(outer_total);
-    for (int n = 0; n < outer_total; n++) {
-        int rem = n;
+    result.reserve(total_lanes() / inner_lanes);
+    for_each_coordinate(outer_sizes, [&](const std::vector<int> &coord) {
         Expr offset_base = base;
-        for (int k = 1; k < d; k++) {
-            int ik = rem % lanes[k];
-            rem /= lanes[k];
-            offset_base = offset_base + ik * strides[k];
+        for (size_t k = 0; k < coord.size(); k++) {
+            offset_base = offset_base + coord[k] * strides[k + 1];
         }
         result.push_back(Ramp::make(offset_base, strides[0], inner_lanes));
-    }
+    });
     return result;
 }
 
@@ -645,30 +636,25 @@ std::vector<int> MultiRamp::shuffle_from_slice(const std::vector<int> &dims,
         internal_assert(fixed[dd] == -1) << "duplicate dim in shuffle_from_slice\n";
         fixed[dd] = pos[j];
     }
-    int total_out = 1;
+    // Sizes of the free (non-fixed) dims, in the same order as they
+    // appear in the full dim list.
+    std::vector<int> free_sizes;
     for (int k = 0; k < d; k++) {
         if (fixed[k] == -1) {
-            total_out *= lanes[k];
+            free_sizes.push_back(lanes[k]);
         }
     }
-    std::vector<int> indices(total_out);
-    for (int n = 0; n < total_out; n++) {
-        int rem = n;
-        int flat = 0;
-        int M = 1;
+    std::vector<int> indices;
+    for_each_coordinate(free_sizes, [&](const std::vector<int> &free_coord) {
+        int flat = 0, M = 1;
+        size_t fj = 0;
         for (int k = 0; k < d; k++) {
-            int ik;
-            if (fixed[k] != -1) {
-                ik = fixed[k];
-            } else {
-                ik = rem % lanes[k];
-                rem /= lanes[k];
-            }
+            int ik = (fixed[k] != -1) ? fixed[k] : free_coord[fj++];
             flat += ik * M;
             M *= lanes[k];
         }
-        indices[n] = flat;
-    }
+        indices.push_back(flat);
+    });
     return indices;
 }
 
