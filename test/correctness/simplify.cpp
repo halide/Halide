@@ -881,6 +881,25 @@ void check_vectors() {
         Expr u8_x = Variable::make(UInt(8), "u8_x");
         check(VectorReduce::make(VectorReduce::Add, broadcast(u8_x, 9), 3), broadcast(u8_x * cast(UInt(8), 3), 3));
     }
+
+    {
+        // Regression test for https://github.com/halide/Halide/issues/9100.
+        // Horizontal add of `factor` lanes, each `r (mod m)`, has alignment
+        // `(factor * r) (mod m)` -- the modulus does NOT scale up, because
+        // the lanes are summed, not multiplied. Previously the simplifier
+        // failed to update alignment at all across horizontal add, so a
+        // cast<uint1> of the result could be folded to the wrong constant.
+        // A select of broadcasts (which does not rewrite further) is the
+        // cheapest way to exercise the VectorReduce::Add info-update path.
+        Expr cond = Variable::make(Bool(), "cond");
+        Expr lhs = cast(UInt(16), 12203);  // odd
+        Expr rhs = cast(UInt(16), 10637);  // odd
+        Expr inner = Select::make(Broadcast::make(cond, 2),
+                                  Broadcast::make(lhs, 2),
+                                  Broadcast::make(rhs, 2));
+        check(cast(UInt(1), VectorReduce::make(VectorReduce::Add, inner, 1)),
+              cast(UInt(1), 0));
+    }
 }
 
 void check_bounds() {
