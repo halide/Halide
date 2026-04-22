@@ -4,9 +4,9 @@
 
 #include "CPlusPlusMangle.h"
 #include "CSE.h"
+#include "CodeGen_CPU.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
-#include "CodeGen_Posix.h"
 #include "CodeGen_Targets.h"
 #include "CompilerLogger.h"
 #include "Debug.h"

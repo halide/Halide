@@ -4,7 +4,15 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const Reinterpret *op, ExprInfo *info) {
-    Expr a = mutate(op->value, nullptr);
+    ExprInfo a_info;
+    Expr a = mutate(op->value, &a_info);
+
+    if (op->type == a.type()) {
+        if (info) {
+            *info = a_info;
+        }
+        return a;
+    }
 
     if (info) {
         // We don't track bounds and such through reinterprets, but we do know
@@ -29,7 +37,7 @@ Expr Simplify::visit(const Reinterpret *op, ExprInfo *info) {
                op->type.is_int_or_uint() &&
                a.type().is_int_or_uint()) {
         // Normalize to casts for non-lane-changing reinterprets.
-        return cast(op->type, a);
+        return mutate(cast(op->type, a), info);
     } else if (a.same_as(op->value)) {
         return op;
     } else {
