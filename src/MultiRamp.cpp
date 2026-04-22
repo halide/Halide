@@ -340,9 +340,13 @@ std::optional<Expr> unbroadcast(const Expr &e) {
         return std::nullopt;
     }
 }
-}  // namespace
 
-bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
+// Internal is_multiramp. May leave *result in a partial state on failure;
+// the public is_multiramp below protects callers by only committing on
+// success. Recursive calls go through the public wrapper, so each branch
+// here can assume *result is either freshly initialized (on entry) or
+// freshly filled by a successful recursion.
+bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
     Type elem_t = e.type().element_of();
     if (e.type().is_scalar()) {
         result->base = e;
@@ -379,26 +383,18 @@ bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
             return result->add(rb);
         }
     } else if (const Mul *m = e.as<Mul>()) {
-        // Try each side as the scalar factor. Use a fresh local MultiRamp
-        // for each attempt: if the first is_multiramp call partially
-        // mutates its output and returns false, that state shouldn't leak
-        // into the fallback attempt (is_multiramp's contract leaves the
-        // output unspecified on failure).
-        if (auto b = unbroadcast(m->b)) {
-            MultiRamp r;
-            if (is_multiramp(m->a, scope, &r)) {
-                r.mul(*b);
-                *result = std::move(r);
-                return true;
-            }
+        // Try each side as the scalar factor. The public wrapper's
+        // untouched-on-failure guarantee means a failed first attempt
+        // leaves *result clean for the second.
+        if (auto b = unbroadcast(m->b);
+            b && is_multiramp(m->a, scope, result)) {
+            result->mul(*b);
+            return true;
         }
-        if (auto a = unbroadcast(m->a)) {
-            MultiRamp r;
-            if (is_multiramp(m->b, scope, &r)) {
-                r.mul(*a);
-                *result = std::move(r);
-                return true;
-            }
+        if (auto a = unbroadcast(m->a);
+            a && is_multiramp(m->b, scope, result)) {
+            result->mul(*a);
+            return true;
         }
     } else if (const Div *d = e.as<Div>()) {
         if (auto denom = unbroadcast(d->b)) {
@@ -412,6 +408,18 @@ bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
                 return result->mod(*denom);
             }
         }
+    }
+    return false;
+}
+}  // namespace
+
+bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
+    // Wrap the impl so that callers get a clean "untouched on failure"
+    // contract regardless of how the impl leaves its scratch space.
+    MultiRamp tmp;
+    if (is_multiramp_impl(e, scope, &tmp)) {
+        *result = std::move(tmp);
+        return true;
     }
     return false;
 }

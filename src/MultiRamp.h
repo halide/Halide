@@ -177,8 +177,7 @@ struct MultiRamp {
 };
 
 /** Check if a vector Expr is a multiramp, and assign to result if so.
- * Contract: on failure, *result is left in an unspecified state; callers
- * must not read *result unless is_multiramp returned true. */
+ * Returns false and leaves *result untouched if not. */
 bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result);
 
 }  // namespace Internal

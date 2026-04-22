@@ -1205,7 +1205,16 @@ protected:
                     auto mid = std::stable_partition(perm.begin(), perm.end(),
                         [&](int i) { return !is_const_zero(b_shape_mr.strides[i]); });
                     int n_kept = mid - perm.begin();
-                    b = Shuffle::make({b}, b_shape_mr.shuffle_from_permuted(perm));
+                    // shuffle_from_permuted gives us idx such that
+                    // Shuffle(<permuted>, idx) == <original>. Here we have
+                    // b in original lane order and want it in permuted
+                    // order, so we invert that as a permutation.
+                    std::vector<int> idx = b_shape_mr.shuffle_from_permuted(perm);
+                    std::vector<int> inverted(idx.size());
+                    for (size_t i = 0; i < idx.size(); i++) {
+                        inverted[idx[i]] = (int)i;
+                    }
+                    b = Shuffle::make({b}, inverted);
                     b_shape_mr.reorder(perm);
 
                     // An inner reduction is a VectorReduce node. An outer
