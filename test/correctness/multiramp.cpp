@@ -1,6 +1,7 @@
 #include "Halide.h"
 
 #include <cstdio>
+#include <set>
 #include <vector>
 
 using namespace Halide;
@@ -434,6 +435,135 @@ void check_shuffle_from_slice_3d() {
     }
 }
 
+// ---- MultiRamp::mul ------------------------------------------------------
+
+void check_mul_basic() {
+    MultiRamp A{3, {1, 10}, {2, 3}};  // 3, 4, 13, 14, 23, 24
+    A.mul(5);
+    CHECK_SEQ_LIT(expand(A), "mul values", 15, 20, 65, 70, 115, 120);
+}
+
+// ---- MultiRamp::operator== ----------------------------------------------
+
+void check_equality_same() {
+    MultiRamp A{0, {1, 10}, {2, 3}};
+    Expr e = simplify(A == A);
+    CHECK(is_const_one(e), "multiramp equals itself");
+}
+
+void check_equality_different() {
+    MultiRamp A{0, {1, 10}, {2, 3}};
+    MultiRamp B{0, {1, 10}, {3, 2}};  // same total lanes, different shape
+    // A.to_expr() == [0,1,10,11,20,21], B.to_expr() = [0,1,2,10,11,12];
+    // so they are not equal in every lane.
+    Expr e = simplify(A == B);
+    CHECK(is_const_zero(e), "different multiramps compare false");
+}
+
+void check_equality_scalar() {
+    MultiRamp A{42, {}, {}};
+    MultiRamp B{42, {}, {}};
+    MultiRamp C{7, {}, {}};
+    CHECK(is_const_one(simplify(A == B)), "scalar multiramp equality");
+    CHECK(is_const_zero(simplify(A == C)), "scalar multiramp inequality");
+}
+
+// ---- MultiRamp::alias_free_slice ----------------------------------------
+
+void check_alias_free_slice_all_unique() {
+    // All lanes of the returned slice should be unique.
+    MultiRamp A{5, {1, 16}, {4, 3}};  // clearly alias-free
+    auto peeled = A.alias_free_slice();
+    CHECK(peeled.empty(), "fully alias-free: nothing peeled");
+    auto seq = expand(A);
+    std::set<int> unique(seq.begin(), seq.end());
+    CHECK(unique.size() == seq.size(), "slice lanes are unique");
+}
+
+void check_alias_free_slice_peels_zero_stride() {
+    // Stride-zero inner dim must be peeled.
+    MultiRamp A{0, {0, 1}, {4, 5}};
+    auto peeled = A.alias_free_slice();
+    CHECK(peeled.size() == 1, "peeled the stride-zero dim");
+    if (peeled.size() == 1) {
+        CHECK(peeled[0].dim == 0 && peeled[0].lanes == 4,
+              "peeled the right dim");
+        CHECK(is_const_zero(peeled[0].stride), "peeled dim had stride zero");
+    }
+    // Remaining is {base=0, strides=[1], lanes=[5]} — unique.
+    auto seq = expand(A);
+    std::set<int> unique(seq.begin(), seq.end());
+    CHECK(unique.size() == seq.size(), "remaining slice is unique");
+}
+
+void check_alias_free_slice_degenerate() {
+    // A 1-dim ramp with stride zero: only dim is a duplication. It should
+    // be peeled, leaving *this as a 0-dim scalar.
+    MultiRamp A{7, {0}, {4}};
+    auto peeled = A.alias_free_slice();
+    CHECK(peeled.size() == 1, "peeled the only dim");
+    CHECK(A.dimensions() == 0, "remaining is scalar");
+    auto seq = expand(A);
+    CHECK(seq.size() == 1 && seq[0] == 7, "scalar lane is base");
+}
+
+// ---- MultiRamp::rotate_stride_one_innermost -----------------------------
+
+void check_rotate_stride_one_innermost() {
+    // Stride-1 dim not innermost: rotating should produce a MultiRamp
+    // whose expand, when transposed with cols = total / A, matches the
+    // original expand.
+    MultiRamp A{0, {10, 1}, {3, 4}};  // [0,10,20,1,11,21,2,12,22,3,13,23]
+    auto orig = expand(A);
+    int a = A.rotate_stride_one_innermost();
+    CHECK(a > 0, "rotated (stride-1 was not innermost)");
+    auto rotated = expand(A);
+    // Per the header: make_transpose(rotated, total/a) recovers orig.
+    // make_transpose(v, cols): output[j*rows + i] = v[i*cols + j], with
+    // rows = v.size()/cols.
+    int cols = (int)rotated.size() / a;
+    int rows = a;
+    std::vector<int> roundtrip(rotated.size());
+    for (int j = 0; j < cols; j++) {
+        for (int i = 0; i < rows; i++) {
+            roundtrip[j * rows + i] = rotated[i * cols + j];
+        }
+    }
+    CHECK_SEQ(roundtrip, orig, "rotate + transpose = identity");
+}
+
+void check_rotate_stride_one_innermost_noop() {
+    // Stride-1 already innermost: no-op.
+    MultiRamp A{0, {1, 10}, {3, 4}};
+    auto before = expand(A);
+    int a = A.rotate_stride_one_innermost();
+    CHECK(a == 0, "no-op when stride-1 already innermost");
+    CHECK_SEQ(expand(A), before, "unchanged");
+}
+
+// ---- is_multiramp round-trip --------------------------------------------
+
+void check_roundtrip(const MultiRamp &mr, const char *msg) {
+    Expr e = mr.to_expr();
+    MultiRamp parsed;
+    Scope<Expr> scope;
+    if (e.type().is_vector()) {
+        CHECK(is_multiramp(e, scope, &parsed), msg);
+        if (parsed.dimensions() > 0 || mr.dimensions() > 0) {
+            auto got = expand(parsed);
+            auto want = expand(mr);
+            CHECK_SEQ(got, want, msg);
+        }
+    }
+}
+
+void check_roundtrips() {
+    check_roundtrip(MultiRamp{0, {1}, {4}}, "1D ramp roundtrip");
+    check_roundtrip(MultiRamp{7, {1, 10}, {2, 3}}, "2D ramp roundtrip");
+    check_roundtrip(MultiRamp{0, {1, 10, 100}, {2, 3, 2}}, "3D ramp roundtrip");
+    check_roundtrip(MultiRamp{0, {0, 1}, {4, 3}}, "stride-zero dim roundtrip");
+}
+
 void check_reject_non_multiramp_sum() {
     // [0,1,2,100,101,102] + [0,2,100,102,200,202] = sum with shape conflict.
     Expr a_inner = Ramp::make(Expr(0), Expr(1), 3);
@@ -482,6 +612,16 @@ int main(int argc, char **argv) {
     check_shuffle_from_slice_2d();
     check_shuffle_from_slice_inner();
     check_shuffle_from_slice_3d();
+    check_mul_basic();
+    check_equality_same();
+    check_equality_different();
+    check_equality_scalar();
+    check_alias_free_slice_all_unique();
+    check_alias_free_slice_peels_zero_stride();
+    check_alias_free_slice_degenerate();
+    check_rotate_stride_one_innermost();
+    check_rotate_stride_one_innermost_noop();
+    check_roundtrips();
     check_reject_non_multiramp_sum();
 
     if (failures) {

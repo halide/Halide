@@ -1,5 +1,9 @@
 #include "Halide.h"
 
+#include <iostream>
+#include <map>
+#include <random>
+
 using namespace Halide;
 using namespace Halide::Internal;
 
@@ -117,6 +121,112 @@ int test(int which_case = all) {
     return success;
 }
 
+// Generate a random quasi-affine expression in the given RVars: an affine
+// combination of terms where each term is one of v, v/k, v%k, or recursively
+// one of those of a nested term. All divisors are required to divide the
+// corresponding RVar's extent, so the expression is representable as a
+// multiramp of the RDom. Coefficients and constant terms are small ints.
+struct RVarInfo {
+    RVar var;
+    int extent;
+};
+
+Expr random_term(std::mt19937 &rng, const RDom &rdom) {
+    const RVar &chosen = rdom[rng() % rdom.dimensions()];
+    int extent = *as_const_int(chosen.extent());
+    int op = (int)(rng() % 3);  // 0: leaf, 1: /k, 2: %k
+    if (op == 0 || extent <= 1) {
+        return chosen;
+    }
+    std::vector<int> divisors;
+    for (int d = 2; d <= extent; d++) {
+        if (extent % d == 0) {
+            divisors.push_back(d);
+        }
+    }
+    if (divisors.empty()) {
+        return chosen;
+    }
+    int k = divisors[rng() % divisors.size()];
+    return (op == 1) ? chosen / k : chosen % k;
+}
+
+Expr random_qa(std::mt19937 &rng, const RDom &rdom) {
+    int n_terms = 1 + (int)(rng() % 3);
+    Expr e;
+    for (int i = 0; i < n_terms; i++) {
+        int coeff = (int)(rng() % 5) - 2;  // -2..2
+        if (coeff == 0) continue;
+        Expr term = random_term(rng, rdom);
+        Expr part = (coeff == 1) ? term : coeff * term;
+        e = e.defined() ? e + part : part;
+    }
+    if (!e.defined()) e = 0;
+    int c0 = (int)(rng() % 7) - 3;  // -3..3
+    if (c0 != 0) e = e + c0;
+    return e;
+}
+
+int test_random() {
+    std::mt19937 rng(0);
+    RDom r(0, 8, 0, 9, 0, 6);
+
+    // Generous symmetric range for both the input and the output. Halide's
+    // bounds inference figures out what it actually needs within this.
+    constexpr int half = 256;
+    constexpr int range = 2 * half;
+
+    Buffer<int> input_buf(range);
+    input_buf.set_min(-half);
+
+    constexpr int num_cases = 1000;
+    int tried = 0;
+    while (tried < num_cases) {
+        Expr A = random_qa(rng, r);
+        Expr B = random_qa(rng, r);
+        int t = tried++;
+
+        for (int i = 0; i < range; i++) {
+            input_buf(i - half) = (i * 31 + t * 7) & 0xff;
+        }
+        ImageParam input(Int(32), 1);
+        input.set(input_buf);
+
+        auto build = [&](bool vectorized) {
+            Func f{"f_rand"};
+            Var x{"x"};
+            f(x) = 0;
+            f(A) += input(B) + 0 * r.x;  // Force a dependence on the RDom
+            if (vectorized) {
+                f.update().atomic().vectorize(r.x).vectorize(r.y).vectorize(r.z);
+            }
+            return f;
+        };
+
+        auto realize = [&](Func f) {
+            Buffer<int> buf(range);
+            buf.set_min(-half);
+            f.realize(buf);
+            return buf;
+        };
+
+        Buffer<int> correct = realize(build(false));
+        Buffer<int> out = realize(build(true));
+
+        for (int i = -half; i < half; i++) {
+            if (out(i) != correct(i)) {
+                std::cout << "Random case " << t << " failed:\n"
+                          << "  A = " << A << "\n"
+                          << "  B = " << B << "\n"
+                          << "  out(" << i << ") = " << out(i)
+                          << " instead of " << correct(i) << "\n";
+                return bad_output;
+            }
+        }
+    }
+    return success;
+}
+
 int main(int argc, char **argv) {
 
     int result = test(all);
@@ -130,6 +240,11 @@ int main(int argc, char **argv) {
         }
     } else if (result != success) {
         return result;
+    }
+
+    int rand_result = test_random();
+    if (rand_result != success) {
+        return rand_result;
     }
 
     printf("Success!\n");
