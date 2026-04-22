@@ -2,7 +2,9 @@
 
 #include "IR.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "ModulusRemainder.h"
 #include "Simplify.h"
 
@@ -51,17 +53,14 @@ bool MultiRamp::add(const MultiRamp &other) {
     // partially consumed, the remaining part of that dimension corresponds to
     // an "outer" sub-dim in the refined shape and its stride must be scaled
     // by the factor just consumed.
-    internal_assert(!lanes.empty() && !other.lanes.empty());
-    int64_t total_a = 1, total_b = 1;
-    for (int l : lanes) {
-        total_a *= l;
+    internal_assert(total_lanes() == other.total_lanes())
+        << "MultiRamp::add: total lane counts must match (" << total_lanes()
+        << " vs " << other.total_lanes() << ")";
+    if (lanes.empty()) {
+        // Both are 0-dim scalars.
+        base = simplify(base + other.base);
+        return true;
     }
-    for (int l : other.lanes) {
-        total_b *= l;
-    }
-    internal_assert(total_a == total_b)
-        << "MultiRamp::add: total lane counts must match (" << total_a
-        << " vs " << total_b << ")";
     MultiRamp result;
     result.base = simplify(base + other.base);
     size_t ai = 0, bi = 0;
@@ -108,9 +107,8 @@ bool MultiRamp::add(const MultiRamp &other) {
             *this = std::move(result);
             return true;
         }
-        // Since the up-front lane-count check passed, both sides must
-        // always exhaust together.
-        internal_assert(!a_done && !b_done);
+        // The up-front lane-count check ensures both sides always exhaust
+        // together, so neither side should be done here.
     }
 }
 
@@ -380,14 +378,26 @@ bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
             return result->add(rb);
         }
     } else if (const Mul *m = e.as<Mul>()) {
-        if (auto b = unbroadcast(m->b);
-            b && is_multiramp(m->a, scope, result)) {
-            result->mul(*b);
-            return true;
-        } else if (auto a = unbroadcast(m->a);
-                   a && is_multiramp(m->b, scope, result)) {
-            result->mul(*a);
-            return true;
+        // Try each side as the scalar factor. Use a fresh local MultiRamp
+        // for each attempt: if the first is_multiramp call partially
+        // mutates its output and returns false, that state shouldn't leak
+        // into the fallback attempt (is_multiramp's contract leaves the
+        // output unspecified on failure).
+        if (auto b = unbroadcast(m->b)) {
+            MultiRamp r;
+            if (is_multiramp(m->a, scope, &r)) {
+                r.mul(*b);
+                *result = std::move(r);
+                return true;
+            }
+        }
+        if (auto a = unbroadcast(m->a)) {
+            MultiRamp r;
+            if (is_multiramp(m->b, scope, &r)) {
+                r.mul(*a);
+                *result = std::move(r);
+                return true;
+            }
         }
     } else if (const Div *d = e.as<Div>()) {
         if (auto denom = unbroadcast(d->b)) {
@@ -429,13 +439,16 @@ void MultiRamp::slice(int d, Expr v) {
 }
 
 Expr MultiRamp::alias_free() const {
-    // A multiramp is alias free if (but not only if) there is an ordering of
-    // dimensions such that next stride is greater than the max value seen so
-    // far. In principle we only need to test the ordering with increasing
-    // strides, but in the presence of symbolic strides, we don't know which one
-    // that is. So we'll test all permutations (there shouldn't be many, because
-    // there's only one dimension per nested loop) and or together the
-    // conditions.
+    // A sufficient condition: there exists an ordering of dims such that
+    // each stride's absolute value is strictly greater than the sum of the
+    // spans of all earlier dims, where span(k) = |strides[k]| * (lanes[k] −
+    // 1). Under such an ordering the lanes enumerate distinct offsets in an
+    // interval-tree fashion. In principle we'd only need to test the
+    // ordering with increasing |strides|, but symbolic strides leave the
+    // ordering unknown, so we try all permutations and OR the conditions.
+    // (The permutation count is small in practice — one dim per nested
+    // loop.) This ignores base, which is fine for uniqueness within the
+    // ramp (base is a uniform offset).
 
     if (lanes.empty()) {
         return const_true();
@@ -458,6 +471,55 @@ Expr MultiRamp::alias_free() const {
         result = result || cond;
     } while (std::next_permutation(perm.begin(), perm.end()));
     return simplify(result);
+}
+
+std::vector<MultiRamp::PeeledDim> MultiRamp::alias_free_slice() {
+    // Greedy: starting from an empty MultiRamp (same base), try adding dims
+    // one by one from innermost to outermost. Any dim that would break the
+    // alias-free condition is peeled off instead. Stride-zero dims always
+    // break alias-freedom (except as the single dim of a 1-dim ramp, which
+    // is a scalar), so we fast-path them to skip the can_prove call.
+    std::vector<PeeledDim> peeled;
+    MultiRamp remaining;
+    remaining.base = base;
+    for (int i = 0; i < dimensions(); i++) {
+        bool must_peel = is_const_zero(strides[i]) && !remaining.lanes.empty();
+        if (!must_peel) {
+            remaining.strides.push_back(strides[i]);
+            remaining.lanes.push_back(lanes[i]);
+            if (can_prove(remaining.alias_free())) {
+                continue;
+            }
+            remaining.strides.pop_back();
+            remaining.lanes.pop_back();
+        }
+        peeled.push_back(PeeledDim{strides[i], lanes[i], i});
+    }
+    *this = std::move(remaining);
+    return peeled;
+}
+
+int MultiRamp::rotate_stride_one_innermost() {
+    int k = -1;
+    for (int i = 0; i < dimensions(); i++) {
+        if (is_const_one(strides[i])) {
+            k = i;
+            break;
+        }
+    }
+    if (k <= 0) {
+        return 0;
+    }
+    int A = 1;
+    for (int i = 0; i < k; i++) {
+        A *= lanes[i];
+    }
+    int d = dimensions();
+    std::vector<int> perm(d);
+    std::iota(perm.begin(), perm.end(), 0);
+    std::rotate(perm.begin(), perm.begin() + k, perm.end());
+    reorder(perm);
+    return A;
 }
 
 int MultiRamp::dimensions() const {
@@ -500,6 +562,20 @@ void MultiRamp::reorder(const std::vector<int> &perm) {
     }
     strides = std::move(new_strides);
     lanes = std::move(new_lanes);
+}
+
+void MultiRamp::accept(IRVisitor *visitor) const {
+    base.accept(visitor);
+    for (const Expr &s : strides) {
+        s.accept(visitor);
+    }
+}
+
+void MultiRamp::mutate(IRMutator *mutator) {
+    base = (*mutator)(base);
+    for (Expr &s : strides) {
+        s = (*mutator)(s);
+    }
 }
 
 std::vector<int> MultiRamp::shuffle_from_permuted(const std::vector<int> &perm) const {
@@ -546,17 +622,11 @@ std::vector<Expr> MultiRamp::flatten() const {
         for (int k = 1; k < d; k++) {
             int ik = rem % lanes[k];
             rem /= lanes[k];
-            if (ik != 0) {
-                offset_base = offset_base + ik * strides[k];
-            }
+            offset_base = offset_base + ik * strides[k];
         }
         result.push_back(Ramp::make(offset_base, strides[0], inner_lanes));
     }
     return result;
-}
-
-std::vector<int> MultiRamp::shuffle_from_slice(int d, int pos) const {
-    return shuffle_from_slice(std::vector<int>{d}, std::vector<int>{pos});
 }
 
 std::vector<int> MultiRamp::shuffle_from_slice(const std::vector<int> &dims,

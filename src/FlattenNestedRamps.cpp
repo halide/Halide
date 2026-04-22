@@ -16,16 +16,6 @@ namespace {
 class FlattenRamps : public IRMutator {
     using IRMutator::visit;
 
-    // Visit the scalar base and strides of a multiramp. They are scalars,
-    // but technically could contain total reductions of nested vectors, so
-    // we need to walk them.
-    void mutate_multiramp_scalars(MultiRamp &mr) {
-        mr.base = mutate(mr.base);
-        for (Expr &s : mr.strides) {
-            s = mutate(s);
-        }
-    }
-
     Expr visit(const Ramp *op) override {
         if (op->base.type().is_vector()) {
             if (MultiRamp mr;
@@ -34,7 +24,7 @@ class FlattenRamps : public IRMutator {
                 // with the general case below, so that we get one big concat
                 // instead of a concat-of-concats. The innermost dimension is
                 // left as a Ramp.
-                mutate_multiramp_scalars(mr);
+                mr.mutate(this);
                 return Shuffle::make_concat(mr.flatten());
             } else {
                 Expr base = mutate(op->base);
@@ -61,9 +51,9 @@ class FlattenRamps : public IRMutator {
         return IRMutator::visit(op);
     }
 
-    // Slice `v` down to `inner_lanes` starting at output lane `n*inner_lanes`,
-    // matching the slicing done to the flattened index. Broadcasts of scalars
-    // pass through unchanged (as a fresh broadcast of `inner_lanes`).
+    // Return the sub-vector of `v` corresponding to the n-th sub-ramp of a
+    // flattened multiramp of width `inner_lanes`. Scalar broadcasts get
+    // rebroadcast to `inner_lanes`; everything else is a slice.
     static Expr slice_per_inner_ramp(const Expr &v, int n, int inner_lanes) {
         if (const Broadcast *b = v.as<Broadcast>()) {
             if (b->value.type().is_scalar()) {
@@ -172,7 +162,7 @@ class FlattenRamps : public IRMutator {
                 mr.dimensions() >= 2) {
 
                 Expr predicate = mutate(op->predicate);
-                mutate_multiramp_scalars(mr);
+                mr.mutate(this);
                 std::vector<Expr> sub_indices = mr.flatten();
                 int inner_lanes = mr.lanes[0];
                 Type elem_type = op->type.with_lanes(inner_lanes);
@@ -201,7 +191,7 @@ class FlattenRamps : public IRMutator {
 
                 Expr predicate = mutate(op->predicate);
                 Expr value = mutate(op->value);
-                mutate_multiramp_scalars(mr);
+                mr.mutate(this);
                 std::vector<Expr> sub_indices = mr.flatten();
                 int inner_lanes = mr.lanes[0];
 

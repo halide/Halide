@@ -393,7 +393,7 @@ void check_shuffle_from_slice_2d() {
     MultiRamp A{0, {1, 10}, {2, 3}};
     MultiRamp S = A;
     S.slice(1, Expr(2));
-    std::vector<int> idx = A.shuffle_from_slice(1, 2);
+    std::vector<int> idx = A.shuffle_from_slice(std::vector<int>{1}, std::vector<int>{2});
     auto a_seq = expand(A);  // 0, 1, 10, 11, 20, 21
     auto s_seq = expand(S);  // 20, 21
     CHECK(idx.size() == s_seq.size(), "slice shuffle size");
@@ -409,7 +409,7 @@ void check_shuffle_from_slice_inner() {
     MultiRamp A{0, {1, 10}, {2, 3}};
     MultiRamp S = A;
     S.slice(0, Expr(1));
-    std::vector<int> idx = A.shuffle_from_slice(0, 1);
+    std::vector<int> idx = A.shuffle_from_slice(std::vector<int>{0}, std::vector<int>{1});
     auto a_seq = expand(A);  // 0, 1, 10, 11, 20, 21
     auto s_seq = expand(S);  // 1, 11, 21
     CHECK(idx.size() == s_seq.size(), "inner slice shuffle size");
@@ -425,7 +425,7 @@ void check_shuffle_from_slice_3d() {
     MultiRamp A{0, {1, 4, 20}, {2, 3, 2}};
     MultiRamp S = A;
     S.slice(1, Expr(1));
-    std::vector<int> idx = A.shuffle_from_slice(1, 1);
+    std::vector<int> idx = A.shuffle_from_slice(std::vector<int>{1}, std::vector<int>{1});
     auto a_seq = expand(A);
     auto s_seq = expand(S);
     CHECK(idx.size() == s_seq.size(), "3D slice shuffle size");

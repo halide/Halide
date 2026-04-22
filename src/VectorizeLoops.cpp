@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <numeric>
 #include <utility>
 
 #include "CSE.h"
@@ -960,16 +961,18 @@ protected:
     }
 
     Stmt visit(const Atomic *op) override {
-        // Recognize a few special cases that we can handle as within-vector reduction trees.
+        // Recognize a few special cases that we can handle as within-vector
+        // reduction trees.
 
-        // We may partially succeed, in which case we'll have loops to rewrap
+        // We may partially succeed, in which case we'll have (unrolled) loops
+        // to rewrap.
         struct ContainingLoop {
             std::string name;
-            int extent = 0;
-            // The index of this loop's dim in the pre-peel store_mr. Only
-            // used in the alias-free peeling path; other uses can leave it
-            // at -1.
-            int dim = -1;
+            int extent;
+            // Index of this loop's dim in the pre-alias-peel MultiRamp. Used
+            // by the unroll below to construct a shuffle mask selecting the
+            // corresponding slice of the reduced value vector.
+            int dim;
         };
         std::vector<ContainingLoop> containing_loops;
 
@@ -1087,11 +1090,7 @@ protected:
                 test = simplify(load_index == store_index);
             } else if (is_multiramp(store_index, vector_scope, &store_mr) &&
                        is_multiramp(load_index, vector_scope, &load_mr)) {
-                debug(0) << "Store multiramp:\n "
-                         << store_mr.to_expr() << "\n";
                 test = store_mr == load_mr;
-                debug(0) << "Store == load test:\n "
-                         << test << "\n";
             }
 
             if (!test.defined()) {
@@ -1126,7 +1125,7 @@ protected:
             };
 
             int output_lanes = 1;
-            MultiRamp pre_peel_mr;
+            MultiRamp b_shape_mr;
             if (store_index.type().is_scalar()) {
                 // The index doesn't depend on the value being
                 // vectorized, so it's a total reduction.
@@ -1134,111 +1133,89 @@ protected:
             } else {
 
                 // The output lanes is >1, so there must be at least one
-                // multiramp dimension with non-zero stride. There may be
-                // dimensions with zero stride, however.
+                // multiramp dimension with non-zero stride. Dims that
+                // can't be part of an alias-free store fall into two
+                // kinds, both discovered by one call to alias_free_slice:
+                //
+                //   - Stride-zero dims: lanes duplicate a value across the
+                //     store, so we fold the duplicates with the reduction
+                //     op. The innermost-in-original stride-zero dim (if
+                //     any) becomes a VectorReduce; others need a
+                //     reduction tree over slices of b.
+                //   - Non-zero-stride aliasing dims (symbolic strides, or
+                //     strides that overlap such that we can't prove
+                //     uniqueness): different lanes of the store go to
+                //     different addresses, so we unroll a containing loop
+                //     and do a slice-per-iteration.
+                //
+                // TODO: the innermost-VectorReduce fast-path is keyed on
+                // "dim 0 of the original". We could move other stride-zero
+                // dims inward via a transpose and VectorReduce them too;
+                // might be better on some targets.
 
-                // Here we identify any stride-0 dimensions in the
-                // multiramp. Innermost ones with stride zero will be handled
-                // with a vector reduce. Others will be handled by taking slices
-                // and combining in a tree. We first shuffle the other
-                // stride-zero ones outermost so that the slices are
-                // dense. TODO: is this the best policy? We could also transpose
-                // them inwards and vector reduce.
+                // b's current lane layout. Starts matching the full
+                // store_mr (before any peel); updated as reductions and
+                // shuffles reshape it. We use this for the shuffle masks
+                // that slice b per unrolled iteration below.
+                b_shape_mr = store_mr;
 
-                // TODO: There may also be dimensions with unknown (symbolic)
-                // stride.  We need to handle these carefully because they might
-                // be zero at runtime. This is require injecting a loop that
-                // handles one slice at a time along that dimension. Finally,
-                // there might be dimensions with known strides such that they
-                // overlap, e.g. if some lunatic vectorizes a reduction like
-                // f(r.x + r.y) += .... We need to slice out at least one of the
-                // two conflicting dimensions and turn it into a loop.
+                std::vector<MultiRamp::PeeledDim> peeled =
+                    store_mr.alias_free_slice();
 
-                int inner_repetitions = 1;
-                int outer_repetitions = 1;
-                if (is_const_zero(store_mr.strides[0])) {
-                    inner_repetitions = store_mr.lanes[0];
-                    store_mr.slice(0, 0);
-                }
+                // Snapshot the original strides so we can identify which
+                // original dims had stride zero after b_shape_mr gets
+                // reordered below.
+                std::vector<Expr> orig_strides = b_shape_mr.strides;
 
-                std::vector<int> perm, zero_dims;
-
-                // Look for stride-zero dimensions
-                perm.reserve(store_mr.dimensions());
-                bool needs_shuffle = false;
-                for (int d = 0; d < store_mr.dimensions(); d++) {
-                    if (is_const_zero(store_mr.strides[d])) {
-                        zero_dims.push_back(d);
-                        outer_repetitions *= store_mr.lanes[d];
-                    } else {
-                        // If any non-stride-zero dims come after a stride-zero
-                        // dim, we'll need a shuffle.
-                        needs_shuffle |= !zero_dims.empty();
-                        perm.push_back(d);
-                    }
-                }
-                std::vector<int> shuffle;
-                if (needs_shuffle) {
-                    perm.insert(perm.end(), zero_dims.begin(), zero_dims.end());
-                    shuffle = store_mr.shuffle_from_permuted(perm);
-                    store_mr.reorder(perm);
-                }
-                for (size_t i = 0; i < zero_dims.size(); i++) {
-                    store_mr.strides.pop_back();
-                    store_mr.lanes.pop_back();
-                }
-
-                // Snapshot the pre-peel MultiRamp so we can figure out
-                // which slice of b each unrolled iteration should store.
-                pre_peel_mr = store_mr;
-
-                if (!can_prove(store_mr.alias_free())) {
-                    debug(0) << "Alias-free check failed\n";
-                    // There may be more collisions. We don't know. This means
-                    // we need to genuinely do an interleaved sequence of loads
-                    // and stores to the target buffer. There may be multiple
-                    // alias-free subsets of the dimensions of store_mr. We'll
-                    // do it greedily. Starting from the innermost, we'll add
-                    // each dimension provided that we maintain the alias-free
-                    // property. Even if we find none, we've at least peeled off
-                    // the stride-0 dimensions already, so it's better than
-                    // bailing and scalarizing.
-
-                    MultiRamp alias_free_slice;
-                    alias_free_slice.base = store_mr.base;
-                    for (int i = 0; i < store_mr.dimensions(); i++) {
-                        Expr s = store_mr.strides[i];
-                        int l = store_mr.lanes[i];
-                        alias_free_slice.strides.push_back(s);
-                        alias_free_slice.lanes.push_back(l);
-                        if (!can_prove(alias_free_slice.alias_free())) {
-                            containing_loops.emplace_back(
-                                ContainingLoop{unique_name('t'), l, i});
-                            alias_free_slice.base +=
-                                Variable::make(Int(32), containing_loops.back().name) * s;
-                            alias_free_slice.strides.pop_back();
-                            alias_free_slice.lanes.pop_back();
+                // Partition peels by handling strategy.
+                int inner_dup = 1;  // >1 if a VectorReduce applies.
+                int outer_dup = 1;  // >1 if a reduction tree applies.
+                std::vector<MultiRamp::PeeledDim> loop_peels;
+                for (const auto &p : peeled) {
+                    if (is_const_zero(p.stride)) {
+                        if (p.dim == 0) {
+                            // Stride-zero peel at the innermost position:
+                            // its duplicates are contiguous in b, so we
+                            // can use VectorReduce directly.
+                            inner_dup = p.lanes;
+                        } else {
+                            outer_dup *= p.lanes;
                         }
+                    } else {
+                        loop_peels.push_back(p);
                     }
-                    store_mr = std::move(alias_free_slice);
                 }
 
-                output_lanes = store_mr.total_lanes();
-                store_index = store_mr.to_expr();
-                int pre_peel_total = pre_peel_mr.total_lanes();
-                if (inner_repetitions > 1) {
-                    b = VectorReduce::make(reduce_op, b, pre_peel_total * outer_repetitions);
+                if (inner_dup > 1) {
+                    int new_lanes = b_shape_mr.total_lanes() / inner_dup;
+                    b = VectorReduce::make(reduce_op, b, new_lanes);
+                    b_shape_mr.slice(0, make_zero(b_shape_mr.base.type()));
                 }
 
-                if (needs_shuffle) {
-                    b = Shuffle::make({b}, shuffle);
-                }
+                // If any non-innermost stride-zero dims need combining,
+                // shuffle b so their duplicates become contiguous, then
+                // reduce them with a tree over contiguous sub-vectors.
+                if (outer_dup > 1) {
+                    // Reorder the remaining zero-stride dims outermost,
+                    // keeping the rest in their relative order.
+                    int d = b_shape_mr.dimensions();
+                    std::vector<int> perm(d);
+                    std::iota(perm.begin(), perm.end(), 0);
+                    auto mid = std::stable_partition(perm.begin(), perm.end(),
+                        [&](int i) { return !is_const_zero(b_shape_mr.strides[i]); });
+                    int n_kept = mid - perm.begin();
+                    b = Shuffle::make({b}, b_shape_mr.shuffle_from_permuted(perm));
+                    b_shape_mr.reorder(perm);
 
-                // Handle outer repetitions with a reduction tree over dense
-                // slices. Reduces b down to pre_peel_total lanes (peeled dims
-                // are handled by the unroll below).
-                if (outer_repetitions > 1) {
-                    int reps = outer_repetitions;
+                    // An inner reduction is a VectorReduce node. An outer
+                    // reduction is cutting the vector into contiguous pieces,
+                    // and adding those pieces together. Now that all the
+                    // remaining stride-0 dims are outermost, we can do that in
+                    // a binary tree. We slice the vector in half and add the
+                    // halves for as long as possible, and then slice up what's
+                    // left into pieces and add the pieces. For big power-of-two
+                    // reductions this produces log(n) IR nodes.
+                    int reps = outer_dup;
                     while (reps % 2 == 0) {
                         int l = b.type().lanes() / 2;
                         Expr b0 = Shuffle::make_slice(b, 0, 1, l);
@@ -1247,14 +1224,44 @@ protected:
                         reps /= 2;
                     }
                     if (reps > 1) {
-                        Expr v = Shuffle::make_slice(b, 0, 1, pre_peel_total);
+                        int chunk = b.type().lanes() / reps;
+                        Expr v = Shuffle::make_slice(b, 0, 1, chunk);
                         for (int i = 1; i < reps; i++) {
-                            Expr slice = simplify(Shuffle::make_slice(b, i * pre_peel_total, 1, pre_peel_total));
+                            Expr slice = simplify(Shuffle::make_slice(b, i * chunk, 1, chunk));
                             v = binop(v, slice);
                         }
                         b = v;
                     }
+
+                    // Drop the outer-zero peeled dims from b_shape_mr (they
+                    // are the trailing dims after the reorder above).
+                    b_shape_mr.strides.resize(n_kept);
+                    b_shape_mr.lanes.resize(n_kept);
                 }
+
+                // We still have peeled dims without zero stride to handle.
+                // Emit the unrolled containing loops for non-zero aliasing
+                // peels. Their shuffle indices below select the right slice of
+                // b per iteration. The loop.dim field is the dim's position in
+                // b_shape_mr's current layout: the count of earlier original
+                // dims that survived both the inner-dim reduction and the
+                // outer-zero drop.
+                // orig dim 0 was removed if we VectorReduce'd it away.
+                const int dim_offset = inner_dup > 1 ? 1 : 0;
+                for (const auto &p : loop_peels) {
+                    int pos = 0;
+                    for (int i = dim_offset; i < p.dim; i++) {
+                        if (!is_const_zero(orig_strides[i])) {
+                            pos++;
+                        }
+                    }
+                    std::string name = unique_name('t');
+                    containing_loops.emplace_back(
+                        ContainingLoop{name, p.lanes, pos});
+                    store_mr.base += Variable::make(Int(32), name) * p.stride;
+                }
+                output_lanes = store_mr.total_lanes();
+                store_index = store_mr.to_expr();
             }
 
             Expr new_load = Load::make(load_a->type.with_lanes(output_lanes),
@@ -1284,7 +1291,7 @@ protected:
                 std::string full_b_var_name = unique_name('b');
                 Expr full_b_var = Variable::make(b.type(), full_b_var_name);
 
-                int total_iters = pre_peel_mr.total_lanes() / output_lanes;
+                int total_iters = b_shape_mr.total_lanes() / output_lanes;
                 std::vector<int> peeled_dims;
                 peeled_dims.reserve(containing_loops.size());
                 for (const auto &loop : containing_loops) {
@@ -1303,7 +1310,7 @@ protected:
                         rem /= e;
                     }
 
-                    std::vector<int> indices = pre_peel_mr.shuffle_from_slice(peeled_dims, v);
+                    std::vector<int> indices = b_shape_mr.shuffle_from_slice(peeled_dims, v);
                     Expr b_slice = Shuffle::make({full_b_var}, indices);
 
                     Stmt this_store = store_template;

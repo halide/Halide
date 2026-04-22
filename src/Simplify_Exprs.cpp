@@ -388,37 +388,15 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
                mr.dimensions() > 1) {
         // If the index is a multi-dimensional ramp with a stride-1 dim that
         // isn't already innermost, rotate it (together with all subsequent
-        // dims) to the innermost position so the resulting load is dense,
-        // and restore the original lane order with a transpose. Splitting
-        // the dims into a contiguous "outer half + inner half" pair and
-        // swapping them lets the shuffle be expressed as a single
-        // make_transpose, which downstream code can recognise and (in
-        // future) represent more compactly than a general shuffle.
-        int k = -1;
-        for (int i = 0; i < mr.dimensions(); i++) {
-            if (is_const_one(mr.strides[i])) {
-                k = i;
-                break;
-            }
-        }
-        if (k > 0) {
-            // Permutation: [k, k+1, ..., d-1, 0, 1, ..., k-1]. This is a pure
-            // rotation of the halves, which Shuffle::make_transpose can
-            // express.
-            int d = mr.dimensions();
-            std::vector<int> perm(d);
-            std::iota(perm.begin(), perm.end(), 0);
-            std::rotate(perm.begin(), perm.begin() + k, perm.end());
-            MultiRamp permuted = mr;
-            permuted.reorder(perm);
-            int A = 1;  // product of lanes[0..k-1]
-            for (int i = 0; i < k; i++) {
-                A *= mr.lanes[i];
-            }
-            int B = op->type.lanes() / A;  // product of lanes[k..d-1]
+        // dims) to the outermost position so the resulting load is dense,
+        // and restore the original lane order with a single make_transpose.
+        MultiRamp permuted = mr;
+        int A = permuted.rotate_stride_one_innermost();
+        if (A > 0) {
+            int B = op->type.lanes() / A;
 
             // The predicate applied to the permuted load must be in the
-            // permuted lane order. For the halves-swap rotation, that's just
+            // permuted lane order. For a halves-swap rotation that's just
             // make_transpose(predicate, A) (except for scalar broadcasts,
             // which are invariant).
             Expr permuted_predicate;

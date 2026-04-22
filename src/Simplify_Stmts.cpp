@@ -400,31 +400,14 @@ Stmt Simplify::visit(const Store *op) {
                mr.dimensions() > 1) {
         // If the index is a multi-dimensional ramp with a stride-1 dim that
         // isn't already innermost, rotate it (together with all subsequent
-        // dims) to the innermost position so the resulting store is dense.
+        // dims) to the outermost position so the resulting store is dense.
         // Permute the value and predicate to match the new lane order using
-        // a single make_transpose, which downstream code can recognise and
-        // represent compactly. Later in lowering, after flattening the
+        // a single make_transpose. Later in lowering, after flattening the
         // nested ramps, this turns into a concat of dense ramps and hits the
         // case above.
-        int k = -1;
-        for (int i = 0; i < mr.dimensions(); i++) {
-            if (is_const_one(mr.strides[i])) {
-                k = i;
-                break;
-            }
-        }
-        if (k > 0) {
-            int d = mr.dimensions();
-            std::vector<int> perm(d);
-            std::iota(perm.begin(), perm.end(), 0);
-            std::rotate(perm.begin(), perm.begin() + k, perm.end());
-            MultiRamp permuted = mr;
-            permuted.reorder(perm);
-            int A = 1;
-            for (int i = 0; i < k; i++) {
-                A *= mr.lanes[i];
-            }
-
+        MultiRamp permuted = mr;
+        int A = permuted.rotate_stride_one_innermost();
+        if (A > 0) {
             // Transpose the value and predicate so their lane ordering
             // matches the permuted index.
             Expr permuted_value = Shuffle::make_transpose(value, A);
