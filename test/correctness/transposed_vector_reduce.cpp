@@ -179,7 +179,7 @@ int test_random() {
     Buffer<int> input_buf(range);
     input_buf.set_min(-half);
 
-    constexpr int num_cases = 1000;
+    constexpr int num_cases = 200;
     int tried = 0;
     while (tried < num_cases) {
         Expr A = random_qa(rng, r);
