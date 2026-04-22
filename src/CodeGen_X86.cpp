@@ -954,14 +954,14 @@ std::vector<Value *> CodeGen_X86::deinterleave_vector(Value *vec, int num_vecs) 
         }
         return result;
     } else {
-        return CodeGen_Posix::deinterleave_vector(vec, num_vecs);
+        return CodeGen_CPU::deinterleave_vector(vec, num_vecs);
     }
 }
 
 Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
     // Only use x86-specific interleaving for AVX and above
     if (vecs.empty() || !target.has_feature(Target::AVX)) {
-        return CodeGen_Posix::interleave_vectors(vecs);
+        return CodeGen_CPU::interleave_vectors(vecs);
     }
 
     if (vecs.size() == 1) {
@@ -998,7 +998,7 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
     if (!is_power_of_two(vec_elements) ||
         !is_power_of_two(vecs.size()) ||
         (vecs.size() * vec_elements * element_bits) <= (size_t)native_vector_bits()) {
-        return CodeGen_Posix::interleave_vectors(vecs);
+        return CodeGen_CPU::interleave_vectors(vecs);
     }
 
     /*
