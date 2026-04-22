@@ -9,6 +9,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "MultiRamp.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Solve.h"
@@ -41,7 +42,7 @@ const Broadcast *as_scalar_broadcast(const Expr &e) {
     } else {
         return nullptr;
     }
-};
+}
 
 /** Find the exact scalar max and min lanes of a vector expression. Not
  * conservative like bounds_of_expr, but uses similar rules for some common node
@@ -189,119 +190,6 @@ Interval bounds_of_lanes(const Expr &e) {
         Expr max_lane = VectorReduce::make(VectorReduce::Max, e, 1);
         return {min_lane, max_lane};
     }
-};
-
-// A ramp with the lanes repeated inner_repetitions times, and then
-// the whole vector repeated outer_repetitions times.
-// E.g: <0 0 2 2 4 4 6 6 0 0 2 2 4 4 6 6>.
-struct InterleavedRamp {
-    Expr base, stride;
-    int lanes, inner_repetitions, outer_repetitions;
-};
-
-bool equal_or_zero(int a, int b) {
-    return a == 0 || b == 0 || a == b;
-}
-
-bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRamp *result) {
-    if (const Ramp *r = e.as<Ramp>()) {
-        const Broadcast *b_base = r->base.as<Broadcast>();
-        const Broadcast *b_stride = r->stride.as<Broadcast>();
-        if (r->base.type().is_scalar()) {
-            result->base = r->base;
-            result->stride = r->stride;
-            result->lanes = r->lanes;
-            result->inner_repetitions = 1;
-            result->outer_repetitions = 1;
-            return true;
-        } else if (b_base && b_stride && b_base->lanes == b_stride->lanes) {
-            // Ramp of broadcast
-            result->base = b_base->value;
-            result->stride = b_stride->value;
-            result->lanes = r->lanes;
-            result->inner_repetitions = b_base->lanes;
-            result->outer_repetitions = 1;
-            return true;
-        }
-    } else if (const Broadcast *b = e.as<Broadcast>()) {
-        if (b->value.type().is_scalar()) {
-            result->base = b->value;
-            result->stride = 0;
-            result->lanes = b->lanes;
-            result->inner_repetitions = 0;
-            result->outer_repetitions = 0;
-            return true;
-        } else if (is_interleaved_ramp(b->value, scope, result)) {
-            // Broadcast of interleaved ramp
-            result->outer_repetitions *= b->lanes;
-            return true;
-        }
-    } else if (const Add *add = e.as<Add>()) {
-        InterleavedRamp ra;
-        if (is_interleaved_ramp(add->a, scope, &ra) &&
-            is_interleaved_ramp(add->b, scope, result) &&
-            equal_or_zero(ra.inner_repetitions, result->inner_repetitions) &&
-            equal_or_zero(ra.outer_repetitions, result->outer_repetitions)) {
-            result->base = simplify(result->base + ra.base);
-            result->stride = simplify(result->stride + ra.stride);
-            result->inner_repetitions = std::max(result->inner_repetitions, ra.inner_repetitions);
-            result->outer_repetitions = std::max(result->outer_repetitions, ra.outer_repetitions);
-            return true;
-        }
-    } else if (const Sub *sub = e.as<Sub>()) {
-        InterleavedRamp ra;
-        if (is_interleaved_ramp(sub->a, scope, &ra) &&
-            is_interleaved_ramp(sub->b, scope, result) &&
-            equal_or_zero(ra.inner_repetitions, result->inner_repetitions) &&
-            equal_or_zero(ra.outer_repetitions, result->outer_repetitions)) {
-            result->base = simplify(ra.base - result->base);
-            result->stride = simplify(ra.stride - result->stride);
-            result->inner_repetitions = std::max(result->inner_repetitions, ra.inner_repetitions);
-            result->outer_repetitions = std::max(result->outer_repetitions, ra.outer_repetitions);
-            return true;
-        }
-    } else if (const Mul *mul = e.as<Mul>()) {
-        std::optional<int64_t> b;
-        if (is_interleaved_ramp(mul->a, scope, result) &&
-            (b = as_const_int(mul->b))) {
-            result->base = simplify(result->base * (int)(*b));
-            result->stride = simplify(result->stride * (int)(*b));
-            return true;
-        }
-    } else if (const Div *div = e.as<Div>()) {
-        std::optional<int64_t> b;
-        if (is_interleaved_ramp(div->a, scope, result) &&
-            (b = as_const_int(div->b)) &&
-            is_const_one(result->stride) &&
-            (result->inner_repetitions == 1 ||
-             result->inner_repetitions == 0) &&
-            can_prove((result->base % (int)(*b)) == 0)) {
-            // TODO: Generalize this. Currently only matches
-            // ramp(base*b, 1, lanes) / b
-            // broadcast(base * b, lanes) / b
-            result->base = simplify(result->base / (int)(*b));
-            result->inner_repetitions *= (int)(*b);
-            return true;
-        }
-    } else if (const Mod *mod = e.as<Mod>()) {
-        std::optional<int64_t> b;
-        if (is_interleaved_ramp(mod->a, scope, result) &&
-            (b = as_const_int(mod->b)) &&
-            (result->outer_repetitions == 1 ||
-             result->outer_repetitions == 0) &&
-            can_prove(((int)(*b) % result->stride) == 0)) {
-            // ramp(base, 2, lanes) % 8
-            result->base = simplify(result->base % (int)(*b));
-            result->stride = simplify(result->stride % (int)(*b));
-            result->outer_repetitions *= (int)(*b);
-            return true;
-        }
-    } else if (const Variable *var = e.as<Variable>()) {
-        if (const Expr *e = scope.find(var->name)) {
-            return is_interleaved_ramp(*e, scope, result);
-        }
-    }
-    return false;
 }
 
 // Allocations inside vectorized loops grow an additional inner
@@ -749,41 +637,8 @@ protected:
                           op->call_type, op->func, op->value_index, op->image, op->param);
     }
 
-    Expr visit(const Let *op) override {
-        // Vectorize the let value and check to see if it was vectorized by
-        // this mutator. The type of the expression might already be vector
-        // width.
-        Expr mutated_value = simplify(mutate(op->value));
-        bool was_vectorized = (!op->value.type().is_vector() &&
-                               mutated_value.type().is_vector());
-
-        // If the value was vectorized by this mutator, add a new name to
-        // the scope for the vectorized value expression.
-        string vectorized_name;
-        if (was_vectorized) {
-            vectorized_name = get_widened_var_name(op->name);
-            scope.push(op->name, op->value);
-            vector_scope.push(vectorized_name, mutated_value);
-        }
-
-        Expr mutated_body = mutate(op->body);
-
-        InterleavedRamp ir;
-        if (is_interleaved_ramp(mutated_value, vector_scope, &ir)) {
-            return substitute(vectorized_name, mutated_value, mutated_body);
-        } else if (mutated_value.same_as(op->value) &&
-                   mutated_body.same_as(op->body)) {
-            return op;
-        } else if (was_vectorized) {
-            scope.pop(op->name);
-            vector_scope.pop(vectorized_name);
-            return Let::make(vectorized_name, mutated_value, mutated_body);
-        } else {
-            return Let::make(op->name, mutated_value, mutated_body);
-        }
-    }
-
-    Stmt visit(const LetStmt *op) override {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         Expr mutated_value = simplify(mutate(op->value));
         string vectorized_name = op->name;
 
@@ -791,31 +646,40 @@ protected:
         bool was_vectorized = (!op->value.type().is_vector() &&
                                mutated_value.type().is_vector());
 
+        decltype(op->body) mutated_body;
         if (was_vectorized) {
             vectorized_name = get_widened_var_name(op->name);
-            scope.push(op->name, op->value);
-            vector_scope.push(vectorized_name, mutated_value);
             // Also keep track of the original let, in case inner code scalarizes.
             containing_lets.emplace_back(op->name, op->value);
-        }
 
-        Stmt mutated_body = mutate(op->body);
+            ScopedBinding<Expr>
+                bind(scope, op->name, op->value),
+                bind_vec(vector_scope, vectorized_name, mutated_value);
 
-        if (was_vectorized) {
+            mutated_body = mutate(op->body);
             containing_lets.pop_back();
-            scope.pop(op->name);
-            vector_scope.pop(vectorized_name);
+        } else {
+            mutated_body = mutate(op->body);
         }
 
-        InterleavedRamp ir;
-        if (is_interleaved_ramp(mutated_value, vector_scope, &ir)) {
+        MultiRamp m;
+        if (mutated_value.type().is_vector() &&
+            is_multiramp(mutated_value, vector_scope, &m)) {
             return substitute(vectorized_name, mutated_value, mutated_body);
         } else if (mutated_value.same_as(op->value) &&
                    mutated_body.same_as(op->body)) {
             return op;
         } else {
-            return LetStmt::make(vectorized_name, mutated_value, mutated_body);
+            return LetOrLetStmt::make(vectorized_name, mutated_value, mutated_body);
         }
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
     }
 
     Stmt visit(const Provide *op) override {
@@ -1017,8 +881,8 @@ protected:
                 string vectorized_name = get_widened_var_name(var);
                 Expr vectorized_value = vector_scope.get(vectorized_name);
                 vector_scope.pop(vectorized_name);
-                InterleavedRamp ir;
-                if (is_interleaved_ramp(vectorized_value, vector_scope, &ir)) {
+                MultiRamp m;
+                if (is_multiramp(vectorized_value, vector_scope, &m)) {
                     body = substitute(vectorized_name, vectorized_value, body);
                 } else {
                     body = LetStmt::make(vectorized_name, vectorized_value, body);
@@ -1097,6 +961,18 @@ protected:
 
     Stmt visit(const Atomic *op) override {
         // Recognize a few special cases that we can handle as within-vector reduction trees.
+
+        // We may partially succeed, in which case we'll have loops to rewrap
+        struct ContainingLoop {
+            std::string name;
+            int extent = 0;
+            // The index of this loop's dim in the pre-peel store_mr. Only
+            // used in the alias-free peeling path; other uses can leave it
+            // at -1.
+            int dim = -1;
+        };
+        std::vector<ContainingLoop> containing_loops;
+
         do {
             if (!op->mutex_name.empty()) {
                 // We can't vectorize over a mutex
@@ -1203,19 +1079,19 @@ protected:
             Expr store_index = mutate(store->index);
             Expr load_index = mutate(load_a->index);
 
-            // The load and store indices must be the same interleaved
-            // ramp (or the same scalar, in the total reduction case).
-            InterleavedRamp store_ir, load_ir;
+            // The load and store indices must be the same multiramp
+            // (or the same scalar, in the total reduction case).
+            MultiRamp store_mr, load_mr;
             Expr test;
             if (store_index.type().is_scalar()) {
                 test = simplify(load_index == store_index);
-            } else if (is_interleaved_ramp(store_index, vector_scope, &store_ir) &&
-                       is_interleaved_ramp(load_index, vector_scope, &load_ir) &&
-                       store_ir.inner_repetitions == load_ir.inner_repetitions &&
-                       store_ir.outer_repetitions == load_ir.outer_repetitions &&
-                       store_ir.lanes == load_ir.lanes) {
-                test = simplify(store_ir.base == load_ir.base &&
-                                store_ir.stride == load_ir.stride);
+            } else if (is_multiramp(store_index, vector_scope, &store_mr) &&
+                       is_multiramp(load_index, vector_scope, &load_mr)) {
+                debug(0) << "Store multiramp:\n "
+                         << store_mr.to_expr() << "\n";
+                test = store_mr == load_mr;
+                debug(0) << "Store == load test:\n "
+                         << test << "\n";
             }
 
             if (!test.defined()) {
@@ -1250,25 +1126,119 @@ protected:
             };
 
             int output_lanes = 1;
+            MultiRamp pre_peel_mr;
             if (store_index.type().is_scalar()) {
                 // The index doesn't depend on the value being
                 // vectorized, so it's a total reduction.
-
                 b = VectorReduce::make(reduce_op, b, 1);
             } else {
 
-                output_lanes = store_index.type().lanes() / (store_ir.inner_repetitions * store_ir.outer_repetitions);
+                // The output lanes is >1, so there must be at least one
+                // multiramp dimension with non-zero stride. There may be
+                // dimensions with zero stride, however.
 
-                store_index = Ramp::make(store_ir.base, store_ir.stride, output_lanes / store_ir.base.type().lanes());
-                if (store_ir.inner_repetitions > 1) {
-                    b = VectorReduce::make(reduce_op, b, output_lanes * store_ir.outer_repetitions);
+                // Here we identify any stride-0 dimensions in the
+                // multiramp. Innermost ones with stride zero will be handled
+                // with a vector reduce. Others will be handled by taking slices
+                // and combining in a tree. We first shuffle the other
+                // stride-zero ones outermost so that the slices are
+                // dense. TODO: is this the best policy? We could also transpose
+                // them inwards and vector reduce.
+
+                // TODO: There may also be dimensions with unknown (symbolic)
+                // stride.  We need to handle these carefully because they might
+                // be zero at runtime. This is require injecting a loop that
+                // handles one slice at a time along that dimension. Finally,
+                // there might be dimensions with known strides such that they
+                // overlap, e.g. if some lunatic vectorizes a reduction like
+                // f(r.x + r.y) += .... We need to slice out at least one of the
+                // two conflicting dimensions and turn it into a loop.
+
+                int inner_repetitions = 1;
+                int outer_repetitions = 1;
+                if (is_const_zero(store_mr.strides[0])) {
+                    inner_repetitions = store_mr.lanes[0];
+                    store_mr.slice(0, 0);
                 }
 
-                // Handle outer repetitions by unrolling the reduction
-                // over slices.
-                if (store_ir.outer_repetitions > 1) {
-                    // First remove all powers of two with a binary reduction tree.
-                    int reps = store_ir.outer_repetitions;
+                std::vector<int> perm, zero_dims;
+
+                // Look for stride-zero dimensions
+                perm.reserve(store_mr.dimensions());
+                bool needs_shuffle = false;
+                for (int d = 0; d < store_mr.dimensions(); d++) {
+                    if (is_const_zero(store_mr.strides[d])) {
+                        zero_dims.push_back(d);
+                        outer_repetitions *= store_mr.lanes[d];
+                    } else {
+                        // If any non-stride-zero dims come after a stride-zero
+                        // dim, we'll need a shuffle.
+                        needs_shuffle |= !zero_dims.empty();
+                        perm.push_back(d);
+                    }
+                }
+                std::vector<int> shuffle;
+                if (needs_shuffle) {
+                    perm.insert(perm.end(), zero_dims.begin(), zero_dims.end());
+                    shuffle = store_mr.shuffle_from_permuted(perm);
+                    store_mr.reorder(perm);
+                }
+                for (size_t i = 0; i < zero_dims.size(); i++) {
+                    store_mr.strides.pop_back();
+                    store_mr.lanes.pop_back();
+                }
+
+                // Snapshot the pre-peel MultiRamp so we can figure out
+                // which slice of b each unrolled iteration should store.
+                pre_peel_mr = store_mr;
+
+                if (!can_prove(store_mr.alias_free())) {
+                    debug(0) << "Alias-free check failed\n";
+                    // There may be more collisions. We don't know. This means
+                    // we need to genuinely do an interleaved sequence of loads
+                    // and stores to the target buffer. There may be multiple
+                    // alias-free subsets of the dimensions of store_mr. We'll
+                    // do it greedily. Starting from the innermost, we'll add
+                    // each dimension provided that we maintain the alias-free
+                    // property. Even if we find none, we've at least peeled off
+                    // the stride-0 dimensions already, so it's better than
+                    // bailing and scalarizing.
+
+                    MultiRamp alias_free_slice;
+                    alias_free_slice.base = store_mr.base;
+                    for (int i = 0; i < store_mr.dimensions(); i++) {
+                        Expr s = store_mr.strides[i];
+                        int l = store_mr.lanes[i];
+                        alias_free_slice.strides.push_back(s);
+                        alias_free_slice.lanes.push_back(l);
+                        if (!can_prove(alias_free_slice.alias_free())) {
+                            containing_loops.emplace_back(
+                                ContainingLoop{unique_name('t'), l, i});
+                            alias_free_slice.base +=
+                                Variable::make(Int(32), containing_loops.back().name) * s;
+                            alias_free_slice.strides.pop_back();
+                            alias_free_slice.lanes.pop_back();
+                        }
+                    }
+                    store_mr = std::move(alias_free_slice);
+                }
+
+                output_lanes = store_mr.total_lanes();
+                store_index = store_mr.to_expr();
+                int pre_peel_total = pre_peel_mr.total_lanes();
+                if (inner_repetitions > 1) {
+                    b = VectorReduce::make(reduce_op, b, pre_peel_total * outer_repetitions);
+                }
+
+                if (needs_shuffle) {
+                    b = Shuffle::make({b}, shuffle);
+                }
+
+                // Handle outer repetitions with a reduction tree over dense
+                // slices. Reduces b down to pre_peel_total lanes (peeled dims
+                // are handled by the unroll below).
+                if (outer_repetitions > 1) {
+                    int reps = outer_repetitions;
                     while (reps % 2 == 0) {
                         int l = b.type().lanes() / 2;
                         Expr b0 = Shuffle::make_slice(b, 0, 1, l);
@@ -1276,12 +1246,10 @@ protected:
                         b = binop(b0, b1);
                         reps /= 2;
                     }
-
-                    // Then reduce linearly over slices for the rest.
                     if (reps > 1) {
-                        Expr v = Shuffle::make_slice(b, 0, 1, output_lanes);
+                        Expr v = Shuffle::make_slice(b, 0, 1, pre_peel_total);
                         for (int i = 1; i < reps; i++) {
-                            Expr slice = simplify(Shuffle::make_slice(b, i * output_lanes, 1, output_lanes));
+                            Expr slice = simplify(Shuffle::make_slice(b, i * pre_peel_total, 1, pre_peel_total));
                             v = binop(v, slice);
                         }
                         b = v;
@@ -1294,12 +1262,60 @@ protected:
                                        load_a->param, const_true(output_lanes),
                                        ModulusRemainder{});
 
-            Expr lhs = cast(b.type(), new_load);
-            b = binop(lhs, b);
-            b = cast(new_load.type(), b);
+            Expr lhs = cast(b.type().with_lanes(output_lanes), new_load);
 
-            Stmt s = Store::make(store->name, b, store_index, store->param,
-                                 const_true(b.type().lanes()), store->alignment);
+            Stmt s;
+            if (containing_loops.empty()) {
+                b = binop(lhs, b);
+                b = cast(new_load.type(), b);
+                s = Store::make(store->name, b, store_index, store->param,
+                                const_true(b.type().lanes()), store->alignment);
+            } else {
+                // Wrap any containing loops we still need (unrolled). We
+                // enumerate the cartesian product of loop iteration values
+                // directly, so that each store's b-slice can be computed
+                // from the full multi-index.
+                std::string b_var_name = unique_name('b');
+                Expr b_var = Variable::make(b.type().with_lanes(output_lanes), b_var_name);
+                Stmt store_template =
+                    Store::make(store->name, cast(new_load.type(), binop(lhs, b_var)),
+                                store_index, store->param,
+                                const_true(output_lanes), ModulusRemainder{});
+                std::string full_b_var_name = unique_name('b');
+                Expr full_b_var = Variable::make(b.type(), full_b_var_name);
+
+                int total_iters = pre_peel_mr.total_lanes() / output_lanes;
+                std::vector<int> peeled_dims;
+                peeled_dims.reserve(containing_loops.size());
+                for (const auto &loop : containing_loops) {
+                    peeled_dims.push_back(loop.dim);
+                }
+                std::vector<Stmt> block;
+                block.reserve(total_iters);
+                for (int n = 0; n < total_iters; n++) {
+                    // Decompose n into per-loop iteration values (innermost
+                    // loop first, matching the order in containing_loops).
+                    std::vector<int> v(containing_loops.size());
+                    int rem = n;
+                    for (size_t j = 0; j < containing_loops.size(); j++) {
+                        int e = containing_loops[j].extent;
+                        v[j] = rem % e;
+                        rem /= e;
+                    }
+
+                    std::vector<int> indices = pre_peel_mr.shuffle_from_slice(peeled_dims, v);
+                    Expr b_slice = Shuffle::make({full_b_var}, indices);
+
+                    Stmt this_store = store_template;
+                    for (size_t j = 0; j < containing_loops.size(); j++) {
+                        this_store = substitute(containing_loops[j].name, v[j], this_store);
+                    }
+                    this_store = substitute(b_var_name, b_slice, this_store);
+                    block.push_back(this_store);
+                }
+                s = Block::make(block);
+                s = LetStmt::make(full_b_var_name, b, s);
+            }
 
             // We may still need the atomic node, if there was more
             // parallelism than just the vectorization.

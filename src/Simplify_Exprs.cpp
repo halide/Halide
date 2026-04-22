@@ -1,5 +1,10 @@
 #include "Simplify_Internal.h"
 
+#include <algorithm>
+#include <numeric>
+
+#include "MultiRamp.h"
+
 using std::string;
 
 namespace Halide {
@@ -375,22 +380,64 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
             loaded_vecs.emplace_back(std::move(load));
         }
         return Shuffle::make(loaded_vecs, s_index->indices);
-    } else if (const Ramp *inner_ramp = r_index ? r_index->base.as<Ramp>() : nullptr;
-               inner_ramp &&
-               !is_const_one(inner_ramp->stride) &&
-               is_const_one(r_index->stride)) {
-        // If it's a nested ramp and the outer ramp has stride 1, swap the
-        // nesting order of the ramps to make dense loads and transpose the
-        // resulting vector instead.
-        Expr transposed_index =
-            Ramp::make(Ramp::make(inner_ramp->base, make_one(inner_ramp->base.type()), r_index->lanes),
-                       Broadcast::make(inner_ramp->stride, r_index->lanes), inner_ramp->lanes);
-        Expr transposed_predicate = (predicate.as<Broadcast>() ?
-                                         predicate :  // common case optimization
-                                         Shuffle::make_transpose(predicate, inner_ramp->lanes));
-        Expr transposed_load =
-            Load::make(op->type, op->name, transposed_index, op->image, op->param, transposed_predicate, align);
-        return mutate(Shuffle::make_transpose(transposed_load, r_index->lanes), info);
+    } else if (MultiRamp mr;
+               index.type().is_vector() &&
+               // Don't do expensive analysis in the common case of a load of a ramp of scalars.
+               !(r_index && r_index->base.type().is_scalar()) &&
+               is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
+               mr.dimensions() > 1) {
+        // If the index is a multi-dimensional ramp with a stride-1 dim that
+        // isn't already innermost, rotate it (together with all subsequent
+        // dims) to the innermost position so the resulting load is dense,
+        // and restore the original lane order with a transpose. Splitting
+        // the dims into a contiguous "outer half + inner half" pair and
+        // swapping them lets the shuffle be expressed as a single
+        // make_transpose, which downstream code can recognise and (in
+        // future) represent more compactly than a general shuffle.
+        int k = -1;
+        for (int i = 0; i < mr.dimensions(); i++) {
+            if (is_const_one(mr.strides[i])) {
+                k = i;
+                break;
+            }
+        }
+        if (k > 0) {
+            // Permutation: [k, k+1, ..., d-1, 0, 1, ..., k-1]. This is a pure
+            // rotation of the halves, which Shuffle::make_transpose can
+            // express.
+            int d = mr.dimensions();
+            std::vector<int> perm(d);
+            std::iota(perm.begin(), perm.end(), 0);
+            std::rotate(perm.begin(), perm.begin() + k, perm.end());
+            MultiRamp permuted = mr;
+            permuted.reorder(perm);
+            int A = 1;  // product of lanes[0..k-1]
+            for (int i = 0; i < k; i++) {
+                A *= mr.lanes[i];
+            }
+            int B = op->type.lanes() / A;  // product of lanes[k..d-1]
+
+            // The predicate applied to the permuted load must be in the
+            // permuted lane order. For the halves-swap rotation, that's just
+            // make_transpose(predicate, A) (except for scalar broadcasts,
+            // which are invariant).
+            Expr permuted_predicate;
+            const Broadcast *b_pred = predicate.as<Broadcast>();
+            if (b_pred && b_pred->value.type().is_scalar()) {
+                permuted_predicate = predicate;
+            } else {
+                permuted_predicate = Shuffle::make_transpose(predicate, A);
+            }
+
+            Expr permuted_load =
+                Load::make(op->type, op->name, permuted.to_expr(), op->image,
+                           op->param, permuted_predicate, align);
+            return mutate(Shuffle::make_transpose(permuted_load, B), info);
+        }
+        if (predicate.same_as(op->predicate) && index.same_as(op->index) && align == op->alignment) {
+            return op;
+        }
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate, align);
     } else if (predicate.same_as(op->predicate) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {

@@ -229,6 +229,7 @@ tests(GROUPS correctness
       multi_way_select.cpp
       multipass_constraints.cpp
       multiple_outputs.cpp
+      multiramp.cpp
       mux.cpp
       narrow_predicates.cpp
       negative_split_factors.cpp
@@ -323,6 +324,7 @@ tests(GROUPS correctness
       tracing_stack.cpp
       transitive_bounds.cpp
       transpose_idioms.cpp
+      transposed_vector_reduce.cpp
       trim_no_ops.cpp
       tuple_partial_update.cpp
       tuple_reduction.cpp

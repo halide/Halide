@@ -1,7 +1,11 @@
 #include "Simplify_Internal.h"
 
+#include <algorithm>
+#include <numeric>
+
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
+#include "MultiRamp.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -388,24 +392,57 @@ Stmt Simplify::visit(const Store *op) {
         Stmt s = Block::make(stores);
         s = LetStmt::make(var_name, value, s);
         return mutate(s);
-    } else if (const Ramp *inner_ramp = r_index ? r_index->base.as<Ramp>() : nullptr;
-               inner_ramp &&
-               !is_const_one(inner_ramp->stride) &&
-               is_const_one(r_index->stride)) {
-        // If it's a nested ramp and the outer ramp has stride 1, swap the
-        // nesting order of the ramps to make dense stores and transpose the
-        // index and value instead. Later in lowering after flattening the
-        // nested ramps it will turn into a concat of dense ramps and hit the
+    } else if (MultiRamp mr;
+               index.type().is_vector() &&
+               // Don't do expensive analysis in the common case of a load of a ramp of scalars.
+               !(r_index && r_index->base.type().is_scalar()) &&
+               is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
+               mr.dimensions() > 1) {
+        // If the index is a multi-dimensional ramp with a stride-1 dim that
+        // isn't already innermost, rotate it (together with all subsequent
+        // dims) to the innermost position so the resulting store is dense.
+        // Permute the value and predicate to match the new lane order using
+        // a single make_transpose, which downstream code can recognise and
+        // represent compactly. Later in lowering, after flattening the
+        // nested ramps, this turns into a concat of dense ramps and hits the
         // case above.
-        Expr transposed_index =
-            Ramp::make(Ramp::make(inner_ramp->base, make_one(inner_ramp->base.type()), r_index->lanes),
-                       Broadcast::make(inner_ramp->stride, r_index->lanes), inner_ramp->lanes);
-        Expr transposed_value = Shuffle::make_transpose(value, inner_ramp->lanes);
-        Expr transposed_predicate = (predicate.as<Broadcast>() ?
-                                         predicate :  // common case optimization
-                                         Shuffle::make_transpose(predicate, inner_ramp->lanes));
-        return mutate(Store::make(op->name, transposed_value, transposed_index,
-                                  op->param, transposed_predicate, align));
+        int k = -1;
+        for (int i = 0; i < mr.dimensions(); i++) {
+            if (is_const_one(mr.strides[i])) {
+                k = i;
+                break;
+            }
+        }
+        if (k > 0) {
+            int d = mr.dimensions();
+            std::vector<int> perm(d);
+            std::iota(perm.begin(), perm.end(), 0);
+            std::rotate(perm.begin(), perm.begin() + k, perm.end());
+            MultiRamp permuted = mr;
+            permuted.reorder(perm);
+            int A = 1;
+            for (int i = 0; i < k; i++) {
+                A *= mr.lanes[i];
+            }
+
+            // Transpose the value and predicate so their lane ordering
+            // matches the permuted index.
+            Expr permuted_value = Shuffle::make_transpose(value, A);
+            Expr permuted_predicate;
+            const Broadcast *b_pred = predicate.as<Broadcast>();
+            if (b_pred && b_pred->value.type().is_scalar()) {
+                permuted_predicate = predicate;
+            } else {
+                permuted_predicate = Shuffle::make_transpose(predicate, A);
+            }
+            return mutate(Store::make(op->name, permuted_value, permuted.to_expr(),
+                                      op->param, permuted_predicate, align));
+        }
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) &&
+            index.same_as(op->index) && align == op->alignment) {
+            return op;
+        }
+        return Store::make(op->name, value, index, op->param, predicate, align);
     } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {
