@@ -77,15 +77,35 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
 
     if (info && op->type.is_int_or_uint()) {
         switch (op->op) {
-        case VectorReduce::Add:
-            // Alignment of result is the alignment of the arg. Bounds
-            // of the result can grow according to the reduction
-            // factor.
-            info->bounds = cast(op->type, info->bounds * factor);
+        case VectorReduce::Add: {
+            // A horizontal add of `factor` lanes is the sum of `factor`
+            // (possibly distinct) values each in `info->bounds` with
+            // alignment `info->alignment`. Treating it as multiplication by
+            // `factor` would be wrong -- that would claim a tighter modulus
+            // than we actually have. Instead we add the per-lane alignment to
+            // itself `factor` times.
+            ModulusRemainder one_lane = info->alignment;
+            info->bounds = info->bounds * factor;
+            for (int i = 1; i < factor; i++) {
+                info->alignment = info->alignment + one_lane;
+            }
+            info->cast_to(op->type);
             break;
-        case VectorReduce::SaturatingAdd:
-            info->bounds = saturating_cast(op->type, info->bounds * factor);
+        }
+        case VectorReduce::SaturatingAdd: {
+            ConstantInterval unsaturated = info->bounds * factor;
+            if (op->type.can_represent(unsaturated)) {
+                ModulusRemainder one_lane = info->alignment;
+                info->bounds = unsaturated;
+                for (int i = 1; i < factor; i++) {
+                    info->alignment = info->alignment + one_lane;
+                }
+            } else {
+                info->bounds = saturating_cast(op->type, unsaturated);
+                info->alignment = ModulusRemainder{};
+            }
             break;
+        }
         case VectorReduce::Mul:
             // Don't try to infer anything about bounds. Leave the
             // alignment unchanged even though we could theoretically
