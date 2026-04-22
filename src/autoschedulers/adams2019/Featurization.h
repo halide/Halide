@@ -166,12 +166,12 @@ struct ScheduleFeatures {
         return 3;
     }
 
-    double &operator[](int idx) {
-        return ((double *)(this))[idx];
+    double &operator[](size_t idx) {
+        return reinterpret_cast<double *>(this)[idx];
     }
 
-    double operator[](int idx) const {
-        return ((const double *)(this))[idx];
+    double operator[](size_t idx) const {
+        return reinterpret_cast<const double *>(this)[idx];
     }
 
     // The number of times storage for this stage is allocated. The
