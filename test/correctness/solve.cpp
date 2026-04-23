@@ -335,6 +335,36 @@ void test_bounds_of_float_to_int_cast_is_sound() {
     }
 }
 
+// Regression guard for the precision side of the above fix. Carrying
+// *symbolic* (non-constant) float bounds through an int32+ cast is load-
+// bearing for bilateral_grid and similar pipelines: bounds often end up
+// as `select(r_sigma > 0, 0/r_sigma, 1/r_sigma) + 0.5` etc., where we
+// can't prove the range fits at bounds-inference time but the programmer
+// has opted into the convention that float-to-int out-of-range is
+// undefined. The soundness fix above must only reject *provably*
+// out-of-range constant bounds, not symbolic ones.
+void test_bounds_of_float_to_int_preserves_symbolic_bounds() {
+    Expr rs = Variable::make(Float(32), "r_sigma");
+    Expr val = Variable::make(Float(32), "val");
+    Expr e = cast<int>(val / rs + 0.5f);
+
+    Scope<Interval> scope;
+    scope.push("val", Interval(Expr(0.0f), Expr(1.0f)));
+    // r_sigma has a bounded positive estimate (what apply_param_estimates
+    // or a scope binding effectively produces after frontend lowering).
+    scope.push("r_sigma", Interval(Expr(0.1f), Expr(1.0f)));
+
+    Interval bounds = bounds_of_expr_in_scope(e, scope);
+    if (!bounds.is_bounded()) {
+        std::cerr << "bounds_of int32(float_expr) dropped to unbounded "
+                  << "for a case that should carry through:\n"
+                  << "  expr: " << e << "\n"
+                  << "  bounds.min: " << (bounds.has_lower_bound() ? simplify(bounds.min) : Expr("neg_inf")) << "\n"
+                  << "  bounds.max: " << (bounds.has_upper_bound() ? simplify(bounds.max) : Expr("pos_inf")) << "\n";
+        std::abort();
+    }
+}
+
 void test_simplify_preserves_float_to_uint_cast_chain() {
     Expr a = Variable::make(Int(32), "a");
     Expr chained = Cast::make(Int(32),
@@ -367,6 +397,7 @@ int main(int argc, char **argv) {
     test_narrow_div_add_equivalence();
     test_bounds_of_float_mod_is_sound();
     test_bounds_of_float_to_int_cast_is_sound();
+    test_bounds_of_float_to_int_preserves_symbolic_bounds();
     test_simplify_preserves_float_to_uint_cast_chain();
     std::printf("Success!\n");
     return 0;

@@ -324,16 +324,39 @@ protected:
             // for the fit check below to prove, and the destination is
             // wide enough that any concretization will fit.
             //
-            // Float sources are excluded because out-of-range
-            // float-to-signed-int casts are implementation-defined: in
-            // particular, the simplifier's folding can invert interval
-            // orientation (see the fuzzer test exercising this). The
-            // bounded-float case below handles the narrow safe subset.
-            //
             // Unsigned sources are excluded unconditionally: unsigned
             // arithmetic is defined to wrap, and a UInt(64) whose bounds
             // exceed Int(32) silently wraps on the cast.
             could_overflow = false;
+        } else if (from.is_float() && to.is_int() && to.bits() >= 32) {
+            // Float source to int32+: out-of-range float-to-signed-int
+            // casts are implementation-defined, so Halide's convention
+            // is to trust the programmer that the value fits. We carry
+            // the float bounds through the cast UNLESS at least one
+            // endpoint is a constant that provably exceeds the
+            // destination's range -- in that case IntImm::make sign-
+            // extends the low bits and can invert the resulting
+            // interval, which is worse than just using bounds_of_type.
+            Interval s = a;
+            if (s.has_lower_bound()) s.min = simplify(s.min);
+            if (s.has_upper_bound()) s.max = simplify(s.max);
+            double lo = -std::ldexp(1.0, to.bits() - 1);
+            double hi_exclusive = std::ldexp(1.0, to.bits() - 1);
+            bool const_oob = false;
+            if (s.has_lower_bound()) {
+                if (auto fmin = as_const_float(s.min)) {
+                    const_oob = const_oob || !std::isfinite(*fmin) || *fmin < lo;
+                }
+            }
+            if (s.has_upper_bound()) {
+                if (auto fmax = as_const_float(s.max)) {
+                    const_oob = const_oob || !std::isfinite(*fmax) || *fmax >= hi_exclusive;
+                }
+            }
+            if (!const_oob) {
+                could_overflow = false;
+                a = s;
+            }
         } else if (a.is_bounded()) {
             if (from.can_represent(to)) {
                 // The other case to consider is narrowing where the
