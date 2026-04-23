@@ -967,7 +967,7 @@ protected:
 
         // We may partially succeed, in which case we'll have (unrolled) loops
         // to rewrap.
-        struct ContainingLoop {
+        struct UnrolledLoop {
             std::string name;
             int extent;
             // Index of this loop's dim in the pre-alias-peel MultiRamp. Used
@@ -975,7 +975,7 @@ protected:
             // corresponding slice of the reduced value vector.
             int dim;
         };
-        std::vector<ContainingLoop> containing_loops;
+        std::vector<UnrolledLoop> unrolled_loops;
 
         do {
             if (!op->mutex_name.empty()) {
@@ -1266,8 +1266,8 @@ protected:
                         }
                     }
                     std::string name = unique_name('t');
-                    containing_loops.emplace_back(
-                        ContainingLoop{name, p.lanes, pos});
+                    unrolled_loops.emplace_back(
+                        UnrolledLoop{name, p.lanes, pos});
                     store_mr.base += Variable::make(Int(32), name) * p.stride;
                 }
                 output_lanes = store_mr.total_lanes();
@@ -1282,7 +1282,7 @@ protected:
             Expr lhs = cast(b.type().with_lanes(output_lanes), new_load);
 
             Stmt s;
-            if (containing_loops.empty()) {
+            if (unrolled_loops.empty()) {
                 b = binop(lhs, b);
                 b = cast(new_load.type(), b);
                 s = Store::make(store->name, b, store_index, store->param,
@@ -1302,22 +1302,28 @@ protected:
                 Expr full_b_var = Variable::make(b.type(), full_b_var_name);
 
                 std::vector<int> peeled_dims, loop_extents;
-                peeled_dims.reserve(containing_loops.size());
-                loop_extents.reserve(containing_loops.size());
-                for (const auto &loop : containing_loops) {
+                peeled_dims.reserve(unrolled_loops.size());
+                loop_extents.reserve(unrolled_loops.size());
+                for (const auto &loop : unrolled_loops) {
                     peeled_dims.push_back(loop.dim);
                     loop_extents.push_back(loop.extent);
                 }
+                // Fully unroll the peeled dims into a flat Block of stores:
+                // we enumerate every multi-index v in the cartesian product of
+                // loop_extents and emit one store per iteration, substituting
+                // the loop variable with the corresponding constant. There is
+                // no runtime loop nest — UnrolledLoop describes the dims we
+                // peeled off of b, not loops that survive in the output.
                 std::vector<Stmt> block;
                 block.reserve(b_shape_mr.total_lanes() / output_lanes);
                 for_each_coordinate(loop_extents, [&](const std::vector<int> &v) {
-                    // v is the loop iteration multi-index (innermost first,
-                    // matching the order in containing_loops).
+                    // v is the iteration multi-index (innermost first,
+                    // matching the order in unrolled_loops).
                     Expr b_slice = Shuffle::make({full_b_var},
                                                  b_shape_mr.shuffle_from_slice(peeled_dims, v));
                     Stmt this_store = store_template;
-                    for (size_t j = 0; j < containing_loops.size(); j++) {
-                        this_store = substitute(containing_loops[j].name, v[j], this_store);
+                    for (size_t j = 0; j < unrolled_loops.size(); j++) {
+                        this_store = substitute(unrolled_loops[j].name, v[j], this_store);
                     }
                     this_store = substitute(b_var_name, b_slice, this_store);
                     block.push_back(this_store);

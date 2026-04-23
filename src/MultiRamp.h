@@ -80,14 +80,15 @@ struct MultiRamp {
      * slice. */
     void slice(int d, Expr v);
 
-    /** Construct an Expr telling us whether the lanes are all unique. A
-     * sufficient condition is that there is an ordering of the dims along
-     * which each stride is greater than the sum of the spans of earlier
-     * dims (span of dim k = |strides[k]| * (lanes[k] - 1)). We check all
-     * dim orderings and OR the resulting conditions together (ignoring
-     * base, since base is a uniform offset and doesn't affect uniqueness
-     * within the ramp). If this simplifies to const_false the lanes may
-     * or may not actually alias. */
+    /** Construct an Expr that is a *sufficient* condition for the lanes to
+     * all be unique — i.e. if it evaluates to true the lanes don't alias,
+     * but if it evaluates to false the lanes may or may not alias. The
+     * implication only goes one way. The condition checked is: there
+     * exists an ordering of the dims along which each stride is greater
+     * than the sum of the spans of earlier dims (span of dim k =
+     * |strides[k]| * (lanes[k] - 1)). We OR that condition over all dim
+     * orderings (base is ignored since it's a uniform offset and doesn't
+     * affect within-ramp uniqueness). */
     Expr alias_free() const;
 
     /** Information about one peeled dim, produced by alias_free_slice.
@@ -98,14 +99,23 @@ struct MultiRamp {
         int dim;
     };
 
-    /** Build an alias-free slice of *this by greedily adding dims innermost
-     * to outermost, keeping a dim only if the slice remains alias-free
-     * after it's added. Replace *this with the resulting slice, and return
-     * a description of the dims that weren't kept (innermost first).
-     * Always succeeds; *this may be reduced to a 0-dim scalar if no prefix
-     * of dims is alias-free. The omitted dims' contributions are NOT
-     * folded into base — callers usually want to add back
-     * `var * omitted.stride` per omitted dim before using *this. */
+    /** Build an alias-free slice of *this by walking the dims innermost to
+     * outermost and keeping each one only if the slice is still alias-free
+     * after adding it. The kept dims are a *subset* of the original dims
+     * (preserving their relative order), not necessarily a prefix — e.g. a
+     * middle dim may be dropped while both inner and outer dims are kept.
+     * Replace *this with the resulting slice, and return a description of
+     * the dims that weren't kept (innermost first). Always succeeds; *this
+     * may be reduced to a 0-dim scalar if no dim can be kept. The omitted
+     * dims' contributions are NOT folded into base — callers usually want
+     * to add back `var * omitted.stride` per omitted dim before using
+     * *this.
+     *
+     * All dimensions with stride zero or purely symbolic strides will be
+     * peeled, and some constant stride dimensions may also be peeled if
+     * they produce values that overlap other dimensions E.g. if there are
+     * two nested ramps that both have stride 1 the outer one will be
+     * peeled. */
     std::vector<PeeledDim> alias_free_slice();
 
     /** No-op returning 0 if the stride-1 dim is already innermost (or

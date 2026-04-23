@@ -387,9 +387,10 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
                is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
                mr.dimensions() > 1) {
         // If the index is a multi-dimensional ramp with a stride-1 dim that
-        // isn't already innermost, rotate it (together with all subsequent
-        // dims) to the outermost position so the resulting load is dense,
-        // and restore the original lane order with a single make_transpose.
+        // isn't already innermost, rotate it to the innermost position (with
+        // the previously-inner dims moved to the outermost end) so the
+        // resulting load is dense, and restore the original lane order with a
+        // single make_transpose.
         MultiRamp permuted = mr;
         int A = permuted.rotate_stride_one_innermost();
         if (A > 0) {
