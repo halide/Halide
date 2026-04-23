@@ -294,6 +294,7 @@ tests(GROUPS correctness
       sliding_over_guard_with_if.cpp
       sliding_reduction.cpp
       sliding_window.cpp
+      solve.cpp
       sort_exprs.cpp
       specialize.cpp
       specialize_to_gpu.cpp

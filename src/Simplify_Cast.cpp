@@ -110,13 +110,20 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
     } else if (cast &&
                op->type.is_int_or_uint() &&
                cast->type.is_int_or_uint() &&
+               cast->value.type().is_int_or_uint() &&
                op->type.bits() <= cast->type.bits() &&
                op->type.bits() <= op->value.type().bits()) {
         // If this is a cast between integer types, where the
         // outer cast is narrower than the inner cast and the
         // inner cast's argument, the inner cast can be
         // eliminated. The inner cast is either a sign extend
-        // or a zero extend, and the outer cast truncates the extended bits
+        // or a zero extend, and the outer cast truncates the extended bits.
+        // The requirement that cast->value is itself int-or-uint is crucial:
+        // a float source makes `cast` an fp-to-int conversion, whose low
+        // bits are not the same as an fp-to-int conversion of a narrower
+        // type. For example, int32(uint64(float64(-21))) evaluates to 0
+        // (undefined-behavior territory for negative float-to-unsigned)
+        // while int32(float64(-21)) is -21.
         if (op->type == cast->value.type()) {
             return mutate(cast->value, info);
         } else {
