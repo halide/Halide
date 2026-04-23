@@ -319,9 +319,20 @@ protected:
         bool could_overflow = true;
         if (to.can_represent(from) || to.is_float()) {
             could_overflow = false;
-        } else if (to.is_int() && to.bits() >= 32) {
-            // If we cast to an int32 or greater, assume that it won't
-            // overflow. Signed 32-bit integer overflow is undefined.
+        } else if (to.is_int() && to.bits() >= 32 && from.is_int() && !a.is_bounded()) {
+            // Signed int source with unbounded child: there's nothing
+            // for the fit check below to prove, and the destination is
+            // wide enough that any concretization will fit.
+            //
+            // Float sources are excluded because out-of-range
+            // float-to-signed-int casts are implementation-defined: in
+            // particular, the simplifier's folding can invert interval
+            // orientation (see the fuzzer test exercising this). The
+            // bounded-float case below handles the narrow safe subset.
+            //
+            // Unsigned sources are excluded unconditionally: unsigned
+            // arithmetic is defined to wrap, and a UInt(64) whose bounds
+            // exceed Int(32) silently wraps on the cast.
             could_overflow = false;
         } else if (a.is_bounded()) {
             if (from.can_represent(to)) {
@@ -742,7 +753,17 @@ protected:
 
         Type t = op->type.element_of();
 
-        // Mod is always positive
+        if (t.is_float()) {
+            // fmod's result takes the sign of the dividend (so it can be
+            // negative), its magnitude is bounded by |b| but can reach it,
+            // and fmod(x, 0) = NaN which is not in any real interval. Don't
+            // try to be clever here -- fall back to unbounded. The integer
+            // reasoning below would unsoundly claim the result is >= 0.
+            bounds_of_type(t);
+            return;
+        }
+
+        // Mod is always positive for integer types.
         interval.min = make_zero(t);
         interval.max = Interval::pos_inf();
 
@@ -765,11 +786,6 @@ protected:
                 // x % [-8, 10] -> [0,9]
                 interval.max = Max::make(interval.min, b.max - make_one(t));
                 interval.max = Max::make(interval.max, make_const(t, -1) - b.min);
-            } else if (b.max.type().is_float()) {
-                // The floating point version has the same sign rules,
-                // but can reach all the way up to the original value,
-                // so there's no -1.
-                interval.max = Max::make(b.max, -b.min);
             }
         }
     }

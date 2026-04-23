@@ -156,7 +156,12 @@ protected:
             }
         } else if (a_uses_var && b_uses_var) {
             if (equal(a, b)) {
-                expr = mutate(a * 2);
+                // Use Mul::make + make_const rather than operator*(Expr, int)
+                // because the latter rejects constants that don't fit in a's
+                // type (e.g. `2` in UInt(1)). make_const truncates modulo the
+                // width, so `UInt(1) * 2` becomes `UInt(1) * 0`, which is
+                // the correct modular result of `a + a` for UInt(1).
+                expr = mutate(Mul::make(a, make_const(a.type(), 2)));
             } else if (add_a && !a_failed) {
                 // (f(x) + a) + g(x) -> (f(x) + g(x)) + a
                 expr = mutate((add_a->a + b) + add_a->b);
@@ -181,11 +186,15 @@ protected:
             } else if (mul_b && equal(mul_b->a, a)) {
                 // f(x) + f(x)*a -> f(x) * (a + 1)
                 expr = mutate(a * (mul_b->b + 1));
-            } else if (div_a && !a_failed) {
-                // f(x)/a + g(x) -> (f(x) + g(x) * a) / b
+            } else if (div_a && !a_failed && no_overflow_int(op->type)) {
+                // f(x)/a + g(x) -> (f(x) + g(x) * a) / a
+                // Only valid when multiplication and division don't wrap:
+                // under modular arithmetic g(x)*a can overflow and the
+                // rewrite changes the value. Gated to Int(32)+.
                 expr = mutate((div_a->a + b * div_a->b) / div_a->b);
-            } else if (div_b && !b_failed) {
+            } else if (div_b && !b_failed && no_overflow_int(op->type)) {
                 // f(x) + g(x)/b -> (f(x) * b + g(x)) / b
+                // Same overflow concern as above.
                 expr = mutate((a * div_b->b + div_b->a) / div_b->b);
             } else {
                 expr = fail(a + b);
@@ -269,8 +278,9 @@ protected:
             } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b)) {
                 // f(x)*a - g(x)*a -> (f(x) - g(x))*a;
                 expr = mutate((mul_a->a - mul_b->a) * mul_a->b);
-            } else if (div_a && !a_failed) {
-                // f(x)/a - g(x) -> (f(x) - g(x) * a) / b
+            } else if (div_a && !a_failed && no_overflow_int(op->type)) {
+                // f(x)/a - g(x) -> (f(x) - g(x) * a) / a
+                // Same overflow concern as the analogous Add rewrite.
                 expr = mutate((div_a->a - b * div_a->b) / div_a->b);
             } else {
                 expr = fail(a - b);
@@ -609,11 +619,21 @@ protected:
         Expr expr;
 
         if (a_uses_var && !b_uses_var) {
-            // We have f(x) < y. Try to unwrap f(x)
-            if (add_a && !a_failed) {
+            // We have f(x) < y. Try to unwrap f(x).
+            //
+            // Several of these rewrites rearrange the comparison by adding
+            // or subtracting on both sides. That's only sound under an
+            // assumption of no integer overflow -- for types that may wrap
+            // (unsigned, or narrow signed whose overflow is UB and could
+            // manifest as wrap), ordering comparisons flip under wrap even
+            // though equality is preserved. So gate the rewrite on
+            // no_overflow_int for LT/LE/GT/GE but allow EQ/NE for all types
+            // (modular arithmetic preserves equality).
+            const bool safe_to_rearrange = no_overflow_int(a.type()) || is_eq || is_ne;
+            if (add_a && !a_failed && safe_to_rearrange) {
                 // f(x) + b < c -> f(x) < c - b
                 expr = mutate(Cmp::make(add_a->a, (b - add_a->b)));
-            } else if (sub_a && !a_failed) {
+            } else if (sub_a && !a_failed && safe_to_rearrange) {
                 // f(x) - b < c -> f(x) < c + b
                 expr = mutate(Cmp::make(sub_a->a, (b + sub_a->b)));
             } else if (mul_a) {
@@ -631,11 +651,19 @@ protected:
                     // check is true, but put an assertion anyway.
                     internal_assert(!b.type().is_uint()) << "Negating unsigned is not legal\n";
                     expr = mutate(Opp::make(mul_a->a * negate(mul_a->b), negate(b)));
-                } else {
-                    // Don't use operator/ and operator % to sneak
-                    // past the division-by-zero check. We'll only
-                    // actually use these when mul_a->b is a positive
-                    // or negative constant.
+                } else if (is_positive_const(mul_a->b) && no_overflow_int(a.type())) {
+                    // The rewrites below divide by mul_a->b, so they
+                    // require it to be a nonzero constant of known sign.
+                    // no_overflow_int also rules out unsigned and narrow
+                    // signed types, for which `a*c == b <=> a == b/c &&
+                    // b%c == 0` fails under modular arithmetic (consider
+                    // uint8 with c = 3, b = 7: the rewrite misses the
+                    // solutions that arise from wrap).
+                    //
+                    // Don't use operator/ and operator % to sneak past the
+                    // division-by-zero check in Div::make / Mod::make --
+                    // mul_a->b is guaranteed non-zero here, so the raw
+                    // make calls are safe.
                     Expr div = Div::make(b, mul_a->b);
                     Expr rem = Mod::make(b, mul_a->b);
                     if (is_eq) {
@@ -644,16 +672,14 @@ protected:
                     } else if (is_ne) {
                         // f(x) * c != b -> f(x) != b/c || b%c != 0
                         expr = mutate((mul_a->a != div) || (rem != 0));
-                    } else if (is_positive_const(mul_a->b)) {
-                        if (is_le) {
-                            expr = mutate(mul_a->a <= div);
-                        } else if (is_lt) {
-                            expr = mutate(mul_a->a <= (b - 1) / mul_a->b);
-                        } else if (is_gt) {
-                            expr = mutate(mul_a->a > div);
-                        } else if (is_ge) {
-                            expr = mutate(mul_a->a > (b - 1) / mul_a->b);
-                        }
+                    } else if (is_le) {
+                        expr = mutate(mul_a->a <= div);
+                    } else if (is_lt) {
+                        expr = mutate(mul_a->a <= (b - 1) / mul_a->b);
+                    } else if (is_gt) {
+                        expr = mutate(mul_a->a > div);
+                    } else if (is_ge) {
+                        expr = mutate(mul_a->a > (b - 1) / mul_a->b);
                     }
                 }
             } else if (div_a) {
@@ -663,7 +689,7 @@ protected:
                     } else if (is_negative_const(div_a->b)) {
                         expr = mutate(Opp::make(div_a->a, b * div_a->b));
                     }
-                } else if (a.type().is_int() && a.type().bits() >= 32) {
+                } else if (no_overflow_int(a.type())) {
                     if (is_eq || is_ne) {
                         // Can't do anything with this
                     } else if (is_negative_const(div_a->b)) {
@@ -689,7 +715,7 @@ protected:
                     }
                 }
             }
-        } else if (a_uses_var && b_uses_var && a.type().is_int() && a.type().bits() >= 32) {
+        } else if (a_uses_var && b_uses_var && no_overflow_int(a.type())) {
             // Convert to f(x) - g(x) == 0 and let the subtract mutator clean up.
             // Only safe if the type is not subject to overflow.
             expr = mutate(Cmp::make(a - b, make_zero(a.type())));
