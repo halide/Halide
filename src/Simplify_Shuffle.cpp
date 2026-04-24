@@ -95,10 +95,11 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
     // broadcast. Note that it doesn't matter what the indices
     // are.
     const Broadcast *b1 = new_vectors[0].as<Broadcast>();
-    if (b1) {
+    if (b1 && b1->value.type().is_scalar()) {
         bool can_collapse = true;
         for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
-            if (const Broadcast *b2 = new_vectors[i].as<Broadcast>()) {
+            if (const Broadcast *b2 = new_vectors[i].as<Broadcast>();
+                b2 && b2->value.type().is_scalar()) {
                 Expr check = mutate(b1->value - b2->value, nullptr);
                 can_collapse &= is_const_zero(check);
             } else {
