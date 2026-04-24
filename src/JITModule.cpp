@@ -408,13 +408,23 @@ void compile_module_impl(
         // i386: "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
         // ARM 32bit: Unsupported target machine architecture in ELF object shared runtime-jitted-objectbuffer
         // Windows 64-bit: JIT session error: could not register eh-frame: __register_frame function not found
-        linkerBuilder = [&](llvm::orc::ExecutionSession &session) {
+        linkerBuilder = [&](llvm::orc::ExecutionSession &session
+#if LLVM_VERSION >= 230
+                            ,
+                            llvm::jitlink::JITLinkMemoryManager &
+#endif
+                        ) {
             return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&](const llvm::MemoryBuffer &) {
                 return std::make_unique<HalideJITMemoryManager>(dependencies);
             });
         };
     } else {
-        linkerBuilder = [](llvm::orc::ExecutionSession &session) {
+        linkerBuilder = [](llvm::orc::ExecutionSession &session
+#if LLVM_VERSION >= 230
+                           ,
+                           llvm::jitlink::JITLinkMemoryManager &
+#endif
+                        ) {
             return std::make_unique<llvm::orc::ObjectLinkingLayer>(session);
         };
     }

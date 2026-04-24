@@ -51,7 +51,7 @@ repos:
     rev: v2.4.1
     hooks:
       - id: codespell
-        args: [ --ignore-words-list, "CreateOr,implementors,PADD,re-use,re-used,re-using,subtile,subtiles" ]
+        args: [ --ignore-words-list, "CreateOr,implementors,PADD,re-use,re-used,re-using,subtile,subtiles,tRe" ]
         exclude: |
           (?x)(
             ^src/autoschedulers/common/cmdline\.h$
