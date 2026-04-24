@@ -130,7 +130,7 @@ protected:
 
             if (Call::as_intrinsic(b, {Call::signed_integer_overflow})) {
                 // Letting signed integer overflow through here would result in
-                // infinite recursion when we try to construction the rounding
+                // infinite recursion when we try to construct the rounding
                 // terms.
                 return Expr{};
             }
