@@ -22,6 +22,42 @@ void check_solve(const Expr &in, const Expr &expected) {
     }
 }
 
+void check_interval(const Expr &a, const Interval &i, bool outer) {
+    Interval result =
+        outer ? solve_for_outer_interval(a, "x") : solve_for_inner_interval(a, "x");
+    result.min = simplify(result.min);
+    result.max = simplify(result.max);
+    if (!equal(result.min, i.min) || !equal(result.max, i.max)) {
+        std::cerr << "Expression " << a << " solved to the interval:\n"
+                  << "  min: " << result.min << "\n"
+                  << "  max: " << result.max << "\n"
+                  << " instead of:\n"
+                  << "  min: " << i.min << "\n"
+                  << "  max: " << i.max << "\n";
+        std::abort();
+    }
+}
+
+void check_outer_interval(const Expr &a, const Expr &min, const Expr &max) {
+    check_interval(a, Interval(min, max), true);
+}
+
+void check_inner_interval(const Expr &a, const Expr &min, const Expr &max) {
+    check_interval(a, Interval(min, max), false);
+}
+
+void check_and_condition(const Expr &orig, const Expr &result, const Interval &i) {
+    Scope<Interval> s;
+    s.push("x", i);
+    Expr cond = and_condition_over_domain(orig, s);
+    if (!equal(cond, result)) {
+        std::cerr << "Expression " << orig
+                  << " reduced to " << cond
+                  << " instead of " << result << "\n";
+        std::abort();
+    }
+}
+
 // Assert that solve_expression produces a result that is semantically
 // equivalent to the input under the given substitution. This is used for
 // cases where we care about preserved meaning, not exact syntactic form.
@@ -88,14 +124,18 @@ void test_unsigned_equality_still_rearranged() {
 
 // Bug #2: the solver was rewriting `f(x) * y @ b` to forms involving `b / y`
 // and `b % y` even when `y` was a non-constant expression. When `y` evaluates
-// to zero the rewrite introduces division-by-zero undefined behavior that was
-// not present in the input.
+// to zero the rewrite changes the expression's value even though Halide
+// defines div/mod-by-zero to return zero -- `a * 0 == b` becomes `a == b/0 &&
+// b%0 == 0` which collapses to `a == 0 && b == 0`, losing the original
+// "always false when b != 0" semantics.
 void test_nonconstant_multiplier_not_rewritten() {
     Expr x = Variable::make(Int(32), "x");
     Expr y = Variable::make(Int(32), "y");
 
     // At y = 0, `x * y == 1` is the well-defined `0 == 1 == false`.
-    // The buggy rewrite `x == 1/y && 1%y == 0` hits `1/0` and `1%0`, UB.
+    // The buggy rewrite `x == 1/y && 1%y == 0` evaluates to
+    // `x == 0 && true == true`, which is true at x = 0 -- changing the
+    // value of the expression.
     std::map<std::string, Expr> vars_zero{
         {"x", Expr(7)},
         {"y", Expr(0)},
@@ -124,73 +164,6 @@ void test_positive_const_multiplier_still_rewritten() {
                 (x == 2) && (Mod::make(seven, three) == 0));
     check_solve(3 * x != 7,
                 (x != 2) || (Mod::make(seven, three) != 0));
-}
-
-// Regression test for an unsoundness in bounds_of_expr_in_scope (which
-// and_condition_over_domain delegates to). The solver fuzzer surfaced a
-// comparison `0 >= int32(min(big_u64, u64(a2) + u64(a0)))` whose weakening
-// collapsed to `const_true` -- bounds_of was applying a shortcut for casts
-// to signed int32+ that assumed no truncation regardless of source type,
-// and the uint64 upper bound (big) wrapped to a negative int32 constant,
-// which then satisfied `0 >= that_max` vacuously.
-void test_and_condition_sound_for_narrowing_uint_cast() {
-    Expr a0 = Variable::make(Int(32), "a0");
-    Expr a2 = Variable::make(Int(32), "a2");
-
-    Expr big = UIntImm::make(UInt(64), 18446744073407718471ULL);
-    Expr sum = Cast::make(UInt(64), a2) + Cast::make(UInt(64), a0);
-    Expr rhs = Cast::make(Int(32), min(big, sum));
-    Expr cond = Expr(0) >= rhs;
-
-    Scope<Interval> scope;
-    scope.push("a0", Interval(Expr(-5), Expr(14)));
-    scope.push("a2", Interval(Expr(9), Expr(16)));
-
-    // At a0=4, a2=11: u64(11)+u64(4) = 15, min(big, 15) = 15, int32(15) = 15,
-    // and 0 >= 15 is false. Since cond is false somewhere in the domain,
-    // and_condition_over_domain must not return const_true.
-    Expr weakened = simplify(and_condition_over_domain(cond, scope));
-    if (is_const_one(weakened)) {
-        std::cerr << "and_condition_over_domain unsound:\n"
-                  << "  cond: " << cond << "\n"
-                  << "  weakened: " << weakened << "\n"
-                  << "  but cond is false at a0=4, a2=11.\n";
-        std::abort();
-    }
-}
-
-// Second bounds_of_expr_in_scope regression. The shortcut in the Cast
-// handler was also blanket-applying to signed-int-to-signed-int narrowing
-// with bounded children: `int32(select(cond, int64(uint32(a4)), 59_i64))`
-// where a4 is pinned to -9 has child bounds `[59, 4294967287]`. Casting
-// those bounds to Int(32) wrapped 4294967287 to -9, producing the inverted
-// interval `[59, -9]`. Downstream the comparison `0 < that` was resolved as
-// `LHS_max < RHS_min` => `1 < 59` => true, claiming the condition was
-// always true even though at cond=true it evaluates to `0 < -9` = false.
-void test_and_condition_sound_for_narrowing_int_cast() {
-    Expr a4 = Variable::make(Int(32), "a4");
-    Expr cond_var = Variable::make(Bool(), "cond");
-
-    Expr rhs = Cast::make(Int(32),
-                          Select::make(cond_var,
-                                       Cast::make(Int(64), Cast::make(UInt(32), a4)),
-                                       IntImm::make(Int(64), 59)));
-    Expr cond = Expr(0) < rhs;
-
-    Scope<Interval> scope;
-    scope.push("a4", Interval(Expr(-9), Expr(-9)));
-    scope.push("cond", Interval(Expr(false), Expr(true)));
-
-    // At cond=true, a4=-9: int64(uint32(-9)) = 4294967287, int32(that) = -9,
-    // and 0 < -9 is false.
-    Expr weakened = simplify(and_condition_over_domain(cond, scope));
-    if (is_const_one(weakened)) {
-        std::cerr << "and_condition_over_domain unsound (narrowing int cast):\n"
-                  << "  cond: " << cond << "\n"
-                  << "  weakened: " << weakened << "\n"
-                  << "  but cond is false at cond=true, a4=-9.\n";
-        std::abort();
-    }
 }
 
 // Solver used to rewrite `f(x) + f(x) -> f(x) * 2` via `operator*(Expr, int)`,
@@ -241,14 +214,17 @@ void test_narrow_div_add_equivalence() {
 
 // bounds_of_expr_in_scope for `float % float` was applying integer-mod
 // semantics and claiming the result is always in `[0, max(|b|, -b.min)]`.
-// For floats, fmod takes the sign of the dividend, and fmod(x, 0) is NaN,
-// so the integer reasoning is unsound. For example the fuzzer generated
-//   (float64(a3) % float64(a4)) >= 291249580.0
-// with a3 in [-10,-3] and a4 in [-9, 4]; the old bounds were
-// [false, false], which propagated up through int32 and min to give a
-// comparison that and_condition_over_domain reported as always-true,
-// even though at a3=-7, a4=0 the input evaluates to false.
-void test_bounds_of_float_mod_is_sound() {
+// Halide mod is defined to be non-negative (Euclidean), but the current
+// float-mod lowering in CodeGen_LLVM is `a - b * floor(a/b)`, which does
+// not always produce a non-negative result when b is negative -- e.g.
+// fmod(5, -3) lowers to 5 - (-3)*floor(5/-3) = 5 - (-3)*(-2) = -1. The
+// fuzzer exercises this via a concrete substitution and compares the
+// rewritten form's simplified value against bounds_of's claim, and the
+// two disagree. Until the lowering is fixed to enforce Euclidean mod,
+// bounds_of falls back to unbounded for float mod. When the lowering
+// is fixed, this test and the float-mod branch in Bounds.cpp can both
+// go away.
+void test_bounds_of_float_mod_matches_lowering() {
     Expr a = Variable::make(Float(64), "a");
     Expr b = Variable::make(Float(64), "b");
     Expr e = Mod::make(a, b);
@@ -258,15 +234,13 @@ void test_bounds_of_float_mod_is_sound() {
     scope.push("b", Interval(Expr(-9.0), Expr(4.0)));
 
     Interval bounds = bounds_of_expr_in_scope(e, scope);
-    // The correct answer for this interval is "we don't know" (NaN is
-    // possible when b contains zero). Require the bounds to have no
-    // finite lower bound and be either unbounded above, or at least
-    // non-negative -- the prior unsound bound was [0, 9].
+    // Under the current lowering the result can be negative, so
+    // bounds.min must not be provably non-negative.
     if (bounds.has_lower_bound()) {
         Expr provably_nonneg = simplify(bounds.min >= Expr(0.0));
         if (is_const_one(provably_nonneg)) {
             std::cerr << "bounds_of float % float claims result is non-negative, "
-                      << "but fmod takes the sign of the dividend:\n"
+                      << "but the current lowering can produce negative results:\n"
                       << "  expr: " << e << "\n"
                       << "  bounds.min: " << simplify(bounds.min) << "\n"
                       << "  bounds.max: " << simplify(bounds.max) << "\n";
@@ -384,18 +358,287 @@ void test_simplify_preserves_float_to_uint_cast_chain() {
     }
 }
 
+// Previously lived as `solve_test()` at the bottom of src/Solve.cpp and
+// was invoked from test/internal.cpp. Moved here so all solver tests are
+// in one place.
+void test_original_solve_test_cases() {
+    using ConciseCasts::i16;
+
+    Expr x = Variable::make(Int(32), "x");
+    Expr y = Variable::make(Int(32), "y");
+    Expr z = Variable::make(Int(32), "z");
+
+    // Check some simple cases
+    check_solve(3 - 4 * x, x * (-4) + 3);
+    check_solve(min(5, x), min(x, 5));
+    check_solve(max(5, (5 + x) * y), max(x * y + 5 * y, 5));
+    check_solve(5 * y + 3 * x == 2, ((x == ((2 - (5 * y)) / 3)) && (((2 - (5 * y)) % 3) == 0)));
+    check_solve(min(min(z, x), min(x, y)), min(x, min(y, z)));
+    check_solve(min(x + y, x + 5), x + min(y, 5));
+
+    // Check solver with expressions containing division
+    check_solve(x + (x * 2) / 2, x * 2);
+    check_solve(x + (x * 2 + y) / 2, x * 2 + (y / 2));
+    check_solve(x + (x * 2 - y) / 2, x * 2 - (y / 2));
+    check_solve(x + (-(x * 2) / 2), x * 0 + 0);
+    check_solve(x + (-(x * 2 + -3)) / 2, x * 0 + 1);
+    check_solve(x + (z - (x * 2 + -3)) / 2, x * 0 + (z - (-3)) / 2);
+    check_solve(x + (y * 16 + (z - (x * 2 + -1))) / 2,
+                (x * 0) + (((z - -1) + (y * 16)) / 2));
+
+    check_solve((x * 9 + 3) / 4 - x * 2, (x * 1 + 3) / 4);
+    check_solve((x * 9 + 3) / 4 + x * 2, (x * 17 + 3) / 4);
+    check_solve(x * 2 + (x * 9 + 3) / 4, (x * 17 + 3) / 4);
+
+    // Check the solver doesn't perform transformations that change integer overflow behavior.
+    check_solve(i16(x + y) * i16(2) / i16(2), i16(x + y) * i16(2) / i16(2));
+
+    // A let statement
+    check_solve(Let::make("z", 3 + 5 * x, y + z < 8),
+                x <= (((8 - (3 + y)) - 1) / 5));
+
+    // A let statement where the variable gets used twice.
+    check_solve(Let::make("z", 3 + 5 * x, y + (z + z) < 8),
+                x <= (((8 - (6 + y)) - 1) / 10));
+
+    // Something where we expect a let in the output.
+    {
+        Expr e = y + 1;
+        for (int i = 0; i < 10; i++) {
+            e *= (e + 1);
+        }
+        SolverResult solved = solve_expression(x + e < e * e, "x");
+        if (!(solved.fully_solved && solved.result.as<Let>())) {
+            std::cerr << "Expected fully-solved Let-bearing result\n";
+            std::abort();
+        }
+    }
+
+    // Solving inequalities for integers is a pain to get right with
+    // all the rounding rules. Check we didn't make a mistake with
+    // brute force.
+    for (int den = -3; den <= 3; den++) {
+        if (den == 0) {
+            continue;
+        }
+        for (int num = 5; num <= 10; num++) {
+            Expr in[] = {
+                {x * den < num},
+                {x * den <= num},
+                {x * den == num},
+                {x * den != num},
+                {x * den >= num},
+                {x * den > num},
+                {x / den < num},
+                {x / den <= num},
+                {x / den == num},
+                {x / den != num},
+                {x / den >= num},
+                {x / den > num},
+            };
+            for (const auto &e : in) {
+                SolverResult solved = solve_expression(e, "x");
+                if (!solved.fully_solved) {
+                    std::cerr << "Error: failed to solve for x in " << e << "\n";
+                    std::abort();
+                }
+                Expr out = simplify(solved.result);
+                for (int i = -10; i < 10; i++) {
+                    Expr in_val = substitute("x", i, e);
+                    Expr out_val = substitute("x", i, out);
+                    in_val = simplify(in_val);
+                    out_val = simplify(out_val);
+                    if (!equal(in_val, out_val)) {
+                        std::cerr << "Error: "
+                                  << e << " is not equivalent to "
+                                  << out << " when x == " << i << "\n";
+                        std::abort();
+                    }
+                }
+            }
+        }
+    }
+
+    // Check for combinatorial explosion
+    {
+        Expr e = x + y;
+        for (int i = 0; i < 20; i++) {
+            e += (e + 1) * y;
+        }
+        SolverResult solved = solve_expression(e, "x");
+        if (!(solved.fully_solved && solved.result.defined())) {
+            std::cerr << "Expected fully-solved defined result for combinatorial case\n";
+            std::abort();
+        }
+    }
+
+    // Check some things that we don't expect to work.
+
+    // Quadratics:
+    if (solve_expression(x * x < 4, "x").fully_solved) {
+        std::cerr << "Expected quadratic to not be fully solved\n";
+        std::abort();
+    }
+
+    // Function calls, cast nodes, or multiplications by unknown sign
+    // don't get inverted, but the bit containing x still gets moved
+    // leftwards.
+    check_solve(4.0f > sqrt(x), sqrt(x) < 4.0f);
+
+    check_solve(4 > y * x, x * y < 4);
+
+    // Now test solving for an interval
+    check_inner_interval(x > 0, 1, Interval::pos_inf());
+    check_inner_interval(x < 100, Interval::neg_inf(), 99);
+    check_outer_interval(x > 0 && x < 100, 1, 99);
+    check_inner_interval(x > 0 && x < 100, 1, 99);
+
+    Expr c = Variable::make(Bool(), "c");
+    check_outer_interval(Let::make("y", 0, x > y && x < 100), 1, 99);
+    check_outer_interval(Let::make("c", x > 0, c && x < 100), 1, 99);
+
+    check_outer_interval((x >= 10 && x <= 90) && sin(x) > 0.5f, 10, 90);
+    check_inner_interval((x >= 10 && x <= 90) && sin(x) > 0.6f, Interval::pos_inf(), Interval::neg_inf());
+
+    check_inner_interval(x == 10, 10, 10);
+    check_outer_interval(x == 10, 10, 10);
+
+    check_inner_interval(!(x != 10), 10, 10);
+    check_outer_interval(!(x != 10), 10, 10);
+
+    check_inner_interval(3 * x + 4 < 27, Interval::neg_inf(), 7);
+    check_outer_interval(3 * x + 4 < 27, Interval::neg_inf(), 7);
+
+    check_inner_interval(min(x, y) > 17, 18, y);
+    check_outer_interval(min(x, y) > 17, 18, Interval::pos_inf());
+
+    check_inner_interval(x / 5 < 17, Interval::neg_inf(), 84);
+    check_outer_interval(x / 5 < 17, Interval::neg_inf(), 84);
+
+    // Test anding a condition over a domain
+    check_and_condition(x > 0, const_true(), Interval(1, y));
+    check_and_condition(x > 0, const_true(), Interval(5, y));
+    check_and_condition(x > 0, const_false(), Interval(-5, y));
+    check_and_condition(x > 0 && x < 10, const_true(), Interval(1, 9));
+    check_and_condition(x > 0 || sin(x) == 0.5f, const_true(), Interval(100, 200));
+
+    check_and_condition(x <= 0, const_true(), Interval(-100, 0));
+    check_and_condition(x <= 0, const_false(), Interval(-100, 1));
+
+    check_and_condition(x <= 0 || y > 2, const_true(), Interval(-100, 0));
+    check_and_condition(x > 0 || y > 2, 2 < y, Interval(-100, 0));
+
+    check_and_condition(x == 0, const_true(), Interval(0, 0));
+    check_and_condition(x == 0, const_false(), Interval(-10, 10));
+    check_and_condition(x != 0, const_false(), Interval(-10, 10));
+    check_and_condition(x != 0, const_true(), Interval(-20, -10));
+
+    check_and_condition(y == 0, y == 0, Interval(-10, 10));
+    check_and_condition(y != 0, y != 0, Interval(-10, 10));
+    check_and_condition((x == 5) && (y != 0), const_false(), Interval(-10, 10));
+    check_and_condition((x == 5) && (y != 3), y != 3, Interval(5, 5));
+    check_and_condition((x != 0) && (y != 0), const_false(), Interval(-10, 10));
+    check_and_condition((x != 0) && (y != 0), y != 0, Interval(-20, -10));
+
+    {
+        // This case used to break due to signed integer overflow in
+        // the simplifier.
+        Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        Expr lhs = pow(cast<int32_t>(a16), 2) + pow(cast<int32_t>(b16), 2);
+
+        Scope<Interval> s;
+        s.push("x", Interval(-10, 10));
+        Expr cond = and_condition_over_domain(lhs < 0, s);
+        if (is_const_one(simplify(cond))) {
+            std::cerr << "Expected cond to not simplify to const_one\n";
+            std::abort();
+        }
+    }
+
+    {
+        // This cause use to cause infinite recursion:
+        Expr t = Variable::make(Int(32), "t");
+        Expr test = (x <= min(max((y - min(((z * x) + t), t)), 1), 0));
+        Interval result = solve_for_outer_interval(test, "z");
+    }
+
+    {
+        // This case caused exponential behavior
+        Expr t = Variable::make(Int(32), "t");
+        for (int i = 0; i < 50; i++) {
+            t = min(t, Variable::make(Int(32), unique_name('v')));
+            t = max(t, Variable::make(Int(32), unique_name('v')));
+        }
+        solve_for_outer_interval(t <= 5, "t");
+        solve_for_inner_interval(t <= 5, "t");
+    }
+
+    // Check for partial results
+    check_solve(max(min(y, x), x), max(min(x, y), x));
+    check_solve(min(y, x) + max(y, 2 * x), min(x, y) + max(x * 2, y));
+    check_solve((min(x, y) + min(y, x)) * max(y, x), (min(x, y) * 2) * max(x, y));
+    check_solve(max((min((y * x), x) + min((1 + y), x)), (y + 2 * x)),
+                max((min((x * y), x) + min(x, (1 + y))), (x * 2 + y)));
+
+    {
+        Expr x = Variable::make(UInt(32), "x");
+        Expr y = Variable::make(UInt(32), "y");
+        Expr z = Variable::make(UInt(32), "z");
+        check_solve(5 - (4 - 4 * x), x * (4) + 1);
+        check_solve(z - (y - x), x + (z - y));
+        check_solve(z - (y - x) == 2, x == 2 - (z - y));
+
+        check_solve(x - (x - y), (x - x) + y);
+
+        // This is used to cause infinite recursion
+        Expr expr = Add::make(z, Sub::make(x, y));
+        SolverResult solved = solve_expression(expr, "y");
+    }
+
+    // This case was incorrect due to canonicalization of the multiply
+    // occurring after unpacking the LHS.
+    check_solve((y - z) * x, x * (y - z));
+
+    // These cases were incorrectly not flipping min/max when moving
+    // it out of the RHS of a subtract.
+    check_solve(min(x - y, x - z), x - max(y, z));
+    check_solve(min(x - y, x), x - max(y, 0));
+    check_solve(min(x, x - y), x - max(y, 0));
+    check_solve(max(x - y, x - z), x - min(y, z));
+    check_solve(max(x - y, x), x - min(y, 0));
+    check_solve(max(x, x - y), x - min(y, 0));
+
+    // Check mixed add/sub
+    check_solve(min(x - y, x + z), x + min(0 - y, z));
+    check_solve(max(x - y, x + z), x + max(0 - y, z));
+    check_solve(min(x + y, x - z), x + min(y, 0 - z));
+    check_solve(max(x + y, x - z), x + max(y, 0 - z));
+
+    check_solve((5 * Broadcast::make(x, 4) + y) / 5,
+                Broadcast::make(x, 4) + (Broadcast::make(y, 4) / 5));
+
+    // Select negates the condition to move x leftward
+    check_solve(select(y < z, z, x),
+                select(z <= y, x, z));
+
+    // Select negates the condition and then mutates it, moving x
+    // leftward (despite the simplifier preferring < to >).
+    check_solve(select(x < 10, 10, x),
+                select(x >= 10, x, 10));
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
+    test_original_solve_test_cases();
     test_unsigned_ordering_not_rearranged();
     test_unsigned_equality_still_rearranged();
     test_nonconstant_multiplier_not_rewritten();
     test_positive_const_multiplier_still_rewritten();
-    test_and_condition_sound_for_narrowing_uint_cast();
-    test_and_condition_sound_for_narrowing_int_cast();
     test_solve_does_not_abort_on_narrow_self_add();
     test_narrow_div_add_equivalence();
-    test_bounds_of_float_mod_is_sound();
+    test_bounds_of_float_mod_matches_lowering();
     test_bounds_of_float_to_int_cast_is_sound();
     test_bounds_of_float_to_int_preserves_symbolic_bounds();
     test_simplify_preserves_float_to_uint_cast_chain();

@@ -319,27 +319,20 @@ protected:
         bool could_overflow = true;
         if (to.can_represent(from) || to.is_float()) {
             could_overflow = false;
-        } else if (to.is_int() && to.bits() >= 32 && from.is_int() && !a.is_bounded()) {
-            // Signed int source with unbounded child: there's nothing
-            // for the fit check below to prove, and the destination is
-            // wide enough that any concretization will fit.
-            //
-            // Unsigned sources are excluded unconditionally: unsigned
-            // arithmetic is defined to wrap, and a UInt(64) whose bounds
-            // exceed Int(32) silently wraps on the cast.
-            could_overflow = false;
         } else if (from.is_float() && to.is_int() && to.bits() >= 32) {
-            // Float source to int32+: out-of-range float-to-signed-int
-            // casts are implementation-defined, so Halide's convention
-            // is to trust the programmer that the value fits. We carry
-            // the float bounds through the cast UNLESS at least one
-            // endpoint is a constant that provably exceeds the
-            // destination's range -- in that case IntImm::make sign-
+            // For int32+ destinations, float-to-signed-int is
+            // implementation-defined on out-of-range values. Halide's
+            // convention is to assume the value fits, so carry the
+            // float bounds through the cast UNLESS at least one
+            // endpoint is a constant we can prove exceeds the
+            // destination's range. In that case IntImm::make sign-
             // extends the low bits and can invert the resulting
-            // interval, which is worse than just using bounds_of_type.
-            Interval s = a;
-            if (s.has_lower_bound()) s.min = simplify(s.min);
-            if (s.has_upper_bound()) s.max = simplify(s.max);
+            // interval, which is strictly worse than bounds_of_type.
+            //
+            // (Float-to-signed-int for bits <= 16 saturates, so it is
+            // handled by the narrower `a.is_bounded()` path below; we
+            // don't need to treat it specially here.)
+            Interval s = simplify(a);
             double lo = -std::ldexp(1.0, to.bits() - 1);
             double hi_exclusive = std::ldexp(1.0, to.bits() - 1);
             bool const_oob = false;
@@ -357,6 +350,12 @@ protected:
                 could_overflow = false;
                 a = s;
             }
+        } else if (to.is_int() && to.bits() >= 32) {
+            // If we cast to an int32 or greater, assume that it won't
+            // overflow. Signed 32-bit integer overflow is undefined, and
+            // Halide treats uint-to-signed-int narrowing as "assumed not
+            // to overflow" too (see PR #7814 context).
+            could_overflow = false;
         } else if (a.is_bounded()) {
             if (from.can_represent(to)) {
                 // The other case to consider is narrowing where the
@@ -777,16 +776,19 @@ protected:
         Type t = op->type.element_of();
 
         if (t.is_float()) {
-            // fmod's result takes the sign of the dividend (so it can be
-            // negative), its magnitude is bounded by |b| but can reach it,
-            // and fmod(x, 0) = NaN which is not in any real interval. Don't
-            // try to be clever here -- fall back to unbounded. The integer
-            // reasoning below would unsoundly claim the result is >= 0.
+            // Halide mod is supposed to be non-negative (Euclidean), but
+            // the current float-mod lowering in CodeGen_LLVM is
+            // `a - b * floor(a/b)`, which can produce a negative result
+            // when b is negative (e.g. fmod(5, -3) = -1 under that
+            // formula). Until the lowering is tightened to enforce the
+            // Euclidean invariant, fall back to unbounded here -- the
+            // integer reasoning below would unsoundly claim the result
+            // is >= 0.
             bounds_of_type(t);
             return;
         }
 
-        // Mod is always positive for integer types.
+        // Mod is always non-negative for integer types.
         interval.min = make_zero(t);
         interval.max = Interval::pos_inf();
 

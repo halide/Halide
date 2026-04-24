@@ -54,8 +54,6 @@ Expr and_condition_over_domain(const Expr &c, const Scope<Interval> &varying);
  * provide a better response than simply const_true(). */
 Expr or_condition_over_domain(const Expr &c, const Scope<Interval> &varying);
 
-void solve_test();
-
 }  // namespace Internal
 }  // namespace Halide
 
