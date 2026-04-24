@@ -122,8 +122,8 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         // a float source makes `cast` an fp-to-int conversion, whose low
         // bits are not the same as an fp-to-int conversion of a narrower
         // type. For example, int32(uint64(float64(-21))) evaluates to 0
-        // (undefined-behavior territory for negative float-to-unsigned)
-        // while int32(float64(-21)) is -21.
+        // (float-to-uint of a negative value saturates to 0 in Halide),
+        // while the stripped form int32(float64(-21)) evaluates to -21.
         if (op->type == cast->value.type()) {
             return mutate(cast->value, info);
         } else {

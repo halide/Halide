@@ -92,12 +92,15 @@ Expr random_int_val(FuzzingContext &fuzz, int lo, int hi) {
 }
 
 // Returns true if the expression, under the given substitution, contains a
-// division or modulo whose divisor simplifies to zero. Solve is allowed to
-// rearrange such expressions in ways that cause the simplifier to fold the UB
-// inconsistently between the original and rewritten form -- so samples that
-// hit div/mod-by-zero should be skipped when checking equivalence. Solve
-// often emits Let bindings, so inline them first (otherwise Div::b is a
-// variable reference and we can't see whether it's zero).
+// division or modulo whose divisor simplifies to zero. Halide defines
+// div/mod-by-zero to return zero, but the simplifier doesn't always fold
+// that consistently across syntactically-different forms -- so solve can
+// rearrange an expression into an equivalent shape whose simplified value
+// at a concrete substitution differs only because one side gets the
+// "returns zero" fold applied while the other doesn't. Skip those samples
+// when checking equivalence. Solve often emits Let bindings, so inline
+// them first (otherwise Div::b is a variable reference and we can't see
+// whether it's zero).
 bool has_div_or_mod_by_zero(const Expr &e, const map<string, Expr> &vars) {
     Expr inlined = substitute_in_all_lets(e);
     bool found = false;
@@ -117,6 +120,41 @@ bool has_div_or_mod_by_zero(const Expr &e, const map<string, Expr> &vars) {
         },
         [&](auto *self, const Mod *op) {
             check_denom(op->b);
+            self->visit_base(op);
+        });
+    return found;
+}
+
+// Returns true if the expression, under the given substitution, contains a
+// narrowing cast whose source value doesn't fit in the destination type.
+// Halide's bounds analysis assumes such casts don't overflow (see PR #7814
+// discussion) -- that's a programmer-level contract that the fuzzer's
+// random value substitutions can easily violate, and the resulting
+// runtime wrap then disagrees with bounds_of's "assumed-fits" prediction.
+// Skip those samples when checking contracts that rely on bounds_of.
+bool has_overflowing_cast(const Expr &e, const map<string, Expr> &vars) {
+    Expr inlined = substitute_in_all_lets(e);
+    bool found = false;
+    auto check_cast = [&](const Cast *op) {
+        if (found) return;
+        Type to = op->type;
+        Type from = op->value.type();
+        // Only care about casts between integer/unsigned types that could
+        // overflow the destination.
+        if (!(to.is_int_or_uint() && from.is_int_or_uint())) return;
+        if (to.can_represent(from)) return;
+        SafeResult<Expr> r = safe_simplify(substitute(vars, op->value));
+        if (!r.ok()) return;
+        if (auto iv = as_const_int(r.value())) {
+            if (!to.can_represent(*iv)) found = true;
+        } else if (auto uv = as_const_uint(r.value())) {
+            if (!to.can_represent(*uv)) found = true;
+        }
+    };
+    visit_with(
+        inlined,
+        [&](auto *self, const Cast *op) {
+            check_cast(op);
             self->visit_base(op);
         });
     return found;
@@ -155,13 +193,14 @@ bool test_solve_expression_equivalence(RandomExpressionGenerator &reg,
             val = random_int_val(reg.fuzz, -32, 32);
         }
 
-        // Skip samples that invoke div/mod-by-zero UB in the input: the
-        // simplifier may fold such UB inconsistently between two
-        // syntactically distinct forms that are nonetheless semantically
-        // equivalent away from the UB. We don't skip based on the *solved*
-        // form -- solve must never introduce new UB that wasn't already in
-        // the input.
-        if (has_div_or_mod_by_zero(test, vars)) {
+        // Skip samples that invoke div/mod-by-zero in the input: Halide
+        // defines the result as zero, but the simplifier may apply the
+        // fold asymmetrically across two syntactically-distinct forms
+        // that are otherwise semantically equivalent. We don't skip
+        // based on the *solved* form -- solve must never introduce new
+        // div/mod-by-zero that wasn't already in the input.
+        if (has_div_or_mod_by_zero(test, vars) ||
+            has_overflowing_cast(test, vars)) {
             continue;
         }
 
@@ -243,6 +282,11 @@ bool test_solve_intervals(RandomExpressionGenerator &reg,
     for (int i = 0; i < samples; i++) {
         for (auto &[name, val] : other_vars) {
             val = random_int_val(reg.fuzz, -16, 16);
+        }
+        // Skip substitutions that violate the "assumed not to overflow"
+        // contract for narrowing int casts.
+        if (has_overflowing_cast(cond, other_vars)) {
+            continue;
         }
 
         Expr inner_min_v, inner_max_v, outer_min_v, outer_max_v;
@@ -355,6 +399,11 @@ bool test_and_condition_over_domain(RandomExpressionGenerator &reg,
         map<string, Expr> vars;
         for (const auto &[name, r] : ranges) {
             vars[name] = random_int_val(reg.fuzz, r.first, r.second);
+        }
+        // Skip substitutions that violate the "assumed not to overflow"
+        // contract for narrowing int casts (see has_overflowing_cast).
+        if (has_overflowing_cast(cond, vars)) {
+            continue;
         }
         int cond_truth = try_resolve_bool(substitute(vars, cond));
         int weak_truth = try_resolve_bool(substitute(vars, weakened));
