@@ -128,6 +128,13 @@ protected:
             Expr a = c->args[0];
             Expr b = c->args[1];
 
+            if (Call::as_intrinsic(b, {Call::signed_integer_overflow})) {
+                // Letting signed integer overflow through here would result in
+                // infinite recursion when we try to construction the rounding
+                // terms.
+                return Expr{};
+            }
+
             // Helper to make the appropriate shift.
             auto rounding_shift = [&](const Expr &a, const Expr &b) {
                 if (c->is_intrinsic(Call::shift_right)) {
@@ -203,7 +210,7 @@ protected:
             }
         }
 
-        return Expr();
+        return Expr{};
     }
 
     template<typename LetOrLetStmt>
