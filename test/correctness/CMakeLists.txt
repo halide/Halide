@@ -110,6 +110,7 @@ tests(GROUPS correctness
       extern_stage_on_device.cpp
       extract_concat_bits.cpp
       failed_unroll.cpp
+      fallback_vscale_sve.cpp
       fast_trigonometric.cpp
       fibonacci.cpp
       fit_function.cpp
