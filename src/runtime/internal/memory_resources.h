@@ -78,6 +78,12 @@ struct RegionIndexing {
     int32_t offset = 0;  //< indexing offset from start of region (used to adjust indices in compute shader to avoid alignment constraints for arbitrary crops)
 };
 
+enum class MemoryRegionKind {
+    AllocatorOwned,  //< region metadata managed by allocator; handle points to native resource
+    CropAlias,       //< alias metadata for a cropped view; owner points to root region
+    ExternalWrapped  //< metadata supplied by caller for an external native resource
+};
+
 // Client-facing struct for exchanging memory region allocation requests
 struct MemoryRegion {
     void *handle = nullptr;       //< client data storing native handle (managed by alloc_block_region/free_block_region) or a pointer to region owning allocation
@@ -85,6 +91,8 @@ struct MemoryRegion {
     RegionIndexing indexing;      //< indexing adjustments for controlling access
     bool dedicated = false;       //< flag indicating whether allocation is one dedicated resource (or split/shared into other resources)
     bool is_owner = true;         //< flag indicating whether allocation is owned by this region, in which case handle is a native handle. Otherwise handle points to owning region of allocation.
+    MemoryRegionKind kind = MemoryRegionKind::AllocatorOwned;
+    MemoryRegion *owner = nullptr;
     MemoryProperties properties;  //< properties for the allocated region
 };
 
