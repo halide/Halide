@@ -127,7 +127,7 @@ class GPUCompilationCache {
         }
 
         for (int i = 0; i < (1 << log2_compilations_size); i++) {
-            if (compilations[i].kernel_id > kInvalidId &&
+            if (compilations[i].kernel_id > kDeletedId &&
                 (all || (compilations[i].context == context)) &&
                 compilations[i].use_count == 0) {
                 debug(user_context) << "Releasing cached compilation: " << compilations[i].module_state
