@@ -3190,7 +3190,7 @@ Func define_base_case(const Internal::Function &func, const vector<Expr> &a, con
     // Reuse names of existing pure args
     for (size_t i = 0; i < a.size(); i++) {
         if (const Variable *v = a[i].as<Variable>()) {
-            if (!v->param.defined()) {
+            if (!v->param.defined() && !v->reduction_domain.defined()) {
                 pure_args[i] = Var(v->name);
             }
         } else {
