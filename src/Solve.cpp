@@ -368,7 +368,10 @@ protected:
         const Sub *sub_a = a.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
         Expr expr;
-        if (a_uses_var && !b_uses_var) {
+        if (a_uses_var && !b_uses_var && no_overflow_int(op->type)) {
+            // Distributing division across +/-/* is only sound under
+            // non-wrapping integer arithmetic. Floats lose precision per
+            // operation, and narrower / unsigned ints can wrap.
             auto ib = as_const_int(b);
             auto is_multiple_of_b = [&](const Expr &e) {
                 if (ib && op->type.is_scalar()) {
@@ -386,7 +389,7 @@ protected:
                        is_multiple_of_b(sub_a->a)) {
                 // (f(x) - a) / b -> f(x) / b - a / b
                 expr = mutate(simplify(sub_a->a / b) - sub_a->b / b);
-            } else if (mul_a && !a_failed && no_overflow_int(op->type) &&
+            } else if (mul_a && !a_failed &&
                        is_multiple_of_b(mul_a->b)) {
                 // (f(x) * a) / b -> f(x) * (a / b)
                 expr = mutate(mul_a->a * (mul_a->b / b));
