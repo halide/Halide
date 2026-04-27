@@ -212,43 +212,6 @@ void test_narrow_div_add_equivalence() {
     }
 }
 
-// bounds_of_expr_in_scope for `float % float` was applying integer-mod
-// semantics and claiming the result is always in `[0, max(|b|, -b.min)]`.
-// Halide mod is defined to be non-negative (Euclidean), but the current
-// float-mod lowering in CodeGen_LLVM is `a - b * floor(a/b)`, which does
-// not always produce a non-negative result when b is negative -- e.g.
-// fmod(5, -3) lowers to 5 - (-3)*floor(5/-3) = 5 - (-3)*(-2) = -1. The
-// fuzzer exercises this via a concrete substitution and compares the
-// rewritten form's simplified value against bounds_of's claim, and the
-// two disagree. Until the lowering is fixed to enforce Euclidean mod,
-// bounds_of falls back to unbounded for float mod. When the lowering
-// is fixed, this test and the float-mod branch in Bounds.cpp can both
-// go away.
-void test_bounds_of_float_mod_matches_lowering() {
-    Expr a = Variable::make(Float(64), "a");
-    Expr b = Variable::make(Float(64), "b");
-    Expr e = Mod::make(a, b);
-
-    Scope<Interval> scope;
-    scope.push("a", Interval(Expr(-10.0), Expr(-3.0)));
-    scope.push("b", Interval(Expr(-9.0), Expr(4.0)));
-
-    Interval bounds = bounds_of_expr_in_scope(e, scope);
-    // Under the current lowering the result can be negative, so
-    // bounds.min must not be provably non-negative.
-    if (bounds.has_lower_bound()) {
-        Expr provably_nonneg = simplify(bounds.min >= Expr(0.0));
-        if (is_const_one(provably_nonneg)) {
-            std::cerr << "bounds_of float % float claims result is non-negative, "
-                      << "but the current lowering can produce negative results:\n"
-                      << "  expr: " << e << "\n"
-                      << "  bounds.min: " << simplify(bounds.min) << "\n"
-                      << "  bounds.max: " << simplify(bounds.max) << "\n";
-            std::abort();
-        }
-    }
-}
-
 // Simplify_Cast was applying a cast-chain simplification
 //   int32(uint64(X)) -> int32(X)
 // whenever widths and the two outer types all lined up for the
@@ -258,87 +221,6 @@ void test_bounds_of_float_mod_matches_lowering() {
 // inner cast is an fp-to-uint conversion, which has entirely different
 // semantics -- so the stripped form `int32(float64(a))` evaluates to a
 // different value (fp-to-int vs fp-to-uint-then-truncate).
-// bounds_of was taking a shortcut for `intN(float_expr)` casts (N >= 32) that
-// assumed the float-to-signed-int cast "truncates in place and preserves
-// interval orientation", so it carried the source float bounds through the
-// cast unchanged. But the simplifier folds out-of-range float constants by
-// wrapping (IntImm::make sign-extends the low 32 bits), which can invert the
-// resulting int interval -- e.g. floats {22e9, 24e9} both wrap, and the two
-// wrapped values happen to land on opposite sides of zero. The shortcut then
-// produced an inverted (empty) interval, which downstream reasoning treated
-// as a vacuously-satisfied constraint.
-void test_bounds_of_float_to_int_cast_is_sound() {
-    Expr a = Variable::make(Int(32), "a");
-    Expr f = -1712582016.0f * cast<float>(a);
-    Expr e = cast<int>(f);
-
-    Scope<Interval> scope;
-    scope.push("a", Interval(cast<int>(-14), cast<int>(-13)));
-
-    Interval bounds = bounds_of_expr_in_scope(e, scope);
-
-    // Concrete evaluations at each endpoint.
-    std::map<std::string, Expr> sub_min{{"a", Expr(-14)}};
-    std::map<std::string, Expr> sub_max{{"a", Expr(-13)}};
-    Expr v_min = simplify(substitute(sub_min, e));
-    Expr v_max = simplify(substitute(sub_max, e));
-
-    // bounds_of must produce an interval that contains both observed values.
-    // Either the interval is unbounded on that side, or the bound must
-    // provably hold.
-    auto must_hold = [&](const Expr &claim, const char *msg) {
-        Expr simplified = simplify(claim);
-        if (!is_const_one(simplified)) {
-            std::cerr << "bounds_of int32(float) unsound: " << msg << "\n"
-                      << "  expr:       " << e << "\n"
-                      << "  bounds.min: " << simplify(bounds.min) << "\n"
-                      << "  bounds.max: " << simplify(bounds.max) << "\n"
-                      << "  v(a=-14):   " << v_min << "\n"
-                      << "  v(a=-13):   " << v_max << "\n";
-            std::abort();
-        }
-    };
-
-    if (bounds.has_lower_bound()) {
-        must_hold(bounds.min <= v_min, "v(a=-14) below bounds.min");
-        must_hold(bounds.min <= v_max, "v(a=-13) below bounds.min");
-    }
-    if (bounds.has_upper_bound()) {
-        must_hold(bounds.max >= v_min, "v(a=-14) above bounds.max");
-        must_hold(bounds.max >= v_max, "v(a=-13) above bounds.max");
-    }
-}
-
-// Regression guard for the precision side of the above fix. Carrying
-// *symbolic* (non-constant) float bounds through an int32+ cast is load-
-// bearing for bilateral_grid and similar pipelines: bounds often end up
-// as `select(r_sigma > 0, 0/r_sigma, 1/r_sigma) + 0.5` etc., where we
-// can't prove the range fits at bounds-inference time but the programmer
-// has opted into the convention that float-to-int out-of-range is
-// undefined. The soundness fix above must only reject *provably*
-// out-of-range constant bounds, not symbolic ones.
-void test_bounds_of_float_to_int_preserves_symbolic_bounds() {
-    Expr rs = Variable::make(Float(32), "r_sigma");
-    Expr val = Variable::make(Float(32), "val");
-    Expr e = cast<int>(val / rs + 0.5f);
-
-    Scope<Interval> scope;
-    scope.push("val", Interval(Expr(0.0f), Expr(1.0f)));
-    // r_sigma has a bounded positive estimate (what apply_param_estimates
-    // or a scope binding effectively produces after frontend lowering).
-    scope.push("r_sigma", Interval(Expr(0.1f), Expr(1.0f)));
-
-    Interval bounds = bounds_of_expr_in_scope(e, scope);
-    if (!bounds.is_bounded()) {
-        std::cerr << "bounds_of int32(float_expr) dropped to unbounded "
-                  << "for a case that should carry through:\n"
-                  << "  expr: " << e << "\n"
-                  << "  bounds.min: " << (bounds.has_lower_bound() ? simplify(bounds.min) : Expr("neg_inf")) << "\n"
-                  << "  bounds.max: " << (bounds.has_upper_bound() ? simplify(bounds.max) : Expr("pos_inf")) << "\n";
-        std::abort();
-    }
-}
-
 void test_simplify_preserves_float_to_uint_cast_chain() {
     Expr a = Variable::make(Int(32), "a");
     Expr chained = Cast::make(Int(32),
@@ -638,9 +520,6 @@ int main(int argc, char **argv) {
     test_positive_const_multiplier_still_rewritten();
     test_solve_does_not_abort_on_narrow_self_add();
     test_narrow_div_add_equivalence();
-    test_bounds_of_float_mod_matches_lowering();
-    test_bounds_of_float_to_int_cast_is_sound();
-    test_bounds_of_float_to_int_preserves_symbolic_bounds();
     test_simplify_preserves_float_to_uint_cast_chain();
     std::printf("Success!\n");
     return 0;

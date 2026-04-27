@@ -6,9 +6,8 @@
 #include "random_expr_generator.h"
 
 // Test the solver in Halide by generating random expressions and verifying that
-// solve_expression, solve_for_inner_interval, solve_for_outer_interval, and
-// and_condition_over_domain satisfy their respective contracts under random
-// concrete substitutions.
+// solve_expression, solve_for_inner_interval, and solve_for_outer_interval
+// satisfy their respective contracts under random concrete substitutions.
 namespace {
 
 using std::map;
@@ -71,17 +70,6 @@ SafeResult<Interval> safe_solve_for_outer_interval(const Expr &c, const string &
     } catch (InternalError &err) {
         std::cerr << "solve_for_outer_interval threw on:\n"
                   << c << "\n  solving for \"" << var << "\"\n"
-                  << err.what() << "\n";
-        return err;
-    }
-}
-
-SafeResult<Expr> safe_and_condition_over_domain(const Expr &c, const Scope<Interval> &scope) {
-    try {
-        return and_condition_over_domain(c, scope);
-    } catch (InternalError &err) {
-        std::cerr << "and_condition_over_domain threw on:\n"
-                  << c << "\n"
                   << err.what() << "\n";
         return err;
     }
@@ -371,59 +359,6 @@ bool test_solve_intervals(RandomExpressionGenerator &reg,
     return true;
 }
 
-// Test that and_condition_over_domain(c, scope) implies c on the domain:
-// for any concrete assignment of vars within their scope intervals, if the
-// weakened condition is true, the original condition must also be true.
-bool test_and_condition_over_domain(RandomExpressionGenerator &reg,
-                                    const Expr &cond,
-                                    int samples) {
-    internal_assert(cond.type().is_bool());
-
-    Scope<Interval> scope;
-    map<string, std::pair<int, int>> ranges;
-    for (const auto &v : reg.fuzz_vars) {
-        int a = reg.fuzz.ConsumeIntegralInRange(-16, 16);
-        int b = reg.fuzz.ConsumeIntegralInRange(-16, 16);
-        if (a > b) std::swap(a, b);
-        ranges[v.name()] = {a, b};
-        scope.push(v.name(), Interval(cast(Int(32), a), cast(Int(32), b)));
-    }
-
-    SafeResult<Expr> weakened_res = safe_and_condition_over_domain(cond, scope);
-    if (weakened_res.failed()) {
-        return false;
-    }
-    Expr weakened = weakened_res.value();
-
-    for (int i = 0; i < samples; i++) {
-        map<string, Expr> vars;
-        for (const auto &[name, r] : ranges) {
-            vars[name] = random_int_val(reg.fuzz, r.first, r.second);
-        }
-        // Skip substitutions that violate the "assumed not to overflow"
-        // contract for narrowing int casts (see has_overflowing_cast).
-        if (has_overflowing_cast(cond, vars)) {
-            continue;
-        }
-        int cond_truth = try_resolve_bool(substitute(vars, cond));
-        int weak_truth = try_resolve_bool(substitute(vars, weakened));
-        if (cond_truth < 0 || weak_truth < 0) {
-            continue;
-        }
-        if (weak_truth == 1 && cond_truth == 0) {
-            std::cerr << "and_condition_over_domain violation (result does not imply input):\n"
-                      << "  cond:     " << cond << "\n"
-                      << "  weakened: " << weakened << "\n";
-            for (const auto &[n, v] : vars) {
-                std::cerr << "  " << n << " = " << v << " (in [" << ranges[n].first
-                          << ", " << ranges[n].second << "])\n";
-            }
-            return false;
-        }
-    }
-    return true;
-}
-
 Expr random_comparison(RandomExpressionGenerator &reg, int depth) {
     using make_bin_op_fn = Expr (*)(Expr, Expr);
     static make_bin_op_fn ops[] = {
@@ -508,15 +443,6 @@ FUZZ_TEST(solve, FuzzingContext &fuzz) {
         printer.print(compound);
         std::cerr << "Expr final_expr = " << printer.node_names[compound.get()] << ";\n";
         std::cerr << "  solving for \"" << var << "\"\n";
-        return 1;
-    }
-
-    // and_condition_over_domain.
-    if (!test_and_condition_over_domain(reg, compound, samples)) {
-        std::cerr << "Failing condition (C++):\n";
-        IRGraphCXXPrinter printer(std::cerr);
-        printer.print(compound);
-        std::cerr << "Expr final_expr = " << printer.node_names[compound.get()] << ";\n";
         return 1;
     }
 

@@ -48,6 +48,22 @@ Expr find_constant_bound(const Expr &e, Direction d,
  * +/-inf. */
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope);
 
+/** Take a conditional that includes variables that vary over some
+ * domain, and convert it to a more conservative (less frequently
+ * true) condition that doesn't depend on those variables. Formally,
+ * the output expr implies the input expr.
+ *
+ * The condition may be a vector condition, in which case we also
+ * 'and' over the vector lanes, and return a scalar result. */
+Expr and_condition_over_domain(const Expr &c, const Scope<Interval> &varying);
+
+/** Take a conditional that includes variables that vary over some
+ * domain, and convert it to a weaker (less frequently false) condition
+ * that doesn't depend on those variables. Formally, the input expr
+ * implies the output expr. Note that this function might be unable to
+ * provide a better response than simply const_true(). */
+Expr or_condition_over_domain(const Expr &c, const Scope<Interval> &varying);
+
 /** Represents the bounds of a region of arbitrary dimension. Zero
  * dimensions corresponds to a scalar region. */
 struct Box {

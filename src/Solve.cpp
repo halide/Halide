@@ -1196,16 +1196,5 @@ Interval solve_for_outer_interval(const Expr &c, const std::string &var) {
     return s.result;
 }
 
-Expr and_condition_over_domain(const Expr &e, const Scope<Interval> &varying) {
-    internal_assert(e.type().is_bool()) << "Expr provided to and_condition_over_domain is not boolean: " << e << "\n";
-    Interval bounds = bounds_of_expr_in_scope(e, varying);
-    internal_assert(bounds.has_lower_bound()) << "Failed to produce bound on boolean value in and_condition_over_domain" << e << "\n";
-    // Minimum of a boolean value is sufficient condition, implies expression.
-    return simplify(bounds.min);
-}
-
-Expr or_condition_over_domain(const Expr &c, const Scope<Interval> &varying) {
-    return simplify(!and_condition_over_domain(simplify(!c), varying));
-}
 }  // namespace Internal
 }  // namespace Halide

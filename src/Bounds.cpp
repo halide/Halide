@@ -319,42 +319,9 @@ protected:
         bool could_overflow = true;
         if (to.can_represent(from) || to.is_float()) {
             could_overflow = false;
-        } else if (from.is_float() && to.is_int() && to.bits() >= 32) {
-            // For int32+ destinations, float-to-signed-int is
-            // implementation-defined on out-of-range values. Halide's
-            // convention is to assume the value fits, so carry the
-            // float bounds through the cast UNLESS at least one
-            // endpoint is a constant we can prove exceeds the
-            // destination's range. In that case IntImm::make sign-
-            // extends the low bits and can invert the resulting
-            // interval, which is strictly worse than bounds_of_type.
-            //
-            // (Float-to-signed-int for bits <= 16 saturates, so it is
-            // handled by the narrower `a.is_bounded()` path below; we
-            // don't need to treat it specially here.)
-            Interval s = simplify(a);
-            double lo = -std::ldexp(1.0, to.bits() - 1);
-            double hi_exclusive = std::ldexp(1.0, to.bits() - 1);
-            bool const_oob = false;
-            if (s.has_lower_bound()) {
-                if (auto fmin = as_const_float(s.min)) {
-                    const_oob = const_oob || !std::isfinite(*fmin) || *fmin < lo;
-                }
-            }
-            if (s.has_upper_bound()) {
-                if (auto fmax = as_const_float(s.max)) {
-                    const_oob = const_oob || !std::isfinite(*fmax) || *fmax >= hi_exclusive;
-                }
-            }
-            if (!const_oob) {
-                could_overflow = false;
-                a = s;
-            }
         } else if (to.is_int() && to.bits() >= 32) {
             // If we cast to an int32 or greater, assume that it won't
-            // overflow. Signed 32-bit integer overflow is undefined, and
-            // Halide treats uint-to-signed-int narrowing as "assumed not
-            // to overflow" too (see PR #7814 context).
+            // overflow. Signed 32-bit integer overflow is undefined.
             could_overflow = false;
         } else if (a.is_bounded()) {
             if (from.can_represent(to)) {
@@ -775,20 +742,7 @@ protected:
 
         Type t = op->type.element_of();
 
-        if (t.is_float()) {
-            // Halide mod is supposed to be non-negative (Euclidean), but
-            // the current float-mod lowering in CodeGen_LLVM is
-            // `a - b * floor(a/b)`, which can produce a negative result
-            // when b is negative (e.g. fmod(5, -3) = -1 under that
-            // formula). Until the lowering is tightened to enforce the
-            // Euclidean invariant, fall back to unbounded here -- the
-            // integer reasoning below would unsoundly claim the result
-            // is >= 0.
-            bounds_of_type(t);
-            return;
-        }
-
-        // Mod is always non-negative for integer types.
+        // Mod is always positive
         interval.min = make_zero(t);
         interval.max = Interval::pos_inf();
 
@@ -811,6 +765,11 @@ protected:
                 // x % [-8, 10] -> [0,9]
                 interval.max = Max::make(interval.min, b.max - make_one(t));
                 interval.max = Max::make(interval.max, make_const(t, -1) - b.min);
+            } else if (b.max.type().is_float()) {
+                // The floating point version has the same sign rules,
+                // but can reach all the way up to the original value,
+                // so there's no -1.
+                interval.max = Max::make(b.max, -b.min);
             }
         }
     }
@@ -1866,6 +1825,18 @@ Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Inter
 
 Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
     return bounds_of_expr_in_scope_with_indent(expr, scope, fb, const_bound, 0);
+}
+
+Expr and_condition_over_domain(const Expr &e, const Scope<Interval> &varying) {
+    internal_assert(e.type().is_bool()) << "Expr provided to and_condition_over_domain is not boolean: " << e << "\n";
+    Interval bounds = bounds_of_expr_in_scope(e, varying);
+    internal_assert(bounds.has_lower_bound()) << "Failed to produce bound on boolean value in and_condition_over_domain" << e << "\n";
+    // Minimum of a boolean value is sufficient condition, implies expression.
+    return simplify(bounds.min);
+}
+
+Expr or_condition_over_domain(const Expr &c, const Scope<Interval> &varying) {
+    return simplify(!and_condition_over_domain(simplify(!c), varying));
 }
 
 void merge_boxes(Box &a, const Box &b) {

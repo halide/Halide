@@ -38,22 +38,6 @@ Interval solve_for_outer_interval(const Expr &c, const std::string &variable);
  * true inside of it, and might be true or false outside of it. */
 Interval solve_for_inner_interval(const Expr &c, const std::string &variable);
 
-/** Take a conditional that includes variables that vary over some
- * domain, and convert it to a more conservative (less frequently
- * true) condition that doesn't depend on those variables. Formally,
- * the output expr implies the input expr.
- *
- * The condition may be a vector condition, in which case we also
- * 'and' over the vector lanes, and return a scalar result. */
-Expr and_condition_over_domain(const Expr &c, const Scope<Interval> &varying);
-
-/** Take a conditional that includes variables that vary over some
- * domain, and convert it to a weaker (less frequently false) condition
- * that doesn't depend on those variables. Formally, the input expr
- * implies the output expr. Note that this function might be unable to
- * provide a better response than simply const_true(). */
-Expr or_condition_over_domain(const Expr &c, const Scope<Interval> &varying);
-
 }  // namespace Internal
 }  // namespace Halide
 
