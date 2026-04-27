@@ -390,6 +390,7 @@ Stmt Simplify::visit(const Store *op) {
         return mutate(s);
     } else if (const Ramp *inner_ramp = r_index ? r_index->base.as<Ramp>() : nullptr;
                inner_ramp &&
+               inner_ramp->base.type().is_scalar() &&
                !is_const_one(inner_ramp->stride) &&
                is_const_one(r_index->stride)) {
         // If it's a nested ramp and the outer ramp has stride 1, swap the
