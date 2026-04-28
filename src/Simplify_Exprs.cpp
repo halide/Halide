@@ -367,8 +367,9 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
     }
 
     ExprInfo base_info;
-    if (const Ramp *r = index.as<Ramp>()) {
-        mutate(r->base, &base_info);
+    const Ramp *r_index = index.as<Ramp>();
+    if (r_index) {
+        mutate(r_index->base, &base_info);
     }
 
     base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
@@ -388,18 +389,42 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
                                op->image, op->param, const_true(new_lanes, nullptr), align);
         return Broadcast::make(load, b_index->lanes);
     } else if (s_index &&
-               is_const_one(predicate) &&
                (s_index->is_concat() ||
                 s_index->is_interleave())) {
-        // Loads of concats/interleaves should be concats/interleaves of loads
+        // Loads of concats/interleaves should be concats/interleaves of
+        // loads. We'll need to slice up the predicate though.
         std::vector<Expr> loaded_vecs;
         for (const Expr &new_index : s_index->vectors) {
             int new_lanes = new_index.type().lanes();
+            Expr predicate_slice =
+                is_const_one(predicate) ? const_true(new_lanes, nullptr) :
+                s_index->is_concat() ?
+                                          Shuffle::make_slice(predicate, (int)loaded_vecs.size() * new_lanes, 1, new_lanes) :
+                                          Shuffle::make_slice(predicate, (int)loaded_vecs.size(), op->type.lanes() / new_lanes, new_lanes);
+            predicate_slice = mutate(predicate_slice, nullptr);
+
             Expr load = Load::make(op->type.with_lanes(new_lanes), op->name, new_index,
-                                   op->image, op->param, const_true(new_lanes, nullptr), ModulusRemainder{});
+                                   op->image, op->param, predicate_slice, ModulusRemainder{});
             loaded_vecs.emplace_back(std::move(load));
         }
         return Shuffle::make(loaded_vecs, s_index->indices);
+    } else if (const Ramp *inner_ramp = r_index ? r_index->base.as<Ramp>() : nullptr;
+               inner_ramp &&
+               inner_ramp->base.type().is_scalar() &&
+               !is_const_one(inner_ramp->stride) &&
+               is_const_one(r_index->stride)) {
+        // If it's a nested ramp and the outer ramp has stride 1, swap the
+        // nesting order of the ramps to make dense loads and transpose the
+        // resulting vector instead.
+        Expr transposed_index =
+            Ramp::make(Ramp::make(inner_ramp->base, make_one(inner_ramp->base.type()), r_index->lanes),
+                       Broadcast::make(inner_ramp->stride, r_index->lanes), inner_ramp->lanes);
+        Expr transposed_predicate = (predicate.as<Broadcast>() ?
+                                         predicate :  // common case optimization
+                                         Shuffle::make_transpose(predicate, inner_ramp->lanes));
+        Expr transposed_load =
+            Load::make(op->type, op->name, transposed_index, op->image, op->param, transposed_predicate, align);
+        return mutate(Shuffle::make_transpose(transposed_load, r_index->lanes), info);
     } else if (predicate.same_as(op->predicate) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {
