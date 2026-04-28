@@ -42,17 +42,6 @@ ALWAYS_INLINE int vk_load_external_context_functions(void *user_context, VkInsta
     return halide_error_code_success;
 }
 
-}  // namespace Vulkan
-}  // namespace Internal
-}  // namespace Runtime
-}  // namespace Halide
-
-// --------------------------------------------------------------------------
-
-extern "C" {
-
-// --------------------------------------------------------------------------
-
 // The default implementation of halide_acquire_vulkan_context uses
 // the global pointers above, and serializes access with a spin lock.
 // Overriding implementations of acquire/release must implement the
@@ -65,15 +54,15 @@ extern "C" {
 //   call to halide_release_vulkan_context. halide_acquire_vulkan_context
 //   should block while a previous call (if any) has not yet been
 //   released via halide_release_vulkan_context.
-WEAK int halide_vulkan_acquire_context(void *user_context,
-                                       halide_vulkan_memory_allocator **allocator,
-                                       VkInstance *instance,
-                                       VkDevice *device,
-                                       VkPhysicalDevice *physical_device,
-                                       VkQueue *queue,
-                                       uint32_t *queue_family_index,
-                                       VkDebugUtilsMessengerEXT *messenger,
-                                       bool create) {
+WEAK int default_vulkan_acquire_context(void *user_context,
+                                        halide_vulkan_memory_allocator **allocator,
+                                        VkInstance *instance,
+                                        VkDevice *device,
+                                        VkPhysicalDevice *physical_device,
+                                        VkQueue *queue,
+                                        uint32_t *queue_family_index,
+                                        VkDebugUtilsMessengerEXT *messenger,
+                                        bool create) {
 #ifdef DEBUG_RUNTIME
     halide_start_clock(user_context);
 #endif
@@ -110,9 +99,55 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
     return halide_error_code_success;
 }
 
-WEAK int halide_vulkan_release_context(void *user_context, VkInstance instance, VkDevice device, VkQueue queue, VkDebugUtilsMessengerEXT messenger) {
+WEAK int default_vulkan_release_context(void *user_context, VkInstance instance, VkDevice device, VkQueue queue, VkDebugUtilsMessengerEXT messenger) {
     halide_mutex_unlock(&thread_lock);
     return halide_error_code_success;
+}
+
+WEAK halide_vulkan_acquire_context_t vulkan_acquire_context_handler =
+    default_vulkan_acquire_context;
+WEAK halide_vulkan_release_context_t vulkan_release_context_handler =
+    default_vulkan_release_context;
+
+}  // namespace Vulkan
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+
+// --------------------------------------------------------------------------
+
+extern "C" {
+
+// --------------------------------------------------------------------------
+
+WEAK int halide_vulkan_acquire_context(void *user_context,
+                                       halide_vulkan_memory_allocator **allocator,
+                                       VkInstance *instance,
+                                       VkDevice *device,
+                                       VkPhysicalDevice *physical_device,
+                                       VkQueue *queue,
+                                       uint32_t *queue_family_index,
+                                       VkDebugUtilsMessengerEXT *messenger,
+                                       bool create) {
+    return vulkan_acquire_context_handler(user_context, allocator, instance, device,
+                                          physical_device, queue, queue_family_index,
+                                          messenger, create);
+}
+
+WEAK int halide_vulkan_release_context(void *user_context, VkInstance instance, VkDevice device, VkQueue queue, VkDebugUtilsMessengerEXT messenger) {
+    return vulkan_release_context_handler(user_context, instance, device, queue, messenger);
+}
+
+WEAK halide_vulkan_acquire_context_t halide_set_vulkan_acquire_context(halide_vulkan_acquire_context_t handler) {
+    halide_vulkan_acquire_context_t result = vulkan_acquire_context_handler;
+    vulkan_acquire_context_handler = handler ? handler : default_vulkan_acquire_context;
+    return result;
+}
+
+WEAK halide_vulkan_release_context_t halide_set_vulkan_release_context(halide_vulkan_release_context_t handler) {
+    halide_vulkan_release_context_t result = vulkan_release_context_handler;
+    vulkan_release_context_handler = handler ? handler : default_vulkan_release_context;
+    return result;
 }
 
 WEAK int halide_vulkan_acquire_memory_allocator(void *user_context,

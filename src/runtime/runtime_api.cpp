@@ -219,6 +219,8 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_vulkan_release_memory_allocator,
     (void *)&halide_vulkan_release_context,
     (void *)&halide_vulkan_run,
+    (void *)&halide_set_vulkan_acquire_context,
+    (void *)&halide_set_vulkan_release_context,
     (void *)&halide_webgpu_device_interface,
     (void *)&halide_webgpu_initialize_kernels,
     (void *)&halide_webgpu_finalize_kernels,
