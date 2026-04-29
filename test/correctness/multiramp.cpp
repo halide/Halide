@@ -24,8 +24,9 @@ std::vector<int> expand(const MultiRamp &m) {
         strides.push_back(*cs);
     }
     int total = 1;
-    for (int n : m.lanes)
+    for (int n : m.lanes) {
         total *= n;
+    }
     std::vector<int> result;
     result.reserve(total);
     for (int flat = 0; flat < total; flat++) {
@@ -91,8 +92,9 @@ void check_add_same_shape() {
     auto a_seq = expand(A), b_seq = expand(B);
     CHECK(A.add(B), "same-shape add");
     std::vector<int> want(8);
-    for (size_t i = 0; i < a_seq.size(); i++)
+    for (size_t i = 0; i < a_seq.size(); i++) {
         want[i] = a_seq[i] + b_seq[i];
+    }
     CHECK_SEQ(expand(A), want, "same-shape add values");
 }
 
@@ -142,8 +144,9 @@ void check_div_pure_carry_const() {
     auto a_seq = expand(A);
     CHECK(A.div(4), "pure-carry div (const k)");
     std::vector<int> want(a_seq.size());
-    for (size_t i = 0; i < a_seq.size(); i++)
+    for (size_t i = 0; i < a_seq.size(); i++) {
         want[i] = a_seq[i] / 4;
+    }
     CHECK_SEQ(expand(A), want, "pure-carry div values");
 }
 
