@@ -7,7 +7,7 @@ using namespace Halide;
 
 size_t custom_malloc_size = 0;
 
-void *my_malloc(void *user_context, size_t x) {
+void *my_malloc(JITUserContext *user_context, size_t x) {
     custom_malloc_size = x;
     void *orig = malloc(x + 32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
@@ -15,7 +15,7 @@ void *my_malloc(void *user_context, size_t x) {
     return ptr;
 }
 
-void my_free(void *user_context, void *ptr) {
+void my_free(JITUserContext *user_context, void *ptr) {
     free(((void **)ptr)[-1]);
 }
 
@@ -51,7 +51,8 @@ int main(int argc, char **argv) {
         // automatic storage folding refused to fold this (the case
         // above).
 
-        h.set_custom_allocator(my_malloc, my_free);
+        h.jit_handlers().custom_malloc = my_malloc;
+        h.jit_handlers().custom_free = my_free;
 
         Buffer<int> im = h.realize({100, 1000});
 

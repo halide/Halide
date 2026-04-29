@@ -65,7 +65,10 @@ if (WITH_TEST_RUNTIME)
     add_subdirectory(runtime)
 endif ()
 
-# FIXME: failing_with_issue is dead code :)
+Halide_feature(WITH_TEST_FAILING_WITH_ISSUE "Build known-failing tests" OFF)
+if (WITH_TEST_FAILING_WITH_ISSUE)
+    add_subdirectory(failing_with_issue)
+endif ()
 
 Halide_feature(WITH_TEST_FUZZ "Build fuzz tests" ON)
 if (WITH_TEST_FUZZ)

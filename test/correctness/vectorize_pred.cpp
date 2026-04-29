@@ -1,9 +1,7 @@
 #include "Halide.h"
-#include "halide_benchmark.h"
 #include <cstdio>
 
 using namespace Halide;
-using namespace Halide::Tools;
 
 template<typename T>
 T tolerance() {
@@ -15,10 +13,6 @@ float tolerance<float>() {
     return 1e-7f;
 }
 
-template<>
-double tolerance<double>() {
-    return 1e-14;
-}
 
 template<typename T>
 bool equals(T a, T b, T epsilon = tolerance<T>()) {
@@ -29,8 +23,8 @@ bool equals(T a, T b, T epsilon = tolerance<T>()) {
 template<typename A>
 bool test(int vec_width) {
 
-    int W = vec_width * 1;
-    int H = 50000;
+    int W = vec_width * 4;
+    int H = 1000;
 
     Buffer<A> input(W, H + 20);
     for (int y = 0; y < H + 20; y++) {
@@ -39,8 +33,8 @@ bool test(int vec_width) {
         }
     }
 
-    Var x, y;
-    Func f, g;
+    Var x("x"), y("y");
+    Func f("f"), g("g");
 
     RDom r(0, W, 0, H);
     r.where((r.x * r.y) % 8 < 7);
@@ -54,50 +48,33 @@ bool test(int vec_width) {
         e = e + input(r.x, r.y + i);
     }
 
-    f(x, y) = undef<A>();
+    f(x, y) = cast<A>(0);
     f(r.x, r.y) = e;
-    g(x, y) = undef<A>();
+    g(x, y) = cast<A>(0);
     g(r.x, r.y) = e;
     f.update(0).vectorize(r.x);
 
     Buffer<A> outputg = g.realize({W, H});
     Buffer<A> outputf = f.realize({W, H});
 
-    double t_g = benchmark([&]() {
-        g.realize(outputg);
-    });
-    double t_f = benchmark([&]() {
-        f.realize(outputf);
-    });
-
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
-            if (!equals(outputf(x, y), outputg(x, y))) {
+    for (int j = 0; j < H; j++) {
+        for (int i = 0; i < W; i++) {
+            if (!equals(outputf(i, j), outputg(i, j))) {
                 std::cout << type_of<A>() << " x " << vec_width << " failed at "
-                          << x << " " << y << ": "
-                          << outputf(x, y) << " vs " << outputg(x, y) << "\n"
+                          << i << " " << j << ": "
+                          << outputf(i, j) << " vs " << outputg(i, j) << "\n"
                           << "Failure!\n";
-                exit(1);
                 return false;
             }
         }
-    }
-
-    printf("Vectorized vs scalar (%s x %d): %1.3gms %1.3gms. Speedup = %1.3f\n",
-           string_of_type<A>(), vec_width, t_f * 1e3, t_g * 1e3, t_g / t_f);
-
-    if (t_f > t_g) {
-        return false;
     }
 
     return true;
 }
 
 int main(int argc, char **argv) {
-    // As for now, we would only vectorize predicated store/load on Hexagon or
-    // if it is of type 32-bit value and has lanes no less than 4 on x86
-    test<float>(4);
-    test<float>(8);
+    if (!test<float>(4)) return 1;
+    if (!test<float>(8)) return 1;
 
     printf("Success!\n");
     return 0;
