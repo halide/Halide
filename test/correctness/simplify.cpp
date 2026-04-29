@@ -805,11 +805,64 @@ void check_vectors() {
     check(VectorReduce::make(VectorReduce::And, Broadcast::make(bool_vector, 4), 1),
           VectorReduce::make(VectorReduce::And, bool_vector, 1));
     check(VectorReduce::make(VectorReduce::Or, Broadcast::make(bool_vector, 4), 2),
-          VectorReduce::make(VectorReduce::Or, bool_vector, 2));
+          Broadcast::make(VectorReduce::make(VectorReduce::Or, bool_vector, 1), 2));
     check(VectorReduce::make(VectorReduce::Min, Broadcast::make(int_vector, 4), 4),
-          int_vector);
+          Broadcast::make(VectorReduce::make(VectorReduce::Min, int_vector, 1), 4));
     check(VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8),
-          VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8));
+          Broadcast::make(VectorReduce::make(VectorReduce::Max, int_vector, 2), 4));
+
+    {
+        Expr x = Variable::make(Int(32), "x");
+        Expr y = Variable::make(Int(32), "y");
+
+        // == Symbolic Strides ==
+
+        // 1. Min: Scalar Reduction (arg_lanes=4, lanes=1 -> factor=4)
+        check(VectorReduce::make(VectorReduce::Min, Ramp::make(x, y, 4), 1),
+              min(y, 0) * 3 + x);
+
+        // 2. Min: Vector Reduction (arg_lanes=6, lanes=2 -> factor=3)
+        check(VectorReduce::make(VectorReduce::Min, Ramp::make(x, y, 6), 2),
+              Ramp::make(min(y, 0) * 2 + x, y * 3, 2));
+
+        // 3. Max: Scalar Reduction (arg_lanes=4, lanes=1 -> factor=4)
+        check(VectorReduce::make(VectorReduce::Max, Ramp::make(x, y, 4), 1),
+              max(y, 0) * 3 + x);
+
+        // 4. Max: Vector Reduction (arg_lanes=6, lanes=2 -> factor=3)
+        check(VectorReduce::make(VectorReduce::Max, Ramp::make(x, y, 6), 2),
+              Ramp::make(max(y, 0) * 2 + x, y * 3, 2));
+
+        // == Constant Strides (Positive & Negative) ==
+
+        // 5. Min: Positive Stride (arg_lanes=8, lanes=2 -> factor=4, stride=2)
+        // Block 1: min(x, x+2, x+4, x+6) -> x
+        // Expected Base: x + min(2 * 3, 0) -> x + 0 -> x
+        // Expected Stride: 2 * 4 = 8
+        check(VectorReduce::make(VectorReduce::Min, Ramp::make(x, 2, 8), 2),
+              Ramp::make(x, 8, 2));
+
+        // 6. Max: Positive Stride (arg_lanes=8, lanes=2 -> factor=4, stride=2)
+        // Block 1: max(x, x+2, x+4, x+6) -> x+6
+        // Expected Base: x + max(2 * 3, 0) -> x + 6
+        // Expected Stride: 2 * 4 = 8
+        check(VectorReduce::make(VectorReduce::Max, Ramp::make(x, 2, 8), 2),
+              Ramp::make(x + 6, 8, 2));
+
+        // 7. Min: Negative Stride (arg_lanes=8, lanes=2 -> factor=4, stride=-2)
+        // Block 1: min(x, x-2, x-4, x-6) -> x-6
+        // Expected Base: x + min(-2 * 3, 0) -> x - 6
+        // Expected Stride: -2 * 4 = -8
+        check(VectorReduce::make(VectorReduce::Min, Ramp::make(x, -2, 8), 2),
+              Ramp::make(x + -6, -8, 2));
+
+        // 8. Max: Negative Stride (arg_lanes=8, lanes=2 -> factor=4, stride=-2)
+        // Block 1: max(x, x-2, x-4, x-6) -> x
+        // Expected Base: x + max(-2 * 3, 0) -> x + 0 -> x
+        // Expected Stride: -2 * 4 = -8
+        check(VectorReduce::make(VectorReduce::Max, Ramp::make(x, -2, 8), 2),
+              Ramp::make(x, -8, 2));
+    }
 
     {
         // h_add(broadcast(x, 8), 4) should simplify to broadcast(x * 2, 4)
@@ -827,6 +880,25 @@ void check_vectors() {
         // keeps the correct type and avoids type-mismatch assertion failures.
         Expr u8_x = Variable::make(UInt(8), "u8_x");
         check(VectorReduce::make(VectorReduce::Add, broadcast(u8_x, 9), 3), broadcast(u8_x * cast(UInt(8), 3), 3));
+    }
+
+    {
+        // Regression test for https://github.com/halide/Halide/issues/9100.
+        // Horizontal add of `factor` lanes, each `r (mod m)`, has alignment
+        // `(factor * r) (mod m)` -- the modulus does NOT scale up, because
+        // the lanes are summed, not multiplied. Previously the simplifier
+        // failed to update alignment at all across horizontal add, so a
+        // cast<uint1> of the result could be folded to the wrong constant.
+        // A select of broadcasts (which does not rewrite further) is the
+        // cheapest way to exercise the VectorReduce::Add info-update path.
+        Expr cond = Variable::make(Bool(), "cond");
+        Expr lhs = cast(UInt(16), 12203);  // odd
+        Expr rhs = cast(UInt(16), 10637);  // odd
+        Expr inner = Select::make(Broadcast::make(cond, 2),
+                                  Broadcast::make(lhs, 2),
+                                  Broadcast::make(rhs, 2));
+        check(cast(UInt(1), VectorReduce::make(VectorReduce::Add, inner, 1)),
+              cast(UInt(1), 0));
     }
 }
 

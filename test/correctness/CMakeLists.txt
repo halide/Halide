@@ -181,6 +181,7 @@ tests(GROUPS correctness
       image_of_lists.cpp
       implicit_args.cpp
       implicit_args_tests.cpp
+      implicit_pure_def_with_rvar_args.cpp
       in_place.cpp
       indexing_access_undef.cpp
       infer_arguments.cpp

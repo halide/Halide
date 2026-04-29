@@ -74,13 +74,13 @@ target_sources(
     ClampUnsafeAccesses.h
     Closure.h
     CodeGen_C.h
+    CodeGen_CPU.h
     CodeGen_D3D12Compute_Dev.h
     CodeGen_GPU_Dev.h
     CodeGen_Internal.h
     CodeGen_LLVM.h
     CodeGen_Metal_Dev.h
     CodeGen_OpenCL_Dev.h
-    CodeGen_Posix.h
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
@@ -257,6 +257,7 @@ target_sources(
     Closure.cpp
     CodeGen_ARM.cpp
     CodeGen_C.cpp
+    CodeGen_CPU.cpp
     CodeGen_D3D12Compute_Dev.cpp
     CodeGen_GPU_Dev.cpp
     CodeGen_Hexagon.cpp
@@ -264,7 +265,6 @@ target_sources(
     CodeGen_LLVM.cpp
     CodeGen_Metal_Dev.cpp
     CodeGen_OpenCL_Dev.cpp
-    CodeGen_Posix.cpp
     CodeGen_PowerPC.cpp
     CodeGen_PTX_Dev.cpp
     CodeGen_PyTorch.cpp

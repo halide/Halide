@@ -1,7 +1,7 @@
 #include <functional>
 #include <sstream>
 
-#include "CodeGen_Posix.h"
+#include "CodeGen_CPU.h"
 #include "ConciseCasts.h"
 #include "ConstantBounds.h"
 #include "IRMatch.h"
@@ -23,12 +23,12 @@ using namespace Halide::ConciseCasts;
 namespace {
 
 /** A code generator that emits WebAssembly code from a given Halide stmt. */
-class CodeGen_WebAssembly : public CodeGen_Posix {
+class CodeGen_WebAssembly : public CodeGen_CPU {
 public:
     CodeGen_WebAssembly(const Target &);
 
 protected:
-    using CodeGen_Posix::visit;
+    using CodeGen_CPU::visit;
 
     void init_module() override;
 
@@ -47,7 +47,7 @@ protected:
 };
 
 CodeGen_WebAssembly::CodeGen_WebAssembly(const Target &t)
-    : CodeGen_Posix(t) {
+    : CodeGen_CPU(t) {
 }
 
 constexpr int max_intrinsic_args = 4;
@@ -114,7 +114,7 @@ const WasmIntrinsic intrinsic_defs[] = {
 };
 
 void CodeGen_WebAssembly::init_module() {
-    CodeGen_Posix::init_module();
+    CodeGen_CPU::init_module();
 
     for (const WasmIntrinsic &i : intrinsic_defs) {
         if (i.feature != Target::FeatureEnd && !target.has_feature(i.feature)) {
@@ -212,7 +212,7 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_WebAssembly::visit(const Call *op) {
@@ -303,7 +303,7 @@ void CodeGen_WebAssembly::visit(const Call *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
@@ -375,7 +375,7 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
         }
     }
 
-    CodeGen_Posix::codegen_vector_reduce(op, init);
+    CodeGen_CPU::codegen_vector_reduce(op, init);
 }
 
 llvm::Value *CodeGen_WebAssembly::optimization_fence(llvm::Value *v) {
@@ -446,14 +446,14 @@ int CodeGen_WebAssembly::native_vector_bits() const {
 
 }  // namespace
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_WebAssembly(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_WebAssembly(const Target &target) {
     user_assert(target.bits == 32) << "Only wasm32 is supported.";
     return std::make_unique<CodeGen_WebAssembly>(target);
 }
 
 #else  // WITH_WEBASSEMBLY
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_WebAssembly(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_WebAssembly(const Target &target) {
     user_error << "WebAssembly not enabled for this build of Halide.\n";
     return nullptr;
 }

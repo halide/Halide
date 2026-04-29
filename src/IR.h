@@ -33,10 +33,60 @@ struct LambdaOverloads : Ts... {
     }
 };
 
-/** The actual IR nodes begin here. Remember that all the Expr
- * nodes also have a public "type" property */
+/** The actual IR nodes begin here. Remember that all the Expr nodes
+ * also have a public "type" property. */
 
-/** Cast a node from one type to another. Can't change vector widths. */
+/** General notes on the semantics of Halide IR nodes:
+ *
+ * Signed integer types with at least 32 bits are treated as if
+ * overflow is impossible: the simplifier is free to apply
+ * unbounded-integer identities to them. Halide does not detect
+ * overflow at runtime, and the behavior on overflow is left
+ * unspecified. We call these (and floats) "no-overflow types". Signed
+ * integers with fewer than 32 bits, and unsigned integers of any
+ * width, are defined to wrap on overflow. We call these "overflow
+ * types".
+ *
+ * On vectors, all operations operate lane-wise, except for those that
+ * explicitly state otherwise (Ramp, Broadcast, Reinterpret, Shuffle,
+ * and VectorReduce). Most Call nodes operate lane-wise, with the
+ * exception of a few intrinsics that break these rules
+ * (e.g. dynamic_shuffle). These intrinsics must be used with care.
+ *
+ * Most IR nodes with child Exprs may evaluate those children in any
+ * order, re-evaluate them, or eliminate them entirely. The Expr a - a
+ * is treated as equivalent to zero, no matter what's hiding in a, and a
+ * + b is treated as the same as b + a. I.e. there are no sequence
+ * points between children, and while the children may have side-effects
+ * (e.g. a Load may fault), it is permissible for simplification to
+ * remove or duplicate these side effects. So be very careful with Call
+ * nodes with side-effects - if you multiply them by zero they may never
+ * happen. The exception is the Evaluate Stmt, which is guaranteed to
+ * evaluate its child Expr once, and of course the Store Stmt (when the
+ * predicate is true), which has a visible effect on memory. Control
+ * flow Stmts (in particular Block and For) provide sequencing, and
+ * IfThenElse must be used for conditional evaluation. AssertStmts also
+ * provide sequencing and conditional evaluation.
+ *
+ * Floating point operations use fast-math rules. They are assumed to
+ * never be NaN or Inf, and they are assumed to uphold the same
+ * identities as real numbers. So in the paragraph above, a - a really
+ * is treated as zero, even if a is Inf. If this is a problem, use the
+ * strict float intrinsics.
+ */
+
+/** Cast a node from one type to another. Can't change vector widths. If
+ * the destination type can't represent the value, the semantics are as
+ * follows:
+ *
+ * - Float to Int/UInt casts truncate towards zero.
+ * - Casts to no-overflow types (i.e. Int(32) and Int(64)) are assumed
+ *   to never overflow.
+ * - Float casts to other Int/UInt types saturate.
+ * - Casts to overflow types wrap.
+ *
+ * FIXME: The simplifier saturates overflowing float to int/uint casts, but the backends do not.
+ */
 struct Cast : public ExprNode<Cast> {
     Expr value;
 
@@ -53,7 +103,9 @@ struct Cast : public ExprNode<Cast> {
 };
 
 /** Reinterpret value as another type, without affecting any of the bits
- * (on little-endian systems). */
+ * (on little-endian systems). May change the number of vector lanes as
+ * long as the total number of bits of the entire vector is
+ * preserved. */
 struct Reinterpret : public ExprNode<Reinterpret> {
     Expr value;
 
@@ -62,7 +114,8 @@ struct Reinterpret : public ExprNode<Reinterpret> {
     static const IRNodeType _node_type = IRNodeType::Reinterpret;
 };
 
-/** The sum of two expressions */
+/** The sum of two expressions. Overflow is assumed impossible for no-overflow
+ * types, and wraps for overflow types. */
 struct Add : public ExprNode<Add> {
     Expr a, b;
 
@@ -71,7 +124,7 @@ struct Add : public ExprNode<Add> {
     static const IRNodeType _node_type = IRNodeType::Add;
 };
 
-/** The difference of two expressions */
+/** The difference of two expressions. Same overflow semantics as Add. */
 struct Sub : public ExprNode<Sub> {
     Expr a, b;
 
@@ -80,7 +133,7 @@ struct Sub : public ExprNode<Sub> {
     static const IRNodeType _node_type = IRNodeType::Sub;
 };
 
-/** The product of two expressions */
+/** The product of two expressions. Same overflow semantics as Add. */
 struct Mul : public ExprNode<Mul> {
     Expr a, b;
 
@@ -89,7 +142,14 @@ struct Mul : public ExprNode<Mul> {
     static const IRNodeType _node_type = IRNodeType::Mul;
 };
 
-/** The ratio of two expressions */
+/** The ratio of two expressions. For integers, rounds according to the
+ * sign of the denominator - down for positive denominators, and up for
+ * negative denominators. This is known as Euclidean division. Note
+ * that this is unlike C. For integers, division by zero evaluates to
+ * zero. For floats, division by zero is undefined - use the strict_div
+ * intrinsic if you need IEEE NaN/Inf behavior. For overflow types,
+ * dividing the most negative representable value by -1 wraps,
+ * returning that same most negative value. */
 struct Div : public ExprNode<Div> {
     Expr a, b;
 
@@ -98,9 +158,13 @@ struct Div : public ExprNode<Div> {
     static const IRNodeType _node_type = IRNodeType::Div;
 };
 
-/** The remainder of a / b. Mostly equivalent to '%' in C, except that
- * the result here is always positive. For floats, this is equivalent
- * to calling fmod. */
+/** The remainder of a / b. For integers, the result is never negative,
+ * and division by zero evaluates to zero. For non-zero b, the Euclidean
+ * identity is upheld: (a/b)*b + (a%b) == a. For floats, this is defined
+ * using floor division: a%b = a - floor(a/b)*b. Note that this may be
+ * negative.
+ *
+ * FIXME: Bounds inference treats float mod as always positive. */
 struct Mod : public ExprNode<Mod> {
     Expr a, b;
 
@@ -109,7 +173,7 @@ struct Mod : public ExprNode<Mod> {
     static const IRNodeType _node_type = IRNodeType::Mod;
 };
 
-/** The lesser of two values. */
+/** The lesser of two values */
 struct Min : public ExprNode<Min> {
     Expr a, b;
 
@@ -127,7 +191,7 @@ struct Max : public ExprNode<Max> {
     static const IRNodeType _node_type = IRNodeType::Max;
 };
 
-/** Is the first expression equal to the second */
+/** Whether the first expression is equal to the second */
 struct EQ : public ExprNode<EQ> {
     Expr a, b;
 
@@ -136,7 +200,7 @@ struct EQ : public ExprNode<EQ> {
     static const IRNodeType _node_type = IRNodeType::EQ;
 };
 
-/** Is the first expression not equal to the second */
+/** Whether the first expression is not equal to the second */
 struct NE : public ExprNode<NE> {
     Expr a, b;
 
@@ -145,7 +209,7 @@ struct NE : public ExprNode<NE> {
     static const IRNodeType _node_type = IRNodeType::NE;
 };
 
-/** Is the first expression less than the second. */
+/** Whether the first expression less than the second */
 struct LT : public ExprNode<LT> {
     Expr a, b;
 
@@ -154,7 +218,7 @@ struct LT : public ExprNode<LT> {
     static const IRNodeType _node_type = IRNodeType::LT;
 };
 
-/** Is the first expression less than or equal to the second. */
+/** Whether the first expression less than or equal to the second */
 struct LE : public ExprNode<LE> {
     Expr a, b;
 
@@ -163,7 +227,8 @@ struct LE : public ExprNode<LE> {
     static const IRNodeType _node_type = IRNodeType::LE;
 };
 
-/** Is the first expression greater than the second. */
+/** Whether the first expression greater than the second. Note that this gets
+ * normalized to LT by the simplifier. */
 struct GT : public ExprNode<GT> {
     Expr a, b;
 
@@ -172,7 +237,8 @@ struct GT : public ExprNode<GT> {
     static const IRNodeType _node_type = IRNodeType::GT;
 };
 
-/** Is the first expression greater than or equal to the second. */
+/** Whether the first expression greater than or equal to the second. Like GT,
+ * this gets normalized to LE by the simplifier. */
 struct GE : public ExprNode<GE> {
     Expr a, b;
 
@@ -190,7 +256,7 @@ struct And : public ExprNode<And> {
     static const IRNodeType _node_type = IRNodeType::And;
 };
 
-/** Logical or - is at least one of the expression true */
+/** Logical or - is at least one of the expressions true */
 struct Or : public ExprNode<Or> {
     Expr a, b;
 
@@ -208,9 +274,11 @@ struct Not : public ExprNode<Not> {
     static const IRNodeType _node_type = IRNodeType::Not;
 };
 
-/** A ternary operator. Evaluates 'true_value' and 'false_value',
- * then selects between them based on 'condition'. Equivalent to
- * the ternary operator in C. */
+/** A ternary operator. Evaluates 'true_value' and 'false_value', then
+ * selects between them based on 'condition'. Unlike the ternary
+ * operator in C, always evaluates both sides. Acts independently per
+ * vector lane, so the condition must have the same number of lanes as
+ * the true and false values. */
 struct Select : public ExprNode<Select> {
     Expr condition, true_value, false_value;
 
@@ -219,11 +287,12 @@ struct Select : public ExprNode<Select> {
     static const IRNodeType _node_type = IRNodeType::Select;
 };
 
-/** Load a value from a named symbol if predicate is true. The buffer
- * is treated as an array of the 'type' of this Load node. That is,
- * the buffer has no inherent type. The name may be the name of an
- * enclosing allocation, an input or output buffer, or any other
- * symbol of type Handle(). */
+/** Load a value from a named symbol if predicate is true. The buffer is
+ * treated as an array of the 'type' of this Load node. That is, the
+ * buffer has no inherent type. The name may be the name of an enclosing
+ * allocation, an input or output buffer, or any other symbol of type
+ * Handle(). A load from one name is assumed to never alias a store to a
+ * different name, and may be reordered with respect to such stores. */
 struct Load : public ExprNode<Load> {
     std::string name;
 
@@ -249,12 +318,13 @@ struct Load : public ExprNode<Load> {
     static const IRNodeType _node_type = IRNodeType::Load;
 };
 
-/** A linear ramp vector node. This is vector with 'lanes' elements, where
- * element i is 'base' + i*'stride'. This is a convenient way to pass around
- * vectors without busting them up into individual elements. E.g. a dense vector
- * load from a buffer can use a ramp node with stride 1 as the index. The base
- * and stride can also be vectors, in which case ramp(b, s, l) is the
- * concatenation of the vectors [b, b + s, b + 2 * s ... ]**/
+/** A linear ramp vector node. This is vector with 'lanes' elements,
+ * where element i is 'base' + i*'stride'. This is a convenient way to
+ * pass around vectors without busting them up into individual
+ * elements. E.g. a dense vector load from a buffer can use a ramp node
+ * with stride 1 as the index. The base and stride can also be vectors,
+ * in which case ramp(b, s, l) is the concatenation of the vectors [b, b
+ * + s, b + 2 * s ... ]**/
 struct Ramp : public ExprNode<Ramp> {
     Expr base, stride;
     int lanes;
@@ -264,10 +334,10 @@ struct Ramp : public ExprNode<Ramp> {
     static const IRNodeType _node_type = IRNodeType::Ramp;
 };
 
-/** A vector with 'lanes' elements, in which every element is 'value'. This is a
- * special case of the ramp node above, in which the stride is zero. If the
- * value is a vector, this is the concatenation of 'lanes' repeated copies of
- * that vector. */
+/** A vector with 'lanes' elements, in which every element is
+ * 'value'. This is a special case of the ramp node above, in which the
+ * stride is zero. If the value is a vector, this is the concatenation
+ * of 'lanes' repeated copies of that vector. */
 struct Broadcast : public ExprNode<Broadcast> {
     Expr value;
     int lanes;
@@ -301,8 +371,9 @@ struct LetStmt : public StmtNode<LetStmt> {
     static const IRNodeType _node_type = IRNodeType::LetStmt;
 };
 
-/** If the 'condition' is false, then evaluate and return the message,
- * which should be a call to an error function. */
+/** If the 'condition' is false, then evaluate and return the message, which
+ * should be a call to an error function. The two child Exprs are evaluated in
+ * order, and the second is only evaluated if the first was false. */
 struct AssertStmt : public StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
@@ -313,16 +384,19 @@ struct AssertStmt : public StmtNode<AssertStmt> {
     static const IRNodeType _node_type = IRNodeType::AssertStmt;
 };
 
-/** This node is a helpful annotation to do with permissions. If 'is_produce' is
- * set to true, this represents a producer node which may also contain updates;
- * otherwise, this represents a consumer node. If the producer node contains
- * updates, the body of the node will be a block of 'produce' and 'update'
- * in that order. In a producer node, the access is read-write only (or write
- * only if it doesn't have updates). In a consumer node, the access is read-only.
- * None of this is actually enforced, the node is purely for informative purposes
- * to help out our analysis during lowering. For every unique ProducerConsumer,
- * there is an associated Realize node with the same name that creates the buffer
- * being read from or written to in the body of the ProducerConsumer.
+/** This node is a helpful annotation to do with permissions. If
+ * 'is_produce' is set to true, this represents a producer node which
+ * may also contain updates; otherwise, this represents a consumer
+ * node. If the producer node contains updates, the body of the node
+ * will be a block of 'produce' and 'update' in that order. In a
+ * producer node, the access is read-write only (or write only if it
+ * doesn't have updates). In a consumer node, the access is read-only.
+ * None of this is actually enforced, the node is purely for informative
+ * purposes to help out our analysis during lowering. For most
+ * ProducerConsumer nodes, there is an associated enclosing Realize node
+ * with the same name that creates the buffer being read from or written
+ * to in the body of the ProducerConsumer. The exception is output
+ * buffers, which are produced but have no Realize node.
  */
 struct ProducerConsumer : public StmtNode<ProducerConsumer> {
     std::string name;
@@ -341,7 +415,8 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
  * 'predicate' is true. The buffer is interpreted as an array of the
  * same type as 'value'. The name may be the name of an enclosing
  * Allocate node, an output buffer, or any other symbol of type
- * Handle(). */
+ * Handle(). Assumed to not alias with loads or stores to different
+ * names. */
 struct Store : public StmtNode<Store> {
     std::string name;
     Expr predicate, value, index;
@@ -362,7 +437,9 @@ struct Store : public StmtNode<Store> {
  * location. You should think of it as a store to a multi-dimensional
  * array. It gets lowered to a conventional Store node. The name must
  * correspond to an output buffer or the name of an enclosing Realize
- * node. */
+ * node. Distinct coordinates are assumed to never alias (i.e. if this
+ * is lowered using strides to a single-dimensional store, those strides
+ * must not be zero.) */
 struct Provide : public StmtNode<Provide> {
     std::string name;
     std::vector<Expr> values;
@@ -450,7 +527,7 @@ struct Realize : public StmtNode<Realize> {
 };
 
 /** A sequence of statements to be executed in-order. 'first' is never
-    a Block, so this can be treated as a linked list. */
+ * a Block, so this can be treated as a linked list. */
 struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
@@ -924,16 +1001,21 @@ struct Variable : public ExprNode<Variable> {
     static const IRNodeType _node_type = IRNodeType::Variable;
 };
 
-/** A for loop. Execute the 'body' statement for all values of the variable
- * 'name' from 'min' to 'max' inclusive. There are four types of For nodes. A
- * 'Serial' for loop is a conventional one. In a 'Parallel' for loop, each
- * iteration of the loop happens in parallel or in some unspecified order. In a
- * 'Vectorized' for loop, each iteration maps to one SIMD lane, and the whole
- * loop is executed in one shot. For this case, the extent (max - min + 1) must
- * be some small integer constant (probably 4, 8, or 16). An 'Unrolled' for loop
- * compiles to a completely unrolled version of the loop. Each iteration becomes
- * its own statement. Again in this case, the extent should be a small integer
- * constant. */
+/** A for loop. Execute the 'body' statement for all values of the
+ * variable 'name' from 'min' to 'max' inclusive. There are four types
+ * of For nodes. A 'Serial' for loop is a conventional one. In a
+ * 'Parallel' for loop, each iteration of the loop happens in parallel
+ * or in some unspecified order. In a 'Vectorized' for loop, each
+ * iteration maps to one SIMD lane, and the whole loop is executed in
+ * one shot. To lower successfully, the extent (max - min + 1) must be a
+ * small integer constant (probably 4, 8, or 16), but this need not be
+ * the case when the For loop is constructed. The lower pass
+ * bound_constant_extent_loops will try to fix it. An 'Unrolled' for
+ * loop compiles to a completely unrolled version of the loop. Each
+ * iteration becomes its own statement. Again in this case, the extent
+ * must ultimately end up a small integer constant or it will fail to
+ * unroll.
+ */
 struct For : public StmtNode<For> {
     std::string name;
     Expr min, max;
@@ -1079,9 +1161,9 @@ struct Prefetch : public StmtNode<Prefetch> {
 };
 
 /**
- * Represents a location where storage will be hoisted to for a Func / Realize
- * node with a given name.
- *
+ * Represents a location where storage will be hoisted to for an
+ * enclosed Realize node with a given name. Removed during lowering when
+ * Realize nodes become Allocate nodes.
  */
 struct HoistedStorage : public StmtNode<HoistedStorage> {
     std::string name;
@@ -1093,12 +1175,15 @@ struct HoistedStorage : public StmtNode<HoistedStorage> {
     static const IRNodeType _node_type = IRNodeType::HoistedStorage;
 };
 
-/** Lock all the Store nodes in the body statement.
- *  Typically the lock is implemented by an atomic operation
- *  (e.g. atomic add or atomic compare-and-swap).
- *  However, if necessary, the node can access a mutex buffer through
- *  mutex_name and mutex_args, by lowering this node into
- *  calls to acquire and release the lock. */
+/** The body operates atomically with respect to any other threads or
+ *  any other vector lanes in enclosing parallel loops.  For enclosing
+ *  parallel loops, typically this is implemented by an atomic operation
+ *  (e.g. atomic add or atomic compare-and-swap).  However, if
+ *  necessary, the node can access a mutex buffer through mutex_name and
+ *  mutex_args, by lowering this node into calls to acquire and release
+ *  the lock. For enclosing vector loops this lowers to horizontal
+ *  reduction operators if possible (i.e. Shuffles and VectorReduce
+ *  nodes). */
 struct Atomic : public StmtNode<Atomic> {
     std::string producer_name;
     std::string mutex_name;  // empty string if not using mutex

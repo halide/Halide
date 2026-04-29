@@ -766,7 +766,7 @@ private:
 
             // Also check when the two expressions interleaved have a common
             // subexpression, which results in a vector var being lifted out.
-            for (int factor : {1, 2}) {
+            for (float factor : {0.5f, 1.f, 2.f}) {
                 const int width = base_vec_bits * 2 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 2;
@@ -791,7 +791,7 @@ private:
             }
 
             // ST3       -       Store three-element structures
-            for (int factor : {1, 2}) {
+            for (float factor : {0.5f, 1.f, 2.f}) {
                 const int width = base_vec_bits * 3 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 3;
@@ -819,7 +819,7 @@ private:
             }
 
             // ST4       -       Store four-element structures
-            for (int factor : {1, 2}) {
+            for (float factor : {0.5f, 1.f, 2.f}) {
                 const int width = base_vec_bits * 4 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 4;

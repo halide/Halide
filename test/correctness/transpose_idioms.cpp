@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
     // coprime no powers of two. We'll use sizes larger than 4, because some
     // backends like to do different things for small strides.
 
-    for (auto tile : {std::pair{8, 16}, {7, 5}, {6, 9}}) {
+    for (auto [tw, th] : {std::pair{8, 16}, {7, 5}, {6, 9}}) {
         {
             // Idiom 1: Strided stores into a staged transposed copy of the
             // input. The strided stores that get mashed together into one big
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
             g(x, y) = f(y, x);
             f.compute_root();
 
-            g.tile(x, y, xi, yi, tile.first, tile.second, TailStrategy::RoundUp)
+            g.tile(x, y, xi, yi, tw, th, TailStrategy::RoundUp)
                 .vectorize(xi)
                 .unroll(yi);
 
@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
             g(x, y) = f(y, x);
             f.compute_root();
 
-            g.tile(x, y, xi, yi, tile.first, tile.second, TailStrategy::RoundUp)
+            g.tile(x, y, xi, yi, tw, th, TailStrategy::RoundUp)
                 .vectorize(xi)
                 .unroll(yi);
 
@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
             g(x, y) = f(y, x);
             f.compute_root();
 
-            g.tile(x, y, xi, yi, tile.first, tile.second, TailStrategy::RoundUp)
+            g.tile(x, y, xi, yi, tw, th, TailStrategy::RoundUp)
                 .vectorize(xi)
                 .vectorize(yi);
 
@@ -167,7 +167,7 @@ int main(int argc, char **argv) {
             g(x, y) = f(y, x);
             f.compute_root();
 
-            g.tile(x, y, xi, yi, tile.first, tile.second, TailStrategy::RoundUp)
+            g.tile(x, y, xi, yi, tw, th, TailStrategy::RoundUp)
                 .reorder(yi, xi)
                 .vectorize(xi)
                 .vectorize(yi);

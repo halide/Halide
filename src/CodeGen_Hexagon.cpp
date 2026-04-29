@@ -3,8 +3,8 @@
 
 #include "AlignLoads.h"
 #include "CSE.h"
+#include "CodeGen_CPU.h"
 #include "CodeGen_Internal.h"
-#include "CodeGen_Posix.h"
 #include "Debug.h"
 #include "HexagonOptimize.h"
 #include "IREquality.h"
@@ -31,7 +31,7 @@ using namespace llvm;
 namespace {
 
 /** A code generator that emits Hexagon code from a given Halide stmt. */
-class CodeGen_Hexagon : public CodeGen_Posix {
+class CodeGen_Hexagon : public CodeGen_CPU {
 public:
     /** Create a Hexagon code generator for the given Hexagon target. */
     CodeGen_Hexagon(const Target &);
@@ -58,7 +58,7 @@ protected:
         return (isa_version >= 65);
     }
 
-    using CodeGen_Posix::visit;
+    using CodeGen_CPU::visit;
 
     /** Nodes for which we want to emit specific hexagon intrinsics */
     ///@{
@@ -96,7 +96,7 @@ protected:
     llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
                                  const std::vector<int> &indices) override;
     llvm::Value *optimization_fence(llvm::Value *v) override;
-    using CodeGen_Posix::shuffle_vectors;
+    using CodeGen_CPU::shuffle_vectors;
     ///@}
 
     /** Generate a LUT lookup using vlut instructions. */
@@ -128,7 +128,7 @@ private:
 };
 
 CodeGen_Hexagon::CodeGen_Hexagon(const Target &t)
-    : CodeGen_Posix(t) {
+    : CodeGen_CPU(t) {
     if (target.has_feature(Halide::Target::HVX_v68)) {
         isa_version = 68;
     } else if (target.has_feature(Halide::Target::HVX_v66)) {
@@ -476,7 +476,7 @@ Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
 void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
                                    const string &simple_name,
                                    const string &extern_name) {
-    CodeGen_Posix::begin_func(f.linkage, simple_name, extern_name, f.args);
+    CodeGen_CPU::begin_func(f.linkage, simple_name, extern_name, f.args);
 
     Stmt body = f.body;
 
@@ -533,7 +533,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     body.accept(this);
 
-    CodeGen_Posix::end_func(f.args);
+    CodeGen_CPU::end_func(f.args);
 }
 
 struct HvxIntrinsic {
@@ -847,7 +847,7 @@ const HvxIntrinsic intrinsic_wrappers[] = {
 // fall-through to CodeGen_LLVM.
 
 void CodeGen_Hexagon::init_module() {
-    CodeGen_Posix::init_module();
+    CodeGen_CPU::init_module();
 
     // LLVM's HVX vector intrinsics don't include the type of the
     // operands, they all operate on vectors of 32 bit integers. To make
@@ -1074,7 +1074,7 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
 
         return vdelta(lut, indices);
     }
-    return CodeGen_Posix::interleave_vectors(v);
+    return CodeGen_CPU::interleave_vectors(v);
 }
 
 // Check if indices form a strided ramp, allowing undef elements to
@@ -1209,7 +1209,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     if (!is_strided_ramp(indices, start, stride)) {
         if (is_concat_or_slice(indices)) {
             // Let LLVM handle concat or slices.
-            return CodeGen_Posix::shuffle_vectors(a, b, indices);
+            return CodeGen_CPU::shuffle_vectors(a, b, indices);
         }
         return vdelta(concat_vectors({a, b}), indices);
     }
@@ -1255,7 +1255,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             }
             return call_intrin_cast(native_ty, intrin_id, {b, a, codegen(bytes_off)});
         }
-        return CodeGen_Posix::shuffle_vectors(a, b, indices);
+        return CodeGen_CPU::shuffle_vectors(a, b, indices);
     } else if (stride == 2 && (start == 0 || start == 1)) {
         // For stride 2 shuffles, we can use vpack or vdeal.
         // It's hard to use call_intrin here. We'll just slice and
@@ -1286,7 +1286,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 llvm::Intrinsic::ID intrin = start == 0 ? INTRINSIC_128B(lo) : INTRINSIC_128B(hi);
                 ret_i = call_intrin_cast(native_ty, intrin, {packed});
             } else {
-                return CodeGen_Posix::shuffle_vectors(a, b, indices);
+                return CodeGen_CPU::shuffle_vectors(a, b, indices);
             }
             if (i + native_elements > result_elements) {
                 // This is the last vector, and it has a few extra
@@ -1772,8 +1772,8 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
     }
     function_does_not_access_memory(fn);
     fn->addFnAttr(llvm::Attribute::NoUnwind);
-    return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
-                                      fn, std::move(args));
+    return CodeGen_CPU::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
+                                    fn, std::move(args));
 }
 
 Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
@@ -1795,8 +1795,8 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
     }
     function_does_not_access_memory(fn);
     fn->addFnAttr(llvm::Attribute::NoUnwind);
-    return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
-                                      fn, std::move(args));
+    return CodeGen_CPU::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
+                                    fn, std::move(args));
 }
 
 string CodeGen_Hexagon::mcpu_target() const {
@@ -1874,14 +1874,14 @@ void CodeGen_Hexagon::visit(const Mul *op) {
         // v68 has vector support for single-precision float.
         if (target.has_feature(Halide::Target::HVX_v68) &&
             op->type.is_float() && op->type.bits() == 32) {
-            CodeGen_Posix::visit(op);
+            CodeGen_CPU::visit(op);
             return;
         }
         internal_error << "Unhandled HVX multiply " << op->a.type() << "*"
                        << op->b.type() << "\n"
                        << Expr(op) << "\n";
     } else {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
     }
 }
 
@@ -2072,7 +2072,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         return;
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Max *op) {
@@ -2086,7 +2086,7 @@ void CodeGen_Hexagon::visit(const Max *op) {
             value = codegen(equiv);
         }
     } else {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
     }
 }
 
@@ -2101,7 +2101,7 @@ void CodeGen_Hexagon::visit(const Min *op) {
             value = codegen(equiv);
         }
     } else {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
     }
 }
 
@@ -2120,7 +2120,7 @@ void CodeGen_Hexagon::visit(const Select *op) {
                                (op->true_value & cond) | (op->false_value & ~cond));
         value = codegen(equiv);
     } else {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
     }
 }
 
@@ -2297,19 +2297,19 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         new_alloc.accept(this);
     } else {
         // For all other memory types
-        CodeGen_Posix::visit(alloc);
+        CodeGen_CPU::visit(alloc);
     }
 }
 
 }  // namespace
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_Hexagon(const Target &target) {
     return std::make_unique<CodeGen_Hexagon>(target);
 }
 
 #else  // WITH_HEXAGON
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_Hexagon(const Target &target) {
     user_error << "hexagon not enabled for this build of Halide.\n";
     return nullptr;
 }

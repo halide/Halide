@@ -467,6 +467,7 @@ SOURCE_FILES = \
   Closure.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
+  CodeGen_CPU.cpp \
   CodeGen_D3D12Compute_Dev.cpp \
   CodeGen_GPU_Dev.cpp \
   CodeGen_Hexagon.cpp \
@@ -474,7 +475,6 @@ SOURCE_FILES = \
   CodeGen_LLVM.cpp \
   CodeGen_Metal_Dev.cpp \
   CodeGen_OpenCL_Dev.cpp \
-  CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
   CodeGen_PyTorch.cpp \
@@ -668,13 +668,13 @@ HEADER_FILES = \
   ClampUnsafeAccesses.h \
   Closure.h \
   CodeGen_C.h \
+  CodeGen_CPU.h \
   CodeGen_D3D12Compute_Dev.h \
   CodeGen_GPU_Dev.h \
   CodeGen_Internal.h \
   CodeGen_LLVM.h \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenCL_Dev.h \
-  CodeGen_Posix.h \
   CodeGen_PTX_Dev.h \
   CodeGen_PyTorch.h \
   CodeGen_Targets.h \
@@ -1288,7 +1288,7 @@ PERFORMANCE_TESTS = $(shell ls $(ROOT_DIR)/test/performance/*.cpp)
 ERROR_TESTS = $(shell ls $(ROOT_DIR)/test/error/*.cpp)
 WARNING_TESTS = $(shell ls $(ROOT_DIR)/test/warning/*.cpp)
 RUNTIME_TESTS = $(shell ls $(ROOT_DIR)/test/runtime/*.cpp)
-FUZZ_TESTS = $(filter-out %halide_fuzz_main.cpp, $(shell ls $(ROOT_DIR)/test/fuzz/*.cpp))
+FUZZ_TESTS = $(filter-out %halide_fuzz_main.cpp %IRGraphCXXPrinter.cpp, $(shell ls $(ROOT_DIR)/test/fuzz/*.cpp))
 GENERATOR_EXTERNAL_TESTS := $(shell ls $(ROOT_DIR)/test/generator/*test.cpp)
 GENERATOR_EXTERNAL_TEST_GENERATOR := $(shell ls $(ROOT_DIR)/test/generator/*_generator.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls $(ROOT_DIR)/tutorial/*.cpp))
@@ -1477,7 +1477,7 @@ $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime: $(ROOT_DIR)/test/correctness/op
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(TEST_LD_FLAGS) -o $@
 
-$(BIN_DIR)/fuzz_%: $(ROOT_DIR)/test/fuzz/%.cpp $(ROOT_DIR)/test/fuzz/halide_fuzz_main.cpp $(ROOT_DIR)/test/fuzz/fuzz_helpers.h $(ROOT_DIR)/test/fuzz/halide_fuzz_main.h $(TEST_DEPS)
+$(BIN_DIR)/fuzz_%: $(ROOT_DIR)/test/fuzz/%.cpp $(ROOT_DIR)/test/fuzz/halide_fuzz_main.cpp $(ROOT_DIR)/test/fuzz/fuzz_helpers.h $(ROOT_DIR)/test/fuzz/halide_fuzz_main.h $(ROOT_DIR)/test/fuzz/IRGraphCXXPrinter.cpp $(ROOT_DIR)/test/fuzz/IRGraphCXXPrinter.h $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $(filter %.cpp,$^) -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@ -DHALIDE_FUZZER_BACKEND=0
 
 # Error tests that link against libHalide
@@ -2199,6 +2199,7 @@ TEST_APPS=\
 	camera_pipe \
 	conv_layer \
 	fft \
+	gaussian_blur \
 	hist \
 	interpolate \
 	lens_blur \
