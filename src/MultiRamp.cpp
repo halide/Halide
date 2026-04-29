@@ -438,7 +438,7 @@ Expr MultiRamp::operator==(const MultiRamp &other) const {
     return simplify(c);
 }
 
-void MultiRamp::slice(int d, Expr v) {
+void MultiRamp::slice(int d, const Expr &v) {
     internal_assert(d >= 0 && d < (int)strides.size());
     internal_assert(v.type() == base.type());
     base += v * strides[d];

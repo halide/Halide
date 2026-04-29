@@ -78,7 +78,7 @@ struct MultiRamp {
     /** Remove dim `d`, adding `v * strides[d]` to base. Pass v = 0 for the
      * first slice along that dim, or a Variable to get a parameterized
      * slice. */
-    void slice(int d, Expr v);
+    void slice(int d, const Expr &v);
 
     /** Construct an Expr that is a *sufficient* condition for the lanes to
      * all be unique — i.e. if it evaluates to true the lanes don't alias,
