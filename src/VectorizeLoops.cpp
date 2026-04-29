@@ -1203,7 +1203,7 @@ protected:
                     std::vector<int> perm(d);
                     std::iota(perm.begin(), perm.end(), 0);
                     auto mid = std::stable_partition(perm.begin(), perm.end(),
-                        [&](int i) { return !is_const_zero(b_shape_mr.strides[i]); });
+                                                     [&](int i) { return !is_const_zero(b_shape_mr.strides[i]); });
                     int n_kept = mid - perm.begin();
                     // shuffle_from_permuted gives us idx such that
                     // Shuffle(<permuted>, idx) == <original>. Here we have

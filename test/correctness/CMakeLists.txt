@@ -89,9 +89,9 @@ tests(GROUPS correctness
       device_crop.cpp
       device_slice.cpp
       dilate3x3.cpp
-      downsampling_reduce.cpp
       div_by_zero.cpp
       div_round_to_zero.cpp
+      downsampling_reduce.cpp
       dynamic_allocation_in_gpu_kernel.cpp
       dynamic_reduction_bounds.cpp
       early_out.cpp
