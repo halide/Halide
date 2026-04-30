@@ -45,7 +45,7 @@
           "default-features": false,
           "features": [
             "serialization",
-            "wasm-executor"
+            "wasm-executor-wabt"
           ]
         }
       ]
@@ -180,10 +180,16 @@
         }
       ]
     },
-    "wasm-executor": {
-      "description": "Include built-in WASM executor",
+    "wasm-executor-wabt": {
+      "description": "Include wabt-based WASM executor",
       "dependencies": [
         "wabt"
+      ]
+    },
+    "wasm-executor-wamr": {
+      "description": "Include wamr-based WASM executor",
+      "dependencies": [
+        "wamr"
       ]
     }
   }
