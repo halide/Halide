@@ -74,7 +74,16 @@ def test_implicit_pure_definition():
     assert np.allclose(result, expected)
 
 
+def test_rdom_domain():
+    r = hl.RDom([(0, 10), (0, 20)], "r")
+    d = r.domain()
+    assert len(d) == 2
+    assert d[0].name() == r.x.name()
+    assert d[1].name() == r.y.name()
+
+
 if __name__ == "__main__":
     test_rdom()
     test_implicit_pure_definition()
     test_rdom_iter()
+    test_rdom_domain()

@@ -63,7 +63,14 @@ void define_rdom(py::module &m) {
             .def(py::init<Buffer<>>(), py::arg("buffer"))
             .def(py::init<OutputImageParam>(), py::arg("image_param"))
             .def(py::init<const Region &, std::string>(), py::arg("region"), py::arg("name") = "")
-            .def("domain", &RDom::domain)
+            .def("domain", [](const RDom &r) -> std::vector<RVar> {
+                std::vector<RVar> vars;
+                vars.reserve(r.dimensions());
+                for (int i = 0; i < r.dimensions(); i++) {
+                    vars.push_back(r[i]);
+                }
+                return vars;
+            })
             .def("defined", &RDom::defined)
             .def("same_as", &RDom::same_as)
             .def("dimensions", &RDom::dimensions)
