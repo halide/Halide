@@ -80,33 +80,20 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     if (!p) {
         return nullptr;
     }
+    __builtin_memset(p, 0, sizeof(halide_profiler_pipeline_stats));
     p->next = s->pipelines;
     p->name = pipeline_name;
     p->num_funcs = num_funcs;
-    p->runs = 0;
-    p->time = 0;
-    p->samples = 0;
-    p->memory_current = 0;
-    p->memory_peak = 0;
-    p->memory_total = 0;
-    p->num_allocs = 0;
-    p->active_threads_numerator = 0;
-    p->active_threads_denominator = 0;
-    p->funcs = (halide_profiler_func_stats *)malloc(num_funcs * sizeof(halide_profiler_func_stats));
+    size_t func_stats_storage = num_funcs * sizeof(halide_profiler_func_stats);
+    p->funcs = (halide_profiler_func_stats *)malloc(func_stats_storage);
     if (!p->funcs) {
         free(p);
         return nullptr;
     }
+    debug(0) << "Clearing func stats\n";
+    __builtin_memset(p->funcs, 0, func_stats_storage);
     for (int i = 0; i < num_funcs; i++) {
-        p->funcs[i].time = 0;
         p->funcs[i].name = (const char *)(func_names[i]);
-        p->funcs[i].memory_current = 0;
-        p->funcs[i].memory_peak = 0;
-        p->funcs[i].memory_total = 0;
-        p->funcs[i].num_allocs = 0;
-        p->funcs[i].stack_peak = 0;
-        p->funcs[i].active_threads_numerator = 0;
-        p->funcs[i].active_threads_denominator = 0;
     }
     s->pipelines = p;
     return p;
@@ -227,7 +214,8 @@ WEAK int halide_profiler_instance_start(void *user_context,
     halide_profiler_func_stats *funcs = (halide_profiler_func_stats *)(instance + 1);
 
     // Zero initialize the instance and func state
-    memset(instance, 0, (uint8_t *)(funcs + num_funcs) - (uint8_t *)instance);
+    debug(0) << "Clearing func stats\n";
+    __builtin_memset(instance, 0, (uint8_t *)(funcs + num_funcs) - (uint8_t *)instance);
 
     instance->funcs = funcs;
 
@@ -321,12 +309,14 @@ WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instan
             // the rounding below, but those aren't guaranteed to be available
             // when compiling the runtime.
             func->time += (uint64_t)(instance_func->time * adjustment + 0.5);  // NOLINT
-            func->active_threads_numerator += instance_func->active_threads_numerator;
-            func->active_threads_denominator += instance_func->active_threads_denominator;
-            func->num_allocs += instance_func->num_allocs;
-            func->stack_peak = max(func->stack_peak, instance_func->stack_peak);
             func->memory_peak = max(func->memory_peak, instance_func->memory_peak);
-            func->memory_total += instance_func->memory_total;
+            func->stack_peak = max(func->stack_peak, instance_func->stack_peak);
+            uint64_t *counter = (&func->stack_peak) + 1;
+            uint64_t *end = (uint64_t *)(func + 1);
+            const uint64_t *instance = (&instance_func->stack_peak) + 1;
+            while (counter != end) {
+                *counter++ += *instance++;
+            }
         }
     }
 
@@ -490,7 +480,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             const char *substr_copy_to_device = " (copy to device)";
             const char *substr_copy_to_host = " (copy to host)";
 
-            int max_func_name_length = 23;  // length of the section header
+            const int max_func_name_length = 22;  // length of the section header
             int num_copy_to_device = 0;
             int num_copy_to_host = 0;
 
@@ -499,10 +489,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             uint64_t total_copy_to_host_time = 0;
             for (int i = 0; i < p->num_funcs; i++) {
                 halide_profiler_func_stats *fs = p->funcs + i;
-                int name_len = strlen(fs->name);
-                if (name_len > max_func_name_length) {
-                    max_func_name_length = name_len;
-                }
                 if (strstr(fs->name, substr_copy_to_device)) {
                     num_copy_to_device++;
                     total_copy_to_device_time += fs->time;
@@ -544,7 +530,16 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
             }
 
-            const auto print_time_and_percentage = [&sstr, p](uint64_t time, size_t &cursor, bool light) {
+            size_t cursor = 0;
+
+            auto pad_to = [&](size_t new_cursor) {
+                while (sstr.size() < new_cursor) {
+                    sstr << " ";
+                }
+                cursor = new_cursor;
+            };
+
+            auto print_time_and_percentage = [&](uint64_t time) {
                 float ft = time / (p->runs * 1000000.0f);
                 if (ft < 10000) {
                     sstr << " ";
@@ -562,10 +557,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 // We don't need 6 sig. figs.
                 sstr.erase(3);
                 sstr << "ms";
-                cursor += 12;
-                while (sstr.size() < cursor) {
-                    sstr << " ";
-                }
+                pad_to(cursor + 12);
 
                 int perthousand = 0;
                 if (p->time != 0) {
@@ -577,60 +569,132 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
                 int percent = perthousand / 10;
                 sstr << percent << "." << (perthousand - percent * 10) << "%)";
-                if (!light) {
-                    cursor += 10;
-                    while (sstr.size() < cursor) {
+                pad_to(cursor + 8);
+            };
+
+            auto print_counter = [&](uint64_t x, int chars) {
+                const char *suffixes[] = {" ",
+                                          "K",
+                                          "M",
+                                          "G",
+                                          "T",
+                                          "P",
+                                          "E"};
+
+                // Right-justify
+                for (int i = 6; i < chars; i++) {
+                    sstr << " ";
+                }
+
+                if (x) {
+                    int s = 0;
+                    while (x >= 10000) {
+                        s++;
+                        x = (x + 499) / 1000;
+                    }
+                    for (uint64_t y = x; y < 10000; y *= 10) {
                         sstr << " ";
                     }
+                    sstr << x << suffixes[s];
+                }
+
+                pad_to(cursor + chars);
+            };
+
+            auto print_float_stat = [&](float x, int chars) {
+                // The goal is to fit this into 6 characters and use at most two
+                // decimal places. This is only used for positive floats, so we
+                // can skip space for a minus sign. Some examples:
+                // |      |
+                // |  0.30|
+                // | 10.00|
+                // |1000.2|
+                // | 10000|
+                // |   32K|
+
+                if (x >= 10000) {
+                    print_counter((uint64_t)x, chars);
+                    return;
+                }
+
+                size_t final_cursor = cursor + chars;
+
+                int left_pad = chars - 7;
+                left_pad += x < 10;
+                left_pad += x < 100;
+                left_pad += x < 1000;
+
+                // Right-justify
+                pad_to(cursor + left_pad);
+
+                sstr << x;
+                pad_to(final_cursor);
+                if (sstr.size() > cursor) {
+                    sstr.erase(sstr.size() - cursor);
+                }
+            };
+
+            auto print_normalized_counter = [&](uint64_t x, int chars) {
+                if (x % p->runs == 0) {
+                    // Common case is the event happens the same number of times on every run
+                    print_counter(x / p->runs, chars);
+                } else if (x == 0) {
+                    // Unlike float stats, if it's zero we don't print
+                    pad_to(cursor + chars);
+                } else {
+                    // But maybe it's variable. The user could be testing lots of different sizes.
+                    print_float_stat((float)x / p->runs, chars);
                 }
             };
 
             auto print_report_entry = [&](halide_profiler_func_stats *fs, const char *suffix_cut) {
-                size_t cursor = 0;
                 sstr.clear();
+                cursor = 0;
 
-                sstr << "    " << fs->name;
+                sstr << "  " << fs->name;
                 if (suffix_cut) {
                     sstr.erase(strlen(suffix_cut));
                 }
-                sstr << ": ";
-                cursor += max_func_name_length + 7;
-                while (sstr.size() < cursor) {
-                    sstr << " ";
+                cursor = sstr.size();
+                if (sstr.size() > max_func_name_length) {
+                    sstr.erase(sstr.size() - max_func_name_length);
+                } else {
+                    pad_to(max_func_name_length);
                 }
+                cursor = max_func_name_length;
+                sstr << ":";
+                pad_to(cursor + 2);
 
-                print_time_and_percentage(fs->time, cursor, false);
+                print_time_and_percentage(fs->time);
 
-                if (!serial) {
+                if (fs->time) {
                     float threads = fs->active_threads_numerator / (fs->active_threads_denominator + 1e-10);
-                    sstr << "threads: " << threads;
-                    sstr.erase(3);
-                    cursor += 15;
-                    while (sstr.size() < cursor) {
-                        sstr << " ";
-                    }
+                    print_float_stat(threads, 8);
+                } else {
+                    pad_to(cursor + 8);
                 }
 
-                if (fs->memory_peak) {
-                    cursor += 15;
-                    sstr << " peak: " << fs->memory_peak;
-                    while (sstr.size() < cursor) {
-                        sstr << " ";
-                    }
-                    sstr << " num: " << fs->num_allocs;
-                    cursor += 15;
-                    while (sstr.size() < cursor) {
-                        sstr << " ";
-                    }
-                    int alloc_avg = 0;
-                    if (fs->num_allocs != 0) {
-                        alloc_avg = fs->memory_total / fs->num_allocs;
-                    }
-                    sstr << " avg: " << alloc_avg;
+                print_normalized_counter(fs->parallel_loops, 7);
+                print_normalized_counter(fs->parallel_tasks, 7);
+                print_normalized_counter(fs->num_allocs, 7);
+                if (fs->num_allocs != 0) {
+                    // Heap
+                    print_counter(fs->memory_peak, 7);  // One of these will be zero
+                    uint64_t alloc_avg = fs->memory_total / fs->num_allocs;
+                    print_counter(alloc_avg, 7);
+                } else {
+                    // Stack
+                    print_counter(fs->stack_peak, 7);
+                    pad_to(cursor + 7);
                 }
-                if (fs->stack_peak > 0) {
-                    sstr << " stack: " << fs->stack_peak;
+
+                if (fs->points_required_at_root) {
+                    float recompute = fs->points_required_at_realization / (float)(fs->points_required_at_root);
+                    print_float_stat(recompute, 10);
+                } else {
+                    pad_to(cursor + 8);
                 }
+
                 sstr << "\n";
 
                 halide_print(user_context, sstr.str());
@@ -642,21 +706,32 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     print_report_entry(fs, nullptr);
                 }
             } else {
-                const auto print_section_header = [&](const char *name, uint64_t total_time) {
-                    size_t cursor = 0;
+                auto print_section_header = [&](const char *name, uint64_t total_time, bool func_stats) {
+                    cursor = 0;
                     sstr.clear();
-                    sstr << "  ";
+                    sstr << " ";
+                    size_t special_chars = 0;
                     if (support_colors) {
-                        sstr << "\033[90m\033[3m";
-                        cursor += 9;
+                        size_t old = sstr.size();
+                        sstr << "\033[38;5;245m\033[3m";
+                        special_chars = sstr.size() - old;
+                        cursor += special_chars;
                     }
                     sstr << "[" << name << " ";
-                    cursor += max_func_name_length + 7;
+                    cursor += max_func_name_length + 2;
                     while (sstr.size() < cursor) {
                         sstr << ":";
                     }
-                    print_time_and_percentage(total_time, cursor, true);
-                    sstr << " ::::]";
+                    print_time_and_percentage(total_time);
+                    if (func_stats) {
+                        sstr << "|threads|  parallel   | heap | peak | avg  |recompute]\n [";
+                        for (size_t i = 2; i < cursor - special_chars; i++) {
+                            sstr << " ";
+                        }
+                        sstr << "| active| loops| tasks|allocs|  mem |  mem |  ratio  ]";
+                    } else {
+                        sstr << " ::::]";
+                    }
                     if (support_colors) {
                         sstr << "\033[0m";
                     }
@@ -664,15 +739,15 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     halide_print(user_context, sstr.str());
                 };
 
-                print_section_header("funcs", total_func_time);
+                print_section_header("funcs", total_func_time, true);
                 for (int i = 0; i < f_stats_count; i++) {
                     halide_profiler_func_stats *fs = f_stats[i];
                     if (!strstr(fs->name, substr_copy_to_device) && !strstr(fs->name, substr_copy_to_host)) {
                         print_report_entry(fs, nullptr);
                     }
                 }
-                if (num_copy_to_device) {
-                    print_section_header("buffer copies to device", total_copy_to_device_time);
+                if (total_copy_to_device_time) {
+                    print_section_header("buffer copies to device", total_copy_to_device_time, false);
                     for (int i = 0; i < f_stats_count; i++) {
                         halide_profiler_func_stats *fs = f_stats[i];
                         if (strstr(fs->name, substr_copy_to_device)) {
@@ -680,8 +755,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                         }
                     }
                 }
-                if (num_copy_to_host) {
-                    print_section_header("buffer copies to host", total_copy_to_host_time);
+                if (total_copy_to_host_time) {
+                    print_section_header("buffer copies to host", total_copy_to_host_time, false);
                     for (int i = 0; i < f_stats_count; i++) {
                         halide_profiler_func_stats *fs = f_stats[i];
                         if (strstr(fs->name, substr_copy_to_host)) {

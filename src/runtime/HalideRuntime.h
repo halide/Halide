@@ -1863,6 +1863,9 @@ void halide_register_argv_and_metadata(
 
 /** Per-Func state tracked by the sampling profiler. */
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
+    /** The name of this Func. A global constant string. */
+    const char *name;
+
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t time;
 
@@ -1872,20 +1875,46 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The peak memory allocation of this Func. */
     uint64_t memory_peak;
 
-    /** The total memory allocation of this Func. */
-    uint64_t memory_total;
-
     /** The peak stack allocation of this Func's threads. */
     uint64_t stack_peak;
+
+    // Everything field after this point is a counters. They are aggregated by blinding adding.
+
+    /** The total memory allocation of this Func. */
+    uint64_t memory_total;
 
     /** The average number of thread pool worker threads active while computing this Func. */
     uint64_t active_threads_numerator, active_threads_denominator;
 
-    /** The name of this Func. A global constant string. */
-    const char *name;
+    /** The total number of times heap storage for this Func was allocated. */
+    uint64_t num_allocs;
 
-    /** The total number of memory allocation of this Func. */
-    int num_allocs;
+    /** The number of times this Func was realized (i.e. a store_at site). */
+    uint64_t realizations;
+
+    /** The number of times a region of this Func was produced (i.e. a
+     * compute_at site) */
+    uint64_t productions;
+
+    /** The number of parallel loops launched to compute some of this
+     * Func. I.e. the number of times halide_do_par_for was called due to one of
+     * this Func's parallel loops. Next, the total number of iterations of those
+     * loops. */
+    uint64_t parallel_loops, parallel_tasks;
+
+    /** The total number of points required of this Func aggregated across all
+     * realizations (i.e. at the store_at sites). */
+    uint64_t points_required_at_realization;
+
+    /** The number of points required of this Func at root. Will be less than
+     * points_required when there is redundant recompute due to use of
+     * compute_at. */
+    uint64_t points_required_at_root;
+
+    /** The number of loads and stores done to a buffer backing this Func. Note
+     * that input buffers will show up due to loads, but the fields above will
+     * be zero. */
+    uint64_t loads, stores;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist

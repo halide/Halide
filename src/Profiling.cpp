@@ -35,6 +35,9 @@ struct Names {
     std::string profiler_func_stack_peak_buf;
     std::string profiler_start_error_code;
 
+    // IDs 0-3 are treated specially in the runtime
+    const int overhead_id = 0, thread_idle_id = 1, malloc_id = 2, free_id = 3;
+
     Names(const std::string &pipeline_name)
         : pipeline_name(pipeline_name),
           profiler_instance(unique_name("profiler_instance")),
@@ -44,6 +47,31 @@ struct Names {
           profiler_func_names(unique_name("profiler_func_names")),
           profiler_func_stack_peak_buf(unique_name("profiler_func_stack_peak_buf")),
           profiler_start_error_code(unique_name("profiler_start_error_code")) {
+
+        name_map.emplace("overhead", overhead_id);
+        name_map.emplace("thread idle", thread_idle_id);
+        name_map.emplace("malloc", malloc_id);
+        name_map.emplace("free", free_id);
+    }
+
+    // Map a unique name to a unique integer, for giving Funcs IDs
+    map<string, int> name_map;
+    int id_for_name(const std::string &name) {
+        return name_map.try_emplace(name, (int)name_map.size()).first->second;
+    }
+
+    std::string prefix(const std::string &name) const {
+        size_t idx = name.find('.');
+        if (idx != std::string::npos) {
+            internal_assert(idx != 0) << name << "\n";
+            return name.substr(0, idx);
+        } else {
+            return name;
+        }
+    }
+
+    int num_ids() const {
+        return (int)name_map.size();
     }
 };
 
@@ -75,29 +103,372 @@ Stmt claim_sampling_token(const Stmt &s, const Expr &shared_token, const Expr &l
                                       release_sampling_token(shared_token, local_token)}));
 }
 
+// Inject counters for various stats as far outermost as possible, to minimize
+// overhead. For example, instead of this:
+// for (x in [min, max]) {
+//   increment_counter(..., 1);
+//   ...
+// }
+// We want to inject this:
+// increment_counter(..., max - min + 1);
+// for (x in [min, max]) {
+//   ...
+// }
+class InjectCounters : public IRMutator {
+public:
+    InjectCounters(Names &names, const map<string, Function> &env)
+        : names(names), env(env) {
+    }
+
+protected:
+    Names &names;
+    const map<string, Function> &env;
+
+    using IRMutator::visit;
+
+    static constexpr int num_counters = 8;
+
+    // TODO: Share with HalideRuntime.h
+    enum { Realizations = 0,
+           Productions,
+           ParallelLoops,
+           ParallelTasks,
+           PointsRequiredAtRealization,
+           PointsRequiredAtRoot,
+           Loads,
+           Stores };
+
+    struct Counters {
+
+        Expr counters[num_counters];
+
+        void add(const Counters &other) {
+            for (int i = 0; i < num_counters; i++) {
+                if (counters[i].defined()) {
+                    if (other.counters[i].defined()) {
+                        counters[i] += other.counters[i];
+                    }
+                } else {
+                    counters[i] = other.counters[i];
+                }
+            }
+            free_vars.insert(other.free_vars.begin(), other.free_vars.end());
+        }
+
+        void mul(const Expr &e) {
+            for (int i = 0; i < num_counters; i++) {
+                if (counters[i].defined()) {
+                    counters[i] *= e;
+                }
+            }
+            add_free_vars(e);
+        }
+
+        void count(int c, const Expr &e) {
+            internal_assert(e.defined() && e.type() == UInt(64)) << e;
+            if (counters[c].defined()) {
+                counters[c] += e;
+            } else {
+                counters[c] = e;
+            }
+            add_free_vars(e);
+        }
+
+        void count(int c) {
+            count(c, make_one(UInt(64)));
+        }
+
+        void add_free_vars(const Expr &e) {
+            visit_with(e, [&](auto *, const Variable *var) {
+                free_vars.insert(var->name);
+            });
+        }
+
+        void dump() const {
+            debug(0) << " realizations:   " << counters[Realizations] << "\n"
+                     << " production:     " << counters[Productions] << "\n"
+                     << " parallel_loops: " << counters[ParallelLoops] << "\n"
+                     << " parallel_tasks: " << counters[ParallelTasks] << "\n"
+                     << " points_required_at_realization: " << counters[PointsRequiredAtRealization] << "\n"
+                     << " points_required_at_root: " << counters[PointsRequiredAtRoot] << "\n"
+                     << " loads: " << counters[Loads] << "\n"
+                     << " stores: " << counters[Stores] << "\n";
+        }
+
+        // The free vars in the expressions
+        std::set<std::string> free_vars;
+    };
+
+    const For *enclosing_loop = nullptr, *enclosing_parallel_loop = nullptr;
+    // thread-local counters
+    std::string local_counters;
+    // A map from a func id and a counter id to a slot in the local counters array
+    std::map<std::pair<int, int>, int> local_counters_indices;
+
+    std::map<int, Counters> counters;
+
+    bool is_func(const std::string &name) const {
+        return env.find(name) != env.end();
+    }
+
+    Stmt flush(const Stmt &s, int id, const Counters &c) {
+        if (enclosing_loop &&
+            enclosing_parallel_loop &&
+            enclosing_loop != enclosing_parallel_loop) {
+            // Flush to local counters
+            if (local_counters.empty()) {
+                local_counters = unique_name("local_counters");
+            }
+            std::vector<Stmt> stores;
+            stores.reserve(num_counters);
+            for (int i = 0; i < num_counters; i++) {
+                if (!c.counters[i].defined()) {
+                    continue;
+                }
+                int n = (int)local_counters_indices.size();
+                int idx =
+                    local_counters_indices.try_emplace({id, i}, n).first->second;
+                Expr old = Load::make(UInt(64), local_counters, idx,
+                                      Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+                stores.push_back(Store::make(local_counters, old + c.counters[i], idx,
+                                             Parameter{}, const_true(), ModulusRemainder{}));
+            }
+            stores.push_back(s);
+            return Block::make(stores);
+        } else {
+            // Flush to global counters
+            std::vector<Expr> args(2 + num_counters);
+            args[0] = Variable::make(Handle(), names.profiler_instance);
+            args[1] = id;
+            for (int i = 0; i < num_counters; i++) {
+                Expr count = c.counters[i];
+                args[i + 2] = count.defined() ? count : make_zero(UInt(64));
+            }
+            Expr call = Call::make(Int(32), "halide_profiler_update_counters", args, Call::Extern);
+            return Block::make(Evaluate::make(std::move(call)), s);
+        }
+    }
+
+    Stmt flush_all(const Stmt &stmt) {
+        Stmt s = stmt;
+        for (auto p : counters) {
+            s = flush(s, p.first, p.second);
+        }
+        counters.clear();
+        return s;
+    }
+
+    Stmt flush_all_that_depend_on_var(const Stmt &stmt, const std::string &var) {
+        Stmt s = stmt;
+        for (auto it = counters.begin(); it != counters.end();) {
+            const auto &[id, c] = *it;
+            if (c.free_vars.count(var)) {
+                s = flush(s, id, c);
+                it = counters.erase(it);
+            } else {
+                it++;
+            }
+        }
+        return s;
+    }
+
+    void merge(const std::map<int, Counters> &other) {
+        for (const auto &it : other) {
+            counters[it.first].add(it.second);
+        }
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic({Call::declare_box_required_root, Call::declare_box_required})) {
+            const auto *b = op->args[0].as<Broadcast>();
+            const auto *v = b ? b->value.as<Variable>() : op->args[0].as<Variable>();
+            internal_assert(v && v->type.is_handle()) << Expr(op) << "\n";
+            Counters &c = counters[names.id_for_name(v->name)];
+
+            // It could be a vector of box declarations, in which case we're
+            // going to need to sum the extents of each.
+            int lanes = op->type.lanes();
+            Expr total_extent = make_one(UInt(64, lanes));
+            for (size_t i = 1; i < op->args.size(); i += 2) {
+                total_extent *= cast(total_extent.type(), op->args[i + 1] + 1 - op->args[i]);
+            }
+            if (lanes > 1) {
+                total_extent = VectorReduce::make(VectorReduce::Add, total_extent, 1);
+            }
+            // It's important to simplify here, as it removes false dependences on loop vars.
+            total_extent = simplify(total_extent);
+
+            if (op->is_intrinsic(Call::declare_box_required)) {
+                // Happens at the realize node
+                c.count(PointsRequiredAtRealization, total_extent);
+                c.count(Realizations);
+            } else {
+                c.count(PointsRequiredAtRoot, total_extent);
+            }
+
+            return make_zero(op->type);
+        } else {
+            // Counter events are never nested, so no recursive mutate call.
+            return op;
+        }
+    }
+
+    Stmt visit(const Store *op) override {
+        // Note this also picks up loads and stores from things associated with
+        // the Func, like storage folding head trackers.
+        std::string f = names.prefix(op->name);
+        if (is_func(f)) {
+            Counters &c = counters[names.id_for_name(f)];
+            c.count(Stores);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Load *op) override {
+        std::string f = names.prefix(op->name);
+        if (is_func(f)) {
+            Counters &c = counters[names.id_for_name(f)];
+            c.count(Loads);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const ProducerConsumer *op) override {
+        if (op->is_producer) {
+            Counters &c = counters[names.id_for_name(op->name)];
+            c.count(Productions);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const For *op) override {
+        if (op->for_type == ForType::GPUBlock) {
+            // TODO
+            return op;
+        }
+
+        decltype(counters) old;
+        old.swap(counters);
+
+        Stmt body;
+        {
+            ScopedValue<const For *> bind1(enclosing_loop, op);
+            ScopedValue<const For *> bind2(enclosing_parallel_loop,
+                                           op->is_unordered_parallel() ?
+                                               op :
+                                               enclosing_parallel_loop);
+            body = mutate(op->body);
+        }
+
+        if (op->is_unordered_parallel() &&
+            !local_counters.empty()) {
+            // Flush any thread-local counters to global state
+            std::map<int, Counters> to_flush;
+            for (auto [p, idx] : local_counters_indices) {
+                auto [id, counter] = p;
+                to_flush[id].counters[counter] =
+                    Load::make(UInt(64), local_counters, idx,
+                               Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+            }
+
+            counters.swap(to_flush);
+            Stmt post_flush = flush_all(Evaluate::make(0));
+            counters.swap(to_flush);
+
+            std::vector<Stmt> stmts;
+            stmts.reserve(local_counters_indices.size() + 2);
+            for (int i = 0; i < (int)local_counters_indices.size(); i++) {
+                stmts.push_back(Store::make(local_counters, make_zero(UInt(64)), i,
+                                            Parameter{}, const_true(), ModulusRemainder{}));
+            }
+
+            stmts.push_back(std::move(body));
+            stmts.push_back(post_flush);
+            body = Block::make(stmts);
+
+            Expr size = (int)local_counters_indices.size();
+            body = Allocate::make(local_counters, UInt(64), MemoryType::Stack, {size}, const_true(), body);
+        }
+
+        // Scale up the counters by the loop trip count
+        Expr e = simplify(op->extent());
+
+        body = flush_all_that_depend_on_var(body, op->name);
+
+        for (auto &[_, c] : counters) {
+            c.mul(e);
+        }
+
+        merge(old);
+
+        if (op->is_unordered_parallel()) {
+            int id = names.id_for_name(names.prefix(op->name));
+            counters[id].count(ParallelLoops);
+            counters[id].count(ParallelTasks, cast(UInt(64), e));
+        }
+
+        return For::make(op->name, op->min, op->max,
+                         op->for_type, op->partition_policy, op->device_api, std::move(body));
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        decltype(counters) old;
+        counters.swap(old);
+        Stmt body = mutate(op->body);
+        body = flush_all_that_depend_on_var(body, op->name);
+        merge(old);
+        return LetStmt::make(op->name, op->value, body);
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        decltype(counters) old;
+
+        counters.swap(old);
+        Stmt then_case, else_case;
+        then_case = mutate(op->then_case);
+        then_case = flush_all(then_case);
+        if (op->else_case.defined()) {
+            else_case = mutate(op->else_case);
+            else_case = flush_all(else_case);
+        }
+        counters.swap(old);
+        return IfThenElse::make(op->condition, then_case, else_case);
+    }
+
+    Stmt visit(const Block *op) override {
+        // Put the outermost counter update just outside the timing start
+        const Evaluate *eval = op->first.as<Evaluate>();
+        const Call *call = eval ? eval->value.as<Call>() : nullptr;
+        if (call && call->is_intrinsic(Call::profiling_enable_instance_marker)) {
+            return flush_all(IRMutator::visit(op));
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+public:
+    Stmt operator()(const Stmt &s) {
+        Stmt stmt = IRMutator::operator()(s);
+        return flush_all(stmt);
+    }
+};
+
 class InjectProfiling : public IRMutator {
 
 public:
-    map<string, int> indices;  // maps from func name -> index in buffer.
-
     vector<int> stack;  // What produce nodes are we currently inside of.
 
-    const Names &names;
+    Names &names;
     const map<string, Function> &env;
 
     bool in_fork = false;
     bool in_parallel = false;
     bool in_leaf_task = false;
 
-    InjectProfiling(const Names &names, const map<std::string, Function> &env)
+    InjectProfiling(Names &names, const map<std::string, Function> &env)
         : names(names), env(env) {
-        stack.push_back(get_func_id("overhead"));
-        // ID 0 is treated specially in the runtime as overhead
-        internal_assert(stack.back() == 0);
 
-        waiting_on_tasks_id = get_func_id("waiting for parallel tasks to finish");
-        malloc_id = get_func_id("halide_malloc");
-        free_id = get_func_id("halide_free");
+        stack.push_back(names.overhead_id);
 
         profiler_instance = Variable::make(Handle(), names.profiler_instance);
         profiler_local_sampling_token = Variable::make(Handle(), names.profiler_local_sampling_token);
@@ -108,7 +479,7 @@ public:
     map<int, uint64_t> func_stack_peak;     // map from func id -> peak stack allocation
 
     Stmt activate_thread(const Stmt &s) {
-        return activate_thread_helper(s, waiting_on_tasks_id);
+        return activate_thread_helper(s, names.thread_idle_id);
     }
 
     Stmt activate_main_thread(const Stmt &s) {
@@ -127,7 +498,7 @@ public:
 
     Stmt suspend_thread(const Stmt &s) {
         return Block::make({decr_active_threads(profiler_instance),
-                            unconditionally_set_current_func(waiting_on_tasks_id),
+                            unconditionally_set_current_func(names.thread_idle_id),
                             s,
                             incr_active_threads(profiler_instance),
                             unconditionally_set_current_func(stack.back())});
@@ -142,7 +513,6 @@ public:
 private:
     using IRMutator::visit;
 
-    int malloc_id, free_id, waiting_on_tasks_id;
     Expr profiler_instance;
     Expr profiler_local_sampling_token;
     Expr profiler_shared_sampling_token;
@@ -161,42 +531,28 @@ private:
 
     bool profiling_memory = true;
 
-    // Strip down the tuple name, e.g. f.0 into f
-    string normalize_name(const string &name) const {
-        size_t idx = name.find('.');
-        if (idx != std::string::npos) {
-            internal_assert(idx != 0);
-            return name.substr(0, idx);
-        } else {
-            return name;
-        }
-    }
+    enum class Kind { ProfiledFunc = 0,
+                      NonProfiledFunc,
+                      NotAFunc };
 
-    Function lookup_function(const string &name) const {
+    Kind classify(const std::string &name) const {
         auto it = env.find(name);
-        if (it != env.end()) {
-            return it->second;
+        if (it == env.end()) {
+            it = env.find(names.prefix(name));
         }
-        string norm_name = normalize_name(name);
-        it = env.find(norm_name);
         if (it != env.end()) {
-            return it->second;
+            if (it->second.should_not_profile()) {
+                return Kind::NonProfiledFunc;
+            } else {
+                return Kind::ProfiledFunc;
+            }
+        } else {
+            return Kind::NotAFunc;
         }
-        internal_error << "No function in the environment found for name '" << name << "'.\n";
-        return {};
     }
 
     int get_func_id(const string &name) {
-        string norm_name = normalize_name(name);
-        int idx = -1;
-        map<string, int>::iterator iter = indices.find(norm_name);
-        if (iter == indices.end()) {
-            idx = (int)indices.size();
-            indices[norm_name] = idx;
-        } else {
-            idx = iter->second;
-        }
-        return idx;
+        return names.id_for_name(names.prefix(name));
     }
 
     Stmt unconditionally_set_current_func(int id) {
@@ -280,20 +636,27 @@ private:
         // inject_profiling() so this is a possible scenario.
         if (!is_const_zero(size) && on_stack) {
             int idx;
-            Function func = lookup_function(op->name);
-            if (func.should_not_profile()) {
-                idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
-            } else {
+            switch (classify(op->name)) {
+            case Kind::ProfiledFunc:
                 idx = get_func_id(op->name);
+                break;
+            case Kind::NonProfiledFunc:
+                idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
+                break;
+            case Kind::NotAFunc:
+                idx = -1;
+                break;
             }
-            auto int_size = as_const_uint(size);
-            internal_assert(int_size);  // Stack size is always a const int
-            func_stack_current[idx] += *int_size;
-            func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
-            debug(3) << "  Allocation on stack: " << op->name
-                     << "(" << size << ") in pipeline " << names.pipeline_name
-                     << "; current: " << func_stack_current[idx]
-                     << "; peak: " << func_stack_peak[idx] << "\n";
+            if (idx >= 0) {
+                auto int_size = as_const_uint(size);
+                internal_assert(int_size);  // Stack size is always a const int
+                func_stack_current[idx] += *int_size;
+                func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
+                debug(3) << "  Allocation on stack: " << op->name
+                         << "(" << size << ") in pipeline " << names.pipeline_name
+                         << "; current: " << func_stack_current[idx]
+                         << "; peak: " << func_stack_peak[idx] << "\n";
+            }
         }
 
         vector<Stmt> tasks;
@@ -304,7 +667,7 @@ private:
                      << "(" << size << ") in pipeline "
                      << names.pipeline_name << "\n";
 
-            tasks.push_back(set_current_func(malloc_id));
+            tasks.push_back(set_current_func(names.malloc_id));
             tasks.push_back(Evaluate::make(Call::make(Int(32), "halide_profiler_memory_allocate",
                                                       {profiler_instance, idx, size}, Call::Extern)));
         }
@@ -346,7 +709,7 @@ private:
                     debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << names.pipeline_name << "\n";
 
                     vector<Stmt> tasks{
-                        set_current_func(free_id),
+                        set_current_func(names.free_id),
                         Evaluate::make(Call::make(Int(32), "halide_profiler_memory_free",
                                                   {profiler_instance, idx, alloc.size}, Call::Extern)),
                         stmt,
@@ -359,47 +722,46 @@ private:
                 internal_assert(int_size);
 
                 int idx;
-                Function func = lookup_function(op->name);
-                if (func.should_not_profile()) {
-                    idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
-                } else {
+                switch (classify(op->name)) {
+                case Kind::ProfiledFunc:
                     idx = get_func_id(op->name);
+                    break;
+                case Kind::NonProfiledFunc:
+                    idx = stack.back();
+                    break;
+                case Kind::NotAFunc:
+                    idx = -1;
+                    break;
                 }
-                func_stack_current[idx] -= *int_size;
-                debug(3) << "  Free on stack: " << op->name
-                         << "(" << alloc.size << ") in pipeline " << names.pipeline_name
-                         << "; current: " << func_stack_current[idx]
-                         << "; peak: " << func_stack_peak[idx] << "\n";
+                if (idx >= 0) {
+                    func_stack_current[idx] -= *int_size;
+                    debug(3) << "  Free on stack: " << op->name
+                             << "(" << alloc.size << ") in pipeline " << names.pipeline_name
+                             << "; current: " << func_stack_current[idx]
+                             << "; peak: " << func_stack_peak[idx] << "\n";
+                }
             }
         }
         return stmt;
     }
 
     Stmt visit(const ProducerConsumer *op) override {
-        int idx;
         Stmt body;
-        if (op->is_producer) {
-            Function func = lookup_function(op->name);
-            if (func.should_not_profile()) {
-                body = mutate(op->body);
-                if (body.same_as(op->body)) {
-                    return op;
-                }
-            } else {
-                idx = get_func_id(op->name);
+        if (classify(op->name) == Kind::ProfiledFunc) {
+            if (op->is_producer) {
+                int idx = get_func_id(op->name);
                 stack.push_back(idx);
                 Stmt set_current = set_current_func(idx);
                 body = Block::make(set_current, mutate(op->body));
                 stack.pop_back();
+            } else {
+                Stmt set_current = set_current_func(stack.back());
+                body = Block::make(set_current, mutate(op->body));
             }
+            return ProducerConsumer::make(op->name, op->is_producer, body);
         } else {
-            // At the beginning of the consume step, set the current task
-            // back to the outer one.
-            Stmt set_current = set_current_func(stack.back());
-            body = Block::make(set_current, mutate(op->body));
+            return IRMutator::visit(op);
         }
-
-        return ProducerConsumer::make(op->name, op->is_producer, body);
     }
 
     Stmt visit_parallel_task(Stmt s) {
@@ -465,6 +827,7 @@ private:
             leaf_task = !contains_parallel_or_blocking_node.result;
 
             if (leaf_task) {
+                // TODO: Shouldn't this be *outside* activate thread, so that the func setting is done by a single leaf?
                 body = claim_sampling_token(body, profiler_shared_sampling_token, profiler_local_sampling_token);
             }
 
@@ -610,10 +973,14 @@ private:
 Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env) {
     Names names(pipeline_name);
 
-    InjectProfiling profiling(names, env);
-    Stmt s = profiling(stmt);
+    // Start by injecting counters as far out as possible
+    Stmt s = InjectCounters(names, env)(stmt);
 
-    int num_funcs = (int)(profiling.indices.size());
+    // Now inject the rest of the profiler state
+    InjectProfiling profiling(names, env);
+    s = profiling(s);
+
+    int num_funcs = names.num_ids();
 
     // TODO: unique_name all these strings
 
@@ -666,8 +1033,8 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
                            MemoryType::Auto, {num_funcs}, const_true(), s);
     }
 
-    for (const auto &p : profiling.indices) {
-        s = Block::make(Store::make(names.profiler_func_names, p.first, p.second, Parameter(), const_true(), ModulusRemainder()), s);
+    for (const auto &[name, id] : names.name_map) {
+        s = Block::make(Store::make(names.profiler_func_names, name, id, Parameter(), const_true(), ModulusRemainder()), s);
     }
 
     s = Block::make(s, Free::make(names.profiler_func_names));

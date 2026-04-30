@@ -1,6 +1,8 @@
 #include "HalideRuntime.h"
 #include "runtime_atomics.h"
 
+#include "printer.h"
+
 extern "C" {
 
 WEAK_INLINE int halide_profiler_set_current_func(halide_profiler_instance_state *instance, int func, int *sampling_token) {
@@ -57,5 +59,40 @@ WEAK_INLINE int halide_profiler_decr_active_threads(halide_profiler_instance_sta
     using namespace Halide::Runtime::Internal::Synchronization;
 
     return atomic_fetch_sub_sequentially_consistent(&(instance->active_threads), 1);
+}
+
+WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_state *instance,
+                                                int id,
+                                                uint64_t realizations,
+                                                uint64_t productions,
+                                                uint64_t parallel_loops,
+                                                uint64_t parallel_tasks,
+                                                uint64_t points_required_at_realization,
+                                                uint64_t points_required_at_root,
+                                                uint64_t loads,
+                                                uint64_t stores) {
+    using namespace Halide::Runtime::Internal::Synchronization;
+
+    halide_profiler_func_stats &stats = instance->funcs[id];
+
+    // This gets inlined. If this is in an inner loop, most of the args will be
+    // the constant zero. We therefore test for zero before adding to every
+    // counter so that unused counters compile to no code.
+#define UPDATE_COUNTER(X)                                        \
+    if (X) {                                                     \
+        atomic_fetch_add_sequentially_consistent(&(stats.X), X); \
+    }
+
+    UPDATE_COUNTER(realizations);
+    UPDATE_COUNTER(productions);
+    UPDATE_COUNTER(parallel_loops);
+    UPDATE_COUNTER(parallel_tasks);
+    UPDATE_COUNTER(points_required_at_realization);
+    UPDATE_COUNTER(points_required_at_root);
+    UPDATE_COUNTER(loads);
+    UPDATE_COUNTER(stores);
+
+#undef UPDATE_COUNTER
+    return 0;
 }
 }

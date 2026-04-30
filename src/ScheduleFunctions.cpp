@@ -1200,12 +1200,41 @@ public:
         return _found_hoist_storage_levels_for_funcs.size() == funcs.size();
     }
 
+    Stmt operator()(const Stmt &stmt) {
+        Stmt s = IRMutator::operator()(stmt);
+        if (target.has_feature(Target::Profile)) {
+            for (size_t i = 0; i < funcs.size(); i++) {
+                if (is_output_list[i]) {
+                    // There is no realize node
+                    s = declare_box(s, funcs[i], Call::declare_box_required);
+                }
+                s = declare_box(s, funcs[i], Call::declare_box_required_root);
+            }
+        }
+        return s;
+    }
+
 protected:
     bool _found_compute_level{};
     std::set<string> _found_store_levels_for_funcs;
     std::set<string> _found_hoist_storage_levels_for_funcs;
 
     using IRMutator::visit;
+
+    Stmt declare_box(const Stmt &stmt, const Function &f, Call::IntrinsicOp intrin) {
+        Stmt s = stmt;
+
+        std::vector<Expr> args = {Variable::make(Handle(), f.name())};
+        const std::vector<std::string> &var_names = f.args();
+        for (int i = 0; i < f.dimensions(); i++) {
+            std::string v = concat_strings(f.name(), ".s0.", var_names[i]);
+            args.emplace_back(Variable::make(Int(32), v + ".min"));
+            args.emplace_back(Variable::make(Int(32), v + ".max"));
+        }
+        Expr d = Call::make(Int(32), intrin,
+                            args, Call::Intrinsic);
+        return Block::make(Evaluate::make(d), s);
+    }
 
     Stmt visit(const For *for_loop) override {
         debug(3) << "Injecting " << funcs << " entering for-loop over " << for_loop->name << "\n";
@@ -1369,18 +1398,7 @@ private:
         if (func.has_extern_definition()) {
             // Add an annotation to let bounds inference know that
             // this will write to the entire bounds required.
-            vector<Expr> args;
-            args.emplace_back(Variable::make(Handle(), func.name()));
-            for (int i = 0; i < func.dimensions(); i++) {
-                string prefix = func.name() + ".s0." + func.args()[i];
-                string min_name = prefix + ".min";
-                string max_name = prefix + ".max";
-
-                args.emplace_back(Variable::make(Int(32), min_name));
-                args.emplace_back(Variable::make(Int(32), max_name));
-            }
-            Expr decl = Call::make(Int(32), Call::declare_box_touched, args, Call::Intrinsic);
-            s = Block::make(Evaluate::make(decl), s);
+            s = declare_box(s, func, Call::declare_box_touched);
         }
 
         if (!is_output) {
@@ -1396,6 +1414,9 @@ private:
             }
 
             s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
+            if (target.has_feature(Target::Profile)) {
+                s = declare_box(s, func, Call::declare_box_required);
+            }
         }
 
         // This is also the point at which we inject explicit bounds
@@ -2618,10 +2639,10 @@ Stmt schedule_functions(const vector<Function> &outputs,
         debug(2) << s << "\n";
     }
 
-    // We can remove the loop over root now
-    const For *root_loop = s.as<For>();
-    internal_assert(root_loop);
-    s = root_loop->body;
+    // We can remove the loop over root now. It's the outermost one.
+    s = mutate_with(s, [&](auto *self, const For *op) {
+        return op->body;
+    });
 
     // We can also remove all the loops over __outermost now.
     s = RemoveLoopsOverOutermost()(s);

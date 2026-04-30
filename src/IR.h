@@ -647,6 +647,11 @@ struct Call : public ExprNode<Call> {
         // Declares that a box region of an allocation has been touched (used by bounds inference)
         declare_box_touched,
 
+        // Declares that region required of a particular Func at this
+        // scope. Injected by ScheduleFunctions and used by the profiler.
+        declare_box_required,
+        declare_box_required_root,
+
         div_round_to_zero,
 
         // A shuffle operation with runtime-varying indices.
