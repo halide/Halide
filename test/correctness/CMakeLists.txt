@@ -360,6 +360,7 @@ tests(GROUPS correctness
       vectorized_load_from_vectorized_allocation.cpp
       vectorized_reduction_bug.cpp
       widening_reduction.cpp
+      wasm_jit_externs.cpp
       # keep-sorted end
 )
 
@@ -483,5 +484,6 @@ set_target_properties(
     correctness_sliding_window
     correctness_stage_strided_loads
     correctness_storage_folding
+    correctness_wasm_jit_externs
     # keep-sorted end
     PROPERTIES ENABLE_EXPORTS TRUE)

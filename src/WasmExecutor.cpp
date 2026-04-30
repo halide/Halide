@@ -2255,25 +2255,8 @@ const HostCallbackMap &get_host_callback_map() {
 }  // namespace
 
 #if WITH_WAMR
-void halide_print_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str) {
-    wasm_module_inst_t module_inst = wasm_runtime_get_module_inst(exec_env);
-    JITUserContext *jit_user_context = (JITUserContext *)wasm_runtime_get_custom_data(module_inst);
-    if (jit_user_context && jit_user_context->handlers.custom_print != nullptr) {
-        (*jit_user_context->handlers.custom_print)(jit_user_context, str);
-    } else {
-        std::cout << str;
-    }
-}
-
-void halide_error_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str) {
-    wasm_module_inst_t module_inst = wasm_runtime_get_module_inst(exec_env);
-    JITUserContext *jit_user_context = (JITUserContext *)wasm_runtime_get_custom_data(module_inst);
-    if (jit_user_context && jit_user_context->handlers.custom_error != nullptr) {
-        (*jit_user_context->handlers.custom_error)(jit_user_context, str);
-    } else {
-        halide_runtime_error << str;
-    }
-}
+void halide_print_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str);
+void halide_error_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str);
 
 int32_t malloc_native(wasm_exec_env_t exec_env, int32_t size) {
     wasm_module_inst_t module_inst = wasm_runtime_get_module_inst(exec_env);
@@ -2540,6 +2523,15 @@ struct WasmModuleContents {
 #if WITH_WAMR
     wasm_module_t module = nullptr;
     wasm_module_inst_t instance = nullptr;
+
+    JITUserContext *jit_user_context = nullptr;
+
+    std::vector<std::string> wamr_extern_names;
+    std::vector<std::string> wamr_extern_signatures;
+    std::vector<std::vector<ExternArgType>> wamr_extern_arg_types;
+    std::vector<TrampolineFn> wamr_extern_trampoline_fns;
+
+    void run_extern_callback(size_t index, wasm_exec_env_t exec_env, uint64_t *args);
 #endif
 
 #ifdef WITH_V8
@@ -2560,6 +2552,57 @@ struct WasmModuleContents {
 
     ~WasmModuleContents() = default;
 };
+
+#if WITH_WAMR
+template<size_t N>
+void wamr_extern_wrapper_n(wasm_exec_env_t exec_env, uint64_t *args) {
+    wasm_module_inst_t instance = wasm_runtime_get_module_inst(exec_env);
+    WasmModuleContents *contents = (WasmModuleContents *)wasm_runtime_get_custom_data(instance);
+    internal_assert(contents) << "No valid private custom context mapped inside WAMR interpreter";
+    contents->run_extern_callback(N, exec_env, args);
+}
+
+template<size_t... Is>
+constexpr auto make_wrapper_table(std::index_sequence<Is...>) {
+    return std::array<void(*)(wasm_exec_env_t, uint64_t *), sizeof...(Is)>{
+        &wamr_extern_wrapper_n<Is>...
+    };
+}
+
+constexpr size_t kMaxExternWrappers = 128;
+static constexpr auto wamr_extern_wrappers = make_wrapper_table(std::make_index_sequence<kMaxExternWrappers>{});
+#endif
+
+#if WITH_WAMR
+void halide_print_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str) {
+    wasm_module_inst_t module_inst = wasm_runtime_get_module_inst(exec_env);
+    WasmModuleContents *contents = (WasmModuleContents *)wasm_runtime_get_custom_data(module_inst);
+    JITUserContext *jit_user_context = contents ? contents->jit_user_context : nullptr;
+    if (jit_user_context && jit_user_context->handlers.custom_print != nullptr) {
+        (*jit_user_context->handlers.custom_print)(jit_user_context, str);
+    } else {
+        std::cout << str;
+    }
+}
+
+void halide_error_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str) {
+    wasm_module_inst_t module_inst = wasm_runtime_get_module_inst(exec_env);
+    WasmModuleContents *contents = (WasmModuleContents *)wasm_runtime_get_custom_data(module_inst);
+    JITUserContext *jit_user_context = contents ? contents->jit_user_context : nullptr;
+    if (jit_user_context && jit_user_context->handlers.custom_error != nullptr) {
+        (*jit_user_context->handlers.custom_error)(jit_user_context, str);
+    } else {
+        halide_runtime_error << str;
+    }
+}
+
+bool should_skip_extern_symbol(const std::string &name) {
+    static std::set<std::string> symbols = {
+        "halide_print",
+        "halide_error"};
+    return symbols.count(name) > 0;
+}
+#endif
 
 WasmModuleContents::WasmModuleContents(
     const Module &halide_module,
@@ -2657,12 +2700,88 @@ WasmModuleContents::WasmModuleContents(
         {"fma", (void *)fma_native, "(FFF)F", NULL}};
     wasm_runtime_register_natives("env", native_symbols, sizeof(native_symbols) / sizeof(NativeSymbol));
 
+    std::vector<NativeSymbol> dynamic_symbols;
+    size_t current_extern_idx = 0;
+
+    for (const auto &it : jit_externs) {
+        const auto &fn_name = it.first;
+        if (should_skip_extern_symbol(fn_name)) {
+            continue;
+        }
+
+        TrampolineFn trampoline_fn = nullptr;
+        std::vector<ExternArgType> arg_types;
+        bool success = build_extern_arg_types(fn_name, jit_externs, trampolines, trampoline_fn, arg_types);
+        internal_assert(success) << "Failed to build extern signature for " << fn_name << "\n";
+
+        internal_assert(current_extern_idx < kMaxExternWrappers) << "Exceeded dynamic extern callback registration limit for WAMR";
+        
+        wamr_extern_names.push_back(fn_name);
+        wamr_extern_arg_types.push_back(arg_types);
+        wamr_extern_trampoline_fns.push_back(trampoline_fn);
+
+        // Format signature string for WAMR (e.g., "(ii)i")
+        std::string sig_str = "(";
+        for (size_t i = 1; i < arg_types.size(); ++i) {
+            const auto &t = arg_types[i];
+            if (t.is_ucon || t.is_buffer) {
+                sig_str += "i";
+            } else {
+                if (t.type.code == halide_type_int || t.type.code == halide_type_uint) {
+                    sig_str += (t.type.bits <= 32) ? "i" : "I";
+                } else if (t.type.code == halide_type_float) {
+                    sig_str += (t.type.bits <= 32) ? "f" : "F";
+                }
+            }
+        }
+        sig_str += ")";
+        if (arg_types[0].is_void) {
+            // sig_str stays same for void
+        } else {
+            const auto &t = arg_types[0];
+            if (t.type.code == halide_type_int || t.type.code == halide_type_uint) {
+                sig_str += (t.type.bits <= 32) ? "i" : "I";
+            } else if (t.type.code == halide_type_float) {
+                sig_str += (t.type.bits <= 32) ? "f" : "F";
+            }
+        }
+
+        wamr_extern_signatures.push_back(sig_str);
+
+        NativeSymbol sym;
+        sym.symbol = wamr_extern_names.back().c_str();
+        sym.func_ptr = (void *)wamr_extern_wrappers[current_extern_idx];
+        sym.signature = wamr_extern_signatures.back().c_str();
+        sym.attachment = nullptr;
+
+        dynamic_symbols.push_back(sym);
+        current_extern_idx++;
+    }
+
+    if (!dynamic_symbols.empty()) {
+        wasm_runtime_register_natives_raw("env", dynamic_symbols.data(), dynamic_symbols.size());
+    }
+
     char error_buf[128];
     module = wasm_runtime_load((uint8_t *)final_wasm.data(), final_wasm.size(), error_buf, sizeof(error_buf));
     internal_assert(module) << "wasm_runtime_load failed: " << error_buf;
 
-    instance = wasm_runtime_instantiate(module, 64 * 1024, 64 * 1024, error_buf, sizeof(error_buf));
+    uint32_t wamr_stack_size = 64 * 1024;
+    uint32_t wamr_heap_size = 32 * 1024 * 1024;
+
+    std::string heap_env = Halide::Internal::get_env_variable("HL_WASM_HEAP_SIZE");
+    if (!heap_env.empty()) {
+        wamr_heap_size = std::stoul(heap_env);
+    }
+    std::string stack_env = Halide::Internal::get_env_variable("HL_WASM_STACK_SIZE");
+    if (!stack_env.empty()) {
+        wamr_stack_size = std::stoul(stack_env);
+    }
+
+    instance = wasm_runtime_instantiate(module, wamr_stack_size, wamr_heap_size, error_buf, sizeof(error_buf));
     internal_assert(instance) << "wasm_runtime_instantiate failed: " << error_buf;
+
+    wasm_runtime_set_custom_data(instance, this);
 #endif
 
 #if WITH_WABT
@@ -2877,6 +2996,114 @@ WasmModuleContents::WasmModuleContents(
 #endif
 }
 
+#if WITH_WAMR
+void WasmModuleContents::run_extern_callback(size_t index, wasm_exec_env_t exec_env, uint64_t *args) {
+    wasm_module_inst_t instance = wasm_runtime_get_module_inst(exec_env);
+    
+    internal_assert(index < wamr_extern_names.size());
+    const auto &arg_types = wamr_extern_arg_types[index];
+    TrampolineFn trampoline_fn = wamr_extern_trampoline_fns[index];
+
+    internal_assert(!arg_types.empty());
+    const size_t arg_types_len = arg_types.size() - 1;
+    const ExternArgType &ret_type = arg_types[0];
+
+    std::vector<Halide::Runtime::Buffer<>> buffers(arg_types_len);
+    std::vector<uint64_t> scalars(arg_types_len, 0);
+    std::vector<void *> trampoline_args(arg_types_len, nullptr);
+
+    std::vector<uint32_t> buf_ptrs(arg_types_len, 0);
+
+    uint64_t *argv_src = args;
+
+    for (size_t i = 0; i < arg_types_len; ++i) {
+        const auto &a = arg_types[i + 1];
+        if (a.is_ucon) {
+            uint32_t ucon_val = *(uint32_t *)(argv_src++);
+            internal_assert(ucon_val == 0 || ucon_val == kMagicJitUserContextValue);
+            scalars[i] = ucon_val;
+            trampoline_args[i] = &scalars[i];
+        } else if (a.is_buffer) {
+            uint32_t buf_ptr = *(uint32_t *)(argv_src++);
+            buf_ptrs[i] = buf_ptr;
+            void *native_buf_ptr = wasm_runtime_addr_app_to_native(instance, buf_ptr);
+            internal_assert(native_buf_ptr);
+            
+            // Fill buffer instance from interpreted wasm_halide_buffer_t
+            wasm_halide_buffer_t *src = (wasm_halide_buffer_t *)native_buf_ptr;
+            halide_buffer_t dst_tmp;
+            dst_tmp.device = 0;
+            dst_tmp.device_interface = nullptr;
+            dst_tmp.host = nullptr;
+            dst_tmp.flags = src->flags;
+            dst_tmp.type = src->type;
+            dst_tmp.dimensions = src->dimensions;
+            dst_tmp.dim = src->dim ? (halide_dimension_t *)wasm_runtime_addr_app_to_native(instance, src->dim) : nullptr;
+            dst_tmp.padding = nullptr;
+
+            buffers[i] = Halide::Runtime::Buffer<>(dst_tmp);
+            if (src->host) {
+                buffers[i].allocate();
+                void *src_host_native = wasm_runtime_addr_app_to_native(instance, src->host);
+                memcpy(buffers[i].raw_buffer()->host, src_host_native, buffers[i].raw_buffer()->size_in_bytes());
+            }
+            
+            trampoline_args[i] = buffers[i].raw_buffer();
+        } else {
+            if (a.type.code == halide_type_int || a.type.code == halide_type_uint) {
+                if (a.type.bits <= 32) {
+                    uint32_t val = *(uint32_t *)(argv_src++);
+                    scalars[i] = val;
+                } else {
+                    uint64_t val = *(uint64_t *)(argv_src++);
+                    scalars[i] = val;
+                }
+            } else if (a.type.code == halide_type_float) {
+                if (a.type.bits == 32) {
+                    float val = *(float *)(argv_src++);
+                    scalars[i] = *(uint32_t *)&val;
+                } else {
+                    double val = *(double *)(argv_src++);
+                    scalars[i] = *(uint64_t *)&val;
+                }
+            }
+            trampoline_args[i] = &scalars[i];
+        }
+    }
+
+    uint64_t ret_val = 0;
+    const bool has_retval = !ret_type.is_void;
+    internal_assert(!ret_type.is_buffer);
+    if (has_retval) {
+        trampoline_args.push_back(&ret_val);
+    }
+    (*trampoline_fn)(trampoline_args.data());
+
+    if (has_retval) {
+        uint64_t *raw_ret = args;
+        *raw_ret = ret_val;
+    }
+
+    for (size_t i = 0; i < arg_types_len; ++i) {
+        const auto &a = arg_types[i + 1];
+        if (a.is_buffer) {
+            uint32_t buf_ptr = buf_ptrs[i];
+            void *native_buf_ptr = wasm_runtime_addr_app_to_native(instance, buf_ptr);
+            wasm_halide_buffer_t *src = (wasm_halide_buffer_t *)native_buf_ptr;
+            if (src->host) {
+                void *src_host_native = wasm_runtime_addr_app_to_native(instance, src->host);
+                memcpy(src_host_native, buffers[i].raw_buffer()->host, buffers[i].raw_buffer()->size_in_bytes());
+            }
+            if (src->dimensions) {
+                void *src_dim_native = wasm_runtime_addr_app_to_native(instance, src->dim);
+                memcpy(src_dim_native, buffers[i].raw_buffer()->dim, sizeof(halide_dimension_t) * src->dimensions);
+            }
+            src->flags = buffers[i].raw_buffer()->flags;
+        }
+    }
+}
+#endif
+
 int WasmModuleContents::run(const void *const *args) {
 #if WITH_WAMR
     JITUserContext *jit_user_context = nullptr;
@@ -2888,7 +3115,7 @@ int WasmModuleContents::run(const void *const *args) {
         }
     }
 
-    wasm_runtime_set_custom_data(instance, jit_user_context);
+    this->jit_user_context = jit_user_context;
 
     int32_t export_count = wasm_runtime_get_export_count(module);
     wasm_function_inst_t func = nullptr;
