@@ -62,7 +62,10 @@ public:
     }
 };
 
-WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipeline_name, int num_funcs, const uint64_t *func_names) {
+WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipeline_name,
+                                                             int num_funcs,
+                                                             const uint64_t *func_names,
+                                                             const int *func_parents) {
     halide_profiler_state *s = halide_profiler_get_state();
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
@@ -94,6 +97,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     __builtin_memset(p->funcs, 0, func_stats_storage);
     for (int i = 0; i < num_funcs; i++) {
         p->funcs[i].name = (const char *)(func_names[i]);
+        p->funcs[i].parent = func_parents[i];
     }
     s->pipelines = p;
     return p;
@@ -204,6 +208,7 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
                                         const uint64_t *func_names,
+                                        const int *func_parents,
                                         halide_profiler_instance_state *instance) {
     // Tell the instance where we stashed the per-func state - just after the
     // instance itself.
@@ -242,7 +247,7 @@ WEAK int halide_profiler_instance_start(void *user_context,
 
         // Find or create the pipeline statistics for this pipeline.
         halide_profiler_pipeline_stats *p =
-            find_or_create_pipeline(pipeline_name, num_funcs, func_names);
+            find_or_create_pipeline(pipeline_name, num_funcs, func_names, func_parents);
         if (!p) {
             // Allocating space to track the statistics failed.
             return halide_error_out_of_memory(user_context);
@@ -316,6 +321,22 @@ WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instan
             const uint64_t *instance = (&instance_func->stack_peak) + 1;
             while (counter != end) {
                 *counter++ += *instance++;
+            }
+        }
+
+        // Recompute cumulative times
+        for (int f = 0; f < p->num_funcs; f++) {
+            p->funcs[f].cumulative_time = 0;
+        }
+        for (int f = 0; f < p->num_funcs; f++) {
+            halide_profiler_func_stats *func = p->funcs + f;
+            uint64_t t = func->time;
+            while (true) {
+                func->cumulative_time += t;
+                if (func->parent < 0) {
+                    break;
+                }
+                func = p->funcs + func->parent;
             }
         }
     }
@@ -422,350 +443,826 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
     const char *sort_str = getenv("HL_PROFILER_SORT");
     if (sort_str) {
         if (!strcmp(sort_str, "time")) {
-            // Sort by descending time
             compare_fs_fn = [](halide_profiler_func_stats *a, halide_profiler_func_stats *b) -> int64_t {
                 return (int64_t)b->time - (int64_t)a->time;
             };
         } else if (!strcmp(sort_str, "name")) {
-            // Sort by ascending name
             compare_fs_fn = [](halide_profiler_func_stats *a, halide_profiler_func_stats *b) -> int64_t {
                 return strcmp(a->name, b->name);
             };
         }
     }
+
     bool support_colors = false;
     const char *term = getenv("TERM");
-    if (term) {
-        // Check if the terminal supports colors
-        if (strstr(term, "color") || strstr(term, "xterm")) {
-            support_colors = true;
-        }
+    if (term && (strstr(term, "color") || strstr(term, "xterm"))) {
+        support_colors = true;
     }
+
+    const char *substr_copy_to_device = " (copy to device)";
+    const char *substr_copy_to_host = " (copy to host)";
+
+    // ---- Profiler report formatting --------------------------------------
+    //
+    // Column-aligned lines are produced from `const char *` templates. A run
+    // of identical "marker" characters is a wildcard slot: the marker char
+    // picks the slot type (and hence its formatter), and the run length is
+    // the slot width. Anything else is literal text. So the templates
+    // literally show the layout, including widths -- no width constants, no
+    // named tokens. To widen a column, type more of the marker. To
+    // rearrange columns, reorder marker runs.
+    //
+    // Markers:
+    //   N name      T time      P percent     H active threads
+    //   L loops     K tasks     A allocs      M mem peak / stack peak
+    //   V mem avg   R recompute S section label
+    //
+    // (No lowercase letters are markers, so "|threads|", "  parallel   ",
+    // "|recompute]", " ::::]", and the second-line column legend, all pass
+    // through verbatim.)
+
+    auto pad_bytes_to = [&](uint64_t target, char pad_char = ' ') {
+        char buf[2] = {pad_char, 0};
+        while (sstr.size() < target) {
+            sstr << buf;
+        }
+    };
+
+    auto truncate_bytes_to = [&](uint64_t target) {
+        if (sstr.size() > target) {
+            sstr.erase(sstr.size() - target);
+        }
+    };
+
+    auto emit_literal_run = [&](char c, int n) {
+        char buf[2] = {c, 0};
+        for (int i = 0; i < n; i++) {
+            sstr << buf;
+        }
+    };
+
+    // Emit `text` with the SGR "faint" attribute when the terminal supports
+    // it, otherwise plain. Faint composes with whatever foreground color is
+    // active (so it works correctly inside the dim-italic section header
+    // too). Returns the number of ANSI bytes emitted -- bytes that don't
+    // count toward visible column width, so callers add it to their pad
+    // target to keep columns aligned.
+    auto emit_dim = [&](const char *text) -> uint64_t {
+        if (support_colors) {
+            uint64_t before = sstr.size();
+            sstr << "\033[2m" << text << "\033[22m";
+            return sstr.size() - before - strlen(text);
+        }
+        sstr << text;
+        return 0;
+    };
+
+    // Each emit_* below fills exactly `width` visible bytes.
+
+    // (emit_name lives inside the per-pipeline loop below; it needs access
+    // to the pipeline's tree structure to draw the indent.)
+
+    auto emit_time = [&](uint64_t time_ns, uint32_t runs, int width) {
+        uint64_t target = sstr.size() + width;
+        float val = time_ns / (runs * 1000000.0f);
+        // Switch from ms to s above 1 s so values fit a tighter column.
+        const char *unit = "ms";
+        if (val >= 1000) {
+            val /= 1000.0f;
+            unit = "s ";
+        }
+        if (val < 1000) {
+            sstr << " ";
+        }
+        if (val < 100) {
+            sstr << " ";
+        }
+        if (val < 10) {
+            sstr << " ";
+        }
+        sstr << val;
+        sstr.erase(4);  // halide_double_to_string emits 6 decimals; trim to 2.
+        target += emit_dim(unit);
+        pad_bytes_to(target);
+    };
+
+    auto emit_percentage = [&](uint64_t numer, uint64_t denom, int width) {
+        uint64_t target = sstr.size() + width;
+        int perthousand = 0;
+        if (denom != 0) {
+            perthousand = (1000 * numer) / denom;
+        }
+        sstr << "(";
+        if (perthousand < 100) {
+            sstr << " ";
+        }
+        int percent = perthousand / 10;
+        sstr << percent << "." << (perthousand - percent * 10) << "%)";
+        pad_bytes_to(target);
+    };
+
+    // SI-suffixed integer with no padding, for free-form summary text.
+    // Matches emit_counter's scaling but emits no leading or trailing padding
+    // and shows zero as "0" rather than blank.
+    auto emit_si = [&](uint64_t x) {
+        const char *suffixes[] = {"", "K", "M", "G", "T", "P", "E"};
+        int scale = 0;
+        while (x >= 10000) {
+            scale++;
+            x = (x + 499) / 1000;
+        }
+        sstr << x;
+        if (scale > 0) {
+            emit_dim(suffixes[scale]);
+        }
+    };
+
+    // SI-suffixed counter (10000 -> 10K, 1e6 -> 1.0M, ...). Zero is blank.
+    auto emit_counter = [&](uint64_t x, int width) {
+        uint64_t target = sstr.size() + width;
+        if (x) {
+            const char *suffixes[] = {" ", "K", "M", "G", "T", "P", "E"};
+            for (int i = 6; i < width; i++) {
+                sstr << " ";
+            }
+            int scale = 0;
+            while (x >= 10000) {
+                scale++;
+                x = (x + 499) / 1000;
+            }
+            for (uint64_t y = x; y < 10000; y *= 10) {
+                sstr << " ";
+            }
+            sstr << x;
+            target += emit_dim(suffixes[scale]);
+        }
+        pad_bytes_to(target);
+    };
+
+    // Positive float, up to two decimal places. Falls back to emit_counter
+    // for values that don't fit.
+    auto emit_float = [&](float x, int width) {
+        if (x >= 10000) {
+            emit_counter((uint64_t)x, width);
+            return;
+        }
+        uint64_t target = sstr.size() + width;
+        int left_pad = width - 7;
+        left_pad += x < 10;
+        left_pad += x < 100;
+        left_pad += x < 1000;
+        pad_bytes_to(sstr.size() + left_pad);
+        sstr << x;
+        pad_bytes_to(target);
+        truncate_bytes_to(target);
+    };
+
+    // A counter accumulated over `runs` runs. Renders the per-run value if
+    // constant per run, otherwise the average. Zero is blank.
+    auto emit_normalized_counter = [&](uint64_t x, uint32_t runs, int width) {
+        if (x % runs == 0) {
+            emit_counter(x / runs, width);
+        } else {
+            emit_float((float)x / runs, width);
+        }
+    };
+
+    // Section label slot: emits "label " then pads to width with `:`. If
+    // the label is too long it spills past the slot, pushing later cells to
+    // the right.
+    auto emit_section_label = [&](const char *label, int width) {
+        uint64_t target = sstr.size() + width;
+        sstr << label << " ";
+        pad_bytes_to(target, '.');
+    };
+
+    // Walk `tmpl`, calling `resolve(c, n)` for each maximal run of
+    // identical chars. The resolver decides what to emit.
+    auto apply_template = [&](const char *tmpl, auto resolve) {
+        while (*tmpl) {
+            char c = *tmpl;
+            int n = 0;
+            while (tmpl[n] == c) {
+                n++;
+            }
+            resolve(c, n);
+            tmpl += n;
+        }
+    };
+
+    // ---- Templates ----
+    // The N slot in func_row absorbs its own 2-space indent, so it is the
+    // same width as the S slot in the section headers; the templates line
+    // up vertically. The literal column legend on the second line of
+    // funcs_section_header is hand-aligned with the column widths on line 1
+    // -- if you resize a column, eyeball the legend too. Trailing \n's are
+    // added by the caller so color reset (when enabled) can be emitted just
+    // before the final newline.
+    constexpr const char *horiz_rule =
+        "--------------------------------------------------------------------------------------------------------\n";
+    constexpr const char *funcs_section_header =
+        " SSSSSSSSSSSSSSSSSSSSSSS |TTTTTTTTT PPPPPPPP| active|  parallel   | heap | peak | avg  |recompute|notes|\n"
+        "                         |                  |threads| loops| tasks|allocs|  mem |  mem |  ratio  |     |";
+    constexpr const char *func_row =
+        "NNNNNNNNNNNNNNNNNNNNNNNNN|TTTTTTTTT PPPPPPPP|HHHHHH |LLLLLL|KKKKKK|AAAAAA|MMMMMM|VVVVVV|RRRRRRRR |YYYYY|";
+    constexpr const char *copy_section_header =
+        " SSSSSSSSSSSSSSSSSSSSSSS |TTTTTTTTT PPPPPPPP|       |      |      |      |      |      |         |     |";
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
-        float total_time = p->time / 1000000.0f;
         if (!p->runs) {
             continue;
         }
-        sstr.clear();
-        bool serial = p->active_threads_numerator == p->active_threads_denominator;
-        float threads = p->active_threads_numerator / (p->active_threads_denominator + 1e-10);
-        sstr << p->name << "\n"
-             << " total time: " << total_time << " ms"
-             << "  samples: " << p->samples
-             << "  runs: " << p->runs
-             << "  time per run: " << total_time / p->runs << " ms\n";
-        if (!serial) {
-            sstr << " average threads used: " << threads << "\n";
-        }
-        sstr << " heap allocations: " << p->num_allocs
-             << "  peak heap usage: " << p->memory_peak << " bytes\n";
-        halide_print(user_context, sstr.str());
 
+        // Pipeline summary (free-form, not column-aligned).
+        {
+            float total_ms = p->time / 1000000.0f;
+            bool serial = p->active_threads_numerator == p->active_threads_denominator;
+            sstr.clear();
+            emit_dim(horiz_rule);
+            sstr << p->name << "\n"
+                 << " total time: " << total_ms << " ms"
+                 << "  samples: " << p->samples
+                 << "  runs: " << p->runs
+                 << "  time per run: " << total_ms / p->runs << " ms\n";
+            if (!serial) {
+                float threads = p->active_threads_numerator / (p->active_threads_denominator + 1e-10f);
+                uint64_t total_parallel_loops = 0;
+                uint64_t total_parallel_tasks = 0;
+                for (int i = 0; i < p->num_funcs; i++) {
+                    total_parallel_loops += p->funcs[i].parallel_loops;
+                    total_parallel_tasks += p->funcs[i].parallel_tasks;
+                }
+                sstr << " average threads used: " << threads
+                     << "  parallel loops: ";
+                emit_si(total_parallel_loops / p->runs);
+                sstr << "  parallel tasks: ";
+                emit_si(total_parallel_tasks / p->runs);
+                sstr << "\n";
+            }
+            sstr << " heap allocations: " << p->num_allocs
+                 << "  peak heap usage: ";
+            emit_si(p->memory_peak);
+            sstr << "\n";
+            halide_print(user_context, sstr.str());
+        }
+
+        // Decide whether to emit the per-func table at all.
         bool print_f_states = p->time || p->memory_total;
         if (!print_f_states) {
             for (int i = 0; i < p->num_funcs; i++) {
-                halide_profiler_func_stats *fs = p->funcs + i;
-                if (fs->stack_peak) {
+                if (p->funcs[i].stack_peak) {
                     print_f_states = true;
                     break;
                 }
             }
         }
+        if (!print_f_states) {
+            continue;
+        }
 
-        if (print_f_states) {
-            int f_stats_count = 0;
-            halide_profiler_func_stats **f_stats = (halide_profiler_func_stats **)__builtin_alloca(p->num_funcs * sizeof(halide_profiler_func_stats *));
-            const char *substr_copy_to_device = " (copy to device)";
-            const char *substr_copy_to_host = " (copy to host)";
-
-            const int max_func_name_length = 22;  // length of the section header
-            int num_copy_to_device = 0;
-            int num_copy_to_host = 0;
-
-            uint64_t total_func_time = 0;
-            uint64_t total_copy_to_device_time = 0;
-            uint64_t total_copy_to_host_time = 0;
+        // Compute each func's depth in the compute_at tree (parent==-1 is a
+        // root, otherwise parent is an index into p->funcs), a DFS traversal
+        // of that tree, and whether each func is the last child of its
+        // parent (used to draw the right tree-art glyph). The DFS order is
+        // the default sort so children sit right under their parents; the
+        // depth + is_last_sibling drive the per-row indent in emit_name.
+        int *func_depth = (int *)__builtin_alloca(p->num_funcs * sizeof(int));
+        int *tree_order = (int *)__builtin_alloca(p->num_funcs * sizeof(int));
+        bool *visited = (bool *)__builtin_alloca(p->num_funcs * sizeof(bool));
+        bool *is_last_sibling = (bool *)__builtin_alloca(p->num_funcs * sizeof(bool));
+        __builtin_memset(visited, 0, p->num_funcs * sizeof(bool));
+        int tree_count = 0;
+        auto dfs = [&](auto &self, int parent_idx, int depth) -> void {
+            int last = -1;
             for (int i = 0; i < p->num_funcs; i++) {
-                halide_profiler_func_stats *fs = p->funcs + i;
-                if (strstr(fs->name, substr_copy_to_device)) {
-                    num_copy_to_device++;
-                    total_copy_to_device_time += fs->time;
-                } else if (strstr(fs->name, substr_copy_to_host)) {
-                    num_copy_to_host++;
-                    total_copy_to_host_time += fs->time;
-                } else {
-                    total_func_time += fs->time;
+                if (p->funcs[i].parent == parent_idx && !visited[i]) {
+                    last = i;
                 }
             }
-
             for (int i = 0; i < p->num_funcs; i++) {
-                halide_profiler_func_stats *fs = p->funcs + i;
-
-                // The first id is always a catch-all overhead slot (notably containing the asserts).
-                // The second id is always the "wait for parallel tasks" slot.
-                // Only report these time if it's non-zero
-                if ((i == 0 || i == 1) && fs->time == 0) {
-                    continue;
-                }
-
-                // These two ids are malloc and free. Don't print them if there
-                // were no heap allocations.
-                if ((i == 2 || i == 3) && p->num_allocs == 0) {
-                    continue;
-                }
-
-                f_stats[f_stats_count++] = fs;
-            }
-
-            if (compare_fs_fn) {
-                for (int i = 1; i < f_stats_count; i++) {
-                    for (int j = i; j > 0 && compare_fs_fn(f_stats[j - 1], f_stats[j]) > 0; j--) {
-                        auto *a = f_stats[j - 1];
-                        auto *b = f_stats[j];
-                        f_stats[j - 1] = b;
-                        f_stats[j] = a;
-                    }
+                if (p->funcs[i].parent == parent_idx && !visited[i]) {
+                    visited[i] = true;
+                    func_depth[i] = depth;
+                    is_last_sibling[i] = (i == last);
+                    tree_order[tree_count++] = i;
+                    self(self, i, depth + 1);
                 }
             }
+        };
+        dfs(dfs, -1, 0);
+        // Any orphans (e.g. parent points outside the array) get appended at
+        // the end at depth 0 rather than being silently dropped.
+        for (int i = 0; i < p->num_funcs; i++) {
+            if (!visited[i]) {
+                func_depth[i] = 0;
+                is_last_sibling[i] = true;
+                tree_order[tree_count++] = i;
+            }
+        }
 
-            size_t cursor = 0;
+        // Filter (skip empty bookkeeping slots) in tree-DFS order, and
+        // optionally re-sort with the user-requested comparator.
+        int f_stats_count = 0;
+        halide_profiler_func_stats **f_stats =
+            (halide_profiler_func_stats **)__builtin_alloca(p->num_funcs * sizeof(halide_profiler_func_stats *));
 
-            auto pad_to = [&](size_t new_cursor) {
-                while (sstr.size() < new_cursor) {
-                    sstr << " ";
-                }
-                cursor = new_cursor;
-            };
-
-            auto print_time_and_percentage = [&](uint64_t time) {
-                float ft = time / (p->runs * 1000000.0f);
-                if (ft < 10000) {
-                    sstr << " ";
-                }
-                if (ft < 1000) {
-                    sstr << " ";
-                }
-                if (ft < 100) {
-                    sstr << " ";
-                }
-                if (ft < 10) {
-                    sstr << " ";
-                }
-                sstr << ft;
-                // We don't need 6 sig. figs.
-                sstr.erase(3);
-                sstr << "ms";
-                pad_to(cursor + 12);
-
-                int perthousand = 0;
-                if (p->time != 0) {
-                    perthousand = (1000 * time) / p->time;
-                }
-                sstr << "(";
-                if (perthousand < 100) {
-                    sstr << " ";
-                }
-                int percent = perthousand / 10;
-                sstr << percent << "." << (perthousand - percent * 10) << "%)";
-                pad_to(cursor + 8);
-            };
-
-            auto print_counter = [&](uint64_t x, int chars) {
-                const char *suffixes[] = {" ",
-                                          "K",
-                                          "M",
-                                          "G",
-                                          "T",
-                                          "P",
-                                          "E"};
-
-                // Right-justify
-                for (int i = 6; i < chars; i++) {
-                    sstr << " ";
-                }
-
-                if (x) {
-                    int s = 0;
-                    while (x >= 10000) {
-                        s++;
-                        x = (x + 499) / 1000;
-                    }
-                    for (uint64_t y = x; y < 10000; y *= 10) {
-                        sstr << " ";
-                    }
-                    sstr << x << suffixes[s];
-                }
-
-                pad_to(cursor + chars);
-            };
-
-            auto print_float_stat = [&](float x, int chars) {
-                // The goal is to fit this into 6 characters and use at most two
-                // decimal places. This is only used for positive floats, so we
-                // can skip space for a minus sign. Some examples:
-                // |      |
-                // |  0.30|
-                // | 10.00|
-                // |1000.2|
-                // | 10000|
-                // |   32K|
-
-                if (x >= 10000) {
-                    print_counter((uint64_t)x, chars);
-                    return;
-                }
-
-                size_t final_cursor = cursor + chars;
-
-                int left_pad = chars - 7;
-                left_pad += x < 10;
-                left_pad += x < 100;
-                left_pad += x < 1000;
-
-                // Right-justify
-                pad_to(cursor + left_pad);
-
-                sstr << x;
-                pad_to(final_cursor);
-                if (sstr.size() > cursor) {
-                    sstr.erase(sstr.size() - cursor);
-                }
-            };
-
-            auto print_normalized_counter = [&](uint64_t x, int chars) {
-                if (x % p->runs == 0) {
-                    // Common case is the event happens the same number of times on every run
-                    print_counter(x / p->runs, chars);
-                } else if (x == 0) {
-                    // Unlike float stats, if it's zero we don't print
-                    pad_to(cursor + chars);
-                } else {
-                    // But maybe it's variable. The user could be testing lots of different sizes.
-                    print_float_stat((float)x / p->runs, chars);
-                }
-            };
-
-            auto print_report_entry = [&](halide_profiler_func_stats *fs, const char *suffix_cut) {
-                sstr.clear();
-                cursor = 0;
-
-                sstr << "  " << fs->name;
-                if (suffix_cut) {
-                    sstr.erase(strlen(suffix_cut));
-                }
-                cursor = sstr.size();
-                if (sstr.size() > max_func_name_length) {
-                    sstr.erase(sstr.size() - max_func_name_length);
-                } else {
-                    pad_to(max_func_name_length);
-                }
-                cursor = max_func_name_length;
-                sstr << ":";
-                pad_to(cursor + 2);
-
-                print_time_and_percentage(fs->time);
-
-                if (fs->time) {
-                    float threads = fs->active_threads_numerator / (fs->active_threads_denominator + 1e-10);
-                    print_float_stat(threads, 8);
-                } else {
-                    pad_to(cursor + 8);
-                }
-
-                print_normalized_counter(fs->parallel_loops, 7);
-                print_normalized_counter(fs->parallel_tasks, 7);
-                print_normalized_counter(fs->num_allocs, 7);
-                if (fs->num_allocs != 0) {
-                    // Heap
-                    print_counter(fs->memory_peak, 7);  // One of these will be zero
-                    uint64_t alloc_avg = fs->memory_total / fs->num_allocs;
-                    print_counter(alloc_avg, 7);
-                } else {
-                    // Stack
-                    print_counter(fs->stack_peak, 7);
-                    pad_to(cursor + 7);
-                }
-
-                if (fs->points_required_at_root) {
-                    float recompute = fs->points_required_at_realization / (float)(fs->points_required_at_root);
-                    print_float_stat(recompute, 10);
-                } else {
-                    pad_to(cursor + 8);
-                }
-
-                sstr << "\n";
-
-                halide_print(user_context, sstr.str());
-            };
-
-            if (num_copy_to_host == 0 && num_copy_to_device == 0) {
-                for (int i = 0; i < f_stats_count; i++) {
-                    halide_profiler_func_stats *fs = f_stats[i];
-                    print_report_entry(fs, nullptr);
-                }
+        int num_copy_to_device = 0;
+        int num_copy_to_host = 0;
+        uint64_t total_func_time = 0;
+        uint64_t total_copy_to_device_time = 0;
+        uint64_t total_copy_to_host_time = 0;
+        for (int i = 0; i < p->num_funcs; i++) {
+            halide_profiler_func_stats *fs = p->funcs + i;
+            if (strstr(fs->name, substr_copy_to_device)) {
+                num_copy_to_device++;
+                total_copy_to_device_time += fs->time;
+            } else if (strstr(fs->name, substr_copy_to_host)) {
+                num_copy_to_host++;
+                total_copy_to_host_time += fs->time;
             } else {
-                auto print_section_header = [&](const char *name, uint64_t total_time, bool func_stats) {
-                    cursor = 0;
-                    sstr.clear();
-                    sstr << " ";
-                    size_t special_chars = 0;
-                    if (support_colors) {
-                        size_t old = sstr.size();
-                        sstr << "\033[38;5;245m\033[3m";
-                        special_chars = sstr.size() - old;
-                        cursor += special_chars;
-                    }
-                    sstr << "[" << name << " ";
-                    cursor += max_func_name_length + 2;
-                    while (sstr.size() < cursor) {
-                        sstr << ":";
-                    }
-                    print_time_and_percentage(total_time);
-                    if (func_stats) {
-                        sstr << "|threads|  parallel   | heap | peak | avg  |recompute]\n [";
-                        for (size_t i = 2; i < cursor - special_chars; i++) {
-                            sstr << " ";
-                        }
-                        sstr << "| active| loops| tasks|allocs|  mem |  mem |  ratio  ]";
-                    } else {
-                        sstr << " ::::]";
-                    }
-                    if (support_colors) {
-                        sstr << "\033[0m";
-                    }
-                    sstr << "\n";
-                    halide_print(user_context, sstr.str());
-                };
+                total_func_time += fs->time;
+            }
+        }
 
-                print_section_header("funcs", total_func_time, true);
+        for (int t = 0; t < tree_count; t++) {
+            int i = tree_order[t];
+            halide_profiler_func_stats *fs = p->funcs + i;
+            // ids 0,1 are overhead and "wait for parallel tasks" -- skip if zero.
+            if ((i == 0 || i == 1) && fs->time == 0) {
+                continue;
+            }
+            // ids 2,3 are malloc/free -- skip if no heap allocations happened.
+            if ((i == 2 || i == 3) && p->num_allocs == 0) {
+                continue;
+            }
+            f_stats[f_stats_count++] = fs;
+        }
+
+        if (compare_fs_fn) {
+            // An explicit sort was requested -- the tree-DFS order is about
+            // to be scrambled, so the depth-based indentation would no
+            // longer correspond to the row layout. Flatten it.
+            for (int i = 0; i < p->num_funcs; i++) {
+                func_depth[i] = 0;
+            }
+            for (int i = 1; i < f_stats_count; i++) {
+                for (int j = i; j > 0 && compare_fs_fn(f_stats[j - 1], f_stats[j]) > 0; j--) {
+                    auto *a = f_stats[j - 1];
+                    auto *b = f_stats[j];
+                    f_stats[j - 1] = b;
+                    f_stats[j] = a;
+                }
+            }
+        }
+
+        // ---- Heuristic warnings -----------------------------------------
+        //
+        // Many counters are recorded but only a few are shown in the table.
+        // For everything else, the `rule` function below scans each func's
+        // stats and emits a numbered warning when the schedule looks
+        // suspicious. Each func's row gets a "notes" cell listing the
+        // numbers of the warnings that apply; the messages themselves
+        // print after all the sections.
+        //
+        // Each rule's trigger condition and message body live in the same
+        // case, sharing locally-computed metrics. The function is called
+        // with emit=false during the pre-scan to discover firings, and
+        // again with emit=true to render each warning's text.
+
+        struct WarningEntry {
+            halide_profiler_func_stats *fs;
+            int rule_id;
+        };
+        constexpr int max_warnings = 256;
+        WarningEntry *warnings = (WarningEntry *)__builtin_alloca(max_warnings * sizeof(WarningEntry));
+        int num_warnings = 0;
+
+        int num_threads = halide_get_num_threads();
+        if (num_threads < 1) {
+            num_threads = 1;
+        }
+
+        // Returns true if rule `rule_id` fires for `fs`. When `emit` is
+        // true, also writes the warning message to sstr (using the same
+        // metrics the trigger condition reads). To add a new rule, append
+        // a new case here -- both the predicate and the text live together.
+        auto rule = [&](halide_profiler_func_stats *fs, int rule_id, bool emit) -> bool {
+            // Skip anything that takes less than 1% of total runtime (including all children).
+            float frac_time = (float)fs->cumulative_time / (float)(p->time + 1);
+            if (frac_time < 0.01) {
+                return false;
+            }
+
+            float threads_avg = fs->active_threads_numerator /
+                                (fs->active_threads_denominator + 1e-10f);
+
+            // fs->time is in ns; per-ms rate = count * 1e6 / ns.
+            uint64_t tasks_per_run = fs->parallel_tasks / p->runs;
+            uint64_t loops_per_run = fs->parallel_loops / p->runs;
+            bool poor_thread_utilization = threads_avg < num_threads * 0.75f;
+            float recompute = (float)fs->points_required_at_realization / fs->points_required_at_root;
+            uint64_t total_vector_loads = fs->vector_loads + fs->gathers;
+            uint64_t total_vector_stores = fs->vector_stores + fs->scatters;
+            bool vector_loads_or_stores = total_vector_loads + total_vector_stores != 0;
+
+            switch (rule_id) {
+            case 0:
+                // Significant func with low thread utilization that's also
+                // launching many parallel loops -- thread pool overhead is
+                // probably eating the parallelism gains.
+                if (poor_thread_utilization &&
+                    loops_per_run > 1) {
+                    if (emit) {
+                        sstr << fs->name << " launches " << loops_per_run
+                             << " parallel loops and shows poor utilization of the "
+                             << "thread pool. Ensure the parallel loop is the outermost "
+                             << "one. Fuse multiple nested parallel loops into one with "
+                             << "Func::fuse. If this Func has multiple update stages, "
+                             << "consider them wrapping them in a single parallel outer "
+                             << "loop with Func::in.";
+                    }
+                    return true;
+                }
+                return false;
+            case 1:
+                // Very high task launch rate -- the inner loop is too
+                // fine-grained, so per-task overhead drowns out the work.
+                if (poor_thread_utilization &&
+                    tasks_per_run > (uint64_t)num_threads * 8) {
+                    if (emit) {
+                        sstr << fs->name << " spawns " << tasks_per_run / loops_per_run
+                             << " parallel tasks per parallel loop and shows poor utilization"
+                             << " of the thread pool. The parallel loop may be too fine-grained."
+                             << " Consider splitting it into a parallel outer loop and a serial"
+                             << " inner loop.";
+                    }
+                    return true;
+                }
+                return false;
+            case 2:
+                // Too few parallel tasks per run to keep the thread pool
+                // busy -- the loop is too coarse-grained.
+                if (fs->parallel_tasks > 0 &&
+                    tasks_per_run < (uint64_t)num_threads) {
+                    if (emit) {
+                        sstr << fs->name << " parallel loop has only " << tasks_per_run
+                             << " task" << (tasks_per_run == 1 ? "" : "s")
+                             << " per run, fewer than the " << num_threads
+                             << " available threads; the loop may be too coarse-grained. "
+                             << "Consider either splitting it more finely or finding other "
+                             << "loops that can be parallel too.";
+                    }
+                    return true;
+                }
+                return false;
+            default:
+                // Continue through to next set
+                break;
+            }
+
+            // For rules below here, we only care if the self time is more than 1%
+            float self_time = fs->time / (float)p->time;
+            if (self_time < 0.01) {
+                return false;
+            }
+
+            switch (rule_id) {
+            case 3:
+                // High redundant recompute
+                if (recompute > 2.0f &&
+                    self_time > 0.01 &&
+                    fs->parent >= 0) {
+                    if (emit) {
+                        // TODO: Silence this for wrapper Funcs
+                        sstr << fs->name << " redundantly recomputes each value " << recompute
+                             << " times on average. Consider a compute_at location further "
+                             << "outwards in the parent's loop nest.";
+                    }
+                    return true;
+                }
+                return false;
+            case 4:
+                if (!vector_loads_or_stores) {
+                    if (emit) {
+                        sstr << fs->name << " performs no vector loads or stores. Ensure it is"
+                             << " vectorized.";
+                    }
+                    return true;
+                }
+                return false;
+            case 5:
+                if (fs->gathers > fs->vector_loads) {
+                    if (emit) {
+                        sstr << fs->name << " performs more vector gathers than dense vector "
+                             << "loads (" << fs->gathers << " vs " << fs->vector_loads << "). "
+                             << "It may be possible to improve performance by vectorizing "
+                             << "a different Var, precomputing boundary conditions, or by "
+                             << "reordering the storage layout of Funcs that this one calls.";
+                    }
+                    return true;
+                }
+                return false;
+            case 6:
+                if (fs->scatters > fs->vector_stores) {
+                    if (emit) {
+                        sstr << fs->name << " performs more vector scatters than dense vector "
+                             << "stores (" << fs->scatters << " vs " << fs->vector_stores << "). It "
+                             << "may be possible to improve performance by vectorizing a different "
+                             << "Var, or by reordering the storage layout of this Func.";
+                    }
+                    return true;
+                }
+                return false;
+            case 7:
+                if (vector_loads_or_stores &&
+                    fs->scalar_stores > total_vector_stores / 10) {
+                    if (emit) {
+                        sstr << "A significant fraction of the stores to " << fs->name << " are scalar: "
+                             << fs->scalar_stores << " out of " << (total_vector_stores + fs->scalar_stores)
+                             << ". There may be an update definition that was not vectorized.";
+                    }
+                    return true;
+                }
+                return false;
+            default:
+                return false;
+            }
+        };
+        constexpr int num_rules = 8;
+
+        for (int f = 0; f < f_stats_count; f++) {
+            halide_profiler_func_stats *fs = f_stats[f];
+            int idx = (int)(fs - p->funcs);
+            // Skip the bookkeeping slots (overhead, thread idle, malloc, free)
+            // and the synthesized buffer-copy funcs -- the rules don't apply.
+            if (idx < 4) {
+                continue;
+            }
+            // Skip host-device copy entries
+            if (strstr(fs->name, substr_copy_to_device) ||
+                strstr(fs->name, substr_copy_to_host)) {
+                continue;
+            }
+            for (int r = 0; r < num_rules; r++) {
+                if (rule(fs, r, /*emit=*/false) && num_warnings < max_warnings) {
+                    warnings[num_warnings++] = {fs, r};
+                }
+            }
+        }
+
+        // Func name slot. Draws the schedule's compute_at tree using
+        // box-drawing glyphs in the same dark gray (xterm 238) used for the
+        // column separators. One column per tree level:
+        //   "  "    leading indent (so root names sit just past " [")
+        //   "│"     ancestor whose subtree continues (more siblings to come)
+        //   " "     ancestor whose subtree is finished
+        //   "├"     current func, with siblings still to come
+        //   "└"     current func, last sibling
+        // Each glyph is 1 visible column but 3 UTF-8 bytes, and ANSI color
+        // codes are non-visible too, so the byte target for the slot is
+        // bumped by the count of non-visible bytes for each glyph emitted.
+        auto emit_name = [&](halide_profiler_func_stats *fs, const char *suffix_cut, int width) {
+            uint64_t target = sstr.size() + width;
+            sstr << "  ";
+            int idx = (int)(fs - p->funcs);
+            int depth = func_depth[idx];
+            if (depth > 0) {
+                // Walk up the parent chain to record each ancestor (and the
+                // func itself at the deepest slot).
+                int lineage[64];
+                int j = idx;
+                for (int k = depth; k > 0; k--) {
+                    lineage[k - 1] = j;
+                    j = p->funcs[j].parent;
+                }
+                // Emit a single 1-column tree-art glyph in dark gray.
+                // Returns the count of bytes emitted that don't count toward
+                // visible width.
+                auto emit_glyph = [&](const char *glyph) -> uint64_t {
+                    uint64_t before = sstr.size();
+                    if (support_colors) {
+                        sstr << "\033[38;5;238m" << glyph << "\033[39m";
+                    } else {
+                        sstr << glyph;
+                    }
+                    return sstr.size() - before - 1;
+                };
+                for (int k = 0; k < depth - 1; k++) {
+                    if (is_last_sibling[lineage[k]]) {
+                        sstr << " ";
+                    } else {
+                        target += emit_glyph("\xe2\x94\x82");  // │
+                    }
+                }
+                if (is_last_sibling[lineage[depth - 1]]) {
+                    target += emit_glyph("\xe2\x94\x94");  // └
+                } else {
+                    target += emit_glyph("\xe2\x94\x9c");  // ├
+                }
+            }
+            sstr << fs->name;
+            if (suffix_cut) {
+                sstr.erase(strlen(suffix_cut));
+            }
+            truncate_bytes_to(target);
+            pad_bytes_to(target);
+        };
+
+        // Render a func-table row by walking `func_row` and dispatching on
+        // the marker char of each run. Width is the run length.
+        auto print_func_row = [&](halide_profiler_func_stats *fs, const char *suffix_cut) {
+            sstr.clear();
+            apply_template(func_row, [&](char c, int w) {
+                switch (c) {
+                case 'N':
+                    emit_name(fs, suffix_cut, w);
+                    break;
+                case 'T':
+                    emit_time(fs->time, p->runs, w);
+                    break;
+                case 'P':
+                    emit_percentage(fs->time, p->time, w);
+                    break;
+                case 'H':
+                    if (fs->time) {
+                        float t = fs->active_threads_numerator / (fs->active_threads_denominator + 1e-10f);
+                        emit_float(t, w);
+                    } else {
+                        pad_bytes_to(sstr.size() + w);
+                    }
+                    break;
+                case 'L':
+                    emit_normalized_counter(fs->parallel_loops, p->runs, w);
+                    break;
+                case 'K':
+                    emit_normalized_counter(fs->parallel_tasks, p->runs, w);
+                    break;
+                case 'A':
+                    emit_normalized_counter(fs->num_allocs, p->runs, w);
+                    break;
+                case 'M':
+                    emit_counter(fs->num_allocs ? fs->memory_peak : fs->stack_peak, w);
+                    break;
+                case 'V':
+                    if (fs->num_allocs) {
+                        emit_counter(fs->memory_total / fs->num_allocs, w);
+                    } else {
+                        pad_bytes_to(sstr.size() + w);
+                    }
+                    break;
+                case 'R':
+                    if (fs->points_required_at_root) {
+                        float ratio = fs->points_required_at_realization / (float)(fs->points_required_at_root);
+                        emit_float(ratio, w);
+                    } else {
+                        pad_bytes_to(sstr.size() + w);
+                    }
+                    break;
+                case 'Y': {
+                    // Notes cell: comma-separated numbers of the warnings
+                    // that apply to this func. Truncated if more would-be
+                    // notes than the cell can hold.
+                    uint64_t target = sstr.size() + w;
+                    bool first = true;
+                    for (int wi = 0; wi < num_warnings; wi++) {
+                        if (warnings[wi].fs == fs) {
+                            if (!first && sstr.size() + 1 < target) {
+                                sstr << ",";
+                            }
+                            if (sstr.size() < target) {
+                                sstr << (wi + 1);
+                            }
+                            first = false;
+                        }
+                    }
+                    truncate_bytes_to(target);
+                    pad_bytes_to(target);
+                    break;
+                }
+                case '|':
+                    // Column separator in a very dark gray (xterm 256-color
+                    // 238) so it sits well behind the data values.
+                    for (int i = 0; i < w; i++) {
+                        if (support_colors) {
+                            sstr << "\033[38;5;238m|\033[39m";
+                        } else {
+                            sstr << "|";
+                        }
+                    }
+                    break;
+                default:
+                    emit_literal_run(c, w);
+                    break;
+                }
+            });
+            sstr << "\n";
+            halide_print(user_context, sstr.str());
+        };
+
+        // Render a section header. ANSI color codes wrap the entire
+        // (multi-line) header; they're applied here rather than via the
+        // template so they don't perturb source-column alignment. While
+        // rendering the header we suppress support_colors so emit_dim
+        // doesn't double-up (the whole header is already dim italic).
+        auto print_section_header = [&](const char *tmpl, const char *label, uint64_t section_time) {
+            sstr.clear();
+            bool saved = support_colors;
+            if (saved) {
+                sstr << "\033[38;5;245m\033[3m";
+            }
+            support_colors = false;
+            apply_template(tmpl, [&](char c, int w) {
+                switch (c) {
+                case 'S':
+                    emit_section_label(label, w);
+                    break;
+                case 'T':
+                    emit_time(section_time, p->runs, w);
+                    break;
+                case 'P':
+                    emit_percentage(section_time, p->time, w);
+                    break;
+                case '|':
+                    // Match the very dark gray separators used in func rows.
+                    // Switch back to the section header's color afterwards so
+                    // the subsequent label text stays dim italic grey.
+                    for (int i = 0; i < w; i++) {
+                        if (saved) {
+                            sstr << "\033[38;5;238m|\033[38;5;245m";
+                        } else {
+                            sstr << "|";
+                        }
+                    }
+                    break;
+                default:
+                    emit_literal_run(c, w);
+                    break;
+                }
+            });
+            support_colors = saved;
+            if (saved) {
+                sstr << "\033[0m";
+            }
+            sstr << "\n";
+            halide_print(user_context, sstr.str());
+        };
+
+        if (num_copy_to_host == 0 && num_copy_to_device == 0) {
+            for (int i = 0; i < f_stats_count; i++) {
+                print_func_row(f_stats[i], nullptr);
+            }
+        } else {
+            print_section_header(funcs_section_header, "funcs", total_func_time);
+            for (int i = 0; i < f_stats_count; i++) {
+                halide_profiler_func_stats *fs = f_stats[i];
+                if (!strstr(fs->name, substr_copy_to_device) && !strstr(fs->name, substr_copy_to_host)) {
+                    print_func_row(fs, nullptr);
+                }
+            }
+            if (total_copy_to_device_time) {
+                print_section_header(copy_section_header, "copies to device", total_copy_to_device_time);
                 for (int i = 0; i < f_stats_count; i++) {
                     halide_profiler_func_stats *fs = f_stats[i];
-                    if (!strstr(fs->name, substr_copy_to_device) && !strstr(fs->name, substr_copy_to_host)) {
-                        print_report_entry(fs, nullptr);
+                    if (strstr(fs->name, substr_copy_to_device)) {
+                        print_func_row(fs, substr_copy_to_device);
                     }
                 }
-                if (total_copy_to_device_time) {
-                    print_section_header("buffer copies to device", total_copy_to_device_time, false);
-                    for (int i = 0; i < f_stats_count; i++) {
-                        halide_profiler_func_stats *fs = f_stats[i];
-                        if (strstr(fs->name, substr_copy_to_device)) {
-                            print_report_entry(fs, substr_copy_to_device);
-                        }
-                    }
-                }
-                if (total_copy_to_host_time) {
-                    print_section_header("buffer copies to host", total_copy_to_host_time, false);
-                    for (int i = 0; i < f_stats_count; i++) {
-                        halide_profiler_func_stats *fs = f_stats[i];
-                        if (strstr(fs->name, substr_copy_to_host)) {
-                            print_report_entry(fs, substr_copy_to_host);
-                        }
+            }
+            if (total_copy_to_host_time) {
+                print_section_header(copy_section_header, "copies to host", total_copy_to_host_time);
+                for (int i = 0; i < f_stats_count; i++) {
+                    halide_profiler_func_stats *fs = f_stats[i];
+                    if (strstr(fs->name, substr_copy_to_host)) {
+                        print_func_row(fs, substr_copy_to_host);
                     }
                 }
             }
         }
+
+        // ---- Warning messages -------------------------------------------
+        // Render each warning collected during the pre-scan; the same
+        // `rule` function used to detect firings now emits the message.
+        bool too_few_samples = p->samples < 100;
+        if (num_warnings || too_few_samples) {
+            halide_print(user_context, " Performance warnings:\n");
+            if (too_few_samples) {
+                print(user_context)
+                    << "  Only " << p->samples << " profiling samples taken. Consider running the "
+                    << "pipeline more times in a loop for more accurate results.\n";
+            }
+            for (int w = 0; w < num_warnings; w++) {
+                sstr.clear();
+                sstr
+                    << "  " << (w + 1) << ") ";
+                rule(warnings[w].fs, warnings[w].rule_id, /*emit=*/true);
+                sstr << "\n";
+                halide_print(user_context, sstr.str());
+            }
+        }
+        sstr.clear();
+        emit_dim(horiz_rule);
+        halide_print(user_context, sstr.str());
     }
 }
 

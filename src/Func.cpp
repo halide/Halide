@@ -2225,12 +2225,12 @@ Func Func::in(const vector<Func> &fs) {
         user_error << "Could not create a in wrapper for an empty list of Funcs\n";
     }
     invalidate_cache();
-    return get_wrapper(func, name() + "_wrapper", fs, false);
+    return get_wrapper(func, name() + "_in", fs, false);
 }
 
 Func Func::in() {
     invalidate_cache();
-    return get_wrapper(func, name() + "_global_wrapper", {}, false);
+    return get_wrapper(func, name() + "_in", {}, false);
 }
 
 Func Func::clone_in(const Func &f) {

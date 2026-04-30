@@ -32,6 +32,7 @@ struct Names {
     std::string profiler_shared_sampling_token;
     std::string hvx_profiler_instance;
     std::string profiler_func_names;
+    std::string profiler_func_parents;
     std::string profiler_func_stack_peak_buf;
     std::string profiler_start_error_code;
 
@@ -45,6 +46,7 @@ struct Names {
           profiler_shared_sampling_token(unique_name("profiler_shared_sampling_token")),
           hvx_profiler_instance(unique_name("hvx_profiler_instance")),
           profiler_func_names(unique_name("profiler_func_names")),
+          profiler_func_parents(unique_name("profiler_func_parents")),
           profiler_func_stack_peak_buf(unique_name("profiler_func_stack_peak_buf")),
           profiler_start_error_code(unique_name("profiler_start_error_code")) {
 
@@ -126,7 +128,8 @@ protected:
 
     using IRMutator::visit;
 
-    static constexpr int num_counters = 8;
+    // ID of the currently-produced Func
+    int producer_id = -1;
 
     // TODO: Share with HalideRuntime.h
     enum { Realizations = 0,
@@ -135,8 +138,14 @@ protected:
            ParallelTasks,
            PointsRequiredAtRealization,
            PointsRequiredAtRoot,
-           Loads,
-           Stores };
+           ScalarLoads,
+           VectorLoads,
+           Gathers,
+           ScalarStores,
+           VectorStores,
+           Scatters };
+
+    static constexpr int num_counters = Scatters + 1;
 
     struct Counters {
 
@@ -182,17 +191,6 @@ protected:
             visit_with(e, [&](auto *, const Variable *var) {
                 free_vars.insert(var->name);
             });
-        }
-
-        void dump() const {
-            debug(0) << " realizations:   " << counters[Realizations] << "\n"
-                     << " production:     " << counters[Productions] << "\n"
-                     << " parallel_loops: " << counters[ParallelLoops] << "\n"
-                     << " parallel_tasks: " << counters[ParallelTasks] << "\n"
-                     << " points_required_at_realization: " << counters[PointsRequiredAtRealization] << "\n"
-                     << " points_required_at_root: " << counters[PointsRequiredAtRoot] << "\n"
-                     << " loads: " << counters[Loads] << "\n"
-                     << " stores: " << counters[Stores] << "\n";
         }
 
         // The free vars in the expressions
@@ -319,26 +317,46 @@ protected:
         std::string f = names.prefix(op->name);
         if (is_func(f)) {
             Counters &c = counters[names.id_for_name(f)];
-            c.count(Stores);
+            if (op->index.type().is_scalar()) {
+                c.count(ScalarStores);
+            } else if (const Ramp *r = op->index.as<Ramp>();
+                       r && is_const_one(r->stride)) {
+                c.count(VectorStores);
+            } else {
+                c.count(Scatters);
+            }
         }
         return IRMutator::visit(op);
     }
 
     Expr visit(const Load *op) override {
-        std::string f = names.prefix(op->name);
-        if (is_func(f)) {
-            Counters &c = counters[names.id_for_name(f)];
-            c.count(Loads);
+        // We bill these to the Func we're producing, not the Func being
+        // loaded. These counters are about what kinds of loads we do while
+        // computing a given Func.
+        if (producer_id >= 0) {
+            Counters &c = counters[producer_id];
+            if (op->index.type().is_scalar()) {
+                c.count(ScalarLoads);
+            } else if (const Ramp *r = op->index.as<Ramp>();
+                       r && is_const_one(r->stride)) {
+                c.count(VectorLoads);
+            } else {
+                c.count(Gathers);
+            }
         }
         return IRMutator::visit(op);
     }
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
-            Counters &c = counters[names.id_for_name(op->name)];
+            int id = names.id_for_name(op->name);
+            Counters &c = counters[id];
             c.count(Productions);
+            ScopedValue<int> old(producer_id, id);
+            return IRMutator::visit(op);
+        } else {
+            return IRMutator::visit(op);
         }
-        return IRMutator::visit(op);
     }
 
     Stmt visit(const For *op) override {
@@ -987,9 +1005,10 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     Expr instance = Variable::make(Handle(), names.profiler_instance);
 
     Expr func_names_buf = Variable::make(Handle(), names.profiler_func_names);
+    Expr func_parents_buf = Variable::make(Handle(), names.profiler_func_parents);
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_instance_start",
-                                     {pipeline_name, num_funcs, func_names_buf, instance}, Call::Extern);
+                                     {pipeline_name, num_funcs, func_names_buf, func_parents_buf, instance}, Call::Extern);
 
     Expr profiler_start_error_code = Variable::make(Int(32), names.profiler_start_error_code);
 
@@ -1033,13 +1052,30 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
                            MemoryType::Auto, {num_funcs}, const_true(), s);
     }
 
+    std::vector<Expr> func_names(names.name_map.size()), func_parents(names.name_map.size(), -1);
     for (const auto &[name, id] : names.name_map) {
-        s = Block::make(Store::make(names.profiler_func_names, name, id, Parameter(), const_true(), ModulusRemainder()), s);
+        func_names[id] = name;
     }
 
-    s = Block::make(s, Free::make(names.profiler_func_names));
-    s = Allocate::make(names.profiler_func_names, Handle(),
-                       MemoryType::Auto, {num_funcs}, const_true(), s);
+    // Compute nesting relationship between Funcs so that the profiler output
+    // can nest in the same way.
+    int id_of_enclosing_produce = -1;
+    visit_with(s,  //
+               [&](auto *self, const ProducerConsumer *op) {
+                   if (op->is_producer) {
+                       int id = names.id_for_name(op->name);
+                       if (id < (int)func_parents.size()) {
+                           func_parents[id] = id_of_enclosing_produce;
+                           ScopedValue<int> old(id_of_enclosing_produce, id);
+                           self->visit_base(op);
+                           return;
+                       }
+                   }
+                   self->visit_base(op);  //
+               });
+
+    s = LetStmt::make(names.profiler_func_names, Call::make(Handle(), Call::make_struct, func_names, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_parents, Call::make(Handle(), Call::make_struct, func_parents, Call::Intrinsic), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 
     // Allocate memory for the profiler instance state

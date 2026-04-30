@@ -1866,8 +1866,18 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The name of this Func. A global constant string. */
     const char *name;
 
+    /** The id of the parent Func (the one which this is compute_at). -1 if the
+     * Func is compute_root. */
+    int parent;
+
+    int _padding;  // unused
+
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t time;
+
+    /** Total time taken evaluating this Func and all other Funcs that have this
+     * as a parent or ancestor (in nanoseconds). */
+    uint64_t cumulative_time;
 
     /** The current memory allocation of this Func. */
     uint64_t memory_current;
@@ -1878,7 +1888,8 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The peak stack allocation of this Func's threads. */
     uint64_t stack_peak;
 
-    // Everything field after this point is a counters. They are aggregated by blinding adding.
+    // Everything field after this point is a counter. They are aggregated by
+    // blindly adding.
 
     /** The total memory allocation of this Func. */
     uint64_t memory_total;
@@ -1911,10 +1922,9 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * compute_at. */
     uint64_t points_required_at_root;
 
-    /** The number of loads and stores done to a buffer backing this Func. Note
-     * that input buffers will show up due to loads, but the fields above will
-     * be zero. */
-    uint64_t loads, stores;
+    /** The number of loads and stores of various types done while evaluating
+     * this Func. */
+    uint64_t scalar_loads, vector_loads, gathers, scalar_stores, vector_stores, scatters;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist

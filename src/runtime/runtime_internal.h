@@ -174,6 +174,7 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
                                         const uint64_t *func_names,
+                                        const int *func_parents,
                                         halide_profiler_instance_state *instance);
 WEAK int halide_profiler_instance_end(void *user_context,
                                       halide_profiler_instance_state *instance);
