@@ -150,6 +150,7 @@ building the core pieces of Halide.
 | [flatbuffers] | `~=23.5.26`        | `WITH_SERIALIZATION=ON`    |                                                     |
 | [wabt]        | `==1.0.39`         | `Halide_WASM_BACKEND=wabt` | Does not have a stable API; exact version required. |
 | [V8]          | trunk              | `Halide_WASM_BACKEND=V8`   | Difficult to build. See [WebAssembly.md]            |
+| [WAMR]        | `>=2.4.3`          | `Halide_WASM_BACKEND=WAMR` | Built natively as static library from source.      |
 | [Python]      | `>=3.10`           | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
 | [pybind11]    | `~=2.11.1`         | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
 
@@ -456,7 +457,7 @@ The following option selects the execution engine for in-process WASM testing:
 
 | Option                | Default | Description                                                                              |
 | --------------------- | ------- | ---------------------------------------------------------------------------------------- |
-| `Halide_WASM_BACKEND` | `wabt`  | Select the backend for WASM testing. Can be `wabt`, `V8` or a false value such as `OFF`. |
+| `Halide_WASM_BACKEND` | `wabt`  | Select the backend for WASM testing. Can be `wabt`, `V8`, `WAMR` or a false value such as `OFF`. |
 
 ## Installing
 
@@ -614,5 +615,6 @@ On this test system (an M3 MacBook Pro), the build is three times faster, with a
 [venv]: https://docs.python.org/3/tutorial/venv.html
 [vs-cmake-docs]: https://docs.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio
 [wabt]: https://github.com/WebAssembly/wabt
+[wamr]: https://github.com/bytecodealliance/wasm-micro-runtime
 [webassembly.md]: ./WebAssembly.md
 [winget]: https://learn.microsoft.com/en-us/windows/package-manager/winget/

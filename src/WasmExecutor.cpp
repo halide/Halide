@@ -16,8 +16,9 @@
 #include "Func.h"
 #include "ImageParam.h"
 #include "JITModule.h"
-#if WITH_WABT || WITH_V8
+#if WITH_WABT || WITH_V8 || WITH_WAMR
 #include "LLVM_Headers.h"
+#include "lld/Common/Driver.h"
 #endif
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
@@ -38,6 +39,10 @@
 #include "wabt/stream.h"
 #endif
 
+#if WITH_WAMR
+#include "wasm_export.h"
+#endif
+
 // clang-format off
 // These includes are order-dependent, don't let clang-format reorder them
 #ifdef WITH_V8
@@ -46,7 +51,7 @@
 #endif  // WITH_V8
 // clang-format on
 
-#if WITH_WABT || WITH_V8
+#if WITH_WABT || WITH_V8 || WITH_WAMR
 LLD_HAS_DRIVER(wasm)
 #endif
 
@@ -82,7 +87,7 @@ static_assert(V8_API_VERSION >= 98,
               "Halide requires V8 v9.8 or later when compiling WITH_V8.");
 #endif
 
-#if WITH_WABT || WITH_V8
+#if WITH_WABT || WITH_V8 || WITH_WAMR
 
 namespace {
 
@@ -2164,6 +2169,7 @@ using HostCallbackMap = std::unordered_map<std::string, FunctionCallback>;
 #define DEFINE_POSIX_MATH_CALLBACK3(t, f) {#f, wasm_jit_posix_math3_callback<t, ::f>}
 #endif
 
+#if WITH_WABT || WITH_V8
 const HostCallbackMap &get_host_callback_map() {
 
     static HostCallbackMap m = {
@@ -2238,14 +2244,247 @@ const HostCallbackMap &get_host_callback_map() {
 
     return m;
 }
-
-}  // namespace
+#endif
 
 #undef DEFINE_CALLBACK
 #undef DEFINE_POSIX_MATH_CALLBACK
 #undef DEFINE_POSIX_MATH_CALLBACK2
 
 #endif  // WITH_WABT || WITH_V8
+
+}  // namespace
+
+#if WITH_WAMR
+void halide_print_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str) {
+    wasm_module_inst_t module_inst = wasm_runtime_get_module_inst(exec_env);
+    JITUserContext *jit_user_context = (JITUserContext *)wasm_runtime_get_custom_data(module_inst);
+    if (jit_user_context && jit_user_context->handlers.custom_print != nullptr) {
+        (*jit_user_context->handlers.custom_print)(jit_user_context, str);
+    } else {
+        std::cout << str;
+    }
+}
+
+void halide_error_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str) {
+    wasm_module_inst_t module_inst = wasm_runtime_get_module_inst(exec_env);
+    JITUserContext *jit_user_context = (JITUserContext *)wasm_runtime_get_custom_data(module_inst);
+    if (jit_user_context && jit_user_context->handlers.custom_error != nullptr) {
+        (*jit_user_context->handlers.custom_error)(jit_user_context, str);
+    } else {
+        halide_runtime_error << str;
+    }
+}
+
+int32_t malloc_native(wasm_exec_env_t exec_env, int32_t size) {
+    wasm_module_inst_t module_inst = wasm_runtime_get_module_inst(exec_env);
+    void *native_ptr = nullptr;
+    uint64_t wbuf = wasm_runtime_module_malloc(module_inst, size + kExtraMallocSlop, &native_ptr);
+    if (wbuf) {
+        return (int32_t)wbuf;
+    }
+    return 0;
+}
+
+void free_native(wasm_exec_env_t exec_env, int32_t ptr) {
+    wasm_module_inst_t module_inst = wasm_runtime_get_module_inst(exec_env);
+    if (ptr) {
+        wasm_runtime_module_free(module_inst, ptr);
+    }
+}
+
+int32_t memcpy_native(wasm_exec_env_t exec_env, int32_t dst, int32_t src, int32_t n) {
+    wasm_module_inst_t module_inst = wasm_runtime_get_module_inst(exec_env);
+    uint8_t *dst_ptr = (uint8_t *)wasm_runtime_addr_app_to_native(module_inst, dst);
+    uint8_t *src_ptr = (uint8_t *)wasm_runtime_addr_app_to_native(module_inst, src);
+    if (dst_ptr && src_ptr) {
+        memcpy(dst_ptr, src_ptr, n);
+    }
+    return dst;
+}
+
+int32_t fclose_native(wasm_exec_env_t exec_env, int32_t fp) {
+    return 0;
+}
+
+int32_t cxa_atexit_native(wasm_exec_env_t exec_env, int32_t func, int32_t arg, int32_t dso) {
+    return 0;
+}
+
+float sinf_native(wasm_exec_env_t exec_env, float x) {
+    return ::sinf(x);
+}
+
+double sin_native(wasm_exec_env_t exec_env, double x) { return ::sin(x); }
+double cos_native(wasm_exec_env_t exec_env, double x) { return ::cos(x); }
+double exp_native(wasm_exec_env_t exec_env, double x) { return ::exp(x); }
+double log_native(wasm_exec_env_t exec_env, double x) { return ::log(x); }
+double pow_native(wasm_exec_env_t exec_env, double x, double y) { return ::pow(x, y); }
+
+float cosf_native(wasm_exec_env_t exec_env, float x) { return ::cosf(x); }
+float expf_native(wasm_exec_env_t exec_env, float x) { return ::expf(x); }
+float logf_native(wasm_exec_env_t exec_env, float x) { return ::logf(x); }
+float powf_native(wasm_exec_env_t exec_env, float x, float y) { return ::powf(x, y); }
+
+float extendhfsf2_native(wasm_exec_env_t exec_env, int32_t in) {
+    return (float)float16_t::make_from_bits(in);
+}
+
+int32_t truncsfhf2_native(wasm_exec_env_t exec_env, float in) {
+    return float16_t(in).to_bits();
+}
+
+void abort_native(wasm_exec_env_t exec_env) {
+    abort();
+}
+
+int32_t getenv_native(wasm_exec_env_t exec_env, int32_t name_ptr) {
+    wasm_module_inst_t instance = wasm_runtime_get_module_inst(exec_env);
+    const char *name = (const char *)wasm_runtime_addr_app_to_native(instance, name_ptr);
+    if (!name) return 0;
+    char *e = getenv(name);
+    if (e) {
+        void *native_ptr = nullptr;
+        uint64_t wbuf = wasm_runtime_module_malloc(instance, strlen(e) + 1, &native_ptr);
+        if (wbuf) {
+            strcpy((char *)native_ptr, e);
+            return (int32_t)wbuf;
+        }
+    }
+    return 0;
+}
+
+int32_t memcmp_native(wasm_exec_env_t exec_env, int32_t s1_ptr, int32_t s2_ptr, int32_t n) {
+    wasm_module_inst_t instance = wasm_runtime_get_module_inst(exec_env);
+    const void *s1 = wasm_runtime_addr_app_to_native(instance, s1_ptr);
+    const void *s2 = wasm_runtime_addr_app_to_native(instance, s2_ptr);
+    if (s1 && s2) {
+        return memcmp(s1, s2, n);
+    }
+    return -1;
+}
+
+int32_t memmove_native(wasm_exec_env_t exec_env, int32_t dst_ptr, int32_t src_ptr, int32_t n) {
+    wasm_module_inst_t instance = wasm_runtime_get_module_inst(exec_env);
+    void *dst = wasm_runtime_addr_app_to_native(instance, dst_ptr);
+    const void *src = wasm_runtime_addr_app_to_native(instance, src_ptr);
+    if (dst && src) {
+        memmove(dst, src, n);
+    }
+    return dst_ptr;
+}
+
+int32_t memset_native(wasm_exec_env_t exec_env, int32_t s_ptr, int32_t c, int32_t n) {
+    wasm_module_inst_t instance = wasm_runtime_get_module_inst(exec_env);
+    void *s = wasm_runtime_addr_app_to_native(instance, s_ptr);
+    if (s) {
+        memset(s, c, n);
+    }
+    return s_ptr;
+}
+
+int32_t strlen_native(wasm_exec_env_t exec_env, int32_t s_ptr) {
+    wasm_module_inst_t instance = wasm_runtime_get_module_inst(exec_env);
+    const char *s = (const char *)wasm_runtime_addr_app_to_native(instance, s_ptr);
+    if (s) {
+        return strlen(s);
+    }
+    return 0;
+}
+
+#define DEFINE_WAMR_MATH_1(name) \
+    float name##f_native(wasm_exec_env_t exec_env, float x) { return ::name##f(x); } \
+    double name##_native(wasm_exec_env_t exec_env, double x) { return ::name(x); }
+
+#define DEFINE_WAMR_MATH_2(name) \
+    float name##f_native(wasm_exec_env_t exec_env, float x, float y) { return ::name##f(x, y); } \
+    double name##_native(wasm_exec_env_t exec_env, double x, double y) { return ::name(x, y); }
+
+#define DEFINE_WAMR_MATH_3(name) \
+    float name##f_native(wasm_exec_env_t exec_env, float x, float y, float z) { return ::name##f(x, y, z); } \
+    double name##_native(wasm_exec_env_t exec_env, double x, double y, double z) { return ::name(x, y, z); }
+
+DEFINE_WAMR_MATH_1(acos)
+DEFINE_WAMR_MATH_1(acosh)
+DEFINE_WAMR_MATH_1(asin)
+DEFINE_WAMR_MATH_1(asinh)
+DEFINE_WAMR_MATH_1(atan)
+DEFINE_WAMR_MATH_1(atanh)
+DEFINE_WAMR_MATH_1(cosh)
+DEFINE_WAMR_MATH_1(sinh)
+DEFINE_WAMR_MATH_1(tan)
+DEFINE_WAMR_MATH_1(tanh)
+DEFINE_WAMR_MATH_1(round)
+
+DEFINE_WAMR_MATH_2(atan2)
+DEFINE_WAMR_MATH_2(fmin)
+DEFINE_WAMR_MATH_2(fmax)
+
+DEFINE_WAMR_MATH_3(fma)
+
+#undef DEFINE_WAMR_MATH_1
+#undef DEFINE_WAMR_MATH_2
+#undef DEFINE_WAMR_MATH_3
+
+// Helpers for buffer conversion
+wasm32_ptr_t hostbuf_to_wasmbuf_wamr(wasm_module_inst_t instance, const halide_buffer_t *src) {
+    if (!src) return 0;
+
+    const size_t dims_size_in_bytes = sizeof(halide_dimension_t) * src->dimensions;
+    const size_t dims_offset = sizeof(wasm_halide_buffer_t);
+    const size_t mem_needed_base = sizeof(wasm_halide_buffer_t) + dims_size_in_bytes;
+    
+    // We need the host data to be 16-byte aligned.
+    // We over-allocate by 16 bytes to allow for alignment adjustment.
+    const size_t host_offset_base = align_up(mem_needed_base, 16);
+    const size_t host_size_in_bytes = src->size_in_bytes();
+    const size_t mem_needed = host_offset_base + host_size_in_bytes + 16;
+
+    void *native_ptr = nullptr;
+    uint64_t wbuf = wasm_runtime_module_malloc(instance, mem_needed, &native_ptr);
+    if (!wbuf) return 0;
+
+    // Calculate aligned host address in Wasm space
+    uint64_t host_wbuf = wbuf + host_offset_base;
+    uint64_t aligned_host_wbuf = (host_wbuf + 15) & ~15; // Align to 16
+    size_t host_offset = aligned_host_wbuf - wbuf;
+
+    wasm_halide_buffer_t *dst = (wasm_halide_buffer_t *)native_ptr;
+    dst->device = 0;
+    dst->device_interface = 0;
+    dst->host = src->host ? (wbuf + host_offset) : 0;
+    dst->flags = src->flags;
+    dst->type = src->type;
+    dst->dimensions = src->dimensions;
+    dst->dim = src->dimensions ? (wbuf + dims_offset) : 0;
+    dst->padding = 0;
+
+    if (src->dim) {
+        memcpy((uint8_t *)native_ptr + dims_offset, src->dim, dims_size_in_bytes);
+    }
+    if (src->host) {
+        memcpy((uint8_t *)native_ptr + host_offset, src->host, host_size_in_bytes);
+    }
+
+    return (wasm32_ptr_t)wbuf;
+}
+
+void copy_wasmbuf_to_existing_hostbuf_wamr(wasm_module_inst_t instance, wasm32_ptr_t src_ptr, halide_buffer_t *dst) {
+    if (!src_ptr || !dst) return;
+
+    wasm_halide_buffer_t *src = (wasm_halide_buffer_t *)wasm_runtime_addr_app_to_native(instance, src_ptr);
+    internal_assert(src);
+
+    if (src->host) {
+        void *src_host_native = wasm_runtime_addr_app_to_native(instance, src->host);
+        memcpy(dst->host, src_host_native, dst->size_in_bytes());
+    }
+    if (src->dimensions) {
+        void *src_dim_native = wasm_runtime_addr_app_to_native(instance, src->dim);
+        memcpy(dst->dim, src_dim_native, sizeof(halide_dimension_t) * src->dimensions);
+    }
+    dst->flags = src->flags;
+}
+#endif
 
 struct WasmModuleContents {
     mutable RefCount ref_count;
@@ -2266,6 +2505,11 @@ struct WasmModuleContents {
     wabt::interp::Instance::Ptr instance;
     wabt::interp::Thread::Options thread_options;
     wabt::interp::Memory::Ptr memory;
+#endif
+
+#if WITH_WAMR
+    wasm_module_t module = nullptr;
+    wasm_module_inst_t instance = nullptr;
 #endif
 
 #ifdef WITH_V8
@@ -2303,11 +2547,95 @@ WasmModuleContents::WasmModuleContents(
       store(wabt::interp::Store(calc_features(halide_module.target())))
 #endif
 
+
 {
 
-#if WITH_WABT || WITH_V8
+#if WITH_WABT || WITH_V8 || WITH_WAMR
     debug(1) << "Compiling wasm function " << fn_name << "\n";
-#endif  // WITH_WABT || WITH_V8
+#endif  // WITH_WABT || WITH_V8 || WITH_WAMR
+
+#if WITH_WAMR
+    user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
+    user_assert(!target.has_feature(Target::WebGPU)) << "wasm_webgpu requires Emscripten (or a similar compiler); it will never be supported under JIT.";
+
+    // Compile halide into wasm bytecode.
+    std::vector<char> final_wasm = compile_to_wasm(halide_module, fn_name);
+
+    static std::once_flag init_wamr_once;
+    std::call_once(init_wamr_once, []() {
+        wasm_runtime_init();
+    });
+
+    static NativeSymbol native_symbols[] = {
+        {"halide_print", (void *)halide_print_native, "(i$)", NULL},
+        {"halide_error", (void *)halide_error_native, "(i$)", NULL},
+        {"malloc", (void *)malloc_native, "(i)i", NULL},
+        {"free", (void *)free_native, "(i)", NULL},
+        {"memcpy", (void *)memcpy_native, "(iii)i", NULL},
+        {"fclose", (void *)fclose_native, "(i)i", NULL},
+        {"__cxa_atexit", (void *)cxa_atexit_native, "(iii)i", NULL},
+        {"sinf", (void *)sinf_native, "(f)f", NULL},
+        {"sin", (void *)sin_native, "(F)F", NULL},
+        {"cos", (void *)cos_native, "(F)F", NULL},
+        {"exp", (void *)exp_native, "(F)F", NULL},
+        {"log", (void *)log_native, "(F)F", NULL},
+        {"pow", (void *)pow_native, "(FF)F", NULL},
+        {"cosf", (void *)cosf_native, "(f)f", NULL},
+        {"expf", (void *)expf_native, "(f)f", NULL},
+        {"logf", (void *)logf_native, "(f)f", NULL},
+        {"powf", (void *)powf_native, "(ff)f", NULL},
+
+        {"__extendhfsf2", (void *)extendhfsf2_native, "(i)f", NULL},
+        {"__truncsfhf2", (void *)truncsfhf2_native, "(f)i", NULL},
+        {"abort", (void *)abort_native, "()", NULL},
+        {"getenv", (void *)getenv_native, "(i)i", NULL},
+        {"memcmp", (void *)memcmp_native, "(iii)i", NULL},
+        {"memmove", (void *)memmove_native, "(iii)i", NULL},
+        {"memset", (void *)memset_native, "(iii)i", NULL},
+        {"strlen", (void *)strlen_native, "(i)i", NULL},
+
+        {"acosf", (void *)acosf_native, "(f)f", NULL},
+        {"acos", (void *)acos_native, "(F)F", NULL},
+        {"acoshf", (void *)acoshf_native, "(f)f", NULL},
+        {"acosh", (void *)acosh_native, "(F)F", NULL},
+        {"asinf", (void *)asinf_native, "(f)f", NULL},
+        {"asin", (void *)asin_native, "(F)F", NULL},
+        {"asinhf", (void *)asinhf_native, "(f)f", NULL},
+        {"asinh", (void *)asinh_native, "(F)F", NULL},
+        {"atanf", (void *)atanf_native, "(f)f", NULL},
+        {"atan", (void *)atan_native, "(F)F", NULL},
+        {"atanhf", (void *)atanhf_native, "(f)f", NULL},
+        {"atanh", (void *)atanh_native, "(F)F", NULL},
+        {"coshf", (void *)coshf_native, "(f)f", NULL},
+        {"cosh", (void *)cosh_native, "(F)F", NULL},
+        {"sinhf", (void *)sinhf_native, "(f)f", NULL},
+        {"sinh", (void *)sinh_native, "(F)F", NULL},
+        {"tanf", (void *)tanf_native, "(f)f", NULL},
+        {"tan", (void *)tan_native, "(F)F", NULL},
+        {"tanhf", (void *)tanhf_native, "(f)f", NULL},
+        {"tanh", (void *)tanh_native, "(F)F", NULL},
+        {"roundf", (void *)roundf_native, "(f)f", NULL},
+        {"round", (void *)round_native, "(F)F", NULL},
+
+        {"atan2f", (void *)atan2f_native, "(ff)f", NULL},
+        {"atan2", (void *)atan2_native, "(FF)F", NULL},
+        {"fminf", (void *)fminf_native, "(ff)f", NULL},
+        {"fmin", (void *)fmin_native, "(FF)F", NULL},
+        {"fmaxf", (void *)fmaxf_native, "(ff)f", NULL},
+        {"fmax", (void *)fmax_native, "(FF)F", NULL},
+
+        {"fmaf", (void *)fmaf_native, "(fff)f", NULL},
+        {"fma", (void *)fma_native, "(FFF)F", NULL}
+    };
+    wasm_runtime_register_natives("env", native_symbols, sizeof(native_symbols) / sizeof(NativeSymbol));
+
+    char error_buf[128];
+    module = wasm_runtime_load((uint8_t *)final_wasm.data(), final_wasm.size(), error_buf, sizeof(error_buf));
+    internal_assert(module) << "wasm_runtime_load failed: " << error_buf;
+
+    instance = wasm_runtime_instantiate(module, 64 * 1024, 64 * 1024, error_buf, sizeof(error_buf));
+    internal_assert(instance) << "wasm_runtime_instantiate failed: " << error_buf;
+#endif
 
 #if WITH_WABT
     user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
@@ -2522,6 +2850,105 @@ WasmModuleContents::WasmModuleContents(
 }
 
 int WasmModuleContents::run(const void *const *args) {
+#if WITH_WAMR
+    JITUserContext *jit_user_context = nullptr;
+    for (size_t i = 0; i < arguments.size(); i++) {
+        const Argument &arg = arguments[i];
+        const void *arg_ptr = args[i];
+        if (arg.name == "__user_context") {
+            jit_user_context = *(JITUserContext **)const_cast<void *>(arg_ptr);
+        }
+    }
+
+    wasm_runtime_set_custom_data(instance, jit_user_context);
+
+        int32_t export_count = wasm_runtime_get_export_count(module);
+    wasm_function_inst_t func = nullptr;
+    std::string func_name;
+    for (int32_t i = 0; i < export_count; i++) {
+        wasm_export_t exp;
+        wasm_runtime_get_export_type(module, i, &exp);
+        if (exp.kind == WASM_IMPORT_EXPORT_KIND_FUNC) {
+            func = wasm_runtime_lookup_function(instance, exp.name);
+            func_name = exp.name;
+            break;
+        }
+    }
+    internal_assert(func) << "No exported function found in Wasm module";
+
+    wasm_exec_env_t exec_env = wasm_runtime_create_exec_env(instance, 64 * 1024);
+    internal_assert(exec_env) << "wasm_runtime_create_exec_env failed";
+
+    std::vector<wasm_val_t> wamr_args_vals(arguments.size());
+    std::vector<wasm32_ptr_t> wbufs(arguments.size(), 0);
+
+    for (size_t i = 0; i < arguments.size(); i++) {
+        const Argument &arg = arguments[i];
+        const void *arg_ptr = args[i];
+        if (arg.is_buffer()) {
+            halide_buffer_t *buf = (halide_buffer_t *)const_cast<void *>(arg_ptr);
+            wasm32_ptr_t wbuf = hostbuf_to_wasmbuf_wamr(instance, buf);
+            internal_assert(wbuf) << "hostbuf_to_wasmbuf_wamr failed";
+            wbufs[i] = wbuf;
+            wamr_args_vals[i].kind = WASM_I32;
+            wamr_args_vals[i].of.i32 = wbuf;
+        } else {
+            if (arg.name == "__user_context") {
+                wamr_args_vals[i].kind = WASM_I32;
+                wamr_args_vals[i].of.i32 = kMagicJitUserContextValue;
+            } else {
+                if (arg.type.is_int() || arg.type.is_uint()) {
+                    if (arg.type.bits() <= 32) {
+                        wamr_args_vals[i].kind = WASM_I32;
+                        wamr_args_vals[i].of.i32 = *(const int32_t *)arg_ptr;
+                    } else {
+                        wamr_args_vals[i].kind = WASM_I64;
+                        wamr_args_vals[i].of.i64 = *(const int64_t *)arg_ptr;
+                    }
+                } else if (arg.type.is_float()) {
+                    if (arg.type.bits() == 32) {
+                        wamr_args_vals[i].kind = WASM_F32;
+                        wamr_args_vals[i].of.f32 = *(const float *)arg_ptr;
+                    } else {
+                        wamr_args_vals[i].kind = WASM_F64;
+                        wamr_args_vals[i].of.f64 = *(const double *)arg_ptr;
+                    }
+                }
+            }
+        }
+    }
+
+        wasm_runtime_init_thread_env();
+
+    wasm_val_t results[1];
+    bool call_success = wasm_runtime_call_wasm_a(exec_env, func, 1, results, wamr_args_vals.size(), wamr_args_vals.data());
+    internal_assert(call_success) << "wasm_runtime_call_wasm_a failed: " << wasm_runtime_get_exception(instance);
+
+        int result = results[0].of.i32;
+
+        wasm_runtime_destroy_thread_env();
+
+    if (result == 0) {
+        for (size_t i = 0; i < arguments.size(); i++) {
+            const Argument &arg = arguments[i];
+            const void *arg_ptr = args[i];
+            if (arg.is_buffer()) {
+                halide_buffer_t *buf = (halide_buffer_t *)const_cast<void *>(arg_ptr);
+                copy_wasmbuf_to_existing_hostbuf_wamr(instance, wbufs[i], buf);
+            }
+        }
+    }
+
+    for (size_t i = 0; i < arguments.size(); i++) {
+        if (wbufs[i]) {
+            wasm_runtime_module_free(instance, wbufs[i]);
+        }
+    }
+
+    wasm_runtime_destroy_exec_env(exec_env);
+    return result;
+#endif
+
 #if WITH_WABT
     const auto &module_desc = module->desc();
 
@@ -2704,7 +3131,7 @@ void destroy<WasmModuleContents>(const WasmModuleContents *p) {
 
 /*static*/
 bool WasmModule::can_jit_target(const Target &target) {
-#if WITH_WABT || WITH_V8
+#if WITH_WABT || WITH_V8 || WITH_WAMR
     if (target.arch == Target::WebAssembly) {
         return true;
     }
@@ -2719,7 +3146,7 @@ WasmModule WasmModule::compile(
     const std::string &fn_name,
     const std::map<std::string, Halide::JITExtern> &jit_externs,
     const std::vector<JITModule> &extern_deps) {
-#if defined(WITH_WABT) || defined(WITH_V8)
+#if defined(WITH_WABT) || defined(WITH_V8) || defined(WITH_WAMR)
     WasmModule wasm_module;
     wasm_module.contents = new WasmModuleContents(module, arguments, fn_name, jit_externs, extern_deps);
     return wasm_module;
