@@ -150,7 +150,7 @@ building the core pieces of Halide.
 | [flatbuffers] | `~=23.5.26`        | `WITH_SERIALIZATION=ON`    |                                                     |
 | [wabt]        | `==1.0.39`         | `Halide_WASM_BACKEND=wabt` | Does not have a stable API; exact version required. |
 | [V8]          | trunk              | `Halide_WASM_BACKEND=V8`   | Difficult to build. See [WebAssembly.md]            |
-| [WAMR]        | `>=2.4.3`          | `Halide_WASM_BACKEND=WAMR` | Built natively as static library from source.      |
+| [WAMR]        | `>=2.4.3`          | `Halide_WASM_BACKEND=WAMR` | Built natively as static library from source.       |
 | [Python]      | `>=3.10`           | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
 | [pybind11]    | `~=2.11.1`         | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
 
@@ -455,8 +455,8 @@ apply when `WITH_TESTS=ON`:
 
 The following option selects the execution engine for in-process WASM testing:
 
-| Option                | Default | Description                                                                              |
-| --------------------- | ------- | ---------------------------------------------------------------------------------------- |
+| Option                | Default | Description                                                                                      |
+| --------------------- | ------- | ------------------------------------------------------------------------------------------------ |
 | `Halide_WASM_BACKEND` | `wabt`  | Select the backend for WASM testing. Can be `wabt`, `V8`, `WAMR` or a false value such as `OFF`. |
 
 ## Installing

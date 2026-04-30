@@ -2314,16 +2314,34 @@ float sinf_native(wasm_exec_env_t exec_env, float x) {
     return ::sinf(x);
 }
 
-double sin_native(wasm_exec_env_t exec_env, double x) { return ::sin(x); }
-double cos_native(wasm_exec_env_t exec_env, double x) { return ::cos(x); }
-double exp_native(wasm_exec_env_t exec_env, double x) { return ::exp(x); }
-double log_native(wasm_exec_env_t exec_env, double x) { return ::log(x); }
-double pow_native(wasm_exec_env_t exec_env, double x, double y) { return ::pow(x, y); }
+double sin_native(wasm_exec_env_t exec_env, double x) {
+    return ::sin(x);
+}
+double cos_native(wasm_exec_env_t exec_env, double x) {
+    return ::cos(x);
+}
+double exp_native(wasm_exec_env_t exec_env, double x) {
+    return ::exp(x);
+}
+double log_native(wasm_exec_env_t exec_env, double x) {
+    return ::log(x);
+}
+double pow_native(wasm_exec_env_t exec_env, double x, double y) {
+    return ::pow(x, y);
+}
 
-float cosf_native(wasm_exec_env_t exec_env, float x) { return ::cosf(x); }
-float expf_native(wasm_exec_env_t exec_env, float x) { return ::expf(x); }
-float logf_native(wasm_exec_env_t exec_env, float x) { return ::logf(x); }
-float powf_native(wasm_exec_env_t exec_env, float x, float y) { return ::powf(x, y); }
+float cosf_native(wasm_exec_env_t exec_env, float x) {
+    return ::cosf(x);
+}
+float expf_native(wasm_exec_env_t exec_env, float x) {
+    return ::expf(x);
+}
+float logf_native(wasm_exec_env_t exec_env, float x) {
+    return ::logf(x);
+}
+float powf_native(wasm_exec_env_t exec_env, float x, float y) {
+    return ::powf(x, y);
+}
 
 float extendhfsf2_native(wasm_exec_env_t exec_env, int32_t in) {
     return (float)float16_t::make_from_bits(in);
@@ -2391,17 +2409,29 @@ int32_t strlen_native(wasm_exec_env_t exec_env, int32_t s_ptr) {
     return 0;
 }
 
-#define DEFINE_WAMR_MATH_1(name) \
-    float name##f_native(wasm_exec_env_t exec_env, float x) { return ::name##f(x); } \
-    double name##_native(wasm_exec_env_t exec_env, double x) { return ::name(x); }
+#define DEFINE_WAMR_MATH_1(name)                               \
+    float name##f_native(wasm_exec_env_t exec_env, float x) {  \
+        return ::name##f(x);                                   \
+    }                                                          \
+    double name##_native(wasm_exec_env_t exec_env, double x) { \
+        return ::name(x);                                      \
+    }
 
-#define DEFINE_WAMR_MATH_2(name) \
-    float name##f_native(wasm_exec_env_t exec_env, float x, float y) { return ::name##f(x, y); } \
-    double name##_native(wasm_exec_env_t exec_env, double x, double y) { return ::name(x, y); }
+#define DEFINE_WAMR_MATH_2(name)                                         \
+    float name##f_native(wasm_exec_env_t exec_env, float x, float y) {   \
+        return ::name##f(x, y);                                          \
+    }                                                                    \
+    double name##_native(wasm_exec_env_t exec_env, double x, double y) { \
+        return ::name(x, y);                                             \
+    }
 
-#define DEFINE_WAMR_MATH_3(name) \
-    float name##f_native(wasm_exec_env_t exec_env, float x, float y, float z) { return ::name##f(x, y, z); } \
-    double name##_native(wasm_exec_env_t exec_env, double x, double y, double z) { return ::name(x, y, z); }
+#define DEFINE_WAMR_MATH_3(name)                                                   \
+    float name##f_native(wasm_exec_env_t exec_env, float x, float y, float z) {    \
+        return ::name##f(x, y, z);                                                 \
+    }                                                                              \
+    double name##_native(wasm_exec_env_t exec_env, double x, double y, double z) { \
+        return ::name(x, y, z);                                                    \
+    }
 
 DEFINE_WAMR_MATH_1(acos)
 DEFINE_WAMR_MATH_1(acosh)
@@ -2432,7 +2462,7 @@ wasm32_ptr_t hostbuf_to_wasmbuf_wamr(wasm_module_inst_t instance, const halide_b
     const size_t dims_size_in_bytes = sizeof(halide_dimension_t) * src->dimensions;
     const size_t dims_offset = sizeof(wasm_halide_buffer_t);
     const size_t mem_needed_base = sizeof(wasm_halide_buffer_t) + dims_size_in_bytes;
-    
+
     // We need the host data to be 16-byte aligned.
     // We over-allocate by 16 bytes to allow for alignment adjustment.
     const size_t host_offset_base = align_up(mem_needed_base, 16);
@@ -2445,7 +2475,7 @@ wasm32_ptr_t hostbuf_to_wasmbuf_wamr(wasm_module_inst_t instance, const halide_b
 
     // Calculate aligned host address in Wasm space
     uint64_t host_wbuf = wbuf + host_offset_base;
-    uint64_t aligned_host_wbuf = (host_wbuf + 15) & ~15; // Align to 16
+    uint64_t aligned_host_wbuf = (host_wbuf + 15) & ~15;  // Align to 16
     size_t host_offset = aligned_host_wbuf - wbuf;
 
     wasm_halide_buffer_t *dst = (wasm_halide_buffer_t *)native_ptr;
@@ -2547,7 +2577,6 @@ WasmModuleContents::WasmModuleContents(
       store(wabt::interp::Store(calc_features(halide_module.target())))
 #endif
 
-
 {
 
 #if WITH_WABT || WITH_V8 || WITH_WAMR
@@ -2625,8 +2654,7 @@ WasmModuleContents::WasmModuleContents(
         {"fmax", (void *)fmax_native, "(FF)F", NULL},
 
         {"fmaf", (void *)fmaf_native, "(fff)f", NULL},
-        {"fma", (void *)fma_native, "(FFF)F", NULL}
-    };
+        {"fma", (void *)fma_native, "(FFF)F", NULL}};
     wasm_runtime_register_natives("env", native_symbols, sizeof(native_symbols) / sizeof(NativeSymbol));
 
     char error_buf[128];
@@ -2862,7 +2890,7 @@ int WasmModuleContents::run(const void *const *args) {
 
     wasm_runtime_set_custom_data(instance, jit_user_context);
 
-        int32_t export_count = wasm_runtime_get_export_count(module);
+    int32_t export_count = wasm_runtime_get_export_count(module);
     wasm_function_inst_t func = nullptr;
     std::string func_name;
     for (int32_t i = 0; i < export_count; i++) {
@@ -2918,15 +2946,15 @@ int WasmModuleContents::run(const void *const *args) {
         }
     }
 
-        wasm_runtime_init_thread_env();
+    wasm_runtime_init_thread_env();
 
     wasm_val_t results[1];
     bool call_success = wasm_runtime_call_wasm_a(exec_env, func, 1, results, wamr_args_vals.size(), wamr_args_vals.data());
     internal_assert(call_success) << "wasm_runtime_call_wasm_a failed: " << wasm_runtime_get_exception(instance);
 
-        int result = results[0].of.i32;
+    int result = results[0].of.i32;
 
-        wasm_runtime_destroy_thread_env();
+    wasm_runtime_destroy_thread_env();
 
     if (result == 0) {
         for (size_t i = 0; i < arguments.size(); i++) {
