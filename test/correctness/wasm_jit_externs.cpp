@@ -22,7 +22,7 @@ bool test_issue_1_extern_funcs() {
     Var x("x");
 
     f(x) = x;
-    
+
     std::vector<ExternFuncArgument> args;
     args.push_back(f);
 
@@ -33,7 +33,7 @@ bool test_issue_1_extern_funcs() {
     Target t("wasm-32-wasmrt");
 
     Pipeline p(g);
-    
+
     JITExtern extern_fn(my_extern_func);
     p.set_jit_externs({{"my_extern_func", extern_fn}});
 
@@ -59,7 +59,7 @@ bool test_issue_2_allocation_sizes() {
     Pipeline p(f);
 
     // Moderate allocation size: 48KB image output buffer
-    constexpr int kSize = 49152 / sizeof(int); // 48KB
+    constexpr int kSize = 49152 / sizeof(int);  // 48KB
     Buffer<int> output = p.realize({kSize}, t);
 
     printf("Issue 2 success!\n");
