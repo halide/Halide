@@ -45,7 +45,8 @@
           "default-features": false,
           "features": [
             "serialization",
-            "wasm-executor-wabt"
+            "wasm-executor-wabt",
+            "wasm-executor-wamr"
           ]
         }
       ]
