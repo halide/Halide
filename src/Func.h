@@ -1406,7 +1406,29 @@ public:
      *
      * As with Func::in(), clone_in() acts transitively: any Func in 'f'/'fs'
      * that does not directly call this Func is replaced by the set of direct
-     * callers reachable from it along paths that lead to this Func.
+     * callers reachable from it along paths that lead to this Func. Only
+     * this Func is cloned; the intermediate Funcs along the path are not.
+     *
+     * For example, given a pipeline that uses sum() (which constructs an
+     * anonymous inner Func to perform the reduction):
+     \code
+     RDom r(0, 5);
+     f(x, y) = x + y;
+     g(x, y) = sum(f(x + r, y));    // g calls f via an anonymous Func from sum()
+     h(x, y) = f(x, y) - 1;         // h calls f directly
+     \endcode
+     * f.clone_in(g) clones f at the anonymous reduction Func inside g but does
+     * not clone the reduction Func itself. It is equivalent to this:
+     \code
+     RDom r(0, 5);
+     f(x, y) = x + y;
+     f_clone(x, y) = x + y;
+     g(x, y) = sum(f_clone(x + r, y)); // the summation calls the clone
+     h(x, y) = f(x, y) - 1;            // unrelated uses of f are untouched
+     \endcode
+     * If the anonymous reduction Func had other consumers besides g, they
+     * would also see the rewrite from f to f_clone — only this Func is
+     * cloned, not the intermediates.
      */
     //@{
     Func clone_in(const Func &f);
