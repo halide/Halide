@@ -410,12 +410,6 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bound_small_allocations(s);
     log("Lowering after bounding small allocations:", s);
 
-    if (t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer)) {
-        debug(1) << "Injecting profiling...\n";
-        s = inject_profiling(s, pipeline_name, env, t);
-        log("Lowering after injecting profiling:", s);
-    }
-
     if (t.has_feature(Target::CUDA)) {
         debug(1) << "Injecting warp shuffles...\n";
         s = lower_warp_shuffles(s, t);
@@ -445,6 +439,13 @@ void lower_impl(const vector<Function> &output_funcs,
     s = hoist_loop_invariant_values(s);
     s = hoist_loop_invariant_if_statements(s);
     log("Lowering after removing dead allocations and hoisting loop invariants:", s);
+
+    if (t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer)) {
+        debug(1) << "Injecting profiling...\n";
+        s = inject_profiling(s, pipeline_name, env, t);
+        s = simplify(s);
+        log("Lowering after injecting profiling:", s);
+    }
 
     debug(1) << "Finding intrinsics...\n";
     // Must be run after the last simplification, because it turns
