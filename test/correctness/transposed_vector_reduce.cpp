@@ -228,6 +228,10 @@ int test_random() {
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM's SVE backend chokes on the vector shuffles in this test.\n");
+        return 0;
+    }
 
     int result = test(all);
 
