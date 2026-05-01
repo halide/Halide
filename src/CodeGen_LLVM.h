@@ -464,6 +464,9 @@ protected:
      * an arbitrary number of vectors.*/
     virtual llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &);
 
+    /** The inverse of interleave_vectors. */
+    virtual std::vector<llvm::Value *> deinterleave_vector(llvm::Value *vec, int num_vecs);
+
     /** Description of an intrinsic function overload. Overloads are resolved
      * using both argument and return types. The scalar types of the arguments
      * and return type must match exactly for an overload resolution to succeed. */
@@ -536,8 +539,6 @@ protected:
                                          const std::vector<int> &indices);
     /** Shorthand for shuffling a single vector. */
     llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
-
-    bool is_power_of_two(int x) const;
 
     bool is_scalable_vector(llvm::Value *v) const;
 
