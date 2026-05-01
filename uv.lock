@@ -770,6 +770,8 @@ resolution-markers = [
 wheels = [
     { url = "https://piwheels.org/simple/pillow/pillow-12.1.1-cp311-cp311-linux_armv6l.whl", hash = "sha256:80e4cc1dfbf1b27cf31d0eacb6397020f21ce3d6ac94f6d989a2f86eb28772b1" },
     { url = "https://piwheels.org/simple/pillow/pillow-12.1.1-cp311-cp311-linux_armv7l.whl", hash = "sha256:80e4cc1dfbf1b27cf31d0eacb6397020f21ce3d6ac94f6d989a2f86eb28772b1" },
+    { url = "https://piwheels.org/simple/pillow/pillow-12.1.1-cp313-cp313-linux_armv6l.whl", hash = "sha256:5cd53e77ef0991be939bd20e9bed065fab0da2fac04d41b13f1471bf87d0bff4" },
+    { url = "https://piwheels.org/simple/pillow/pillow-12.1.1-cp313-cp313-linux_armv7l.whl", hash = "sha256:5cd53e77ef0991be939bd20e9bed065fab0da2fac04d41b13f1471bf87d0bff4" },
 ]
 
 [[package]]
