@@ -48,11 +48,6 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
                 .fuse(yo, c, t)
                 .parallel(t);
 
-            blur.in(transpose)
-                .compute_at(transpose, y)
-                .vectorize(x)
-                .unroll(y);
-
             // Run the filter on each row of tiles (which corresponds to a strip of
             // columns in the input).
             blur.compute_at(transpose, t);
