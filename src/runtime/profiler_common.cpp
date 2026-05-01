@@ -784,13 +784,21 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
         // Use the tree order to compute some cumulative stats
         struct CumulativeStats {
+            // Time taken by this func and all children
             uint64_t time;
+            // Average threads active for this func and all children
             uint64_t active_threads_numerator;
             uint64_t active_threads_denominator;
+
+            // Number of tasks for all containing parallel loops. Note this is
+            // cumulative in the opposite direction - it incorporates
+            // information from parents, not children.
+            uint64_t parallel_tasks;
         };
         size_t cum_stats_size = p->num_funcs * sizeof(CumulativeStats);
         CumulativeStats *cum_stats = (CumulativeStats *)__builtin_alloca(cum_stats_size);
         __builtin_memset(cum_stats, 0, cum_stats_size);
+        // Propagation to parents
         for (int i = p->num_funcs - 1; i >= 0; i--) {
             int j = tree_order[i];
             cum_stats[j].time += p->funcs[j].time;
@@ -801,6 +809,18 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 cum_stats[parent].time += cum_stats[j].time;
                 cum_stats[parent].active_threads_numerator += cum_stats[j].active_threads_numerator;
                 cum_stats[parent].active_threads_denominator += cum_stats[j].active_threads_denominator;
+            }
+        }
+        // Propagation to children
+        for (int i = 0; i < p->num_funcs; i++) {
+            int j = tree_order[i];
+            int parent = p->funcs[j].parent;
+            if (parent >= 0) {
+                if (p->funcs[j].parallel_tasks == 0) {
+                    cum_stats[j].parallel_tasks = cum_stats[parent].parallel_tasks;
+                } else {
+                    cum_stats[j].parallel_tasks = p->funcs[j].parallel_tasks;
+                }
             }
         }
 
@@ -895,12 +915,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                         CumulativeStats *cs,
                         int rule_id,
                         bool emit) -> bool {
-            // Skip anything that takes less than 1% of total runtime (including all children).
-            float frac_time = (float)cs->time / (float)(p->time + 1);
-            if (frac_time < 0.01) {
-                return false;
-            }
-
             float threads_avg = cs->active_threads_numerator /
                                 (cs->active_threads_denominator + 1e-10f);
 
@@ -916,8 +930,34 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             bool vector_loads_or_stores = total_vector_loads + total_vector_stores != 0;
             float ms_per_task = (cs->time / (fs->parallel_tasks + 1e-10f)) * 1e-6f;
 
+            // Rules we want to check for *every* Func, even cheap ones
             switch (rule_id) {
             case 0:
+                if (fs->parallel_loops == 0 &&
+                    cs->parallel_tasks != 0 &&
+                    fs->num_allocs > fs->parallel_tasks) {
+                    if (emit) {
+                        sstr << fs->name << " was realized inside " << (cs->parallel_tasks / p->runs)
+                             << " parallel tasks, yet made " << (fs->num_allocs / p->runs)
+                             << " heap allocations. Consider hoisting storage for the "
+                             << "Func to the parallel loop to cut down on the number of "
+                             << "heap allocations, or using .store_in(MemoryType::Stack).";
+                    }
+                    return true;
+                }
+                return false;
+            default:
+                break;
+            }
+
+            // Skip anything that takes less than 1% of total runtime (including all children).
+            float frac_time = (float)cs->time / (float)(p->time + 1);
+            if (frac_time < 0.01) {
+                return false;
+            }
+
+            switch (rule_id) {
+            case 1:
                 // Significant func with low thread utilization that's also
                 // launching many parallel loops -- thread pool overhead is
                 // probably eating the parallelism gains.
@@ -930,12 +970,12 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                              << "one. Fuse multiple nested parallel loops into one with "
                              << "Func::fuse. If this Func has multiple update stages, "
                              << "consider them wrapping them in a single parallel outer "
-                             << "loop with Func::in.";
+                             << "loop with .in().";
                     }
                     return true;
                 }
                 return false;
-            case 1:
+            case 2:
                 // Very high task launch rate -- the inner loop is too
                 // fine-grained, so per-task overhead drowns out the work.
                 if (poor_thread_utilization &&
@@ -950,7 +990,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 2:
+            case 3:
                 // Too few parallel tasks per run to keep the thread pool
                 // busy -- the loop is too coarse-grained.
                 if (fs->parallel_tasks > 0 &&
@@ -967,7 +1007,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 3:
+            case 4:
                 // Not parallelized at all
                 if (!serial &&
                     fs->parent == -1 &&
@@ -991,7 +1031,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             }
 
             switch (rule_id) {
-            case 3:
+            case 5:
                 // High redundant recompute
                 if (recompute > 2.0f &&
                     self_time > 0.01 &&
@@ -1005,7 +1045,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 4:
+            case 6:
                 if (!vector_loads_or_stores) {
                     if (emit) {
                         sstr << fs->name << " performs no vector loads or stores. Ensure it is"
@@ -1014,7 +1054,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 5:
+            case 7:
                 if (fs->gathers > fs->vector_loads) {
                     if (emit) {
                         sstr << fs->name << " performs more vector gathers than dense vector "
@@ -1029,7 +1069,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 6:
+            case 8:
                 if (fs->scatters > fs->vector_stores) {
                     if (emit) {
                         sstr << fs->name << " performs more vector scatters than dense vector "
@@ -1043,7 +1083,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 7:
+            case 9:
                 if (vector_loads_or_stores &&
                     total_vector_stores <= fs->scalar_stores * 10) {
                     if (emit) {
@@ -1056,7 +1096,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 8:
+            case 10:
                 if (total_vector_stores > fs->scalar_stores * 10 &&
                     fs->bytes_stored < total_vector_stores * p->native_vector_bytes) {
                     if (emit) {
@@ -1068,12 +1108,11 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-
             default:
                 return false;
             }
         };
-        constexpr int num_rules = 9;
+        constexpr int num_rules = 11;
 
         for (int f = 0; f < f_stats_count; f++) {
             halide_profiler_func_stats *fs = f_stats[f];
