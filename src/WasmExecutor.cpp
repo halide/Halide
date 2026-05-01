@@ -2257,6 +2257,19 @@ const HostCallbackMap &get_host_callback_map() {
 #if WITH_WAMR
 void halide_print_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str);
 void halide_error_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str);
+int32_t halide_trace_helper_native(wasm_exec_env_t exec_env,
+                                    int32_t ucon,
+                                    int32_t func_name,
+                                    int32_t value,
+                                    int32_t coordinates,
+                                    int32_t type_code,
+                                    int32_t type_bits,
+                                    int32_t type_lanes,
+                                    int32_t trace_code,
+                                    int32_t parent_id,
+                                    int32_t value_index,
+                                    int32_t dimensions,
+                                    int32_t trace_tag);
 
 int32_t malloc_native(wasm_exec_env_t exec_env, int32_t size) {
     wasm_module_inst_t module_inst = wasm_runtime_get_module_inst(exec_env);
@@ -2564,9 +2577,8 @@ void wamr_extern_wrapper_n(wasm_exec_env_t exec_env, uint64_t *args) {
 
 template<size_t... Is>
 constexpr auto make_wrapper_table(std::index_sequence<Is...>) {
-    return std::array<void(*)(wasm_exec_env_t, uint64_t *), sizeof...(Is)>{
-        &wamr_extern_wrapper_n<Is>...
-    };
+    return std::array<void (*)(wasm_exec_env_t, uint64_t *), sizeof...(Is)>{
+        &wamr_extern_wrapper_n<Is>...};
 }
 
 constexpr size_t kMaxExternWrappers = 128;
@@ -2594,6 +2606,45 @@ void halide_error_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str
     } else {
         halide_runtime_error << str;
     }
+}
+
+int32_t halide_trace_helper_native(wasm_exec_env_t exec_env,
+                                    int32_t ucon,
+                                    int32_t func_name_ptr,
+                                    int32_t value_ptr,
+                                    int32_t coordinates_ptr,
+                                    int32_t type_code,
+                                    int32_t type_bits,
+                                    int32_t type_lanes,
+                                    int32_t trace_code,
+                                    int32_t parent_id,
+                                    int32_t value_index,
+                                    int32_t dimensions,
+                                    int32_t trace_tag_ptr) {
+    wasm_module_inst_t instance = wasm_runtime_get_module_inst(exec_env);
+    WasmModuleContents *contents = (WasmModuleContents *)wasm_runtime_get_custom_data(instance);
+    JITUserContext *jit_user_context = contents ? contents->jit_user_context : nullptr;
+
+    uint8_t *base = (uint8_t *)wasm_runtime_addr_app_to_native(instance, 0);
+
+    halide_trace_event_t event;
+    event.func = (const char *)(base + func_name_ptr);
+    event.value = value_ptr ? ((void *)(base + value_ptr)) : nullptr;
+    event.coordinates = coordinates_ptr ? ((int32_t *)(base + coordinates_ptr)) : nullptr;
+    event.trace_tag = (const char *)(base + trace_tag_ptr);
+    event.type.code = (halide_type_code_t)type_code;
+    event.type.bits = (uint8_t)type_bits;
+    event.type.lanes = (uint16_t)type_lanes;
+    event.event = (halide_trace_event_code_t)trace_code;
+    event.parent_id = parent_id;
+    event.value_index = value_index;
+    event.dimensions = dimensions;
+
+    int32_t result = 0;
+    if (jit_user_context && jit_user_context->handlers.custom_trace != nullptr) {
+        result = (*jit_user_context->handlers.custom_trace)(jit_user_context, &event);
+    }
+    return result;
 }
 
 bool should_skip_extern_symbol(const std::string &name) {
@@ -2641,6 +2692,7 @@ WasmModuleContents::WasmModuleContents(
     static NativeSymbol native_symbols[] = {
         {"halide_print", (void *)halide_print_native, "(i$)", NULL},
         {"halide_error", (void *)halide_error_native, "(i$)", NULL},
+        {"halide_trace_helper", (void *)halide_trace_helper_native, "(iiiiiiiiiiii)i", NULL},
         {"malloc", (void *)malloc_native, "(i)i", NULL},
         {"free", (void *)free_native, "(i)", NULL},
         {"memcpy", (void *)memcpy_native, "(iii)i", NULL},
@@ -2715,7 +2767,7 @@ WasmModuleContents::WasmModuleContents(
         internal_assert(success) << "Failed to build extern signature for " << fn_name << "\n";
 
         internal_assert(current_extern_idx < kMaxExternWrappers) << "Exceeded dynamic extern callback registration limit for WAMR";
-        
+
         wamr_extern_names.push_back(fn_name);
         wamr_extern_arg_types.push_back(arg_types);
         wamr_extern_trampoline_fns.push_back(trampoline_fn);
@@ -2999,7 +3051,7 @@ WasmModuleContents::WasmModuleContents(
 #if WITH_WAMR
 void WasmModuleContents::run_extern_callback(size_t index, wasm_exec_env_t exec_env, uint64_t *args) {
     wasm_module_inst_t instance = wasm_runtime_get_module_inst(exec_env);
-    
+
     internal_assert(index < wamr_extern_names.size());
     const auto &arg_types = wamr_extern_arg_types[index];
     TrampolineFn trampoline_fn = wamr_extern_trampoline_fns[index];
@@ -3028,7 +3080,7 @@ void WasmModuleContents::run_extern_callback(size_t index, wasm_exec_env_t exec_
             buf_ptrs[i] = buf_ptr;
             void *native_buf_ptr = wasm_runtime_addr_app_to_native(instance, buf_ptr);
             internal_assert(native_buf_ptr);
-            
+
             // Fill buffer instance from interpreted wasm_halide_buffer_t
             wasm_halide_buffer_t *src = (wasm_halide_buffer_t *)native_buf_ptr;
             halide_buffer_t dst_tmp;
@@ -3047,7 +3099,7 @@ void WasmModuleContents::run_extern_callback(size_t index, wasm_exec_env_t exec_
                 void *src_host_native = wasm_runtime_addr_app_to_native(instance, src->host);
                 memcpy(buffers[i].raw_buffer()->host, src_host_native, buffers[i].raw_buffer()->size_in_bytes());
             }
-            
+
             trampoline_args[i] = buffers[i].raw_buffer();
         } else {
             if (a.type.code == halide_type_int || a.type.code == halide_type_uint) {
