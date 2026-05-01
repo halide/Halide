@@ -1360,7 +1360,13 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         }
         bool too_many_anon_funcs = anon_funcs >= 3 && anon_time * 10 > p->time;
 
-        if (num_warnings || too_few_samples || too_many_anon_funcs) {
+        // Warn if the pipeline allocates at least 100MB and spends at least 10%
+        // of its time freeing it.
+        bool expensive_free =
+            p->memory_peak > 100 * 1000 * 1000 &&
+            p->funcs[3].time * 10 > p->time;
+
+        if (num_warnings || too_few_samples || too_many_anon_funcs || expensive_free) {
             halide_print(user_context, " Performance warnings:\n");
             int max_cols = (int)strlen(func_row);
             // print_wrapped doesn't understand non-printing characters
@@ -1380,6 +1386,14 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 sstr << "  - Only " << p->samples
                      << " profiling samples taken. Consider running the "
                      << "pipeline more times in a loop for more accurate results.\n";
+                print_wrapped(user_context, 4, max_cols, sstr.str());
+            }
+            if (expensive_free) {
+                sstr.clear();
+                sstr << "  - The pipeline allocates a significant amount of memory, and a "
+                     << "lot of time is spent freeing it. Either fuse stages more aggressively "
+                     << "to use less memory, or consider a using caching allocator with "
+                     << "retention enabled to make freeing it cheaper.\n";
                 print_wrapped(user_context, 4, max_cols, sstr.str());
             }
             for (int w = 0; w < num_warnings; w++) {
