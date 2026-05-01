@@ -165,6 +165,40 @@ WEAK void sampling_profiler_thread(void *) {
     halide_mutex_unlock(&s->lock);
 }
 
+// Print `str` to halide_print, wrapping so no line exceeds `max_cols`
+// columns. Words are separated by spaces. The first line starts at
+// column 0; every subsequent line is preceded by `indent` spaces (counted
+// against max_cols). No trailing newline is added on the final line.
+WEAK void print_wrapped(void *user_context, int indent, int max_cols, const char *str) {
+    const char *start = str;
+    char *line_buf = (char *)__builtin_alloca(max_cols + 2);
+    int spaces = 0;
+    while (true) {
+        for (int i = 0; i < spaces; i++) {
+            line_buf[i] = ' ';
+        }
+        int line_end = 0;
+        for (int j = 0; j < max_cols - spaces; j++) {
+            line_buf[spaces + j] = start[j];
+            if (start[j] == '\0') {
+                halide_print(user_context, line_buf);
+                return;
+            }
+            if (start[j] == ' ') {
+                line_end = spaces + j;
+            }
+        }
+        if (line_end == 0) {
+            line_end = max_cols;
+        }
+        line_buf[line_end] = '\n';
+        line_buf[line_end + 1] = '\0';
+        halide_print(user_context, line_buf);
+        start += line_end - spaces + 1;
+        spaces = indent;
+    }
+}
+
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
@@ -209,6 +243,7 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         int num_funcs,
                                         const uint64_t *func_names,
                                         const int *func_parents,
+                                        uint64_t native_vector_bytes,
                                         halide_profiler_instance_state *instance) {
     // Tell the instance where we stashed the per-func state - just after the
     // instance itself.
@@ -219,7 +254,6 @@ WEAK int halide_profiler_instance_start(void *user_context,
     halide_profiler_func_stats *funcs = (halide_profiler_func_stats *)(instance + 1);
 
     // Zero initialize the instance and func state
-    debug(0) << "Clearing func stats\n";
     __builtin_memset(instance, 0, (uint8_t *)(funcs + num_funcs) - (uint8_t *)instance);
 
     instance->funcs = funcs;
@@ -252,6 +286,7 @@ WEAK int halide_profiler_instance_start(void *user_context,
             // Allocating space to track the statistics failed.
             return halide_error_out_of_memory(user_context);
         }
+        p->native_vector_bytes = native_vector_bytes;
 
         // Tell the instance the pipeline to which it belongs.
         instance->pipeline_stats = p;
@@ -321,22 +356,6 @@ WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instan
             const uint64_t *instance = (&instance_func->stack_peak) + 1;
             while (counter != end) {
                 *counter++ += *instance++;
-            }
-        }
-
-        // Recompute cumulative times
-        for (int f = 0; f < p->num_funcs; f++) {
-            p->funcs[f].cumulative_time = 0;
-        }
-        for (int f = 0; f < p->num_funcs; f++) {
-            halide_profiler_func_stats *func = p->funcs + f;
-            uint64_t t = func->time;
-            while (true) {
-                func->cumulative_time += t;
-                if (func->parent < 0) {
-                    break;
-                }
-                func = p->funcs + func->parent;
             }
         }
     }
@@ -674,10 +693,18 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             continue;
         }
 
+        // Is the pipeline entirely serial?
+        uint64_t total_parallel_loops = 0;
+        uint64_t total_parallel_tasks = 0;
+        for (int i = 0; i < p->num_funcs; i++) {
+            total_parallel_loops += p->funcs[i].parallel_loops;
+            total_parallel_tasks += p->funcs[i].parallel_tasks;
+        }
+        bool serial = total_parallel_loops == 0;
+
         // Pipeline summary (free-form, not column-aligned).
         {
             float total_ms = p->time / 1000000.0f;
-            bool serial = p->active_threads_numerator == p->active_threads_denominator;
             sstr.clear();
             emit_dim(horiz_rule);
             sstr << p->name << "\n"
@@ -687,12 +714,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                  << "  time per run: " << total_ms / p->runs << " ms\n";
             if (!serial) {
                 float threads = p->active_threads_numerator / (p->active_threads_denominator + 1e-10f);
-                uint64_t total_parallel_loops = 0;
-                uint64_t total_parallel_tasks = 0;
-                for (int i = 0; i < p->num_funcs; i++) {
-                    total_parallel_loops += p->funcs[i].parallel_loops;
-                    total_parallel_tasks += p->funcs[i].parallel_tasks;
-                }
                 sstr << " average threads used: " << threads
                      << "  parallel loops: ";
                 emit_si(total_parallel_loops / p->runs);
@@ -758,6 +779,28 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 func_depth[i] = 0;
                 is_last_sibling[i] = true;
                 tree_order[tree_count++] = i;
+            }
+        }
+
+        // Use the tree order to compute some cumulative stats
+        struct CumulativeStats {
+            uint64_t time;
+            uint64_t active_threads_numerator;
+            uint64_t active_threads_denominator;
+        };
+        size_t cum_stats_size = p->num_funcs * sizeof(CumulativeStats);
+        CumulativeStats *cum_stats = (CumulativeStats *)__builtin_alloca(cum_stats_size);
+        __builtin_memset(cum_stats, 0, cum_stats_size);
+        for (int i = p->num_funcs - 1; i >= 0; i--) {
+            int j = tree_order[i];
+            cum_stats[j].time += p->funcs[j].time;
+            cum_stats[j].active_threads_numerator += p->funcs[j].active_threads_numerator;
+            cum_stats[j].active_threads_denominator += p->funcs[j].active_threads_denominator;
+            int parent = p->funcs[j].parent;
+            if (parent >= 0) {
+                cum_stats[parent].time += cum_stats[j].time;
+                cum_stats[parent].active_threads_numerator += cum_stats[j].active_threads_numerator;
+                cum_stats[parent].active_threads_denominator += cum_stats[j].active_threads_denominator;
             }
         }
 
@@ -832,6 +875,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
         struct WarningEntry {
             halide_profiler_func_stats *fs;
+            CumulativeStats *cs;
             int rule_id;
         };
         constexpr int max_warnings = 256;
@@ -847,24 +891,30 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         // true, also writes the warning message to sstr (using the same
         // metrics the trigger condition reads). To add a new rule, append
         // a new case here -- both the predicate and the text live together.
-        auto rule = [&](halide_profiler_func_stats *fs, int rule_id, bool emit) -> bool {
+        auto rule = [&](halide_profiler_func_stats *fs,
+                        CumulativeStats *cs,
+                        int rule_id,
+                        bool emit) -> bool {
             // Skip anything that takes less than 1% of total runtime (including all children).
-            float frac_time = (float)fs->cumulative_time / (float)(p->time + 1);
+            float frac_time = (float)cs->time / (float)(p->time + 1);
             if (frac_time < 0.01) {
                 return false;
             }
 
-            float threads_avg = fs->active_threads_numerator /
-                                (fs->active_threads_denominator + 1e-10f);
+            float threads_avg = cs->active_threads_numerator /
+                                (cs->active_threads_denominator + 1e-10f);
 
             // fs->time is in ns; per-ms rate = count * 1e6 / ns.
             uint64_t tasks_per_run = fs->parallel_tasks / p->runs;
             uint64_t loops_per_run = fs->parallel_loops / p->runs;
             bool poor_thread_utilization = threads_avg < num_threads * 0.75f;
-            float recompute = (float)fs->points_required_at_realization / fs->points_required_at_root;
+            float recompute = (fs->points_required_at_realization /
+                               (fs->points_required_at_root + 1e-10f));
             uint64_t total_vector_loads = fs->vector_loads + fs->gathers;
             uint64_t total_vector_stores = fs->vector_stores + fs->scatters;
+            uint64_t total_stores = fs->scalar_stores + fs->vector_stores + fs->scatters;
             bool vector_loads_or_stores = total_vector_loads + total_vector_stores != 0;
+            float ms_per_task = (cs->time / (fs->parallel_tasks + 1e-10f)) * 1e-6f;
 
             switch (rule_id) {
             case 0:
@@ -889,13 +939,13 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 // Very high task launch rate -- the inner loop is too
                 // fine-grained, so per-task overhead drowns out the work.
                 if (poor_thread_utilization &&
-                    tasks_per_run > (uint64_t)num_threads * 8) {
+                    tasks_per_run > (uint64_t)num_threads * 4) {
                     if (emit) {
                         sstr << fs->name << " spawns " << tasks_per_run / loops_per_run
                              << " parallel tasks per parallel loop and shows poor utilization"
                              << " of the thread pool. The parallel loop may be too fine-grained."
                              << " Consider splitting it into a parallel outer loop and a serial"
-                             << " inner loop.";
+                             << " inner loop. Each task currently takes " << ms_per_task << "ms.";
                     }
                     return true;
                 }
@@ -906,12 +956,25 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 if (fs->parallel_tasks > 0 &&
                     tasks_per_run < (uint64_t)num_threads) {
                     if (emit) {
-                        sstr << fs->name << " parallel loop has only " << tasks_per_run
+                        sstr << fs->name << "'s parallel loop has only " << tasks_per_run
                              << " task" << (tasks_per_run == 1 ? "" : "s")
                              << " per run, fewer than the " << num_threads
                              << " available threads; the loop may be too coarse-grained. "
                              << "Consider either splitting it more finely or finding other "
-                             << "loops that can be parallel too.";
+                             << "loops that can be parallel too. Each task currently takes "
+                             << ms_per_task << "ms.";
+                    }
+                    return true;
+                }
+                return false;
+            case 3:
+                // Not parallelized at all
+                if (!serial &&
+                    fs->parent == -1 &&
+                    fs->parallel_loops == 0) {
+                    if (emit) {
+                        sstr << fs->name << " is compute_root but not parallelized, while "
+                             << "some other Funcs are. Consider parallelizing it.";
                     }
                     return true;
                 }
@@ -955,8 +1018,11 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 if (fs->gathers > fs->vector_loads) {
                     if (emit) {
                         sstr << fs->name << " performs more vector gathers than dense vector "
-                             << "loads (" << fs->gathers << " vs " << fs->vector_loads << "). "
-                             << "It may be possible to improve performance by vectorizing "
+                             << "loads (";
+                        emit_si(fs->gathers);
+                        sstr << " vs ";
+                        emit_si(fs->vector_loads);
+                        sstr << "). It may be possible to improve performance by vectorizing "
                              << "a different Var, precomputing boundary conditions, or by "
                              << "reordering the storage layout of Funcs that this one calls.";
                     }
@@ -967,33 +1033,52 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 if (fs->scatters > fs->vector_stores) {
                     if (emit) {
                         sstr << fs->name << " performs more vector scatters than dense vector "
-                             << "stores (" << fs->scatters << " vs " << fs->vector_stores << "). It "
-                             << "may be possible to improve performance by vectorizing a different "
-                             << "Var, or by reordering the storage layout of this Func.";
+                             << "stores (";
+                        emit_si(fs->scatters);
+                        sstr << " vs ";
+                        emit_si(fs->vector_stores);
+                        sstr << "). It may be possible to improve performance by vectorizing a "
+                             << "different Var, or by reordering the storage layout of this Func.";
                     }
                     return true;
                 }
                 return false;
             case 7:
                 if (vector_loads_or_stores &&
-                    fs->scalar_stores > total_vector_stores / 10) {
+                    total_vector_stores <= fs->scalar_stores * 10) {
                     if (emit) {
-                        sstr << "A significant fraction of the stores to " << fs->name << " are scalar: "
-                             << fs->scalar_stores << " out of " << (total_vector_stores + fs->scalar_stores)
-                             << ". There may be an update definition that was not vectorized.";
+                        sstr << "A significant fraction of the stores to " << fs->name << " are scalar: ";
+                        emit_si(fs->scalar_stores);
+                        sstr << " out of ";
+                        emit_si(total_vector_stores + fs->scalar_stores);
+                        sstr << ". There may be an update definition that was not vectorized.";
                     }
                     return true;
                 }
                 return false;
+            case 8:
+                if (total_vector_stores > fs->scalar_stores * 10 &&
+                    fs->bytes_stored < total_vector_stores * p->native_vector_bytes) {
+                    if (emit) {
+                        sstr << "Stores to " << fs->name << " only write an average of "
+                             << fs->bytes_stored / total_stores << " bytes each. "
+                             << "This is less than the machine native vector width. Consider "
+                             << "using wider vectors.";
+                    }
+                    return true;
+                }
+                return false;
+
             default:
                 return false;
             }
         };
-        constexpr int num_rules = 8;
+        constexpr int num_rules = 9;
 
         for (int f = 0; f < f_stats_count; f++) {
             halide_profiler_func_stats *fs = f_stats[f];
             int idx = (int)(fs - p->funcs);
+            CumulativeStats *cs = cum_stats + idx;
             // Skip the bookkeeping slots (overhead, thread idle, malloc, free)
             // and the synthesized buffer-copy funcs -- the rules don't apply.
             if (idx < 4) {
@@ -1005,8 +1090,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 continue;
             }
             for (int r = 0; r < num_rules; r++) {
-                if (rule(fs, r, /*emit=*/false) && num_warnings < max_warnings) {
-                    warnings[num_warnings++] = {fs, r};
+                if (rule(fs, cs, r, /*emit=*/false) && num_warnings < max_warnings) {
+                    warnings[num_warnings++] = {fs, cs, r};
                 }
             }
         }
@@ -1071,7 +1156,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
         // Render a func-table row by walking `func_row` and dispatching on
         // the marker char of each run. Width is the run length.
-        auto print_func_row = [&](halide_profiler_func_stats *fs, const char *suffix_cut) {
+        auto print_func_row = [&](halide_profiler_func_stats *fs,
+                                  CumulativeStats *cs,
+                                  const char *suffix_cut) {
             sstr.clear();
             apply_template(func_row, [&](char c, int w) {
                 switch (c) {
@@ -1085,8 +1172,10 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     emit_percentage(fs->time, p->time, w);
                     break;
                 case 'H':
-                    if (fs->time) {
-                        float t = fs->active_threads_numerator / (fs->active_threads_denominator + 1e-10f);
+                    if (cs->time) {
+                        // NB: cumulative
+                        float t = (cs->active_threads_numerator /
+                                   (cs->active_threads_denominator + 1e-10f));
                         emit_float(t, w);
                     } else {
                         pad_bytes_to(sstr.size() + w);
@@ -1210,22 +1299,26 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
         if (num_copy_to_host == 0 && num_copy_to_device == 0) {
             for (int i = 0; i < f_stats_count; i++) {
-                print_func_row(f_stats[i], nullptr);
+                halide_profiler_func_stats *fs = f_stats[i];
+                CumulativeStats *cs = cum_stats + (fs - p->funcs);
+                print_func_row(fs, cs, nullptr);
             }
         } else {
             print_section_header(funcs_section_header, "funcs", total_func_time);
             for (int i = 0; i < f_stats_count; i++) {
                 halide_profiler_func_stats *fs = f_stats[i];
+                CumulativeStats *cs = cum_stats + (fs - p->funcs);
                 if (!strstr(fs->name, substr_copy_to_device) && !strstr(fs->name, substr_copy_to_host)) {
-                    print_func_row(fs, nullptr);
+                    print_func_row(fs, cs, nullptr);
                 }
             }
             if (total_copy_to_device_time) {
                 print_section_header(copy_section_header, "copies to device", total_copy_to_device_time);
                 for (int i = 0; i < f_stats_count; i++) {
                     halide_profiler_func_stats *fs = f_stats[i];
+                    CumulativeStats *cs = cum_stats + (fs - p->funcs);
                     if (strstr(fs->name, substr_copy_to_device)) {
-                        print_func_row(fs, substr_copy_to_device);
+                        print_func_row(fs, cs, substr_copy_to_device);
                     }
                 }
             }
@@ -1233,8 +1326,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 print_section_header(copy_section_header, "copies to host", total_copy_to_host_time);
                 for (int i = 0; i < f_stats_count; i++) {
                     halide_profiler_func_stats *fs = f_stats[i];
+                    CumulativeStats *cs = cum_stats + (fs - p->funcs);
                     if (strstr(fs->name, substr_copy_to_host)) {
-                        print_func_row(fs, substr_copy_to_host);
+                        print_func_row(fs, cs, substr_copy_to_host);
                     }
                 }
             }
@@ -1243,22 +1337,59 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         // ---- Warning messages -------------------------------------------
         // Render each warning collected during the pre-scan; the same
         // `rule` function used to detect firings now emits the message.
+        // Wrap at the table width so warnings don't extend past the right
+        // edge of the table above.
+
+        // Warn if not enough pipeline samples
         bool too_few_samples = p->samples < 100;
-        if (num_warnings || too_few_samples) {
+
+        // Warn if more than 10% of the time was spent in unnamed Funcs and
+        // there are at least three of them.
+        uint64_t anon_time = 0;
+        int anon_funcs = 0;
+        for (int i = 0; i < p->num_funcs; i++) {
+            const char *name = p->funcs[i].name;
+            bool anon = name[0] == 'f';
+            for (int i = 1; name[i]; i++) {
+                anon &= name[i] >= '0' && name[i] <= '9';
+            }
+            if (anon) {
+                anon_funcs++;
+                anon_time += p->funcs[i].time;
+            }
+        }
+        bool too_many_anon_funcs = anon_funcs >= 3 && anon_time * 10 > p->time;
+
+        if (num_warnings || too_few_samples || too_many_anon_funcs) {
             halide_print(user_context, " Performance warnings:\n");
+            int max_cols = (int)strlen(func_row);
+            // print_wrapped doesn't understand non-printing characters
+            bool old = support_colors;
+            support_colors = false;
+
+            if (too_many_anon_funcs) {
+                sstr.clear();
+                sstr << "  - " << anon_funcs << " Funcs have auto-generated names and "
+                     << "collectively take up a significant fraction of the total runtime. "
+                     << "Consider giving them explicit names by passing a string to the "
+                     << "Func constructor. This will make this profile easier to read.\n";
+                print_wrapped(user_context, 4, max_cols, sstr.str());
+            }
             if (too_few_samples) {
-                print(user_context)
-                    << "  Only " << p->samples << " profiling samples taken. Consider running the "
-                    << "pipeline more times in a loop for more accurate results.\n";
+                sstr.clear();
+                sstr << "  - Only " << p->samples
+                     << " profiling samples taken. Consider running the "
+                     << "pipeline more times in a loop for more accurate results.\n";
+                print_wrapped(user_context, 4, max_cols, sstr.str());
             }
             for (int w = 0; w < num_warnings; w++) {
                 sstr.clear();
-                sstr
-                    << "  " << (w + 1) << ") ";
-                rule(warnings[w].fs, warnings[w].rule_id, /*emit=*/true);
+                sstr << "  " << (w + 1) << ") ";
+                rule(warnings[w].fs, warnings[w].cs, warnings[w].rule_id, /*emit=*/true);
                 sstr << "\n";
-                halide_print(user_context, sstr.str());
+                print_wrapped(user_context, 5, max_cols, sstr.str());
             }
+            support_colors = old;
         }
         sstr.clear();
         emit_dim(horiz_rule);

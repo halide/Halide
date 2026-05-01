@@ -131,7 +131,7 @@ protected:
     // ID of the currently-produced Func
     int producer_id = -1;
 
-    // TODO: Share with HalideRuntime.h
+    // This must match the signature of halide_profile_update_counters in the runtime.
     enum { Realizations = 0,
            Productions,
            ParallelLoops,
@@ -141,11 +141,13 @@ protected:
            ScalarLoads,
            VectorLoads,
            Gathers,
+           BytesLoaded,
            ScalarStores,
            VectorStores,
-           Scatters };
+           Scatters,
+           BytesStored };
 
-    static constexpr int num_counters = Scatters + 1;
+    static constexpr int num_counters = BytesStored + 1;
 
     struct Counters {
 
@@ -325,6 +327,7 @@ protected:
             } else {
                 c.count(Scatters);
             }
+            c.count(BytesStored, make_const(UInt(64), op->value.type().bytes() * op->value.type().lanes()));
         }
         return IRMutator::visit(op);
     }
@@ -343,6 +346,7 @@ protected:
             } else {
                 c.count(Gathers);
             }
+            c.count(BytesLoaded, make_const(UInt(64), op->type.bytes() * op->type.lanes()));
         }
         return IRMutator::visit(op);
     }
@@ -988,7 +992,7 @@ private:
 
 }  // namespace
 
-Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env) {
+Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env, const Target &target) {
     Names names(pipeline_name);
 
     // Start by injecting counters as far out as possible
@@ -1008,7 +1012,13 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     Expr func_parents_buf = Variable::make(Handle(), names.profiler_func_parents);
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_instance_start",
-                                     {pipeline_name, num_funcs, func_names_buf, func_parents_buf, instance}, Call::Extern);
+                                     {pipeline_name,
+                                      num_funcs,
+                                      func_names_buf,
+                                      func_parents_buf,
+                                      make_const(UInt(64), target.natural_vector_size(UInt(8))),
+                                      instance},
+                                     Call::Extern);
 
     Expr profiler_start_error_code = Variable::make(Int(32), names.profiler_start_error_code);
 

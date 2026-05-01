@@ -1875,10 +1875,6 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t time;
 
-    /** Total time taken evaluating this Func and all other Funcs that have this
-     * as a parent or ancestor (in nanoseconds). */
-    uint64_t cumulative_time;
-
     /** The current memory allocation of this Func. */
     uint64_t memory_current;
 
@@ -1894,7 +1890,8 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The total memory allocation of this Func. */
     uint64_t memory_total;
 
-    /** The average number of thread pool worker threads active while computing this Func. */
+    /** The average number of thread pool worker threads active while computing
+     * this Func. */
     uint64_t active_threads_numerator, active_threads_denominator;
 
     /** The total number of times heap storage for this Func was allocated. */
@@ -1924,7 +1921,8 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
 
     /** The number of loads and stores of various types done while evaluating
      * this Func. */
-    uint64_t scalar_loads, vector_loads, gathers, scalar_stores, vector_stores, scatters;
+    uint64_t scalar_loads, vector_loads, gathers, bytes_loaded;
+    uint64_t scalar_stores, vector_stores, scatters, bytes_stored;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
@@ -1945,6 +1943,10 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
     /** The average number of thread pool worker threads doing useful
      * work while computing this pipeline. */
     uint64_t active_threads_numerator, active_threads_denominator;
+
+    /** The native vector width for the target this pipeline ran on, in
+     * bytes. This is used to drive some performance warnings. */
+    uint64_t native_vector_bytes;
 
     /** The name of this pipeline. A global constant string. */
     const char *name;
