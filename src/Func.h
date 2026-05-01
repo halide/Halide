@@ -1347,6 +1347,12 @@ public:
        for x:
          g(x, y) = f(x, y)
      \endcode
+     * If a Func passed to in() does not directly call this Func, in() acts
+     * transitively: the Func graph is searched downward from each argument,
+     * and every direct caller of this Func found along the way is wrapped.
+     * This is useful when intermediate Funcs are anonymous and not held by
+     * the user (e.g. a pyramid built via helper functions).
+     *
      * using Func::in(), we can write:
      \code
      f(x, y) = x + y;
@@ -1398,6 +1404,9 @@ public:
      h(x, y) = f(x, y) - 3;
      \endcode
      *
+     * As with Func::in(), clone_in() acts transitively: any Func in 'f'/'fs'
+     * that does not directly call this Func is replaced by the set of direct
+     * callers reachable from it along paths that lead to this Func.
      */
     //@{
     Func clone_in(const Func &f);
