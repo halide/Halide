@@ -1391,6 +1391,10 @@ Type CodeGen_LLVM::upgrade_type_for_storage(const Type &t) const {
     }
 }
 
+void CodeGen_LLVM::set_effective_vscale(int vscale) {
+    effective_vscale = vscale;
+}
+
 void CodeGen_LLVM::visit(const IntImm *op) {
     value = ConstantInt::getSigned(llvm_type_of(op->type), op->value);
 }
@@ -4854,6 +4858,12 @@ void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &
 }
 
 Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args) {
+    return call_overloaded_intrin(result_type, name, args, intrinsics);
+}
+
+Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args,
+                                            const IntrinsicsMap &overloaded_intrinsics) {
+
     constexpr int debug_level = 4;
 
     debug(debug_level) << "call_overloaded_intrin: " << result_type << " " << name << "(";
@@ -4864,8 +4874,8 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
     }
     debug(debug_level) << ")\n";
 
-    auto impls_i = intrinsics.find(name);
-    if (impls_i == intrinsics.end()) {
+    const auto impls_i = overloaded_intrinsics.find(name);
+    if (impls_i == overloaded_intrinsics.end()) {
         debug(debug_level) << "No intrinsic " << name << "\n";
         return nullptr;
     }

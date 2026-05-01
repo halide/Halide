@@ -164,6 +164,8 @@ protected:
      * of functions as. */
     virtual Type upgrade_type_for_argument_passing(const Type &) const;
 
+    void set_effective_vscale(int vscale);
+
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function = nullptr;
     llvm::LLVMContext *context = nullptr;
@@ -477,8 +479,9 @@ protected:
             : result_type(result_type), arg_types(std::move(arg_types)), impl(impl) {
         }
     };
+    using IntrinsicsMap = std::map<std::string, std::vector<Intrinsic>>;
     /** Mapping of intrinsic functions to the various overloads implementing it. */
-    std::map<std::string, std::vector<Intrinsic>> intrinsics;
+    IntrinsicsMap intrinsics;
 
     /** Get an LLVM intrinsic declaration. If it doesn't exist, it will be created. */
     llvm::Function *get_llvm_intrin(const Type &ret_type, const std::string &name, const std::vector<Type> &arg_types, bool scalars_are_vectors = false);
@@ -487,7 +490,11 @@ protected:
     llvm::Function *declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors = false);
     void declare_intrin_overload(const std::string &name, const Type &ret_type, llvm::Function *impl, std::vector<Type> arg_types);
     /** Call an overloaded intrinsic function. Returns nullptr if no suitable overload is found. */
-    llvm::Value *call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args);
+    virtual llvm::Value *call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args);
+    /** Call an overloaded intrinsic function. Returns nullptr if no suitable overload is found.
+     * Look up the given overloaded_intrinsics map for the corresponding intrin */
+    llvm::Value *call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args,
+                                        const IntrinsicsMap &overloaded_intrinsics);
 
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
