@@ -300,6 +300,12 @@ WEAK bool D3DErrorCheck(HRESULT result, ID3D12T *object, void *user_context, con
         TRACEFATAL(
             message << " (HRESULT=" << (void *)(int64_t)result
                     << ", object*=" << object << ")");
+        // Even on failure, COM may return a non-null object (e.g. an error
+        // info object). Release it here to avoid leaking a reference; callers
+        // are expected to discard the pointer after a failed check.
+        if (object != nullptr) {
+            object->Release();
+        }
         return true;
     }
     TRACEPRINT("SUCCESS: " << d3d12typename(object) << " object created: " << object << "\n");
