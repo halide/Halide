@@ -576,6 +576,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         string hlsl_name = extern_function_name_map.at(op->name);
         bool float_only = hlsl_float_only_intrinsics.count(hlsl_name) > 0;
         vector<string> arg_strs;
+        arg_strs.reserve(op->args.size());
         for (const auto &a : op->args) {
             arg_strs.push_back(print_expr(a));
         }
@@ -586,14 +587,18 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
             if (float_only) {
                 o << "(double)" << hlsl_name << "(";
                 for (size_t a = 0; a < arg_strs.size(); ++a) {
-                    if (a > 0) o << ", ";
+                    if (a > 0) {
+                        o << ", ";
+                    }
                     o << "(float)" << arg_strs[a] << lane_suffix;
                 }
                 o << ")";
             } else {
                 o << hlsl_name << "(";
                 for (size_t a = 0; a < arg_strs.size(); ++a) {
-                    if (a > 0) o << ", ";
+                    if (a > 0) {
+                        o << ", ";
+                    }
                     o << arg_strs[a] << lane_suffix;
                 }
                 o << ")";
@@ -608,7 +613,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
             for (int i = 0; i < lanes; ++i) {
                 string idx = "[" + std::to_string(i) + "]";
                 emit_one_call(rhs, idx);
-                if (i < lanes - 1) rhs << ", ";
+                if (i < lanes - 1) {
+                    rhs << ", ";
+                }
             }
             rhs << ")";
         }
@@ -704,7 +711,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
                 rhs << print_type(op->type) << "(";
                 for (int i = 0; i < lanes; ++i) {
                     rhs << "(double)round((float)" << arg << "[" << i << "])";
-                    if (i < lanes - 1) rhs << ", ";
+                    if (i < lanes - 1) {
+                        rhs << ", ";
+                    }
                 }
                 rhs << ")";
             }
