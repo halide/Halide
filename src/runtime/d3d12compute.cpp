@@ -2129,9 +2129,47 @@ WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_librar
         return nullptr;
     }
 
-    // Target profile: "cs_6_X" where X = sm_version % 10
-    WCHAR target_profile[16] = {(WCHAR)'c', (WCHAR)'s', (WCHAR)'_', (WCHAR)'6', (WCHAR)'_',
-                                (WCHAR)('0' + (sm_version % 10)), 0};
+    // Target profile: "cs_<major>_<minor>".
+    //
+    // The current sm_version encoding is `major * 10 + minor` and only supports
+    // single-digit minors (SM 6.0-6.9). The formatting below is written to
+    // handle multi-digit major and minor so it stays correct if a future SM
+    // (e.g. SM 6.10 or SM 10.0) requires extending the encoding scheme — only
+    // the major/minor decomposition would need to change.
+    int major = sm_version / 10;
+    int minor = sm_version % 10;
+    WCHAR target_profile[16];
+    {
+        // Append "cs_<major>_<minor>" wide-char-by-wide-char.
+        WCHAR *p = target_profile;
+        *p++ = (WCHAR)'c';
+        *p++ = (WCHAR)'s';
+        *p++ = (WCHAR)'_';
+        // Emit major in decimal (handles >= 10).
+        WCHAR major_buf[8];
+        int n = 0;
+        do {
+            major_buf[n++] = (WCHAR)('0' + (major % 10));
+            major /= 10;
+        } while (major > 0 && n < 8);
+        while (n > 0) {
+            *p++ = major_buf[--n];
+        }
+        *p++ = (WCHAR)'_';
+        // Emit minor in decimal (handles >= 10).
+        WCHAR minor_buf[8];
+        n = 0;
+        do {
+            minor_buf[n++] = (WCHAR)('0' + (minor % 10));
+            minor /= 10;
+        } while (minor > 0 && n < 8);
+        while (n > 0) {
+            *p++ = minor_buf[--n];
+        }
+        *p = 0;
+        // Defensive bound check: 16 wide chars is plenty for "cs_999_999" + null.
+        halide_abort_if_false(user_context, (size_t)(p - target_profile) < 16);
+    }
 
     // Build argument array (shared by both compiler paths)
     LPCWSTR args[24];
