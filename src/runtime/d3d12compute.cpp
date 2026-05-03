@@ -2321,7 +2321,8 @@ WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_librar
 
     if (FAILED(get_result_hr) || !shader_blob || shader_blob->GetBufferSize() == 0) {
         TRACEFATAL("D3D12Compute: DXC produced no output DXIL blob "
-                   "(GetResult HRESULT=" << (void *)(int64_t)get_result_hr << ").");
+                   "(GetResult HRESULT="
+                   << (void *)(int64_t)get_result_hr << ").");
         if (shader_blob) {
             Release_ID3D12Object(shader_blob);
         }
@@ -3503,9 +3504,7 @@ WEAK int halide_d3d12compute_image_copy_to_device(void *user_context, halide_buf
     UINT num_rows = 0;
     UINT64 row_size_in_bytes = 0;
     UINT64 total_bytes = 0;
-    (*d3d12_context.device)->GetCopyableFootprints(
-        &tex_desc, /*FirstSubresource=*/0, /*NumSubresources=*/1, /*BaseOffset=*/0,
-        &layout, &num_rows, &row_size_in_bytes, &total_bytes);
+    (*d3d12_context.device)->GetCopyableFootprints(&tex_desc, /*FirstSubresource=*/0, /*NumSubresources=*/1, /*BaseOffset=*/0, &layout, &num_rows, &row_size_in_bytes, &total_bytes);
     UINT row_pitch = layout.Footprint.RowPitch;
     UINT src_row_bytes = (UINT)row_size_in_bytes;
 
@@ -3516,7 +3515,7 @@ WEAK int halide_d3d12compute_image_copy_to_device(void *user_context, halide_buf
     // which trivially satisfies the alignment, but assert it to defend against
     // future changes to the suballocator.
     halide_abort_if_false(user_context,
-        (staging_byte_offset & (D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1)) == 0);
+                          (staging_byte_offset & (D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1)) == 0);
     void *staging_base = buffer_contents(&upload);
 
     // Copy row-by-row to respect the 256-byte pitch alignment in the staging buffer.
@@ -3593,9 +3592,7 @@ WEAK int halide_d3d12compute_image_copy_to_host(void *user_context, halide_buffe
     UINT num_rows = 0;
     UINT64 row_size_in_bytes = 0;
     UINT64 total_bytes = 0;
-    (*d3d12_context.device)->GetCopyableFootprints(
-        &tex_desc, /*FirstSubresource=*/0, /*NumSubresources=*/1, /*BaseOffset=*/0,
-        &layout, &num_rows, &row_size_in_bytes, &total_bytes);
+    (*d3d12_context.device)->GetCopyableFootprints(&tex_desc, /*FirstSubresource=*/0, /*NumSubresources=*/1, /*BaseOffset=*/0, &layout, &num_rows, &row_size_in_bytes, &total_bytes);
     UINT row_pitch = layout.Footprint.RowPitch;
     UINT src_row_bytes = (UINT)row_size_in_bytes;
 
@@ -3604,7 +3601,7 @@ WEAK int halide_d3d12compute_image_copy_to_host(void *user_context, halide_buffe
     // PlacedFootprint.Offset must be aligned to D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT
     // (512 bytes) per the D3D12 spec.  See note in image_copy_to_device.
     halide_abort_if_false(user_context,
-        (staging_byte_offset & (D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1)) == 0);
+                          (staging_byte_offset & (D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1)) == 0);
 
     d3d12_frame *frame = acquire_frame(d3d12_context.device);
     d3d12_compute_command_list *cmdList = frame->cmd_list;
