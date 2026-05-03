@@ -3494,17 +3494,22 @@ WEAK int halide_d3d12compute_image_copy_to_device(void *user_context, halide_buf
     d3d12_buffer *tex_buf = peel_buffer(buffer);
     halide_abort_if_false(user_context, tex_buf->type == d3d12_buffer::Texture);
 
-    UINT elem_bytes = (UINT)buffer->type.bytes();
-    UINT src_row_bytes = tex_buf->textureWidth * elem_bytes;
-    // D3D12 requires staging buffer rows to be aligned to 256 bytes.
-    UINT row_pitch = ((src_row_bytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) /
-                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) *
-                     D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
-    // Cast to size_t before multiplying to avoid 32-bit overflow for large textures.
-    size_t staging_size = (size_t)row_pitch *
-                          (size_t)tex_buf->textureHeight *
-                          (size_t)tex_buf->textureDepth;
+    // Use the D3D12 helper GetCopyableFootprints() to compute the staging-buffer
+    // layout (offset, row pitch, total size) instead of computing it manually.
+    // This handles compressed/block formats correctly and stays consistent with
+    // whatever alignment rules the runtime device enforces.
+    D3D12_RESOURCE_DESC tex_desc = tex_buf->resource->GetDesc();
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout = {};
+    UINT num_rows = 0;
+    UINT64 row_size_in_bytes = 0;
+    UINT64 total_bytes = 0;
+    (*d3d12_context.device)->GetCopyableFootprints(
+        &tex_desc, /*FirstSubresource=*/0, /*NumSubresources=*/1, /*BaseOffset=*/0,
+        &layout, &num_rows, &row_size_in_bytes, &total_bytes);
+    UINT row_pitch = layout.Footprint.RowPitch;
+    UINT src_row_bytes = (UINT)row_size_in_bytes;
 
+    size_t staging_size = (size_t)total_bytes;
     size_t staging_byte_offset = suballocate(d3d12_context.device, &upload, staging_size);
     // PlacedFootprint.Offset must be aligned to D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT
     // (512 bytes) per the D3D12 spec.  suballocate() currently always returns 0,
@@ -3518,9 +3523,9 @@ WEAK int halide_d3d12compute_image_copy_to_device(void *user_context, halide_buf
     const char *host_src = (const char *)buffer->host;
     char *stg_dst = (char *)staging_base + staging_byte_offset;
     for (UINT d = 0; d < tex_buf->textureDepth; d++) {
-        for (UINT h = 0; h < tex_buf->textureHeight; h++) {
-            memcpy(stg_dst + ((size_t)d * tex_buf->textureHeight + h) * row_pitch,
-                   host_src + ((size_t)d * tex_buf->textureHeight + h) * src_row_bytes,
+        for (UINT h = 0; h < num_rows; h++) {
+            memcpy(stg_dst + ((size_t)d * num_rows + h) * row_pitch,
+                   host_src + ((size_t)d * num_rows + h) * src_row_bytes,
                    src_row_bytes);
         }
     }
@@ -3546,12 +3551,9 @@ WEAK int halide_d3d12compute_image_copy_to_device(void *user_context, halide_buf
     D3D12_TEXTURE_COPY_LOCATION src_loc = {};
     src_loc.pResource = upload.resource;
     src_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    src_loc.PlacedFootprint = layout;
+    // BaseOffset was 0 above; shift to wherever suballocate() placed us.
     src_loc.PlacedFootprint.Offset = staging_byte_offset;
-    src_loc.PlacedFootprint.Footprint.Format = tex_buf->format;
-    src_loc.PlacedFootprint.Footprint.Width = tex_buf->textureWidth;
-    src_loc.PlacedFootprint.Footprint.Height = tex_buf->textureHeight;
-    src_loc.PlacedFootprint.Footprint.Depth = tex_buf->textureDepth;
-    src_loc.PlacedFootprint.Footprint.RowPitch = row_pitch;
 
     (*cmdList)->CopyTextureRegion(&dst_loc, 0, 0, 0, &src_loc, nullptr);
 
@@ -3584,17 +3586,20 @@ WEAK int halide_d3d12compute_image_copy_to_host(void *user_context, halide_buffe
     d3d12_buffer *tex_buf = peel_buffer(buffer);
     halide_abort_if_false(user_context, tex_buf->type == d3d12_buffer::Texture);
 
-    UINT elem_bytes = (UINT)buffer->type.bytes();
-    UINT src_row_bytes = tex_buf->textureWidth * elem_bytes;
-    // D3D12 requires staging buffer rows to be aligned to 256 bytes.
-    UINT row_pitch = ((src_row_bytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) /
-                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) *
-                     D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
-    // Cast to size_t before multiplying to avoid 32-bit overflow for large textures.
-    size_t staging_size = (size_t)row_pitch *
-                          (size_t)tex_buf->textureHeight *
-                          (size_t)tex_buf->textureDepth;
+    // Use the D3D12 helper GetCopyableFootprints() to compute the staging-buffer
+    // layout (offset, row pitch, total size). See note in image_copy_to_device.
+    D3D12_RESOURCE_DESC tex_desc = tex_buf->resource->GetDesc();
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout = {};
+    UINT num_rows = 0;
+    UINT64 row_size_in_bytes = 0;
+    UINT64 total_bytes = 0;
+    (*d3d12_context.device)->GetCopyableFootprints(
+        &tex_desc, /*FirstSubresource=*/0, /*NumSubresources=*/1, /*BaseOffset=*/0,
+        &layout, &num_rows, &row_size_in_bytes, &total_bytes);
+    UINT row_pitch = layout.Footprint.RowPitch;
+    UINT src_row_bytes = (UINT)row_size_in_bytes;
 
+    size_t staging_size = (size_t)total_bytes;
     size_t staging_byte_offset = suballocate(d3d12_context.device, &readback, staging_size);
     // PlacedFootprint.Offset must be aligned to D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT
     // (512 bytes) per the D3D12 spec.  See note in image_copy_to_device.
@@ -3622,12 +3627,9 @@ WEAK int halide_d3d12compute_image_copy_to_host(void *user_context, halide_buffe
     D3D12_TEXTURE_COPY_LOCATION dst_loc = {};
     dst_loc.pResource = readback.resource;
     dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    dst_loc.PlacedFootprint = layout;
+    // BaseOffset was 0 above; shift to wherever suballocate() placed us.
     dst_loc.PlacedFootprint.Offset = staging_byte_offset;
-    dst_loc.PlacedFootprint.Footprint.Format = tex_buf->format;
-    dst_loc.PlacedFootprint.Footprint.Width = tex_buf->textureWidth;
-    dst_loc.PlacedFootprint.Footprint.Height = tex_buf->textureHeight;
-    dst_loc.PlacedFootprint.Footprint.Depth = tex_buf->textureDepth;
-    dst_loc.PlacedFootprint.Footprint.RowPitch = row_pitch;
 
     (*cmdList)->CopyTextureRegion(&dst_loc, 0, 0, 0, &src_loc, nullptr);
 
@@ -3648,9 +3650,9 @@ WEAK int halide_d3d12compute_image_copy_to_host(void *user_context, halide_buffe
     const char *stg_src = (const char *)staging_data + staging_byte_offset;
     char *host_dst = (char *)buffer->host;
     for (UINT d = 0; d < tex_buf->textureDepth; d++) {
-        for (UINT h = 0; h < tex_buf->textureHeight; h++) {
-            memcpy(host_dst + ((size_t)d * tex_buf->textureHeight + h) * src_row_bytes,
-                   stg_src + ((size_t)d * tex_buf->textureHeight + h) * row_pitch,
+        for (UINT h = 0; h < num_rows; h++) {
+            memcpy(host_dst + ((size_t)d * num_rows + h) * src_row_bytes,
+                   stg_src + ((size_t)d * num_rows + h) * row_pitch,
                    src_row_bytes);
         }
     }
