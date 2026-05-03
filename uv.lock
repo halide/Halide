@@ -178,7 +178,7 @@ ci-llvm-22 = [
 ]
 ci-llvm-main = [
     { name = "cmake" },
-    { name = "halide-llvm", version = "23.0.0.dev90747+gb614c152", source = { registry = "https://pypi.halide-lang.org/simple" } },
+    { name = "halide-llvm", version = "23.0.0.dev91651+g37e0109a", source = { registry = "https://pypi.halide-lang.org/simple" } },
     { name = "ninja" },
     { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'" },
     { name = "pre-commit" },
@@ -346,7 +346,7 @@ wheels = [
 
 [[package]]
 name = "halide-llvm"
-version = "23.0.0.dev90747+gb614c152"
+version = "23.0.0.dev91651+g37e0109a"
 source = { registry = "https://pypi.halide-lang.org/simple" }
 resolution-markers = [
     "(python_full_version >= '3.11' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.11' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
@@ -363,14 +363,14 @@ resolution-markers = [
     "(python_full_version < '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version < '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
 ]
 wheels = [
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev90747+gb614c152-py3-none-macosx_11_0_arm64.whl", hash = "sha256:8c22da0e0f3f41ac49c1a1866177ed4774efbffcc2498fe6526be1336cc68246" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev90747+gb614c152-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:06ec04711f021f8de7d8a3bfef1214a8bc9d4b509956dc98be38c1c6449c4405" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev90747+gb614c152-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:abd9a582bd43fd829d3d88f260392ed0d4c74947d584d14bf962730dabf6d525" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev90747+gb614c152-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a238faa9811c531fdf473a2d2a5e983d40a72a2e67984202d7b02d03f7cf8d0d" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev90747+gb614c152-py3-none-manylinux_2_28_i686.whl", hash = "sha256:bf016c8dd13394e11f12f19fce715eff1e78f19f27aeebf5bfaa70d4ae26b4d9" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev90747+gb614c152-py3-none-manylinux_2_31_armv7l.whl", hash = "sha256:321a16aae32581427f90612ff3732903ceb376ccd9c6d887f4a2e9d37776e6d6" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev90747+gb614c152-py3-none-win32.whl", hash = "sha256:3221c77637f275e65d5c1e765bd3c62d5c8e2ddffc92a6149ce099a8a625fd1f" },
-    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev90747+gb614c152-py3-none-win_amd64.whl", hash = "sha256:ed333239ade21b3d7357a4afa5b1ff3c77ae578529bbea7b0ca6384ce6b06ac1" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev91651+g37e0109a-py3-none-macosx_11_0_arm64.whl", hash = "sha256:18881f72694e08cb3d8155d195676c21a640700d69274e70973dc450c8978cca" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev91651+g37e0109a-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:014e23aeaac38cf3b0acff2379b7697d6edd9a55f2b7c7ea38cf959f15f32718" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev91651+g37e0109a-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:6c36174ee8c52a227c41631c84e311ffa2782cdfdb5ef6beb672f4667b319f75" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev91651+g37e0109a-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:87d3c336c3f1b0057f40c5c7b5bbee74249da7ba892e8662b9579a4dd89c478b" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev91651+g37e0109a-py3-none-manylinux_2_28_i686.whl", hash = "sha256:c6fb882f56f1caade4f44bf151cbc064b44cf98636f8a19aa84db6420117f697" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev91651+g37e0109a-py3-none-manylinux_2_31_armv7l.whl", hash = "sha256:c467be0a78bbbda665e07996a1acfedfe5aadb02c21f28c808345b0afe8796d0" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev91651+g37e0109a-py3-none-win32.whl", hash = "sha256:8045a1c346e24250db03ba9a7aa78b106b1158f85a5f6d00330da0ccd4a26690" },
+    { url = "https://pypi.halide-lang.org/packages/halide_llvm-23.0.0.dev91651+g37e0109a-py3-none-win_amd64.whl", hash = "sha256:e16b3cd5ef6c7615aa9edfdb96537534c556bd9638aa56f7ad72685d864a30f9" },
 ]
 
 [[package]]
