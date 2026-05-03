@@ -296,16 +296,17 @@ WEAK bool D3DErrorCheck(HRESULT result, ID3D12T *object, void *user_context, con
     // HRESULT ERROR CODES:
     // D3D12: https://msdn.microsoft.com/en-us/library/windows/desktop/bb509553(v=vs.85).aspx
     // Win32: https://msdn.microsoft.com/en-us/library/windows/desktop/aa378137(v=vs.85).aspx
+    //
+    // NOTE: even on failure, COM may return a non-null object (e.g. an error
+    // info object) that should be Released to avoid a reference leak.  This
+    // template is also instantiated with non-COM types (HANDLE, faux mapped-
+    // memory pointers), so the Release cannot be done here unconditionally.
+    // Callers that pass real COM objects should call release_d3d12_object()
+    // on the leaked object after a failed check.
     if (FAILED(result) || !object) {
         TRACEFATAL(
             message << " (HRESULT=" << (void *)(int64_t)result
                     << ", object*=" << object << ")");
-        // Even on failure, COM may return a non-null object (e.g. an error
-        // info object). Release it here to avoid leaking a reference; callers
-        // are expected to discard the pointer after a failed check.
-        if (object != nullptr) {
-            object->Release();
-        }
         return true;
     }
     TRACEPRINT("SUCCESS: " << d3d12typename(object) << " object created: " << object << "\n");
@@ -671,10 +672,10 @@ WEAK size_t number_of_elements(void *user_context, const halide_buffer_t *buffer
     halide_abort_if_false(user_context, (size_in_bytes % element_size) == 0);
 
     // 64-bit types are represented as pairs of uint32 elements in the UAV
-    // (there is no DXGI format for 64-bit scalars).  Each logical element
-    // occupies two R32_UINT slots, so double the count for the UAV descriptor.
+    // (there is no DXGI format for 64-bit scalars).  Each 64-bit lane occupies
+    // two R32_UINT slots, so multi-lane 64-bit elements need 2 * lanes slots.
     if (is_64bit_type(buffer->type)) {
-        elements *= 2;
+        elements *= 2 * (size_t)buffer->type.lanes;
     }
 
     return elements;
@@ -1353,6 +1354,10 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12
     // A committed resource manages its own private heap:
     HRESULT result = (*device)->CreateCommittedResource(pHeapProperties, HeapFlags, pDesc, InitialResourceState, pOptimizedClearValue, IID_PPV_ARGS(&resource));
     if (D3DErrorCheck(result, resource, nullptr, "Unable to create the Direct3D 12 buffer")) {
+        // COM may return a non-null object even on failure; release to avoid leak.
+        if (resource != nullptr) {
+            resource->Release();
+        }
         return buffer;
     }
 
@@ -1555,6 +1560,10 @@ WEAK d3d12_buffer *new_texture_buffer(d3d12_device *device, UINT width, UINT hei
         &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
         D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&resource));
     if (D3DErrorCheck(result, resource, nullptr, "Unable to create Direct3D 12 texture")) {
+        // COM may return a non-null object even on failure; release to avoid leak.
+        if (resource != nullptr) {
+            resource->Release();
+        }
         return nullptr;
     }
 
@@ -2260,9 +2269,15 @@ WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_librar
         }
     }
 
-    // Check compilation status
-    HRESULT status = S_OK;
-    result_obj->GetStatus(&status);
+    // Check compilation status. GetStatus() itself returns an HRESULT; if it
+    // fails it may leave 'status' unchanged, so initialize 'status' to a
+    // failure value and treat a failed GetStatus call as a failure.
+    // (E_FAIL == 0x80004005 — not defined in this minimal runtime header.)
+    HRESULT status = (HRESULT)0x80004005L;
+    HRESULT get_status_hr = result_obj->GetStatus(&status);
+    if (FAILED(get_status_hr)) {
+        status = get_status_hr;
+    }
 
     if (FAILED(status)) {
         // Dump DXC error/warning messages
@@ -2296,13 +2311,17 @@ WEAK d3d12_function *d3d12_compile_shader_dxc(d3d12_device *device, d3d12_librar
         Release_ID3D12Object(warnings);
     }
 
-    // Retrieve compiled DXIL bytecode
+    // Retrieve compiled DXIL bytecode. GetResult() itself returns an HRESULT;
+    // shader_blob is nullptr-initialized so a failed call is benign for the
+    // !shader_blob check below, but we still want a clean diagnostic if the
+    // call itself fails.
     IDxcBlob *shader_blob = nullptr;
-    result_obj->GetResult(&shader_blob);
+    HRESULT get_result_hr = result_obj->GetResult(&shader_blob);
     Release_ID3D12Object(result_obj);
 
-    if (!shader_blob || shader_blob->GetBufferSize() == 0) {
-        TRACEFATAL("D3D12Compute: DXC produced no output DXIL blob.");
+    if (FAILED(get_result_hr) || !shader_blob || shader_blob->GetBufferSize() == 0) {
+        TRACEFATAL("D3D12Compute: DXC produced no output DXIL blob "
+                   "(GetResult HRESULT=" << (void *)(int64_t)get_result_hr << ").");
         if (shader_blob) {
             Release_ID3D12Object(shader_blob);
         }
@@ -3226,6 +3245,8 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
     if (wrap_buffer(user_context, buf, d3d12_buf)) {
         TRACEFATAL("D3D12: unable to wrap halide buffer and D3D12 buffer.");
         error(user_context) << "D3D12: unable to wrap halide buffer and D3D12 buffer";
+        // d3d12_buf would otherwise leak: release the underlying D3D12 resource.
+        release_d3d12_object(d3d12_buf);
         return halide_error_code_device_wrap_native_failed;
     }
 
@@ -3276,6 +3297,8 @@ WEAK int halide_d3d12compute_image_device_malloc(void *user_context, halide_buff
     if (wrap_buffer(user_context, buf, d3d12_buf, &d3d12compute_image_device_interface)) {
         TRACEFATAL("D3D12: unable to wrap halide buffer and D3D12 texture.");
         error(user_context) << "D3D12: unable to wrap halide buffer and D3D12 texture";
+        // d3d12_buf would otherwise leak: release the underlying D3D12 texture.
+        release_d3d12_object(d3d12_buf);
         return halide_error_code_device_wrap_native_failed;
     }
 
@@ -3477,9 +3500,18 @@ WEAK int halide_d3d12compute_image_copy_to_device(void *user_context, halide_buf
     UINT row_pitch = ((src_row_bytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) /
                       D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) *
                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
-    size_t staging_size = (size_t)row_pitch * tex_buf->textureHeight * tex_buf->textureDepth;
+    // Cast to size_t before multiplying to avoid 32-bit overflow for large textures.
+    size_t staging_size = (size_t)row_pitch *
+                          (size_t)tex_buf->textureHeight *
+                          (size_t)tex_buf->textureDepth;
 
     size_t staging_byte_offset = suballocate(d3d12_context.device, &upload, staging_size);
+    // PlacedFootprint.Offset must be aligned to D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT
+    // (512 bytes) per the D3D12 spec.  suballocate() currently always returns 0,
+    // which trivially satisfies the alignment, but assert it to defend against
+    // future changes to the suballocator.
+    halide_abort_if_false(user_context,
+        (staging_byte_offset & (D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1)) == 0);
     void *staging_base = buffer_contents(&upload);
 
     // Copy row-by-row to respect the 256-byte pitch alignment in the staging buffer.
@@ -3558,9 +3590,16 @@ WEAK int halide_d3d12compute_image_copy_to_host(void *user_context, halide_buffe
     UINT row_pitch = ((src_row_bytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) /
                       D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) *
                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
-    size_t staging_size = (size_t)row_pitch * tex_buf->textureHeight * tex_buf->textureDepth;
+    // Cast to size_t before multiplying to avoid 32-bit overflow for large textures.
+    size_t staging_size = (size_t)row_pitch *
+                          (size_t)tex_buf->textureHeight *
+                          (size_t)tex_buf->textureDepth;
 
     size_t staging_byte_offset = suballocate(d3d12_context.device, &readback, staging_size);
+    // PlacedFootprint.Offset must be aligned to D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT
+    // (512 bytes) per the D3D12 spec.  See note in image_copy_to_device.
+    halide_abort_if_false(user_context,
+        (staging_byte_offset & (D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1)) == 0);
 
     d3d12_frame *frame = acquire_frame(d3d12_context.device);
     d3d12_compute_command_list *cmdList = frame->cmd_list;
@@ -3601,10 +3640,10 @@ WEAK int halide_d3d12compute_image_copy_to_host(void *user_context, halide_buffe
     enqueue_frame(frame);
     wait_until_completed(frame);
 
-    // Decrement the ref_count that suballocate() incremented — the GPU work is done.
-    __atomic_sub_fetch(&readback.ref_count, 1, __ATOMIC_SEQ_CST);
-
     // Unpack row-by-row from the padded staging buffer to the dense host buffer.
+    // Done BEFORE decrementing ref_count so the staging buffer is guaranteed to
+    // remain reserved while we read from it (a concurrent suballocate() that
+    // sees ref_count==0 could otherwise grow/replace the staging buffer).
     void *staging_data = buffer_contents(&readback);
     const char *stg_src = (const char *)staging_data + staging_byte_offset;
     char *host_dst = (char *)buffer->host;
@@ -3615,6 +3654,10 @@ WEAK int halide_d3d12compute_image_copy_to_host(void *user_context, halide_buffe
                    src_row_bytes);
         }
     }
+
+    // Decrement the ref_count that suballocate() incremented — staging buffer
+    // can now be reused.
+    __atomic_sub_fetch(&readback.ref_count, 1, __ATOMIC_SEQ_CST);
 
     return halide_error_code_success;
 }
@@ -3811,48 +3854,67 @@ WEAK int halide_d3d12compute_run(void *user_context,
                 // Align to packed_size boundary
                 offset = (offset + packed_size - 1) & ~(packed_size - 1);
 
+                // Use memcpy throughout to avoid:
+                //  (a) strict-aliasing UB from `*((T*)args[i])` casts, and
+                //  (b) misaligned loads on architectures that don't tolerate them
+                //      (e.g. Windows on ARM).  Halide does not guarantee that
+                //      args[i] is suitably aligned for its halide_type_t.
                 if (arg_type.bits == 64) {
-                    // 64-bit scalars (double, int64_t, uint64_t): copy 8 bytes directly.
-                    uint64_t val64 = *((uint64_t *)args[i]);
+                    // 64-bit scalars (double, int64_t, uint64_t): copy 8 bytes verbatim.
+                    uint64_t val64 = 0;
+                    memcpy(&val64, args[i], 8);
                     memcpy(&uniform_bytes[offset], &val64, 8);
                     TRACELEVEL(3, "args[" << i << "] -> 64bit = 0x" << val64 << "\n");
                 } else {
-                    // Sub-32-bit values are widened to 32-bit; 32-bit copied directly.
+                    // Sub-32-bit values are widened to 32-bit; 32-bit copied verbatim.
                     int32_t uniform_word = 0;
                     if (arg_type.code == halide_type_float) {
                         halide_abort_if_false(user_context, (arg_type.bits == 32));
-                        float &uniform_value = ((float &)uniform_word);
-                        uniform_value = *((float *)args[i]);
+                        float uniform_value = 0.0f;
+                        memcpy(&uniform_value, args[i], 4);
+                        memcpy(&uniform_word, &uniform_value, 4);
                         TRACELEVEL(3, "args[" << i << "] -> float32 = " << uniform_value << "\n");
                     } else if (arg_type.code == halide_type_int) {
-                        int32_t &uniform_value = ((int32_t &)uniform_word);
+                        int32_t uniform_value = 0;
                         if (arg_type.bits == 1) {
-                            uniform_value = *((int8_t *)args[i]);
-                            uniform_value = (uniform_value == 0) ? 0 : 1;
+                            int8_t b = 0;
+                            memcpy(&b, args[i], 1);
+                            uniform_value = (b == 0) ? 0 : 1;
                         } else if (arg_type.bits == 8) {
-                            uniform_value = *((int8_t *)args[i]);
+                            int8_t v = 0;
+                            memcpy(&v, args[i], 1);
+                            uniform_value = v;  // sign-extend
                         } else if (arg_type.bits == 16) {
-                            uniform_value = *((int16_t *)args[i]);
+                            int16_t v = 0;
+                            memcpy(&v, args[i], 2);
+                            uniform_value = v;  // sign-extend
                         } else if (arg_type.bits == 32) {
-                            uniform_value = *((int32_t *)args[i]);
+                            memcpy(&uniform_value, args[i], 4);
                         } else {
                             halide_abort_if_false(user_context, false);
                         }
+                        uniform_word = uniform_value;
                         TRACELEVEL(3, "args[" << i << "] -> int32 = " << uniform_value << "\n");
                     } else if (arg_type.code == halide_type_uint) {
-                        uint32_t &uniform_value = ((uint32_t &)uniform_word);
+                        uint32_t uniform_value = 0;
                         if (arg_type.bits == 1) {
-                            uniform_value = *((uint8_t *)args[i]);
-                            uniform_value = (uniform_value == 0) ? 0 : 1;
+                            uint8_t b = 0;
+                            memcpy(&b, args[i], 1);
+                            uniform_value = (b == 0) ? 0u : 1u;
                         } else if (arg_type.bits == 8) {
-                            uniform_value = *((uint8_t *)args[i]);
+                            uint8_t v = 0;
+                            memcpy(&v, args[i], 1);
+                            uniform_value = v;  // zero-extend
                         } else if (arg_type.bits == 16) {
-                            uniform_value = *((uint16_t *)args[i]);
+                            uint16_t v = 0;
+                            memcpy(&v, args[i], 2);
+                            uniform_value = v;  // zero-extend
                         } else if (arg_type.bits == 32) {
-                            uniform_value = *((uint32_t *)args[i]);
+                            memcpy(&uniform_value, args[i], 4);
                         } else {
                             halide_abort_if_false(user_context, false);
                         }
+                        memcpy(&uniform_word, &uniform_value, 4);
                         TRACELEVEL(3, "args[" << i << "] -> uint32 = " << uniform_value << "\n");
                     } else {
                         halide_abort_if_false(user_context, false);
@@ -4134,11 +4196,13 @@ WEAK int d3d12compute_device_crop_from_offset(void *user_context,
     halide_abort_if_false(user_context, (new_handle->halide_type == dst->type));
     halide_abort_if_false(user_context, (src->device_interface == dst->device_interface));
 
-    // For 64-bit types the UAV uses R32_UINT with 2x element count, so the
-    // crop offset (in logical elements) must be doubled to stay in UAV units.
+    // For 64-bit types the UAV uses R32_UINT, so each 64-bit lane occupies
+    // two uint slots.  The crop offset (in logical elements) must therefore
+    // be scaled by 2 * lanes to stay in UAV units.  For non-64-bit types the
+    // DXGI format already encodes the lane count, so the scale is 1.
     int64_t uav_offset = offset;
     if (is_64bit_type(dst->type)) {
-        uav_offset *= 2;
+        uav_offset *= 2 * (int64_t)dst->type.lanes;
     }
     new_handle->offset = old_handle->offset + uav_offset;
     new_handle->offsetInBytes = (old_handle->offset + offset) * dst->type.bytes() * dst->type.lanes;
