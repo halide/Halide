@@ -380,6 +380,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
     base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
 
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
+    int A;
 
     const Broadcast *b_index = index.as<Broadcast>();
     const Shuffle *s_index = index.as<Shuffle>();
@@ -417,39 +418,30 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
                index.type().is_vector() &&
                // Don't do expensive analysis in the common case of a load of a ramp of scalars.
                !(r_index && r_index->base.type().is_scalar()) &&
+               // It's a multi-dimensional multiramp.
                is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
-               mr.dimensions() > 1) {
-        // If the index is a multi-dimensional ramp with a stride-1 dim that
-        // isn't already innermost, rotate it to the innermost position (with
-        // the previously-inner dims moved to the outermost end) so the
-        // resulting load is dense, and restore the original lane order with a
-        // single make_transpose.
-        MultiRamp permuted = mr;
-        int A = permuted.rotate_stride_one_innermost();
-        if (A > 0) {
-            int B = op->type.lanes() / A;
-
-            // The predicate applied to the permuted load must be in the
-            // permuted lane order. For a halves-swap rotation that's just
-            // make_transpose(predicate, A) (except for scalar broadcasts,
-            // which are invariant).
-            Expr permuted_predicate;
-            const Broadcast *b_pred = predicate.as<Broadcast>();
-            if (b_pred && b_pred->value.type().is_scalar()) {
-                permuted_predicate = predicate;
-            } else {
-                permuted_predicate = Shuffle::make_transpose(predicate, A);
-            }
-
-            Expr permuted_load =
-                Load::make(op->type, op->name, permuted.to_expr(), op->image,
-                           op->param, permuted_predicate, align);
-            return mutate(Shuffle::make_transpose(permuted_load, B), info);
+               mr.dimensions() > 1 &&
+               // The innermost stride isn't already one.
+               !is_const_one(mr.strides[0]) &&
+               // We can successfully rotate a stride one dimension innermost.
+               (A = mr.rotate_stride_one_innermost()) > 0) {
+        // Rotating the stride one dimension innermost made the load dense, but
+        // we must now transpose the predicate to match the transposed index,
+        // and inverse-transpose the loaded value to restore the original lane
+        // ordering.
+        Expr permuted_predicate;
+        const Broadcast *b_pred = predicate.as<Broadcast>();
+        if (b_pred && b_pred->value.type().is_scalar()) {
+            permuted_predicate = predicate;
+        } else {
+            permuted_predicate = Shuffle::make_transpose(predicate, A);
         }
-        if (predicate.same_as(op->predicate) && index.same_as(op->index) && align == op->alignment) {
-            return op;
-        }
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate, align);
+
+        Expr permuted_load =
+            Load::make(op->type, op->name, mr.to_expr(), op->image,
+                       op->param, permuted_predicate, align);
+        int B = op->type.lanes() / A;
+        return mutate(Shuffle::make_transpose(permuted_load, B), info);
     } else if (predicate.same_as(op->predicate) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {

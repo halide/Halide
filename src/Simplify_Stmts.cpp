@@ -361,6 +361,7 @@ Stmt Simplify::visit(const Store *op) {
     }
 
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
+    int A;
 
     if (is_const_zero(predicate)) {
         // Predicate is always false
@@ -396,37 +397,34 @@ Stmt Simplify::visit(const Store *op) {
                index.type().is_vector() &&
                // Don't do expensive analysis in the common case of a load of a ramp of scalars.
                !(r_index && r_index->base.type().is_scalar()) &&
+               // It's a multi-dimensional multiramp
                is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
-               mr.dimensions() > 1) {
-        // If the index is a multi-dimensional ramp with a stride-1 dim that
-        // isn't already innermost, rotate it to the innermost position (with
-        // the previously-inner dims moved to the outermost end) so the
-        // resulting store is dense. Permute the value and predicate to match
-        // the new lane order using a single make_transpose. Later in
-        // lowering, after flattening the nested ramps, this turns into a
-        // concat of dense ramps and hits the case above.
-        MultiRamp permuted = mr;
-        int A = permuted.rotate_stride_one_innermost();
-        if (A > 0) {
-            // Transpose the value and predicate so their lane ordering
-            // matches the permuted index.
-            Expr permuted_value = Shuffle::make_transpose(value, A);
-            Expr permuted_predicate;
-            const Broadcast *b_pred = predicate.as<Broadcast>();
-            if (b_pred && b_pred->value.type().is_scalar()) {
-                permuted_predicate = predicate;
-            } else {
-                permuted_predicate = Shuffle::make_transpose(predicate, A);
-            }
-            return mutate(Store::make(op->name, permuted_value, permuted.to_expr(),
-                                      op->param, permuted_predicate, align));
+               mr.dimensions() > 1 &&
+               // The innermost stride isn't already one
+               !is_const_one(mr.strides[0]) &&
+               // We can successfully rotate a stride one dimension innermost
+               (A = mr.rotate_stride_one_innermost()) > 0) {
+
+        // Rotating the stride one dimension innermost in the index made the
+        // resulting store dense. Now permute the value and predicate to match
+        // the new lane order using a single make_transpose. Later in lowering,
+        // after flattening the nested ramps, this turns into a concat of dense
+        // ramps and hits the case above.
+
+        Expr permuted_value = Shuffle::make_transpose(value, A);
+        Expr permuted_predicate;
+        const Broadcast *b_pred = predicate.as<Broadcast>();
+        if (b_pred && b_pred->value.type().is_scalar()) {
+            permuted_predicate = predicate;
+        } else {
+            permuted_predicate = Shuffle::make_transpose(predicate, A);
         }
-        if (predicate.same_as(op->predicate) && value.same_as(op->value) &&
-            index.same_as(op->index) && align == op->alignment) {
-            return op;
-        }
-        return Store::make(op->name, value, index, op->param, predicate, align);
-    } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index) && align == op->alignment) {
+        return mutate(Store::make(op->name, permuted_value, mr.to_expr(),
+                                  op->param, permuted_predicate, align));
+    } else if (predicate.same_as(op->predicate) &&
+               value.same_as(op->value) &&
+               index.same_as(op->index) &&
+               align == op->alignment) {
         return op;
     } else {
         return Store::make(op->name, value, index, op->param, predicate, align);
