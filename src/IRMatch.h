@@ -255,8 +255,7 @@ struct WildConstInt {
 
     constexpr static bool foldable = true;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         state.get_bound_const(i, val, ty);
         return false;
     }
@@ -309,8 +308,7 @@ struct WildConstUInt {
 
     constexpr static bool foldable = true;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
         state.get_bound_const(i, val, ty);
         return false;
     }
@@ -363,8 +361,7 @@ struct WildConstFloat {
 
     constexpr static bool foldable = true;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
         state.get_bound_const(i, val, ty);
         return false;
     }
@@ -422,8 +419,7 @@ struct WildConst {
 
     constexpr static bool foldable = true;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
         state.get_bound_const(i, val, ty);
         return false;
     }
@@ -526,8 +522,7 @@ struct IntLiteral {
 
     constexpr static bool foldable = true;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
         // Assume type is already correct
         switch (ty.code) {
         case halide_type_int:
@@ -652,8 +647,7 @@ struct BinOp {
 
     constexpr static bool foldable = A::foldable && B::foldable;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
         bool overflow = false;
         halide_scalar_value_t val_a, val_b;
         if (std::is_same_v<A, IntLiteral>) {
@@ -752,8 +746,7 @@ struct CmpOp {
 
     constexpr static bool foldable = A::foldable && B::foldable;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
         bool overflow = false;
         halide_scalar_value_t val_a, val_b;
         // If one side is an untyped const, evaluate the other side first to get a type hint.
@@ -2451,8 +2444,7 @@ struct Overflow {
 
     constexpr static bool foldable = true;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
         val.u.u64 = 0;
         return true;
     }
@@ -2570,8 +2562,7 @@ struct IsFloat {
 
     constexpr static bool foldable = true;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         Type t = a.make(state, {}).type();
         val.u.u64 = t.is_float();
@@ -2610,8 +2601,7 @@ struct IsInt {
 
     constexpr static bool foldable = true;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         Type t = a.make(state, {}).type();
         val.u.u64 = t.is_int() && (bits == 0 || t.bits() == bits) && (lanes == 0 || t.lanes() == lanes);
@@ -2657,8 +2647,7 @@ struct IsUInt {
 
     constexpr static bool foldable = true;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         Type t = a.make(state, {}).type();
         val.u.u64 = t.is_uint() && (bits == 0 || t.bits() == bits) && (lanes == 0 || t.lanes() == lanes);
@@ -2702,8 +2691,7 @@ struct IsScalar {
 
     constexpr static bool foldable = true;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         Type t = a.make(state, {}).type();
         val.u.u64 = t.is_scalar();
@@ -2740,8 +2728,7 @@ struct IsMaxValue {
 
     constexpr static bool foldable = true;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         const bool overflow = a.make_folded_const(val, ty, state);
         const uint64_t max_bits = (uint64_t)(-1) >> (64 - ty.bits + (ty.code == halide_type_int));
@@ -2782,8 +2769,7 @@ struct IsMinValue {
 
     constexpr static bool foldable = true;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         const bool overflow = a.make_folded_const(val, ty, state);
         if (ty.code == halide_type_int) {
@@ -2826,8 +2812,7 @@ struct LanesOf {
 
     constexpr static bool foldable = true;
 
-    HALIDE_ALWAYS_INLINE
-    [[nodiscard]] bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         Type t = a.make(state, {}).type();
         val.u.u64 = t.lanes();
