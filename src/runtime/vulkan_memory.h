@@ -268,6 +268,10 @@ void *VulkanMemoryAllocator::map(void *user_context, MemoryRegion *region) {
     }
 
     MemoryRegion *owner = owner_of(user_context, region);
+    if (owner != nullptr && owner->kind == MemoryRegionKind::ExternalWrapped) {
+        error(user_context) << "VulkanMemoryAllocator: Unable to map wrapped external region through allocator!\n";
+        return nullptr;
+    }
     RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
     if (region_allocator == nullptr) {
         error(user_context) << "VulkanMemoryAllocator: Unable to map region! Invalid region allocator handle!\n";
@@ -322,6 +326,10 @@ int VulkanMemoryAllocator::unmap(void *user_context, MemoryRegion *region) {
     }
 
     MemoryRegion *owner = owner_of(user_context, region);
+    if (owner != nullptr && owner->kind == MemoryRegionKind::ExternalWrapped) {
+        error(user_context) << "VulkanMemoryAllocator: Unable to unmap wrapped external region through allocator!\n";
+        return halide_error_code_internal_error;
+    }
     RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
     if (region_allocator == nullptr) {
         error(user_context) << "VulkanMemoryAllocator: Unable to unmap region! Invalid region allocator handle!\n";
@@ -361,28 +369,40 @@ MemoryRegion *VulkanMemoryAllocator::create_crop(void *user_context, MemoryRegio
     }
 
     MemoryRegion *owner = owner_of(user_context, region);
-    RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
-    if (region_allocator == nullptr) {
-        error(user_context) << "VulkanMemoryAllocator: Unable to unmap region! Invalid region allocator handle!\n";
-        return nullptr;  // NOTE: caller must handle nullptr
-    }
-
-    // increment usage count
-    int error_code = region_allocator->retain(this, owner);
-    if (error_code != halide_error_code_success) {
-        error(user_context) << "VulkanMemoryAllocator: Unable to crop region! Failed to retain memory region!\n";
-        return nullptr;  // NOTE: caller must handle nullptr
-    }
-
-    // create a new region to return, and copy all the other region's properties
-    const BlockAllocator::MemoryAllocators &allocators = block_allocator->current_allocators();
-    if (allocators.system.allocate == nullptr) {
-        error(user_context) << "VulkanMemoryAllocator: Unable to create crop! Missing system allocator interface!\n";
+    if (owner == nullptr) {
+        error(user_context) << "VulkanMemoryAllocator: Unable to crop region! Invalid owner region!\n";
         return nullptr;
     }
 
-    MemoryRegion *memory_region = reinterpret_cast<MemoryRegion *>(
-        allocators.system.allocate(user_context, sizeof(MemoryRegion)));
+    const bool allocator_owned = owner->kind == MemoryRegionKind::AllocatorOwned;
+    if (allocator_owned) {
+        RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
+        if (region_allocator == nullptr) {
+            error(user_context) << "VulkanMemoryAllocator: Unable to crop region! Invalid region allocator handle!\n";
+            return nullptr;  // NOTE: caller must handle nullptr
+        }
+
+        // increment usage count
+        int error_code = region_allocator->retain(this, owner);
+        if (error_code != halide_error_code_success) {
+            error(user_context) << "VulkanMemoryAllocator: Unable to crop region! Failed to retain memory region!\n";
+            return nullptr;  // NOTE: caller must handle nullptr
+        }
+    }
+
+    // create a new region to return, and copy all the other region's properties
+    MemoryRegion *memory_region = nullptr;
+    if (allocator_owned) {
+        const BlockAllocator::MemoryAllocators &allocators = block_allocator->current_allocators();
+        if (allocators.system.allocate == nullptr) {
+            error(user_context) << "VulkanMemoryAllocator: Unable to create crop! Missing system allocator interface!\n";
+            return nullptr;
+        }
+        memory_region = reinterpret_cast<MemoryRegion *>(
+            allocators.system.allocate(user_context, sizeof(MemoryRegion)));
+    } else {
+        memory_region = reinterpret_cast<MemoryRegion *>(malloc(sizeof(MemoryRegion)));
+    }
 
     if (memory_region == nullptr) {
         error(user_context) << "VulkanMemoryAllocator: Failed to allocate memory region! Out of memory!\n";
@@ -393,6 +413,8 @@ MemoryRegion *VulkanMemoryAllocator::create_crop(void *user_context, MemoryRegio
     // point the handle to the owner of the allocated region, and update the indexing offset
     memory_region->is_owner = false;
     memory_region->handle = (void *)owner;
+    memory_region->kind = MemoryRegionKind::CropAlias;
+    memory_region->owner = owner;
     memory_region->indexing.offset += owner->indexing.offset + indexing.offset;
     return memory_region;
 }
@@ -404,36 +426,46 @@ int VulkanMemoryAllocator::destroy_crop(void *user_context, MemoryRegion *region
     }
 
     MemoryRegion *owner = owner_of(user_context, region);
-    RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
-    if (region_allocator == nullptr) {
-        error(user_context) << "VulkanMemoryAllocator: Unable to destroy crop region! Invalid region allocator handle!\n";
+    if (owner == nullptr) {
+        error(user_context) << "VulkanMemoryAllocator: Unable to destroy crop region! Invalid owner region!\n";
         return halide_error_code_internal_error;
     }
 
-    // decrement usage count
-    int error_code = region_allocator->release(this, owner);
-    if (error_code != halide_error_code_success) {
-        error(user_context) << "VulkanBlockAllocator: Unable to destroy crop region! Region allocator failed to release memory region!\n";
-        return error_code;
+    if (owner->kind == MemoryRegionKind::AllocatorOwned) {
+        RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
+        if (region_allocator == nullptr) {
+            error(user_context) << "VulkanMemoryAllocator: Unable to destroy crop region! Invalid region allocator handle!\n";
+            return halide_error_code_internal_error;
+        }
+
+        // decrement usage count
+        int error_code = region_allocator->release(this, owner);
+        if (error_code != halide_error_code_success) {
+            error(user_context) << "VulkanBlockAllocator: Unable to destroy crop region! Region allocator failed to release memory region!\n";
+            return error_code;
+        }
     }
 
-    // discard the copied region struct
-    const BlockAllocator::MemoryAllocators &allocators = block_allocator->current_allocators();
-    if (allocators.system.deallocate == nullptr) {
-        error(user_context) << "VulkanBlockAllocator: Unable to destroy crop region! Missing system allocator interface!\n";
-        return halide_error_code_internal_error;
+    if (owner->kind == MemoryRegionKind::AllocatorOwned) {
+        // discard the copied region struct
+        const BlockAllocator::MemoryAllocators &allocators = block_allocator->current_allocators();
+        if (allocators.system.deallocate == nullptr) {
+            error(user_context) << "VulkanBlockAllocator: Unable to destroy crop region! Missing system allocator interface!\n";
+            return halide_error_code_internal_error;
+        }
+        allocators.system.deallocate(user_context, region);
+    } else {
+        free(region);
     }
-    allocators.system.deallocate(user_context, region);
     return halide_error_code_success;
 }
 
 MemoryRegion *VulkanMemoryAllocator::owner_of(void *user_context, MemoryRegion *region) {
-    if (region->is_owner) {
-        return region;
-    } else {
-        // If this is a cropped region, use the handle to retrieve the owner of the allocation
-        return reinterpret_cast<MemoryRegion *>(region->handle);
+    MemoryRegion *current = region;
+    while (current != nullptr && current->kind == MemoryRegionKind::CropAlias) {
+        current = current->owner != nullptr ? current->owner : reinterpret_cast<MemoryRegion *>(current->handle);
     }
+    return current;
 }
 
 int VulkanMemoryAllocator::release(void *user_context, MemoryRegion *region) {
@@ -451,6 +483,11 @@ int VulkanMemoryAllocator::release(void *user_context, MemoryRegion *region) {
     if (block_allocator == nullptr) {
         error(user_context) << "VulkanMemoryAllocator: Unable to release region! Invalid block allocator!\n";
         return halide_error_code_generic_error;
+    }
+    MemoryRegion *owner = owner_of(user_context, region);
+    if (owner != nullptr && owner->kind == MemoryRegionKind::ExternalWrapped) {
+        error(user_context) << "VulkanMemoryAllocator: Unable to release wrapped external region through allocator!\n";
+        return halide_error_code_internal_error;
     }
     return block_allocator->release(this, region);
 }
@@ -471,6 +508,11 @@ int VulkanMemoryAllocator::reclaim(void *user_context, MemoryRegion *region) {
         error(user_context) << "VulkanMemoryAllocator: Unable to reclaim region! Invalid block allocator!\n";
         return halide_error_code_generic_error;
     }
+    MemoryRegion *owner = owner_of(user_context, region);
+    if (owner != nullptr && owner->kind == MemoryRegionKind::ExternalWrapped) {
+        error(user_context) << "VulkanMemoryAllocator: Unable to reclaim wrapped external region through allocator!\n";
+        return halide_error_code_internal_error;
+    }
     return block_allocator->reclaim(this, region);
 }
 
@@ -489,6 +531,11 @@ int VulkanMemoryAllocator::retain(void *user_context, MemoryRegion *region) {
     if (block_allocator == nullptr) {
         error(user_context) << "VulkanMemoryAllocator: Unable to retain region! Invalid block allocator!\n";
         return halide_error_code_generic_error;
+    }
+    MemoryRegion *owner = owner_of(user_context, region);
+    if (owner != nullptr && owner->kind == MemoryRegionKind::ExternalWrapped) {
+        error(user_context) << "VulkanMemoryAllocator: Unable to retain wrapped external region through allocator!\n";
+        return halide_error_code_internal_error;
     }
     return block_allocator->retain(this, region);
 }

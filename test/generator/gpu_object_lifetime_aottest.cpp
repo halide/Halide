@@ -137,6 +137,11 @@ int main(int argc, char **argv) {
                 native_handle = halide_metal_get_buffer(nullptr, output.raw_buffer());
                 can_rewrap = true;
             }
+#elif defined(TEST_VULKAN)
+            if (output.raw_buffer()->device_interface == halide_vulkan_device_interface()) {
+                native_handle = halide_vulkan_get_vk_buffer(nullptr, output.raw_buffer());
+                can_rewrap = true;
+            }
 #endif
 
             if (can_rewrap) {
@@ -155,6 +160,38 @@ int main(int argc, char **argv) {
                 if (i == 1) {
                     wrap_test.device_detach_native();
                 }
+
+#if defined(TEST_VULKAN)
+                if (output.raw_buffer()->device_interface == halide_vulkan_device_interface()) {
+                    Buffer<int, 1> offset_wrap(79);
+                    int result = halide_vulkan_wrap_vk_buffer_with_offset(nullptr, offset_wrap.raw_buffer(), native_handle, sizeof(int));
+                    if (result != 0) {
+                        printf("Error! halide_vulkan_wrap_vk_buffer_with_offset() returned: %d\n", result);
+                        return 1;
+                    }
+                    uint64_t offset = halide_vulkan_get_vk_crop_offset(nullptr, offset_wrap.raw_buffer());
+                    if (offset != sizeof(int)) {
+                        printf("Error! Vulkan wrapped buffer offset: %llu != %zu\n",
+                               (unsigned long long)offset, sizeof(int));
+                        return 1;
+                    }
+
+                    offset_wrap.set_device_dirty();
+                    offset_wrap.copy_to_host();
+                    for (int x = 0; x < offset_wrap.width(); x++) {
+                        if (offset_wrap(x) != output(x + 1)) {
+                            printf("Error! (Vulkan offset wrap test %d): %d != %d\n", i, offset_wrap(x), output(x + 1));
+                            return 1;
+                        }
+                    }
+
+                    result = halide_vulkan_detach_vk_buffer(nullptr, offset_wrap.raw_buffer());
+                    if (result != 0) {
+                        printf("Error! halide_vulkan_detach_vk_buffer() returned: %d\n", result);
+                        return 1;
+                    }
+                }
+#endif
             }
         }
 

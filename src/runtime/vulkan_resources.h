@@ -603,7 +603,8 @@ int vk_update_descriptor_set(void *user_context,
                 return halide_error_code_internal_error;
             }
 
-            VkDeviceSize range_offset = 0;
+            VkDeviceSize range_offset =
+                owner->kind == MemoryRegionKind::ExternalWrapped ? owner->allocation.offset : 0;
             VkDeviceSize range_size = device_region->allocation.size;
             VkDescriptorBufferInfo device_buffer_info = {
                 *device_buffer,  // the buffer
