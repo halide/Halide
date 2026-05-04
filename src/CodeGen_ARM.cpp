@@ -1795,24 +1795,8 @@ void CodeGen_ARM::visit(const Store *op) {
     if (target_vscale() > 0) {
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
         if (stride && stride->value == 1) {
-            // Basically we can deal with vanilla codegen,
-            // but to avoid LLVM error, process with the multiple of natural_lanes
-            const int natural_lanes = natural_vector_size(op->value.type());
-            if (ramp->lanes % natural_lanes && !emit_atomic_stores) {
-                int aligned_lanes = align_up(ramp->lanes, natural_lanes);
-                // Use predicate to prevent overrun
-                Expr vpred;
-                if (is_predicated_store) {
-                    vpred = Shuffle::make_concat({op->predicate, const_false(aligned_lanes - ramp->lanes)});
-                } else {
-                    vpred = make_vector_predicate_1s_0s(ramp->lanes, aligned_lanes - ramp->lanes);
-                }
-                auto aligned_index = Ramp::make(ramp->base, stride, aligned_lanes);
-                Expr padding = make_zero(op->value.type().with_lanes(aligned_lanes - ramp->lanes));
-                Expr aligned_value = Shuffle::make_concat({op->value, padding});
-                codegen(Store::make(op->name, aligned_value, aligned_index, op->param, vpred, op->alignment));
-                return;
-            }
+            CodeGen_CPU::visit(op);
+            return;
         } else if (op->index.type().is_vector()) {
             // Scatter
             Type elt = op->value.type().element_of();
@@ -1965,30 +1949,9 @@ void CodeGen_ARM::visit(const Load *op) {
     }
 
     if ((target_vscale() > 0)) {
-        if (stride && stride->value < 1) {
+        if (stride && stride->value <= 1) {
             CodeGen_CPU::visit(op);
             return;
-        } else if (stride && stride->value == 1) {
-            const int natural_lanes = natural_vector_size(op->type);
-            if (ramp->lanes % natural_lanes) {
-                // Load with lanes multiple of natural_lanes
-                int aligned_lanes = align_up(ramp->lanes, natural_lanes);
-                // Use predicate to prevent from overrun
-                Expr vpred;
-                if (is_predicated_load) {
-                    vpred = Shuffle::make_concat({op->predicate, const_false(aligned_lanes - ramp->lanes)});
-                } else {
-                    vpred = make_vector_predicate_1s_0s(ramp->lanes, aligned_lanes - ramp->lanes);
-                }
-                auto aligned_index = Ramp::make(ramp->base, stride, aligned_lanes);
-                auto aligned_type = op->type.with_lanes(aligned_lanes);
-                value = codegen(Load::make(aligned_type, op->name, aligned_index, op->image, op->param, vpred, op->alignment));
-                value = slice_vector(value, 0, ramp->lanes);
-                return;
-            } else {
-                CodeGen_CPU::visit(op);
-                return;
-            }
         } else if (op->index.type().is_vector()) {
             // General Gather Load
 
