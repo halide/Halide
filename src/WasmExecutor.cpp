@@ -2258,18 +2258,18 @@ const HostCallbackMap &get_host_callback_map() {
 void halide_print_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str);
 void halide_error_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str);
 int32_t halide_trace_helper_native(wasm_exec_env_t exec_env,
-                                    int32_t ucon,
-                                    int32_t func_name,
-                                    int32_t value,
-                                    int32_t coordinates,
-                                    int32_t type_code,
-                                    int32_t type_bits,
-                                    int32_t type_lanes,
-                                    int32_t trace_code,
-                                    int32_t parent_id,
-                                    int32_t value_index,
-                                    int32_t dimensions,
-                                    int32_t trace_tag);
+                                   int32_t ucon,
+                                   int32_t func_name,
+                                   int32_t value,
+                                   int32_t coordinates,
+                                   int32_t type_code,
+                                   int32_t type_bits,
+                                   int32_t type_lanes,
+                                   int32_t trace_code,
+                                   int32_t parent_id,
+                                   int32_t value_index,
+                                   int32_t dimensions,
+                                   int32_t trace_tag);
 
 int32_t malloc_native(wasm_exec_env_t exec_env, int32_t size) {
     wasm_module_inst_t module_inst = wasm_runtime_get_module_inst(exec_env);
@@ -2609,18 +2609,18 @@ void halide_error_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str
 }
 
 int32_t halide_trace_helper_native(wasm_exec_env_t exec_env,
-                                    int32_t ucon,
-                                    int32_t func_name_ptr,
-                                    int32_t value_ptr,
-                                    int32_t coordinates_ptr,
-                                    int32_t type_code,
-                                    int32_t type_bits,
-                                    int32_t type_lanes,
-                                    int32_t trace_code,
-                                    int32_t parent_id,
-                                    int32_t value_index,
-                                    int32_t dimensions,
-                                    int32_t trace_tag_ptr) {
+                                   int32_t ucon,
+                                   int32_t func_name_ptr,
+                                   int32_t value_ptr,
+                                   int32_t coordinates_ptr,
+                                   int32_t type_code,
+                                   int32_t type_bits,
+                                   int32_t type_lanes,
+                                   int32_t trace_code,
+                                   int32_t parent_id,
+                                   int32_t value_index,
+                                   int32_t dimensions,
+                                   int32_t trace_tag_ptr) {
     wasm_module_inst_t instance = wasm_runtime_get_module_inst(exec_env);
     WasmModuleContents *contents = (WasmModuleContents *)wasm_runtime_get_custom_data(instance);
     JITUserContext *jit_user_context = contents ? contents->jit_user_context : nullptr;
