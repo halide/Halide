@@ -422,10 +422,14 @@ void compile_module_impl(
         linkerBuilder = [](llvm::orc::ExecutionSession &session
 #if LLVM_VERSION >= 230
                            ,
-                           llvm::jitlink::JITLinkMemoryManager &
+                           llvm::jitlink::JITLinkMemoryManager &memMgr
 #endif
                         ) {
+#if LLVM_VERSION >= 230
+            return std::make_unique<llvm::orc::ObjectLinkingLayer>(session, memMgr);
+#else
             return std::make_unique<llvm::orc::ObjectLinkingLayer>(session);
+#endif
         };
     }
 
