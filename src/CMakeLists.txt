@@ -580,7 +580,7 @@ target_compile_definitions(Halide PUBLIC
 
 set(Halide_WASM_BACKEND "wabt"
     CACHE STRING "Which backend to use for Halide's WASM testing.")
-set_property(CACHE Halide_WASM_BACKEND PROPERTY STRINGS "wabt;V8;OFF")
+set_property(CACHE Halide_WASM_BACKEND PROPERTY STRINGS "wabt;V8;WAMR;OFF")
 
 if (MSVC AND Halide_WASM_BACKEND STREQUAL "wabt")
     message(WARNING "wabt is not yet supported on Windows")
@@ -591,13 +591,20 @@ if (Halide_WASM_BACKEND STREQUAL "wabt")
     find_package(wabt REQUIRED)
     _Halide_pkgdep(wabt)
 
-    target_link_libraries(Halide PRIVATE wabt::wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
+    target_link_libraries(Halide PRIVATE wabt::wabt)
 elseif (Halide_WASM_BACKEND STREQUAL "V8")
     find_package(V8 REQUIRED)
     _Halide_pkgdep(V8)
+
     target_compile_definitions(Halide PRIVATE WITH_V8)
     target_link_libraries(Halide PRIVATE V8::V8)
+elseif (Halide_WASM_BACKEND STREQUAL "WAMR")
+    find_package(iwasm REQUIRED)
+    _Halide_pkgdep(iwasm)
+
+    target_compile_definitions(Halide PRIVATE WITH_WAMR)
+    target_link_libraries(Halide PRIVATE iwasm::vmlib)
 elseif (Halide_WASM_BACKEND)
     message(FATAL_ERROR "Unknown Halide_WASM_BACKEND `${Halide_WASM_BACKEND}`")
 endif ()
