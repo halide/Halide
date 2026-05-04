@@ -156,7 +156,12 @@ protected:
             }
         } else if (a_uses_var && b_uses_var) {
             if (equal(a, b)) {
-                expr = mutate(a * 2);
+                // Use Mul::make + make_const rather than operator*(Expr, int)
+                // because the latter rejects constants that don't fit in a's
+                // type (e.g. `2` in UInt(1)). make_const truncates modulo the
+                // width, so `UInt(1) * 2` becomes `UInt(1) * 0`, which is
+                // the correct modular result of `a + a` for UInt(1).
+                expr = mutate(Mul::make(a, make_const(a.type(), 2)));
             } else if (add_a && !a_failed) {
                 // (f(x) + a) + g(x) -> (f(x) + g(x)) + a
                 expr = mutate((add_a->a + b) + add_a->b);
@@ -181,11 +186,15 @@ protected:
             } else if (mul_b && equal(mul_b->a, a)) {
                 // f(x) + f(x)*a -> f(x) * (a + 1)
                 expr = mutate(a * (mul_b->b + 1));
-            } else if (div_a && !a_failed) {
-                // f(x)/a + g(x) -> (f(x) + g(x) * a) / b
+            } else if (div_a && !a_failed && no_overflow_int(op->type)) {
+                // f(x)/a + g(x) -> (f(x) + g(x) * a) / a
+                // Only valid when multiplication and division don't wrap:
+                // under modular arithmetic g(x)*a can overflow and the
+                // rewrite changes the value. Gated to Int(32)+.
                 expr = mutate((div_a->a + b * div_a->b) / div_a->b);
-            } else if (div_b && !b_failed) {
+            } else if (div_b && !b_failed && no_overflow_int(op->type)) {
                 // f(x) + g(x)/b -> (f(x) * b + g(x)) / b
+                // Same overflow concern as above.
                 expr = mutate((a * div_b->b + div_b->a) / div_b->b);
             } else {
                 expr = fail(a + b);
@@ -269,8 +278,9 @@ protected:
             } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b)) {
                 // f(x)*a - g(x)*a -> (f(x) - g(x))*a;
                 expr = mutate((mul_a->a - mul_b->a) * mul_a->b);
-            } else if (div_a && !a_failed) {
-                // f(x)/a - g(x) -> (f(x) - g(x) * a) / b
+            } else if (div_a && !a_failed && no_overflow_int(op->type)) {
+                // f(x)/a - g(x) -> (f(x) - g(x) * a) / a
+                // Same overflow concern as the analogous Add rewrite.
                 expr = mutate((div_a->a - b * div_a->b) / div_a->b);
             } else {
                 expr = fail(a - b);
@@ -358,7 +368,10 @@ protected:
         const Sub *sub_a = a.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
         Expr expr;
-        if (a_uses_var && !b_uses_var) {
+        if (a_uses_var && !b_uses_var && no_overflow_int(op->type)) {
+            // Distributing division across +/-/* is only sound under
+            // non-wrapping integer arithmetic. Floats lose precision per
+            // operation, and narrower / unsigned ints can wrap.
             auto ib = as_const_int(b);
             auto is_multiple_of_b = [&](const Expr &e) {
                 if (ib && op->type.is_scalar()) {
@@ -376,7 +389,7 @@ protected:
                        is_multiple_of_b(sub_a->a)) {
                 // (f(x) - a) / b -> f(x) / b - a / b
                 expr = mutate(simplify(sub_a->a / b) - sub_a->b / b);
-            } else if (mul_a && !a_failed && no_overflow_int(op->type) &&
+            } else if (mul_a && !a_failed &&
                        is_multiple_of_b(mul_a->b)) {
                 // (f(x) * a) / b -> f(x) * (a / b)
                 expr = mutate(mul_a->a * (mul_a->b / b));
@@ -609,11 +622,20 @@ protected:
         Expr expr;
 
         if (a_uses_var && !b_uses_var) {
-            // We have f(x) < y. Try to unwrap f(x)
-            if (add_a && !a_failed) {
+            // We have f(x) < y. Try to unwrap f(x).
+            //
+            // Several of these rewrites rearrange the comparison by adding
+            // or subtracting on both sides. That's only sound under an
+            // assumption of no integer overflow -- for types that wrap
+            // (unsigned and narrow signed), ordering comparisons flip
+            // under wrap even though equality is preserved. So gate the
+            // rewrite on no_overflow_int for LT/LE/GT/GE but allow EQ/NE
+            // for all types (modular arithmetic preserves equality).
+            const bool safe_to_rearrange = no_overflow_int(a.type()) || is_eq || is_ne;
+            if (add_a && !a_failed && safe_to_rearrange) {
                 // f(x) + b < c -> f(x) < c - b
                 expr = mutate(Cmp::make(add_a->a, (b - add_a->b)));
-            } else if (sub_a && !a_failed) {
+            } else if (sub_a && !a_failed && safe_to_rearrange) {
                 // f(x) - b < c -> f(x) < c + b
                 expr = mutate(Cmp::make(sub_a->a, (b + sub_a->b)));
             } else if (mul_a) {
@@ -631,11 +653,14 @@ protected:
                     // check is true, but put an assertion anyway.
                     internal_assert(!b.type().is_uint()) << "Negating unsigned is not legal\n";
                     expr = mutate(Opp::make(mul_a->a * negate(mul_a->b), negate(b)));
-                } else {
-                    // Don't use operator/ and operator % to sneak
-                    // past the division-by-zero check. We'll only
-                    // actually use these when mul_a->b is a positive
-                    // or negative constant.
+                } else if (is_positive_const(mul_a->b) && no_overflow_int(a.type())) {
+                    // The rewrites below divide by mul_a->b, so require
+                    // it to be a nonzero constant of known sign.
+                    // no_overflow_int also rules out unsigned and narrow
+                    // signed types, for which `a*c == b <=> a == b/c &&
+                    // b%c == 0` fails under modular arithmetic (consider
+                    // uint8 with c = 3, b = 7: the rewrite misses the
+                    // solutions that arise from wrap).
                     Expr div = Div::make(b, mul_a->b);
                     Expr rem = Mod::make(b, mul_a->b);
                     if (is_eq) {
@@ -644,16 +669,14 @@ protected:
                     } else if (is_ne) {
                         // f(x) * c != b -> f(x) != b/c || b%c != 0
                         expr = mutate((mul_a->a != div) || (rem != 0));
-                    } else if (is_positive_const(mul_a->b)) {
-                        if (is_le) {
-                            expr = mutate(mul_a->a <= div);
-                        } else if (is_lt) {
-                            expr = mutate(mul_a->a <= (b - 1) / mul_a->b);
-                        } else if (is_gt) {
-                            expr = mutate(mul_a->a > div);
-                        } else if (is_ge) {
-                            expr = mutate(mul_a->a > (b - 1) / mul_a->b);
-                        }
+                    } else if (is_le) {
+                        expr = mutate(mul_a->a <= div);
+                    } else if (is_lt) {
+                        expr = mutate(mul_a->a <= (b - 1) / mul_a->b);
+                    } else if (is_gt) {
+                        expr = mutate(mul_a->a > div);
+                    } else if (is_ge) {
+                        expr = mutate(mul_a->a > (b - 1) / mul_a->b);
                     }
                 }
             } else if (div_a) {
@@ -663,7 +686,7 @@ protected:
                     } else if (is_negative_const(div_a->b)) {
                         expr = mutate(Opp::make(div_a->a, b * div_a->b));
                     }
-                } else if (a.type().is_int() && a.type().bits() >= 32) {
+                } else if (no_overflow_int(a.type())) {
                     if (is_eq || is_ne) {
                         // Can't do anything with this
                     } else if (is_negative_const(div_a->b)) {
@@ -689,7 +712,7 @@ protected:
                     }
                 }
             }
-        } else if (a_uses_var && b_uses_var && a.type().is_int() && a.type().bits() >= 32) {
+        } else if (a_uses_var && b_uses_var && no_overflow_int(a.type())) {
             // Convert to f(x) - g(x) == 0 and let the subtract mutator clean up.
             // Only safe if the type is not subject to overflow.
             expr = mutate(Cmp::make(a - b, make_zero(a.type())));
@@ -1171,313 +1194,6 @@ Interval solve_for_outer_interval(const Expr &c, const std::string &var) {
         return Interval::nothing();
     }
     return s.result;
-}
-
-Expr and_condition_over_domain(const Expr &e, const Scope<Interval> &varying) {
-    internal_assert(e.type().is_bool()) << "Expr provided to and_condition_over_domain is not boolean: " << e << "\n";
-    Interval bounds = bounds_of_expr_in_scope(e, varying);
-    internal_assert(bounds.has_lower_bound()) << "Failed to produce bound on boolean value in and_condition_over_domain" << e << "\n";
-    // Minimum of a boolean value is sufficient condition, implies expression.
-    return simplify(bounds.min);
-}
-
-Expr or_condition_over_domain(const Expr &c, const Scope<Interval> &varying) {
-    return simplify(!and_condition_over_domain(simplify(!c), varying));
-}
-
-// Testing code
-
-namespace {
-
-void check_solve(const Expr &a, const Expr &b) {
-    SolverResult solved = solve_expression(a, "x");
-    internal_assert(equal(solved.result, b))
-        << "Expression: " << a << "\n"
-        << " solved to " << solved.result << "\n"
-        << " instead of " << b << "\n";
-}
-
-void check_interval(const Expr &a, const Interval &i, bool outer) {
-    Interval result =
-        outer ? solve_for_outer_interval(a, "x") : solve_for_inner_interval(a, "x");
-    result.min = simplify(result.min);
-    result.max = simplify(result.max);
-    internal_assert(equal(result.min, i.min) && equal(result.max, i.max))
-        << "Expression " << a << " solved to the interval:\n"
-        << "  min: " << result.min << "\n"
-        << "  max: " << result.max << "\n"
-        << " instead of:\n"
-        << "  min: " << i.min << "\n"
-        << "  max: " << i.max << "\n";
-}
-
-void check_outer_interval(const Expr &a, const Expr &min, const Expr &max) {
-    check_interval(a, Interval(min, max), true);
-}
-
-void check_inner_interval(const Expr &a, const Expr &min, const Expr &max) {
-    check_interval(a, Interval(min, max), false);
-}
-
-void check_and_condition(const Expr &orig, const Expr &result, const Interval &i) {
-    Scope<Interval> s;
-    s.push("x", i);
-    Expr cond = and_condition_over_domain(orig, s);
-    internal_assert(equal(cond, result))
-        << "Expression " << orig
-        << " reduced to " << cond
-        << " instead of " << result << "\n";
-}
-}  // namespace
-
-void solve_test() {
-    using ConciseCasts::i16;
-
-    Expr x = Variable::make(Int(32), "x");
-    Expr y = Variable::make(Int(32), "y");
-    Expr z = Variable::make(Int(32), "z");
-
-    // Check some simple cases
-    check_solve(3 - 4 * x, x * (-4) + 3);
-    check_solve(min(5, x), min(x, 5));
-    check_solve(max(5, (5 + x) * y), max(x * y + 5 * y, 5));
-    check_solve(5 * y + 3 * x == 2, ((x == ((2 - (5 * y)) / 3)) && (((2 - (5 * y)) % 3) == 0)));
-    check_solve(min(min(z, x), min(x, y)), min(x, min(y, z)));
-    check_solve(min(x + y, x + 5), x + min(y, 5));
-
-    // Check solver with expressions containing division
-    check_solve(x + (x * 2) / 2, x * 2);
-    check_solve(x + (x * 2 + y) / 2, x * 2 + (y / 2));
-    check_solve(x + (x * 2 - y) / 2, x * 2 - (y / 2));
-    check_solve(x + (-(x * 2) / 2), x * 0 + 0);
-    check_solve(x + (-(x * 2 + -3)) / 2, x * 0 + 1);
-    check_solve(x + (z - (x * 2 + -3)) / 2, x * 0 + (z - (-3)) / 2);
-    check_solve(x + (y * 16 + (z - (x * 2 + -1))) / 2,
-                (x * 0) + (((z - -1) + (y * 16)) / 2));
-
-    check_solve((x * 9 + 3) / 4 - x * 2, (x * 1 + 3) / 4);
-    check_solve((x * 9 + 3) / 4 + x * 2, (x * 17 + 3) / 4);
-    check_solve(x * 2 + (x * 9 + 3) / 4, (x * 17 + 3) / 4);
-
-    // Check the solver doesn't perform transformations that change integer overflow behavior.
-    check_solve(i16(x + y) * i16(2) / i16(2), i16(x + y) * i16(2) / i16(2));
-
-    // A let statement
-    check_solve(Let::make("z", 3 + 5 * x, y + z < 8),
-                x <= (((8 - (3 + y)) - 1) / 5));
-
-    // A let statement where the variable gets used twice.
-    check_solve(Let::make("z", 3 + 5 * x, y + (z + z) < 8),
-                x <= (((8 - (6 + y)) - 1) / 10));
-
-    // Something where we expect a let in the output.
-    {
-        Expr e = y + 1;
-        for (int i = 0; i < 10; i++) {
-            e *= (e + 1);
-        }
-        SolverResult solved = solve_expression(x + e < e * e, "x");
-        internal_assert(solved.fully_solved && solved.result.as<Let>());
-    }
-
-    // Solving inequalities for integers is a pain to get right with
-    // all the rounding rules. Check we didn't make a mistake with
-    // brute force.
-    for (int den = -3; den <= 3; den++) {
-        if (den == 0) {
-            continue;
-        }
-        for (int num = 5; num <= 10; num++) {
-            Expr in[] = {
-                {x * den < num},
-                {x * den <= num},
-                {x * den == num},
-                {x * den != num},
-                {x * den >= num},
-                {x * den > num},
-                {x / den < num},
-                {x / den <= num},
-                {x / den == num},
-                {x / den != num},
-                {x / den >= num},
-                {x / den > num},
-            };
-            for (const auto &e : in) {
-                SolverResult solved = solve_expression(e, "x");
-                internal_assert(solved.fully_solved) << "Error: failed to solve for x in " << e << "\n";
-                Expr out = simplify(solved.result);
-                for (int i = -10; i < 10; i++) {
-                    Expr in_val = substitute("x", i, e);
-                    Expr out_val = substitute("x", i, out);
-                    in_val = simplify(in_val);
-                    out_val = simplify(out_val);
-                    internal_assert(equal(in_val, out_val))
-                        << "Error: "
-                        << e << " is not equivalent to "
-                        << out << " when x == " << i << "\n";
-                }
-            }
-        }
-    }
-
-    // Check for combinatorial explosion
-    Expr e = x + y;
-    for (int i = 0; i < 20; i++) {
-        e += (e + 1) * y;
-    }
-    SolverResult solved = solve_expression(e, "x");
-    internal_assert(solved.fully_solved && solved.result.defined());
-
-    // Check some things that we don't expect to work.
-
-    // Quadratics:
-    internal_assert(!solve_expression(x * x < 4, "x").fully_solved);
-
-    // Function calls, cast nodes, or multiplications by unknown sign
-    // don't get inverted, but the bit containing x still gets moved
-    // leftwards.
-    check_solve(4.0f > sqrt(x), sqrt(x) < 4.0f);
-
-    check_solve(4 > y * x, x * y < 4);
-
-    // Now test solving for an interval
-    check_inner_interval(x > 0, 1, Interval::pos_inf());
-    check_inner_interval(x < 100, Interval::neg_inf(), 99);
-    check_outer_interval(x > 0 && x < 100, 1, 99);
-    check_inner_interval(x > 0 && x < 100, 1, 99);
-
-    Expr c = Variable::make(Bool(), "c");
-    check_outer_interval(Let::make("y", 0, x > y && x < 100), 1, 99);
-    check_outer_interval(Let::make("c", x > 0, c && x < 100), 1, 99);
-
-    check_outer_interval((x >= 10 && x <= 90) && sin(x) > 0.5f, 10, 90);
-    check_inner_interval((x >= 10 && x <= 90) && sin(x) > 0.6f, Interval::pos_inf(), Interval::neg_inf());
-
-    check_inner_interval(x == 10, 10, 10);
-    check_outer_interval(x == 10, 10, 10);
-
-    check_inner_interval(!(x != 10), 10, 10);
-    check_outer_interval(!(x != 10), 10, 10);
-
-    check_inner_interval(3 * x + 4 < 27, Interval::neg_inf(), 7);
-    check_outer_interval(3 * x + 4 < 27, Interval::neg_inf(), 7);
-
-    check_inner_interval(min(x, y) > 17, 18, y);
-    check_outer_interval(min(x, y) > 17, 18, Interval::pos_inf());
-
-    check_inner_interval(x / 5 < 17, Interval::neg_inf(), 84);
-    check_outer_interval(x / 5 < 17, Interval::neg_inf(), 84);
-
-    // Test anding a condition over a domain
-    check_and_condition(x > 0, const_true(), Interval(1, y));
-    check_and_condition(x > 0, const_true(), Interval(5, y));
-    check_and_condition(x > 0, const_false(), Interval(-5, y));
-    check_and_condition(x > 0 && x < 10, const_true(), Interval(1, 9));
-    check_and_condition(x > 0 || sin(x) == 0.5f, const_true(), Interval(100, 200));
-
-    check_and_condition(x <= 0, const_true(), Interval(-100, 0));
-    check_and_condition(x <= 0, const_false(), Interval(-100, 1));
-
-    check_and_condition(x <= 0 || y > 2, const_true(), Interval(-100, 0));
-    check_and_condition(x > 0 || y > 2, 2 < y, Interval(-100, 0));
-
-    check_and_condition(x == 0, const_true(), Interval(0, 0));
-    check_and_condition(x == 0, const_false(), Interval(-10, 10));
-    check_and_condition(x != 0, const_false(), Interval(-10, 10));
-    check_and_condition(x != 0, const_true(), Interval(-20, -10));
-
-    check_and_condition(y == 0, y == 0, Interval(-10, 10));
-    check_and_condition(y != 0, y != 0, Interval(-10, 10));
-    check_and_condition((x == 5) && (y != 0), const_false(), Interval(-10, 10));
-    check_and_condition((x == 5) && (y != 3), y != 3, Interval(5, 5));
-    check_and_condition((x != 0) && (y != 0), const_false(), Interval(-10, 10));
-    check_and_condition((x != 0) && (y != 0), y != 0, Interval(-20, -10));
-
-    {
-        // This case used to break due to signed integer overflow in
-        // the simplifier.
-        Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-        Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-        Expr lhs = pow(cast<int32_t>(a16), 2) + pow(cast<int32_t>(b16), 2);
-
-        Scope<Interval> s;
-        s.push("x", Interval(-10, 10));
-        Expr cond = and_condition_over_domain(lhs < 0, s);
-        internal_assert(!is_const_one(simplify(cond)));
-    }
-
-    {
-        // This cause use to cause infinite recursion:
-        Expr t = Variable::make(Int(32), "t");
-        Expr test = (x <= min(max((y - min(((z * x) + t), t)), 1), 0));
-        Interval result = solve_for_outer_interval(test, "z");
-    }
-
-    {
-        // This case caused exponential behavior
-        Expr t = Variable::make(Int(32), "t");
-        for (int i = 0; i < 50; i++) {
-            t = min(t, Variable::make(Int(32), unique_name('v')));
-            t = max(t, Variable::make(Int(32), unique_name('v')));
-        }
-        solve_for_outer_interval(t <= 5, "t");
-        solve_for_inner_interval(t <= 5, "t");
-    }
-
-    // Check for partial results
-    check_solve(max(min(y, x), x), max(min(x, y), x));
-    check_solve(min(y, x) + max(y, 2 * x), min(x, y) + max(x * 2, y));
-    check_solve((min(x, y) + min(y, x)) * max(y, x), (min(x, y) * 2) * max(x, y));
-    check_solve(max((min((y * x), x) + min((1 + y), x)), (y + 2 * x)),
-                max((min((x * y), x) + min(x, (1 + y))), (x * 2 + y)));
-
-    {
-        Expr x = Variable::make(UInt(32), "x");
-        Expr y = Variable::make(UInt(32), "y");
-        Expr z = Variable::make(UInt(32), "z");
-        check_solve(5 - (4 - 4 * x), x * (4) + 1);
-        check_solve(z - (y - x), x + (z - y));
-        check_solve(z - (y - x) == 2, x == 2 - (z - y));
-
-        check_solve(x - (x - y), (x - x) + y);
-
-        // This is used to cause infinite recursion
-        Expr expr = Add::make(z, Sub::make(x, y));
-        SolverResult solved = solve_expression(expr, "y");
-    }
-
-    // This case was incorrect due to canonicalization of the multiply
-    // occurring after unpacking the LHS.
-    check_solve((y - z) * x, x * (y - z));
-
-    // These cases were incorrectly not flipping min/max when moving
-    // it out of the RHS of a subtract.
-    check_solve(min(x - y, x - z), x - max(y, z));
-    check_solve(min(x - y, x), x - max(y, 0));
-    check_solve(min(x, x - y), x - max(y, 0));
-    check_solve(max(x - y, x - z), x - min(y, z));
-    check_solve(max(x - y, x), x - min(y, 0));
-    check_solve(max(x, x - y), x - min(y, 0));
-
-    // Check mixed add/sub
-    check_solve(min(x - y, x + z), x + min(0 - y, z));
-    check_solve(max(x - y, x + z), x + max(0 - y, z));
-    check_solve(min(x + y, x - z), x + min(y, 0 - z));
-    check_solve(max(x + y, x - z), x + max(y, 0 - z));
-
-    check_solve((5 * Broadcast::make(x, 4) + y) / 5,
-                Broadcast::make(x, 4) + (Broadcast::make(y, 4) / 5));
-
-    // Select negates the condition to move x leftward
-    check_solve(select(y < z, z, x),
-                select(z <= y, x, z));
-
-    // Select negates the condition and then mutates it, moving x
-    // leftward (despite the simplifier preferring < to >).
-    check_solve(select(x < 10, 10, x),
-                select(x >= 10, x, 10));
-
-    std::cout << "Solve test passed\n";
 }
 
 }  // namespace Internal
