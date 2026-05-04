@@ -4,6 +4,7 @@
 #include "Deinterleave.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "MultiRamp.h"
 #include "Simplify.h"
 
 using std::vector;
@@ -17,15 +18,25 @@ class FlattenRamps : public IRMutator {
 
     Expr visit(const Ramp *op) override {
         if (op->base.type().is_vector()) {
-            Expr base = mutate(op->base);
-            Expr stride = mutate(op->stride);
-            std::vector<Expr> ramp_elems;
-            ramp_elems.reserve(op->lanes);
-            for (int ix = 0; ix < op->lanes; ix++) {
-                ramp_elems.push_back(base + ix * stride);
-            }
+            if (MultiRamp mr;
+                is_multiramp(op, Scope<Expr>::empty_scope(), &mr)) {
+                // Flatten multiramps entirely in one go, instead of recursively
+                // with the general case below, so that we get one big concat
+                // instead of a concat-of-concats. The innermost dimension is
+                // left as a Ramp.
+                mr.mutate(this);
+                return Shuffle::make_concat(mr.flatten());
+            } else {
+                Expr base = mutate(op->base);
+                Expr stride = mutate(op->stride);
+                std::vector<Expr> ramp_elems;
+                ramp_elems.reserve(op->lanes);
+                for (int ix = 0; ix < op->lanes; ix++) {
+                    ramp_elems.push_back(base + ix * stride);
+                }
 
-            return Shuffle::make_concat(ramp_elems);
+                return Shuffle::make_concat(ramp_elems);
+            }
         }
 
         return IRMutator::visit(op);
@@ -38,6 +49,18 @@ class FlattenRamps : public IRMutator {
         }
 
         return IRMutator::visit(op);
+    }
+
+    // Return the sub-vector of `v` corresponding to the n-th sub-ramp of a
+    // flattened multiramp of width `inner_lanes`. Scalar broadcasts get
+    // rebroadcast to `inner_lanes`; everything else is a slice.
+    static Expr slice_per_inner_ramp(const Expr &v, int n, int inner_lanes) {
+        if (const Broadcast *b = v.as<Broadcast>()) {
+            if (b->value.type().is_scalar()) {
+                return Broadcast::make(b->value, inner_lanes);
+            }
+        }
+        return Shuffle::make_slice(v, n * inner_lanes, 1, inner_lanes);
     }
 
     Expr visit(const Load *op) override {
@@ -122,6 +145,92 @@ class FlattenRamps : public IRMutator {
                         return Shuffle::make({dense_load}, const_indices);
                     }
                 }
+            }
+        }
+
+        // If the index is a multiramp, emit a concat of per-inner-ramp
+        // dense/strided loads. This handles the case where the bounded-span
+        // conversion above didn't fire (e.g. symbolic strides, or the
+        // access range is too large for a single dense load). Doing the
+        // concat directly (rather than letting the Ramp visitor flatten
+        // the nested ramp into a big scalar-index load + a subtracted
+        // broadcast offset) makes the structure visible to downstream
+        // shuffle simplification rules.
+        if (op->type.is_vector()) {
+            if (MultiRamp mr;
+                is_multiramp(op->index, Scope<Expr>::empty_scope(), &mr) &&
+                mr.dimensions() >= 2) {
+
+                Expr predicate = mutate(op->predicate);
+                mr.mutate(this);
+                std::vector<Expr> sub_indices = mr.flatten();
+                int inner_lanes = mr.lanes[0];
+                Type elem_type = op->type.with_lanes(inner_lanes);
+                std::vector<Expr> loads;
+                loads.reserve(sub_indices.size());
+                for (size_t n = 0; n < sub_indices.size(); n++) {
+                    Expr p = slice_per_inner_ramp(predicate, (int)n, inner_lanes);
+                    ModulusRemainder align = (n == 0) ? op->alignment : ModulusRemainder{};
+                    loads.push_back(Load::make(elem_type, op->name, sub_indices[n],
+                                               op->image, op->param, p, align));
+                }
+                return Shuffle::make_concat(loads);
+            }
+        }
+
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Store *op) override {
+        // If the index is a multiramp, unroll into a sequence of per-inner-ramp
+        // stores, for the same reason as the Load visitor above.
+        if (op->index.type().is_vector()) {
+            if (MultiRamp mr;
+                is_multiramp(op->index, Scope<Expr>::empty_scope(), &mr) &&
+                mr.dimensions() >= 2) {
+
+                Expr predicate = mutate(op->predicate);
+                Expr value = mutate(op->value);
+                mr.mutate(this);
+                std::vector<Expr> sub_indices = mr.flatten();
+                int inner_lanes = mr.lanes[0];
+
+                // The value and/or predicate may load from the buffer being
+                // stored to, so they must be fully evaluated before any of
+                // the stores run. Hoist non-trivial ones into LetStmts that
+                // wrap the block of stores. Skip the hoisting if the expr
+                // is already a Variable or a constant.
+                auto needs_hoist = [](const Expr &e) {
+                    return !is_const(e) && !e.as<Variable>();
+                };
+                std::string value_name, predicate_name;
+                Expr value_ref = value, predicate_ref = predicate;
+                if (needs_hoist(value)) {
+                    value_name = unique_name('t');
+                    value_ref = Variable::make(value.type(), value_name);
+                }
+                if (needs_hoist(predicate)) {
+                    predicate_name = unique_name('t');
+                    predicate_ref = Variable::make(predicate.type(), predicate_name);
+                }
+
+                std::vector<Stmt> stores;
+                stores.reserve(sub_indices.size());
+                for (size_t n = 0; n < sub_indices.size(); n++) {
+                    Expr p = slice_per_inner_ramp(predicate_ref, (int)n, inner_lanes);
+                    Expr v = slice_per_inner_ramp(value_ref, (int)n, inner_lanes);
+                    ModulusRemainder align = (n == 0) ? op->alignment : ModulusRemainder{};
+                    stores.push_back(Store::make(op->name, v, sub_indices[n],
+                                                 op->param, p, align));
+                }
+                Stmt result = Block::make(stores);
+                if (!predicate_name.empty()) {
+                    result = LetStmt::make(predicate_name, predicate, result);
+                }
+                if (!value_name.empty()) {
+                    result = LetStmt::make(value_name, value, result);
+                }
+                return result;
             }
         }
         return IRMutator::visit(op);

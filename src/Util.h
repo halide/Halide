@@ -183,6 +183,26 @@ bool ends_with(const std::string &str, const std::string &suffix);
  * this function to return the same string without any copies being made. */
 std::string replace_all(std::string str, const std::string &find, const std::string &replace);
 
+/** Invoke `f(coord)` for each integer coordinate in the box
+ * `[0, sizes[0]) x [0, sizes[1]) x ...`, in lex order with the first
+ * axis varying fastest. `coord` is a `const std::vector<int> &` of the
+ * same length as `sizes`. The empty-sizes case invokes `f` once with an
+ * empty coord (a 0-dim box has one point). */
+template<typename F>
+void for_each_coordinate(const std::vector<int> &sizes, F &&f) {
+    std::vector<int> coord(sizes.size(), 0);
+    while (true) {
+        f(coord);
+        size_t k = 0;
+        while (k < sizes.size() && ++coord[k] == sizes[k]) {
+            coord[k++] = 0;
+        }
+        if (k == sizes.size()) {
+            return;
+        }
+    }
+}
+
 /** Split the source string using 'delim' as the divider. */
 std::vector<std::string> split_string(const std::string &source, const std::string &delim);
 
