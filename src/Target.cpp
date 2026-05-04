@@ -776,6 +776,16 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_realizations", Target::TraceRealizations},
     {"trace_pipeline", Target::TracePipeline},
     {"d3d12compute", Target::D3D12Compute},
+    {"hlsl_sm60", Target::HLSL_SM60},
+    {"hlsl_sm61", Target::HLSL_SM61},
+    {"hlsl_sm62", Target::HLSL_SM62},
+    {"hlsl_sm63", Target::HLSL_SM63},
+    {"hlsl_sm64", Target::HLSL_SM64},
+    {"hlsl_sm65", Target::HLSL_SM65},
+    {"hlsl_sm66", Target::HLSL_SM66},
+    {"hlsl_sm67", Target::HLSL_SM67},
+    {"hlsl_sm68", Target::HLSL_SM68},
+    {"hlsl_sm69", Target::HLSL_SM69},
     {"strict_float", Target::StrictFloat},
     {"tsan", Target::TSAN},
     {"asan", Target::ASAN},
@@ -1135,6 +1145,22 @@ void Target::validate_features() const {
                                 VSX,
                             });
     }
+
+    // D3D12Compute SM version features require D3D12Compute to also be set.
+    if (!has_feature(D3D12Compute)) {
+        do_check_bad(*this, {
+                                HLSL_SM60,
+                                HLSL_SM61,
+                                HLSL_SM62,
+                                HLSL_SM63,
+                                HLSL_SM64,
+                                HLSL_SM65,
+                                HLSL_SM66,
+                                HLSL_SM67,
+                                HLSL_SM68,
+                                HLSL_SM69,
+                            });
+    }
 }
 
 Target::Target(const std::string &target) {
@@ -1378,6 +1404,43 @@ int Target::get_vulkan_capability_lower_bound() const {
     return 10;
 }
 
+int Target::get_d3d12compute_capability_lower_bound() const {
+    if (!has_feature(Target::D3D12Compute)) {
+        return -1;
+    }
+    if (has_feature(Target::HLSL_SM60)) {
+        return 60;
+    }
+    if (has_feature(Target::HLSL_SM61)) {
+        return 61;
+    }
+    if (has_feature(Target::HLSL_SM62)) {
+        return 62;
+    }
+    if (has_feature(Target::HLSL_SM63)) {
+        return 63;
+    }
+    if (has_feature(Target::HLSL_SM64)) {
+        return 64;
+    }
+    if (has_feature(Target::HLSL_SM65)) {
+        return 65;
+    }
+    if (has_feature(Target::HLSL_SM66)) {
+        return 66;
+    }
+    if (has_feature(Target::HLSL_SM67)) {
+        return 67;
+    }
+    if (has_feature(Target::HLSL_SM68)) {
+        return 68;
+    }
+    if (has_feature(Target::HLSL_SM69)) {
+        return 69;
+    }
+    return 51;  // default: SM 5.1 (FXC)
+}
+
 int Target::get_arm_v8_lower_bound() const {
     if (has_feature(Target::ARMv8a)) {
         return 80;
@@ -1416,13 +1479,13 @@ bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
             return (!has_feature(Metal) &&
-                    !has_feature(D3D12Compute) &&
+                    (!has_feature(D3D12Compute) || get_d3d12compute_capability_lower_bound() >= 60) &&
                     (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles)) &&
                     (!has_feature(Vulkan) || has_feature(Target::VulkanFloat64)) &&
                     !has_feature(WebGPU));
         } else {
             return (!has_feature(Metal) &&
-                    !has_feature(D3D12Compute) &&
+                    (!has_feature(D3D12Compute) || get_d3d12compute_capability_lower_bound() >= 60) &&
                     (!has_feature(Vulkan) || has_feature(Target::VulkanInt64)) &&
                     !has_feature(WebGPU));
         }
@@ -1450,9 +1513,18 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
             return has_feature(Target::CLDoubles);
         }
     } else if (device == DeviceAPI::D3D12Compute) {
-        // Shader Model 5.x can optionally support double-precision; 64-bit int
-        // types are not supported.
-        return t.bits() < 64;
+        // SM 5.1 (FXC): no 64-bit types. float16 and int8 work via widening.
+        // SM 6.0+: 64-bit int and float (double, int64_t, uint64_t) supported.
+        // SM 6.2+: native 16-bit float (float16_t) and int (int16_t, uint16_t).
+        // SM 6.6+: native 8-bit int (int8_t, uint8_t). Earlier SMs widen to int32.
+        // SM 6.9+: long vectors (5–1024 lanes) via vector<T, N> syntax.
+        if (t.bits() == 64) {
+            return get_d3d12compute_capability_lower_bound() >= 60;
+        }
+        if (t.lanes() > 4) {
+            return get_d3d12compute_capability_lower_bound() >= 69;
+        }
+        return true;
     } else if (device == DeviceAPI::Vulkan) {
         if (t.is_float() && t.bits() == 64) {
             return has_feature(Target::VulkanFloat64);
@@ -1653,6 +1725,17 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         VulkanV12,
         VulkanV13,
 
+        HLSL_SM60,
+        HLSL_SM61,
+        HLSL_SM62,
+        HLSL_SM63,
+        HLSL_SM64,
+        HLSL_SM65,
+        HLSL_SM66,
+        HLSL_SM67,
+        HLSL_SM68,
+        HLSL_SM69,
+
         ARMv8a,
         ARMv81a,
         ARMv82a,
@@ -1787,6 +1870,43 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         output.features.reset(VulkanV13);
     }
 
+    // Pick tight lower bound for D3D12Compute SM version. Use fall-through to clear redundant features
+    int d3d12_sm_a = get_d3d12compute_capability_lower_bound();
+    int d3d12_sm_b = other.get_d3d12compute_capability_lower_bound();
+
+    // Same trick as CUDA: -1 (unused) becomes large when cast to unsigned, so min gives the true lower bound.
+    int d3d12_sm = std::min((unsigned)d3d12_sm_a, (unsigned)d3d12_sm_b);
+    if (d3d12_sm < 60) {
+        output.features.reset(HLSL_SM60);
+    }
+    if (d3d12_sm < 61) {
+        output.features.reset(HLSL_SM61);
+    }
+    if (d3d12_sm < 62) {
+        output.features.reset(HLSL_SM62);
+    }
+    if (d3d12_sm < 63) {
+        output.features.reset(HLSL_SM63);
+    }
+    if (d3d12_sm < 64) {
+        output.features.reset(HLSL_SM64);
+    }
+    if (d3d12_sm < 65) {
+        output.features.reset(HLSL_SM65);
+    }
+    if (d3d12_sm < 66) {
+        output.features.reset(HLSL_SM66);
+    }
+    if (d3d12_sm < 67) {
+        output.features.reset(HLSL_SM67);
+    }
+    if (d3d12_sm < 68) {
+        output.features.reset(HLSL_SM68);
+    }
+    if (d3d12_sm < 69) {
+        output.features.reset(HLSL_SM69);
+    }
+
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     int hvx_a = get_hvx_lower_bound(*this);
     int hvx_b = get_hvx_lower_bound(other);
@@ -1874,6 +1994,11 @@ void target_test() {
         {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
         {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt", ""}},
         {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt-hvx", "hexagon-32-qurt-hvx"}},
+        {{"x86-64-windows-d3d12compute-hlsl_sm66", "x86-64-windows-d3d12compute", "x86-64-windows-d3d12compute"}},
+        {{"x86-64-windows-d3d12compute-hlsl_sm66", "x86-64-windows-d3d12compute-hlsl_sm60", "x86-64-windows-d3d12compute-hlsl_sm60"}},
+        {{"x86-64-windows-d3d12compute-hlsl_sm62", "x86-64-windows-d3d12compute-hlsl_sm62", "x86-64-windows-d3d12compute-hlsl_sm62"}},
+        {{"x86-64-windows-d3d12compute-hlsl_sm69", "x86-64-windows-d3d12compute", "x86-64-windows-d3d12compute"}},
+        {{"x86-64-windows-d3d12compute-hlsl_sm69", "x86-64-windows-d3d12compute-hlsl_sm60", "x86-64-windows-d3d12compute-hlsl_sm60"}},
     };
 
     for (const auto &test : gcd_tests) {

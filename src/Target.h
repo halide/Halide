@@ -184,6 +184,16 @@ struct Target {
         AVX10_1 = halide_target_feature_avx10_1,
         X86APX = halide_target_feature_x86_apx,
         Simulator = halide_target_feature_simulator,
+        HLSL_SM60 = halide_target_feature_hlsl_sm60,
+        HLSL_SM61 = halide_target_feature_hlsl_sm61,
+        HLSL_SM62 = halide_target_feature_hlsl_sm62,
+        HLSL_SM63 = halide_target_feature_hlsl_sm63,
+        HLSL_SM64 = halide_target_feature_hlsl_sm64,
+        HLSL_SM65 = halide_target_feature_hlsl_sm65,
+        HLSL_SM66 = halide_target_feature_hlsl_sm66,
+        HLSL_SM67 = halide_target_feature_hlsl_sm67,
+        HLSL_SM68 = halide_target_feature_hlsl_sm68,
+        HLSL_SM69 = halide_target_feature_hlsl_sm69,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
@@ -348,6 +358,11 @@ struct Target {
      * 10 (our minimum supported Vulkan compute capability) if no Vulkan
      * features are set. */
     int get_vulkan_capability_lower_bound() const;
+
+    /** Get the minimum D3D12Compute Shader Model version as an integer
+     * (e.g. 60 for SM 6.0, 62 for SM 6.2). Returns 51 (SM 5.1, FXC path)
+     * if no SM 6.x features are set, or -1 if D3D12Compute is not enabled. */
+    int get_d3d12compute_capability_lower_bound() const;
 
     /** Get the minimum ARM v8.x capability found as an integer. Returns
      * -1 if no ARM v8.x features are set. */

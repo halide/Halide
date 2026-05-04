@@ -276,16 +276,20 @@ fun_2(uint32_t, uint32_t, absd, absd);
         test_##type##_##name(args.data);                        \
     } while (0)
 
-#define call_1_float_types(name, steps, start, end) \
-    do {                                            \
-        call_1(float, name, steps, start, end);     \
-        call_1(double, name, steps, start, end);    \
+#define call_1_float_types(name, steps, start, end)  \
+    do {                                             \
+        call_1(float, name, steps, start, end);      \
+        if (!skip_double) {                          \
+            call_1(double, name, steps, start, end); \
+        }                                            \
     } while (0)
 
-#define call_2_float_types(name, steps, start1, end1, start2, end2) \
-    do {                                                            \
-        call_2(float, name, steps, start1, end1, start2, end2);     \
-        call_2(double, name, steps, start1, end1, start2, end2);    \
+#define call_2_float_types(name, steps, start1, end1, start2, end2)  \
+    do {                                                             \
+        call_2(float, name, steps, start1, end1, start2, end2);      \
+        if (!skip_double) {                                          \
+            call_2(double, name, steps, start1, end1, start2, end2); \
+        }                                                            \
     } while (0)
 
 }  // namespace
@@ -293,6 +297,12 @@ fun_2(uint32_t, uint32_t, absd, absd);
 int main(int argc, char **argv) {
     printf("host is:      %s\n", get_host_target().to_string().c_str());
     printf("HL_JIT_TARGET is: %s\n", get_jit_target_from_environment().to_string().c_str());
+
+    Target jit_target = get_jit_target_from_environment();
+    bool skip_double = !jit_target.supports_type(Float(64));
+    if (skip_double) {
+        printf("Skipping double tests (target does not support float64)\n");
+    }
 
     call_1_float_types(abs, 256, -1000, 1000);
     call_1_float_types(sqrt, 256, 0, 1000000);

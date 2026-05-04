@@ -17,7 +17,8 @@ int find_pi() {
     }
 
     // Vulkan lacks trig functions for 64-bit floats ... skip
-    if (target.has_feature(Target::Vulkan) && (type.is_float() && type.bits() > 32)) {
+    if (target.has_feature(Target::Vulkan) &&
+        (type.is_float() && type.bits() > 32)) {
         return 0;
     }
 

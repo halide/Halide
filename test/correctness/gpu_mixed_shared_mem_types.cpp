@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include <stdio.h>
+#include <vector>
 
 using namespace Halide;
 
@@ -23,13 +24,17 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Type types[] = {Int(8), Int(16), Int(32), Int(64),
+    std::vector<Type> type_vec;
+    for (auto ty : {Int(8), Int(16), Int(32), Int(64),
                     UInt(8), UInt(16), UInt(32), UInt(64),
-                    Float(32)};
+                    Float(32)}) {
+        if (!t.supports_type(ty)) continue;
+        type_vec.push_back(ty);
+    }
+    const int n_types = (int)type_vec.size();
+    Type *types = type_vec.data();
 
-    const int n_types = sizeof(types) / sizeof(types[0]);
-
-    Func funcs[n_types];
+    std::vector<Func> funcs(n_types);
 
     Var x("x"), xi("xi");
 
