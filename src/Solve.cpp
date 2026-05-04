@@ -389,8 +389,7 @@ protected:
                        is_multiple_of_b(sub_a->a)) {
                 // (f(x) - a) / b -> f(x) / b - a / b
                 expr = mutate(simplify(sub_a->a / b) - sub_a->b / b);
-            } else if (mul_a && !a_failed &&
-                       is_multiple_of_b(mul_a->b)) {
+            } else if (mul_a && !a_failed && is_multiple_of_b(mul_a->b)) {
                 // (f(x) * a) / b -> f(x) * (a / b)
                 expr = mutate(mul_a->a * (mul_a->b / b));
             }
