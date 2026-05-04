@@ -9,6 +9,9 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 namespace {
+Expr x = Variable::make(Int(32), "x");
+Expr y = Variable::make(Int(32), "y");
+Expr z = Variable::make(Int(32), "z");
 
 // Assert that solve_expression produces exactly the given expected expression.
 void check_solve(const Expr &in, const Expr &expected) {
@@ -78,8 +81,8 @@ void check_solve_equivalent(const Expr &in, const std::map<std::string, Expr> &v
     }
 }
 
-// Bug #1: the solver was rewriting `f(x) + b @ c` to `f(x) @ c - b` for
-// every comparison @, but for unsigned types the subtraction wraps, which
+// The solver was rewriting `f(x) + b @ c` to `f(x) @ c - b` for every
+// comparison @, but for unsigned types the subtraction wraps, which
 // does not preserve the *ordering* comparisons LT/LE/GT/GE (the EQ/NE
 // rewrite is still valid under modular arithmetic, so those stay).
 void test_unsigned_ordering_not_rearranged() {
@@ -108,9 +111,9 @@ void test_unsigned_ordering_not_rearranged() {
     check_solve_equivalent(x - y >= c, vars);
 }
 
-// Bug #1 corollary: EQ/NE rewrites are still safe under modular arithmetic
-// (modular equivalence preserves equality), so these should continue to be
-// rewritten to isolate x on the left.
+// EQ/NE rewrites are still safe under modular arithmetic (modular equivalence
+// preserves equality), so these should continue to be rewritten to isolate x
+// on the left.
 void test_unsigned_equality_still_rearranged() {
     Expr x = Variable::make(UInt(32), "x");
     Expr y = Variable::make(UInt(32), "y");
@@ -122,16 +125,13 @@ void test_unsigned_equality_still_rearranged() {
     check_solve(x + y != c, x != (c - y));
 }
 
-// Bug #2: the solver was rewriting `f(x) * y @ b` to forms involving `b / y`
-// and `b % y` even when `y` was a non-constant expression. When `y` evaluates
-// to zero the rewrite changes the expression's value even though Halide
-// defines div/mod-by-zero to return zero -- `a * 0 == b` becomes `a == b/0 &&
-// b%0 == 0` which collapses to `a == 0 && b == 0`, losing the original
-// "always false when b != 0" semantics.
+// The solver was rewriting `f(x) * y @ b` to forms involving `b / y` and `b % y`
+// even when `y` was a non-constant expression. When `y` evaluates to zero the
+// rewrite changes the expression's value even though Halide defines
+// div/mod-by-zero to return zero -- `a * 0 == b` becomes `a == b/0 && b%0 == 0`
+// which collapses to `a == 0 && b == 0`, losing the original "always false when
+// b != 0" semantics.
 void test_nonconstant_multiplier_not_rewritten() {
-    Expr x = Variable::make(Int(32), "x");
-    Expr y = Variable::make(Int(32), "y");
-
     // At y = 0, `x * y == 1` is the well-defined `0 == 1 == false`.
     // The buggy rewrite `x == 1/y && 1%y == 0` evaluates to
     // `x == 0 && true == true`, which is true at x = 0 -- changing the
@@ -157,7 +157,6 @@ void test_nonconstant_multiplier_not_rewritten() {
 // operands are const, so `Div::make(7, 3)` reduces to 2 during mutation;
 // there is no analogous fold for Mod so the Mod node stays.
 void test_positive_const_multiplier_still_rewritten() {
-    Expr x = Variable::make(Int(32), "x");
     Expr seven = Expr(7);
     Expr three = Expr(3);
     check_solve(3 * x == 7,
@@ -240,15 +239,8 @@ void test_simplify_preserves_float_to_uint_cast_chain() {
     }
 }
 
-// Previously lived as `solve_test()` at the bottom of src/Solve.cpp and
-// was invoked from test/internal.cpp. Moved here so all solver tests are
-// in one place.
-void test_original_solve_test_cases() {
+void test_simple_cases() {
     using ConciseCasts::i16;
-
-    Expr x = Variable::make(Int(32), "x");
-    Expr y = Variable::make(Int(32), "y");
-    Expr z = Variable::make(Int(32), "z");
 
     // Check some simple cases
     check_solve(3 - 4 * x, x * (-4) + 3);
@@ -257,6 +249,10 @@ void test_original_solve_test_cases() {
     check_solve(5 * y + 3 * x == 2, ((x == ((2 - (5 * y)) / 3)) && (((2 - (5 * y)) % 3) == 0)));
     check_solve(min(min(z, x), min(x, y)), min(x, min(y, z)));
     check_solve(min(x + y, x + 5), x + min(y, 5));
+}
+
+void test_simple_division_cases() {
+    using ConciseCasts::i16;
 
     // Check solver with expressions containing division
     check_solve(x + (x * 2) / 2, x * 2);
@@ -271,9 +267,17 @@ void test_original_solve_test_cases() {
     check_solve((x * 9 + 3) / 4 - x * 2, (x * 1 + 3) / 4);
     check_solve((x * 9 + 3) / 4 + x * 2, (x * 17 + 3) / 4);
     check_solve(x * 2 + (x * 9 + 3) / 4, (x * 17 + 3) / 4);
+}
+
+void test_integer_overflow() {
+    using ConciseCasts::i16;
 
     // Check the solver doesn't perform transformations that change integer overflow behavior.
     check_solve(i16(x + y) * i16(2) / i16(2), i16(x + y) * i16(2) / i16(2));
+}
+
+void test_let_statements() {
+    using ConciseCasts::i16;
 
     // A let statement
     check_solve(Let::make("z", 3 + 5 * x, y + z < 8),
@@ -284,17 +288,19 @@ void test_original_solve_test_cases() {
                 x <= (((8 - (6 + y)) - 1) / 10));
 
     // Something where we expect a let in the output.
-    {
-        Expr e = y + 1;
-        for (int i = 0; i < 10; i++) {
-            e *= (e + 1);
-        }
-        SolverResult solved = solve_expression(x + e < e * e, "x");
-        if (!(solved.fully_solved && solved.result.as<Let>())) {
-            std::cerr << "Expected fully-solved Let-bearing result\n";
-            std::abort();
-        }
+    Expr e = y + 1;
+    for (int i = 0; i < 10; i++) {
+        e *= (e + 1);
     }
+    SolverResult solved = solve_expression(x + e < e * e, "x");
+    if (!(solved.fully_solved && solved.result.as<Let>())) {
+        std::cerr << "Expected fully-solved Let-bearing result\n";
+        std::abort();
+    }
+}
+
+void test_integer_rounding_brute_force() {
+    using ConciseCasts::i16;
 
     // Solving inequalities for integers is a pain to get right with
     // all the rounding rules. Check we didn't make a mistake with
@@ -340,19 +346,25 @@ void test_original_solve_test_cases() {
             }
         }
     }
+}
+
+void test_regression_combinatorial_explosion() {
+    using ConciseCasts::i16;
 
     // Check for combinatorial explosion
-    {
-        Expr e = x + y;
-        for (int i = 0; i < 20; i++) {
-            e += (e + 1) * y;
-        }
-        SolverResult solved = solve_expression(e, "x");
-        if (!(solved.fully_solved && solved.result.defined())) {
-            std::cerr << "Expected fully-solved defined result for combinatorial case\n";
-            std::abort();
-        }
+    Expr e = x + y;
+    for (int i = 0; i < 20; i++) {
+        e += (e + 1) * y;
     }
+    SolverResult solved = solve_expression(e, "x");
+    if (!(solved.fully_solved && solved.result.defined())) {
+        std::cerr << "Expected fully-solved defined result for combinatorial case\n";
+        std::abort();
+    }
+}
+
+void test_unsolvable_cases_are_unsolvable() {
+    using ConciseCasts::i16;
 
     // Check some things that we don't expect to work.
 
@@ -368,6 +380,10 @@ void test_original_solve_test_cases() {
     check_solve(4.0f > sqrt(x), sqrt(x) < 4.0f);
 
     check_solve(4 > y * x, x * y < 4);
+}
+
+void test_interval_solutions() {
+    using ConciseCasts::i16;
 
     // Now test solving for an interval
     check_inner_interval(x > 0, 1, Interval::pos_inf());
@@ -396,6 +412,10 @@ void test_original_solve_test_cases() {
 
     check_inner_interval(x / 5 < 17, Interval::neg_inf(), 84);
     check_outer_interval(x / 5 < 17, Interval::neg_inf(), 84);
+}
+
+void test_and_condition_over_domain() {
+    using ConciseCasts::i16;
 
     // Test anding a condition over a domain
     check_and_condition(x > 0, const_true(), Interval(1, y));
@@ -421,40 +441,50 @@ void test_original_solve_test_cases() {
     check_and_condition((x == 5) && (y != 3), y != 3, Interval(5, 5));
     check_and_condition((x != 0) && (y != 0), const_false(), Interval(-10, 10));
     check_and_condition((x != 0) && (y != 0), y != 0, Interval(-20, -10));
+}
 
-    {
-        // This case used to break due to signed integer overflow in
-        // the simplifier.
-        Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-        Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-        Expr lhs = pow(cast<int32_t>(a16), 2) + pow(cast<int32_t>(b16), 2);
+void test_regression_signed_integer_overflow_pow() {
+    using ConciseCasts::i16;
 
-        Scope<Interval> s;
-        s.push("x", Interval(-10, 10));
-        Expr cond = and_condition_over_domain(lhs < 0, s);
-        if (is_const_one(simplify(cond))) {
-            std::cerr << "Expected cond to not simplify to const_one\n";
-            std::abort();
-        }
+    // This case used to break due to signed integer overflow in
+    // the simplifier.
+    Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+    Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+    Expr lhs = pow(cast<int32_t>(a16), 2) + pow(cast<int32_t>(b16), 2);
+
+    Scope<Interval> s;
+    s.push("x", Interval(-10, 10));
+    Expr cond = and_condition_over_domain(lhs < 0, s);
+    if (is_const_one(simplify(cond))) {
+        std::cerr << "Expected cond to not simplify to const_one\n";
+        std::abort();
     }
+}
 
-    {
-        // This cause use to cause infinite recursion:
-        Expr t = Variable::make(Int(32), "t");
-        Expr test = (x <= min(max((y - min(((z * x) + t), t)), 1), 0));
-        Interval result = solve_for_outer_interval(test, "z");
-    }
+void test_regression_infinite_recursion_min_max() {
+    using ConciseCasts::i16;
 
-    {
-        // This case caused exponential behavior
-        Expr t = Variable::make(Int(32), "t");
-        for (int i = 0; i < 50; i++) {
-            t = min(t, Variable::make(Int(32), unique_name('v')));
-            t = max(t, Variable::make(Int(32), unique_name('v')));
-        }
-        solve_for_outer_interval(t <= 5, "t");
-        solve_for_inner_interval(t <= 5, "t");
+    // This cause use to cause infinite recursion:
+    Expr t = Variable::make(Int(32), "t");
+    Expr test = (x <= min(max((y - min(((z * x) + t), t)), 1), 0));
+    Interval result = solve_for_outer_interval(test, "z");
+}
+
+void test_regression_exponential_behavior_min_max() {
+    using ConciseCasts::i16;
+
+    // This case caused exponential behavior
+    Expr t = Variable::make(Int(32), "t");
+    for (int i = 0; i < 50; i++) {
+        t = min(t, Variable::make(Int(32), unique_name('v')));
+        t = max(t, Variable::make(Int(32), unique_name('v')));
     }
+    solve_for_outer_interval(t <= 5, "t");
+    solve_for_inner_interval(t <= 5, "t");
+}
+
+void test_partial_solves() {
+    using ConciseCasts::i16;
 
     // Check for partial results
     check_solve(max(min(y, x), x), max(min(x, y), x));
@@ -462,25 +492,32 @@ void test_original_solve_test_cases() {
     check_solve((min(x, y) + min(y, x)) * max(y, x), (min(x, y) * 2) * max(x, y));
     check_solve(max((min((y * x), x) + min((1 + y), x)), (y + 2 * x)),
                 max((min((x * y), x) + min(x, (1 + y))), (x * 2 + y)));
+}
 
-    {
-        Expr x = Variable::make(UInt(32), "x");
-        Expr y = Variable::make(UInt(32), "y");
-        Expr z = Variable::make(UInt(32), "z");
-        check_solve(5 - (4 - 4 * x), x * (4) + 1);
-        check_solve(z - (y - x), x + (z - y));
-        check_solve(z - (y - x) == 2, x == 2 - (z - y));
+void test_regression_infinite_recursion_add_sub() {
+    using ConciseCasts::i16;
 
-        check_solve(x - (x - y), (x - x) + y);
+    check_solve(5 - (4 - 4 * x), x * (4) + 1);
+    check_solve(z - (y - x), x + (z - y));
+    check_solve(z - (y - x) == 2, x == 2 - (z - y));
 
-        // This is used to cause infinite recursion
-        Expr expr = Add::make(z, Sub::make(x, y));
-        SolverResult solved = solve_expression(expr, "y");
-    }
+    check_solve(x - (x - y), (x - x) + y);
+
+    // This is used to cause infinite recursion
+    Expr expr = Add::make(z, Sub::make(x, y));
+    SolverResult solved = solve_expression(expr, "y");
+}
+
+void test_regression_multiply_distribution() {
+    using ConciseCasts::i16;
 
     // This case was incorrect due to canonicalization of the multiply
     // occurring after unpacking the LHS.
     check_solve((y - z) * x, x * (y - z));
+}
+
+void test_regression_skipped_mix_max() {
+    using ConciseCasts::i16;
 
     // These cases were incorrectly not flipping min/max when moving
     // it out of the RHS of a subtract.
@@ -490,15 +527,27 @@ void test_original_solve_test_cases() {
     check_solve(max(x - y, x - z), x - min(y, z));
     check_solve(max(x - y, x), x - min(y, 0));
     check_solve(max(x, x - y), x - min(y, 0));
+}
+
+void test_mixed_add_sub() {
+    using ConciseCasts::i16;
 
     // Check mixed add/sub
     check_solve(min(x - y, x + z), x + min(0 - y, z));
     check_solve(max(x - y, x + z), x + max(0 - y, z));
     check_solve(min(x + y, x - z), x + min(y, 0 - z));
     check_solve(max(x + y, x - z), x + max(y, 0 - z));
+}
+
+void test_broadcast() {
+    using ConciseCasts::i16;
 
     check_solve((5 * Broadcast::make(x, 4) + y) / 5,
                 Broadcast::make(x, 4) + (Broadcast::make(y, 4) / 5));
+}
+
+void test_select() {
+    using ConciseCasts::i16;
 
     // Select negates the condition to move x leftward
     check_solve(select(y < z, z, x),
@@ -513,7 +562,25 @@ void test_original_solve_test_cases() {
 }  // namespace
 
 int main(int argc, char **argv) {
-    test_original_solve_test_cases();
+    test_simple_cases();
+    test_simple_division_cases();
+    test_integer_overflow();
+    test_let_statements();
+    test_integer_rounding_brute_force();
+    test_regression_combinatorial_explosion();
+    test_unsolvable_cases_are_unsolvable();
+    test_interval_solutions();
+    test_and_condition_over_domain();
+    test_regression_signed_integer_overflow_pow();
+    test_regression_infinite_recursion_min_max();
+    test_regression_exponential_behavior_min_max();
+    test_partial_solves();
+    test_regression_infinite_recursion_add_sub();
+    test_regression_multiply_distribution();
+    test_regression_skipped_mix_max();
+    test_mixed_add_sub();
+    test_broadcast();
+    test_select();
     test_unsigned_ordering_not_rearranged();
     test_unsigned_equality_still_rearranged();
     test_nonconstant_multiplier_not_rewritten();
