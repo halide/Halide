@@ -105,6 +105,64 @@ extern int halide_vulkan_release_context(void *user_context,
                                          VkDevice device,
                                          VkQueue queue,
                                          VkDebugUtilsMessengerEXT messenger);
+
+typedef int (*halide_vulkan_acquire_context_t)(void *user_context,
+                                               struct halide_vulkan_memory_allocator **allocator,
+                                               VkInstance *instance,
+                                               VkDevice *device,
+                                               VkPhysicalDevice *physical_device,
+                                               VkQueue *queue,
+                                               uint32_t *queue_family_index,
+                                               VkDebugUtilsMessengerEXT *messenger,
+                                               bool create);
+typedef int (*halide_vulkan_release_context_t)(void *user_context,
+                                               VkInstance instance,
+                                               VkDevice device,
+                                               VkQueue queue,
+                                               VkDebugUtilsMessengerEXT messenger);
+
+/** Override the Vulkan context acquisition callback. Returns the previous
+ * handler. If unset, Halide uses its built-in Vulkan context management.
+ */
+extern halide_vulkan_acquire_context_t halide_set_vulkan_acquire_context(halide_vulkan_acquire_context_t handler);
+
+/** Override the Vulkan context release callback. Returns the previous handler. */
+extern halide_vulkan_release_context_t halide_set_vulkan_release_context(halide_vulkan_release_context_t handler);
+
+/** Ensure a Halide Vulkan memory allocator exists for an externally-managed
+ * Vulkan context. Intended for embedders that override
+ * halide_vulkan_acquire_context()/halide_vulkan_release_context().
+ *
+ * The embedder should store the returned allocator with the same object that
+ * owns the external context, return it from later acquire-context calls for
+ * that context, and release it when that external context is torn down.
+ *
+ * This call refreshes Halide's Vulkan dispatch tables for the supplied
+ * instance/device. If `*allocator` is null, a new allocator bound to
+ * `device`/`physical_device` is created and stored back. If `*allocator` is
+ * non-null, it must already be bound to the supplied device.
+ */
+extern int halide_vulkan_acquire_memory_allocator(void *user_context,
+                                                  struct halide_vulkan_memory_allocator **allocator,
+                                                  VkInstance instance,
+                                                  VkDevice device,
+                                                  VkPhysicalDevice physical_device);
+
+/** Destroy a Halide Vulkan memory allocator created for an externally-managed
+ * Vulkan context after the embedder has ensured no in-flight Halide work is
+ * using it. This only releases Halide-owned allocator and shader-module state;
+ * it does not destroy the Vulkan instance, device, queue, or any
+ * embedder-owned debug messenger.
+ *
+ * This call refreshes Halide's Vulkan dispatch tables for the supplied
+ * instance/device. The supplied device and physical_device must match the
+ * allocator's context.
+ */
+extern int halide_vulkan_release_memory_allocator(void *user_context,
+                                                  struct halide_vulkan_memory_allocator *allocator,
+                                                  VkInstance instance,
+                                                  VkDevice device,
+                                                  VkPhysicalDevice physical_device);
 // --
 
 // Override the default allocation callbacks (default uses Vulkan runtime implementation)

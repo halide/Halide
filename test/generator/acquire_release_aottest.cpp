@@ -143,6 +143,109 @@ extern "C" int halide_webgpu_release_context(void *user_context) {
 }
 
 #define HAS_MULTIPLE_CONTEXTS true
+#elif defined(TEST_VULKAN)
+
+#include "HalideRuntimeVulkan.h"
+
+struct gpu_context {
+    halide_vulkan_memory_allocator *allocator = nullptr;
+    VkInstance instance = nullptr;
+    VkDevice device = nullptr;
+    VkPhysicalDevice physical_device = nullptr;
+    VkQueue queue = nullptr;
+    uint32_t queue_family_index = 0;
+    VkDebugUtilsMessengerEXT messenger = nullptr;
+    halide_vulkan_acquire_context_t previous_acquire = nullptr;
+    halide_vulkan_release_context_t previous_release = nullptr;
+    int acquires = 0;
+    int releases = 0;
+} vulkan_context;
+
+extern "C" int custom_vulkan_acquire_context(void *user_context,
+                                             halide_vulkan_memory_allocator **allocator,
+                                             VkInstance *instance,
+                                             VkDevice *device,
+                                             VkPhysicalDevice *physical_device,
+                                             VkQueue *queue,
+                                             uint32_t *queue_family_index,
+                                             VkDebugUtilsMessengerEXT *messenger,
+                                             bool create) {
+    if (vulkan_context.allocator == nullptr || vulkan_context.instance == nullptr) {
+        return halide_error_code_device_interface_no_device;
+    }
+    *allocator = vulkan_context.allocator;
+    *instance = vulkan_context.instance;
+    *device = vulkan_context.device;
+    *physical_device = vulkan_context.physical_device;
+    *queue = vulkan_context.queue;
+    *queue_family_index = vulkan_context.queue_family_index;
+    *messenger = vulkan_context.messenger;
+    vulkan_context.acquires++;
+    return halide_error_code_success;
+}
+
+extern "C" int custom_vulkan_release_context(void *user_context,
+                                             VkInstance instance,
+                                             VkDevice device,
+                                             VkQueue queue,
+                                             VkDebugUtilsMessengerEXT messenger) {
+    vulkan_context.releases++;
+    return halide_error_code_success;
+}
+
+bool init_context() {
+    halide_vulkan_memory_allocator *default_allocator = nullptr;
+    // Use Halide's built-in Vulkan setup to get real handles, then exercise the
+    // same callback and allocator path an embedder would use for its own context.
+    int result = halide_vulkan_acquire_context(nullptr,
+                                               &default_allocator,
+                                               &vulkan_context.instance,
+                                               &vulkan_context.device,
+                                               &vulkan_context.physical_device,
+                                               &vulkan_context.queue,
+                                               &vulkan_context.queue_family_index,
+                                               &vulkan_context.messenger,
+                                               true);
+    if (result != halide_error_code_success) {
+        printf("[SKIP] Failed to create Vulkan context: %d\n", result);
+        return false;
+    }
+    halide_vulkan_release_context(nullptr, vulkan_context.instance, vulkan_context.device,
+                                  vulkan_context.queue, vulkan_context.messenger);
+
+    result = halide_vulkan_acquire_memory_allocator(nullptr,
+                                                    &vulkan_context.allocator,
+                                                    vulkan_context.instance,
+                                                    vulkan_context.device,
+                                                    vulkan_context.physical_device);
+    if (result != halide_error_code_success) {
+        printf("Failed to create external Vulkan allocator: %d\n", result);
+        return false;
+    }
+
+    vulkan_context.previous_acquire = halide_set_vulkan_acquire_context(custom_vulkan_acquire_context);
+    vulkan_context.previous_release = halide_set_vulkan_release_context(custom_vulkan_release_context);
+    return true;
+}
+
+void destroy_context() {
+    int result = halide_vulkan_release_memory_allocator(nullptr,
+                                                        vulkan_context.allocator,
+                                                        vulkan_context.instance,
+                                                        vulkan_context.device,
+                                                        vulkan_context.physical_device);
+    if (result != halide_error_code_success) {
+        printf("Failed to release external Vulkan allocator: %d\n", result);
+    }
+    assert(vulkan_context.acquires == vulkan_context.releases);
+    vulkan_context.allocator = nullptr;
+
+    halide_set_vulkan_acquire_context(vulkan_context.previous_acquire);
+    halide_set_vulkan_release_context(vulkan_context.previous_release);
+    halide_device_release(nullptr, halide_vulkan_device_interface());
+
+    vulkan_context = gpu_context{};
+}
 #else
 // Just use the default implementation of acquire/release.
 bool init_context() {
@@ -194,10 +297,14 @@ bool run_test() {
     output.device_free();
 
     if (interface != nullptr) {
+#if defined(TEST_VULKAN)
+        destroy_context();
+#else
         halide_device_release(nullptr, interface);
 
         // Free the context we created.
         destroy_context();
+#endif
     } else {
         printf("Device interface is nullptr.\n");
     }
@@ -207,9 +314,6 @@ bool run_test() {
 }
 
 int main(int argc, char **argv) {
-#if defined(TEST_VULKAN)
-    printf("[SKIP] Vulkan doesn't implement a custom context for this test.\n");
-#else
     if (!run_test()) {
         return 1;
     }
@@ -217,7 +321,6 @@ int main(int argc, char **argv) {
     if (!run_test()) {
         return 1;
     }
-#endif
     return 0;
 }
 
