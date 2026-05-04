@@ -1347,6 +1347,12 @@ public:
        for x:
          g(x, y) = f(x, y)
      \endcode
+     * If a Func passed to in() does not directly call this Func, in() acts
+     * transitively: the Func graph is searched downward from each argument,
+     * and every direct caller of this Func found along the way is wrapped.
+     * This is useful when intermediate Funcs are anonymous and not held by
+     * the user (e.g. a pyramid built via helper functions).
+     *
      * using Func::in(), we can write:
      \code
      f(x, y) = x + y;
@@ -1398,6 +1404,31 @@ public:
      h(x, y) = f(x, y) - 3;
      \endcode
      *
+     * As with Func::in(), clone_in() acts transitively: any Func in 'f'/'fs'
+     * that does not directly call this Func is replaced by the set of direct
+     * callers reachable from it along paths that lead to this Func. Only
+     * this Func is cloned; the intermediate Funcs along the path are not.
+     *
+     * For example, given a pipeline that uses sum() (which constructs an
+     * anonymous inner Func to perform the reduction):
+     \code
+     RDom r(0, 5);
+     f(x, y) = x + y;
+     g(x, y) = sum(f(x + r, y));    // g calls f via an anonymous Func from sum()
+     h(x, y) = f(x, y) - 1;         // h calls f directly
+     \endcode
+     * f.clone_in(g) clones f at the anonymous reduction Func inside g but does
+     * not clone the reduction Func itself. It is equivalent to this:
+     \code
+     RDom r(0, 5);
+     f(x, y) = x + y;
+     f_clone(x, y) = x + y;
+     g(x, y) = sum(f_clone(x + r, y)); // the summation calls the clone
+     h(x, y) = f(x, y) - 1;            // unrelated uses of f are untouched
+     \endcode
+     * If the anonymous reduction Func had other consumers besides g, they
+     * would also see the rewrite from f to f_clone — only this Func is
+     * cloned, not the intermediates.
      */
     //@{
     Func clone_in(const Func &f);
