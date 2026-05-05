@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "halide_test_dirs.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -88,7 +89,7 @@ void print_mat_rhs(const Buffer<T> &buf, int rows, int cols) {
 }
 
 template<typename LhsInt8, typename RhsInt8>
-bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
+bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r, bool use_intrinsic) {
     Buffer<LhsInt8> A_buf(acc, row);
     Buffer<RhsInt8> B_buf(4, col, acc / 4);
 
@@ -96,8 +97,14 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
     RDom r(0, acc);
 
     Func mm("matmul");
-    mm(x, y) = cast<int32_t>(0);
-    mm(x, y) += cast<int32_t>(A_buf(r, y)) * cast<int32_t>(B_buf(r % 4, x, r / 4));
+
+    mm(x, y) = 0;
+
+    if (use_intrinsic) {
+        mm(x, y) += widening_mul(A_buf(r, y), B_buf(r % 4, x, r / 4));
+    } else {
+        mm(x, y) += cast<int32_t>(A_buf(r, y)) * cast<int32_t>(B_buf(r % 4, x, r / 4));
+    }
 
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
@@ -133,7 +140,15 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
 
     Buffer<int32_t> out(col, row);
 
-    result.realize(out);
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::AVX512_SapphireRapids)) {
+        result.realize(out);
+    } else {
+        // Just compile it to see if anything crashes
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s",
+                                   {A_buf, B_buf}, Target{"x86-64-linux-avx512_sapphirerapids"});
+        return true;
+    }
 
     // uncomment to check the matrices
     // std::cout << "Matrix A\n";
@@ -163,7 +178,7 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
     return true;
 }
 
-bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
+bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r, bool use_intrinsics) {
     Var x("x"), y("y");
     Buffer<bfloat16_t> A(acc, row);
     Buffer<bfloat16_t> B(2, col, acc / 2);
@@ -171,8 +186,12 @@ bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) 
     RDom r(0, acc, "acc");
 
     Func mm("matmul");
-    mm(x, y) = cast<float>(0);
-    mm(x, y) += cast<float>(cast<float>(A(r.x, y))) * cast<float>(B(r.x % 2, x, r.x / 2));
+    mm(x, y) = 0.f;
+    if (use_intrinsics) {
+        mm(x, y) += widening_mul(A(r.x, y), B(r.x % 2, x, r.x / 2));
+    } else {
+        mm(x, y) += cast<float>(A(r.x, y)) * cast<float>(B(r.x % 2, x, r.x / 2));
+    }
 
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
@@ -212,7 +231,14 @@ bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) 
     // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
     // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
 
-    result.realize(out);
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::AVX512_SapphireRapids)) {
+        result.realize(out);
+    } else {
+        // Just compile it to see if anything crashes
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids"});
+        return true;
+    }
 
     // uncomment to check the matrices
     // std::cout << "Matrix A\n";
@@ -247,17 +273,36 @@ auto matmul_us = &matmul<uint8_t, int8_t>;
 auto matmul_su = &matmul<int8_t, uint8_t>;
 auto matmul_uu = &matmul<uint8_t, uint8_t>;
 
-bool run_tests(bool (*fn)(int, int, int, int, int, int), int element_width) {
-    return fn(2, 2, 16, 2, 2, 8 / element_width) && fn(4, 4, 8, 4, 4, 8 / element_width) && fn(32, 32, 32, 8, 8, 8 / element_width) && fn(32, 32, 32, 8, 8, 4 / element_width);
+bool run_tests(bool (*fn)(int, int, int, int, int, int, bool), int element_width) {
+    struct Cfg {
+        int row, col, acc, tx, ty, tr;
+        bool intrin;
+    };
+    Cfg cfgs[] = {
+        {2, 2, 16, 2, 2, 8 / element_width, true},
+        {4, 4, 8, 4, 4, 8 / element_width, false},
+        {32, 32, 32, 8, 8, 8 / element_width, true},
+        {32, 32, 32, 8, 8, 4 / element_width, false},
+        // Asymmetric tiles — regression for the tile_x/tile_y swap bug
+        // tracked in PR #8350. Earlier the matcher silently confused the
+        // two whenever tile_x == tile_y, so all prior coverage was blind
+        // to the misnaming.
+        {32, 16, 32, 8, 4, 8 / element_width, true},
+        {16, 32, 32, 4, 8, 8 / element_width, false},
+        {32, 32, 32, 8, 4, 4 / element_width, true},
+        {32, 32, 32, 4, 8, 4 / element_width, false},
+    };
+    for (const auto &c : cfgs) {
+        if (!fn(c.row, c.col, c.acc, c.tx, c.ty, c.tr, c.intrin)) {
+            std::cerr << "Failed at row=" << c.row << " col=" << c.col << " acc=" << c.acc
+                      << " tx=" << c.tx << " ty=" << c.ty << " tr=" << c.tr << "\n";
+            return false;
+        }
+    }
+    return true;
 }
 
 int main(int argc, char **argv) {
-    Target t = get_jit_target_from_environment();
-    if (!t.has_feature(Target::AVX512_SapphireRapids)) {
-        printf("[SKIP] No AMX target enabled\n");
-        return 0;
-    }
-
     printf("Running AMX matmul (signed/signed)\n");
     if (!run_tests(matmul_ss, 1)) {
         return 1;

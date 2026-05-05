@@ -12,7 +12,8 @@ namespace Internal {
 
 Expr Cast::make(Type t, Expr v) {
     internal_assert(v.defined()) << "Cast of undefined\n";
-    internal_assert(t.lanes() == v.type().lanes()) << "Cast may not change vector widths\n";
+    internal_assert(t.lanes() == v.type().lanes()) << "Cast may not change vector widths\n"
+                                                   << t << " " << v << "\n";
 
     Cast *node = new Cast;
     node->type = t;
