@@ -240,8 +240,6 @@ void test_simplify_preserves_float_to_uint_cast_chain() {
 }
 
 void test_simple_cases() {
-    using ConciseCasts::i16;
-
     // Check some simple cases
     check_solve(3 - 4 * x, x * (-4) + 3);
     check_solve(min(5, x), min(x, 5));
@@ -252,8 +250,6 @@ void test_simple_cases() {
 }
 
 void test_simple_division_cases() {
-    using ConciseCasts::i16;
-
     // Check solver with expressions containing division
     check_solve(x + (x * 2) / 2, x * 2);
     check_solve(x + (x * 2 + y) / 2, x * 2 + (y / 2));
@@ -271,14 +267,11 @@ void test_simple_division_cases() {
 
 void test_integer_overflow() {
     using ConciseCasts::i16;
-
     // Check the solver doesn't perform transformations that change integer overflow behavior.
     check_solve(i16(x + y) * i16(2) / i16(2), i16(x + y) * i16(2) / i16(2));
 }
 
 void test_let_statements() {
-    using ConciseCasts::i16;
-
     // A let statement
     check_solve(Let::make("z", 3 + 5 * x, y + z < 8),
                 x <= (((8 - (3 + y)) - 1) / 5));
@@ -300,8 +293,6 @@ void test_let_statements() {
 }
 
 void test_integer_rounding_brute_force() {
-    using ConciseCasts::i16;
-
     // Solving inequalities for integers is a pain to get right with
     // all the rounding rules. Check we didn't make a mistake with
     // brute force.
@@ -349,8 +340,6 @@ void test_integer_rounding_brute_force() {
 }
 
 void test_regression_combinatorial_explosion() {
-    using ConciseCasts::i16;
-
     // Check for combinatorial explosion
     Expr e = x + y;
     for (int i = 0; i < 20; i++) {
@@ -364,8 +353,6 @@ void test_regression_combinatorial_explosion() {
 }
 
 void test_unsolvable_cases_are_unsolvable() {
-    using ConciseCasts::i16;
-
     // Check some things that we don't expect to work.
 
     // Quadratics:
@@ -383,8 +370,6 @@ void test_unsolvable_cases_are_unsolvable() {
 }
 
 void test_interval_solutions() {
-    using ConciseCasts::i16;
-
     // Now test solving for an interval
     check_inner_interval(x > 0, 1, Interval::pos_inf());
     check_inner_interval(x < 100, Interval::neg_inf(), 99);
@@ -415,8 +400,6 @@ void test_interval_solutions() {
 }
 
 void test_and_condition_over_domain() {
-    using ConciseCasts::i16;
-
     // Test anding a condition over a domain
     check_and_condition(x > 0, const_true(), Interval(1, y));
     check_and_condition(x > 0, const_true(), Interval(5, y));
@@ -444,8 +427,6 @@ void test_and_condition_over_domain() {
 }
 
 void test_regression_signed_integer_overflow_pow() {
-    using ConciseCasts::i16;
-
     // This case used to break due to signed integer overflow in
     // the simplifier.
     Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
@@ -462,8 +443,6 @@ void test_regression_signed_integer_overflow_pow() {
 }
 
 void test_regression_infinite_recursion_min_max() {
-    using ConciseCasts::i16;
-
     // This cause use to cause infinite recursion:
     Expr t = Variable::make(Int(32), "t");
     Expr test = (x <= min(max((y - min(((z * x) + t), t)), 1), 0));
@@ -471,8 +450,6 @@ void test_regression_infinite_recursion_min_max() {
 }
 
 void test_regression_exponential_behavior_min_max() {
-    using ConciseCasts::i16;
-
     // This case caused exponential behavior
     Expr t = Variable::make(Int(32), "t");
     for (int i = 0; i < 50; i++) {
@@ -484,8 +461,6 @@ void test_regression_exponential_behavior_min_max() {
 }
 
 void test_partial_solves() {
-    using ConciseCasts::i16;
-
     // Check for partial results
     check_solve(max(min(y, x), x), max(min(x, y), x));
     check_solve(min(y, x) + max(y, 2 * x), min(x, y) + max(x * 2, y));
@@ -495,8 +470,6 @@ void test_partial_solves() {
 }
 
 void test_regression_infinite_recursion_add_sub() {
-    using ConciseCasts::i16;
-
     check_solve(5 - (4 - 4 * x), x * (4) + 1);
     check_solve(z - (y - x), x + (z - y));
     check_solve(z - (y - x) == 2, x == 2 - (z - y));
@@ -509,16 +482,12 @@ void test_regression_infinite_recursion_add_sub() {
 }
 
 void test_regression_multiply_distribution() {
-    using ConciseCasts::i16;
-
     // This case was incorrect due to canonicalization of the multiply
     // occurring after unpacking the LHS.
     check_solve((y - z) * x, x * (y - z));
 }
 
 void test_regression_skipped_mix_max() {
-    using ConciseCasts::i16;
-
     // These cases were incorrectly not flipping min/max when moving
     // it out of the RHS of a subtract.
     check_solve(min(x - y, x - z), x - max(y, z));
@@ -530,8 +499,6 @@ void test_regression_skipped_mix_max() {
 }
 
 void test_mixed_add_sub() {
-    using ConciseCasts::i16;
-
     // Check mixed add/sub
     check_solve(min(x - y, x + z), x + min(0 - y, z));
     check_solve(max(x - y, x + z), x + max(0 - y, z));
@@ -540,15 +507,11 @@ void test_mixed_add_sub() {
 }
 
 void test_broadcast() {
-    using ConciseCasts::i16;
-
     check_solve((5 * Broadcast::make(x, 4) + y) / 5,
                 Broadcast::make(x, 4) + (Broadcast::make(y, 4) / 5));
 }
 
 void test_select() {
-    using ConciseCasts::i16;
-
     // Select negates the condition to move x leftward
     check_solve(select(y < z, z, x),
                 select(z <= y, x, z));
