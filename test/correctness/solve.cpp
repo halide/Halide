@@ -13,6 +13,10 @@ Expr x = Variable::make(Int(32), "x");
 Expr y = Variable::make(Int(32), "y");
 Expr z = Variable::make(Int(32), "z");
 
+Expr ux = Variable::make(UInt(32), "x");
+Expr uy = Variable::make(UInt(32), "y");
+Expr uz = Variable::make(UInt(32), "z");
+
 // Assert that solve_expression produces exactly the given expected expression.
 void check_solve(const Expr &in, const Expr &expected) {
     SolverResult solved = solve_expression(in, "x");
@@ -86,9 +90,6 @@ void check_solve_equivalent(const Expr &in, const std::map<std::string, Expr> &v
 // does not preserve the *ordering* comparisons LT/LE/GT/GE (the EQ/NE
 // rewrite is still valid under modular arithmetic, so those stay).
 void test_unsigned_ordering_not_rearranged() {
-    Expr x = Variable::make(UInt(32), "x");
-    Expr y = Variable::make(UInt(32), "y");
-
     // A concrete substitution that demonstrates the wrap: with x = 4 and
     // y = (uint32_t)-14 = 4294967282, x + y = 4294967286, so
     // `x + y < 1641646169` is false. The buggy rewrite `x < 1641646169 - y`
@@ -99,30 +100,28 @@ void test_unsigned_ordering_not_rearranged() {
     };
 
     Expr c = UIntImm::make(UInt(32), 1641646169u);
-    check_solve_equivalent(x + y < c, vars);
-    check_solve_equivalent(x + y <= c, vars);
-    check_solve_equivalent(x + y > c, vars);
-    check_solve_equivalent(x + y >= c, vars);
+    check_solve_equivalent(ux + uy < c, vars);
+    check_solve_equivalent(ux + uy <= c, vars);
+    check_solve_equivalent(ux + uy > c, vars);
+    check_solve_equivalent(ux + uy >= c, vars);
 
     // The symmetric subtraction form must be preserved too.
-    check_solve_equivalent(x - y < c, vars);
-    check_solve_equivalent(x - y <= c, vars);
-    check_solve_equivalent(x - y > c, vars);
-    check_solve_equivalent(x - y >= c, vars);
+    check_solve_equivalent(ux - uy < c, vars);
+    check_solve_equivalent(ux - uy <= c, vars);
+    check_solve_equivalent(ux - uy > c, vars);
+    check_solve_equivalent(ux - uy >= c, vars);
 }
 
 // EQ/NE rewrites are still safe under modular arithmetic (modular equivalence
 // preserves equality), so these should continue to be rewritten to isolate x
 // on the left.
 void test_unsigned_equality_still_rearranged() {
-    Expr x = Variable::make(UInt(32), "x");
-    Expr y = Variable::make(UInt(32), "y");
     Expr c = UIntImm::make(UInt(32), 2u);
 
     // `x + y == c` should solve to `x == c - y`, matching existing tests
     // in src/Solve.cpp's solve_test() for unsigned rewrites.
-    check_solve(x + y == c, x == (c - y));
-    check_solve(x + y != c, x != (c - y));
+    check_solve(ux + uy == c, ux == (c - uy));
+    check_solve(ux + uy != c, ux != (c - uy));
 }
 
 // The solver was rewriting `f(x) * y @ b` to forms involving `b / y` and `b % y`
@@ -172,10 +171,10 @@ void test_positive_const_multiplier_still_rewritten() {
 // applies soundly for every integer type -- for UInt(1), `a * 2` correctly
 // becomes `a * 0`, matching the modular value of `a + a`.
 void test_solve_does_not_abort_on_narrow_self_add() {
-    Expr x = Variable::make(UInt(1), "x");
+    Expr bx = Variable::make(UInt(1), "x");
     // This used to abort with
     //   "Integer constant 2 will be implicitly coerced to type uint1..."
-    SolverResult s = solve_expression(x + x, "x");
+    SolverResult s = solve_expression(bx + bx, "x");
     // The actual rewritten form is unimportant here -- the test just locks
     // in that solve_expression doesn't abort on this shape.
     if (!s.result.defined()) {
@@ -470,14 +469,14 @@ void test_partial_solves() {
 }
 
 void test_regression_infinite_recursion_add_sub() {
-    check_solve(5 - (4 - 4 * x), x * (4) + 1);
-    check_solve(z - (y - x), x + (z - y));
-    check_solve(z - (y - x) == 2, x == 2 - (z - y));
+    check_solve(5 - (4 - 4 * ux), ux * (4) + 1);
+    check_solve(uz - (uy - ux), ux + (uz - uy));
+    check_solve(uz - (uy - ux) == 2, ux == 2 - (uz - uy));
 
-    check_solve(x - (x - y), (x - x) + y);
+    check_solve(ux - (ux - uy), (ux - ux) + uy);
 
     // This is used to cause infinite recursion
-    Expr expr = Add::make(z, Sub::make(x, y));
+    Expr expr = Add::make(uz, Sub::make(ux, uy));
     SolverResult solved = solve_expression(expr, "y");
 }
 
