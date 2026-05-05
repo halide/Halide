@@ -101,7 +101,7 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     // The vector reduce must be of a multiply. Unpack it and rebind lhs and rhs
     // to mean the lhs and rhs of the mul. For integers we normalize various
     // ways of doing the widening multiply by running find_intrinsics. For
-    // floats we do the opposite and canonalize away from intrinsics, because
+    // floats we do the opposite and canonicalize away from intrinsics, because
     // FindIntrinsics does not currently lift float widening_muls.
     if (reduce->type.is_int_or_uint()) {
         Expr reduce_value = find_intrinsics(reduce->value);
