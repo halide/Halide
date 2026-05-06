@@ -114,8 +114,8 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
 
         if (const auto *call = Call::as_intrinsic(cast->value, {Call::widening_mul})) {
             // Simplify to convert bit-math back to multiply, div, mod
-            lhs = simplify(call->args[0]);
-            rhs = simplify(call->args[1]);
+            lhs = simplify(lower_intrinsics(call->args[0]));
+            rhs = simplify(lower_intrinsics(call->args[1]));
         } else {
             debug(3) << "Reduce not a widening mul\n";
             return {};
