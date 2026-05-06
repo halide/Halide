@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Collect source-based LLVM coverage for src/ by running the test suite three times:
-#   1. host        — all correctness, generator, error, and autoscheduler tests
-#   2. host-metal  — only tests whose name contains "gpu"
-#   3. host-opencl — only tests whose name contains "gpu" or "opencl"
+# Collect source-based LLVM coverage for src/ by running the test suite four times:
+#   1. host                        — all correctness, generator, error, and autoscheduler tests
+#   2. host-metal                  — only tests whose name contains "gpu" or "metal"
+#   3. host-opencl                 — only tests whose name contains "gpu" or "opencl"
+#   4. wasm-32-wasmrt-wasm_simd128 — all tests (exercises WasmExecutor for JIT)
 #
 # Prerequisites: Homebrew LLVM 21 (for llvm-profdata and llvm-cov).
 #
@@ -37,24 +38,31 @@ if [[ $REPORT_ONLY -eq 0 ]]; then
 
     # ── Configure + Build ─────────────────────────────────────────────────────────
     cmake --preset macOS-coverage
-    cmake --build --preset macOS-coverage -j"$NPROC"
+    cmake --build --preset macOS-coverage
 
     # ── Run 1: host — all tests ──────────────────────────────────────────────────
     ctest --preset macOS-coverage -j"$NPROC" || echo "Warning: some tests failed (see above)"
 
     # ── Reconfigure + rebuild for host-metal ─────────────────────────────────────
     cmake --preset macOS-coverage -DHalide_TARGET=host-metal
-    cmake --build --preset macOS-coverage -j"$NPROC"
+    cmake --build --preset macOS-coverage
 
     # ── Run 2: host-metal — GPU tests only ───────────────────────────────────────
-    ctest --preset macOS-coverage -j"$NPROC" -R gpu || echo "Warning: some tests failed (see above)"
+    ctest --preset macOS-coverage -j"$NPROC" -R "gpu|metal" || echo "Warning: some tests failed (see above)"
 
     # ── Reconfigure + rebuild for host-opencl ────────────────────────────────────
     cmake --preset macOS-coverage -DHalide_TARGET=host-opencl
-    cmake --build --preset macOS-coverage -j"$NPROC"
+    cmake --build --preset macOS-coverage
 
     # ── Run 3: host-opencl — GPU and OpenCL-specific tests ───────────────────────
     ctest --preset macOS-coverage -j"$NPROC" -R "gpu|opencl" || echo "Warning: some tests failed (see above)"
+
+    # ── Reconfigure + rebuild for wasm-32-wasmrt-wasm_simd128 ────────────────────
+    cmake --preset macOS-coverage -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128
+    cmake --build --preset macOS-coverage
+
+    # ── Run 4: wasm — all tests (exercises WasmExecutor for JIT compilation) ─────
+    ctest --preset macOS-coverage -j"$NPROC" || echo "Warning: some tests failed (see above)"
 
 fi # REPORT_ONLY
 

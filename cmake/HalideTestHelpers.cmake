@@ -99,8 +99,8 @@ function(add_halide_test TARGET)
                           VISIBILITY_INLINES_HIDDEN TRUE)
 
 
-    if (WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
-        if (WITH_SERIALIZATION)
+    if (WITH_SERIALIZATION AND WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
+        if (NOT Halide_TARGET MATCHES "wasm")
             target_compile_definitions(${TARGET} PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
         endif ()
     endif ()

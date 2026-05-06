@@ -28,6 +28,27 @@ permissions:
   contents: read
 
 jobs:
+  coverage:
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
+    name: arm-64 / coverage
+    runs-on: macos-26
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install coverage dependencies
+        run: brew install llvm@22 emscripten
+
+      - name: Run coverage suite
+        run: tools/run-coverage.sh
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: build/macOS-coverage/coverage.info
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   macos:
     if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: ${{ matrix.arch }} / ${{ matrix.uv_group }}
