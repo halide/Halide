@@ -37,7 +37,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install coverage dependencies
-        run: brew install llvm@21 lld@21 emscripten
+        run: brew install llvm@21 lld@21 emscripten flatbuffers wabt
 
       - name: Run coverage suite
         run: tools/run-coverage.sh
