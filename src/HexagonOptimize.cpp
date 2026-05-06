@@ -1404,9 +1404,6 @@ class EliminateInterleaves : public IRMutator {
     // We need to know when loads are a multiple of 2 native vectors.
     int native_vector_bits;
 
-    // Alignment analyzer for loads and stores
-    HexagonAlignmentAnalyzer alignment_analyzer;
-
     // Check if x is an expression that is either an interleave, or
     // transitively is an interleave.
     bool yields_removable_interleave(const Expr &x) {
@@ -1920,9 +1917,8 @@ class EliminateInterleaves : public IRMutator {
             }
             bool *aligned_accesses = aligned_buffer_access.shallow_find(op->name);
             internal_assert(aligned_accesses) << "Buffer not found in scope";
-            int64_t aligned_offset = 0;
 
-            if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
+            if (!is_hexagon_aligned(op, native_vector_bits / 8, nullptr)) {
                 *aligned_accesses = false;
             }
         }
@@ -1955,9 +1951,7 @@ class EliminateInterleaves : public IRMutator {
                 bool *aligned_accesses = aligned_buffer_access.shallow_find(op->name);
                 internal_assert(aligned_accesses) << "Buffer not found in scope";
 
-                int64_t aligned_offset = 0;
-
-                if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
+                if (!is_hexagon_aligned(op, native_vector_bits / 8, nullptr)) {
                     *aligned_accesses = false;
                 }
             } else {
@@ -1977,7 +1971,7 @@ class EliminateInterleaves : public IRMutator {
 
 public:
     EliminateInterleaves(const Target &t, int native_vector_bytes)
-        : native_vector_bits(native_vector_bytes * 8), alignment_analyzer(native_vector_bytes) {
+        : native_vector_bits(native_vector_bytes * 8) {
         if (t.features_any_of({Target::HVX_v65})) {
             hvx_target = HvxTarget::v65orLater;
         } else if (t.features_any_of({Target::HVX_v66})) {

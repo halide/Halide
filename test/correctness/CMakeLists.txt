@@ -111,6 +111,7 @@ tests(GROUPS correctness
       extern_stage_on_device.cpp
       extract_concat_bits.cpp
       failed_unroll.cpp
+      fallback_vscale_sve.cpp
       fast_trigonometric.cpp
       fibonacci.cpp
       fit_function.cpp
@@ -425,6 +426,7 @@ tests(GROUPS correctness multithreaded
       ring_buffer.cpp
       stream_compaction.cpp
       thread_safety.cpp
+      transitive_in.cpp
       truncated_pyramid.cpp
       tuple_vector_reduce.cpp
       vector_cast.cpp
