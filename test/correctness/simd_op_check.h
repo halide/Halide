@@ -18,16 +18,16 @@ using namespace Halide;
 Expr input(const Type &t, const Expr &arg) {
     return Internal::Call::make(t, "input", {arg}, Internal::Call::Extern);
 }
-Expr in_f16(const Expr &arg) {
+[[maybe_unused]] Expr in_f16(const Expr &arg) {
     return input(Float(16), arg);
 }
-Expr in_bf16(const Expr &arg) {
+[[maybe_unused]] Expr in_bf16(const Expr &arg) {
     return input(BFloat(16), arg);
 }
-Expr in_f32(const Expr &arg) {
+[[maybe_unused]] Expr in_f32(const Expr &arg) {
     return input(Float(32), arg);
 }
-Expr in_f64(const Expr &arg) {
+[[maybe_unused]] Expr in_f64(const Expr &arg) {
     return input(Float(64), arg);
 }
 Expr in_i8(const Expr &arg) {
