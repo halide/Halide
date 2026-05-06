@@ -174,7 +174,6 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r, bool 
         }
     }
 
-    std::cout << "Success!\n";
     return true;
 }
 
@@ -264,7 +263,6 @@ bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r, 
         }
     }
 
-    std::cout << "Success!\n";
     return true;
 }
 
@@ -327,6 +325,8 @@ int main(int argc, char **argv) {
     if (!run_tests(matmul_bf16, 2)) {
         return 1;
     }
+
+    printf("Success!\n");
 
     return 0;
 }
