@@ -110,8 +110,9 @@ files, and several others.
 
 ## Notes
 
-- One test fails on Apple Silicon: `correctness_simd_op_check_x86` (Bus error —
-  x86 SIMD checks not runnable on arm64). All other tests pass or are skipped.
+- `correctness_simd_op_check_x86` runs the assembly-pattern checks on Apple
+  Silicon (cross-compiling to x86) but skips the runtime correctness checks,
+  since x86 code cannot execute on arm64. All tests pass or are skipped.
 - The host-metal pass brought `CodeGen_Metal_Dev.cpp` from 0% to 85% and
   `FuseGPUThreadLoops.cpp` from 3% to 91%.
 - OpenCL, Vulkan, WebGPU, D3D12, PTX, and SPIR-V backends remain near-zero — no

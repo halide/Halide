@@ -503,7 +503,14 @@ public:
             if (!sharder.should_run(t)) continue;
             const auto &task = tasks.at(t);
             futures.push_back(pool.async([&]() {
-                return check_one(task.op, task.name, task.vector_width, task.expr);
+                // Run check_one on a large-stack thread to avoid overflowing the
+                // default 512 KB worker stack during deeply recursive LLVM codegen
+                // (especially under coverage instrumentation).
+                TestResult result;
+                Internal::run_with_large_stack([&] {
+                    result = check_one(task.op, task.name, task.vector_width, task.expr);
+                });
+                return result;
             }));
         }
 
