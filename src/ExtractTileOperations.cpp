@@ -52,20 +52,13 @@ struct Matmul {
 Matmul convert_to_matmul(const Store *op, const string &new_name) {
     // We expect the pattern:
     //
-    // out[ramp] = reduce_add(widen(lhs[multiramp]) * widen(rhs[multiramp])) + out[ramp]
+    // out[idx] = reduce_add(widen(lhs[multiramp]) * widen(rhs[multiramp])) + out[idx]
     //
     // Though if the multiramp has an outer dimension of stride zero it may have
     // been hoisted outwards to just a broadcast of the widened value.
 
     debug(3) << "Potential matmul:\n"
              << Stmt(op) << "\n";
-
-    // The output's index must be the canonical ramp(0, 1, S).
-    if (const Ramp *r = op->index.as<Ramp>();
-        !r || !is_const_zero(r->base) || !is_const_one(r->stride)) {
-        debug(3) << "Output index not simple ramp\n";
-        return {};
-    }
 
     // The RHS must be an add
     const auto *add = op->value.as<Add>();
@@ -316,31 +309,25 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
                                Call::Intrinsic);
 
     Type res_type = op->value.type().with_lanes(256);
-    auto out_load = Load::make(res_type, new_name, Ramp::make(0, 1, 256), {}, {}, const_true(256), {});
+    Expr subtile_idx = Ramp::make(0, 1, 256);
+    auto out_load = Load::make(res_type, new_name, subtile_idx, {}, {}, const_true(256), {});
 
     auto matmul = Call::make(res_type, "tile_matmul",
                              {I, col_bytes, K, out_load, lhs_call, rhs_call},
                              Call::Intrinsic);
-    auto store = Store::make(new_name, matmul, Ramp::make(0, 1, 256), Parameter(), const_true(256), ModulusRemainder());
+    auto store = Store::make(new_name, matmul, std::move(subtile_idx), Parameter(), const_true(256), ModulusRemainder());
     return {true, std::move(store), I, J, K};
 }
 
-Stmt convert_to_zero(const Store *op, int I, int J, const string &new_name) {
-    const auto *ramp = op->index.as<Ramp>();
-    if (!ramp ||
-        !is_const_one(ramp->stride) ||
-        !is_const_zero(ramp->base) ||
-        !is_const_zero(op->value) ||
-        op->value.type().lanes() != I * J) {
-        return {};
-    }
+Stmt convert_to_zero(const Store *op, const string &new_name, int I, int J) {
     auto rows = Cast::make(Int(16), I);
     auto bytes = op->value.type().bytes();
     auto colbytes = Cast::make(Int(16), J * bytes);
     const auto &store_type = op->value.type();
     auto tile_zero_type = store_type.with_lanes(1024 / store_type.bytes());
     auto val = Call::make(tile_zero_type, "tile_zero", {rows, colbytes}, Call::Intrinsic);
-    return Store::make(new_name, std::move(val), Ramp::make(0, 1, 256), Parameter(), const_true(256), ModulusRemainder());
+    Expr subtile_idx = Ramp::make(0, 1, 256);
+    return Store::make(new_name, std::move(val), std::move(subtile_idx), Parameter(), const_true(256), ModulusRemainder());
 }
 
 Stmt convert_to_tile_store(const Store *op, const string &amx_name, int I, int J) {
@@ -375,7 +362,8 @@ Stmt convert_to_tile_store(const Store *op, const string &amx_name, int I, int J
 
     auto out_var = Variable::make(Handle(), op->name);
     auto tile_type = op->value.type().with_lanes(256);
-    auto tile_val = Load::make(tile_type, amx_name, Ramp::make(0, 1, 256), {}, {}, const_true(256), {});
+    Expr subtile_idx = Ramp::make(0, 1, 256);
+    auto tile_val = Load::make(tile_type, amx_name, std::move(subtile_idx), {}, {}, const_true(256), {});
     auto bytes = op->value.type().bytes();
     internal_assert(bytes == 4) << "AMX store only supported for int32 and float32 output, not for " << op->value.type() << "\n";
     auto store = Call::make(Int(32), "tile_store",
@@ -396,6 +384,75 @@ class ExtractTileOperations : public IRMutator {
     int found_J = -1;
     int found_K = -1;
 
+    // An AMXTile allocation may represent multiple AMX accumulator
+    // registers as 2D sub-tiles. This map tracks those.
+    std::vector<MultiRamp> amx_subtiles;
+
+    // Returns a unique subtile index for a load or store index, or -1 if it
+    // overlaps with an existing subtile, or is otherwise poorly behaved.
+    int get_subtile(const Expr &index) {
+        MultiRamp mr;
+        if (!is_multiramp(index, Scope<Expr>::empty_scope(), &mr)) {
+            return -1;
+        }
+        if (!can_prove(mr.alias_free())) {
+            // What are you doing?
+            return -1;
+        }
+        if (amx_subtiles.empty()) {
+            amx_subtiles.push_back(std::move(mr));
+            return 0;
+        }
+
+        // All strides and lanes must match across all subtiles, or we give up.
+        const MultiRamp &first = amx_subtiles[0];
+        if (mr.dimensions() != first.dimensions()) {
+            return -1;
+        }
+        for (int i = 0; i < first.dimensions(); i++) {
+            if (!can_prove(mr.strides[i] == first.strides[i]) ||
+                mr.lanes[i] != first.lanes[i]) {
+                return -1;
+            }
+        }
+
+        // Now check for disjointedness
+        // Add a synthetic dimension, the purpose of which will become clear.
+        mr.strides.push_back(Expr{});
+        mr.lanes.push_back(2);
+        for (int i = 0; i < (int)amx_subtiles.size(); i++) {
+            auto &other = amx_subtiles[i];
+            // One of two things must be true:
+            // 1) All of the lanes of mr equal the corresponding lane of
+            // other. We've already checked the strides and lanes, so it's just
+            // a matter of checking the base.
+            if (can_prove(mr.base == other.base)) {
+                return i;
+            }
+
+            // 2) None of the lanes or mr equal any of the lanes of other. To do
+            // this we'll construct a combined mr that can be either mr or
+            // other, and ask if it's alias-free.
+            mr.strides.back() = mr.base - other.base;
+            if (!can_prove(mr.alias_free())) {
+                return -1;
+            }
+        }
+
+        // Didn't already exist and didn't alias with anything.
+        mr.strides.pop_back();
+        mr.lanes.pop_back();
+        amx_subtiles.push_back(std::move(mr));
+        return (int)amx_subtiles.size() - 1;
+    }
+
+    // Returns an index expression for a given load or store index. user_asserts if impossible
+    std::string get_subtile_name(const Expr &index) {
+        int idx = get_subtile(index);
+        user_assert(idx >= 0) << "Index for AMX tile load/store is not a well-formed subtile or partially overlaps other subtiles: " << index;
+        return amx_name + std::to_string(idx);
+    }
+
     Stmt visit(const Allocate *op) override {
         if (op->memory_type == MemoryType::AMXTile) {
             user_assert(
@@ -403,6 +460,7 @@ class ExtractTileOperations : public IRMutator {
                 (op->type.is_float() && op->type.bits() == 32))
                 << "scheduled tile operations must yield 32-bit integers or 32-bit floats";
 
+            // We only support one live AMX allocation at a time for now
             user_assert(!in_allocate) << "Already in AMX allocation: " << amx_name;
             ScopedValue<string> old_amx_name(amx_name, op->name + ".amx");
             ScopedValue<string> old_tile_name(tile_name, op->name);
@@ -418,9 +476,11 @@ class ExtractTileOperations : public IRMutator {
                 body = mutate(body);
             }
 
-            // Always size 256, regardless of how big the matrix multiply was
-            return Allocate::make(amx_name, op->type.element_of(),
-                                  MemoryType::AMXTile, {256}, const_true(), body);
+            for (int i = 0; i < (int)amx_subtiles.size(); i++) {
+                body = Allocate::make(amx_name + std::to_string(i), op->type.element_of(),
+                                      MemoryType::AMXTile, {256}, const_true(), body);
+            }
+            return body;
         }
         return IRMutator::visit(op);
     }
@@ -429,7 +489,16 @@ class ExtractTileOperations : public IRMutator {
         if (op->name != tile_name) {
             return op;
         }
-        return Free::make(amx_name);
+        Stmt s;
+        for (int i = 0; i < (int)amx_subtiles.size(); i++) {
+            Stmt f = Free::make(amx_name + std::to_string(i));
+            if (s.defined()) {
+                s = Block::make(std::move(s), std::move(f));
+            } else {
+                s = std::move(f);
+            }
+        }
+        return s;
     }
 
     Stmt visit(const ProducerConsumer *op) override {
@@ -451,12 +520,14 @@ class ExtractTileOperations : public IRMutator {
             if (!load || load->name != tile_name) {
                 return op;
             }
-            auto store = convert_to_tile_store(op, amx_name, found_I, found_J);
+            auto store = convert_to_tile_store(op, get_subtile_name(load->index), found_I, found_J);
             user_assert(store.defined()) << "Store to AMX tile allocation of a non-tile value";
             return store;
         }
 
-        auto matmul = convert_to_matmul(op, amx_name);
+        std::string subtile_name = get_subtile_name(op->index);
+
+        auto matmul = convert_to_matmul(op, subtile_name);
         if (matmul.result) {
             user_assert(
                 (found_I < 0 || matmul.I == found_I) &&
@@ -475,7 +546,7 @@ class ExtractTileOperations : public IRMutator {
             return op;
         }
 
-        auto zero = convert_to_zero(op, found_I, found_J, amx_name);
+        auto zero = convert_to_zero(op, subtile_name, found_I, found_J);
         if (zero.defined()) {
             return zero;
         }
