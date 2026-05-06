@@ -432,7 +432,6 @@ Expr lossless_cast(Type t,
                    Expr e,
                    const Scope<ConstantInterval> &scope,
                    std::map<Expr, ConstantInterval, ExprCompare> *cache) {
-    internal_assert(t.lanes() == e.type().lanes());
     if (!e.defined() || t == e.type()) {
         return e;
     } else if (t.can_represent(e.type())) {
