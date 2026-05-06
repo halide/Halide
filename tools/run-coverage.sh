@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Collect source-based LLVM coverage for src/ by running the test suite twice:
+# Collect source-based LLVM coverage for src/ by running the test suite three times:
 #   1. host        — all correctness, generator, error, and autoscheduler tests
 #   2. host-metal  — only tests whose name contains "gpu"
+#   3. host-opencl — only tests whose name contains "gpu" or "opencl"
 #
 # Prerequisites: Homebrew LLVM 21 (for llvm-profdata and llvm-cov).
 #
@@ -32,20 +33,28 @@ cd "$REPO_ROOT"
 
 if [[ $REPORT_ONLY -eq 0 ]]; then
 
+    mkdir -p "$BUILD_DIR/profiles"
+
     # ── Configure + Build ─────────────────────────────────────────────────────────
     cmake --preset macOS-coverage
-    cmake --build "$BUILD_DIR" -j"$NPROC"
+    cmake --build --preset macOS-coverage -j"$NPROC"
 
     # ── Run 1: host — all tests ──────────────────────────────────────────────────
-    mkdir -p "$BUILD_DIR/profiles"
     ctest --preset macOS-coverage -j"$NPROC" || echo "Warning: some tests failed (see above)"
 
     # ── Reconfigure + rebuild for host-metal ─────────────────────────────────────
     cmake --preset macOS-coverage -DHalide_TARGET=host-metal
-    cmake --build "$BUILD_DIR" -j"$NPROC"
+    cmake --build --preset macOS-coverage -j"$NPROC"
 
     # ── Run 2: host-metal — GPU tests only ───────────────────────────────────────
     ctest --preset macOS-coverage -j"$NPROC" -R gpu || echo "Warning: some tests failed (see above)"
+
+    # ── Reconfigure + rebuild for host-opencl ────────────────────────────────────
+    cmake --preset macOS-coverage -DHalide_TARGET=host-opencl
+    cmake --build --preset macOS-coverage -j"$NPROC"
+
+    # ── Run 3: host-opencl — GPU and OpenCL-specific tests ───────────────────────
+    ctest --preset macOS-coverage -j"$NPROC" -R "gpu|opencl" || echo "Warning: some tests failed (see above)"
 
 fi # REPORT_ONLY
 

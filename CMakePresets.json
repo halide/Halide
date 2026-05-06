@@ -225,7 +225,8 @@
         "WITH_TEST_GENERATOR": "YES",
         "WITH_TEST_RUNTIME": "NO",
         "WITH_TEST_FUZZ": "NO",
-        "WITH_TEST_CORRECTNESS": "YES"
+        "WITH_TEST_CORRECTNESS": "YES",
+        "WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING": "YES"
       }
     },
     {
@@ -266,6 +267,17 @@
         "WITH_TEST_GENERATOR": "NO",
         "WITH_TEST_FUZZ": "YES",
         "BUILD_SHARED_LIBS": "NO"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "macOS-coverage",
+      "configurePreset": "macOS-coverage",
+      "displayName": "macOS (Coverage)",
+      "description": "Build with LLVM_PROFILE_FILE set so generator binaries write profiles to the profiles/ dir",
+      "environment": {
+        "LLVM_PROFILE_FILE": "${sourceDir}/build/macOS-coverage/profiles/%p-%m.profraw"
       }
     }
   ],
