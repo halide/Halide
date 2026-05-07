@@ -423,6 +423,7 @@ tests(GROUPS correctness multithreaded
       ring_buffer.cpp
       stream_compaction.cpp
       thread_safety.cpp
+      transitive_in.cpp
       truncated_pyramid.cpp
       tuple_vector_reduce.cpp
       vector_cast.cpp
