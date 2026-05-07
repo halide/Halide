@@ -127,8 +127,8 @@ repos:
         files: (^|/)(CMakeLists\.txt|.*\.cmake)$
 
       - id: uv-lock
-        name: check uv.lock is up to date
-        entry: uv lock --check
+        name: ensure uv.lock is up to date
+        entry: uv lock
         language: system
         pass_filenames: false
         files: ^(pyproject\.toml|uv\.lock)$
