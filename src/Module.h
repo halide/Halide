@@ -117,7 +117,7 @@ struct LoweredFunc {
     NameMangling name_mangling;
 
     /** The attributes in bit flags purposed for additional information used in lowering and codegen. */
-    enum Attribute {
+    enum Attribute : uint64_t {
         NO_ATTRIBUTE = 0,
         SME_STREAMING_TASK = 1 << 0,
         SME_NONSTREAMING_TASK = 1 << 1,
