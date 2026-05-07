@@ -20,6 +20,13 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         int64_t old_min = value_info.bounds.min;
         bool old_min_defined = value_info.bounds.min_defined;
         value_info.cast_to(op->type);
+        if (value.type().is_float() && op->type.is_int_or_uint()) {
+            // ExprInfo::cast_to handles integer casts, where narrowing wraps
+            // and preserves alignment modulo the destination width. Float to
+            // integer casts saturate instead, so the old alignment can be
+            // wrong after the cast.
+            value_info.alignment = ModulusRemainder();
+        }
         if (op->type.is_uint() && op->type.bits() == 64 && old_min_defined && old_min > 0) {
             // It's impossible for a cast *to* a uint64 in Halide to lower the
             // min. Casts to uint64_t don't overflow for any source type.

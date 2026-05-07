@@ -186,15 +186,16 @@ protected:
             } else if (mul_b && equal(mul_b->a, a)) {
                 // f(x) + f(x)*a -> f(x) * (a + 1)
                 expr = mutate(a * (mul_b->b + 1));
-            } else if (div_a && !a_failed && no_overflow_int(op->type)) {
+            } else if (div_a && !a_failed && no_overflow_int(op->type) && can_prove(div_a->b != 0)) {
                 // f(x)/a + g(x) -> (f(x) + g(x) * a) / a
                 // Only valid when multiplication and division don't wrap:
                 // under modular arithmetic g(x)*a can overflow and the
-                // rewrite changes the value. Gated to Int(32)+.
+                // rewrite changes the value. Gated to Int(32)+. Also require
+                // a to be nonzero because div-by-zero is defined to return zero.
                 expr = mutate((div_a->a + b * div_a->b) / div_a->b);
-            } else if (div_b && !b_failed && no_overflow_int(op->type)) {
+            } else if (div_b && !b_failed && no_overflow_int(op->type) && can_prove(div_b->b != 0)) {
                 // f(x) + g(x)/b -> (f(x) * b + g(x)) / b
-                // Same overflow concern as above.
+                // Same overflow and div-by-zero concerns as above.
                 expr = mutate((a * div_b->b + div_b->a) / div_b->b);
             } else {
                 expr = fail(a + b);
@@ -278,9 +279,9 @@ protected:
             } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b)) {
                 // f(x)*a - g(x)*a -> (f(x) - g(x))*a;
                 expr = mutate((mul_a->a - mul_b->a) * mul_a->b);
-            } else if (div_a && !a_failed && no_overflow_int(op->type)) {
+            } else if (div_a && !a_failed && no_overflow_int(op->type) && can_prove(div_a->b != 0)) {
                 // f(x)/a - g(x) -> (f(x) - g(x) * a) / a
-                // Same overflow concern as the analogous Add rewrite.
+                // Same overflow and div-by-zero concerns as the Add case above.
                 expr = mutate((div_a->a - b * div_a->b) / div_a->b);
             } else {
                 expr = fail(a - b);

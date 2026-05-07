@@ -78,65 +78,59 @@ SafeResult<Interval> safe_solve_for_outer_interval(const Expr &c, const string &
 Expr random_int_val(FuzzingContext &fuzz, int lo, int hi) {
     return cast(Int(32), fuzz.ConsumeIntegralInRange(lo, hi));
 }
-
 // Returns true if the expression, under the given substitution, contains a
-// division or modulo whose divisor simplifies to zero. Halide defines
-// div/mod-by-zero to return zero, but the simplifier doesn't always fold
-// that consistently across syntactically-different forms -- so solve can
-// rearrange an expression into an equivalent shape whose simplified value
-// at a concrete substitution differs only because one side gets the
-// "returns zero" fold applied while the other doesn't. Skip those samples
-// when checking equivalence. Solve often emits Let bindings, so inline
-// them first (otherwise Div::b is a variable reference and we can't see
-// whether it's zero).
-bool has_div_or_mod_by_zero(const Expr &e, const map<string, Expr> &vars) {
+// floating-point division or modulo whose divisor simplifies to zero. Integer
+// div/mod-by-zero is defined in Halide, but floating-point div/mod-by-zero is
+// undefined and can introduce NaNs, violating the simplifier's fast-math
+// assumptions.
+bool has_float_div_or_mod_by_zero(const Expr &e, const map<string, Expr> &vars) {
     Expr inlined = substitute_in_all_lets(e);
     bool found = false;
-    auto check_denom = [&](const Expr &denom) {
-        if (found) return;
-        if (SafeResult<Expr> r = safe_simplify(substitute(vars, denom)); r.ok()) {
-            if (Internal::is_const_zero(r.value())) {
-                found = true;
-            }
-        }
-    };
     visit_with(
         inlined,
-        [&](auto *self, const Div *op) {
-            check_denom(op->b);
-            self->visit_base(op);
-        },
-        [&](auto *self, const Mod *op) {
-            check_denom(op->b);
+        [&](auto *self, const auto *op) {
+            if constexpr (std::is_same_v<decltype(op), Div> ||
+                          std::is_same_v<decltype(op), Mod>) {
+                if (found || !op->type.is_float()) {
+                    return;
+                }
+                SafeResult<Expr> r = safe_simplify(substitute(vars, op->b));
+                found |= r.ok() && is_const_zero(r.value());
+            }
             self->visit_base(op);
         });
     return found;
 }
 
+bool no_overflow_int(Type t) {
+    return t.is_int() && t.bits() >= 32;
+}
+
 // Returns true if the expression, under the given substitution, contains a
 // narrowing cast whose source value doesn't fit in the destination type.
-// Halide's bounds analysis assumes such casts don't overflow (see PR #7814
-// discussion) -- that's a programmer-level contract that the fuzzer's
-// random value substitutions can easily violate, and the resulting
-// runtime wrap then disagrees with bounds_of's "assumed-fits" prediction.
-// Skip those samples when checking contracts that rely on bounds_of.
+// Halide assumes casts to no-overflow integer types don't overflow; skip
+// substitutions that violate that programmer-level contract.
 bool has_overflowing_cast(const Expr &e, const map<string, Expr> &vars) {
     Expr inlined = substitute_in_all_lets(e);
     bool found = false;
     auto check_cast = [&](const Cast *op) {
-        if (found) return;
+        if (found) {
+            return;
+        }
         Type to = op->type;
         Type from = op->value.type();
-        // Only care about casts between integer/unsigned types that could
-        // overflow the destination.
-        if (!(to.is_int_or_uint() && from.is_int_or_uint())) return;
-        if (to.can_represent(from)) return;
+        if (!no_overflow_int(to) || !from.is_int_or_uint() || to.can_represent(from)) {
+            return;
+        }
         SafeResult<Expr> r = safe_simplify(substitute(vars, op->value));
-        if (!r.ok()) return;
-        if (auto iv = as_const_int(r.value())) {
-            if (!to.can_represent(*iv)) found = true;
-        } else if (auto uv = as_const_uint(r.value())) {
-            if (!to.can_represent(*uv)) found = true;
+        if (!r.ok()) {
+            return;
+        }
+        if (auto iv = as_const_int(r.value()); iv && !to.can_represent(*iv)) {
+            found = true;
+        }
+        if (auto uv = as_const_uint(r.value()); uv && !to.can_represent(*uv)) {
+            found = true;
         }
     };
     visit_with(
@@ -181,13 +175,9 @@ bool test_solve_expression_equivalence(RandomExpressionGenerator &reg,
             val = random_int_val(reg.fuzz, -32, 32);
         }
 
-        // Skip samples that invoke div/mod-by-zero in the input: Halide
-        // defines the result as zero, but the simplifier may apply the
-        // fold asymmetrically across two syntactically-distinct forms
-        // that are otherwise semantically equivalent. We don't skip
-        // based on the *solved* form -- solve must never introduce new
-        // div/mod-by-zero that wasn't already in the input.
-        if (has_div_or_mod_by_zero(test, vars) ||
+        // Skip substitutions that violate Halide's no-overflow cast contract
+        // or its no-NaN/finite floating-point assumptions.
+        if (has_float_div_or_mod_by_zero(test, vars) ||
             has_overflowing_cast(test, vars)) {
             continue;
         }
@@ -272,20 +262,25 @@ bool test_solve_intervals(RandomExpressionGenerator &reg,
             val = random_int_val(reg.fuzz, -16, 16);
         }
         // Skip substitutions that violate the "assumed not to overflow"
-        // contract for narrowing int casts.
-        if (has_overflowing_cast(cond, other_vars)) {
+        // contract for casts to no-overflow integer types.
+        if (has_overflowing_cast(cond, other_vars) ||
+            has_float_div_or_mod_by_zero(cond, other_vars)) {
             continue;
         }
 
-        Expr inner_min_v, inner_max_v, outer_min_v, outer_max_v;
-        if (inner.has_lower_bound()) inner_min_v = subst_and_simplify(other_vars, inner.min);
-        if (inner.has_upper_bound()) inner_max_v = subst_and_simplify(other_vars, inner.max);
-        if (outer.has_lower_bound()) outer_min_v = subst_and_simplify(other_vars, outer.min);
-        if (outer.has_upper_bound()) outer_max_v = subst_and_simplify(other_vars, outer.max);
+        Expr inner_min_v = inner.has_lower_bound() ? subst_and_simplify(other_vars, inner.min) : Expr();
+        Expr inner_max_v = inner.has_upper_bound() ? subst_and_simplify(other_vars, inner.max) : Expr();
+        Expr outer_min_v = outer.has_lower_bound() ? subst_and_simplify(other_vars, outer.min) : Expr();
+        Expr outer_max_v = outer.has_upper_bound() ? subst_and_simplify(other_vars, outer.max) : Expr();
         Expr cond_sub = substitute(other_vars, cond);
 
         int val = reg.fuzz.ConsumeIntegralInRange(-64, 64);
         Expr var_val = cast(Int(32), val);
+        map<string, Expr> vars = other_vars;
+        vars[var] = var_val;
+        if (has_float_div_or_mod_by_zero(cond, vars)) {
+            continue;
+        }
         int cond_truth = try_resolve_bool(substitute(var, var_val, cond_sub));
         if (cond_truth < 0) {
             // Can't resolve (symbolic leftover or UB) -- skip.
@@ -325,25 +320,16 @@ bool test_solve_intervals(RandomExpressionGenerator &reg,
         // Outer interval: var_val NOT in [outer.min, outer.max] => cond is false.
         // An empty outer interval means cond is unsatisfiable, so any sample
         // that evaluates to true is a violation.
-        int out_lb = 0, out_ub = 0;
+        int out_lb = 0;
+        int out_ub = 0;
         if (outer.is_empty()) {
             out_lb = 1;
         }
         if (outer.has_lower_bound()) {
-            int r = try_resolve_bool(var_val < outer_min_v);
-            if (r < 0) {
-                out_lb = -1;
-            } else {
-                out_lb = r;
-            }
+            out_lb = try_resolve_bool(var_val < outer_min_v);
         }
         if (outer.has_upper_bound()) {
-            int r = try_resolve_bool(var_val > outer_max_v);
-            if (r < 0) {
-                out_ub = -1;
-            } else {
-                out_ub = r;
-            }
+            out_ub = try_resolve_bool(var_val > outer_max_v);
         }
         if ((out_lb == 1 || out_ub == 1) && cond_truth == 1) {
             std::cerr << "solve_for_outer_interval violation\n"
