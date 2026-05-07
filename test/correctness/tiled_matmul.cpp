@@ -113,7 +113,7 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r, bool 
     // loads. But if you go too big you'll run out of tile registers and
     // compilation will fail (The LLVM AMX register allocator will spill, but it
     // seems to be fussy about it).
-    int outer_tile_x = 2, outer_tile_y = 2;
+    int outer_tile_x = col > tile_x ? 2 : 1, outer_tile_y = row > tile_y ? 2 : 1;
 
     mm.compute_at(mm.in(), x)
         .store_in(MemoryType::AMXTile)
@@ -291,10 +291,9 @@ bool run_tests(bool (*fn)(int, int, int, int, int, int, bool), int element_width
         bool intrin;
     };
     Cfg cfgs[] = {
-        /*
+
         {2, 2, 16, 2, 2, 8 / element_width, true},
         {4, 4, 8, 4, 4, 8 / element_width, false},
-        */
         {32, 32, 32, 8, 8, 8 / element_width, true},
         {32, 32, 32, 8, 8, 4 / element_width, false},
         // Asymmetric tiles — regression for the tile_x/tile_y swap bug
@@ -305,6 +304,10 @@ bool run_tests(bool (*fn)(int, int, int, int, int, int, bool), int element_width
         {16, 32, 32, 4, 8, 8 / element_width, false},
         {32, 32, 32, 8, 4, 4 / element_width, true},
         {32, 32, 32, 4, 8, 4 / element_width, false},
+
+        // Larger-than-native tiles (unsupported for now, may destructure into
+        // multiple ops in future)
+        // {64, 64, 64, 32, 16, 8 / element_width, true},
     };
     for (const auto &c : cfgs) {
         if (!fn(c.row, c.col, c.acc, c.tx, c.ty, c.tr, c.intrin)) {
@@ -321,7 +324,6 @@ int main(int argc, char **argv) {
     if (!run_tests(matmul_ss, 1)) {
         return 1;
     }
-    return 0;
 
     printf("Running AMX matmul (signed/unsigned)\n");
     if (!run_tests(matmul_su, 1)) {

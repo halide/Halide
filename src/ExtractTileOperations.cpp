@@ -57,14 +57,21 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     // Though if the multiramp has an outer dimension of stride zero it may have
     // been hoisted outwards to just a broadcast of the widened value.
 
+    auto fail = [&](const char *reason) -> Matmul {
+        user_error << "Matrix multiply not recognized. Store to AMX allocation must be a "
+                   << "zero-initialization or a sum of a vector reduce op and a load from "
+                   << "the same allocation. In the following store, " << reason << ".\n"
+                   << Stmt(op);
+        return Matmul{};
+    };
+
     debug(3) << "Potential matmul:\n"
              << Stmt(op) << "\n";
 
     // The RHS must be an add
     const auto *add = op->value.as<Add>();
     if (!add) {
-        debug(3) << "RHS not an add\n";
-        return {};
+        return fail("the right-hand-side is not an add");
     }
 
     // The add must be between a vector reduce and a load. The simplifier will
@@ -73,22 +80,19 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     Expr lhs = add->a;
     const auto *reduce = lhs.as<VectorReduce>();
     if (!reduce || reduce->op != VectorReduce::Add) {
-        debug(3) << "LHS of add not a VectorReduce\n";
-        return {};
+        return fail("the right-hand-side is not a vector reduction plus a load");
     }
 
     // The load must be to the same addresses as the store (i.e. this is a +=)
     Expr rhs = add->b;
     const auto *load = rhs.as<Load>();
     if (!load || load->name != op->name || !equal(load->index, op->index)) {
-        debug(3) << "Load doesn't match store\n";
-        return {};
+        return fail("the right-hand-side load is not from the same address as the store");
     }
 
     // There must be no predicate on the load or store
     if (!is_const_one(load->predicate) || !is_const_one(op->predicate)) {
-        debug(3) << "Predicated\n";
-        return {};
+        return fail("the load or store is predicated");
     }
 
     // The vector reduce must be of a multiply. Unpack it and rebind lhs and rhs
@@ -101,8 +105,7 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
 
         const auto *cast = reduce_value.as<Cast>();
         if (!cast) {
-            debug(3) << "Reduce not an int cast\n";
-            return {};
+            return fail("the vector reduction operand or result types are not supported");
         }
 
         if (const auto *call = Call::as_intrinsic(cast->value, {Call::widening_mul})) {
@@ -110,14 +113,12 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
             lhs = simplify(lower_intrinsics(call->args[0]));
             rhs = simplify(lower_intrinsics(call->args[1]));
         } else {
-            debug(3) << "Reduce not a widening mul\n";
-            return {};
+            return fail("the vector reduction is not of a widening multiply");
         }
 
         if (lhs.type().bits() != 8 ||
             rhs.type().bits() != 8) {
-            debug(3) << "Reduce not a widening mul of 8-bit integers\n";
-            return {};
+            return fail("the vector reduction operand or result types are not supported");
         }
 
     } else {
@@ -125,8 +126,7 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
         Expr reduce_value = simplify(lower_intrinsics(reduce->value));
         const auto *mul = reduce_value.as<Mul>();
         if (!mul) {
-            debug(3) << "Reduce not a multiply\n";
-            return {};
+            return fail("the vector reduction is not of a widening multiply");
         }
         lhs = mul->a;
         rhs = mul->b;
@@ -151,15 +151,13 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
         const auto *lhs_cast = lhs.as<Cast>();
         const auto *rhs_cast = rhs.as<Cast>();
         if (!lhs_cast || !rhs_cast) {
-            debug(3) << "No widening casts\n";
-            return {};
+            return fail("the vector reduction is not of a widening multiply");
         }
         lhs = lhs_cast->value;
         rhs = rhs_cast->value;
         if (!lhs.type().is_bfloat() ||
             rhs.type().element_of() != lhs.type().element_of()) {
-            debug(3) << "Bad inner cast type: " << lhs.type() << " " << rhs.type() << "\n";
-            return {};
+            return fail("the vector reduction operand or result types are not supported");
         }
     }
 
@@ -168,13 +166,11 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     const auto *lhs_load = lhs.as<Load>();
     const auto *rhs_load = rhs.as<Load>();
     if (!lhs_load || !rhs_load) {
-        debug(3) << "Not loads\n";
-        return {};
+        return fail("the matrix multiply operands are not loads");
     }
     // The loads must be unpredicated
     if (!is_const_one(lhs_load->predicate) || !is_const_one(rhs_load->predicate)) {
-        debug(3) << "Loads predicated\n";
-        return {};
+        return fail("the matrix multiply operands are predicated loads");
     }
 
     // Now we analyze the load indices as multiramps
@@ -182,10 +178,7 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     Scope<Expr> empty_scope;
     if (!is_multiramp(lhs_load->index, empty_scope, &lhs_mr) ||
         !is_multiramp(rhs_load->index, empty_scope, &rhs_mr)) {
-        debug(3) << "Indices not multiaffine: \n"
-                 << "lhs: " << lhs_load->index << "\n"
-                 << "rhs: " << rhs_load->index << "\n";
-        return {};
+        return fail("the matrix multiply loads indices are not affine");
     }
 
     // Add back on any broadcasts as a stride-0 outer dim.
@@ -205,8 +198,7 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     };
     if (!has_trailing_zero(rhs_mr)) {
         if (!has_trailing_zero(lhs_mr)) {
-            debug(3) << "Neither side has a trailing stride-zero dim\n";
-            return {};
+            return fail("neither matrix multiply operand is broadcast along the outermost dimension");
         }
         std::swap(lhs, rhs);
         std::swap(lhs_mr, rhs_mr);
@@ -259,34 +251,31 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     //   rhs: [1, ?, Ki, 0]   (with `?` the RHS row stride between Ko chunks)
     std::vector<int> shape{Ki, Ko, J, I};
     std::vector<Expr> lhs_strides, rhs_strides;
-    if (!lhs_mr.strides_for_shape(shape, &lhs_strides)) {
-        debug(3) << "lhs_mr has incompatible shape\n";
-        return {};
-    }
-    if (!rhs_mr.strides_for_shape(shape, &rhs_strides)) {
-        debug(3) << "rhs_mr has incompatible shape\n";
-        return {};
+    if (!lhs_mr.strides_for_shape(shape, &lhs_strides) ||
+        !rhs_mr.strides_for_shape(shape, &rhs_strides)) {
+        return fail("a matrix multiply operand has an unsupported access pattern");
     }
 
-    if (!is_const_one(lhs_strides[0]) || !is_const_one(rhs_strides[0])) {
-        debug(3) << "Innermost stride not 1\n";
-        return {};
+    if (!is_const_one(lhs_strides[0]) ||
+        !is_const_one(rhs_strides[0]) ||
+        (Ko > 1 && !is_const(lhs_strides[1], Ki)) ||
+        !is_const_zero(lhs_strides[2]) ||
+        !is_const(rhs_strides[2], Ki) ||
+        !is_const_zero(rhs_strides[3])) {
+        return fail("the storage layout for a matrix multiply operand is unsupported by AMX");
     }
-    if (Ko > 1 && !is_const(lhs_strides[1], Ki)) {
-        debug(3) << "lhs stride Ko not Ki\n";
-        return {};
-    }
-    if (!is_const_zero(lhs_strides[2])) {
-        debug(3) << "lhs stride J not 0\n";
-        return {};
-    }
-    if (!is_const(rhs_strides[2], Ki)) {
-        debug(3) << "rhs stride J not Ki\n";
-        return {};
-    }
-    if (!is_const_zero(rhs_strides[3])) {
-        debug(3) << "rhs stride I not 0\n";
-        return {};
+
+    // Both sides of the multiply must be things that fit in AMX registers. We
+    // could manually split up too-large matrices here into a collection of
+    // matrix multiply ops, but for now we just assert.
+    {
+        Type t = op->value.type();
+        bool result_ok = t.bytes() * I * J <= 1024;
+        bool lhs_ok = lhs.type().bytes() * I * K <= 1024;
+        bool rhs_ok = rhs.type().bytes() * K * J <= 1024;
+        if (!result_ok || !lhs_ok || !rhs_ok) {
+            return fail("one more more matrices are too large to fit in AMX registers (more than 1024 bytes)");
+        }
     }
 
     Expr rhs_stride_bytes = Ko > 1 ? rhs_strides[1] * element_width : make_zero(rhs_mr.base.type());
@@ -332,18 +321,23 @@ Stmt convert_to_zero(const Store *op, const string &new_name, int I, int J) {
 
 Stmt convert_to_tile_store(const Store *op, const string &amx_name, int I, int J) {
     debug(3) << "Considering tile store: " << Stmt(op);
+
+    auto fail = [&](const char *reason) {
+        user_error << "Store of AMX register to memory not supported. "
+                   << reason << ".\n"
+                   << Stmt(op);
+        return Stmt{};
+    };
+
     if (!is_const_one(op->predicate)) {
-        debug(3) << "Predicated\n";
-        return {};
+        return fail("The store has a predicate");
     }
     MultiRamp mr;
     if (!is_multiramp(op->index, Scope<Expr>::empty_scope(), &mr)) {
-        debug(3) << "Index not a multiramp\n";
-        return {};
+        return fail("The store index is not affine");
     }
     if (mr.total_lanes() != I * J) {
-        debug(3) << "Index has wrong number of lanes\n";
-        return {};
+        return fail("There are too many lanes for the deduced matrix shape");
     }
 
     // Coerce the index into the canonical 2D shape: stride-1 inner of
@@ -351,12 +345,10 @@ Stmt convert_to_tile_store(const Store *op, const string &amx_name, int I, int J
     // extent 1 — strides_for_shape returns a zero stride for those slots.
     std::vector<Expr> mr_strides;
     if (!mr.strides_for_shape({J, I}, &mr_strides)) {
-        debug(3) << "Index has incompatible shape\n";
-        return {};
+        return fail("The store index is incompatible with the deduced matrix shape");
     }
     if (J > 1 && !is_const_one(mr_strides[0])) {
-        debug(3) << "Inner stride not 1\n";
-        return {};
+        return fail("The innermost stride of the store index is not one");
     }
     Expr x_stride = mr_strides[1];
 
@@ -365,7 +357,10 @@ Stmt convert_to_tile_store(const Store *op, const string &amx_name, int I, int J
     Expr subtile_idx = Ramp::make(0, 1, 256);
     auto tile_val = Load::make(tile_type, amx_name, std::move(subtile_idx), {}, {}, const_true(256), {});
     auto bytes = op->value.type().bytes();
-    internal_assert(bytes == 4) << "AMX store only supported for int32 and float32 output, not for " << op->value.type() << "\n";
+    // This should have been caught earlier, so internal assert
+    internal_assert(bytes == 4)
+        << "AMX store only supported for int32 and float32 output, not for "
+        << op->value.type() << "\n";
     auto store = Call::make(Int(32), "tile_store",
                             {I, J * bytes, std::move(out_var),
                              mr.base * bytes, x_stride * bytes, std::move(tile_val)},
@@ -378,7 +373,7 @@ class ExtractTileOperations : public IRMutator {
 
     string tile_name;
     string amx_name;
-    vector<Stmt> pending_stores;
+    int pass = 0;
     bool in_allocate = false;
     int found_I = -1;
     int found_J = -1;
@@ -431,8 +426,9 @@ class ExtractTileOperations : public IRMutator {
             }
 
             // 2) None of the lanes or mr equal any of the lanes of other. To do
-            // this we'll construct a combined mr that can be either mr or
-            // other, and ask if it's alias-free.
+            // this we'll construct a combined mr that can be either 'mr' or
+            // 'other', and ask if it's alias-free. This is what the synthetic
+            // dimension was for.
             mr.strides.back() = mr.base - other.base;
             if (!can_prove(mr.alias_free())) {
                 return -1;
@@ -449,7 +445,9 @@ class ExtractTileOperations : public IRMutator {
     // Returns an index expression for a given load or store index. user_asserts if impossible
     std::string get_subtile_name(const Expr &index) {
         int idx = get_subtile(index);
-        user_assert(idx >= 0) << "Index for AMX tile load/store is not a well-formed subtile or partially overlaps other subtiles: " << index;
+        user_assert(idx >= 0)
+            << "Index for AMX tile load/store must be a constant rectangular subtile that "
+            << "does not overlap any other subtile: " << index;
         return amx_name + std::to_string(idx);
     }
 
@@ -461,20 +459,18 @@ class ExtractTileOperations : public IRMutator {
                 << "scheduled tile operations must yield 32-bit integers or 32-bit floats";
 
             // We only support one live AMX allocation at a time for now
-            user_assert(!in_allocate) << "Already in AMX allocation: " << amx_name;
-            ScopedValue<string> old_amx_name(amx_name, op->name + ".amx");
+            user_assert(!in_allocate)
+                << "Already in AMX allocation at allocation for " << op->name
+                << ". We do not currently support multiple nested AMX matrix multiplies.";
+            ScopedValue<string> old_amx_name(amx_name, op->name + ".amx.");
             ScopedValue<string> old_tile_name(tile_name, op->name);
             ScopedValue<bool> old_in_alloc(in_allocate, true);
             Stmt body = op->body;
 
-            pending_stores.clear();
+            pass = 0;
             body = mutate(body);
-            if (found_I < 0 || found_J < 0 || found_K < 0) {
-                return op;
-            }
-            if (!pending_stores.empty()) {
-                body = mutate(body);
-            }
+            pass = 1;
+            body = mutate(body);
 
             for (int i = 0; i < (int)amx_subtiles.size(); i++) {
                 body = Allocate::make(amx_name + std::to_string(i), op->type.element_of(),
@@ -515,44 +511,55 @@ class ExtractTileOperations : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
+        // There are three operations on a tile register:
+        // 1) Zero-initialization
+        // 2) Matrix multiply
+        // 3) Stores to memory
+
+        // For the matrix multiply we can deduce the tile shape. The stores to
+        // memory and zero-intialization may be flat loads and stores, but to
+        // emit the code we need to know the shape. We do two passes - in the
+        // first we just recognize the matrix multiplies, and in the second we
+        // recognize the initializations and stores.
+
+        // All three convert ops either succeed, or do their own user_error internally.
+
         if (op->name != tile_name) {
             const auto *load = op->value.as<Load>();
             if (!load || load->name != tile_name) {
                 return op;
             }
-            auto store = convert_to_tile_store(op, get_subtile_name(load->index), found_I, found_J);
-            user_assert(store.defined()) << "Store to AMX tile allocation of a non-tile value";
-            return store;
+            if (pass == 1) {
+                return convert_to_tile_store(op, get_subtile_name(load->index), found_I, found_J);
+            } else {
+                return op;
+            }
         }
 
         std::string subtile_name = get_subtile_name(op->index);
 
-        auto matmul = convert_to_matmul(op, subtile_name);
-        if (matmul.result) {
-            user_assert(
-                (found_I < 0 || matmul.I == found_I) &&
-                (found_J < 0 || matmul.J == found_J) &&
-                (found_K < 0 || matmul.K == found_K))
-                << "Found different tile sizes for AMX tile allocation";
+        if (is_const_zero(op->value)) {
+            if (pass == 1) {
+                return convert_to_zero(op, subtile_name, found_I, found_J);
+            } else {
+                return op;
+            }
+        }
+
+        if (pass == 0) {
+            auto matmul = convert_to_matmul(op, subtile_name);
+            user_assert((found_I < 0 || matmul.I == found_I) &&
+                        (found_J < 0 || matmul.J == found_J) &&
+                        (found_K < 0 || matmul.K == found_K))
+                << "Found inconsistent tile sizes for AMX tile allocation across multiple "
+                << "matrix multiplies that store to it.";
             found_I = matmul.I;
             found_J = matmul.J;
             found_K = matmul.K;
-
             return matmul.stmt;
-        }
-
-        if (found_I < 0 || found_J < 0) {
-            pending_stores.emplace_back(op);
+        } else {
             return op;
         }
-
-        auto zero = convert_to_zero(op, subtile_name, found_I, found_J);
-        if (zero.defined()) {
-            return zero;
-        }
-
-        user_error << "Found non-tile operations for AMX tile allocation";
-        return op;
     }
 };
 
