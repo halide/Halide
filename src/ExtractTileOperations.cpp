@@ -65,11 +65,16 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
         return Matmul{};
     };
 
-    debug(3) << "Potential matmul:\n"
-             << Stmt(op) << "\n";
+    // Peel lets
+    std::vector<std::pair<std::string, Expr>> peeled_lets;
+    Expr value = op->value;
+    while (const Let *l = value.as<Let>()) {
+        peeled_lets.emplace_back(l->name, l->value);
+        value = l->body;
+    }
 
     // The RHS must be an add
-    const auto *add = op->value.as<Add>();
+    const auto *add = value.as<Add>();
     if (!add) {
         return fail("the right-hand-side is not an add");
     }
@@ -191,20 +196,6 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     add_broadcast(lhs_mr, lhs_broadcast);
     add_broadcast(rhs_mr, rhs_broadcast);
 
-    // Normalize by making the RHS the one with the trailing zero stride. If
-    // neither side has one, this isn't a matmul we can recognize.
-    auto has_trailing_zero = [](const MultiRamp &mr) {
-        return !mr.lanes.empty() && is_const_zero(mr.strides.back());
-    };
-    if (!has_trailing_zero(rhs_mr)) {
-        if (!has_trailing_zero(lhs_mr)) {
-            return fail("neither matrix multiply operand is broadcast along the outermost dimension");
-        }
-        std::swap(lhs, rhs);
-        std::swap(lhs_mr, rhs_mr);
-        std::swap(lhs_load, rhs_load);
-    }
-
     // In a matrix multiply with row-major inputs and outputs, the algorithm
     // looks like:
     //
@@ -228,8 +219,10 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     // [1, Ki, 0, ?] [1, ?, Ki, 0]
 
     // So next we need to:
-    // 1) Deduce what Ki, Ko, I, J are.
-    // 2) extract those two question marks, and validate the
+    // 1) Deduce what Ki, Ko, are.
+    // 2) Deduce which is the LHS and which is the RHS
+    // 3) Deduce what I, J are.
+    // 4) extract those two question marks, and validate the
     // rest is as-expected.
 
     // The reduction's K dimension will be split into inner and outer elements.
@@ -238,10 +231,53 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     int Ki = 4 / element_width;
     int Ko = K / Ki;
 
-    // I is the extent of the trailing stride-zero dim of the RHS (validated
-    // above by the swap-or-fail step). J follows from the output lane count.
-    int I = rhs_mr.lanes.back();
-    int J = reduce->type.lanes() / I;
+    // Now deduce LHS and RHS. First some helpers.
+    auto swap_sides = [&]() {
+        std::swap(lhs, rhs);
+        std::swap(lhs_mr, rhs_mr);
+        std::swap(lhs_load, rhs_load);
+    };
+
+    auto swizzled = [](const MultiRamp &mr) {
+        // Count the number of non-broadcast dimensions
+        int count = 0;
+        for (int i = 0; i < mr.dimensions(); i++) {
+            count += !is_const_zero(mr.strides[i]);
+        }
+        return count > 2;
+    };
+
+    auto has_trailing_zero = [](const MultiRamp &mr) {
+        return !mr.lanes.empty() && is_const_zero(mr.strides.back());
+    };
+
+    // The RHS is the one that's swizzled. The LHS should be stored densely in
+    // K. If both sides are stored densely either Ko is one (there's no outer
+    // dimension in the swizzle) or J is one (there's no dimension that would go
+    // between Ki and Ko). The RHS is the one that doesn't depend on I, so it
+    // should have a trailing zero stride. If neither side is swizzled and
+    // neither side has a trailing zero stride then it doesn't matter which side
+    // is which.
+    if (swizzled(lhs_mr) || (!swizzled(rhs_mr) && has_trailing_zero(lhs_mr))) {
+        swap_sides();
+    }
+
+    auto unique_lanes = [](const MultiRamp &mr) {
+        int u = 1;
+        for (int i = 0; i < mr.dimensions(); i++) {
+            if (!is_const_zero(mr.strides[i])) {
+                u *= mr.lanes[i];
+            }
+        }
+        return u;
+    };
+
+    // Now deduce I, J. The output has I * J lanes. The LHS has I * K unique
+    // addresses loaded, and the RHS has J * K unique addresses.
+    int IJ = reduce->type.lanes();
+    int IK = unique_lanes(lhs_mr);
+    int I = IK / K;
+    int J = IJ / I;
 
     // Coerce both MRs into the canonical [Ki, Ko, J, I] shape (innermost
     // first). When Ko == 1, the second slot is just an extent-1 dim and
@@ -249,7 +285,8 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     // we'll then validate are:
     //   lhs: [1, Ki, 0, ?]   (with `?` the LHS row stride)
     //   rhs: [1, ?, Ki, 0]   (with `?` the RHS row stride between Ko chunks)
-    std::vector<int> shape{Ki, Ko, J, I};
+    std::vector<int>
+        shape{Ki, Ko, J, I};
     std::vector<Expr> lhs_strides, rhs_strides;
     if (!lhs_mr.strides_for_shape(shape, &lhs_strides) ||
         !rhs_mr.strides_for_shape(shape, &rhs_strides)) {
@@ -259,8 +296,8 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     if (!is_const_one(lhs_strides[0]) ||
         !is_const_one(rhs_strides[0]) ||
         (Ko > 1 && !is_const(lhs_strides[1], Ki)) ||
+        (J > 1 && !is_const(rhs_strides[2], Ki)) ||
         !is_const_zero(lhs_strides[2]) ||
-        !is_const(rhs_strides[2], Ki) ||
         !is_const_zero(rhs_strides[3])) {
         return fail("the storage layout for a matrix multiply operand is unsupported by AMX");
     }
@@ -275,6 +312,12 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
         bool rhs_ok = rhs.type().bytes() * K * J <= 1024;
         if (!result_ok || !lhs_ok || !rhs_ok) {
             return fail("one more more matrices are too large to fit in AMX registers (more than 1024 bytes)");
+        }
+        if (I > 16) {
+            return fail("the result matrix has more than 16 rows");
+        }
+        if (Ko > 16) {
+            return fail("the RHS matrix has more than 16 rows");
         }
     }
 
@@ -305,6 +348,9 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
                              {I, col_bytes, K, out_load, lhs_call, rhs_call},
                              Call::Intrinsic);
     auto store = Store::make(new_name, matmul, std::move(subtile_idx), Parameter(), const_true(256), ModulusRemainder());
+    for (auto &[name, value] : reverse_view(peeled_lets)) {
+        store = LetStmt::make(std::move(name), std::move(value), store);
+    }
     return {true, std::move(store), I, J, K};
 }
 
@@ -320,8 +366,6 @@ Stmt convert_to_zero(const Store *op, const string &new_name, int I, int J) {
 }
 
 Stmt convert_to_tile_store(const Store *op, const string &amx_name, int I, int J) {
-    debug(3) << "Considering tile store: " << Stmt(op);
-
     auto fail = [&](const char *reason) {
         user_error << "Store of AMX register to memory not supported. "
                    << reason << ".\n"
@@ -388,11 +432,11 @@ class ExtractTileOperations : public IRMutator {
     int get_subtile(const Expr &index) {
         MultiRamp mr;
         if (!is_multiramp(index, Scope<Expr>::empty_scope(), &mr)) {
-            return -1;
+            user_error << "Access to AMX tile not affine: " << index << "\n";
         }
         if (!can_prove(mr.alias_free())) {
             // What are you doing?
-            return -1;
+            user_error << "Access to AMX tile may have duplicated lanes: " << index << "\n";
         }
         if (amx_subtiles.empty()) {
             amx_subtiles.push_back(std::move(mr));
@@ -402,12 +446,17 @@ class ExtractTileOperations : public IRMutator {
         // All strides and lanes must match across all subtiles, or we give up.
         const MultiRamp &first = amx_subtiles[0];
         if (mr.dimensions() != first.dimensions()) {
+            user_error
+                << "Access to AMX tile does not have the same shape as other accesses to the same memory.";
             return -1;
         }
         for (int i = 0; i < first.dimensions(); i++) {
             if (!can_prove(mr.strides[i] == first.strides[i]) ||
                 mr.lanes[i] != first.lanes[i]) {
-                return -1;
+                user_error
+                    << "Access to AMX tile has different size and strides to other "
+                    << "accesses to the same memory. All accesses must have the same "
+                    << "subtile size and strides: " << index;
             }
         }
 
@@ -431,6 +480,9 @@ class ExtractTileOperations : public IRMutator {
             // dimension was for.
             mr.strides.back() = mr.base - other.base;
             if (!can_prove(mr.alias_free())) {
+                user_error
+                    << "Failed to prove access to AMX does not partially overlap "
+                    << "another distinct access: " << index;
                 return -1;
             }
         }
@@ -445,9 +497,7 @@ class ExtractTileOperations : public IRMutator {
     // Returns an index expression for a given load or store index. user_asserts if impossible
     std::string get_subtile_name(const Expr &index) {
         int idx = get_subtile(index);
-        user_assert(idx >= 0)
-            << "Index for AMX tile load/store must be a constant rectangular subtile that "
-            << "does not overlap any other subtile: " << index;
+        internal_assert(idx >= 0);  // errors handled already
         return amx_name + std::to_string(idx);
     }
 

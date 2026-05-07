@@ -46,7 +46,7 @@ void fill_buffer_b(Buffer<IntT> &buf, int col, int acc) {
 }
 
 bool equal_eps(float lhs, float rhs, float eps) {
-    return std::abs(lhs - rhs) < eps;
+    return std::abs(lhs - rhs) / (std::max(std::abs(lhs), std::abs(rhs)) + 1e-10f) < eps;
 }
 
 struct make_uint_t {
@@ -89,7 +89,7 @@ void print_mat_rhs(const Buffer<T> &buf, int rows, int cols) {
 }
 
 template<typename LhsInt8, typename RhsInt8>
-bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r, bool use_intrinsic) {
+bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool use_intrinsic) {
     Buffer<LhsInt8> A_buf(acc, row);
     Buffer<RhsInt8> B_buf(4, col, acc / 4);
 
@@ -191,7 +191,7 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r, bool 
     return true;
 }
 
-bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r, bool use_intrinsics) {
+bool matmul_bf16(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool use_intrinsics) {
     Var x("x"), y("y");
     Buffer<bfloat16_t> A(acc, row);
     Buffer<bfloat16_t> B(2, col, acc / 2);
@@ -268,7 +268,7 @@ bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r, 
             for (int k = 0; k < acc; ++k) {
                 val += static_cast<float>(A(k, j)) * static_cast<float>(B(k % 2, i, k / 2));
             }
-            if (!equal_eps(val, out(i, j), 0.03f)) {
+            if (!equal_eps(val, out(i, j), 0.01f)) {
                 std::cerr << "Invalid result at " << i << ", " << j << "\n"
                           << out(i, j) << " != " << val << "\n"
                           << "Matrix dims: " << row << "x" << col << "x" << acc << "\nTile dims: " << tile_x << "x" << tile_y << "x" << tile_r << "\n";
@@ -287,31 +287,52 @@ auto matmul_uu = &matmul<uint8_t, uint8_t>;
 
 bool run_tests(bool (*fn)(int, int, int, int, int, int, bool), int element_width) {
     struct Cfg {
-        int row, col, acc, tx, ty, tr;
+        int col, row, acc, tx, ty, tr;
         bool intrin;
     };
     Cfg cfgs[] = {
-
         {2, 2, 16, 2, 2, 8 / element_width, true},
         {4, 4, 8, 4, 4, 8 / element_width, false},
         {32, 32, 32, 8, 8, 8 / element_width, true},
         {32, 32, 32, 8, 8, 4 / element_width, false},
-        // Asymmetric tiles — regression for the tile_x/tile_y swap bug
-        // tracked in PR #8350. Earlier the matcher silently confused the
-        // two whenever tile_x == tile_y, so all prior coverage was blind
-        // to the misnaming.
+
+        // Asymmetric tiles
         {32, 16, 32, 8, 4, 8 / element_width, true},
         {16, 32, 32, 4, 8, 8 / element_width, false},
         {32, 32, 32, 8, 4, 4 / element_width, true},
         {32, 32, 32, 4, 8, 4 / element_width, false},
+
+        // Degenerate along I or J axis (a matrix-vector multiply)
+        {8, 8, 64, 2, 1, 64 / element_width, false},
+
+        {8, 8, 64, 1, 2, 64 / element_width, false},
+
+        // Degenerate along both (a dot product)
+        {1, 1, 64, 1, 1, 64 / element_width, false},
+
+        // A matmul scheduled as individual dot products
+        {8, 8, 64, 1, 1, 64 / element_width, false},
+
+        // The size of the intermediate vector (and the number of multiplies
+        // done) is IJK. AMX requires:
+        // I <= 16,
+        // K <= 64 / element_width
+        // IJ <= 256
+        // JK <= 1024 / element_width
+        // IK <= 1024 / element_width
+        // Under these constraints, IJK is maximized when I = J = 16, K = 64 / element_width.
+        // So this is the setting that does the most work for us.
+        {32, 32, 64, 16, 16, 64 / element_width, false},
 
         // Larger-than-native tiles (unsupported for now, may destructure into
         // multiple ops in future)
         // {64, 64, 64, 32, 16, 8 / element_width, true},
     };
     for (const auto &c : cfgs) {
-        if (!fn(c.row, c.col, c.acc, c.tx, c.ty, c.tr, c.intrin)) {
-            std::cerr << "Failed at row=" << c.row << " col=" << c.col << " acc=" << c.acc
+        std::cerr << "Testing col=" << c.col << " row=" << c.row << " acc=" << c.acc
+                  << " tx=" << c.tx << " ty=" << c.ty << " tr=" << c.tr << "\n";
+        if (!fn(c.col, c.row, c.acc, c.tx, c.ty, c.tr, c.intrin)) {
+            std::cerr << "Failed at col=" << c.col << " row=" << c.row << " acc=" << c.acc
                       << " tx=" << c.tx << " ty=" << c.ty << " tr=" << c.tr << "\n";
             return false;
         }
