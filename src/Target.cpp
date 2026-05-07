@@ -77,7 +77,7 @@ __attribute__((target("+sve"))) int get_sve_vector_length() {
 }
 
 #if HAS_ATTR_TARGET_SME
-__attribute__((target("+sme"))) int get_sme_streaming_vector_length() {
+__attribute__((target("+sme"))) int get_sme_streaming_vector_length() {  // codespell:ignore sme
     register int result asm("w0");
     __asm__("rdsvl %x0, #8" : "=r"(result));
     return result;

@@ -2710,7 +2710,7 @@ void CodeGen_ARM::visit(const Call *op) {
 
             // Body
             FunctionType *intrin_fn_type = FunctionType::get(i64_t, {}, false);
-            FunctionCallee intrin_fn = module->getOrInsertFunction("llvm.aarch64.sme.cntsd", intrin_fn_type);
+            FunctionCallee intrin_fn = module->getOrInsertFunction("llvm.aarch64.sme.cntsd", intrin_fn_type);  // codespell:ignore sme
             CallInst *intrin_call = builder->CreateCall(intrin_fn, {});
             Value *i32_cntsd = builder->CreateIntCast(intrin_call, i32_t, false);
             // Divide by 2, as cnts"d" returns the number of lanes for 64bit type, while vscale=1 means 128bit.
