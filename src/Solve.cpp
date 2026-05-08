@@ -474,6 +474,10 @@ protected:
             } else if (t_b && !b_failed) {
                 // op(f(x), op(g(x), a)) -> op(op(f(x), g(x)), a)
                 expr = mutate(T::make(T::make(a, t_b->a), t_b->b));
+            } else if (!no_overflow_int(op->type)) {
+                // Early exit before arithmetic rearrangement rules, which
+                // are only valid when values can't wrap.
+                expr = fail(T::make(a, b));
             } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
                 // op(f(x) + a, f(x) + b) -> f(x) + op(a, b)
                 expr = mutate(add_a->a + T::make(add_a->b, add_b->b));
