@@ -215,20 +215,16 @@ Expr subst_and_simplify(const map<string, Expr> &vars, const Expr &e) {
 
 // Returns 1 if `c` simplifies to a true constant, 0 if a false constant, -1
 // otherwise. Used to handle partial results from the simplifier safely.
-int try_resolve_bool(const Expr &c) {
-    Expr s;
-    if (SafeResult<Expr> r = safe_simplify(c); r.ok()) {
-        s = r.value();
-    } else {
-        return -1;
+std::optional<bool> try_resolve_bool(const Expr &c) {
+    if (const SafeResult<Expr> r = safe_simplify(c); r.ok()) {
+        if (is_const_one(r.value())) {
+            return true;
+        }
+        if (is_const_zero(r.value())) {
+            return false;
+        }
     }
-    if (is_const_one(s)) {
-        return 1;
-    }
-    if (is_const_zero(s)) {
-        return 0;
-    }
-    return -1;
+    return std::nullopt;
 }
 
 // Test the contracts of solve_for_inner_interval and solve_for_outer_interval
@@ -281,32 +277,22 @@ bool test_solve_intervals(RandomExpressionGenerator &reg,
         if (has_float_div_or_mod_by_zero(cond, vars)) {
             continue;
         }
-        int cond_truth = try_resolve_bool(substitute(var, var_val, cond_sub));
-        if (cond_truth < 0) {
+        auto cond_truth = try_resolve_bool(substitute(var, var_val, cond_sub));
+        if (!cond_truth.has_value()) {
             // Can't resolve (symbolic leftover or UB) -- skip.
             continue;
         }
 
         // Inner interval: var_val in [inner.min, inner.max] => cond is true.
         // An empty inner interval is a trivial (vacuously true) claim.
-        int in_inner = inner.is_empty() ? 0 : 1;
-        if (in_inner == 1 && inner.has_lower_bound()) {
-            int r = try_resolve_bool(var_val >= inner_min_v);
-            if (r < 0) {
-                in_inner = -1;
-            } else if (r == 0) {
-                in_inner = 0;
-            }
+        std::optional in_inner = !inner.is_empty();
+        if (in_inner.value_or(false) && inner.has_lower_bound()) {
+            in_inner = try_resolve_bool(var_val >= inner_min_v);
         }
-        if (in_inner == 1 && inner.has_upper_bound()) {
-            int r = try_resolve_bool(var_val <= inner_max_v);
-            if (r < 0) {
-                in_inner = -1;
-            } else if (r == 0) {
-                in_inner = 0;
-            }
+        if (in_inner.value_or(false) && inner.has_upper_bound()) {
+            in_inner = try_resolve_bool(var_val <= inner_max_v);
         }
-        if (in_inner == 1 && cond_truth == 0) {
+        if (in_inner.value_or(false) && !*cond_truth) {
             std::cerr << "solve_for_inner_interval violation\n"
                       << "  cond: " << cond << "\n"
                       << "  var: " << var << " = " << val << "\n"
@@ -320,18 +306,9 @@ bool test_solve_intervals(RandomExpressionGenerator &reg,
         // Outer interval: var_val NOT in [outer.min, outer.max] => cond is false.
         // An empty outer interval means cond is unsatisfiable, so any sample
         // that evaluates to true is a violation.
-        int out_lb = 0;
-        int out_ub = 0;
-        if (outer.is_empty()) {
-            out_lb = 1;
-        }
-        if (outer.has_lower_bound()) {
-            out_lb = try_resolve_bool(var_val < outer_min_v);
-        }
-        if (outer.has_upper_bound()) {
-            out_ub = try_resolve_bool(var_val > outer_max_v);
-        }
-        if ((out_lb == 1 || out_ub == 1) && cond_truth == 1) {
+        auto out_lb = outer.has_lower_bound() ? try_resolve_bool(var_val < outer_min_v) : outer.is_empty();
+        auto out_ub = outer.has_upper_bound() ? try_resolve_bool(var_val > outer_max_v) : false;
+        if ((out_lb.value_or(false) || out_ub.value_or(false)) && *cond_truth) {
             std::cerr << "solve_for_outer_interval violation\n"
                       << "  cond: " << cond << "\n"
                       << "  var: " << var << " = " << val << "\n"
