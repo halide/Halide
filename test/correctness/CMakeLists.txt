@@ -91,6 +91,7 @@ tests(GROUPS correctness
       dilate3x3.cpp
       div_by_zero.cpp
       div_round_to_zero.cpp
+      downsampling_reduce.cpp
       dynamic_allocation_in_gpu_kernel.cpp
       dynamic_reduction_bounds.cpp
       early_out.cpp
@@ -231,6 +232,7 @@ tests(GROUPS correctness
       multi_way_select.cpp
       multipass_constraints.cpp
       multiple_outputs.cpp
+      multiramp.cpp
       mux.cpp
       narrow_predicates.cpp
       negative_split_factors.cpp
@@ -325,6 +327,7 @@ tests(GROUPS correctness
       tracing_stack.cpp
       transitive_bounds.cpp
       transpose_idioms.cpp
+      transposed_vector_reduce.cpp
       trim_no_ops.cpp
       tuple_partial_update.cpp
       tuple_reduction.cpp

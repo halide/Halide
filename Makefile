@@ -548,6 +548,7 @@ SOURCE_FILES = \
   Module.cpp \
   ModulusRemainder.cpp \
   Monotonic.cpp \
+  MultiRamp.cpp \
   ObjectInstanceRegistry.cpp \
   OffloadGPULoops.cpp \
   OptimizeShuffles.cpp \
@@ -753,6 +754,7 @@ HEADER_FILES = \
   Module.h \
   ModulusRemainder.h \
   Monotonic.h \
+  MultiRamp.h \
   ObjectInstanceRegistry.h \
   OffloadGPULoops.h \
   OptimizeShuffles.h \
