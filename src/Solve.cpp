@@ -387,8 +387,12 @@ protected:
                 // (f(x) + a) / b -> f(x) / b + a / b
                 expr = mutate(simplify(add_a->a / b) + add_a->b / b);
             } else if (sub_a && !a_failed &&
-                       is_multiple_of_b(sub_a->a)) {
+                       is_multiple_of_b(sub_a->a) &&
+                       is_multiple_of_b(sub_a->b)) {
                 // (f(x) - a) / b -> f(x) / b - a / b
+                // Both f(x) and a must be multiples of b. For floor division,
+                // (k*b - a)/b = k - ceil(a/b), which differs from k - a/b
+                // unless a is also a multiple of b.
                 expr = mutate(simplify(sub_a->a / b) - sub_a->b / b);
             } else if (mul_a && !a_failed && is_multiple_of_b(mul_a->b)) {
                 // (f(x) * a) / b -> f(x) * (a / b)
