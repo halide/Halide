@@ -68,9 +68,9 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     // Peel lets
     std::vector<std::pair<std::string, Expr>> peeled_lets;
     Expr value = op->value;
-    while (const Let *l = value.as<Let>()) {
-        peeled_lets.emplace_back(l->name, l->value);
-        value = l->body;
+    while (const Let *let = value.as<Let>()) {
+        peeled_lets.emplace_back(let->name, let->value);
+        value = let->body;
     }
 
     // The RHS must be an add
@@ -349,7 +349,7 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
                              Call::Intrinsic);
     auto store = Store::make(new_name, matmul, std::move(subtile_idx), Parameter(), const_true(256), ModulusRemainder());
     for (auto &[name, value] : reverse_view(peeled_lets)) {
-        store = LetStmt::make(std::move(name), std::move(value), store);
+        store = LetStmt::make(name, std::move(value), store);
     }
     return {true, std::move(store), I, J, K};
 }
@@ -462,7 +462,7 @@ class ExtractTileOperations : public IRMutator {
 
         // Now check for disjointedness
         // Add a synthetic dimension, the purpose of which will become clear.
-        mr.strides.push_back(Expr{});
+        mr.strides.emplace_back();
         mr.lanes.push_back(2);
         for (int i = 0; i < (int)amx_subtiles.size(); i++) {
             auto &other = amx_subtiles[i];
