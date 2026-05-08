@@ -1473,15 +1473,13 @@ void IRPrinter::visit(const Shuffle *op) {
     } else {
         openf("shuffle");
         print_list(op->vectors);
-        stream << paren(", ...");
-        /*
+        stream << paren(", ");
         for (size_t i = 0; i < op->indices.size(); i++) {
             stream << imm_int(op->indices[i]);
             if (i < op->indices.size() - 1) {
                 stream << paren(", ");
             }
         }
-        */
     }
     closef();
 }
