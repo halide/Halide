@@ -321,15 +321,19 @@ protected:
 
         Expr expr;
         if (a_uses_var && !b_uses_var) {
-            if (add_a && !a_failed) {
-                // (f(x) + a) * b -> f(x) * b + a * b
-                expr = mutate(add_a->a * b + add_a->b * b);
-            } else if (sub_a && !a_failed) {
-                // (f(x) - a) * b -> f(x) * b - a * b
-                expr = mutate(sub_a->a * b - sub_a->b * b);
-            } else if (mul_a && !a_failed) {
-                // (f(x) * a) * b -> f(x) * (a * b)
-                expr = mutate(mul_a->a * (mul_a->b * b));
+            // Float multiplication is not distributive or associative, so
+            // these rewrites are restricted to non-float types.
+            if (!op->type.is_float()) {
+                if (add_a && !a_failed) {
+                    // (f(x) + a) * b -> f(x) * b + a * b
+                    expr = mutate(add_a->a * b + add_a->b * b);
+                } else if (sub_a && !a_failed) {
+                    // (f(x) - a) * b -> f(x) * b - a * b
+                    expr = mutate(sub_a->a * b - sub_a->b * b);
+                } else if (mul_a && !a_failed) {
+                    // (f(x) * a) * b -> f(x) * (a * b)
+                    expr = mutate(mul_a->a * (mul_a->b * b));
+                }
             }
         } else if (a_uses_var && b_uses_var) {
             // It's a quadratic. We could continue but this is
