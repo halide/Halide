@@ -519,6 +519,10 @@ class ExtractTileOperations : public IRMutator {
 
             pass = 0;
             body = mutate(body);
+            user_assert(found_I >= 0 && found_J >= 0 && found_K >= 0)
+                << op->name << " is stored in AMXTile memory, but no matrix multiply "
+                << "operation was found that stores to it, so the shape of the tile "
+                << "was unable to be determined.\n";
             pass = 1;
             body = mutate(body);
 

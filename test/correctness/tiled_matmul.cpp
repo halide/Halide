@@ -112,7 +112,8 @@ bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool 
     // An outer layer of tiling is necessary to reuse repeated subtile
     // loads. But if you go too big you'll run out of tile registers and
     // compilation will fail (The LLVM AMX register allocator will spill, but it
-    // seems to be fussy about it).
+    // seems to be fussy about it). Doing this also tests the case of more than
+    // one matrix multiply operation applied to a single AMXTile allocation.
     int outer_tile_x = col > tile_x ? 2 : 1, outer_tile_y = row > tile_y ? 2 : 1;
 
     mm.compute_at(mm.in(), x)
