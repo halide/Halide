@@ -660,10 +660,11 @@ protected:
                     }
                 } else if (is_const(mul_a->b, -1)) {
                     expr = mutate(Opp::make(mul_a->a, make_zero(b.type()) - b));
-                } else if (is_negative_const(mul_a->b)) {
-                    // It shouldn't have been unsigned since the is_negative_const
-                    // check is true, but put an assertion anyway.
-                    internal_assert(!b.type().is_uint()) << "Negating unsigned is not legal\n";
+                } else if (is_negative_const(mul_a->b) && no_overflow_int(a.type())) {
+                    // Restrict to no_overflow_int types: for narrow signed types
+                    // (int8, int16), negate(INT_MIN) overflows back to INT_MIN,
+                    // which would create an infinite flip cycle (GT <-> LT) since the
+                    // negated multiplier is still negative after the rewrite.
                     expr = mutate(Opp::make(mul_a->a * negate(mul_a->b), negate(b)));
                 } else if (is_positive_const(mul_a->b) && no_overflow_int(a.type())) {
                     // The rewrites below divide by mul_a->b, so require
