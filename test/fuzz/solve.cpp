@@ -89,8 +89,8 @@ bool has_float_div_or_mod_by_zero(const Expr &e, const map<string, Expr> &vars) 
     visit_with(
         inlined,
         [&](auto *self, const auto *op) {
-            if constexpr (std::is_same_v<decltype(op), Div> ||
-                          std::is_same_v<decltype(op), Mod>) {
+            if constexpr (std::is_same_v<decltype(op), const Div *> ||
+                          std::is_same_v<decltype(op), const Mod *>) {
                 if (found || !op->type.is_float()) {
                     return;
                 }
