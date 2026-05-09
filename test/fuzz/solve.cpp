@@ -15,7 +15,7 @@ using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
-// Wrap a call that may throw InternalError in an std::variant so callers can
+// Wrap a call that may throw InternalError in a std::variant so callers can
 // report the failure with context rather than aborting the whole fuzzer.
 template<typename T>
 struct SafeResult : std::variant<T, InternalError> {
@@ -77,29 +77,6 @@ SafeResult<Interval> safe_solve_for_outer_interval(const Expr &c, const string &
 
 Expr random_int_val(FuzzingContext &fuzz, int lo, int hi) {
     return cast(Int(32), fuzz.ConsumeIntegralInRange(lo, hi));
-}
-// Returns true if the expression, under the given substitution, contains a
-// floating-point division or modulo whose divisor simplifies to zero. Integer
-// div/mod-by-zero is defined in Halide, but floating-point div/mod-by-zero is
-// undefined and can introduce NaNs, violating the simplifier's fast-math
-// assumptions.
-bool has_float_div_or_mod_by_zero(const Expr &e, const map<string, Expr> &vars) {
-    Expr inlined = substitute_in_all_lets(e);
-    bool found = false;
-    visit_with(
-        inlined,
-        [&](auto *self, const auto *op) {
-            if constexpr (std::is_same_v<decltype(op), const Div *> ||
-                          std::is_same_v<decltype(op), const Mod *>) {
-                if (found || !op->type.is_float()) {
-                    return;
-                }
-                SafeResult<Expr> r = safe_simplify(substitute(vars, op->b));
-                found |= r.ok() && is_const_zero(r.value());
-            }
-            self->visit_base(op);
-        });
-    return found;
 }
 
 bool no_overflow_int(Type t) {
@@ -176,9 +153,7 @@ bool test_solve_expression_equivalence(RandomExpressionGenerator &reg,
         }
 
         // Skip substitutions that violate Halide's no-overflow cast contract
-        // or its no-NaN/finite floating-point assumptions.
-        if (has_float_div_or_mod_by_zero(test, vars) ||
-            has_overflowing_cast(test, vars)) {
+        if (has_overflowing_cast(test, vars)) {
             continue;
         }
 
@@ -206,11 +181,6 @@ bool test_solve_expression_equivalence(RandomExpressionGenerator &reg,
         }
     }
     return true;
-}
-
-// Substitute the given variables and simplify.
-Expr subst_and_simplify(const map<string, Expr> &vars, const Expr &e) {
-    return simplify(substitute(vars, e));
 }
 
 // Returns 1 if `c` simplifies to a true constant, 0 if a false constant, -1
@@ -259,24 +229,20 @@ bool test_solve_intervals(RandomExpressionGenerator &reg,
         }
         // Skip substitutions that violate the "assumed not to overflow"
         // contract for casts to no-overflow integer types.
-        if (has_overflowing_cast(cond, other_vars) ||
-            has_float_div_or_mod_by_zero(cond, other_vars)) {
+        if (has_overflowing_cast(cond, other_vars)) {
             continue;
         }
 
-        Expr inner_min_v = inner.has_lower_bound() ? subst_and_simplify(other_vars, inner.min) : Expr();
-        Expr inner_max_v = inner.has_upper_bound() ? subst_and_simplify(other_vars, inner.max) : Expr();
-        Expr outer_min_v = outer.has_lower_bound() ? subst_and_simplify(other_vars, outer.min) : Expr();
-        Expr outer_max_v = outer.has_upper_bound() ? subst_and_simplify(other_vars, outer.max) : Expr();
+        Expr inner_min_v = inner.has_lower_bound() ? simplify(substitute(other_vars, inner.min)) : Expr();
+        Expr inner_max_v = inner.has_upper_bound() ? simplify(substitute(other_vars, inner.max)) : Expr();
+        Expr outer_min_v = outer.has_lower_bound() ? simplify(substitute(other_vars, outer.min)) : Expr();
+        Expr outer_max_v = outer.has_upper_bound() ? simplify(substitute(other_vars, outer.max)) : Expr();
         Expr cond_sub = substitute(other_vars, cond);
 
         int val = reg.fuzz.ConsumeIntegralInRange(-64, 64);
         Expr var_val = cast(Int(32), val);
         map<string, Expr> vars = other_vars;
         vars[var] = var_val;
-        if (has_float_div_or_mod_by_zero(cond, vars)) {
-            continue;
-        }
         auto cond_truth = try_resolve_bool(substitute(var, var_val, cond_sub));
         if (!cond_truth.has_value()) {
             // Can't resolve (symbolic leftover or UB) -- skip.
