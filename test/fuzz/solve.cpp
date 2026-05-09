@@ -213,8 +213,8 @@ bool test_solve_intervals(RandomExpressionGenerator &reg,
     if (inner_res.failed() || outer_res.failed()) {
         return false;
     }
-    Interval inner = inner_res.value();
-    Interval outer = outer_res.value();
+    const Interval &inner = inner_res.value();
+    const Interval &outer = outer_res.value();
 
     map<string, Expr> other_vars;
     for (const auto &v : reg.fuzz_vars) {
@@ -303,6 +303,16 @@ Expr random_comparison(RandomExpressionGenerator &reg, int depth) {
     return reg.fuzz.PickValueInArray(ops)(a, b);
 }
 
+[[noreturn]]
+void exit_and_report_failure(const char *description, const string &var, const Expr &expr) {
+    std::cerr << "Failing " << description << " (C++):\n";
+    IRGraphCXXPrinter printer(std::cerr);
+    printer.print(expr);
+    std::cerr << "Expr final_expr = " << printer.node_names[expr.get()] << ";\n";
+    std::cerr << "  solving for \"" << var << "\"\n";
+    std::exit(1);
+}
+
 }  // namespace
 
 FUZZ_TEST(solve, FuzzingContext &fuzz) {
@@ -336,45 +346,25 @@ FUZZ_TEST(solve, FuzzingContext &fuzz) {
     int width = fuzz.PickValueInArray({1, 2, 3, 4, 6, 8});
     Expr test_expr = reg.random_expr(Int(32).with_lanes(width), depth);
     if (!test_solve_expression_equivalence(reg, test_expr, var, samples)) {
-        std::cerr << "Failing expression (C++):\n";
-        IRGraphCXXPrinter printer(std::cerr);
-        printer.print(test_expr);
-        std::cerr << "Expr final_expr = " << printer.node_names[test_expr.get()] << ";\n";
-        std::cerr << "  solving for \"" << var << "\"\n";
-        return 1;
+        exit_and_report_failure("expression", var, test_expr);
     }
 
     // solve_expression: also handle comparisons (the solver inverts these).
     Expr cmp = random_comparison(reg, depth);
     if (!test_solve_expression_equivalence(reg, cmp, var, samples)) {
-        std::cerr << "Failing comparison (C++):\n";
-        IRGraphCXXPrinter printer(std::cerr);
-        printer.print(cmp);
-        std::cerr << "Expr final_expr = " << printer.node_names[cmp.get()] << ";\n";
-        std::cerr << "  solving for \"" << var << "\"\n";
-        return 1;
+        exit_and_report_failure("comparison", var, cmp);
     }
 
     // solve_for_inner_interval / solve_for_outer_interval.
     if (!test_solve_intervals(reg, cmp, var, samples)) {
-        std::cerr << "Failing condition (C++):\n";
-        IRGraphCXXPrinter printer(std::cerr);
-        printer.print(cmp);
-        std::cerr << "Expr final_expr = " << printer.node_names[cmp.get()] << ";\n";
-        std::cerr << "  solving for \"" << var << "\"\n";
-        return 1;
+        exit_and_report_failure("condition", var, cmp);
     }
 
     // Also exercise solve_for_*_interval with compound boolean conditions.
     Expr cmp2 = random_comparison(reg, depth);
     Expr compound = fuzz.ConsumeBool() ? (cmp && cmp2) : (cmp || cmp2);
     if (!test_solve_intervals(reg, compound, var, samples)) {
-        std::cerr << "Failing compound condition (C++):\n";
-        IRGraphCXXPrinter printer(std::cerr);
-        printer.print(compound);
-        std::cerr << "Expr final_expr = " << printer.node_names[compound.get()] << ";\n";
-        std::cerr << "  solving for \"" << var << "\"\n";
-        return 1;
+        exit_and_report_failure("compound condition", var, compound);
     }
 
     return 0;
