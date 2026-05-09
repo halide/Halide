@@ -85,11 +85,11 @@ protected:
     // Flip the top-level comparison or logical operator of a boolean expression
     // to negate it WITHOUT calling the full Halide simplifier.
     //
-    // Why not just simplify(!e)?  simplify() calls the Halide simplifier, which
-    // may apply arithmetic rewrites that are unsound for floats (e.g.,
-    // x + y == x  →  y == 0, or rearranging adds/subs across a comparison).
-    // We only need to push the "!" one level deep — the solver will handle the
-    // rest when it processes the resulting condition.
+    // Why not just simplify(!e)?  simplify() may apply arithmetic rewrites
+    // (e.g., x + y == x  →  y == 0) that go beyond a simple negation and
+    // transform the condition in ways the solver hasn't processed yet.
+    // We only need to push the "!" one level deep — the solver will handle
+    // the rest when it processes the resulting condition.
     static Expr shallow_negate_cond(Expr e) {
         if (const LT *op = e.as<LT>()) return GE::make(op->a, op->b);
         if (const LE *op = e.as<LE>()) return GT::make(op->a, op->b);
@@ -342,19 +342,15 @@ protected:
 
         Expr expr;
         if (a_uses_var && !b_uses_var) {
-            // Float multiplication is not distributive or associative, so
-            // these rewrites are restricted to non-float types.
-            if (!op->type.is_float()) {
-                if (add_a && !a_failed) {
-                    // (f(x) + a) * b -> f(x) * b + a * b
-                    expr = mutate(add_a->a * b + add_a->b * b);
-                } else if (sub_a && !a_failed) {
-                    // (f(x) - a) * b -> f(x) * b - a * b
-                    expr = mutate(sub_a->a * b - sub_a->b * b);
-                } else if (mul_a && !a_failed) {
-                    // (f(x) * a) * b -> f(x) * (a * b)
-                    expr = mutate(mul_a->a * (mul_a->b * b));
-                }
+            if (add_a && !a_failed) {
+                // (f(x) + a) * b -> f(x) * b + a * b
+                expr = mutate(add_a->a * b + add_a->b * b);
+            } else if (sub_a && !a_failed) {
+                // (f(x) - a) * b -> f(x) * b - a * b
+                expr = mutate(sub_a->a * b - sub_a->b * b);
+            } else if (mul_a && !a_failed) {
+                // (f(x) * a) * b -> f(x) * (a * b)
+                expr = mutate(mul_a->a * (mul_a->b * b));
             }
         } else if (a_uses_var && b_uses_var) {
             // It's a quadratic. We could continue but this is
@@ -395,9 +391,10 @@ protected:
         const Mul *mul_a = a.as<Mul>();
         Expr expr;
         if (a_uses_var && !b_uses_var && no_overflow_int(op->type)) {
-            // Distributing division across +/-/* is only sound under
-            // non-wrapping integer arithmetic. Floats lose precision per
-            // operation, and narrower / unsigned ints can wrap.
+            // Distributing division across +/-/* is only sound for
+            // non-wrapping integers. These rewrites use exact divisibility
+            // checks (reduce_expr_modulo, b/c*c == b) that have no float
+            // analog, and narrower / unsigned integer types can wrap.
             auto ib = as_const_int(b);
             auto is_multiple_of_b = [&](const Expr &e) {
                 if (ib && op->type.is_scalar()) {
@@ -658,19 +655,11 @@ protected:
             // We have f(x) < y. Try to unwrap f(x).
             //
             // Several of these rewrites rearrange the comparison by adding
-            // or subtracting on both sides. That's only sound under two
-            // conditions:
-            //   1. No integer overflow: for types that wrap (unsigned and narrow
-            //      signed), ordering comparisons flip under wrap even though
-            //      equality is preserved. So gate on no_overflow_int for
-            //      LT/LE/GT/GE, but allow EQ/NE (modular arithmetic preserves
-            //      equality).
-            //   2. Not float: for floats, adding or subtracting a value from
-            //      both sides changes the rounding order and can produce a
-            //      semantically different result. For example,
-            //      (a - x) != (a/C) is NOT equivalent to x != (a/C - a) because
-            //      the latter computes a/C-a in a precision context where a
-            //      dominates, losing the small a/C term.
+            // or subtracting on both sides. For types that wrap (unsigned and
+            // narrow signed), ordering comparisons flip under wrap even though
+            // equality is preserved. So gate on no_overflow_int for
+            // LT/LE/GT/GE, but allow EQ/NE (modular arithmetic preserves
+            // equality).
             const bool safe_to_rearrange = no_overflow_int(a.type()) || is_eq || is_ne;
             if (add_a && !a_failed && safe_to_rearrange) {
                 // f(x) + b < c -> f(x) < c - b
@@ -835,10 +824,10 @@ protected:
         Expr condition = op->condition;
 
         // select(cond, a, x) ~> select(!cond, x, a)
-        // Use shallow_negate_cond rather than simplify(!condition): the full
-        // Halide simplifier applies arithmetic rewrites (e.g., x + y == x → y == 0)
-        // that are sound for integers but NOT for floats.  We only need to flip
-        // the top-level operator here; the solver will handle the rest.
+        // Use shallow_negate_cond rather than simplify(!condition): simplify()
+        // may apply arithmetic rewrites beyond the negation (e.g., x + y == x → y == 0)
+        // that transform the condition in ways the solver hasn't processed yet.
+        // We only need to flip the top-level operator; the solver handles the rest.
         if (!true_uses_var && false_uses_var) {
             condition = shallow_negate_cond(condition);
             std::swap(true_value, false_value);
