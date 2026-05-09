@@ -346,9 +346,13 @@ FUZZ_TEST(solve, FuzzingContext &fuzz) {
     constexpr int samples = 20;
 
     RandomExpressionGenerator reg{fuzz};
+    // Float types are excluded from the equivalence check.  Halide's solver
+    // applies fast-math rewrites (treats floats as reals, reassociation
+    // permitted) that are correct under Halide semantics but differ from
+    // concrete IEEE 754 evaluation.  The interval tests below still exercise
+    // the solver on integer expressions containing comparisons.
     reg.fuzz_types = {Int(8), Int(16), Int(32), Int(64),
-                      UInt(1), UInt(8), UInt(16), UInt(32), UInt(64),
-                      Float(32), Float(64)};
+                      UInt(1), UInt(8), UInt(16), UInt(32), UInt(64)};
     // Leave gen_shuffles / gen_vector_reduce / gen_reinterpret off for now
     // -- those exercise Deinterleaver / shuffle lowering more than solve
     // proper. gen_broadcast_of_vector and gen_ramp_of_vector are on so the

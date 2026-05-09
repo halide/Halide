@@ -523,50 +523,6 @@ void test_select() {
                 select(x >= 10, x, 10));
 }
 
-// Float addition is not associative: the solver must not fold constants when
-// doing so would change the rounding order and produce a different result.
-void test_float_add_reassociation_not_applied() {
-    Expr xf = Variable::make(Float(32), "x");
-    // With x=27f: (27f - 113f) + 545750592f = 545750528f
-    // The buggy rewrite folded to: 27f + (545750592f - 113f) = 545750464f
-    check_solve_equivalent((xf - 113.0f) + 545750592.0f,
-                           {{"x", make_const(Float(32), 27.0f)}});
-    // Symmetric: (f(x) + a) + b -> f(x) + (a + b) is also wrong for floats.
-    check_solve_equivalent((xf + 113.0f) + 545750592.0f,
-                           {{"x", make_const(Float(32), 27.0f)}});
-}
-
-// Float subtraction is not associative: folding constants across a subtract
-// may change the rounding order and produce a different value.
-void test_float_sub_reassociation_not_applied() {
-    Expr xf = Variable::make(Float(32), "x");
-    Expr yf = Variable::make(Float(32), "y");
-    // a - (f(x) + b): with a=4294967296f, b=150f, x=-30f
-    // Original: 4294967296f - (-30f + 150f) = 4294967296f - 120f = 4294967296f
-    // Buggy rewrite: -(-30f) + (4294967296f - 150f) = 30f + 4294967040f = 4294967040f
-    check_solve_equivalent(make_const(Float(32), 4294967296.0f) - (xf + make_const(Float(32), 150.0f)),
-                           {{"x", make_const(Float(32), -30.0f)}});
-    // (f(x) - a) - b: with a=113f, b=545750592f, x=27f
-    check_solve_equivalent((xf - 113.0f) - make_const(Float(32), 545750592.0f),
-                           {{"x", make_const(Float(32), 27.0f)}});
-}
-
-// Adding or subtracting from both sides of a float EQ/NE is unsound: the
-// rewrite changes the float rounding order and produces a different value.
-// The specific failure: (y - x) != (y/C) was solved to x != (y/C - y)/-1,
-// but y/C - y loses precision when y >> y/C (the small term gets absorbed).
-void test_float_cmp_not_rearranged_across_add_sub() {
-    Expr xf = Variable::make(Float(32), "x");
-    Expr yf = Variable::make(Float(32), "y");
-    // With y=18.0f, x=18.0f, C=-1468077184.0f:
-    //   (18f - 18f) != 18f/C  =>  0.0 != -1.22e-8  =>  true
-    //   buggy: 18f != (18f/C - 18f)/-1  =>  18f != 18f  =>  false
-    check_solve_equivalent(
-        (yf - xf) != (yf / make_const(Float(32), -1468077184.0f)),
-        {{"x", make_const(Float(32), 18.0f)},
-         {"y", make_const(Float(32), 18.0f)}});
-}
-
 // Dividing both sides of f(x)*b == c by b is unsound for floats when b could
 // be zero: x*0 == 0 is always true, but x == 0/0 (NaN) is always false.
 void test_float_mul_eq_zero_divisor_not_rewritten() {
@@ -584,12 +540,10 @@ void test_float_mul_eq_zero_divisor_not_rewritten() {
 }
 
 // The solver must NOT call the full Halide simplifier when negating a select
-// condition to swap true/false branches.  simplify(!cond) applies arithmetic
-// rewrites that are sound for integers but wrong for floats, e.g.:
-//   simplify((a2 + a0/C) == a2)  →  a0 == 0    (catastrophic-cancellation case)
-//   simplify((a - a%C) == b)     →  a == b      (drops the %C term)
-//   simplify(a <= min(C,b) - b)  →  (max(b,C) + a) <= C  (float arithmetic rearranged)
-// The fix is shallow_negate_cond, which flips only the outermost operator.
+// condition to swap true/false branches.  The simplifier can aggressively
+// rewrite float conditions (e.g. x + y == x → y == 0, or a - a%C == b → a == b)
+// in ways that diverge from concrete evaluation.  The solver only needs to flip
+// the outermost operator; shallow_negate_cond does exactly that.
 void test_float_select_condition_not_simplified() {
     Expr xf = Variable::make(Float(32), "x");
     Expr yf = Variable::make(Float(32), "y");
@@ -643,9 +597,6 @@ int main(int argc, char **argv) {
     test_solve_does_not_abort_on_narrow_self_add();
     test_narrow_div_add_equivalence();
     test_simplify_preserves_float_to_uint_cast_chain();
-    test_float_add_reassociation_not_applied();
-    test_float_sub_reassociation_not_applied();
-    test_float_cmp_not_rearranged_across_add_sub();
     test_float_mul_eq_zero_divisor_not_rewritten();
     test_float_select_condition_not_simplified();
     std::printf("Success!\n");

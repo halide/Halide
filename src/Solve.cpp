@@ -167,10 +167,7 @@ protected:
 
         Expr expr;
 
-        if (a_uses_var && !b_uses_var && !op->type.is_float()) {
-            // Float addition is not associative, so folding the constant into
-            // the other addend would change the rounding and produce a
-            // semantically different expression.
+        if (a_uses_var && !b_uses_var) {
             if (sub_a && !a_failed) {
                 // (f(x) - a) + b -> f(x) + (b - a)
                 expr = mutate(sub_a->a + (b - sub_a->b));
@@ -185,20 +182,17 @@ protected:
                 // type (e.g. `2` in UInt(1)). make_const truncates modulo the
                 // width, so `UInt(1) * 2` becomes `UInt(1) * 0`, which is
                 // the correct modular result of `a + a` for UInt(1).
-                // Note: x + x == 2*x IS exact for floats (doubles the mantissa,
-                // no rounding, same as incrementing the exponent).
                 expr = mutate(Mul::make(a, make_const(a.type(), 2)));
-            } else if (!op->type.is_float() && add_a && !a_failed) {
+            } else if (add_a && !a_failed) {
                 // (f(x) + a) + g(x) -> (f(x) + g(x)) + a
-                // Not sound for floats: reassociates the addition, changing rounding.
                 expr = mutate((add_a->a + b) + add_a->b);
-            } else if (!op->type.is_float() && add_b && !b_failed) {
+            } else if (add_b && !b_failed) {
                 // f(x) + (g(x) + a) -> (f(x) + g(x)) + a
                 expr = mutate((a + add_b->a) + add_b->b);
-            } else if (!op->type.is_float() && sub_a && !a_failed) {
+            } else if (sub_a && !a_failed) {
                 // (f(x) - a) + g(x) -> (f(x) + g(x)) - a
                 expr = mutate((sub_a->a + b) - sub_a->b);
-            } else if (!op->type.is_float() && sub_b && !b_failed) {
+            } else if (sub_b && !b_failed) {
                 // f(x) + (g(x) - a) -> (f(x) + g(x)) - a
                 expr = mutate((a + sub_b->a) - sub_b->b);
             } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
@@ -260,10 +254,7 @@ protected:
 
         Expr expr;
 
-        if (a_uses_var && !b_uses_var && !op->type.is_float()) {
-            // Float subtraction is not associative, so folding the constant into
-            // the other operand would change rounding and produce a semantically
-            // different expression.
+        if (a_uses_var && !b_uses_var) {
             if (sub_a && !a_failed) {
                 // (f(x) - a) - b -> f(x) - (a + b)
                 expr = mutate(sub_a->a - (sub_a->b + b));
@@ -281,29 +272,26 @@ protected:
                     // Negating unsigned is not legal
                     expr = fail(a - b);
                 }
-            } else if (!op->type.is_float() && sub_b && !b_failed) {
+            } else if (sub_b && !b_failed) {
                 // a - (f(x) - b) -> -f(x) + (a + b)
                 expr = mutate(negate(sub_b->a) + (a + sub_b->b));
-            } else if (!op->type.is_float() && add_b && !b_failed) {
+            } else if (add_b && !b_failed) {
                 // a - (f(x) + b) -> -f(x) + (a - b)
                 expr = mutate(negate(add_b->a) + (a - add_b->b));
             } else {
-                // negate(b) + a is sound for floats: negation is exact and
-                // addition is commutative, so a - b == negate(b) + a exactly.
                 expr = mutate(negate(b) + a);
             }
         } else if (a_uses_var && b_uses_var) {
-            if (!op->type.is_float() && add_a && !a_failed) {
+            if (add_a && !a_failed) {
                 // (f(x) + a) - g(x) -> (f(x) - g(x)) + a
-                // Not sound for floats: reassociates arithmetic, changing rounding.
                 expr = mutate(add_a->a - b + add_a->b);
-            } else if (!op->type.is_float() && add_b && !b_failed) {
+            } else if (add_b && !b_failed) {
                 // f(x) - (g(x) + a) -> (f(x) - g(x)) - a
                 expr = mutate(a - add_b->a - add_b->b);
-            } else if (!op->type.is_float() && sub_a && !a_failed) {
+            } else if (sub_a && !a_failed) {
                 // (f(x) - a) - g(x) -> (f(x) - g(x)) - a
                 expr = mutate(sub_a->a - b - sub_a->b);
-            } else if (!op->type.is_float() && sub_b && !b_failed) {
+            } else if (sub_b && !b_failed) {
                 // f(x) - (g(x) - a) -> (f(x) - g(x)) + a
                 expr = mutate(a - sub_b->a + sub_b->b);
             } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
@@ -483,10 +471,7 @@ protected:
         auto [a, a_uses_var, a_failed] = mutate_with_state(op->a);
         auto [b, b_uses_var, b_failed] = mutate_with_state(op->b);
 
-        if (b_uses_var && !a_uses_var && !op->type.is_float()) {
-            // Swapping min/max operands is unsound for float types: when one
-            // operand is NaN, min(NaN, x) and min(x, NaN) can give different
-            // results depending on whether NaN is the first or second argument.
+        if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
             std::swap(a_uses_var, b_uses_var);
             std::swap(a_failed, b_failed);
@@ -686,7 +671,7 @@ protected:
             //      (a - x) != (a/C) is NOT equivalent to x != (a/C - a) because
             //      the latter computes a/C-a in a precision context where a
             //      dominates, losing the small a/C term.
-            const bool safe_to_rearrange = !a.type().is_float() && (no_overflow_int(a.type()) || is_eq || is_ne);
+            const bool safe_to_rearrange = no_overflow_int(a.type()) || is_eq || is_ne;
             if (add_a && !a_failed && safe_to_rearrange) {
                 // f(x) + b < c -> f(x) < c - b
                 expr = mutate(Cmp::make(add_a->a, (b - add_a->b)));
