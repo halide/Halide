@@ -353,10 +353,8 @@ FUZZ_TEST(solve, FuzzingContext &fuzz) {
     // the solver on integer expressions containing comparisons.
     reg.fuzz_types = {Int(8), Int(16), Int(32), Int(64),
                       UInt(1), UInt(8), UInt(16), UInt(32), UInt(64)};
-    // Leave gen_shuffles / gen_vector_reduce / gen_reinterpret off for now
-    // -- those exercise Deinterleaver / shuffle lowering more than solve
-    // proper. gen_broadcast_of_vector and gen_ramp_of_vector are on so the
-    // solver sees vector-typed expressions.
+    // Leave gen_shuffles / gen_vector_reduce / gen_reinterpret off -- those
+    // exercise Deinterleaver / shuffle lowering more than the solver proper.
     reg.gen_shuffles = false;
     reg.gen_vector_reduce = false;
     reg.gen_reinterpret = false;
@@ -364,11 +362,11 @@ FUZZ_TEST(solve, FuzzingContext &fuzz) {
     // Pick one of the generator's variables to solve for.
     const string var = reg.fuzz_vars[fuzz.ConsumeIntegralInRange<size_t>(0, reg.fuzz_vars.size() - 1)].name();
 
-    // solve_expression: arithmetic equivalence. Pick a random width so the
-    // generator's Broadcast/Ramp lambdas actually fire (they're no-ops on
-    // scalar types). Vector subtrees containing scalar variables exercise
-    // the solver's vector-aware handling (see e.g. the Broadcast case in
-    // src/Solve.cpp's solve_test).
+    // solve_expression: arithmetic equivalence. Pick a random vector width
+    // so the generator produces Broadcast/Ramp nodes within the tree (those
+    // generators fall through to plain recursion for scalar types). Vector
+    // subtrees containing scalar variables exercise the solver's
+    // vector-aware handling.
     int width = fuzz.PickValueInArray({1, 2, 3, 4, 6, 8});
     Expr test_expr = reg.random_expr(Int(32).with_lanes(width), depth);
     if (!test_solve_expression_equivalence(reg, test_expr, var, samples)) {
