@@ -252,7 +252,9 @@ void test_simple_division_cases() {
     // Check solver with expressions containing division
     check_solve(x + (x * 2) / 2, x * 2);
     check_solve(x + (x * 2 + y) / 2, x * 2 + (y / 2));
-    check_solve(x + (x * 2 - y) / 2, x * 2 - (y / 2));
+    // Note: x + (x*2 - y)/2 == (x*4 - y)/2 for all integers (floor division);
+    // the split form x*2 - y/2 is incorrect when y is odd.
+    check_solve(x + (x * 2 - y) / 2, (x * 4 - y) / 2);
     check_solve(x + (-(x * 2) / 2), x * 0 + 0);
     check_solve(x + (-(x * 2 + -3)) / 2, x * 0 + 1);
     check_solve(x + (z - (x * 2 + -3)) / 2, x * 0 + (z - (-3)) / 2);
@@ -513,12 +515,103 @@ void test_broadcast() {
 void test_select() {
     // Select negates the condition to move x leftward
     check_solve(select(y < z, z, x),
-                select(z <= y, x, z));
+                select(y >= z, x, z));
 
     // Select negates the condition and then mutates it, moving x
     // leftward (despite the simplifier preferring < to >).
     check_solve(select(x < 10, 10, x),
                 select(x >= 10, x, 10));
+}
+
+// Float addition is not associative: the solver must not fold constants when
+// doing so would change the rounding order and produce a different result.
+void test_float_add_reassociation_not_applied() {
+    Expr xf = Variable::make(Float(32), "x");
+    // With x=27f: (27f - 113f) + 545750592f = 545750528f
+    // The buggy rewrite folded to: 27f + (545750592f - 113f) = 545750464f
+    check_solve_equivalent((xf - 113.0f) + 545750592.0f,
+                           {{"x", make_const(Float(32), 27.0f)}});
+    // Symmetric: (f(x) + a) + b -> f(x) + (a + b) is also wrong for floats.
+    check_solve_equivalent((xf + 113.0f) + 545750592.0f,
+                           {{"x", make_const(Float(32), 27.0f)}});
+}
+
+// Float subtraction is not associative: folding constants across a subtract
+// may change the rounding order and produce a different value.
+void test_float_sub_reassociation_not_applied() {
+    Expr xf = Variable::make(Float(32), "x");
+    Expr yf = Variable::make(Float(32), "y");
+    // a - (f(x) + b): with a=4294967296f, b=150f, x=-30f
+    // Original: 4294967296f - (-30f + 150f) = 4294967296f - 120f = 4294967296f
+    // Buggy rewrite: -(-30f) + (4294967296f - 150f) = 30f + 4294967040f = 4294967040f
+    check_solve_equivalent(make_const(Float(32), 4294967296.0f) - (xf + make_const(Float(32), 150.0f)),
+                           {{"x", make_const(Float(32), -30.0f)}});
+    // (f(x) - a) - b: with a=113f, b=545750592f, x=27f
+    check_solve_equivalent((xf - 113.0f) - make_const(Float(32), 545750592.0f),
+                           {{"x", make_const(Float(32), 27.0f)}});
+}
+
+// Adding or subtracting from both sides of a float EQ/NE is unsound: the
+// rewrite changes the float rounding order and produces a different value.
+// The specific failure: (y - x) != (y/C) was solved to x != (y/C - y)/-1,
+// but y/C - y loses precision when y >> y/C (the small term gets absorbed).
+void test_float_cmp_not_rearranged_across_add_sub() {
+    Expr xf = Variable::make(Float(32), "x");
+    Expr yf = Variable::make(Float(32), "y");
+    // With y=18.0f, x=18.0f, C=-1468077184.0f:
+    //   (18f - 18f) != 18f/C  =>  0.0 != -1.22e-8  =>  true
+    //   buggy: 18f != (18f/C - 18f)/-1  =>  18f != 18f  =>  false
+    check_solve_equivalent(
+        (yf - xf) != (yf / make_const(Float(32), -1468077184.0f)),
+        {{"x", make_const(Float(32), 18.0f)},
+         {"y", make_const(Float(32), 18.0f)}});
+}
+
+// Dividing both sides of f(x)*b == c by b is unsound for floats when b could
+// be zero: x*0 == 0 is always true, but x == 0/0 (NaN) is always false.
+void test_float_mul_eq_zero_divisor_not_rewritten() {
+    Expr xf = Variable::make(Float(32), "x");
+    Expr yf = Variable::make(Float(32), "y");
+    // With y=0, x=5: yf * xf == 0 is true; the buggy rewrite produced
+    // xf == 0/0 (NaN), which is always false regardless of x.
+    check_solve_equivalent(make_const(Float(32), 0.0f) == (yf * xf),
+                           {{"x", make_const(Float(32), 5.0f)},
+                            {"y", make_const(Float(32), 0.0f)}});
+    // NE variant: y*x != 0 with y=0, x=5 is false; buggy rewrite made it true.
+    check_solve_equivalent(make_const(Float(32), 0.0f) != (yf * xf),
+                           {{"x", make_const(Float(32), 5.0f)},
+                            {"y", make_const(Float(32), 0.0f)}});
+}
+
+// The solver must NOT call the full Halide simplifier when negating a select
+// condition to swap true/false branches.  simplify(!cond) applies arithmetic
+// rewrites that are sound for integers but wrong for floats, e.g.:
+//   simplify((a2 + a0/C) == a2)  →  a0 == 0    (catastrophic-cancellation case)
+//   simplify((a - a%C) == b)     →  a == b      (drops the %C term)
+//   simplify(a <= min(C,b) - b)  →  (max(b,C) + a) <= C  (float arithmetic rearranged)
+// The fix is shallow_negate_cond, which flips only the outermost operator.
+void test_float_select_condition_not_simplified() {
+    Expr xf = Variable::make(Float(32), "x");
+    Expr yf = Variable::make(Float(32), "y");
+    Expr zf = Variable::make(Float(32), "z");
+
+    // select(cond, const, f(x)) → select(!cond, f(x), const)
+    // cond = (y + z/C) == y: simplify(!cond) would drop z/C and give y != y = false,
+    // but the correct negation is (y + z/C) != y.
+    check_solve_equivalent(
+        select(yf + zf / make_const(Float(32), 1e9f) == yf,
+               make_const(Float(32), 42.0f), xf),
+        {{"x", make_const(Float(32), 7.0f)},
+         {"y", make_const(Float(32), 1e30f)},  // y+z/C rounds to y
+         {"z", make_const(Float(32), 1.0f)}});
+
+    // cond = (a - a%C) != b: simplify(!cond) would drop %C and give a == b
+    check_solve_equivalent(
+        select((yf - Halide::Internal::Mod::make(yf, make_const(Float(32), -8.0e8f))) != zf,
+               make_const(Float(32), 0.0f), xf),
+        {{"x", make_const(Float(32), 3.0f)},
+         {"y", make_const(Float(32), 1.0f)},
+         {"z", make_const(Float(32), 1.5e9f)}});
 }
 
 }  // namespace
@@ -550,6 +643,11 @@ int main(int argc, char **argv) {
     test_solve_does_not_abort_on_narrow_self_add();
     test_narrow_div_add_equivalence();
     test_simplify_preserves_float_to_uint_cast_chain();
+    test_float_add_reassociation_not_applied();
+    test_float_sub_reassociation_not_applied();
+    test_float_cmp_not_rearranged_across_add_sub();
+    test_float_mul_eq_zero_divisor_not_rewritten();
+    test_float_select_condition_not_simplified();
     std::printf("Success!\n");
     return 0;
 }

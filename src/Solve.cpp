@@ -82,6 +82,27 @@ protected:
     // External lets.
     const Scope<Expr> &external_scope;
 
+    // Flip the top-level comparison or logical operator of a boolean expression
+    // to negate it WITHOUT calling the full Halide simplifier.
+    //
+    // Why not just simplify(!e)?  simplify() calls the Halide simplifier, which
+    // may apply arithmetic rewrites that are unsound for floats (e.g.,
+    // x + y == x  →  y == 0, or rearranging adds/subs across a comparison).
+    // We only need to push the "!" one level deep — the solver will handle the
+    // rest when it processes the resulting condition.
+    static Expr shallow_negate_cond(Expr e) {
+        if (const LT *op = e.as<LT>()) return GE::make(op->a, op->b);
+        if (const LE *op = e.as<LE>()) return GT::make(op->a, op->b);
+        if (const GT *op = e.as<GT>()) return LE::make(op->a, op->b);
+        if (const GE *op = e.as<GE>()) return LT::make(op->a, op->b);
+        if (const EQ *op = e.as<EQ>()) return NE::make(op->a, op->b);
+        if (const NE *op = e.as<NE>()) return EQ::make(op->a, op->b);
+        if (const Not *op = e.as<Not>()) return op->a;
+        if (const And *op = e.as<And>()) return Or::make(Not::make(op->a), Not::make(op->b));
+        if (const Or *op = e.as<Or>()) return And::make(Not::make(op->a), Not::make(op->b));
+        return Not::make(e);
+    }
+
     // Return the negative of an expr. Does some eager simplification
     // to avoid injecting pointless -1s.
     Expr negate(const Expr &e) {
@@ -146,7 +167,10 @@ protected:
 
         Expr expr;
 
-        if (a_uses_var && !b_uses_var) {
+        if (a_uses_var && !b_uses_var && !op->type.is_float()) {
+            // Float addition is not associative, so folding the constant into
+            // the other addend would change the rounding and produce a
+            // semantically different expression.
             if (sub_a && !a_failed) {
                 // (f(x) - a) + b -> f(x) + (b - a)
                 expr = mutate(sub_a->a + (b - sub_a->b));
@@ -161,17 +185,20 @@ protected:
                 // type (e.g. `2` in UInt(1)). make_const truncates modulo the
                 // width, so `UInt(1) * 2` becomes `UInt(1) * 0`, which is
                 // the correct modular result of `a + a` for UInt(1).
+                // Note: x + x == 2*x IS exact for floats (doubles the mantissa,
+                // no rounding, same as incrementing the exponent).
                 expr = mutate(Mul::make(a, make_const(a.type(), 2)));
-            } else if (add_a && !a_failed) {
+            } else if (!op->type.is_float() && add_a && !a_failed) {
                 // (f(x) + a) + g(x) -> (f(x) + g(x)) + a
+                // Not sound for floats: reassociates the addition, changing rounding.
                 expr = mutate((add_a->a + b) + add_a->b);
-            } else if (add_b && !b_failed) {
+            } else if (!op->type.is_float() && add_b && !b_failed) {
                 // f(x) + (g(x) + a) -> (f(x) + g(x)) + a
                 expr = mutate((a + add_b->a) + add_b->b);
-            } else if (sub_a && !a_failed) {
+            } else if (!op->type.is_float() && sub_a && !a_failed) {
                 // (f(x) - a) + g(x) -> (f(x) + g(x)) - a
                 expr = mutate((sub_a->a + b) - sub_a->b);
-            } else if (sub_b && !b_failed) {
+            } else if (!op->type.is_float() && sub_b && !b_failed) {
                 // f(x) + (g(x) - a) -> (f(x) + g(x)) - a
                 expr = mutate((a + sub_b->a) - sub_b->b);
             } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
@@ -233,7 +260,10 @@ protected:
 
         Expr expr;
 
-        if (a_uses_var && !b_uses_var) {
+        if (a_uses_var && !b_uses_var && !op->type.is_float()) {
+            // Float subtraction is not associative, so folding the constant into
+            // the other operand would change rounding and produce a semantically
+            // different expression.
             if (sub_a && !a_failed) {
                 // (f(x) - a) - b -> f(x) - (a + b)
                 expr = mutate(sub_a->a - (sub_a->b + b));
@@ -251,26 +281,29 @@ protected:
                     // Negating unsigned is not legal
                     expr = fail(a - b);
                 }
-            } else if (sub_b && !b_failed) {
+            } else if (!op->type.is_float() && sub_b && !b_failed) {
                 // a - (f(x) - b) -> -f(x) + (a + b)
                 expr = mutate(negate(sub_b->a) + (a + sub_b->b));
-            } else if (add_b && !b_failed) {
+            } else if (!op->type.is_float() && add_b && !b_failed) {
                 // a - (f(x) + b) -> -f(x) + (a - b)
                 expr = mutate(negate(add_b->a) + (a - add_b->b));
             } else {
+                // negate(b) + a is sound for floats: negation is exact and
+                // addition is commutative, so a - b == negate(b) + a exactly.
                 expr = mutate(negate(b) + a);
             }
         } else if (a_uses_var && b_uses_var) {
-            if (add_a && !a_failed) {
+            if (!op->type.is_float() && add_a && !a_failed) {
                 // (f(x) + a) - g(x) -> (f(x) - g(x)) + a
+                // Not sound for floats: reassociates arithmetic, changing rounding.
                 expr = mutate(add_a->a - b + add_a->b);
-            } else if (add_b && !b_failed) {
+            } else if (!op->type.is_float() && add_b && !b_failed) {
                 // f(x) - (g(x) + a) -> (f(x) - g(x)) - a
                 expr = mutate(a - add_b->a - add_b->b);
-            } else if (sub_a && !a_failed) {
+            } else if (!op->type.is_float() && sub_a && !a_failed) {
                 // (f(x) - a) - g(x) -> (f(x) - g(x)) - a
                 expr = mutate(sub_a->a - b - sub_a->b);
-            } else if (sub_b && !b_failed) {
+            } else if (!op->type.is_float() && sub_b && !b_failed) {
                 // f(x) - (g(x) - a) -> (f(x) - g(x)) + a
                 expr = mutate(a - sub_b->a + sub_b->b);
             } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
@@ -450,7 +483,10 @@ protected:
         auto [a, a_uses_var, a_failed] = mutate_with_state(op->a);
         auto [b, b_uses_var, b_failed] = mutate_with_state(op->b);
 
-        if (b_uses_var && !a_uses_var) {
+        if (b_uses_var && !a_uses_var && !op->type.is_float()) {
+            // Swapping min/max operands is unsound for float types: when one
+            // operand is NaN, min(NaN, x) and min(x, NaN) can give different
+            // results depending on whether NaN is the first or second argument.
             std::swap(a, b);
             std::swap(a_uses_var, b_uses_var);
             std::swap(a_failed, b_failed);
@@ -637,13 +673,20 @@ protected:
             // We have f(x) < y. Try to unwrap f(x).
             //
             // Several of these rewrites rearrange the comparison by adding
-            // or subtracting on both sides. That's only sound under an
-            // assumption of no integer overflow -- for types that wrap
-            // (unsigned and narrow signed), ordering comparisons flip
-            // under wrap even though equality is preserved. So gate the
-            // rewrite on no_overflow_int for LT/LE/GT/GE but allow EQ/NE
-            // for all types (modular arithmetic preserves equality).
-            const bool safe_to_rearrange = no_overflow_int(a.type()) || is_eq || is_ne;
+            // or subtracting on both sides. That's only sound under two
+            // conditions:
+            //   1. No integer overflow: for types that wrap (unsigned and narrow
+            //      signed), ordering comparisons flip under wrap even though
+            //      equality is preserved. So gate on no_overflow_int for
+            //      LT/LE/GT/GE, but allow EQ/NE (modular arithmetic preserves
+            //      equality).
+            //   2. Not float: for floats, adding or subtracting a value from
+            //      both sides changes the rounding order and can produce a
+            //      semantically different result. For example,
+            //      (a - x) != (a/C) is NOT equivalent to x != (a/C - a) because
+            //      the latter computes a/C-a in a precision context where a
+            //      dominates, losing the small a/C term.
+            const bool safe_to_rearrange = !a.type().is_float() && (no_overflow_int(a.type()) || is_eq || is_ne);
             if (add_a && !a_failed && safe_to_rearrange) {
                 // f(x) + b < c -> f(x) < c - b
                 expr = mutate(Cmp::make(add_a->a, (b - add_a->b)));
@@ -652,11 +695,17 @@ protected:
                 expr = mutate(Cmp::make(sub_a->a, (b + sub_a->b)));
             } else if (mul_a) {
                 if (a.type().is_float()) {
-                    // f(x) * b == c -> f(x) == c / b
-                    if (is_eq || is_ne || is_positive_const(mul_a->b)) {
+                    if (is_positive_const(mul_a->b)) {
+                        // f(x) * pos_c cmp b -> f(x) cmp b/pos_c
                         expr = mutate(Cmp::make(mul_a->a, (b / mul_a->b)));
                     } else if (is_negative_const(mul_a->b)) {
+                        // f(x) * neg_c cmp b -> f(x) opp b/neg_c
                         expr = mutate(Opp::make(mul_a->a, (b / mul_a->b)));
+                    } else if ((is_eq || is_ne) && can_prove(mul_a->b != 0)) {
+                        // f(x) * b == c -> f(x) == c/b, only when b != 0.
+                        // If b could be zero, x*0 == 0 is always true but
+                        // x == 0/0 (NaN) is always false, so the rewrite is unsound.
+                        expr = mutate(Cmp::make(mul_a->a, (b / mul_a->b)));
                     }
                 } else if (is_const(mul_a->b, -1)) {
                     expr = mutate(Opp::make(mul_a->a, make_zero(b.type()) - b));
@@ -801,8 +850,12 @@ protected:
         Expr condition = op->condition;
 
         // select(cond, a, x) ~> select(!cond, x, a)
+        // Use shallow_negate_cond rather than simplify(!condition): the full
+        // Halide simplifier applies arithmetic rewrites (e.g., x + y == x → y == 0)
+        // that are sound for integers but NOT for floats.  We only need to flip
+        // the top-level operator here; the solver will handle the rest.
         if (!true_uses_var && false_uses_var) {
-            condition = simplify(!condition);
+            condition = shallow_negate_cond(condition);
             std::swap(true_value, false_value);
         }
 
