@@ -90,16 +90,34 @@ protected:
     // transform the condition in ways the solver hasn't processed yet.
     // We only need to push the "!" one level deep — the solver will handle
     // the rest when it processes the resulting condition.
-    static Expr shallow_negate_cond(Expr e) {
-        if (const LT *op = e.as<LT>()) return GE::make(op->a, op->b);
-        if (const LE *op = e.as<LE>()) return GT::make(op->a, op->b);
-        if (const GT *op = e.as<GT>()) return LE::make(op->a, op->b);
-        if (const GE *op = e.as<GE>()) return LT::make(op->a, op->b);
-        if (const EQ *op = e.as<EQ>()) return NE::make(op->a, op->b);
-        if (const NE *op = e.as<NE>()) return EQ::make(op->a, op->b);
-        if (const Not *op = e.as<Not>()) return op->a;
-        if (const And *op = e.as<And>()) return Or::make(Not::make(op->a), Not::make(op->b));
-        if (const Or *op = e.as<Or>()) return And::make(Not::make(op->a), Not::make(op->b));
+    static Expr shallow_negate_cond(const Expr &e) {
+        if (const LT *op = e.as<LT>()) {
+            return GE::make(op->a, op->b);
+        }
+        if (const LE *op = e.as<LE>()) {
+            return GT::make(op->a, op->b);
+        }
+        if (const GT *op = e.as<GT>()) {
+            return LE::make(op->a, op->b);
+        }
+        if (const GE *op = e.as<GE>()) {
+            return LT::make(op->a, op->b);
+        }
+        if (const EQ *op = e.as<EQ>()) {
+            return NE::make(op->a, op->b);
+        }
+        if (const NE *op = e.as<NE>()) {
+            return EQ::make(op->a, op->b);
+        }
+        if (const Not *op = e.as<Not>()) {
+            return op->a;
+        }
+        if (const And *op = e.as<And>()) {
+            return Or::make(Not::make(op->a), Not::make(op->b));
+        }
+        if (const Or *op = e.as<Or>()) {
+            return And::make(Not::make(op->a), Not::make(op->b));
+        }
         return Not::make(e);
     }
 
