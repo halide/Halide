@@ -112,12 +112,6 @@ protected:
         if (const Not *op = e.as<Not>()) {
             return op->a;
         }
-        if (const And *op = e.as<And>()) {
-            return Or::make(Not::make(op->a), Not::make(op->b));
-        }
-        if (const Or *op = e.as<Or>()) {
-            return And::make(Not::make(op->a), Not::make(op->b));
-        }
         return Not::make(e);
     }
 
