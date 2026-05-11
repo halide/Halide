@@ -892,9 +892,9 @@ bool lookup_feature(const std::string &tok, Target::Feature &result) {
     return false;
 }
 
-int parse_vector_bits(const std::string &tok, const std::string &prefix) {
-    if (tok.find(prefix) == 0) {
-        std::string num = tok.substr(prefix.size(), std::string::npos);
+int parse_vector_bits(const std::string &tok) {
+    if (tok.find("vector_bits_") == 0) {
+        std::string num = tok.substr(sizeof("vector_bits_") - 1, std::string::npos);
         size_t end_index;
         int parsed = std::stoi(num, &end_index);
         if (end_index == num.size()) {
@@ -971,6 +971,7 @@ bool merge_string(Target &t, const std::string &target) {
     for (size_t i = 0; i < tokens.size(); i++) {
         const string &tok = tokens[i];
         Target::Feature feature;
+        int vector_bits;
 
         if (tok == "host") {
             if (i > 0) {
@@ -1006,8 +1007,8 @@ bool merge_string(Target &t, const std::string &target) {
         } else if (tok == "trace_all") {
             t.set_features({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations});
             features_specified = true;
-        } else if (auto vb = parse_vector_bits(tok, "vector_bits_"); vb >= 0) {
-            t.vector_bits = vb;
+        } else if ((vector_bits = parse_vector_bits(tok)) >= 0) {
+            t.vector_bits = vector_bits;
         } else {
             return false;
         }
