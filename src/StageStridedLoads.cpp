@@ -158,7 +158,7 @@ protected:
     void visit(const Store *op) override {
         // Don't mess with the loads inside a matrix multiply op. Those are
         // natively supported as 2D loads and must remain naked loads.
-        if (auto *alloc = allocation_scope.find(op->name);
+        if (const auto *alloc = allocation_scope.find(op->name);
             alloc && (*alloc)->memory_type == MemoryType::AMXTile) {
             return;
         } else {

@@ -321,6 +321,7 @@ tests(GROUPS correctness
       target.cpp
       target_query.cpp
       tiled_matmul.cpp
+      tiled_matmul_errors.cpp
       tracing.cpp
       tracing_bounds.cpp
       tracing_broadcast.cpp
