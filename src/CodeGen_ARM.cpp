@@ -1336,7 +1336,7 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
             internal_assert(!in_streaming) << "Streaming mode in non-internal linkage func is unexpected\n";
             Expr runtime_vscale = Call::make(Int(32), Call::get_runtime_vscale, {}, Call::PureIntrinsic);
             Expr compiletime_vscale = Expr(effective_vscale);
-            std::vector<Expr> args{simple_name, std::string(""), runtime_vscale, compiletime_vscale};
+            std::vector<Expr> args{simple_name, runtime_vscale, compiletime_vscale};
             Expr error = Call::make(Int(32), "halide_error_vscale_invalid", args, Call::Extern);
             func.body = Block::make(AssertStmt::make(runtime_vscale == compiletime_vscale, error), func.body);
         }
@@ -1345,8 +1345,8 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
             // because streaming task is basically internal linkage.
             Expr runtime_vscale = Call::make(Int(32), Call::get_runtime_streaming_vscale, {}, Call::PureIntrinsic);
             Expr compiletime_vscale = Expr(target.sme_streaming_vector_bits() / 128);
-            std::vector<Expr> args{simple_name, std::string("streaming"), runtime_vscale, compiletime_vscale};
-            Expr error = Call::make(Int(32), "halide_error_vscale_invalid", args, Call::Extern);
+            std::vector<Expr> args{simple_name, runtime_vscale, compiletime_vscale};
+            Expr error = Call::make(Int(32), "halide_error_streaming_vscale_invalid", args, Call::Extern);
             func.body = Block::make(AssertStmt::make(runtime_vscale == compiletime_vscale, error), func.body);
         }
     }

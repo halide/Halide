@@ -1279,6 +1279,10 @@ enum halide_error_code_t {
 
     /** Profiling failed for a pipeline invocation. */
     halide_error_code_cannot_profile_pipeline = -48,
+
+    /** "vscale" value of Streaming Scalable Vector detected in runtime does not
+     * match the streaming vscale value used in compilation. */
+    halide_error_code_streaming_vscale_invalid = -49,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1354,7 +1358,8 @@ extern int halide_error_storage_bound_too_small(void *user_context, const char *
                                                 int provided_size, int required_size);
 extern int halide_error_device_crop_failed(void *user_context);
 extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
-extern int halide_error_vscale_invalid(void *user_context, const char *func_name, const char *prefix, int runtime_vscale, int compiletime_vscale);
+extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
+extern int halide_error_streaming_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
 // @}
 
 /** Optional features a compilation Target can have.
