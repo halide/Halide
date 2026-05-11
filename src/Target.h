@@ -51,10 +51,8 @@ struct Target {
 
     /** The bit-width of a vector register for targets where this is configurable and
      * targeting a fixed size is desired. The default of 0 indicates no assumption of
-     * fixed size is allowed.
-     * streaming_vector_bits is for streaming mode in aarch64 SME. */
+     * fixed size is allowed. */
     int vector_bits = 0;
-    int streaming_vector_bits = 0;
 
     /** The specific processor to be targeted, tuned for.
      * Corresponds to processor_name_map in Target.cpp.
@@ -157,6 +155,11 @@ struct Target {
         SVE = halide_target_feature_sve,
         SVE2 = halide_target_feature_sve2,
         SME2 = halide_target_feature_sme2,
+        SME_SVL128 = halide_target_feature_sme_svl128,
+        SME_SVL256 = halide_target_feature_sme_svl256,
+        SME_SVL512 = halide_target_feature_sme_svl512,
+        SME_SVL1024 = halide_target_feature_sme_svl1024,
+        SME_SVL2048 = halide_target_feature_sme_svl2048,
         ARMDotProd = halide_target_feature_arm_dot_prod,
         ARMFp16 = halide_target_feature_arm_fp16,
         LLVMLargeCodeModel = halide_llvm_large_code_model,
@@ -191,8 +194,8 @@ struct Target {
     };
     Target() = default;
     Target(OS o, Arch a, int b, Processor pt, const std::vector<Feature> &initial_features = std::vector<Feature>(),
-           int vb = 0, int svb = 0)
-        : os(o), arch(a), bits(b), vector_bits(vb), streaming_vector_bits(svb), processor_tune(pt) {
+           int vb = 0)
+        : os(o), arch(a), bits(b), vector_bits(vb), processor_tune(pt) {
         for (const auto &f : initial_features) {
             set_feature(f);
         }
@@ -285,8 +288,7 @@ struct Target {
                bits == other.bits &&
                processor_tune == other.processor_tune &&
                features == other.features &&
-               vector_bits == other.vector_bits &&
-               streaming_vector_bits == other.streaming_vector_bits;
+               vector_bits == other.vector_bits;
     }
 
     bool operator!=(const Target &other) const {
@@ -324,6 +326,10 @@ struct Target {
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type in streaming mode in aarch64 SME. */
     int natural_vector_size(const Halide::Type &t, bool is_sme_streaming) const;
+
+    /** Return the fixed SME streaming vector length in bits selected by this target,
+     * or 0 if no SME_SVL feature is set. */
+    int sme_streaming_vector_bits() const;
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
@@ -380,6 +386,10 @@ struct Target {
      * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug").
      * If the string is not a known feature name, return FeatureEnd. */
     static Target::Feature feature_from_name(const std::string &name);
+
+    /** Return the SME_SVL feature corresponding to an SME streaming vector
+     * length in bits, or FeatureEnd if no exact SME_SVL feature exists. */
+    static Target::Feature sme_svl_feature_from_bits(int bits);
 
 private:
     /** A bitmask that stores the active features. */

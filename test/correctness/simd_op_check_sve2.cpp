@@ -48,7 +48,10 @@ public:
         if (target.has_feature(Target::SME2)) {
             // In this case, we run tests for streaming mode in SME2 but not for SVE2.
             // At the moment, host with native SME2 is unavailable, so check only JIT target.
-            can_run_the_code = is_runtime_compatible(jit_target, target, {Target::SME2});
+            can_run_the_code = is_runtime_compatible(jit_target, target,
+                                                     {Target::SME2, Target::SME_SVL128,
+                                                      Target::SME_SVL256, Target::SME_SVL512,
+                                                      Target::SME_SVL1024, Target::SME_SVL2048});
         } else {
             // Run tests for SVE2, so don't care SME2.
             can_run_the_code = is_runtime_compatible(host, target) && is_runtime_compatible(jit_target, target);
@@ -1435,7 +1438,7 @@ private:
 
     int native_vector_bits() const {
         // In this test, if target has SME, we run test in streaming mode,
-        // so the target.streaming_vector_bits is applied.
+        // so the target's SME_SVL feature is applied.
         return target.natural_vector_size(Int(8), has_sme()) * 8;
     }
 
@@ -1473,8 +1476,13 @@ int main(int argc, char **argv) {
 
         // For SME2, try to select a target which runs natively if possible.
         auto host_target = get_host_target();
-        int svb = host_target.has_feature(Target::SME2) ? host_target.streaming_vector_bits : 512;
-        auto sme_target = Target(host_target.os, Target::ARM, 64, Target::ProcessorGeneric, {Target::SME2}, 0, svb);
+        int svb = host_target.has_feature(Target::SME2) ? host_target.sme_streaming_vector_bits() : 512;
+        Target::Feature sme_svl = Target::sme_svl_feature_from_bits(svb);
+        if (sme_svl == Target::FeatureEnd) {
+            std::cerr << "Unsupported SME SVL " << svb << "\n";
+            return 1;
+        }
+        auto sme_target = Target(host_target.os, Target::ARM, 64, Target::ProcessorGeneric, {Target::SME2, sme_svl});
         targets.emplace_back(sme_target);
     }
 

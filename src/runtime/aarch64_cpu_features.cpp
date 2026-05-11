@@ -141,6 +141,11 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
     halide_set_known_cpu_feature(features, halide_target_feature_sve);
     halide_set_known_cpu_feature(features, halide_target_feature_sve2);
     halide_set_known_cpu_feature(features, halide_target_feature_sme2);
+    halide_set_known_cpu_feature(features, halide_target_feature_sme_svl128);
+    halide_set_known_cpu_feature(features, halide_target_feature_sme_svl256);
+    halide_set_known_cpu_feature(features, halide_target_feature_sme_svl512);
+    halide_set_known_cpu_feature(features, halide_target_feature_sme_svl1024);
+    halide_set_known_cpu_feature(features, halide_target_feature_sme_svl2048);
 
     // All ARM architectures support "No Neon".
     halide_set_available_cpu_feature(features, halide_target_feature_no_neon);

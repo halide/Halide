@@ -55,9 +55,11 @@ void define_target(py::module &m) {
             .def("supports_device_api", &Target::supports_device_api, py::arg("device"))
             .def("natural_vector_size", natural_vector_size1_method, py::arg("type"))
             .def("natural_vector_size", natural_vector_size2_method, py::arg("type"), py::arg("is_sme_streaming"))
+            .def("sme_streaming_vector_bits", &Target::sme_streaming_vector_bits)
             .def("has_large_buffers", &Target::has_large_buffers)
             .def("maximum_buffer_size", &Target::maximum_buffer_size)
             .def("supported", &Target::supported)
+            .def_static("sme_svl_feature_from_bits", &Target::sme_svl_feature_from_bits, py::arg("bits"))
             .def_static("validate_target_string", &Target::validate_target_string, py::arg("name"));
     ;
 

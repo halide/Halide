@@ -96,7 +96,12 @@ bool test_streaming_vscale(int vectorization_factor, int vector_bits, int stream
     }
     if (streaming_vector_bits != 0) {
         t = t.with_feature(Target::SME2);
-        t.streaming_vector_bits = streaming_vector_bits;
+        Target::Feature sme_svl = Target::sme_svl_feature_from_bits(streaming_vector_bits);
+        if (sme_svl == Target::FeatureEnd) {
+            printf("[%s] Unsupported streaming_vector_bits %d\n", name.c_str(), streaming_vector_bits);
+            return false;
+        }
+        t.set_feature(sme_svl);
     }
 
     // sve or neon

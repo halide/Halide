@@ -274,7 +274,6 @@ Target calculate_host_target() {
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
     int vector_bits = 0;
-    int streaming_vector_bits = 0;
     Target::Processor processor = Target::Processor::ProcessorGeneric;
     std::vector<Target::Feature> initial_features;
 
@@ -386,7 +385,11 @@ Target calculate_host_target() {
         vector_bits = get_sve_vector_length();
     }
     if (has_streaming_scalable_vector) {
-        streaming_vector_bits = get_sme_streaming_vector_length();
+        const int streaming_vector_bits = get_sme_streaming_vector_length();
+        Target::Feature sme_svl = Target::sme_svl_feature_from_bits(streaming_vector_bits);
+        user_assert(sme_svl != Target::FeatureEnd)
+            << "Detected unsupported SME streaming vector length " << streaming_vector_bits << " bits.\n";
+        initial_features.push_back(sme_svl);
     }
 #endif
 
@@ -461,7 +464,7 @@ Target calculate_host_target() {
         processor = get_amd_processor(family, model, have_sse3);
 
         if (processor == Target::Processor::ZnVer4) {
-            Target t{os, arch, bits, processor, initial_features, vector_bits, streaming_vector_bits};
+            Target t{os, arch, bits, processor, initial_features, vector_bits};
             t.set_feature(Target::SSE41);
             if (os_avx) {
                 t.set_features({Target::AVX, Target::F16C, Target::FMA, Target::AVX2});
@@ -472,7 +475,7 @@ Target calculate_host_target() {
             }
             return t;
         } else if (processor == Target::Processor::ZnVer5) {
-            Target t{os, arch, bits, processor, initial_features, vector_bits, streaming_vector_bits};
+            Target t{os, arch, bits, processor, initial_features, vector_bits};
             t.set_feature(Target::SSE41);
             if (os_avx) {
                 t.set_features({Target::AVX, Target::F16C, Target::FMA,
@@ -589,7 +592,7 @@ Target calculate_host_target() {
 #endif
 #endif
 
-    return {os, arch, bits, processor, initial_features, vector_bits, streaming_vector_bits};
+    return {os, arch, bits, processor, initial_features, vector_bits};
 }
 
 bool is_using_hexagon(const Target &t) {
@@ -842,6 +845,11 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
     {"sme2", Target::SME2},
+    {"sme_svl128", Target::SME_SVL128},
+    {"sme_svl256", Target::SME_SVL256},
+    {"sme_svl512", Target::SME_SVL512},
+    {"sme_svl1024", Target::SME_SVL1024},
+    {"sme_svl2048", Target::SME_SVL2048},
     {"arm_dot_prod", Target::ARMDotProd},
     {"arm_fp16", Target::ARMFp16},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
@@ -1000,8 +1008,6 @@ bool merge_string(Target &t, const std::string &target) {
             features_specified = true;
         } else if (auto vb = parse_vector_bits(tok, "vector_bits_"); vb >= 0) {
             t.vector_bits = vb;
-        } else if (auto svb = parse_vector_bits(tok, "streaming_vector_bits_"); svb >= 0) {
-            t.streaming_vector_bits = svb;
         } else {
             return false;
         }
@@ -1123,6 +1129,11 @@ void Target::validate_features() const {
                                 POWER_ARCH_2_07,
                                 RVV,
                                 SME2,
+                                SME_SVL128,
+                                SME_SVL256,
+                                SME_SVL512,
+                                SME_SVL1024,
+                                SME_SVL2048,
                                 SVE,
                                 SVE2,
                                 VSX,
@@ -1184,12 +1195,31 @@ void Target::validate_features() const {
                                 POWER_ARCH_2_07,
                                 RVV,
                                 SSE41,
+                                SME_SVL128,
+                                SME_SVL256,
+                                SME_SVL512,
+                                SME_SVL1024,
+                                SME_SVL2048,
                                 SME2,
                                 SVE,
                                 SVE2,
                                 VSX,
                             });
     }
+
+    const int num_sme_svl_features =
+        (int)has_feature(SME_SVL128) +
+        (int)has_feature(SME_SVL256) +
+        (int)has_feature(SME_SVL512) +
+        (int)has_feature(SME_SVL1024) +
+        (int)has_feature(SME_SVL2048);
+
+    user_assert(num_sme_svl_features <= 1)
+        << "Target may have at most one SME_SVL feature.\n";
+    user_assert(!has_feature(SME2) || num_sme_svl_features == 1)
+        << "Target feature sme2 requires exactly one SME_SVL feature.\n";
+    user_assert(has_feature(SME2) || num_sme_svl_features == 0)
+        << "Target features SME_SVL128, SME_SVL256, SME_SVL512, SME_SVL1024, and SME_SVL2048 require target feature sme2.\n";
 }
 
 Target::Target(const std::string &target) {
@@ -1233,6 +1263,23 @@ Target::Feature Target::feature_from_name(const std::string &name) {
     return Target::FeatureEnd;
 }
 
+Target::Feature Target::sme_svl_feature_from_bits(int bits) {
+    switch (bits) {
+    case 128:
+        return Target::SME_SVL128;
+    case 256:
+        return Target::SME_SVL256;
+    case 512:
+        return Target::SME_SVL512;
+    case 1024:
+        return Target::SME_SVL1024;
+    case 2048:
+        return Target::SME_SVL2048;
+    default:
+        return Target::FeatureEnd;
+    }
+}
+
 std::string Target::to_string() const {
     string result;
     for (const auto &arch_entry : arch_name_map) {
@@ -1268,9 +1315,6 @@ std::string Target::to_string() const {
     }
     if (vector_bits != 0) {
         result += "-vector_bits_" + std::to_string(vector_bits);
-    }
-    if (streaming_vector_bits != 0) {
-        result += "-streaming_vector_bits_" + std::to_string(streaming_vector_bits);
     }
 
     return result;
@@ -1600,6 +1644,31 @@ int Target::natural_vector_size(const Halide::Type &t) const {
     return natural_vector_size(t, false);
 }
 
+int Target::sme_streaming_vector_bits() const {
+    int result = 0;
+    auto set_result = [&result](int bits) {
+        user_assert(result == 0)
+            << "Target may have at most one SME_SVL feature.\n";
+        result = bits;
+    };
+    if (has_feature(Target::SME_SVL128)) {
+        set_result(128);
+    }
+    if (has_feature(Target::SME_SVL256)) {
+        set_result(256);
+    }
+    if (has_feature(Target::SME_SVL512)) {
+        set_result(512);
+    }
+    if (has_feature(Target::SME_SVL1024)) {
+        set_result(1024);
+    }
+    if (has_feature(Target::SME_SVL2048)) {
+        set_result(2048);
+    }
+    return result;
+}
+
 int Target::natural_vector_size(const Halide::Type &t, bool is_sme_streaming) const {
     user_assert(!has_unknowns())
         << "natural_vector_size cannot be used on a Target with Unknown values.\n";
@@ -1609,9 +1678,9 @@ int Target::natural_vector_size(const Halide::Type &t, bool is_sme_streaming) co
 
     if (arch == Target::ARM) {
         if (is_sme_streaming &&
-            streaming_vector_bits != 0 &&
+            sme_streaming_vector_bits() != 0 &&
             has_feature(Halide::Target::SME2)) {
-            return streaming_vector_bits / (data_size * 8);
+            return sme_streaming_vector_bits() / (data_size * 8);
         } else if (vector_bits != 0 &&
                    (has_feature(Halide::Target::SVE2) ||
                     (t.is_float() && has_feature(Halide::Target::SVE)))) {
@@ -1965,14 +2034,13 @@ void target_test() {
     internal_assert(Target(with_vector_bits.to_string()).vector_bits == 512) << "Vector bits not round tripped properly.\n";
     internal_assert(with_vector_bits.natural_vector_size(Int(32)) == 16) << "Wrong natural_vector_size.\n";
 
-    // Tests for streaming_vector_bits
-    internal_assert(Target().streaming_vector_bits == 0) << "Default Target streaming_vector_bits not 0.\n";
-    internal_assert(Target("arm-64-linux-sme2-vector_bits_512-streaming_vector_bits_1024").streaming_vector_bits == 1024) << "Streaming vector bits not parsed correctly.\n";
-    Target with_streaming_vector_bits(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE2, Target::SME2}, 512, 1024);
-    internal_assert(with_streaming_vector_bits.streaming_vector_bits == 1024) << "Streaming vector bits not populated in constructor.\n";
-    internal_assert(Target(with_streaming_vector_bits.to_string()).streaming_vector_bits == 1024) << "Streaming vector bits not round tripped properly.\n";
-    internal_assert(with_streaming_vector_bits.natural_vector_size(Int(32), true) == 32) << "Wrong natural_vector_size with SME streaming.\n";
-    internal_assert(with_streaming_vector_bits.natural_vector_size(Int(32), false) == 16) << "Wrong natural_vector_size without SME streaming.\n";
+    // Tests for SME streaming vector length
+    internal_assert(Target().sme_streaming_vector_bits() == 0) << "Default Target SME SVL not 0.\n";
+    internal_assert(Target::sme_svl_feature_from_bits(1024) == Target::SME_SVL1024) << "SME SVL feature lookup failed.\n";
+    Target with_sme_svl(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE2, Target::SME2, Target::SME_SVL1024}, 512);
+    internal_assert(with_sme_svl.sme_streaming_vector_bits() == 1024) << "SME SVL not populated in constructor.\n";
+    internal_assert(with_sme_svl.natural_vector_size(Int(32), true) == 32) << "Wrong natural_vector_size with SME streaming.\n";
+    internal_assert(with_sme_svl.natural_vector_size(Int(32), false) == 16) << "Wrong natural_vector_size without SME streaming.\n";
 
     std::cout << "Target test passed\n";
 }

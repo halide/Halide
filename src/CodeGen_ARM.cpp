@@ -1070,8 +1070,8 @@ void CodeGen_ARM::init_module() {
         user_warning << "Halide does not support SVE for now. Use SVE2 if your target device supports it.\n";
     }
     if (target.has_feature(Target::SME2)) {
-        user_assert(target.streaming_vector_bits != 0) << "For SME2 support, Target::streaming_vector_bits must be set. For generator target strings, add \"streaming_vector_bits_<bits>\".\n";
-        user_assert((target.streaming_vector_bits % 128) == 0) << "For SME2 support, Target::streaming_vector_bits must be a multiple of 128.\n";
+        user_assert(target.sme_streaming_vector_bits() != 0)
+            << "For SME2 support, exactly one Target::SME_SVL* feature must be set. For generator target strings, add \"sme_svl<bits>\".\n";
     }
 
     const bool has_neon = !target.has_feature(Target::NoNEON);
@@ -1141,7 +1141,7 @@ void CodeGen_ARM::init_module() {
                 intrinsics_map = &intrinsics_sve2;
                 break;
             case SIMDFlavors::Streaming:
-                vscale = target.streaming_vector_bits / 128;
+                vscale = target.sme_streaming_vector_bits() / 128;
                 intrinsics_map = &intrinsics_streaming;
                 break;
             default:
@@ -1295,7 +1295,7 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
         });
 
         if (is_streaming_task) {
-            feasible_vscale = check_feasible_vscale(target.streaming_vector_bits,  // SVL
+            feasible_vscale = check_feasible_vscale(target.sme_streaming_vector_bits(),  // SVL
                                                     lanes_used, "streaming_", simple_name);
         }
         in_streaming = (feasible_vscale > 0) && is_streaming_task;
@@ -1344,7 +1344,7 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
             // We check regardless of streaming mode enabled or not
             // because streaming task is basically internal linkage.
             Expr runtime_vscale = Call::make(Int(32), Call::get_runtime_streaming_vscale, {}, Call::PureIntrinsic);
-            Expr compiletime_vscale = Expr(target.streaming_vector_bits / 128);
+            Expr compiletime_vscale = Expr(target.sme_streaming_vector_bits() / 128);
             std::vector<Expr> args{simple_name, std::string("streaming"), runtime_vscale, compiletime_vscale};
             Expr error = Call::make(Int(32), "halide_error_vscale_invalid", args, Call::Extern);
             func.body = Block::make(AssertStmt::make(runtime_vscale == compiletime_vscale, error), func.body);

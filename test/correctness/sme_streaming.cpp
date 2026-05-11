@@ -124,7 +124,13 @@ bool check_correctness(const std::string &name, Func &f) {
     auto target = get_jit_target_from_environment();
     constexpr int WIDTH = 1000;
     Buffer<float> with_streaming = f.realize({WIDTH}, target);
-    Buffer<float> without_streaming = f.realize({WIDTH}, target.without_feature(Target::SME2));
+    Target target_without_sme = target.without_feature(Target::SME2)
+                                    .without_feature(Target::SME_SVL128)
+                                    .without_feature(Target::SME_SVL256)
+                                    .without_feature(Target::SME_SVL512)
+                                    .without_feature(Target::SME_SVL1024)
+                                    .without_feature(Target::SME_SVL2048);
+    Buffer<float> without_streaming = f.realize({WIDTH}, target_without_sme);
     for (int x = 0; x < WIDTH; x++) {
         if (with_streaming(x) != without_streaming(x)) {
             std::cerr << "im(" << x << ") = " << with_streaming(x)
@@ -140,7 +146,7 @@ bool check_correctness(const std::string &name, Func &f) {
 bool check(Func &f, const std::string &name,
            const std::multiset<TaskCall> &exp_calls) {
 
-    Target target("arm-64-linux-sme2-streaming_vector_bits_512-no_asserts-no_runtime-no_bounds_query");
+    Target target("arm-64-linux-sme2-sme_svl512-no_asserts-no_runtime-no_bounds_query");
     Module m = f.compile_to_module(f.infer_arguments(), "", target);
 
     if (DEBUG) {
