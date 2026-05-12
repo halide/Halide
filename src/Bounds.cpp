@@ -1827,6 +1827,18 @@ Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope,
     return bounds_of_expr_in_scope_with_indent(expr, scope, fb, const_bound, 0);
 }
 
+Expr and_condition_over_domain(const Expr &e, const Scope<Interval> &varying) {
+    internal_assert(e.type().is_bool()) << "Expr provided to and_condition_over_domain is not boolean: " << e << "\n";
+    Interval bounds = bounds_of_expr_in_scope(e, varying);
+    internal_assert(bounds.has_lower_bound()) << "Failed to produce bound on boolean value in and_condition_over_domain" << e << "\n";
+    // Minimum of a boolean value is sufficient condition, implies expression.
+    return simplify(bounds.min);
+}
+
+Expr or_condition_over_domain(const Expr &c, const Scope<Interval> &varying) {
+    return simplify(!and_condition_over_domain(simplify(!c), varying));
+}
+
 void merge_boxes(Box &a, const Box &b) {
     if (b.empty()) {
         return;
