@@ -116,13 +116,13 @@ repos:
     hooks:
       - id: check-cmake-file-lists
         name: check CMake file lists
-        entry: python tools/check_cmake_file_lists.py
+        entry: python3 tools/check_cmake_file_lists.py
         language: system
         files: ^test/.*CMakeLists\.txt$
 
       - id: check-cmake-style
         name: check CMake style
-        entry: python tools/check_cmake_style.py
+        entry: python3 tools/check_cmake_style.py
         language: system
         files: (^|/)(CMakeLists\.txt|.*\.cmake)$
 

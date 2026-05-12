@@ -143,8 +143,8 @@ After broader approval, third-party dependencies must be consumed with
 `find_package`. This also lets packagers and distributors substitute a system or
 pre-built copy, rather than forcing every downstream to rebuild dependencies
 from source. We use vcpkg in CI to manage our dependencies. If vcpkg lacks a
-port, you must write a custom port in `cmake/vcpkg` (for the main Halide build)
-or `apps/vcpkg/ports` (for the apps).
+port, you must write a custom port in `cmake/vcpkg-ports` (for the main Halide
+build) or `apps/vcpkg/ports` (for the apps).
 
 ## Prohibited commands list
 
