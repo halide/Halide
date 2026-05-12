@@ -1718,31 +1718,34 @@ void CodeGen_X86::visit(const Store *op) {
 }
 
 string CodeGen_X86::mcpu_target() const {
-    // Perform an ad-hoc guess for the -mcpu given features.
-    // WARNING: this is used to drive -mcpu, *NOT* -mtune!
-    //          The CPU choice here *WILL* affect -mattrs!
-    if (target.has_feature(Target::AVX512_SapphireRapids)) {
-        return "sapphirerapids";
-    } else if (target.has_feature(Target::AVX512_Zen5)) {
-        return "znver5";
-    } else if (target.has_feature(Target::AVX512_Zen4)) {
-        return "znver4";
-    } else if (target.has_feature(Target::AVX512_Cannonlake)) {
-        return "cannonlake";
-    } else if (target.has_feature(Target::AVX512_Skylake)) {
-        return "skylake-avx512";
-    } else if (target.has_feature(Target::AVX512_KNL)) {
-        return "knl";
+    // Use generic x86-64 microarchitecture levels rather than specific
+    // CPU names. mattrs() turns on the actual features Halide knows
+    // about on top of this baseline. This avoids LLVM enabling
+    // vendor-specific extras for us (e.g. sse4a on AMD CPUs like
+    // "znver4"), which would otherwise mean that a Halide feature
+    // higher in the hierarchy (Zen4) failed to be a strict superset
+    // of one below it (Cannonlake). With this change, a Halide flag
+    // like AVX512_Zen4 produces code that runs on the intersection
+    // of Zen4 and Cannonlake hardware -- not the union.
+    if (target.has_feature(Target::AVX512_Skylake)) {
+        // x86-64-v4: SSE4.2, POPCNT, AVX, AVX2, BMI1/2, F16C, FMA,
+        // LZCNT, MOVBE, plus AVX512F/BW/CD/DQ/VL.
+        return "x86-64-v4";
     } else if (target.has_feature(Target::AVX2)) {
-        return "haswell";
+        // x86-64-v3: SSE4.2, POPCNT, AVX, AVX2, BMI1/2, F16C, FMA,
+        // LZCNT, MOVBE. Also covers AVX512 / AVX512_KNL, since both
+        // imply AVX2 (via complete_x86_target), but neither requires
+        // BW/DQ/VL which would come for free with v4.
+        return "x86-64-v3";
     } else if (target.has_feature(Target::AVX)) {
-        return "corei7-avx";
-    } else if (target.has_feature(Target::SSE41)) {
-        // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
-        return "penryn";
+        // x86-64-v2: SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT. AVX is
+        // added on top via mattrs.
+        return "x86-64-v2";
     } else {
-        // Default should not include SSSE3, hence "k8" rather than "core2"
-        return "k8";
+        // Plain x86-64 baseline (SSE, SSE2). The Halide SSE41 level
+        // (which deliberately stops short of SSE4.2) adds its
+        // features individually in mattrs.
+        return "x86-64";
     }
 }
 
@@ -1814,10 +1817,35 @@ string CodeGen_X86::mcpu_tune() const {
     return mcpu_target();  // Detect "best" CPU from the enabled ISA's.
 }
 
-// FIXME: we should lower everything here, instead of relying
-//        that -mcpu= (`mcpu_target()`) implies/sets features for us.
+// All features Halide knows about are turned on individually here,
+// rather than relying on `-mcpu=` (set by `mcpu_target()`) to pull
+// them in. `mcpu_target()` picks only generic x86-64-v{N} levels, so
+// we don't accidentally inherit vendor-specific features (e.g. sse4a)
+// that aren't present across all CPUs at a given Halide feature
+// level.
 string CodeGen_X86::mattrs() const {
     std::vector<std::string_view> attrs;
+
+    // Features added on top of the plain x86-64 baseline. These are
+    // already covered by x86-64-v2 (and above), but Halide's SSE41
+    // feature level intentionally stops short of SSE4.2, so SSE41
+    // alone uses the plain x86-64 mcpu and adds these by hand.
+    if (target.has_feature(Target::SSE41) && !target.has_feature(Target::AVX)) {
+        attrs.emplace_back("+sse3");
+        attrs.emplace_back("+ssse3");
+        attrs.emplace_back("+sse4.1");
+    }
+
+    // Features added on top of the x86-64-v2 baseline. AVX without
+    // AVX2 only needs +avx (the rest of v3 -- BMI/F16C/FMA -- aren't
+    // guaranteed at the Halide AVX level).
+    if (target.has_feature(Target::AVX) && !target.has_feature(Target::AVX2)) {
+        attrs.emplace_back("+avx");
+    }
+
+    // FMA / F16C are guaranteed when AVX2 is set (and thus already
+    // included in x86-64-v3), but are also exposed as independent
+    // Halide flags, so emit them explicitly when requested.
     if (target.has_feature(Target::FMA)) {
         attrs.emplace_back("+fma");
     }
@@ -1827,39 +1855,46 @@ string CodeGen_X86::mattrs() const {
     if (target.has_feature(Target::F16C)) {
         attrs.emplace_back("+f16c");
     }
+
+    // AVX512 features. Any AVX512 variant implies AVX2 (via
+    // complete_x86_target), so the mcpu baseline is at least
+    // x86-64-v3. Skylake-and-above selects x86-64-v4, which already
+    // includes F/CD/BW/DQ/VL, but we still add those features
+    // explicitly so the bare AVX512 / AVX512_KNL paths (which use
+    // x86-64-v3) also get them.
     if (target.has_feature(Target::AVX512) ||
         target.has_feature(Target::AVX512_KNL) ||
         target.has_feature(Target::AVX512_Skylake) ||
         target.has_feature(Target::AVX512_Cannonlake)) {
         attrs.emplace_back("+avx512f");
         attrs.emplace_back("+avx512cd");
-        if (target.has_feature(Target::AVX512_KNL)) {
-            attrs.emplace_back("+avx512pf");
-            attrs.emplace_back("+avx512er");
-        }
-        if (target.has_feature(Target::AVX512_Skylake) ||
-            target.has_feature(Target::AVX512_Cannonlake)) {
-            attrs.emplace_back("+avx512vl");
-            attrs.emplace_back("+avx512bw");
-            attrs.emplace_back("+avx512dq");
-        }
-        if (target.has_feature(Target::AVX512_Cannonlake)) {
-            attrs.emplace_back("+avx512ifma");
-            attrs.emplace_back("+avx512vbmi");
-        }
-        if (target.has_feature(Target::AVX512_Zen4)) {
-            attrs.emplace_back("+avx512bf16");
-            attrs.emplace_back("+avx512vnni");
-            attrs.emplace_back("+avx512bitalg");
-            attrs.emplace_back("+avx512vbmi2");
-        }
-        if (target.has_feature(Target::AVXVNNI)) {
-            attrs.emplace_back("+avxvnni");
-        }
-        if (target.has_feature(Target::AVX512_SapphireRapids)) {
-            attrs.emplace_back("+amx-int8");
-            attrs.emplace_back("+amx-bf16");
-        }
+    }
+    if (target.has_feature(Target::AVX512_KNL)) {
+        attrs.emplace_back("+avx512pf");
+        attrs.emplace_back("+avx512er");
+    }
+    if (target.has_feature(Target::AVX512_Skylake) ||
+        target.has_feature(Target::AVX512_Cannonlake)) {
+        attrs.emplace_back("+avx512vl");
+        attrs.emplace_back("+avx512bw");
+        attrs.emplace_back("+avx512dq");
+    }
+    if (target.has_feature(Target::AVX512_Cannonlake)) {
+        attrs.emplace_back("+avx512ifma");
+        attrs.emplace_back("+avx512vbmi");
+    }
+    if (target.has_feature(Target::AVX512_Zen4)) {
+        attrs.emplace_back("+avx512bf16");
+        attrs.emplace_back("+avx512vnni");
+        attrs.emplace_back("+avx512bitalg");
+        attrs.emplace_back("+avx512vbmi2");
+    }
+    if (target.has_feature(Target::AVXVNNI)) {
+        attrs.emplace_back("+avxvnni");
+    }
+    if (target.has_feature(Target::AVX512_SapphireRapids)) {
+        attrs.emplace_back("+amx-int8");
+        attrs.emplace_back("+amx-bf16");
     }
     if (gather_might_be_slow(target)) {
         attrs.emplace_back("+prefer-no-gather");
