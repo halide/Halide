@@ -17,22 +17,22 @@ bool test() {
     const T onePointTwoFive(1.25);
 
     // Check the bits are how we expect before using
-    // comparision operators
+    // comparison operators
     h_assert(one.to_bits() != onePointTwoFive.to_bits(), "bits should be different");
     uint16_t bits = (T::exponent_mask >> 1) & T::exponent_mask;
     h_assert(one.to_bits() == bits, "bit pattern for 1.0 is wrong");
     bits |= 1 << (T::mantissa_bits - 2);
     h_assert(onePointTwoFive.to_bits() == bits, "bit pattern for 1.25 is wrong");
 
-    // Check comparision operators
-    h_assert(!(one == onePointTwoFive), "comparision failed");
-    h_assert(one != onePointTwoFive, "comparision failed");
-    h_assert(one < onePointTwoFive, "comparision failed");
-    h_assert(one <= onePointTwoFive, "comparision failed");
-    h_assert(onePointTwoFive > one, "comparision failed");
-    h_assert(onePointTwoFive >= one, "comparision failed");
-    h_assert(one >= one, "comparision failed");
-    h_assert(one == one, "comparision failed");
+    // Check comparison operators
+    h_assert(!(one == onePointTwoFive), "comparison failed");
+    h_assert(one != onePointTwoFive, "comparison failed");
+    h_assert(one < onePointTwoFive, "comparison failed");
+    h_assert(one <= onePointTwoFive, "comparison failed");
+    h_assert(onePointTwoFive > one, "comparison failed");
+    h_assert(onePointTwoFive >= one, "comparison failed");
+    h_assert(one >= one, "comparison failed");
+    h_assert(one == one, "comparison failed");
 
     // Try with a negative number
     const T minusOne = -one;

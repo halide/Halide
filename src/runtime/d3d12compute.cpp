@@ -1017,7 +1017,7 @@ WEAK ID3D12Device *D3D12CreateDeviceForAdapter(IDXGIAdapter1 *adapter) {
 
     DXGI_ADAPTER_DESC1 desc = {};
     if (FAILED(dxgiAdapter->GetDesc1(&desc))) {
-        TRACEFATAL("Unable to retrieve information (DXGI_ADAPTER_DESC1) about the selectd adapter.");
+        TRACEFATAL("Unable to retrieve information (DXGI_ADAPTER_DESC1) about the selected adapter.");
         return nullptr;
     }
     char Description[128];
@@ -1325,7 +1325,7 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12
 
     d3d12_buffer buffer = {};
     ID3D12Resource *resource = nullptr;
-    // A commited resource manages its own private heap:
+    // A committed resource manages its own private heap:
     HRESULT result = (*device)->CreateCommittedResource(pHeapProperties, HeapFlags, pDesc, InitialResourceState, pOptimizedClearValue, IID_PPV_ARGS(&resource));
     if (D3DErrorCheck(result, resource, nullptr, "Unable to create the Direct3D 12 buffer")) {
         return buffer;
@@ -2533,7 +2533,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
 
     // TODO(marcos): acquire_context will acquire the context lock and hold it
     // until it gets released by release_context; it should be possible to simply
-    // hold it to obtain 'device_ret' and 'queue_ret' and release it immediatley
+    // hold it to obtain 'device_ret' and 'queue_ret' and release it immediately
     // after -- as a safe-guard, increment the reference count of the underlying
     // ID3D12Device and ID3D12CommandQueue COM objects.
     halide_mutex_lock(&thread_lock);
@@ -2602,7 +2602,7 @@ WEAK void d3d12_debug_dump() {
 
 using namespace Halide::Runtime::Internal::D3D12Compute;
 
-// NOTE(marcos): purposedly disabling cache on 'master' for now
+// NOTE(marcos): purposely disabling cache on 'master' for now
 WEAK bool enable_allocation_cache = false;
 static constexpr int MaxBuffersInCache = 32;
 WEAK d3d12_buffer *buffer_pool[MaxBuffersInCache] = {};
@@ -3201,7 +3201,7 @@ WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct h
     // NOTE(marcos): it would be nice to have some "zero-copy" behavior here by
     // allocating the device memory and MapBuffering it to the host memory, but
     // sadly, even with a "dedicated" d3d12 staging heap just for this buffer,
-    // d3d12 has no bi-directional system memory heap (a sigle resource that is
+    // d3d12 has no bi-directional system memory heap (a single resource that is
     // capable of both upload and readback). One possible workaround is to just
     // suballocate from two common heaps (one used for uploads and another for
     // readbacks) and dynamically change buffer->host accordingly. However, if

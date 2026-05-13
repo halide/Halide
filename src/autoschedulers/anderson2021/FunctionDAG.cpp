@@ -653,8 +653,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
             stage_scope_with_concrete_rvar_bounds.set_containing_scope(&scope);
             stage_scope_with_symbolic_rvar_bounds.set_containing_scope(&scope);
             for (const auto &rv : sched.rvars()) {
-                Expr min = simplify(apply_param_estimates.mutate(rv.min));
-                Expr max = simplify(apply_param_estimates.mutate(rv.min + rv.extent - 1));
+                Expr min = simplify(apply_param_estimates(rv.min));
+                Expr max = simplify(apply_param_estimates(rv.min + rv.extent - 1));
                 stage_scope_with_concrete_rvar_bounds.push(rv.var, Interval(min, max));
                 min = Variable::make(Int(32), consumer.name() + "." + rv.var + ".min");
                 max = Variable::make(Int(32), consumer.name() + "." + rv.var + ".max");
@@ -686,8 +686,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                 for (int j = 0; j < consumer.dimensions(); j++) {
                     const auto &req = node.region_required[j];
                     auto &comp = node.region_computed[j];
-                    comp.in.min = simplify(apply_param_estimates.mutate(comp.in.min));
-                    comp.in.max = simplify(apply_param_estimates.mutate(comp.in.max));
+                    comp.in.min = simplify(apply_param_estimates(comp.in.min));
+                    comp.in.max = simplify(apply_param_estimates(comp.in.max));
                     if (equal(comp.in.min, req.min) && equal(comp.in.max, req.max)) {
                         comp.equals_required = true;
                     } else {
@@ -911,11 +911,11 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
 
             stage.index = s;
 
-            exprs = apply_param_estimates.mutate(exprs);
+            exprs = apply_param_estimates(exprs);
 
             for (auto &p : func_value_bounds) {
-                p.second.min = apply_param_estimates.mutate(p.second.min);
-                p.second.max = apply_param_estimates.mutate(p.second.max);
+                p.second.min = apply_param_estimates(p.second.min);
+                p.second.max = apply_param_estimates(p.second.max);
             }
 
             // For this stage scope we want symbolic bounds for the rvars

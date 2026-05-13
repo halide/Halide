@@ -2,7 +2,7 @@
 #define HALIDE_PARAMETER_H
 
 /** \file
- * Defines the internal representation of parameters to halide piplines
+ * Defines the internal representation of parameters to halide pipelines
  */
 #include <optional>
 #include <string>

@@ -55,7 +55,6 @@ protected:
 }  // namespace
 
 Stmt unroll_loops(const Stmt &s) {
-    ZoneScoped;
     Stmt stmt = UnrollLoops()(s);
     // Unrolling duplicates variable names. Other passes assume variable names are unique.
     return uniquify_variable_names(stmt);

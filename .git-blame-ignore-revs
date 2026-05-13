@@ -1,0 +1,25 @@
+# Bulk clang-format runs
+5e17a20783854e158c06729a2c9b788d2e041928 # Some clang-format suggestions (2018-05-08)
+fb89ed72cc0710ddba7d0734e38b72e6f6b9c1fd # clang-format nearly everything in src (2019-09-27)
+b465318a583ff58114ac63ecd8125ca7e648ae35 # Apply clang-format to the rest of apps/ (2019-12-03)
+e9ee1023649af4cd671b84c9068a0f208f2da3ee # Apply clang-format to test/*/* (2019-12-30)
+f1aa07bf66677393cca617942cd0973b35e1ee54 # Run clang-format on src/runtime (2019-12-30)
+
+# clang-format version upgrades
+4b2d21154c5eda4e3ece657e4886d45fa78069f1 # Upgrade clang-format and clang-tidy to use LLVM 17 (#8042)
+6b9f786292471d92a4d421a45a8a128344079825 # Upgrade to clang-format 19 (#8543)
+bd5b85fd402b49c3c1775a37899d66d8388c782e # Remove most disablings of clang-format (#8874)
+
+# Mechanical bulk changes
+a804b09c9059771a2930e96ce3050d6b84bf2f89 # <Halide.h> -> "Halide.h" (2015-02-24)
+512240ed29146f9eac4d73db5bbd0f659f952a23 # Adding `override` keyword where applicable (2018-10-09)
+eebc6fe793a030ea11e44b0213d09e9115cc9c4e # Move Halide.h to front of correctness test includes (2019-01-09)
+822f5da6731ec206ba748e0fdf55a09674343199 # Don't return negative values from main() (#7406)
+
+# pre-commit rollout
+9baf7fcfcca5d00f79fb8f2b4aa6853783ece035 # Use pre-commit to implement GHA basic checks (#9015)
+93226012ef7c4ed05bf2c69bce4bc75e0e601317 # pre-commit: enable codespell; fix typos and cryptic names (#9019)
+e58aa4ede36e41e2e827024196a838c87f2970ae # pre-commit: check CMake sources for style guide violations (#9020)
+f700a7121b3652a354e438d81615638887d241c8 # pre-commit: enable shfmt and shellcheck (#9021)
+c07af18f0c57914afd8fde38b4bb782fea236678 # pre-commit: enable mdformat (markdown) (#9022)
+751a6915cf34a06524c6213f3b2283b5d33d1fa2 # pre-commit: keep sorted lists in order (#9024)

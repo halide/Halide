@@ -4,7 +4,7 @@ include(CheckCXXCompilerFlag)
 # Internal tests are a special case.
 # HalideTestHelpers depends on this test being present.
 add_executable(_test_internal internal.cpp)
-target_link_libraries(_test_internal PRIVATE Halide::Test)
+target_link_libraries(_test_internal PRIVATE Halide::Test Halide::TerminateHandler)
 target_include_directories(_test_internal PRIVATE "${Halide_SOURCE_DIR}/src")
 target_precompile_headers(_test_internal PRIVATE <Halide.h>)
 if (Halide_CCACHE_BUILD)
@@ -67,36 +67,7 @@ endif ()
 
 # FIXME: failing_with_issue is dead code :)
 
-# Ensure that basic sanitizer flags are supported;
-# - Address sanitizer is often used in conjunction with fuzzing as it will detect
-#   common high severity bugs. This sanitizer is used as a "default" for fuzzing
-#   when the sanitizer isn't otherwise specified.
-# - Fuzzer sanitizer will link against libfuzzer and is currently only supported
-#   on clang/msvc and isn't supported with GCC. If you need to use these fuzzers
-#   with a GCC based project you should consider looking into the LIB_FUZZING_ENGINE
-#   env variable defined in `test/fuzz/CMakeLists.txt`.
-set(CMAKE_REQUIRED_LINK_OPTIONS "-fsanitize=fuzzer,address")
-set(CMAKE_REQUIRED_FLAGS "-fsanitize=fuzzer-no-link,address")
-check_cxx_source_compiles([[
-#include <cstdint>
-#include <cstddef>
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, std::size_t Size) {
-  return 0;
-}
-]] HAS_FUZZ_FLAGS)
-
-if (NOT HAS_FUZZ_FLAGS)
-    message(VERBOSE "Compiler does not support libfuzzer sanitizer.")
-else ()
-    message(VERBOSE "Compiler supports libfuzzer sanitizer.")
-endif ()
-
-# Note that we want to default WITH_TEST_FUZZ to OFF, even if HAS_FUZZ_FLAGS
-# is true: just because our compiler supports fuzzing doesn't mean we want to
-# build the fuzz tests, because they won't really build properly without the
-# right preset specified.
-Halide_feature(WITH_TEST_FUZZ "Build fuzz tests" AUTO
-               DEPENDS HAS_FUZZ_FLAGS)
+Halide_feature(WITH_TEST_FUZZ "Build fuzz tests" ON)
 if (WITH_TEST_FUZZ)
     add_subdirectory(fuzz)
 endif ()

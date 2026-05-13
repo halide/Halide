@@ -246,7 +246,7 @@ class LoopCarryOverLoop : public IRMutator {
     Stmt lift_carried_values_out_of_stmt(const Stmt &orig_stmt) {
         debug(4) << "About to lift carried values out of stmt: " << orig_stmt << "\n";
 
-        // The stmts, as graphs (lets subtituted in). We must only use
+        // The stmts, as graphs (lets substituted in). We must only use
         // graph-aware methods to touch these, lest we incur
         // exponential runtime.
         Stmt graph_stmt = substitute_in_all_lets(orig_stmt);

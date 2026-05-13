@@ -504,8 +504,9 @@ protected:
     }
 
     Stmt visit(const Allocate *op) override {
-        if (hoisted_storages_map.count(op->name) > 0) {
-            HoistedStorageData &hoisted_storage_data = hoisted_storages[hoisted_storages_map[op->name]];
+        if (auto it = hoisted_storages_map.find(op->name);
+            it != hoisted_storages_map.end()) {
+            HoistedStorageData &hoisted_storage_data = hoisted_storages[it->second];
 
             auto expand_and_bound = [&](Expr e) {
                 // Iterate from innermost outwards

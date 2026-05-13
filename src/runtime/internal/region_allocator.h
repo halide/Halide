@@ -73,10 +73,10 @@ private:
     // Merges available neighbouring block regions into the given region
     BlockRegion *coalesce_block_regions(void *user_context, BlockRegion *region);
 
-    // Returns true if the given region can be split to accomodate the given size
+    // Returns true if the given region can be split to accommodate the given size
     bool can_split(const BlockRegion *region, const MemoryRequest &request) const;
 
-    // Splits the given block region into a smaller region to accomodate the given size, followed by empty space for the remaining
+    // Splits the given block region into a smaller region to accommodate the given size, followed by empty space for the remaining
     BlockRegion *split_block_region(void *user_context, BlockRegion *region, const MemoryRequest &request);
 
     // Creates a new block region and adds it to the region list
@@ -198,7 +198,7 @@ MemoryRegion *RegionAllocator::reserve(void *user_context, const MemoryRequest &
     if (can_split(block_region, region_request)) {
 #ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "RegionAllocator: Splitting region of size ( " << (int32_t)(block_region->memory.allocation.size) << ") "
-                            << "to accomodate requested size (" << (int32_t)(region_request.size) << " bytes)";
+                            << "to accommodate requested size (" << (int32_t)(region_request.size) << " bytes)";
 #endif
         split_block_region(user_context, block_region, region_request);
     }

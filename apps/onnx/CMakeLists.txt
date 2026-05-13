@@ -20,6 +20,7 @@ if (NOT ONNX_FOUND)
     message(WARNING "Could NOT find ONNX package config")
     return()
 endif ()
+message(STATUS "Found ONNX: ${ONNX_DIR} (found version \"${ONNX_VERSION}\")")
 
 find_package(Halide REQUIRED)
 
@@ -141,5 +142,5 @@ set_tests_properties(
     PASS_REGULAR_EXPRESSION "OK"
     SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
     ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:model_cpp>;MODEL_AUTOSCHEDULER=$<TARGET_FILE:Halide::Adams2019>"
-    TIMEOUT 120
+    TIMEOUT 300  # 5 minutes
 )

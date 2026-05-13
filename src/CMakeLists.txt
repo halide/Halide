@@ -49,6 +49,7 @@ target_sources(
     FILE_SET private_headers
     TYPE HEADERS
     FILES
+    # keep-sorted start case=no
     AbstractGenerator.h
     AddAtomicMutex.h
     AddImageChecks.h
@@ -63,9 +64,9 @@ target_sources(
     AsyncProducers.h
     AutoScheduleUtils.h
     BoundaryConditions.h
+    BoundConstantExtentLoops.h
     Bounds.h
     BoundsInference.h
-    BoundConstantExtentLoops.h
     BoundSmallAllocations.h
     Buffer.h
     Callable.h
@@ -73,13 +74,13 @@ target_sources(
     ClampUnsafeAccesses.h
     Closure.h
     CodeGen_C.h
+    CodeGen_CPU.h
     CodeGen_D3D12Compute_Dev.h
     CodeGen_GPU_Dev.h
     CodeGen_Internal.h
     CodeGen_LLVM.h
     CodeGen_Metal_Dev.h
     CodeGen_OpenCL_Dev.h
-    CodeGen_Posix.h
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
@@ -88,13 +89,14 @@ target_sources(
     CompilerLogger.h
     CompilerProfiling.h
     ConciseCasts.h
-    CPlusPlusMangle.h
     ConstantBounds.h
     ConstantInterval.h
+    CPlusPlusMangle.h
     CSE.h
     Debug.h
     DebugArguments.h
     DebugToFile.h
+    DecomposeVectorShuffle.h
     Definition.h
     Deinterleave.h
     Derivative.h
@@ -159,6 +161,7 @@ target_sources(
     Module.h
     ModulusRemainder.h
     Monotonic.h
+    MultiRamp.h
     ObjectInstanceRegistry.h
     OffloadGPULoops.h
     OptimizeShuffles.h
@@ -221,6 +224,7 @@ target_sources(
     VectorizeLoops.h
     WasmExecutor.h
     WrapCalls.h
+    # keep-sorted end
 )
 
 # The sources that go into libHalide. For the sake of IDE support, headers that
@@ -228,6 +232,7 @@ target_sources(
 target_sources(
     Halide
     PRIVATE
+    # keep-sorted start case=no
     AbstractGenerator.cpp
     AddAtomicMutex.cpp
     AddImageChecks.cpp
@@ -242,9 +247,9 @@ target_sources(
     AsyncProducers.cpp
     AutoScheduleUtils.cpp
     BoundaryConditions.cpp
+    BoundConstantExtentLoops.cpp
     Bounds.cpp
     BoundsInference.cpp
-    BoundConstantExtentLoops.cpp
     BoundSmallAllocations.cpp
     Buffer.cpp
     Callable.cpp
@@ -253,6 +258,7 @@ target_sources(
     Closure.cpp
     CodeGen_ARM.cpp
     CodeGen_C.cpp
+    CodeGen_CPU.cpp
     CodeGen_D3D12Compute_Dev.cpp
     CodeGen_GPU_Dev.cpp
     CodeGen_Hexagon.cpp
@@ -260,7 +266,6 @@ target_sources(
     CodeGen_LLVM.cpp
     CodeGen_Metal_Dev.cpp
     CodeGen_OpenCL_Dev.cpp
-    CodeGen_Posix.cpp
     CodeGen_PowerPC.cpp
     CodeGen_PTX_Dev.cpp
     CodeGen_PyTorch.cpp
@@ -278,6 +283,7 @@ target_sources(
     Debug.cpp
     DebugArguments.cpp
     DebugToFile.cpp
+    DecomposeVectorShuffle.cpp
     Definition.cpp
     Deinterleave.cpp
     Derivative.cpp
@@ -334,6 +340,7 @@ target_sources(
     Module.cpp
     ModulusRemainder.cpp
     Monotonic.cpp
+    MultiRamp.cpp
     ObjectInstanceRegistry.cpp
     OffloadGPULoops.cpp
     OptimizeShuffles.cpp
@@ -366,7 +373,6 @@ target_sources(
     Simplify_Add.cpp
     Simplify_And.cpp
     Simplify_Call.cpp
-    Simplify_Reinterpret.cpp
     Simplify_Cast.cpp
     Simplify_Div.cpp
     Simplify_EQ.cpp
@@ -379,6 +385,7 @@ target_sources(
     Simplify_Mul.cpp
     Simplify_Not.cpp
     Simplify_Or.cpp
+    Simplify_Reinterpret.cpp
     Simplify_Select.cpp
     Simplify_Shuffle.cpp
     Simplify_Stmts.cpp
@@ -414,6 +421,7 @@ target_sources(
     VectorizeLoops.cpp
     WasmExecutor.cpp
     WrapCalls.cpp
+    # keep-sorted end
 )
 
 set(C_TEMPLATE_FILES

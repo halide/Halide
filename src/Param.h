@@ -179,7 +179,7 @@ public:
         } else {
 
             // Specialized version for when T = void (thus the type is only known at runtime,
-            // not compiletime). Note that this actually works fine for all Params; we specialize
+            // not compile time). Note that this actually works fine for all Params; we specialize
             // it just to reduce code size for the common case of T != void.
 
 #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
@@ -256,7 +256,7 @@ public:
         } else {
 
             // Specialized version for when T = void (thus the type is only known at runtime,
-            // not compiletime). Note that this actually works fine for all Params; we specialize
+            // not compile time). Note that this actually works fine for all Params; we specialize
             // it just to reduce code size for the common case of T != void.
 
 #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \

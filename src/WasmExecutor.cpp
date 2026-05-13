@@ -8,7 +8,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "CodeGen_Posix.h"
+#include "CodeGen_CPU.h"
 #include "CodeGen_Targets.h"
 #include "Debug.h"
 #include "Error.h"
@@ -288,7 +288,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     // for the alloca usage.
     size_t stack_size = 65536;
     {
-        std::unique_ptr<CodeGen_Posix> cg(new_CodeGen_WebAssembly(module.target()));
+        std::unique_ptr<CodeGen_CPU> cg(new_CodeGen_WebAssembly(module.target()));
         cg->set_context(context);
         fn_module = cg->compile(module);
         stack_size += cg->get_requested_alloca_total();
@@ -1225,7 +1225,7 @@ wabt::Result extern_callback_wrapper(const std::vector<ExternArgType> &arg_types
         results[0] = dynamic_type_dispatch<LoadValue>(ret_type.type, (void *)&ret_val);
     }
 
-    // Progagate buffer data backwards. Note that for arbitrary extern functions,
+    // Propagate buffer data backwards. Note that for arbitrary extern functions,
     // we have no idea which buffers might be "input only", so we copy all data for all of them.
     for (size_t i = 0; i < arg_types_len; ++i) {
         const auto &a = arg_types[i + 1];
@@ -2086,7 +2086,7 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value> &args) {
         dynamic_type_dispatch<LoadAndReturnScalar>(ret_type.type, context, (void *)&ret_val, args.GetReturnValue());
     }
 
-    // Progagate buffer data backwards. Note that for arbitrary extern functions,
+    // Propagate buffer data backwards. Note that for arbitrary extern functions,
     // we have no idea which buffers might be "input only", so we copy all data for all of them.
     for (size_t i = 0; i < arg_types_len; ++i) {
         if (arg_types[i].is_buffer) {

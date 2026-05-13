@@ -363,7 +363,6 @@ class ValidateGPUSchedule : public IRVisitor {
 }  // anonymous namespace
 
 Stmt canonicalize_gpu_vars(Stmt s) {
-    ZoneScoped;
     ValidateGPUSchedule()(s);
     s = CanonicalizeGPUVars()(s);
     return s;

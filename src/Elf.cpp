@@ -406,7 +406,7 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
             auto to_relocate = obj->find_section(name + 5);
             internal_assert(to_relocate != obj->sections_end());
             // TODO: This assert should work, but it seems like this
-            // isn't a reliable test. We rely on the names intead.
+            // isn't a reliable test. We rely on the names instead.
             // internal_assert(&*to_relocate == section_map[sh->sh_link]);
             for (uint64_t i = 0; i < sh->sh_size / sh->sh_entsize; i++) {
                 const char *rela_ptr = data + sh->sh_offset + i * sh->sh_entsize;

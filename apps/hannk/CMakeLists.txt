@@ -117,6 +117,7 @@ endif ()
 # Tests
 
 set(TEST_FILES
+    # keep-sorted start
     inception_v2_224_quant/000.DEPTHWISE_CONV_2D.tflite
     inception_v4_299_quant/000.CONV_2D.tflite
     inception_v4_299_quant/001.CONV_2D.tflite
@@ -235,6 +236,7 @@ set(TEST_FILES
     mobilenet_v2_1.0_224_quant/059.DEPTHWISE_CONV_2D.tflite
     mobilenet_v2_1.0_224_quant/062.AVERAGE_POOL_2D.tflite
     mobilenet_v2_1.0_224_quant/064.RESHAPE.tflite
+    # keep-sorted end
 )
 list(TRANSFORM TEST_FILES PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/test/")
 

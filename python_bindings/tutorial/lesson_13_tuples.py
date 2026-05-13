@@ -38,7 +38,7 @@ def main():
     )
 
     # Since this pattern appears quite often, Halide provides a
-    # syntatic sugar to write the code above as the following,
+    # syntactic sugar to write the code above as the following,
     # using the "mux" function.
     # color_image[x, y, c] = hl.mux(c, [245, 42, 132]);
 

@@ -83,7 +83,6 @@ protected:
     void codegen_vector_reduce(const VectorReduce *op, const Expr &init) override;
     // @}
 
-    std::string march() const;
     std::string mcpu_target() const override;
     std::string mcpu_tune() const override;
     std::string mattrs() const override;
@@ -553,10 +552,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
     CodeGen_LLVM::codegen_vector_reduce(op, init);
 }
 
-string CodeGen_PTX_Dev::march() const {
-    return "nvptx64";
-}
-
 string CodeGen_PTX_Dev::mcpu_target() const {
     if (target.has_feature(Target::CUDACapability86)) {
         return "sm_86";
@@ -632,8 +627,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     options.AllowFPOpFusion = CodeGen_GPU_Dev::any_strict_float ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
 #if LLVM_VERSION < 230
     options.NoInfsFPMath = !CodeGen_GPU_Dev::any_strict_float;
-#endif
     options.NoNaNsFPMath = !CodeGen_GPU_Dev::any_strict_float;
+#endif
     options.HonorSignDependentRoundingFPMathOption = !CodeGen_GPU_Dev::any_strict_float;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;

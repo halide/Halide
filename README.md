@@ -21,9 +21,9 @@ For more detail about what Halide is, see https://halide-lang.org.
 
 For API documentation see https://halide-lang.org/docs.
 
-For some example code, read through the tutorials online
-at https://halide-lang.org/tutorials. The corresponding code is in the
-`tutorials/` directory. Larger examples are in the `apps/` directory.
+For some example code, read through the tutorials online at
+https://halide-lang.org/tutorials. The corresponding code is in the `tutorials/`
+directory. Larger examples are in the `apps/` directory.
 
 If you've acquired a full source distribution and want to build Halide, see the
 [notes below](#building-halide).
@@ -66,10 +66,8 @@ installed it in. On Windows, you will need to add the virtual environment root
 directory to `CMAKE_PREFIX_PATH`. This can be done by running
 `set CMAKE_PREFIX_PATH=%VIRTUAL_ENV%` in `cmd`.
 
-Other build systems can find the Halide root path by running `python -c
-"import halide; print(halide.install_dir())"`.
-
-[halide-pypi]: https://pypi.halide-lang.org/simple
+Other build systems can find the Halide root path by running
+`python -c "import halide; print(halide.install_dir())"`.
 
 ## Homebrew
 
@@ -82,8 +80,8 @@ $ brew install halide
 
 ## Binary tarballs
 
-The latest version of Halide can always be found on GitHub
-at https://github.com/halide/Halide/releases
+The latest version of Halide can always be found on GitHub at
+https://github.com/halide/Halide/releases
 
 We provide binary releases for many popular platforms and architectures,
 including 32/64-bit x86 Windows, 64-bit x86/ARM macOS, and 32/64-bit x86/ARM
@@ -125,7 +123,7 @@ These are the **tested** host toolchain and platform combinations for building
 and running the Halide compiler library.
 
 | Compiler   | Version      | OS                     | Architectures |
-|------------|--------------|------------------------|---------------|
+| ---------- | ------------ | ---------------------- | ------------- |
 | GCC        | 9.5          | Ubuntu Linux 20.04 LTS | x86, x64      |
 | GCC        | 11.4         | Ubuntu Linux 22.04 LTS | ARM32, ARM64  |
 | MSVC       | 2022 (19.37) | Windows 11 (22631)     | x86, x64      |
@@ -168,17 +166,17 @@ Replace `22` with the desired LLVM major version (`21`, `22`, `23`, or `main`).
 Binary wheels are available for Linux (x86-64, x86-32, AArch64, ARMv7), macOS
 (x86-64, ARM64), and Windows (x86-64, x86-32).
 
-On macOS, [Homebrew](https://brew.sh) is also a good option: `brew install
-llvm`. On Debian flavors of Linux, the
+On macOS, [Homebrew](https://brew.sh) is also a good option:
+`brew install llvm`. On Debian flavors of Linux, the
 [LLVM APT repo](https://apt.llvm.org) works well; use the provided installation
 script.
 
 <details>
 <summary>Building LLVM from source (advanced)</summary>
 
-> [!WARNING]
-> Building LLVM from source requires significant time, disk space, and RAM.
-> Prefer the pre-built binaries above unless you need a custom configuration.
+> [!WARNING] Building LLVM from source requires significant time, disk space,
+> and RAM. Prefer the pre-built binaries above unless you need a custom
+> configuration.
 
 First check it out from GitHub:
 
@@ -234,8 +232,6 @@ recommend enabling the full set to simplify builds during development.
 
 This is discussed in greater detail in [BuildingHalideWithCMake.md]. CMake
 version 3.28+ is required to build Halide.
-
-[BuildingHalideWithCMake.md]: doc/BuildingHalideWithCMake.md
 
 ### MacOS and Linux
 
@@ -301,8 +297,8 @@ Halide includes a `vcpkg-configuration.json` that automatically configures
 [overlay ports](https://learn.microsoft.com/en-us/vcpkg/concepts/overlay-ports)
 and overlay triplets. These overlays redirect LLVM and Python to system
 installations, so vcpkg only builds the smaller dependencies (flatbuffers, wabt,
-pybind11, etc.). You must have LLVM and Python installed separately
-(see [Acquiring LLVM](#acquiring-llvm) above).
+pybind11, etc.). You must have LLVM and Python installed separately (see
+[Acquiring LLVM](#acquiring-llvm) above).
 
 #### Building Halide
 
@@ -342,9 +338,8 @@ Subsets of the tests can be selected with `-L` and include `correctness`,
 <details>
 <summary>Building LLVM from source on Windows (advanced)</summary>
 
-> [!WARNING]
-> Building LLVM from source requires significant time, disk space, and RAM.
-> Prefer the pre-built `halide-llvm` binaries (see
+> [!WARNING] Building LLVM from source requires significant time, disk space,
+> and RAM. Prefer the pre-built `halide-llvm` binaries (see
 > [Acquiring LLVM](#acquiring-llvm)) unless you need a custom configuration.
 
 First, download LLVM's sources (these instructions use the 21.1.8 release).
@@ -407,10 +402,9 @@ commands that were run, as well as the environment variables they were run with.
 
 ## Building Halide with make
 
-> [!WARNING]
-> We do not provide support for the Makefile. Feel free to use it, but if
-> anything goes wrong, switch to the CMake build. Note also that the Makefile
-> cannot build the Python bindings or produce install packages.
+> [!WARNING] We do not provide support for the Makefile. Feel free to use it,
+> but if anything goes wrong, switch to the CMake build. Note also that the
+> Makefile cannot build the Python bindings or produce install packages.
 
 *TL;DR*: Have LLVM 17 (or greater) installed and run `make` in the root
 directory of the repository (where this README is).
@@ -463,7 +457,7 @@ output can be parsed programmatically by starting from the code in
 We have more documentation in `doc/`, the following links might be helpful:
 
 | Document                                      | Description                                                               |
-|-----------------------------------------------|---------------------------------------------------------------------------|
+| --------------------------------------------- | ------------------------------------------------------------------------- |
 | [CMake build](doc/BuildingHalideWithCMake.md) | How to configure and build Halide using CMake.                            |
 | [CMake package](doc/HalideCMakePackage.md)    | How to use the Halide CMake package to build your code.                   |
 | [Hexagon](doc/Hexagon.md)                     | How to use the Hexagon backend.                                           |
@@ -477,7 +471,10 @@ The following links are of greater interest to developers wishing to contribute
 code to Halide:
 
 | Document                                 | Description                                                                                                   |
-|------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | [CMake developer](doc/CodeStyleCMake.md) | Guidelines for authoring new CMake code.                                                                      |
 | [FuzzTesting](doc/FuzzTesting.md)        | Information about fuzz testing the Halide compiler (rather than pipelines). Intended for internal developers. |
 | [Testing](doc/Testing.md)                | Information about our test organization and debugging tips. Intended for internal developers.                 |
+
+[buildinghalidewithcmake.md]: doc/BuildingHalideWithCMake.md
+[halide-pypi]: https://pypi.halide-lang.org/simple

@@ -6,7 +6,7 @@
 # files into a single .a file; input .a are decomposed
 # into their component .o files. Ordering is maintained.
 # It is assumed there are no duplicates. (It's basically the subset
-# of libtool that we'd use, if libtool was reliably available everwhere.)
+# of libtool that we'd use, if libtool was reliably available everywhere.)
 #
 # $1 = Output file (always .a)
 # $2...$N = Input files (any mixture of .a or .o files)

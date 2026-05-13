@@ -4,6 +4,7 @@ if (Halide_TARGET MATCHES "webgpu")
 endif ()
 
 set(tests
+    # keep-sorted start
     lesson_01_basics.py
     lesson_02_input_image.py
     lesson_03_debugging_1.py
@@ -19,6 +20,7 @@ set(tests
     lesson_12_using_the_gpu.py
     lesson_13_tuples.py
     lesson_14_types.py
+    # keep-sorted end
 )
 
 set(PYPATH_lesson_10_aot_compilation_run "$<TARGET_FILE_DIR:lesson_10_halide>")

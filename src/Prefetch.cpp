@@ -440,7 +440,6 @@ protected:
 Stmt inject_placeholder_prefetch(const Stmt &s, const map<string, Function> &env,
                                  const string &prefix,
                                  const vector<PrefetchDirective> &prefetches) {
-    ZoneScoped;
     Stmt stmt = InjectPlaceholderPrefetch(env, prefix, prefetches)(s);
     return stmt;
 }
@@ -482,7 +481,6 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
 }
 
 Stmt hoist_prefetches(const Stmt &s) {
-    ZoneScoped;
     return HoistPrefetches()(s);
 }
 

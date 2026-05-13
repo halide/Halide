@@ -184,7 +184,7 @@ int main() {
         // This should be about the same as the previous run (about ~200000 times/sec).
         std::cout << "Execute Pipeline (compile to callable): " << int(count / t) << " times/sec\n";
 
-        // Perhaps even more convient, we can create a std::function object from the callable,
+        // Perhaps even more convenient, we can create a std::function object from the callable,
         // which allows cleaner type checking for the parameters, and slightly less overhead
         // for invoking the function. The list used for the template parameters needs to match
         // the list for the parameters of the pipeline.  Here, we have a single result buffer,

@@ -6,6 +6,7 @@ endif()
 
 tests(GROUPS performance
       SOURCES
+      # keep-sorted start
       async_gpu.cpp
       blend_tail_strategies.cpp
       block_transpose.cpp
@@ -17,6 +18,7 @@ tests(GROUPS performance
       fast_pow.cpp
       fast_sine_cosine.cpp
       gpu_half_throughput.cpp
+      interleave.cpp
       jit_stress.cpp
       lots_of_inputs.cpp
       memcpy.cpp
@@ -27,6 +29,7 @@ tests(GROUPS performance
       tiled_matmul.cpp
       vectorize.cpp
       wrap.cpp
+      # keep-sorted end
       )
 
 tests(GROUPS performance multithreaded

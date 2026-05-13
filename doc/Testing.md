@@ -8,7 +8,7 @@ Halide's tests are organized beneath the top-level `test/` directory. These
 folders are described below:
 
 | Folder               | Description                                                                      |
-|----------------------|----------------------------------------------------------------------------------|
+| -------------------- | -------------------------------------------------------------------------------- |
 | `autoschedulers/$AS` | Test for the `$AS` (e.g. `adams2019`) autoscheduler                              |
 | `common`             | Code that may be shared across multiple tests                                    |
 | `correctness`        | Tests that check correctness of various compiler properties                      |
@@ -30,8 +30,8 @@ The vast majority of our tests are simple C++ executables that link to Halide,
 perform some checks, and print the special line `Success!` upon successful
 completion. There are three main exceptions to this:
 
-First, the `warning` tests are expected to print a line that reads
-`Warning:` and do not look for `Success!`.
+First, the `warning` tests are expected to print a line that reads `Warning:`
+and do not look for `Success!`.
 
 Second, some tests cannot run in all scenarios; for example, a test that
 measures CUDA performance requires a CUDA-capable GPU. In these cases, tests are

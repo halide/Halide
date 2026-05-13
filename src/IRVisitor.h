@@ -84,17 +84,15 @@ private:
     }
 
 protected:
-#define HALIDE_CALL_VISIT_EXPR_IMPL(T)                                          \
-    void visit(const T *op) override {                                          \
-        ZoneScopedVisitor(IRNodeType::T, "LambdaVisitor", Profiling::BIT_EXPR); \
-        this->visit_impl(op);                                                   \
+#define HALIDE_CALL_VISIT_EXPR_IMPL(T) \
+    void visit(const T *op) override { \
+        this->visit_impl(op);          \
     }
     HALIDE_FOR_EACH_IR_EXPR(HALIDE_CALL_VISIT_EXPR_IMPL)
 #undef HALIDE_CALL_VISIT_EXPR_IMPL
-#define HALIDE_CALL_VISIT_STMT_IMPL(T)                                          \
-    void visit(const T *op) override {                                          \
-        ZoneScopedVisitor(IRNodeType::T, "LambdaVisitor", Profiling::BIT_STMT); \
-        this->visit_impl(op);                                                   \
+#define HALIDE_CALL_VISIT_STMT_IMPL(T) \
+    void visit(const T *op) override { \
+        this->visit_impl(op);          \
     }
     HALIDE_FOR_EACH_IR_STMT(HALIDE_CALL_VISIT_STMT_IMPL)
 #undef HALIDE_CALL_VISIT_STMT_IMPL

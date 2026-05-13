@@ -344,7 +344,7 @@ WEAK void halide_profiler_stack_peak_update(void *user_context,
     // Note: Update to the counter is done without grabbing the state's lock to
     // reduce lock contention. One potential issue is that other call that frees the
     // pipeline and function stats structs may be running in parallel. However, the
-    // current desctructor (called on profiler shutdown) does not free the structs
+    // current destructor (called on profiler shutdown) does not free the structs
     // unless user specifically calls halide_profiler_reset().
 
     // Update per-func memory stats
@@ -771,7 +771,7 @@ WEAK void halide_windows_profiler_shutdown() {
     // sections in a static destructor as it may run after threads
     // have been killed by the OS. Furthermore, may calls, even things
     // like EnterCriticalSection may be set to kill the process if
-    // called during process shutdown. Hence this routine doesn't attmept
+    // called during process shutdown. Hence this routine doesn't attempt
     // to clean up state as the destructor does on other platforms.
 
     // Print results. Avoid locking as it will cause problems and

@@ -5,6 +5,7 @@ tests(GROUPS correctness_multi_gpu
 
 tests(GROUPS correctness
       SOURCES
+      # keep-sorted start case=no
       align_bounds.cpp
       argmax.cpp
       async_device_copy.cpp
@@ -79,6 +80,7 @@ tests(GROUPS correctness
       debug_to_file.cpp
       debug_to_file_multiple_outputs.cpp
       debug_to_file_reorder.cpp
+      decompose_vector_shuffle.cpp
       deferred_loop_level.cpp
       deinterleave4.cpp
       device_buffer_copies_with_profile.cpp
@@ -89,6 +91,7 @@ tests(GROUPS correctness
       dilate3x3.cpp
       div_by_zero.cpp
       div_round_to_zero.cpp
+      downsampling_reduce.cpp
       dynamic_allocation_in_gpu_kernel.cpp
       dynamic_reduction_bounds.cpp
       early_out.cpp
@@ -108,6 +111,7 @@ tests(GROUPS correctness
       extern_stage_on_device.cpp
       extract_concat_bits.cpp
       failed_unroll.cpp
+      fallback_vscale_sve.cpp
       fast_trigonometric.cpp
       fibonacci.cpp
       fit_function.cpp
@@ -125,11 +129,10 @@ tests(GROUPS correctness
       fused_where_inner_extent_is_zero.cpp
       fuzz_float_stores.cpp
       fuzz_schedule.cpp
-      fuzz_simplify.cpp
       gameoflife.cpp
       gather.cpp
-      gpu_allocation_cache.cpp
       gpu_alloc_group_profiling.cpp
+      gpu_allocation_cache.cpp
       gpu_arg_types.cpp
       gpu_assertion_in_kernel.cpp
       gpu_bounds_inference_failure.cpp
@@ -179,6 +182,7 @@ tests(GROUPS correctness
       image_of_lists.cpp
       implicit_args.cpp
       implicit_args_tests.cpp
+      implicit_pure_def_with_rvar_args.cpp
       in_place.cpp
       indexing_access_undef.cpp
       infer_arguments.cpp
@@ -219,8 +223,8 @@ tests(GROUPS correctness
       many_updates.cpp
       math.cpp
       median3x3.cpp
-      metal_precompiled_shaders.cpp
       memoize_cloned.cpp
+      metal_precompiled_shaders.cpp
       min_extent.cpp
       mod.cpp
       multi_output_pipeline_with_bad_sizes.cpp
@@ -228,6 +232,7 @@ tests(GROUPS correctness
       multi_way_select.cpp
       multipass_constraints.cpp
       multiple_outputs.cpp
+      multiramp.cpp
       mux.cpp
       narrow_predicates.cpp
       negative_split_factors.cpp
@@ -264,8 +269,8 @@ tests(GROUPS correctness
       realize_over_shifted_domain.cpp
       recursive_box_filters.cpp
       reduction_chain.cpp
-      reduction_predicate_racing.cpp
       reduction_non_rectangular.cpp
+      reduction_predicate_racing.cpp
       reduction_schedule.cpp
       register_shuffle.cpp
       reorder_storage.cpp
@@ -292,6 +297,7 @@ tests(GROUPS correctness
       sliding_over_guard_with_if.cpp
       sliding_reduction.cpp
       sliding_window.cpp
+      solve.cpp
       sort_exprs.cpp
       specialize.cpp
       specialize_to_gpu.cpp
@@ -321,6 +327,8 @@ tests(GROUPS correctness
       tracing_broadcast.cpp
       tracing_stack.cpp
       transitive_bounds.cpp
+      transpose_idioms.cpp
+      transposed_vector_reduce.cpp
       trim_no_ops.cpp
       tuple_partial_update.cpp
       tuple_reduction.cpp
@@ -333,8 +341,8 @@ tests(GROUPS correctness
       uninitialized_read.cpp
       unique_func_image.cpp
       unroll_dynamic_loop.cpp
-      unroll_loop_with_implied_constant_bounds.cpp
       unroll_huge_mux.cpp
+      unroll_loop_with_implied_constant_bounds.cpp
       unrolled_reduction.cpp
       unsafe_dedup_lets.cpp
       unsafe_promises.cpp
@@ -355,8 +363,8 @@ tests(GROUPS correctness
       vectorized_initialization.cpp
       vectorized_load_from_vectorized_allocation.cpp
       vectorized_reduction_bug.cpp
-      widening_lerp.cpp
       widening_reduction.cpp
+      # keep-sorted end
 )
 
 # Simd op check tests fix the target features internally, so they
@@ -365,17 +373,21 @@ tests(GROUPS correctness
 if (NOT Halide_BUILDING_IN_CI OR Halide_TARGET STREQUAL "host")
     tests(GROUPS correctness multithreaded
           SOURCES
+          # keep-sorted start
           simd_op_check_arm.cpp
           simd_op_check_hvx.cpp
           simd_op_check_powerpc.cpp
           simd_op_check_riscv.cpp
           simd_op_check_sve2.cpp
           simd_op_check_wasm.cpp
-          simd_op_check_x86.cpp)
+          simd_op_check_x86.cpp
+          # keep-sorted end
+          )
 endif ()
 
 tests(GROUPS correctness multithreaded
       SOURCES
+      # keep-sorted start
       assertion_failure_in_parallel_for.cpp
       async.cpp
       async_copy_chain.cpp
@@ -415,11 +427,13 @@ tests(GROUPS correctness multithreaded
       ring_buffer.cpp
       stream_compaction.cpp
       thread_safety.cpp
+      transitive_in.cpp
       truncated_pyramid.cpp
       tuple_vector_reduce.cpp
       vector_cast.cpp
       vector_math.cpp
       vector_reductions.cpp
+      # keep-sorted end
       )
 
 # Make sure the test that needs Halide::ImageIO has it
@@ -429,47 +443,50 @@ target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
 target_link_libraries(correctness_gpu_allocation_cache PRIVATE Halide::ThreadPool)
 
 # Tests which use external funcs need to enable exports.
-set_target_properties(correctness_async
-                      correctness_atomics
-                      correctness_c_function
-                      correctness_callable
-                      correctness_callable_generator
-                      correctness_callable_typed
-                      correctness_compute_at_split_rvar
-                      correctness_concat
-                      correctness_custom_lowering_pass
-                      correctness_extern_bounds_inference
-                      correctness_extern_consumer
-                      correctness_extern_consumer_tiled
-                      correctness_extern_error
-                      correctness_extern_output_expansion
-                      correctness_extern_partial
-                      correctness_extern_producer
-                      correctness_extern_reorder_storage
-                      correctness_extern_sort
-                      correctness_extern_stage
-                      correctness_extern_stage_on_device
-                      correctness_handle
-                      correctness_image_of_lists
-                      correctness_lazy_convolution
-                      correctness_loop_invariant_extern_calls
-                      correctness_make_struct
-                      correctness_many_small_extern_stages
-                      correctness_memoize
-                      correctness_memoize_cloned
-                      correctness_multiple_outputs_extern
-                      correctness_non_nesting_extern_bounds_query
-                      correctness_parallel_fork
-                      correctness_pipeline_set_jit_externs_func
-                      correctness_process_some_tiles
-                      correctness_side_effects
-                      correctness_skip_stages
-                      correctness_skip_stages_cse_bug
-                      correctness_skip_stages_external_array_functions
-                      correctness_sliding_backwards
-                      correctness_sliding_over_guard_with_if
-                      correctness_sliding_reduction
-                      correctness_sliding_window
-                      correctness_stage_strided_loads
-                      correctness_storage_folding
-                      PROPERTIES ENABLE_EXPORTS TRUE)
+set_target_properties(
+    # keep-sorted start
+    correctness_async
+    correctness_atomics
+    correctness_c_function
+    correctness_callable
+    correctness_callable_generator
+    correctness_callable_typed
+    correctness_compute_at_split_rvar
+    correctness_concat
+    correctness_custom_lowering_pass
+    correctness_extern_bounds_inference
+    correctness_extern_consumer
+    correctness_extern_consumer_tiled
+    correctness_extern_error
+    correctness_extern_output_expansion
+    correctness_extern_partial
+    correctness_extern_producer
+    correctness_extern_reorder_storage
+    correctness_extern_sort
+    correctness_extern_stage
+    correctness_extern_stage_on_device
+    correctness_handle
+    correctness_image_of_lists
+    correctness_lazy_convolution
+    correctness_loop_invariant_extern_calls
+    correctness_make_struct
+    correctness_many_small_extern_stages
+    correctness_memoize
+    correctness_memoize_cloned
+    correctness_multiple_outputs_extern
+    correctness_non_nesting_extern_bounds_query
+    correctness_parallel_fork
+    correctness_pipeline_set_jit_externs_func
+    correctness_process_some_tiles
+    correctness_side_effects
+    correctness_skip_stages
+    correctness_skip_stages_cse_bug
+    correctness_skip_stages_external_array_functions
+    correctness_sliding_backwards
+    correctness_sliding_over_guard_with_if
+    correctness_sliding_reduction
+    correctness_sliding_window
+    correctness_stage_strided_loads
+    correctness_storage_folding
+    # keep-sorted end
+    PROPERTIES ENABLE_EXPORTS TRUE)

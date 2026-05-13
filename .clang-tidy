@@ -1,4 +1,5 @@
 ---
+# keep-sorted start skip_lines=10
 Checks: >
     *,
     -abseil-*,
@@ -159,6 +160,7 @@ Checks: >
     -readability-use-anyofallof,
     -readability-use-concise-preprocessor-directives,
     -readability-use-std-min-max,
+# keep-sorted end
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
 ExcludeHeaderFilterRegex: '\.fbs\.h|common/cmdline\.h|/mini_\w*\.h'

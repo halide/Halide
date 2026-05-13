@@ -116,7 +116,7 @@ std::string buffer_type_name() {
  * template parameter is T = void.
  *
  * A Buffer<T, D1> can refer to a Buffer<T, D2> if D1 == D2,
- * or if D1 is AnyDims (meaning "dimensionality is checked at runtime, not compiletime").
+ * or if D1 is AnyDims (meaning "dimensionality is checked at runtime, not compile time").
  */
 template<typename T, int Dims>
 class Buffer {
@@ -128,7 +128,7 @@ class Buffer {
     template<typename T2, int D2>
     static void assert_can_convert_from(const Buffer<T2, D2> &other) {
         if (!other.defined()) {
-            // Avoid UB of deferencing offset of a null contents ptr
+            // Avoid UB of dereferencing offset of a null contents ptr
             static_assert(!std::is_const_v<T2> || std::is_const_v<T>,
                           "Can't convert from a Buffer<const T> to a Buffer<T>");
             static_assert(std::is_same_v<std::remove_const_t<T>, std::remove_const_t<T2>> ||

@@ -156,7 +156,6 @@ class BoundSmallAllocations : public IRMutator {
 }  // namespace
 
 Stmt bound_small_allocations(const Stmt &s) {
-    ZoneScoped;
     return BoundSmallAllocations()(s);
 }
 

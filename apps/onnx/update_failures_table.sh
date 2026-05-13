@@ -2,12 +2,6 @@
 
 set -exo pipefail
 
-if [ ! -d "$PWD/build" ]; then
-    echo "Must have built ONNX in build/"
-    exit 1
-fi
-
-export PYTHONPATH=$PWD/build
 export PYTHONUNBUFFERED=1
 
 MODEL_AUTOSCHEDULER="$(python -c "import halide; print(halide.install_dir())")/lib/libautoschedule_adams2019.so"

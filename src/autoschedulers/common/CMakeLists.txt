@@ -5,7 +5,6 @@ target_sources(
     INTERFACE
     FILE_SET HEADERS
     FILES
-    Errors.h
     HalidePlugin.h
     ParamParser.h
     cmdline.h

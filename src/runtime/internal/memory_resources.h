@@ -35,7 +35,7 @@ enum class MemoryVisibility {
 enum class MemoryUsage {
     InvalidUsage,    //< invalid enum value
     StaticStorage,   //< intended for static storage, whereby the contents will be set once and remain unchanged
-    DynamicStorage,  //< intended for dyanmic storage, whereby the contents will be set frequently and change constantly
+    DynamicStorage,  //< intended for dynamic storage, whereby the contents will be set frequently and change constantly
     UniformStorage,  //< intended for fast & small fixed read-only uniform storage (intended for passing shader parameters), whereby the contents will be set once and remain unchanged
     TransferSrc,     //< intended for staging storage updates, whereby the contents will be used as the source of a transfer
     TransferDst,     //< intended for staging storage updates, whereby the contents will be used as the destination of a transfer
@@ -84,7 +84,7 @@ struct MemoryRegion {
     RegionAllocation allocation;  //< allocation in parent block for region
     RegionIndexing indexing;      //< indexing adjustments for controlling access
     bool dedicated = false;       //< flag indicating whether allocation is one dedicated resource (or split/shared into other resources)
-    bool is_owner = true;         //< flag indicating whether allocation is owned by this region, in which case handle is a native handle. Otherwise handle points to owning region of alloction.
+    bool is_owner = true;         //< flag indicating whether allocation is owned by this region, in which case handle is a native handle. Otherwise handle points to owning region of allocation.
     MemoryProperties properties;  //< properties for the allocated region
 };
 

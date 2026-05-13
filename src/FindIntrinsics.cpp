@@ -11,7 +11,7 @@ namespace Internal {
 
 namespace {
 
-// This routine provides a guard on the return type of intrisics such that only
+// This routine provides a guard on the return type of intrinsics such that only
 // these types will ever be considered in the visiting that happens here.
 bool find_intrinsics_for_type(const Type &t) {
     // Currently, we only try to find and replace intrinsics for vector types that aren't bools.
@@ -76,7 +76,7 @@ Expr find_and_subtract(const Expr &e, const Expr &round) {
         if (a.defined()) {
             return Sub::make(a, sub->b);
         }
-        // We can't recurse into the negatve part of a subtract.
+        // We can't recurse into the negative part of a subtract.
     } else if (can_prove(e == round)) {
         return make_zero(e.type());
     }
@@ -127,6 +127,13 @@ protected:
             internal_assert(c->args.size() == 2);
             Expr a = c->args[0];
             Expr b = c->args[1];
+
+            if (Call::as_intrinsic(b, {Call::signed_integer_overflow})) {
+                // Letting signed integer overflow through here would result in
+                // infinite recursion when we try to construct the rounding
+                // terms.
+                return Expr{};
+            }
 
             // Helper to make the appropriate shift.
             auto rounding_shift = [&](const Expr &a, const Expr &b) {
@@ -203,7 +210,7 @@ protected:
             }
         }
 
-        return Expr();
+        return Expr{};
     }
 
     template<typename LetOrLetStmt>
