@@ -401,9 +401,9 @@ void lower_impl(const vector<Function> &output_funcs,
     s = simplify(s);
     log.end(s);
 
-    debug(1) << "Staging strided loads...\n";
+    log.begin("Staging strided loads");
     s = stage_strided_loads(s, t);
-    log("Lowering after staging strided loads:", s);
+    log.end(s);
 
     log.begin("Trimming loops to the region over which they do something");
     s = trim_no_ops(s);

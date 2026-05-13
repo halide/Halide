@@ -4006,7 +4006,7 @@ void CodeGen_LLVM::visit(const For *op) {
         // Pop the loop variable from the scope
         sym_pop(op->name);
     } else {
-        internal_error << "Unknown type of For node. Only Serial and Parallel For nodes should survive down to codegen.\n";
+        internal_error << "Unknown type of For node: " << op->for_type << ". Only Serial and Parallel For nodes should survive down to codegen.\n";
     }
 }
 
