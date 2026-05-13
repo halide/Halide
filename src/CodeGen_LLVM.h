@@ -31,8 +31,10 @@ class NamedMDNode;
 class DataLayout;
 class BasicBlock;
 class GlobalVariable;
+class VectorType;
 }  // namespace llvm
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -161,6 +163,8 @@ protected:
     /** Return the type that a Halide type should be passed in and out
      * of functions as. */
     virtual Type upgrade_type_for_argument_passing(const Type &) const;
+
+    void set_effective_vscale(int vscale);
 
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function = nullptr;
@@ -460,6 +464,9 @@ protected:
      * an arbitrary number of vectors.*/
     virtual llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &);
 
+    /** The inverse of interleave_vectors. */
+    virtual std::vector<llvm::Value *> deinterleave_vector(llvm::Value *vec, int num_vecs);
+
     /** Description of an intrinsic function overload. Overloads are resolved
      * using both argument and return types. The scalar types of the arguments
      * and return type must match exactly for an overload resolution to succeed. */
@@ -472,8 +479,9 @@ protected:
             : result_type(result_type), arg_types(std::move(arg_types)), impl(impl) {
         }
     };
+    using IntrinsicsMap = std::map<std::string, std::vector<Intrinsic>>;
     /** Mapping of intrinsic functions to the various overloads implementing it. */
-    std::map<std::string, std::vector<Intrinsic>> intrinsics;
+    IntrinsicsMap intrinsics;
 
     /** Get an LLVM intrinsic declaration. If it doesn't exist, it will be created. */
     llvm::Function *get_llvm_intrin(const Type &ret_type, const std::string &name, const std::vector<Type> &arg_types, bool scalars_are_vectors = false);
@@ -482,7 +490,11 @@ protected:
     llvm::Function *declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors = false);
     void declare_intrin_overload(const std::string &name, const Type &ret_type, llvm::Function *impl, std::vector<Type> arg_types);
     /** Call an overloaded intrinsic function. Returns nullptr if no suitable overload is found. */
-    llvm::Value *call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args);
+    virtual llvm::Value *call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args);
+    /** Call an overloaded intrinsic function. Returns nullptr if no suitable overload is found.
+     * Look up the given overloaded_intrinsics map for the corresponding intrin */
+    llvm::Value *call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args,
+                                        const IntrinsicsMap &overloaded_intrinsics);
 
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
@@ -509,6 +521,11 @@ protected:
      * if you ask for more lanes than the vector has. */
     virtual llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);
 
+    /** Use an arithmetic fence to prevent LLVM from fusing operations
+     * across this barrier. Works by bitcasting to float, applying
+     * llvm.arithmetic.fence, and bitcasting back. */
+    virtual llvm::Value *optimization_fence(llvm::Value *);
+
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
     virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 
@@ -522,8 +539,6 @@ protected:
                                          const std::vector<int> &indices);
     /** Shorthand for shuffling a single vector. */
     llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
-
-    bool is_power_of_two(int x) const;
 
     bool is_scalable_vector(llvm::Value *v) const;
 
@@ -589,14 +604,25 @@ protected:
     /** Convert an LLVM vscale vector value to the corresponding fixed vector value. */
     llvm::Value *scalable_to_fixed_vector_type(llvm::Value *scalable);
 
+    /** Work around LLVM's inability to lower vector insert/extract for i1
+     * element types (getVectorSubVecPointer computes byte offsets via integer
+     * division, truncating for i1: 1/8=0). Widens the i1 vector arg to i8,
+     * applies fn to the widened value, and truncates the result back to
+     * result_i1_type. */
+    llvm::Value *handle_bool_as_i8(llvm::Value *arg, llvm::VectorType *result_i1_type,
+                                   const std::function<llvm::Value *(llvm::Value *)> &fn);
+
     /** Get number of vector elements, taking into account scalable vectors. Returns 1 for scalars. */
+    // @{
     int get_vector_num_elements(const llvm::Type *t);
+    int get_vector_num_elements(const llvm::Value *v);
+    // @}
 
     /** Interface to abstract vector code generation as LLVM is now
      * providing multiple options to express even simple vector
      * operations. Specifically traditional fixed length vectors, vscale
      * based variable length vectors, and the vector predicate based approach
-     * where an explict length is passed with each instruction.
+     * where an explicit length is passed with each instruction.
      */
     // @{
     enum class VectorTypeConstraint {
@@ -624,7 +650,7 @@ protected:
     // @{
     /** Struct to hold descriptor for an argument to a vector
      *  predicated intrinsic. This includes the value, whether the
-     *  type of the argument should be mangled into the intrisic name
+     *  type of the argument should be mangled into the intrinsic name
      *  and if so, where, and the alignment for pointer arguments. */
     struct VPArg {
         llvm::Value *value;
@@ -651,7 +677,7 @@ protected:
     /** Generate a vector predicated comparison intrinsic call if
      * use_llvm_vp_intrinsics is true and result_type is a vector
      * type. If generated, assigns result of vp intrinsic to value and
-     * returns true if it an instuction is generated, otherwise
+     * returns true if it an instruction is generated, otherwise
      * returns false. */
     bool try_vector_predication_comparison(const std::string &name, const Type &result_type,
                                            MaskVariant mask, llvm::Value *a, llvm::Value *b,
@@ -665,9 +691,9 @@ protected:
         }
     };
 
-    /** Generate an intrisic call if use_llvm_vp_intrinsics is true
+    /** Generate an intrinsic call if use_llvm_vp_intrinsics is true
      * and length is greater than 1. If generated, assigns result
-     * of vp intrinsic to value and returns true if it an instuction
+     * of vp intrinsic to value and returns true if it an instruction
      * is generated, otherwise returns false. */
     bool try_vector_predication_intrinsic(const std::string &name, VPResultType result_type,
                                           int32_t length, MaskVariant mask, std::vector<VPArg> args);

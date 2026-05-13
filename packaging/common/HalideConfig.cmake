@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.28)
 @PACKAGE_INIT@
 
-macro(Halide_fail message)
+macro(Halide_fail message)  # nolint -- required for find_package scoping
     set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE "${message}")
     set(${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)
     return()
 endmacro()
 
-macro(Halide_find_component_dependency comp dep)
+macro(Halide_find_component_dependency comp dep)  # nolint
     set(Halide_quiet)
     if (${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY)
         set(Halide_quiet QUIET)
@@ -81,7 +81,7 @@ set(Halide_shared_targets "${CMAKE_CURRENT_LIST_DIR}/Halide-shared-targets.cmake
 set(Halide_static_deps "${CMAKE_CURRENT_LIST_DIR}/Halide-static-deps.cmake")
 set(Halide_shared_deps "${CMAKE_CURRENT_LIST_DIR}/Halide-shared-deps.cmake")
 
-macro(Halide_load_targets type)
+macro(Halide_load_targets type)  # nolint
     if (NOT EXISTS "${Halide_${type}_targets}")
         Halide_fail("Halide `${type}` libraries were requested but not found.")
     endif ()
@@ -141,15 +141,15 @@ unset(Halide_static_targets)
 # _Halide_fail after one redefinition. Doing it twice overwrites both since the
 # saving behavior doesn't continue past the first.
 foreach (i RANGE 0 1)
-    macro(Halide_fail)
+    macro(Halide_fail)  # nolint -- poisoning internal APIs
         message(FATAL_ERROR "Cannot call internal API: Halide_fail")
     endmacro()
 
-    macro(Halide_find_component_dependency)
+    macro(Halide_find_component_dependency)  # nolint
         message(FATAL_ERROR "Cannot call internal API: Halide_find_component_dependency")
     endmacro()
 
-    macro(Halide_load_targets)
+    macro(Halide_load_targets)  # nolint
         message(FATAL_ERROR "Cannot call internal API: Halide_load_targets")
     endmacro()
 endforeach ()

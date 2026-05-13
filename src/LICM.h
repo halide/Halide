@@ -19,7 +19,7 @@ Stmt hoist_loop_invariant_values(Stmt);
 /** Just hoist loop-invariant if statements as far up as
  * possible. Does not lift other values. It's useful to run this
  * earlier in lowering to simplify the IR. */
-Stmt hoist_loop_invariant_if_statements(Stmt);
+Stmt hoist_loop_invariant_if_statements(const Stmt &);
 
 }  // namespace Internal
 }  // namespace Halide

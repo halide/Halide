@@ -168,4 +168,3 @@ _add_halide_library_set(halide_op_implementations
         GENERATOR_ARGS)
 
 _finish_halide_library_set(halide_op_implementations)
-

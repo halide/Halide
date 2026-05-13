@@ -25,8 +25,8 @@ int main() {
         const float16_t zeroPFromDouble(0.0);
         const float16_t zeroPFromInt(0);
         h_assert(zeroDefaultConstructor.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
-        h_assert(zeroPFromFloat.to_bits() == zeroP.to_bits(), "Mistmatch between constructors");
-        h_assert(zeroPFromDouble.to_bits() == zeroP.to_bits(), "Mistmatch between constructors");
+        h_assert(zeroPFromFloat.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
+        h_assert(zeroPFromDouble.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
         h_assert(zeroPFromInt.to_bits() == zeroP.to_bits(), "make_from_signed_int gave wrong value");
 
         // Check the representation

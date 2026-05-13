@@ -34,7 +34,7 @@ namespace Halide {
  *  'Expr' for the min and extent of a dimension will keep that dimension
  *  unmodified.
  *
- *  Numerous options for specifing the outside area are provided,
+ *  Numerous options for specifying the outside area are provided,
  *  including replacement with an expression, repeating the edge
  *  samples, mirroring over the edge, and repeating or mirroring the
  *  entire image.

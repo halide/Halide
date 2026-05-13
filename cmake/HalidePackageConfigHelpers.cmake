@@ -52,8 +52,8 @@ function(_Halide_pkgdep PKG)
                ")")
     endif ()
 
-    set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" APPEND PROPERTY pkgdeps "${PKG}")
-    set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY "pkgdeps[${PKG}]" "${code}")
+    set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" APPEND PROPERTY pkgdeps "${PKG}")  # nolint
+    set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY "pkgdeps[${PKG}]" "${code}")  # nolint
 endfunction()
 
 ##

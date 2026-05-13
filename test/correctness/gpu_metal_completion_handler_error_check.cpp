@@ -3,12 +3,18 @@
 
 using namespace Halide;
 
-bool errored = false;
-
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
     if (!t.has_feature(Target::Metal)) {
         printf("[SKIP] Metal not enabled\n");
+        return 0;
+    }
+
+    // Apple Silicon GPUs do not enforce a per-command-buffer timeout, so this
+    // test cannot trigger a GPU error on those devices. Restrict to Intel Macs
+    // where the AMD/Intel GPU watchdog timer will fire.
+    if (t.arch == Target::ARM) {
+        printf("[SKIP] Apple Silicon does not enforce Metal GPU timeouts\n");
         return 0;
     }
 
@@ -24,6 +30,8 @@ int main(int argc, char **argv) {
 
     f.gpu_tile(x, c, xi, ci, 4, 4);
     f.update(0).gpu_tile(r.x, c, rxi, ci, 4, 4);
+
+    bool errored = false;
 
     // Metal is surprisingly resilient.  Run this in a loop just to make sure we trigger the error.
     for (int i = 0; (i < 10) && !errored; i++) {

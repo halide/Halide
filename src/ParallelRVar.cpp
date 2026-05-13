@@ -110,7 +110,7 @@ bool can_parallelize_rvar(const string &v,
 
     // Make an expr representing the store done by a different thread.
     RenameFreeVars renamer;
-    auto other_store = renamer.mutate(args);
+    auto other_store = renamer(args);
 
     // Construct an expression which is true when the two threads are
     // in fact two different threads. We'll use this liberally in the
@@ -147,7 +147,7 @@ bool can_parallelize_rvar(const string &v,
     // Add the definition's predicate if there is any
     if (pred.defined() || !is_const_one(pred)) {
         const Expr &this_pred = pred;
-        Expr other_pred = renamer.mutate(pred);
+        Expr other_pred = renamer(pred);
         debug(3) << "......this thread predicate: " << this_pred << "\n";
         debug(3) << "......other thread predicate: " << other_pred << "\n";
         hazard = hazard && this_pred && other_pred;
@@ -156,7 +156,7 @@ bool can_parallelize_rvar(const string &v,
     debug(3) << "Attempting to falsify: " << hazard << "\n";
     // Pull out common non-boolean terms
     hazard = common_subexpression_elimination(hazard);
-    hazard = SubstituteInBooleanLets().mutate(hazard);
+    hazard = SubstituteInBooleanLets()(hazard);
     hazard = simplify(hazard, bounds);
     debug(3) << "Simplified to: " << hazard << "\n";
 

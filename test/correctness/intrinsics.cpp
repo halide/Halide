@@ -346,6 +346,11 @@ int main(int argc, char **argv) {
     check_intrinsics_over_range<int32_t>();
     check_intrinsics_over_range<uint32_t>();
 
+    // Signed integer overflow on the RHS of a shift used to cause infinite
+    // recursion (issue #9108)
+    Expr e = simplify(i32x << (i32x << 67));
+    check(e, e);
+
     // The intrinsics-matching pass substitutes in widening lets. At
     // one point this caused a missing symbol bug for the code below
     // due to a subexpression not getting mutated.

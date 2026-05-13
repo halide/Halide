@@ -67,7 +67,7 @@ bool Cache::add_memoized_blocks(const State *state,
         }
     }
 
-    // succesfully added cached items!
+    // successfully added cached items!
     return true;
 }
 

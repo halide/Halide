@@ -245,6 +245,20 @@ void CodeGen_GPU_C::visit(const Call *op) {
                 equiv.accept(this);
             }
         }
+    } else if (op->is_intrinsic(Call::strict_fma)) {
+        // All shader languages have fma
+        Expr equiv = Call::make(op->type, "fma", op->args, Call::PureExtern);
+        equiv.accept(this);
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GPU_C::visit(const Mod *op) {
+    if (op->type.is_float()) {
+        // All shader languages have fmod
+        Expr equiv = Call::make(op->type, "fmod", {op->a, op->b}, Call::PureExtern);
+        equiv.accept(this);
     } else {
         CodeGen_C::visit(op);
     }

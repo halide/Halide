@@ -27,8 +27,16 @@ set(common_cache_args
   "-DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>"
 )
 
-if (CMAKE_BUILD_TYPE)
-  list(APPEND common_cache_args "-DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}")
+# The Hexagon SDK toolchain only handles Release and Debug build types.
+# Map other types (e.g. RelWithDebInfo) to the appropriate one.
+if (CMAKE_BUILD_TYPE STREQUAL "" OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(_hexagon_build_type "${CMAKE_BUILD_TYPE}")
+else ()
+  set(_hexagon_build_type "Release")
+endif ()
+
+if (_hexagon_build_type)
+  list(APPEND common_cache_args "-DCMAKE_BUILD_TYPE:STRING=${_hexagon_build_type}")
 endif ()
 
 ExternalProject_Add(

@@ -201,7 +201,7 @@ private:
 
     Stmt unconditionally_set_current_func(int id) {
         Stmt s = Evaluate::make(Call::make(Int(32), "halide_profiler_set_current_func",
-                                           {profiler_instance, id, reinterpret(Handle(), cast<uint64_t>(0))}, Call::Extern));
+                                           {profiler_instance, id, reinterpret(Handle(), make_zero(UInt(64)))}, Call::Extern));
         return s;
     }
 
@@ -210,7 +210,7 @@ private:
             return Evaluate::make(0);
         }
         most_recently_set_func = id;
-        Expr last_arg = in_leaf_task ? profiler_local_sampling_token : reinterpret(Handle(), cast<uint64_t>(0));
+        Expr last_arg = in_leaf_task ? profiler_local_sampling_token : reinterpret(Handle(), make_zero(UInt(64)));
         // This call gets inlined and becomes a single store instruction.
         Stmt s = Evaluate::make(Call::make(Int(32), "halide_profiler_set_current_func",
                                            {profiler_instance, id, last_arg}, Call::Extern));
@@ -611,7 +611,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     Names names(pipeline_name);
 
     InjectProfiling profiling(names, env);
-    Stmt s = profiling.mutate(stmt);
+    Stmt s = profiling(stmt);
 
     int num_funcs = (int)(profiling.indices.size());
 

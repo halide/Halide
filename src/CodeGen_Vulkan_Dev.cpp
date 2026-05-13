@@ -126,7 +126,6 @@ protected:
 
         // Scalarize expressions
         void scalarize(const Expr &e);
-        SpvId map_type_to_pair(const Type &t);
 
         // Workgroup size
         void reset_workgroup_size();
@@ -203,6 +202,7 @@ protected:
             {"fast_pow_f32", GLSLstd450Pow},
             {"floor_f16", GLSLstd450Floor},
             {"floor_f32", GLSLstd450Floor},
+            {"fma", GLSLstd450Fma},
             {"log_f16", GLSLstd450Log},
             {"log_f32", GLSLstd450Log},
             {"sin_f16", GLSLstd450Sin},
@@ -243,7 +243,7 @@ protected:
         StorageBufferOffsetMap storage_buffer_offset_map;
 
         // Defines the binding information for a specialization constant
-        // that is exported by the module and can be overriden at runtime
+        // that is exported by the module and can be overridden at runtime
         struct SpecializationBinding {
             SpvId constant_id = 0;
             uint32_t type_size = 0;
@@ -260,7 +260,7 @@ protected:
         };
         using SharedMemoryUsage = std::vector<SharedMemoryAllocation>;
 
-        // Defines the specialization constants used for dynamically overiding the dispatch size
+        // Defines the specialization constants used for dynamically overriding the dispatch size
         struct WorkgroupSizeBinding {
             SpvId local_size_constant_id[3] = {0, 0, 0};  // zero if unused
         };
@@ -473,15 +473,6 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize(const Expr &e) {
         result_id = composite_id;
     }
     builder.update_id(result_id);
-}
-
-SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::map_type_to_pair(const Type &t) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::map_type_to_pair(): " << t << "\n";
-    SpvId base_type_id = builder.declare_type(t);
-    SpvBuilder::StructMemberTypes member_type_ids = {base_type_id, base_type_id};
-    const std::string struct_name = std::string("_struct_") + type_to_c_type(t, false, false) + std::string("_pair");
-    SpvId struct_type_id = builder.declare_struct(struct_name, member_type_ids);
-    return struct_type_id;
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Variable *var) {
@@ -1195,9 +1186,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
             e.accept(this);
         }
     } else if (op->is_strict_float_intrinsic()) {
-        // TODO: Enable/Disable RelaxedPrecision flags?
-        Expr e = unstrictify_float(op);
-        e.accept(this);
+        if (op->is_intrinsic(Call::strict_fma)) {
+            Expr builtin_call = Call::make(op->type, "fma", op->args, Call::PureExtern);
+            builtin_call.accept(this);
+        } else {
+            // TODO: Enable/Disable RelaxedPrecision flags?
+            Expr e = unstrictify_float(op);
+            e.accept(this);
+        }
     } else if (op->is_intrinsic(Call::IntrinsicOp::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         // b > a, so the following works without widening:
@@ -2080,31 +2076,21 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
         debug(3) << "\n";
 
         if (arg_ids.size() == 1) {
-
             // 1 argument, just do a simple assignment via a cast
             SpvId result_id = cast_type(op->type, op->vectors[0].type(), arg_ids[0]);
             builder.update_id(result_id);
 
         } else if (arg_ids.size() == 2) {
-
-            // 2 arguments, use a composite insert to update even and odd indices
-            uint32_t even_idx = 0;
-            uint32_t odd_idx = 1;
-            SpvFactory::Indices even_indices;
-            SpvFactory::Indices odd_indices;
-            for (int i = 0; i < op_lanes; ++i) {
-                even_indices.push_back(even_idx);
-                odd_indices.push_back(odd_idx);
-                even_idx += 2;
-                odd_idx += 2;
+            // 2 arguments, use vector-shuffle with logical indices indexing into (vec1[0], vec1[1], ..., vec2[0], vec2[1], ...)
+            SpvFactory::Indices logical_indices;
+            for (int i = 0; i < arg_lanes; ++i) {
+                logical_indices.push_back(uint32_t(i));
+                logical_indices.push_back(uint32_t(i + arg_lanes));
             }
 
             SpvId type_id = builder.declare_type(op->type);
-            SpvId value_id = builder.declare_null_constant(op->type);
-            SpvId partial_id = builder.reserve_id(SpvResultId);
             SpvId result_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::composite_insert(type_id, partial_id, arg_ids[0], value_id, even_indices));
-            builder.append(SpvFactory::composite_insert(type_id, result_id, arg_ids[1], partial_id, odd_indices));
+            builder.append(SpvFactory::vector_shuffle(type_id, result_id, arg_ids[0], arg_ids[1], logical_indices));
             builder.update_id(result_id);
 
         } else {
@@ -2134,7 +2120,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
     } else if (op->is_extract_element()) {
         int idx = op->indices[0];
         internal_assert(idx >= 0);
-        internal_assert(idx <= op->vectors[0].type().lanes());
+        internal_assert(idx < op->vectors[0].type().lanes());
         if (op->vectors[0].type().is_vector()) {
             SpvFactory::Indices indices = {(uint32_t)idx};
             SpvId type_id = builder.declare_type(op->type);
@@ -2371,7 +2357,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_header(SpvBinary &spirv_header) {
     // ... [4] Dynamic workgroup dimensions bound to specialization constants
     // ....... [0] Constant id to use for local_size_x (zero if it was statically declared and not bound to a specialization constant)
     // ....... [1] Constant id to use for local_size_y
-    // ....... [2] Constant id ot use for local_size_z
+    // ....... [2] Constant id to use for local_size_z
     //
     // NOTE: Halide's Vulkan runtime consumes this header prior to compiling.
     //

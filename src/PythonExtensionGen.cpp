@@ -15,6 +15,18 @@ using std::string;
 
 namespace {
 
+// See normalize_line_endings in CodeGen_C.cpp for rationale.
+string normalize_line_endings(const char *s) {
+    string result;
+    result.reserve(strlen(s));
+    for (; *s; ++s) {
+        if (*s != '\r') {
+            result += *s;
+        }
+    }
+    return result;
+}
+
 string sanitize_name(const string &name) {
     ostringstream oss;
     for (char c : name) {
@@ -95,7 +107,7 @@ std::pair<string, string> print_type(const LoweredArgument *arg) {
     }
 }
 
-const char kModuleRegistrationCode[] = R"INLINE_CODE(
+const string kModuleRegistrationCode = normalize_line_endings(R"INLINE_CODE(
 static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");
 
 namespace Halide::PythonExtensions {
@@ -271,7 +283,7 @@ HALIDE_EXPORT_SYMBOL PyObject *_HALIDE_EXPAND_AND_CONCAT(PyInit_, HALIDE_PYTHON_
 }
 
 }  // extern "C"
-)INLINE_CODE";
+)INLINE_CODE");
 
 }  // namespace
 
@@ -300,7 +312,7 @@ void PythonExtensionGen::compile(const Module &module) {
             extern_decl_gen.compile(module);
         }
 
-        dest << R"INLINE_CODE(
+        dest << normalize_line_endings(R"INLINE_CODE(
 namespace Halide::PythonRuntime {
 extern bool unpack_buffer(PyObject *py_obj,
                           int py_getbuffer_flags,
@@ -389,7 +401,7 @@ private:
 
 }  // namespace
 
-)INLINE_CODE";
+)INLINE_CODE");
 
         for (const auto &f : module.functions()) {
             if (f.linkage == LinkageType::ExternalPlusMetadata) {

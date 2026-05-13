@@ -339,13 +339,6 @@ const halide_scalar_value_t *make_scalar(double v) {
     return s;
 }
 
-template<>
-const halide_scalar_value_t *make_scalar(void *v) {
-    halide_scalar_value_t *s = new halide_scalar_value_t();
-    s->u.handle = v;
-    return s;
-}
-
 constexpr int64_t NO_VALUE = (int64_t)0xFFFFFFFFFFFFFFFF;
 
 int64_t const *const *make_int64_array(const std::vector<int64_t> &v) {
@@ -1586,10 +1579,10 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    constexpr auto usig = compute_signature(metadata_tester_ucon_argument_info());
-    if (strcmp(&usig[0], "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+    constexpr auto ucon_sig = compute_signature(metadata_tester_ucon_argument_info());
+    if (strcmp(&ucon_sig[0], "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
         // NOLINTNEXTLINE(clang-diagnostic-unreachable-code)
-        std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &usig[0] << "\n";
+        std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &ucon_sig[0] << "\n";
         exit(1);
     }
 

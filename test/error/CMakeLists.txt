@@ -1,6 +1,7 @@
 tests(GROUPS error
       EXPECT_FAILURE
       SOURCES
+      # keep-sorted start
       ambiguous_inline_reductions.cpp
       async_require_fail.cpp
       atomics_gpu_8_bit.cpp
@@ -20,16 +21,16 @@ tests(GROUPS error
       bad_const_cast.cpp
       bad_device_api.cpp
       bad_dimensions.cpp
-      bad_ring_buffer.cpp
       bad_extern_split.cpp
       bad_fold.cpp
       bad_func_object.cpp
-      bad_host_alignment.cpp
       bad_hoist_storage.cpp
+      bad_host_alignment.cpp
       bad_partition_always.cpp
       bad_prefetch.cpp
       bad_reorder.cpp
       bad_reorder_storage.cpp
+      bad_ring_buffer.cpp
       bad_rvar_order.cpp
       bad_schedule.cpp
       bad_store_at.cpp
@@ -41,6 +42,7 @@ tests(GROUPS error
       callable_typed_bad_arguments_buffer_dims.cpp
       callable_typed_bad_arguments_buffer_type.cpp
       clamp_out_of_range.cpp
+      compute_at_on_output.cpp
       compute_with_crossing_edges1.cpp
       compute_with_crossing_edges2.cpp
       compute_with_fuse_in_specialization.cpp
@@ -66,6 +68,7 @@ tests(GROUPS error
       func_tuple_types_mismatch.cpp
       func_tuple_update_types_mismatch.cpp
       fuse_vectorized_var_with_rvar.cpp
+      hoist_storage_extern.cpp
       hoist_storage_without_compute_at.cpp
       implicit_args.cpp
       impossible_constraints.cpp
@@ -87,8 +90,8 @@ tests(GROUPS error
       null_host_field.cpp
       overflow_during_constant_folding.cpp
       pointer_arithmetic.cpp
-      race_condition.cpp
       predicate_loads_used_in_inner_splits.cpp
+      race_condition.cpp
       rdom_undefined.cpp
       rdom_where_races.cpp
       realization_with_too_many_outputs.cpp
@@ -137,4 +140,5 @@ tests(GROUPS error
       wrapper_never_used.cpp
       wrong_dimensionality_extern_stage.cpp
       wrong_type.cpp
+      # keep-sorted end
       )

@@ -1369,7 +1369,7 @@ void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     target.set(context.target_);
     autoscheduler_.set(context.autoscheduler_params_);
 
-    // pre-emptively build our param_info now
+    // preemptively build our param_info now
     internal_assert(param_info_ptr == nullptr);
     param_info_ptr = std::make_unique<GeneratorParamInfo>(this, size);
 }
@@ -1806,7 +1806,7 @@ void GIOBase::verify_internals() {
         }
     } else {
         for (const Expr &e : exprs()) {
-            user_assert(e.defined()) << "Input/Ouput " << name() << " is not defined.\n";
+            user_assert(e.defined()) << "Input/Output " << name() << " is not defined.\n";
             user_assert(e.type() == gio_type())
                 << "Expected type " << gio_type()
                 << " but got " << e.type()
@@ -2167,7 +2167,7 @@ void generator_test() {
         const std::vector<uint64_t> a = {1, 2, 3, 4};
         Var x;
         Func fn_typed, fn_untyped;
-        fn_typed(x) = cast<int16_t>(38);
+        fn_typed(x) = make_const(Int(16), 38);
         fn_untyped(x) = 32.f;
         const std::vector<Func> fn_array = {fn_untyped, fn_untyped};
 

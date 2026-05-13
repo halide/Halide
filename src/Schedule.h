@@ -95,7 +95,7 @@ enum class TailStrategy {
      * branching. It increases code size slightly for inner loops
      * due to the epilogue handling, but not for outer loops
      * (e.g. loops over tiles). If used on a stage that reads from
-     * an input or writes to an output, this stategy only requires
+     * an input or writes to an output, this strategy only requires
      * that the input/output extent be at least the split factor,
      * instead of a multiple of the split factor as with RoundUp. */
     ShiftInwards,
@@ -236,6 +236,13 @@ public:
 
     /** Mutate our contents to match the contents of 'other'. */
     void set(const LoopLevel &other);
+
+    // Default copy and assignment. Unlike set(), which mutates the
+    // existing contents, assignment replaces the contents pointer.
+    LoopLevel(const LoopLevel &) = default;
+    LoopLevel &operator=(const LoopLevel &) = default;
+    LoopLevel(LoopLevel &&) = default;
+    LoopLevel &operator=(LoopLevel &&) = default;
 
     // All the public methods below this point are meant only for internal
     // use by Halide, rather than user code; hence, they are deliberately

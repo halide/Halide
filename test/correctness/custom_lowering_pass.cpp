@@ -18,6 +18,7 @@ class CheckForFloatDivision : public IRMutator {
             std::cerr << "Found floating-point division by constant: " << Expr(op) << "\n";
             exit(1);
         }
+        IRMutator::visit(op);
         return op;
     }
 };

@@ -50,7 +50,7 @@ public:
 }  // namespace
 
 Stmt select_gpu_api(const Stmt &s, const Target &t) {
-    return SelectGPUAPI(t).mutate(s);
+    return SelectGPUAPI(t)(s);
 }
 
 }  // namespace Internal

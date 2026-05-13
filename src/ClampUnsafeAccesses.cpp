@@ -107,7 +107,7 @@ private:
 }  // namespace
 
 Stmt clamp_unsafe_accesses(const Stmt &s, const std::map<std::string, Function> &env, FuncValueBounds &func_bounds) {
-    return ClampUnsafeAccesses(env, func_bounds).mutate(s);
+    return ClampUnsafeAccesses(env, func_bounds)(s);
 }
 
 }  // namespace Halide::Internal

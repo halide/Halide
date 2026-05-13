@@ -88,7 +88,7 @@ int load_library(const char *soname, const unsigned char *code, int codeLen, han
     // Open the library
     dllib_init();
     // We need to use RTLD_NOW, the libraries we build for Hexagon
-    // offloading do not support lazy bindin.
+    // offloading do not support lazy binding.
     lib = dlopenbuf(soname, (const char *)code, codeLen, RTLD_LOCAL | RTLD_NOW);
     if (!lib) {
         halide_print(NULL, "dlopenbuf failed\n");

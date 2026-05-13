@@ -4,8 +4,8 @@ find_package(
 )
 get_target_property(VulkanHeaders_INCLUDE_DIR Vulkan::Headers INTERFACE_INCLUDE_DIRECTORIES)
 
-# Keep these lists in alphabetical order.
 set(RUNTIME_CPP
+    # keep-sorted start ignore_prefixes=#
     aarch64_cpu_features
     alignment_128
     alignment_32
@@ -106,9 +106,11 @@ set(RUNTIME_CPP
     windows_yield
     write_debug_image
     x86_cpu_features
+    # keep-sorted end
 )
 
 set(RUNTIME_LL
+    # keep-sorted start
     aarch64
     arm
     arm_no_neon
@@ -124,15 +126,19 @@ set(RUNTIME_LL
     x86_avx2
     x86_avx512
     x86_sse41
+    # keep-sorted end
 )
 
 set(RUNTIME_BC
+    # keep-sorted start
     compute_20
     compute_30
     compute_35
+    # keep-sorted end
 )
 
 set(RUNTIME_HEADER_FILES
+    # keep-sorted start
     HalideBuffer.h
     HalidePyTorchCudaHelpers.h
     HalidePyTorchHelpers.h
@@ -146,6 +152,7 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeQurt.h
     HalideRuntimeVulkan.h
     HalideRuntimeWebGPU.h
+    # keep-sorted end
 )
 
 # Need to create an object library for this because CMake

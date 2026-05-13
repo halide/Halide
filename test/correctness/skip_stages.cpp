@@ -245,7 +245,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        // Check the interation with storage hoisting
+        // Check the iteration with storage hoisting
 
         // This Func may or may not be loaded, depending on y
         Func maybe_loaded("maybe_loaded");

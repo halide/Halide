@@ -1,20 +1,17 @@
 #include "FindIntrinsics.h"
 #include "CSE.h"
-#include "CodeGen_Internal.h"
-#include "ConciseCasts.h"
 #include "ConstantBounds.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
+#include "IRVisitor.h"
 #include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
 
-using namespace Halide::ConciseCasts;
-
 namespace {
 
-// This routine provides a guard on the return type of intrisics such that only
+// This routine provides a guard on the return type of intrinsics such that only
 // these types will ever be considered in the visiting that happens here.
 bool find_intrinsics_for_type(const Type &t) {
     // Currently, we only try to find and replace intrinsics for vector types that aren't bools.
@@ -79,7 +76,7 @@ Expr find_and_subtract(const Expr &e, const Expr &round) {
         if (a.defined()) {
             return Sub::make(a, sub->b);
         }
-        // We can't recurse into the negatve part of a subtract.
+        // We can't recurse into the negative part of a subtract.
     } else if (can_prove(e == round)) {
         return make_zero(e.type());
     }
@@ -130,6 +127,13 @@ protected:
             internal_assert(c->args.size() == 2);
             Expr a = c->args[0];
             Expr b = c->args[1];
+
+            if (Call::as_intrinsic(b, {Call::signed_integer_overflow})) {
+                // Letting signed integer overflow through here would result in
+                // infinite recursion when we try to construct the rounding
+                // terms.
+                return Expr{};
+            }
 
             // Helper to make the appropriate shift.
             auto rounding_shift = [&](const Expr &a, const Expr &b) {
@@ -206,7 +210,7 @@ protected:
             }
         }
 
-        return Expr();
+        return Expr{};
     }
 
     template<typename LetOrLetStmt>
@@ -1121,6 +1125,7 @@ protected:
 // because each let in a chain has a wider value than the
 // ones it refers to.
 class SubstituteInWideningLets : public IRMutator {
+protected:
     using IRMutator::visit;
 
     bool widens(const Expr &e) {
@@ -1220,7 +1225,7 @@ class SubstituteInWideningLets : public IRMutator {
 
             if (should_replace) {
                 size_t start_of_new_lets = frames.size();
-                value = extractor.mutate(value);
+                value = extractor(value);
                 // Mutate any subexpressions the extractor decided to
                 // leave behind, in case they in turn depend on lets
                 // we've decided to substitute in.
@@ -1266,16 +1271,16 @@ class SubstituteInWideningLets : public IRMutator {
 }  // namespace
 
 Stmt find_intrinsics(const Stmt &s) {
-    Stmt stmt = SubstituteInWideningLets().mutate(s);
-    stmt = FindIntrinsics().mutate(stmt);
+    Stmt stmt = SubstituteInWideningLets()(s);
+    stmt = FindIntrinsics()(stmt);
     // In case we want to hoist widening ops back out
     stmt = common_subexpression_elimination(stmt);
     return stmt;
 }
 
 Expr find_intrinsics(const Expr &e) {
-    Expr expr = SubstituteInWideningLets().mutate(e);
-    expr = FindIntrinsics().mutate(expr);
+    Expr expr = SubstituteInWideningLets()(e);
+    expr = FindIntrinsics()(expr);
     expr = common_subexpression_elimination(expr);
     return expr;
 }
@@ -1651,11 +1656,11 @@ class LowerIntrinsics : public IRMutator {
 }  // namespace
 
 Expr lower_intrinsics(const Expr &e) {
-    return LowerIntrinsics().mutate(e);
+    return LowerIntrinsics()(e);
 }
 
 Stmt lower_intrinsics(const Stmt &s) {
-    return LowerIntrinsics().mutate(s);
+    return LowerIntrinsics()(s);
 }
 
 }  // namespace Internal

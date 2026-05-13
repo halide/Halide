@@ -328,7 +328,7 @@ struct SequenceType {
 
 //byte offset from the start of the case values for
 //this unions case value array.  it MUST be aligned
-//at the alignment requrements for the descriptor
+//at the alignment requirements for the descriptor
 //
 //if negative it means that the unions cases are
 //simple enumerators, so the value read from the descriptor

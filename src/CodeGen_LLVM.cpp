@@ -4,9 +4,9 @@
 
 #include "CPlusPlusMangle.h"
 #include "CSE.h"
+#include "CodeGen_CPU.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
-#include "CodeGen_Posix.h"
 #include "CodeGen_Targets.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
@@ -407,11 +407,7 @@ void CodeGen_LLVM::init_codegen(const std::string &name) {
 
     internal_assert(module && context);
 
-#if LLVM_VERSION >= 210
     debug(1) << "Target triple of initial module: " << module->getTargetTriple().str() << "\n";
-#else
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-#endif
 
     module->setModuleIdentifier(name);
 
@@ -1363,10 +1359,6 @@ void CodeGen_LLVM::codegen(const Stmt &s) {
     s.accept(this);
 }
 
-bool CodeGen_LLVM::is_power_of_two(int x) const {
-    return (x & (x - 1)) == 0;
-}
-
 Type CodeGen_LLVM::upgrade_type_for_arithmetic(const Type &t) const {
     if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
         return Float(32, t.lanes());
@@ -1397,6 +1389,10 @@ Type CodeGen_LLVM::upgrade_type_for_storage(const Type &t) const {
     } else {
         return t;
     }
+}
+
+void CodeGen_LLVM::set_effective_vscale(int vscale) {
+    effective_vscale = vscale;
 }
 
 void CodeGen_LLVM::visit(const IntImm *op) {
@@ -1515,6 +1511,17 @@ void CodeGen_LLVM::visit(const Reinterpret *op) {
         llvm::Type *llvm_dst_fixed = get_vector_type(llvm_type_of(dst.element_of()), dst.lanes(), VectorTypeConstraint::Fixed);
         value = builder->CreateBitOrPointerCast(value, llvm_dst_fixed);
         value = fixed_to_scalable_vector_type(value);
+    } else if (isa<FixedVectorType>(value->getType()) && isa<ScalableVectorType>(llvm_dst)) {
+        // Cannot bitcast/ptrtoint directly between fixed and scalable vectors.
+        // First cast to a fixed vector of the destination element type, then convert to scalable.
+        llvm::Type *llvm_dst_fixed = get_vector_type(llvm_dst->getScalarType(), dst.lanes(), VectorTypeConstraint::Fixed);
+        value = builder->CreateBitOrPointerCast(value, llvm_dst_fixed);
+        value = fixed_to_scalable_vector_type(value);
+    } else if (isa<ScalableVectorType>(value->getType()) && isa<FixedVectorType>(llvm_dst)) {
+        // Cannot bitcast/ptrtoint directly between scalable and fixed vectors.
+        // First convert to a fixed vector of the source element type, then cast.
+        value = scalable_to_fixed_vector_type(value);
+        value = builder->CreateBitOrPointerCast(value, llvm_dst);
     } else {
         // Our `Reinterpret` expr directly maps to LLVM IR bitcast/ptrtoint/inttoptr
         // instructions with no additional handling required:
@@ -1782,7 +1789,7 @@ void CodeGen_LLVM::visit(const LT *op) {
     Value *b = codegen(op->b);
     if (t.is_float()) {
         ScopedFastMath guard(this);
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "olt")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "olt")) {  // codespell:ignore olt
             value = builder->CreateFCmpOLT(a, b);
         }
     } else if (t.is_int()) {
@@ -2200,10 +2207,13 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
         internal_assert(vecs[0]->getType() == vecs[i]->getType());
     }
     int vec_elements = get_vector_num_elements(vecs[0]->getType());
+    const int num_vecs = (int)vecs.size();
 
-    if (vecs.size() == 1) {
+    int factor = gcd(vec_elements, num_vecs);
+
+    if (num_vecs == 1) {
         return vecs[0];
-    } else if (vecs.size() == 2) {
+    } else if (num_vecs == 2) {
         Value *a = vecs[0];
         Value *b = vecs[1];
         vector<int> indices(vec_elements * 2);
@@ -2211,57 +2221,251 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
             indices[i] = i % 2 == 0 ? i / 2 : i / 2 + vec_elements;
         }
         return shuffle_vectors(a, b, indices);
+    } else if (factor == 1) {
+        // The number of vectors and the vector length is
+        // coprime. (E.g. interleaving an odd number of vectors of some
+        // power-of-two length). Use the algorithm from "A Decomposition for
+        // In-place Matrix Transposition" by Catanzaro et al.
+        std::vector<Value *> v = vecs;
+
+        // Using unary shuffles, get each element into the right ultimate
+        // lane. This works out without collisions because the number of vectors
+        // and the length of each vector is coprime.
+        std::vector<int> shuffle(vec_elements);
+        for (int i = 0; i < num_vecs; i++) {
+            for (int j = 0; j < vec_elements; j++) {
+                int k = j * num_vecs + i;
+                shuffle[k % vec_elements] = j;
+            }
+            v[i] = shuffle_vectors(v[i], v[i], shuffle);
+        }
+
+        // We intentionally don't put an optimization fence after the unary
+        // shuffles, because some architectures have a two-way shuffle, so it
+        // helps to fuse the unary shuffle into the first layer of two-way
+        // blends below.
+
+        // Now we need to transfer the elements across the vectors. If we
+        // reorder the vectors, this becomes a rotation across the vectors of a
+        // different amount per lane.
+        std::vector<Value *> new_v(v.size());
+        for (int i = 0; i < num_vecs; i++) {
+            int j = (i * vec_elements) % num_vecs;
+            new_v[i] = v[j];
+        }
+        v.swap(new_v);
+
+        std::vector<int> rotation(vec_elements, 0);
+        for (int i = 0; i < vec_elements; i++) {
+            int k = (i * num_vecs) % vec_elements;
+            rotation[k] = (i * num_vecs) / vec_elements;
+        }
+        internal_assert(rotation[0] == 0);
+
+        // We'll handle each bit of the rotation one at a time with a two-way
+        // shuffle.
+        int d = 1;
+        while (d < num_vecs) {
+
+            for (int i = 0; i < vec_elements; i++) {
+                shuffle[i] = ((rotation[i] & d) == 0) ? i : (i + vec_elements);
+            }
+
+            for (int i = 0; i < num_vecs; i++) {
+                int j = (i + num_vecs - d) % num_vecs;
+                new_v[i] = shuffle_vectors(v[i], v[j], shuffle);
+            }
+
+            v.swap(new_v);
+
+            d *= 2;
+        }
+
+        return concat_vectors(v);
     } else {
-        // Grab the even and odd elements of vecs.
-        vector<Value *> even_vecs;
-        vector<Value *> odd_vecs;
-        for (size_t i = 0; i < vecs.size(); i++) {
-            if (i % 2 == 0) {
-                even_vecs.push_back(vecs[i]);
-            } else {
-                odd_vecs.push_back(vecs[i]);
-            }
-        }
-
-        // If the number of vecs is odd, save the last one for later.
-        Value *last = nullptr;
-        if (even_vecs.size() > odd_vecs.size()) {
-            last = even_vecs.back();
-            even_vecs.pop_back();
-        }
-        internal_assert(even_vecs.size() == odd_vecs.size());
-
-        // Interleave the even and odd parts.
-        Value *even = interleave_vectors(even_vecs);
-        Value *odd = interleave_vectors(odd_vecs);
-
-        if (last) {
-            int result_elements = vec_elements * vecs.size();
-
-            // Interleave even and odd, leaving a space for the last element.
-            vector<int> indices(result_elements, -1);
-            for (int i = 0, idx = 0; i < result_elements; i++) {
-                if (i % vecs.size() < vecs.size() - 1) {
-                    indices[i] = idx % 2 == 0 ? idx / 2 : idx / 2 + vec_elements * even_vecs.size();
-                    idx++;
+        // The number of vectors shares a factor with the length of the
+        // vectors. Pick some factor of the number of vectors, interleave in
+        // separate groups, and then interleave the results. Do the largest
+        // power of two factor first.
+        int f = largest_power_of_two_factor(num_vecs);
+        if (f == 1 || f == num_vecs) {
+            for (int i = 2; i < num_vecs; i++) {
+                if (num_vecs % i == 0) {
+                    f = i;
+                    break;
                 }
             }
-            Value *even_odd = shuffle_vectors(even, odd, indices);
+        }
 
-            // Interleave the last vector into the result.
-            last = slice_vector(last, 0, result_elements);
-            for (int i = 0; i < result_elements; i++) {
-                if (i % vecs.size() < vecs.size() - 1) {
-                    indices[i] = i;
-                } else {
-                    indices[i] = i / vecs.size() + result_elements;
-                }
+        // if f == 1 then the vector length is a multiple of the
+        // interleaving factor and the number of vectors is prime but not two
+        // (e.g. vec_elements = 24 and num_vecs = 3). Pad each vector out to a
+        // power of two size, interleave, and discard the tail of the
+        // result. This buys us some extra room to run Catanzaro's algorithm in.
+        if (f == 1) {
+            int padded_size = next_power_of_two(vec_elements);
+            std::vector<Value *> padded(num_vecs);
+            for (int i = 0; i < num_vecs; i++) {
+                // slice_vector can also be used to pad with don't cares
+                padded[i] = slice_vector(vecs[i], 0, padded_size);
+            }
+            Value *v = interleave_vectors(padded);
+            return slice_vector(v, 0, num_vecs * vec_elements);
+        }
+
+        internal_assert(f > 1 && f < num_vecs && num_vecs % f == 0)
+            << f << " " << num_vecs << " " << factor;
+
+        vector<vector<Value *>> groups(f);
+        for (int i = 0; i < num_vecs; i++) {
+            groups[i % f].push_back(vecs[i]);
+        }
+
+        // Interleave each group
+        vector<Value *> interleaved(f);
+        for (int i = 0; i < f; i++) {
+            interleaved[i] = optimization_fence(interleave_vectors(groups[i]));
+        }
+
+        // Interleave the result
+        return interleave_vectors(interleaved);
+    }
+}
+
+std::vector<Value *> CodeGen_LLVM::deinterleave_vector(Value *vec, int num_vecs) {
+    int vec_elements = get_vector_num_elements(vec->getType());
+    internal_assert(vec_elements % num_vecs == 0);
+    vec_elements /= num_vecs;
+
+    int factor = gcd(vec_elements, num_vecs);
+
+    if (num_vecs == 1) {
+        return {vec};
+    } else if (num_vecs == 2) {
+        std::vector<Value *> result(2);
+        std::vector<int> indices(vec_elements);
+        for (int i = 0; i < vec_elements; i++) {
+            indices[i] = i * 2;
+        }
+        result[0] = shuffle_vectors(vec, vec, indices);
+        for (int i = 0; i < vec_elements; i++) {
+            indices[i]++;
+        }
+        result[1] = shuffle_vectors(vec, vec, indices);
+        return result;
+    } else if (factor == 1) {
+        // Use the inverse of Catanzaro's algorithm from above. We slice into
+        // distinct vectors, then rotate each element into the correct final
+        // vector, then do a unary permutation of each vector.
+
+        // Instead of concatenating, we slice.
+        std::vector<Value *> v(num_vecs);
+        for (int i = 0; i < num_vecs; i++) {
+            v[i] = slice_vector(vec, i * vec_elements, vec_elements);
+        }
+
+        // Compute the same rotation as above
+        std::vector<int> rotation(vec_elements, 0);
+        for (int i = 0; i < vec_elements; i++) {
+            int k = (i * num_vecs) % vec_elements;
+            rotation[k] = (i * num_vecs) / vec_elements;
+        }
+        internal_assert(rotation[0] == 0);
+
+        // We'll handle each bit of the rotation one at a time with a two-way
+        // shuffle.
+        std::vector<int> shuffle(vec_elements);
+        std::vector<Value *> new_v(v.size());
+        int d = 1;
+        while (d < num_vecs) {
+
+            for (int i = 0; i < vec_elements; i++) {
+                shuffle[i] = ((rotation[i] & d) == 0) ? i : (i + vec_elements);
             }
 
-            return shuffle_vectors(even_odd, last, indices);
-        } else {
-            return interleave_vectors({even, odd});
+            for (int i = 0; i < num_vecs; i++) {
+                // The rotation is in the opposite direction to the interleaving
+                // version, so num_vecs - d becomes just d.
+                int j = (i + d) % num_vecs;
+                // An optimization fence here keeps it as a blend and stops it
+                // from getting fused with the unary shuffle below.
+                new_v[i] = optimization_fence(shuffle_vectors(v[i], v[j], shuffle));
+            }
+
+            v.swap(new_v);
+            d *= 2;
         }
+
+        // Now reorder the vectors in the inverse order to the above.
+        for (int i = 0; i < num_vecs; i++) {
+            int j = (i * vec_elements) % num_vecs;
+            // j and i are swapped below, because we're doing the inverse of the
+            // algorithm above. This map is 1:1 because vec_elements and
+            // num_vecs are coprime, so every slot of new_v is stored to.
+            new_v[j] = v[i];
+        }
+        v.swap(new_v);
+
+        // The elements are now in the correct vector. Finish up with a unary
+        // shuffle of each.
+        for (int i = 0; i < num_vecs; i++) {
+            for (int j = 0; j < vec_elements; j++) {
+                int k = j * num_vecs + i;
+                // This is the inverse shuffle of the interleaving version, so
+                // the index and the arg of the assignment below are swapped
+                // compared to the above.
+                shuffle[j] = k % vec_elements;
+            }
+
+            v[i] = shuffle_vectors(v[i], v[i], shuffle);
+        }
+
+        return v;
+
+    } else {
+        // Do a lower-factor deinterleave, then deinterleave each result
+        // again. We know there's a non-trivial factor because if it were prime
+        // the gcd above would have been 1. Do the largest power-of-two factor
+        // first.
+        int f = largest_power_of_two_factor(num_vecs);
+        if (f == 1 || f == num_vecs) {
+            for (int i = 2; i < num_vecs; i++) {
+                if (num_vecs % i == 0) {
+                    f = i;
+                    break;
+                }
+            }
+        }
+
+        // if f == 1 then the final vector length is a multiple of the
+        // deinterleaving factor and the number of vectors is prime but not two
+        // (e.g. vec_elements = 24 and num_vecs = 3). Pad the vector out to a
+        // power of two size, deinterleave, and discard the tail of each vector
+        // result. This buys us some extra room to run Catanzaro's algorithm in.
+        if (f == 1) {
+            int padded_size = next_power_of_two(vec_elements);
+            Value *padded = slice_vector(vec, 0, padded_size * num_vecs);
+            std::vector<Value *> result = deinterleave_vector(padded, num_vecs);
+            for (int i = 0; i < num_vecs; i++) {
+                result[i] = slice_vector(result[i], 0, vec_elements);
+            }
+            return result;
+        }
+
+        internal_assert(f > 1 && f < num_vecs && num_vecs % f == 0)
+            << f << " " << num_vecs << " " << factor;
+
+        auto partial = deinterleave_vector(vec, f);
+        std::vector<Value *> result(num_vecs);
+        for (size_t i = 0; i < partial.size(); i++) {
+            Value *v = partial[i];
+            auto vecs = deinterleave_vector(v, num_vecs / f);
+            for (size_t j = 0; j < vecs.size(); j++) {
+                result[j * f + i] = vecs[j];
+            }
+        }
+
+        return result;
     }
 }
 
@@ -3319,6 +3523,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         // Evaluate the args first outside the strict scope, as they may use
         // non-strict operations.
         std::vector<Expr> new_args(op->args.size());
+        std::vector<std::string> to_pop;
         for (size_t i = 0; i < op->args.size(); i++) {
             const Expr &arg = op->args[i];
             if (arg.as<Variable>() || is_const(arg)) {
@@ -3326,21 +3531,44 @@ void CodeGen_LLVM::visit(const Call *op) {
             } else {
                 std::string name = unique_name('t');
                 sym_push(name, codegen(arg));
+                to_pop.push_back(name);
                 new_args[i] = Variable::make(arg.type(), name);
             }
         }
 
-        Expr call = Call::make(op->type, op->name, new_args, op->call_type);
         {
             ScopedValue<bool> old_in_strict_float(in_strict_float, true);
-            value = codegen(unstrictify_float(call.as<Call>()));
+            if (op->is_intrinsic(Call::strict_fma)) {
+                if (op->type.is_float() && op->type.bits() <= 16 &&
+                    upgrade_type_for_arithmetic(op->type) != op->type) {
+                    // For (b)float16 and below, doing the fma as a
+                    // double-precision fma is exact and is what llvm does. A
+                    // double has enough bits of precision such that the add in
+                    // the fma has no rounding error in the cases where the fma
+                    // is going to return a finite float16. We do this
+                    // legalization manually so that we can use our custom
+                    // vectorizable float16 casts instead of letting llvm call
+                    // library functions.
+                    Type wide_t = Float(64, op->type.lanes());
+                    for (Expr &e : new_args) {
+                        e = cast(wide_t, e);
+                    }
+                    Expr equiv = Call::make(wide_t, op->name, new_args, op->call_type);
+                    equiv = cast(op->type, equiv);
+                    value = codegen(equiv);
+                } else {
+                    std::string name = "llvm.fma" + mangle_llvm_type(llvm_type_of(op->type));
+                    value = call_intrin(op->type, op->type.lanes(), name, new_args);
+                }
+            } else {
+                // Lower to something other than a call node
+                Expr call = Call::make(op->type, op->name, new_args, op->call_type);
+                value = codegen(unstrictify_float(call.as<Call>()));
+            }
         }
 
-        for (size_t i = 0; i < op->args.size(); i++) {
-            const Expr &arg = op->args[i];
-            if (!arg.as<Variable>() && !is_const(arg)) {
-                sym_pop(new_args[i].as<Variable>()->name);
-            }
+        for (const auto &s : to_pop) {
+            sym_pop(s);
         }
 
     } else if (is_float16_transcendental(op) && !supports_call_as_float16(op)) {
@@ -3362,11 +3590,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", fn);
             IRBuilderBase::InsertPoint here = builder->saveIP();
             builder->SetInsertPoint(block);
-#if LLVM_VERSION >= 210
             Value *ret = builder->CreateVScale(i32_t);
-#else
-            Value *ret = builder->CreateVScale(ConstantInt::get(i32_t, 1));
-#endif
             builder->CreateRet(ret);
 
             // To avoid vscale_range(n,n) added in CodeGen_Internal
@@ -3962,7 +4186,7 @@ void CodeGen_LLVM::codegen_asserts(const vector<const AssertStmt *> &asserts) {
 
     // Mix all the conditions together into a bitmask
 
-    Expr bitmask = cast<uint64_t>(1) << 63;
+    Expr bitmask = make_const(UInt(64), ((uint64_t)1) << 63);
     for (size_t i = 0; i < asserts.size(); i++) {
         bitmask = bitmask | (cast<uint64_t>(!asserts[i]->condition) << i);
     }
@@ -4128,13 +4352,33 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             } else {
                 internal_assert(op->indices[0] == 0);
             }
-            value = create_broadcast(value, op->indices.size());
+            if (op->indices.size() > 1) {
+                value = create_broadcast(value, op->indices.size());
+            }
             return;
         }
     }
 
     if (op->is_interleave()) {
         value = interleave_vectors(vecs);
+    } else if (op->is_transpose()) {
+        int cols = op->transpose_factor();
+        int rows = op->vectors[0].type().lanes() / cols;
+        if (is_power_of_two(cols) &&
+            !is_power_of_two(rows)) {
+            // We're doing something like vectorizing over c and x when storing
+            // packed rgb. Best handled as an interleave.
+            std::vector<Value *> slices(rows);
+            for (int i = 0; i < rows; i++) {
+                slices[i] = slice_vector(vecs[0], i * cols, cols);
+            }
+            value = interleave_vectors(slices);
+        } else {
+            // Deinterleave out the cols of the input matrix and concat
+            // them. Occurs when, for example, loading packed RGB and
+            // vectorizing across x.
+            value = concat_vectors(deinterleave_vector(vecs[0], cols));
+        }
     } else if (op->is_concat()) {
         value = concat_vectors(vecs);
     } else {
@@ -4314,10 +4558,12 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         const int input_lanes = val.type().lanes();
         const int input_bytes = input_lanes * val.type().bytes();
         const int vscale = std::max(effective_vscale, 1);
+        // LLVM added VECREDUCE_MUL/FMUL lowering for SVE in LLVM 22.
+        const bool mul_ok = LLVM_VERSION >= 220 || effective_vscale == 0;
         const bool llvm_has_intrinsic =
             // Must be one of these ops
             ((op->op == VectorReduce::Add ||
-              op->op == VectorReduce::Mul ||
+              (op->op == VectorReduce::Mul && mul_ok) ||
               op->op == VectorReduce::Min ||
               op->op == VectorReduce::Max) &&
              (use_llvm_vp_intrinsics ||
@@ -4612,6 +4858,12 @@ void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &
 }
 
 Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args) {
+    return call_overloaded_intrin(result_type, name, args, intrinsics);
+}
+
+Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args,
+                                            const IntrinsicsMap &overloaded_intrinsics) {
+
     constexpr int debug_level = 4;
 
     debug(debug_level) << "call_overloaded_intrin: " << result_type << " " << name << "(";
@@ -4622,8 +4874,8 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
     }
     debug(debug_level) << ")\n";
 
-    auto impls_i = intrinsics.find(name);
-    if (impls_i == intrinsics.end()) {
+    const auto impls_i = overloaded_intrinsics.find(name);
+    if (impls_i == overloaded_intrinsics.end()) {
         debug(debug_level) << "No intrinsic " << name << "\n";
         return nullptr;
     }
@@ -4752,23 +5004,29 @@ Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
 Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes,
                                  const string &name, vector<Value *> arg_values,
                                  bool scalable_vector_result, bool is_reduction) {
+    auto fix_vector_lanes_of_type = [&](const llvm::Type *t) {
+        if (intrin_lanes == 1 || is_reduction) {
+            return t->getScalarType();
+        } else {
+            if (scalable_vector_result && effective_vscale != 0) {
+                return get_vector_type(result_type->getScalarType(),
+                                       intrin_lanes / effective_vscale, VectorTypeConstraint::VScale);
+            } else {
+                return get_vector_type(result_type->getScalarType(),
+                                       intrin_lanes, VectorTypeConstraint::Fixed);
+            }
+        }
+    };
+
     llvm::Function *fn = module->getFunction(name);
     if (!fn) {
         vector<llvm::Type *> arg_types(arg_values.size());
         for (size_t i = 0; i < arg_values.size(); i++) {
-            arg_types[i] = arg_values[i]->getType();
+            llvm::Type *t = arg_values[i]->getType();
+            arg_types[i] = fix_vector_lanes_of_type(t);
         }
 
-        llvm::Type *intrinsic_result_type = result_type->getScalarType();
-        if (intrin_lanes > 1 && !is_reduction) {
-            if (scalable_vector_result && effective_vscale != 0) {
-                intrinsic_result_type = get_vector_type(result_type->getScalarType(),
-                                                        intrin_lanes / effective_vscale, VectorTypeConstraint::VScale);
-            } else {
-                intrinsic_result_type = get_vector_type(result_type->getScalarType(),
-                                                        intrin_lanes, VectorTypeConstraint::Fixed);
-            }
-        }
+        llvm::Type *intrinsic_result_type = fix_vector_lanes_of_type(result_type);
         FunctionType *func_t = FunctionType::get(intrinsic_result_type, arg_types, false);
         fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
         fn->setCallingConv(CallingConv::C);
@@ -4803,7 +5061,7 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
                 if (arg_i_lanes >= arg_lanes) {
                     // Horizontally reducing intrinsics may have
                     // arguments that have more lanes than the
-                    // result. Assume that the horizontally reduce
+                    // result. Assume that they horizontally reduce
                     // neighboring elements...
                     int reduce = arg_i_lanes / arg_lanes;
                     args.push_back(slice_vector(arg_values[i], start * reduce, intrin_lanes * reduce));
@@ -4920,6 +5178,13 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
         // otherwise.
         llvm::Type *scalar_type = vec->getType()->getScalarType();
 
+        if (scalar_type->isIntegerTy(1)) {
+            auto *result_type = cast<VectorType>(get_vector_type(scalar_type, size / effective_vscale, VectorTypeConstraint::VScale));
+            return handle_bool_as_i8(vec, result_type, [&](Value *v) {
+                return slice_vector(v, start, size);
+            });
+        }
+
         int intermediate_lanes = std::min(size, vec_lanes - start);
         llvm::Type *intermediate_type = get_vector_type(scalar_type, intermediate_lanes, VectorTypeConstraint::Fixed);
 
@@ -4935,6 +5200,31 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
 
         return vec;
     }
+}
+
+Value *CodeGen_LLVM::optimization_fence(Value *v) {
+    llvm::Type *t = v->getType();
+    if (t->isScalableTy()) {
+        // Convert to fixed, fence, convert back.
+        Value *fixed = scalable_to_fixed_vector_type(v);
+        fixed = optimization_fence(fixed);
+        return fixed_to_scalable_vector_type(fixed);
+    }
+    const int bits = t->getPrimitiveSizeInBits();
+    if (bits % 32) {
+        const int lanes = get_vector_num_elements(t);
+        const int element_bits = t->getScalarSizeInBits();
+        const int lanes_per_32_bits = 32 / element_bits;
+        const int padded_lanes = align_up(lanes, lanes_per_32_bits);
+        v = slice_vector(v, 0, padded_lanes);
+        v = optimization_fence(v);
+        v = slice_vector(v, 0, lanes);
+        return v;
+    }
+    llvm::Type *float_type = get_vector_type(f32_t, bits / 32, VectorTypeConstraint::Fixed);
+    v = builder->CreateBitCast(v, float_type);
+    v = builder->CreateArithmeticFence(v, float_type);
+    return builder->CreateBitCast(v, t);
 }
 
 Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
@@ -5190,6 +5480,18 @@ llvm::Value *CodeGen_LLVM::match_vector_type_scalable(llvm::Value *value, llvm::
     return match_vector_type_scalable(value, guide->getType());
 }
 
+llvm::Value *CodeGen_LLVM::handle_bool_as_i8(llvm::Value *arg, llvm::VectorType *result_i1_type,
+                                             const std::function<llvm::Value *(llvm::Value *)> &fn) {
+    auto *arg_vty = cast<llvm::VectorType>(arg->getType());
+    bool scalable = isa<llvm::ScalableVectorType>(arg_vty);
+    int min_elts = scalable ? cast<llvm::ScalableVectorType>(arg_vty)->getMinNumElements() : cast<llvm::FixedVectorType>(arg_vty)->getNumElements();
+    auto constraint = scalable ? VectorTypeConstraint::VScale : VectorTypeConstraint::Fixed;
+    llvm::Type *arg_i8 = get_vector_type(i8_t, min_elts, constraint);
+    llvm::Value *widened = builder->CreateZExt(arg, arg_i8);
+    llvm::Value *result = fn(widened);
+    return builder->CreateTrunc(result, result_i1_type);
+}
+
 llvm::Value *CodeGen_LLVM::convert_fixed_or_scalable_vector_type(llvm::Value *arg,
                                                                  llvm::Type *desired_type) {
     llvm::Type *arg_type = arg->getType();
@@ -5199,6 +5501,18 @@ llvm::Value *CodeGen_LLVM::convert_fixed_or_scalable_vector_type(llvm::Value *ar
     }
 
     internal_assert(arg_type->getScalarType() == desired_type->getScalarType());
+
+    if (arg_type->isVectorTy() && desired_type->isVectorTy() &&
+        arg_type->getScalarType()->isIntegerTy(1)) {
+        bool dst_scalable = isa<llvm::ScalableVectorType>(desired_type);
+        int dst_elts = get_vector_num_elements(desired_type);
+        llvm::Type *dst_i8 = get_vector_type(i8_t, dst_scalable ? dst_elts / effective_vscale : dst_elts,
+                                             dst_scalable ? VectorTypeConstraint::VScale : VectorTypeConstraint::Fixed);
+        return handle_bool_as_i8(arg, cast<VectorType>(desired_type), [&](Value *v) {
+            return convert_fixed_or_scalable_vector_type(v, dst_i8);
+        });
+    }
+
     if (!arg_type->isVectorTy()) {
         arg = create_broadcast(arg, 1);
         arg_type = arg->getType();
@@ -5228,7 +5542,7 @@ llvm::Value *CodeGen_LLVM::convert_fixed_or_scalable_vector_type(llvm::Value *ar
         arg_elements = result_elements;
     } else {
         // Use extract to make smaller, insert to make bigger.
-        // A somewhat arbitary decision.
+        // A somewhat arbitrary decision.
         use_insert = (arg_elements < result_elements);
     }
 
@@ -5280,6 +5594,12 @@ llvm::Value *CodeGen_LLVM::fixed_to_scalable_vector_type(llvm::Value *fixed_arg)
     internal_assert(fixed_type->getElementType() == scalable_type->getElementType());
     internal_assert(lanes == (scalable_type->getMinNumElements() * effective_vscale));
 
+    if (fixed_type->getElementType()->isIntegerTy(1)) {
+        return handle_bool_as_i8(fixed_arg, scalable_type, [&](Value *v) {
+            return fixed_to_scalable_vector_type(v);
+        });
+    }
+
     // E.g. <vscale x 2 x i64> llvm.vector.insert.nxv2i64.v4i64(<vscale x 2 x i64>, <4 x i64>, i64)
     const char *type_designator;
     if (fixed_type->getElementType()->isIntegerTy()) {
@@ -5297,7 +5617,7 @@ llvm::Value *CodeGen_LLVM::fixed_to_scalable_vector_type(llvm::Value *fixed_arg)
 
     std::vector<llvm::Value *> args;
     args.push_back(result_vec);
-    args.push_back(value);
+    args.push_back(fixed_arg);
     args.push_back(ConstantInt::get(i64_t, 0));
 
     return simple_call_intrin(intrin, args, scalable_type);
@@ -5315,6 +5635,12 @@ llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_a
 
     internal_assert(fixed_type->getElementType() == scalable_type->getElementType());
     internal_assert(fixed_type->getNumElements() == (scalable_type->getMinNumElements() * effective_vscale));
+
+    if (scalable_type->getElementType()->isIntegerTy(1)) {
+        return handle_bool_as_i8(scalable_arg, fixed_type, [&](Value *v) {
+            return scalable_to_fixed_vector_type(v);
+        });
+    }
 
     // E.g. <64 x i8> @llvm.vector.extract.v64i8.nxv8i8(<vscale x 8 x i8> %vresult, i64 0)
     const char *type_designator;
@@ -5338,12 +5664,16 @@ int CodeGen_LLVM::get_vector_num_elements(const llvm::Type *t) {
         const auto *vt = cast<llvm::FixedVectorType>(t);
         return vt->getNumElements();
     } else if (isa<llvm::ScalableVectorType>(t)) {
-        internal_assert(effective_vscale != 0) << "Scalable vector type enountered without vector_bits being set.\n";
+        internal_assert(effective_vscale != 0) << "Scalable vector type encountered without vector_bits being set.\n";
         const auto *vt = cast<llvm::ScalableVectorType>(t);
         return vt->getMinNumElements() * effective_vscale;
     } else {
         return 1;
     }
+}
+
+int CodeGen_LLVM::get_vector_num_elements(const llvm::Value *v) {
+    return get_vector_num_elements(v->getType());
 }
 
 llvm::Type *CodeGen_LLVM::llvm_type_of(LLVMContext *c, Halide::Type t,
@@ -5382,23 +5712,7 @@ llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
     switch (type_constraint) {
     case VectorTypeConstraint::None:
         if (effective_vscale > 0) {
-            bool wide_enough = true;
-            // TODO(https://github.com/halide/Halide/issues/8119): Architecture
-            // specific code should not go here. Ideally part of this can go
-            // away via LLVM fixes and modifying intrinsic selection to handle
-            // scalable vs. fixed vectors. Making this method virtual is
-            // possibly expensive.
-            if (target.arch == Target::ARM) {
-                if (!target.has_feature(Target::NoNEON)) {
-                    // force booleans into bytes. TODO(https://github.com/halide/Halide/issues/8119): figure out a better way to do this.
-                    int bit_size = std::max((int)t->getScalarSizeInBits(), 8);
-                    wide_enough = (bit_size * n) > 128;
-                } else {
-                    // TODO(https://github.com/halide/Halide/issues/8119): AArch64 SVE2 support is crashy with scalable vectors of min size 1.
-                    wide_enough = (n / effective_vscale) > 1;
-                }
-            }
-            scalable = wide_enough && ((n % effective_vscale) == 0);
+            scalable = (n % effective_vscale) == 0;
             if (scalable) {
                 n = n / effective_vscale;
             }

@@ -1,0 +1,7 @@
+{
+  "name": "fft2d",
+  "version-string": "1.0",
+  "description": "Ooura FFT C sources (source provider for TFLite in-tree build)",
+  "homepage": "https://github.com/petewarden/OouraFFT",
+  "license": "LicenseRef-OouraFFT"
+}

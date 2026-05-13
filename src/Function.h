@@ -60,7 +60,7 @@ public:
 
     /** Construct a new function with the given name,
      * with a requirement that it can only represent Expr(s) of the given type(s),
-     * and must have exactly the give nnumber of dimensions.
+     * and must have exactly the give number of dimensions.
      * required_types.empty() means there are no constraints on the type(s).
      * required_dims == AnyDims means there are no constraints on the dimensions. */
     explicit Function(const std::vector<Type> &required_types, int required_dims, const std::string &n);
@@ -162,10 +162,10 @@ public:
     /** Get the types of the outputs. */
     const std::vector<Type> &output_types() const;
 
-    /** Get the type constaints on the outputs (if any). */
+    /** Get the type constraints on the outputs (if any). */
     const std::vector<Type> &required_types() const;
 
-    /** Get the dimensionality constaints on the outputs (if any). */
+    /** Get the dimensionality constraints on the outputs (if any). */
     int required_dimensions() const;
 
     /** Get the right-hand-side of the pure definition. Returns an
@@ -248,7 +248,7 @@ public:
                        const std::vector<Var> &dims,
                        NameMangling mangling, DeviceAPI device_api);
 
-    /** Retrive the arguments of the extern definition. */
+    /** Retrieve the arguments of the extern definition. */
     // @{
     const std::vector<ExternFuncArgument> &extern_arguments() const;
     std::vector<ExternFuncArgument> &extern_arguments();

@@ -680,6 +680,7 @@ const char *const intrinsic_op_names[] = {
     "strict_cast",
     "strict_div",
     "strict_eq",
+    "strict_fma",
     "strict_le",
     "strict_lt",
     "strict_max",
@@ -772,7 +773,7 @@ Expr Variable::make(Type type, const std::string &name, Buffer<> image, Paramete
 Expr Shuffle::make(const std::vector<Expr> &vectors,
                    const std::vector<int> &indices) {
     internal_assert(!vectors.empty()) << "Shuffle of zero vectors.\n";
-    internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
+    internal_assert(!indices.empty()) << "Shuffle with zero indices.\n";
     Type element_ty = vectors.front().type().element_of();
     int input_lanes = 0;
     for (const Expr &i : vectors) {
@@ -812,6 +813,21 @@ Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
     }
 
     return make(vectors, indices);
+}
+
+Expr Shuffle::make_transpose(Expr e, int cols) {
+    internal_assert(e.type().lanes() % cols == 0)
+        << "Transpose cols must divide the number of lanes.\n";
+    int rows = e.type().lanes() / cols;
+
+    std::vector<int> indices(e.type().lanes());
+    for (int j = 0; j < cols; j++) {
+        for (int i = 0; i < rows; i++) {
+            indices[j * rows + i] = i * cols + j;
+        }
+    }
+
+    return make({std::move(e)}, indices);
 }
 
 Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
@@ -1009,6 +1025,33 @@ bool Shuffle::is_concat() const {
     // A concat is a ramp where the output has the same number of
     // lanes as the input.
     return indices.size() == input_lanes && is_ramp(indices);
+}
+
+bool Shuffle::is_transpose() const {
+    if (vectors.size() > 1 ||
+        (int)indices.size() != vectors[0].type().lanes() ||
+        indices.size() < 2 ||
+        indices[0] != 0 ||
+        indices[1] <= 0) {
+        return false;
+    }
+    int cols = indices[1];
+    int rows = vectors[0].type().lanes() / cols;
+    if ((int)indices.size() != rows * cols) {
+        return false;
+    }
+    for (int row = 0; row < rows; row++) {
+        for (int col = 0; col < cols; col++) {
+            if (indices[col * rows + row] != row * cols + col) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+int Shuffle::transpose_factor() const {
+    return indices[1] - indices[0];
 }
 
 bool Shuffle::is_slice() const {

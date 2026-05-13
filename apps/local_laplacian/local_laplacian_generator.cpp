@@ -37,7 +37,7 @@ public:
 
         // Make the processed Gaussian pyramid.
         Func gPyramid[maxJ];
-        // Do a lookup into a lut with 256 entires per intensity level
+        // Do a lookup into a lut with 256 entries per intensity level
         Expr level = k * (1.0f / (levels - 1));
         Expr idx = gray(x, y) * cast<float>(levels - 1) * 256.0f;
         idx = clamp(cast<int>(idx), 0, (levels - 1) * 256);
@@ -165,7 +165,8 @@ public:
                     .compute_root()
                     .reorder_storage(x, k, y)
                     .reorder(k, y)
-                    .parallel(y, 8)
+                    .split(y, yo, y, 8)
+                    .parallel(yo)
                     .vectorize(x, 8);
                 outGPyramid[j]
                     .store_at(output, yo)
@@ -180,6 +181,12 @@ public:
                     gPyramid[j].never_partition_all();
                 }
             }
+            gPyramid[0]
+                .clone_in(gPyramid[1])
+                .store_at(gPyramid[1], yo)
+                .compute_at(gPyramid[1], y)
+                .vectorize(x, 8);
+
             outGPyramid[0]
                 .compute_at(output, y)
                 .hoist_storage(output, yo)

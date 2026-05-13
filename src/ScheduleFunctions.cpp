@@ -133,7 +133,7 @@ public:
 };
 
 Stmt substitute_in(const string &name, const Expr &value, bool calls, bool provides, const Stmt &s) {
-    return SubstituteIn(name, value, calls, provides).mutate(s);
+    return SubstituteIn(name, value, calls, provides)(s);
 }
 
 class AddPredicates : public IRGraphMutator {
@@ -177,7 +177,7 @@ public:
 };
 
 Stmt add_predicates(const Expr &cond, const Function &func, ApplySplitResult::Type type, const Stmt &s) {
-    return AddPredicates(cond, func, type).mutate(s);
+    return AddPredicates(cond, func, type)(s);
 }
 
 // Build a loop nest about a provide node using a schedule
@@ -1004,7 +1004,7 @@ Stmt inject_stmt(Stmt root, Stmt injected, const LoopLevel &level) {
         return Block::make(root, injected);
     }
     InjectStmt injector(injected, level);
-    root = injector.mutate(root);
+    root = injector(root);
     internal_assert(injector.found_level);
     return root;
 }
@@ -1091,7 +1091,7 @@ Stmt substitute_fused_bounds(Stmt s, const map<string, Interval> &replacements) 
         }
     } subs(replacements);
 
-    return subs.mutate(s);
+    return subs(s);
 }
 
 // Add letstmts inside each parent loop that define the corresponding child loop
@@ -1128,7 +1128,7 @@ Stmt add_loop_var_aliases(Stmt s, const map<string, set<string>> &loop_var_alias
         }
     } add_aliases(loop_var_aliases);
 
-    return add_aliases.mutate(s);
+    return add_aliases(s);
 }
 
 // Shift the iteration domain of a loop nest by some factor.
@@ -1161,8 +1161,7 @@ public:
         if (shifts.empty()) {
             return node;
         }
-        ShiftLoopNest visitor(shifts);
-        return visitor.mutate(node);
+        return ShiftLoopNest(shifts)(node);
     }
 };
 
@@ -2264,20 +2263,14 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
+    if (is_output) {
+        // None of the checks below apply to outputs
+        return true;
+    }
+
     LoopLevel store_at = f.schedule().store_level();
     LoopLevel compute_at = f.schedule().compute_level();
     LoopLevel hoist_storage_at = f.schedule().hoist_storage_level();
-
-    // Outputs must be compute_root and store_root. They're really
-    // store_in_user_code, but store_root is close enough.
-    if (is_output) {
-        if (store_at.is_root() && compute_at.is_root()) {
-            return true;
-        } else {
-            user_error << "Func " << f.name() << " is an output, so must"
-                       << " be scheduled compute_root (which is the default).\n";
-        }
-    }
 
     // Otherwise inspect the uses to see what's ok.
     ComputeLegalSchedules legal(f, env);
@@ -2315,6 +2308,12 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
 
     if (f.schedule().ring_buffer().defined() && store_at == hoist_storage_at) {
         user_error << "Func \"" << f.name() << "\" is scheduled with ring_buffer(), but has matching store_at and hoist_storage levels. Add an explicit hoist_storage directive to the schedule to fix the issue.\n";
+    }
+
+    // Check if hoist_storage is used with an extern stage
+    if (f.has_extern_definition() && !hoist_storage_at.is_inlined() && hoist_storage_at != store_at) {
+        user_error << "Func \"" << f.name() << "\" is an extern function with storage hoisted to a different level than store_at. "
+                   << "Func::hoist_storage is not currently supported for extern functions.";
     }
 
     vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
@@ -2378,6 +2377,27 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     }
 
     return true;
+}
+
+void validate_output_schedules(const vector<Function> &outputs) {
+    for (Function f : outputs) {
+        // Treat unscheduled as root
+        FuncSchedule &sched = f.schedule();
+        for (LoopLevel *l : {&sched.compute_level(), &sched.store_level(), &sched.hoist_storage_level()}) {
+            if (l->is_inlined()) {
+                *l = LoopLevel::root();
+                l->lock();
+            } else if (!l->is_root()) {
+                user_error
+                    << "Func " << f.name() << " is an output, so must be scheduled"
+                    << " compute_root, store_root, and hoist_storage_root (which is the"
+                    << " default). The requested compute, store, and hoist_storage levels are "
+                    << sched.compute_level() << ", "
+                    << sched.store_level() << ", and "
+                    << sched.hoist_storage_level() << " respectively.\n";
+            }
+        }
+    }
 }
 
 void validate_fused_group_schedule_helper(const string &fn,
@@ -2552,6 +2572,8 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     any_memoized = false;
 
+    validate_output_schedules(outputs);
+
     validate_fused_groups_schedule(fused_groups, env);
 
     for (const auto &group : reverse_view(fused_groups)) {
@@ -2589,7 +2611,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
         } else {
             debug(1) << "Injecting realization of " << funcs << "\n";
             InjectFunctionRealization injector(funcs, is_output_list, target, env);
-            s = injector.mutate(s);
+            s = injector(s);
             internal_assert(injector.found_store_level() && injector.found_compute_level() && injector.found_hoist_storage_level());
         }
 
@@ -2602,7 +2624,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
     s = root_loop->body;
 
     // We can also remove all the loops over __outermost now.
-    s = RemoveLoopsOverOutermost().mutate(s);
+    s = RemoveLoopsOverOutermost()(s);
 
     return s;
 }

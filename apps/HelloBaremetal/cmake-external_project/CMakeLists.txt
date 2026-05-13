@@ -41,7 +41,7 @@ add_executable(${GEN_EXE} IMPORTED)
 # Specify the location of exe file to import
 set_property(TARGET ${GEN_EXE}
              PROPERTY IMPORTED_LOCATION ${GEN_BINARY_DIR}/${GEN_EXE})
-# Associate with external project so that it invokes build porcess
+# Associate with external project so that it invokes build process
 add_dependencies(${GEN_EXE} gen_project)
 
 # Generate filter function

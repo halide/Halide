@@ -17,9 +17,9 @@ QEMU_MACHINE_ARGS="-M realview-pbx-a9 -cpu cortex-a9 -smp 1 -m 1024M"
 echo "Running command:  $EXE_ARGS"
 
 qemu-system-arm \
-    ${QEMU_MACHINE_ARGS} \
+    "${QEMU_MACHINE_ARGS}" \
     -monitor null -serial null -nographic \
-    -kernel ${EXECUTABLE} \
+    -kernel "${EXECUTABLE}" \
     -semihosting -semihosting-config enable=on,target=native,arg="${EXE_ARGS}"
 
 echo "Exit from QEMU"

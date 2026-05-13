@@ -514,7 +514,7 @@ int main(int argc, char **argv) {
         Buffer<uint8_t> result = f.realize();
         assert(result() == (462 % 256));
 
-        // Change image data without channging tag
+        // Change image data without changing tag
         in(0) = 41;
         result = f.realize();
 
@@ -657,7 +657,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        printf("In 100 attempts with flaky malloc, %d errors and %d full completions occured.\n",
+        printf("In 100 attempts with flaky malloc, %d errors and %d full completions occurred.\n",
                total_errors, completed);
     }
 
@@ -708,7 +708,7 @@ int main(int argc, char **argv) {
         memoized_three() = count_calls(3, 3);
         memoized_one.compute_root().memoize(EvictionKey(1));
         memoized_two.compute_root().memoize(EvictionKey(p));
-        // The called extern here would usually take user_context and extact a value
+        // The called extern here would usually take user_context and extract a value
         // from within, but JIT mostly subsumes user_context, so this is just an example.
         memoized_three.compute_root().memoize(EvictionKey(computed_eviction_key(5)));
         f() = memoized_one() + memoized_two() + memoized_three();

@@ -103,6 +103,7 @@ def test_basics():
     blur_x.compute_at(blur_y, x).vectorize(x, 8)
     blur_y.compile_jit()
 
+
 def test_basics2():
     input = hl.ImageParam(hl.Float(32), 3, "input")
     hl.Param(hl.Float(32), "r_sigma", 0.1)
@@ -607,6 +608,7 @@ def test_print_ir():
     p = hl.Pipeline()
     assert str(p) == "<halide.Pipeline Pipeline()>"
 
+
 def test_split_vars():
     f = hl.Func("f")
     (x, xo, xi) = hl.vars("x xo xi")
@@ -632,6 +634,7 @@ def test_split_vars():
     assert isinstance(vars[2], hl.RVar) and vars[2].name() == r.y.name()
     assert isinstance(vars[3], hl.Var) and vars[3].name() == x.name()
     assert isinstance(vars[4], hl.Var) and vars[4].name() == hl.Var.outermost().name()
+
 
 if __name__ == "__main__":
     test_compiletime_error()

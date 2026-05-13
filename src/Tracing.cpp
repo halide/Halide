@@ -350,7 +350,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
     }
 
     // Inject tracing calls
-    s = tracing.mutate(s);
+    s = tracing(s);
 
     // Strip off the dummy realize blocks
     s = mutate_with(s, [&](auto *self, const Realize *op) {

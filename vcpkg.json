@@ -36,7 +36,14 @@
           "name": "halide",
           "default-features": false,
           "features": [
-            "python-bindings",
+            "python-bindings"
+          ],
+          "platform": "x64 | arm64"
+        },
+        {
+          "name": "halide",
+          "default-features": false,
+          "features": [
             "serialization",
             "wasm-executor"
           ]

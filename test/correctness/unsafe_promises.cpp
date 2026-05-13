@@ -6,7 +6,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     // Test primary use case for unsafe_promise_clamped -- data that
-    // uses fewer bits than the type it is embeded within.
+    // uses fewer bits than the type it is embedded within.
     {
         Buffer<uint16_t> ten_bit_data(100);
         for (int i = 0; i < 100; i++) {
