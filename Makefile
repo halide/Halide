@@ -2416,7 +2416,7 @@ ifeq ($(UNAME), Darwin)
 endif
 
 
-$(DISTRIB_DIR)/lib/libautoschedule_%.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_%.$(PLUGIN_EXT)
+$(DISTRIB_DIR)/lib/libautoschedule_%.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_%.$(PLUGIN_EXT) $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
 	@mkdir -p $(@D)
 	cp $< $(DISTRIB_DIR)/lib
 ifeq ($(UNAME), Darwin)
