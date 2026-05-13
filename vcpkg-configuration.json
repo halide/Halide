@@ -3,7 +3,6 @@
     "cmake/vcpkg-ports"
   ],
   "overlay-triplets": [
-    "cmake/vcpkg-triplets",
-    "cmake/vcpkg/triplets"
+    "cmake/vcpkg-triplets"
   ]
 }

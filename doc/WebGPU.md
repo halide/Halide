@@ -71,10 +71,6 @@ Note that it is explicitly legal to define both `HL_WEBGPU_NATIVE_LIB` and
 `HL_WEBGPU_NODE_BINDINGS` at the same time; the correct executable environment
 will be selected based on the Halide target specified.
 
-Note that it is explicitly legal to specify both WEBGPU_NATIVE_LIB and
-WEBGPU_NODE_BINDINGS for the same build; the correct executable environment will
-be selected based on the Halide target specified.
-
 ## Setting up for WASM+WebGPU testing
 
 ### Installing Node.js 25 via nvm
@@ -124,7 +120,7 @@ After building, point the test runner at your build by setting:
 
 ## Setting up Dawn via vcpkg
 
-> _Tested with Dawn vcpkg port version 20251202.213730 on macOS (arm64)_
+> _Tested with Dawn vcpkg port version 20260410.140140 on macOS (arm64)_
 
 The Halide repository includes vcpkg support for automatically downloading and
 building Dawn as part of the CMake configure step. This is the easiest path for
@@ -144,9 +140,9 @@ Clone and bootstrap vcpkg locally (no system-wide installation needed):
 
 ### Configure and build Halide
 
-Use the provided `arm64-osx-halide` (or `x64-osx-halide`) overlay triplet,
-which keeps static linkage for all packages except Dawn (which must be shared
-so it can be loaded via `dlopen` at runtime):
+Use the provided `arm64-osx-halide` (or `x64-osx-halide`) overlay triplet.
+These triplets use static linkage for all packages except Dawn, which must be
+a shared library so it can be loaded via `dlopen` at runtime:
 
     cmake <halide_root_dir> -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
