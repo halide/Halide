@@ -6,6 +6,7 @@ get_target_property(VulkanHeaders_INCLUDE_DIR Vulkan::Headers INTERFACE_INCLUDE_
 
 set(RUNTIME_CPP
     # keep-sorted start ignore_prefixes=#
+    # TODO(https://github.com/halide/Halide/issues/7248)
     aarch64_cpu_features
     alignment_128
     alignment_32
@@ -86,7 +87,6 @@ set(RUNTIME_CPP
     tracing
     vulkan
     wasm_cpu_features
-    # TODO(https://github.com/halide/Halide/issues/7248)
     # webgpu
     webgpu_dawn_arm
     webgpu_dawn_x86
