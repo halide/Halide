@@ -276,9 +276,9 @@ target_sources(
     CodeGen_X86.cpp
     CompilerLogger.cpp
     CompilerProfiling.cpp
-    CPlusPlusMangle.cpp
     ConstantBounds.cpp
     ConstantInterval.cpp
+    CPlusPlusMangle.cpp
     CSE.cpp
     Debug.cpp
     DebugArguments.cpp
