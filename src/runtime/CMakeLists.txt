@@ -258,7 +258,8 @@ foreach (i IN LISTS RUNTIME_CPP)
         elseif (i MATCHES "webgpu_dawn_arm$")
             if (j EQUAL 32 AND "ARM" IN_LIST Halide_LLVM_COMPONENTS)
                 # 32-bit ARM is compiled but emits no code (guarded by #ifndef BITS_64 in the source).
-                set(TARGET "arm-unknown-unknown-unknown")
+                # Use generic 32-bit target to avoid cross-compilation issues on some platforms.
+                set(TARGET "i386-unknown-unknown-unknown")
             elseif (j EQUAL 64 AND "AArch64" IN_LIST Halide_LLVM_COMPONENTS)
                 # due to struct passing, we need to use the correct arch
                 set(TARGET "aarch64-unknown-unknown-unknown")
