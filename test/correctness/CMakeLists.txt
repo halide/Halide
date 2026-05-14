@@ -91,6 +91,7 @@ tests(GROUPS correctness
       dilate3x3.cpp
       div_by_zero.cpp
       div_round_to_zero.cpp
+      downsampling_reduce.cpp
       dynamic_allocation_in_gpu_kernel.cpp
       dynamic_reduction_bounds.cpp
       early_out.cpp
@@ -110,6 +111,7 @@ tests(GROUPS correctness
       extern_stage_on_device.cpp
       extract_concat_bits.cpp
       failed_unroll.cpp
+      fallback_vscale_sve.cpp
       fast_trigonometric.cpp
       fibonacci.cpp
       fit_function.cpp
@@ -230,6 +232,7 @@ tests(GROUPS correctness
       multi_way_select.cpp
       multipass_constraints.cpp
       multiple_outputs.cpp
+      multiramp.cpp
       mux.cpp
       narrow_predicates.cpp
       negative_split_factors.cpp
@@ -294,6 +297,7 @@ tests(GROUPS correctness
       sliding_over_guard_with_if.cpp
       sliding_reduction.cpp
       sliding_window.cpp
+      solve.cpp
       sort_exprs.cpp
       specialize.cpp
       specialize_to_gpu.cpp
@@ -324,6 +328,7 @@ tests(GROUPS correctness
       tracing_stack.cpp
       transitive_bounds.cpp
       transpose_idioms.cpp
+      transposed_vector_reduce.cpp
       trim_no_ops.cpp
       tuple_partial_update.cpp
       tuple_reduction.cpp
@@ -422,6 +427,7 @@ tests(GROUPS correctness multithreaded
       ring_buffer.cpp
       stream_compaction.cpp
       thread_safety.cpp
+      transitive_in.cpp
       truncated_pyramid.cpp
       tuple_vector_reduce.cpp
       vector_cast.cpp

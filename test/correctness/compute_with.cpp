@@ -1016,7 +1016,7 @@ int multi_tile_mixed_tile_factor_test() {
     return 0;
 }
 
-int only_some_are_tiled_test() {
+[[maybe_unused]] int only_some_are_tiled_test() {
     const int size = 256;
     Buffer<int> f_im(size, size), g_im(size / 2, size / 2), h_im(size / 2, size / 2);
     Buffer<int> f_im_ref(size, size), g_im_ref(size / 2, size / 2), h_im_ref(size / 2, size / 2);
@@ -1527,7 +1527,7 @@ int update_stage_pairwise_test() {
     return 0;
 }
 
-int update_stage_pairwise_zigzag_test() {
+[[maybe_unused]] int update_stage_pairwise_zigzag_test() {
     const int f_size = 128;
     const int g_size = 128;
     const int base = 31;
