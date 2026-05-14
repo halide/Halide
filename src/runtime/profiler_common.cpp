@@ -96,7 +96,6 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
         free(p);
         return nullptr;
     }
-    debug(0) << "Clearing func stats\n";
     __builtin_memset(p->funcs, 0, func_stats_storage);
     for (int i = 0; i < num_funcs; i++) {
         p->funcs[i].name = (const char *)(func_names[i]);
