@@ -655,7 +655,18 @@ protected:
             max_lanes = std::max(new_arg.type().lanes(), max_lanes);
         }
 
-        if (!changed) {
+        if (!op->is_pure()) {
+            // If the call is side-effecty, we need to ensure it happens the
+            // right number of times regardless of whether or not it depends on
+            // the vectorized vars, so just set max lanes to the product of all
+            // the vectorization factors.
+            max_lanes = 1;
+            for (auto &vv : vectorized_vars) {
+                max_lanes *= vv.lanes;
+            }
+        }
+
+        if (!changed && max_lanes == 1) {
             return op;
         } else if (op->name == Call::trace) {
             auto event = as_const_int(op->args[6]);

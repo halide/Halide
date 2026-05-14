@@ -2,7 +2,11 @@
 #include <map>
 #include <string>
 
+#include "Bounds.h"
 #include "CodeGen_Internal.h"
+#include "DeviceInterface.h"
+#include "ExprUsesVar.h"
+#include "FindCalls.h"
 #include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -21,6 +25,180 @@ using std::map;
 using std::string;
 using std::vector;
 
+// =============================================================================
+// Profiling injection
+// =============================================================================
+//
+// When a pipeline is compiled with the "profile" target feature, this
+// lowering pass instruments the IR with calls into the Halide profiler
+// runtime. At run time the profiler then collects per-Func statistics —
+// time spent, memory used, points realized, kinds of loads issued, parallel
+// loops launched, inlined call counts, and so on — which the runtime prints
+// as a report when the pipeline terminates (or makes available as JSON to
+// external tools).
+//
+// Two complementary mechanisms collect data at run time:
+//
+//  - Sampling. A background profiler thread (started lazily by the runtime
+//    on first use) periodically reads a "current func" word that the
+//    generated code writes whenever the executing pipeline transitions
+//    between Funcs. The distribution of samples across Funcs gives the time
+//    profile. This handles wall time cheaply: the only thing the generated
+//    code does on the hot path is one store of an integer id.
+//
+//  - Direct counters. Discrete events that need exact counts (loads, stores,
+//    allocations, parallel launches, inlined call sites, ...) can't be
+//    reliably sampled, so the generated code calls
+//    halide_profiler_update_counters at appropriate points to bump per-Func
+//    64-bit counters by computed amounts. The runtime keeps one
+//    halide_profiler_func_stats struct per id; the counters live in there.
+//
+// This pass is responsible for emitting both — the set_current_func writes,
+// the counter updates, and all the surrounding scaffolding (instance start
+// and stop, thread activity tracking around parallel constructs, sampling
+// token management for leaf tasks, stack-peak accounting, etc.).
+//
+// -----------------------------------------------------------------------------
+// Structure of the passes in this file
+// -----------------------------------------------------------------------------
+//
+// This file exposes two top-level passes. resolve_inline_markers runs very
+// early in lowering — immediately after schedule_functions — to consume the
+// inline_marker intrinsics that Inline.cpp leaves at every inlined call
+// site and turn them into stmt-level declare_inlined intrinsics. Doing it
+// early lets every later pass safely transform Provides without tripping
+// on inline_marker (which has no codegen support). It's the only pass here
+// that's not gated on "we're actually instrumenting"; the markers always
+// need to be removed if they're there.
+//
+// inject_profiling is the main pass and runs much later, after bounds
+// inference but before storage flattening. It consumes declare_inlined,
+// declare_box_required_at_{realization,production,root}, and emits all the
+// runtime calls. It runs three sub-passes over the IR:
+//
+//  1) PreAllocateInstances. Enumerates every "instance" (see below) of every
+//     Func and assigns each one an integer id matching its eventual slot in
+//     the runtime's halide_profiler_func_stats array. To save the next pass
+//     from re-parsing the inlining graph, it also rewrites each
+//     declare_inlined intrinsic to a flat list of the resolved instance ids;
+//     the intrinsic's type (carrying the vector lane count) is preserved.
+//
+//  2) InjectCounters. Walks the IR and accumulates per-instance counter
+//     contributions, flushing them as halide_profiler_update_counters calls.
+//     Counters are hoisted as far out as possible: a Store inside a loop of
+//     trip count N becomes a single "+N" update outside the loop rather than
+//     N "+1" updates inside it. This keeps the per-iteration overhead of
+//     profiling close to zero.
+//
+//     If a counter update fails to hoist all the way out of a parallel loop
+//     — typically because the contribution depends on the parallel loop var
+//     itself, or on something defined inside the body — we don't want each
+//     iteration to do an atomic add directly into the global stats struct.
+//     Instead InjectCounters allocates a small thread-local buffer
+//     ("local_counters") on the stack of each parallel task, accumulates
+//     contributions there with ordinary (non-atomic) adds, and then emits
+//     one halide_profiler_update_counters call per task at the end of the
+//     loop body that folds the local buffer into the shared per-instance
+//     counters with a single atomic update. This trades a fixed per-task
+//     overhead for keeping the hot inner loop free of atomics.
+//
+//  3) InjectProfiling. Emits the rest of the runtime scaffolding:
+//       - halide_profiler_set_current_func writes so the sampler knows which
+//         instance the CPU is currently executing.
+//       - halide_profiler_memory_allocate / _memory_free wrappers around
+//         heap allocations, plus per-instance peak-stack accounting.
+//       - halide_profiler_incr/decr_active_threads around parallel for, fork
+//         and acquire, so the runtime can compute average active-thread
+//         counts.
+//       - Sampling-token plumbing so leaf parallel tasks contend cheaply for
+//         the sampling slot.
+//       - Copy-to-host / copy-to-device timing.
+//
+// After those three passes, inject_profiling wraps the whole IR with a
+// halide_profiler_instance_start call (which registers the pipeline instance
+// with the global profiler and returns an error code we assert on) and a
+// register_destructor for halide_profiler_instance_end, and emits the
+// func_names / func_parents tables the runtime needs to print the report.
+//
+// -----------------------------------------------------------------------------
+// Inputs from earlier lowering passes
+// -----------------------------------------------------------------------------
+//
+// ScheduleFunctions and Inline emit some intrinsics specifically for the
+// profiler that this pass consumes and strips out:
+//
+//  - declare_box_required_at_realization(f, min0, max0, min1, max1, ...):
+//    emitted by ScheduleFunctions at every Realize node. The box (mins/maxes
+//    per dimension) is the set of points of f realized at that realize node.
+//    We bill the box size to f's PointsRequiredAtRealization counter and
+//    bump Realizations.
+//
+//  - declare_box_required_at_production(f, ...): emitted by ScheduleFunctions
+//    just inside the ProducerConsumer node. Uses the same .s0.var.min/.max
+//    vars, but bounds inference binds those to per-production values at this
+//    scope. Captures over-computation that the realize-box counter misses
+//    (e.g. sliding-window failure: many produce iterations each recomputing
+//    the full realize box).
+//
+//  - declare_box_required_at_root(f, ...): emitted by ScheduleFunctions at the
+//    outermost level for every Func. The box is the pipeline-wide total
+//    number of points of f required by all consumers. We duplicate that
+//    count into every instance of f as PointsRequiredAtRoot, so each
+//    instance has the same shared denominator when computing a local
+//    recompute ratio.
+//
+//  - declare_inlined(...): emitted by a post-pass after Inline.cpp, one per
+//    inlined call chain inside a Provide. The args encode a small graph:
+//    the first N handle args name nodes (node 0 is the surrounding
+//    producer, nodes 1..N-1 are the inlined Funcs in the chain), and the
+//    trailing int args are (parent_idx, callee_idx) edges. Each non-root
+//    node represents one inlined call site and bills +1 (× surrounding
+//    vector lanes) to InlinedCalls. PreAllocateInstances rewrites this
+//    intrinsic in place; downstream we just read the resolved ids out of
+//    the args and strip the intrinsic.
+//
+// -----------------------------------------------------------------------------
+// Instances
+// -----------------------------------------------------------------------------
+//
+// Most Funcs appear in exactly one place in the lowered IR, but some appear
+// in many:
+//
+//  - An inlined Func called from multiple callers gets its body substituted
+//    at every call site, and each substituted copy can be transformed
+//    independently (different surrounding loop trip counts, different
+//    vectorization, different inlining chains nested above it).
+//
+//  - A non-inlined Func whose update definitions have no explicit schedule
+//    (e.g. h_1(x,y) += g_2(x+1,y); h_2(x,y) += g_2(x+1,y); with g_2 left at
+//    its default schedule) gets a separate Realize/Producer block per
+//    caller, because there's no shared compute_at level for it.
+//
+// We call each such appearance an "instance" of the Func, and the profiler
+// gives each its own id and its own row in the report. Two reasons for
+// tracking them separately rather than aggregating at billing time:
+//
+//  1) Each instance has a distinct parent Func — the producer or inlining
+//     chain it lives inside. The reporter prints stats as a tree, so the
+//     parent relationship is part of the output, not just a runtime detail.
+//
+//  2) Local stats (peak memory, recompute ratio, time%) are meaningful
+//     per-instance. A Func called from a hot caller and a cold caller can
+//     have very different profiles, and merging them would erase the
+//     signal.
+//
+// Names::id_for_instance(name, parent_id) is the allocator: it gives back
+// the same id for the same (name, parent) pair and a fresh id otherwise.
+// PreAllocateInstances drives the allocation by walking ProducerConsumer
+// nodes and declare_inlined intrinsics; the other passes look up the same
+// ids by replaying the same producer-stack / inlining-chain context.
+//
+// IdInfo::canonical_id remembers, for each instance, the first id that was
+// allocated for its name. That lets the reporter optionally show a
+// rolled-up "by Func" view, and lets per-Func warnings (heuristics like
+// "this Func is being recomputed too much") fire once per Func rather than
+// once per instance.
+
 namespace {
 
 // All names that need to be unique, just in case someone does something
@@ -33,6 +211,7 @@ struct Names {
     std::string hvx_profiler_instance;
     std::string profiler_func_names;
     std::string profiler_func_parents;
+    std::string profiler_func_canonical_ids;
     std::string profiler_func_stack_peak_buf;
     std::string profiler_start_error_code;
 
@@ -47,25 +226,55 @@ struct Names {
           hvx_profiler_instance(unique_name("hvx_profiler_instance")),
           profiler_func_names(unique_name("profiler_func_names")),
           profiler_func_parents(unique_name("profiler_func_parents")),
+          profiler_func_canonical_ids(unique_name("profiler_func_canonical_ids")),
           profiler_func_stack_peak_buf(unique_name("profiler_func_stack_peak_buf")),
           profiler_start_error_code(unique_name("profiler_start_error_code")) {
 
-        name_map.emplace("overhead", overhead_id);
-        name_map.emplace("thread idle", thread_idle_id);
-        name_map.emplace("malloc", malloc_id);
-        name_map.emplace("free", free_id);
+        // Reserve the special IDs (in order so the *_id constants match).
+        for (const char *n : {"overhead", "thread idle", "malloc", "free"}) {
+            id_for_instance(n, -1);
+        }
     }
 
-    // Map a unique name to a unique integer, for giving Funcs IDs
-    map<string, int> name_map;
+    // One IdInfo per instance — see the file-level "Instances" comment for
+    // what an instance is.
+    struct IdInfo {
+        std::string name;
+        int parent_id;     // immediate parent instance, or -1 if at the root
+        int canonical_id;  // first id allocated for this name, used for
+                           // per-Func (rolled-up) reporting
+    };
+    std::vector<IdInfo> id_info;
+    // First id allocated for each name — the canonical instance.
+    std::map<std::string, int> canonical_id_for_name;
+    // (parent_id, name) -> id — used to deduplicate when the same (parent,
+    // name) pair is encountered more than once.
+    std::map<std::pair<int, std::string>, int> instance_map;
+
+    // Get (or allocate) the id for a specific instance of a Func, identified
+    // by its name plus its immediate parent instance in the IR. Two
+    // appearances of the same Func with different parents get different ids;
+    // two appearances with the same parent share one id.
+    int id_for_instance(const std::string &name, int parent_id) {
+        auto [it, inserted] = instance_map.try_emplace({parent_id, name}, (int)id_info.size());
+        if (inserted) {
+            int canon = canonical_id_for_name.try_emplace(name, it->second).first->second;
+            id_info.push_back({name, parent_id, canon});
+        }
+        return it->second;
+    }
+
+    // Shorthand for the id of the root-level (parent = -1) instance of a
+    // name. Used for Funcs we know have only one instance (e.g. produced at
+    // the pipeline root) and for synthetic ids like "h (copy to host)".
     int id_for_name(const std::string &name) {
-        return name_map.try_emplace(name, (int)name_map.size()).first->second;
+        return id_for_instance(name, -1);
     }
 
     std::string prefix(const std::string &name) const {
         size_t idx = name.find('.');
         if (idx != std::string::npos) {
-            internal_assert(idx != 0) << name << "\n";
+            internal_assert(idx != 0) << name;
             return name.substr(0, idx);
         } else {
             return name;
@@ -73,40 +282,194 @@ struct Names {
     }
 
     int num_ids() const {
-        return (int)name_map.size();
+        return (int)id_info.size();
     }
 };
 
-Stmt incr_active_threads(const Expr &profiler_instance) {
-    return Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
-                                     {profiler_instance}, Call::Extern));
+// Unwrap a Broadcast(...) wrapper from an arg, then extract the Func name.
+// declare_inlined / declare_box_required / declare_stage / inline_marker
+// carry the Func name as a StringImm in their first arg — the name is just
+// a label for the profiler report, not a symbol that exists in scope, so
+// using a StringImm keeps it from being matched by passes like
+// InjectHostDevBufferCopies that substitute Variables named after Funcs.
+// The arg can show up wrapped in a Broadcast after vectorization.
+const std::string &handle_name(const Expr &e) {
+    const Expr *inner = &e;
+    if (const Broadcast *b = e.as<Broadcast>()) {
+        inner = &b->value;
+    }
+    const StringImm *s = inner->as<StringImm>();
+    internal_assert(s) << e;
+    return s->value;
 }
 
-Stmt decr_active_threads(const Expr &profiler_instance) {
-    return Evaluate::make(Call::make(Int(32), "halide_profiler_decr_active_threads",
-                                     {profiler_instance}, Call::Extern));
-}
+// First pass: enumerate the instances (see file-level comment) and assign
+// each one an id. Walks every ProducerConsumer node (one instance per
+// producer, parented to the surrounding producer) and every declare_inlined
+// intrinsic (one instance per non-root node of the inlining graph the
+// intrinsic encodes). To save the next pass from re-parsing the
+// declare_inlined graph, this pass also rewrites each declare_inlined to
+// just the flat list of resolved instance ids — the intrinsic's type is
+// preserved so the surrounding vector lane count is still available.
+class PreAllocateInstances : public IRMutator {
+    Names &names;
+    int producer_id = -1;
 
-Stmt acquire_sampling_token(const Expr &shared_token, const Expr &local_token) {
-    return Evaluate::make(Call::make(Int(32), "halide_profiler_acquire_sampling_token",
-                                     {shared_token, local_token}, Call::Extern));
-}
+    using IRMutator::visit;
 
-Stmt release_sampling_token(const Expr &shared_token, const Expr &local_token) {
-    return Evaluate::make(Call::make(Int(32), "halide_profiler_release_sampling_token",
-                                     {shared_token, local_token}, Call::Extern));
-}
+    Stmt visit(const ProducerConsumer *op) override {
+        if (op->is_producer) {
+            int id = names.id_for_instance(op->name, producer_id);
+            ScopedValue<int> old(producer_id, id);
+            return IRMutator::visit(op);
+        }
+        return IRMutator::visit(op);
+    }
 
-Stmt claim_sampling_token(const Stmt &s, const Expr &shared_token, const Expr &local_token) {
-    return LetStmt::make(local_token.as<Variable>()->name,
-                         Call::make(Handle(), Call::alloca, {Int(32).bytes()}, Call::Intrinsic),
-                         Block::make({acquire_sampling_token(shared_token, local_token),
-                                      s,
-                                      release_sampling_token(shared_token, local_token)}));
-}
+    Expr visit(const Call *op) override {
+        // Eagerly allocate ids for the synthetic copy "Funcs" produced by
+        // InjectProfiling::inject_buffer_copy_timing. Allocating them here
+        // (during the encounter-order walk) rather than later in
+        // InjectProfiling makes the ids fall in IR order alongside their
+        // sibling producers, so the report's DFS-by-id traversal renders
+        // them in their correct timeline position. id_for_instance is
+        // idempotent on (name, parent), so InjectProfiling's later lookup
+        // returns the same id. Parent is the immediately enclosing
+        // producer, so a copy_to_device(foo) emitted inside Produce(bar)
+        // nests under bar in the report — making it clear which consumer
+        // the copy was preparing data for.
+        if (op->name == "halide_copy_to_host" || op->name == "halide_copy_to_device") {
+            if (!op->args.empty()) {
+                if (const Variable *v = op->args.front().as<Variable>()) {
+                    if (ends_with(v->name, ".buffer")) {
+                        std::string buffer_name = v->name.substr(0, v->name.size() - 7);
+                        const char *tag = op->name == "halide_copy_to_device" ?
+                                              " (copy to device)" :
+                                              " (copy to host)";
+                        names.id_for_instance(buffer_name + tag, producer_id);
+                    }
+                }
+            }
+            return IRMutator::visit(op);
+        }
+        if (!op->is_intrinsic(Call::declare_inlined)) {
+            return IRMutator::visit(op);
+        }
+        // Parse the (node_0, ..., node_{N-1}, p_0, c_0, ...) form.
+        int num_nodes = 0;
+        while (num_nodes < (int)op->args.size() &&
+               op->args[num_nodes].type().is_handle()) {
+            num_nodes++;
+        }
+        int num_edges = ((int)op->args.size() - num_nodes) / 2;
+        internal_assert(num_nodes >= 1 &&
+                        (int)op->args.size() == num_nodes + 2 * num_edges);
 
-// Inject counters for various stats as far outermost as possible, to minimize
-// overhead. For example, instead of this:
+        // Collect all incoming edges per node. A node can have multiple
+        // parents when CSE within a Provide shares a marker subexpression
+        // between two different inlining contexts (the diamond case).
+        std::vector<std::vector<int>> parents(num_nodes);
+        for (int e = 0; e < num_edges; e++) {
+            auto p = as_const_int(op->args[num_nodes + 2 * e]);
+            auto c = as_const_int(op->args[num_nodes + 2 * e + 1]);
+            internal_assert(p && c) << Expr(op);
+            parents[*c].push_back((int)*p);
+        }
+
+        // For each node, the sorted-by-index list of all its ancestors
+        // (including itself), and its depth from the root. Computed via
+        // recursive memoization so dependencies are resolved in topological
+        // order regardless of how the node indices compare — node indices
+        // reflect walk-encounter order, not topology (e.g. a let-bound
+        // marker is added before the markers that reference it).
+        std::vector<std::vector<int>> ancestors(num_nodes);
+        std::vector<int> depth(num_nodes, 0);
+        std::vector<bool> done(num_nodes, false);
+        auto compute_ancestors = [&](auto &self, int n) -> void {
+            if (done[n]) {
+                return;
+            }
+            done[n] = true;
+            ancestors[n] = {n};
+            for (int p : parents[n]) {
+                self(self, p);
+                depth[n] = std::max(depth[n], depth[p] + 1);
+                std::vector<int> merged;
+                std::set_union(ancestors[n].begin(), ancestors[n].end(),
+                               ancestors[p].begin(), ancestors[p].end(),
+                               std::back_inserter(merged));
+                ancestors[n] = std::move(merged);
+            }
+        };
+        for (int n = 0; n < num_nodes; n++) {
+            compute_ancestors(compute_ancestors, n);
+        }
+
+        // For each non-root node pick its "effective" parent. Single parent:
+        // just that parent. Multiple parents (the diamond case): the lowest
+        // common ancestor — the deepest node every parent agrees on.
+        std::vector<int> node_parent_idx(num_nodes, -1);
+        for (int n = 1; n < num_nodes; n++) {
+            internal_assert(!parents[n].empty())
+                << "Non-root node " << n << " has no parent in declare_inlined";
+            if (parents[n].size() == 1) {
+                node_parent_idx[n] = parents[n][0];
+                continue;
+            }
+            std::vector<int> common = ancestors[parents[n][0]];
+            std::vector<int> tmp;
+            for (size_t i = 1; i < parents[n].size(); i++) {
+                tmp.clear();
+                std::set_intersection(common.begin(), common.end(),
+                                      ancestors[parents[n][i]].begin(),
+                                      ancestors[parents[n][i]].end(),
+                                      std::back_inserter(tmp));
+                std::swap(common, tmp);
+            }
+            // common always contains at least the root (which is every
+            // node's ancestor). Pick the deepest.
+            int best = common[0];
+            for (int a : common) {
+                if (depth[a] > depth[best]) {
+                    best = a;
+                }
+            }
+            node_parent_idx[n] = best;
+        }
+
+        // Node 0 is the surrounding producer; the rest chain back to it.
+        std::vector<int> node_id(num_nodes, -1);
+        node_id[0] = producer_id;
+        auto resolve_instance_id = [&](auto &self, int idx) -> int {
+            if (node_id[idx] >= 0) {
+                return node_id[idx];
+            }
+            int pid = self(self, node_parent_idx[idx]);
+            const std::string &name = handle_name(op->args[idx]);
+            node_id[idx] = names.id_for_instance(name, pid);
+            return node_id[idx];
+        };
+        for (int i = 1; i < num_nodes; i++) {
+            resolve_instance_id(resolve_instance_id, i);
+        }
+
+        std::vector<Expr> new_args;
+        new_args.reserve(num_nodes - 1);
+        for (int i = 1; i < num_nodes; i++) {
+            new_args.push_back(make_const(Int(32), node_id[i]));
+        }
+        return Call::make(op->type, Call::declare_inlined,
+                          new_args, Call::Intrinsic);
+    }
+
+public:
+    PreAllocateInstances(Names &names)
+        : names(names) {
+    }
+};
+
+// Second pass: inject counters for various stats as far outermost as possible,
+// to minimize overhead. For example, instead of this:
 // for (x in [min, max]) {
 //   increment_counter(..., 1);
 //   ...
@@ -120,7 +483,19 @@ class InjectCounters : public IRMutator {
 public:
     InjectCounters(Names &names, const map<string, Function> &env)
         : names(names), env(env) {
+        // The previous pass populated names.id_info with every instance.
+        // Index them by name so declare_box_required_root (which carries a
+        // pipeline-wide root-box count for a Func, not for any specific
+        // instance of it) can duplicate that count to every instance.
+        for (int i = 0; i < names.num_ids(); i++) {
+            instances_by_name[names.id_info[i].name].push_back(i);
+        }
     }
+
+    // Instances whose counter contributions were hoisted out of a GPU
+    // kernel via upper-bound substitution (or summed across an impure-
+    // condition IfThenElse) and so may be over-counted in the report.
+    std::set<int> approximated_instances;
 
 protected:
     Names &names;
@@ -131,13 +506,28 @@ protected:
     // ID of the currently-produced Func
     int producer_id = -1;
 
-    // This must match the signature of halide_profile_update_counters in the runtime.
+    // Per-Func flag: are we currently inside that Func's pure def?
+    // Updated by the declare_stage marker that ScheduleFunctions emits
+    // at the start of each stage's loop nest (the marker also carries
+    // the Func name). A per-Func map handles compute_with cases where
+    // the stages of different Funcs are interleaved in the IR — each
+    // Store consults the flag for its own Func.
+    std::map<std::string, bool> func_in_pure_stage;
+
+    // The counters we track. This list must be kept in sync with multiple other
+    // things. If you add a counter, also update:
+    // - the num_counters int below the enum
+    // - halide_profile_update_counters in profiler_inlined.cpp
+    // - the fields of halide_profiler_func_stats in HalideRuntime.h
+    // - the block of code that prints counters to json in profiler_common.cpp
     enum { Realizations = 0,
            Productions,
            ParallelLoops,
            ParallelTasks,
            PointsRequiredAtRealization,
+           PointsRequiredAtProduction,
            PointsRequiredAtRoot,
+           PointsComputed,
            ScalarLoads,
            VectorLoads,
            Gathers,
@@ -145,9 +535,10 @@ protected:
            ScalarStores,
            VectorStores,
            Scatters,
-           BytesStored };
+           BytesStored,
+           InlinedCalls };
 
-    static constexpr int num_counters = BytesStored + 1;
+    static constexpr int num_counters = InlinedCalls + 1;
 
     struct Counters {
 
@@ -200,12 +591,28 @@ protected:
     };
 
     const For *enclosing_loop = nullptr, *enclosing_parallel_loop = nullptr;
+    // True while mutating the body of any GPU loop. The CPU local_counters
+    // mechanism doesn't translate to GPU code (the buffer would have to be
+    // device-accessible, with atomic adds, and IHDBC has already run by the
+    // time we're injecting profiling). Instead, when in_gpu is set, we
+    // make any counter contribution that would normally have to flush
+    // mid-kernel hoist conservatively out of the kernel — substituting an
+    // upper bound for loop vars, wrapping in a Let for LetStmts, and
+    // wrapping in a Select for IfThenElse (or taking the max of the
+    // branches when the condition is impure). Any instance whose
+    // contribution is hoisted via an upper-bound substitution is recorded
+    // in approximated_instances and flagged in its profile-report notes.
+    bool in_gpu = false;
     // thread-local counters
     std::string local_counters;
     // A map from a func id and a counter id to a slot in the local counters array
     std::map<std::pair<int, int>, int> local_counters_indices;
 
     std::map<int, Counters> counters;
+
+    // name -> all instance ids with that name. Built once in the constructor;
+    // only declare_box_required_root reads it.
+    std::map<std::string, std::vector<int>> instances_by_name;
 
     bool is_func(const std::string &name) const {
         return env.find(name) != env.end();
@@ -221,6 +628,7 @@ protected:
             }
             std::vector<Stmt> stores;
             stores.reserve(num_counters);
+            // TODO: Joint CSE across RHSs
             for (int i = 0; i < num_counters; i++) {
                 if (!c.counters[i].defined()) {
                     continue;
@@ -240,6 +648,7 @@ protected:
             std::vector<Expr> args(2 + num_counters);
             args[0] = Variable::make(Handle(), names.profiler_instance);
             args[1] = id;
+            // TODO: Joint CSE across RHSs
             for (int i = 0; i < num_counters; i++) {
                 Expr count = c.counters[i];
                 args[i + 2] = count.defined() ? count : make_zero(UInt(64));
@@ -278,34 +687,186 @@ protected:
         }
     }
 
+    // Recompute a Counters object's free_vars set from its current Exprs.
+    // Used after any hoisting operation that mutates the Exprs in place.
+    static void recompute_free_vars(Counters &c) {
+        c.free_vars.clear();
+        for (int i = 0; i < num_counters; i++) {
+            if (c.counters[i].defined()) {
+                c.add_free_vars(c.counters[i]);
+            }
+        }
+    }
+
+    // GPU hoisting: if `var` (a closing-out loop var) appears in a counter
+    // contribution, substitute an upper bound for it so the contribution
+    // becomes hoistable. Mark the instance as approximated since the result
+    // is an over-estimate. If no finite upper bound can be found, drop the
+    // contribution entirely (still mark approximated).
+    void hoist_loop_var_upper_bound(const For *op) {
+        Scope<Interval> scope;
+        scope.push(op->name, Interval(op->min, op->max));
+        for (auto &[id, c] : counters) {
+            if (!c.free_vars.count(op->name)) {
+                continue;
+            }
+            for (int i = 0; i < num_counters; i++) {
+                if (c.counters[i].defined() && expr_uses_var(c.counters[i], op->name)) {
+                    Interval iv = bounds_of_expr_in_scope(c.counters[i], scope);
+                    if (iv.has_upper_bound()) {
+                        c.counters[i] = simplify(iv.max);
+                    } else {
+                        c.counters[i] = Expr();
+                    }
+                    approximated_instances.insert(id);
+                }
+            }
+            recompute_free_vars(c);
+        }
+    }
+
+    // GPU hoisting: when a LetStmt is closing out, any counter contribution
+    // that depends on the let-bound name gets wrapped in an exact Let —
+    // but only if the RHS is pure. An impure RHS (e.g. a Load whose
+    // backing buffer may be mutated, or a non-pure Call) would be
+    // re-evaluated in a different scope by the wrapped Let, which can
+    // change its meaning. In that case we drop the contribution and mark
+    // the instance approximated.
+    void hoist_let(const std::string &name, const Expr &value) {
+        bool value_pure = is_pure(value);
+        for (auto &[id, c] : counters) {
+            if (!c.free_vars.count(name)) {
+                continue;
+            }
+            for (int i = 0; i < num_counters; i++) {
+                if (c.counters[i].defined() && expr_uses_var(c.counters[i], name)) {
+                    if (value_pure) {
+                        c.counters[i] = Let::make(name, value, c.counters[i]);
+                    } else {
+                        c.counters[i] = Expr();
+                        approximated_instances.insert(id);
+                    }
+                }
+            }
+            recompute_free_vars(c);
+        }
+    }
+
+    // GPU hoisting: combine the then- and else-branch counter contributions
+    // of an IfThenElse into the outer scope. For a pure condition, exact via
+    // Select. For an impure condition (e.g. a Load), upper-bound the
+    // contribution by max(then, else) (the branches are mutually exclusive)
+    // and mark the instances as approximated.
+    void hoist_if(const Expr &condition,
+                  std::map<int, Counters> &then_counters,
+                  std::map<int, Counters> &else_counters) {
+        bool cond_pure = is_pure(condition);
+        std::set<int> ids;
+        for (const auto &p : then_counters) {
+            ids.insert(p.first);
+        }
+        for (const auto &p : else_counters) {
+            ids.insert(p.first);
+        }
+        for (int id : ids) {
+            Counters merged;
+            auto *t = then_counters.count(id) ? &then_counters[id] : nullptr;
+            auto *e = else_counters.count(id) ? &else_counters[id] : nullptr;
+            for (int i = 0; i < num_counters; i++) {
+                Expr tv = (t && t->counters[i].defined()) ? t->counters[i] : Expr();
+                Expr ev = (e && e->counters[i].defined()) ? e->counters[i] : Expr();
+                if (!tv.defined() && !ev.defined()) {
+                    continue;
+                }
+                Expr zero64 = make_zero(UInt(64));
+                Expr ti = tv.defined() ? tv : zero64;
+                Expr ei = ev.defined() ? ev : zero64;
+                if (cond_pure) {
+                    merged.counters[i] = select(condition, ti, ei);
+                } else {
+                    // Branches are mutually exclusive — only one runs per
+                    // execution — so the tight conservative upper bound on
+                    // the contribution is max(then, else).
+                    merged.counters[i] = max(ti, ei);
+                    approximated_instances.insert(id);
+                }
+            }
+            recompute_free_vars(merged);
+            counters[id].add(merged);
+        }
+    }
+
+    // Compute the total number of points in a box passed to declare_box_required*.
+    // The args after the func handle are (min, max) pairs per dim; the result is
+    // a scalar UInt(64) total, reduced across any surrounding vector lanes.
+    static Expr box_total(const Call *op) {
+        int lanes = op->type.lanes();
+        Expr total = make_one(UInt(64, lanes));
+        for (size_t i = 1; i < op->args.size(); i += 2) {
+            total *= cast(total.type(), op->args[i + 1] + 1 - op->args[i]);
+        }
+        if (lanes > 1) {
+            total = VectorReduce::make(VectorReduce::Add, total, 1);
+        }
+        // Simplifying here removes false dependences on loop vars.
+        return simplify(total);
+    }
+
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic({Call::declare_box_required_root, Call::declare_box_required})) {
-            const auto *b = op->args[0].as<Broadcast>();
-            const auto *v = b ? b->value.as<Variable>() : op->args[0].as<Variable>();
-            internal_assert(v && v->type.is_handle()) << Expr(op) << "\n";
-            Counters &c = counters[names.id_for_name(v->name)];
-
-            // It could be a vector of box declarations, in which case we're
-            // going to need to sum the extents of each.
-            int lanes = op->type.lanes();
-            Expr total_extent = make_one(UInt(64, lanes));
-            for (size_t i = 1; i < op->args.size(); i += 2) {
-                total_extent *= cast(total_extent.type(), op->args[i + 1] + 1 - op->args[i]);
+        if (op->is_intrinsic(Call::declare_box_required_at_realization)) {
+            // Emitted at the Realize node for the func. The Realize sits
+            // inside the parent producer and contains this func's
+            // ProducerConsumer, so the right instance id is parented to the
+            // current producer.
+            Counters &c = counters[names.id_for_instance(handle_name(op->args[0]), producer_id)];
+            c.count(PointsRequiredAtRealization, box_total(op));
+            c.count(Realizations);
+            return make_zero(op->type);
+        } else if (op->is_intrinsic(Call::declare_box_required_at_production)) {
+            // Emitted just inside the ProducerConsumer node. The same
+            // .s0.var.min/.max vars used at the Realize site are also bound
+            // here by bounds inference, but to the per-production-instance
+            // values, so this captures e.g. sliding-window over-computation
+            // that the realize-box counter misses.
+            Counters &c = counters[names.id_for_instance(handle_name(op->args[0]), producer_id)];
+            c.count(PointsRequiredAtProduction, box_total(op));
+            return make_zero(op->type);
+        } else if (op->is_intrinsic(Call::declare_box_required_at_root)) {
+            // Bill the pipeline-wide root box to this Func's canonical
+            // instance only. It's a Func-level fact, not a per-instance one,
+            // so summing it across instances would over-count. The reporter
+            // looks it up via fs->canonical_id when computing each
+            // instance's local recompute ratio.
+            auto it = instances_by_name.find(handle_name(op->args[0]));
+            if (it != instances_by_name.end()) {
+                // instances_by_name was filled in id-ascending order, and the
+                // canonical id is the first id allocated for the name, so
+                // it->second.front() is always the canonical id.
+                counters[it->second.front()].count(PointsRequiredAtRoot, box_total(op));
             }
-            if (lanes > 1) {
-                total_extent = VectorReduce::make(VectorReduce::Add, total_extent, 1);
-            }
-            // It's important to simplify here, as it removes false dependences on loop vars.
-            total_extent = simplify(total_extent);
+            return make_zero(op->type);
+        } else if (op->is_intrinsic(Call::declare_inlined)) {
+            // The pre-pass has already resolved each non-root chain node to a
+            // per-instance id, so the args here are just a flat list of int
+            // ids — one per inlined call site to bill. The intrinsic's type
+            // still carries the surrounding vector lane count.
+            Expr per_node = make_const(UInt(64), op->type.lanes());
 
-            if (op->is_intrinsic(Call::declare_box_required)) {
-                // Happens at the realize node
-                c.count(PointsRequiredAtRealization, total_extent);
-                c.count(Realizations);
-            } else {
-                c.count(PointsRequiredAtRoot, total_extent);
+            for (const Expr &arg : op->args) {
+                auto id = as_const_int(arg);
+                internal_assert(id);
+                counters[(int)*id].count(InlinedCalls, per_node);
             }
 
+            return make_zero(op->type);
+        } else if (op->is_intrinsic(Call::declare_stage)) {
+            // Marker from ScheduleFunctions saying "we're starting stage N
+            // of Func F here". Update our per-Func pure-def flag and strip
+            // the marker from the IR.
+            internal_assert(op->args.size() == 2);
+            auto stage = as_const_int(op->args[1]);
+            internal_assert(stage);
+            func_in_pure_stage[handle_name(op->args[0])] = (*stage == 0);
             return make_zero(op->type);
         } else {
             // Counter events are never nested, so no recursive mutate call.
@@ -313,12 +874,30 @@ protected:
         }
     }
 
+    // True for Stores/Loads to or from buffers we want to bill: a Func's
+    // own storage, or an input/output parameter / image. False for internal
+    // bookkeeping buffers like storage-folding head trackers, async
+    // semaphores, and sampling tokens — we don't want their accesses
+    // inflating the byte / scalar-load counts of the enclosing producer.
+    bool is_real_data_buffer(const Store *op) const {
+        return op->param.defined() || is_func(names.prefix(op->name));
+    }
+    bool is_real_data_buffer(const Load *op) const {
+        return op->param.defined() || op->image.defined() ||
+               is_func(names.prefix(op->name));
+    }
+
     Stmt visit(const Store *op) override {
-        // Note this also picks up loads and stores from things associated with
-        // the Func, like storage folding head trackers.
-        std::string f = names.prefix(op->name);
-        if (is_func(f)) {
-            Counters &c = counters[names.id_for_name(f)];
+        if (is_real_data_buffer(op)) {
+            std::string f = names.prefix(op->name);
+            // Stores in a producer block are to the Func being produced, so
+            // bill them to the current producer's instance id. (That's the
+            // right instance even if f has multiple instances elsewhere.)
+            int id = (producer_id >= 0 && names.id_info[producer_id].name == f) ?
+                         producer_id :
+                         names.id_for_name(f);
+            Counters &c = counters[id];
+            int lanes = op->value.type().lanes();
             if (op->index.type().is_scalar()) {
                 c.count(ScalarStores);
             } else if (const Ramp *r = op->index.as<Ramp>();
@@ -327,7 +906,14 @@ protected:
             } else {
                 c.count(Scatters);
             }
-            c.count(BytesStored, make_const(UInt(64), op->value.type().bytes() * op->value.type().lanes()));
+            c.count(BytesStored, make_const(UInt(64), op->value.type().bytes() * lanes));
+            // Only the pure def (stage 0) contributes to "points computed";
+            // update-def stores are a separate kind of work and shouldn't
+            // show up as recompute.
+            auto it = func_in_pure_stage.find(f);
+            if (it != func_in_pure_stage.end() && it->second) {
+                c.count(PointsComputed, make_const(UInt(64), lanes));
+            }
         }
         return IRMutator::visit(op);
     }
@@ -336,7 +922,7 @@ protected:
         // We bill these to the Func we're producing, not the Func being
         // loaded. These counters are about what kinds of loads we do while
         // computing a given Func.
-        if (producer_id >= 0) {
+        if (producer_id >= 0 && is_real_data_buffer(op)) {
             Counters &c = counters[producer_id];
             if (op->index.type().is_scalar()) {
                 c.count(ScalarLoads);
@@ -353,7 +939,9 @@ protected:
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
-            int id = names.id_for_name(op->name);
+            // One instance per producer node, parented to the surrounding
+            // producer. See file-level comment for why this matters.
+            int id = names.id_for_instance(op->name, producer_id);
             Counters &c = counters[id];
             c.count(Productions);
             ScopedValue<int> old(producer_id, id);
@@ -364,10 +952,12 @@ protected:
     }
 
     Stmt visit(const For *op) override {
-        if (op->for_type == ForType::GPUBlock) {
-            // TODO
-            return op;
-        }
+        // GPU loops are also is_unordered_parallel(). We can't use the CPU
+        // local_counters mechanism inside a GPU kernel (device memory,
+        // atomics, IHDBC ordering), so when in_gpu we hoist any
+        // closing-out contributions instead of flushing — see the helper
+        // methods above.
+        ScopedValue<bool> bind_gpu(in_gpu, in_gpu || is_gpu(op->for_type));
 
         decltype(counters) old;
         old.swap(counters);
@@ -415,7 +1005,13 @@ protected:
         // Scale up the counters by the loop trip count
         Expr e = simplify(op->extent());
 
-        body = flush_all_that_depend_on_var(body, op->name);
+        if (in_gpu) {
+            // Don't try to flush in the middle of a GPU kernel — hoist
+            // depending contributions out via upper-bound substitution.
+            hoist_loop_var_upper_bound(op);
+        } else {
+            body = flush_all_that_depend_on_var(body, op->name);
+        }
 
         for (auto &[_, c] : counters) {
             c.mul(e);
@@ -424,7 +1020,8 @@ protected:
         merge(old);
 
         if (op->is_unordered_parallel()) {
-            int id = names.id_for_name(names.prefix(op->name));
+            // The parallel loop belongs to the currently-producing Func.
+            int id = producer_id >= 0 ? producer_id : names.id_for_name(names.prefix(op->name));
             counters[id].count(ParallelLoops);
             counters[id].count(ParallelTasks, cast(UInt(64), e));
         }
@@ -437,14 +1034,38 @@ protected:
         decltype(counters) old;
         counters.swap(old);
         Stmt body = mutate(op->body);
-        body = flush_all_that_depend_on_var(body, op->name);
+        if (in_gpu) {
+            hoist_let(op->name, op->value);
+        } else {
+            body = flush_all_that_depend_on_var(body, op->name);
+        }
         merge(old);
         return LetStmt::make(op->name, op->value, body);
     }
 
     Stmt visit(const IfThenElse *op) override {
-        decltype(counters) old;
+        if (in_gpu) {
+            // Inside a GPU kernel we can't flush in the branches; instead
+            // combine the branch contributions into the outer scope via
+            // Select (or a conservative max of the branches if the
+            // condition is impure).
+            decltype(counters) outer;
+            counters.swap(outer);
+            Stmt then_case = mutate(op->then_case);
+            decltype(counters) then_counters;
+            counters.swap(then_counters);
+            Stmt else_case;
+            decltype(counters) else_counters;
+            if (op->else_case.defined()) {
+                else_case = mutate(op->else_case);
+                counters.swap(else_counters);
+            }
+            counters.swap(outer);
+            hoist_if(op->condition, then_counters, else_counters);
+            return IfThenElse::make(op->condition, then_case, else_case);
+        }
 
+        decltype(counters) old;
         counters.swap(old);
         Stmt then_case, else_case;
         then_case = mutate(op->then_case);
@@ -470,12 +1091,40 @@ protected:
 
 public:
     Stmt operator()(const Stmt &s) {
-        Stmt stmt = IRMutator::operator()(s);
-        return flush_all(stmt);
+        return flush_all(IRMutator::operator()(s));
     }
 };
 
 class InjectProfiling : public IRMutator {
+    // Thread-activity tracking around parallel constructs and sampling-token
+    // plumbing for leaf parallel tasks.
+    static Stmt incr_active_threads(const Expr &profiler_instance) {
+        return Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
+                                         {profiler_instance}, Call::Extern));
+    }
+
+    static Stmt decr_active_threads(const Expr &profiler_instance) {
+        return Evaluate::make(Call::make(Int(32), "halide_profiler_decr_active_threads",
+                                         {profiler_instance}, Call::Extern));
+    }
+
+    static Stmt acquire_sampling_token(const Expr &shared_token, const Expr &local_token) {
+        return Evaluate::make(Call::make(Int(32), "halide_profiler_acquire_sampling_token",
+                                         {shared_token, local_token}, Call::Extern));
+    }
+
+    static Stmt release_sampling_token(const Expr &shared_token, const Expr &local_token) {
+        return Evaluate::make(Call::make(Int(32), "halide_profiler_release_sampling_token",
+                                         {shared_token, local_token}, Call::Extern));
+    }
+
+    static Stmt claim_sampling_token(const Stmt &s, const Expr &shared_token, const Expr &local_token) {
+        return LetStmt::make(local_token.as<Variable>()->name,
+                             Call::make(Handle(), Call::alloca, {Int(32).bytes()}, Call::Intrinsic),
+                             Block::make({acquire_sampling_token(shared_token, local_token),
+                                          s,
+                                          release_sampling_token(shared_token, local_token)}));
+    }
 
 public:
     vector<int> stack;  // What produce nodes are we currently inside of.
@@ -547,6 +1196,11 @@ private:
     struct AllocSize {
         bool on_stack;
         Expr size;
+        // Instance id resolved at Allocate time. The matching Free may sit at
+        // a different point in the producer stack than the Allocate (the
+        // Allocate can be hoisted while the Free stays deep), so caching the
+        // id here keeps the two billed to the same instance.
+        int id;
     };
 
     Scope<AllocSize> func_alloc_sizes;
@@ -573,8 +1227,18 @@ private:
         }
     }
 
-    int get_func_id(const string &name) {
-        return names.id_for_name(names.prefix(name));
+    // Resolve a Func name to its instance id under the currently-active
+    // producer chain. Must match the instance id PreAllocateInstances
+    // allocated for the corresponding producer.
+    int get_func_instance_id(const string &name) {
+        int parent = stack.back();
+        // The bottom of the stack is the overhead sentinel; treat it as "no
+        // parent" so pipeline-root producers come out as parent=-1, matching
+        // how PreAllocateInstances allocates them (its producer_id starts at -1).
+        if (parent == names.overhead_id) {
+            parent = -1;
+        }
+        return names.id_for_instance(names.prefix(name), parent);
     }
 
     Stmt unconditionally_set_current_func(int id) {
@@ -651,40 +1315,43 @@ private:
 
         bool on_stack = can_fit_on_stack && !op->new_expr.defined();
 
-        func_alloc_sizes.push(op->name, {on_stack, size});
+        // Resolve the id once here. visit(Free) may fire at a different
+        // producer-stack depth than this Allocate (the Allocate can be hoisted
+        // while the Free stays inside an enclosing producer's body), so we
+        // cache the id and have Free use it instead of re-querying stack.back().
+        int idx;
+        switch (classify(op->name)) {
+        case Kind::ProfiledFunc:
+            idx = get_func_instance_id(op->name);
+            break;
+        case Kind::NonProfiledFunc:
+            // Attribute the stack size contribution to the deepest _profiled_ func.
+            idx = stack.back();
+            break;
+        case Kind::NotAFunc:
+            idx = -1;
+            break;
+        }
+
+        func_alloc_sizes.push(op->name, {on_stack, size, idx});
 
         // compute_allocation_size() might return a zero size, if the allocation is
         // always conditionally false. remove_dead_allocations() is called after
         // inject_profiling() so this is a possible scenario.
-        if (!is_const_zero(size) && on_stack) {
-            int idx;
-            switch (classify(op->name)) {
-            case Kind::ProfiledFunc:
-                idx = get_func_id(op->name);
-                break;
-            case Kind::NonProfiledFunc:
-                idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
-                break;
-            case Kind::NotAFunc:
-                idx = -1;
-                break;
-            }
-            if (idx >= 0) {
-                auto int_size = as_const_uint(size);
-                internal_assert(int_size);  // Stack size is always a const int
-                func_stack_current[idx] += *int_size;
-                func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
-                debug(3) << "  Allocation on stack: " << op->name
-                         << "(" << size << ") in pipeline " << names.pipeline_name
-                         << "; current: " << func_stack_current[idx]
-                         << "; peak: " << func_stack_peak[idx] << "\n";
-            }
+        if (!is_const_zero(size) && on_stack && idx >= 0) {
+            auto int_size = as_const_uint(size);
+            internal_assert(int_size);  // Stack size is always a const int
+            func_stack_current[idx] += *int_size;
+            func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
+            debug(3) << "  Allocation on stack: " << op->name
+                     << "(" << size << ") in pipeline " << names.pipeline_name
+                     << "; current: " << func_stack_current[idx]
+                     << "; peak: " << func_stack_peak[idx] << "\n";
         }
 
         vector<Stmt> tasks;
         bool track_heap_allocation = !is_const_zero(size) && !on_stack && profiling_memory;
         if (track_heap_allocation) {
-            int idx = get_func_id(op->name);
             debug(3) << "  Allocation on heap: " << op->name
                      << "(" << size << ") in pipeline "
                      << names.pipeline_name << "\n";
@@ -725,9 +1392,9 @@ private:
         Stmt stmt = IRMutator::visit(op);
 
         if (!is_const_zero(alloc.size)) {
+            int idx = alloc.id;
             if (!alloc.on_stack) {
                 if (profiling_memory) {
-                    int idx = get_func_id(op->name);
                     debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << names.pipeline_name << "\n";
 
                     vector<Stmt> tasks{
@@ -743,18 +1410,6 @@ private:
                 auto int_size = as_const_uint(alloc.size);
                 internal_assert(int_size);
 
-                int idx;
-                switch (classify(op->name)) {
-                case Kind::ProfiledFunc:
-                    idx = get_func_id(op->name);
-                    break;
-                case Kind::NonProfiledFunc:
-                    idx = stack.back();
-                    break;
-                case Kind::NotAFunc:
-                    idx = -1;
-                    break;
-                }
                 if (idx >= 0) {
                     func_stack_current[idx] -= *int_size;
                     debug(3) << "  Free on stack: " << op->name
@@ -771,7 +1426,7 @@ private:
         Stmt body;
         if (classify(op->name) == Kind::ProfiledFunc) {
             if (op->is_producer) {
-                int idx = get_func_id(op->name);
+                int idx = get_func_instance_id(op->name);
                 stack.push_back(idx);
                 Stmt set_current = set_current_func(idx);
                 body = Block::make(set_current, mutate(op->body));
@@ -889,6 +1544,27 @@ private:
 
         Stmt stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
 
+        // Force a device sync after every GPU kernel launch. Kernel
+        // launches are asynchronous, so without this the actual compute
+        // time gets billed to whatever blocking host operation runs
+        // next (typically a halide_copy_to_host, or the end-of-pipeline
+        // device-free) and the profiler attributes time to the wrong
+        // row. We only do this when building with -profile (this whole
+        // pass only runs in that case), and only at the outermost GPU
+        // loop — inner GPU loops live inside the kernel body, which
+        // this pass does not descend into. The trade-off is that any
+        // overlap (host work, future kernel launches) that the
+        // schedule was relying on disappears, so the absolute time of
+        // a profiled GPU build is biased upward; that's documented in
+        // HalideRuntime.h.
+        if (op->device_api != DeviceAPI::None &&
+            op->device_api != DeviceAPI::Host &&
+            op->device_api != DeviceAPI::Hexagon) {
+            Expr device_interface = make_device_interface_call(op->device_api);
+            Stmt sync = call_extern_and_assert("halide_device_sync_global", {device_interface});
+            stmt = Block::make(stmt, sync);
+        }
+
         if (update_active_threads) {
             if (Internal::is_gpu(op->for_type)) {
                 stmt = suspend_thread_but_keep_task_id(stmt);
@@ -918,66 +1594,79 @@ private:
         return IfThenElse::make(std::move(condition), std::move(then_case), std::move(else_case));
     }
 
+    // Pattern emitted by InjectHostDevBufferCopies:
+    //   let err = halide_copy_to_{host,device}(buf, ...) in
+    //     assert(err == 0)
+    //     <rest>
+    // We bill the copy as its own synthetic Func ("<name> (copy to {host,device})")
+    // so its time shows up as its own line in the profile. The synthetic func
+    // is active for the duration of the copy plus the assert and (for
+    // copy_to_device) a device-sync barrier; after that we go back to whatever
+    // producer is on the stack.
+    Stmt inject_buffer_copy_timing(const LetStmt *op, const Call *call) {
+        const Variable *var = call->args.front().as<Variable>();
+        internal_assert(var)
+            << "Expected to find a variable as first argument of the function call " << call->name << ".\n";
+        std::string buffer_name = var->name;
+        internal_assert(ends_with(buffer_name, ".buffer"))
+            << "Expected to find a variable ending in .buffer as first argument to function call " << call->name << "\n";
+        buffer_name = buffer_name.substr(0, buffer_name.size() - 7);
+
+        bool to_device = call->name == "halide_copy_to_device";
+        const char *tag = to_device ? " (copy to device)" : " (copy to host)";
+        // Parent the synthetic copy "Func" to whichever producer it sits
+        // inside, so it nests under that producer in the timeline view.
+        // PreAllocateInstances allocates these ids eagerly using the same
+        // parent, so id_for_instance here just looks up the existing id.
+        // overhead_id sits at the bottom of the stack as a sentinel — at
+        // the outermost level it stands in for "no enclosing producer".
+        int parent_id = stack.back();
+        if (parent_id == names.overhead_id) {
+            parent_id = -1;
+        }
+        int copy_id = names.id_for_instance(buffer_name + tag, parent_id);
+        // Bump a counter per copy invocation so tests/reports can see
+        // exactly how many times it fired (the sample-based `time` is too
+        // coarse for fast copies).
+        Stmt count_call = Evaluate::make(
+            Call::make(Int(32), "halide_profiler_count_host_device_copy",
+                       {profiler_instance, make_const(Int(32), copy_id)}, Call::Extern));
+        Stmt start_profiler = Block::make(count_call, set_current_func(copy_id));
+
+        // The copy is followed by an assert; we wrap both (and, for
+        // copy_to_device, the subsequent device sync) in the timed window.
+        const AssertStmt *copy_assert = nullptr;
+        Stmt other;
+        if (const Block *block = op->body.as<Block>()) {
+            copy_assert = block->first.as<AssertStmt>();
+            if (copy_assert) {
+                other = block->rest;
+            }
+        } else {
+            copy_assert = op->body.as<AssertStmt>();
+        }
+        internal_assert(copy_assert) << "No assert found after buffer copy.";
+
+        std::vector<Stmt> steps;
+        steps.push_back(AssertStmt::make(copy_assert->condition, copy_assert->message));
+        if (to_device) {
+            // Last arg to copy_to_device is the device interface.
+            Expr device_interface = call->args.back();
+            steps.push_back(call_extern_and_assert("halide_device_sync_global", {device_interface}));
+        }
+        steps.push_back(set_current_func(stack.back()));
+        if (other.defined()) {
+            steps.push_back(mutate(other));
+        }
+        return Block::make(start_profiler,
+                           LetStmt::make(op->name, mutate(op->value),
+                                         Block::make(steps)));
+    }
+
     Stmt visit(const LetStmt *op) override {
         if (const Call *call = op->value.as<Call>()) {
-            Stmt start_profiler;
             if (call->name == "halide_copy_to_host" || call->name == "halide_copy_to_device") {
-                std::string buffer_name;
-                if (const Variable *var = call->args.front().as<Variable>()) {
-                    buffer_name = var->name;
-                    if (ends_with(buffer_name, ".buffer")) {
-                        buffer_name = buffer_name.substr(0, buffer_name.size() - 7);
-                    } else {
-                        internal_error << "Expected to find a variable ending in .buffer as first argument to function call " << call->name << "\n";
-                    }
-                } else {
-                    internal_error << "Expected to find a variable as first argument of the function call " << call->name << ".\n";
-                }
-                bool requires_sync = false;
-                if (call->name == "halide_copy_to_host") {
-                    int copy_to_host_id = get_func_id(buffer_name + " (copy to host)");
-                    start_profiler = set_current_func(copy_to_host_id);
-                    requires_sync = false;
-                } else if (call->name == "halide_copy_to_device") {
-                    int copy_to_device_id = get_func_id(buffer_name + " (copy to device)");
-                    start_profiler = set_current_func(copy_to_device_id);
-                    requires_sync = true;
-                } else {
-                    internal_error << "Unexpected function name.\n";
-                }
-                if (start_profiler.defined()) {
-                    // The copy functions are followed by an assert, which we will wrap in the timed body.
-                    const AssertStmt *copy_assert = nullptr;
-                    Stmt other;
-                    if (const Block *block = op->body.as<Block>()) {
-                        if (const AssertStmt *assert = block->first.as<AssertStmt>()) {
-                            copy_assert = assert;
-                            other = block->rest;
-                        }
-                    } else if (const AssertStmt *assert = op->body.as<AssertStmt>()) {
-                        copy_assert = assert;
-                    }
-                    if (copy_assert) {
-                        std::vector<Stmt> steps;
-                        steps.push_back(AssertStmt::make(copy_assert->condition, copy_assert->message));
-                        if (requires_sync) {
-                            internal_assert(call->name == "halide_copy_to_device");
-                            Expr device_interface = call->args.back();  // The last argument to the copy_to_device calls is the device_interface.
-                            Stmt sync_and_assert = call_extern_and_assert("halide_device_sync_global", {device_interface});
-                            steps.push_back(sync_and_assert);
-                        }
-                        steps.push_back(set_current_func(stack.back()));
-
-                        if (other.defined()) {
-                            steps.push_back(mutate(other));
-                        }
-                        return Block::make(start_profiler,
-                                           LetStmt::make(op->name, mutate(op->value),
-                                                         Block::make(steps)));
-                    } else {
-                        internal_error << "No assert found after buffer copy.\n";
-                    }
-                }
+                return inject_buffer_copy_timing(op, call);
             }
         }
 
@@ -992,30 +1681,256 @@ private:
 
 }  // namespace
 
+// =============================================================================
+// inline_marker resolution
+// =============================================================================
+//
+// Inline.cpp leaves an inline_marker intrinsic at every inlined call site
+// (one per Func inlining, nested when a chain of Funcs is inlined into the
+// same site). This pass walks each Provide, replaces the markers with their
+// bodies, and stamps down a declare_inlined intrinsic recording the inlining
+// graph for the Provide. PreAllocateInstances in inject_profiling then
+// allocates per-instance ids from those graphs.
+//
+// Stmt-level CSE inside Inline.cpp can hoist common subexpressions —
+// including ones containing markers — out into LetStmts wrapping the
+// Provide, so we have to deal with that too. We treat each such LetStmt's
+// RHS as an "unrooted subgraph": its top-level markers are recorded as the
+// let's subgraph roots, and each use of the let var contributes an edge
+// from the current parent context to those roots. This handles arbitrarily
+// nested let chains and shared subexpressions without substituting let
+// values into every use site (which would be quadratic for large bodies).
+//
+// Lets that the Provide never references stay in the IR with their markers
+// stripped (so codegen doesn't trip on them), but contribute no nodes to
+// the graph.
+
+namespace {
+
+bool expr_contains_inline_marker(const Expr &e) {
+    bool found = false;
+    visit_with(e, [&](auto *self, const Call *op) {
+        if (op->is_intrinsic(Call::inline_marker)) {
+            found = true;
+        }
+        self->visit_base(op);
+    });
+    return found;
+}
+
+// Mutator that walks an entire let-chain + Provide subtree as one unit:
+//   - On an inline_marker call: replaces it with its body, registering a
+//     node and an edge (or recording the node as a subgraph root, if we're
+//     currently walking a let RHS).
+//   - On a Let or LetStmt: walks the value through `this` with the let-
+//     root parent sentinel set so the value's top-level markers become
+//     this let's subgraph roots, records the roots, then walks the body.
+//   - On a Variable: if the name matches a let we've already processed,
+//     emits edges from the current parent to that let's subgraph roots
+//     (or forwards the roots to the enclosing let, if we're inside one).
+class BuildInlineGraph : public IRMutator {
+public:
+    // Output: the graph built during mutate(), plus the name of the Provide
+    // it surrounds (captured during the walk so the caller doesn't have to
+    // re-walk the IR to find it).
+    std::map<int, Expr> nodes_by_id;
+    struct Edge {
+        int caller, callee;
+    };
+    std::vector<Edge> edges;
+    std::string provide_name;
+
+protected:
+    // Sentinel parent value meaning "we're walking a let RHS": markers
+    // encountered with this parent become subgraph roots for the
+    // surrounding let rather than children of an enclosing context. -1 is
+    // already taken (means "the Provide node"), so use -2.
+    static constexpr int let_root_sentinel = -2;
+
+    int parent = -1;
+    std::vector<int> *current_let_roots = nullptr;
+
+    // Internal dedup map: same inline_marker Expr (via CSE) collapses to one node.
+    std::map<Expr, int, ExprCompare> nodes_by_expr;
+    // Subgraph roots for each let, indexed by name.
+    std::map<std::string, std::vector<int>> let_roots;
+
+    using IRMutator::visit;
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::inline_marker)) {
+            internal_assert(op->args.size() == 2);
+            Expr e(op);
+            auto [it, inserted] = nodes_by_expr.try_emplace(e, (int)nodes_by_expr.size());
+            int id = it->second;
+            if (inserted) {
+                nodes_by_id[id] = e;
+            }
+            if (parent == let_root_sentinel) {
+                current_let_roots->push_back(id);
+            } else {
+                edges.emplace_back(Edge{parent, id});
+            }
+            ScopedValue<int> old(parent, id);
+            return mutate(op->args[1]);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Variable *op) override {
+        auto it = let_roots.find(op->name);
+        if (it != let_roots.end()) {
+            if (parent == let_root_sentinel) {
+                current_let_roots->insert(current_let_roots->end(),
+                                          it->second.begin(), it->second.end());
+            } else {
+                for (int r : it->second) {
+                    edges.emplace_back(Edge{parent, r});
+                }
+            }
+        }
+        return op;
+    }
+
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
+        // Walk the chain top-down processing each value (so that later
+        // values can resolve references to earlier let names), then walk
+        // the body, then rebuild bottom-up. Iterative form so deep chains
+        // don't blow the stack.
+        struct Frame {
+            const LetOrLetStmt *op;
+            Expr new_value;
+        };
+        std::vector<Frame> frames;
+        decltype(op->body) body;
+        do {
+            // Walk the value with parent = let_root_sentinel so its top-
+            // level markers become this let's subgraph roots.
+            std::vector<int> roots;
+            Expr new_value;
+            {
+                ScopedValue<int> sp(parent, let_root_sentinel);
+                ScopedValue<std::vector<int> *> sr(current_let_roots, &roots);
+                new_value = mutate(op->value);
+            }
+            let_roots[op->name] = std::move(roots);
+            frames.push_back({op, std::move(new_value)});
+            body = op->body;
+        } while ((op = body.template as<LetOrLetStmt>()));
+
+        body = mutate(body);
+
+        for (const auto &frame : reverse_view(frames)) {
+            if (frame.new_value.same_as(frame.op->value) && body.same_as(frame.op->body)) {
+                body = frame.op;
+            } else {
+                body = LetOrLetStmt::make(frame.op->name, frame.new_value, body);
+            }
+        }
+        return body;
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const Provide *op) override {
+        provide_name = op->name;
+        return IRMutator::visit(op);
+    }
+};
+
+// Process a Stmt that's either a Provide or a chain of LetStmts ending in
+// a Provide. Builds the inlining graph, strips markers, rebuilds, and
+// emits a declare_inlined.
+Stmt process_inlining_subtree(const Stmt &s) {
+
+    BuildInlineGraph builder;
+
+    Stmt rewritten = builder(s);
+
+    internal_assert(!builder.provide_name.empty())
+        << "Expected to encounter a Provide while walking " << s << "\n";
+
+    // Now stamp down the declare_inlined intrinsic that encodes the graph via a
+    // list of its nodes followed by a list of its edges.
+    std::vector<Expr> intrin_args;
+    intrin_args.reserve(1 + builder.nodes_by_id.size() + 2 * builder.edges.size());
+    intrin_args.emplace_back(builder.provide_name);
+    for (const auto &[id, marker] : builder.nodes_by_id) {
+        intrin_args.push_back(marker.as<Call>()->args[0]);
+    }
+    for (const auto &edge : builder.edges) {
+        // +1 to account for the provide node itself at index 0.
+        intrin_args.push_back(edge.caller + 1);
+        intrin_args.push_back(edge.callee + 1);
+    }
+    if (intrin_args.size() > 1) {
+        Stmt decl = Evaluate::make(Call::make(Int(32), Call::declare_inlined,
+                                              intrin_args, Call::Intrinsic));
+        rewritten = Block::make(decl, rewritten);
+    }
+    return rewritten;
+}
+
+}  // namespace
+
+Stmt resolve_inline_markers(const Stmt &s) {
+    return mutate_with(s,  //
+                       [&](auto *self, const LetStmt *op) {
+                           // A LetStmt whose RHS carries an inline_marker
+                           // was hoisted out of its Provide by CSE; process
+                           // the chain + Provide together.
+                           if (expr_contains_inline_marker(op->value)) {
+                               return process_inlining_subtree(Stmt(op));
+                           } else {
+                               return self->visit_base(op);
+                           }  //
+                       },                                    //
+                       [&](auto *self, const Provide *op) {  //
+                           return process_inlining_subtree(Stmt(op));
+                       });
+}
+
 Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env, const Target &target) {
     Names names(pipeline_name);
 
-    // Start by injecting counters as far out as possible
-    Stmt s = InjectCounters(names, env)(stmt);
+    // 1) Allocate an instance id for every real instance (each producer node
+    //    and each inlined call site), and rewrite declare_inlined intrinsics
+    //    to hold those resolved ids directly. After this names.id_info is the
+    //    full set of instances we'll report on.
+    Stmt s = PreAllocateInstances(names)(stmt);
 
-    // Now inject the rest of the profiler state
+    // 2) Inject the counter-update calls for stats (loads, stores,
+    //    realizations, parallel loops, inlined call billing, etc.).
+    InjectCounters injector(names, env);
+    s = injector(s);
+    std::set<int> approximated_instances = std::move(injector.approximated_instances);
+
+    // 3) Inject the rest of the profiler scaffolding: thread activation,
+    //    memory tracking, current-func tracking, copy-to-host/device timing.
     InjectProfiling profiling(names, env);
     s = profiling(s);
 
     int num_funcs = names.num_ids();
 
-    // TODO: unique_name all these strings
-
     Expr instance = Variable::make(Handle(), names.profiler_instance);
 
     Expr func_names_buf = Variable::make(Handle(), names.profiler_func_names);
     Expr func_parents_buf = Variable::make(Handle(), names.profiler_func_parents);
+    Expr func_canonical_ids_buf = Variable::make(Handle(), names.profiler_func_canonical_ids);
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_instance_start",
                                      {pipeline_name,
                                       num_funcs,
                                       func_names_buf,
                                       func_parents_buf,
+                                      func_canonical_ids_buf,
                                       make_const(UInt(64), target.natural_vector_size(UInt(8))),
                                       instance},
                                      Call::Extern);
@@ -1047,6 +1962,20 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     // If there was a problem starting the profiler, it will call an
     // appropriate halide error function and then return the
     // (negative) error code as the token.
+    // Mark approximated instances before the pipeline body runs but
+    // after halide_profiler_instance_start has populated instance->funcs.
+    if (!approximated_instances.empty()) {
+        std::vector<Stmt> marks;
+        marks.reserve(approximated_instances.size() + 1);
+        for (int id : approximated_instances) {
+            marks.emplace_back(Evaluate::make(
+                Call::make(Int(32), "halide_profiler_mark_approximated",
+                           {instance, make_const(Int(32), id)}, Call::Extern)));
+        }
+        marks.push_back(s);
+        s = Block::make(marks);
+    }
+
     s = Block::make(AssertStmt::make(profiler_start_error_code == 0, profiler_start_error_code), s);
     s = LetStmt::make(names.profiler_start_error_code, start_profiler, s);
 
@@ -1062,30 +1991,16 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
                            MemoryType::Auto, {num_funcs}, const_true(), s);
     }
 
-    std::vector<Expr> func_names(names.name_map.size()), func_parents(names.name_map.size(), -1);
-    for (const auto &[name, id] : names.name_map) {
-        func_names[id] = name;
+    std::vector<Expr> func_names(num_funcs), func_parents(num_funcs, -1), func_canonical_ids(num_funcs, -1);
+    for (int i = 0; i < num_funcs; i++) {
+        func_names[i] = names.id_info[i].name;
+        func_parents[i] = names.id_info[i].parent_id;
+        func_canonical_ids[i] = names.id_info[i].canonical_id;
     }
-
-    // Compute nesting relationship between Funcs so that the profiler output
-    // can nest in the same way.
-    int id_of_enclosing_produce = -1;
-    visit_with(s,  //
-               [&](auto *self, const ProducerConsumer *op) {
-                   if (op->is_producer) {
-                       int id = names.id_for_name(op->name);
-                       if (id < (int)func_parents.size()) {
-                           func_parents[id] = id_of_enclosing_produce;
-                           ScopedValue<int> old(id_of_enclosing_produce, id);
-                           self->visit_base(op);
-                           return;
-                       }
-                   }
-                   self->visit_base(op);  //
-               });
 
     s = LetStmt::make(names.profiler_func_names, Call::make(Handle(), Call::make_struct, func_names, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_parents, Call::make(Handle(), Call::make_struct, func_parents, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_canonical_ids, Call::make(Handle(), Call::make_struct, func_canonical_ids, Call::Intrinsic), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 
     // Allocate memory for the profiler instance state

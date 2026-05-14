@@ -45,6 +45,12 @@ class Function;
  */
 Stmt inject_profiling(const Stmt &, const std::string &, const std::map<std::string, Function> &env, const Target &target);
 
+/** Resolve any inline_marker intrinsics left in the IR by Inline.cpp into
+ * stmt-level declare_inlined intrinsics that record the inlining graph
+ * around each Provide. Should be run after schedule_functions and before
+ * any pass that might trip on inline_marker. */
+Stmt resolve_inline_markers(const Stmt &s);
+
 }  // namespace Internal
 }  // namespace Halide
 

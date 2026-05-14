@@ -1336,6 +1336,7 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_msan,$(GENERATOR_AOTCPP_
 
 # https://github.com/halide/Halide/issues/7272
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbrot,$(GENERATOR_AOTCPP_TESTS))
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_profiler_instances,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/4916
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
@@ -1604,6 +1605,11 @@ $(FILTERS_DIR)/string_param.a: $(BIN_DIR)/string_param.generator
 $(FILTERS_DIR)/memory_profiler_mandelbrot.a: $(BIN_DIR)/memory_profiler_mandelbrot.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g memory_profiler_mandelbrot -f memory_profiler_mandelbrot $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-profile
+
+# profiler_instances needs profiler set; verifies the per-instance / canonical-id machinery.
+$(FILTERS_DIR)/profiler_instances.a: $(BIN_DIR)/profiler_instances.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g profiler_instances -f profiler_instances $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-profile
 
 $(FILTERS_DIR)/alias_with_offset_42.a: $(BIN_DIR)/alias.generator
 	@mkdir -p $(@D)

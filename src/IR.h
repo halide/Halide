@@ -649,8 +649,18 @@ struct Call : public ExprNode<Call> {
 
         // Declares that region required of a particular Func at this
         // scope. Injected by ScheduleFunctions and used by the profiler.
-        declare_box_required,
-        declare_box_required_root,
+        declare_box_required_at_realization,
+        declare_box_required_at_production,
+        declare_box_required_at_root,
+
+        // Declares a Func was inlined here the given number of times
+        declare_inlined,
+
+        // Declares that the following stmt computes a particular stage of
+        // a particular Func. Used by the profiler to bill points computed
+        // in the pure def separately from points computed in update defs.
+        // Args: (Variable<Handle> handle for the func, Int<32> stage_idx).
+        declare_stage,
 
         div_round_to_zero,
 
@@ -682,6 +692,11 @@ struct Call : public ExprNode<Call> {
         if_then_else_mask,
         image_load,
         image_store,
+
+        // A temporary annotation used while inlining to track what called what
+        // for profiling purposes
+        inline_marker,
+
         lerp,
 
         // Loop partitioning hints used to help identify the 'steady state' of
