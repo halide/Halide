@@ -1221,14 +1221,30 @@ protected:
 
     using IRMutator::visit;
 
+    // Emit a (intrin, name_arg, min_0, max_0, min_1, max_1, ...) Call
+    // wrapping `stmt`. The shape of name_arg depends on the intrinsic:
+    //
+    //   - declare_box_touched is a real annotation that bounds inference
+    //     uses to know which Realize node is being touched. Its first arg
+    //     must be a Variable<Handle>(func.name()) — a reference to the
+    //     Realize-named buffer in scope — because passes that substitute
+    //     names of in-scope buffers (most notably box_touched analysis
+    //     itself) follow that name.
+    //
+    //   - declare_box_required_at_{realization,production,root} are
+    //     profiler markers. The first arg is just a label for the
+    //     profiler report and is not in scope as a buffer; it's a
+    //     StringImm so the buffer-name-following passes leave it alone.
     Stmt declare_box(const Stmt &stmt, const Function &f, Call::IntrinsicOp intrin) {
-        Stmt s = stmt;
-
+        Expr name_arg;
+        if (intrin == Call::declare_box_touched) {
+            name_arg = Variable::make(Handle(), f.name());
+        } else {
+            name_arg = Expr(f.name());
+        }
         std::vector<Expr> args;
         args.reserve(2 * f.dimensions() + 1);
-        // The Func is recorded as a StringImm, not a Variable. This is a name
-        // for a profiler report, not a named reference to a value in scope.
-        args.emplace_back(f.name());
+        args.push_back(std::move(name_arg));
         const std::vector<std::string> &var_names = f.args();
         for (int i = 0; i < f.dimensions(); i++) {
             std::string v = concat_strings(f.name(), ".s0.", var_names[i]);
@@ -1236,7 +1252,7 @@ protected:
             args.emplace_back(Variable::make(Int(32), v + ".max"));
         }
         Expr d = Call::make(Int(32), intrin, args, Call::Intrinsic);
-        return Block::make(Evaluate::make(d), s);
+        return Block::make(Evaluate::make(d), stmt);
     }
 
     Stmt visit(const For *for_loop) override {
