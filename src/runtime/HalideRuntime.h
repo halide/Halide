@@ -1873,6 +1873,29 @@ void halide_register_argv_and_metadata(
  * profile-target build are biased upward and should not be compared to
  * unprofiled runs. */
 
+/** Kinds of entries in halide_profiler_func_stats. Carried as a small
+ * tag on each entry so the report doesn't have to recognize special
+ * slots by their index, or recognize copy synthetics by parsing their
+ * name. */
+enum halide_profiler_func_kind {
+    /** A normal Halide Func. */
+    halide_profiler_func_kind_func = 0,
+    /** Pipeline overhead — id 0 in every pipeline. */
+    halide_profiler_func_kind_overhead = 1,
+    /** Time the calling thread spent waiting for parallel tasks — id 1. */
+    halide_profiler_func_kind_thread_idle = 2,
+    /** Time spent in halide_malloc — id 2. */
+    halide_profiler_func_kind_malloc = 3,
+    /** Time spent in halide_free — id 3. */
+    halide_profiler_func_kind_free = 4,
+    /** Synthetic entry timing a halide_copy_to_host call. The
+     * buffer_func_id field on the entry is the canonical id of the Func
+     * whose buffer is being copied. */
+    halide_profiler_func_kind_copy_to_host = 5,
+    /** Synthetic entry timing a halide_copy_to_device call. */
+    halide_profiler_func_kind_copy_to_device = 6,
+};
+
 /** Per-Func state tracked by the sampling profiler. */
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The name of this Func. A global constant string. */
@@ -1970,6 +1993,17 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * condition by summing both branches). Numerical counters are
      * therefore conservative upper bounds rather than exact totals. */
     uint8_t counters_approximated;
+
+    /** Tag identifying what this entry represents — see
+     * halide_profiler_func_kind. Lets the reporter handle bookkeeping
+     * slots and synthetic copy entries by tag rather than by hardcoded
+     * id or by parsing the name. */
+    uint8_t kind;
+
+    /** For copy-synthetic entries (kind == copy_to_host or copy_to_device),
+     * the canonical id of the Func whose buffer is being copied. -1 on
+     * every other kind. */
+    int buffer_func_id;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist

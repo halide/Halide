@@ -213,9 +213,12 @@ struct Names {
     std::string profiler_func_parents;
     std::string profiler_func_canonical_ids;
     std::string profiler_func_stack_peak_buf;
+    std::string profiler_func_kinds;
+    std::string profiler_func_buffer_func_ids;
     std::string profiler_start_error_code;
 
-    // IDs 0-3 are treated specially in the runtime
+    // IDs 0-3 are reserved for bookkeeping slots; the kind field on each
+    // disambiguates them from real Funcs at report time.
     const int overhead_id = 0, thread_idle_id = 1, malloc_id = 2, free_id = 3;
 
     Names(const std::string &pipeline_name)
@@ -228,11 +231,24 @@ struct Names {
           profiler_func_parents(unique_name("profiler_func_parents")),
           profiler_func_canonical_ids(unique_name("profiler_func_canonical_ids")),
           profiler_func_stack_peak_buf(unique_name("profiler_func_stack_peak_buf")),
+          profiler_func_kinds(unique_name("profiler_func_kinds")),
+          profiler_func_buffer_func_ids(unique_name("profiler_func_buffer_func_ids")),
           profiler_start_error_code(unique_name("profiler_start_error_code")) {
 
-        // Reserve the special IDs (in order so the *_id constants match).
-        for (const char *n : {"overhead", "thread idle", "malloc", "free"}) {
-            id_for_instance(n, -1);
+        // Reserve the bookkeeping slots first, so their indices match the
+        // *_id constants. Each gets a specific kind so the reporter can
+        // recognize it without hardcoding its index.
+        struct {
+            const char *name;
+            halide_profiler_func_kind kind;
+        } bookkeeping[] = {
+            {"overhead", halide_profiler_func_kind_overhead},
+            {"thread idle", halide_profiler_func_kind_thread_idle},
+            {"malloc", halide_profiler_func_kind_malloc},
+            {"free", halide_profiler_func_kind_free},
+        };
+        for (const auto &b : bookkeeping) {
+            id_for_instance(b.name, -1, b.kind);
         }
     }
 
@@ -240,9 +256,13 @@ struct Names {
     // what an instance is.
     struct IdInfo {
         std::string name;
-        int parent_id;     // immediate parent instance, or -1 if at the root
-        int canonical_id;  // first id allocated for this name, used for
-                           // per-Func (rolled-up) reporting
+        int parent_id;            // immediate parent instance, or -1 if at the root
+        int canonical_id;         // first id allocated for this name, used for
+                                  // per-Func (rolled-up) reporting
+        halide_profiler_func_kind kind;
+        int buffer_func_id;       // for copy synthetics, canonical id of the
+                                  // Func whose buffer is being copied; -1
+                                  // otherwise
     };
     std::vector<IdInfo> id_info;
     // First id allocated for each name — the canonical instance.
@@ -255,18 +275,20 @@ struct Names {
     // by its name plus its immediate parent instance in the IR. Two
     // appearances of the same Func with different parents get different ids;
     // two appearances with the same parent share one id.
-    int id_for_instance(const std::string &name, int parent_id) {
+    int id_for_instance(const std::string &name, int parent_id,
+                        halide_profiler_func_kind kind = halide_profiler_func_kind_func,
+                        int buffer_func_id = -1) {
         auto [it, inserted] = instance_map.try_emplace({parent_id, name}, (int)id_info.size());
         if (inserted) {
             int canon = canonical_id_for_name.try_emplace(name, it->second).first->second;
-            id_info.push_back({name, parent_id, canon});
+            id_info.push_back({name, parent_id, canon, kind, buffer_func_id});
         }
         return it->second;
     }
 
     // Shorthand for the id of the root-level (parent = -1) instance of a
     // name. Used for Funcs we know have only one instance (e.g. produced at
-    // the pipeline root) and for synthetic ids like "h (copy to host)".
+    // the pipeline root).
     int id_for_name(const std::string &name) {
         return id_for_instance(name, -1);
     }
@@ -343,10 +365,22 @@ class PreAllocateInstances : public IRMutator {
                 if (const Variable *v = op->args.front().as<Variable>()) {
                     if (ends_with(v->name, ".buffer")) {
                         std::string buffer_name = v->name.substr(0, v->name.size() - 7);
-                        const char *tag = op->name == "halide_copy_to_device" ?
-                                              " (copy to device)" :
-                                              " (copy to host)";
-                        names.id_for_instance(buffer_name + tag, producer_id);
+                        bool to_device = op->name == "halide_copy_to_device";
+                        const char *tag = to_device ? " (copy to device)" : " (copy to host)";
+                        halide_profiler_func_kind kind =
+                            to_device ? halide_profiler_func_kind_copy_to_device
+                                      : halide_profiler_func_kind_copy_to_host;
+                        // Look up the canonical id of the Func whose
+                        // buffer this is. The Func's producer has
+                        // already been visited (it's the producer this
+                        // copy sits inside, or a sibling allocated
+                        // earlier), so the name is in the map.
+                        int buffer_func_id = -1;
+                        auto it = names.canonical_id_for_name.find(buffer_name);
+                        if (it != names.canonical_id_for_name.end()) {
+                            buffer_func_id = it->second;
+                        }
+                        names.id_for_instance(buffer_name + tag, producer_id, kind, buffer_func_id);
                     }
                 }
             }
@@ -1924,6 +1958,8 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     Expr func_names_buf = Variable::make(Handle(), names.profiler_func_names);
     Expr func_parents_buf = Variable::make(Handle(), names.profiler_func_parents);
     Expr func_canonical_ids_buf = Variable::make(Handle(), names.profiler_func_canonical_ids);
+    Expr func_kinds_buf = Variable::make(Handle(), names.profiler_func_kinds);
+    Expr func_buffer_func_ids_buf = Variable::make(Handle(), names.profiler_func_buffer_func_ids);
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_instance_start",
                                      {pipeline_name,
@@ -1931,6 +1967,8 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
                                       func_names_buf,
                                       func_parents_buf,
                                       func_canonical_ids_buf,
+                                      func_kinds_buf,
+                                      func_buffer_func_ids_buf,
                                       make_const(UInt(64), target.natural_vector_size(UInt(8))),
                                       instance},
                                      Call::Extern);
@@ -1991,16 +2029,25 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
                            MemoryType::Auto, {num_funcs}, const_true(), s);
     }
 
-    std::vector<Expr> func_names(num_funcs), func_parents(num_funcs, -1), func_canonical_ids(num_funcs, -1);
+    std::vector<Expr> func_names(num_funcs);
+    std::vector<Expr> func_parents(num_funcs);
+    std::vector<Expr> func_canonical_ids(num_funcs);
+    std::vector<Expr> func_kinds(num_funcs);
+    std::vector<Expr> func_buffer_func_ids(num_funcs);
     for (int i = 0; i < num_funcs; i++) {
-        func_names[i] = names.id_info[i].name;
-        func_parents[i] = names.id_info[i].parent_id;
-        func_canonical_ids[i] = names.id_info[i].canonical_id;
+        const auto &info = names.id_info[i];
+        func_names[i] = info.name;
+        func_parents[i] = info.parent_id;
+        func_canonical_ids[i] = info.canonical_id;
+        func_kinds[i] = make_const(UInt(8), (uint8_t)info.kind);
+        func_buffer_func_ids[i] = info.buffer_func_id;
     }
 
     s = LetStmt::make(names.profiler_func_names, Call::make(Handle(), Call::make_struct, func_names, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_parents, Call::make(Handle(), Call::make_struct, func_parents, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_canonical_ids, Call::make(Handle(), Call::make_struct, func_canonical_ids, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_kinds, Call::make(Handle(), Call::make_struct, func_kinds, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_buffer_func_ids, Call::make(Handle(), Call::make_struct, func_buffer_func_ids, Call::Intrinsic), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 
     // Allocate memory for the profiler instance state

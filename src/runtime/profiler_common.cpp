@@ -66,7 +66,9 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
                                                              int num_funcs,
                                                              const uint64_t *func_names,
                                                              const int *func_parents,
-                                                             const int *func_canonical_ids) {
+                                                             const int *func_canonical_ids,
+                                                             const uint8_t *func_kinds,
+                                                             const int *func_buffer_func_ids) {
     halide_profiler_state *s = halide_profiler_get_state();
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
@@ -100,6 +102,8 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
         p->funcs[i].name = (const char *)(func_names[i]);
         p->funcs[i].parent = func_parents[i];
         p->funcs[i].canonical_id = func_canonical_ids[i];
+        p->funcs[i].kind = func_kinds[i];
+        p->funcs[i].buffer_func_id = func_buffer_func_ids[i];
     }
     s->pipelines = p;
     return p;
@@ -246,6 +250,8 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         const uint64_t *func_names,
                                         const int *func_parents,
                                         const int *func_canonical_ids,
+                                        const uint8_t *func_kinds,
+                                        const int *func_buffer_func_ids,
                                         uint64_t native_vector_bytes,
                                         halide_profiler_instance_state *instance) {
     // Tell the instance where we stashed the per-func state - just after the
@@ -284,7 +290,9 @@ WEAK int halide_profiler_instance_start(void *user_context,
 
         // Find or create the pipeline statistics for this pipeline.
         halide_profiler_pipeline_stats *p =
-            find_or_create_pipeline(pipeline_name, num_funcs, func_names, func_parents, func_canonical_ids);
+            find_or_create_pipeline(pipeline_name, num_funcs,
+                                    func_names, func_parents, func_canonical_ids,
+                                    func_kinds, func_buffer_func_ids);
         if (!p) {
             // Allocating space to track the statistics failed.
             return halide_error_out_of_memory(user_context);
@@ -500,8 +508,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         support_colors = true;
     }
 
-    const char *substr_copy_to_device = " (copy to device)";
-    const char *substr_copy_to_host = " (copy to host)";
 
     // ---- Profiler report formatting --------------------------------------
     //
@@ -857,12 +863,17 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         for (int t = 0; t < tree_count; t++) {
             int i = tree_order[t];
             const halide_profiler_func_stats *fs = p->funcs + i;
-            // ids 0,1 are overhead and "wait for parallel tasks" -- skip if zero.
-            if ((i == 0 || i == 1) && fs->time == 0) {
+            // Skip the overhead / thread-idle bookkeeping slots if they
+            // didn't accumulate any time, and the malloc/free slots if
+            // no heap allocations happened — they'd just be noise.
+            if ((fs->kind == halide_profiler_func_kind_overhead ||
+                 fs->kind == halide_profiler_func_kind_thread_idle) &&
+                fs->time == 0) {
                 continue;
             }
-            // ids 2,3 are malloc/free -- skip if no heap allocations happened.
-            if ((i == 2 || i == 3) && p->num_allocs == 0) {
+            if ((fs->kind == halide_profiler_func_kind_malloc ||
+                 fs->kind == halide_profiler_func_kind_free) &&
+                p->num_allocs == 0) {
                 continue;
             }
             f_stats[f_stats_count++] = fs;
@@ -1112,7 +1123,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 return false;
             case 12: {
                 // Look for copy synthetics anywhere in the pipeline whose
-                // base buffer name matches `fs->name`. Fire only when
+                // buffer_func_id points at this Func. Fire only when
                 // BOTH directions exist — a Func whose buffer is copied
                 // both to host and to device within the same pipeline run
                 // is bouncing between devices, regardless of which scope
@@ -1126,19 +1137,17 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 // ordinary pipeline I/O (e.g. preparing the output
                 // buffer's device side, or finalizing input on host)
                 // and shouldn't trigger.
-                size_t my_name_len = strlen(fs->name);
+                int my_canonical = fs->canonical_id;
                 bool has_copy_to_host = false;
                 bool has_copy_to_device = false;
                 for (int i = 0; i < p->num_funcs; i++) {
-                    const char *n = p->funcs[i].name;
-                    if (strlen(n) <= my_name_len ||
-                        strncmp(n, fs->name, my_name_len) != 0 ||
-                        n[my_name_len] != ' ') {
+                    const halide_profiler_func_stats *c = p->funcs + i;
+                    if (c->buffer_func_id != my_canonical) {
                         continue;
                     }
-                    if (strstr(n, substr_copy_to_host)) {
+                    if (c->kind == halide_profiler_func_kind_copy_to_host) {
                         has_copy_to_host = true;
-                    } else if (strstr(n, substr_copy_to_device)) {
+                    } else if (c->kind == halide_profiler_func_kind_copy_to_device) {
                         has_copy_to_device = true;
                     }
                 }
@@ -1280,13 +1289,10 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             if (fs->canonical_id != idx) {
                 continue;
             }
-            // Skip bookkeeping slots (overhead, thread idle, malloc, free)
-            // and synthesized buffer-copy funcs -- rules don't apply.
-            if (idx < 4) {
-                continue;
-            }
-            if (strstr(fs->name, substr_copy_to_device) ||
-                strstr(fs->name, substr_copy_to_host)) {
+            // Rules only apply to real Funcs — skip bookkeeping slots
+            // (overhead, thread idle, malloc, free) and synthesized
+            // buffer-copy timing entries.
+            if (fs->kind != halide_profiler_func_kind_func) {
                 continue;
             }
             const halide_profiler_func_stats *agg_fs = &canon_fs[idx];
@@ -1309,7 +1315,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         // Each glyph is 1 visible column but 3 UTF-8 bytes, and ANSI color
         // codes are non-visible too, so the byte target for the slot is
         // bumped by the count of non-visible bytes for each glyph emitted.
-        auto emit_name = [&](const halide_profiler_func_stats *fs, const char *suffix_cut, int width) {
+        auto emit_name = [&](const halide_profiler_func_stats *fs, int width) {
             uint64_t target = sstr.size() + width;
             sstr << "  ";
             int idx = (int)(fs - p->funcs);
@@ -1349,9 +1355,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
             }
             sstr << fs->name;
-            if (suffix_cut) {
-                sstr.erase(strlen(suffix_cut));
-            }
             truncate_bytes_to(target);
             pad_bytes_to(target);
         };
@@ -1359,13 +1362,12 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         // Render a func-table row by walking `func_row` and dispatching on
         // the marker char of each run. Width is the run length.
         auto print_func_row = [&](const halide_profiler_func_stats *fs,
-                                  const CumulativeStats *cs,
-                                  const char *suffix_cut) {
+                                  const CumulativeStats *cs) {
             sstr.clear();
             apply_template(fs->inlined_calls ? inlined_func_row : func_row, [&](char c, int w) {
                 switch (c) {
                 case 'N':
-                    emit_name(fs, suffix_cut, w);
+                    emit_name(fs, w);
                     break;
                 case 'T':
                     emit_time(fs->time, p->billed_runs ? p->billed_runs : 1, w);
@@ -1526,7 +1528,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         for (int i = 0; i < f_stats_count; i++) {
             const halide_profiler_func_stats *fs = f_stats[i];
             const CumulativeStats *cs = cum_stats + (fs - p->funcs);
-            print_func_row(fs, cs, /*suffix_cut=*/nullptr);
+            print_func_row(fs, cs);
         }
 
         // ---- Warning messages -------------------------------------------
@@ -1556,10 +1558,18 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         bool too_many_anon_funcs = anon_funcs >= 3 && anon_time * 10 > p->time;
 
         // Warn if the pipeline allocates at least 100MB and spends at least 10%
-        // of its time freeing it.
+        // of its time freeing it. The free bookkeeping slot's time is what
+        // we sampled while halide_free was running.
+        uint64_t free_time = 0;
+        for (int i = 0; i < p->num_funcs; i++) {
+            if (p->funcs[i].kind == halide_profiler_func_kind_free) {
+                free_time = p->funcs[i].time;
+                break;
+            }
+        }
         bool expensive_free =
             p->memory_peak > 100 * 1000 * 1000 &&
-            p->funcs[3].time * 10 > p->time;
+            free_time * 10 > p->time;
 
         if (num_warnings || too_few_samples || too_many_anon_funcs || expensive_free) {
             halide_print(user_context, " Performance warnings:\n");
@@ -1683,6 +1693,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     json << "        {\n";
                     field_str("          ", "name", fs->name);
                     field_i("          ", "parent", fs->parent);
+                    field_i("          ", "canonical_id", fs->canonical_id);
+                    field_i("          ", "kind", fs->kind);
+                    field_i("          ", "buffer_func_id", fs->buffer_func_id);
                     field_u64("          ", "time_ns", fs->time);
                     field_u64("          ", "memory_current", fs->memory_current);
                     field_u64("          ", "memory_peak", fs->memory_peak);
