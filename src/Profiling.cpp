@@ -1887,8 +1887,15 @@ Stmt process_inlining_subtree(const Stmt &s) {
 
     Stmt rewritten = builder(s);
 
-    internal_assert(!builder.provide_name.empty())
-        << "Expected to encounter a Provide while walking " << s << "\n";
+    if (builder.provide_name.empty()) {
+        // No surrounding Provide — the inline_markers were sitting in an
+        // expression that doesn't belong to a Halide-Func production
+        // (e.g. an extern stage's call args reading an Input Func). The
+        // walk above has already stripped the markers from `rewritten`;
+        // we just have no Provide-level entry to bill the inlined calls
+        // to, so skip emitting a declare_inlined.
+        return rewritten;
+    }
 
     // Now stamp down the declare_inlined intrinsic that encodes the graph via a
     // list of its nodes followed by a list of its edges.
