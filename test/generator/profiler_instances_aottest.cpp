@@ -23,8 +23,8 @@ void fail(const char *what) {
         }                                          \
     } while (0)
 
-// Find all instances (stats rows) with the given Func name.
-std::vector<const halide_profiler_func_stats *> instances_of(
+// Find every entry (row in the per-Func stats array) with the given name.
+std::vector<const halide_profiler_func_stats *> entries_of(
     const halide_profiler_pipeline_stats *p, const char *name) {
     std::vector<const halide_profiler_func_stats *> out;
     for (int i = 0; i < p->num_funcs; i++) {
@@ -44,7 +44,7 @@ const char *parent_name(const halide_profiler_pipeline_stats *p,
 }
 
 int parent_id_of(const halide_profiler_pipeline_stats *p, const char *name) {
-    auto xs = instances_of(p, name);
+    auto xs = entries_of(p, name);
     REQUIRE(xs.size() == 1);
     return (int)(xs[0] - p->funcs);
 }
@@ -52,19 +52,19 @@ int parent_id_of(const halide_profiler_pipeline_stats *p, const char *name) {
 // Assertions on the profiler state. -----------------------------------------
 
 void check_two_compute_root_callers(const halide_profiler_pipeline_stats *p) {
-    auto g = instances_of(p, "caller_g");
-    auto h = instances_of(p, "caller_h");
+    auto g = entries_of(p, "caller_g");
+    auto h = entries_of(p, "caller_h");
     REQUIRE(g.size() == 1);
     REQUIRE(h.size() == 1);
     REQUIRE(g[0]->productions > 0);
     REQUIRE(h[0]->productions > 0);
-    // Each is its own canonical (only one instance per name).
+    // Each is its own canonical (only one entry per name).
     REQUIRE(g[0]->canonical_id == (int)(g[0] - p->funcs));
     REQUIRE(h[0]->canonical_id == (int)(h[0] - p->funcs));
 }
 
 void check_inlined_func_multiple_callers(const halide_profiler_pipeline_stats *p) {
-    auto fs = instances_of(p, "multi_inlined");
+    auto fs = entries_of(p, "multi_inlined");
     REQUIRE(fs.size() == 2);
     REQUIRE(fs[0]->canonical_id == fs[1]->canonical_id);
 
@@ -79,9 +79,9 @@ void check_inlined_func_multiple_callers(const halide_profiler_pipeline_stats *p
 
 void check_inlining_chain(const halide_profiler_pipeline_stats *p) {
     // a -> b -> c -> caller_{g,h}: each link must point at the next-out one.
-    auto a = instances_of(p, "chain_a");
-    auto b = instances_of(p, "chain_b");
-    auto c = instances_of(p, "chain_c");
+    auto a = entries_of(p, "chain_a");
+    auto b = entries_of(p, "chain_b");
+    auto c = entries_of(p, "chain_c");
     REQUIRE(a.size() == 2);
     REQUIRE(b.size() == 2);
     REQUIRE(c.size() == 2);
@@ -95,11 +95,11 @@ void check_inlining_chain(const halide_profiler_pipeline_stats *p) {
         const char *pn = parent_name(p, fs);
         REQUIRE(strcmp(pn, "caller_g") == 0 || strcmp(pn, "caller_h") == 0);
     }
-    // All instances of the same name share a canonical_id.
+    // All entries of the same name share a canonical_id.
     REQUIRE(a[0]->canonical_id == a[1]->canonical_id);
     REQUIRE(b[0]->canonical_id == b[1]->canonical_id);
     REQUIRE(c[0]->canonical_id == c[1]->canonical_id);
-    // Each link has billed inlined calls in every instance.
+    // Each link has billed inlined calls in every entry.
     for (auto *fs : a) {
         REQUIRE(fs->inlined_calls > 0);
     }
@@ -111,8 +111,8 @@ void check_inlining_chain(const halide_profiler_pipeline_stats *p) {
     }
 }
 
-void check_unscheduled_update_multiple_instances(const halide_profiler_pipeline_stats *p) {
-    auto fs = instances_of(p, "update_f");
+void check_unscheduled_update_multiple_entries(const halide_profiler_pipeline_stats *p) {
+    auto fs = entries_of(p, "update_f");
     REQUIRE(fs.size() == 2);
     REQUIRE(fs[0]->canonical_id == fs[1]->canonical_id);
     REQUIRE(fs[0]->realizations > 0);
@@ -131,7 +131,7 @@ void check_cse_hoisted_marker(const halide_profiler_pipeline_stats *p) {
     // cse_shared appears in both the arg and the value of cse_user's update
     // Provide; Inline.cpp's CSE will hoist the shared computation into a
     // LetStmt above the Provide. The post-pass has to strip that.
-    auto fs = instances_of(p, "cse_shared");
+    auto fs = entries_of(p, "cse_shared");
     REQUIRE(!fs.empty());
     uint64_t total = 0;
     for (auto *inst : fs) {
@@ -143,13 +143,13 @@ void check_cse_hoisted_marker(const halide_profiler_pipeline_stats *p) {
 // Diamond inlining: diamond_shared is reached from diamond_outer via two
 // different intermediate markers (diamond_left and diamond_right). CSE
 // factors diamond_shared's marker into a let above the Provide so its
-// instance has two parents in the inlining graph. The LCA computation
-// in PreAllocateInstances should attribute it to diamond_outer (the
+// entry has two parents in the inlining graph. The LCA computation
+// in PreAllocateEntries should attribute it to diamond_outer (the
 // deepest node both diamond_left and diamond_right share), not to the
 // Provide root or to whichever edge happened to be processed last.
 void check_diamond_lca_attribution(const halide_profiler_pipeline_stats *p) {
-    auto outer = instances_of(p, "diamond_outer");
-    auto shared = instances_of(p, "diamond_shared");
+    auto outer = entries_of(p, "diamond_outer");
+    auto shared = entries_of(p, "diamond_shared");
     REQUIRE(!outer.empty());
     REQUIRE(!shared.empty());
     int outer_idx = (int)(outer[0] - p->funcs);
@@ -164,7 +164,7 @@ void check_diamond_lca_attribution(const halide_profiler_pipeline_stats *p) {
 // (pure-def stage-0 stores × lanes) catches it. So we expect
 // points_computed to exceed points_required_at_root.
 void check_roundup_overstores_bytes(const halide_profiler_pipeline_stats *p) {
-    auto fs = instances_of(p, "roundup_outer");
+    auto fs = entries_of(p, "roundup_outer");
     REQUIRE(fs.size() == 1);
     REQUIRE(fs[0]->points_required_at_root > 0);
     REQUIRE(fs[0]->points_computed > fs[0]->points_required_at_root);
@@ -174,7 +174,7 @@ void check_roundup_overstores_bytes(const halide_profiler_pipeline_stats *p) {
 // extra stores actually happen. points_computed matches the required
 // extent.
 void check_guardwithif_no_overstore(const halide_profiler_pipeline_stats *p) {
-    auto fs = instances_of(p, "guard_outer");
+    auto fs = entries_of(p, "guard_outer");
     REQUIRE(fs.size() == 1);
     REQUIRE(fs[0]->points_required_at_root > 0);
     REQUIRE(fs[0]->points_computed == fs[0]->points_required_at_root);
@@ -187,7 +187,7 @@ void check_guardwithif_no_overstore(const halide_profiler_pipeline_stats *p) {
 // stores (4 of them, one per unrolled iteration), not the update-def
 // stores.
 void check_unrolled_pure_update(const halide_profiler_pipeline_stats *p) {
-    auto fs = instances_of(p, "unrolled_pu");
+    auto fs = entries_of(p, "unrolled_pu");
     REQUIRE(fs.size() == 1);
     REQUIRE(fs[0]->points_computed == 4);
     // Total stores = pure-def + update-def = 8.
@@ -198,14 +198,14 @@ void check_unrolled_pure_update(const halide_profiler_pipeline_stats *p) {
 // compute_with: two Funcs share a loop nest, so their stage stores
 // appear interleaved in the IR. The per-Func pure-def tracking has to
 // attribute each Store to the right Func. compute_with also gives each
-// Func multiple instance rows (one for the actual producer plus
+// Func multiple entries (one for the actual producer plus
 // box-required artifacts under the fused partner), so we sum across
-// instances. Each Func is pure-only and gets stored at every output
+// entries. Each Func is pure-only and gets stored at every output
 // point exactly once, so its points_computed should equal its
 // points_required_at_root.
 void check_compute_with(const halide_profiler_pipeline_stats *p) {
-    auto a = instances_of(p, "cw_a");
-    auto b = instances_of(p, "cw_b");
+    auto a = entries_of(p, "cw_a");
+    auto b = entries_of(p, "cw_b");
     REQUIRE(!a.empty());
     REQUIRE(!b.empty());
     uint64_t a_computed = 0;
@@ -229,7 +229,7 @@ void check_compute_with(const halide_profiler_pipeline_stats *p) {
 // points are computed in more than one tile. Recompute is modest — > 1
 // but well under 2.
 void check_tiled_stencil_modest_recompute(const halide_profiler_pipeline_stats *p) {
-    auto fs = instances_of(p, "stencil_p");
+    auto fs = entries_of(p, "stencil_p");
     REQUIRE(fs.size() == 1);
     REQUIRE(fs[0]->points_required_at_root > 0);
     REQUIRE(fs[0]->points_required_at_realization > fs[0]->points_required_at_root);
@@ -241,12 +241,12 @@ void check_tiled_stencil_modest_recompute(const halide_profiler_pipeline_stats *
 // thing being tested here is that the inline_marker for it survives the
 // post-pass cleanly (rather than leaking to codegen), gets a slot in the
 // stats array, and bills inlined calls. We also assert that
-// points_required_at_root is zero on every instance: BoundsInference
+// points_required_at_root is zero on every entry: BoundsInference
 // can't compute a finite root box for an unbounded Func, so it doesn't
-// emit declare_box_required_root for it and the canonical instance's
+// emit declare_box_required_root for it and the canonical entry's
 // counter stays at zero (no recompute ratio is meaningful).
 void check_forced_inline(const halide_profiler_pipeline_stats *p) {
-    auto fs = instances_of(p, "forced_inline");
+    auto fs = entries_of(p, "forced_inline");
     REQUIRE(!fs.empty());
     uint64_t total = 0;
     for (auto *inst : fs) {
@@ -264,7 +264,7 @@ void check_forced_inline(const halide_profiler_pipeline_stats *p) {
 // (which is what production would be without sliding), and both should
 // exceed points_required_at_root only by the per-tile halo overhead.
 void check_sliding_window_counters(const halide_profiler_pipeline_stats *p) {
-    auto fs = instances_of(p, "slide_p");
+    auto fs = entries_of(p, "slide_p");
     REQUIRE(fs.size() == 1);
     uint64_t at_real = fs[0]->points_required_at_realization;
     uint64_t at_prod = fs[0]->points_required_at_production;
@@ -288,7 +288,7 @@ void check_sliding_window_counters(const halide_profiler_pipeline_stats *p) {
 // box (which is just the stored stripe per outer tile). Comparing the
 // two counters surfaces the slide failure.
 void check_sliding_window_failure_counters(const halide_profiler_pipeline_stats *p) {
-    auto fs = instances_of(p, "slide_fail_g");
+    auto fs = entries_of(p, "slide_fail_g");
     REQUIRE(fs.size() == 1);
     uint64_t at_real = fs[0]->points_required_at_realization;
     uint64_t at_prod = fs[0]->points_required_at_production;
@@ -302,10 +302,10 @@ void check_sliding_window_failure_counters(const halide_profiler_pipeline_stats 
 // GPU-only: RDom::where with a Func-load predicate becomes an IfThenElse
 // inside the update body whose condition is impure. Inside a GPU kernel,
 // InjectCounters can't flush mid-kernel, so it hoists the depending
-// counter contributions via max-of-branches and flags the instance's
+// counter contributions via max-of-branches and flags the entry's
 // stats as approximated.
 void check_counters_approximated_on_impure_if(const halide_profiler_pipeline_stats *p) {
-    auto fs = instances_of(p, "approx_out");
+    auto fs = entries_of(p, "approx_out");
     REQUIRE(!fs.empty());
     bool any_approx = false;
     for (auto *inst : fs) {
@@ -316,12 +316,12 @@ void check_counters_approximated_on_impure_if(const halide_profiler_pipeline_sta
 
 // GPU-only: an outer CPU loop with a host-then-device-then-host data
 // chain forces explicit halide_copy_to_host / halide_copy_to_device calls
-// to fire once per outer iteration. The synthetic copy "Func" instances
+// to fire once per outer iteration. The synthetic copy "Func" entries
 // should be parented somewhere inside the xfer_out producer tree (rather
 // than at the pipeline root), and their realizations counter should
 // equal the outer-loop trip count.
 void check_copy_synthetics_parented_to_producer(const halide_profiler_pipeline_stats *p) {
-    auto xfer_out = instances_of(p, "xfer_out");
+    auto xfer_out = entries_of(p, "xfer_out");
     REQUIRE(xfer_out.size() == 1);
     int xfer_out_id = (int)(xfer_out[0] - p->funcs);
 
@@ -337,7 +337,7 @@ void check_copy_synthetics_parented_to_producer(const halide_profiler_pipeline_s
     };
 
     auto check = [&](const char *copy_name) {
-        auto fs = instances_of(p, copy_name);
+        auto fs = entries_of(p, copy_name);
         REQUIRE(fs.size() == 1);
         // The synthetic copy "Func" must thread into the timeline under
         // xfer_out (the producer that contains the outer CPU loop), not
@@ -361,7 +361,7 @@ void check_copy_synthetics_parented_to_producer(const halide_profiler_pipeline_s
 // devices" rule should fire (signaled by the parent-of-copy having the
 // same base name as the copy buffer).
 void check_mixed_host_device_update_defs(const halide_profiler_pipeline_stats *p) {
-    auto fs = instances_of(p, "mixed_sched");
+    auto fs = entries_of(p, "mixed_sched");
     REQUIRE(fs.size() == 1);
     int mixed_id = (int)(fs[0] - p->funcs);
 
@@ -384,17 +384,17 @@ void check_mixed_host_device_update_defs(const halide_profiler_pipeline_stats *p
 }
 
 void check_points_required_at_root_canonical_only(const halide_profiler_pipeline_stats *p) {
-    // For any Func with multiple instances, at most one instance should have a
+    // For any Func with multiple entries, at most one entry should have a
     // non-zero points_required_at_root (the canonical one — that's where the
     // compiler bills the pipeline-wide root box).
-    int instances_with_pr_at_root = 0;
-    int total_multi_instance_funcs = 0;
+    int entries_with_pr_at_root = 0;
+    int total_multi_entry_funcs = 0;
     auto check = [&](const char *name) {
-        auto xs = instances_of(p, name);
+        auto xs = entries_of(p, name);
         if (xs.size() <= 1) {
             return;
         }
-        total_multi_instance_funcs++;
+        total_multi_entry_funcs++;
         int with_pr = 0;
         int canon = xs[0]->canonical_id;
         for (auto *fs : xs) {
@@ -404,14 +404,14 @@ void check_points_required_at_root_canonical_only(const halide_profiler_pipeline
             }
         }
         REQUIRE(with_pr <= 1);
-        instances_with_pr_at_root += with_pr;
+        entries_with_pr_at_root += with_pr;
     };
     check("multi_inlined");
     check("chain_a");
     check("chain_b");
     check("chain_c");
     check("update_f");
-    REQUIRE(total_multi_instance_funcs >= 3);
+    REQUIRE(total_multi_entry_funcs >= 3);
 }
 
 }  // namespace
@@ -439,7 +439,7 @@ int main(int argc, char **argv) {
     check_two_compute_root_callers(target);
     check_inlined_func_multiple_callers(target);
     check_inlining_chain(target);
-    check_unscheduled_update_multiple_instances(target);
+    check_unscheduled_update_multiple_entries(target);
     check_cse_hoisted_marker(target);
     check_diamond_lca_attribution(target);
     check_forced_inline(target);
@@ -452,13 +452,13 @@ int main(int argc, char **argv) {
     check_sliding_window_failure_counters(target);
     // Only present when the pipeline was built with a GPU feature — the
     // generator gates the corresponding Funcs on get_target().has_gpu_feature().
-    if (!instances_of(target, "approx_out").empty()) {
+    if (!entries_of(target, "approx_out").empty()) {
         check_counters_approximated_on_impure_if(target);
     }
-    if (!instances_of(target, "xfer_out").empty()) {
+    if (!entries_of(target, "xfer_out").empty()) {
         check_copy_synthetics_parented_to_producer(target);
     }
-    if (!instances_of(target, "mixed_sched").empty()) {
+    if (!entries_of(target, "mixed_sched").empty()) {
         check_mixed_host_device_update_defs(target);
     }
     check_points_required_at_root_canonical_only(target);

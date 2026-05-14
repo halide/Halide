@@ -76,14 +76,14 @@ using std::vector;
 // declare_box_required_at_{realization,production,root}, and emits all the
 // runtime calls. It runs three sub-passes over the IR:
 //
-//  1) PreAllocateInstances. Enumerates every "instance" (see below) of every
+//  1) PreAllocateEntries. Enumerates every entry (see below) for every
 //     Func and assigns each one an integer id matching its eventual slot in
 //     the runtime's halide_profiler_func_stats array. To save the next pass
 //     from re-parsing the inlining graph, it also rewrites each
-//     declare_inlined intrinsic to a flat list of the resolved instance ids;
+//     declare_inlined intrinsic to a flat list of the resolved entry ids;
 //     the intrinsic's type (carrying the vector lane count) is preserved.
 //
-//  2) InjectCounters. Walks the IR and accumulates per-instance counter
+//  2) InjectCounters. Walks the IR and accumulates per-entry counter
 //     contributions, flushing them as halide_profiler_update_counters calls.
 //     Counters are hoisted as far out as possible: a Store inside a loop of
 //     trip count N becomes a single "+N" update outside the loop rather than
@@ -98,7 +98,7 @@ using std::vector;
 //     ("local_counters") on the stack of each parallel task, accumulates
 //     contributions there with ordinary (non-atomic) adds, and then emits
 //     one halide_profiler_update_counters call per task at the end of the
-//     loop body that folds the local buffer into the shared per-instance
+//     loop body that folds the local buffer into the shared per-entry
 //     counters with a single atomic update. This trades a fixed per-task
 //     overhead for keeping the hot inner loop free of atomics.
 //
@@ -106,7 +106,7 @@ using std::vector;
 //       - halide_profiler_set_current_func writes so the sampler knows which
 //         instance the CPU is currently executing.
 //       - halide_profiler_memory_allocate / _memory_free wrappers around
-//         heap allocations, plus per-instance peak-stack accounting.
+//         heap allocations, plus per-entry peak-stack accounting.
 //       - halide_profiler_incr/decr_active_threads around parallel for, fork
 //         and acquire, so the runtime can compute average active-thread
 //         counts.
@@ -143,9 +143,9 @@ using std::vector;
 //  - declare_box_required_at_root(f, ...): emitted by ScheduleFunctions at the
 //    outermost level for every Func. The box is the pipeline-wide total
 //    number of points of f required by all consumers. We duplicate that
-//    count into every instance of f as PointsRequiredAtRoot, so each
-//    instance has the same shared denominator when computing a local
-//    recompute ratio.
+//    count into every entry for f as PointsRequiredAtRoot, so each entry
+//    has the same shared denominator when computing a local recompute
+//    ratio.
 //
 //  - declare_inlined(...): emitted by a post-pass after Inline.cpp, one per
 //    inlined call chain inside a Provide. The args encode a small graph:
@@ -153,16 +153,16 @@ using std::vector;
 //    producer, nodes 1..N-1 are the inlined Funcs in the chain), and the
 //    trailing int args are (parent_idx, callee_idx) edges. Each non-root
 //    node represents one inlined call site and bills +1 (× surrounding
-//    vector lanes) to InlinedCalls. PreAllocateInstances rewrites this
+//    vector lanes) to InlinedCalls. PreAllocateEntries rewrites this
 //    intrinsic in place; downstream we just read the resolved ids out of
 //    the args and strip the intrinsic.
 //
 // -----------------------------------------------------------------------------
-// Instances
+// Entries
 // -----------------------------------------------------------------------------
 //
-// Most Funcs appear in exactly one place in the lowered IR, but some appear
-// in many:
+// Each row in the per-Func stats array is an "entry". Most Funcs need
+// exactly one entry, but some need several:
 //
 //  - An inlined Func called from multiple callers gets its body substituted
 //    at every call site, and each substituted copy can be transformed
@@ -174,30 +174,30 @@ using std::vector;
 //    its default schedule) gets a separate Realize/Producer block per
 //    caller, because there's no shared compute_at level for it.
 //
-// We call each such appearance an "instance" of the Func, and the profiler
-// gives each its own id and its own row in the report. Two reasons for
-// tracking them separately rather than aggregating at billing time:
+// Each such appearance gets its own entry and its own row in the report.
+// Two reasons for tracking them separately rather than aggregating at
+// billing time:
 //
-//  1) Each instance has a distinct parent Func — the producer or inlining
+//  1) Each entry has a distinct parent Func — the producer or inlining
 //     chain it lives inside. The reporter prints stats as a tree, so the
 //     parent relationship is part of the output, not just a runtime detail.
 //
 //  2) Local stats (peak memory, recompute ratio, time%) are meaningful
-//     per-instance. A Func called from a hot caller and a cold caller can
+//     per-entry. A Func called from a hot caller and a cold caller can
 //     have very different profiles, and merging them would erase the
 //     signal.
 //
-// Names::id_for_instance(name, parent_id) is the allocator: it gives back
+// Names::id_for_entry(name, parent_id) is the allocator: it gives back
 // the same id for the same (name, parent) pair and a fresh id otherwise.
-// PreAllocateInstances drives the allocation by walking ProducerConsumer
+// PreAllocateEntries drives the allocation by walking ProducerConsumer
 // nodes and declare_inlined intrinsics; the other passes look up the same
 // ids by replaying the same producer-stack / inlining-chain context.
 //
-// IdInfo::canonical_id remembers, for each instance, the first id that was
+// EntryInfo::canonical_id remembers, for each entry, the first id that was
 // allocated for its name. That lets the reporter optionally show a
 // rolled-up "by Func" view, and lets per-Func warnings (heuristics like
 // "this Func is being recomputed too much") fire once per Func rather than
-// once per instance.
+// once per entry.
 
 namespace {
 
@@ -248,15 +248,14 @@ struct Names {
             {"free", halide_profiler_func_kind_free},
         };
         for (const auto &b : bookkeeping) {
-            id_for_instance(b.name, -1, b.kind);
+            id_for_entry(b.name, -1, b.kind);
         }
     }
 
-    // One IdInfo per instance — see the file-level "Instances" comment for
-    // what an instance is.
-    struct IdInfo {
+    // One EntryInfo per entry — see the file-level "Entries" comment.
+    struct EntryInfo {
         std::string name;
-        int parent_id;            // immediate parent instance, or -1 if at the root
+        int parent_id;            // immediate parent entry, or -1 if at the root
         int canonical_id;         // first id allocated for this name, used for
                                   // per-Func (rolled-up) reporting
         halide_profiler_func_kind kind;
@@ -264,33 +263,33 @@ struct Names {
                                   // Func whose buffer is being copied; -1
                                   // otherwise
     };
-    std::vector<IdInfo> id_info;
-    // First id allocated for each name — the canonical instance.
+    std::vector<EntryInfo> entry_info;
+    // First id allocated for each name — the canonical entry.
     std::map<std::string, int> canonical_id_for_name;
     // (parent_id, name) -> id — used to deduplicate when the same (parent,
     // name) pair is encountered more than once.
-    std::map<std::pair<int, std::string>, int> instance_map;
+    std::map<std::pair<int, std::string>, int> entry_map;
 
-    // Get (or allocate) the id for a specific instance of a Func, identified
-    // by its name plus its immediate parent instance in the IR. Two
-    // appearances of the same Func with different parents get different ids;
-    // two appearances with the same parent share one id.
-    int id_for_instance(const std::string &name, int parent_id,
+    // Get (or allocate) the id for a specific entry, keyed on the Func
+    // name plus its immediate parent entry in the IR. Two appearances of
+    // the same Func with different parents get different ids; two
+    // appearances with the same parent share one id.
+    int id_for_entry(const std::string &name, int parent_id,
                         halide_profiler_func_kind kind = halide_profiler_func_kind_func,
                         int buffer_func_id = -1) {
-        auto [it, inserted] = instance_map.try_emplace({parent_id, name}, (int)id_info.size());
+        auto [it, inserted] = entry_map.try_emplace({parent_id, name}, (int)entry_info.size());
         if (inserted) {
             int canon = canonical_id_for_name.try_emplace(name, it->second).first->second;
-            id_info.push_back({name, parent_id, canon, kind, buffer_func_id});
+            entry_info.push_back({name, parent_id, canon, kind, buffer_func_id});
         }
         return it->second;
     }
 
-    // Shorthand for the id of the root-level (parent = -1) instance of a
-    // name. Used for Funcs we know have only one instance (e.g. produced at
+    // Shorthand for the id of the root-level (parent = -1) entry for a
+    // name. Used for Funcs we know have only one entry (e.g. produced at
     // the pipeline root).
     int id_for_name(const std::string &name) {
-        return id_for_instance(name, -1);
+        return id_for_entry(name, -1);
     }
 
     std::string prefix(const std::string &name) const {
@@ -304,7 +303,7 @@ struct Names {
     }
 
     int num_ids() const {
-        return (int)id_info.size();
+        return (int)entry_info.size();
     }
 };
 
@@ -325,15 +324,15 @@ const std::string &handle_name(const Expr &e) {
     return s->value;
 }
 
-// First pass: enumerate the instances (see file-level comment) and assign
-// each one an id. Walks every ProducerConsumer node (one instance per
+// First pass: enumerate the entries (see file-level comment) and assign
+// each one an id. Walks every ProducerConsumer node (one entry per
 // producer, parented to the surrounding producer) and every declare_inlined
-// intrinsic (one instance per non-root node of the inlining graph the
+// intrinsic (one entry per non-root node of the inlining graph the
 // intrinsic encodes). To save the next pass from re-parsing the
 // declare_inlined graph, this pass also rewrites each declare_inlined to
-// just the flat list of resolved instance ids — the intrinsic's type is
+// just the flat list of resolved entry ids — the intrinsic's type is
 // preserved so the surrounding vector lane count is still available.
-class PreAllocateInstances : public IRMutator {
+class PreAllocateEntries : public IRMutator {
     Names &names;
     int producer_id = -1;
 
@@ -341,7 +340,7 @@ class PreAllocateInstances : public IRMutator {
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
-            int id = names.id_for_instance(op->name, producer_id);
+            int id = names.id_for_entry(op->name, producer_id);
             ScopedValue<int> old(producer_id, id);
             return IRMutator::visit(op);
         }
@@ -354,7 +353,7 @@ class PreAllocateInstances : public IRMutator {
         // (during the encounter-order walk) rather than later in
         // InjectProfiling makes the ids fall in IR order alongside their
         // sibling producers, so the report's DFS-by-id traversal renders
-        // them in their correct timeline position. id_for_instance is
+        // them in their correct timeline position. id_for_entry is
         // idempotent on (name, parent), so InjectProfiling's later lookup
         // returns the same id. Parent is the immediately enclosing
         // producer, so a copy_to_device(foo) emitted inside Produce(bar)
@@ -380,7 +379,7 @@ class PreAllocateInstances : public IRMutator {
                         if (it != names.canonical_id_for_name.end()) {
                             buffer_func_id = it->second;
                         }
-                        names.id_for_instance(buffer_name + tag, producer_id, kind, buffer_func_id);
+                        names.id_for_entry(buffer_name + tag, producer_id, kind, buffer_func_id);
                     }
                 }
             }
@@ -474,17 +473,17 @@ class PreAllocateInstances : public IRMutator {
         // Node 0 is the surrounding producer; the rest chain back to it.
         std::vector<int> node_id(num_nodes, -1);
         node_id[0] = producer_id;
-        auto resolve_instance_id = [&](auto &self, int idx) -> int {
+        auto resolve_entry_id = [&](auto &self, int idx) -> int {
             if (node_id[idx] >= 0) {
                 return node_id[idx];
             }
             int pid = self(self, node_parent_idx[idx]);
             const std::string &name = handle_name(op->args[idx]);
-            node_id[idx] = names.id_for_instance(name, pid);
+            node_id[idx] = names.id_for_entry(name, pid);
             return node_id[idx];
         };
         for (int i = 1; i < num_nodes; i++) {
-            resolve_instance_id(resolve_instance_id, i);
+            resolve_entry_id(resolve_entry_id, i);
         }
 
         std::vector<Expr> new_args;
@@ -497,7 +496,7 @@ class PreAllocateInstances : public IRMutator {
     }
 
 public:
-    PreAllocateInstances(Names &names)
+    PreAllocateEntries(Names &names)
         : names(names) {
     }
 };
@@ -517,19 +516,19 @@ class InjectCounters : public IRMutator {
 public:
     InjectCounters(Names &names, const map<string, Function> &env)
         : names(names), env(env) {
-        // The previous pass populated names.id_info with every instance.
+        // The previous pass populated names.entry_info with every entry.
         // Index them by name so declare_box_required_root (which carries a
         // pipeline-wide root-box count for a Func, not for any specific
-        // instance of it) can duplicate that count to every instance.
+        // entry for it) can duplicate that count to every entry.
         for (int i = 0; i < names.num_ids(); i++) {
-            instances_by_name[names.id_info[i].name].push_back(i);
+            entries_by_name[names.entry_info[i].name].push_back(i);
         }
     }
 
-    // Instances whose counter contributions were hoisted out of a GPU
+    // Entries whose counter contributions were hoisted out of a GPU
     // kernel via upper-bound substitution (or summed across an impure-
     // condition IfThenElse) and so may be over-counted in the report.
-    std::set<int> approximated_instances;
+    std::set<int> approximated_entries;
 
 protected:
     Names &names;
@@ -633,9 +632,9 @@ protected:
     // mid-kernel hoist conservatively out of the kernel — substituting an
     // upper bound for loop vars, wrapping in a Let for LetStmts, and
     // wrapping in a Select for IfThenElse (or taking the max of the
-    // branches when the condition is impure). Any instance whose
-    // contribution is hoisted via an upper-bound substitution is recorded
-    // in approximated_instances and flagged in its profile-report notes.
+    // branches when the condition is impure). Any entry whose contribution
+    // is hoisted via an upper-bound substitution is recorded in
+    // approximated_entries and flagged in its profile-report notes.
     bool in_gpu = false;
     // thread-local counters
     std::string local_counters;
@@ -644,9 +643,9 @@ protected:
 
     std::map<int, Counters> counters;
 
-    // name -> all instance ids with that name. Built once in the constructor;
+    // name -> all entry ids with that name. Built once in the constructor;
     // only declare_box_required_root reads it.
-    std::map<std::string, std::vector<int>> instances_by_name;
+    std::map<std::string, std::vector<int>> entries_by_name;
 
     bool is_func(const std::string &name) const {
         return env.find(name) != env.end();
@@ -734,7 +733,7 @@ protected:
 
     // GPU hoisting: if `var` (a closing-out loop var) appears in a counter
     // contribution, substitute an upper bound for it so the contribution
-    // becomes hoistable. Mark the instance as approximated since the result
+    // becomes hoistable. Mark the entry as approximated since the result
     // is an over-estimate. If no finite upper bound can be found, drop the
     // contribution entirely (still mark approximated).
     void hoist_loop_var_upper_bound(const For *op) {
@@ -752,7 +751,7 @@ protected:
                     } else {
                         c.counters[i] = Expr();
                     }
-                    approximated_instances.insert(id);
+                    approximated_entries.insert(id);
                 }
             }
             recompute_free_vars(c);
@@ -765,7 +764,7 @@ protected:
     // backing buffer may be mutated, or a non-pure Call) would be
     // re-evaluated in a different scope by the wrapped Let, which can
     // change its meaning. In that case we drop the contribution and mark
-    // the instance approximated.
+    // the entry approximated.
     void hoist_let(const std::string &name, const Expr &value) {
         bool value_pure = is_pure(value);
         for (auto &[id, c] : counters) {
@@ -778,7 +777,7 @@ protected:
                         c.counters[i] = Let::make(name, value, c.counters[i]);
                     } else {
                         c.counters[i] = Expr();
-                        approximated_instances.insert(id);
+                        approximated_entries.insert(id);
                     }
                 }
             }
@@ -790,7 +789,7 @@ protected:
     // of an IfThenElse into the outer scope. For a pure condition, exact via
     // Select. For an impure condition (e.g. a Load), upper-bound the
     // contribution by max(then, else) (the branches are mutually exclusive)
-    // and mark the instances as approximated.
+    // and mark the entries as approximated.
     void hoist_if(const Expr &condition,
                   std::map<int, Counters> &then_counters,
                   std::map<int, Counters> &else_counters) {
@@ -822,7 +821,7 @@ protected:
                     // execution — so the tight conservative upper bound on
                     // the contribution is max(then, else).
                     merged.counters[i] = max(ti, ei);
-                    approximated_instances.insert(id);
+                    approximated_entries.insert(id);
                 }
             }
             recompute_free_vars(merged);
@@ -850,38 +849,38 @@ protected:
         if (op->is_intrinsic(Call::declare_box_required_at_realization)) {
             // Emitted at the Realize node for the func. The Realize sits
             // inside the parent producer and contains this func's
-            // ProducerConsumer, so the right instance id is parented to the
+            // ProducerConsumer, so the right entry id is parented to the
             // current producer.
-            Counters &c = counters[names.id_for_instance(handle_name(op->args[0]), producer_id)];
+            Counters &c = counters[names.id_for_entry(handle_name(op->args[0]), producer_id)];
             c.count(PointsRequiredAtRealization, box_total(op));
             c.count(Realizations);
             return make_zero(op->type);
         } else if (op->is_intrinsic(Call::declare_box_required_at_production)) {
             // Emitted just inside the ProducerConsumer node. The same
             // .s0.var.min/.max vars used at the Realize site are also bound
-            // here by bounds inference, but to the per-production-instance
-            // values, so this captures e.g. sliding-window over-computation
-            // that the realize-box counter misses.
-            Counters &c = counters[names.id_for_instance(handle_name(op->args[0]), producer_id)];
+            // here by bounds inference, but to the per-production values,
+            // so this captures e.g. sliding-window over-computation that
+            // the realize-box counter misses.
+            Counters &c = counters[names.id_for_entry(handle_name(op->args[0]), producer_id)];
             c.count(PointsRequiredAtProduction, box_total(op));
             return make_zero(op->type);
         } else if (op->is_intrinsic(Call::declare_box_required_at_root)) {
             // Bill the pipeline-wide root box to this Func's canonical
-            // instance only. It's a Func-level fact, not a per-instance one,
-            // so summing it across instances would over-count. The reporter
-            // looks it up via fs->canonical_id when computing each
-            // instance's local recompute ratio.
-            auto it = instances_by_name.find(handle_name(op->args[0]));
-            if (it != instances_by_name.end()) {
-                // instances_by_name was filled in id-ascending order, and the
+            // entry only. It's a Func-level fact, not a per-entry one, so
+            // summing it across entries would over-count. The reporter
+            // looks it up via fs->canonical_id when computing each entry's
+            // local recompute ratio.
+            auto it = entries_by_name.find(handle_name(op->args[0]));
+            if (it != entries_by_name.end()) {
+                // entries_by_name was filled in id-ascending order, and the
                 // canonical id is the first id allocated for the name, so
                 // it->second.front() is always the canonical id.
                 counters[it->second.front()].count(PointsRequiredAtRoot, box_total(op));
             }
             return make_zero(op->type);
         } else if (op->is_intrinsic(Call::declare_inlined)) {
-            // The pre-pass has already resolved each non-root chain node to a
-            // per-instance id, so the args here are just a flat list of int
+            // The pre-pass has already resolved each non-root chain node to
+            // a per-entry id, so the args here are just a flat list of int
             // ids — one per inlined call site to bill. The intrinsic's type
             // still carries the surrounding vector lane count.
             Expr per_node = make_const(UInt(64), op->type.lanes());
@@ -925,9 +924,9 @@ protected:
         if (is_real_data_buffer(op)) {
             std::string f = names.prefix(op->name);
             // Stores in a producer block are to the Func being produced, so
-            // bill them to the current producer's instance id. (That's the
-            // right instance even if f has multiple instances elsewhere.)
-            int id = (producer_id >= 0 && names.id_info[producer_id].name == f) ?
+            // bill them to the current producer's entry id. (That's the
+            // right entry even if f has multiple entries elsewhere.)
+            int id = (producer_id >= 0 && names.entry_info[producer_id].name == f) ?
                          producer_id :
                          names.id_for_name(f);
             Counters &c = counters[id];
@@ -973,9 +972,9 @@ protected:
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
-            // One instance per producer node, parented to the surrounding
+            // One entry per producer node, parented to the surrounding
             // producer. See file-level comment for why this matters.
-            int id = names.id_for_instance(op->name, producer_id);
+            int id = names.id_for_entry(op->name, producer_id);
             Counters &c = counters[id];
             c.count(Productions);
             ScopedValue<int> old(producer_id, id);
@@ -1230,10 +1229,10 @@ private:
     struct AllocSize {
         bool on_stack;
         Expr size;
-        // Instance id resolved at Allocate time. The matching Free may sit at
+        // Entry id resolved at Allocate time. The matching Free may sit at
         // a different point in the producer stack than the Allocate (the
         // Allocate can be hoisted while the Free stays deep), so caching the
-        // id here keeps the two billed to the same instance.
+        // id here keeps the two billed to the same entry.
         int id;
     };
 
@@ -1261,18 +1260,18 @@ private:
         }
     }
 
-    // Resolve a Func name to its instance id under the currently-active
-    // producer chain. Must match the instance id PreAllocateInstances
+    // Resolve a Func name to its entry id under the currently-active
+    // producer chain. Must match the entry id PreAllocateEntries
     // allocated for the corresponding producer.
-    int get_func_instance_id(const string &name) {
+    int get_func_entry_id(const string &name) {
         int parent = stack.back();
         // The bottom of the stack is the overhead sentinel; treat it as "no
         // parent" so pipeline-root producers come out as parent=-1, matching
-        // how PreAllocateInstances allocates them (its producer_id starts at -1).
+        // how PreAllocateEntries allocates them (its producer_id starts at -1).
         if (parent == names.overhead_id) {
             parent = -1;
         }
-        return names.id_for_instance(names.prefix(name), parent);
+        return names.id_for_entry(names.prefix(name), parent);
     }
 
     Stmt unconditionally_set_current_func(int id) {
@@ -1356,7 +1355,7 @@ private:
         int idx;
         switch (classify(op->name)) {
         case Kind::ProfiledFunc:
-            idx = get_func_instance_id(op->name);
+            idx = get_func_entry_id(op->name);
             break;
         case Kind::NonProfiledFunc:
             // Attribute the stack size contribution to the deepest _profiled_ func.
@@ -1460,7 +1459,7 @@ private:
         Stmt body;
         if (classify(op->name) == Kind::ProfiledFunc) {
             if (op->is_producer) {
-                int idx = get_func_instance_id(op->name);
+                int idx = get_func_entry_id(op->name);
                 stack.push_back(idx);
                 Stmt set_current = set_current_func(idx);
                 body = Block::make(set_current, mutate(op->body));
@@ -1650,15 +1649,15 @@ private:
         const char *tag = to_device ? " (copy to device)" : " (copy to host)";
         // Parent the synthetic copy "Func" to whichever producer it sits
         // inside, so it nests under that producer in the timeline view.
-        // PreAllocateInstances allocates these ids eagerly using the same
-        // parent, so id_for_instance here just looks up the existing id.
+        // PreAllocateEntries allocates these ids eagerly using the same
+        // parent, so id_for_entry here just looks up the existing id.
         // overhead_id sits at the bottom of the stack as a sentinel — at
         // the outermost level it stands in for "no enclosing producer".
         int parent_id = stack.back();
         if (parent_id == names.overhead_id) {
             parent_id = -1;
         }
-        int copy_id = names.id_for_instance(buffer_name + tag, parent_id);
+        int copy_id = names.id_for_entry(buffer_name + tag, parent_id);
         // Bump a counter per copy invocation so tests/reports can see
         // exactly how many times it fired (the sample-based `time` is too
         // coarse for fast copies).
@@ -1723,8 +1722,8 @@ private:
 // (one per Func inlining, nested when a chain of Funcs is inlined into the
 // same site). This pass walks each Provide, replaces the markers with their
 // bodies, and stamps down a declare_inlined intrinsic recording the inlining
-// graph for the Provide. PreAllocateInstances in inject_profiling then
-// allocates per-instance ids from those graphs.
+// graph for the Provide. PreAllocateEntries in inject_profiling then
+// allocates per-entry ids from those graphs.
 //
 // Stmt-level CSE inside Inline.cpp can hoist common subexpressions —
 // including ones containing markers — out into LetStmts wrapping the
@@ -1934,17 +1933,17 @@ Stmt resolve_inline_markers(const Stmt &s) {
 Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env, const Target &target) {
     Names names(pipeline_name);
 
-    // 1) Allocate an instance id for every real instance (each producer node
-    //    and each inlined call site), and rewrite declare_inlined intrinsics
-    //    to hold those resolved ids directly. After this names.id_info is the
-    //    full set of instances we'll report on.
-    Stmt s = PreAllocateInstances(names)(stmt);
+    // 1) Allocate an id for every entry (each producer node and each
+    //    inlined call site), and rewrite declare_inlined intrinsics to
+    //    hold those resolved ids directly. After this, names.entry_info
+    //    is the full set of entries we'll report on.
+    Stmt s = PreAllocateEntries(names)(stmt);
 
     // 2) Inject the counter-update calls for stats (loads, stores,
     //    realizations, parallel loops, inlined call billing, etc.).
     InjectCounters injector(names, env);
     s = injector(s);
-    std::set<int> approximated_instances = std::move(injector.approximated_instances);
+    std::set<int> approximated_entries = std::move(injector.approximated_entries);
 
     // 3) Inject the rest of the profiler scaffolding: thread activation,
     //    memory tracking, current-func tracking, copy-to-host/device timing.
@@ -2000,12 +1999,12 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     // If there was a problem starting the profiler, it will call an
     // appropriate halide error function and then return the
     // (negative) error code as the token.
-    // Mark approximated instances before the pipeline body runs but
-    // after halide_profiler_instance_start has populated instance->funcs.
-    if (!approximated_instances.empty()) {
+    // Mark approximated entries before the pipeline body runs but after
+    // halide_profiler_instance_start has populated instance->funcs.
+    if (!approximated_entries.empty()) {
         std::vector<Stmt> marks;
-        marks.reserve(approximated_instances.size() + 1);
-        for (int id : approximated_instances) {
+        marks.reserve(approximated_entries.size() + 1);
+        for (int id : approximated_entries) {
             marks.emplace_back(Evaluate::make(
                 Call::make(Int(32), "halide_profiler_mark_approximated",
                            {instance, make_const(Int(32), id)}, Call::Extern)));
@@ -2035,7 +2034,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     std::vector<Expr> func_kinds(num_funcs);
     std::vector<Expr> func_buffer_func_ids(num_funcs);
     for (int i = 0; i < num_funcs; i++) {
-        const auto &info = names.id_info[i];
+        const auto &info = names.entry_info[i];
         func_names[i] = info.name;
         func_parents[i] = info.parent_id;
         func_canonical_ids[i] = info.canonical_id;

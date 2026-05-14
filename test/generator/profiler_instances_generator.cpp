@@ -4,14 +4,14 @@ using namespace Halide;
 
 namespace {
 
-// A pipeline exercising several profiler-instance scenarios in one pass:
+// A pipeline exercising several profiler-entry scenarios in one pass:
 //
 //  - `multi_inlined` is inlined into two compute_root callers, so should get
-//    two instance rows in the stats array sharing a canonical_id.
+//    two entry rows in the stats array sharing a canonical_id.
 //  - `chain_a -> chain_b -> chain_c` form an inlining chain. Each link appears
 //    in stats with the right parent pointing at the next link out.
 //  - `update_f` has an update definition and no schedule; it gets a separate
-//    Realize/Produce per caller, so two instance rows with the same name.
+//    Realize/Produce per caller, so two entry rows with the same name.
 //  - `cse_shared(r)` is referenced in both the index and the value of an
 //    update Provide, which Inline.cpp's Stmt-level CSE hoists into a LetStmt
 //    above the Provide; this exercises the let-handling code in
@@ -61,7 +61,7 @@ public:
         // diamond_shared ends up bound in a LetStmt above the Provide, and
         // diamond_left/diamond_right both reference it. The LCA of those
         // two parents in the inlining graph is `diamond_outer` — that's
-        // what the LCA computation in PreAllocateInstances needs to find.
+        // what the LCA computation in PreAllocateEntries needs to find.
         Func diamond_shared("diamond_shared");
         Func diamond_left("diamond_left"), diamond_right("diamond_right");
         Func diamond_outer("diamond_outer"), diamond_user("diamond_user");
@@ -210,7 +210,7 @@ public:
         // realized per outer iteration; xfer_host reads it from the host
         // (so a copy-to-host fires per outer iter); xfer_host is then
         // read by xfer_dev2 on the device (so a copy-to-device fires per
-        // outer iter). The synthetic copy instances should be parented
+        // outer iter). The synthetic copy entries should be parented
         // to xfer_out and their realizations counter should match the
         // outer-loop trip count.
         Func xfer_dev("xfer_dev"), xfer_host("xfer_host"),
