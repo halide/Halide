@@ -1751,6 +1751,17 @@ bool expr_contains_inline_marker(const Expr &e) {
     return found;
 }
 
+bool expr_contains_marker(const Expr &e) {
+    bool found = false;
+    visit_with(e, [&](auto *self, const Call *op) {
+        if (op->is_intrinsic({Call::inline_marker, Call::extern_stage_marker})) {
+            found = true;
+        }
+        self->visit_base(op);
+    });
+    return found;
+}
+
 // Mutator that walks an entire let-chain + Provide subtree as one unit:
 //   - On an inline_marker call: replaces it with its body, registering a
 //     node and an edge (or recording the node as a subgraph root, if we're
@@ -1805,6 +1816,18 @@ protected:
                 edges.emplace_back(Edge{parent, id});
             }
             ScopedValue<int> old(parent, id);
+            return mutate(op->args[1]);
+        } else if (op->is_intrinsic(Call::extern_stage_marker)) {
+            // ScheduleFunctions tagged an extern call's value. The
+            // extern stage's Halide name is in args[0]; use it as the
+            // billing target for any inline_markers in the call args.
+            // Strip the marker — only its first arg matters here.
+            internal_assert(op->args.size() == 2);
+            const StringImm *s = op->args[0].as<StringImm>();
+            internal_assert(s) << op->args[0];
+            if (provide_name.empty()) {
+                provide_name = s->value;
+            }
             return mutate(op->args[1]);
         }
         return IRMutator::visit(op);
@@ -1888,12 +1911,11 @@ Stmt process_inlining_subtree(const Stmt &s) {
     Stmt rewritten = builder(s);
 
     if (builder.provide_name.empty()) {
-        // No surrounding Provide — the inline_markers were sitting in an
-        // expression that doesn't belong to a Halide-Func production
-        // (e.g. an extern stage's call args reading an Input Func). The
-        // walk above has already stripped the markers from `rewritten`;
-        // we just have no Provide-level entry to bill the inlined calls
-        // to, so skip emitting a declare_inlined.
+        // Nothing claimed the inline_markers in this subtree — neither
+        // a Provide nor an extern_stage_marker. The walk above has
+        // already stripped the markers, so the IR is well-formed; we
+        // just have no entry to bill the inlined calls to. Skip
+        // emitting a declare_inlined.
         return rewritten;
     }
 
@@ -1921,20 +1943,32 @@ Stmt process_inlining_subtree(const Stmt &s) {
 }  // namespace
 
 Stmt resolve_inline_markers(const Stmt &s) {
-    return mutate_with(s,  //
-                       [&](auto *self, const LetStmt *op) {
-                           // A LetStmt whose RHS carries an inline_marker
-                           // was hoisted out of its Provide by CSE; process
-                           // the chain + Provide together.
-                           if (expr_contains_inline_marker(op->value)) {
-                               return process_inlining_subtree(Stmt(op));
-                           } else {
-                               return self->visit_base(op);
-                           }  //
-                       },                                    //
-                       [&](auto *self, const Provide *op) {  //
-                           return process_inlining_subtree(Stmt(op));
-                       });
+    return mutate_with(
+        s,  //
+        [&](auto *self, const LetStmt *op) {
+            // A LetStmt whose RHS carries a marker was hoisted out of
+            // its Provide by CSE, or sits above an extern stage's call
+            // (tagged with an extern_stage_marker). Process the chain
+            // together with whatever it anchors to.
+            if (expr_contains_marker(op->value)) {
+                return process_inlining_subtree(Stmt(op));
+            } else {
+                return self->visit_base(op);
+            }  //
+        },                                    //
+        [&](auto *self, const Provide *op) {  //
+            return process_inlining_subtree(Stmt(op));
+        },  //
+        [&](auto *self, const Evaluate *op) {
+            // An Evaluate of an expression containing a marker (e.g. an
+            // extern call wrapped in extern_stage_marker that wasn't
+            // bound to a let). Process it like a Provide.
+            if (expr_contains_marker(op->value)) {
+                return process_inlining_subtree(Stmt(op));
+            } else {
+                return self->visit_base(op);
+            }
+        });
 }
 
 Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env, const Target &target) {

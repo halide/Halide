@@ -662,6 +662,14 @@ struct Call : public ExprNode<Call> {
         // Args: (Variable<Handle> handle for the func, Int<32> stage_idx).
         declare_stage,
 
+        // Wraps the value of an extern-stage call to tag any inline_marker
+        // chains in the args with the extern stage they're being evaluated
+        // for. resolve_inline_markers uses the tag as the fallback
+        // billing target (no surrounding Provide exists for extern
+        // stages). Args: (StringImm stage name, body). Returns body.type();
+        // resolve_inline_markers strips the wrapper.
+        extern_stage_marker,
+
         div_round_to_zero,
 
         // A shuffle operation with runtime-varying indices.

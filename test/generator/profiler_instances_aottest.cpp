@@ -9,6 +9,22 @@
 
 using namespace Halide::Runtime;
 
+// Extern stage used by the profiler_instances generator's
+// extern_stage_e Func. Its only Expr arg is the inlined value of
+// extern_inlined(2) (i.e. 2*7+3 = 17 after simplification, but
+// arriving here wrapped in an inline_marker chain in the IR pre-
+// lowering — the test asserts the marker survives correctly).
+extern "C" int test_extern_stage(int seed, halide_buffer_t *out) {
+    if (out->is_bounds_query()) {
+        return 0;
+    }
+    int *p = (int *)out->host;
+    for (int i = 0; i < out->dim[0].extent; i++) {
+        p[i] = seed + i;
+    }
+    return 0;
+}
+
 namespace {
 
 void fail(const char *what) {
@@ -383,6 +399,20 @@ void check_mixed_host_device_update_defs(const halide_profiler_pipeline_stats *p
     REQUIRE(found_mid_func_copy);
 }
 
+// Extern stage with an inlined Func in its scalar arg: the inlined entry
+// should be parented to the extern stage (not to whatever surrounds it),
+// confirming the extern_stage_marker path in resolve_inline_markers
+// correctly anchors inline_markers buried in extern call args.
+void check_extern_stage_inlined_parent(const halide_profiler_pipeline_stats *p) {
+    auto ei = entries_of(p, "extern_inlined");
+    REQUIRE(!ei.empty());
+    int ese_id = parent_id_of(p, "extern_stage_e");
+    for (auto *fs : ei) {
+        REQUIRE(fs->parent == ese_id);
+        REQUIRE(fs->inlined_calls > 0);
+    }
+}
+
 void check_points_required_at_root_canonical_only(const halide_profiler_pipeline_stats *p) {
     // For any Func with multiple entries, at most one entry should have a
     // non-zero points_required_at_root (the canonical one — that's where the
@@ -450,6 +480,7 @@ int main(int argc, char **argv) {
     check_tiled_stencil_modest_recompute(target);
     check_sliding_window_counters(target);
     check_sliding_window_failure_counters(target);
+    check_extern_stage_inlined_parent(target);
     // Only present when the pipeline was built with a GPU feature — the
     // generator gates the corresponding Funcs on get_target().has_gpu_feature().
     if (!entries_of(target, "approx_out").empty()) {

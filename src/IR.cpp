@@ -630,6 +630,7 @@ const char *const intrinsic_op_names[] = {
     "declare_box_required_at_root",
     "declare_inlined",
     "declare_stage",
+    "extern_stage_marker",
     "div_round_to_zero",
     "dynamic_shuffle",
     "extract_bits",

@@ -245,6 +245,18 @@ public:
             mixed_sched.update(1).gpu_tile(x, xi, 8);
         }
 
+        // Extern stage with an inlined Func in its scalar call arg.
+        // `extern_inlined` is inlined into `extern_stage_e`'s arg, so the
+        // resolve_inline_markers path needs to attribute it to the extern
+        // stage (via extern_stage_marker — there's no surrounding Provide
+        // to anchor on). The aottest checks that the inlined entry's parent
+        // in the report is `extern_stage_e`, not the surrounding caller.
+        Func extern_inlined("extern_inlined"), extern_stage_e("extern_stage_e");
+        extern_inlined(x) = x * 7 + 3;
+        extern_stage_e.define_extern("test_extern_stage",
+                                     {Expr(extern_inlined(2))}, Int(32), 1);
+        extern_stage_e.compute_root();
+
         Func caller_g("caller_g"), caller_h("caller_h");
         caller_g(x) = multi_inlined(x) + chain_c(x) + update_f(x);
         caller_h(x) = multi_inlined(x) - chain_c(x) + update_f(x);
@@ -252,7 +264,7 @@ public:
         Expr out_value = caller_g(x) + caller_h(x) + cse_user(x) + diamond_user(x) +
                          forced_user(x) + roundup_outer(x) + guard_outer(x) +
                          stencil_out(x) + unrolled_pu(x % 4) + cw_a(x) + cw_b(x) +
-                         slide_out(x) + slide_fail_f(x);
+                         slide_out(x) + slide_fail_f(x) + extern_stage_e(x);
         if (get_target().has_gpu_feature()) {
             out_value = out_value + approx_out(x) + xfer_out(x) + mixed_sched(x);
         }
