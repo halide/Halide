@@ -255,13 +255,13 @@ struct Names {
     // One EntryInfo per entry — see the file-level "Entries" comment.
     struct EntryInfo {
         std::string name;
-        int parent_id;            // immediate parent entry, or -1 if at the root
-        int canonical_id;         // first id allocated for this name, used for
-                                  // per-Func (rolled-up) reporting
+        int parent_id;     // immediate parent entry, or -1 if at the root
+        int canonical_id;  // first id allocated for this name, used for
+                           // per-Func (rolled-up) reporting
         halide_profiler_func_kind kind;
-        int buffer_func_id;       // for copy synthetics, canonical id of the
-                                  // Func whose buffer is being copied; -1
-                                  // otherwise
+        int buffer_func_id;  // for copy synthetics, canonical id of the
+                             // Func whose buffer is being copied; -1
+                             // otherwise
     };
     std::vector<EntryInfo> entry_info;
     // First id allocated for each name — the canonical entry.
@@ -275,8 +275,8 @@ struct Names {
     // the same Func with different parents get different ids; two
     // appearances with the same parent share one id.
     int id_for_entry(const std::string &name, int parent_id,
-                        halide_profiler_func_kind kind = halide_profiler_func_kind_func,
-                        int buffer_func_id = -1) {
+                     halide_profiler_func_kind kind = halide_profiler_func_kind_func,
+                     int buffer_func_id = -1) {
         auto [it, inserted] = entry_map.try_emplace({parent_id, name}, (int)entry_info.size());
         if (inserted) {
             int canon = canonical_id_for_name.try_emplace(name, it->second).first->second;
@@ -367,8 +367,7 @@ class PreAllocateEntries : public IRMutator {
                         bool to_device = op->name == "halide_copy_to_device";
                         const char *tag = to_device ? " (copy to device)" : " (copy to host)";
                         halide_profiler_func_kind kind =
-                            to_device ? halide_profiler_func_kind_copy_to_device
-                                      : halide_profiler_func_kind_copy_to_host;
+                            to_device ? halide_profiler_func_kind_copy_to_device : halide_profiler_func_kind_copy_to_host;
                         // Look up the canonical id of the Func whose
                         // buffer this is. The Func's producer has
                         // already been visited (it's the producer this
@@ -1739,17 +1738,6 @@ private:
 // the graph.
 
 namespace {
-
-bool expr_contains_inline_marker(const Expr &e) {
-    bool found = false;
-    visit_with(e, [&](auto *self, const Call *op) {
-        if (op->is_intrinsic(Call::inline_marker)) {
-            found = true;
-        }
-        self->visit_base(op);
-    });
-    return found;
-}
 
 bool expr_contains_marker(const Expr &e) {
     bool found = false;
