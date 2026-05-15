@@ -178,6 +178,12 @@ void lower_impl(const vector<Function> &output_funcs,
     Stmt s = schedule_functions(outputs, fused_groups, env, t, any_memoized);
     log("Lowering after creating initial loop nests:", s);
 
+    if (t.has_feature(Target::Profile)) {
+        debug(1) << "Resolving inline_marker intrinsics...\n";
+        s = resolve_inline_markers(s);
+        log("Lowering after resolving inline_marker:", s);
+    }
+
     if (any_memoized) {
         debug(1) << "Injecting memoization...\n";
         s = inject_memoization(s, env, pipeline_name, outputs);

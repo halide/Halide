@@ -65,7 +65,10 @@ public:
 WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipeline_name,
                                                              int num_funcs,
                                                              const uint64_t *func_names,
-                                                             const int *func_parents) {
+                                                             const int *func_parents,
+                                                             const int *func_canonical_ids,
+                                                             const uint8_t *func_kinds,
+                                                             const int *func_buffer_func_ids) {
     halide_profiler_state *s = halide_profiler_get_state();
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
@@ -93,11 +96,13 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
         free(p);
         return nullptr;
     }
-    debug(0) << "Clearing func stats\n";
     __builtin_memset(p->funcs, 0, func_stats_storage);
     for (int i = 0; i < num_funcs; i++) {
         p->funcs[i].name = (const char *)(func_names[i]);
         p->funcs[i].parent = func_parents[i];
+        p->funcs[i].canonical_id = func_canonical_ids[i];
+        p->funcs[i].kind = func_kinds[i];
+        p->funcs[i].buffer_func_id = func_buffer_func_ids[i];
     }
     s->pipelines = p;
     return p;
@@ -243,6 +248,9 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         int num_funcs,
                                         const uint64_t *func_names,
                                         const int *func_parents,
+                                        const int *func_canonical_ids,
+                                        const uint8_t *func_kinds,
+                                        const int *func_buffer_func_ids,
                                         uint64_t native_vector_bytes,
                                         halide_profiler_instance_state *instance) {
     // Tell the instance where we stashed the per-func state - just after the
@@ -281,7 +289,9 @@ WEAK int halide_profiler_instance_start(void *user_context,
 
         // Find or create the pipeline statistics for this pipeline.
         halide_profiler_pipeline_stats *p =
-            find_or_create_pipeline(pipeline_name, num_funcs, func_names, func_parents);
+            find_or_create_pipeline(pipeline_name, num_funcs,
+                                    func_names, func_parents, func_canonical_ids,
+                                    func_kinds, func_buffer_func_ids);
         if (!p) {
             // Allocating space to track the statistics failed.
             return halide_error_out_of_memory(user_context);
@@ -318,37 +328,34 @@ WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instan
         uint64_t true_duration = end_time - instance->start_time;
         halide_profiler_pipeline_stats *p = instance->pipeline_stats;
 
-        // Retire the instance, accumulating statistics onto the statistics for this
-        // pipeline. Fields related to memory usages are tracked in the pipeline stats
-        p->samples += instance->samples;
-        p->time += true_duration;
+        // Retire the instance, accumulating statistics onto the statistics
+        // for this pipeline. Memory and per-Func counter fields accumulate
+        // regardless of whether the run produced samples — those counters
+        // were updated by the Halide code itself, not by the sampler, so
+        // they're valid even for unsampled runs.
         p->active_threads_numerator += instance->active_threads_numerator;
         p->active_threads_denominator += instance->active_threads_denominator;
         p->memory_total += instance->memory_total;
         p->memory_peak = max(p->memory_peak, instance->memory_peak);
         p->num_allocs += instance->num_allocs;
         p->runs++;
+        p->samples += instance->samples;
 
-        // Compute an adjustment factor to account for the fact that the billed
-        // time is not equal to the duration between start and end calls. We
-        // could avoid this by just making sure there is a sampling event a the
-        // start and end of the pipeline, but this would overcount whatever the
-        // last value of current_func is at the end of the pipeline, and is
-        // likely to undercount time spent in the first func in a
-        // pipeline. Sampling events need to happen independently (in the random
-        // variable sense) of any changes in current_func.
-        double adjustment = 1;
-        if (instance->billed_time > 0) {
-            adjustment = (double)true_duration / instance->billed_time;
-        }
+        // Per-Func *counter* fields accumulate every run. Per-Func *time*
+        // fields only get a meaningful contribution from runs that the
+        // sampler actually hit (billed_time > 0): the time-accounting math
+        // in this function relies on a non-zero billed_time, and a run
+        // that completes between two sampler ticks has nothing useful to
+        // contribute. Including such runs in p->time would make the sum
+        // of fs->time across Funcs less than p->time, breaking percentage
+        // math in the report.
 
+        // First, the per-Func counter fields. Their layout: stack_peak is
+        // a per-instance "max" field; everything after it is a uint64_t
+        // counter we sum across instances.
         for (int f = 0; f < p->num_funcs; f++) {
             halide_profiler_func_stats *func = p->funcs + f;
             const halide_profiler_func_stats *instance_func = instance->funcs + f;
-            // clang-tidy wants me to use a c standard library function to do
-            // the rounding below, but those aren't guaranteed to be available
-            // when compiling the runtime.
-            func->time += (uint64_t)(instance_func->time * adjustment + 0.5);  // NOLINT
             func->memory_peak = max(func->memory_peak, instance_func->memory_peak);
             func->stack_peak = max(func->stack_peak, instance_func->stack_peak);
             uint64_t *counter = (&func->stack_peak) + 1;
@@ -356,6 +363,29 @@ WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instan
             const uint64_t *instance = (&instance_func->stack_peak) + 1;
             while (counter != end) {
                 *counter++ += *instance++;
+            }
+        }
+
+        // Then per-Func time, only for runs the sampler reached. Compute
+        // an adjustment factor to account for the fact that the billed
+        // time is not exactly the duration between start and end calls.
+        // We could avoid this by force-sampling at the start and end of
+        // the pipeline, but that would overcount whatever the last value
+        // of current_func happens to be at the end, and undercount time
+        // spent in the first Func. Sampling events need to happen
+        // independently (in the random-variable sense) of any changes to
+        // current_func.
+        if (instance->billed_time > 0) {
+            p->time += true_duration;
+            p->billed_runs++;
+            double adjustment = (double)true_duration / instance->billed_time;
+            for (int f = 0; f < p->num_funcs; f++) {
+                halide_profiler_func_stats *func = p->funcs + f;
+                const halide_profiler_func_stats *instance_func = instance->funcs + f;
+                // clang-tidy wants me to use a c standard library function
+                // to do the rounding below, but those aren't guaranteed to
+                // be available when compiling the runtime.
+                func->time += (uint64_t)(instance_func->time * adjustment + 0.5);  // NOLINT
             }
         }
     }
@@ -383,6 +413,20 @@ WEAK void halide_profiler_stack_peak_update(void *user_context,
             sync_compare_max_and_swap(&(instance->funcs[i]).stack_peak, f_values[i]);
         }
     }
+}
+
+WEAK void halide_profiler_mark_approximated(void *user_context,
+                                            halide_profiler_instance_state *instance,
+                                            int func_id) {
+    instance->funcs[func_id].counters_approximated = 1;
+}
+
+WEAK void halide_profiler_count_host_device_copy(void *user_context,
+                                                 halide_profiler_instance_state *instance,
+                                                 int func_id) {
+    using namespace Halide::Runtime::Internal::Synchronization;
+    atomic_fetch_add_sequentially_consistent(&(instance->funcs[func_id].realizations),
+                                             (uint64_t)1);
 }
 
 WEAK void halide_profiler_memory_allocate(void *user_context,
@@ -457,29 +501,12 @@ WEAK void halide_profiler_memory_free(void *user_context,
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
     StringStreamPrinter<1024> sstr(user_context);
 
-    int64_t (*compare_fs_fn)(halide_profiler_func_stats *a, halide_profiler_func_stats *b) = nullptr;
-
-    const char *sort_str = getenv("HL_PROFILER_SORT");
-    if (sort_str) {
-        if (!strcmp(sort_str, "time")) {
-            compare_fs_fn = [](halide_profiler_func_stats *a, halide_profiler_func_stats *b) -> int64_t {
-                return (int64_t)b->time - (int64_t)a->time;
-            };
-        } else if (!strcmp(sort_str, "name")) {
-            compare_fs_fn = [](halide_profiler_func_stats *a, halide_profiler_func_stats *b) -> int64_t {
-                return strcmp(a->name, b->name);
-            };
-        }
-    }
-
     bool support_colors = false;
     const char *term = getenv("TERM");
     if (term && (strstr(term, "color") || strstr(term, "xterm"))) {
         support_colors = true;
     }
 
-    const char *substr_copy_to_device = " (copy to device)";
-    const char *substr_copy_to_host = " (copy to host)";
 
     // ---- Profiler report formatting --------------------------------------
     //
@@ -646,15 +673,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         }
     };
 
-    // Section label slot: emits "label " then pads to width with `:`. If
-    // the label is too long it spills past the slot, pushing later cells to
-    // the right.
-    auto emit_section_label = [&](const char *label, int width) {
-        uint64_t target = sstr.size() + width;
-        sstr << label << " ";
-        pad_bytes_to(target, '.');
-    };
-
     // Walk `tmpl`, calling `resolve(c, n)` for each maximal run of
     // identical chars. The resolver decides what to emit.
     auto apply_template = [&](const char *tmpl, auto resolve) {
@@ -670,22 +688,22 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
     };
 
     // ---- Templates ----
-    // The N slot in func_row absorbs its own 2-space indent, so it is the
-    // same width as the S slot in the section headers; the templates line
-    // up vertically. The literal column legend on the second line of
-    // funcs_section_header is hand-aligned with the column widths on line 1
-    // -- if you resize a column, eyeball the legend too. Trailing \n's are
-    // added by the caller so color reset (when enabled) can be emitted just
-    // before the final newline.
+    // The N slot in func_row absorbs its own 2-space indent. Trailing \n's
+    // are added by the caller so color reset (when enabled) can be emitted
+    // just before the final newline.
     constexpr const char *horiz_rule =
         "--------------------------------------------------------------------------------------------------------\n";
-    constexpr const char *funcs_section_header =
-        " SSSSSSSSSSSSSSSSSSSSSSS |TTTTTTTTT PPPPPPPP| active|  parallel   | heap | peak | avg  |recompute|notes|\n"
-        "                         |                  |threads| loops| tasks|allocs|  mem |  mem |  ratio  |     |";
     constexpr const char *func_row =
         "NNNNNNNNNNNNNNNNNNNNNNNNN|TTTTTTTTT PPPPPPPP|HHHHHH |LLLLLL|KKKKKK|AAAAAA|MMMMMM|VVVVVV|RRRRRRRR |YYYYY|";
-    constexpr const char *copy_section_header =
-        " SSSSSSSSSSSSSSSSSSSSSSS |TTTTTTTTT PPPPPPPP|       |      |      |      |      |      |         |     |";
+    constexpr const char *inlined_func_row =
+        "NNNNNNNNNNNNNNNNNNNNNNNNN|IIIIIIIIIIIIIIIIII|       |      |      |      |      |      |RRRRRRRR |YYYYY|";
+    // Column legend printed once above the func table. Each pipe column
+    // and label width matches func_row. Hand-aligned -- if you resize a
+    // column, eyeball this too.
+    constexpr const char *column_legend_row_1 =
+        "  name                   | time     percent | active|  parallel   | heap | peak | avg  |recompute|notes|";
+    constexpr const char *column_legend_row_2 =
+        "                         |                  |threads| loops| tasks|allocs|  mem |  mem |  ratio  |     |";
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
@@ -702,16 +720,22 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         }
         bool serial = total_parallel_loops == 0;
 
-        // Pipeline summary (free-form, not column-aligned).
+        // Pipeline summary (free-form, not column-aligned). Times are
+        // averaged over billed_runs (runs that produced samples), not
+        // total runs — see halide_profiler_instance_end for why.
         {
             float total_ms = p->time / 1000000.0f;
+            int time_runs = p->billed_runs ? p->billed_runs : 1;
             sstr.clear();
             emit_dim(horiz_rule);
             sstr << p->name << "\n"
                  << " total time: " << total_ms << " ms"
                  << "  samples: " << p->samples
-                 << "  runs: " << p->runs
-                 << "  time per run: " << total_ms / p->runs << " ms\n";
+                 << "  runs: " << p->runs;
+            if (p->billed_runs != p->runs) {
+                sstr << " (" << p->billed_runs << " timed)";
+            }
+            sstr << "  time per run: " << total_ms / time_runs << " ms\n";
             if (!serial) {
                 float threads = p->active_threads_numerator / (p->active_threads_denominator + 1e-10f);
                 sstr << " average threads used: " << threads
@@ -782,6 +806,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             }
         }
 
+        // TODO: inlined Funcs, or even Funcs with update definitions that have
+        // multiple callers but are unscheduled could have multiple parents!
+
         // Use the tree order to compute some cumulative stats
         struct CumulativeStats {
             // Time taken by this func and all children
@@ -811,7 +838,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 cum_stats[parent].active_threads_denominator += cum_stats[j].active_threads_denominator;
             }
         }
-        // Propagation to children
+        // Propagation to children: parallel_tasks latches downward — a Func
+        // realized inside its parent's parallel loop "inherits" the parent's
+        // task count if it doesn't have one of its own.
         for (int i = 0; i < p->num_funcs; i++) {
             int j = tree_order[i];
             int parent = p->funcs[j].parent;
@@ -827,66 +856,119 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         // Filter (skip empty bookkeeping slots) in tree-DFS order, and
         // optionally re-sort with the user-requested comparator.
         int f_stats_count = 0;
-        halide_profiler_func_stats **f_stats =
-            (halide_profiler_func_stats **)__builtin_alloca(p->num_funcs * sizeof(halide_profiler_func_stats *));
-
-        int num_copy_to_device = 0;
-        int num_copy_to_host = 0;
-        uint64_t total_func_time = 0;
-        uint64_t total_copy_to_device_time = 0;
-        uint64_t total_copy_to_host_time = 0;
-        for (int i = 0; i < p->num_funcs; i++) {
-            halide_profiler_func_stats *fs = p->funcs + i;
-            if (strstr(fs->name, substr_copy_to_device)) {
-                num_copy_to_device++;
-                total_copy_to_device_time += fs->time;
-            } else if (strstr(fs->name, substr_copy_to_host)) {
-                num_copy_to_host++;
-                total_copy_to_host_time += fs->time;
-            } else {
-                total_func_time += fs->time;
-            }
-        }
+        const halide_profiler_func_stats **f_stats =
+            (const halide_profiler_func_stats **)__builtin_alloca(p->num_funcs * sizeof(const halide_profiler_func_stats *));
 
         for (int t = 0; t < tree_count; t++) {
             int i = tree_order[t];
-            halide_profiler_func_stats *fs = p->funcs + i;
-            // ids 0,1 are overhead and "wait for parallel tasks" -- skip if zero.
-            if ((i == 0 || i == 1) && fs->time == 0) {
+            const halide_profiler_func_stats *fs = p->funcs + i;
+            // Skip the overhead / thread-idle bookkeeping slots if they
+            // didn't accumulate any time, and the malloc/free slots if
+            // no heap allocations happened — they'd just be noise.
+            if ((fs->kind == halide_profiler_func_kind_overhead ||
+                 fs->kind == halide_profiler_func_kind_thread_idle) &&
+                fs->time == 0) {
                 continue;
             }
-            // ids 2,3 are malloc/free -- skip if no heap allocations happened.
-            if ((i == 2 || i == 3) && p->num_allocs == 0) {
+            if ((fs->kind == halide_profiler_func_kind_malloc ||
+                 fs->kind == halide_profiler_func_kind_free) &&
+                p->num_allocs == 0) {
                 continue;
             }
             f_stats[f_stats_count++] = fs;
         }
 
-        if (compare_fs_fn) {
-            // An explicit sort was requested -- the tree-DFS order is about
-            // to be scrambled, so the depth-based indentation would no
-            // longer correspond to the row layout. Flatten it.
-            for (int i = 0; i < p->num_funcs; i++) {
-                func_depth[i] = 0;
+        // ---- Per-Func rolled-up stats -----------------------------------
+        //
+        // A Func may have multiple instances in this stats array (different
+        // inlining chains, or an unscheduled Func realized separately under
+        // each caller). The per-instance rows are useful for display, but
+        // for warnings we want one shot per Func, against Func-wide totals.
+        // Sum the counter region of every instance into a single aggregate
+        // keyed on canonical_id; identity fields come from the canonical
+        // entry; peaks take the max.
+        //
+        // Note this is a different kind of aggregation from cum_stats: that
+        // one sums children's stats into a parent (subtree totals). This one
+        // sums siblings sharing a name into a single per-Func entry.
+        //
+        // The struct documents that everything from memory_total onwards is
+        // "a counter, aggregated by blindly adding", so we honour that with
+        // a single loop over the counter region rather than naming every
+        // field. Adding a new counter to halide_profiler_func_stats then
+        // requires no changes here.
+        // Counter region: every field from memory_total to the end of the
+        // struct. They're all uint64_t and contiguous, so we treat the region
+        // as a uint64_t[] and blindly add it. We round down so that on 32-bit
+        // builds (where the struct gets up to 7 bytes of trailing alignment
+        // padding) we don't try to dereference the pad.
+        constexpr size_t counter_offset = __builtin_offsetof(halide_profiler_func_stats, memory_total);
+        constexpr size_t counter_bytes = sizeof(halide_profiler_func_stats) - counter_offset;
+        constexpr int num_counter_words = (int)(counter_bytes / sizeof(uint64_t));
+
+        size_t canon_fs_size = p->num_funcs * sizeof(halide_profiler_func_stats);
+        size_t canon_cs_size = p->num_funcs * sizeof(CumulativeStats);
+        halide_profiler_func_stats *canon_fs =
+            (halide_profiler_func_stats *)__builtin_alloca(canon_fs_size);
+        CumulativeStats *canon_cs =
+            (CumulativeStats *)__builtin_alloca(canon_cs_size);
+        __builtin_memset(canon_fs, 0, canon_fs_size);
+        __builtin_memset(canon_cs, 0, canon_cs_size);
+        // canonical_id <= i for every instance, so a single forward pass
+        // initializes each aggregate's identity fields when it hits the
+        // canonical entry, then folds later non-canonical instances into it.
+        for (int i = 0; i < p->num_funcs; i++) {
+            const halide_profiler_func_stats &src = p->funcs[i];
+            int c = src.canonical_id;
+            halide_profiler_func_stats &dst = canon_fs[c];
+            if (i == c) {
+                // Identity / non-summable fields come from the canonical entry.
+                dst.name = src.name;
+                dst.parent = src.parent;
+                dst.canonical_id = c;
             }
-            for (int i = 1; i < f_stats_count; i++) {
-                for (int j = i; j > 0 && compare_fs_fn(f_stats[j - 1], f_stats[j]) > 0; j--) {
-                    auto *a = f_stats[j - 1];
-                    auto *b = f_stats[j];
-                    f_stats[j - 1] = b;
-                    f_stats[j] = a;
-                }
+            // Inlined Funcs don't get time samples of their own (they execute
+            // as part of their caller), so for rule evaluation we want them
+            // to inherit their caller's self time. Doing it here keeps the
+            // source p->funcs[] array read-only.
+            uint64_t self_time = src.time;
+            uint64_t subtree_time = cum_stats[i].time;
+            if (src.inlined_calls && src.parent >= 0) {
+                self_time = p->funcs[src.parent].time;
+                subtree_time = self_time;
             }
+            dst.time += self_time;
+            if (src.memory_peak > dst.memory_peak) {
+                dst.memory_peak = src.memory_peak;
+            }
+            if (src.stack_peak > dst.stack_peak) {
+                dst.stack_peak = src.stack_peak;
+            }
+            // Blind-add the counter region (everything from memory_total
+            // onwards in the struct).
+            uint64_t *dst_counters = (uint64_t *)((char *)&dst + counter_offset);
+            const uint64_t *src_counters = (const uint64_t *)((const char *)&src + counter_offset);
+            for (int j = 0; j < num_counter_words; j++) {
+                dst_counters[j] += src_counters[j];
+            }
+
+            CumulativeStats &dst_cs = canon_cs[c];
+            dst_cs.time += subtree_time;
+            dst_cs.active_threads_numerator += cum_stats[i].active_threads_numerator;
+            dst_cs.active_threads_denominator += cum_stats[i].active_threads_denominator;
+            dst_cs.parallel_tasks += cum_stats[i].parallel_tasks;
         }
 
         // ---- Heuristic warnings -----------------------------------------
         //
         // Many counters are recorded but only a few are shown in the table.
-        // For everything else, the `rule` function below scans each func's
-        // stats and emits a numbered warning when the schedule looks
-        // suspicious. Each func's row gets a "notes" cell listing the
-        // numbers of the warnings that apply; the messages themselves
-        // print after all the sections.
+        // For everything else, the `rule` function below scans each Func's
+        // rolled-up stats and emits a numbered warning when the schedule
+        // looks suspicious. Each Func's row gets a "notes" cell listing the
+        // numbers of the warnings that apply; the messages themselves print
+        // after all the sections. Because warnings fire per-Func (on the
+        // canonical aggregate), every instance of the same Func shows the
+        // same set of note numbers.
         //
         // Each rule's trigger condition and message body live in the same
         // case, sharing locally-computed metrics. The function is called
@@ -894,8 +976,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         // again with emit=true to render each warning's text.
 
         struct WarningEntry {
-            halide_profiler_func_stats *fs;
-            CumulativeStats *cs;
+            int canonical_id;
             int rule_id;
         };
         constexpr int max_warnings = 256;
@@ -911,8 +992,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         // true, also writes the warning message to sstr (using the same
         // metrics the trigger condition reads). To add a new rule, append
         // a new case here -- both the predicate and the text live together.
-        auto rule = [&](halide_profiler_func_stats *fs,
-                        CumulativeStats *cs,
+        auto rule = [&](const halide_profiler_func_stats *fs,
+                        const CumulativeStats *cs,
                         int rule_id,
                         bool emit) -> bool {
             float threads_avg = cs->active_threads_numerator /
@@ -922,8 +1003,16 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             uint64_t tasks_per_run = fs->parallel_tasks / p->runs;
             uint64_t loops_per_run = fs->parallel_loops / p->runs;
             bool poor_thread_utilization = threads_avg < num_threads * 0.75f;
-            float recompute = (fs->points_required_at_realization /
-                               (fs->points_required_at_root + 1e-10f));
+            // Recompute = points-actually-computed / points-required-at-root.
+            // points_computed (pure-def stage-0 stores × lanes) captures
+            // forms of over-computation that the box-required counter
+            // misses: tail strategies like RoundUp, and cases where
+            // sliding-window failed. Inlined Funcs don't have stage-0
+            // stores at all, so for them we fall back to inlined_calls.
+            uint64_t numerator = fs->points_computed + fs->inlined_calls;
+            float recompute = fs->points_required_at_root ?
+                                  (numerator / (float)fs->points_required_at_root) :
+                                  0.f;
             uint64_t total_vector_loads = fs->vector_loads + fs->gathers;
             uint64_t total_vector_stores = fs->vector_stores + fs->scatters;
             uint64_t total_stores = fs->scalar_stores + fs->vector_stores + fs->scatters;
@@ -942,6 +1031,18 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                              << " heap allocations. Consider hoisting storage for the "
                              << "Func to the parallel loop to cut down on the number of "
                              << "heap allocations, or using .store_in(MemoryType::Stack).";
+                    }
+                    return true;
+                }
+                return false;
+            case 11:
+                if (fs->counters_approximated) {
+                    if (emit) {
+                        sstr << fs->name << " has counter contributions that could not be "
+                             << "exactly accumulated (e.g. hoisted out of a GPU kernel via "
+                             << "an upper-bound substitution, or across an IfThenElse with an "
+                             << "impure condition). Its numerical counters are conservative "
+                             << "upper bounds rather than exact totals.";
                     }
                     return true;
                 }
@@ -1019,6 +1120,49 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
+            case 12: {
+                // Look for copy synthetics anywhere in the pipeline whose
+                // buffer_func_id points at this Func. Fire only when
+                // BOTH directions exist — a Func whose buffer is copied
+                // both to host and to device within the same pipeline run
+                // is bouncing between devices, regardless of which scope
+                // each copy ended up in. This catches the asymmetric
+                // case where one direction is nested in the Func itself
+                // and the other lives in a consumer's scope (e.g. pure
+                // on GPU, update(0) on CPU, no later GPU stage — the
+                // device->host copy ends up in the Func's producer but
+                // the next host->device copy is in the first consumer
+                // that reads on device). A single one-way copy is
+                // ordinary pipeline I/O (e.g. preparing the output
+                // buffer's device side, or finalizing input on host)
+                // and shouldn't trigger.
+                int my_canonical = fs->canonical_id;
+                bool has_copy_to_host = false;
+                bool has_copy_to_device = false;
+                for (int i = 0; i < p->num_funcs; i++) {
+                    const halide_profiler_func_stats *c = p->funcs + i;
+                    if (c->buffer_func_id != my_canonical) {
+                        continue;
+                    }
+                    if (c->kind == halide_profiler_func_kind_copy_to_host) {
+                        has_copy_to_host = true;
+                    } else if (c->kind == halide_profiler_func_kind_copy_to_device) {
+                        has_copy_to_device = true;
+                    }
+                }
+                if (has_copy_to_host && has_copy_to_device) {
+                    if (emit) {
+                        sstr << fs->name << " has stages computing on different devices, "
+                             << "forcing host<->device buffer transfers between stages of "
+                             << "the same Func. This usually means an update definition "
+                             << "was left unscheduled or scheduled on the wrong device. "
+                             << "Schedule all update definitions of " << fs->name
+                             << " to compute on the same device as the pure definition.";
+                    }
+                    return true;
+                }
+                return false;
+            }
             default:
                 // Continue through to next set
                 break;
@@ -1037,16 +1181,39 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     self_time > 0.01 &&
                     fs->parent >= 0) {
                     if (emit) {
-                        // TODO: Silence this for wrapper Funcs
                         sstr << fs->name << " redundantly recomputes each value " << recompute
-                             << " times on average. Consider a compute_at location further "
-                             << "outwards in the parent's loop nest.";
+                             << " times on average. ";
+                        if (fs->inlined_calls) {
+                            sstr << "If this Func has a non-trivial body, consider using "
+                                 << "compute_at or compute_root instead of inlining it.";
+                        } else {
+                            // Determine the single biggest cause
+                            float a = (float)fs->points_required_at_realization / fs->points_required_at_root;
+                            float b = (float)fs->points_required_at_production / fs->points_required_at_realization;
+                            float c = (float)fs->points_computed / fs->points_required_at_production;
+                            if (a > b && a > c) {
+                                sstr
+                                    << "Consider a store_at/compute_at location further outwards "
+                                    << "in the parent's loop nest.";
+                            }
+                            if (b > c) {
+                                sstr
+                                    << "The points required at the compute_at site is " << b
+                                    << " times larger than the points required at the store_at "
+                                    << "site. Sliding window optimization may have failed.";
+                            } else {
+                                sstr
+                                    << "The number of points actually computed is " << c
+                                    << " times larger than the points required at the compute_at site."
+                                    << " The schedule may be using excessively large split factors.";
+                            }
+                        }
                     }
                     return true;
                 }
                 return false;
             case 6:
-                if (!vector_loads_or_stores) {
+                if (!vector_loads_or_stores && !fs->inlined_calls) {
                     if (emit) {
                         sstr << fs->name << " performs no vector loads or stores. Ensure it is"
                              << " vectorized.";
@@ -1112,25 +1279,26 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 return false;
             }
         };
-        constexpr int num_rules = 11;
+        constexpr int num_rules = 13;
 
         for (int f = 0; f < f_stats_count; f++) {
-            halide_profiler_func_stats *fs = f_stats[f];
+            const halide_profiler_func_stats *fs = f_stats[f];
             int idx = (int)(fs - p->funcs);
-            CumulativeStats *cs = cum_stats + idx;
-            // Skip the bookkeeping slots (overhead, thread idle, malloc, free)
-            // and the synthesized buffer-copy funcs -- the rules don't apply.
-            if (idx < 4) {
+            // Run each rule once per Func, on the canonical instance only.
+            if (fs->canonical_id != idx) {
                 continue;
             }
-            // Skip host-device copy entries
-            if (strstr(fs->name, substr_copy_to_device) ||
-                strstr(fs->name, substr_copy_to_host)) {
+            // Rules only apply to real Funcs — skip bookkeeping slots
+            // (overhead, thread idle, malloc, free) and synthesized
+            // buffer-copy timing entries.
+            if (fs->kind != halide_profiler_func_kind_func) {
                 continue;
             }
+            const halide_profiler_func_stats *agg_fs = &canon_fs[idx];
+            const CumulativeStats *agg_cs = &canon_cs[idx];
             for (int r = 0; r < num_rules; r++) {
-                if (rule(fs, cs, r, /*emit=*/false) && num_warnings < max_warnings) {
-                    warnings[num_warnings++] = {fs, cs, r};
+                if (rule(agg_fs, agg_cs, r, /*emit=*/false) && num_warnings < max_warnings) {
+                    warnings[num_warnings++] = {idx, r};
                 }
             }
         }
@@ -1146,7 +1314,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         // Each glyph is 1 visible column but 3 UTF-8 bytes, and ANSI color
         // codes are non-visible too, so the byte target for the slot is
         // bumped by the count of non-visible bytes for each glyph emitted.
-        auto emit_name = [&](halide_profiler_func_stats *fs, const char *suffix_cut, int width) {
+        auto emit_name = [&](const halide_profiler_func_stats *fs, int width) {
             uint64_t target = sstr.size() + width;
             sstr << "  ";
             int idx = (int)(fs - p->funcs);
@@ -1186,26 +1354,22 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
             }
             sstr << fs->name;
-            if (suffix_cut) {
-                sstr.erase(strlen(suffix_cut));
-            }
             truncate_bytes_to(target);
             pad_bytes_to(target);
         };
 
         // Render a func-table row by walking `func_row` and dispatching on
         // the marker char of each run. Width is the run length.
-        auto print_func_row = [&](halide_profiler_func_stats *fs,
-                                  CumulativeStats *cs,
-                                  const char *suffix_cut) {
+        auto print_func_row = [&](const halide_profiler_func_stats *fs,
+                                  const CumulativeStats *cs) {
             sstr.clear();
-            apply_template(func_row, [&](char c, int w) {
+            apply_template(fs->inlined_calls ? inlined_func_row : func_row, [&](char c, int w) {
                 switch (c) {
                 case 'N':
-                    emit_name(fs, suffix_cut, w);
+                    emit_name(fs, w);
                     break;
                 case 'T':
-                    emit_time(fs->time, p->runs, w);
+                    emit_time(fs->time, p->billed_runs ? p->billed_runs : 1, w);
                     break;
                 case 'P':
                     emit_percentage(fs->time, p->time, w);
@@ -1239,22 +1403,35 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                         pad_bytes_to(sstr.size() + w);
                     }
                     break;
-                case 'R':
-                    if (fs->points_required_at_root) {
-                        float ratio = fs->points_required_at_realization / (float)(fs->points_required_at_root);
-                        emit_float(ratio, w);
+                case 'R': {
+                    // points_required_at_root is billed only to the
+                    // canonical instance; look it up there. Use the
+                    // points_computed counter (pure-def stage-0 stores
+                    // by lane count, summed across instances) so the
+                    // ratio reflects what was actually computed, not
+                    // just the realize-box-size machinery. For inlined
+                    // Funcs there are no stage-0 stores, so we fall
+                    // back to inlined_calls.
+                    uint64_t at_root = p->funcs[fs->canonical_id].points_required_at_root;
+                    if (at_root) {
+                        float recompute = ((fs->points_computed + fs->inlined_calls) /
+                                           (float)at_root);
+                        emit_float(recompute, w);
                     } else {
                         pad_bytes_to(sstr.size() + w);
                     }
                     break;
+                }
                 case 'Y': {
                     // Notes cell: comma-separated numbers of the warnings
-                    // that apply to this func. Truncated if more would-be
+                    // that apply to this Func. Warnings fire per-Func (on the
+                    // canonical instance), so every instance with the same
+                    // canonical_id shows the same numbers. Truncated if more
                     // notes than the cell can hold.
                     uint64_t target = sstr.size() + w;
                     bool first = true;
                     for (int wi = 0; wi < num_warnings; wi++) {
-                        if (warnings[wi].fs == fs) {
+                        if (warnings[wi].canonical_id == fs->canonical_id) {
                             if (!first && sstr.size() + 1 < target) {
                                 sstr << ",";
                             }
@@ -1273,12 +1450,36 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     // 238) so it sits well behind the data values.
                     for (int i = 0; i < w; i++) {
                         if (support_colors) {
-                            sstr << "\033[38;5;238m|\033[39m";
+                            sstr << "\033[38;5;238m\xe2\x94\x82\033[39m";
                         } else {
-                            sstr << "|";
+                            sstr << "\xe2\x94\x82";
                         }
                     }
                     break;
+                case 'I': {
+                    // "(inlined)" placeholder, centered in the run width and
+                    // painted in the same mid-gray as the section headers.
+                    // Track the ANSI bytes we emit so we can bump the pad
+                    // target by exactly that many bytes (they don't count
+                    // toward visible width).
+                    uint64_t target = sstr.size() + w;
+                    const char text[] = "(inlined)";
+                    constexpr int text_len = sizeof(text) - 1;
+                    int pad_left = (w > text_len) ? (w - text_len) / 2 : 0;
+                    for (int i = 0; i < pad_left; i++) {
+                        sstr << " ";
+                    }
+                    if (support_colors) {
+                        uint64_t before = sstr.size();
+                        sstr << "\033[38;5;245m" << text << "\033[39m";
+                        target += (sstr.size() - before) - text_len;
+                    } else {
+                        sstr << text;
+                    }
+                    truncate_bytes_to(target);
+                    pad_bytes_to(target);
+                    break;
+                }
                 default:
                     emit_literal_run(c, w);
                     break;
@@ -1288,89 +1489,45 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             halide_print(user_context, sstr.str());
         };
 
-        // Render a section header. ANSI color codes wrap the entire
-        // (multi-line) header; they're applied here rather than via the
-        // template so they don't perturb source-column alignment. While
-        // rendering the header we suppress support_colors so emit_dim
-        // doesn't double-up (the whole header is already dim italic).
-        auto print_section_header = [&](const char *tmpl, const char *label, uint64_t section_time) {
+        // Print the column legend once before the table. Styled dim
+        // italic gray, with the same dark-gray vertical separators used
+        // in the func rows.
+        auto print_legend_row = [&](const char *row) {
             sstr.clear();
-            bool saved = support_colors;
-            if (saved) {
+            if (support_colors) {
                 sstr << "\033[38;5;245m\033[3m";
             }
-            support_colors = false;
-            apply_template(tmpl, [&](char c, int w) {
-                switch (c) {
-                case 'S':
-                    emit_section_label(label, w);
-                    break;
-                case 'T':
-                    emit_time(section_time, p->runs, w);
-                    break;
-                case 'P':
-                    emit_percentage(section_time, p->time, w);
-                    break;
-                case '|':
-                    // Match the very dark gray separators used in func rows.
-                    // Switch back to the section header's color afterwards so
-                    // the subsequent label text stays dim italic grey.
-                    for (int i = 0; i < w; i++) {
-                        if (saved) {
-                            sstr << "\033[38;5;238m|\033[38;5;245m";
-                        } else {
-                            sstr << "|";
-                        }
+            char buf[2] = {0, 0};
+            for (const char *c = row; *c; c++) {
+                if (*c == '|') {
+                    if (support_colors) {
+                        sstr << "\033[38;5;238m\xe2\x94\x82\033[38;5;245m";
+                    } else {
+                        sstr << "\xe2\x94\x82";
                     }
-                    break;
-                default:
-                    emit_literal_run(c, w);
-                    break;
+                } else {
+                    buf[0] = *c;
+                    sstr << buf;
                 }
-            });
-            support_colors = saved;
-            if (saved) {
+            }
+            if (support_colors) {
                 sstr << "\033[0m";
             }
             sstr << "\n";
             halide_print(user_context, sstr.str());
         };
+        print_legend_row(column_legend_row_1);
+        print_legend_row(column_legend_row_2);
 
-        if (num_copy_to_host == 0 && num_copy_to_device == 0) {
-            for (int i = 0; i < f_stats_count; i++) {
-                halide_profiler_func_stats *fs = f_stats[i];
-                CumulativeStats *cs = cum_stats + (fs - p->funcs);
-                print_func_row(fs, cs, nullptr);
-            }
-        } else {
-            print_section_header(funcs_section_header, "funcs", total_func_time);
-            for (int i = 0; i < f_stats_count; i++) {
-                halide_profiler_func_stats *fs = f_stats[i];
-                CumulativeStats *cs = cum_stats + (fs - p->funcs);
-                if (!strstr(fs->name, substr_copy_to_device) && !strstr(fs->name, substr_copy_to_host)) {
-                    print_func_row(fs, cs, nullptr);
-                }
-            }
-            if (total_copy_to_device_time) {
-                print_section_header(copy_section_header, "copies to device", total_copy_to_device_time);
-                for (int i = 0; i < f_stats_count; i++) {
-                    halide_profiler_func_stats *fs = f_stats[i];
-                    CumulativeStats *cs = cum_stats + (fs - p->funcs);
-                    if (strstr(fs->name, substr_copy_to_device)) {
-                        print_func_row(fs, cs, substr_copy_to_device);
-                    }
-                }
-            }
-            if (total_copy_to_host_time) {
-                print_section_header(copy_section_header, "copies to host", total_copy_to_host_time);
-                for (int i = 0; i < f_stats_count; i++) {
-                    halide_profiler_func_stats *fs = f_stats[i];
-                    CumulativeStats *cs = cum_stats + (fs - p->funcs);
-                    if (strstr(fs->name, substr_copy_to_host)) {
-                        print_func_row(fs, cs, substr_copy_to_host);
-                    }
-                }
-            }
+        // The DFS-of-the-parent-tree order put copies as children of the
+        // producer they're inside, so they thread into the timeline view
+        // alongside the regular Funcs. Keep the " (copy to ...)" suffix on
+        // each copy row so it's clear what it is without needing a
+        // separate section header.
+        for (int i = 0; i < f_stats_count; i++) {
+            const halide_profiler_func_stats *fs = f_stats[i];
+            const CumulativeStats *cs = cum_stats + (fs - p->funcs);
+            print_func_row(fs, cs);
         }
 
         // ---- Warning messages -------------------------------------------
@@ -1400,10 +1557,18 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         bool too_many_anon_funcs = anon_funcs >= 3 && anon_time * 10 > p->time;
 
         // Warn if the pipeline allocates at least 100MB and spends at least 10%
-        // of its time freeing it.
+        // of its time freeing it. The free bookkeeping slot's time is what
+        // we sampled while halide_free was running.
+        uint64_t free_time = 0;
+        for (int i = 0; i < p->num_funcs; i++) {
+            if (p->funcs[i].kind == halide_profiler_func_kind_free) {
+                free_time = p->funcs[i].time;
+                break;
+            }
+        }
         bool expensive_free =
             p->memory_peak > 100 * 1000 * 1000 &&
-            p->funcs[3].time * 10 > p->time;
+            free_time * 10 > p->time;
 
         if (num_warnings || too_few_samples || too_many_anon_funcs || expensive_free) {
             halide_print(user_context, " Performance warnings:\n");
@@ -1438,7 +1603,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             for (int w = 0; w < num_warnings; w++) {
                 sstr.clear();
                 sstr << "  " << (w + 1) << ") ";
-                rule(warnings[w].fs, warnings[w].cs, warnings[w].rule_id, /*emit=*/true);
+                int cid = warnings[w].canonical_id;
+                rule(&canon_fs[cid], &canon_cs[cid], warnings[w].rule_id, /*emit=*/true);
                 sstr << "\n";
                 print_wrapped(user_context, 5, max_cols, sstr.str());
             }
@@ -1447,6 +1613,128 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         sstr.clear();
         emit_dim(horiz_rule);
         halide_print(user_context, sstr.str());
+    }
+
+    if (const char *raw_str = getenv("HL_PROFILER_JSON_OUTPUT")) {
+        // Dump the raw counter values to a JSON file -- mostly intended for
+        // debugging the counters themselves, but useful for offline analysis.
+        void *f = halide_fopen(raw_str, "w");
+        if (f) {
+            StringStreamPrinter<4096> json(user_context);
+
+            auto flush = [&]() {
+                if (json.size() > 0) {
+                    fwrite(json.str(), json.size(), 1, f);
+                    json.clear();
+                }
+            };
+
+            // Emit a JSON-escaped string literal (handles " and \).
+            auto str = [&](const char *s) {
+                json << "\"";
+                char one[2] = {0, 0};
+                for (const char *q = s; *q; q++) {
+                    if (*q == '"' || *q == '\\') {
+                        json << "\\";
+                    }
+                    one[0] = *q;
+                    json << one;
+                }
+                json << "\"";
+            };
+
+            // Helper for emitting a uint64 counter as a JSON field.
+            auto field_u64 = [&](const char *indent, const char *name, uint64_t v, bool last = false) {
+                json << indent;
+                str(name);
+                json << ": " << v;
+                json << (last ? "\n" : ",\n");
+            };
+            auto field_i = [&](const char *indent, const char *name, int v, bool last = false) {
+                json << indent;
+                str(name);
+                json << ": " << v;
+                json << (last ? "\n" : ",\n");
+            };
+            auto field_str = [&](const char *indent, const char *name, const char *v, bool last = false) {
+                json << indent;
+                str(name);
+                json << ": ";
+                str(v);
+                json << (last ? "\n" : ",\n");
+            };
+
+            json << "{\n  \"pipelines\": [";
+            bool first_pipeline = true;
+            for (halide_profiler_pipeline_stats *pp = s->pipelines; pp;
+                 pp = (halide_profiler_pipeline_stats *)(pp->next)) {
+                json << (first_pipeline ? "\n" : ",\n");
+                first_pipeline = false;
+
+                json << "    {\n";
+                field_str("      ", "name", pp->name);
+                field_i("      ", "runs", pp->runs);
+                field_i("      ", "billed_runs", pp->billed_runs);
+                field_i("      ", "samples", pp->samples);
+                field_i("      ", "num_allocs", pp->num_allocs);
+                field_u64("      ", "time_ns", pp->time);
+                field_u64("      ", "memory_current", pp->memory_current);
+                field_u64("      ", "memory_peak", pp->memory_peak);
+                field_u64("      ", "memory_total", pp->memory_total);
+                field_u64("      ", "active_threads_numerator", pp->active_threads_numerator);
+                field_u64("      ", "active_threads_denominator", pp->active_threads_denominator);
+                field_u64("      ", "native_vector_bytes", pp->native_vector_bytes);
+                json << "      \"funcs\": [";
+
+                for (int i = 0; i < pp->num_funcs; i++) {
+                    json << (i == 0 ? "\n" : ",\n");
+                    const halide_profiler_func_stats *fs = &pp->funcs[i];
+                    json << "        {\n";
+                    field_str("          ", "name", fs->name);
+                    field_i("          ", "parent", fs->parent);
+                    field_i("          ", "canonical_id", fs->canonical_id);
+                    field_i("          ", "kind", fs->kind);
+                    field_i("          ", "buffer_func_id", fs->buffer_func_id);
+                    field_u64("          ", "time_ns", fs->time);
+                    field_u64("          ", "memory_current", fs->memory_current);
+                    field_u64("          ", "memory_peak", fs->memory_peak);
+                    field_u64("          ", "memory_total", fs->memory_total);
+                    field_u64("          ", "stack_peak", fs->stack_peak);
+                    field_u64("          ", "active_threads_numerator", fs->active_threads_numerator);
+                    field_u64("          ", "active_threads_denominator", fs->active_threads_denominator);
+                    field_u64("          ", "num_allocs", fs->num_allocs);
+                    field_u64("          ", "realizations", fs->realizations);
+                    field_u64("          ", "productions", fs->productions);
+                    field_u64("          ", "parallel_loops", fs->parallel_loops);
+                    field_u64("          ", "parallel_tasks", fs->parallel_tasks);
+                    field_u64("          ", "points_required_at_realization", fs->points_required_at_realization);
+                    field_u64("          ", "points_required_at_production", fs->points_required_at_production);
+                    field_u64("          ", "points_required_at_root", fs->points_required_at_root);
+                    field_u64("          ", "points_computed", fs->points_computed);
+                    field_u64("          ", "scalar_loads", fs->scalar_loads);
+                    field_u64("          ", "vector_loads", fs->vector_loads);
+                    field_u64("          ", "gathers", fs->gathers);
+                    field_u64("          ", "bytes_loaded", fs->bytes_loaded);
+                    field_u64("          ", "scalar_stores", fs->scalar_stores);
+                    field_u64("          ", "vector_stores", fs->vector_stores);
+                    field_u64("          ", "scatters", fs->scatters);
+                    field_u64("          ", "bytes_stored", fs->bytes_stored);
+                    field_u64("          ", "inlined_calls", fs->inlined_calls, true);
+                    json << "        }";
+
+                    // Flush periodically so we don't overflow the buffer for
+                    // pipelines with many funcs.
+                    if (json.size() > 2048) {
+                        flush();
+                    }
+                }
+                json << "\n      ]\n";
+                json << "    }";
+            }
+            json << (first_pipeline ? "" : "\n") << "  ]\n}\n";
+            flush();
+            fclose(f);
+        }
     }
 }
 
@@ -1472,7 +1760,7 @@ WEAK void halide_profiler_reset() {
     // state without grabbing the global profiler state's lock.
     halide_profiler_state *s = halide_profiler_get_state();
     LockProfiler lock(s);
-    halide_abort_if_false(nullptr, s->instances == nullptr);
+    // halide_abort_if_false(nullptr, s->instances == nullptr);
     halide_profiler_reset_unlocked(s);
 }
 

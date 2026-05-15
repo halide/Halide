@@ -18,16 +18,16 @@ using namespace Halide;
 Expr input(const Type &t, const Expr &arg) {
     return Internal::Call::make(t, "input", {arg}, Internal::Call::Extern);
 }
-Expr in_f16(const Expr &arg) {
+[[maybe_unused]] Expr in_f16(const Expr &arg) {
     return input(Float(16), arg);
 }
-Expr in_bf16(const Expr &arg) {
+[[maybe_unused]] Expr in_bf16(const Expr &arg) {
     return input(BFloat(16), arg);
 }
-Expr in_f32(const Expr &arg) {
+[[maybe_unused]] Expr in_f32(const Expr &arg) {
     return input(Float(32), arg);
 }
-Expr in_f64(const Expr &arg) {
+[[maybe_unused]] Expr in_f64(const Expr &arg) {
     return input(Float(64), arg);
 }
 Expr in_i8(const Expr &arg) {
@@ -167,10 +167,7 @@ public:
         std::string fn_name = "test_" + name + "_vecwidth" + std::to_string(vector_width);
         std::string file_name = output_directory + fn_name;
 
-        auto ext = Internal::get_output_info(target);
         std::map<OutputFileType, std::string> outputs = {
-            {OutputFileType::c_header, file_name + ext.at(OutputFileType::c_header).extension},
-            {OutputFileType::object, file_name + ext.at(OutputFileType::object).extension},
             {OutputFileType::assembly, file_name + ".s"},
             {OutputFileType::llvm_assembly, file_name + ".ll"},
         };
@@ -503,7 +500,14 @@ public:
             if (!sharder.should_run(t)) continue;
             const auto &task = tasks.at(t);
             futures.push_back(pool.async([&]() {
-                return check_one(task.op, task.name, task.vector_width, task.expr);
+                // Run check_one on a large-stack thread to avoid overflowing the
+                // default 512 KB worker stack during deeply recursive LLVM codegen
+                // (especially under coverage instrumentation).
+                TestResult result;
+                Internal::run_with_large_stack([&] {
+                    result = check_one(task.op, task.name, task.vector_width, task.expr);
+                });
+                return result;
             }));
         }
 

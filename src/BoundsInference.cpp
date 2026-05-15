@@ -194,6 +194,7 @@ bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
 class Inliner : public IRMutator {
 public:
     std::set<Function, Function::Compare> to_inline;
+    bool keep_inlined_calls = false;
 
     Expr do_inlining(const Expr &e) {
         return common_subexpression_elimination(mutate(e));
@@ -226,6 +227,18 @@ protected:
                 for (size_t i = 0; i < args.size(); i++) {
                     body = Let::make(f.name() + "." + func_args[i], args[i], body);
                 }
+
+                if (keep_inlined_calls) {
+                    // Wrap with inline_marker so boxes_required can still
+                    // see the original call when analyzing the inlined
+                    // body — it walks the marker's first arg (the call)
+                    // to record the box required for the inlined Func.
+                    // A post-pass strips these markers unconditionally
+                    // after bounds inference is done; until then they
+                    // act like return_second(call, body).
+                    body = Call::make(op->type, Call::inline_marker, {op, body}, Call::PureIntrinsic);
+                }
+
                 return body;
             }
         }
@@ -270,6 +283,7 @@ public:
         string stage_prefix;
         size_t fused_group_index;
         Inliner *inliner;
+        bool inlined;
 
         // Computed expressions on the left and right-hand sides.
         // Note that a function definition might have different LHS or reduction domain
@@ -626,6 +640,29 @@ public:
                 }
             }
 
+            if (inlined) {
+                // Just stamp down a box_required declaration for the
+                // profiler. We don't need the actual .min/.max symbols. Don't
+                // bother if the box required is infinite - it must be a Func
+                // that must be inlined. We can't compute a box-required-at-root
+                // for that Func.
+                std::vector<Expr> args;
+                args.reserve(b.size() * 2 + 1);
+                args.emplace_back(name);
+                bool bounded = true;
+                for (size_t d = 0; d < b.size(); d++) {
+                    args.emplace_back(b[d].min);
+                    args.emplace_back(b[d].max);
+                    bounded &= b[d].is_bounded();
+                }
+                if (bounded) {
+                    Expr decl = Call::make(Int(32), Call::declare_box_required_at_root, args, Call::Intrinsic);
+                    return Block::make(Evaluate::make(decl), s);
+                } else {
+                    return s;
+                }
+            }
+
             for (size_t d = 0; d < b.size(); d++) {
                 string arg = name + ".s" + std::to_string(stage) + "." + func_args[d];
 
@@ -849,8 +886,12 @@ public:
         // Compute the intrinsic relationships between the stages of
         // the functions.
 
+        // We compute a little more if we're running the profiler
+        const bool profiling = target.has_feature(Target::Profile);
+
         // Figure out which functions will be inlined away
         vector<bool> inlined(f.size());
+        inliner.keep_inlined_calls = profiling;
         for (size_t i = 0; i < inlined.size(); i++) {
             if (i < f.size() - 1 &&
                 f[i].schedule().compute_level().is_inlined() &&
@@ -867,7 +908,8 @@ public:
         // this is straight-forward.
         for (size_t i = 0; i < f.size(); i++) {
 
-            if (inlined[i]) {
+            if (inlined[i] && !profiling) {
+                // We only need the inlined stages if we're profiling
                 continue;
             }
 
@@ -879,6 +921,7 @@ public:
             s.compute_exprs();
             s.stage_prefix = s.name + ".s0.";
             s.inliner = &inliner;
+            s.inlined = inlined[i];
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
@@ -898,6 +941,7 @@ public:
         }
 
         // Remove the inlined stages
+        /*
         vector<Stage> new_stages;
         for (const auto &stage : stages) {
             if (!stage.func.schedule().compute_level().is_inlined() ||
@@ -906,6 +950,7 @@ public:
             }
         }
         new_stages.swap(stages);
+        */
 
         // Dump the stages post-inlining for debugging
         /*
@@ -966,6 +1011,13 @@ public:
                 }
             }
 
+            // We don't care about inlined callers, which can show up when
+            // profiling. We'll consider ourselves called by whatever stage
+            // they're inlined into instead.
+            if (consumer.inlined) {
+                continue;
+            }
+
             // Expand the bounds required of all the producers found
             // (and we are checking until i, because stages are topologically sorted).
             for (size_t j = 0; j < i; j++) {
@@ -976,7 +1028,7 @@ public:
                 if (!b.empty()) {
                     // Check for unboundedness
                     for (size_t k = 0; k < b.size(); k++) {
-                        if (!b[k].is_bounded()) {
+                        if (!b[k].is_bounded() && !producer.inlined) {
                             std::ostringstream err;
                             if (consumer.stage == 0) {
                                 err << "The pure definition ";
@@ -1045,6 +1097,7 @@ public:
 
     using IRMutator::visit;
 
+    bool at_root = true;
     Stmt visit(const For *op) override {
         // Don't recurse inside loops marked 'Extern', they will be
         // removed later.
@@ -1174,16 +1227,31 @@ public:
         }
 
         // Recurse.
-        body = mutate(body);
+        {
+            ScopedValue<bool> bind(at_root, false);
+            body = mutate(body);
+        }
 
         if (!no_pipelines) {
             // We only care about the bounds of a func if:
             // A) We're not already in a pipeline over that func AND
             // B.1) There's a production of this func somewhere inside this loop OR
-            // B.2) We're downstream (a consumer) of a func for which we care about the bounds.
+            // B.2) We're downstream (a consumer) of a func for which we care
+            //      about the bounds OR
+            // B.3) We're at root. We need all bounds here. This handles more
+            //      than B.1 because it catches the case where we're profiling,
+            //      in which case inlined Funcs will show up in the stages
+            //      vector and we need their bounds to compute recompute
+            //      factors.
             vector<bool> bounds_needed(stages.size(), false);
             for (size_t i = 0; i < stages.size(); i++) {
-                if (inner_productions.count(stages[i].name)) {
+                // Outside -profile we only need bounds for things
+                // actually produced inside this loop; under -profile the
+                // inlined stages also live in `stages` and need bounds
+                // for their recompute ratios, so we mark them all at
+                // root.
+                bool profiling = target.has_feature(Target::Profile);
+                if ((at_root && profiling) || inner_productions.count(stages[i].name)) {
                     bounds_needed[i] = true;
                 }
 
@@ -1383,6 +1451,20 @@ Stmt bounds_inference(Stmt s,
 
     s = BoundsInference(funcs, fused_func_groups, fused_pairs_in_groups,
                         outputs, func_bounds, target)(s);
+
+    // The Inliner wraps calls to inlined Funcs in inline_marker so that
+    // boxes_required and related analyses can still see them. They have
+    // no role past this point — the inlined Func has no buffer or
+    // producer, so leaving them in would crash codegen — strip them all
+    // unconditionally.
+    s = mutate_with(s, [&](auto *self, const Call *op) -> Expr {
+        if (op->is_intrinsic(Call::inline_marker)) {
+            internal_assert(op->args.size() == 2);
+            return self->mutate(op->args[1]);
+        }
+        return self->visit_base(op);
+    });
+
     return s.as<For>()->body;
 }
 

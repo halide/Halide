@@ -101,6 +101,7 @@ class Inliner : public IRMutator {
     using IRMutator::visit;
 
     Function func;
+    bool leave_decl;
 
     Expr visit(const Call *op) override {
         if (op->name == func.name()) {
@@ -125,6 +126,16 @@ class Inliner : public IRMutator {
             }
 
             found++;
+
+            if (leave_decl) {
+                // Leave an inlining marker. It's a pure intrinsic because we
+                // want it to be deduped by CSE. The Func is encoded as a
+                // StringImm, not a Variable, because this is just a name for a
+                // profiler report, not a reference to a named value that's in
+                // scope.
+                body = Call::make(body.type(), Call::inline_marker,
+                                  {func.name(), body}, Call::PureIntrinsic);
+            }
 
             return body;
 
@@ -167,22 +178,33 @@ class Inliner : public IRMutator {
         if (found > 0) {
             stmt = common_subexpression_elimination(stmt);
         }
-
         return stmt;
     }
 
 public:
     int found = 0;
 
-    Inliner(const Function &f)
-        : func(f) {
+    Inliner(const Function &f, bool leave_decl = false)
+        : func(f),
+          leave_decl(leave_decl) {
         internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
         validate_schedule_inlined_function(f);
+
+        // Don't leave an inlining decl if it's a trivial wrapper Func
+        if (leave_decl && f.updates().empty()) {
+            for (const Expr &v : f.values()) {
+                if (const Call *call = v.as<Call>()) {
+                    for (const Expr &arg : call->args) {
+                        leave_decl &= arg.as<Variable>() || is_const(arg);
+                    }
+                }
+            }
+        }
     }
 };
 
-Stmt inline_function(const Stmt &s, const Function &f) {
-    return Inliner(f)(s);
+Stmt inline_function(const Stmt &s, const Function &f, bool leave_decl) {
+    return Inliner(f, leave_decl)(s);
 }
 
 Expr inline_function(Expr e, const Function &f) {

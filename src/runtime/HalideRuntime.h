@@ -1403,7 +1403,7 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_user_context,  ///< Generated code takes a user_context pointer as first argument
 
-    halide_target_feature_profile,     ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
+    halide_target_feature_profile,     ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func. Also injects a synchronous halide_device_sync after every GPU kernel launch so the profiler can attribute compute time correctly — see halide_profiler_func_stats for the trade-off.
     halide_target_feature_no_runtime,  ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
     halide_target_feature_metal,  ///< Enable the (Apple) Metal runtime.
@@ -1859,7 +1859,42 @@ void halide_register_argv_and_metadata(
 
 /** The functions below here are relevant for pipelines compiled with
  * the -profile target flag, which runs a sampling profiler thread
- * alongside the pipeline. */
+ * alongside the pipeline.
+ *
+ * GPU note: when building with -profile, Halide injects a synchronous
+ * halide_device_sync at the end of every GPU kernel launch so that the
+ * reported per-Func times reflect actual compute time rather than just
+ * launch overhead. Without these syncs the asynchronous launches return
+ * to the host immediately and the device's compute time ends up billed
+ * to whatever blocking host operation runs next (typically the next
+ * copy-to-host or the end-of-pipeline device-free). The trade-off is
+ * that profiled GPU pipelines lose any host-device or kernel-kernel
+ * overlap they would otherwise have, so absolute runtimes from a
+ * profile-target build are biased upward and should not be compared to
+ * unprofiled runs. */
+
+/** Kinds of entries in halide_profiler_func_stats. Carried as a small
+ * tag on each entry so the report doesn't have to recognize special
+ * slots by their index, or recognize copy synthetics by parsing their
+ * name. */
+enum halide_profiler_func_kind {
+    /** A normal Halide Func. */
+    halide_profiler_func_kind_func = 0,
+    /** Pipeline overhead — id 0 in every pipeline. */
+    halide_profiler_func_kind_overhead = 1,
+    /** Time the calling thread spent waiting for parallel tasks — id 1. */
+    halide_profiler_func_kind_thread_idle = 2,
+    /** Time spent in halide_malloc — id 2. */
+    halide_profiler_func_kind_malloc = 3,
+    /** Time spent in halide_free — id 3. */
+    halide_profiler_func_kind_free = 4,
+    /** Synthetic entry timing a halide_copy_to_host call. The
+     * buffer_func_id field on the entry is the canonical id of the Func
+     * whose buffer is being copied. */
+    halide_profiler_func_kind_copy_to_host = 5,
+    /** Synthetic entry timing a halide_copy_to_device call. */
+    halide_profiler_func_kind_copy_to_device = 6,
+};
 
 /** Per-Func state tracked by the sampling profiler. */
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
@@ -1870,7 +1905,15 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * Func is compute_root. */
     int parent;
 
-    int _padding;  // unused
+    /** The id of the canonical instance of this Func.
+     *
+     * A Func can appear more than once in this array: inlined Funcs called
+     * from multiple callers, or Funcs with unscheduled update definitions,
+     * get a separate "instance" per occurrence so each can carry its own
+     * counters. canonical_id is the id of the first instance and is the
+     * shared key for deduplicating instances back to a Func — e.g. for
+     * rolling up per-Func aggregates or grouping in JSON output. */
+    int canonical_id;
 
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t time;
@@ -1914,15 +1957,53 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * realizations (i.e. at the store_at sites). */
     uint64_t points_required_at_realization;
 
+    /** The total number of points required of this Func aggregated across all
+     * productions (i.e. at the compute_at sites). When sliding-window
+     * succeeds, this is less than the per-production naive sum; when sliding
+     * fails it matches points_required_at_realization summed over
+     * productions. */
+    uint64_t points_required_at_production;
+
     /** The number of points required of this Func at root. Will be less than
      * points_required when there is redundant recompute due to use of
      * compute_at. */
     uint64_t points_required_at_root;
 
+    /** The number of points actually computed by this Func's pure
+     * definition (its stage-0 stores), weighted by vector lane count.
+     * Captures forms of over-computation that the box-required counters
+     * miss: tail strategies like RoundUp that write past the requested
+     * extent, and cases where sliding-window failed so each produce-node
+     * iteration computes the full required box. Counting just stage-0
+     * stores keeps update definitions from being conflated as
+     * "recompute". */
+    uint64_t points_computed;
+
     /** The number of loads and stores of various types done while evaluating
      * this Func. */
     uint64_t scalar_loads, vector_loads, gathers, bytes_loaded;
     uint64_t scalar_stores, vector_stores, scatters, bytes_stored;
+
+    /** The number of times a call to this Func was inlined. */
+    uint64_t inlined_calls;
+
+    /** Set if some of this Func's counter contributions could not be
+     * exactly accumulated (e.g. they were hoisted out of a GPU kernel via
+     * an upper-bound substitution, or out of an IfThenElse with an impure
+     * condition by summing both branches). Numerical counters are
+     * therefore conservative upper bounds rather than exact totals. */
+    uint8_t counters_approximated;
+
+    /** Tag identifying what this entry represents — see
+     * halide_profiler_func_kind. Lets the reporter handle bookkeeping
+     * slots and synthetic copy entries by tag rather than by hardcoded
+     * id or by parsing the name. */
+    uint8_t kind;
+
+    /** For copy-synthetic entries (kind == copy_to_host or copy_to_device),
+     * the canonical id of the Func whose buffer is being copied. -1 on
+     * every other kind. */
+    int buffer_func_id;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
@@ -1963,6 +2044,13 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
 
     /** The number of times this pipeline has been run. */
     int runs;
+
+    /** The number of pipeline runs that produced at least one profiler
+     * sample. Runs that completed in less than one sampler tick contribute
+     * to `runs` (and to the per-Func counters) but not to per-Func time
+     * accumulation, so this is the correct denominator for time
+     * averages. */
+    int billed_runs;
 
     /** The total number of samples taken inside of this pipeline. */
     int samples;

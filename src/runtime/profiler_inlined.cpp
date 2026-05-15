@@ -68,7 +68,9 @@ WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_
                                                 uint64_t parallel_loops,
                                                 uint64_t parallel_tasks,
                                                 uint64_t points_required_at_realization,
+                                                uint64_t points_required_at_production,
                                                 uint64_t points_required_at_root,
+                                                uint64_t points_computed,
                                                 uint64_t scalar_loads,
                                                 uint64_t vector_loads,
                                                 uint64_t gathers,
@@ -76,7 +78,8 @@ WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_
                                                 uint64_t scalar_stores,
                                                 uint64_t vector_stores,
                                                 uint64_t scatters,
-                                                uint64_t bytes_stored) {
+                                                uint64_t bytes_stored,
+                                                uint64_t inlined_calls) {
     using namespace Halide::Runtime::Internal::Synchronization;
 
     halide_profiler_func_stats &stats = instance->funcs[id];
@@ -94,7 +97,9 @@ WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_
     UPDATE_COUNTER(parallel_loops);
     UPDATE_COUNTER(parallel_tasks);
     UPDATE_COUNTER(points_required_at_realization);
+    UPDATE_COUNTER(points_required_at_production);
     UPDATE_COUNTER(points_required_at_root);
+    UPDATE_COUNTER(points_computed);
     UPDATE_COUNTER(scalar_loads);
     UPDATE_COUNTER(vector_loads);
     UPDATE_COUNTER(gathers);
@@ -103,6 +108,7 @@ WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_
     UPDATE_COUNTER(vector_stores);
     UPDATE_COUNTER(scatters);
     UPDATE_COUNTER(bytes_stored);
+    UPDATE_COUNTER(inlined_calls);
 
 #undef UPDATE_COUNTER
     return 0;

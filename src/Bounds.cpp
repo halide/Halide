@@ -1177,10 +1177,11 @@ protected:
             const bool widen_0 = can_widen(op->args[0]), widen_1 = can_widen(op->args[1]);
             if (op->is_intrinsic(Call::absd) && op->type.is_float()) {
                 return abs(op->args[0] - op->args[1]);
-            } else if (op->is_intrinsic(Call::return_second)) {
-                return op->args[1];
-            } else if (op->is_intrinsic(Call::if_then_else)) {
-                // Probably more conservative than necessary
+            } else if (op->is_intrinsic({Call::return_second,
+                                          Call::inline_marker,
+                                          Call::if_then_else})) {
+                // For if_then_else this is probably more conservative
+                // than necessary.
                 return op->args[1];
             } else if (op->is_intrinsic(Call::rounding_shift_right)) {
                 // TODO: uses bitwise ops we may not handle well
@@ -1825,6 +1826,18 @@ Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Inter
 
 Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
     return bounds_of_expr_in_scope_with_indent(expr, scope, fb, const_bound, 0);
+}
+
+Expr and_condition_over_domain(const Expr &e, const Scope<Interval> &varying) {
+    internal_assert(e.type().is_bool()) << "Expr provided to and_condition_over_domain is not boolean: " << e << "\n";
+    Interval bounds = bounds_of_expr_in_scope(e, varying);
+    internal_assert(bounds.has_lower_bound()) << "Failed to produce bound on boolean value in and_condition_over_domain" << e << "\n";
+    // Minimum of a boolean value is sufficient condition, implies expression.
+    return simplify(bounds.min);
+}
+
+Expr or_condition_over_domain(const Expr &c, const Scope<Interval> &varying) {
+    return simplify(!and_condition_over_domain(simplify(!c), varying));
 }
 
 void merge_boxes(Box &a, const Box &b) {

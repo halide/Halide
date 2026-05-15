@@ -162,6 +162,12 @@ struct halide_profiler_instance_state;
 WEAK void halide_profiler_stack_peak_update(void *user_context,
                                             halide_profiler_instance_state *instance,
                                             uint64_t *f_values);
+WEAK void halide_profiler_mark_approximated(void *user_context,
+                                            halide_profiler_instance_state *instance,
+                                            int func_id);
+WEAK void halide_profiler_count_host_device_copy(void *user_context,
+                                                 halide_profiler_instance_state *instance,
+                                                 int func_id);
 WEAK void halide_profiler_memory_allocate(void *user_context,
                                           halide_profiler_instance_state *instance,
                                           int func_id,
@@ -175,6 +181,9 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         int num_funcs,
                                         const uint64_t *func_names,
                                         const int *func_parents,
+                                        const int *func_canonical_ids,
+                                        const uint8_t *func_kinds,
+                                        const int *func_buffer_func_ids,
                                         uint64_t native_vector_bytes,
                                         halide_profiler_instance_state *instance);
 WEAK int halide_profiler_instance_end(void *user_context,

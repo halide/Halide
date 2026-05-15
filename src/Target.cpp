@@ -223,11 +223,11 @@ std::optional<T> getsysctl(const char *name) {
     return std::make_optional(value);
 }
 
-bool sysctl_is_set(const char *name) {
+[[maybe_unused]] bool sysctl_is_set(const char *name) {
     return getsysctl<int>(name).value_or(0);
 }
 
-bool is_armv7s() {
+[[maybe_unused]] bool is_armv7s() {
     return getsysctl<cpu_type_t>("hw.cputype") == CPU_TYPE_ARM &&
            getsysctl<cpu_subtype_t>("hw.cpusubtype") == CPU_SUBTYPE_ARM_V7S;
 }
@@ -502,9 +502,10 @@ Target calculate_host_target() {
             }
         }
 
-        // AVX10 converged vector instructions.
+        // AVX10 converged vector instructions. The enumeration bit is
+        // CPUID.(EAX=7,ECX=1).EDX[19].
         const uint32_t avx10 = 1U << 19;
-        if (os_avx512 && (info2.edx & avx10)) {
+        if (os_avx512 && (info3.edx & avx10)) {
             const auto info_avx10 = cpuid(0x24, 0x0);
 
             // This checks that the AVX10 version is greater than zero.

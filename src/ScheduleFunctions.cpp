@@ -793,6 +793,15 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
     // Make the extern call
     Expr e = f.make_call_to_extern_definition(extern_call_args, target);
 
+    if (target.has_feature(Target::Profile)) {
+        // Tag the extern call so resolve_inline_markers can bill any
+        // inline_marker chains in the args to this extern stage. (The
+        // extern call has no surrounding Provide for the markers to
+        // anchor on.)
+        e = Call::make(e.type(), Call::extern_stage_marker,
+                       {Expr(f.name()), e}, Call::PureIntrinsic);
+    }
+
     // Check if it succeeded
     string result_name = unique_name('t');
     Expr result = Variable::make(Int(32), result_name);
@@ -1206,9 +1215,9 @@ public:
             for (size_t i = 0; i < funcs.size(); i++) {
                 if (is_output_list[i]) {
                     // There is no realize node
-                    s = declare_box(s, funcs[i], Call::declare_box_required);
+                    s = declare_box(s, funcs[i], Call::declare_box_required_at_realization);
                 }
-                s = declare_box(s, funcs[i], Call::declare_box_required_root);
+                s = declare_box(s, funcs[i], Call::declare_box_required_at_root);
             }
         }
         return s;
@@ -1221,19 +1230,38 @@ protected:
 
     using IRMutator::visit;
 
+    // Emit a (intrin, name_arg, min_0, max_0, min_1, max_1, ...) Call
+    // wrapping `stmt`. The shape of name_arg depends on the intrinsic:
+    //
+    //   - declare_box_touched is a real annotation that bounds inference
+    //     uses to know which Realize node is being touched. Its first arg
+    //     must be a Variable<Handle>(func.name()) — a reference to the
+    //     Realize-named buffer in scope — because passes that substitute
+    //     names of in-scope buffers (most notably box_touched analysis
+    //     itself) follow that name.
+    //
+    //   - declare_box_required_at_{realization,production,root} are
+    //     profiler markers. The first arg is just a label for the
+    //     profiler report and is not in scope as a buffer; it's a
+    //     StringImm so the buffer-name-following passes leave it alone.
     Stmt declare_box(const Stmt &stmt, const Function &f, Call::IntrinsicOp intrin) {
-        Stmt s = stmt;
-
-        std::vector<Expr> args = {Variable::make(Handle(), f.name())};
+        Expr name_arg;
+        if (intrin == Call::declare_box_touched) {
+            name_arg = Variable::make(Handle(), f.name());
+        } else {
+            name_arg = Expr(f.name());
+        }
+        std::vector<Expr> args;
+        args.reserve(2 * f.dimensions() + 1);
+        args.push_back(std::move(name_arg));
         const std::vector<std::string> &var_names = f.args();
         for (int i = 0; i < f.dimensions(); i++) {
             std::string v = concat_strings(f.name(), ".s0.", var_names[i]);
             args.emplace_back(Variable::make(Int(32), v + ".min"));
             args.emplace_back(Variable::make(Int(32), v + ".max"));
         }
-        Expr d = Call::make(Int(32), intrin,
-                            args, Call::Intrinsic);
-        return Block::make(Evaluate::make(d), s);
+        Expr d = Call::make(Int(32), intrin, args, Call::Intrinsic);
+        return Block::make(Evaluate::make(d), stmt);
     }
 
     Stmt visit(const For *for_loop) override {
@@ -1415,7 +1443,7 @@ private:
 
             s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
             if (target.has_feature(Target::Profile)) {
-                s = declare_box(s, func, Call::declare_box_required);
+                s = declare_box(s, func, Call::declare_box_required_at_realization);
             }
         }
 
@@ -1823,8 +1851,20 @@ private:
             string def_prefix = f.name() + ".s" + std::to_string(func_stage.second) + ".";
             const auto &def = (func_stage.second == 0) ? f.definition() : f.updates()[func_stage.second - 1];
 
-            const Stmt &produce_def = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
-                                                               replacements, add_lets, aliases);
+            Stmt produce_def = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
+                                                        replacements, add_lets, aliases);
+            if (target.has_feature(Target::Profile)) {
+                // Mark the start of this Func's stage so InjectCounters can
+                // distinguish pure-def stores from update-def stores even
+                // when there's no surrounding For loop with a stage-named
+                // var to key off (zero-dimensional or fully-unrolled Funcs,
+                // or stages of Funcs whose pure def has no Vars).
+                Expr marker = Call::make(Int(32), Call::declare_stage,
+                                         {Expr(f.name()),
+                                          make_const(Int(32), func_stage.second)},
+                                         Call::Intrinsic);
+                produce_def = Block::make(Evaluate::make(marker), produce_def);
+            }
             producer = inject_stmt(producer, produce_def, def.schedule().fuse_level().level);
         }
 
@@ -1871,6 +1911,12 @@ private:
         // Add the producer nodes.
         for (const auto &i : funcs) {
             producer = ProducerConsumer::make_produce(i.name(), producer);
+            if (target.has_feature(Target::Profile)) {
+                // Marker sits *outside* the Produce node so the parent
+                // producer_id is in scope (not the Func's own id), but inside
+                // any surrounding loops so it accumulates per production.
+                producer = declare_box(producer, i, Call::declare_box_required_at_production);
+            }
         }
 
         // Add the consumer nodes.
@@ -2628,7 +2674,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
         if (group_should_be_inlined(funcs)) {
             debug(1) << "Inlining " << funcs[0].name() << "\n";
-            s = inline_function(s, funcs[0]);
+            s = inline_function(s, funcs[0], target.has_feature(Target::Profile));
         } else {
             debug(1) << "Injecting realization of " << funcs << "\n";
             InjectFunctionRealization injector(funcs, is_output_list, target, env);
