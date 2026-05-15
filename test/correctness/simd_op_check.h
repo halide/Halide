@@ -167,10 +167,7 @@ public:
         std::string fn_name = "test_" + name + "_vecwidth" + std::to_string(vector_width);
         std::string file_name = output_directory + fn_name;
 
-        auto ext = Internal::get_output_info(target);
         std::map<OutputFileType, std::string> outputs = {
-            {OutputFileType::c_header, file_name + ext.at(OutputFileType::c_header).extension},
-            {OutputFileType::object, file_name + ext.at(OutputFileType::object).extension},
             {OutputFileType::assembly, file_name + ".s"},
             {OutputFileType::llvm_assembly, file_name + ".ll"},
         };
