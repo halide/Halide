@@ -556,9 +556,10 @@ Target calculate_host_target() {
             }
         }
 
-        // AVX10 converged vector instructions.
+        // AVX10 converged vector instructions. The enumeration bit is
+        // CPUID.(EAX=7,ECX=1).EDX[19].
         const uint32_t avx10 = 1U << 19;
-        if (os_avx512 && (info2.edx & avx10)) {
+        if (os_avx512 && (info3.edx & avx10)) {
             const auto info_avx10 = cpuid(0x24, 0x0);
 
             // This checks that the AVX10 version is greater than zero.

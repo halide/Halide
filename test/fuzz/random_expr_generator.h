@@ -200,8 +200,8 @@ public:
                 return fuzz.PickValueInArray(make_bin_op)(a, b);
             });
         }
-        if (gen_bitwise) {
-            // Bitwise
+        if (gen_bitwise && !t.is_float()) {
+            // Bitwise -- not valid on float types, so skip when t is float.
             ops.push_back([&] {
                 static make_bin_op_fn make_bin_op[] = {
                     make_bitwise_or,

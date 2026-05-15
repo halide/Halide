@@ -161,6 +161,7 @@ target_sources(
     Module.h
     ModulusRemainder.h
     Monotonic.h
+    MultiRamp.h
     ObjectInstanceRegistry.h
     OffloadGPULoops.h
     OptimizeShuffles.h
@@ -339,6 +340,7 @@ target_sources(
     Module.cpp
     ModulusRemainder.cpp
     Monotonic.cpp
+    MultiRamp.cpp
     ObjectInstanceRegistry.cpp
     OffloadGPULoops.cpp
     OptimizeShuffles.cpp

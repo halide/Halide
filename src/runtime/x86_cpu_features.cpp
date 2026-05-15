@@ -197,8 +197,9 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
         // AVX10 converged vector instructions.
         // AVX10 uses EVEX encoding with opmask registers at all vector widths,
         // so it requires the same OS XSAVE support as AVX-512.
+        // The enumeration bit is CPUID.(EAX=7,ECX=1).EDX[19].
         constexpr uint32_t avx10 = 1U << 19;
-        if (os_avx512 && (info2.edx & avx10)) {
+        if (os_avx512 && (info3.edx & avx10)) {
             const auto info_avx10 = cpuid(0x24, 0x0);
             if ((info_avx10.ebx & 0xff) >= 1) {
                 halide_set_available_cpu_feature(features, halide_target_feature_avx10_1);

@@ -116,19 +116,19 @@ repos:
     hooks:
       - id: check-cmake-file-lists
         name: check CMake file lists
-        entry: python tools/check_cmake_file_lists.py
+        entry: python3 tools/check_cmake_file_lists.py
         language: system
         files: ^test/.*CMakeLists\.txt$
 
       - id: check-cmake-style
         name: check CMake style
-        entry: python tools/check_cmake_style.py
+        entry: python3 tools/check_cmake_style.py
         language: system
         files: (^|/)(CMakeLists\.txt|.*\.cmake)$
 
       - id: uv-lock
-        name: check uv.lock is up to date
-        entry: uv lock --check
+        name: ensure uv.lock is up to date
+        entry: uv lock
         language: system
         pass_filenames: false
         files: ^(pyproject\.toml|uv\.lock)$

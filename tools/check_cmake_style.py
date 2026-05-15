@@ -8,6 +8,7 @@ from pathlib import Path
 # fmt: off
 
 PROHIBITED_COMMANDS: dict[str, str] = {
+    # keep-sorted start case=no
     "add_compile_definitions":       "use target_compile_definitions",
     "add_compile_options":           "use target_compile_options",
     "add_definitions":               "use target_compile_definitions",
@@ -18,6 +19,11 @@ PROHIBITED_COMMANDS: dict[str, str] = {
     "create_test_sourcelist":        "use Halide's own testing solution",
     "define_property":               "use a cache variable",
     "enable_language":               "Halide is C/C++ only",
+    "FetchContent_Declare":          "use find_package instead",
+    "FetchContent_GetProperties":    "use find_package instead",
+    "FetchContent_MakeAvailable":    "use find_package instead",
+    "FetchContent_Populate":         "use find_package instead",
+    "FetchContent_SetPopulated":     "use find_package instead",
     "fltk_wrap_ui":                  "Halide does not use FLTK",
     "include_directories":           "use target_include_directories",
     "include_external_msproject":    "write a CMake package config file",
@@ -31,6 +37,7 @@ PROHIBITED_COMMANDS: dict[str, str] = {
     "set_directory_properties":      "use cache variables or target properties",
     "site_name":                     "privacy: do not leak host name",
     "variable_watch":                "debugging helper, not for production",
+    # keep-sorted end
 }
 
 # fmt: on
@@ -40,6 +47,10 @@ SPECIAL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (
         re.compile(r"\bcmake_policy\s*\(.*\bOLD\b", re.IGNORECASE),
         "cmake_policy(... OLD) is deprecated; fix code for new policy",
+    ),
+    (
+        re.compile(r"\binclude\s*\(\s*FetchContent\s*\)", re.IGNORECASE),
+        "include(FetchContent) is prohibited; use find_package instead",
     ),
     (
         re.compile(r"\bfile\s*\(\s*GLOB", re.IGNORECASE),

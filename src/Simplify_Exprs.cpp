@@ -1,5 +1,10 @@
 #include "Simplify_Internal.h"
 
+#include <algorithm>
+#include <numeric>
+
+#include "MultiRamp.h"
+
 using std::string;
 
 namespace Halide {
@@ -375,6 +380,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
     base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
 
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
+    int A;
 
     const Broadcast *b_index = index.as<Broadcast>();
     const Shuffle *s_index = index.as<Shuffle>();
@@ -408,23 +414,34 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
             loaded_vecs.emplace_back(std::move(load));
         }
         return Shuffle::make(loaded_vecs, s_index->indices);
-    } else if (const Ramp *inner_ramp = r_index ? r_index->base.as<Ramp>() : nullptr;
-               inner_ramp &&
-               inner_ramp->base.type().is_scalar() &&
-               !is_const_one(inner_ramp->stride) &&
-               is_const_one(r_index->stride)) {
-        // If it's a nested ramp and the outer ramp has stride 1, swap the
-        // nesting order of the ramps to make dense loads and transpose the
-        // resulting vector instead.
-        Expr transposed_index =
-            Ramp::make(Ramp::make(inner_ramp->base, make_one(inner_ramp->base.type()), r_index->lanes),
-                       Broadcast::make(inner_ramp->stride, r_index->lanes), inner_ramp->lanes);
-        Expr transposed_predicate = (predicate.as<Broadcast>() ?
-                                         predicate :  // common case optimization
-                                         Shuffle::make_transpose(predicate, inner_ramp->lanes));
-        Expr transposed_load =
-            Load::make(op->type, op->name, transposed_index, op->image, op->param, transposed_predicate, align);
-        return mutate(Shuffle::make_transpose(transposed_load, r_index->lanes), info);
+    } else if (MultiRamp mr;
+               index.type().is_vector() &&
+               // Don't do expensive analysis in the common case of a load of a ramp of scalars.
+               !(r_index && r_index->base.type().is_scalar()) &&
+               // It's a multi-dimensional multiramp.
+               is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
+               mr.dimensions() > 1 &&
+               // The innermost stride isn't already one.
+               !is_const_one(mr.strides[0]) &&
+               // We can successfully rotate a stride one dimension innermost.
+               (A = mr.rotate_stride_one_innermost()) > 0) {
+        // Rotating the stride one dimension innermost made the load dense, but
+        // we must now transpose the predicate to match the transposed index,
+        // and inverse-transpose the loaded value to restore the original lane
+        // ordering.
+        Expr permuted_predicate;
+        const Broadcast *b_pred = predicate.as<Broadcast>();
+        if (b_pred && b_pred->value.type().is_scalar()) {
+            permuted_predicate = predicate;
+        } else {
+            permuted_predicate = Shuffle::make_transpose(predicate, A);
+        }
+
+        Expr permuted_load =
+            Load::make(op->type, op->name, mr.to_expr(), op->image,
+                       op->param, permuted_predicate, align);
+        int B = op->type.lanes() / A;
+        return mutate(Shuffle::make_transpose(permuted_load, B), info);
     } else if (predicate.same_as(op->predicate) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {

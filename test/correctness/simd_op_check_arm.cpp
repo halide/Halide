@@ -508,7 +508,11 @@ public:
             check(arm32 ? "vneg.s16" : "neg", 4 * w, -i16_1);
             check(arm32 ? "vneg.s32" : "neg", 2 * w, -i32_1);
             check(arm32 ? "vneg.f32" : "fneg", 4 * w, -f32_1);
-            check(arm32 ? "vneg.f64" : "fneg", 2 * w, -f64_1);
+            if (Internal::get_llvm_version() < 230) {
+                check(arm32 ? "vneg.f64" : "fneg", 2 * w, -f64_1);
+            } else {
+                check(arm32 ? "veor" : "fneg", 2 * w, -f64_1);
+            }
 
             // VNMLA    -       F, D    Negative Multiply Accumulate
             // VNMLS    -       F, D    Negative Multiply Subtract
