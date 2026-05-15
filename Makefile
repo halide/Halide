@@ -548,6 +548,7 @@ SOURCE_FILES = \
   Module.cpp \
   ModulusRemainder.cpp \
   Monotonic.cpp \
+  MultiRamp.cpp \
   ObjectInstanceRegistry.cpp \
   OffloadGPULoops.cpp \
   OptimizeShuffles.cpp \
@@ -753,6 +754,7 @@ HEADER_FILES = \
   Module.h \
   ModulusRemainder.h \
   Monotonic.h \
+  MultiRamp.h \
   ObjectInstanceRegistry.h \
   OffloadGPULoops.h \
   OptimizeShuffles.h \
@@ -2422,7 +2424,7 @@ ifeq ($(UNAME), Darwin)
 endif
 
 
-$(DISTRIB_DIR)/lib/libautoschedule_%.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_%.$(PLUGIN_EXT)
+$(DISTRIB_DIR)/lib/libautoschedule_%.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_%.$(PLUGIN_EXT) $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
 	@mkdir -p $(@D)
 	cp $< $(DISTRIB_DIR)/lib
 ifeq ($(UNAME), Darwin)

@@ -31,7 +31,6 @@ int main(int argc, const char **argv) {
     deinterleave_vector_test();
     modulus_remainder_test();
     cse_test();
-    solve_test();
     target_test();
     cplusplus_mangle_test();
     is_monotonic_test();

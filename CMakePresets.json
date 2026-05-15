@@ -203,6 +203,33 @@
       }
     },
     {
+      "name": "macOS-coverage",
+      "displayName": "macOS (Coverage)",
+      "description": "macOS build with source-based LLVM coverage instrumentation",
+      "inherits": "macOS",
+      "toolchainFile": "${sourceDir}/cmake/toolchain.macos-homebrew.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_FLAGS": "-fprofile-instr-generate -fcoverage-mapping",
+        "CMAKE_CXX_FLAGS": "-fprofile-instr-generate -fcoverage-mapping",
+        "CMAKE_EXE_LINKER_FLAGS": "-fprofile-instr-generate",
+        "CMAKE_MODULE_LINKER_FLAGS": "-fprofile-instr-generate",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fprofile-instr-generate",
+        "WITH_TUTORIALS": "NO",
+        "WITH_PYTHON_BINDINGS": "NO",
+        "WITH_UTILS": "NO",
+        "WITH_TEST_AUTO_SCHEDULE": "YES",
+        "WITH_TEST_ERROR": "YES",
+        "WITH_TEST_WARNING": "NO",
+        "WITH_TEST_PERFORMANCE": "NO",
+        "WITH_TEST_GENERATOR": "YES",
+        "WITH_TEST_RUNTIME": "NO",
+        "WITH_TEST_FUZZ": "NO",
+        "WITH_TEST_CORRECTNESS": "YES",
+        "WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING": "YES"
+      }
+    },
+    {
       "name": "macOS-vcpkg",
       "inherits": [
         "macOS",
@@ -240,6 +267,31 @@
         "WITH_TEST_GENERATOR": "NO",
         "WITH_TEST_FUZZ": "YES",
         "BUILD_SHARED_LIBS": "NO"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "macOS-coverage",
+      "configurePreset": "macOS-coverage",
+      "displayName": "macOS (Coverage)",
+      "description": "Build with LLVM_PROFILE_FILE set so generator binaries write profiles to the profiles/ dir",
+      "environment": {
+        "LLVM_PROFILE_FILE": "${sourceDir}/build/macOS-coverage/profiles/%p-%m.profraw"
+      }
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "macOS-coverage",
+      "configurePreset": "macOS-coverage",
+      "displayName": "macOS (Coverage)",
+      "description": "Run correctness tests with LLVM source-based coverage profiling",
+      "environment": {
+        "LLVM_PROFILE_FILE": "${sourceDir}/build/macOS-coverage/profiles/%p-%m.profraw"
+      },
+      "output": {
+        "outputOnFailure": true
       }
     }
   ]
