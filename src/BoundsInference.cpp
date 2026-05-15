@@ -229,8 +229,14 @@ protected:
                 }
 
                 if (keep_inlined_calls) {
-                    // Also remember the original call
-                    body = Call::make(op->type, Call::return_second, {op, body}, Call::Intrinsic);
+                    // Wrap with inline_marker so boxes_required can still
+                    // see the original call when analyzing the inlined
+                    // body — it walks the marker's first arg (the call)
+                    // to record the box required for the inlined Func.
+                    // A post-pass strips these markers unconditionally
+                    // after bounds inference is done; until then they
+                    // act like return_second(call, body).
+                    body = Call::make(op->type, Call::inline_marker, {op, body}, Call::PureIntrinsic);
                 }
 
                 return body;
@@ -1239,7 +1245,13 @@ public:
             //      factors.
             vector<bool> bounds_needed(stages.size(), false);
             for (size_t i = 0; i < stages.size(); i++) {
-                if (at_root || inner_productions.count(stages[i].name)) {
+                // Outside -profile we only need bounds for things
+                // actually produced inside this loop; under -profile the
+                // inlined stages also live in `stages` and need bounds
+                // for their recompute ratios, so we mark them all at
+                // root.
+                bool profiling = target.has_feature(Target::Profile);
+                if ((at_root && profiling) || inner_productions.count(stages[i].name)) {
                     bounds_needed[i] = true;
                 }
 
@@ -1439,6 +1451,20 @@ Stmt bounds_inference(Stmt s,
 
     s = BoundsInference(funcs, fused_func_groups, fused_pairs_in_groups,
                         outputs, func_bounds, target)(s);
+
+    // The Inliner wraps calls to inlined Funcs in inline_marker so that
+    // boxes_required and related analyses can still see them. They have
+    // no role past this point — the inlined Func has no buffer or
+    // producer, so leaving them in would crash codegen — strip them all
+    // unconditionally.
+    s = mutate_with(s, [&](auto *self, const Call *op) -> Expr {
+        if (op->is_intrinsic(Call::inline_marker)) {
+            internal_assert(op->args.size() == 2);
+            return self->mutate(op->args[1]);
+        }
+        return self->visit_base(op);
+    });
+
     return s.as<For>()->body;
 }
 
