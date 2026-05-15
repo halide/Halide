@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <map>
+#include <set>
 #include <string>
 
 #include "Bounds.h"
@@ -1780,12 +1781,12 @@ protected:
     static constexpr int let_root_sentinel = -2;
 
     int parent = -1;
-    std::vector<int> *current_let_roots = nullptr;
+    std::set<int> *current_let_roots = nullptr;
 
     // Internal dedup map: same inline_marker Expr (via CSE) collapses to one node.
     std::map<Expr, int, ExprCompare> nodes_by_expr;
     // Subgraph roots for each let, indexed by name.
-    std::map<std::string, std::vector<int>> let_roots;
+    std::map<std::string, std::set<int>> let_roots;
 
     using IRMutator::visit;
 
@@ -1799,7 +1800,7 @@ protected:
                 nodes_by_id[id] = e;
             }
             if (parent == let_root_sentinel) {
-                current_let_roots->push_back(id);
+                current_let_roots->insert(id);
             } else {
                 edges.emplace_back(Edge{parent, id});
             }
@@ -1825,8 +1826,7 @@ protected:
         auto it = let_roots.find(op->name);
         if (it != let_roots.end()) {
             if (parent == let_root_sentinel) {
-                current_let_roots->insert(current_let_roots->end(),
-                                          it->second.begin(), it->second.end());
+                current_let_roots->insert(it->second.begin(), it->second.end());
             } else {
                 for (int r : it->second) {
                     edges.emplace_back(Edge{parent, r});
@@ -1851,11 +1851,11 @@ protected:
         do {
             // Walk the value with parent = let_root_sentinel so its top-
             // level markers become this let's subgraph roots.
-            std::vector<int> roots;
+            std::set<int> roots;
             Expr new_value;
             {
                 ScopedValue<int> sp(parent, let_root_sentinel);
-                ScopedValue<std::vector<int> *> sr(current_let_roots, &roots);
+                ScopedValue<std::set<int> *> sr(current_let_roots, &roots);
                 new_value = mutate(op->value);
             }
             let_roots[op->name] = std::move(roots);
