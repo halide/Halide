@@ -140,8 +140,9 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     // There may be a broadcast next (it can get hoisted outside of other ops)
     auto debroadcast = [](Expr &e) -> int {
         if (const Broadcast *b = e.as<Broadcast>()) {
+            int lanes = b->lanes;
             e = b->value;
-            return b->lanes;
+            return lanes;
         } else {
             return 1;
         }
