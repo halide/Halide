@@ -188,6 +188,7 @@ tests(GROUPS correctness
       infer_arguments.cpp
       inline_reduction.cpp
       inlined_generator.cpp
+      input_func_name_unique.cpp
       input_image_bounds_check.cpp
       input_larger_than_two_gigs.cpp
       integer_powers.cpp
