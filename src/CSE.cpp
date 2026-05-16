@@ -1,6 +1,7 @@
 #include <map>
 
 #include "CSE.h"
+#include "CompilerProfiling.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -291,6 +292,7 @@ public:
 }  // namespace
 
 Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
+    ZoneScoped;
     Expr e = e_in;
 
     // Early-out for trivial cases.
@@ -338,6 +340,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     };
     UniqueNameProvider namer;
     {
+        ZoneScopedN("UniqueNameProvider");
         e.accept(&namer);
     }
 

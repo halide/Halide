@@ -1,5 +1,6 @@
 #include "LICM.h"
 #include "CSE.h"
+#include "CompilerProfiling.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -525,6 +526,7 @@ protected:
 }  // namespace
 
 Stmt hoist_loop_invariant_values(Stmt s) {
+    ZoneScoped;
     s = GroupLoopInvariants()(s);
     s = common_subexpression_elimination(s);
     s = LICM()(s);

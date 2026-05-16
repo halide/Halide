@@ -484,6 +484,7 @@ SOURCE_FILES = \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
   CompilerLogger.cpp \
+  CompilerProfiling.cpp \
   ConstantBounds.cpp \
   ConstantInterval.cpp \
   CPlusPlusMangle.cpp \
@@ -681,6 +682,7 @@ HEADER_FILES = \
   CodeGen_Vulkan_Dev.h \
   CodeGen_WebGPU_Dev.h \
   CompilerLogger.h \
+  CompilerProfiling.h \
   ConciseCasts.h \
   ConstantBounds.h \
   ConstantInterval.h \

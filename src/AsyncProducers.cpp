@@ -1016,6 +1016,7 @@ protected:
 }  // namespace
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
+    ZoneScoped;
     s = TightenProducerConsumerNodes(env)(s);
     s = InjectRingBuffering(env)(s);
     s = ForkAsyncProducers(env)(s);

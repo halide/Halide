@@ -445,12 +445,14 @@ Stmt inject_placeholder_prefetch(const Stmt &s, const map<string, Function> &env
 }
 
 Stmt inject_prefetch(const Stmt &s, const map<string, Function> &env) {
+    ZoneScoped;
     CollectExternalBufferBounds finder;
     s.accept(&finder);
     return InjectPrefetch(env, finder.buffers)(s);
 }
 
 Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
+    ZoneScoped;
     size_t max_dim = 0;
     Expr max_byte_size;
 

@@ -140,10 +140,12 @@ auto substitute_impl(const Expr &find, const Expr &replacement, const T &ir) {
 }  // namespace
 
 Expr substitute(const Expr &find, const Expr &replacement, const Expr &expr) {
+    ZoneScoped;
     return substitute_impl(find, replacement, expr);
 }
 
 Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
+    ZoneScoped;
     return substitute_impl(find, replacement, stmt);
 }
 
@@ -204,18 +206,22 @@ public:
 }  // namespace
 
 Expr graph_substitute(const string &name, const Expr &replacement, const Expr &expr) {
+    ZoneScoped;
     return GraphSubstitute(name, replacement)(expr);
 }
 
 Stmt graph_substitute(const string &name, const Expr &replacement, const Stmt &stmt) {
+    ZoneScoped;
     return GraphSubstitute(name, replacement)(stmt);
 }
 
 Expr graph_substitute(const Expr &find, const Expr &replacement, const Expr &expr) {
+    ZoneScoped;
     return GraphSubstituteExpr(find, replacement)(expr);
 }
 
 Stmt graph_substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
+    ZoneScoped;
     return GraphSubstituteExpr(find, replacement)(stmt);
 }
 
@@ -235,10 +241,12 @@ protected:
 }  // namespace
 
 Expr substitute_in_all_lets(const Expr &expr) {
+    ZoneScoped;
     return SubstituteInAllLets()(expr);
 }
 
 Stmt substitute_in_all_lets(const Stmt &stmt) {
+    ZoneScoped;
     return SubstituteInAllLets()(stmt);
 }
 

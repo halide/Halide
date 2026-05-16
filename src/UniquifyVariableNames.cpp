@@ -165,6 +165,7 @@ public:
 }  // namespace
 
 Stmt uniquify_variable_names(const Stmt &s) {
+    ZoneScoped;
     FindFreeVars finder;
     s.accept(&finder);
     return UniquifyVariableNames(&finder.free_vars)(s);

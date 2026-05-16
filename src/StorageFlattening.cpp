@@ -626,6 +626,7 @@ Stmt storage_flattening(Stmt s,
                         const vector<Function> &outputs,
                         const map<string, Function> &env,
                         const Target &target) {
+    ZoneScoped;
     s = zero_gpu_loop_mins(s);
 
     // Make an environment that makes it easier to figure out which

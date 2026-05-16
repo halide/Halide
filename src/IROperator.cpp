@@ -1075,18 +1075,22 @@ T remove_intrinsics(const T &e, const std::initializer_list<Call::IntrinsicOp> &
 }  // namespace
 
 Expr remove_likelies(const Expr &e) {
+    ZoneScoped;
     return remove_intrinsics(e, {Call::likely, Call::likely_if_innermost});
 }
 
 Stmt remove_likelies(const Stmt &s) {
+    ZoneScoped;
     return remove_intrinsics(s, {Call::likely, Call::likely_if_innermost});
 }
 
 Expr remove_promises(const Expr &e) {
+    ZoneScoped;
     return remove_intrinsics(e, {Call::promise_clamped, Call::unsafe_promise_clamped});
 }
 
 Stmt remove_promises(const Stmt &s) {
+    ZoneScoped;
     return remove_intrinsics(s, {Call::promise_clamped, Call::unsafe_promise_clamped});
 }
 

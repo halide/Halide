@@ -1,6 +1,7 @@
 #include "InjectHostDevBufferCopies.h"
 
 #include "CodeGen_GPU_Dev.h"
+#include "CompilerProfiling.h"
 #include "Debug.h"
 #include "ExternFuncArgument.h"
 #include "IRMutator.h"
@@ -217,6 +218,7 @@ protected:
     }
 
     Stmt do_copies(Stmt s, FindBufferUsage *precomputed = nullptr) {
+        ZoneScoped;
         // Sniff what happens to the buffer inside the stmt
         FindBufferUsage local_finder(buffer, DeviceAPI::Host);
         if (!precomputed) {
@@ -570,6 +572,7 @@ protected:
     };
 
     Stmt inject_free_after_last_use(Stmt body, const Stmt &last_use, const Stmt &free_stmt) {
+        ZoneScoped;
         bool success = false;
         body = mutate_with(
             body,
@@ -762,6 +765,7 @@ public:
             finder(s);
             Stmt new_stmt = s;
             for (const string &buf : finder.result) {
+                ZoneScopedN("InjectBufferCopiesForSingleBuffer");
                 new_stmt = InjectBufferCopiesForSingleBuffer(buf, true, finder.result_storage.at(buf))(new_stmt);
             }
             return new_stmt;

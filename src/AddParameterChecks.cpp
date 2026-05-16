@@ -1,4 +1,5 @@
 #include "AddParameterChecks.h"
+#include "CompilerProfiling.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
 #include "Substitute.h"

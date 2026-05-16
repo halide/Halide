@@ -119,6 +119,7 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
 }
 
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
+    ZoneScoped;
     Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
     Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
     interval = simplify(interval);
@@ -3021,6 +3022,7 @@ protected:
 
 map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool consider_provides,
                                const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    ZoneScoped;
     if (!fn.empty() && s.defined()) {
         // Filter things down to the relevant sub-Stmts, so we don't spend a
         // long time reasoning about lets and ifs that don't surround an
@@ -3276,6 +3278,7 @@ Interval compute_pure_function_definition_value_bounds(
 
 FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                                               const map<string, Function> &env) {
+    ZoneScoped;
     FuncValueBounds fb;
 
     for (const auto &func_name : order) {
