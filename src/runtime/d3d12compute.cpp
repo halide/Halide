@@ -1515,6 +1515,12 @@ WEAK d3d12_buffer *new_texture_buffer(d3d12_device *device, UINT width, UINT hei
     D3D12_RESOURCE_DESC desc = {};
     {
         desc.Alignment = 0;
+        // Halide's image model has no concept of mipmaps: a Buffer stored in
+        // MemoryType::GPUTexture is always a single-level texture.  This matches
+        // the OpenCL back-end, the only other GPUTexture-capable runtime, which
+        // sets cl_image_desc::num_mip_levels = 0 (OpenCL's "base level only").
+        // MipLevels = 1 (D3D12's "one level total") is the equivalent and is
+        // intentional; the UAV is created with MipSlice = 0 accordingly.
         desc.MipLevels = 1;
         desc.Format = format;
         desc.SampleDesc.Count = 1;
@@ -1961,9 +1967,11 @@ WEAK void dump_shader(const char *source, ID3DBlob *compiler_msgs = nullptr) {
 namespace {
 
 // Parse the SM version from a Halide-emitted HLSL source header.
-// Returns e.g. 60 for "//HALIDE_D3D12_SM 60\n", or 0 if not present.
+// Returns e.g. 60 for "#define HALIDE_D3D12_SM 60\n", or 0 if not present.
+// The codegen emits this #define as the very first line of the shader so
+// generated code can also gate features with "#if HALIDE_D3D12_SM >= NN".
 int parse_hlsl_sm_version(const char *source) {
-    constexpr const char prefix[] = "//HALIDE_D3D12_SM ";
+    constexpr const char prefix[] = "#define HALIDE_D3D12_SM ";
     constexpr size_t prefix_len = sizeof(prefix) - 1;  // exclude null terminator
 
     if (strncmp(source, prefix, prefix_len) != 0) {
@@ -2354,7 +2362,7 @@ WEAK d3d12_function *d3d12_compile_shader(d3d12_device *device, d3d12_library *l
                                           int shared_mem_bytes, int threadsX, int threadsY, int threadsZ) {
     TRACELOG;
 
-    // Dispatch to DXC for SM 6.x shaders (source header "//HALIDE_D3D12_SM NN\n").
+    // Dispatch to DXC for SM 6.x shaders (source header "#define HALIDE_D3D12_SM NN\n").
     int sm_version = parse_hlsl_sm_version(library->source);
     if (sm_version >= 60) {
         // Round shared memory here too, consistent with FXC path below.
@@ -3837,7 +3845,12 @@ WEAK int halide_d3d12compute_run(void *user_context,
                 release_object(&uniform_buffer);
                 uniform_buffer = new_constant_buffer(device, constant_buffer_size);
                 if (!uniform_buffer) {
-                    release_object(function);
+                    // NOTE: do NOT release_object(function) here. 'function' is
+                    // owned by library->cache (see new_function_with_name); the
+                    // run path only borrows it. Releasing it would leave a
+                    // dangling pointer in the cache and cause a use-after-free
+                    // on the next run with the same kernel key. The cache is
+                    // freed when the library/module is released.
                     TRACEFATAL("D3D12Compute: Could not allocate arguments buffer.");
                     return halide_error_code_out_of_memory;
                 }
@@ -3863,7 +3876,9 @@ WEAK int halide_d3d12compute_run(void *user_context,
                     uint64_t val64 = 0;
                     memcpy(&val64, args[i], 8);
                     memcpy(&uniform_bytes[offset], &val64, 8);
-                    TRACELEVEL(3, "args[" << i << "] -> 64bit = 0x" << val64 << "\n");
+                    // Cast to (void *) so it prints as hex ("0x..."); the
+                    // integer overload would print decimal after a "0x" prefix.
+                    TRACELEVEL(3, "args[" << i << "] -> 64bit = " << (void *)(int64_t)val64 << "\n");
                 } else {
                     // Sub-32-bit values are widened to 32-bit; 32-bit copied verbatim.
                     int32_t uniform_word = 0;

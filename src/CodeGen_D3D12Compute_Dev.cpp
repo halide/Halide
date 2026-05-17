@@ -2130,10 +2130,14 @@ void CodeGen_D3D12Compute_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
 
-    // Emit SM version marker for runtime to select FXC (SM 5.1) vs DXC (SM 6.x)
+    // Emit SM version marker for runtime to select FXC (SM 5.1) vs DXC (SM 6.x).
+    // Emitted as a real #define (not a comment) so generated shader code can
+    // also gate features with preprocessor checks, e.g.:
+    //   #if HALIDE_D3D12_SM >= 62
+    // The runtime parses this same line to pick the compiler/profile.
     int sm = d3d12compute_c.get_target().get_d3d12compute_capability_lower_bound();
     if (sm >= 60) {
-        src_stream << "//HALIDE_D3D12_SM " << sm << "\n";
+        src_stream << "#define HALIDE_D3D12_SM " << sm << "\n";
     }
 
     // compiler control pragmas
