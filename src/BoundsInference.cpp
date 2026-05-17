@@ -1,5 +1,4 @@
 #include "BoundsInference.h"
-#include <chrono>
 #include "Bounds.h"
 #include "CSE.h"
 #include "ExprUsesVar.h"
@@ -213,7 +212,13 @@ protected:
             }
         }
         Expr e = qualify(f.name() + ".", f.values()[idx]);
-        e = do_inlining(e);
+        // Recursively inline, but defer CSE until the outermost public
+        // do_inlining call CSEs the final result once. Running CSE at
+        // each level of a chain of inlined Funcs duplicates O(N) work
+        // per level, summing to O(N^2). The recursion still resolves
+        // the chain because mutate() dispatches back into visit(Call)
+        // which calls get_qualified_body for each inlined sub-call.
+        e = mutate(e);
         qualified_bodies[f][idx] = e;
         return e;
     }
@@ -950,8 +955,17 @@ public:
             }
         }
 
-        // Do any pure inlining
+        // Do any pure inlining. Skip inlined stages — under -profile
+        // they appear in `stages` so the profiler can track recompute
+        // counters, but the relationship-computing loop below skips
+        // their boxes_required walk too, so their exprs are never
+        // consulted. Doing do_inlining on every inlined stage adds an
+        // independent CSE pass over the full inlined chain per stage,
+        // which is O(N) work × N stages = O(N^2).
         for (auto &s : stages) {
+            if (s.inlined) {
+                continue;
+            }
             for (auto &cond_val : s.exprs) {
                 internal_assert(cond_val.value.defined());
                 cond_val.value = inliner.do_inlining(cond_val.value);
