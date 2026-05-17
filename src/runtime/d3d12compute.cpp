@@ -545,6 +545,35 @@ struct d3d12_buffer {
     DXGI_FORMAT format;
     D3D12_RESOURCE_STATES state;
 
+    // NOTE(textures vs buffers): this single enum conflates two conceptually
+    // orthogonal axes — storage kind (linear buffer vs. texture) and heap/access
+    // role (Upload / ReadBack / Constant / ReadWrite / ReadOnly / WriteOnly).
+    // `Texture` is therefore mutually exclusive with the heap roles *by design*.
+    //
+    // This is intentional and currently safe because the two axes never need to
+    // combine: a texture is always created UAV (ALLOW_UNORDERED_ACCESS) and is
+    // always transferred via a *separate* linear Upload/ReadBack staging buffer
+    // (see image_copy_to_device / image_copy_to_host), so there is never a
+    // "texture in an upload heap" or a "read-only SRV texture" to represent.
+    //
+    // It also is not the primary buffer-vs-texture discriminator: that is the
+    // device-interface pointer on the halide_buffer_t —
+    // halide_d3d12compute_device_interface vs halide_d3d12compute_image_device_interface,
+    // selected by resource dimension in halide_d3d12compute_wrap_buffer().
+    // This mirrors how OpenCL distinguishes the two: OpenCL also "piggybacks"
+    // textures onto its buffer handle (one device_handle wrapping a polymorphic
+    // cl_mem that may be a clCreateBuffer buffer or a clCreateImage image) and
+    // disambiguates purely via dual device interfaces (opencl_device_interface
+    // vs opencl_image_device_interface). The difference is only internal: OpenCL
+    // keeps the cl_mem opaque and lets the driver tag it, whereas this runtime
+    // needs an explicit tag here because it manages D3D12 resource state, views
+    // (CBV/UAV) and staging itself. Hence `type` is a secondary implementation
+    // detail, not a parallel buffer/texture abstraction.
+    //
+    // TODO: if read-only (SRV) textures or textures backed by upload/readback
+    // heaps are ever needed, split `type` into orthogonal `storage_kind`
+    // {Buffer, Texture} and `heap_role` {Default, Upload, ReadBack, Constant}
+    // (+ access flags) fields rather than extending this enum further.
     enum {
         Unknown = 0,
         Constant,
