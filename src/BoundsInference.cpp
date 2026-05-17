@@ -212,12 +212,8 @@ protected:
             }
         }
         Expr e = qualify(f.name() + ".", f.values()[idx]);
-        // Recursively inline, but defer CSE until the outermost public
-        // do_inlining call CSEs the final result once. Running CSE at
-        // each level of a chain of inlined Funcs duplicates O(N) work
-        // per level, summing to O(N^2). The recursion still resolves
-        // the chain because mutate() dispatches back into visit(Call)
-        // which calls get_qualified_body for each inlined sub-call.
+        // Cache the body pre-CSE; the public do_inlining call at the
+        // top of the recursion runs CSE once on the final result.
         e = mutate(e);
         qualified_bodies[f][idx] = e;
         return e;
@@ -269,11 +265,13 @@ public:
 
     Inliner inliner;
 
-    // Boxes deferred by Stage::define_bounds for inlined Funcs. The IR
-    // gets a single-arg marker (declare_box_required_at_root holding
-    // just the Func name) at the right scope; a post-pass after
-    // BoundsInference rewrites each marker in place to a full
-    // declaration with shared LetStmt-bound subexpressions.
+    // Box-required for each inlined Func, keyed by name. Stage::
+    // define_bounds stamps a single-arg declare_box_required_at_root
+    // marker carrying just the name at the right scope and writes the
+    // box here. After bounds inference, rewrite_deferred_root_box_markers
+    // walks the IR, looks up the box for each marker, joint-CSEs runs
+    // of adjacent markers, and rewrites each in place to a full
+    // declaration referencing shared LetStmt-bound subexpressions.
     std::map<std::string, Box> deferred_root_boxes;
 
     struct CondValue {
@@ -451,15 +449,11 @@ public:
         }
 
         // Wrap a statement in let stmts defining the box. For inlined
-        // Funcs we stash the box in deferred_root_boxes and stamp a
-        // single-arg marker intrinsic in place of the full
-        // declare_box_required_at_root; a post-pass walks the resulting
-        // Stmt, joint-CSEs adjacent markers' boxes, and rewrites each
-        // marker to the full declaration with shared LetStmts. Doing
-        // it via a marker (rather than emitting the full declaration
-        // here) avoids O(N^2) IR text for chains of inlined Funcs with
-        // non-trivial bounds, including in HL_DEBUG_CODEGEN=2 dumps
-        // between passes.
+        // Funcs, write the box into deferred_root_boxes and stamp a
+        // single-arg declare_box_required_at_root marker carrying just
+        // the Func name at the current scope; a post-pass after bounds
+        // inference rewrites each marker to a full declaration sharing
+        // LetStmt-bound subexpressions across the markers in its block.
         Stmt define_bounds(Stmt s,
                            const Function &producing_func,
                            const string &producing_stage_index,
@@ -664,20 +658,15 @@ public:
             }
 
             if (inlined) {
-                // Skip Funcs whose box-required is infinite — must-
-                // inline Funcs for which no finite root box can be
-                // computed.
+                // A must-inline Func with no finite root box has nothing
+                // to declare.
                 bool bounded = true;
                 for (size_t d = 0; d < b.size(); d++) {
                     bounded &= b[d].is_bounded();
                 }
                 if (bounded && deferred_root_boxes) {
-                    // Stash the box and stamp a single-arg marker at
-                    // the right scope. A post-pass after bounds
-                    // inference joint-CSEs the boxes for adjacent
-                    // markers and rewrites each in place to a full
-                    // declare_box_required_at_root referencing the
-                    // shared LetStmt-bound subexpressions.
+                    // Stash the box for the post-pass and leave a
+                    // single-arg marker (just the Func name) in place.
                     (*deferred_root_boxes)[name] = b;
                     Expr marker = Call::make(Int(32), Call::declare_box_required_at_root,
                                              {Expr(name)}, Call::Intrinsic);
@@ -955,13 +944,8 @@ public:
             }
         }
 
-        // Do any pure inlining. Skip inlined stages — under -profile
-        // they appear in `stages` so the profiler can track recompute
-        // counters, but the relationship-computing loop below skips
-        // their boxes_required walk too, so their exprs are never
-        // consulted. Doing do_inlining on every inlined stage adds an
-        // independent CSE pass over the full inlined chain per stage,
-        // which is O(N) work × N stages = O(N^2).
+        // Do any pure inlining. Inlined stages' exprs aren't
+        // consulted below, so skip them.
         for (auto &s : stages) {
             if (s.inlined) {
                 continue;
@@ -997,16 +981,11 @@ public:
 
             Stage &consumer = stages[i];
 
-            // We don't care about inlined callers — under -profile they
-            // appear in `stages` so they can be entries in the
-            // profiler report, but their producer bounds are picked up
-            // transitively through the outermost (non-inlined)
-            // consumer's box analysis (inline_marker's args[0] carries
-            // the original Halide call). Skip their per-stage box
-            // analysis entirely: it's O(N) per inlined stage and
-            // O(N^2) across a chain of N inlined Funcs, and the
-            // resulting `boxes` map would be unused (there's an early
-            // `continue` before the "expand to producers" loop anyway).
+            // Inlined callers' producer bounds are picked up
+            // transitively through the outermost non-inlined consumer's
+            // box analysis: inline_marker's args[0] carries the
+            // original Halide call, so the producer's box gets
+            // recorded as that walk descends through the inlined IR.
             if (consumer.inlined) {
                 continue;
             }
@@ -1433,12 +1412,10 @@ std::vector<Expr> root_box_decl_args(const std::string &name, const Box &b) {
     return args;
 }
 
-// Walk the IR and rewrite single-arg declare_box_required_at_root
-// markers stamped by Stage::define_bounds for inlined Funcs. For each
-// run of consecutive markers in a Block, look up the corresponding
-// boxes, joint-CSE the bounds, and emit a Block of full declarations
-// wrapped in shared LetStmts. This keeps the IR linear in the chain
-// length even when the bounds expressions form a deep nested DAG.
+// Replace each single-arg declare_box_required_at_root marker in the
+// IR with a full declaration whose bound args come from `boxes`. For
+// each run of consecutive markers in a Block, the bounds are joint-
+// CSE'd so common subexpressions become LetStmts wrapping the run.
 class RewriteDeferredRootBoxMarkers : public IRMutator {
 public:
     RewriteDeferredRootBoxMarkers(const std::map<std::string, Box> &boxes)
@@ -1469,12 +1446,13 @@ private:
         return name->value;
     }
 
-    // Joint-CSE the boxes for the given markers and emit a Stmt that
-    // computes the corresponding declarations, prepended onto tail.
+    // Emit a Stmt that computes the declarations for the given markers,
+    // prepended onto tail, joint-CSEing the bounds so subexpressions
+    // shared across the markers are lifted to LetStmts.
     Stmt emit_jointly_csed(const std::vector<std::string> &marker_names, Stmt tail) {
-        // Bundle all the bounds Exprs into a single Expr so that
-        // common_subexpression_elimination can find shared subtrees
-        // across the markers. Record arg counts so we can unpack later.
+        // Bundle all the bounds Exprs into a single Expr for CSE,
+        // recording arg counts so the result can be unpacked back into
+        // per-marker declarations.
         std::vector<Expr> bundle_args;
         std::vector<size_t> arg_count_per_marker;
         for (const std::string &name : marker_names) {
@@ -1488,8 +1466,8 @@ private:
         Expr bundle = Call::make(Int(32), Call::bundle, bundle_args, Call::PureIntrinsic);
         bundle = common_subexpression_elimination(bundle);
 
-        // Peel outer Lets — these become shared LetStmts wrapping the
-        // block of declarations.
+        // Outer Lets become shared LetStmts wrapping the block of
+        // declarations.
         std::vector<std::pair<std::string, Expr>> shared_lets;
         while (const Let *let = bundle.as<Let>()) {
             shared_lets.emplace_back(let->name, let->value);
