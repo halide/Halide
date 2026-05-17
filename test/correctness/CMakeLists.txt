@@ -219,6 +219,7 @@ tests(GROUPS correctness
       low_bit_depth_noise.cpp
       make_struct.cpp
       many_dimensions.cpp
+      many_inlined_selects.cpp
       many_small_extern_stages.cpp
       many_updates.cpp
       math.cpp

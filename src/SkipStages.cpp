@@ -397,6 +397,21 @@ protected:
         }
     }
 
+    // select on bools that collapses select(c, X, X) -> X and the
+    // constant-cond cases.
+    Expr make_select(const Expr &c, const Expr &t, const Expr &f) {
+        if (is_const_one(c)) {
+            return t;
+        }
+        if (is_const_zero(c)) {
+            return f;
+        }
+        if (t.same_as(f)) {
+            return t;
+        }
+        return select(c, t, f);
+    }
+
     void merge_func_info(std::map<size_t, FuncInfo> *old,
                          const std::map<size_t, FuncInfo> &new_info,
                          const Expr &used = Expr{},
@@ -468,10 +483,48 @@ protected:
         std::map<size_t, FuncInfo> old;
         old.swap(func_info);
         mutate(op->true_value);
-        merge_func_info(&old, func_info, op->condition);
-        func_info.clear();
+        std::map<size_t, FuncInfo> true_info;
+        true_info.swap(func_info);
         mutate(op->false_value);
-        merge_func_info(&old, func_info, !op->condition);
+        // func_info now holds the false-branch info.
+
+        // Combine the two branches with select(cond, t, f). A missing
+        // entry on a side means used=false / loaded=false for that branch.
+        auto combine = [&](const Expr &t, const Expr &f) {
+            Expr tt = t.defined() ? t : const_false();
+            Expr ff = f.defined() ? f : const_false();
+            return make_select(op->condition, tt, ff);
+        };
+
+        // Walk every id present in either branch.
+        for (auto &p : func_info) {
+            size_t id = p.first;
+            auto it_t = true_info.find(id);
+            Expr t_u, t_l;
+            if (it_t != true_info.end()) {
+                t_u = it_t->second.used;
+                t_l = it_t->second.loaded;
+                true_info.erase(it_t);
+            }
+            FuncInfo merged{combine(t_u, p.second.used),
+                             combine(t_l, p.second.loaded)};
+            auto [q, inserted] = old.try_emplace(id, merged);
+            if (!inserted) {
+                q->second.used = make_or(q->second.used, merged.used);
+                q->second.loaded = make_or(q->second.loaded, merged.loaded);
+            }
+        }
+        for (auto &p : true_info) {
+            size_t id = p.first;
+            FuncInfo merged{combine(p.second.used, Expr()),
+                             combine(p.second.loaded, Expr())};
+            auto [q, inserted] = old.try_emplace(id, merged);
+            if (!inserted) {
+                q->second.used = make_or(q->second.used, merged.used);
+                q->second.loaded = make_or(q->second.loaded, merged.loaded);
+            }
+        }
+        func_info.clear();
         old.swap(func_info);
         mutate(op->condition);  // Check for any calls in the condition
 
