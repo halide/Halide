@@ -488,41 +488,41 @@ protected:
         mutate(op->false_value);
         // func_info now holds the false-branch info.
 
-        // Combine the two branches with select(cond, t, f). A missing
-        // entry on a side means used=false / loaded=false for that branch.
-        auto combine = [&](const Expr &t, const Expr &f) {
-            Expr tt = t.defined() ? t : const_false();
-            Expr ff = f.defined() ? f : const_false();
-            return make_select(op->condition, tt, ff);
+        // Ids touched on both branches: combine with select(cond, t, f),
+        // so make_select can collapse `select(c, X, X) -> X` when the
+        // two branches contributed the same Expr.
+        // Ids touched on only one branch: AND the predicate with the
+        // appropriate side of the condition.
+        auto merge_into_old = [&](size_t id, const Expr &u, const Expr &l) {
+            auto [q, inserted] = old.try_emplace(id, FuncInfo{u, l});
+            if (!inserted) {
+                q->second.used = make_or(q->second.used, u);
+                q->second.loaded = make_or(q->second.loaded, l);
+            }
         };
 
-        // Walk every id present in either branch.
         for (auto &p : func_info) {
             size_t id = p.first;
             auto it_t = true_info.find(id);
-            Expr t_u, t_l;
+            Expr u, l;
             if (it_t != true_info.end()) {
-                t_u = it_t->second.used;
-                t_l = it_t->second.loaded;
+                u = make_select(op->condition, it_t->second.used, p.second.used);
+                l = make_select(op->condition, it_t->second.loaded, p.second.loaded);
                 true_info.erase(it_t);
+            } else {
+                u = make_and(p.second.used, !op->condition);
+                l = make_and(p.second.loaded, !op->condition);
             }
-            FuncInfo merged{combine(t_u, p.second.used),
-                             combine(t_l, p.second.loaded)};
-            auto [q, inserted] = old.try_emplace(id, merged);
-            if (!inserted) {
-                q->second.used = make_or(q->second.used, merged.used);
-                q->second.loaded = make_or(q->second.loaded, merged.loaded);
-            }
+            merge_into_old(id, u, l);
         }
+        // The ids left in true_info are the ones that were only touched
+        // on the true branch (the ones present in both branches were
+        // combined and erased in the loop above).
         for (auto &p : true_info) {
             size_t id = p.first;
-            FuncInfo merged{combine(p.second.used, Expr()),
-                             combine(p.second.loaded, Expr())};
-            auto [q, inserted] = old.try_emplace(id, merged);
-            if (!inserted) {
-                q->second.used = make_or(q->second.used, merged.used);
-                q->second.loaded = make_or(q->second.loaded, merged.loaded);
-            }
+            Expr u = make_and(p.second.used, op->condition);
+            Expr l = make_and(p.second.loaded, op->condition);
+            merge_into_old(id, u, l);
         }
         func_info.clear();
         old.swap(func_info);
