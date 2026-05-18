@@ -21,12 +21,10 @@ namespace {
 class AlignLoads : public IRMutator {
 public:
     AlignLoads(int alignment, int min_bytes)
-        : alignment_analyzer(alignment), required_alignment(alignment), min_bytes_to_align(min_bytes) {
+        : required_alignment(alignment), min_bytes_to_align(min_bytes) {
     }
 
 private:
-    HexagonAlignmentAnalyzer alignment_analyzer;
-
     // Loads and stores should ideally be aligned to the vector width in bytes.
     int required_alignment;
 
@@ -82,12 +80,10 @@ private:
             return IRMutator::visit(op);
         }
 
-        int64_t aligned_offset = 0;
-        bool is_aligned =
-            alignment_analyzer.is_aligned(op, &aligned_offset);
+        int aligned_offset = 0;
+        bool is_aligned = is_hexagon_aligned(op, required_alignment, &aligned_offset);
         // We know the alignment_analyzer has been able to reason about alignment
         // if the following is true.
-        bool known_alignment = is_aligned || (!is_aligned && aligned_offset != 0);
         int lanes = ramp->lanes;
         int native_lanes = required_alignment / op->type.bytes();
         int stride = static_cast<int>(*const_stride);
@@ -99,7 +95,7 @@ private:
             // without requiring more vectors from the dense
             // load. This makes loads like f(2*x + 1) into an aligned
             // load of double length, with a single shuffle.
-            int shift = known_alignment && aligned_offset < stride ? aligned_offset : 0;
+            int shift = aligned_offset < stride ? aligned_offset : 0;
 
             // Load a dense vector covering all of the addresses in the load.
             Expr dense_base = simplify(ramp->base - shift);
@@ -122,8 +118,8 @@ private:
 
             // If load is smaller than a native vector and can fully fit inside of it and offset is known,
             // we can simply offset the native load and slice.
-            if (!is_aligned && aligned_offset != 0 && Int(32).can_represent(aligned_offset) && (aligned_offset + lanes <= native_lanes)) {
-                ramp_base = simplify(ramp_base - (int)aligned_offset);
+            if (!is_aligned && aligned_offset != 0 && (aligned_offset + lanes <= native_lanes)) {
+                ramp_base = simplify(ramp_base - aligned_offset);
                 alignment = alignment - aligned_offset;
                 slice_offset = aligned_offset;
             }
@@ -147,15 +143,15 @@ private:
             return Shuffle::make_concat(slices);
         }
 
-        if (!is_aligned && aligned_offset != 0 && Int(32).can_represent(aligned_offset)) {
+        if (!is_aligned && aligned_offset != 0) {
             // We know the offset of this load from an aligned
             // address. Rewrite this is an aligned load of two
             // native vectors, followed by a shuffle.
-            Expr aligned_base = simplify(ramp->base - (int)aligned_offset);
-            ModulusRemainder alignment = op->alignment - (int)aligned_offset;
+            Expr aligned_base = simplify(ramp->base - aligned_offset);
+            ModulusRemainder alignment = op->alignment - aligned_offset;
             Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, lanes * 2), alignment);
 
-            return Shuffle::make_slice(aligned_load, (int)aligned_offset, 1, lanes);
+            return Shuffle::make_slice(aligned_load, aligned_offset, 1, lanes);
         }
 
         return IRMutator::visit(op);

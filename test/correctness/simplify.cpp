@@ -128,6 +128,17 @@ void check_casts() {
     check(cast(UInt(16), 65) < cast(UInt(16), 66), const_true());
     check(cast(UInt(16), 123.4f), make_const(UInt(16), 123));
     check(cast(Float(32), cast(UInt(16), 123456.0f)), 57920.0f);
+
+    // Regression test for float-to-integer casts preserving stale integer
+    // alignment. Float-to-integer casts saturate, so uint1(float64(-27))
+    // is false, not true due to the source integer's odd alignment.
+    Expr neg_i32 = IntImm::make(Int(32), -27);
+    Expr neg_f64 = Cast::make(Float(64), neg_i32);
+    Expr neg_to_u1 = Cast::make(UInt(1), neg_f64);
+    check(neg_to_u1, const_false());
+    check(Cast::make(Int(32), neg_to_u1) > 0, const_false());
+    check(select(Cast::make(Int(32), neg_to_u1) > 0, -27, 37), 37);
+
     // Specific checks for 32 bit unsigned expressions - ensure simplifications are actually unsigned.
     // 4000000000 (4 billion) is less than 2^32 but more than 2^31.  As an int, it is negative.
     check(cast(UInt(32), (int)4000000000UL) + cast(UInt(32), 5), make_const(UInt(32), (int)4000000005UL));
