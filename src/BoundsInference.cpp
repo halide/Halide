@@ -212,9 +212,7 @@ protected:
             }
         }
         Expr e = qualify(f.name() + ".", f.values()[idx]);
-        // Cache the body pre-CSE; the public do_inlining call at the
-        // top of the recursion runs CSE once on the final result.
-        e = mutate(e);
+        e = do_inlining(e);
         qualified_bodies[f][idx] = e;
         return e;
     }
