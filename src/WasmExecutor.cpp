@@ -2249,10 +2249,9 @@ const HostCallbackMap &get_host_callback_map() {
 #undef DEFINE_CALLBACK
 #undef DEFINE_POSIX_MATH_CALLBACK
 #undef DEFINE_POSIX_MATH_CALLBACK2
-
-#endif  // WITH_WABT || WITH_V8
-
 }  // namespace
+
+#endif  // WITH_WABT || WITH_V8 || WITH_WAMR
 
 #if WITH_WAMR
 void halide_print_native(wasm_exec_env_t exec_env, int32_t ucon, const char *str);
