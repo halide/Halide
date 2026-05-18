@@ -22,8 +22,6 @@ public:
     // failure scenario. Always passed in as 1 by the aottest, but the
     // compiler can't see that, so sliding can't determine the sign.
     Input<int> stride{"stride"};
-    // uint16 lookup table for the overflowing-bounds scenario below.
-    Input<Buffer<uint16_t, 1>> table16{"table16"};
     Output<Buffer<int, 1>> out{"out"};
 
     void generate() {
@@ -259,28 +257,25 @@ public:
                                      {Expr(extern_inlined(2))}, Int(32), 1);
         extern_stage_e.compute_root();
 
-        // Inlined Func whose bounds-inferred interval doesn't fit in int32.
+        // `table16` is an inlined Func read at an index whose
+        // bounds-inferred interval doesn't fit in int32. The inner uint16
+        // casts widen the factors' intervals to [0, 65535] (regardless of
+        // what bounds inference knows about x), and `[0, 65535] * [0, 65535]`
+        // includes 65535*65535 = 4_294_836_225, which overflows int32. The
+        // simplifier materialises a signed_integer_overflow intrinsic for
+        // the offending corner, and it ends up inside the bounds Expr
+        // that inject_profiling emits in the declare_box_required_at_root
+        // marker for table16 (since table16 is inlined).
         //
-        // The runtime value of `wide_scaled(x)` is always small (the >> 16
-        // brings it back to ~[-50000, 50000]). But interval bounds inference
-        // on `(a - b) * 50000` independently bounds the factors: `a - b` is
-        // in [-65535, 65535] (the two table16 reads are uint16), and the
-        // product with the constant 50000 gives [-3.27e9, 3.27e9], which
-        // overflows int32. The simplifier then materialises a
-        // `signed_integer_overflow` intrinsic for the constant-folded
-        // product, and it ends up inside the `declare_box_required_at_root`
-        // marker the profiler emits for `table16` (since wide_scaled is
-        // inlined and reaches a buffer index).
-        //
-        // The poison-drop pre-pass in inject_profiling has to recognise the
-        // taint -- including through the let-binding chain the simplifier
-        // builds -- and silently drop the marker so codegen doesn't user_error.
-        Func wide_scaled("wide_scaled");
-        wide_scaled(x) = ((cast<int32_t>(table16(x % 1024)) -
-                           cast<int32_t>(table16((x + 1) % 1024))) *
-                          50000) >> 16;
+        // Without the poison-drop pre-pass in inject_profiling, that
+        // marker reaches codegen and user_errors. With it, the marker is
+        // silently dropped and the generator compiles.
+        Func table16("table16");
+        table16(x) = cast<uint16_t>(x);
+
         Func wide_user("wide_user");
-        wide_user(x) = cast<int>(table16(clamp(wide_scaled(x) & 1023, 0, 1023)));
+        Expr ux = cast<int32_t>(cast<uint16_t>(x));
+        wide_user(x) = cast<int>(table16(ux * ux));
 
         Func caller_g("caller_g"), caller_h("caller_h");
         caller_g(x) = multi_inlined(x) + chain_c(x) + update_f(x);

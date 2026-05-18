@@ -413,6 +413,30 @@ void check_extern_stage_inlined_parent(const halide_profiler_pipeline_stats *p) 
     }
 }
 
+// table16 is an inlined Func whose root box is `ux * ux` for
+// ux = cast<int32>(cast<uint16>(x)) — bounds inference can't prove the
+// product fits in int32 ([0, 65535] * [0, 65535] = up to 4_294_836_225,
+// which overflows), so simplify materialises a signed_integer_overflow
+// intrinsic inside the declare_box_required_at_root marker for table16.
+// (compute_root'ing table16 with this same index expression makes the
+// same intrinsic reach codegen and user_errors.) Without the poison-drop
+// pre-pass in inject_profiling that marker reaches codegen and breaks
+// the compile; with the pre-pass the marker is silently dropped, the
+// pipeline compiles, and table16's points_required_at_root counter
+// stays at zero (we lose the root-box count for the poisoned chain
+// but everything else still works). wide_user, the inlined wrapper
+// that consumes table16, still has a well-defined root box of its own
+// and is unaffected.
+void check_poisoned_root_box_dropped(const halide_profiler_pipeline_stats *p) {
+    auto wu = entries_of(p, "wide_user");
+    REQUIRE(wu.size() == 1);
+    REQUIRE(wu[0]->inlined_calls > 0);
+    auto t16 = entries_of(p, "table16");
+    REQUIRE(t16.size() == 1);
+    REQUIRE(t16[0]->inlined_calls > 0);
+    REQUIRE(t16[0]->points_required_at_root == 0);
+}
+
 void check_points_required_at_root_canonical_only(const halide_profiler_pipeline_stats *p) {
     // For any Func with multiple entries, at most one entry should have a
     // non-zero points_required_at_root (the canonical one — that's where the
@@ -450,14 +474,10 @@ int main(int argc, char **argv) {
     // Size deliberately not a multiple of the RoundUp/GuardWithIf split
     // factor (10), so the tail strategies actually do something.
     Buffer<int, 1> output(73);
-    // table16 feeds the wide-bounds scenario. Contents don't matter for the
-    // assertion; we just need a real buffer.
-    Buffer<uint16_t, 1> table16(1024);
-    table16.fill(0);
     // stride=1 is hidden from the compiler — the slide_fail_g scenario
     // calls g(stride*x) and g(stride*x + 3), and since the sign of stride
     // is unknown at compile time, sliding-window monotonicity fails.
-    profiler_instances(1, table16, output);
+    profiler_instances(1, output);
 
     halide_profiler_state *s = halide_profiler_get_state();
     REQUIRE(s != nullptr);
@@ -497,6 +517,7 @@ int main(int argc, char **argv) {
         check_mixed_host_device_update_defs(target);
     }
     check_points_required_at_root_canonical_only(target);
+    check_poisoned_root_box_dropped(target);
 
     printf("Success!\n");
     return 0;
