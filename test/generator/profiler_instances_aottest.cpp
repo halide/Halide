@@ -450,10 +450,14 @@ int main(int argc, char **argv) {
     // Size deliberately not a multiple of the RoundUp/GuardWithIf split
     // factor (10), so the tail strategies actually do something.
     Buffer<int, 1> output(73);
+    // table16 feeds the wide-bounds scenario. Contents don't matter for the
+    // assertion; we just need a real buffer.
+    Buffer<uint16_t, 1> table16(1024);
+    table16.fill(0);
     // stride=1 is hidden from the compiler — the slide_fail_g scenario
     // calls g(stride*x) and g(stride*x + 3), and since the sign of stride
     // is unknown at compile time, sliding-window monotonicity fails.
-    profiler_instances(1, output);
+    profiler_instances(1, table16, output);
 
     halide_profiler_state *s = halide_profiler_get_state();
     REQUIRE(s != nullptr);
