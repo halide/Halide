@@ -257,25 +257,23 @@ public:
                                      {Expr(extern_inlined(2))}, Int(32), 1);
         extern_stage_e.compute_root();
 
-        // `table16` is an inlined Func read at an index whose
-        // bounds-inferred interval doesn't fit in int32. The inner uint16
-        // casts widen the factors' intervals to [0, 65535] (regardless of
-        // what bounds inference knows about x), and `[0, 65535] * [0, 65535]`
-        // includes 65535*65535 = 4_294_836_225, which overflows int32. The
-        // simplifier materialises a signed_integer_overflow intrinsic for
-        // the offending corner, and it ends up inside the bounds Expr
-        // that inject_profiling emits in the declare_box_required_at_root
-        // marker for table16 (since table16 is inlined).
-        //
-        // Without the poison-drop pre-pass in inject_profiling, that
-        // marker reaches codegen and user_errors. With it, the marker is
+        // `tab` is an inlined Func read at an index whose bounds-inferred
+        // interval doesn't fit in int32. The uint16 cast widens ux's
+        // interval to [0, 65535] regardless of what bounds inference
+        // knows about x, so `ux * ux` reaches 65535*65535 =
+        // 4_294_836_225 which overflows int32. The simplifier
+        // materialises a signed_integer_overflow intrinsic for the
+        // offending corner, and it ends up inside the bounds Expr that
+        // inject_profiling emits in the declare_box_required_at_root
+        // marker for tab. Without the poison-drop pre-pass that marker
+        // reaches codegen and user_errors; with it the marker is
         // silently dropped and the generator compiles.
-        Func table16("table16");
-        table16(x) = cast<uint16_t>(x);
+        Func tab("tab");
+        tab(x) = x;
 
-        Func wide_user("wide_user");
+        Func tab_caller("tab_caller");
         Expr ux = cast<int32_t>(cast<uint16_t>(x));
-        wide_user(x) = cast<int>(table16(ux * ux));
+        tab_caller(x) = tab(ux * ux);
 
         Func caller_g("caller_g"), caller_h("caller_h");
         caller_g(x) = multi_inlined(x) + chain_c(x) + update_f(x);
@@ -285,7 +283,7 @@ public:
                          forced_user(x) + roundup_outer(x) + guard_outer(x) +
                          stencil_out(x) + unrolled_pu(x % 4) + cw_a(x) + cw_b(x) +
                          slide_out(x) + slide_fail_f(x) + extern_stage_e(x) +
-                         wide_user(x);
+                         tab_caller(x);
         if (get_target().has_gpu_feature()) {
             out_value = out_value + approx_out(x) + xfer_out(x) + mixed_sched(x);
         }

@@ -413,28 +413,27 @@ void check_extern_stage_inlined_parent(const halide_profiler_pipeline_stats *p) 
     }
 }
 
-// table16 is an inlined Func whose root box is `ux * ux` for
+// tab is an inlined Func whose root box is `ux * ux` for
 // ux = cast<int32>(cast<uint16>(x)) — bounds inference can't prove the
 // product fits in int32 ([0, 65535] * [0, 65535] = up to 4_294_836_225,
 // which overflows), so simplify materialises a signed_integer_overflow
-// intrinsic inside the declare_box_required_at_root marker for table16.
-// (compute_root'ing table16 with this same index expression makes the
-// same intrinsic reach codegen and user_errors.) Without the poison-drop
+// intrinsic inside the declare_box_required_at_root marker for tab.
+// (compute_root'ing tab with this same index expression makes the same
+// intrinsic reach codegen and user_errors.) Without the poison-drop
 // pre-pass in inject_profiling that marker reaches codegen and breaks
 // the compile; with the pre-pass the marker is silently dropped, the
-// pipeline compiles, and table16's points_required_at_root counter
-// stays at zero (we lose the root-box count for the poisoned chain
-// but everything else still works). wide_user, the inlined wrapper
-// that consumes table16, still has a well-defined root box of its own
-// and is unaffected.
+// pipeline compiles, and tab's points_required_at_root counter stays at
+// zero (we lose the root-box count for the poisoned chain but
+// everything else still works). tab_caller, the inlined wrapper that
+// consumes tab, still has a well-defined root box of its own.
 void check_poisoned_root_box_dropped(const halide_profiler_pipeline_stats *p) {
-    auto wu = entries_of(p, "wide_user");
-    REQUIRE(wu.size() == 1);
-    REQUIRE(wu[0]->inlined_calls > 0);
-    auto t16 = entries_of(p, "table16");
-    REQUIRE(t16.size() == 1);
-    REQUIRE(t16[0]->inlined_calls > 0);
-    REQUIRE(t16[0]->points_required_at_root == 0);
+    auto caller = entries_of(p, "tab_caller");
+    REQUIRE(caller.size() == 1);
+    REQUIRE(caller[0]->inlined_calls > 0);
+    auto tab = entries_of(p, "tab");
+    REQUIRE(tab.size() == 1);
+    REQUIRE(tab[0]->inlined_calls > 0);
+    REQUIRE(tab[0]->points_required_at_root == 0);
 }
 
 void check_points_required_at_root_canonical_only(const halide_profiler_pipeline_stats *p) {
