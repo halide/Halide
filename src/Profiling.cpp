@@ -1959,14 +1959,109 @@ Stmt resolve_inline_markers(const Stmt &s) {
         });
 }
 
+// Drop declare_box_required_at_root intrinsics whose bounds couldn't be
+// reduced to int32-representable form. Bounds inference for inlined Funcs
+// happily produces such bounds (e.g. an index of `(c1 - c2) * c3` over a
+// wide interval), and simplify materialises a `signed_integer_overflow`
+// intrinsic for the offending sub-Expr; the box-required marker is a
+// nice-to-have for the recompute-ratio report, so dropping it is safer
+// than letting it reach codegen (which would `user_error`).
+//
+// The taint is tracked via a Scope of poisoned let-binding names so that
+// a downstream reference to the simplifier-introduced let (e.g.
+// `let t = signed_integer_overflow(N); ... declare_box_required_at_root(..., t)`)
+// also drops the marker.
+class DropPoisonedBoxRequired : public IRMutator {
+    Scope<> poisoned;
+
+    // True if `e` directly contains a signed_integer_overflow intrinsic, or
+    // references a Variable currently in `poisoned`.
+    bool is_poisoned(const Expr &e) const {
+        bool result = false;
+        visit_with(e,
+                   [&](auto *self, const Call *op) {
+                       if (op->is_intrinsic(Call::signed_integer_overflow)) {
+                           result = true;
+                       } else {
+                           self->visit_base(op);
+                       }
+                   },
+                   [&](auto *self, const Variable *op) {
+                       if (poisoned.contains(op->name)) {
+                           result = true;
+                       }
+                   });
+        return result;
+    }
+
+    using IRMutator::visit;
+
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
+        // Walk the let chain top-down sniffing each value for poison, then
+        // mutate the body, then rebuild bottom-up. Iterative form so deep
+        // let chains don't blow the stack. We don't mutate the values —
+        // declare_box_required_at_root only ever appears at stmt position,
+        // so there's nothing inside a let value for us to rewrite.
+        struct Frame {
+            const LetOrLetStmt *op;
+            ScopedBinding<> binding;
+        };
+        std::vector<Frame> frames;
+        decltype(op->body) body;
+        do {
+            ScopedBinding<> binding(is_poisoned(op->value), poisoned, op->name);
+            frames.push_back({op, std::move(binding)});
+            body = op->body;
+        } while ((op = body.template as<LetOrLetStmt>()));
+
+        body = mutate(body);
+
+        for (const auto &frame : reverse_view(frames)) {
+            if (body.same_as(frame.op->body)) {
+                body = frame.op;
+            } else {
+                body = LetOrLetStmt::make(frame.op->name, frame.op->value, body);
+            }
+        }
+        return body;
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::declare_box_required_at_root)) {
+            for (size_t i = 1; i < op->args.size(); i++) {
+                if (is_poisoned(op->args[i])) {
+                    return make_zero(op->type);
+                }
+            }
+        }
+        return IRMutator::visit(op);
+    }
+};
+
 Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env, const Target &target) {
     Names names(pipeline_name);
+
+    // 0) Drop any declare_box_required_at_root marker whose bounds Expr
+    //    transitively depends on a signed_integer_overflow intrinsic
+    //    (introduced by simplify when an inlined Func's bounds couldn't
+    //    be represented in int32). These markers are nice-to-have stats
+    //    only — dropping them is safer than letting them reach codegen.
+    Stmt s = DropPoisonedBoxRequired()(stmt);
 
     // 1) Allocate an id for every entry (each producer node and each
     //    inlined call site), and rewrite declare_inlined intrinsics to
     //    hold those resolved ids directly. After this, names.entry_info
     //    is the full set of entries we'll report on.
-    Stmt s = PreAllocateEntries(names)(stmt);
+    s = PreAllocateEntries(names)(s);
 
     // 2) Inject the counter-update calls for stats (loads, stores,
     //    realizations, parallel loops, inlined call billing, etc.).
