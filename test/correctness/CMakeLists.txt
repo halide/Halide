@@ -76,6 +76,8 @@ tests(GROUPS correctness
       custom_error_reporter.cpp
       custom_jit_context.cpp
       custom_lowering_pass.cpp
+      d3d12compute_sm6x.cpp
+      d3d12compute_strict_float.cpp
       dead_realization_in_specialization.cpp
       debug_to_file.cpp
       debug_to_file_multiple_outputs.cpp
@@ -189,6 +191,7 @@ tests(GROUPS correctness
       infer_arguments.cpp
       inline_reduction.cpp
       inlined_generator.cpp
+      input_func_name_unique.cpp
       input_image_bounds_check.cpp
       input_larger_than_two_gigs.cpp
       integer_powers.cpp
@@ -220,6 +223,7 @@ tests(GROUPS correctness
       low_bit_depth_noise.cpp
       make_struct.cpp
       many_dimensions.cpp
+      many_inlined_selects.cpp
       many_small_extern_stages.cpp
       many_updates.cpp
       math.cpp
@@ -304,6 +308,7 @@ tests(GROUPS correctness
       specialize_to_gpu.cpp
       specialize_trim_condition.cpp
       split_by_non_factor.cpp
+      split_factor_type.cpp
       split_fuse_rvar.cpp
       split_reuse_inner_name_bug.cpp
       split_store_compute.cpp
