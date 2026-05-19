@@ -89,7 +89,6 @@ public:
             r.param = op->param;
             r.type = op->param.type();
             r.dimensions = op->param.dimensions();
-            r.used_on_host = false;
             buffers[op->param.name()] = r;
         } else if (op->reduction_domain.defined()) {
             // The bounds of reduction domains are not yet defined,
@@ -208,6 +207,7 @@ Stmt add_image_checks_inner(Stmt s,
     vector<Stmt> asserts_device_not_dirty;
     vector<Stmt> buffer_rewrites;
     vector<Stmt> msan_checks;
+    vector<Stmt> set_host_dirty;
 
     // Inject the code that conditionally returns if we're in inference mode
     Expr maybe_return_condition = const_false();
@@ -649,6 +649,16 @@ Stmt add_image_checks_inner(Stmt s,
                 // If we have no device support, we can't handle
                 // device_dirty, so every buffer touched needs checking.
                 asserts_device_not_dirty.push_back(AssertStmt::make(!device_dirty, error));
+
+                // However, if it's an output, we do still need to set the host
+                // dirty bit in case the result is fed to a later GPU
+                // kernel.
+                if (is_output_buffer) {
+                    Expr set =
+                        Call::make(Int(32), Call::buffer_set_host_dirty,
+                                   {handle, const_true()}, Call::Extern);
+                    set_host_dirty.push_back(Evaluate::make(set));
+                }
             }
         }
 
@@ -677,6 +687,10 @@ Stmt add_image_checks_inner(Stmt s,
             lets->pop_back();
         }
     };
+
+    // After all asserts, set host dirty on outputs if this is a CPU-only
+    // pipeline
+    prepend_stmts(&set_host_dirty);
 
     // Inject the code that checks the host pointers.
     prepend_stmts(&asserts_host_non_null);

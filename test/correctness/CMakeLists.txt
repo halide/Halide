@@ -188,6 +188,7 @@ tests(GROUPS correctness
       infer_arguments.cpp
       inline_reduction.cpp
       inlined_generator.cpp
+      input_func_name_unique.cpp
       input_image_bounds_check.cpp
       input_larger_than_two_gigs.cpp
       integer_powers.cpp
@@ -304,6 +305,7 @@ tests(GROUPS correctness
       specialize_to_gpu.cpp
       specialize_trim_condition.cpp
       split_by_non_factor.cpp
+      split_factor_type.cpp
       split_fuse_rvar.cpp
       split_reuse_inner_name_bug.cpp
       split_store_compute.cpp
