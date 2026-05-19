@@ -37,6 +37,8 @@ class Param {
             << "is no longer used to control whether Halide functions take explicit "
             << "user_context arguments. Use set_custom_user_context() when jitting, "
             << "or add Target::UserContext to the Target feature set when compiling ahead of time.";
+        // Discourage future Funcs from having the same name as this Param.
+        Internal::unique_name(param.name());
     }
 
     // Allow all Param<> variants friend access to each other
