@@ -305,6 +305,7 @@ tests(GROUPS correctness
       specialize_to_gpu.cpp
       specialize_trim_condition.cpp
       split_by_non_factor.cpp
+      split_factor_type.cpp
       split_fuse_rvar.cpp
       split_reuse_inner_name_bug.cpp
       split_store_compute.cpp
