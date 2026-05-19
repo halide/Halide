@@ -2576,13 +2576,53 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     validate_fused_groups_schedule(fused_groups, env);
 
+    // Collect consecutive inlinable groups and apply them in one
+    // inline_functions pass. The Inliner caps how many functions are
+    // substituted per CSE invocation internally (see its class doc), so we
+    // just hand it everything pending.
+    //
+    // We flush the batch before each realization so the realization's
+    // validate_schedule sees the post-inline 's' (its callers, if they
+    // were inlined, will have been substituted in by then).
+    vector<Function> pending_inlines;
+    auto flush_pending_inlines = [&]() {
+        if (pending_inlines.empty()) {
+            return;
+        }
+        debug(1) << "Inlining group of " << pending_inlines.size()
+                 << " function(s): " << pending_inlines << "\n";
+        s = inline_functions(s, pending_inlines);
+        pending_inlines.clear();
+        debug(2) << "Lowering after inlining group of functions:\n"
+                 << s << "\n";
+    };
+
     for (const auto &group : reverse_view(fused_groups)) {
+        vector<Function> group_funcs;
+        group_funcs.reserve(group.size());
+        for (const string &name : group) {
+            group_funcs.push_back(env.find(name)->second);
+        }
+
+        if (group_should_be_inlined(group_funcs)) {
+            // Inlinable groups have a single pure func. Schedule legality is
+            // a property of the func alone; we don't need to consult 's'.
+            const Function &f = group_funcs[0];
+            validate_schedule_inlined_function(f);
+            pending_inlines.push_back(f);
+            continue;
+        }
+
+        // Realization: flush any pending inlines first so that
+        // validate_schedule and the InjectFunctionRealization walk see the
+        // post-inline 's'. In particular, ComputeLegalSchedules inside
+        // validate_schedule needs the inlined call sites to be visible to
+        // find this group's funcs.
+        flush_pending_inlines();
+
         vector<Function> funcs;
         vector<bool> is_output_list;
-
-        for (const string &name : group) {
-            Function f = env.find(name)->second;
-
+        for (const Function &f : group_funcs) {
             bool is_output = false;
             for (const Function &o : outputs) {
                 is_output = is_output | o.same_as(f);
@@ -2605,18 +2645,13 @@ Stmt schedule_functions(const vector<Function> &outputs,
             continue;
         }
 
-        if (group_should_be_inlined(funcs)) {
-            debug(1) << "Inlining " << funcs[0].name() << "\n";
-            s = inline_function(s, funcs[0]);
-        } else {
-            debug(1) << "Injecting realization of " << funcs << "\n";
-            InjectFunctionRealization injector(funcs, is_output_list, target, env);
-            s = injector(s);
-            internal_assert(injector.found_store_level() && injector.found_compute_level() && injector.found_hoist_storage_level());
-        }
-
+        debug(1) << "Injecting realization of " << funcs << "\n";
+        InjectFunctionRealization injector(funcs, is_output_list, target, env);
+        s = injector(s);
+        internal_assert(injector.found_store_level() && injector.found_compute_level() && injector.found_hoist_storage_level());
         debug(2) << s << "\n";
     }
+    flush_pending_inlines();
 
     // We can remove the loop over root now
     const For *root_loop = s.as<For>();
