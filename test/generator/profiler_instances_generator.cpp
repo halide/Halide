@@ -257,6 +257,24 @@ public:
                                      {Expr(extern_inlined(2))}, Int(32), 1);
         extern_stage_e.compute_root();
 
+        // `tab` is an inlined Func read at an index whose bounds-inferred
+        // interval doesn't fit in int32. The uint16 cast widens ux's
+        // interval to [0, 65535] regardless of what bounds inference
+        // knows about x, so `ux * ux` reaches 65535*65535 =
+        // 4_294_836_225 which overflows int32. The simplifier
+        // materialises a signed_integer_overflow intrinsic for the
+        // offending corner, and it ends up inside the bounds Expr that
+        // inject_profiling emits in the declare_box_required_at_root
+        // marker for tab. Without the poison-drop pre-pass that marker
+        // reaches codegen and user_errors; with it the marker is
+        // silently dropped and the generator compiles.
+        Func tab("tab");
+        tab(x) = x;
+
+        Func tab_caller("tab_caller");
+        Expr ux = cast<int32_t>(cast<uint16_t>(x));
+        tab_caller(x) = tab(ux * ux);
+
         Func caller_g("caller_g"), caller_h("caller_h");
         caller_g(x) = multi_inlined(x) + chain_c(x) + update_f(x);
         caller_h(x) = multi_inlined(x) - chain_c(x) + update_f(x);
@@ -264,7 +282,8 @@ public:
         Expr out_value = caller_g(x) + caller_h(x) + cse_user(x) + diamond_user(x) +
                          forced_user(x) + roundup_outer(x) + guard_outer(x) +
                          stencil_out(x) + unrolled_pu(x % 4) + cw_a(x) + cw_b(x) +
-                         slide_out(x) + slide_fail_f(x) + extern_stage_e(x);
+                         slide_out(x) + slide_fail_f(x) + extern_stage_e(x) +
+                         tab_caller(x);
         if (get_target().has_gpu_feature()) {
             out_value = out_value + approx_out(x) + xfer_out(x) + mixed_sched(x);
         }

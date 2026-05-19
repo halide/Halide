@@ -413,6 +413,29 @@ void check_extern_stage_inlined_parent(const halide_profiler_pipeline_stats *p) 
     }
 }
 
+// tab is an inlined Func whose root box is `ux * ux` for
+// ux = cast<int32>(cast<uint16>(x)) — bounds inference can't prove the
+// product fits in int32 ([0, 65535] * [0, 65535] = up to 4_294_836_225,
+// which overflows), so simplify materialises a signed_integer_overflow
+// intrinsic inside the declare_box_required_at_root marker for tab.
+// (compute_root'ing tab with this same index expression makes the same
+// intrinsic reach codegen and user_errors.) Without the poison-drop
+// pre-pass in inject_profiling that marker reaches codegen and breaks
+// the compile; with the pre-pass the marker is silently dropped, the
+// pipeline compiles, and tab's points_required_at_root counter stays at
+// zero (we lose the root-box count for the poisoned chain but
+// everything else still works). tab_caller, the inlined wrapper that
+// consumes tab, still has a well-defined root box of its own.
+void check_poisoned_root_box_dropped(const halide_profiler_pipeline_stats *p) {
+    auto caller = entries_of(p, "tab_caller");
+    REQUIRE(caller.size() == 1);
+    REQUIRE(caller[0]->inlined_calls > 0);
+    auto tab = entries_of(p, "tab");
+    REQUIRE(tab.size() == 1);
+    REQUIRE(tab[0]->inlined_calls > 0);
+    REQUIRE(tab[0]->points_required_at_root == 0);
+}
+
 void check_points_required_at_root_canonical_only(const halide_profiler_pipeline_stats *p) {
     // For any Func with multiple entries, at most one entry should have a
     // non-zero points_required_at_root (the canonical one — that's where the
@@ -493,6 +516,7 @@ int main(int argc, char **argv) {
         check_mixed_host_device_update_defs(target);
     }
     check_points_required_at_root_canonical_only(target);
+    check_poisoned_root_box_dropped(target);
 
     printf("Success!\n");
     return 0;
