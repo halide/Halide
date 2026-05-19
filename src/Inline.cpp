@@ -1,7 +1,3 @@
-#include <chrono>
-#include <iostream>
-#include <set>
-
 #include "CSE.h"
 #include "Debug.h"
 #include "ExternFuncArgument.h"
@@ -221,8 +217,6 @@ Stmt Inliner::do_inlining(const Stmt &s) {
 }
 
 Expr Inliner::visit(const Call *op) {
-    // Match by name. Some Call nodes (e.g. those rebuilt by other passes)
-    // may not carry an op->func pointer.
     auto it = to_inline.find({op->name, op->value_index});
     if (it != to_inline.end()) {
         // If this entry's order_id is past the current limit, leave the
@@ -246,9 +240,8 @@ Expr Inliner::visit(const Call *op) {
         // the outer mutate walks to pick them up at every call site.
         if (!entry.qualified_body.defined()) {
             entry.qualified_body = qualify(func.name() + ".", func.values()[op->value_index]);
-            // First-time computation: fall through to the do_inlining
-            // call below.
-            entry.lowest_pending_order_id = 0;  // force re-inline below
+            // Fall through to the do_inlining call below.
+            entry.lowest_pending_order_id = 0;
         }
         if (active_limit > entry.lowest_pending_order_id) {
             // Save/restore the outer pass's tracking around the recursive
