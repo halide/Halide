@@ -156,9 +156,6 @@ void Inliner::add(const Function &f) {
 }
 
 Expr Inliner::operator()(const Expr &e) {
-    // Single-pass path: either we're already inside an outer deepening
-    // pass (recursive call from get_qualified_body), or the set is small
-    // enough that the deepening loop wouldn't do anything useful.
     if (active_limit != SIZE_MAX || to_inline.size() <= batch_size) {
         return common_subexpression_elimination(mutate(e));
     }
@@ -233,26 +230,23 @@ Expr Inliner::visit(const Call *op) {
         // Mutate the args
         auto args = mutate(op->args);
 
-        // Compute (or re-compute) the cached qualified body. The cache is
-        // (re-)processed whenever the current active_limit has expanded
-        // past the lowest pending order_id inside the cached body, so the
-        // newly-active functions get pulled in here instead of leaving
-        // the outer mutate walks to pick them up at every call site.
+        // Compute (or re-process) the cached qualified body when the
+        // current active_limit lets us pull more inlinable Calls into it.
         if (!entry.qualified_body.defined()) {
             entry.qualified_body = qualify(func.name() + ".", func.values()[op->value_index]);
-            // Fall through to the recursive operator() call below.
             entry.lowest_pending_order_id = 0;
         }
         if (active_limit > entry.lowest_pending_order_id) {
-            // Save/restore the outer pass's tracking around the recursive
-            // call so we can record per-entry lowest pending while still
-            // bubbling the outer's seen-skip up.
             size_t saved_min = min_skipped_order_id;
             min_skipped_order_id = SIZE_MAX;
             entry.qualified_body = (*this)(entry.qualified_body);
             entry.lowest_pending_order_id = min_skipped_order_id;
-            min_skipped_order_id = std::min(saved_min, entry.lowest_pending_order_id);
+            min_skipped_order_id = std::min(saved_min, min_skipped_order_id);
         }
+        // Whether or not we re-processed, the cached body still has Calls
+        // at order_id == lowest_pending un-inlined. Propagate that up so
+        // the outer deepening loop knows there's more work.
+        min_skipped_order_id = std::min(min_skipped_order_id, entry.lowest_pending_order_id);
         Expr body = entry.qualified_body;
 
         const vector<string> func_args = func.args();

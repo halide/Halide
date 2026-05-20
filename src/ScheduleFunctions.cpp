@@ -2601,9 +2601,24 @@ Stmt schedule_functions(const vector<Function> &outputs,
         }
 
         if (group_should_be_inlined(group_funcs)) {
-            // Inlinable groups have a single pure func. Schedule legality is
-            // a property of the func alone; we don't need to consult 's'.
+            // Inlinable groups have a single pure func. Check the
+            // schedule-property errors directly here; we can't call
+            // validate_schedule (which walks 's' for call sites) because
+            // batched inline chains may not yet have their inner call
+            // sites exposed in 's'.
             const Function &f = group_funcs[0];
+            const LoopLevel &store_at = f.schedule().store_level();
+            const LoopLevel &hoist_storage_at = f.schedule().hoist_storage_level();
+            if (store_at.is_root()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled store_root(), but is inlined. Funcs that use store_root must also call compute_root or compute_at.\n";
+            } else if (!store_at.is_inlined()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled store_at(), but is inlined. Funcs that use store_at must also call compute_at.\n";
+            }
+            if (hoist_storage_at.is_root()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage_root(), but is inlined. Funcs that use hoist_storage_root must also call compute_root or compute_at.\n";
+            } else if (!hoist_storage_at.is_inlined()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage(), but is inlined. Funcs that use hoist_storage_root must also call compute_at.\n";
+            }
             validate_schedule_inlined_function(f);
             pending_inlines.push_back(f);
             continue;
