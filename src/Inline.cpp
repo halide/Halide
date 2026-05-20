@@ -1,10 +1,10 @@
+#include "Inline.h"
 #include "CSE.h"
 #include "Debug.h"
 #include "ExternFuncArgument.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "Inline.h"
 #include "Qualify.h"
 #include "Substitute.h"
 
