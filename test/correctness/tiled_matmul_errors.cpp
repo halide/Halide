@@ -9,6 +9,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+#if HALIDE_WITH_EXCEPTIONS
+
 using namespace Halide;
 
 namespace {
@@ -294,9 +296,8 @@ void scenario_matmul_by_constant() {
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (!exceptions_enabled()) {
-        printf("[SKIP] Halide was compiled without exceptions; this test "
-               "needs them to catch each scenario's user error.\n");
+    if (!Halide::exceptions_enabled()) {
+        printf("[SKIP] Halide was compiled without exceptions.\n");
         return 0;
     }
 
@@ -320,3 +321,12 @@ int main(int argc, char **argv) {
     printf("Success!\n");
     return 0;
 }
+
+#else  // HALIDE_WITH_EXCEPTIONS
+
+int main(int argc, char **argv) {
+    printf("[SKIP] Halide was compiled without exceptions.\n");
+    return 0;
+}
+
+#endif  // HALIDE_WITH_EXCEPTIONS

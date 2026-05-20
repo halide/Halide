@@ -110,8 +110,8 @@ protected:
                     if (const Allocate *const *a_ptr = allocation_scope.find(op->name)) {
                         a = *a_ptr;
                     }
-                    // Don't mess with loads from tile memory
-                    if (!a || a->memory_type != MemoryType::AMXTile) {
+                    // Don't mess with loads from natively-2D tile memory.
+                    if (!a || !is_tile_memory_type(a->memory_type)) {
                         found_loads[Key{op->name, base, stride, r->lanes, op->type, a, s}][offset].push_back(op);
                     }
                 }
@@ -156,10 +156,9 @@ protected:
     }
 
     void visit(const Store *op) override {
-        // Don't mess with the loads inside a matrix multiply op. Those are
-        // natively supported as 2D loads and must remain naked loads.
+        // Don't mess with stores to natively-2D tile memory.
         if (const auto *alloc = allocation_scope.find(op->name);
-            alloc && (*alloc)->memory_type == MemoryType::AMXTile) {
+            alloc && is_tile_memory_type((*alloc)->memory_type)) {
             return;
         } else {
             IRVisitor::visit(op);

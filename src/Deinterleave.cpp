@@ -617,10 +617,9 @@ class Interleaver : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        // Don't mess with matrix multiply ops, which use natively-supported 2D
-        // loads and stores.
+        // Don't mess with stores to natively-2D tile memory.
         if (const auto *alloc = allocation_scope.find(op->name);
-            alloc && (*alloc) == MemoryType::AMXTile) {
+            alloc && is_tile_memory_type(*alloc)) {
             return op;
         }
 
@@ -670,10 +669,9 @@ class Interleaver : public IRMutator {
             return Stmt();
         }
 
-        // Don't mess with matrix multiply ops, which use natively-supported 2D
-        // loads and stores.
+        // Don't mess with stores to natively-2D tile memory.
         if (const auto *alloc = allocation_scope.find(store->name);
-            alloc && (*alloc) == MemoryType::AMXTile) {
+            alloc && is_tile_memory_type(*alloc)) {
             return Stmt();
         }
 
