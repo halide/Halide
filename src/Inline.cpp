@@ -117,7 +117,7 @@ void validate_schedule_inlined_function(Function f) {
 // the range we measured.
 //
 // Implementation: each add() call assigns the entry an order_id (its
-// position in the add() sequence). do_inlining processes the set by
+// position in the add() sequence). operator() processes the set by
 // iterative deepening through that sequence -- a series of passes that
 // raise an active_limit by batch_size each time, with visit(Call) only
 // inlining entries whose order_id is below the current limit. The CSE
@@ -148,14 +148,14 @@ void Inliner::add(const Function &f) {
         if (inserted) {
             it->second.func = f;
             // order_id is the entry's position in the add() sequence, used
-            // by do_inlining's iterative-deepening loop to decide when this
+            // by operator()'s iterative-deepening loop to decide when this
             // entry first becomes eligible to inline.
             it->second.order_id = to_inline.size() - 1;
         }
     }
 }
 
-Expr Inliner::do_inlining(const Expr &e) {
+Expr Inliner::operator()(const Expr &e) {
     // Single-pass path: either we're already inside an outer deepening
     // pass (recursive call from get_qualified_body), or the set is small
     // enough that the deepening loop wouldn't do anything useful.
@@ -191,7 +191,7 @@ Expr Inliner::do_inlining(const Expr &e) {
     return result;
 }
 
-Stmt Inliner::do_inlining(const Stmt &s) {
+Stmt Inliner::operator()(const Stmt &s) {
     if (active_limit != SIZE_MAX || to_inline.size() <= batch_size) {
         return mutate(s);
     }
@@ -199,7 +199,7 @@ Stmt Inliner::do_inlining(const Stmt &s) {
     // because the CSE that bounds per-pass work happens in two places
     // already: the per-Provide CSE inside visit(Provide) flattens each
     // Provide after this pass's substitutions, and any recursive
-    // do_inlining(Expr) from get_qualified_body sees active_limit set and
+    // operator()(Expr) from get_qualified_body sees active_limit set and
     // CSEs the qualified body it produces.
     Stmt result = s;
     size_t limit = batch_size;
@@ -240,16 +240,16 @@ Expr Inliner::visit(const Call *op) {
         // the outer mutate walks to pick them up at every call site.
         if (!entry.qualified_body.defined()) {
             entry.qualified_body = qualify(func.name() + ".", func.values()[op->value_index]);
-            // Fall through to the do_inlining call below.
+            // Fall through to the recursive operator() call below.
             entry.lowest_pending_order_id = 0;
         }
         if (active_limit > entry.lowest_pending_order_id) {
             // Save/restore the outer pass's tracking around the recursive
-            // do_inlining so we can record per-entry lowest pending while
-            // still bubbling the outer's seen-skip up.
+            // call so we can record per-entry lowest pending while still
+            // bubbling the outer's seen-skip up.
             size_t saved_min = min_skipped_order_id;
             min_skipped_order_id = SIZE_MAX;
-            entry.qualified_body = do_inlining(entry.qualified_body);
+            entry.qualified_body = (*this)(entry.qualified_body);
             entry.lowest_pending_order_id = min_skipped_order_id;
             min_skipped_order_id = std::min(saved_min, entry.lowest_pending_order_id);
         }
@@ -319,7 +319,7 @@ Stmt inline_function(const Stmt &s, const Function &f) {
 }
 
 Expr inline_function(Expr e, const Function &f) {
-    return Inliner(f).do_inlining(e);
+    return Inliner(f)(e);
 }
 
 Stmt inline_functions(const Stmt &s, const vector<Function> &fs) {
@@ -332,7 +332,7 @@ Stmt inline_functions(const Stmt &s, const vector<Function> &fs) {
         validate_schedule_inlined_function(f);
         i.add(f);
     }
-    return i.do_inlining(s);
+    return i(s);
 }
 
 // Inline all calls to 'f' inside 'caller'

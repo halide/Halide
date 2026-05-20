@@ -21,8 +21,8 @@ namespace Internal {
  *
  *   Inliner inliner;
  *   for (Function f : to_inline) inliner.add(f);
- *   Stmt result = inliner.do_inlining(stmt);
- *   // or: Expr result = inliner.do_inlining(expr);
+ *   Stmt result = inliner(stmt);
+ *   // or: Expr result = inliner(expr);
  *
  * For a single function, Inliner(f) gives an equivalent shortcut and
  * `inline_function(s/e, f)` packages it up further.
@@ -42,20 +42,10 @@ public:
     void add(const Function &f);
 
     /** Inline all calls to the added functions within e/s, returning the
-     * result with CSE applied. */
-    Expr do_inlining(const Expr &e);
-    Stmt do_inlining(const Stmt &s);
-
-    /** operator() on an Inliner is a synonym for do_inlining, so callers
-     * who use the IRMutator-style i(s) syntax get the same behavior as
-     * the explicit i.do_inlining(s). Shadows the inherited inline
-     * operator() from IRMutator. */
-    Expr operator()(const Expr &e) {
-        return do_inlining(e);
-    }
-    Stmt operator()(const Stmt &s) {
-        return do_inlining(s);
-    }
+     * result with CSE applied. Shadows the inherited inline operator()
+     * from IRMutator. */
+    Expr operator()(const Expr &e);
+    Stmt operator()(const Stmt &s);
 
 protected:
     Expr visit(const Call *op) override;

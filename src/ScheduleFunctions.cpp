@@ -2577,13 +2577,9 @@ Stmt schedule_functions(const vector<Function> &outputs,
     validate_fused_groups_schedule(fused_groups, env);
 
     // Collect consecutive inlinable groups and apply them in one
-    // inline_functions pass. The Inliner caps how many functions are
-    // substituted per CSE invocation internally (see its class doc), so we
-    // just hand it everything pending.
-    //
-    // We flush the batch before each realization so the realization's
-    // validate_schedule sees the post-inline 's' (its callers, if they
-    // were inlined, will have been substituted in by then).
+    // inline_functions pass. We flush the batch before each realization so
+    // the realization's validate_schedule sees the post-inline 's' (its
+    // callers, if they were inlined, will have been substituted in by then).
     vector<Function> pending_inlines;
     auto flush_pending_inlines = [&]() {
         if (pending_inlines.empty()) {

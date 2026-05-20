@@ -640,7 +640,7 @@ public:
             vector<pair<Expr, int>> buffers_to_annotate;
             for (const auto &arg : args) {
                 if (arg.is_expr()) {
-                    bounds_inference_args.push_back(inliner->do_inlining(arg.expr));
+                    bounds_inference_args.push_back((*inliner)(arg.expr));
                 } else if (arg.is_func()) {
                     Function input(arg.func);
                     for (int k = 0; k < input.outputs(); k++) {
@@ -854,7 +854,7 @@ public:
         for (auto &s : stages) {
             for (auto &cond_val : s.exprs) {
                 internal_assert(cond_val.value.defined());
-                cond_val.value = inliner.do_inlining(cond_val.value);
+                cond_val.value = inliner(cond_val.value);
             }
         }
 
