@@ -70,6 +70,8 @@ WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_
                                                 uint64_t points_required_at_realization,
                                                 uint64_t points_required_at_production,
                                                 uint64_t points_required_at_root,
+                                                uint64_t points_required_inwards,
+                                                uint64_t productions_if_inwards,
                                                 uint64_t points_computed,
                                                 uint64_t scalar_loads,
                                                 uint64_t vector_loads,
@@ -99,6 +101,8 @@ WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_
     UPDATE_COUNTER(points_required_at_realization);
     UPDATE_COUNTER(points_required_at_production);
     UPDATE_COUNTER(points_required_at_root);
+    UPDATE_COUNTER(points_required_inwards);
+    UPDATE_COUNTER(productions_if_inwards);
     UPDATE_COUNTER(points_computed);
     UPDATE_COUNTER(scalar_loads);
     UPDATE_COUNTER(vector_loads);

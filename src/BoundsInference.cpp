@@ -1267,11 +1267,12 @@ public:
                 // for their recompute ratios, so we mark them all at
                 // root.
                 bool profiling = target.has_feature(Target::Profile);
-                if ((at_root && profiling) || inner_productions.count(stages[i].name)) {
+                bool produced_inside = inner_productions.count(stages[i].name);
+                if ((at_root && profiling) || produced_inside) {
                     bounds_needed[i] = true;
                 }
 
-                if (in_pipeline.count(stages[i].name)) {
+                if (in_pipeline.count(stages[i].name) && !produced_inside) {
                     bounds_needed[i] = false;
                 }
 
@@ -1395,6 +1396,19 @@ public:
         inner_productions.insert(p->name);
         return stmt;
     }
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::declare_box_required_inwards) &&
+            !op->args.empty()) {
+            if (const StringImm *name = op->args[0].as<StringImm>()) {
+                // Treat the inwards-decl site as an inner production of this
+                // Func, so that the logic above knows that we need to compute
+                // valid bounds for it and all its consumers here.
+                inner_productions.insert(name->value);
+            }
+        }
+        return IRMutator::visit(op);
+    }
 };
 
 // Helper: take a Box and a Func name and produce the args vector for a
@@ -1514,7 +1528,7 @@ private:
 
         // Rebuild the block from the end backwards, joint-CSEing any
         // contiguous run of marker stmts before emitting them.
-        Stmt result;  // accumulated tail
+        Stmt result;                          // accumulated tail
         std::vector<std::string> marker_run;  // markers immediately preceding 'result'
         auto flush_markers = [&]() {
             if (marker_run.empty()) {

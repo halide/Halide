@@ -335,13 +335,50 @@ const std::string &handle_name(const Expr &e) {
 // preserved so the surrounding vector lane count is still available.
 class PreAllocateEntries : public IRMutator {
     Names &names;
+    const std::map<std::string, Function> &env;
     int producer_id = -1;
 
+    // Entries minted by a Produce of a profiled Func. Used by visit
+    // (Allocate) to decide whether the Allocate had a matching Produce
+    // at the same scope — if not, the Allocate is a hoist_storage
+    // allocation site and the entry is marked with
+    // halide_profiler_func_kind_allocation.
+    std::set<int> produce_minted_ids;
+
+    bool is_profiled_func(const std::string &name) const {
+        auto it = env.find(name);
+        if (it == env.end()) {
+            it = env.find(names.prefix(name));
+        }
+        return it != env.end() && !it->second.should_not_profile();
+    }
+
     using IRMutator::visit;
+
+    Stmt visit(const Allocate *op) override {
+        // Eagerly mint the entry at the Allocate site so it falls in IR
+        // order — for hoist_storage Funcs this puts the allocation
+        // entry before the production entry in the report. For Funcs
+        // without hoist_storage the Allocate and Produce sit in the
+        // same scope and id_for_entry is idempotent.
+        int id = -1;
+        if (is_profiled_func(op->name)) {
+            id = names.id_for_entry(op->name, producer_id);
+        }
+        Stmt result = IRMutator::visit(op);
+        // After walking the body, the matching Produce (if any at this
+        // scope) has been minted. If not, this is a hoist_storage
+        // allocation site — mark its kind accordingly.
+        if (id >= 0 && !produce_minted_ids.count(id)) {
+            names.entry_info[id].kind = halide_profiler_func_kind_allocation;
+        }
+        return result;
+    }
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             int id = names.id_for_entry(op->name, producer_id);
+            produce_minted_ids.insert(id);
             ScopedValue<int> old(producer_id, id);
             return IRMutator::visit(op);
         }
@@ -496,8 +533,8 @@ class PreAllocateEntries : public IRMutator {
     }
 
 public:
-    PreAllocateEntries(Names &names)
-        : names(names) {
+    PreAllocateEntries(Names &names, const std::map<std::string, Function> &env)
+        : names(names), env(env) {
     }
 };
 
@@ -560,6 +597,8 @@ protected:
            PointsRequiredAtRealization,
            PointsRequiredAtProduction,
            PointsRequiredAtRoot,
+           PointsRequiredInwards,
+           ProductionsIfInwards,
            PointsComputed,
            ScalarLoads,
            VectorLoads,
@@ -876,6 +915,14 @@ protected:
                 // canonical id is the first id allocated for the name, so
                 // it->second.front() is always the canonical id.
                 counters[it->second.front()].count(PointsRequiredAtRoot, box_total(op));
+            }
+            return make_zero(op->type);
+        } else if (op->is_intrinsic(Call::declare_box_required_inwards)) {
+            // Emitted one compute_at level further in than the current compute_at.
+            auto it = entries_by_name.find(handle_name(op->args[0]));
+            if (it != entries_by_name.end()) {
+                counters[it->second.front()].count(PointsRequiredInwards, box_total(op));
+                counters[it->second.front()].count(ProductionsIfInwards);
             }
             return make_zero(op->type);
         } else if (op->is_intrinsic(Call::declare_inlined)) {
@@ -1978,18 +2025,18 @@ class DropPoisonedBoxRequired : public IRMutator {
     // references a Variable currently in `poisoned`.
     bool is_poisoned(const Expr &e) const {
         bool result = false;
-        visit_with(e,
+        visit_with(e,  //
                    [&](auto *self, const Call *op) {
                        if (op->is_intrinsic(Call::signed_integer_overflow)) {
                            result = true;
                        } else {
                            self->visit_base(op);
-                       }
+                       }  //
                    },
                    [&](auto *self, const Variable *op) {
                        if (poisoned.contains(op->name)) {
                            result = true;
-                       }
+                       }  //
                    });
         return result;
     }
@@ -2061,7 +2108,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     //    inlined call site), and rewrite declare_inlined intrinsics to
     //    hold those resolved ids directly. After this, names.entry_info
     //    is the full set of entries we'll report on.
-    s = PreAllocateEntries(names)(s);
+    s = PreAllocateEntries(names, env)(s);
 
     // 2) Inject the counter-update calls for stats (loads, stores,
     //    realizations, parallel loops, inlined call billing, etc.).

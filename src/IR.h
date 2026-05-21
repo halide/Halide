@@ -653,6 +653,9 @@ struct Call : public ExprNode<Call> {
         declare_box_required_at_production,
         declare_box_required_at_root,
 
+        // One loop nest level further in than the current compute_at, if not already innermost
+        declare_box_required_inwards,
+
         // Declares a Func was inlined here the given number of times
         declare_inlined,
 

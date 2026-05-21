@@ -628,6 +628,7 @@ const char *const intrinsic_op_names[] = {
     "declare_box_required_at_realization",
     "declare_box_required_at_production",
     "declare_box_required_at_root",
+    "declare_box_required_inwards",
     "declare_inlined",
     "declare_stage",
     "extern_stage_marker",

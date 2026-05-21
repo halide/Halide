@@ -507,7 +507,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         support_colors = true;
     }
 
-
     // ---- Profiler report formatting --------------------------------------
     //
     // Column-aligned lines are produced from `const char *` templates. A run
@@ -697,6 +696,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         "NNNNNNNNNNNNNNNNNNNNNNNNN|TTTTTTTTT PPPPPPPP|HHHHHH |LLLLLL|KKKKKK|AAAAAA|MMMMMM|VVVVVV|RRRRRRRR |YYYYY|";
     constexpr const char *inlined_func_row =
         "NNNNNNNNNNNNNNNNNNNNNNNNN|IIIIIIIIIIIIIIIIII|       |      |      |      |      |      |RRRRRRRR |YYYYY|";
+    constexpr const char *allocation_func_row =
+        "NNNNNNNNNNNNNNNNNNNNNNNNN|ZZZZZZZZZZZZZZZZZZ|       |      |      |AAAAAA|MMMMMM|VVVVVV|         |     |";
     // Column legend printed once above the func table. Each pipe column
     // and label width matches func_row. Hand-aligned -- if you resize a
     // column, eyeball this too.
@@ -1035,7 +1036,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 11:
+            case 12:
                 if (fs->counters_approximated) {
                     if (emit) {
                         sstr << fs->name << " has counter contributions that could not be "
@@ -1120,7 +1121,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 12: {
+            case 13: {
                 // Look for copy synthetics anywhere in the pipeline whose
                 // buffer_func_id points at this Func. Fire only when
                 // BOTH directions exist — a Func whose buffer is copied
@@ -1178,7 +1179,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             case 5:
                 // High redundant recompute
                 if (recompute > 2.0f &&
-                    self_time > 0.01 &&
                     fs->parent >= 0) {
                     if (emit) {
                         sstr << fs->name << " redundantly recomputes each value " << recompute
@@ -1213,6 +1213,23 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
                 return false;
             case 6:
+                // The inverse: a more aggressive compute_at would be possible
+                // without incurring recompute. Only trigger if there's a heap
+                // allocation, otherwise it probably doesn't matter (the value
+                // may already be in registers).
+                if (recompute < 2.0f &&
+                    fs->num_allocs > 0 &&
+                    fs->points_required_inwards > 0 &&
+                    fs->productions_if_inwards > fs->productions &&
+                    fs->points_required_inwards < 1.01 * fs->points_required_at_realization) {
+                    if (emit) {
+                        sstr << fs->name << " could be computed further inside the loop nest "
+                             << "of its consumers without incurring significant redundant recompute.";
+                    }
+                    return true;
+                }
+                return false;
+            case 7:
                 if (!vector_loads_or_stores && !fs->inlined_calls) {
                     if (emit) {
                         sstr << fs->name << " performs no vector loads or stores. Ensure it is"
@@ -1221,7 +1238,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 7:
+            case 8:
                 if (fs->gathers > fs->vector_loads) {
                     if (emit) {
                         sstr << fs->name << " performs more vector gathers than dense vector "
@@ -1236,7 +1253,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 8:
+            case 9:
                 if (fs->scatters > fs->vector_stores) {
                     if (emit) {
                         sstr << fs->name << " performs more vector scatters than dense vector "
@@ -1250,7 +1267,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 9:
+            case 10:
                 if (vector_loads_or_stores &&
                     total_vector_stores <= fs->scalar_stores * 10) {
                     if (emit) {
@@ -1263,7 +1280,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 10:
+            case 11:
                 if (total_vector_stores > fs->scalar_stores * 10 &&
                     fs->bytes_stored < total_vector_stores * p->native_vector_bytes) {
                     if (emit) {
@@ -1279,7 +1296,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 return false;
             }
         };
-        constexpr int num_rules = 13;
+        // TODO: Should probably name each warning instead of using ints, to
+        // avoid accidentally reusing the same int.
+        constexpr int num_rules = 14;
 
         for (int f = 0; f < f_stats_count; f++) {
             const halide_profiler_func_stats *fs = f_stats[f];
@@ -1363,7 +1382,13 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         auto print_func_row = [&](const halide_profiler_func_stats *fs,
                                   const CumulativeStats *cs) {
             sstr.clear();
-            apply_template(fs->inlined_calls ? inlined_func_row : func_row, [&](char c, int w) {
+            const char *row_template = func_row;
+            if (fs->kind == halide_profiler_func_kind_allocation) {
+                row_template = allocation_func_row;
+            } else if (fs->inlined_calls) {
+                row_template = inlined_func_row;
+            }
+            apply_template(row_template, [&](char c, int w) {
                 switch (c) {
                 case 'N':
                     emit_name(fs, w);
@@ -1456,15 +1481,19 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                         }
                     }
                     break;
-                case 'I': {
-                    // "(inlined)" placeholder, centered in the run width and
-                    // painted in the same mid-gray as the section headers.
-                    // Track the ANSI bytes we emit so we can bump the pad
-                    // target by exactly that many bytes (they don't count
-                    // toward visible width).
+                case 'I':
+                case 'Z': {
+                    // "(inlined)" / "(allocation)" placeholder, centered in
+                    // the run width and painted in the same mid-gray as the
+                    // section headers. Track the ANSI bytes we emit so we
+                    // can bump the pad target by exactly that many bytes
+                    // (they don't count toward visible width).
                     uint64_t target = sstr.size() + w;
-                    const char text[] = "(inlined)";
-                    constexpr int text_len = sizeof(text) - 1;
+                    const char *text = (c == 'I') ? "(inlined)" : "(allocation)";
+                    int text_len = 0;
+                    while (text[text_len]) {
+                        text_len++;
+                    }
                     int pad_left = (w > text_len) ? (w - text_len) / 2 : 0;
                     for (int i = 0; i < pad_left; i++) {
                         sstr << " ";
@@ -1710,6 +1739,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     field_u64("          ", "points_required_at_realization", fs->points_required_at_realization);
                     field_u64("          ", "points_required_at_production", fs->points_required_at_production);
                     field_u64("          ", "points_required_at_root", fs->points_required_at_root);
+                    field_u64("          ", "points_required_inwards", fs->points_required_inwards);
+                    field_u64("          ", "productions_if_inwards", fs->productions_if_inwards);
                     field_u64("          ", "points_computed", fs->points_computed);
                     field_u64("          ", "scalar_loads", fs->scalar_loads);
                     field_u64("          ", "vector_loads", fs->vector_loads);

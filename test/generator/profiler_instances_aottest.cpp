@@ -413,6 +413,32 @@ void check_extern_stage_inlined_parent(const halide_profiler_pipeline_stats *p) 
     }
 }
 
+// inwards_g_root and inwards_g_at_y are the two halves of the
+// f(xf, yf) = g(yf) scenario for the "compute one level inwards"
+// counter. For the compute_root half, moving inwards to
+// compute_at(f, yf) doesn't change the per-yf work, so
+// points_required_inwards equals points_required_at_realization
+// (and the "could compute further inside" perf warning would fire).
+// For the compute_at(f, yf) half, moving inwards to compute_at(f, xf)
+// recomputes g(yf) once per xf — points_required_inwards is much
+// larger than realization (and the warning correctly stays silent).
+void check_inwards_counter(const halide_profiler_pipeline_stats *p) {
+    auto g_root = entries_of(p, "inwards_g_root");
+    REQUIRE(g_root.size() == 1);
+    REQUIRE(g_root[0]->points_required_at_realization > 0);
+    REQUIRE(g_root[0]->points_required_inwards ==
+            g_root[0]->points_required_at_realization);
+
+    auto g_at_y = entries_of(p, "inwards_g_at_y");
+    REQUIRE(g_at_y.size() == 1);
+    REQUIRE(g_at_y[0]->points_required_at_realization > 0);
+    // The factor is extent(r_inwards) = 16 in the generator; allow
+    // some slack but require it to be clearly above the realization.
+    REQUIRE(g_at_y[0]->points_required_inwards >
+            g_at_y[0]->points_required_at_realization * 4);
+
+}
+
 // tab is an inlined Func whose root box is `ux * ux` for
 // ux = cast<int32>(cast<uint16>(x)) — bounds inference can't prove the
 // product fits in int32 ([0, 65535] * [0, 65535] = up to 4_294_836_225,
@@ -504,6 +530,7 @@ int main(int argc, char **argv) {
     check_sliding_window_counters(target);
     check_sliding_window_failure_counters(target);
     check_extern_stage_inlined_parent(target);
+    check_inwards_counter(target);
     // Only present when the pipeline was built with a GPU feature — the
     // generator gates the corresponding Funcs on get_target().has_gpu_feature().
     if (!entries_of(target, "approx_out").empty()) {

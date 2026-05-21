@@ -275,6 +275,36 @@ public:
         Expr ux = cast<int32_t>(cast<uint16_t>(x));
         tab_caller(x) = tab(ux * ux);
 
+        // Inwards-counter test:
+        // f(xf, yf) = g(yf). g only depends on yf. With g.compute_root,
+        // moving one level inwards to compute_at(f, yf) costs the same
+        // (one g point per yf either way) — points_required_inwards
+        // matches points_required_at_realization, so the "could compute
+        // further inside" warning would fire. With g.compute_at(f, yf),
+        // moving inwards to compute_at(f, xf) costs a factor of
+        // extent(xf) (g recomputed per xf*yf instead of per yf) —
+        // points_required_inwards is much larger than realization, so
+        // the warning correctly stays silent.
+        Var xf("xf"), yf("yf");
+        Func inwards_g_root("inwards_g_root"), inwards_f_root("inwards_f_root");
+        Func inwards_g_at_y("inwards_g_at_y"), inwards_f_at_y("inwards_f_at_y");
+        inwards_g_root(yf) = yf * 3;
+        inwards_f_root(xf, yf) = inwards_g_root(yf);
+        inwards_g_root.compute_root();
+        inwards_f_root.compute_root();
+
+        inwards_g_at_y(yf) = yf * 3;
+        inwards_f_at_y(xf, yf) = inwards_g_at_y(yf);
+        inwards_g_at_y.compute_at(inwards_f_at_y, yf);
+        inwards_f_at_y.compute_root();
+
+        RDom r_inwards(0, 16);
+        Func inwards_red_root("inwards_red_root"), inwards_red_at_y("inwards_red_at_y");
+        inwards_red_root(x) = 0;
+        inwards_red_root(x) += inwards_f_root(r_inwards, x);
+        inwards_red_at_y(x) = 0;
+        inwards_red_at_y(x) += inwards_f_at_y(r_inwards, x);
+
         Func caller_g("caller_g"), caller_h("caller_h");
         caller_g(x) = multi_inlined(x) + chain_c(x) + update_f(x);
         caller_h(x) = multi_inlined(x) - chain_c(x) + update_f(x);
@@ -283,7 +313,8 @@ public:
                          forced_user(x) + roundup_outer(x) + guard_outer(x) +
                          stencil_out(x) + unrolled_pu(x % 4) + cw_a(x) + cw_b(x) +
                          slide_out(x) + slide_fail_f(x) + extern_stage_e(x) +
-                         tab_caller(x);
+                         tab_caller(x) +
+                         inwards_red_root(x) + inwards_red_at_y(x);
         if (get_target().has_gpu_feature()) {
             out_value = out_value + approx_out(x) + xfer_out(x) + mixed_sched(x);
         }

@@ -1894,6 +1894,12 @@ enum halide_profiler_func_kind {
     halide_profiler_func_kind_copy_to_host = 5,
     /** Synthetic entry timing a halide_copy_to_device call. */
     halide_profiler_func_kind_copy_to_device = 6,
+    /** An entry for a Realize/free pair without a matching Produce at
+     * the same scope — i.e., a hoist_storage allocation site whose
+     * production happens deeper in the IR. Carries the memory columns
+     * for the buffer's lifetime; the time/compute columns belong to
+     * the separate production entry for the same Func. */
+    halide_profiler_func_kind_allocation = 7,
 };
 
 /** Per-Func state tracked by the sampling profiler. */
@@ -1968,6 +1974,12 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * points_required when there is redundant recompute due to use of
      * compute_at. */
     uint64_t points_required_at_root;
+
+    /** The number of points required of this Func if it had been compute_at one
+     * level further inwards into the loop nest of its consumers, and the number
+     * of times it would have been produced under the same condition. Used to
+     * evaluate if a computing further in might be a good idea. */
+    uint64_t points_required_inwards, productions_if_inwards;
 
     /** The number of points actually computed by this Func's pure
      * definition (its stage-0 stores), weighted by vector lane count.
