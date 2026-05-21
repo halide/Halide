@@ -68,6 +68,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
                                                              const int *func_parents,
                                                              const int *func_canonical_ids,
                                                              const uint8_t *func_kinds,
+                                                             const uint8_t *func_flags,
                                                              const int *func_buffer_func_ids) {
     halide_profiler_state *s = halide_profiler_get_state();
 
@@ -102,6 +103,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
         p->funcs[i].parent = func_parents[i];
         p->funcs[i].canonical_id = func_canonical_ids[i];
         p->funcs[i].kind = func_kinds[i];
+        p->funcs[i].flags = func_flags[i];
         p->funcs[i].buffer_func_id = func_buffer_func_ids[i];
     }
     s->pipelines = p;
@@ -250,6 +252,7 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         const int *func_parents,
                                         const int *func_canonical_ids,
                                         const uint8_t *func_kinds,
+                                        const uint8_t *func_flags,
                                         const int *func_buffer_func_ids,
                                         uint64_t native_vector_bytes,
                                         halide_profiler_instance_state *instance) {
@@ -291,7 +294,7 @@ WEAK int halide_profiler_instance_start(void *user_context,
         halide_profiler_pipeline_stats *p =
             find_or_create_pipeline(pipeline_name, num_funcs,
                                     func_names, func_parents, func_canonical_ids,
-                                    func_kinds, func_buffer_func_ids);
+                                    func_kinds, func_flags, func_buffer_func_ids);
         if (!p) {
             // Allocating space to track the statistics failed.
             return halide_error_out_of_memory(user_context);
@@ -413,12 +416,6 @@ WEAK void halide_profiler_stack_peak_update(void *user_context,
             sync_compare_max_and_swap(&(instance->funcs[i]).stack_peak, f_values[i]);
         }
     }
-}
-
-WEAK void halide_profiler_mark_approximated(void *user_context,
-                                            halide_profiler_instance_state *instance,
-                                            int func_id) {
-    instance->funcs[func_id].counters_approximated = 1;
 }
 
 WEAK void halide_profiler_count_host_device_copy(void *user_context,
@@ -1058,7 +1055,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
                 return false;
             case warning_approximated_counters:
-                if (fs->counters_approximated) {
+                if (fs->flags & halide_profiler_func_flag_counters_approximated) {
                     if (emit) {
                         sstr << fs->name << " has counter contributions that could not be "
                              << "exactly accumulated (e.g. hoisted out of a GPU kernel via "
@@ -1198,9 +1195,13 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
             switch (w) {
             case warning_high_recompute:
-                // High redundant recompute
+                // High redundant recompute. Trivial-wrapper Funcs (input
+                // buffer wrappers, .in() wrappers) inherit their parent's
+                // load count by design, so a "this Func recomputes" warning
+                // is misleading -- suppress it.
                 if (recompute > 2.0f &&
-                    fs->parent >= 0) {
+                    fs->parent >= 0 &&
+                    !(fs->flags & halide_profiler_func_flag_trivial_wrapper)) {
                     if (emit) {
                         sstr << fs->name << " redundantly recomputes each value " << recompute
                              << " times on average. ";

@@ -1902,6 +1902,24 @@ enum halide_profiler_func_kind {
     halide_profiler_func_kind_allocation = 7,
 };
 
+/** Bit values for halide_profiler_func_stats::flags. */
+enum halide_profiler_func_flag {
+    /** Set if some of this Func's counter contributions could not be
+     * exactly accumulated (e.g. they were hoisted out of a GPU kernel via
+     * an upper-bound substitution, or out of an IfThenElse with an impure
+     * condition by summing both branches). Numerical counters are
+     * therefore conservative upper bounds rather than exact totals. */
+    halide_profiler_func_flag_counters_approximated = 1 << 0,
+    /** Set if this Func is a trivial wrapper -- it renames an existing
+     * buffer or Func without doing any computation of its own. Examples:
+     * the auto-generated wrapper Func for every Input buffer, the Func
+     * created by Func::in() / Func::in(consumer). Currently this only
+     * suppresses profiler heuristic performance warnings (redundant
+     * recompute would otherwise fire against the load count of whatever
+     * the wrapper points to). */
+    halide_profiler_func_flag_trivial_wrapper = 1 << 1,
+};
+
 /** Per-Func state tracked by the sampling profiler. */
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The name of this Func. A global constant string. */
@@ -1999,12 +2017,10 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The number of times a call to this Func was inlined. */
     uint64_t inlined_calls;
 
-    /** Set if some of this Func's counter contributions could not be
-     * exactly accumulated (e.g. they were hoisted out of a GPU kernel via
-     * an upper-bound substitution, or out of an IfThenElse with an impure
-     * condition by summing both branches). Numerical counters are
-     * therefore conservative upper bounds rather than exact totals. */
-    uint8_t counters_approximated;
+    /** Bitfield of halide_profiler_func_flag_* values. Initialised once
+     * at instance start from a per-Func constants array; the runtime
+     * does not mutate it. */
+    uint8_t flags;
 
     /** Tag identifying what this entry represents — see
      * halide_profiler_func_kind. Lets the reporter handle bookkeeping

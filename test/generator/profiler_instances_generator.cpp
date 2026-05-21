@@ -22,6 +22,10 @@ public:
     // failure scenario. Always passed in as 1 by the aottest, but the
     // compiler can't see that, so sliding can't determine the sign.
     Input<int> stride{"stride"};
+    // Used to verify that the trivial wrapper Func baked into an
+    // Input<Buffer> doesn't get a stats entry (see the assertion in
+    // the aottest).
+    Input<Buffer<int, 1>> in{"in"};
     Output<Buffer<int, 1>> out{"out"};
 
     void generate() {
@@ -305,6 +309,20 @@ public:
         inwards_red_at_y(x) = 0;
         inwards_red_at_y(x) += inwards_f_at_y(r_inwards, x);
 
+        // Funcs to exercise the Func::in() machinery. `in_target_naked`
+        // gets a naked in() wrapper (no consumer arg) -- the wrapper's
+        // profiler display name should be "in_target_naked.in()".
+        // `in_target_consumer` gets a wrapper specific to the consumer
+        // `in_consumer` -- the display name should be
+        // "in_target_consumer.in(in_consumer)".
+        Func in_target_naked("in_target_naked"), in_target_consumer("in_target_consumer"),
+             in_consumer("in_consumer");
+        in_target_naked(x) = x + 7;
+        in_target_consumer(x) = x + 11;
+        in_consumer(x) = in_target_consumer(x) + 1;
+        Func naked_wrapper = in_target_naked.in();
+        Func consumer_wrapper = in_target_consumer.in(in_consumer);
+
         Func caller_g("caller_g"), caller_h("caller_h");
         caller_g(x) = multi_inlined(x) + chain_c(x) + update_f(x);
         caller_h(x) = multi_inlined(x) - chain_c(x) + update_f(x);
@@ -313,8 +331,9 @@ public:
                          forced_user(x) + roundup_outer(x) + guard_outer(x) +
                          stencil_out(x) + unrolled_pu(x % 4) + cw_a(x) + cw_b(x) +
                          slide_out(x) + slide_fail_f(x) + extern_stage_e(x) +
-                         tab_caller(x) +
-                         inwards_red_root(x) + inwards_red_at_y(x);
+                         tab_caller(x) + in(x) +
+                         inwards_red_root(x) + inwards_red_at_y(x) +
+                         naked_wrapper(x) + in_consumer(x);
         if (get_target().has_gpu_feature()) {
             out_value = out_value + approx_out(x) + xfer_out(x) + mixed_sched(x);
         }

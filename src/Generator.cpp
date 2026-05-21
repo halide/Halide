@@ -107,6 +107,7 @@ Func make_param_func(const Parameter &p, const std::string &name) {
         }
         f(args) = Internal::Call::make(p, args_expr);
     }
+    f.function().set_profiler_display_name(name + " (input)");
     return f;
 }
 

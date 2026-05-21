@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdlib>
 #include <map>
 #include <set>
 #include <string>
@@ -206,6 +207,7 @@ namespace {
 // perverse like naming a func "profiler_instance".
 struct Names {
     const std::string &pipeline_name;
+    const std::map<std::string, Function> &env;
     std::string profiler_instance;
     std::string profiler_local_sampling_token;
     std::string profiler_shared_sampling_token;
@@ -215,6 +217,7 @@ struct Names {
     std::string profiler_func_canonical_ids;
     std::string profiler_func_stack_peak_buf;
     std::string profiler_func_kinds;
+    std::string profiler_func_flags;
     std::string profiler_func_buffer_func_ids;
     std::string profiler_start_error_code;
 
@@ -222,8 +225,9 @@ struct Names {
     // disambiguates them from real Funcs at report time.
     const int overhead_id = 0, thread_idle_id = 1, malloc_id = 2, free_id = 3;
 
-    Names(const std::string &pipeline_name)
+    Names(const std::string &pipeline_name, const std::map<std::string, Function> &env)
         : pipeline_name(pipeline_name),
+          env(env),
           profiler_instance(unique_name("profiler_instance")),
           profiler_local_sampling_token(unique_name("profiler_local_sampling_token")),
           profiler_shared_sampling_token(unique_name("profiler_shared_sampling_token")),
@@ -233,6 +237,7 @@ struct Names {
           profiler_func_canonical_ids(unique_name("profiler_func_canonical_ids")),
           profiler_func_stack_peak_buf(unique_name("profiler_func_stack_peak_buf")),
           profiler_func_kinds(unique_name("profiler_func_kinds")),
+          profiler_func_flags(unique_name("profiler_func_flags")),
           profiler_func_buffer_func_ids(unique_name("profiler_func_buffer_func_ids")),
           profiler_start_error_code(unique_name("profiler_start_error_code")) {
 
@@ -263,25 +268,75 @@ struct Names {
         int buffer_func_id;  // for copy synthetics, canonical id of the
                              // Func whose buffer is being copied; -1
                              // otherwise
+        // Initial value of halide_profiler_func_stats::flags. Read once
+        // at instance-start time from the per-entry constants array;
+        // the runtime does not subsequently mutate it.
+        uint8_t flags;
     };
     std::vector<EntryInfo> entry_info;
     // First id allocated for each name — the canonical entry.
     std::map<std::string, int> canonical_id_for_name;
     // (parent_id, name) -> id — used to deduplicate when the same (parent,
-    // name) pair is encountered more than once.
+    // name) pair is encountered more than once. Keyed on the IR-level
+    // Function name so two appearances of the same Func dedup correctly,
+    // even when the entry's display name is a Function::profiler_display_name
+    // override.
     std::map<std::pair<int, std::string>, int> entry_map;
+
+    // Detect a trivial wrapper Func: one whose definition is just a
+    // rename of another buffer/Func, doing no arithmetic of its own. We
+    // use the same predicate as the Inline.cpp Inliner: no update defs
+    // and every value Expr is a Call whose args are all Variables or
+    // constants. Covers the auto-generated wrappers around
+    // Input<Buffer<>>s and the wrappers produced by Func::in(), and
+    // also catches human-written passthroughs like `f(x) = g(x)`.
+    static bool is_trivial_wrapper(const Function &f) {
+        if (!f.updates().empty()) {
+            return false;
+        }
+        const auto &values = f.values();
+        if (values.empty()) {
+            return false;
+        }
+        for (const Expr &v : values) {
+            const Call *call = v.as<Call>();
+            if (!call) {
+                return false;
+            }
+            for (const Expr &arg : call->args) {
+                if (!arg.as<Variable>() && !is_const(arg)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 
     // Get (or allocate) the id for a specific entry, keyed on the Func
     // name plus its immediate parent entry in the IR. Two appearances of
     // the same Func with different parents get different ids; two
     // appearances with the same parent share one id.
-    int id_for_entry(const std::string &name, int parent_id,
+    int id_for_entry(const std::string &ir_name, int parent_id,
                      halide_profiler_func_kind kind = halide_profiler_func_kind_func,
                      int buffer_func_id = -1) {
-        auto [it, inserted] = entry_map.try_emplace({parent_id, name}, (int)entry_info.size());
+        auto [it, inserted] = entry_map.try_emplace({parent_id, ir_name}, (int)entry_info.size());
         if (inserted) {
-            int canon = canonical_id_for_name.try_emplace(name, it->second).first->second;
-            entry_info.push_back({name, parent_id, canon, kind, buffer_func_id});
+            int canon = canonical_id_for_name.try_emplace(ir_name, it->second).first->second;
+            std::string display_name = ir_name;
+            uint8_t flags = 0;
+            if (kind == halide_profiler_func_kind_func) {
+                auto eit = env.find(ir_name);
+                if (eit != env.end()) {
+                    const Function &f = eit->second;
+                    if (!f.profiler_display_name().empty()) {
+                        display_name = f.profiler_display_name();
+                    }
+                    if (is_trivial_wrapper(f)) {
+                        flags |= halide_profiler_func_flag_trivial_wrapper;
+                    }
+                }
+            }
+            entry_info.push_back({display_name, parent_id, canon, kind, buffer_func_id, flags});
         }
         return it->second;
     }
@@ -989,10 +1044,22 @@ protected:
             c.count(BytesStored, make_const(UInt(64), op->value.type().bytes() * lanes));
             // Only the pure def (stage 0) contributes to "points computed";
             // update-def stores are a separate kind of work and shouldn't
-            // show up as recompute.
+            // show up as recompute. For Tuple-valued Funcs each output
+            // point produces one Store per tuple element (to buffers
+            // f.0, f.1, ...), so counting all of them would inflate
+            // points_computed by the tuple arity. Skip any store whose
+            // buffer name's final dotted component parses as a non-zero
+            // integer -- those are the non-canonical tuple elements.
             auto it = func_in_pure_stage.find(f);
             if (it != func_in_pure_stage.end() && it->second) {
-                c.count(PointsComputed, make_const(UInt(64), lanes));
+                size_t last_dot = op->name.rfind('.');
+                const char *tail = (last_dot == std::string::npos) ? op->name.c_str() : op->name.c_str() + last_dot + 1;
+                char *end = nullptr;
+                long idx = std::strtol(tail, &end, 10);
+                bool is_dup_tuple_element = (*end == '\0' && idx != 0);
+                if (!is_dup_tuple_element) {
+                    c.count(PointsComputed, make_const(UInt(64), lanes));
+                }
             }
         }
         return IRMutator::visit(op);
@@ -2095,7 +2162,7 @@ class DropPoisonedBoxRequired : public IRMutator {
 };
 
 Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env, const Target &target) {
-    Names names(pipeline_name);
+    Names names(pipeline_name, env);
 
     // 0) Drop any declare_box_required_at_root marker whose bounds Expr
     //    transitively depends on a signed_integer_overflow intrinsic
@@ -2114,7 +2181,13 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     //    realizations, parallel loops, inlined call billing, etc.).
     InjectCounters injector(names, env);
     s = injector(s);
-    std::set<int> approximated_entries = std::move(injector.approximated_entries);
+    // Fold the approximated-entry set into each EntryInfo's flags
+    // bitfield so it gets passed in via the per-entry constants array
+    // at halide_profiler_instance_start, alongside the other initial-
+    // flag bits set by id_for_entry.
+    for (int id : injector.approximated_entries) {
+        names.entry_info[id].flags |= halide_profiler_func_flag_counters_approximated;
+    }
 
     // 3) Inject the rest of the profiler scaffolding: thread activation,
     //    memory tracking, current-func tracking, copy-to-host/device timing.
@@ -2129,6 +2202,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     Expr func_parents_buf = Variable::make(Handle(), names.profiler_func_parents);
     Expr func_canonical_ids_buf = Variable::make(Handle(), names.profiler_func_canonical_ids);
     Expr func_kinds_buf = Variable::make(Handle(), names.profiler_func_kinds);
+    Expr func_flags_buf = Variable::make(Handle(), names.profiler_func_flags);
     Expr func_buffer_func_ids_buf = Variable::make(Handle(), names.profiler_func_buffer_func_ids);
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_instance_start",
@@ -2138,6 +2212,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
                                       func_parents_buf,
                                       func_canonical_ids_buf,
                                       func_kinds_buf,
+                                      func_flags_buf,
                                       func_buffer_func_ids_buf,
                                       make_const(UInt(64), target.natural_vector_size(UInt(8))),
                                       instance},
@@ -2170,20 +2245,6 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     // If there was a problem starting the profiler, it will call an
     // appropriate halide error function and then return the
     // (negative) error code as the token.
-    // Mark approximated entries before the pipeline body runs but after
-    // halide_profiler_instance_start has populated instance->funcs.
-    if (!approximated_entries.empty()) {
-        std::vector<Stmt> marks;
-        marks.reserve(approximated_entries.size() + 1);
-        for (int id : approximated_entries) {
-            marks.emplace_back(Evaluate::make(
-                Call::make(Int(32), "halide_profiler_mark_approximated",
-                           {instance, make_const(Int(32), id)}, Call::Extern)));
-        }
-        marks.push_back(s);
-        s = Block::make(marks);
-    }
-
     s = Block::make(AssertStmt::make(profiler_start_error_code == 0, profiler_start_error_code), s);
     s = LetStmt::make(names.profiler_start_error_code, start_profiler, s);
 
@@ -2203,6 +2264,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     std::vector<Expr> func_parents(num_funcs);
     std::vector<Expr> func_canonical_ids(num_funcs);
     std::vector<Expr> func_kinds(num_funcs);
+    std::vector<Expr> func_flags(num_funcs);
     std::vector<Expr> func_buffer_func_ids(num_funcs);
     for (int i = 0; i < num_funcs; i++) {
         const auto &info = names.entry_info[i];
@@ -2210,6 +2272,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
         func_parents[i] = info.parent_id;
         func_canonical_ids[i] = info.canonical_id;
         func_kinds[i] = make_const(UInt(8), (uint8_t)info.kind);
+        func_flags[i] = make_const(UInt(8), info.flags);
         func_buffer_func_ids[i] = info.buffer_func_id;
     }
 
@@ -2217,6 +2280,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     s = LetStmt::make(names.profiler_func_parents, Call::make(Handle(), Call::make_struct, func_parents, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_canonical_ids, Call::make(Handle(), Call::make_struct, func_canonical_ids, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_kinds, Call::make(Handle(), Call::make_struct, func_kinds, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_flags, Call::make(Handle(), Call::make_struct, func_flags, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_buffer_func_ids, Call::make(Handle(), Call::make_struct, func_buffer_func_ids, Call::Intrinsic), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 
