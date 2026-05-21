@@ -989,13 +989,34 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             num_threads = 1;
         }
 
-        // Returns true if rule `rule_id` fires for `fs`. When `emit` is
+        // To add a new warning: add an entry to this enum (before
+        // num_warning_kinds), and a matching case in the rule() lambda
+        // below. The position in the enum doesn't matter; the switch
+        // dispatches by name.
+        enum WarningKind {
+            warning_allocs_in_parallel_loop,
+            warning_poor_thread_utilization_many_loops,
+            warning_poor_thread_utilization_fine_tasks,
+            warning_too_few_parallel_tasks,
+            warning_not_parallelized,
+            warning_high_recompute,
+            warning_could_compute_further_inside,
+            warning_no_vector_ops,
+            warning_more_gathers_than_vector_loads,
+            warning_more_scatters_than_vector_stores,
+            warning_many_scalar_stores,
+            warning_narrow_vector_stores,
+            warning_approximated_counters,
+            warning_device_bouncing,
+            num_warning_kinds
+        };
+
+        // Returns true if warning `w` fires for `fs`. When `emit` is
         // true, also writes the warning message to sstr (using the same
-        // metrics the trigger condition reads). To add a new rule, append
-        // a new case here -- both the predicate and the text live together.
+        // metrics the trigger condition reads).
         auto rule = [&](const halide_profiler_func_stats *fs,
                         const CumulativeStats *cs,
-                        int rule_id,
+                        WarningKind w,
                         bool emit) -> bool {
             float threads_avg = cs->active_threads_numerator /
                                 (cs->active_threads_denominator + 1e-10f);
@@ -1021,8 +1042,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             float ms_per_task = (cs->time / (fs->parallel_tasks + 1e-10f)) * 1e-6f;
 
             // Rules we want to check for *every* Func, even cheap ones
-            switch (rule_id) {
-            case 0:
+            switch (w) {
+            case warning_allocs_in_parallel_loop:
                 if (fs->parallel_loops == 0 &&
                     cs->parallel_tasks != 0 &&
                     fs->num_allocs > fs->parallel_tasks) {
@@ -1036,7 +1057,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 12:
+            case warning_approximated_counters:
                 if (fs->counters_approximated) {
                     if (emit) {
                         sstr << fs->name << " has counter contributions that could not be "
@@ -1058,8 +1079,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 return false;
             }
 
-            switch (rule_id) {
-            case 1:
+            switch (w) {
+            case warning_poor_thread_utilization_many_loops:
                 // Significant func with low thread utilization that's also
                 // launching many parallel loops -- thread pool overhead is
                 // probably eating the parallelism gains.
@@ -1077,7 +1098,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 2:
+            case warning_poor_thread_utilization_fine_tasks:
                 // Very high task launch rate -- the inner loop is too
                 // fine-grained, so per-task overhead drowns out the work.
                 if (poor_thread_utilization &&
@@ -1092,7 +1113,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 3:
+            case warning_too_few_parallel_tasks:
                 // Too few parallel tasks per run to keep the thread pool
                 // busy -- the loop is too coarse-grained.
                 if (fs->parallel_tasks > 0 &&
@@ -1109,7 +1130,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 4:
+            case warning_not_parallelized:
                 // Not parallelized at all
                 if (!serial &&
                     fs->parent == -1 &&
@@ -1121,7 +1142,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 13: {
+            case warning_device_bouncing: {
                 // Look for copy synthetics anywhere in the pipeline whose
                 // buffer_func_id points at this Func. Fire only when
                 // BOTH directions exist — a Func whose buffer is copied
@@ -1175,8 +1196,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 return false;
             }
 
-            switch (rule_id) {
-            case 5:
+            switch (w) {
+            case warning_high_recompute:
                 // High redundant recompute
                 if (recompute > 2.0f &&
                     fs->parent >= 0) {
@@ -1212,7 +1233,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 6:
+            case warning_could_compute_further_inside:
                 // The inverse: a more aggressive compute_at would be possible
                 // without incurring recompute. Only trigger if there's a heap
                 // allocation, otherwise it probably doesn't matter (the value
@@ -1229,7 +1250,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 7:
+            case warning_no_vector_ops:
                 if (!vector_loads_or_stores && !fs->inlined_calls) {
                     if (emit) {
                         sstr << fs->name << " performs no vector loads or stores. Ensure it is"
@@ -1238,7 +1259,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 8:
+            case warning_more_gathers_than_vector_loads:
                 if (fs->gathers > fs->vector_loads) {
                     if (emit) {
                         sstr << fs->name << " performs more vector gathers than dense vector "
@@ -1253,7 +1274,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 9:
+            case warning_more_scatters_than_vector_stores:
                 if (fs->scatters > fs->vector_stores) {
                     if (emit) {
                         sstr << fs->name << " performs more vector scatters than dense vector "
@@ -1267,7 +1288,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 10:
+            case warning_many_scalar_stores:
                 if (vector_loads_or_stores &&
                     total_vector_stores <= fs->scalar_stores * 10) {
                     if (emit) {
@@ -1280,7 +1301,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     return true;
                 }
                 return false;
-            case 11:
+            case warning_narrow_vector_stores:
                 if (total_vector_stores > fs->scalar_stores * 10 &&
                     fs->bytes_stored < total_vector_stores * p->native_vector_bytes) {
                     if (emit) {
@@ -1296,10 +1317,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 return false;
             }
         };
-        // TODO: Should probably name each warning instead of using ints, to
-        // avoid accidentally reusing the same int.
-        constexpr int num_rules = 14;
-
         for (int f = 0; f < f_stats_count; f++) {
             const halide_profiler_func_stats *fs = f_stats[f];
             int idx = (int)(fs - p->funcs);
@@ -1315,9 +1332,10 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             }
             const halide_profiler_func_stats *agg_fs = &canon_fs[idx];
             const CumulativeStats *agg_cs = &canon_cs[idx];
-            for (int r = 0; r < num_rules; r++) {
-                if (rule(agg_fs, agg_cs, r, /*emit=*/false) && num_warnings < max_warnings) {
-                    warnings[num_warnings++] = {idx, r};
+            for (int w = 0; w < num_warning_kinds; w++) {
+                if (rule(agg_fs, agg_cs, (WarningKind)w, /*emit=*/false) &&
+                    num_warnings < max_warnings) {
+                    warnings[num_warnings++] = {idx, w};
                 }
             }
         }
@@ -1633,7 +1651,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 sstr.clear();
                 sstr << "  " << (w + 1) << ") ";
                 int cid = warnings[w].canonical_id;
-                rule(&canon_fs[cid], &canon_cs[cid], warnings[w].rule_id, /*emit=*/true);
+                rule(&canon_fs[cid], &canon_cs[cid], (WarningKind)warnings[w].rule_id, /*emit=*/true);
                 sstr << "\n";
                 print_wrapped(user_context, 5, max_cols, sstr.str());
             }
