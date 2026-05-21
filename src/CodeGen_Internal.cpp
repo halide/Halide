@@ -50,7 +50,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_malloc",
         "halide_print",
         "halide_profiler_count_host_device_copy",
-        "halide_profiler_mark_approximated",
         "halide_profiler_memory_allocate",
         "halide_profiler_memory_free",
         "halide_profiler_instance_start",

@@ -110,6 +110,10 @@ struct FunctionContents {
 
     bool no_profiling = false;
 
+    // Optional override for the name shown in the profiler. The IR-level
+    // name is `name`; this is purely cosmetic.
+    std::string profiler_display_name;
+
     bool frozen = false;
 
     void accept(IRVisitor *visitor) const {
@@ -514,6 +518,7 @@ void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const
     copy->trace_realizations = contents->trace_realizations;
     copy->trace_tags = contents->trace_tags;
     copy->no_profiling = contents->no_profiling;
+    copy->profiler_display_name = contents->profiler_display_name;
     copy->frozen = contents->frozen;
     copy->output_buffers = contents->output_buffers;
     copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
@@ -1189,6 +1194,13 @@ void Function::do_not_profile() {
 }
 bool Function::should_not_profile() const {
     return contents->no_profiling;
+}
+
+void Function::set_profiler_display_name(const std::string &n) {
+    contents->profiler_display_name = n;
+}
+const std::string &Function::profiler_display_name() const {
+    return contents->profiler_display_name;
 }
 
 void Function::freeze() {

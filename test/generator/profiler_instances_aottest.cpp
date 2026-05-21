@@ -325,7 +325,7 @@ void check_counters_approximated_on_impure_if(const halide_profiler_pipeline_sta
     REQUIRE(!fs.empty());
     bool any_approx = false;
     for (auto *inst : fs) {
-        any_approx = any_approx || inst->counters_approximated;
+        any_approx = any_approx || (inst->flags & halide_profiler_func_flag_counters_approximated);
     }
     REQUIRE(any_approx);
 }
@@ -426,6 +426,53 @@ void check_extern_stage_inlined_parent(const halide_profiler_pipeline_stats *p) 
 // zero (we lose the root-box count for the poisoned chain but
 // everything else still works). tab_caller, the inlined wrapper that
 // consumes tab, still has a well-defined root box of its own.
+// ImageParam::create_func emits a built-in wrapper Func through which
+// every access to the input buffer flows. The Function is given a
+// profiler_display_name like "<input_name> (input)" so the user
+// recognizes it in the report. The Profiling pass detects it as a
+// trivial wrapper (single Call to the underlying buffer with Var/const
+// args) and sets the trivial_wrapper bit, which suppresses the
+// "redundantly recomputes" warning. We assert all of that here.
+void check_input_wrapper(const halide_profiler_pipeline_stats *p) {
+    // Internal IR name "in_im" should not appear -- the entry uses the
+    // display name instead.
+    REQUIRE(entries_of(p, "in_im").empty());
+    auto fs = entries_of(p, "in (input)");
+    REQUIRE(!fs.empty());
+    for (auto *inst : fs) {
+        REQUIRE(inst->flags & halide_profiler_func_flag_trivial_wrapper);
+    }
+    // The wrapper was actually exercised in the pipeline.
+    uint64_t total_inlined_calls = 0;
+    for (auto *inst : fs) {
+        total_inlined_calls += inst->inlined_calls;
+    }
+    REQUIRE(total_inlined_calls > 0);
+}
+
+// Func::in() and Func::in(consumer) create wrapper Funcs whose
+// profiler display name is set from get_wrapper, and whose
+// trivial-wrapper flag is inferred by Profiling.cpp's
+// is_trivial_wrapper predicate (one Call, all Var/const args).
+void check_func_in_wrappers(const halide_profiler_pipeline_stats *p) {
+    {
+        auto fs = entries_of(p, "in_target_naked.in()");
+        REQUIRE(!fs.empty());
+        for (auto *inst : fs) {
+            REQUIRE(inst->flags & halide_profiler_func_flag_trivial_wrapper);
+            REQUIRE(inst->inlined_calls > 0);
+        }
+    }
+    {
+        auto fs = entries_of(p, "in_target_consumer.in(in_consumer)");
+        REQUIRE(!fs.empty());
+        for (auto *inst : fs) {
+            REQUIRE(inst->flags & halide_profiler_func_flag_trivial_wrapper);
+            REQUIRE(inst->inlined_calls > 0);
+        }
+    }
+}
+
 void check_poisoned_root_box_dropped(const halide_profiler_pipeline_stats *p) {
     auto caller = entries_of(p, "tab_caller");
     REQUIRE(caller.size() == 1);
@@ -473,10 +520,12 @@ int main(int argc, char **argv) {
     // Size deliberately not a multiple of the RoundUp/GuardWithIf split
     // factor (10), so the tail strategies actually do something.
     Buffer<int, 1> output(73);
+    Buffer<int, 1> in(73);
+    in.fill(0);
     // stride=1 is hidden from the compiler — the slide_fail_g scenario
     // calls g(stride*x) and g(stride*x + 3), and since the sign of stride
     // is unknown at compile time, sliding-window monotonicity fails.
-    profiler_instances(1, output);
+    profiler_instances(1, in, output);
 
     halide_profiler_state *s = halide_profiler_get_state();
     REQUIRE(s != nullptr);
@@ -517,6 +566,8 @@ int main(int argc, char **argv) {
     }
     check_points_required_at_root_canonical_only(target);
     check_poisoned_root_box_dropped(target);
+    check_input_wrapper(target);
+    check_func_in_wrappers(target);
 
     printf("Success!\n");
     return 0;

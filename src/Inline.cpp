@@ -189,17 +189,6 @@ public:
           leave_decl(leave_decl) {
         internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
         validate_schedule_inlined_function(f);
-
-        // Don't leave an inlining decl if it's a trivial wrapper Func
-        if (leave_decl && f.updates().empty()) {
-            for (const Expr &v : f.values()) {
-                if (const Call *call = v.as<Call>()) {
-                    for (const Expr &arg : call->args) {
-                        leave_decl &= arg.as<Variable>() || is_const(arg);
-                    }
-                }
-            }
-        }
     }
 };
 
