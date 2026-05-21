@@ -218,6 +218,14 @@ protected:
     }
 
     Expr visit(const Call *op) override {
+        // The Inliner is the only thing that constructs inline_markers, and
+        // it's only invoked once per cond_val.value, so we should never
+        // walk into one. Walking into args[0] (which preserves the
+        // original Call for diamond-dependency dedup) would re-trigger
+        // inlining of any Funcs that appear in the call's index args,
+        // producing nested inline_markers that grow exponentially.
+        internal_assert(!op->is_intrinsic(Call::inline_marker))
+            << "Inliner should never encounter an inline_marker — it constructs them.\n";
         if (op->func.defined()) {
             Function f(op->func);
             if (to_inline.count(f)) {
