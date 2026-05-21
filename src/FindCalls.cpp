@@ -3,6 +3,8 @@
 #include "ExternFuncArgument.h"
 #include "Function.h"
 #include "IRVisitor.h"
+#include "Parameter.h"
+#include <set>
 #include <utility>
 
 namespace Halide {
@@ -97,6 +99,64 @@ std::map<std::string, Function> build_environment(const std::vector<Function> &f
     for (const Function &f : funcs) {
         populate_environment_helper(f, &env, &order, true, true);
     }
+
+    // Validate the environment: no Parameter (ImageParam, Generator
+    // Input<Buffer>, or scalar Param) may share a name with a Func in the
+    // pipeline. Such a collision otherwise causes confusing internal errors
+    // later in lowering. Output Funcs intentionally share names with their
+    // output buffer Parameters, so exclude buffer params whose name matches
+    // an output Func.
+    class FindParamNames : public IRVisitor {
+        using IRVisitor::visit;
+        void record(const Parameter &p) {
+            if (!p.defined()) {
+                return;
+            }
+            if (p.is_buffer()) {
+                buffer_names.insert(p.name());
+            } else {
+                scalar_names.insert(p.name());
+            }
+        }
+        void visit(const Variable *op) override {
+            record(op->param);
+        }
+        void visit(const Call *op) override {
+            IRVisitor::visit(op);
+            record(op->param);
+        }
+
+    public:
+        std::set<std::string> buffer_names;
+        std::set<std::string> scalar_names;
+    } finder;
+    for (const auto &p : env) {
+        p.second.accept(&finder);
+    }
+    std::set<std::string> output_names;
+    for (const Function &f : funcs) {
+        output_names.insert(f.name());
+    }
+    for (const std::string &name : finder.buffer_names) {
+        if (output_names.count(name)) {
+            continue;
+        }
+        if (env.count(name)) {
+            user_error << "The name \"" << name << "\" is used for both "
+                       << "an input buffer (ImageParam or Generator Input<Buffer>) "
+                       << "and a Func in the same pipeline. "
+                       << "Input buffers and Funcs must have distinct names.\n";
+        }
+    }
+    for (const std::string &name : finder.scalar_names) {
+        if (env.count(name)) {
+            user_error << "The name \"" << name << "\" is used for both "
+                       << "a scalar Param (or Generator Input scalar) "
+                       << "and a Func in the same pipeline. "
+                       << "Params and Funcs must have distinct names.\n";
+        }
+    }
+
     return env;
 }
 

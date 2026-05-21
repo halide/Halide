@@ -1919,6 +1919,8 @@ void GeneratorInputBase::init_internals() {
     funcs_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
         auto name = array_name(i);
+        // Discourage future Funcs from having the same name as this Input.
+        Internal::unique_name(name);
         parameters_.emplace_back(gio_type(), kind() != ArgInfoKind::Scalar, dims(), name);
         auto &p = parameters_[i];
         if (kind() != ArgInfoKind::Scalar) {

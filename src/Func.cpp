@@ -1073,9 +1073,19 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     return intm;
 }
 
-void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor, bool exact, TailStrategy tail) {
+void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor_arg, bool exact, TailStrategy tail) {
     debug(4) << "In schedule for " << name() << ", split " << old << " into "
-             << outer << " and " << inner << " with factor of " << factor << "\n";
+             << outer << " and " << inner << " with factor of " << factor_arg << "\n";
+
+    user_assert(factor_arg.defined())
+        << "In schedule for " << name() << ", split factor for splitting "
+        << old << " is undefined.\n";
+    user_assert(Int(32).can_represent(factor_arg.type()))
+        << "In schedule for " << name() << ", split factor for splitting "
+        << old << " has type " << factor_arg.type()
+        << ", which is not representable as int32.\n";
+    Expr factor = cast<int32_t>(factor_arg);
+
     vector<Dim> &dims = definition.schedule().dims();
 
     definition.schedule().touched() = true;
