@@ -924,6 +924,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 dst.name = src.name;
                 dst.parent = src.parent;
                 dst.canonical_id = c;
+                dst.flags = src.flags;
+                dst.kind = src.kind;
+                dst.buffer_func_id = src.buffer_func_id;
             }
             // Inlined Funcs don't get time samples of their own (they execute
             // as part of their caller), so for rule evaluation we want them
