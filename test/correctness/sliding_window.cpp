@@ -393,6 +393,28 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // Sliding a producer along the outer loop of a pair of outputs fused
+        // together with compute_with. Previously triggered an internal compiler
+        // error referencing a missing .loop_min symbol on the fused loop.
+        count = 0;
+        Func f, g1, g2;
+        f(x, y) = call_counter(x, y);
+        g1(x, y) = f(x, y - 1) + f(x, y + 1);
+        g2(x, y) = f(x, y - 1) - f(x, y + 1);
+
+        f.store_root().compute_at(g1, y);
+        g2.compute_with(g1, x);
+
+        Pipeline({g1, g2}).realize({10, 10});
+
+        // f spans y in [-1, 10], so 12 rows of 10 = 120 calls when slid.
+        if (count != 120) {
+            printf("f was called %d times instead of %d times\n", count, 120);
+            return 1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }
