@@ -224,10 +224,18 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     set<int> &slid_dimensions;
     Scope<Expr> scope;
 
-    // Loops between the loop being slid over and the produce node
+    // For loops strictly between the loop being slid over and the current
+    // node (not including the loop being slid over itself).
     Scope<> enclosing_loops;
 
     map<string, Expr> replacements;
+
+    // Loop-nest depth (size of enclosing_loops) at the moment we visited the
+    // target producer. Bounds inference places the lets that drive the producer
+    // at this same loop level, so replacements must only be applied to LetStmts
+    // at that same level. Any same-named lets found elsewhere (e.g. inside the
+    // consume side of the func) are not the correct ones to rewrite.
+    size_t producer_loop_depth = 0;
 
     using IRMutator::visit;
 
@@ -500,6 +508,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 replacements[n + ".min"] = Variable::make(Int(32), prefix + dim + ".min");
                 replacements[n + ".max"] = Variable::make(Int(32), prefix + dim + ".max");
             }
+            producer_loop_depth = enclosing_loops.size();
 
             // Ok, we have a new min/max required and we're going to
             // rewrite all the lets that define bounds required. Now
@@ -591,7 +600,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         Expr value = op->value;
 
         map<string, Expr>::iterator iter = replacements.find(op->name);
-        if (iter != replacements.end()) {
+        if (iter != replacements.end() && enclosing_loops.size() == producer_loop_depth) {
             value = iter->second;
             replacements.erase(iter);
         }
