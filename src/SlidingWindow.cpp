@@ -230,13 +230,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
     map<string, Expr> replacements;
 
-    // Loop-nest depth (size of enclosing_loops) at the moment we visited the
-    // target producer. Bounds inference places the lets that drive the
-    // producer at this same loop level, so replacements must only be applied
-    // to LetStmts at that same level — same-named lets at deeper for-loop
-    // nesting (e.g. inside the consume side of the func) serve other
-    // purposes and must not be rewritten.
-    size_t producer_loop_depth = 0;
+    // The immediately-enclosing For node, and the one enclosing the target
+    // producer. Replacements are only applied to LetStmts directly inside
+    // producer_for.
+    const For *current_for = nullptr;
+    Stmt producer_for;
 
     using IRMutator::visit;
 
@@ -509,7 +507,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 replacements[n + ".min"] = Variable::make(Int(32), prefix + dim + ".min");
                 replacements[n + ".max"] = Variable::make(Int(32), prefix + dim + ".max");
             }
-            producer_loop_depth = enclosing_loops.size();
+            producer_for = Stmt(current_for);
 
             // Ok, we have a new min/max required and we're going to
             // rewrite all the lets that define bounds required. Now
@@ -575,6 +573,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         Expr min = expand_expr(op->min, scope);
         Expr max = expand_expr(op->max, scope);
         ScopedBinding<> bind(enclosing_loops, op->name);
+        ScopedValue<const For *> bind_for(current_for, op);
         if (equal(min, max)) {
             // Just treat it like a let
             Stmt s = LetStmt::make(op->name, min, op->body);
@@ -601,7 +600,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         Expr value = op->value;
 
         map<string, Expr>::iterator iter = replacements.find(op->name);
-        if (iter != replacements.end() && enclosing_loops.size() == producer_loop_depth) {
+        if (iter != replacements.end() && current_for == producer_for.get()) {
             value = iter->second;
             replacements.erase(iter);
         }
