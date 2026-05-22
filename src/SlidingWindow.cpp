@@ -231,11 +231,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     map<string, Expr> replacements;
 
     // Loop-nest depth (size of enclosing_loops) at the moment we visited the
-    // target producer. Bounds inference places the lets that drive the
-    // producer at this same loop level, so replacements must only be applied
-    // to LetStmts at that same level — same-named lets at deeper for-loop
-    // nesting (e.g. inside the consume side of the func) serve other
-    // purposes and must not be rewritten.
+    // target producer. Bounds inference places the lets that drive the producer
+    // at this same loop level, so replacements must only be applied to LetStmts
+    // at that same level. Any same-named lets found elsewhere (e.g. inside the
+    // consume side of the func) are not the correct ones to rewrite.
     size_t producer_loop_depth = 0;
 
     using IRMutator::visit;
