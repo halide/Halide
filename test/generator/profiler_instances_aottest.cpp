@@ -455,19 +455,13 @@ void check_inwards_counter(const halide_profiler_pipeline_stats *p) {
 // ImageParam::create_func emits a built-in wrapper Func through which
 // every access to the input buffer flows. The Function is given a
 // profiler_display_name like "<input_name> (input)" so the user
-// recognizes it in the report. The Profiling pass detects it as a
-// trivial wrapper (single Call to the underlying buffer with Var/const
-// args) and sets the trivial_wrapper bit, which suppresses the
-// "redundantly recomputes" warning. We assert all of that here.
+// recognizes it in the report.
 void check_input_wrapper(const halide_profiler_pipeline_stats *p) {
     // Internal IR name "in_im" should not appear -- the entry uses the
     // display name instead.
     REQUIRE(entries_of(p, "in_im").empty());
     auto fs = entries_of(p, "in (input)");
     REQUIRE(!fs.empty());
-    for (auto *inst : fs) {
-        REQUIRE(inst->flags & halide_profiler_func_flag_trivial_wrapper);
-    }
     // The wrapper was actually exercised in the pipeline.
     uint64_t total_inlined_calls = 0;
     for (auto *inst : fs) {
@@ -477,15 +471,12 @@ void check_input_wrapper(const halide_profiler_pipeline_stats *p) {
 }
 
 // Func::in() and Func::in(consumer) create wrapper Funcs whose
-// profiler display name is set from get_wrapper, and whose
-// trivial-wrapper flag is inferred by Profiling.cpp's
-// is_trivial_wrapper predicate (one Call, all Var/const args).
+// profiler display name is set from get_wrapper.
 void check_func_in_wrappers(const halide_profiler_pipeline_stats *p) {
     {
         auto fs = entries_of(p, "in_target_naked.in()");
         REQUIRE(!fs.empty());
         for (auto *inst : fs) {
-            REQUIRE(inst->flags & halide_profiler_func_flag_trivial_wrapper);
             REQUIRE(inst->inlined_calls > 0);
         }
     }
@@ -493,7 +484,6 @@ void check_func_in_wrappers(const halide_profiler_pipeline_stats *p) {
         auto fs = entries_of(p, "in_target_consumer.in(in_consumer)");
         REQUIRE(!fs.empty());
         for (auto *inst : fs) {
-            REQUIRE(inst->flags & halide_profiler_func_flag_trivial_wrapper);
             REQUIRE(inst->inlined_calls > 0);
         }
     }

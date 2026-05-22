@@ -1198,40 +1198,38 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
             switch (w) {
             case warning_high_recompute:
-                // High redundant recompute. Trivial-wrapper Funcs (input
-                // buffer wrappers, .in() wrappers) inherit their parent's
-                // load count by design, so a "this Func recomputes" warning
-                // is misleading -- suppress it.
+                // High redundant recompute. Only fires on non-inlined
+                // Funcs: for inlined Funcs the textual call count is a
+                // poor proxy for real work, since LLVM's LICM /
+                // constant-folding routinely makes the visible "recompute"
+                // disappear. The recompute column still shows the raw
+                // ratio for any inlined Func that looks suspicious; the
+                // cure is to try compute_at and see if it gets faster.
                 if (recompute > 2.0f &&
                     fs->parent >= 0 &&
-                    !(fs->flags & halide_profiler_func_flag_trivial_wrapper)) {
+                    !fs->inlined_calls) {
                     if (emit) {
                         sstr << fs->name << " redundantly recomputes each value " << recompute
                              << " times on average. ";
-                        if (fs->inlined_calls) {
-                            sstr << "If this Func has a non-trivial body, consider using "
-                                 << "compute_at or compute_root instead of inlining it.";
+                        // Determine the single biggest cause
+                        float a = (float)fs->points_required_at_realization / fs->points_required_at_root;
+                        float b = (float)fs->points_required_at_production / fs->points_required_at_realization;
+                        float c = (float)fs->points_computed / fs->points_required_at_production;
+                        if (a > b && a > c) {
+                            sstr
+                                << "Consider a store_at/compute_at location further outwards "
+                                << "in the parent's loop nest.";
+                        }
+                        if (b > c) {
+                            sstr
+                                << "The points required at the compute_at site is " << b
+                                << " times larger than the points required at the store_at "
+                                << "site. Sliding window optimization may have failed.";
                         } else {
-                            // Determine the single biggest cause
-                            float a = (float)fs->points_required_at_realization / fs->points_required_at_root;
-                            float b = (float)fs->points_required_at_production / fs->points_required_at_realization;
-                            float c = (float)fs->points_computed / fs->points_required_at_production;
-                            if (a > b && a > c) {
-                                sstr
-                                    << "Consider a store_at/compute_at location further outwards "
-                                    << "in the parent's loop nest.";
-                            }
-                            if (b > c) {
-                                sstr
-                                    << "The points required at the compute_at site is " << b
-                                    << " times larger than the points required at the store_at "
-                                    << "site. Sliding window optimization may have failed.";
-                            } else {
-                                sstr
-                                    << "The number of points actually computed is " << c
-                                    << " times larger than the points required at the compute_at site."
-                                    << " The schedule may be using excessively large split factors.";
-                            }
+                            sstr
+                                << "The number of points actually computed is " << c
+                                << " times larger than the points required at the compute_at site."
+                                << " The schedule may be using excessively large split factors.";
                         }
                     }
                     return true;

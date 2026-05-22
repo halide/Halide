@@ -1910,14 +1910,6 @@ enum halide_profiler_func_flag {
      * condition by summing both branches). Numerical counters are
      * therefore conservative upper bounds rather than exact totals. */
     halide_profiler_func_flag_counters_approximated = 1 << 0,
-    /** Set if this Func is a trivial wrapper -- it renames an existing
-     * buffer or Func without doing any computation of its own. Examples:
-     * the auto-generated wrapper Func for every Input buffer, the Func
-     * created by Func::in() / Func::in(consumer). Currently this only
-     * suppresses profiler heuristic performance warnings (redundant
-     * recompute would otherwise fire against the load count of whatever
-     * the wrapper points to). */
-    halide_profiler_func_flag_trivial_wrapper = 1 << 1,
 };
 
 /** Per-Func state tracked by the sampling profiler. */

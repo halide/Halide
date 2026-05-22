@@ -283,35 +283,6 @@ struct Names {
     // override.
     std::map<std::pair<int, std::string>, int> entry_map;
 
-    // Detect a trivial wrapper Func: one whose definition is just a
-    // rename of another buffer/Func, doing no arithmetic of its own. We
-    // use the same predicate as the Inline.cpp Inliner: no update defs
-    // and every value Expr is a Call whose args are all Variables or
-    // constants. Covers the auto-generated wrappers around
-    // Input<Buffer<>>s and the wrappers produced by Func::in(), and
-    // also catches human-written passthroughs like `f(x) = g(x)`.
-    static bool is_trivial_wrapper(const Function &f) {
-        if (!f.updates().empty()) {
-            return false;
-        }
-        const auto &values = f.values();
-        if (values.empty()) {
-            return false;
-        }
-        for (const Expr &v : values) {
-            const Call *call = v.as<Call>();
-            if (!call) {
-                return false;
-            }
-            for (const Expr &arg : call->args) {
-                if (!arg.as<Variable>() && !is_const(arg)) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
     // Get (or allocate) the id for a specific entry, keyed on the Func
     // name plus its immediate parent entry in the IR. Two appearances of
     // the same Func with different parents get different ids; two
@@ -330,9 +301,6 @@ struct Names {
                     const Function &f = eit->second;
                     if (!f.profiler_display_name().empty()) {
                         display_name = f.profiler_display_name();
-                    }
-                    if (is_trivial_wrapper(f)) {
-                        flags |= halide_profiler_func_flag_trivial_wrapper;
                     }
                 }
             }
