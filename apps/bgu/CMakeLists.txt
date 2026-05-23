@@ -14,21 +14,23 @@ find_package(Halide REQUIRED)
 # Generator
 add_halide_generator(bgu.generator SOURCES bgu_generator.cpp)
 
+set(_bgu_autoscheduler_params autoscheduler.experimental_gpu_schedule=1)
+
+if(Halide_TARGET MATCHES "cuda|metal|opencl")
+    # Set last_level_cache per GPU block to an extremely small value. This
+    # eliminates all `.compute_at` in the generated schedules, which in turn
+    # eliminates all GPU shared memory allocations.
+    list(APPEND _bgu_autoscheduler_params
+        autoscheduler.last_level_cache_size=2000
+    )
+endif()
+
 # Filters
 add_halide_library(bgu FROM bgu.generator)
 add_halide_library(bgu_auto_schedule FROM bgu.generator
                    GENERATOR bgu
                    AUTOSCHEDULER Halide::Mullapudi2016
-# Note(antonysigma): experimental GPU schedule failed on the Buildbot worker
-# "halide-testbranch-main-llvm18-x86-64-linux-cmake" with error:
-#
-# CUDA error: CUDA_ERROR_ILLEGAL_ADDRESS cuCtxSynchronize failed
-#
-# Curiously, it works on a low-end GPU: Nvidia GTX 1660S.
-#
-# Uncomment the following code to debug. PARAMS
-# autoscheduler.experimental_gpu_schedule=1
-)
+                   PARAMS ${_bgu_autoscheduler})
 
 # Main executable
 add_executable(bgu_filter filter.cpp)
