@@ -135,6 +135,8 @@ public:
     }
 };
 
+}  // namespace
+
 // Lower a Pipeline (presented via its env, outputs, and realization
 // order/fused groups) through the canonical-form prefix passes: all
 // the Stmt-transforming passes from initial loop-nest creation
@@ -161,8 +163,8 @@ Stmt lower_to_canonical_form(const vector<Function> &outputs,
                              const Target &t,
                              const vector<Stmt> &requirements,
                              const string &pipeline_name,
-                             bool trace_pipeline,
-                             LoweringLogger &log) {
+                             bool trace_pipeline) {
+    LoweringLogger log;
     debug(1) << "Creating initial loop nests...\n";
     bool any_memoized = false;
     Stmt s = schedule_functions(outputs, fused_groups, env, t, any_memoized);
@@ -451,6 +453,8 @@ Stmt lower_to_canonical_form(const vector<Function> &outputs,
     return s;
 }
 
+namespace {
+
 void lower_impl(const vector<Function> &output_funcs,
                 const string &pipeline_name,
                 const Target &t,
@@ -495,15 +499,13 @@ void lower_impl(const vector<Function> &output_funcs,
     // specializations' conditions
     simplify_specializations(env);
 
-    LoweringLogger log;
-
     // Run the canonical-form prefix: every Stmt-transforming pass from
     // schedule_functions through strip_asserts. See the
     // lower_to_canonical_form docstring above and
     // docs/implement_with/DESIGN.md §4.4.
     Stmt s = lower_to_canonical_form(outputs, env, order, fused_groups, t,
                                      requirements, pipeline_name,
-                                     trace_pipeline, log);
+                                     trace_pipeline);
 
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
