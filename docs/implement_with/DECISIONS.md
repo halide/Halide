@@ -28,6 +28,7 @@ Distinguish two categories:
 - [Constant-bound conflict detection](#constant-bound-conflict-detection) (Phase 3, session 3)
 - [Serialization: hard error in Phase 3](#serialization-hard-error-in-phase-3) (Phase 3, session 3)
 - [OQ#5 — canonicalization prefix](#oq5-canonicalization-prefix) (Pre-Phase-4, session 4) **[REVISES DESIGN]**
+- [Phase 4 case-study set](#phase-4-case-study-set) (Phase 4, session 5)
 
 ---
 
@@ -513,3 +514,66 @@ instruction declarations.
   `lower_to_canonical_form` is invoked, so its transferred bounds
   participate in canonical-form bounds inference. This is correct and
   doesn't need to change.
+
+---
+
+## Phase 4 case-study set
+
+**Phase:** 4 · **Session:** 5 (2026-05-25) · **Status:** Resolved
+
+**Decision.** Four case studies validate the Phase 4 matcher before
+OQ#5 is considered "settled" beyond v1's no-stability-promise scope:
+
+1. **`vfmadd231ps_256`** (AVX2 + FMA) — single intrinsic; post-
+   FindIntrinsics lifting; the §3.3 canonical example. Simplest end-
+   to-end smoke test.
+2. **SDOT 4×4 GEMV** (ARM dot-product) — multi-instruction emit
+   (four broadcasting SDOTs); joint matching of related outputs;
+   §3.4 example.
+3. **HVX MAC sequences and/or AMX tile triples** — at least one,
+   ideally both. Validates that `find_intrinsics` (HVX) and (gated)
+   `extract_tile_operations` (AMX) running *inside* the canonical-form
+   prefix produces match-friendly IR for those targets. Without this
+   case, OQ#5's decision to keep those passes inside the prefix is
+   not actually validated end-to-end.
+4. **PTX MMA on CUDA** (NVPTX tensor cores) — validates LLVM-backed
+   GPU matching. Canonical form is cut *before* `inject_gpu_offload`,
+   so spec and use-site share `For::GPUBlock`/`For::GPUThread` loop
+   structure; matching across that structure is the test that closes
+   the "LLVM-backed backends first" line from
+   [OQ#5](#oq5-canonicalization-prefix). String-y GPU backends
+   (OpenCL/Metal) are out of scope for v1.
+
+**Alternatives considered.**
+
+1. **Three case studies (drop PTX MMA).** **Rejected:** without a GPU
+   case the OQ#5 analysis is incomplete — the "we can't exclude GPU
+   from the design" constraint stated during OQ#5 resolution was never
+   actually exercised in code.
+2. **Pick one of HVX-vs-AMX rather than allowing either.**
+   **Deferred:** HVX requires a Hexagon toolchain to test JIT-able
+   intrinsic lowering; AMX requires SapphireRapids-class hardware or
+   `Target::AVX512_SapphireRapids` JIT. Whichever is reachable from
+   the developer's toolchain at the time gets the first cut; the
+   other can land later as a separate test.
+3. **Add a string-y GPU case (OpenCL / Metal MMA).** **Rejected for
+   v1:** OQ#5's stated phasing is LLVM-backed backends first, string-y
+   codegen backends later. String-y backends diverge in *codegen*,
+   well after canonical form; they inherit the matcher for free as
+   long as their codegen handles the substituted intrinsic `Call`
+   nodes. Revisit when v1's LLVM cases are stable.
+
+**Reasoning.** Each case tests a distinct property of the canonical-
+form prefix or the matcher mechanism. The set is the smallest one that
+covers single-call vs. multi-call, post-FindIntrinsics vs. pre-
+intrinsic-lifting, CPU-SIMD vs. explicit-register-file vs. GPU. Each
+also has a direct correspondence to the OQ#5 constraints, so the
+case-study results validate the OQ#5 cut decision concretely.
+
+**Implication.** The Phase 4 PR series should land these tests
+incrementally (vfmadd first; SDOT and PTX MMA after the matcher is
+stable; HVX/AMX last because they require less common toolchains).
+Phase 4 is not "complete" until at least three of the four are wired
+up end-to-end; the fourth (HVX or AMX, whichever is harder to reach)
+can carry over into Phase 5 with the emit work, since by then the
+matcher is the established part.

@@ -324,15 +324,27 @@ See [`DECISIONS.md`](DECISIONS.md). Highlights from session 1:
    tests rather than the test file's filename — they should keep
    passing as Phase 4 lands.
 3. **Tests for Phase 4:** the design's "get to end-to-end early"
-   guidance (§8.1) now has three concrete case studies attached from
-   the OQ#5 conversation:
-   - `vfmadd231ps_256` (single FMA on AVX2/FMA — the canonical
-     §3.3 example).
-   - SDOT 4×4 GEMV on ARM (§3.4 — multi-instruction emit, tests joint
-     matching of the four broadcasting SDOTs).
-   - At least one of HVX MAC sequences or AMX tile triples (validates
-     that the matcher works with intrinsic-lifted IR).
-   These three should be wired up before declaring OQ#5 "settled"
+   guidance (§8.1) has four case studies attached, each chosen to
+   exercise a distinct property of the canonical-form prefix and the
+   matcher:
+   - `vfmadd231ps_256` (single FMA on AVX2/FMA — the canonical §3.3
+     example) — simplest case; validates the post-FindIntrinsics
+     match on a single intrinsic call.
+   - SDOT 4×4 GEMV on ARM (§3.4 — multi-instruction emit) — tests
+     joint matching of the four broadcasting SDOTs and multi-output
+     scheduling.
+   - HVX MAC sequences *or* AMX tile triples — validates that
+     `find_intrinsics` (HVX) and (gated) `extract_tile_operations`
+     (AMX) inside the prefix produce match-friendly canonical IR. At
+     least one of these should be wired up; both is better.
+   - PTX MMA on CUDA (NVPTX tensor cores) — validates LLVM-backed GPU
+     matching. Canonical form is taken *before* `inject_gpu_offload`,
+     so spec and use-site share `For::GPUBlock`/`For::GPUThread` loop
+     structure; this is the test that closes the "LLVM-backed
+     backends first" line from the OQ#5 analysis. Warp-scoped
+     fragment IR also exercises shared-state subtleties that the CPU
+     case studies cannot.
+   The four together should be wired up before declaring OQ#5 "settled"
    beyond v1's no-stability-promise scope.
 
 ### What is NOT yet done that's worth noting

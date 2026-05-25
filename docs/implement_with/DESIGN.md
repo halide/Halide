@@ -736,8 +736,18 @@ a problem.
 13. Structural matcher with alpha-equivalence + commutativity, reusing
     `IRMatcher`.
 14. Joint multi-output matching.
-15. Tests: simple intrinsic substitutions (vfmadd, single FMA on AVX2)
-    end-to-end; multi-output Tuple instruction end-to-end.
+15. Tests cover four case studies, each exercising a distinct property of
+    the canonical-form prefix:
+    - `vfmadd231ps_256` (§3.3) — single intrinsic, post-FindIntrinsics
+      lifting.
+    - SDOT 4×4 GEMV on ARM (§3.4) — multi-instruction emit; joint
+      matching of four broadcasting SDOTs.
+    - HVX MAC sequences and/or AMX tile triples — validates that
+      `find_intrinsics` and (gated) `extract_tile_operations` inside the
+      prefix produce match-friendly canonical IR.
+    - PTX MMA on CUDA (NVPTX tensor cores) — validates LLVM-backed GPU
+      matching against pre-offload `For::GPUBlock`/`For::GPUThread`
+      structure (canonical form is cut *before* `inject_gpu_offload`).
 
 **Phase 5 — Emit and lowering integration**
 16. Emit callback invocation and Stmt substitution.
@@ -780,6 +790,17 @@ a problem.
 ## 11. Changelog
 
 Format: `YYYY-MM-DD (session N)` — short summary of what changed.
+
+- **2026-05-25 (session 5, Phase 4 kick-off):** Phase 4 case-study
+  list expanded to four entries. PTX MMA (NVPTX tensor cores) added
+  as the LLVM-backed-GPU validation case — closes the
+  "LLVM-backed backends first" line from OQ#5's analysis by
+  exercising matching against pre-`inject_gpu_offload`
+  `For::GPUBlock`/`For::GPUThread` loop structure. §8.2 Phase 4 and
+  [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) updated to
+  list the four case studies and what each one specifically validates.
+  No source-code changes in this doc commit. See
+  [DECISIONS.md](DECISIONS.md#phase-4-case-study-set).
 
 - **2026-05-25 (session 4, pre-Phase-4):** OQ#5 (canonicalization
   prefix) resolved. New function
