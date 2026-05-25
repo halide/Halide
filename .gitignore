@@ -273,3 +273,6 @@ TAGS
 # TODO: these should become .cmake.in
 !packaging/common/HalideConfig.cmake
 !packaging/common/HalideHelpersConfig.cmake
+
+# implement_with: SCRATCH.md is per-session scratch space, not committed.
+docs/implement_with/SCRATCH.md
