@@ -131,6 +131,7 @@ target_sources(
     HexagonOffload.h
     HexagonOptimize.h
     ImageParam.h
+    ImplementWithMatcher.h
     InferArguments.h
     InjectHostDevBufferCopies.h
     Inline.h
@@ -314,6 +315,7 @@ target_sources(
     HexagonOffload.cpp
     HexagonOptimize.cpp
     ImageParam.cpp
+    ImplementWithMatcher.cpp
     InferArguments.cpp
     InjectHostDevBufferCopies.cpp
     Inline.cpp

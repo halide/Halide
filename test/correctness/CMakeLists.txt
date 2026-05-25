@@ -185,6 +185,7 @@ tests(GROUPS correctness
       implement_with_phase1.cpp
       implement_with_phase2.cpp
       implement_with_phase3.cpp
+      implement_with_phase4.cpp
       implicit_args.cpp
       implicit_args_tests.cpp
       implicit_pure_def_with_rvar_args.cpp
@@ -374,6 +375,11 @@ tests(GROUPS correctness
       widening_reduction.cpp
       # keep-sorted end
 )
+
+# The implement_with Phase 4 test calls Internal::lower_spec_to_canonical_form
+# directly; it needs access to the src/ tree to find ImplementWithMatcher.h.
+target_include_directories(correctness_implement_with_phase4
+                           PRIVATE "${Halide_SOURCE_DIR}/src")
 
 # Simd op check tests fix the target features internally, so they
 # only need to be run on one target in CI. Every CI runner targets
