@@ -312,7 +312,7 @@ Stmt inline_function(const Stmt &s, const Function &f) {
     return Inliner(f)(s);
 }
 
-Expr inline_function(Expr e, const Function &f) {
+Expr inline_function(const Expr &e, const Function &f) {
     return Inliner(f)(e);
 }
 

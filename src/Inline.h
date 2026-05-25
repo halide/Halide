@@ -84,7 +84,7 @@ private:
  * values definition). */
 // @{
 Stmt inline_function(const Stmt &s, const Function &f);
-Expr inline_function(Expr e, const Function &f);
+Expr inline_function(const Expr &e, const Function &f);
 void inline_function(Function caller, const Function &f);
 // @}
 
