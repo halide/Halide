@@ -376,20 +376,72 @@ Semantics at lowering time:
 
 ### 4.4 Matcher design
 
-The matcher operates on lowered Halide IR after a fixed prefix of lowering
-passes:
+The matcher operates on lowered Halide IR at a single, well-defined point
+in `lower_impl`: the Stmt returned by
+`Internal::lower_to_canonical_form` (defined in `src/Lower.cpp`). This is
+the deepest point in lowering at which the Stmt is still "the program
+semantics," before user-injected `custom_passes` run and before backend
+offloading (Hexagon RPC, GPU offload, parallel-task lowering, closure
+generation).
 
-- `compute_at` / `store_at` materialization,
-- bounds inference,
-- storage flattening,
-- one pass of `Simplify` + CSE,
-- vectorization of loops marked `vectorize`,
-- but *before* LLVM codegen lowering.
+The exact prefix is the sequence of passes inside that function, in order
+(some are gated on `Target` features and run only when those features are
+on; both spec-lowering and use-site-lowering see the same gating because
+they share a Target):
 
-The spec pipeline is lowered through the same prefix of passes to a canonical
-form. (Recall that the spec is a real Pipeline; it can be lowered just like
-any other Pipeline. The only difference is that the lowering output is used
-as a match pattern rather than codegen'd.)
+1. **Loop-nest construction:** `schedule_functions`, then optionally
+   `inject_memoization`, then `inject_tracing` and `add_parameter_checks`.
+2. **Bounds inference and infrastructure:** `compute_function_value_bounds`,
+   `clamp_unsafe_accesses`, `bounds_inference`, `add_split_factor_checks`,
+   `remove_extern_loops`, `sliding_window`, `uniquify_variable_names`,
+   first `simplify`, `simplify_correlated_differences`,
+   `allocation_bounds_inference`, `add_image_checks`, `remove_undef`,
+   `storage_folding`, `debug_to_file`, `inject_prefetch`,
+   `lower_safe_promises`, `skip_stages`, `fork_async_producers`,
+   `split_tuples`.
+3. **GPU var canonicalization** (if `Target::has_gpu_feature()`):
+   `canonicalize_gpu_vars`, followed by a `simplify_correlated_differences`
+   + `bound_small_allocations` pair.
+4. **Storage flattening and host/device staging:** `storage_flattening`,
+   `add_atomic_mutex`, `unpack_buffers`, optionally
+   `rewrite_memoized_allocations`, and (if host↔device copies are
+   needed) `select_gpu_api` + `inject_host_dev_buffer_copies` + a
+   second `select_gpu_api`.
+5. **Second simplification block:** `simplify` + `unify_duplicate_lets`,
+   `reduce_prefetch_dimension`, `simplify_correlated_differences`,
+   `bound_constant_extent_loops`.
+6. **Loop transformations:** `unroll_loops`, `vectorize_loops` +
+   `simplify`, optionally `fuse_gpu_thread_loops`, `rewrite_interleavings`
+   + `simplify`, `partition_loops` + `simplify`, `stage_strided_loads`,
+   `trim_no_ops`, `rebase_loops_to_zero`, `hoist_loop_invariant_if_statements`,
+   `inject_early_frees`, optionally `fuzz_float_stores`.
+7. **Final normalization:** `simplify_correlated_differences`,
+   `bound_small_allocations`, optionally `inject_profiling` and
+   `lower_warp_shuffles`, `common_subexpression_elimination`,
+   `lower_unsafe_promises`.
+8. **Intrinsic lifting:** optionally `extract_tile_operations` (AMX, gated on
+   `Target::AVX512_SapphireRapids`), `flatten_nested_ramps`,
+   `remove_dead_allocations` + `simplify` + `hoist_loop_invariant_values` +
+   `hoist_loop_invariant_if_statements`, **`find_intrinsics`**,
+   `hoist_prefetches`, optionally `strip_asserts` (gated on `Target::NoAsserts`).
+
+The spec pipeline is lowered through the *same* `lower_to_canonical_form`
+function, so the spec and use-site IRs are produced by identical pass
+sequences modulo Target-conditional gates. (Recall that the spec is a real
+Pipeline; it can be lowered just like any other Pipeline. The only
+difference is that the lowering output is used as a match pattern rather
+than codegen'd.) FindIntrinsics runs *inside* the prefix, so the matcher
+sees patterns already lifted to Halide intrinsic `Call` nodes. AMX tile
+extraction also runs inside, so AMX-style instruction declarations match
+post-lifting. HVX MAC patterns recognized by FindIntrinsics likewise match
+in their lifted form.
+
+**Stability.** v1 makes no stability promise about the prefix. The single
+source of truth is `lower_to_canonical_form` in `src/Lower.cpp` — changes
+to that function change canonical form and constitute breaking changes
+for in-tree instruction declarations. Out-of-tree instruction libraries
+are not yet a target use case; revisit prefix stability (e.g. via per-
+instruction prefix versioning) in v1.5+. OQ#5 captures the rationale.
 
 Matching is then structural with the following allowances:
 
@@ -569,11 +621,19 @@ through every directive.
    stubs undefined input Funcs inside a spec thunk. See
    [DECISIONS.md](DECISIONS.md#auto-stub-for-undefined-spec-input-funcs).
 
-5. **What is the precise canonicalization prefix?** Listed in §4.4, but the
-   exact pass sequence needs to be pinned down and made stable. Match
-   success must be reproducible across Halide versions; this means the
-   canonicalization prefix is effectively part of the public API of the
-   feature.
+5. ~~**What is the precise canonicalization prefix?**~~ **Resolved
+   (session 4, pre-Phase-4):** the prefix is the body of
+   `Internal::lower_to_canonical_form` in `src/Lower.cpp` — every
+   Stmt-transforming pass from `schedule_functions` through
+   `strip_asserts`, with `find_intrinsics` and (gated)
+   `extract_tile_operations` *inside* the prefix so that HVX MAC and AMX
+   tile patterns match in their lifted form. The cut is *before* user-
+   injected `custom_passes` and *before* backend offloading
+   (Hexagon RPC, GPU offload, parallel-task lowering). v1 makes no
+   stability promise — prefix changes are breaking changes; revisit in
+   v1.5+ when out-of-tree instruction libraries become a target use
+   case. See §4.4 above and
+   [DECISIONS.md](DECISIONS.md#oq5-canonicalization-prefix).
 
 6. **Diagnostics on match failure.** The "diff between canonical spec and
    canonical use-site form" idea is appealing but the implementation is
@@ -720,6 +780,21 @@ a problem.
 ## 11. Changelog
 
 Format: `YYYY-MM-DD (session N)` — short summary of what changed.
+
+- **2026-05-25 (session 4, pre-Phase-4):** OQ#5 (canonicalization
+  prefix) resolved. New function
+  `Internal::lower_to_canonical_form(outputs, env, order, fused_groups,
+  target, requirements, pipeline_name, trace_pipeline, log)` in
+  `src/Lower.cpp` owns the prefix; `lower_impl` calls it. The function
+  is a no-behavior-change extraction of the existing pass sequence
+  from `schedule_functions` through `strip_asserts`, cutting *before*
+  user `custom_passes` and *before* backend offloading. Both the user
+  pipeline and (in Phase 4+) the spec pipeline will be lowered through
+  this single function so structural matching sees identical canonical
+  IR on both sides. §4.4 rewritten to spell out the prefix in order.
+  No stability promise in v1; in-tree intrinsic catalogs stay in sync
+  by construction. See
+  [DECISIONS.md](DECISIONS.md#oq5-canonicalization-prefix).
 
 - **2026-05-25 (session 3, Phase 3):** Schedule transfer +
   constraint-installation pass landed. New file pair

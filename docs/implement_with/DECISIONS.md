@@ -27,6 +27,7 @@ Distinguish two categories:
 - [Positional spec-Var → user-Var mapping in Phase 3](#positional-spec-var--user-var-mapping-in-phase-3) (Phase 3, session 3)
 - [Constant-bound conflict detection](#constant-bound-conflict-detection) (Phase 3, session 3)
 - [Serialization: hard error in Phase 3](#serialization-hard-error-in-phase-3) (Phase 3, session 3)
+- [OQ#5 — canonicalization prefix](#oq5-canonicalization-prefix) (Pre-Phase-4, session 4) **[REVISES DESIGN]**
 
 ---
 
@@ -425,3 +426,90 @@ for instructions, the assert is lifted.
 **Implication.** `WITH_SERIALIZATION=ON` builds work fine for pipelines
 that don't use `implement_with`. Pipelines that do will hit a clear
 `user_assert` mentioning `implement_with` and `WITH_SERIALIZATION=OFF`.
+
+---
+
+## OQ#5 — canonicalization prefix
+
+**Phase:** Pre-Phase-4 · **Session:** 4 (2026-05-25) · **Status:** Resolved
+**[REVISES DESIGN]**
+
+**Decision.** Canonical form for the structural matcher (Phase 4+) is the
+Stmt returned by `Internal::lower_to_canonical_form(outputs, env, order,
+fused_groups, target, requirements, pipeline_name, trace_pipeline, log)`,
+defined in `src/Lower.cpp`. This function owns every Stmt-transforming
+pass from `schedule_functions` through `strip_asserts`, in the order they
+appeared in `lower_impl` before extraction. The cut is *before*
+user-injected `custom_passes` and *before* backend offloading (Hexagon
+RPC, GPU offload, parallel-task lowering, closure generation). DESIGN.md
+§4.4 lists the exact ordered pass sequence; the canonical source of
+truth is the function body, not the docs.
+
+No stability promise in v1; revisit in v1.5+ if/when out-of-tree
+instruction libraries with independent release cadence become a target.
+Changes to `lower_to_canonical_form` are breaking changes for in-tree
+instruction declarations.
+
+**Alternatives considered.**
+
+1. **Cut earlier (after `partition_loops + simplify`, line ~380 in
+   `lower_impl`).** **Rejected:** would put `find_intrinsics` and
+   `extract_tile_operations` *outside* canonical form. HVX MAC and AMX
+   tile patterns are lifted by those passes; matching pre-lifting would
+   force spec authors to anticipate every lifting rewrite, which
+   directly contradicts the design's intent of giving authors a
+   high-level Halide spec syntax.
+2. **Cut at `result_module.set_conceptual_code_stmt(s)` (Halide's own
+   "this is canonical IR" mark, line 482).** **Rejected:** that point
+   is *after* `custom_passes`. Including user-injected
+   `IRMutator`-implemented passes in canonical form makes matching
+   depend on the user's local toolbox — non-reproducible across
+   pipelines that import the same instruction library. By cutting
+   before custom_passes, we keep canonical form a property of (env,
+   Target) alone.
+3. **Cut later, after `inject_hexagon_rpc` / `inject_gpu_offload`.**
+   **Rejected:** at that point the matched region is wrapped in a kernel
+   parameter or extern-call shell, and matching across that boundary
+   adds significant complexity. The pre-offload IR has GPU loops as
+   `For` nodes with `For::GPUBlock`/`For::GPUThread` types — the
+   matcher can recognize those directly.
+4. **Versioned prefix (each `Instruction` carries a "matched against
+   canonical form vN" tag; Halide ships compatibility implementations
+   for prior prefixes).** **Rejected for v1:** heavy, premature. v1
+   ships in-tree intrinsic catalogs that update in lockstep with the
+   prefix. Revisit when out-of-tree libraries become real.
+
+**Reasoning.** Four constraints jointly point at this cut:
+
+- *Punt stability:* we want freedom to refine the prefix as the matcher
+  is built. The single-function source-of-truth model gives one place
+  reviewers can detect canonical-form-changing edits; that's enough.
+- *LLVM-backed GPU first, string-y backends later:* string-y backends
+  (OpenCL, Metal) diverge in *codegen*, well after this cut. They
+  inherit canonical form for free as long as their codegen handles the
+  substituted intrinsic `Call` nodes. LLVM-backed targets (x86, ARM,
+  CUDA via NVPTX, Hexagon) all flow through this exact point.
+- *HVX MAC and AMX tiles:* both rely on intrinsic-lifting passes
+  (`find_intrinsics`, `extract_tile_operations`) that run inside the
+  prefix. Putting them inside means both spec and use-site see the
+  lifted form.
+- *Exo's "alignment is the scheduler's problem":* the user's schedule
+  must produce a loop nest that structurally matches the spec's after
+  the prefix. The matcher is structural-mod-alpha + Simplify-equivalence
+  — no SMT, matching Halide's §6 non-goal.
+
+**Implication.**
+
+- Spec authors who want to match a pattern *before* FindIntrinsics
+  lifting have no opt-out today. The spec should be written so its
+  post-FindIntrinsics form matches the post-FindIntrinsics use-site
+  form. Document this as a known sharp edge.
+- `custom_passes` runs in `lower_impl` *after* the canonical-form
+  prefix returns and *after* match-and-emit (Phase 5+) substitutes the
+  matched region. User custom passes therefore observe the substituted
+  Stmt, which is what they typically want.
+- The Phase 3 schedule-transfer pass (`apply_implement_with_directives`)
+  is *upstream* of canonical form — it runs in `lower_impl` before
+  `lower_to_canonical_form` is invoked, so its transferred bounds
+  participate in canonical-form bounds inference. This is correct and
+  doesn't need to change.

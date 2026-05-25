@@ -2,9 +2,9 @@
 
 **Branch:** `alexreinking/implement_with` (worktree at
 `/var/home/alex/dev/Halide/implement_with`)
-**Current phase:** Phase 3 complete (single-output, bounds only);
-Phase 4 not started.
-**Last updated:** 2026-05-25 (session 3)
+**Current phase:** Phase 3 complete; OQ#5 (canonicalization prefix)
+resolved; Phase 4 ready to start.
+**Last updated:** 2026-05-25 (session 4)
 
 This file is the single source of truth for *where we are*. The design doc
 ([`DESIGN.md`](DESIGN.md)) is the spec; this file is the trace. Update at
@@ -19,10 +19,54 @@ the end of every session.
 | 1     | Infrastructure (inert API)               | **Done**    | Session 1. Two commits on branch. |
 | 2     | Spec-pattern Funcs                       | **Done**    | Session 2. Two commits on branch. |
 | 3     | Schedule transfer + constraint install   | **Done**    | Session 3. Single-output, bounds only; vectorize/align/etc. deferred. |
-| 4     | Matcher (canonicalization + structural)  | Not started | Most complex phase. Resolve OQ#5 first. |
+| 4     | Matcher (canonicalization + structural)  | Not started | OQ#5 resolved session 4; `lower_to_canonical_form` extracted. Ready to start. |
 | 5     | Emit + lowering integration              | Not started | |
 | 6     | Diagnostics                              | Not started | |
 | 7 (v1.5) | Affine match parameters               | Not started | |
+
+---
+
+## Session 4 — what landed (pre-Phase-4 setup, 2026-05-25)
+
+### Source changes (committed, 1 commit)
+
+- **`src/Lower.cpp`** — extracted `Internal::lower_to_canonical_form`
+  from `lower_impl`. No-behavior-change refactor; the function owns
+  every Stmt-transforming pass from `schedule_functions` through
+  `strip_asserts`, with `find_intrinsics` and AMX
+  `extract_tile_operations` *inside* the prefix. `lower_impl` now
+  calls it. User `custom_passes` and backend offloading still run
+  inline in `lower_impl` after it returns.
+
+### Resolved open questions
+
+- **OQ#5 (canonicalization prefix)** — pinned at the body of
+  `lower_to_canonical_form`. v1 makes no stability promise; in-tree
+  intrinsic catalogs stay in sync by construction. Cut is *before*
+  custom_passes (so canonical form is a property of (env, Target)
+  alone, not the user's local toolbox) and *before* backend
+  offloading. See
+  [DECISIONS.md](DECISIONS.md#oq5-canonicalization-prefix) for the
+  four constraints that jointly point at this cut.
+
+### Doc changes
+
+- **DESIGN.md §4.4** rewritten — replaced the prose bullet list with
+  the actual ordered pass sequence inside `lower_to_canonical_form`.
+  OQ#5 marked resolved with a link to DECISIONS.
+- **DECISIONS.md** — new OQ#5 entry with the four-constraint analysis
+  and the alternatives considered (cut earlier / at
+  `set_conceptual_code_stmt` / post-offload / versioned).
+- DESIGN.md changelog updated.
+
+### Tests
+
+| Path                                                  | Status | Notes |
+|-------------------------------------------------------|--------|-------|
+| `test/correctness/implement_with_phase1.cpp`          | Passes | Unchanged. |
+| `test/correctness/implement_with_phase2.cpp`          | Passes | Unchanged. |
+| `test/correctness/implement_with_phase3.cpp`          | Passes | Unchanged. |
+| Sample of unrelated correctness tests                 | Passes | bounds, simplify, vectorize_varying_allocation_size, compute_at_split_rvar, memoize — exercising the any_memoized path through the refactor. |
 
 ---
 
@@ -217,8 +261,6 @@ See [`DECISIONS.md`](DECISIONS.md). Highlights from session 1:
 
 ### Carried into Phase 4
 
-- **Canonicalization prefix (OQ#5):** must be pinned down before Phase
-  4 starts. Not yet decided.
 - **Multi-output schedule transfer:** Phase 3 supports single-output
   only. Multi-output (`co_outputs`, Tuple-valued primaries) needs
   name-keyed spec→user mapping; cleanest to land alongside the matcher
@@ -254,32 +296,53 @@ See [`DECISIONS.md`](DECISIONS.md). Highlights from session 1:
 
 ## Session handoff — next session start here
 
-1. **Resolve OQ#5 (canonicalization prefix)** in DESIGN.md before
-   writing any matcher code. The matcher needs a stable definition
-   of canonical form; this needs to be locked in first because it
-   becomes part of the public API of the feature (a future Halide
-   version cannot silently change canonical form without breaking
-   user-out-of-tree instruction libraries).
-2. **Begin Phase 4 (matcher).** Per DESIGN.md §4.4 and §8.2 Phase 4:
-   - Lower both spec pipeline and use-site region through the §4.4
-     canonical-form prefix.
+1. **Begin Phase 4 (matcher).** OQ#5 is resolved and
+   `lower_to_canonical_form` is in place — both spec and use-site can
+   now be lowered to a single canonical form. Per DESIGN.md §4.4 and
+   §8.2 Phase 4:
+   - Add a spec-pipeline lowering entry point that builds an env from
+     a Pipeline and calls `lower_to_canonical_form`. The spec doesn't
+     have args/requirements/etc.; supply empty defaults.
+   - Locate the matched region in the user's canonical Stmt by walking
+     for a `For` node whose qualified name corresponds to the
+     directive's `loop_var_name` (stage-qualified per Halide's
+     internal naming convention).
    - Structural matcher with alpha-equivalence + commutativity, reusing
-     `IRMatcher` from `src/IRMatch.h`.
+     `IRMatcher` from `src/IRMatch.h`. FindIntrinsics has already run
+     inside the prefix, so HVX MAC / AMX tile patterns will be matched
+     in their lifted form.
    - Establish the spec-Var → user-Var rename map from the match.
      (Phase 3 currently uses a positional fallback anchored at arg 0;
      replace that with the matched rename map.)
    - Joint multi-output matching (and extend Phase 3 schedule transfer
      accordingly).
-3. **Extend schedule transfer once the matcher provides a rename map.**
+2. **Extend schedule transfer once the matcher provides a rename map.**
    Currently `ApplyImplementWith.cpp` transfers only
    `FuncSchedule::bounds()` and only single-output. Once the matcher
    gives us a proper var rename, layer in `align_storage`, `vectorize`
    (as a width requirement), and the multi-output path. Update Phase 3
    tests rather than the test file's filename — they should keep
    passing as Phase 4 lands.
-4. **Tests for Phase 4:** simple intrinsic substitutions end-to-end on
-   `vfmadd231ps_256`-style examples per the "get to end-to-end early"
-   guidance in DESIGN.md §8.1.
+3. **Tests for Phase 4:** the design's "get to end-to-end early"
+   guidance (§8.1) now has three concrete case studies attached from
+   the OQ#5 conversation:
+   - `vfmadd231ps_256` (single FMA on AVX2/FMA — the canonical
+     §3.3 example).
+   - SDOT 4×4 GEMV on ARM (§3.4 — multi-instruction emit, tests joint
+     matching of the four broadcasting SDOTs).
+   - At least one of HVX MAC sequences or AMX tile triples (validates
+     that the matcher works with intrinsic-lifted IR).
+   These three should be wired up before declaring OQ#5 "settled"
+   beyond v1's no-stability-promise scope.
+
+### What is NOT yet done that's worth noting
+
+- The opportunistic *early-warning* target-feature check at
+  `implement_with` call time (the second half of OQ#1's proposal) is
+  not implemented. Consider it if generator workflows surface noisy
+  late-error reports.
+- The user's `MatchContext::input/output/param` accessors are still
+  stubs — wired up in Phase 5 alongside emit substitution.
 
 ### What is NOT yet done that's worth noting
 
