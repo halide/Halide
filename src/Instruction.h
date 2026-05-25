@@ -7,12 +7,11 @@
  * pure-Halide spec paired with a hardware/library emission. Instructions
  * are committed at scheduling time via Func::implement_with.
  *
- * Phase 2: spec-pattern Func mode is wired up — Instruction::spec()
- * marks output Funcs as spec-pattern, and Pipeline::compile_to_module
- * guards against realizing spec-pattern Pipelines. No structural
- * matching, schedule transfer, or lowering substitution yet. See
- * docs/implement_with/DESIGN.md (and IMPLEMENTATION_STATUS.md for
- * current phase status).
+ * Phase 3: target-feature check + transfer of contractual bounds from
+ * spec Funcs onto matched user Funcs runs at lowering time (see
+ * ApplyImplementWith.h). Structural matching, match-parameter binding,
+ * and emit substitution are still future work. See
+ * docs/implement_with/DESIGN.md and IMPLEMENTATION_STATUS.md.
  */
 
 #include <functional>
@@ -149,8 +148,9 @@ public:
 
 namespace Internal {
 
-/** A recorded implement_with directive sitting on a StageSchedule. Phase
- * 1: this is data-only; the lowering pipeline does not consult it. */
+/** A recorded implement_with directive sitting on a StageSchedule.
+ * Consumed at lowering time by apply_implement_with_directives (Phase 3).
+ * Structural matching and lowering substitution are still future work. */
 struct ImplementWithDirective {
     /** The Instruction this stage was committed to. */
     Instruction instruction;

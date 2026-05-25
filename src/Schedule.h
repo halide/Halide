@@ -787,8 +787,11 @@ public:
      * Func::implement_with or Stage::implement_with. See \ref Instruction
      * and docs/implement_with/DESIGN.md.
      *
-     * Phase 1: these are recorded but inert; the lowering pipeline does
-     * not yet consult them. */
+     * Phase 3: consumed by Internal::apply_implement_with_directives at
+     * lowering time, which checks the instruction's required Target
+     * features and transfers contractual bounds onto the matched user
+     * Funcs. Structural matching + emit substitution are still future
+     * work (Phases 4–5). */
     // @{
     const std::vector<ImplementWithDirective> &implement_with_directives() const;
     std::vector<ImplementWithDirective> &implement_with_directives();

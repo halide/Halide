@@ -12,6 +12,7 @@
 #include "AddParameterChecks.h"
 #include "AddSplitFactorChecks.h"
 #include "AllocationBoundsInference.h"
+#include "ApplyImplementWith.h"
 #include "AsyncProducers.h"
 #include "BoundConstantExtentLoops.h"
 #include "BoundSmallAllocations.h"
@@ -159,6 +160,13 @@ void lower_impl(const vector<Function> &output_funcs,
     for (auto &iter : env) {
         iter.second.lock_loop_levels();
     }
+
+    // Resolve implement_with directives: target-feature check + transfer of
+    // contractual scheduling directives from spec Funcs onto matched user
+    // Funcs. Must run before bounds inference so the transferred bounds
+    // participate normally. (Phase 3; structural matching + emit
+    // substitution still TODO in later phases.)
+    apply_implement_with_directives(env, t);
 
     // Substitute in wrapper Funcs
     env = wrap_func_calls(env);

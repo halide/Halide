@@ -57,6 +57,7 @@ target_sources(
     AddSplitFactorChecks.h
     AlignLoads.h
     AllocationBoundsInference.h
+    ApplyImplementWith.h
     ApplySplit.h
     Argument.h
     AssociativeOpsTable.h
@@ -240,6 +241,7 @@ target_sources(
     AddSplitFactorChecks.cpp
     AlignLoads.cpp
     AllocationBoundsInference.cpp
+    ApplyImplementWith.cpp
     ApplySplit.cpp
     Argument.cpp
     AssociativeOpsTable.cpp
