@@ -301,6 +301,7 @@ struct StageScheduleContents {
     std::vector<Split> splits;
     std::vector<Dim> dims;
     std::vector<PrefetchDirective> prefetches;
+    std::vector<ImplementWithDirective> implement_with_directives;
     FuseLoopLevel fuse_level;
     std::vector<FusedPair> fused_pairs;
     bool touched = false;
@@ -553,6 +554,7 @@ StageSchedule StageSchedule::get_copy() const {
     copy.contents->splits = contents->splits;
     copy.contents->dims = contents->dims;
     copy.contents->prefetches = contents->prefetches;
+    copy.contents->implement_with_directives = contents->implement_with_directives;
     copy.contents->fuse_level = contents->fuse_level;
     copy.contents->fused_pairs = contents->fused_pairs;
     copy.contents->touched = contents->touched;
@@ -600,6 +602,14 @@ std::vector<PrefetchDirective> &StageSchedule::prefetches() {
 
 const std::vector<PrefetchDirective> &StageSchedule::prefetches() const {
     return contents->prefetches;
+}
+
+std::vector<ImplementWithDirective> &StageSchedule::implement_with_directives() {
+    return contents->implement_with_directives;
+}
+
+const std::vector<ImplementWithDirective> &StageSchedule::implement_with_directives() const {
+    return contents->implement_with_directives;
 }
 
 FuseLoopLevel &StageSchedule::fuse_level() {

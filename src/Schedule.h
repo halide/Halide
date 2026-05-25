@@ -26,6 +26,7 @@ namespace Internal {
 class Function;
 struct FunctionContents;
 struct LoopLevelContents;
+struct ImplementWithDirective;
 }  // namespace Internal
 
 /** Different ways to handle a tail case in a split when the
@@ -780,6 +781,17 @@ public:
     // @{
     bool override_atomic_associativity_test() const;
     bool &override_atomic_associativity_test();
+    // @}
+
+    /** User-defined Instruction directives applied to this stage via
+     * Func::implement_with or Stage::implement_with. See \ref Instruction
+     * and docs/implement_with/DESIGN.md.
+     *
+     * Phase 1: these are recorded but inert; the lowering pipeline does
+     * not yet consult them. */
+    // @{
+    const std::vector<ImplementWithDirective> &implement_with_directives() const;
+    std::vector<ImplementWithDirective> &implement_with_directives();
     // @}
 
     /** Pass an IRVisitor through to all Exprs referenced in the

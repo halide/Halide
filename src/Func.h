@@ -8,6 +8,7 @@
 
 #include "Argument.h"
 #include "Expr.h"
+#include "Instruction.h"
 #include "JITModule.h"
 #include "Module.h"
 #include "Param.h"
@@ -487,6 +488,24 @@ public:
      * otherwise fire. This counts as a schedule, so calling this twice on the
      * same Stage will fail the assertion. */
     void unscheduled();
+
+    /** Commit this stage to be implemented by the given user-defined
+     * Instruction at the named loop level. See docs/implement_with/DESIGN.md
+     * and \ref Instruction.
+     *
+     * Phase 1: the directive is recorded on the StageSchedule but does
+     * not yet influence bounds inference, lowering, or codegen. Use the
+     * multi-output overload for instructions whose spec has more than
+     * one output Func. */
+    // @{
+    Stage &implement_with(const VarOrRVar &loop_level,
+                          const Instruction &instr,
+                          ImplementMode mode = ImplementMode::Strict);
+    Stage &implement_with(const VarOrRVar &loop_level,
+                          const Instruction &instr,
+                          const std::vector<Func> &co_outputs,
+                          ImplementMode mode = ImplementMode::Strict);
+    // @}
 };
 
 // For backwards compatibility, keep the ScheduleHandle name.
@@ -2367,6 +2386,26 @@ public:
      * this function than the allocation size you have stated, a runtime
      * error will occur when you try to run the pipeline. */
     Func &bound_storage(const Var &dim, const Expr &bound);
+
+    /** Commit this Func (its initial definition) to be implemented by the
+     * given user-defined Instruction at the named loop level. To target
+     * an update definition, call implement_with on the corresponding
+     * Stage (e.g. `f.update(0).implement_with(...)`). See
+     * docs/implement_with/DESIGN.md and \ref Instruction.
+     *
+     * Phase 1: the directive is recorded on the StageSchedule but does
+     * not yet influence bounds inference, lowering, or codegen. Use the
+     * multi-output overload for instructions whose spec has more than
+     * one output Func. */
+    // @{
+    Func &implement_with(const VarOrRVar &loop_level,
+                         const Instruction &instr,
+                         ImplementMode mode = ImplementMode::Strict);
+    Func &implement_with(const VarOrRVar &loop_level,
+                         const Instruction &instr,
+                         const std::vector<Func> &co_outputs,
+                         ImplementMode mode = ImplementMode::Strict);
+    // @}
 
     /** Allocate storage for this function within f's loop over
      * var. Scheduling storage is optional, and can be used to

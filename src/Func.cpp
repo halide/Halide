@@ -2131,6 +2131,35 @@ void Stage::unscheduled() {
     definition.schedule().touched() = true;
 }
 
+Stage &Stage::implement_with(const VarOrRVar &loop_level,
+                             const Instruction &instr,
+                             ImplementMode mode) {
+    return implement_with(loop_level, instr, std::vector<Func>{}, mode);
+}
+
+Stage &Stage::implement_with(const VarOrRVar &loop_level,
+                             const Instruction &instr,
+                             const std::vector<Func> &co_outputs,
+                             ImplementMode mode) {
+    user_assert(instr.defined())
+        << "Stage::implement_with called with an undefined Instruction. "
+        << "Did you forget to call Instruction::Builder::build()?\n";
+
+    Internal::ImplementWithDirective d;
+    d.instruction = instr;
+    d.loop_var_name = loop_level.name();
+    d.loop_var_is_rvar = loop_level.is_rvar;
+    d.co_output_names.reserve(co_outputs.size());
+    for (const Func &co : co_outputs) {
+        d.co_output_names.push_back(co.name());
+    }
+    d.mode = mode;
+
+    definition.schedule().implement_with_directives().push_back(std::move(d));
+    definition.schedule().touched() = true;
+    return *this;
+}
+
 void Func::invalidate_cache() {
     if (pipeline_.defined()) {
         pipeline_.invalidate_cache();
@@ -2945,6 +2974,23 @@ Func &Func::bound_storage(const Var &dim, const Expr &bound) {
                << ", could not find var " << dim.name()
                << " to bound the storage of.\n"
                << dump_dim_list(func.schedule().storage_dims());
+    return *this;
+}
+
+Func &Func::implement_with(const VarOrRVar &loop_level,
+                            const Instruction &instr,
+                            ImplementMode mode) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).implement_with(loop_level, instr, mode);
+    return *this;
+}
+
+Func &Func::implement_with(const VarOrRVar &loop_level,
+                            const Instruction &instr,
+                            const std::vector<Func> &co_outputs,
+                            ImplementMode mode) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).implement_with(loop_level, instr, co_outputs, mode);
     return *this;
 }
 

@@ -134,6 +134,7 @@ target_sources(
     InjectHostDevBufferCopies.h
     Inline.h
     InlineReductions.h
+    Instruction.h
     IntegerDivisionTable.h
     Interval.h
     IntrusivePtr.h
@@ -315,6 +316,7 @@ target_sources(
     InjectHostDevBufferCopies.cpp
     Inline.cpp
     InlineReductions.cpp
+    Instruction.cpp
     IntegerDivisionTable.cpp
     Interval.cpp
     IR.cpp

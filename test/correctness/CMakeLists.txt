@@ -182,6 +182,7 @@ tests(GROUPS correctness
       host_alignment.cpp
       image_io.cpp
       image_of_lists.cpp
+      implement_with_phase1.cpp
       implicit_args.cpp
       implicit_args_tests.cpp
       implicit_pure_def_with_rvar_args.cpp
