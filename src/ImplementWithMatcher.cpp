@@ -26,25 +26,17 @@
 namespace Halide {
 namespace Internal {
 
-Stmt lower_spec_to_canonical_form(const Pipeline &spec, const Target &t) {
-    // Extract the Internal::Function handles from the spec's outputs.
-    std::vector<Function> output_funcs;
-    for (const Func &f : spec.outputs()) {
-        Function fn = f.function();
-        internal_assert(fn.is_spec_pattern())
-            << "lower_spec_to_canonical_form expects every output of the "
-               "spec Pipeline to be a spec-pattern Func (one produced by "
-               "Instruction::spec()); got output '"
-            << fn.name() << "' which is not marked spec-pattern.";
-        output_funcs.push_back(fn);
-    }
+namespace {
 
-    // Mirror lower_impl's pre-canonical-form setup. Two intentional
-    // omissions compared to lower_impl:
-    //   - apply_implement_with_directives: specs do not themselves carry
-    //     implement_with directives, so there is nothing to apply.
-    //   - any-strict-float flag plumbing into a Module: we never produce
-    //     a Module here, so the bool return of strictify_float is dropped.
+// Common back-half of lower_impl: mirrors every step in lower_impl from
+// deep_copy through lower_to_canonical_form, omitting only the
+// apply_implement_with_directives call (which would recurse) and the
+// any-strict-float flag plumbing (which only matters for Module
+// construction). Used to produce canonical-form IR for either side of
+// the matcher.
+Stmt lower_no_implement_with(const std::vector<Function> &output_funcs,
+                             const Target &t,
+                             const std::string &pipeline_name) {
     auto [outputs, env] =
         deep_copy(output_funcs, build_environment(output_funcs));
 
@@ -63,8 +55,32 @@ Stmt lower_spec_to_canonical_form(const Pipeline &spec, const Target &t) {
 
     return lower_to_canonical_form(outputs, env, order, fused_groups, t,
                                    /*requirements=*/{},
-                                   /*pipeline_name=*/"implement_with_spec",
+                                   pipeline_name,
                                    /*trace_pipeline=*/false);
+}
+
+}  // namespace
+
+Stmt lower_spec_to_canonical_form(const Pipeline &spec, const Target &t) {
+    std::vector<Function> output_funcs;
+    for (const Func &f : spec.outputs()) {
+        Function fn = f.function();
+        internal_assert(fn.is_spec_pattern())
+            << "lower_spec_to_canonical_form expects every output of the "
+               "spec Pipeline to be a spec-pattern Func (one produced by "
+               "Instruction::spec()); got output '"
+            << fn.name() << "' which is not marked spec-pattern.";
+        output_funcs.push_back(fn);
+    }
+    return lower_no_implement_with(output_funcs, t, "implement_with_spec");
+}
+
+Stmt lower_pipeline_to_canonical_form(const Pipeline &p, const Target &t) {
+    std::vector<Function> output_funcs;
+    for (const Func &f : p.outputs()) {
+        output_funcs.push_back(f.function());
+    }
+    return lower_no_implement_with(output_funcs, t, "implement_with_user");
 }
 
 namespace {

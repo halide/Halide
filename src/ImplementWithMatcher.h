@@ -42,6 +42,18 @@ namespace Internal {
  * Target-conditional gates noted in DESIGN.md §4.4. */
 Stmt lower_spec_to_canonical_form(const Pipeline &spec, const Target &t);
 
+/** Lower an arbitrary user pipeline to canonical form via the same
+ * pre-canonical-form prefix as `lower_spec_to_canonical_form`. Differs
+ * from the spec variant only in that it does not assert that the
+ * pipeline's outputs are spec-pattern Funcs.
+ *
+ * Intended for situations (e.g. matcher case-study tests, or any
+ * future user-IR comparison) where the caller wants a canonical-form
+ * Stmt for a real Halide pipeline without going through the full
+ * compile path. As with the spec variant, the `implement_with`
+ * directive hook is not invoked. */
+Stmt lower_pipeline_to_canonical_form(const Pipeline &p, const Target &t);
+
 /** Locate the For node in a canonical-form Stmt that corresponds to
  * an implement_with directive's loop level. The directive is keyed by
  * (user_func_name, stage_index, loop_var_name); the For node we look
