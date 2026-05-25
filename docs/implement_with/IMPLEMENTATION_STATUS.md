@@ -2,9 +2,10 @@
 
 **Branch:** `alexreinking/implement_with` (worktree at
 `/var/home/alex/dev/Halide/implement_with`)
-**Current phase:** Phase 3 complete; OQ#5 (canonicalization prefix)
-resolved; Phase 4 ready to start.
-**Last updated:** 2026-05-25 (session 4)
+**Current phase:** Phase 4 in progress. Spec-pipeline lowering entry
+point and region locator landed; structural matcher itself is the next
+piece.
+**Last updated:** 2026-05-25 (session 5)
 
 This file is the single source of truth for *where we are*. The design doc
 ([`DESIGN.md`](DESIGN.md)) is the spec; this file is the trace. Update at
@@ -19,10 +20,75 @@ the end of every session.
 | 1     | Infrastructure (inert API)               | **Done**    | Session 1. Two commits on branch. |
 | 2     | Spec-pattern Funcs                       | **Done**    | Session 2. Two commits on branch. |
 | 3     | Schedule transfer + constraint install   | **Done**    | Session 3. Single-output, bounds only; vectorize/align/etc. deferred. |
-| 4     | Matcher (canonicalization + structural)  | Not started | OQ#5 resolved session 4; `lower_to_canonical_form` extracted. Ready to start. |
+| 4     | Matcher (canonicalization + structural)  | In progress | Session 5: PTX MMA added to case studies; `lower_to_canonical_form` exposed in header; `lower_spec_to_canonical_form` and `find_implement_with_loop` landed. Structural matcher itself is next. |
 | 5     | Emit + lowering integration              | Not started | |
 | 6     | Diagnostics                              | Not started | |
 | 7 (v1.5) | Affine match parameters               | Not started | |
+
+---
+
+## Session 5 — what landed (Phase 4 kick-off, 2026-05-25)
+
+### Doc changes (1 commit)
+
+- **DESIGN.md / IMPLEMENTATION_STATUS.md / DECISIONS.md** — Phase 4
+  case-study list expanded from three entries to four. PTX MMA on
+  CUDA (NVPTX tensor cores) added as the LLVM-backed-GPU validation
+  case. DECISIONS.md gets a new "Phase 4 case-study set" entry with
+  the rationale and rejected alternatives (three-cases-only;
+  pick-one-of-HVX-AMX; string-y GPU). DESIGN.md changelog updated.
+
+### Source changes (3 commits)
+
+- **`src/Lower.h` / `src/Lower.cpp`** — exposed
+  `Internal::lower_to_canonical_form` via Lower.h. Moved out of the
+  anonymous namespace and dropped the internal `LoweringLogger`
+  parameter (now instantiated inside the function). `lower_impl`
+  moved into its own anonymous namespace. No-behavior-change
+  refactor.
+- **`src/ImplementWithMatcher.h` / `src/ImplementWithMatcher.cpp`**
+  (new) — defines two pieces of matcher infrastructure:
+    - `Internal::lower_spec_to_canonical_form(spec, target)` — spec-
+      side counterpart of `lower_impl`'s pre-canonical-form prefix.
+      Runs the same setup (`deep_copy + build_environment`,
+      `lower_target_query_ops`, `strictify_float`,
+      `lock_loop_levels`, `wrap_func_calls`, `realization_order`,
+      `simplify_specializations`) then calls
+      `lower_to_canonical_form`. Intentional omission vs.
+      `lower_impl`: does *not* call
+      `apply_implement_with_directives` (specs cannot themselves
+      carry instructions).
+    - `Internal::find_implement_with_loop(stmt, func, stage, var)`
+      — IRVisitor that locates the `For` node whose stage-qualified
+      name is `<func>.s<stage>.<var>` in a canonical-form Stmt.
+      Returns undefined if not found.
+- **`src/CMakeLists.txt`** — `ImplementWithMatcher.{h,cpp}` registered
+  alphabetically (between `ImageParam` and `InferArguments`).
+- **`test/correctness/implement_with_phase4.cpp`** (new) — 4 sub-tests:
+    - `test_spec_lowers_to_nonempty_stmt` — lowers an Instruction's
+      spec through the new entry point and verifies the lowered
+      Stmt is non-trivial and mentions the output Func's name.
+    - `test_use_site_pipeline_still_compiles` — regression check
+      that the Phase 3 lowering path is intact.
+    - `test_find_implement_with_loop_returns_for_node` — locator
+      finds the expected For in a spec lowered with explicit
+      `Var("i")`.
+    - `test_find_implement_with_loop_returns_undefined_when_missing`.
+- **`test/correctness/CMakeLists.txt`** — phase4 test registered;
+  its target adds `${Halide_SOURCE_DIR}/src` to the include path
+  because it calls `Internal::` API directly.
+
+### Known noise (not a regression)
+
+- Lowering a spec pipeline emits warnings of the form
+  `"It is meaningless to bound dimension v0 of function a to be
+  within [0, 8] because the function is scheduled inline."` These
+  fire on spec-pattern input Funcs which are inlined by default but
+  carry `bound()` from the contract. Same warnings fire on the
+  Phase 3 use-site path. Cosmetic only; could be suppressed for
+  spec lowering in a follow-up (e.g. by suppressing inline-bound
+  warnings on spec-pattern Funcs, or by scheduling spec inputs
+  `compute_root()` before lowering).
 
 ---
 
@@ -296,34 +362,51 @@ See [`DECISIONS.md`](DECISIONS.md). Highlights from session 1:
 
 ## Session handoff — next session start here
 
-1. **Begin Phase 4 (matcher).** OQ#5 is resolved and
-   `lower_to_canonical_form` is in place — both spec and use-site can
-   now be lowered to a single canonical form. Per DESIGN.md §4.4 and
-   §8.2 Phase 4:
-   - Add a spec-pipeline lowering entry point that builds an env from
-     a Pipeline and calls `lower_to_canonical_form`. The spec doesn't
-     have args/requirements/etc.; supply empty defaults.
-   - Locate the matched region in the user's canonical Stmt by walking
-     for a `For` node whose qualified name corresponds to the
-     directive's `loop_var_name` (stage-qualified per Halide's
-     internal naming convention).
-   - Structural matcher with alpha-equivalence + commutativity, reusing
-     `IRMatcher` from `src/IRMatch.h`. FindIntrinsics has already run
-     inside the prefix, so HVX MAC / AMX tile patterns will be matched
-     in their lifted form.
-   - Establish the spec-Var → user-Var rename map from the match.
-     (Phase 3 currently uses a positional fallback anchored at arg 0;
-     replace that with the matched rename map.)
-   - Joint multi-output matching (and extend Phase 3 schedule transfer
-     accordingly).
-2. **Extend schedule transfer once the matcher provides a rename map.**
+1. **Continue Phase 4 — build the structural matcher.** The two
+   matcher prerequisites are now in place (spec lowering +
+   region locator); the matcher itself is the next PR. Suggested
+   incremental landings:
+   - **Define `MatchResult`** (`{ bool success; std::string
+     failure_reason; std::map<std::string,std::string> var_rename;
+     std::map<std::string,std::string> func_rename; }`) and the
+     `match_canonical_form(spec_loop, user_loop) -> MatchResult`
+     entry point in `ImplementWithMatcher.{h,cpp}`. Both inputs are
+     the `For` nodes returned by `find_implement_with_loop` on the
+     respective canonical Stmts.
+   - **Alpha-renaming for Variables and LetStmt-bound names.**
+     Parallel traversal that binds spec-name -> user-name on first
+     sight and enforces consistency thereafter. Test: match a spec
+     against a spec that was lowered with a different `Var()` name.
+   - **Recognition of spec input Funcs as "match anything".** The
+     spec's auto-stubbed input Funcs (Phase 2) appear as separate
+     Produce/Consumer nodes in the spec's canonical Stmt with stub
+     bodies (`= 0.0f`). The matcher must skip these and treat
+     references to them as wildcards bound to the user's input
+     Func names. This is where the structural matcher meets the
+     bigger design.
+   - **Commutativity for `+`, `*`, `min`, `max`** (and any other
+     ops the case-study bodies actually need). Reuse `IRMatcher`
+     from `src/IRMatch.h` if it fits.
+   - **Simplify-equivalence for integer expressions** — call into
+     `Simplify` to canonicalize indices/strides before comparing.
+2. **Wire the matcher into `apply_implement_with_directives`.**
+   Replace Phase 3's positional spec-Var -> user-Var rename with
+   the matcher's `var_rename`. The Phase 3 tests should still pass
+   (the 1D positional case is a degenerate matcher case); the win
+   is correctness for multi-dim and split-renamed cases.
+3. **Joint multi-output matching.** Extend the matcher to match
+   against multiple co-computed outputs at the same loop level
+   (Tuple primaries; `compute_with`-fused co-outputs). Lift the
+   `co_output_names.empty()` and `outputs().size() == 1`
+   restrictions in `apply_implement_with_directives`.
+4. **Extend schedule transfer once the matcher provides a rename map.**
    Currently `ApplyImplementWith.cpp` transfers only
    `FuncSchedule::bounds()` and only single-output. Once the matcher
    gives us a proper var rename, layer in `align_storage`, `vectorize`
    (as a width requirement), and the multi-output path. Update Phase 3
    tests rather than the test file's filename — they should keep
    passing as Phase 4 lands.
-3. **Tests for Phase 4:** the design's "get to end-to-end early"
+5. **Tests for Phase 4:** the design's "get to end-to-end early"
    guidance (§8.1) has four case studies attached, each chosen to
    exercise a distinct property of the canonical-form prefix and the
    matcher:

@@ -791,6 +791,24 @@ a problem.
 
 Format: `YYYY-MM-DD (session N)` — short summary of what changed.
 
+- **2026-05-25 (session 5, Phase 4 in-progress):** Phase 4
+  prerequisites landed: spec-pipeline lowering entry point and
+  region locator. `Internal::lower_to_canonical_form` exposed via
+  `src/Lower.h` (moved out of anonymous namespace; internal
+  `LoweringLogger` parameter dropped). New file pair
+  `src/ImplementWithMatcher.{h,cpp}` defines
+  `Internal::lower_spec_to_canonical_form(spec, target)` — the
+  spec-side counterpart of `lower_impl`'s pre-canonical-form
+  prefix, omitting only `apply_implement_with_directives` (specs
+  do not themselves carry instructions) — and
+  `Internal::find_implement_with_loop(stmt, func, stage, var)`
+  which locates a stage-qualified `For` node in canonical IR.
+  Together these are the two matcher prerequisites: spec and
+  use-site both reduce to canonical-form Stmt that the structural
+  matcher (next session) will compare. New
+  `test/correctness/implement_with_phase4.cpp` covers both with
+  four sub-tests.
+
 - **2026-05-25 (session 5, Phase 4 kick-off):** Phase 4 case-study
   list expanded to four entries. PTX MMA (NVPTX tensor cores) added
   as the LLVM-backed-GPU validation case — closes the
