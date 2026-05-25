@@ -1262,6 +1262,17 @@ Offset<Serialize::FusedPair> Serializer::serialize_fused_pair(FlatBufferBuilder 
 }
 
 Offset<Serialize::StageSchedule> Serializer::serialize_stage_schedule(FlatBufferBuilder &builder, const StageSchedule &stage_schedule) {
+    // implement_with directives carry an Instruction handle whose spec
+    // thunk and emit callback are std::function — neither is serializable
+    // through the flatbuffer schema. Until Phase 5+ provides a serialization
+    // story, fire a hard error rather than silently drop the directive.
+    // See docs/implement_with/DECISIONS.md (serialization-deferral) and
+    // IMPLEMENTATION_STATUS.md for context.
+    user_assert(stage_schedule.implement_with_directives().empty())
+        << "Serialization of pipelines containing implement_with directives "
+        << "is not yet supported. Pass WITH_SERIALIZATION=OFF, or remove the "
+        << "implement_with directives from this pipeline.\n";
+
     std::vector<Offset<Serialize::ReductionVariable>> rvars_serialized;
     rvars_serialized.reserve(stage_schedule.rvars().size());
     for (const auto &rvar : stage_schedule.rvars()) {
