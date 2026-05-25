@@ -506,6 +506,123 @@ void test_match_simplify_unequal_integers_still_fail() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Case study: vfmadd231ps_256 (the canonical §3.3 example)
+// ---------------------------------------------------------------------------
+// End-to-end matcher validation against a real user pipeline. Lowers
+// both the spec (using lower_spec_to_canonical_form) and a realistic
+// Halide user pipeline (using lower_pipeline_to_canonical_form), then
+// runs the structural matcher on the inner For nodes. Asserts that
+//   - the match succeeds,
+//   - var_rename maps the spec loop var to the user loop var (or to a
+//     name uniquification thereof), and
+//   - func_rename binds every spec input Func name (a, b, c) and the
+//     spec output name to a corresponding user-side buffer / output
+//     name.
+//
+// The user pipeline uses ImageParam inputs with min pinned to 0 so
+// that the generated index is `x` rather than `x - ua.min.0`. Without
+// the pinned mins, the user-side Loads carry a parameter-dependent
+// offset that the matcher's Simplify-equivalence fallback cannot
+// prove constant. That non-zero-min handling is naturally Phase 7
+// (affine match parameters) territory and out of scope for v1.
+void test_case_study_vfmadd231ps_256() {
+    Instruction instr = make_vfmadd_style_named();
+    Pipeline spec = instr.spec();
+    Target t = target_with({Target::FMA, Target::AVX2});
+    std::string spec_out = spec.outputs()[0].name();
+
+    ImageParam a_in(Float(32), 1, "ua");
+    ImageParam b_in(Float(32), 1, "ub");
+    ImageParam c_in(Float(32), 1, "uc");
+    a_in.dim(0).set_bounds(0, 8);
+    b_in.dim(0).set_bounds(0, 8);
+    c_in.dim(0).set_bounds(0, 8);
+    Func out("user_out_vfmadd");
+    Var x("x");
+    out(x) = a_in(x) * b_in(x) + c_in(x);
+    out.bound(x, 0, 8);
+    Pipeline user(out);
+
+    Internal::Stmt spec_s = Internal::lower_spec_to_canonical_form(spec, t);
+    Internal::Stmt user_s = Internal::lower_pipeline_to_canonical_form(user, t);
+
+    Internal::Stmt spec_loop =
+        Internal::find_implement_with_loop(spec_s, spec_out, 0, "i");
+    Internal::Stmt user_loop =
+        Internal::find_implement_with_loop(user_s, "user_out_vfmadd", 0, "x");
+    if (!spec_loop.defined() || !user_loop.defined()) {
+        fprintf(stderr,
+                "test_case_study_vfmadd231ps_256: locator missed "
+                "(spec_defined=%d user_defined=%d)\n",
+                (int)spec_loop.defined(), (int)user_loop.defined());
+        exit(1);
+    }
+
+    Internal::MatchResult r =
+        Internal::match_canonical_form(spec_loop, user_loop);
+    if (!r.success) {
+        fprintf(stderr,
+                "test_case_study_vfmadd231ps_256: match failed: %s\n",
+                r.failure_reason.c_str());
+        exit(1);
+    }
+
+    // Loop var: spec For is "<spec_out>.s0.i"; user For is
+    // "user_out_vfmadd.s0.x". The matcher binds the full For-loop
+    // names in var_rename, so we look up the spec For name (which is
+    // also the same string as spec_loop's For::name).
+    const Internal::For *spec_for = spec_loop.as<Internal::For>();
+    const Internal::For *user_for = user_loop.as<Internal::For>();
+    internal_assert(spec_for && user_for) << "locator returned non-For Stmt";
+    auto it = r.var_rename.find(spec_for->name);
+    if (it == r.var_rename.end() || it->second != user_for->name) {
+        fprintf(stderr,
+                "test_case_study_vfmadd231ps_256: expected For-name binding "
+                "'%s' -> '%s'; got '%s'\n",
+                spec_for->name.c_str(), user_for->name.c_str(),
+                (it == r.var_rename.end() ? "(missing)" : it->second.c_str()));
+        exit(1);
+    }
+
+    // Func bindings: spec primary 'out' binds to user 'user_out_vfmadd';
+    // spec inputs 'a', 'b', 'c' bind to user ImageParam names
+    // 'ua', 'ub', 'uc'. Names are uniquified per process, so look up
+    // by inspecting the spec-side Allocate names.
+    CollectAllocateNames spec_allocs;
+    spec_s.accept(&spec_allocs);
+    for (const std::string &n : spec_allocs.names) {
+        auto bit = r.func_rename.find(n);
+        if (bit == r.func_rename.end()) {
+            fprintf(stderr,
+                    "test_case_study_vfmadd231ps_256: spec Allocate '%s' "
+                    "is unbound in func_rename\n",
+                    n.c_str());
+            exit(1);
+        }
+        // Bound name should start with "u" (ua / ub / uc).
+        if (bit->second.empty() || bit->second[0] != 'u') {
+            fprintf(stderr,
+                    "test_case_study_vfmadd231ps_256: spec input '%s' "
+                    "bound to '%s', which is not a user ImageParam "
+                    "(ua/ub/uc)\n",
+                    n.c_str(), bit->second.c_str());
+            exit(1);
+        }
+    }
+
+    // Spec output should bind to the user output.
+    auto out_it = r.func_rename.find(spec_out);
+    if (out_it == r.func_rename.end() || out_it->second != "user_out_vfmadd") {
+        fprintf(stderr,
+                "test_case_study_vfmadd231ps_256: spec output '%s' "
+                "expected to bind to 'user_out_vfmadd'; got '%s'\n",
+                spec_out.c_str(),
+                (out_it == r.func_rename.end() ? "(missing)" : out_it->second.c_str()));
+        exit(1);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -520,6 +637,7 @@ int main(int argc, char **argv) {
     test_match_spec_input_funcs_bind_as_wildcards();
     test_match_simplify_equivalent_integer_indices();
     test_match_simplify_unequal_integers_still_fail();
+    test_case_study_vfmadd231ps_256();
 
     printf("Success!\n");
     return 0;
