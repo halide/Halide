@@ -3452,7 +3452,14 @@ FuncRef::operator Expr() const {
         Expr stub_val = req.empty() ? Expr(0) : make_zero(req[0]);
         // const_cast: FuncRef is a handle type; auto-stubbing a spec input Func
         // is a legitimate side-effect from an otherwise-const call conversion.
-        const_cast<Internal::Function &>(func).define(arg_names, {stub_val});
+        auto &mutable_func = const_cast<Internal::Function &>(func);
+        mutable_func.define(arg_names, {stub_val});
+        // Schedule the auto-stub compute_root() so that its body survives the
+        // canonical-form prefix as a Realize / Load chain rather than being
+        // inlined and Simplified to a constant. The matcher's func_rename
+        // map binds the Load names; without compute_root, there is no Load
+        // to bind.
+        mutable_func.schedule().compute_level() = LoopLevel::root();
         // func is now defined; fall through to the normal path.
     }
 

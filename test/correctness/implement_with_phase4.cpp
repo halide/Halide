@@ -287,15 +287,9 @@ void test_match_different_op_fails() {
 // spec). The For loop names and Func names differ; alpha-renaming
 // must make the match succeed AND the For-loop var binding must be
 // non-identity (proves the renaming machinery is actually exercised
-// rather than the two Stmts being incidentally equal).
-//
-// Note: spec input Funcs auto-stub to 0.0f and are scheduled inline,
-// so after Simplify the body collapses to Store(out, 0.0f). The only
-// names that differ between the two lowerings are the output Func
-// name and the loop-var name derived from it (e.g. "out$5.s0.i" vs
-// "out$6.s0.i"). That is enough to validate alpha-renaming on the
-// loop var; spec-input-Func wildcard semantics will be exercised by
-// a follow-up commit that prevents stub inlining.
+// rather than the two Stmts being incidentally equal). The
+// dedicated test for spec-input-Func wildcard binding via
+// func_rename is test_match_spec_input_funcs_bind_as_wildcards.
 void test_match_alpha_rename_two_lowered_specs() {
     Pipeline spec1 = make_vfmadd_style_named().spec();
     Pipeline spec2 = make_vfmadd_style_named().spec();
@@ -347,6 +341,98 @@ void test_match_alpha_rename_two_lowered_specs() {
     }
 }
 
+// Spec-input Func wildcard binding: when spec input Funcs are auto-
+// stubbed and scheduled compute_root() (which Phase 2's spec-thunk
+// auto-stub now does by default), their bodies survive the canonical-
+// form prefix as Realize / Allocate / Load chains rather than being
+// inlined and Simplified to constants. The matcher's func_rename map
+// then binds the spec input names to whichever names the user-side IR
+// uses at the corresponding Load positions.
+//
+// Without this, the spec input Funcs degenerate to 0.0f and the inner
+// loop body collapses to Store(out, 0.0f) -- there are no Loads from
+// 'a' / 'b' / 'c' for the matcher's func_rename to bind. This test
+// proves the wildcard behavior is observable end to end.
+class CollectAllocateNames : public Internal::IRVisitor {
+public:
+    std::vector<std::string> names;
+    using Internal::IRVisitor::visit;
+    void visit(const Internal::Allocate *op) override {
+        names.push_back(op->name);
+        Internal::IRVisitor::visit(op);
+    }
+};
+
+void test_match_spec_input_funcs_bind_as_wildcards() {
+    Pipeline spec1 = make_vfmadd_style_named().spec();
+    Pipeline spec2 = make_vfmadd_style_named().spec();
+    Target t = target_with({Target::FMA, Target::AVX2});
+    std::string out1 = spec1.outputs()[0].name();
+    std::string out2 = spec2.outputs()[0].name();
+    Internal::Stmt s1 = Internal::lower_spec_to_canonical_form(spec1, t);
+    Internal::Stmt s2 = Internal::lower_spec_to_canonical_form(spec2, t);
+
+    CollectAllocateNames cn1, cn2;
+    s1.accept(&cn1);
+    s2.accept(&cn2);
+    if (cn1.names.size() != 3 || cn2.names.size() != 3) {
+        fprintf(stderr,
+                "test_match_spec_input_funcs_bind_as_wildcards: expected "
+                "3 spec input allocations per side, got %zu vs %zu\n",
+                cn1.names.size(), cn2.names.size());
+        exit(1);
+    }
+
+    Internal::Stmt l1 = Internal::find_implement_with_loop(s1, out1, 0, "i");
+    Internal::Stmt l2 = Internal::find_implement_with_loop(s2, out2, 0, "i");
+    if (!l1.defined() || !l2.defined()) {
+        fprintf(stderr,
+                "test_match_spec_input_funcs_bind_as_wildcards: locator "
+                "returned undefined Stmt (out1=%s, out2=%s)\n",
+                out1.c_str(), out2.c_str());
+        exit(1);
+    }
+    Internal::MatchResult r = Internal::match_canonical_form(l1, l2);
+    if (!r.success) {
+        fprintf(stderr,
+                "test_match_spec_input_funcs_bind_as_wildcards: match "
+                "failed: %s\n",
+                r.failure_reason.c_str());
+        exit(1);
+    }
+
+    // Every spec input Allocate name from side 1 must appear in
+    // func_rename and bind to one of side 2's input Allocate names. We
+    // do not insist on a particular pairing because the matcher is free
+    // to choose commutative orderings (e.g. a <-> b can be swapped
+    // under Mul without affecting the match).
+    for (const std::string &n : cn1.names) {
+        auto it = r.func_rename.find(n);
+        if (it == r.func_rename.end()) {
+            fprintf(stderr,
+                    "test_match_spec_input_funcs_bind_as_wildcards: "
+                    "missing func_rename entry for spec input '%s'\n",
+                    n.c_str());
+            exit(1);
+        }
+        bool found = false;
+        for (const std::string &n2 : cn2.names) {
+            if (it->second == n2) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            fprintf(stderr,
+                    "test_match_spec_input_funcs_bind_as_wildcards: "
+                    "spec input '%s' bound to '%s' which is not a "
+                    "side-2 spec input\n",
+                    n.c_str(), it->second.c_str());
+            exit(1);
+        }
+    }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -358,6 +444,7 @@ int main(int argc, char **argv) {
     test_match_commutativity_directly();
     test_match_different_op_fails();
     test_match_alpha_rename_two_lowered_specs();
+    test_match_spec_input_funcs_bind_as_wildcards();
 
     printf("Success!\n");
     return 0;
