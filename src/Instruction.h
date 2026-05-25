@@ -7,8 +7,10 @@
  * pure-Halide spec paired with a hardware/library emission. Instructions
  * are committed at scheduling time via Func::implement_with.
  *
- * Phase 1: the public API surface exists but is inert. No structural
- * matching, no schedule transfer, no lowering substitution. See
+ * Phase 2: spec-pattern Func mode is wired up — Instruction::spec()
+ * marks output Funcs as spec-pattern, and Pipeline::compile_to_module
+ * guards against realizing spec-pattern Pipelines. No structural
+ * matching, schedule transfer, or lowering substitution yet. See
  * docs/implement_with/DESIGN.md (and IMPLEMENTATION_STATUS.md for
  * current phase status).
  */
@@ -55,7 +57,14 @@ public:
 
 namespace Internal {
 struct InstructionContents;
-}
+
+/** Returns true when the calling code is executing inside an
+ * Instruction::Builder::spec thunk. Used by FuncRef::operator Expr()
+ * to permit calls to undefined spec-input Funcs. Not part of the
+ * public Halide API. */
+bool in_spec_thunk();
+
+}  // namespace Internal
 
 /** A user-defined instruction declaration. Value-type wrapper around a
  * refcounted contents block. Construct via Instruction::declare. */
@@ -85,10 +94,10 @@ public:
      * legal at the use site. */
     const std::set<Target::Feature> &required_features() const;
 
-    /** Run the spec thunk and return the resulting Pipeline. The Funcs in
-     * the returned Pipeline are spec-pattern Funcs (see §4.7 of the design
-     * doc). Phase 1: this is callable and returns the Pipeline, but no
-     * spec-pattern Func mode has been wired up yet. */
+    /** Run the spec thunk and return the resulting Pipeline. The output
+     * Funcs in the returned Pipeline are marked as spec-pattern (see §4.7
+     * of the design doc): they carry match-pattern definitions and
+     * contractual schedules, but cannot be realized or compiled. */
     Pipeline spec() const;
 
     /** Invoke the emit callback. Phase 1: callable directly for testing but

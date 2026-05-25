@@ -3434,8 +3434,27 @@ Stage FuncRef::operator/=(const FuncRef &e) {
 }
 
 FuncRef::operator Expr() const {
-    user_assert(func.has_pure_definition() || func.has_extern_definition())
-        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
+    if (!func.has_pure_definition() && !func.has_extern_definition()) {
+        // Undefined Func is only legal inside a spec thunk, where it acts as a
+        // named input pattern variable. Auto-stub it so that scheduling
+        // directives (bound, vectorize, etc.) can be applied to it afterward.
+        user_assert(Internal::in_spec_thunk())
+            << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
+
+        std::vector<std::string> arg_names;
+        for (const Expr &a : args) {
+            const Variable *v = a.as<Variable>();
+            internal_assert(v) << "In spec thunk, call arg to undefined Func \""
+                               << func.name() << "\" is not a simple Var.\n";
+            arg_names.push_back(v->name);
+        }
+        const auto &req = func.required_types();
+        Expr stub_val = req.empty() ? Expr(0) : make_zero(req[0]);
+        // const_cast: FuncRef is a handle type; auto-stubbing a spec input Func
+        // is a legitimate side-effect from an otherwise-const call conversion.
+        const_cast<Internal::Function &>(func).define(arg_names, {stub_val});
+        // func is now defined; fall through to the normal path.
+    }
 
     user_assert(func.outputs() == 1)
         << "Can't convert a reference Func \"" << func.name()

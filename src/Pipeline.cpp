@@ -498,6 +498,14 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     user_assert(defined()) << "Can't compile undefined Pipeline.\n";
 
     for (const Function &f : contents->outputs) {
+        user_assert(!f.is_spec_pattern())
+            << "Cannot compile a spec-pattern Pipeline. "
+            << "Spec pipelines (created by Instruction::Builder::spec) exist only as "
+            << "match patterns for implement_with and are never lowered to executable "
+            << "code. Output Func \"" << f.name() << "\" is a spec-pattern Func.\n";
+    }
+
+    for (const Function &f : contents->outputs) {
         user_assert(f.has_pure_definition() || f.has_extern_definition())
             << "Can't compile Pipeline with undefined output Func: " << f.name() << ".";
         user_assert(!f.schedule().memoized())

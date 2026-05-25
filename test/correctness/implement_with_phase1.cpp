@@ -26,20 +26,12 @@ Instruction make_test_instruction() {
     return Instruction::declare("test_intrin")
         .spec([]() -> Pipeline {
             // Spec-pattern Funcs must be explicitly named — see design
-            // doc OQ#2.
-            //
-            // The design doc §3.3 writes this as `out(i) = a(i) * b(i) + c(i)`
-            // with `a`, `b`, `c` undefined — that requires the Phase 2
-            // spec-pattern Func mode (§4.7), where calls into undefined
-            // Funcs are legal and form match patterns. In Phase 1 the
-            // spec body must use defined Funcs, so we stub the inputs
-            // with placeholder pure definitions. The matcher does not
-            // exist yet, so these definitions are not consulted.
+            // doc OQ#2. Input Funcs (a, b, c) are declared with explicit
+            // types and left undefined; their calls in out's body form
+            // the match pattern. Phase 2 auto-stubs them on first call.
             Var i;
-            Func a("a"), b("b"), c("c"), out("out");
-            a(i) = i;
-            b(i) = i;
-            c(i) = i;
+            Func a(Float(32), 1, "a"), b(Float(32), 1, "b"),
+                c(Float(32), 1, "c"), out("out");
             out(i) = a(i) * b(i) + c(i);
             return Pipeline({out});
         })

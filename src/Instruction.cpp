@@ -10,6 +10,25 @@ namespace Halide {
 
 namespace Internal {
 
+// ---------------------------------------------------------------------------
+// Spec-thunk context flag
+// ---------------------------------------------------------------------------
+
+static thread_local int g_spec_thunk_depth = 0;
+
+bool in_spec_thunk() {
+    return g_spec_thunk_depth > 0;
+}
+
+namespace {
+struct SpecThunkScope {
+    SpecThunkScope() { ++g_spec_thunk_depth; }
+    ~SpecThunkScope() { --g_spec_thunk_depth; }
+};
+}  // namespace
+
+// ---------------------------------------------------------------------------
+
 /** Storage backing an Instruction handle. Held via IntrusivePtr. */
 struct InstructionContents {
     mutable RefCount ref_count;
@@ -56,7 +75,12 @@ Pipeline Instruction::spec() const {
     user_assert((bool)contents->spec_fn)
         << "Instruction \"" << contents->name
         << "\" has no spec thunk. Did you forget to call Builder::spec(...)?\n";
-    return contents->spec_fn();
+    Internal::SpecThunkScope scope;
+    Pipeline p = contents->spec_fn();
+    for (Func &f : p.outputs()) {
+        f.function().mark_as_spec_pattern();
+    }
+    return p;
 }
 
 Internal::Stmt Instruction::emit(const MatchContext &ctx) const {
