@@ -433,6 +433,79 @@ void test_match_spec_input_funcs_bind_as_wildcards() {
     }
 }
 
+// Simplify-equivalence fallback: structurally distinct but
+// algebraically equivalent integer Exprs match once their free
+// Variables are alpha-bound. Spec body uses (i + 4) - 2; user body
+// uses j + 2; the For loop's bind i <-> j enables the matcher's
+// substitute + simplify rule to declare equivalence.
+void test_match_simplify_equivalent_integer_indices() {
+    using Halide::Internal::Evaluate;
+    using Halide::Internal::For;
+    using Halide::Internal::ForType;
+    using Halide::Internal::MatchResult;
+    using Halide::Internal::Stmt;
+    using Halide::Internal::Variable;
+
+    Expr i = Variable::make(Int(32), "i");
+    Expr j = Variable::make(Int(32), "j");
+
+    Stmt body_spec = Evaluate::make((i + 4) - 2);
+    Stmt body_user = Evaluate::make(j + 2);
+
+    Stmt s1 = For::make("i", 0, 8, ForType::Serial, Partition::Auto,
+                        DeviceAPI::None, body_spec);
+    Stmt s2 = For::make("j", 0, 8, ForType::Serial, Partition::Auto,
+                        DeviceAPI::None, body_user);
+
+    MatchResult r = Internal::match_canonical_form(s1, s2);
+    if (!r.success) {
+        fprintf(stderr,
+                "test_match_simplify_equivalent_integer_indices: "
+                "match failed: %s\n",
+                r.failure_reason.c_str());
+        exit(1);
+    }
+    auto it = r.var_rename.find("i");
+    if (it == r.var_rename.end() || it->second != "j") {
+        fprintf(stderr,
+                "test_match_simplify_equivalent_integer_indices: "
+                "expected For binding i -> j; got '%s'\n",
+                (it == r.var_rename.end() ? "(missing)" : it->second.c_str()));
+        exit(1);
+    }
+}
+
+// Negative case: integer Exprs that aren't algebraically equivalent
+// must still fail to match. Spec body is i + 3; user body is j + 2;
+// after binding i -> j the difference simplifies to 1, not zero.
+void test_match_simplify_unequal_integers_still_fail() {
+    using Halide::Internal::Evaluate;
+    using Halide::Internal::For;
+    using Halide::Internal::ForType;
+    using Halide::Internal::MatchResult;
+    using Halide::Internal::Stmt;
+    using Halide::Internal::Variable;
+
+    Expr i = Variable::make(Int(32), "i");
+    Expr j = Variable::make(Int(32), "j");
+
+    Stmt body_spec = Evaluate::make(i + 3);
+    Stmt body_user = Evaluate::make(j + 2);
+
+    Stmt s1 = For::make("i", 0, 8, ForType::Serial, Partition::Auto,
+                        DeviceAPI::None, body_spec);
+    Stmt s2 = For::make("j", 0, 8, ForType::Serial, Partition::Auto,
+                        DeviceAPI::None, body_user);
+
+    MatchResult r = Internal::match_canonical_form(s1, s2);
+    if (r.success) {
+        fprintf(stderr,
+                "test_match_simplify_unequal_integers_still_fail: "
+                "unexpected success on (i+3) vs (j+2)\n");
+        exit(1);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -445,6 +518,8 @@ int main(int argc, char **argv) {
     test_match_different_op_fails();
     test_match_alpha_rename_two_lowered_specs();
     test_match_spec_input_funcs_bind_as_wildcards();
+    test_match_simplify_equivalent_integer_indices();
+    test_match_simplify_unequal_integers_still_fail();
 
     printf("Success!\n");
     return 0;

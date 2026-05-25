@@ -95,11 +95,17 @@ struct MatchResult {
  *    enforces consistency thereafter.
  *  - The commutative ops Add, Mul, Min, Max try both child orderings.
  *  - Types, opcode kinds, and Call::call_type must match exactly.
- *
- * The matcher does not yet call Simplify on integer subexpressions, so
- * lexically distinct but algebraically equivalent indices (e.g.
- * `i + 1` vs `1 + i` outside a commutative-op context) will not
- * match. That refinement is a follow-up commit. */
+ *  - When structural recursion fails on a pair of scalar/vector
+ *    integer Exprs, the matcher falls back to a Simplify-equivalence
+ *    check: it substitutes the current `var_rename` bindings into the
+ *    spec side and asks Simplify whether `spec_substituted - user`
+ *    reduces to a constant zero. This lets algebraically equivalent
+ *    but lexically distinct integer indices (e.g. `(i + 4) - 2` vs
+ *    `i + 2`, given a binding `i -> j`) match without depending on
+ *    Simplify's pass-time normalization. The fallback is only
+ *    consulted after structural dispatch fails, so structurally
+ *    identical IR continues to match without paying for an extra
+ *    Simplify call. */
 MatchResult match_canonical_form(const Stmt &spec_loop,
                                  const Stmt &user_loop);
 

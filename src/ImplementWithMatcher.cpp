@@ -10,12 +10,15 @@
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
+#include "IROperator.h"
 #include "IRVisitor.h"
 #include "Lower.h"
 #include "Pipeline.h"
 #include "RealizationOrder.h"
+#include "Simplify.h"
 #include "SimplifySpecializations.h"
 #include "StrictifyFloat.h"
+#include "Substitute.h"
 #include "Target.h"
 #include "TargetQueryOps.h"
 #include "WrapCalls.h"
@@ -131,6 +134,17 @@ private:
     bool match_exprs(const std::vector<Expr> &a,
                      const std::vector<Expr> &b,
                      const char *context);
+
+    // Structural dispatch for match_expr; recurses through the IR
+    // tree via the per-node-type visit() methods.
+    bool match_expr_structural(const Expr &a, const Expr &b);
+
+    // Fallback for match_expr when structural dispatch fails. Applies
+    // current var_rename bindings to spec, then asks Simplify whether
+    // `spec_substituted - user` reduces to a constant zero. Only valid
+    // for integer-typed Exprs of matching type (int or uint, scalar or
+    // vector).
+    bool simplify_equivalent_ints(const Expr &a, const Expr &b);
 
     template<typename F1, typename F2>
     bool try_either(F1 first, F2 second);
@@ -253,6 +267,34 @@ bool Matcher::match_expr(const Expr &a, const Expr &b) {
         failure_reason = "one Expr is defined and the other is not.";
         return false;
     }
+
+    // Snapshot binding state so that, on structural failure, the
+    // simplify-equivalence fallback sees only the bindings that
+    // existed before this call. Partial bindings made by the
+    // (failed) structural attempt would otherwise leak into the
+    // substitution and yield false negatives.
+    auto snap_v = var_rename;
+    auto snap_f = func_rename;
+    auto snap_r = failure_reason;
+
+    if (match_expr_structural(a, b)) {
+        return true;
+    }
+
+    std::string structural_failure = failure_reason;
+    var_rename = std::move(snap_v);
+    func_rename = std::move(snap_f);
+    failure_reason = std::move(snap_r);
+
+    if (simplify_equivalent_ints(a, b)) {
+        return true;
+    }
+
+    failure_reason = std::move(structural_failure);
+    return false;
+}
+
+bool Matcher::match_expr_structural(const Expr &a, const Expr &b) {
     if (a->node_type != b->node_type) {
         std::ostringstream os;
         os << "Expr node type mismatch (spec="
@@ -275,6 +317,40 @@ bool Matcher::match_expr(const Expr &a, const Expr &b) {
         failure_reason = "Expr node kind not handled by matcher.";
         return false;
     }
+}
+
+bool Matcher::simplify_equivalent_ints(const Expr &a, const Expr &b) {
+    if (a.type() != b.type()) {
+        return false;
+    }
+    if (!a.type().is_int() && !a.type().is_uint()) {
+        return false;
+    }
+
+    // Collect the type of every Variable named in the spec Expr so we
+    // can rebuild it with the user-side name. Same-name spec Variables
+    // are by IR invariant the same Type, so first-seen wins.
+    class CollectSpecVarTypes : public IRVisitor {
+    public:
+        std::map<std::string, Type> types;
+        using IRVisitor::visit;
+        void visit(const Variable *op) override {
+            types.try_emplace(op->name, op->type);
+        }
+    } collector;
+    a.accept(&collector);
+
+    std::map<std::string, Expr> subs;
+    for (const auto &kv : collector.types) {
+        auto it = var_rename.find(kv.first);
+        if (it != var_rename.end() && it->second != kv.first) {
+            subs[kv.first] = Variable::make(kv.second, it->second);
+        }
+    }
+
+    Expr substituted = subs.empty() ? a : substitute(subs, a);
+    Expr diff = simplify(substituted - b);
+    return is_const_zero(diff);
 }
 
 bool Matcher::match_stmt(const Stmt &a, const Stmt &b) {
