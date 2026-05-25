@@ -538,12 +538,14 @@ through every directive.
 
 ## 7. Open Questions
 
-1. **Where exactly does the target-feature check fire?** Two options: at
-   `implement_with` call time (requires `Target` to be known at schedule
-   construction, which isn't always true in generator-based workflows), or
-   at lowering time (later, but consistent with how other target-conditional
-   behavior is handled). Proposal: lowering time, with an opportunistic
-   early-warning check at construction time if Target is available.
+1. ~~**Where exactly does the target-feature check fire?**~~ **Resolved
+   (session 3, Phase 3):** lowering time, inside
+   `Internal::apply_implement_with_directives` (called from `lower_impl`
+   after `lock_loop_levels`, before `wrap_func_calls`). The
+   opportunistic early-warning call-time check from the original
+   proposal is **not** implemented in v1; revisit if generator workflows
+   surface noisy late-error reports. See
+   [DECISIONS.md](DECISIONS.md#schedule-transfer-hook-point).
 
 2. ~~**How are spec inputs/outputs named?**~~ **Resolved (session 1, Phase 1):**
    spec authors must explicitly name spec-pattern Funcs via the
@@ -718,6 +720,37 @@ a problem.
 ## 11. Changelog
 
 Format: `YYYY-MM-DD (session N)` — short summary of what changed.
+
+- **2026-05-25 (session 3, Phase 3):** Schedule transfer +
+  constraint-installation pass landed. New file pair
+  `src/ApplyImplementWith.{h,cpp}` defines
+  `Internal::apply_implement_with_directives`, invoked from `lower_impl`
+  after `lock_loop_levels` and before `wrap_func_calls`. The pass:
+  errors on missing required Target features; calls `instr.spec()` to
+  get a fresh spec Pipeline; identifies user Funcs by name (output =
+  the user Func the directive sat on; inputs = same-name Funcs in
+  env); and transfers `FuncSchedule::bounds()` with positional
+  spec-arg → user-arg rename. Constant-bound conflicts are detected
+  inline with a `user_assert` that names both values. The pass works
+  on the deep-copied lowering env, so the user's pristine `Function`
+  schedule is untouched.
+
+  Scope decisions: single-output and `bounds()`-only — multi-output
+  (`co_outputs`, Tuple-valued primaries) and non-bound directives
+  (`vectorize`, `align_storage`, `unroll`, `reorder`, etc.) are
+  deferred to Phase 4 where the matcher provides the spec-Var →
+  user-Var rename map. Positional rename is provisional and replaced
+  by the matcher's mapping in Phase 4. See
+  [DECISIONS.md](DECISIONS.md#phase-3-scope-bounds-only-single-output)
+  and [DECISIONS.md](DECISIONS.md#positional-spec-var--user-var-mapping-in-phase-3).
+
+  Cross-cutting: `Serializer::serialize_stage_schedule` now hard-errors
+  on non-empty `implement_with_directives` so the silent-drop hole that
+  existed in Phases 1–2 cannot regress; see
+  [DECISIONS.md](DECISIONS.md#serialization-hard-error-in-phase-3).
+  OQ#1 (target-check location) resolved as lowering-time. The
+  call-time early-warning half of the OQ#1 proposal is NOT
+  implemented in v1.
 
 - **2026-05-25 (session 2, Phase 2):** Spec-pattern Func mode landed.
   `Function::is_spec_pattern` flag, `Pipeline::compile_to_module` guard,

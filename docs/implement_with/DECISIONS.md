@@ -22,6 +22,11 @@ Distinguish two categories:
 - [Spec input Func type declarations](#spec-input-func-type-declarations) (Phase 2, session 2)
 - [Auto-stub for undefined spec input Funcs](#auto-stub-for-undefined-spec-input-funcs) (Phase 2, session 2)
 - [Materialization guard location](#materialization-guard-location) (Phase 2, session 2)
+- [Schedule-transfer hook point](#schedule-transfer-hook-point) (Phase 3, session 3)
+- [Phase 3 scope: bounds only, single-output](#phase-3-scope-bounds-only-single-output) (Phase 3, session 3)
+- [Positional spec-Var → user-Var mapping in Phase 3](#positional-spec-var--user-var-mapping-in-phase-3) (Phase 3, session 3)
+- [Constant-bound conflict detection](#constant-bound-conflict-detection) (Phase 3, session 3)
+- [Serialization: hard error in Phase 3](#serialization-hard-error-in-phase-3) (Phase 3, session 3)
 
 ---
 
@@ -241,3 +246,182 @@ which all compile/realize paths pass (`compile_jit`, `compile_to_object`,
 **Implication.** The error message mentions `compile_to_module` in its
 context. Future diagnostics improvements (Phase 6) may want to give more
 specific pipeline-entry-point names in the error.
+
+---
+
+## Schedule-transfer hook point
+
+**Phase:** 3 · **Session:** 3 (2026-05-25) · **Status:** Resolved
+
+**Decision.** Schedule transfer and target-feature check fire at *lowering
+time* — specifically, inside a new pass
+`Internal::apply_implement_with_directives(env, target)` invoked from
+`lower_impl` after `lock_loop_levels` and before `wrap_func_calls`. The
+pass mutates the deep-copied env produced earlier in `lower_impl`, never
+the user's pristine `Function`.
+
+**Alternatives considered.**
+
+1. **Eager: at `Stage::implement_with` call time.** Mutate the user's
+   `Function` schedule on the spot. **Rejected:** Target is generally
+   not known at call time (generator workflows pin Target only at
+   compile/realize time), so the target-feature check could not fire.
+   Also, mutating the user's `Function` at directive-record time mixes
+   declaration and side-effect in a way that makes it hard to recompile
+   the same Pipeline under a different Target — a use case the deep-copy
+   approach handles cleanly.
+2. **Lowering time, but mutating the user's `Function` directly (not the
+   deep copy).** **Rejected:** breaks the recompile-under-different-Target
+   property, and would make any error in transfer leave the user's
+   pristine state in an inconsistent partial-transfer state.
+3. **Lowering time, in a new pass *after* bounds inference.**
+   **Rejected:** the whole point of transferring bounds is that they
+   participate in bounds inference. Has to be before.
+
+**Reasoning.** Lowering time is where the Target is known and where
+deep-copy semantics already exist; both are required. Resolves OQ#1 in
+favor of lowering-time checking. The opportunistic call-time early-warning
+half of OQ#1's proposal is not implemented in v1.
+
+**Implication.** `Stage::implement_with` remains a pure recording call
+(no validation beyond `instr.defined()`). All schedule-application
+semantics live in `ApplyImplementWith.cpp` and are exercised by
+`compile_to_module` and downstream entry points.
+
+---
+
+## Phase 3 scope: bounds only, single-output
+
+**Phase:** 3 · **Session:** 3 (2026-05-25) · **Status:** Resolved
+
+**Decision.** Phase 3's `apply_implement_with_directives` pass transfers
+only `FuncSchedule::bounds()` entries from spec Funcs to user Funcs, and
+supports only single-output instructions. Multi-output (`co_outputs` or
+Tuple-valued primaries) and the broader directive categories
+(`vectorize`, `align_storage`, `unroll`, `reorder`, `compute_with`
+between spec Funcs) are deferred to Phase 4, where they layer naturally
+on top of the structural matcher.
+
+**Alternatives considered.**
+
+1. **Transfer everything in Phase 3.** **Rejected:** most non-bound
+   directives reference the spec's loop variables (e.g. `vectorize(i, 8)`
+   becomes a Split + dim modification). To translate these to the user's
+   schedule we need to know which user Var corresponds to the spec's
+   `i` — which is the matcher's job. Doing this without the matcher
+   means either inventing a parallel rename heuristic that disagrees
+   with the matcher (bad), or scheduling the wrong dimension and
+   relying on bounds-inference to catch it (also bad).
+2. **Support multi-output now via name-keyed mapping.** **Rejected:**
+   the name-keyed mapping needs `find_transitive_calls`-style traversal
+   keyed by the directive's `co_output_names` plus the spec's output
+   list. It works, but it's also the kind of name-resolution logic the
+   matcher needs anyway, so colocating it there avoids duplication.
+
+**Reasoning.** Phase 3's job is to make schedule transfer real *enough*
+to validate the architectural choice (lowering-time, deep-copy env) and
+to install the load-bearing target-feature check. The bounds-only,
+single-output slice is sufficient to exercise both. Expanding scope at
+this point would push the deeper directive translation work into a
+phase whose other concerns (the matcher's IR-level reasoning) are
+heavier and more error-prone.
+
+**Implication.** The `apply_implement_with_directives` pass explicitly
+errors when `spec.outputs().size() != 1` or `co_output_names` is
+non-empty — silently no-oping would be worse. Phase 4 must lift this
+restriction in the same change that lands the matcher.
+
+---
+
+## Positional spec-Var → user-Var mapping in Phase 3
+
+**Phase:** 3 · **Session:** 3 (2026-05-25) · **Status:** Resolved
+(provisional — replaced by matcher in Phase 4)
+
+**Decision.** In Phase 3, when transferring a `Bound` from a spec Func
+to its matched user Func, the spec's Var name is renamed by argument
+position: spec's `args()[0]` → user's `args()[0]`, etc. The directive's
+`loop_var_name` is *not* consulted by Phase 3's renamer; positional
+match anchored at arg 0 is sufficient for the bound-transfer case.
+
+**Alternatives considered.**
+
+1. **Anchor the rename at the directive's `loop_var_name`.** That is,
+   find the user arg matching `loop_var_name`, set that as "position k",
+   and align the spec's outermost Var to it. **Rejected for Phase 3:**
+   adds complexity to handle deeper-than-loop-var dims, and the matcher
+   replaces this logic anyway in Phase 4.
+2. **Wait for the matcher and do no renaming in Phase 3.**
+   **Rejected:** then transferred bounds would carry the spec's
+   `i` literally onto the user's `out` (whose arg is `x`), and bounds
+   inference would not recognize the var name. Even the basic
+   target-check tests would not be runnable end-to-end without it.
+
+**Reasoning.** Pragmatic: positional rename gets the bound-transfer
+case to a working end-to-end demonstration. Phase 4 establishes the
+real spec-Var → user-Var map from the structural match and replaces
+this fallback.
+
+**Implication.** Tests in `implement_with_phase3.cpp` use 1D user Funcs
+and 1D spec Funcs to keep the positional mapping unambiguous. Mixing
+dimensionalities (e.g. 2D user, 1D spec scheduled on an inner split
+Var) currently transfers correctly only by accident; the matcher will
+make it deliberate.
+
+---
+
+## Constant-bound conflict detection
+
+**Phase:** 3 · **Session:** 3 (2026-05-25) · **Status:** Resolved
+
+**Decision.** When `apply_implement_with_directives` would add a
+transferred `Bound{var, min, extent}` to a user Func that already has
+a `Bound` on the same `var`, and both `min` (or both `extent`) are
+compile-time-constant integers with different values, the pass errors
+immediately with a message naming both values, the conflicting `var`,
+the user Func, and the instruction.
+
+**Alternatives considered.**
+
+1. **No detection; rely on bounds inference and runtime checks.**
+   **Rejected:** the failure mode in that path is a runtime assertion
+   failure at `realize()` time with a generic "extent mismatch" message
+   — no mention of `implement_with`, no link to the spec that imposed
+   the constraint.
+2. **Detect everything, including symbolic conflicts.** **Rejected for
+   v1:** would need a Simplify-based comparison or an SMT-style
+   reasoner. v1.5's affine match parameters make symbolic conflict
+   checking more interesting; defer.
+
+**Reasoning.** The constant-vs-constant case is the most common
+mistake (user sets a tile-by-N that conflicts with the instruction's
+fixed-width bound), and is easy to catch with a couple of lines of
+`as_const_int` calls. Symbolic cases get a less specific error from
+downstream bounds inference; good enough for v1.
+
+**Implication.** Phase 3 test
+`test_conflicting_bound_errors` is exactly this case (user bound 16,
+spec bound 8). Future v1.5 work on affine parameters should extend
+`check_bound_conflict` to handle symbolic forms.
+
+---
+
+## Serialization: hard error in Phase 3
+
+**Phase:** 3 · **Session:** 3 (2026-05-25) · **Status:** Resolved
+(supersedes [`serialization-deferral`](#serialization-deferral))
+
+**Decision.** `Serializer::serialize_stage_schedule` now `user_assert`s
+that `implement_with_directives().empty()`. Pipelines using
+`implement_with` cannot currently be serialized.
+
+**Reasoning.** Phase 1 left the door open (silent drop on serialize).
+Phase 3 makes directives load-bearing — they influence bounds
+inference — so a silent drop now produces a *different* pipeline on
+deserialization, not just one missing a noop directive. Hard erroring
+prevents this. When Phase 5+ adds proper serialize/deserialize support
+for instructions, the assert is lifted.
+
+**Implication.** `WITH_SERIALIZATION=ON` builds work fine for pipelines
+that don't use `implement_with`. Pipelines that do will hit a clear
+`user_assert` mentioning `implement_with` and `WITH_SERIALIZATION=OFF`.

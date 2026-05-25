@@ -2,8 +2,9 @@
 
 **Branch:** `alexreinking/implement_with` (worktree at
 `/var/home/alex/dev/Halide/implement_with`)
-**Current phase:** Phase 2 complete; Phase 3 not started.
-**Last updated:** 2026-05-25 (session 2)
+**Current phase:** Phase 3 complete (single-output, bounds only);
+Phase 4 not started.
+**Last updated:** 2026-05-25 (session 3)
 
 This file is the single source of truth for *where we are*. The design doc
 ([`DESIGN.md`](DESIGN.md)) is the spec; this file is the trace. Update at
@@ -17,11 +18,83 @@ the end of every session.
 |-------|------------------------------------------|-------------|-------|
 | 1     | Infrastructure (inert API)               | **Done**    | Session 1. Two commits on branch. |
 | 2     | Spec-pattern Funcs                       | **Done**    | Session 2. Two commits on branch. |
-| 3     | Schedule transfer + constraint install   | Not started | Next phase. |
+| 3     | Schedule transfer + constraint install   | **Done**    | Session 3. Single-output, bounds only; vectorize/align/etc. deferred. |
 | 4     | Matcher (canonicalization + structural)  | Not started | Most complex phase. Resolve OQ#5 first. |
 | 5     | Emit + lowering integration              | Not started | |
 | 6     | Diagnostics                              | Not started | |
 | 7 (v1.5) | Affine match parameters               | Not started | |
+
+---
+
+## Phase 3 — what landed (session 3, 2026-05-25)
+
+### Source changes (committed)
+
+- **`src/ApplyImplementWith.h`** / **`src/ApplyImplementWith.cpp`** (new) —
+  declares and defines `Internal::apply_implement_with_directives(env,
+  target)`, the lowering-time pass that:
+    1. Errors if any of `instr.required_features()` are missing from the
+       compile Target.
+    2. For each `ImplementWithDirective` on any stage of any Func in the
+       deep-copied env, calls `instr.spec()`, identifies user Funcs
+       corresponding to spec output (primary) and inputs (by Func name in
+       the user's env), and transfers `FuncSchedule::bounds()` entries
+       with a *positional* spec-arg → user-arg rename.
+    3. Detects constant-extent / constant-min conflicts between a
+       transferred bound and a pre-existing user bound, and errors with
+       a message that names both values, the instruction, the var, and
+       the user Func.
+- **`src/Lower.cpp`** — calls `apply_implement_with_directives` after
+  `lock_loop_levels`, before `wrap_func_calls`. The transfer runs on the
+  deep-copied env so the user's pristine `Function` schedule is not
+  mutated.
+- **`src/Serialization.cpp`** — `serialize_stage_schedule` now hard-errors
+  if `implement_with_directives()` is non-empty, so the silent-drop
+  behavior (still load-bearing — see Phase 1 notes) cannot regress
+  unnoticed when serialization is enabled in some future build.
+- **`src/CMakeLists.txt`** — new header + source registered in
+  alphabetical position (`ApplyImplementWith` slots between
+  `AllocationBoundsInference` and `ApplySplit`).
+- **`test/correctness/implement_with_phase3.cpp`** (new) — 5 sub-tests
+  covering: target-feature-missing error; target-feature-present
+  compile success; user's pristine schedule untouched after compile;
+  constant-extent conflict error; spec-input-name not present in user
+  env is silently skipped (Phase 4's job).
+- **`test/correctness/CMakeLists.txt`** — phase3 test registered.
+
+### Scope decisions
+
+Phase 3 v1 only transfers `FuncSchedule::bounds()` (the `Bound` list).
+Other directive categories — `vectorize`, `align_storage`, `unroll`,
+`reorder`, `compute_with` between spec Funcs — are recognized by the
+design as transferable but require structural information about loop
+nests that becomes available only after the matcher (Phase 4) maps spec
+Vars to user split/reorder Vars. The Phase 3 hook still runs over all
+spec Funcs, so layering more transfers on top is additive. See
+[`DECISIONS.md`](DECISIONS.md#phase-3-scope-bounds-only-single-output)
+for the rationale.
+
+Multi-output instructions (Tuple-valued primaries and the `co_outputs`
+overload) are *not* yet supported by the transfer pass: it errors
+explicitly if `spec.outputs().size() != 1` or `co_output_names` is
+non-empty. The reason is the same — multi-output mapping is naturally
+name-keyed and benefits from the matcher's name-resolution.
+
+### Resolved open questions
+
+- **OQ#1 (target-feature check location)** — fires at lowering time
+  (inside `apply_implement_with_directives`). The "opportunistic
+  early-warning at construction time if Target is available" half of the
+  design-doc proposal is **not** implemented in v1 — re-evaluate when
+  generator integration lands.
+
+### Tests
+
+| Path                                                  | Status | Notes |
+|-------------------------------------------------------|--------|-------|
+| `test/correctness/implement_with_phase1.cpp`          | Passes | Unchanged. |
+| `test/correctness/implement_with_phase2.cpp`          | Passes | Unchanged. |
+| `test/correctness/implement_with_phase3.cpp`          | Passes | 5 sub-tests. Two error-path tests skip if exceptions disabled at runtime. |
 
 ---
 
@@ -142,24 +215,29 @@ See [`DECISIONS.md`](DECISIONS.md). Highlights from session 1:
 
 ## Open issues / things to plan around
 
-### Carried into Phase 3
+### Carried into Phase 4
 
-- **Schedule transfer (§4.2–§4.3, Phase 3):** Spec Funcs carry
-  scheduling directives as contractual constraints. Phase 3 transfers
-  these to the corresponding matched user Funcs at `implement_with`
-  call time so they participate in bounds inference. This is the
-  next phase's primary task.
 - **Canonicalization prefix (OQ#5):** must be pinned down before Phase
   4 starts. Not yet decided.
+- **Multi-output schedule transfer:** Phase 3 supports single-output
+  only. Multi-output (`co_outputs`, Tuple-valued primaries) needs
+  name-keyed spec→user mapping; cleanest to land alongside the matcher
+  in Phase 4.
+- **Non-bound directive transfer:** Phase 3 transfers only
+  `FuncSchedule::bounds()`. The design contract also covers
+  `vectorize`, `align_storage`, `unroll`, `reorder`, etc. These need
+  the matcher's var rename to be useful at the user's split-Var level,
+  so they layer naturally on Phase 4.
 
 ### Cross-cutting
 
-- **Serialization:** `WITH_SERIALIZATION=ON` (the default) will silently
-  drop `implement_with` directives across serialize/deserialize today.
-  Fix when Phase 2 or 3 adds anything load-bearing to the directive.
-  Until then, builds with serialization enabled may quietly lose
-  directives — file an assert that fires on first serialization of a
-  schedule with non-empty `implement_with_directives` so it can't slip.
+- **Serialization:** Phase 3 added a hard error in
+  `serialize_stage_schedule` if `implement_with_directives` is
+  non-empty. `WITH_SERIALIZATION=OFF` is no longer load-bearing for
+  the silent-drop reason, but is still load-bearing for the build —
+  builds with serialization on will simply hard-error on any pipeline
+  using `implement_with` until Phase 5+ adds proper serialization. See
+  [DECISIONS.md](DECISIONS.md#serialization-hard-error-in-phase-3).
 
 ### Branching strategy
 
@@ -176,24 +254,38 @@ See [`DECISIONS.md`](DECISIONS.md). Highlights from session 1:
 
 ## Session handoff — next session start here
 
-1. **Begin Phase 3 (schedule transfer + constraint installation).**
-   Read §4.2–§4.3 of DESIGN.md carefully. Per §8.2:
-   - At `implement_with` schedule application time, identify the
-     corresponding user Func for each spec pipeline Func (spec output →
-     user primary/co-output by name; spec inputs → matched by name
-     from the user's pipeline body, or by position).
-   - Transfer every scheduling directive on each spec Func to the
-     corresponding user Func. These directives then participate in
-     normal bounds inference and layout determination.
-   - Target-feature checking: error if `instr.required_features()` are
-     not all enabled in the compile Target (at schedule-application
-     time or lowering time per OQ#1 — see DESIGN.md §7.1).
-   - Tests: schedules that violate transferred constraints error cleanly
-     with helpful diagnostics.
-2. **Resolve OQ#4** in the design doc — Phase 2 is landed; record
-   the auto-stub decision in DESIGN.md's open-questions section.
-3. **Serialization guard (cross-cutting):** Before Phase 3 makes
-   directives load-bearing (they will influence bounds inference),
-   add an `internal_assert` in the serializer that fires when
-   `implement_with_directives` is non-empty, so that the silent-drop
-   behavior can't silently corrupt a pipeline.
+1. **Resolve OQ#5 (canonicalization prefix)** in DESIGN.md before
+   writing any matcher code. The matcher needs a stable definition
+   of canonical form; this needs to be locked in first because it
+   becomes part of the public API of the feature (a future Halide
+   version cannot silently change canonical form without breaking
+   user-out-of-tree instruction libraries).
+2. **Begin Phase 4 (matcher).** Per DESIGN.md §4.4 and §8.2 Phase 4:
+   - Lower both spec pipeline and use-site region through the §4.4
+     canonical-form prefix.
+   - Structural matcher with alpha-equivalence + commutativity, reusing
+     `IRMatcher` from `src/IRMatch.h`.
+   - Establish the spec-Var → user-Var rename map from the match.
+     (Phase 3 currently uses a positional fallback anchored at arg 0;
+     replace that with the matched rename map.)
+   - Joint multi-output matching (and extend Phase 3 schedule transfer
+     accordingly).
+3. **Extend schedule transfer once the matcher provides a rename map.**
+   Currently `ApplyImplementWith.cpp` transfers only
+   `FuncSchedule::bounds()` and only single-output. Once the matcher
+   gives us a proper var rename, layer in `align_storage`, `vectorize`
+   (as a width requirement), and the multi-output path. Update Phase 3
+   tests rather than the test file's filename — they should keep
+   passing as Phase 4 lands.
+4. **Tests for Phase 4:** simple intrinsic substitutions end-to-end on
+   `vfmadd231ps_256`-style examples per the "get to end-to-end early"
+   guidance in DESIGN.md §8.1.
+
+### What is NOT yet done that's worth noting
+
+- The opportunistic *early-warning* target-feature check at
+  `implement_with` call time (the second half of OQ#1's proposal) is
+  not implemented. Consider it if generator workflows surface noisy
+  late-error reports.
+- The user's `MatchContext::input/output/param` accessors are still
+  stubs — wired up in Phase 5 alongside emit substitution.
