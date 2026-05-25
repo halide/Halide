@@ -791,6 +791,35 @@ a problem.
 
 Format: `YYYY-MM-DD (session N)` — short summary of what changed.
 
+- **2026-05-25 (session 6, Phase 4 matcher):** Structural matcher
+  for canonical-form IR landed. New `Internal::MatchResult`
+  struct and `Internal::match_canonical_form(spec_loop, user_loop)`
+  entry point in `src/ImplementWithMatcher.{h,cpp}`. The matcher is
+  a parallel walker over paired Stmt/Expr trees with two binding
+  maps: `var_rename` for Variables / For loop vars / Let{,Stmt}
+  bound names; `func_rename` for buffer / Func / intrinsic names
+  in Load, Store, Call, Provide, Realize, Allocate, Free,
+  ProducerConsumer, Atomic, Prefetch, HoistedStorage. Commutative
+  ops (Add, Mul, Min, Max) try both child orderings with
+  snapshot-and-restore on the binding maps. Types, opcode kinds,
+  Call::call_type, For::for_type/device_api/partition_policy,
+  Allocate::memory_type/padding, Realize::memory_type,
+  VectorReduce::op, and Shuffle::indices must match exactly. The
+  matcher does not yet call `Simplify` on integer subexpressions,
+  so lexically distinct but algebraically equal indices outside
+  a commutative-op context will fail to match — that's a planned
+  follow-up. Four new sub-tests in
+  `test/correctness/implement_with_phase4.cpp` cover the
+  identity-match, commutativity (handmade IR), op-mismatch
+  failure, and the two-lowered-specs alpha-rename case.
+
+  Known limitation: spec-pattern input Funcs auto-inline to their
+  `0.0f` stub bodies during canonical-form lowering, so the
+  matcher's `func_rename` wildcard binding for spec inputs
+  isn't truly exercised yet — the body simplifies to a constant
+  Store before any Load survives to bind. Resolving this is the
+  next handoff item (see `IMPLEMENTATION_STATUS.md`).
+
 - **2026-05-25 (session 5, Phase 4 in-progress):** Phase 4
   prerequisites landed: spec-pipeline lowering entry point and
   region locator. `Internal::lower_to_canonical_form` exposed via

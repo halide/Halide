@@ -2,10 +2,12 @@
 
 **Branch:** `alexreinking/implement_with` (worktree at
 `/var/home/alex/dev/Halide/implement_with`)
-**Current phase:** Phase 4 in progress. Spec-pipeline lowering entry
-point and region locator landed; structural matcher itself is the next
-piece.
-**Last updated:** 2026-05-25 (session 5)
+**Current phase:** Phase 4 in progress. Structural matcher with
+alpha-rename + commutativity landed. Spec-input-Func wildcard
+semantics (currently degenerate because stub Funcs inline to 0.0f),
+Simplify-equivalence on integer expressions, and the wire-in to
+`apply_implement_with_directives` are the next pieces.
+**Last updated:** 2026-05-25 (session 6)
 
 This file is the single source of truth for *where we are*. The design doc
 ([`DESIGN.md`](DESIGN.md)) is the spec; this file is the trace. Update at
@@ -20,12 +22,71 @@ the end of every session.
 | 1     | Infrastructure (inert API)               | **Done**    | Session 1. Two commits on branch. |
 | 2     | Spec-pattern Funcs                       | **Done**    | Session 2. Two commits on branch. |
 | 3     | Schedule transfer + constraint install   | **Done**    | Session 3. Single-output, bounds only; vectorize/align/etc. deferred. |
-| 4     | Matcher (canonicalization + structural)  | In progress | Session 5: PTX MMA added to case studies; `lower_to_canonical_form` exposed in header; `lower_spec_to_canonical_form` and `find_implement_with_loop` landed. Structural matcher itself is next. |
+| 4     | Matcher (canonicalization + structural)  | In progress | Session 5: PTX MMA added to case studies; `lower_to_canonical_form` exposed; `lower_spec_to_canonical_form` and `find_implement_with_loop` landed. Session 6: structural matcher with alpha-rename + commutativity landed (`match_canonical_form` + `MatchResult`). Spec-input wildcard semantics (blocked on stub-inline prevention), Simplify-equivalence, and apply_implement_with_directives wire-in still pending. |
 | 5     | Emit + lowering integration              | Not started | |
 | 6     | Diagnostics                              | Not started | |
 | 7 (v1.5) | Affine match parameters               | Not started | |
 
 ---
+
+## Session 6 — what landed (Phase 4 matcher, 2026-05-25)
+
+### Source changes (1 commit)
+
+- **`src/ImplementWithMatcher.h` / `src/ImplementWithMatcher.cpp`** —
+  new `MatchResult` struct and `Internal::match_canonical_form(spec_loop,
+  user_loop) -> MatchResult` entry point. Internal `Matcher` class is a
+  parallel walker over paired Stmt/Expr trees with two binding maps:
+    - `var_rename` (spec name -> user name) for Variables, For loop
+      vars, and Let/LetStmt bound names. Bindings record on first
+      sight; conflicts produce a `failure_reason` and bail.
+    - `func_rename` (spec name -> user name) for buffer / Func /
+      intrinsic names in Load, Store, Call, Provide, Realize,
+      Allocate, Free, ProducerConsumer, Atomic, Prefetch,
+      HoistedStorage. Intrinsic names are stable strings, so they
+      just record identity bindings.
+  Commutative ops (`Add`, `Mul`, `Min`, `Max`) try both child orderings
+  with snapshot-and-restore on the binding maps + failure reason.
+  Types, opcode kinds, `Call::call_type`,
+  `For::for_type`/`device_api`/`partition_policy`,
+  `Allocate::memory_type`/`padding`, `Realize::memory_type`,
+  `VectorReduce::op`, and `Shuffle::indices` must match exactly.
+
+### Tests added to `implement_with_phase4.cpp`
+
+- `test_match_identity_self` — lower a spec, locate its `For`, match
+  against itself; asserts success and that every binding is identity.
+- `test_match_commutativity_directly` — handmade `Evaluate(x + y)` vs
+  `Evaluate(y + x)`. Expects success and `var_rename` containing
+  `{ x -> y, y -> x }`. This is the dedicated commutativity test;
+  it avoids the Pipeline-lowering path so Simplify cannot
+  canonicalize the operand order away.
+- `test_match_different_op_fails` — handmade Add vs Mul; expects
+  failure with non-empty reason.
+- `test_match_alpha_rename_two_lowered_specs` — lowers
+  `make_vfmadd_style_named()` twice (Func uniquification yields
+  distinct names like `out$5` and `out$6`); asserts success and at
+  least one non-identity `var_rename` entry. The For-loop var
+  binding `outN.s0.i -> outM.s0.i` is what gets exercised here.
+
+### Known limitation: spec input Funcs auto-inline
+
+The spec-pattern Func mode (Phase 2) auto-stubs undefined input Funcs
+with a `0.0f` body. By default they're scheduled inline, so Halide's
+canonical-form prefix inlines `a(i) * b(i) + c(i)` into the output
+Func's body and Simplify collapses it to `0.0f`. The matcher's
+`func_rename` machinery is *correctly* set up to bind spec input
+Func names to user Func names as wildcards (every Load/Call name
+already routes through `func_rename`), but at this point in
+canonical form there are no Loads from `a`/`b`/`c` to wildcard-bind
+— the body is just a constant.
+
+This means the "spec input Funcs are wildcards" property from the
+design isn't truly tested yet; the four-case-study end-to-end work
+will land alongside a fix that prevents stub inlining (either
+schedule spec-input Funcs `compute_root()` before lowering, or use
+a tagged Call::PureExtern stub the matcher recognizes as a
+wildcard sentinel).
 
 ## Session 5 — what landed (Phase 4 kick-off, 2026-05-25)
 
@@ -362,51 +423,53 @@ See [`DECISIONS.md`](DECISIONS.md). Highlights from session 1:
 
 ## Session handoff — next session start here
 
-1. **Continue Phase 4 — build the structural matcher.** The two
-   matcher prerequisites are now in place (spec lowering +
-   region locator); the matcher itself is the next PR. Suggested
-   incremental landings:
-   - **Define `MatchResult`** (`{ bool success; std::string
-     failure_reason; std::map<std::string,std::string> var_rename;
-     std::map<std::string,std::string> func_rename; }`) and the
-     `match_canonical_form(spec_loop, user_loop) -> MatchResult`
-     entry point in `ImplementWithMatcher.{h,cpp}`. Both inputs are
-     the `For` nodes returned by `find_implement_with_loop` on the
-     respective canonical Stmts.
-   - **Alpha-renaming for Variables and LetStmt-bound names.**
-     Parallel traversal that binds spec-name -> user-name on first
-     sight and enforces consistency thereafter. Test: match a spec
-     against a spec that was lowered with a different `Var()` name.
-   - **Recognition of spec input Funcs as "match anything".** The
-     spec's auto-stubbed input Funcs (Phase 2) appear as separate
-     Produce/Consumer nodes in the spec's canonical Stmt with stub
-     bodies (`= 0.0f`). The matcher must skip these and treat
-     references to them as wildcards bound to the user's input
-     Func names. This is where the structural matcher meets the
-     bigger design.
-   - **Commutativity for `+`, `*`, `min`, `max`** (and any other
-     ops the case-study bodies actually need). Reuse `IRMatcher`
-     from `src/IRMatch.h` if it fits.
-   - **Simplify-equivalence for integer expressions** — call into
-     `Simplify` to canonicalize indices/strides before comparing.
-2. **Wire the matcher into `apply_implement_with_directives`.**
+1. **Make spec-input-Func wildcards observable.** The matcher's
+   `func_rename` map already binds Load/Call names as wildcards, but
+   the canonical-form lowering inlines spec input Funcs (their `0.0f`
+   stub bodies) so there are no Loads from `a`/`b`/`c` left to bind.
+   Two options:
+   - **`compute_root()` spec inputs before lowering.** Modify
+     `lower_spec_to_canonical_form` (or Phase 2's spec-pattern Func
+     setup) to schedule auto-stubbed input Funcs `compute_root()` so
+     they survive as Realize/ProducerConsumer/Load chains in
+     canonical IR. The matcher then walks those Loads, binding the
+     spec input names into `func_rename`. Risk: the spec lowered IR
+     now contains real Allocate/Free for the stub bodies, which the
+     user IR will not have at the matched For region. The matcher
+     would need to either match outside the For (and have the
+     locator return a wider region) or special-case Realize/Allocate
+     skipping for known spec-input Func names.
+   - **Tagged stub sentinel.** Replace the `0.0f` stub with a
+     dedicated `Call::PureIntrinsic` named (say) `implement_with_input`
+     carrying the spec-input Func name as a string arg. The matcher
+     recognizes this sentinel and treats matching it as a wildcard
+     bind. Cleaner separation; needs a small Phase 2 edit.
+2. **Simplify-equivalence for integer expressions.** Two algebraically
+   equal indices that aren't lexically equal (e.g. `(i + 4) - 2` vs
+   `i + 2`) currently fail to match outside commutative-op contexts.
+   Wrap integer comparisons with `simplify(spec_idx - user_idx) == 0`
+   or similar. Care needed around free Variables — the simplifier
+   doesn't know about alpha-renaming, so call simplify *after* the
+   rename has been resolved, or substitute bindings before
+   simplifying.
+3. **Wire the matcher into `apply_implement_with_directives`.**
    Replace Phase 3's positional spec-Var -> user-Var rename with
    the matcher's `var_rename`. The Phase 3 tests should still pass
    (the 1D positional case is a degenerate matcher case); the win
    is correctness for multi-dim and split-renamed cases.
-3. **Joint multi-output matching.** Extend the matcher to match
+4. **Joint multi-output matching.** Extend the matcher to match
    against multiple co-computed outputs at the same loop level
    (Tuple primaries; `compute_with`-fused co-outputs). Lift the
    `co_output_names.empty()` and `outputs().size() == 1`
    restrictions in `apply_implement_with_directives`.
-4. **Extend schedule transfer once the matcher provides a rename map.**
+5. **Extend schedule transfer once the matcher provides a rename map.**
    Currently `ApplyImplementWith.cpp` transfers only
    `FuncSchedule::bounds()` and only single-output. Once the matcher
    gives us a proper var rename, layer in `align_storage`, `vectorize`
    (as a width requirement), and the multi-output path. Update Phase 3
    tests rather than the test file's filename — they should keep
    passing as Phase 4 lands.
-5. **Tests for Phase 4:** the design's "get to end-to-end early"
+6. **Tests for Phase 4:** the design's "get to end-to-end early"
    guidance (§8.1) has four case studies attached, each chosen to
    exercise a distinct property of the canonical-form prefix and the
    matcher:
