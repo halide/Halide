@@ -112,6 +112,8 @@ struct FunctionContents {
 
     bool frozen = false;
 
+    bool is_spec_pattern = false;
+
     void accept(IRVisitor *visitor) const {
         func_schedule.accept(visitor);
 
@@ -515,6 +517,7 @@ void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const
     copy->trace_tags = contents->trace_tags;
     copy->no_profiling = contents->no_profiling;
     copy->frozen = contents->frozen;
+    copy->is_spec_pattern = contents->is_spec_pattern;
     copy->output_buffers = contents->output_buffers;
     copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
 
@@ -1196,6 +1199,13 @@ void Function::freeze() {
 }
 bool Function::frozen() const {
     return contents->frozen;
+}
+
+void Function::mark_as_spec_pattern() {
+    contents->is_spec_pattern = true;
+}
+bool Function::is_spec_pattern() const {
+    return contents->is_spec_pattern;
 }
 
 const map<string, FunctionPtr> &Function::wrappers() const {

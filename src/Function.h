@@ -306,6 +306,16 @@ public:
      * add new definitions. */
     bool frozen() const;
 
+    /** Mark this Function as a spec-pattern Func. Spec-pattern Funcs
+     * are created inside Instruction::Builder::spec thunks and exist
+     * only as match patterns; they are never lowered to executable
+     * code. It is an error to realize or compile a Pipeline whose
+     * output Funcs are marked spec-pattern. */
+    void mark_as_spec_pattern();
+
+    /** True if this Function has been marked as a spec-pattern Func. */
+    bool is_spec_pattern() const;
+
     /** Make a new Function with the same lifetime as this one, and
      * return a strong reference to it. Useful to create Functions which
      * have circular references to this one - e.g. the wrappers
