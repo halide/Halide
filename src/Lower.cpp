@@ -135,52 +135,34 @@ public:
     }
 };
 
-void lower_impl(const vector<Function> &output_funcs,
-                const string &pipeline_name,
-                const Target &t,
-                const vector<Argument> &args,
-                const LinkageType linkage_type,
-                const vector<Stmt> &requirements,
-                bool trace_pipeline,
-                const vector<IRMutator *> &custom_passes,
-                Module &result_module) {
-    auto time_start = std::chrono::high_resolution_clock::now();
-
-    size_t initial_lowered_function_count = result_module.functions().size();
-
-    // Create a deep-copy of the entire graph of Funcs.
-    auto [outputs, env] = deep_copy(output_funcs, build_environment(output_funcs));
-
-    lower_target_query_ops(env, t);
-
-    bool any_strict_float = strictify_float(env, t);
-    result_module.set_any_strict_float(any_strict_float);
-
-    // Finalize all the LoopLevels
-    for (auto &iter : env) {
-        iter.second.lock_loop_levels();
-    }
-
-    // Resolve implement_with directives: target-feature check + transfer of
-    // contractual scheduling directives from spec Funcs onto matched user
-    // Funcs. Must run before bounds inference so the transferred bounds
-    // participate normally. (Phase 3; structural matching + emit
-    // substitution still TODO in later phases.)
-    apply_implement_with_directives(env, t);
-
-    // Substitute in wrapper Funcs
-    env = wrap_func_calls(env);
-
-    // Compute a realization order and determine group of functions which loops
-    // are to be fused together
-    auto [order, fused_groups] = realization_order(outputs, env);
-
-    // Try to simplify the RHS/LHS of a function definition by propagating its
-    // specializations' conditions
-    simplify_specializations(env);
-
-    LoweringLogger log;
-
+// Lower a Pipeline (presented via its env, outputs, and realization
+// order/fused groups) through the canonical-form prefix passes: all
+// the Stmt-transforming passes from initial loop-nest creation
+// (schedule_functions) through the final intrinsic-recognition and
+// assert-stripping passes. The returned Stmt is the *canonical form*
+// of the program: deterministic up to Target-conditional gating
+// (Target::NoAsserts, Target::AVX512_SapphireRapids, GPU/CUDA flags,
+// FuzzFloatStores, Profile).
+//
+// User-injected custom_passes and downstream backend offloading
+// (Hexagon RPC, GPU offload, parallel-task lowering) run *after* this
+// returns. See docs/implement_with/DESIGN.md §4.4 for the role of
+// this prefix in the implement_with structural matcher.
+//
+// Both callers of this prefix --- the main `lower_impl` and (in
+// Phase 4+) the spec-pipeline lowering used by the implement_with
+// matcher --- get the same canonical Stmt for the same input modulo
+// the Target-conditional gates above. Changes here change canonical
+// form and are breaking changes for in-tree instruction declarations.
+Stmt lower_to_canonical_form(const vector<Function> &outputs,
+                             std::map<string, Function> &env,
+                             const vector<string> &order,
+                             const vector<vector<string>> &fused_groups,
+                             const Target &t,
+                             const vector<Stmt> &requirements,
+                             const string &pipeline_name,
+                             bool trace_pipeline,
+                             LoweringLogger &log) {
     debug(1) << "Creating initial loop nests...\n";
     bool any_memoized = false;
     Stmt s = schedule_functions(outputs, fused_groups, env, t, any_memoized);
@@ -465,6 +447,63 @@ void lower_impl(const vector<Function> &output_funcs,
         s = strip_asserts(s);
         log("Lowering after stripping asserts:", s);
     }
+
+    return s;
+}
+
+void lower_impl(const vector<Function> &output_funcs,
+                const string &pipeline_name,
+                const Target &t,
+                const vector<Argument> &args,
+                const LinkageType linkage_type,
+                const vector<Stmt> &requirements,
+                bool trace_pipeline,
+                const vector<IRMutator *> &custom_passes,
+                Module &result_module) {
+    auto time_start = std::chrono::high_resolution_clock::now();
+
+    size_t initial_lowered_function_count = result_module.functions().size();
+
+    // Create a deep-copy of the entire graph of Funcs.
+    auto [outputs, env] = deep_copy(output_funcs, build_environment(output_funcs));
+
+    lower_target_query_ops(env, t);
+
+    bool any_strict_float = strictify_float(env, t);
+    result_module.set_any_strict_float(any_strict_float);
+
+    // Finalize all the LoopLevels
+    for (auto &iter : env) {
+        iter.second.lock_loop_levels();
+    }
+
+    // Resolve implement_with directives: target-feature check + transfer of
+    // contractual scheduling directives from spec Funcs onto matched user
+    // Funcs. Must run before bounds inference so the transferred bounds
+    // participate normally. (Phase 3; structural matching + emit
+    // substitution still TODO in later phases.)
+    apply_implement_with_directives(env, t);
+
+    // Substitute in wrapper Funcs
+    env = wrap_func_calls(env);
+
+    // Compute a realization order and determine group of functions which loops
+    // are to be fused together
+    auto [order, fused_groups] = realization_order(outputs, env);
+
+    // Try to simplify the RHS/LHS of a function definition by propagating its
+    // specializations' conditions
+    simplify_specializations(env);
+
+    LoweringLogger log;
+
+    // Run the canonical-form prefix: every Stmt-transforming pass from
+    // schedule_functions through strip_asserts. See the
+    // lower_to_canonical_form docstring above and
+    // docs/implement_with/DESIGN.md §4.4.
+    Stmt s = lower_to_canonical_form(outputs, env, order, fused_groups, t,
+                                     requirements, pipeline_name,
+                                     trace_pipeline, log);
 
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
