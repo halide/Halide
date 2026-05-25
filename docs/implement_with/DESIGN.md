@@ -560,11 +560,12 @@ through every directive.
    Proposal: primary-Func-with-co-outputs is least invasive; revisit if a
    Pipeline-level scheduling surface emerges for other reasons.
 
-4. **Spec-pattern Func mode plumbing.** The new internal Func mode (§4.7)
-   needs to integrate with existing Func machinery without bloating
-   `Function::Contents`. Proposal: a single boolean flag plus a check in
-   the few operations that materialize Funcs; the rest of the API is
-   unaware.
+4. ~~**Spec-pattern Func mode plumbing.**~~ **Resolved (session 2, Phase 2):**
+   `bool is_spec_pattern` in `FunctionContents`; `Pipeline::compile_to_module`
+   guards against materializing spec-pattern pipelines; `Instruction::spec()`
+   marks output Funcs after the thunk returns; `FuncRef::operator Expr()` auto-
+   stubs undefined input Funcs inside a spec thunk. See
+   [DECISIONS.md](DECISIONS.md#auto-stub-for-undefined-spec-input-funcs).
 
 5. **What is the precise canonicalization prefix?** Listed in §4.4, but the
    exact pass sequence needs to be pinned down and made stable. Match
@@ -717,6 +718,15 @@ a problem.
 ## 11. Changelog
 
 Format: `YYYY-MM-DD (session N)` — short summary of what changed.
+
+- **2026-05-25 (session 2, Phase 2):** Spec-pattern Func mode landed.
+  `Function::is_spec_pattern` flag, `Pipeline::compile_to_module` guard,
+  `Instruction::spec()` marking, `FuncRef::operator Expr()` auto-stub for
+  undefined typed input Funcs. OQ#4 resolved. Design note: the §3.3 example
+  uses bare `Func a("a")` for spec inputs; Phase 2 requires
+  `Func a(Float(32), 1, "a")` to provide the element type. Type-polymorphic
+  specs (bare Func with no required_types) are v2. See
+  [DECISIONS.md](DECISIONS.md#spec-input-func-type-declarations).
 
 - **2026-05-25 (session 1, Phase 1):** Initial in-repo copy. Resolved
   OQ#2 (spec-Func naming via `Func("name")`). Renamed Builder method

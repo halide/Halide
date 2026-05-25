@@ -2,8 +2,8 @@
 
 **Branch:** `alexreinking/implement_with` (worktree at
 `/var/home/alex/dev/Halide/implement_with`)
-**Current phase:** Phase 1 complete; Phase 2 not started.
-**Last updated:** 2026-05-25 (session 1)
+**Current phase:** Phase 2 complete; Phase 3 not started.
+**Last updated:** 2026-05-25 (session 2)
 
 This file is the single source of truth for *where we are*. The design doc
 ([`DESIGN.md`](DESIGN.md)) is the spec; this file is the trace. Update at
@@ -15,13 +15,56 @@ the end of every session.
 
 | Phase | Description                              | Status      | Notes |
 |-------|------------------------------------------|-------------|-------|
-| 1     | Infrastructure (inert API)               | **Done**    | Session 1. Test green. Not yet committed. |
-| 2     | Spec-pattern Funcs                       | Not started | Touches `Function::Contents`. |
-| 3     | Schedule transfer + constraint install   | Not started | |
+| 1     | Infrastructure (inert API)               | **Done**    | Session 1. Two commits on branch. |
+| 2     | Spec-pattern Funcs                       | **Done**    | Session 2. Two commits on branch. |
+| 3     | Schedule transfer + constraint install   | Not started | Next phase. |
 | 4     | Matcher (canonicalization + structural)  | Not started | Most complex phase. Resolve OQ#5 first. |
 | 5     | Emit + lowering integration              | Not started | |
 | 6     | Diagnostics                              | Not started | |
 | 7 (v1.5) | Affine match parameters               | Not started | |
+
+---
+
+## Phase 2 — what landed (session 2, 2026-05-25)
+
+### Source changes (committed, 2 commits)
+
+- **`src/Function.cpp`** / **`src/Function.h`** — `bool is_spec_pattern` in
+  `FunctionContents`; deep-copy propagation; `Function::mark_as_spec_pattern()`
+  and `Function::is_spec_pattern()` getter/setter.
+- **`src/Pipeline.cpp`** — materialization guard at the top of
+  `compile_to_module()`: errors with a clear message if any output Func is
+  spec-pattern, before any other compile-path checks fire.
+- **`src/Instruction.h`** — `Internal::in_spec_thunk()` declaration;
+  updated `spec()` docstring; updated file-level phase comment.
+- **`src/Instruction.cpp`** — thread-local `g_spec_thunk_depth` counter and
+  `Internal::SpecThunkScope` RAII guard; `Instruction::spec()` now wraps the
+  thunk call in this scope and marks all output Funcs spec-pattern after the
+  thunk returns.
+- **`src/Func.cpp`** — `FuncRef::operator Expr()` extended: when called inside
+  a spec thunk for an undefined Func, auto-stubs the Func with a zero body
+  (typed from `required_types` if set, `Int(32)` otherwise) so that downstream
+  scheduling directives (`bound`, `vectorize`, etc.) can be applied.
+- **`test/correctness/implement_with_phase1.cpp`** — stubs for `a`, `b`, `c`
+  removed; constructors changed to `Func(Float(32), 1, "name")` to declare
+  element types. Test still passes.
+- **`test/correctness/implement_with_phase2.cpp`** (new) — five sub-tests.
+- **`test/correctness/CMakeLists.txt`** — phase2 test registered.
+
+### Design decision made under uncertainty
+
+The design doc §3.3 example uses bare `Func a("a")` (no type annotation) for
+undefined spec input Funcs.  Phase 2 requires explicit type declarations:
+`Func(Float(32), 1, "a")`.  Bare `Func("a")` auto-stubs with `Int(32)`, which
+may cause type mismatches in Phase 4's matcher.  Full type-polymorphic specs
+are v2.  See [`DECISIONS.md`](DECISIONS.md#spec-input-func-type-declarations).
+
+### Tests
+
+| Path                                                  | Status | Notes |
+|-------------------------------------------------------|--------|-------|
+| `test/correctness/implement_with_phase1.cpp`          | Passes | Updated: stubs removed, typed Funcs. |
+| `test/correctness/implement_with_phase2.cpp`          | Passes | 5 sub-tests. Exception path skipped if built without exceptions. |
 
 ---
 
@@ -99,13 +142,13 @@ See [`DECISIONS.md`](DECISIONS.md). Highlights from session 1:
 
 ## Open issues / things to plan around
 
-### Carried into Phase 2
+### Carried into Phase 3
 
-- **Spec-pattern Func mode (§4.7, OQ#4):** Phase 1 sidesteps this by
-  having the test stub spec inputs (`a(i) = i;` etc.). The design doc's
-  syntax (`out(i) = a(i) * b(i) + c(i)` with `a/b/c` undefined) is not
-  yet legal — Phase 2 is required to make it so. **This is the next
-  phase's first task.**
+- **Schedule transfer (§4.2–§4.3, Phase 3):** Spec Funcs carry
+  scheduling directives as contractual constraints. Phase 3 transfers
+  these to the corresponding matched user Funcs at `implement_with`
+  call time so they participate in bounds inference. This is the
+  next phase's primary task.
 - **Canonicalization prefix (OQ#5):** must be pinned down before Phase
   4 starts. Not yet decided.
 
@@ -133,19 +176,24 @@ See [`DECISIONS.md`](DECISIONS.md). Highlights from session 1:
 
 ## Session handoff — next session start here
 
-1. **Begin Phase 2 (spec-pattern Func mode).** Read §4.7 of DESIGN.md
-   carefully. First sub-task per §8.2:
-   - Add spec-pattern mode flag to `Function::Contents`.
-   - Implement errors at materialization sites (`realize`,
-     `compile_jit`, `compile_to_static_library`, etc.).
-   - Mark Funcs in a spec pipeline as spec-pattern when the Builder's
-     spec thunk returns.
-   - Tests should demonstrate that the design doc's intended spec
-     syntax (e.g., `out(i) = a(i) * b(i) + c(i)` with undefined `a/b/c`)
-     becomes legal inside a spec thunk, and that any attempt to
-     `realize` a spec pipeline errors cleanly.
-2. **Update Phase 1 test:** once spec-pattern Func mode exists, restore
-   the spec body in `implement_with_phase1.cpp` to the design-doc
-   syntax (drop the stub definitions of `a/b/c`). The Phase 1 test will
-   then double as a Phase 2 regression check.
-3. **Resolve OQ#4** in the design doc when Phase 2 lands.
+1. **Begin Phase 3 (schedule transfer + constraint installation).**
+   Read §4.2–§4.3 of DESIGN.md carefully. Per §8.2:
+   - At `implement_with` schedule application time, identify the
+     corresponding user Func for each spec pipeline Func (spec output →
+     user primary/co-output by name; spec inputs → matched by name
+     from the user's pipeline body, or by position).
+   - Transfer every scheduling directive on each spec Func to the
+     corresponding user Func. These directives then participate in
+     normal bounds inference and layout determination.
+   - Target-feature checking: error if `instr.required_features()` are
+     not all enabled in the compile Target (at schedule-application
+     time or lowering time per OQ#1 — see DESIGN.md §7.1).
+   - Tests: schedules that violate transferred constraints error cleanly
+     with helpful diagnostics.
+2. **Resolve OQ#4** in the design doc — Phase 2 is landed; record
+   the auto-stub decision in DESIGN.md's open-questions section.
+3. **Serialization guard (cross-cutting):** Before Phase 3 makes
+   directives load-bearing (they will influence bounds inference),
+   add an `internal_assert` in the serializer that fires when
+   `implement_with_directives` is non-empty, so that the silent-drop
+   behavior can't silently corrupt a pipeline.

@@ -19,6 +19,9 @@ Distinguish two categories:
 - [`require` vs `requires`](#require-vs-requires) (Phase 1, session 1) **[REVISES DESIGN]**
 - [Storage location for the directive](#storage-location-for-the-directive) (Phase 1, session 1)
 - [Serialization deferral](#serialization-deferral) (Phase 1, session 1)
+- [Spec input Func type declarations](#spec-input-func-type-declarations) (Phase 2, session 2)
+- [Auto-stub for undefined spec input Funcs](#auto-stub-for-undefined-spec-input-funcs) (Phase 2, session 2)
+- [Materialization guard location](#materialization-guard-location) (Phase 2, session 2)
 
 ---
 
@@ -143,3 +146,98 @@ let it pretend to work.
   - add full serialization, or
   - file an `internal_assert` in the serializer that fires when
     `implement_with_directives` is non-empty, so it can't slip silently.
+
+---
+
+## Spec input Func type declarations
+
+**Phase:** 2 · **Session:** 2 (2026-05-25) · **Status:** Resolved
+
+**Decision.** Undefined spec input Funcs must be declared with explicit
+element types via the `Func(Type, dims, name)` constructor — e.g.
+`Func a(Float(32), 1, "a")`. The bare `Func a("a")` form (no type) auto-stubs
+with `Int(32)`, which may cause type mismatches in Phase 4's structural
+matcher if the use-site type differs.
+
+**Alternatives considered.**
+
+1. Allow bare `Func a("a")` and infer type from context (e.g., from the
+   output Func's type). **Rejected for Phase 2:** type-polymorphic specs are
+   a v2 feature; Phase 2 does not need to solve type inference. The
+   design doc §3.3 example using bare `Func a` is aspirational shorthand.
+2. Require explicit stub definitions (`a(i) = 0.0f;`). **Rejected:** Phase 2's
+   purpose is to eliminate this boilerplate.
+3. Use `ImageParam` for spec inputs. **Rejected:** `ImageParam` does not support
+   Halide scheduling directives (`bound`, `vectorize`, etc.) that form the
+   instruction contract (see design doc §4.2).
+
+**Reasoning.** The matcher (Phase 4) will need to compare spec Func types
+against use-site types. Getting the type right now (via `required_types`)
+produces correct spec IR; getting it wrong defers a type error until Phase 4.
+The cost to spec authors is minimal: one constructor change per input Func.
+
+**Implication.** Phase 2 and Phase 4 tests use `Func(Float(32), 1, "name")`.
+The design doc's bare-`Func` examples remain aspirational and should be
+revisited when v2 type-polymorphic specs are designed.
+
+---
+
+## Auto-stub for undefined spec input Funcs
+
+**Phase:** 2 · **Session:** 2 (2026-05-25) · **Status:** Resolved
+
+**Decision.** When `FuncRef::operator Expr()` is called for an undefined Func
+inside a spec thunk, it auto-defines the Func with a zero stub body (typed
+from `required_types` if set, `Int(32)` otherwise). This allows downstream
+scheduling directives (`bound`, `vectorize`, etc.) to be applied — they
+require the Func to have dimension args set, which only happens via `define`.
+
+**Alternatives considered.**
+
+1. Register args without creating a definition (new `Function::set_args()` API).
+   **Rejected:** more invasive API change; semantically no different from a
+   stub body that is never executed.
+2. Modify `Func::bound()` to accept undefined Funcs in spec context.
+   **Rejected:** `bound` and `vectorize` both ultimately need the args list;
+   bypassing those checks individually would require many touch points.
+3. Thread-local flag + special Call::make path (no auto-stub). **Rejected:**
+   this approach produces undefined-Func Call nodes in the IR, which breaks
+   `func.outputs() == 0` invariants in several downstream consumers.
+
+**Reasoning.** The auto-stub is the minimal change that makes the full
+design-doc spec syntax work end-to-end. The stub body is irrelevant because
+spec pipelines are never lowered. The `const_cast` in `FuncRef::operator Expr()`
+is safe because `FuncRef` is already a handle type — const-ness on a `FuncRef`
+does not imply immutability of the backing Function.
+
+**Implication.** After auto-stubbing, spec input Funcs are defined with a stub
+body. The matcher (Phase 4) identifies them as inputs by checking whether they
+appear in `Pipeline::outputs()` — inputs are those referenced but not in the
+outputs list, regardless of whether they have stub definitions or not.
+
+---
+
+## Materialization guard location
+
+**Phase:** 2 · **Session:** 2 (2026-05-25) · **Status:** Resolved
+
+**Decision.** The spec-pattern guard is placed at the top of
+`Pipeline::compile_to_module()`, which is the single choke point through
+which all compile/realize paths pass (`compile_jit`, `compile_to_object`,
+`compile_to_file`, `realize`, etc. all call it).
+
+**Alternatives considered.**
+
+1. Also guard `Pipeline::realize(vector<int32_t>)` directly.
+   **Deferred:** the `realize` path's existing `has_pure_definition` checks
+   do not fire for a defined output Func, so `compile_to_module` is always
+   reached. No need to duplicate.
+2. Guard at `Func::realize()` level. **Rejected:** this would miss other
+   `Pipeline` entry points; guarding at `Pipeline::compile_to_module` is
+   more complete.
+
+**Reasoning.** Single guard, no duplication, catches all code paths.
+
+**Implication.** The error message mentions `compile_to_module` in its
+context. Future diagnostics improvements (Phase 6) may want to give more
+specific pipeline-entry-point names in the error.
