@@ -2,12 +2,15 @@
 
 **Branch:** `alexreinking/implement_with` (worktree at
 `/var/home/alex/dev/Halide/implement_with`)
-**Current phase:** Phase 4 in progress. Structural matcher with
-alpha-rename + commutativity landed. Spec-input-Func wildcard
-semantics (currently degenerate because stub Funcs inline to 0.0f),
-Simplify-equivalence on integer expressions, and the wire-in to
-`apply_implement_with_directives` are the next pieces.
-**Last updated:** 2026-05-25 (session 6)
+**Current phase:** Phase 4 in progress. Structural matcher (alpha-
+rename + commutativity + Simplify-equivalence fallback) is now
+exercised end to end by a vfmadd231ps_256 case study that lowers
+both a spec and a realistic Halide user pipeline through the
+canonical-form prefix and asserts the resulting bindings. Three
+case studies remain (SDOT, HVX/AMX, PTX MMA); the wire-in to
+`apply_implement_with_directives` and joint multi-output matching
+are deferred to future sessions.
+**Last updated:** 2026-05-25 (session 7)
 
 This file is the single source of truth for *where we are*. The design doc
 ([`DESIGN.md`](DESIGN.md)) is the spec; this file is the trace. Update at
@@ -22,12 +25,101 @@ the end of every session.
 | 1     | Infrastructure (inert API)               | **Done**    | Session 1. Two commits on branch. |
 | 2     | Spec-pattern Funcs                       | **Done**    | Session 2. Two commits on branch. |
 | 3     | Schedule transfer + constraint install   | **Done**    | Session 3. Single-output, bounds only; vectorize/align/etc. deferred. |
-| 4     | Matcher (canonicalization + structural)  | In progress | Session 5: PTX MMA added to case studies; `lower_to_canonical_form` exposed; `lower_spec_to_canonical_form` and `find_implement_with_loop` landed. Session 6: structural matcher with alpha-rename + commutativity landed (`match_canonical_form` + `MatchResult`). Spec-input wildcard semantics (blocked on stub-inline prevention), Simplify-equivalence, and apply_implement_with_directives wire-in still pending. |
+| 4     | Matcher (canonicalization + structural)  | In progress | Session 5: PTX MMA added to case studies; `lower_to_canonical_form` exposed; `lower_spec_to_canonical_form` and `find_implement_with_loop` landed. Session 6: structural matcher with alpha-rename + commutativity landed (`match_canonical_form` + `MatchResult`). Session 7: spec-input wildcard observability (stubs now `compute_root()`), Simplify-equivalence fallback for integer Exprs, `lower_pipeline_to_canonical_form` helper, and the vfmadd231ps_256 case study landed. Three case studies (SDOT, HVX/AMX, PTX MMA) and the apply_implement_with_directives wire-in remain. |
 | 5     | Emit + lowering integration              | Not started | |
 | 6     | Diagnostics                              | Not started | |
 | 7 (v1.5) | Affine match parameters               | Not started | |
 
 ---
+
+## Session 7 — what landed (Phase 4: wildcards, Simplify, case study, 2026-05-25)
+
+### Source changes (4 commits)
+
+- **`src/Func.cpp`** — `FuncRef::operator Expr()` schedules the
+  auto-stubbed spec input Func `compute_root()` after defining it.
+  Without this, the stub Func is inlined and the canonical-form
+  prefix substitutes `0.0f` into every call site; Simplify then
+  collapses the body to a constant Store, leaving no Load for the
+  matcher's `func_rename` to bind. With `compute_root()` the stub
+  body survives as a Realize / Allocate / produce / Load chain and
+  the spec-input wildcard semantics described in the design are
+  observable end to end.
+- **`src/ImplementWithMatcher.{h,cpp}`** — two pieces:
+    - **Simplify-equivalence fallback.** `match_expr` now snapshots
+      binding state, attempts the existing structural recursion via
+      a new `match_expr_structural` helper, and on failure restores
+      the snapshot before trying `simplify_equivalent_ints`. The
+      fallback substitutes current `var_rename` bindings into the
+      spec Expr and asks Simplify whether `spec_substituted - user`
+      reduces to a constant zero. Restricted to scalar/vector
+      integer types of matching shape. Identical IR still takes the
+      structural path (no extra Simplify cost in the common case).
+    - **`lower_pipeline_to_canonical_form(p, t)`** — new public
+      entry point that omits the spec-pattern assertion in
+      `lower_spec_to_canonical_form`, making the canonical-form
+      lowering usable for real Halide user pipelines too. Both
+      functions delegate to a shared file-local helper
+      `lower_no_implement_with`. Needed for case-study tests that
+      build a user pipeline and lower it through the matcher's
+      prefix.
+
+### Tests added to `implement_with_phase4.cpp`
+
+- `test_match_spec_input_funcs_bind_as_wildcards` — lowers two
+  copies of the FMA spec; collects spec-side `Allocate` names from
+  each lowered Stmt; matches the inner Fors; asserts every spec
+  input Allocate name is bound in `func_rename` to some side-2 input
+  name (we don't insist on a specific pairing because commutativity
+  may swap a/b).
+- `test_match_simplify_equivalent_integer_indices` — handmade For
+  loops with bodies `(i + 4) - 2` vs `j + 2`. Structural match
+  fails (Sub vs Add); after the For binds `i -> j` the
+  simplify-equivalence fallback recognizes the algebraic identity.
+- `test_match_simplify_unequal_integers_still_fail` — negative
+  control for the above. `i + 3` vs `j + 2` correctly fails.
+- `test_case_study_vfmadd231ps_256` — first of four Phase 4 case
+  studies. Builds the spec from §3.3 and a realistic user pipeline
+  with ImageParam inputs (`dim(0).set_bounds(0, 8)` to pin the min
+  to 0). Lowers both via the spec / pipeline canonical-form entry
+  points, locates inner Fors by stage-qualified name, matches, and
+  asserts (a) success, (b) For-name binding, (c) every spec
+  Allocate name binds to a user ImageParam (`ua` / `ub` / `uc`),
+  and (d) spec output name binds to `user_out_vfmadd`.
+
+### Decisions made under uncertainty
+
+- **Compute_root vs tagged sentinel for spec-input wildcards.**
+  Picked compute_root() on the auto-stub. Reason: keeps the
+  matcher logic uniform — Load names already route through
+  `func_rename`, no special intrinsic handling needed. The
+  per-stub Realize/Allocate is small (just the bounded extent) and
+  only exists during spec lowering. The tagged-sentinel
+  alternative was lighter at runtime but required a custom
+  matcher rule and diverged from "spec lowered IR == user lowered
+  IR" purity.
+- **Item 3 (matcher wire-in to `apply_implement_with_directives`)
+  deferred.** Wiring the matcher in requires lowering the user
+  pipeline mid-prefix in `lower_impl` (matcher needs canonical-
+  form IR on both sides; user side isn't lowered yet when
+  `apply_implement_with_directives` runs). The simplest fix
+  (deep-copy env per directive, run wrap_func_calls /
+  realization_order / simplify_specializations /
+  lower_to_canonical_form on the copy) is doable but expensive
+  and changes the function signature. Worth a dedicated session.
+  Positional rename continues to work for the cases currently
+  tested; the win for the matcher path is correctness on
+  multi-dim and reordered cases not yet covered by the Phase 3
+  test suite.
+
+### Non-zero-min note for case studies
+
+The vfmadd case study uses `ImageParam::dim(0).set_bounds(0, 8)`
+to pin the input min to 0. Without it, the user-side Load index is
+`x - ua.min.0`, which the simplify-equivalence fallback cannot
+prove constant. Affine match parameters (Phase 7, v1.5) are the
+proper place to handle non-zero buffer mins. Documented in the
+test's comment block.
 
 ## Session 6 — what landed (Phase 4 matcher, 2026-05-25)
 
@@ -423,75 +515,85 @@ See [`DECISIONS.md`](DECISIONS.md). Highlights from session 1:
 
 ## Session handoff — next session start here
 
-1. **Make spec-input-Func wildcards observable.** The matcher's
-   `func_rename` map already binds Load/Call names as wildcards, but
-   the canonical-form lowering inlines spec input Funcs (their `0.0f`
-   stub bodies) so there are no Loads from `a`/`b`/`c` left to bind.
-   Two options:
-   - **`compute_root()` spec inputs before lowering.** Modify
-     `lower_spec_to_canonical_form` (or Phase 2's spec-pattern Func
-     setup) to schedule auto-stubbed input Funcs `compute_root()` so
-     they survive as Realize/ProducerConsumer/Load chains in
-     canonical IR. The matcher then walks those Loads, binding the
-     spec input names into `func_rename`. Risk: the spec lowered IR
-     now contains real Allocate/Free for the stub bodies, which the
-     user IR will not have at the matched For region. The matcher
-     would need to either match outside the For (and have the
-     locator return a wider region) or special-case Realize/Allocate
-     skipping for known spec-input Func names.
-   - **Tagged stub sentinel.** Replace the `0.0f` stub with a
-     dedicated `Call::PureIntrinsic` named (say) `implement_with_input`
-     carrying the spec-input Func name as a string arg. The matcher
-     recognizes this sentinel and treats matching it as a wildcard
-     bind. Cleaner separation; needs a small Phase 2 edit.
-2. **Simplify-equivalence for integer expressions.** Two algebraically
-   equal indices that aren't lexically equal (e.g. `(i + 4) - 2` vs
-   `i + 2`) currently fail to match outside commutative-op contexts.
-   Wrap integer comparisons with `simplify(spec_idx - user_idx) == 0`
-   or similar. Care needed around free Variables — the simplifier
-   doesn't know about alpha-renaming, so call simplify *after* the
-   rename has been resolved, or substitute bindings before
-   simplifying.
-3. **Wire the matcher into `apply_implement_with_directives`.**
-   Replace Phase 3's positional spec-Var -> user-Var rename with
-   the matcher's `var_rename`. The Phase 3 tests should still pass
-   (the 1D positional case is a degenerate matcher case); the win
-   is correctness for multi-dim and split-renamed cases.
-4. **Joint multi-output matching.** Extend the matcher to match
-   against multiple co-computed outputs at the same loop level
-   (Tuple primaries; `compute_with`-fused co-outputs). Lift the
-   `co_output_names.empty()` and `outputs().size() == 1`
-   restrictions in `apply_implement_with_directives`.
-5. **Extend schedule transfer once the matcher provides a rename map.**
-   Currently `ApplyImplementWith.cpp` transfers only
-   `FuncSchedule::bounds()` and only single-output. Once the matcher
-   gives us a proper var rename, layer in `align_storage`, `vectorize`
-   (as a width requirement), and the multi-output path. Update Phase 3
-   tests rather than the test file's filename — they should keep
-   passing as Phase 4 lands.
-6. **Tests for Phase 4:** the design's "get to end-to-end early"
-   guidance (§8.1) has four case studies attached, each chosen to
-   exercise a distinct property of the canonical-form prefix and the
-   matcher:
-   - `vfmadd231ps_256` (single FMA on AVX2/FMA — the canonical §3.3
-     example) — simplest case; validates the post-FindIntrinsics
-     match on a single intrinsic call.
-   - SDOT 4×4 GEMV on ARM (§3.4 — multi-instruction emit) — tests
-     joint matching of the four broadcasting SDOTs and multi-output
-     scheduling.
-   - HVX MAC sequences *or* AMX tile triples — validates that
-     `find_intrinsics` (HVX) and (gated) `extract_tile_operations`
-     (AMX) inside the prefix produce match-friendly canonical IR. At
-     least one of these should be wired up; both is better.
-   - PTX MMA on CUDA (NVPTX tensor cores) — validates LLVM-backed GPU
-     matching. Canonical form is taken *before* `inject_gpu_offload`,
-     so spec and use-site share `For::GPUBlock`/`For::GPUThread` loop
-     structure; this is the test that closes the "LLVM-backed
-     backends first" line from the OQ#5 analysis. Warp-scoped
-     fragment IR also exercises shared-state subtleties that the CPU
-     case studies cannot.
-   The four together should be wired up before declaring OQ#5 "settled"
-   beyond v1's no-stability-promise scope.
+The Phase 4 matcher core (alpha-rename + commutativity + Simplify-
+equivalence + spec-input wildcards) is feature-complete and exercised
+by an end-to-end vfmadd case study. The remaining Phase 4 work breaks
+into two independent tracks: more case studies (to validate the
+target-specific canonical-form gates) and the schedule-transfer
+wire-in (to make the matcher's `var_rename` reach Phase 3's bound
+transfer). Either is a reasonable first item for the next session.
+
+1. **Wire the matcher into `apply_implement_with_directives`.**
+   The hard part is *getting* the user-side canonical IR: the
+   matcher needs lowered IR on both sides, but
+   `apply_implement_with_directives` runs mid-prefix in `lower_impl`
+   (after `lock_loop_levels`, before `wrap_func_calls`) — the user
+   pipeline isn't lowered yet at that point. Two design sketches:
+   - **Per-directive deep-copy lowering.** Change the
+     `apply_implement_with_directives` signature to take `outputs`
+     as well. For each directive (or once per call, cached): deep-
+     copy the env, run `wrap_func_calls` / `realization_order` /
+     `simplify_specializations` / `lower_to_canonical_form` on the
+     copy to get user-side IR, run the matcher, then transfer
+     bounds using `var_rename` on the *original* env. Cost: one
+     extra canonical-form lowering per `apply_implement_with_directives`
+     invocation. The `lower_pipeline_to_canonical_form` helper
+     added in session 7 covers most of the lowering machinery; only
+     a "no deep-copy, env already prepared" variant is missing.
+   - **Restructure lowering to expose canonical IR first.** Move
+     `apply_implement_with_directives` to run *after*
+     `lower_to_canonical_form`, then have it patch the Stmt rather
+     than the env. This is a bigger change but avoids the duplicate
+     lowering, and is closer to how Phase 5's emit substitution
+     will need to work anyway. Probably the right long-term shape.
+
+   Either way: existing Phase 3 tests should keep passing (the 1D
+   positional case is a degenerate matcher case). The win is
+   correctness for multi-dim and reordered cases — worth adding
+   tests for those at the same time.
+
+2. **Joint multi-output matching.** Extend the matcher to handle
+   Tuple-valued primaries and `compute_with`-fused co-outputs at
+   the same loop level. Lift the `co_output_names.empty()` and
+   `outputs().size() == 1` restrictions in
+   `apply_implement_with_directives`. Required for the SDOT 4×4
+   GEMV case study below.
+
+3. **Extend schedule transfer beyond bounds.** Once the matcher's
+   `var_rename` is wired in (item 1), layer `align_storage`,
+   `vectorize` (as a width requirement), and the multi-output
+   path into `ApplyImplementWith.cpp`. Currently only
+   `FuncSchedule::bounds()` transfers, single-output only.
+
+4. **Remaining Phase 4 case studies.** vfmadd231ps_256 landed in
+   session 7. Three remain, each chosen to exercise a distinct
+   property of the canonical-form prefix:
+   - **SDOT 4×4 GEMV on ARM** (DESIGN.md §3.4 — multi-instruction
+     emit) — needs joint matching of the four broadcasting SDOTs;
+     blocked on item 2 above (joint multi-output) for full
+     coverage, but a single-output reduction variant could land
+     first.
+   - **HVX MAC sequences *or* AMX tile triples** — validates that
+     `find_intrinsics` (HVX) and gated `extract_tile_operations`
+     (AMX) inside the canonical-form prefix produce match-friendly
+     IR. At least one of these should be wired up; both is better.
+     HVX target builds without extra LLVM components; AMX requires
+     LLVM with X86 target enabled.
+   - **PTX MMA on CUDA (NVPTX tensor cores)** — validates LLVM-
+     backed GPU matching. Canonical form is taken *before*
+     `inject_gpu_offload`, so spec and use-site share
+     `For::GPUBlock`/`For::GPUThread` loop structure. Warp-scoped
+     fragment IR exercises shared-state subtleties the CPU case
+     studies cannot. Required for declaring OQ#5 "settled" beyond
+     v1's no-stability-promise scope.
+
+5. **Non-zero ImageParam mins (Phase 7 prep).** The vfmadd case
+   study pins input mins to 0 because the matcher's Simplify-
+   equivalence fallback cannot prove `x - ua.min.0 == x` when
+   `ua.min.0` is symbolic. Real Halide pipelines use non-zero mins.
+   Affine match parameters (Phase 7, v1.5) handle this properly;
+   no Phase 4 changes needed, but worth a note when planning the
+   case studies above.
 
 ### What is NOT yet done that's worth noting
 

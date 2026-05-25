@@ -791,6 +791,31 @@ a problem.
 
 Format: `YYYY-MM-DD (session N)` — short summary of what changed.
 
+- **2026-05-25 (session 7, Phase 4 wildcards + Simplify + case
+  study):** Three matcher-completion pieces landed plus the first
+  Phase 4 case study. (1) Spec-input Func wildcards are now
+  observable: `FuncRef::operator Expr()` schedules auto-stubbed
+  spec input Funcs `compute_root()` so their bodies survive the
+  canonical-form prefix as Realize / Allocate / Load chains,
+  letting the matcher's `func_rename` bind the spec input names
+  to user-side buffer / Func names. (2) `match_expr` now has a
+  Simplify-equivalence fallback for scalar/vector integer Exprs:
+  on structural-recursion failure, the matcher substitutes
+  current `var_rename` bindings into the spec Expr and checks
+  whether `simplify(spec_substituted - user)` is constant zero,
+  so algebraically equal but lexically distinct indices match
+  (e.g. `(i + 4) - 2` vs `j + 2` once `i -> j` is bound).
+  (3) New public entry point
+  `Internal::lower_pipeline_to_canonical_form(p, target)` mirrors
+  `lower_spec_to_canonical_form` minus the spec-pattern
+  assertion, enabling case studies that lower real user pipelines
+  through the same prefix. (4) The vfmadd231ps_256 case study
+  (`test_case_study_vfmadd231ps_256`) lowers both the §3.3 spec
+  and a realistic Halide user pipeline (ImageParam inputs with
+  mins pinned to 0), locates inner Fors, matches, and asserts
+  For-name + Allocate-name + output-name bindings. Three case
+  studies remain (SDOT, HVX/AMX, PTX MMA).
+
 - **2026-05-25 (session 6, Phase 4 matcher):** Structural matcher
   for canonical-form IR landed. New `Internal::MatchResult`
   struct and `Internal::match_canonical_form(spec_loop, user_loop)`
