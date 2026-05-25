@@ -11,6 +11,8 @@
  * form in the matcher.
  */
 
+#include <string>
+
 #include "Expr.h"
 
 namespace Halide {
@@ -38,6 +40,22 @@ namespace Internal {
  * produce IR that is comparable structurally modulo the
  * Target-conditional gates noted in DESIGN.md §4.4. */
 Stmt lower_spec_to_canonical_form(const Pipeline &spec, const Target &t);
+
+/** Locate the For node in a canonical-form Stmt that corresponds to
+ * an implement_with directive's loop level. The directive is keyed by
+ * (user_func_name, stage_index, loop_var_name); the For node we look
+ * for is named "<user_func_name>.s<stage_index>.<loop_var_name>",
+ * which is the format produced by schedule_functions and preserved by
+ * uniquify_variable_names.
+ *
+ * Returns an undefined Stmt if no such For node exists. The match is
+ * exact: split-renamed Vars (e.g. xi from a split of x) must be named
+ * with their post-split name in the directive, just as they would be
+ * in any other scheduling call. */
+Stmt find_implement_with_loop(const Stmt &s,
+                              const std::string &user_func_name,
+                              int stage_index,
+                              const std::string &loop_var_name);
 
 }  // namespace Internal
 }  // namespace Halide
