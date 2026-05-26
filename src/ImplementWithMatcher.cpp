@@ -123,6 +123,65 @@ Stmt find_implement_with_loop(const Stmt &s,
 
 namespace {
 
+// Locate the outermost For at a given stage within a producer's body.
+// The spec-side counterpart of find_implement_with_loop: the wire-in
+// into apply_implement_with_directives does not know which bare Var
+// the spec author scheduled, so it picks the outermost stage-S For of
+// the spec primary by walking into the matching ProducerConsumer.
+class FindOutermostStageForInProducer : public IRVisitor {
+public:
+    Stmt found;
+    const std::string &producer_name;
+    const std::string stage_prefix;
+    bool in_producer = false;
+
+    FindOutermostStageForInProducer(const std::string &producer,
+                                    int stage)
+        : producer_name(producer),
+          stage_prefix(producer + ".s" + std::to_string(stage) + ".") {
+    }
+
+    using IRVisitor::visit;
+
+    void visit(const ProducerConsumer *op) override {
+        if (found.defined()) {
+            return;
+        }
+        if (op->is_producer && op->name == producer_name) {
+            bool saved = in_producer;
+            in_producer = true;
+            op->body.accept(this);
+            in_producer = saved;
+            return;
+        }
+        IRVisitor::visit(op);
+    }
+
+    void visit(const For *op) override {
+        if (found.defined()) {
+            return;
+        }
+        if (in_producer &&
+            op->name.compare(0, stage_prefix.size(), stage_prefix) == 0) {
+            found = Stmt(op);
+            return;
+        }
+        IRVisitor::visit(op);
+    }
+};
+
+}  // namespace
+
+Stmt find_spec_primary_loop(const Stmt &s,
+                            const std::string &spec_out_name,
+                            int stage_index) {
+    FindOutermostStageForInProducer v(spec_out_name, stage_index);
+    s.accept(&v);
+    return v.found;
+}
+
+namespace {
+
 // Parallel-walk matcher. Recurses through paired Stmt/Expr trees,
 // binding spec-side names to user-side names in two maps:
 //   var_rename:  Variables, For loop vars, Let{,Stmt} bound names

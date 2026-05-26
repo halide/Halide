@@ -70,6 +70,25 @@ Stmt find_implement_with_loop(const Stmt &s,
                               int stage_index,
                               const std::string &loop_var_name);
 
+/** Locate the spec primary's outermost compute For at a given stage,
+ * looking only inside the producer-for-`spec_out_name` subtree.
+ *
+ * Used by the `apply_implement_with_directives` wire-in: the
+ * directive carries the user's bare loop_var_name (so the user-side
+ * For can be found by name via `find_implement_with_loop`), but
+ * carries no analogous hint for the spec side. The spec's "matched
+ * loop" for a stage is, by convention, its outermost For inside that
+ * producer at that stage --- which is what the spec author scheduled
+ * the matched region to start at. If the spec author splits a Var
+ * (e.g. `out.update(0).split(i, io, ii, 64)`), the post-split outer
+ * For (named `<spec_out>.s<stage>.i.io`) is the outermost and is
+ * returned.
+ *
+ * Returns an undefined Stmt if no matching For is found. */
+Stmt find_spec_primary_loop(const Stmt &s,
+                            const std::string &spec_out_name,
+                            int stage_index);
+
 /** Outcome of a single structural-match attempt between a spec's
  * canonical-form loop region and the user's. Owns no IR; the rename
  * maps are bindings discovered during the parallel walk.

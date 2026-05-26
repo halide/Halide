@@ -175,6 +175,48 @@ void test_find_implement_with_loop_returns_undefined_when_missing() {
     }
 }
 
+// find_spec_primary_loop walks into ProducerConsumer{out} and returns
+// the outermost For at the requested stage. Unlike
+// find_implement_with_loop it does not need the bare Var name --- the
+// wire-in into apply_implement_with_directives uses this because the
+// directive does not carry a spec-side var hint.
+void test_find_spec_primary_loop_outermost() {
+    Instruction instr = make_vfmadd_style_named();
+    Pipeline spec = instr.spec();
+    Target t = target_with({Target::FMA, Target::AVX2});
+    std::string out_name = spec.outputs()[0].name();
+
+    Internal::Stmt s = Internal::lower_spec_to_canonical_form(spec, t);
+    Internal::Stmt loop =
+        Internal::find_spec_primary_loop(s, out_name, 0);
+    if (!loop.defined()) {
+        fprintf(stderr,
+                "test_find_spec_primary_loop_outermost: locator returned "
+                "undefined Stmt for stage 0 of %s\n",
+                out_name.c_str());
+        exit(1);
+    }
+    const Internal::For *f = loop.as<Internal::For>();
+    std::string expected = out_name + ".s0.i";
+    if (!f || f->name != expected) {
+        fprintf(stderr,
+                "test_find_spec_primary_loop_outermost: returned For has "
+                "name '%s'; expected '%s'\n",
+                (f ? f->name.c_str() : "(not a For)"), expected.c_str());
+        exit(1);
+    }
+
+    // Stage 1 does not exist on this spec; locator should return undefined.
+    Internal::Stmt missing =
+        Internal::find_spec_primary_loop(s, out_name, 1);
+    if (missing.defined()) {
+        fprintf(stderr,
+                "test_find_spec_primary_loop_outermost: stage 1 should not "
+                "exist on a single-stage spec, but locator found one.\n");
+        exit(1);
+    }
+}
+
 // Match a lowered spec loop against itself. The matcher must report
 // success; var_rename and func_rename should contain identity bindings
 // (every spec name maps to itself, since the inputs are identical).
@@ -1136,6 +1178,7 @@ int main(int argc, char **argv) {
     test_use_site_pipeline_still_compiles();
     test_find_implement_with_loop_returns_for_node();
     test_find_implement_with_loop_returns_undefined_when_missing();
+    test_find_spec_primary_loop_outermost();
     test_match_identity_self();
     test_match_commutativity_directly();
     test_match_different_op_fails();
