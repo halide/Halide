@@ -8,7 +8,23 @@ vcpkg_from_github(
     PATCHES remove-fetchcontent.patch
 )
 
-vcpkg_cmake_configure(SOURCE_PATH "${SOURCE_PATH}")
+if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
+    set(WAMR_BUILD_TARGET "X86_32")
+elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
+    set(WAMR_BUILD_TARGET "X86_64")
+elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm")
+    set(WAMR_BUILD_TARGET "ARM")
+elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
+    set(WAMR_BUILD_TARGET "AARCH64")
+else()
+    message(FATAL_ERROR "Unsupported architecture: ${VCPKG_TARGET_ARCHITECTURE}")
+endif()
+
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        -DWAMR_BUILD_TARGET=${WAMR_BUILD_TARGET}
+)
 
 vcpkg_cmake_install()
 vcpkg_cmake_config_fixup(PACKAGE_NAME iwasm CONFIG_PATH lib/cmake/iwasm)
