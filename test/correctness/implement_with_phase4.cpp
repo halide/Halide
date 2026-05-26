@@ -623,6 +623,164 @@ void test_case_study_vfmadd231ps_256() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Case study: SDOT-style 4x4 GEMV (DESIGN.md §3.4)
+// ---------------------------------------------------------------------------
+// Single-output ARM dot-product GEMV. The spec is a two-stage Func:
+//   out(i) = c(i);
+//   out(i) += int32(A(i, k)) * int32(b(k));
+// matched at the update stage's i-loop. The user pipeline mirrors the
+// shape with ImageParam inputs. This exercises:
+//   - 2D Loads (A) with both bound and stride pinned at the ImageParam,
+//   - the matcher walking through an inner reduction-domain For loop,
+//   - Cast nodes from int8 -> int32 (the actual SDOT widening),
+//   - the matcher's two-stage out (init + update) — find_implement_with_loop
+//     locates the update-stage's For specifically.
+//
+// Joint multi-output matching (the "four broadcasting SDOTs" property in
+// the design) is task #9 and out of scope here; this case study is the
+// single-output reduction variant the §3.4 example reduces to once the
+// emit-side multi-instruction structure is factored out.
+Instruction make_sdot_style_named() {
+    return Instruction::declare("sdot_gemv_4x4_named")
+        .spec([]() -> Pipeline {
+            Var i("i"), j("j");
+            RDom k(0, 4, "k");
+            Func A(Int(8), 2, "A"), b(Int(8), 1, "b"),
+                c(Int(32), 1, "c"), out(Int(32), 1, "out");
+            // Force the c(i) FuncRef -> Expr conversion explicitly: the
+            // FuncRef-to-FuncRef operator= overload would otherwise route
+            // through Tuple(FuncRef), which asserts on undefined Funcs
+            // before the spec-thunk auto-stub gets a chance to fire. The
+            // auto-stub only triggers from FuncRef::operator Expr().
+            Expr c_at_i = c(i);
+            out(i) = c_at_i;
+            out(i) += cast<int32_t>(A(i, k)) * cast<int32_t>(b(k));
+            // Don't bound the auto-stubbed inputs. Their pure args take
+            // their names from the call site (A: "i","k$0"; b: "k$0";
+            // c: "i"), so `bound(_1, 0, 4)` or `bound(i, 0, 4)` on b
+            // doesn't resolve. Bound inference picks up the inputs'
+            // required regions from the consumer `out`, which has its
+            // first dim bounded explicitly and its second access driven
+            // by the constant-extent RDom k(0, 4).
+            out.bound(i, 0, 4);
+            return Pipeline({out});
+        })
+        .require({})
+        .emit(stub_emit)
+        .build();
+}
+
+void test_case_study_sdot_gemv_4x4() {
+    Instruction instr = make_sdot_style_named();
+    Pipeline spec = instr.spec();
+    Target t = target_with({});
+    std::string spec_out = spec.outputs()[0].name();
+
+    ImageParam A_in(Int(8), 2, "uA");
+    ImageParam b_in(Int(8), 1, "ub");
+    ImageParam c_in(Int(32), 1, "uc");
+    A_in.dim(0).set_bounds(0, 4).set_stride(1);
+    A_in.dim(1).set_bounds(0, 4).set_stride(4);
+    b_in.dim(0).set_bounds(0, 4);
+    c_in.dim(0).set_bounds(0, 4);
+    Func uout(Int(32), 1, "user_out_sdot");
+    Var x("x");
+    RDom uk(0, 4, "uk");
+    uout(x) = c_in(x);
+    uout(x) += cast<int32_t>(A_in(x, uk)) * cast<int32_t>(b_in(uk));
+    uout.bound(x, 0, 4);
+    Pipeline user(uout);
+
+    Internal::Stmt spec_s = Internal::lower_spec_to_canonical_form(spec, t);
+    Internal::Stmt user_s = Internal::lower_pipeline_to_canonical_form(user, t);
+
+    Internal::Stmt spec_loop =
+        Internal::find_implement_with_loop(spec_s, spec_out, 1, "i");
+    Internal::Stmt user_loop =
+        Internal::find_implement_with_loop(user_s, "user_out_sdot", 1, "x");
+    if (!spec_loop.defined() || !user_loop.defined()) {
+        fprintf(stderr,
+                "test_case_study_sdot_gemv_4x4: locator missed "
+                "(spec_defined=%d user_defined=%d). spec IR:\n%s\nuser IR:\n%s\n",
+                (int)spec_loop.defined(), (int)user_loop.defined(),
+                ([&] { std::ostringstream os; os << spec_s; return os.str(); })().c_str(),
+                ([&] { std::ostringstream os; os << user_s; return os.str(); })().c_str());
+        exit(1);
+    }
+
+    Internal::MatchResult r =
+        Internal::match_canonical_form(spec_loop, user_loop);
+    if (!r.success) {
+        fprintf(stderr,
+                "test_case_study_sdot_gemv_4x4: match failed: %s\n"
+                "spec loop:\n%s\nuser loop:\n%s\n",
+                r.failure_reason.c_str(),
+                ([&] { std::ostringstream os; os << spec_loop; return os.str(); })().c_str(),
+                ([&] { std::ostringstream os; os << user_loop; return os.str(); })().c_str());
+        exit(1);
+    }
+
+    const Internal::For *spec_for = spec_loop.as<Internal::For>();
+    const Internal::For *user_for = user_loop.as<Internal::For>();
+    internal_assert(spec_for && user_for) << "locator returned non-For Stmt";
+    auto it = r.var_rename.find(spec_for->name);
+    if (it == r.var_rename.end() || it->second != user_for->name) {
+        fprintf(stderr,
+                "test_case_study_sdot_gemv_4x4: expected For-name binding "
+                "'%s' -> '%s'; got '%s'\n",
+                spec_for->name.c_str(), user_for->name.c_str(),
+                (it == r.var_rename.end() ? "(missing)" : it->second.c_str()));
+        exit(1);
+    }
+
+    // The matched region (update-stage s1 i-loop) references only the
+    // reduction-side inputs A and b plus the in-place output `out`. The
+    // init-stage input `c` lives in s0 and is therefore not visible
+    // here; its binding belongs to a (currently out-of-scope) match
+    // against the s0 For. We verify the bindings we *do* expect:
+    //   - spec output 'out' binds to 'user_out_sdot',
+    //   - exactly two spec input Allocates bind to user ImageParams
+    //     whose names start with 'u' (uA and ub).
+    auto out_it = r.func_rename.find(spec_out);
+    if (out_it == r.func_rename.end() || out_it->second != "user_out_sdot") {
+        fprintf(stderr,
+                "test_case_study_sdot_gemv_4x4: spec output '%s' "
+                "expected to bind to 'user_out_sdot'; got '%s'\n",
+                spec_out.c_str(),
+                (out_it == r.func_rename.end() ? "(missing)" : out_it->second.c_str()));
+        exit(1);
+    }
+
+    CollectAllocateNames spec_allocs;
+    spec_s.accept(&spec_allocs);
+    int n_inputs_bound = 0;
+    for (const std::string &n : spec_allocs.names) {
+        if (n == spec_out) continue;
+        auto bit = r.func_rename.find(n);
+        if (bit == r.func_rename.end()) {
+            continue;  // input not referenced in the matched region (e.g. c)
+        }
+        if (bit->second.empty() || bit->second[0] != 'u') {
+            fprintf(stderr,
+                    "test_case_study_sdot_gemv_4x4: spec input '%s' "
+                    "bound to '%s', which is not a user ImageParam "
+                    "(uA/ub/uc)\n",
+                    n.c_str(), bit->second.c_str());
+            exit(1);
+        }
+        ++n_inputs_bound;
+    }
+    if (n_inputs_bound != 2) {
+        fprintf(stderr,
+                "test_case_study_sdot_gemv_4x4: expected 2 spec inputs "
+                "(A and b) bound to user ImageParams in the update-stage "
+                "region; got %d\n",
+                n_inputs_bound);
+        exit(1);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -638,6 +796,7 @@ int main(int argc, char **argv) {
     test_match_simplify_equivalent_integer_indices();
     test_match_simplify_unequal_integers_still_fail();
     test_case_study_vfmadd231ps_256();
+    test_case_study_sdot_gemv_4x4();
 
     printf("Success!\n");
     return 0;
