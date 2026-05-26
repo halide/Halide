@@ -2,16 +2,17 @@
 
 **Branch:** `alexreinking/implement_with` (worktree at
 `/var/home/alex/dev/Halide/implement_with`)
-**Current phase:** Phase 4 substantially complete. All four case
-studies from DESIGN.md §3.3-§3.4 (vfmadd231ps_256, sdot_gemv_4x4,
-hvx_mac_widening, ptx_gpu_mac) land end to end, each exercising a
-distinct property of the canonical-form prefix (basic scalar FMA;
-2-stage reduction with 2D Loads + Casts; vector intrinsic lifting
-via find_intrinsics; GPU For loop types). Open Phase 4 work: the
-`apply_implement_with_directives` matcher wire-in (task #8), joint
-multi-output matching (task #9), and extended schedule transfer
-beyond bounds (task #10). Once those land Phase 4 is closed.
-**Last updated:** 2026-05-25 (session 8)
+**Current phase:** Phase 4 **closed**. All four case studies land,
+the matcher is wired into `apply_implement_with_directives` (so spec
+inputs are resolved by structural correspondence rather than by name
+match), multi-output instructions (Tuple-valued primaries and
+`co_outputs`) are supported, and `align_storage` / `bound_storage`
+transfer alongside `bound()`. Next: Phase 5 (emit + lowering
+integration). The Phase 5 entry point would replace the matched
+user-side For body with the spec's emit() output, threading the
+matcher's `MatchResult` through to `MatchContext` so emit callbacks
+can read `ctx.input(...)` / `ctx.output(...)`.
+**Last updated:** 2026-05-25 (session 9)
 
 This file is the single source of truth for *where we are*. The design doc
 ([`DESIGN.md`](DESIGN.md)) is the spec; this file is the trace. Update at
@@ -25,13 +26,111 @@ the end of every session.
 |-------|------------------------------------------|-------------|-------|
 | 1     | Infrastructure (inert API)               | **Done**    | Session 1. Two commits on branch. |
 | 2     | Spec-pattern Funcs                       | **Done**    | Session 2. Two commits on branch. |
-| 3     | Schedule transfer + constraint install   | **Done**    | Session 3. Single-output, bounds only; vectorize/align/etc. deferred. |
-| 4     | Matcher (canonicalization + structural)  | In progress | Session 5: PTX MMA added to case studies; `lower_to_canonical_form` exposed; `lower_spec_to_canonical_form` and `find_implement_with_loop` landed. Session 6: structural matcher with alpha-rename + commutativity landed (`match_canonical_form` + `MatchResult`). Session 7: spec-input wildcard observability (stubs now `compute_root()`), Simplify-equivalence fallback for integer Exprs, `lower_pipeline_to_canonical_form` helper, and the vfmadd231ps_256 case study landed. Session 8: remaining three case studies (sdot_gemv_4x4, hvx_mac_widening, ptx_gpu_mac) landed; matcher exercised across two-stage reductions, vector intrinsic lifting, and GPU For loop types. apply_implement_with_directives wire-in, joint multi-output, and extended schedule transfer remain. |
+| 3     | Schedule transfer + constraint install   | **Done**    | Session 3. Single-output, bounds only; vectorize/align/etc. deferred. (Multi-output and align_storage transfer extended in session 9.) |
+| 4     | Matcher (canonicalization + structural)  | **Done**    | Session 5: PTX MMA added to case studies; `lower_to_canonical_form` exposed; `lower_spec_to_canonical_form` and `find_implement_with_loop` landed. Session 6: structural matcher with alpha-rename + commutativity landed (`match_canonical_form` + `MatchResult`). Session 7: spec-input wildcard observability (stubs now `compute_root()`), Simplify-equivalence fallback for integer Exprs, `lower_pipeline_to_canonical_form` helper, and the vfmadd231ps_256 case study landed. Session 8: remaining three case studies (sdot_gemv_4x4, hvx_mac_widening, ptx_gpu_mac) landed; matcher exercised across two-stage reductions, vector intrinsic lifting, and GPU For loop types. Session 9: `find_spec_primary_loop` locator; matcher wired into `apply_implement_with_directives` (3-pass: positional primary transfer, matcher, matcher-driven input transfer); multi-output (Tuple-valued + co_outputs) supported; `align_storage`/`bound_storage` transfer added. |
 | 5     | Emit + lowering integration              | Not started | |
 | 6     | Diagnostics                              | Not started | |
 | 7 (v1.5) | Affine match parameters               | Not started | |
 
 ---
+
+## Session 9 — what landed (Phase 4 closeout, 2026-05-25)
+
+### Source changes (4 commits)
+
+- **`src/ImplementWithMatcher.{h,cpp}`** — new `find_spec_primary_loop`
+  helper. The spec-side counterpart of `find_implement_with_loop`:
+  walks into `ProducerConsumer{is_producer=true, name=spec_out_name}`
+  and returns the outermost For at the requested stage. Used by the
+  wire-in below, which knows the user-side loop var name (from the
+  directive) but has no analogous hint for the spec side.
+
+- **`src/ApplyImplementWith.{h,cpp}`** — `apply_implement_with_directives`
+  signature gains `const std::vector<Function> &outputs`. The function
+  is refactored into three passes:
+    1. **Pre-matcher** (positional, unconditional): target-feature
+       check + primary-output bound transfer. Must run first because
+       the user pipeline cannot lower to a structurally-matchable
+       canonical form until the spec's constant bounds are installed
+       on the user primary (otherwise the For has symbolic
+       `out.min.0` / `out.extent.0` that won't match the spec's
+       constants).
+    2. **Matcher**: lowers the user pipeline (via
+       `lower_pipeline_to_canonical_form`, which deep-copies, so env
+       is not mutated) and the spec; locates matched Fors; runs
+       `match_canonical_form`. Stores the (Pipeline, MatchResult)
+       pair per directive --- the Pipeline must be kept alive because
+       Halide uniquifies Func names per `Instruction::spec()`
+       invocation, so the matcher's func_rename keys are valid only
+       for the invocation that produced them.
+    3. **Post-matcher input transfer**: walks spec_primary's
+       transitive calls; for each spec input, looks up the user Func
+       via `func_rename[spec_input_name]` (falling back to
+       env.find-by-name) and translates bare-Var rename keys via
+       `bare_var_renames_from_matcher`, which parses For-name
+       bindings (`<func>.s<stage>.<bare>`) to recover bare-Var pairs.
+  Also lifts the multi-output restriction
+  (`spec_outputs.size() == 1 && co_output_names.empty()`) to a
+  symmetric arity check (`spec.outputs().size() == 1 +
+  co_output_names.size()`); the per-directive transfer iterates both
+  the primary and co-outputs, looking the latter up by name from
+  `co_output_names`. And adds `transfer_storage_dims` invoked
+  alongside `transfer_bounds` for both primary and inputs ---
+  transfers `align_storage` and `bound_storage` with conflict
+  detection.
+
+- **`src/Lower.cpp`** — sole caller updated to pass `outputs`.
+
+### Tests added to `implement_with_phase4.cpp` (4 new sub-tests)
+
+- `test_find_spec_primary_loop_outermost` — locator returns
+  `<spec_out>.s<stage>.<var>` outermost For, and undefined for an
+  out-of-range stage.
+- `test_wire_in_matches_renamed_spec_inputs` — user pipeline with
+  compute_root'd inputs named "p_wire", "q_wire", "r_wire" (none of
+  the spec's "a", "b", "c"). Sets `p_wire.bound(x, 0, 16)` which
+  conflicts with spec's `a.bound(i, 0, 8)`. Without the matcher
+  wire-in, `env.find("a")` returns nothing and the conflict is
+  silently dropped; with it, `func_rename` binds `a -> p_wire`, the
+  conflict fires, compile errors. The test asserts the error message
+  mentions implement_with, extent, and p_wire.
+- `test_multi_output_tuple_primary_compiles` — Tuple-valued primary
+  modeled on DESIGN.md §3.5 (frecpe_pair).
+- `test_multi_output_co_outputs_compile` — co-outputs modeled on
+  DESIGN.md §3.6 (tile_op with result + status).
+- `test_align_storage_conflict_detected` — spec sets
+  `align_storage(i, 64)`, user sets conflicting
+  `align_storage(x, 32)`. With Phase 3 silently no-op'd; now errors.
+
+### Decisions made under uncertainty
+
+- **3-pass refactor vs. lenient matcher.** The natural alternative
+  to running positional primary-output transfer before the matcher
+  would be to teach the matcher to ignore For min/max mismatches.
+  Picked the 3-pass approach because (a) it keeps the matcher's
+  strict semantics for emit-time use, (b) the primary-output
+  positional rename was already correct for the cases the wire-in
+  enables (anchor at directive's loop var), and (c) the cost is one
+  extra `lower_pipeline_to_canonical_form` call per
+  `apply_implement_with_directives` invocation, which is acceptable
+  for a compile-time pass.
+
+- **Per-Pipeline matcher context.** Each `Instruction::spec()`
+  invocation re-runs Halide's process-wide Func name uniquifier, so
+  consecutive calls return Funcs named `a$17`, `b$18`, `c$16` on
+  one invocation and `a$18`, `b$19`, `c$17` on the next. The
+  matcher's `func_rename` keys are stable only within a single
+  invocation. Resolved by stashing the spec Pipeline used for
+  matching in a per-directive context (`MatcherContext`) and re-using
+  it during the input-transfer pass.
+
+- **vectorize-as-width-requirement deferred.** The third bullet on
+  the session-8 handoff's task-10 list is not landed. It requires
+  threading the matcher's For-loop var binding into the user's
+  `StageSchedule` Dim vector (for_type) rather than `FuncSchedule`
+  (which is what bounds and storage_dims live on). More naturally
+  landed alongside the Phase 5 emit substitution, when the matcher's
+  full `var_rename` already needs to be plumbed for ctx.input/output.
 
 ## Session 8 — what landed (Phase 4: remaining case studies, 2026-05-25)
 
@@ -586,94 +685,81 @@ See [`DECISIONS.md`](DECISIONS.md). Highlights from session 1:
 
 ## Session handoff — next session start here
 
-All four Phase 4 case studies land. The remaining Phase 4 work is
-two-and-a-half items: the matcher wire-in (which is the load-
-bearing one — Phase 3 currently uses positional rename, not the
-matcher's `var_rename`), joint multi-output matching, and extended
-schedule transfer beyond bounds. Once those land Phase 4 is closed
-and the project can move to Phase 5 (emit + lowering integration).
+Phase 4 is **closed**. The matcher's structural correspondence is
+plumbed end-to-end: from the directive sitting on a user StageSchedule,
+through `apply_implement_with_directives` lowering both sides to
+canonical form, through `match_canonical_form` producing var/func
+renames, into the per-Func transfer (bounds + storage dims) using
+those renames. Multi-output (Tuple-valued + co_outputs) works. The
+project is ready for Phase 5.
 
-1. **Wire the matcher into `apply_implement_with_directives`.**
-   The hard part is *getting* the user-side canonical IR: the
-   matcher needs lowered IR on both sides, but
-   `apply_implement_with_directives` runs mid-prefix in `lower_impl`
-   (after `lock_loop_levels`, before `wrap_func_calls`) — the user
-   pipeline isn't lowered yet at that point. Two design sketches:
-   - **Per-directive deep-copy lowering.** Change the
-     `apply_implement_with_directives` signature to take `outputs`
-     as well. For each directive (or once per call, cached): deep-
-     copy the env, run `wrap_func_calls` / `realization_order` /
-     `simplify_specializations` / `lower_to_canonical_form` on the
-     copy to get user-side IR, run the matcher, then transfer
-     bounds using `var_rename` on the *original* env. Cost: one
-     extra canonical-form lowering per `apply_implement_with_directives`
-     invocation. The `lower_pipeline_to_canonical_form` helper
-     added in session 7 covers most of the lowering machinery; only
-     a "no deep-copy, env already prepared" variant is missing.
-   - **Restructure lowering to expose canonical IR first.** Move
-     `apply_implement_with_directives` to run *after*
-     `lower_to_canonical_form`, then have it patch the Stmt rather
-     than the env. This is a bigger change but avoids the duplicate
-     lowering, and is closer to how Phase 5's emit substitution
-     will need to work anyway. Probably the right long-term shape.
+### Phase 5 — emit + lowering integration
 
-   Either way: existing Phase 3 tests should keep passing (the 1D
-   positional case is a degenerate matcher case). The win is
-   correctness for multi-dim and reordered cases — worth adding
-   tests for those at the same time.
+The matcher already produces a `MatchResult` per directive; Phase 5's
+job is to *use* it to substitute the matched user-side For body with
+the spec's emit() output. Sketch:
 
-2. **Joint multi-output matching.** Extend the matcher to handle
-   Tuple-valued primaries and `compute_with`-fused co-outputs at
-   the same loop level. Lift the `co_output_names.empty()` and
-   `outputs().size() == 1` restrictions in
-   `apply_implement_with_directives`. Required for the full §3.4
-   "four broadcasting SDOTs" variant (the single-output reduction
-   form landed in session 8 as the SDOT case study).
+1. **Restructure or rerun.** Currently the matcher runs inside
+   `apply_implement_with_directives` (which lives mid-prefix in
+   `lower_impl`, before `lower_to_canonical_form`). Phase 5's emit
+   substitution must run *after* canonical-form lowering --- the
+   Stmt to substitute into is the canonical-form user Stmt, not the
+   env. Two options:
+   - Run the matcher twice (once for transfer, once for emit) ---
+     simple but wasteful.
+   - Restructure: emit substitution becomes a post-canonical-form
+     pass that re-locates the user Fors by directive, re-runs the
+     matcher, and rewrites the matched For body. The transfer pass
+     stays where it is (it has to mutate the env before
+     bounds_inference).
 
-3. **Extend schedule transfer beyond bounds.** Once the matcher's
-   `var_rename` is wired in (item 1), layer `align_storage`,
-   `vectorize` (as a width requirement), and the multi-output
-   path into `ApplyImplementWith.cpp`. Currently only
-   `FuncSchedule::bounds()` transfers, single-output only.
+2. **MatchContext wiring.** The `MatchContext` accessors
+   (`ctx.input(name)`, `ctx.output(name)`, `ctx.param(name)`) are
+   still stubs. Phase 5 fills them from the `MatchResult` ---
+   `ctx.input("a")` returns a handle that emits a Load from the
+   user-side Func bound to spec name "a" (which the matcher's
+   `func_rename` already records).
 
-### Smaller follow-ups surfaced by session 8
+3. **Substitution mutator.** Given the matched user-side For and the
+   spec's emit() Stmt, build an `IRMutator` that replaces the For's
+   body. Must preserve any surrounding canonical-form structure
+   (Lets, Realizes, ProducerConsumer wrappers) so subsequent passes
+   (custom_passes, GPU offload, parallel-task lowering) see a
+   well-formed Stmt.
+
+### Smaller follow-ups surfaced across Phase 4
+
+- **vectorize-as-width-requirement transfer.** Phase 4 transfers
+  bounds + storage dims. The design also calls for transferring
+  `vectorize(i, 4)` from the spec onto the user as a width constraint
+  (the user must vectorize the matched loop at width ≥ 4). This lives
+  on `StageSchedule::dims()` (for_type), not `FuncSchedule`, so it
+  needs the matcher's For-loop var binding to map spec dim → user
+  dim. More naturally landed alongside Phase 5's emit (which also
+  needs the For-level binding).
 
 - **Auto-stub through `Tuple(FuncRef)`.** `out(i) = c(i)` (direct
   FuncRef-to-FuncRef assignment) routes through `Tuple(FuncRef)`,
   which asserts before the spec-thunk auto-stub gets a chance to
-  fire. Workaround in the SDOT test is `Expr c_val = c(i); out(i)
-  = c_val;`. A one-line fix in `Tuple(const FuncRef &)` to honor
-  `Internal::in_spec_thunk()` (or in
-  `FuncRef::operator=(const FuncRef &)` to force Expr conversion
-  for undefined RHS) would remove the wart.
+  fire. Workaround in the SDOT case study is
+  `Expr c_val = c(i); out(i) = c_val;`. A one-line fix in
+  `Tuple(const FuncRef &)` to honor `Internal::in_spec_thunk()`
+  would remove the wart.
+
 - **Auto-stub pure-arg names.** The §3.4 example uses
   `A.bound(_1, 0, 4)`, but the auto-stubbed Func's pure args come
   from the call site (`A(i, k)` -> args "i" and "k$0"), so neither
-  `_1` nor any user-visible Var resolves. Either (a) the
-  auto-stub should expose the names it picks via a getter, or (b)
-  spec authors should be steered away from `bound(_N, ...)` in
-  the design doc. Currently undocumented. The SDOT case study
-  works around it by relying on bounds inference.
+  `_1` nor any user-visible Var resolves. Either expose the names
+  via a getter or steer spec authors away from `bound(_N, ...)`.
+
 - **Non-zero ImageParam mins (Phase 7 prep).** Three of four case
   studies pin input mins to 0 because the matcher's Simplify-
   equivalence fallback can't prove `x - ua.min.0 == x` when
-  `ua.min.0` is symbolic. Real Halide pipelines use non-zero mins.
-  Affine match parameters (Phase 7, v1.5) handle this properly.
+  `ua.min.0` is symbolic. Affine match parameters (Phase 7, v1.5)
+  handle this properly.
 
-### What is NOT yet done that's worth noting
-
-- The opportunistic *early-warning* target-feature check at
-  `implement_with` call time (the second half of OQ#1's proposal) is
-  not implemented. Consider it if generator workflows surface noisy
-  late-error reports.
-- The user's `MatchContext::input/output/param` accessors are still
-  stubs — wired up in Phase 5 alongside emit substitution.
-
-### What is NOT yet done that's worth noting
-
-- The opportunistic *early-warning* target-feature check at
-  `implement_with` call time (the second half of OQ#1's proposal) is
-  not implemented. Consider it if generator workflows surface noisy
-  late-error reports.
-- The user's `MatchContext::input/output/param` accessors are still
-  stubs — wired up in Phase 5 alongside emit substitution.
+- **Opportunistic early-warning target-feature check.** The second
+  half of OQ#1's proposal --- check target features at
+  `implement_with` call time when Target is available --- is not
+  implemented. Consider for generator workflows if late-error
+  reports prove noisy.

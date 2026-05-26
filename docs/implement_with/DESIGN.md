@@ -791,6 +791,44 @@ a problem.
 
 Format: `YYYY-MM-DD (session N)` — short summary of what changed.
 
+- **2026-05-25 (session 9, Phase 4 closeout):** Three Phase 4 wire-in
+  pieces landed and Phase 4 is closed. (1) New `find_spec_primary_loop`
+  locator in `ImplementWithMatcher`: the spec-side counterpart of
+  `find_implement_with_loop`, walks into
+  `ProducerConsumer{spec_out_name}` and returns the outermost For at
+  the requested stage. (2) `apply_implement_with_directives` is
+  rewritten as a 3-pass pipeline: pre-matcher positional
+  primary-output bound transfer, matcher pass (lowers user pipeline
+  via `lower_pipeline_to_canonical_form` and per-directive spec via
+  `lower_spec_to_canonical_form`), post-matcher input bound transfer
+  using `func_rename` for Func lookup and a new
+  `bare_var_renames_from_matcher` helper for Var lookup. The 3-pass
+  structure is required because the user-side outermost For has
+  symbolic `out.min.0` / `out.extent.0` until the spec's bounds are
+  installed, which would otherwise prevent the matcher's For
+  comparison from succeeding. The function signature gains
+  `const std::vector<Function> &outputs` so the wire-in can lower
+  the user pipeline. (3) Multi-output and storage-dim transfer:
+  `spec.outputs().size() == 1 && co_output_names.empty()` lifts to
+  a symmetric arity check, so Tuple-valued primaries and
+  `co_outputs` flows both work; a new `transfer_storage_dims`
+  helper runs alongside `transfer_bounds` and transfers
+  `align_storage` and `bound_storage` with conflict detection.
+  Per-directive `MatcherContext` keeps the spec `Pipeline` alive
+  across passes because each `Instruction::spec()` invocation
+  re-runs Halide's process-wide Func name uniquifier --- the
+  matcher's `func_rename` keys are stable only for the invocation
+  that produced them. Four new sub-tests:
+  `test_find_spec_primary_loop_outermost`,
+  `test_wire_in_matches_renamed_spec_inputs` (compile-time conflict
+  on a renamed user input proves `func_rename` resolution kicks in),
+  `test_multi_output_tuple_primary_compiles`,
+  `test_multi_output_co_outputs_compile`,
+  `test_align_storage_conflict_detected`. vectorize-as-width-
+  requirement transfer is deferred to Phase 5 (needs the matcher's
+  For-loop var binding plumbed into `StageSchedule::dims`, same
+  plumbing emit substitution will need).
+
 - **2026-05-25 (session 8, Phase 4 remaining case studies):** All
   three remaining case studies from the Phase 4 plan land as
   test-only additions to `implement_with_phase4.cpp` (no source
