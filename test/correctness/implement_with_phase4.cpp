@@ -955,6 +955,180 @@ void test_case_study_hvx_mac_widening() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Case study: PTX MMA / GPU MAC on CUDA
+// ---------------------------------------------------------------------------
+// Validates that the matcher handles For nodes with For::GPUBlock and
+// For::GPUThread for_type kinds — the LLVM-backed GPU validation case
+// in DESIGN.md §8.2. The canonical-form prefix is cut *before*
+// inject_gpu_offload (see DECISIONS.md OQ#5), so spec and use-site
+// share the GPU loop structure end to end.
+//
+// The pattern is a simple element-wise MAC tiled with gpu_tile; in a
+// real MMA flow the emit callback would lower this to a warp-level
+// wmma.mma.* sequence with the corresponding shared-memory dance. The
+// case study tests the matcher's ability to traverse GPU loop nests,
+// not the emit-side intrinsic generation.
+//
+// Target: host-cuda-cuda_capability_61 (Cuda + compute cap >= 6.1,
+// which gates dp4a / dp2a; we don't strictly need that here but
+// matching the existing test cuda_8_bit_dot_product.cpp gives a known-
+// good target string).
+Instruction make_gpu_mac_style_named() {
+    return Instruction::declare("gpu_mac_style_named")
+        .spec([]() -> Pipeline {
+            Var x("x"), y("y"), xi("xi"), yi("yi");
+            Func a(Int(8), 2, "a"), b(Int(8), 2, "b"),
+                out(Int(32), 2, "out");
+            Expr a_at = a(x, y);
+            Expr b_at = b(x, y);
+            out(x, y) = cast<int32_t>(0);
+            out(x, y) += cast<int32_t>(a_at) * cast<int32_t>(b_at);
+            out.bound(x, 0, 128).bound(y, 0, 64);
+            out.update(0).gpu_tile(x, y, xi, yi, 32, 8,
+                                   TailStrategy::RoundUp);
+            return Pipeline({out});
+        })
+        .require({})
+        .emit(stub_emit)
+        .build();
+}
+
+void test_case_study_ptx_gpu_mac() {
+    Instruction instr = make_gpu_mac_style_named();
+    Pipeline spec = instr.spec();
+    Target t("host-cuda-cuda_capability_61");
+    std::string spec_out = spec.outputs()[0].name();
+
+    ImageParam a_in(Int(8), 2, "ua");
+    ImageParam b_in(Int(8), 2, "ub");
+    a_in.dim(0).set_bounds(0, 128).set_stride(1);
+    a_in.dim(1).set_bounds(0, 64).set_stride(128);
+    b_in.dim(0).set_bounds(0, 128).set_stride(1);
+    b_in.dim(1).set_bounds(0, 64).set_stride(128);
+    Func uout(Int(32), 2, "user_out_gpu_mac");
+    Var ux("ux"), uy("uy"), uxi("uxi"), uyi("uyi");
+    uout(ux, uy) = cast<int32_t>(0);
+    uout(ux, uy) += cast<int32_t>(a_in(ux, uy)) * cast<int32_t>(b_in(ux, uy));
+    uout.bound(ux, 0, 128).bound(uy, 0, 64);
+    uout.update(0).gpu_tile(ux, uy, uxi, uyi, 32, 8, TailStrategy::RoundUp);
+    Pipeline user(uout);
+
+    Internal::Stmt spec_s = Internal::lower_spec_to_canonical_form(spec, t);
+    Internal::Stmt user_s = Internal::lower_pipeline_to_canonical_form(user, t);
+
+    // Sanity-check the spec actually contains a GPUBlock For — confirms
+    // the canonical-form prefix did not silently demote the GPU
+    // scheduling and that we're really exercising the GPU loop path.
+    class HasGPUFor : public Internal::IRVisitor {
+    public:
+        bool found_block = false;
+        bool found_thread = false;
+        using Internal::IRVisitor::visit;
+        void visit(const Internal::For *op) override {
+            if (op->for_type == Internal::ForType::GPUBlock) {
+                found_block = true;
+            }
+            if (op->for_type == Internal::ForType::GPUThread) {
+                found_thread = true;
+            }
+            Internal::IRVisitor::visit(op);
+        }
+    } gpu_check;
+    spec_s.accept(&gpu_check);
+    if (!gpu_check.found_block || !gpu_check.found_thread) {
+        fprintf(stderr,
+                "test_case_study_ptx_gpu_mac: canonical-form spec is "
+                "missing expected GPU For nodes (block=%d, thread=%d); "
+                "gpu_tile may not be reaching canonical form. spec IR:\n%s\n",
+                (int)gpu_check.found_block, (int)gpu_check.found_thread,
+                ([&] { std::ostringstream os; os << spec_s; return os.str(); })().c_str());
+        exit(1);
+    }
+
+    // gpu_tile(x, y, xi, yi, ...) names the post-tile block loops
+    // "<func>.s1.<orig>.<orig>.block_id_<dim>" — the original var name
+    // appears twice (once from the stage, once from gpu_tile's own
+    // split). The outermost block loop is the y-dim (Halide preserves
+    // row-major order: y outer, x inner). Locate that one.
+    Internal::Stmt spec_loop =
+        Internal::find_implement_with_loop(spec_s, spec_out, 1,
+                                           "y.y.block_id_y");
+    Internal::Stmt user_loop =
+        Internal::find_implement_with_loop(user_s, "user_out_gpu_mac", 1,
+                                           "uy.uy.block_id_y");
+    if (!spec_loop.defined() || !user_loop.defined()) {
+        // Fall back to walking the IR for the outermost GPUBlock For if
+        // the assumed naming scheme didn't match — gives a useful error
+        // message identifying the For names actually present.
+        class CollectForNames : public Internal::IRVisitor {
+        public:
+            std::vector<std::string> names;
+            using Internal::IRVisitor::visit;
+            void visit(const Internal::For *op) override {
+                names.push_back(op->name);
+                Internal::IRVisitor::visit(op);
+            }
+        } spec_fors, user_fors;
+        spec_s.accept(&spec_fors);
+        user_s.accept(&user_fors);
+        fprintf(stderr,
+                "test_case_study_ptx_gpu_mac: locator missed "
+                "(spec_defined=%d user_defined=%d). spec For names:\n",
+                (int)spec_loop.defined(), (int)user_loop.defined());
+        for (const auto &n : spec_fors.names) fprintf(stderr, "  %s\n", n.c_str());
+        fprintf(stderr, "user For names:\n");
+        for (const auto &n : user_fors.names) fprintf(stderr, "  %s\n", n.c_str());
+        exit(1);
+    }
+
+    Internal::MatchResult r =
+        Internal::match_canonical_form(spec_loop, user_loop);
+    if (!r.success) {
+        fprintf(stderr,
+                "test_case_study_ptx_gpu_mac: match failed: %s\n"
+                "spec loop:\n%s\nuser loop:\n%s\n",
+                r.failure_reason.c_str(),
+                ([&] { std::ostringstream os; os << spec_loop; return os.str(); })().c_str(),
+                ([&] { std::ostringstream os; os << user_loop; return os.str(); })().c_str());
+        exit(1);
+    }
+
+    auto out_it = r.func_rename.find(spec_out);
+    if (out_it == r.func_rename.end() || out_it->second != "user_out_gpu_mac") {
+        fprintf(stderr,
+                "test_case_study_ptx_gpu_mac: spec output '%s' "
+                "expected to bind to 'user_out_gpu_mac'; got '%s'\n",
+                spec_out.c_str(),
+                (out_it == r.func_rename.end() ? "(missing)" : out_it->second.c_str()));
+        exit(1);
+    }
+
+    CollectAllocateNames spec_allocs;
+    spec_s.accept(&spec_allocs);
+    int n_inputs_bound = 0;
+    for (const std::string &n : spec_allocs.names) {
+        if (n == spec_out) continue;
+        auto bit = r.func_rename.find(n);
+        if (bit == r.func_rename.end()) continue;
+        if (bit->second.empty() || bit->second[0] != 'u') {
+            fprintf(stderr,
+                    "test_case_study_ptx_gpu_mac: spec input '%s' "
+                    "bound to '%s' which is not a user ImageParam\n",
+                    n.c_str(), bit->second.c_str());
+            exit(1);
+        }
+        ++n_inputs_bound;
+    }
+    if (n_inputs_bound != 2) {
+        fprintf(stderr,
+                "test_case_study_ptx_gpu_mac: expected 2 spec inputs "
+                "(a, b) bound; got %d\n",
+                n_inputs_bound);
+        exit(1);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -972,6 +1146,7 @@ int main(int argc, char **argv) {
     test_case_study_vfmadd231ps_256();
     test_case_study_sdot_gemv_4x4();
     test_case_study_hvx_mac_widening();
+    test_case_study_ptx_gpu_mac();
 
     printf("Success!\n");
     return 0;
