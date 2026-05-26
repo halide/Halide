@@ -1171,6 +1171,82 @@ void test_case_study_ptx_gpu_mac() {
     }
 }
 
+// Wire-in regression: prove the matcher path in
+// apply_implement_with_directives resolves spec inputs by structural
+// correspondence (via func_rename) rather than by name match. The user
+// pipeline names its inputs "p" / "q" / "r" --- none of which appear in
+// the spec by name --- but the structure matches the spec's
+// out(i) = a(i) * b(i) + c(i). Without the matcher, env.find("a")
+// returns nothing, the conflicting bound on "p" is silently ignored,
+// and compile succeeds. With the matcher, func_rename binds a->p
+// (etc.), the bound conflict is detected, and compile errors.
+void test_wire_in_matches_renamed_spec_inputs() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        printf("[SKIP] test_wire_in_matches_renamed_spec_inputs: exceptions "
+               "disabled\n");
+        return;
+    }
+
+    Instruction instr = make_vfmadd_style();
+    Var x("x");
+    Func p_in("p_wire"), q("q_wire"), r("r_wire"), out("out_wire");
+    p_in(x) = 1.0f;
+    q(x) = 2.0f;
+    r(x) = 3.0f;
+    out(x) = p_in(x) * q(x) + r(x);
+
+    // Inputs are compute_root() so their lowered IR has explicit Loads
+    // (mirroring the spec's auto-stubbed compute_root inputs) for the
+    // matcher's func_rename to bind against. Without compute_root the
+    // user inputs are inlined to constants and there is no Load for the
+    // matcher to bind to.
+    p_in.compute_root();
+    q.compute_root();
+    r.compute_root();
+
+    // Conflicting bound: spec requires bound(i, 0, 8) on every input
+    // (transitively via a.bound(i, 0, 8)). User declares bound on p
+    // with extent 16 --- transferring spec's bound onto p (renamed via
+    // matcher) must surface as a conflict.
+    p_in.bound(x, 0, 16);
+    out.implement_with(x, instr);
+
+    Target t = target_with({Target::FMA, Target::AVX2});
+    Pipeline pipe(out);
+
+    bool got_error = false;
+    try {
+        (void)pipe.compile_to_module({}, "test_wire_in_rename", t);
+    } catch (const Halide::CompileError &e) {
+        got_error = true;
+        std::string msg = e.what();
+        if (msg.find("implement_with") == std::string::npos ||
+            msg.find("extent") == std::string::npos ||
+            msg.find("p_wire") == std::string::npos) {
+            fprintf(stderr,
+                    "test_wire_in_matches_renamed_spec_inputs: error "
+                    "message missing expected context (implement_with / "
+                    "extent / p_wire):\n%s\n",
+                    msg.c_str());
+            exit(1);
+        }
+    }
+    if (!got_error) {
+        fprintf(stderr,
+                "test_wire_in_matches_renamed_spec_inputs: compile with a "
+                "matcher-detected bound conflict on a renamed input should "
+                "have errored, but did not. This usually means the matcher "
+                "wire-in did not bind the spec input to the user's renamed "
+                "Func.\n");
+        exit(1);
+    }
+#else
+    printf("[SKIP] test_wire_in_matches_renamed_spec_inputs: built without "
+           "exceptions\n");
+#endif
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -1190,6 +1266,7 @@ int main(int argc, char **argv) {
     test_case_study_sdot_gemv_4x4();
     test_case_study_hvx_mac_widening();
     test_case_study_ptx_gpu_mac();
+    test_wire_in_matches_renamed_spec_inputs();
 
     printf("Success!\n");
     return 0;

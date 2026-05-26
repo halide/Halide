@@ -15,6 +15,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "Function.h"
 #include "Target.h"
@@ -27,8 +28,17 @@ namespace Internal {
  * features and transfer the spec Funcs' scheduling directives onto the
  * corresponding user Funcs. Operates in place on `env`, which is
  * expected to be the deep-copied lowering env (so the user's pristine
- * schedule is not mutated). */
+ * schedule is not mutated).
+ *
+ * `outputs` is the deep-copied output Function list (the same one
+ * lower_impl already holds). It is used to lower the user pipeline
+ * to canonical form so the structural matcher can derive spec-to-user
+ * bindings; without it the spec-input transfer is limited to a
+ * name-keyed lookup. Passing an empty vector forces the matcher path
+ * to short-circuit and the pass falls back to its Phase 3 name-keyed
+ * behavior. */
 void apply_implement_with_directives(std::map<std::string, Function> &env,
+                                     const std::vector<Function> &outputs,
                                      const Target &target);
 
 }  // namespace Internal

@@ -9,6 +9,7 @@
 #include "FindCalls.h"
 #include "Func.h"
 #include "IROperator.h"
+#include "ImplementWithMatcher.h"
 #include "Instruction.h"
 #include "Pipeline.h"
 #include "Schedule.h"
@@ -106,10 +107,61 @@ void check_target_features(const Instruction &instr, const Target &target,
     }
 }
 
-void process_directive(const ImplementWithDirective &d,
-                       Function &user_primary,
-                       std::map<std::string, Function> &env,
-                       const Target &target) {
+// Helper: derive a bare-var rename map (e.g. "i" -> "x") from the
+// matcher's full-loop-name bindings (e.g. "out.s0.i" -> "user_out.s0.x").
+// The matcher binds the full stage-qualified For-loop names; bound() and
+// other Var-keyed schedule entries on the source spec/user Funcs are
+// keyed by the bare Var name only.
+//
+// We parse each matched binding whose key has the spec-side prefix
+// "<spec_func>.s<stage>." and whose value has the user-side prefix
+// "<user_func>.s<stage>." (note: the stage indices on either side don't
+// need to agree — implement_with maps a user-stage's loop level onto
+// the spec-stage's structurally-matched loop). The remainder after the
+// stage prefix is the bare Var (or split-var dotted name, e.g. "i.io").
+VarRenameMap bare_var_renames_from_matcher(
+    const std::map<std::string, std::string> &full_name_renames,
+    const Function &spec_func,
+    const Function &user_func) {
+    VarRenameMap m;
+    const std::string spec_prefix = spec_func.name() + ".s";
+    const std::string user_prefix = user_func.name() + ".s";
+    for (const auto &kv : full_name_renames) {
+        const std::string &sk = kv.first;
+        const std::string &uk = kv.second;
+        if (sk.compare(0, spec_prefix.size(), spec_prefix) != 0 ||
+            uk.compare(0, user_prefix.size(), user_prefix) != 0) {
+            continue;
+        }
+        size_t sdot = sk.find('.', spec_prefix.size());
+        size_t udot = uk.find('.', user_prefix.size());
+        if (sdot == std::string::npos || udot == std::string::npos) {
+            continue;
+        }
+        std::string sb = sk.substr(sdot + 1);
+        std::string ub = uk.substr(udot + 1);
+        if (sb.empty() || ub.empty()) {
+            continue;
+        }
+        // First-seen wins (same bare Var should not have conflicting
+        // bindings in well-formed canonical IR; if it does, leave the
+        // first entry in place so callers see a deterministic result).
+        m.emplace(sb, ub);
+    }
+    return m;
+}
+
+// Pre-matcher pass for a single directive: target-feature check and
+// primary-output bound transfer. The primary transfer must happen
+// before the matcher runs because lowering the user pipeline to
+// canonical form needs the spec's bounds installed on the user primary
+// --- without them, the user's outermost For has symbolic min/extent
+// (out.min.0 / out.extent.0) and will not structurally match the
+// spec's constant-bound For. Positional rename is sufficient here: the
+// directive anchors spec-arg-0 to user-arg-0 by construction.
+void apply_primary_transfer(const ImplementWithDirective &d,
+                            Function &user_primary,
+                            const Target &target) {
     const Instruction &instr = d.instruction;
     internal_assert(instr.defined())
         << "implement_with: directive on Func \"" << user_primary.name()
@@ -131,16 +183,32 @@ void process_directive(const ImplementWithDirective &d,
         << "\" lists " << d.co_output_names.size() << " co-outputs. "
         << "Single-output instructions only are supported in this build.\n";
 
-    // Primary output: transfer bounds from spec output -> user primary.
     Function spec_primary = spec_outputs[0].function();
     VarRenameMap primary_map = build_var_rename(spec_primary, user_primary);
     transfer_bounds(spec_primary, user_primary, primary_map, instr.name());
+}
 
-    // Spec inputs are everything transitively reachable from the spec
-    // primary, minus the primary itself. For each, look up the user Func
-    // with the same name in env and transfer its bounds. If no such user
-    // Func exists, skip silently — the structural matcher (Phase 4) will
-    // diagnose the mismatch.
+// Post-matcher pass for a single directive: spec-input bound transfer.
+// With a successful matcher result, look up the user Func via
+// func_rename (the structural correspondence) and translate bare Vars
+// via the matcher's For-name bindings: this is what lets the spec
+// author use input Func names that don't match the user's. Without a
+// matcher result, fall back to the Phase 3 name-keyed lookup +
+// positional rename.
+//
+// `spec` is the Pipeline the matcher used. It must be the *same*
+// invocation as the one passed to match_canonical_form --- each
+// d.instruction.spec() call rebuilds the spec lambda and re-runs
+// Halide's process-wide Func name uniquification, so the names of
+// spec_primary and its reachable inputs differ between separate
+// invocations. The matcher's func_rename keys are valid only for the
+// invocation it lowered.
+void apply_input_transfer(const ImplementWithDirective &d,
+                          const Pipeline &spec,
+                          std::map<std::string, Function> &env,
+                          const MatchResult *match) {
+    Function spec_primary = spec.outputs()[0].function();
+
     std::map<std::string, Function> reachable = find_transitive_calls(spec_primary);
     for (const auto &kv : reachable) {
         const std::string &spec_input_name = kv.first;
@@ -148,50 +216,187 @@ void process_directive(const ImplementWithDirective &d,
         if (spec_input_name == spec_primary.name()) {
             continue;
         }
-        auto user_it = env.find(spec_input_name);
+
+        std::map<std::string, Function>::iterator user_it = env.end();
+        if (match && match->success) {
+            auto fit = match->func_rename.find(spec_input_name);
+            if (fit != match->func_rename.end()) {
+                user_it = env.find(fit->second);
+            }
+        }
+        if (user_it == env.end()) {
+            user_it = env.find(spec_input_name);
+        }
         if (user_it == env.end()) {
             continue;
         }
         Function &user_input = user_it->second;
-        VarRenameMap input_map = build_var_rename(spec_input, user_input);
-        transfer_bounds(spec_input, user_input, input_map, instr.name());
+        VarRenameMap input_map;
+        if (match && match->success) {
+            input_map =
+                bare_var_renames_from_matcher(match->var_rename, spec_input,
+                                              user_input);
+        }
+        if (input_map.empty()) {
+            input_map = build_var_rename(spec_input, user_input);
+        }
+        transfer_bounds(spec_input, user_input, input_map,
+                        d.instruction.name());
     }
+}
+
+// Per-directive matcher context: the spec Pipeline whose canonical
+// form was matched and the resulting MatchResult. The Pipeline must
+// be kept alive and re-used for subsequent passes (input bound
+// transfer), because Halide uniquifies Func names per-invocation: the
+// "a" in spec.outputs()[0]'s reachable set is "a$N" with a different
+// N each time Instruction::spec() is invoked, and the matcher's
+// func_rename keys are valid only for the N from the invocation that
+// produced this MatchResult.
+struct MatcherContext {
+    Pipeline spec;
+    MatchResult result;
+};
+
+// Lower the user pipeline to canonical form and, for each pending
+// directive, run the structural matcher against the spec to produce a
+// MatchResult plus the spec Pipeline whose Func names the matcher
+// bound. Returns one entry per pending directive in input order;
+// entries have `result.success == false` for directives we could not
+// match against (e.g. matched For not found on either side).
+//
+// This deep-copies the env internally, so does not mutate `env` here.
+std::vector<MatcherContext> match_pending_directives(
+    const std::vector<Function> &outputs,
+    const Target &target,
+    const std::vector<std::pair<std::string, ImplementWithDirective>> &pending,
+    const std::vector<int> &pending_stages) {
+    std::vector<MatcherContext> results(pending.size());
+    if (pending.empty() || outputs.empty()) {
+        return results;
+    }
+
+    // Build a Pipeline over the user's output Funcs and lower to
+    // canonical form. lower_pipeline_to_canonical_form internally
+    // deep-copies, so this does not see (or apply) the in-progress
+    // bounds transfer that the caller's primary-output positional
+    // pre-pass has installed --- but the user's pristine bounds are
+    // preserved.
+    std::vector<Func> output_funcs;
+    output_funcs.reserve(outputs.size());
+    for (const Function &f : outputs) {
+        output_funcs.emplace_back(f);
+    }
+    Pipeline user_pipeline(output_funcs);
+    Stmt user_canonical;
+    try {
+        user_canonical = lower_pipeline_to_canonical_form(user_pipeline, target);
+    } catch (...) {
+        // If the user pipeline cannot itself be lowered (e.g. some
+        // structural problem the matcher would diagnose anyway), fall
+        // through to the name-keyed fallback path.
+        return results;
+    }
+
+    for (size_t i = 0; i < pending.size(); ++i) {
+        const std::string &func_name = pending[i].first;
+        const ImplementWithDirective &d = pending[i].second;
+        const int stage = pending_stages[i];
+
+        Stmt user_loop = find_implement_with_loop(user_canonical, func_name,
+                                                  stage, d.loop_var_name);
+        if (!user_loop.defined()) {
+            continue;
+        }
+
+        Pipeline spec = d.instruction.spec();
+        if (spec.outputs().size() != 1) {
+            continue;
+        }
+        const std::string spec_out_name = spec.outputs()[0].name();
+        Stmt spec_canonical = lower_spec_to_canonical_form(spec, target);
+        Stmt spec_loop = find_spec_primary_loop(spec_canonical, spec_out_name,
+                                                stage);
+        if (!spec_loop.defined()) {
+            continue;
+        }
+
+        results[i].spec = spec;
+        results[i].result = match_canonical_form(spec_loop, user_loop);
+    }
+    return results;
 }
 
 }  // namespace
 
 void apply_implement_with_directives(std::map<std::string, Function> &env,
+                                     const std::vector<Function> &outputs,
                                      const Target &target) {
-    // Collect a snapshot of (function, directive) pairs first so the
+    // Collect (func_name, directive, stage_index) snapshots first so the
     // process loop can freely mutate per-function schedules without
     // tripping iterator invalidation on the directive vectors. (We are
     // not inserting or removing env entries here.)
-    struct Pending {
-        std::string func_name;
-        ImplementWithDirective directive;
-    };
-    std::vector<Pending> pending;
+    std::vector<std::pair<std::string, ImplementWithDirective>> pending;
+    std::vector<int> pending_stages;
 
     for (auto &kv : env) {
         const Function &fn = kv.second;
         for (const ImplementWithDirective &d :
              fn.definition().schedule().implement_with_directives()) {
-            pending.push_back({fn.name(), d});
+            pending.emplace_back(fn.name(), d);
+            pending_stages.push_back(0);
         }
         for (size_t i = 0; i < fn.updates().size(); ++i) {
             const StageSchedule &s = fn.update(static_cast<int>(i)).schedule();
             for (const ImplementWithDirective &d : s.implement_with_directives()) {
-                pending.push_back({fn.name(), d});
+                pending.emplace_back(fn.name(), d);
+                pending_stages.push_back(static_cast<int>(i + 1));
             }
         }
     }
 
-    for (const Pending &p : pending) {
-        auto it = env.find(p.func_name);
+    if (pending.empty()) {
+        return;
+    }
+
+    // First pass: target-feature check + primary-output bound transfer
+    // for every directive (positional rename). This installs the
+    // spec's constant bounds on the user's primary so that, when we
+    // lower the user pipeline to canonical form below, its outermost
+    // For has constants matching the spec's (instead of symbolic
+    // out.min.0 / out.extent.0 that would foil structural matching).
+    for (size_t i = 0; i < pending.size(); ++i) {
+        auto it = env.find(pending[i].first);
         internal_assert(it != env.end())
             << "implement_with: pending directive references Func \""
-            << p.func_name << "\" which is not in the lowering env.\n";
-        process_directive(p.directive, it->second, env, target);
+            << pending[i].first << "\" which is not in the lowering env.\n";
+        apply_primary_transfer(pending[i].second, it->second, target);
+    }
+
+    // Second pass: run the matcher on each directive against the
+    // user-side IR (now lowered with primary bounds installed). The
+    // matcher pass is opportunistic --- any directive whose user-side
+    // For we cannot lower or locate falls back to the Phase 3
+    // name-keyed lookup + positional rename for input bound transfer.
+    std::vector<MatcherContext> match_ctxs =
+        match_pending_directives(outputs, target, pending, pending_stages);
+
+    // Third pass: spec-input bound transfer, using matcher results
+    // when available. We use the spec Pipeline kept alive in
+    // match_ctxs (not a fresh d.instruction.spec() call) because
+    // Halide uniquifies Func names per invocation: the matcher's
+    // func_rename keys reference the invocation it lowered. For
+    // directives the matcher pass skipped (spec is default-
+    // constructed), invoke spec() now so the fallback name-keyed path
+    // still has a Pipeline to walk.
+    for (size_t i = 0; i < pending.size(); ++i) {
+        if (!match_ctxs[i].spec.defined()) {
+            match_ctxs[i].spec = pending[i].second.instruction.spec();
+        }
+        const MatchResult *m = match_ctxs[i].result.success
+                                   ? &match_ctxs[i].result
+                                   : nullptr;
+        apply_input_transfer(pending[i].second, match_ctxs[i].spec, env, m);
     }
 }
 

@@ -486,7 +486,7 @@ void lower_impl(const vector<Function> &output_funcs,
     // Funcs. Must run before bounds inference so the transferred bounds
     // participate normally. (Phase 3; structural matching + emit
     // substitution still TODO in later phases.)
-    apply_implement_with_directives(env, t);
+    apply_implement_with_directives(env, outputs, t);
 
     // Substitute in wrapper Funcs
     env = wrap_func_calls(env);
