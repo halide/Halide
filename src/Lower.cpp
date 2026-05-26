@@ -13,6 +13,7 @@
 #include "AddSplitFactorChecks.h"
 #include "AllocationBoundsInference.h"
 #include "ApplyImplementWith.h"
+#include "ApplyImplementWithEmit.h"
 #include "AsyncProducers.h"
 #include "BoundConstantExtentLoops.h"
 #include "BoundSmallAllocations.h"
@@ -509,6 +510,14 @@ void lower_impl(const vector<Function> &output_funcs,
 
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
+
+    // Phase 5: implement_with emit substitution. For each directive,
+    // structurally match the spec against the user-side canonical-form
+    // IR, build a MatchContext, invoke the Instruction's emit callback,
+    // and replace the matched For region with its output. Runs before
+    // custom_passes so user-injected lowering passes observe the
+    // substituted Stmt.
+    s = apply_implement_with_emit(s, env, t);
 
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {

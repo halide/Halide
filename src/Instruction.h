@@ -15,6 +15,8 @@
  */
 
 #include <functional>
+#include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -28,6 +30,30 @@ namespace Halide {
 
 class Func;
 class Instruction;
+class MatchContext;
+
+namespace Internal {
+
+/** Backing state for a MatchContext produced by the implement_with
+ * emit pass (Phase 5). Owned via shared_ptr so MatchContext stays
+ * cheap to copy. Internal-only; emit callbacks see only the
+ * MatchContext accessors. */
+struct MatchContextContents {
+    /** spec input/output Func name -> matched user-side name. Sourced
+     * from the matcher's func_rename. */
+    std::map<std::string, std::string> func_rename;
+    /** spec bare Var name -> matched user-side bare Var. Parsed from
+     * the matcher's For-loop name bindings. */
+    std::map<std::string, std::string> var_rename;
+    /** The compile Target. */
+    Target target;
+    /** The user-side primary Func name (the Func the directive sat on). */
+    std::string user_primary_name;
+    /** The spec-side primary output Func name (post-uniquification). */
+    std::string spec_primary_name;
+};
+
+}  // namespace Internal
 
 /** Behavior on structural match failure. v1 supports Strict only. */
 enum class ImplementMode {
@@ -40,18 +66,49 @@ enum class ImplementMode {
 
 /** Context passed to an Instruction's emit callback at lowering time.
  *
- * Phase 1: this is a stub. Future phases will fill in input/output buffer
- * accessors (keyed by spec-pattern Func name) and resolved match parameter
- * values. */
+ * v1 exposes a name-keyed view of the structural-match result: given a
+ * spec-pattern Func name (e.g. "a"), `input(name)` returns the user-side
+ * buffer/Func name the matcher bound it to. Similarly for `output(name)`
+ * and `var(name)`. The compile Target is available via `target()`.
+ *
+ * The emit callback uses these names to construct its own
+ * Halide IR (Loads, Stores, Calls, etc.). Richer accessors that
+ * pre-build canonical Load/Store Exprs at the spec's vector width are
+ * deferred to a future iteration once concrete emit patterns surface
+ * the right abstraction.
+ *
+ * Phase 7 (v1.5) will add `param(name)` for affine match parameters. */
 class MatchContext {
 public:
     MatchContext() = default;
+    explicit MatchContext(std::shared_ptr<const Internal::MatchContextContents> c);
 
-    // Future API (filled in by later phases):
-    //   const Expr &input(const std::string &name) const;
-    //   const Expr &output(const std::string &name) const;
-    //   int        param(const std::string &name) const;
-    //   Type       type(const std::string &name) const;
+    /** User-side Func/buffer name bound to the spec-pattern input named
+     * `spec_name`. Errors with a descriptive message if no binding was
+     * recorded. */
+    const std::string &input(const std::string &spec_name) const;
+
+    /** User-side Func/buffer name bound to the spec-pattern output named
+     * `spec_name`. For single-output specs the typical caller passes the
+     * primary output's name; multi-output specs may pass any output. */
+    const std::string &output(const std::string &spec_name) const;
+
+    /** User-side Var name bound to the spec-pattern bare Var named
+     * `spec_var`. Useful when an emit callback needs to construct an
+     * index expression keyed off a user loop variable. */
+    const std::string &var(const std::string &spec_var) const;
+
+    /** The compile Target. */
+    const Target &target() const;
+
+    /** True iff this MatchContext is backed by a successful match. A
+     * default-constructed MatchContext returns false here. */
+    bool defined() const {
+        return (bool)contents;
+    }
+
+private:
+    std::shared_ptr<const Internal::MatchContextContents> contents;
 };
 
 namespace Internal {

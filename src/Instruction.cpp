@@ -5,6 +5,7 @@
 #include "Error.h"
 #include "Func.h"
 #include "IR.h"
+#include "Target.h"
 
 namespace Halide {
 
@@ -22,8 +23,12 @@ bool in_spec_thunk() {
 
 namespace {
 struct SpecThunkScope {
-    SpecThunkScope() { ++g_spec_thunk_depth; }
-    ~SpecThunkScope() { --g_spec_thunk_depth; }
+    SpecThunkScope() {
+        ++g_spec_thunk_depth;
+    }
+    ~SpecThunkScope() {
+        --g_spec_thunk_depth;
+    }
 };
 }  // namespace
 
@@ -89,6 +94,123 @@ Internal::Stmt Instruction::emit(const MatchContext &ctx) const {
         << "Instruction \"" << contents->name
         << "\" has no emit callback. Did you forget to call Builder::emit(...)?\n";
     return contents->emit_fn(ctx);
+}
+
+// ---------------------------------------------------------------------------
+// MatchContext
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Halide uniquifies user-visible Func names process-wide: `Func a("a")`
+// produces a Function whose stored name is "a$N" for some N. The
+// matcher's func_rename uses those uniquified names as keys. The spec
+// author, however, naturally writes the *original* name in their emit
+// callback (`ctx.input("a")`). Bridge the gap by matching either the
+// exact key or any key of the form "<spec_name>$<digits>".
+const std::string *
+lookup_with_uniquify_suffix(const std::map<std::string, std::string> &m,
+                            const std::string &spec_name) {
+    auto it = m.find(spec_name);
+    if (it != m.end()) {
+        return &it->second;
+    }
+    const std::string prefix = spec_name + "$";
+    const std::string *match = nullptr;
+    int matches_found = 0;
+    for (const auto &kv : m) {
+        if (kv.first.size() > prefix.size() &&
+            kv.first.compare(0, prefix.size(), prefix) == 0) {
+            // Ensure the part after '$' is all digits.
+            bool all_digits = true;
+            for (size_t i = prefix.size(); i < kv.first.size(); ++i) {
+                if (kv.first[i] < '0' || kv.first[i] > '9') {
+                    all_digits = false;
+                    break;
+                }
+            }
+            if (all_digits) {
+                match = &kv.second;
+                ++matches_found;
+            }
+        }
+    }
+    // Ambiguity (multiple "<name>$N" entries) means the spec author
+    // probably redeclared `Func a("a")` more than once in the same
+    // spec thunk. v1 returns the last seen; callers can disambiguate
+    // by using more distinctive names.
+    (void)matches_found;
+    return match;
+}
+
+}  // namespace
+
+MatchContext::MatchContext(std::shared_ptr<const Internal::MatchContextContents> c)
+    : contents(std::move(c)) {
+}
+
+const std::string &MatchContext::input(const std::string &spec_name) const {
+    user_assert(contents)
+        << "MatchContext::input(\"" << spec_name << "\") called on a "
+        << "default-constructed MatchContext. The emit callback's argument "
+        << "must come from the implement_with lowering pass.\n";
+    const std::string *r =
+        lookup_with_uniquify_suffix(contents->func_rename, spec_name);
+    user_assert(r != nullptr)
+        << "MatchContext: no binding recorded for input/output spec Func \""
+        << spec_name << "\". Check that the spec-pattern Func is named "
+        << "(via Func(\"" << spec_name << "\")) and that the structural "
+        << "matcher saw its body.\n";
+    return *r;
+}
+
+const std::string &MatchContext::output(const std::string &spec_name) const {
+    user_assert(contents)
+        << "MatchContext::output(\"" << spec_name << "\") called on a "
+        << "default-constructed MatchContext.\n";
+    // The spec primary's name (post-uniquification) is stashed
+    // explicitly so even when func_rename does not record a binding
+    // for it (e.g. the canonical-form prefix rewrote the
+    // ProducerConsumer for the primary out), the common emit pattern
+    // "give me the primary output's user-side name" works. Match
+    // against both the post-uniquify form and the original
+    // pre-uniquify form (so `ctx.output("out")` works when the spec
+    // declared `Func out("out")`).
+    if (spec_name == contents->spec_primary_name) {
+        return contents->user_primary_name;
+    }
+    {
+        const std::string prefix = spec_name + "$";
+        if (contents->spec_primary_name.size() > prefix.size() &&
+            contents->spec_primary_name.compare(0, prefix.size(), prefix) == 0) {
+            return contents->user_primary_name;
+        }
+    }
+    const std::string *r =
+        lookup_with_uniquify_suffix(contents->func_rename, spec_name);
+    user_assert(r != nullptr)
+        << "MatchContext: no binding recorded for spec output Func \""
+        << spec_name << "\".\n";
+    return *r;
+}
+
+const std::string &MatchContext::var(const std::string &spec_var) const {
+    user_assert(contents)
+        << "MatchContext::var(\"" << spec_var << "\") called on a "
+        << "default-constructed MatchContext.\n";
+    auto it = contents->var_rename.find(spec_var);
+    user_assert(it != contents->var_rename.end())
+        << "MatchContext: no binding recorded for spec Var \"" << spec_var
+        << "\". The matcher only records bindings for Vars that surface "
+        << "as For-loop names, Let bindings, or Variable nodes in the "
+        << "matched region.\n";
+    return it->second;
+}
+
+const Target &MatchContext::target() const {
+    user_assert(contents)
+        << "MatchContext::target() called on a default-constructed MatchContext.\n";
+    return contents->target;
 }
 
 // ---------------------------------------------------------------------------
