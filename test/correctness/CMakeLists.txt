@@ -186,6 +186,7 @@ tests(GROUPS correctness
       implement_with_phase2.cpp
       implement_with_phase3.cpp
       implement_with_phase4.cpp
+      implement_with_phase5.cpp
       implicit_args.cpp
       implicit_args_tests.cpp
       implicit_pure_def_with_rvar_args.cpp
@@ -376,9 +377,12 @@ tests(GROUPS correctness
       # keep-sorted end
 )
 
-# The implement_with Phase 4 test calls Internal::lower_spec_to_canonical_form
-# directly; it needs access to the src/ tree to find ImplementWithMatcher.h.
+# The implement_with Phase 4 and Phase 5 tests call Internal:: API
+# directly; they need access to the src/ tree to find
+# ImplementWithMatcher.h and IRVisitor.h.
 target_include_directories(correctness_implement_with_phase4
+                           PRIVATE "${Halide_SOURCE_DIR}/src")
+target_include_directories(correctness_implement_with_phase5
                            PRIVATE "${Halide_SOURCE_DIR}/src")
 
 # Simd op check tests fix the target features internally, so they
