@@ -95,6 +95,77 @@ void transfer_bounds(const Function &spec, Function &user,
     }
 }
 
+// Transfer storage-dim properties set by Func::align_storage and
+// Func::bound_storage from `spec` onto `user`. Unlike bounds() (which
+// is an append-only list), storage_dims() is a fixed-size vector
+// initialized at Func definition with one entry per pure arg. So we
+// mutate the existing entries in place rather than push new ones.
+// Conflicting constant alignments / storage bounds error out by the
+// same shape as check_bound_conflict.
+void transfer_storage_dims(const Function &spec, Function &user,
+                           const VarRenameMap &rename,
+                           const std::string &instr_name) {
+    std::vector<StorageDim> &user_dims = user.schedule().storage_dims();
+    for (const StorageDim &s : spec.schedule().storage_dims()) {
+        if (!s.alignment.defined() && !s.bound.defined()) {
+            continue;
+        }
+        auto it = rename.find(s.var);
+        if (it == rename.end()) {
+            // The matched For binding may not cover non-pure storage
+            // axes the spec set; fall back to silent skip rather than
+            // hard-error here. Phase 7 (affine match parameters) is
+            // the right place for richer dim-to-dim mapping.
+            continue;
+        }
+        const std::string &user_var = it->second;
+        StorageDim *user_dim = nullptr;
+        for (auto &d : user_dims) {
+            if (d.var == user_var) {
+                user_dim = &d;
+                break;
+            }
+        }
+        if (!user_dim) {
+            continue;
+        }
+        if (s.alignment.defined()) {
+            if (user_dim->alignment.defined()) {
+                int64_t a = 0, b = 0;
+                if (both_const_int(user_dim->alignment, s.alignment, &a, &b) &&
+                    a != b) {
+                    user_error
+                        << "implement_with: instruction \"" << instr_name
+                        << "\" requires align_storage(extent) = " << b
+                        << " on var \"" << user_var << "\" of Func \""
+                        << user.name() << "\", but a prior align_storage() "
+                        << "call on the same var declared alignment = " << a
+                        << ". These two constraints cannot both hold.\n";
+                }
+            } else {
+                user_dim->alignment = s.alignment;
+            }
+        }
+        if (s.bound.defined()) {
+            if (user_dim->bound.defined()) {
+                int64_t a = 0, b = 0;
+                if (both_const_int(user_dim->bound, s.bound, &a, &b) &&
+                    a != b) {
+                    user_error
+                        << "implement_with: instruction \"" << instr_name
+                        << "\" requires bound_storage = " << b << " on var \""
+                        << user_var << "\" of Func \"" << user.name()
+                        << "\", but a prior bound_storage() call declared "
+                        << "= " << a
+                        << ". These two constraints cannot both hold.\n";
+                }
+            } else {
+                user_dim->bound = s.bound;
+            }
+        }
+    }
+}
+
 void check_target_features(const Instruction &instr, const Target &target,
                            const std::string &user_func_name) {
     for (Target::Feature f : instr.required_features()) {
@@ -196,6 +267,7 @@ void apply_primary_transfer(const ImplementWithDirective &d,
     Function spec_primary = spec_outputs[0].function();
     VarRenameMap primary_map = build_var_rename(spec_primary, user_primary);
     transfer_bounds(spec_primary, user_primary, primary_map, instr.name());
+    transfer_storage_dims(spec_primary, user_primary, primary_map, instr.name());
 
     for (size_t k = 0; k < d.co_output_names.size(); ++k) {
         Function spec_co = spec_outputs[k + 1].function();
@@ -208,6 +280,7 @@ void apply_primary_transfer(const ImplementWithDirective &d,
                "environment.\n";
         VarRenameMap co_map = build_var_rename(spec_co, it->second);
         transfer_bounds(spec_co, it->second, co_map, instr.name());
+        transfer_storage_dims(spec_co, it->second, co_map, instr.name());
     }
 }
 
@@ -265,6 +338,8 @@ void apply_input_transfer(const ImplementWithDirective &d,
         }
         transfer_bounds(spec_input, user_input, input_map,
                         d.instruction.name());
+        transfer_storage_dims(spec_input, user_input, input_map,
+                              d.instruction.name());
     }
 }
 

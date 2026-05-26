@@ -1250,6 +1250,75 @@ void test_multi_output_co_outputs_compile() {
     (void)pipe.compile_to_module({a_in}, "test_co_outputs", t);
 }
 
+// Extended schedule transfer: the spec sets align_storage on its
+// primary output. The user has no align_storage set. After lowering,
+// the spec's alignment must end up on the user Func's storage_dim
+// (we observe this indirectly by setting a conflicting alignment on
+// the user and confirming compile errors out).
+void test_align_storage_conflict_detected() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        printf("[SKIP] test_align_storage_conflict_detected: exceptions "
+               "disabled\n");
+        return;
+    }
+
+    Instruction instr = Instruction::declare("align_storage_test")
+        .spec([]() -> Pipeline {
+            Var i("i");
+            Func a(Float(32), 1, "a_as"),
+                out(Float(32), 1, "out_as");
+            out(i) = a(i) + 1.0f;
+            out.bound(i, 0, 16);
+            out.align_storage(i, 64);  // spec requires 64-byte alignment
+            a.bound(i, 0, 16);
+            return Pipeline({out});
+        })
+        .require({})
+        .emit(stub_emit)
+        .build();
+
+    ImageParam a_in(Float(32), 1, "a_as_buf");
+    a_in.dim(0).set_bounds(0, 16);
+    Var x("x");
+    Func out("out_as_user");
+    out(x) = a_in(x) + 1.0f;
+    out.bound(x, 0, 16);
+    out.align_storage(x, 32);  // conflicts with spec's 64
+    out.implement_with(x, instr);
+
+    Target t = target_with({});
+    Pipeline pipe(out);
+
+    bool got_error = false;
+    try {
+        (void)pipe.compile_to_module({a_in}, "test_align_conflict", t);
+    } catch (const Halide::CompileError &e) {
+        got_error = true;
+        std::string msg = e.what();
+        if (msg.find("implement_with") == std::string::npos ||
+            msg.find("align_storage") == std::string::npos) {
+            fprintf(stderr,
+                    "test_align_storage_conflict_detected: error message "
+                    "missing expected context (implement_with / "
+                    "align_storage):\n%s\n",
+                    msg.c_str());
+            exit(1);
+        }
+    }
+    if (!got_error) {
+        fprintf(stderr,
+                "test_align_storage_conflict_detected: compile with a "
+                "conflicting align_storage should have errored, but did "
+                "not.\n");
+        exit(1);
+    }
+#else
+    printf("[SKIP] test_align_storage_conflict_detected: built without "
+           "exceptions\n");
+#endif
+}
+
 // Wire-in regression: prove the matcher path in
 // apply_implement_with_directives resolves spec inputs by structural
 // correspondence (via func_rename) rather than by name match. The user
@@ -1348,6 +1417,7 @@ int main(int argc, char **argv) {
     test_wire_in_matches_renamed_spec_inputs();
     test_multi_output_tuple_primary_compiles();
     test_multi_output_co_outputs_compile();
+    test_align_storage_conflict_detected();
 
     printf("Success!\n");
     return 0;
