@@ -781,6 +781,180 @@ void test_case_study_sdot_gemv_4x4() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Case study: HVX widening MAC via find_intrinsics
+// ---------------------------------------------------------------------------
+// Validates that intrinsic lifting (find_intrinsics) inside the
+// canonical-form prefix produces match-friendly IR on both sides. The
+// pattern is a classic HVX MAC: out(i) += widening_mul(a(i), b(i)),
+// authored as cast<int32>(a) * cast<int32>(b) on both sides;
+// find_intrinsics lifts it to a `widening_mul` Call. If lifting were
+// inconsistent (or skipped on one side), the matcher would see a Mul
+// of Casts on one side and a widening_mul Call on the other, failing
+// with a node-type mismatch. The test asserts they match.
+//
+// Target: hexagon-32-noos-hvx_v66 (the bundled halide-llvm includes
+// Hexagon). The match property is generic to any target that runs
+// find_intrinsics in canonical form (i.e. all of them), but using a
+// real HVX target exercises the Hexagon-specific gating that motivates
+// this case study.
+Instruction make_hvx_mac_style_named() {
+    return Instruction::declare("hvx_mac_style_named")
+        .spec([]() -> Pipeline {
+            Var i("i"), io("io"), ii("ii");
+            Func a(Int(8), 1, "a"), b(Int(8), 1, "b"),
+                out(Int(32), 1, "out");
+            Expr a_at_i = a(i);
+            Expr b_at_i = b(i);
+            out(i) = cast<int32_t>(0);
+            out(i) += cast<int32_t>(a_at_i) * cast<int32_t>(b_at_i);
+            out.bound(i, 0, 128);
+            // Vectorization is required for find_intrinsics to lift
+            // widening_mul (its guard `find_intrinsics_for_type` is
+            // vector-only). HVX has 64 int32 lanes at v66; split i into
+            // outer io / inner ii(64) and vectorize the inner, giving
+            // the post-split outer For a deterministic name
+            // ("out.s1.io") that find_implement_with_loop can locate.
+            out.update(0).split(i, io, ii, 64).vectorize(ii);
+            return Pipeline({out});
+        })
+        .require({})
+        .emit(stub_emit)
+        .build();
+}
+
+class CountWideningMul : public Internal::IRVisitor {
+public:
+    int count = 0;
+    using Internal::IRVisitor::visit;
+    void visit(const Internal::Call *op) override {
+        if (op->is_intrinsic(Internal::Call::widening_mul)) {
+            ++count;
+        }
+        Internal::IRVisitor::visit(op);
+    }
+};
+
+void test_case_study_hvx_mac_widening() {
+    Instruction instr = make_hvx_mac_style_named();
+    Pipeline spec = instr.spec();
+    Target t("hexagon-32-noos-hvx_v66");
+    std::string spec_out = spec.outputs()[0].name();
+
+    ImageParam a_in(Int(8), 1, "ua");
+    ImageParam b_in(Int(8), 1, "ub");
+    a_in.dim(0).set_bounds(0, 128);
+    b_in.dim(0).set_bounds(0, 128);
+    Func uout(Int(32), 1, "user_out_hvx_mac");
+    Var x("x"), xo("xo"), xi("xi");
+    uout(x) = cast<int32_t>(0);
+    uout(x) += cast<int32_t>(a_in(x)) * cast<int32_t>(b_in(x));
+    uout.bound(x, 0, 128);
+    uout.update(0).split(x, xo, xi, 64).vectorize(xi);
+    Pipeline user(uout);
+
+    Internal::Stmt spec_s = Internal::lower_spec_to_canonical_form(spec, t);
+    Internal::Stmt user_s = Internal::lower_pipeline_to_canonical_form(user, t);
+
+    // Sanity-check that find_intrinsics actually lifted widening_mul on
+    // both sides. If it didn't, this test would not be exercising the
+    // canonical-form intrinsic-lifting property at all.
+    CountWideningMul spec_count, user_count;
+    spec_s.accept(&spec_count);
+    user_s.accept(&user_count);
+    if (spec_count.count == 0 || user_count.count == 0) {
+        fprintf(stderr,
+                "test_case_study_hvx_mac_widening: find_intrinsics did "
+                "not lift widening_mul (spec=%d, user=%d). Pattern was "
+                "probably constant-folded away or the canonical-form "
+                "prefix is no longer running find_intrinsics. spec IR:\n"
+                "%s\nuser IR:\n%s\n",
+                spec_count.count, user_count.count,
+                ([&] { std::ostringstream os; os << spec_s; return os.str(); })().c_str(),
+                ([&] { std::ostringstream os; os << user_s; return os.str(); })().c_str());
+        exit(1);
+    }
+
+    // The post-split outer loop is named "<func>.s1.<orig>.<outer>" —
+    // Halide's split() concatenates the original var name and the new
+    // outer name. With original var "i" and outer "io", the spec For is
+    // "<out>.s1.i.io"; the user For is "user_out_hvx_mac.s1.x.xo".
+    Internal::Stmt spec_loop =
+        Internal::find_implement_with_loop(spec_s, spec_out, 1, "i.io");
+    Internal::Stmt user_loop =
+        Internal::find_implement_with_loop(user_s, "user_out_hvx_mac", 1, "x.xo");
+    if (!spec_loop.defined() || !user_loop.defined()) {
+        fprintf(stderr,
+                "test_case_study_hvx_mac_widening: locator missed "
+                "(spec_defined=%d user_defined=%d). spec IR:\n%s\nuser IR:\n%s\n",
+                (int)spec_loop.defined(), (int)user_loop.defined(),
+                ([&] { std::ostringstream os; os << spec_s; return os.str(); })().c_str(),
+                ([&] { std::ostringstream os; os << user_s; return os.str(); })().c_str());
+        exit(1);
+    }
+
+    Internal::MatchResult r =
+        Internal::match_canonical_form(spec_loop, user_loop);
+    if (!r.success) {
+        fprintf(stderr,
+                "test_case_study_hvx_mac_widening: match failed: %s\n"
+                "spec loop:\n%s\nuser loop:\n%s\n",
+                r.failure_reason.c_str(),
+                ([&] { std::ostringstream os; os << spec_loop; return os.str(); })().c_str(),
+                ([&] { std::ostringstream os; os << user_loop; return os.str(); })().c_str());
+        exit(1);
+    }
+
+    // The matched region should reference the widening_mul intrinsic
+    // (proves it's the lifted form being matched, not the un-lifted
+    // Mul of Casts that find_intrinsics started from).
+    CountWideningMul loop_count;
+    spec_loop.accept(&loop_count);
+    if (loop_count.count == 0) {
+        fprintf(stderr,
+                "test_case_study_hvx_mac_widening: matched spec loop "
+                "contains no widening_mul intrinsic; the test region "
+                "was not the lifted form.\n");
+        exit(1);
+    }
+
+    // Spec output binds to the user output; spec input a, b bind to
+    // the user ImageParams (uniquification permitting).
+    auto out_it = r.func_rename.find(spec_out);
+    if (out_it == r.func_rename.end() || out_it->second != "user_out_hvx_mac") {
+        fprintf(stderr,
+                "test_case_study_hvx_mac_widening: spec output '%s' "
+                "expected to bind to 'user_out_hvx_mac'; got '%s'\n",
+                spec_out.c_str(),
+                (out_it == r.func_rename.end() ? "(missing)" : out_it->second.c_str()));
+        exit(1);
+    }
+
+    CollectAllocateNames spec_allocs;
+    spec_s.accept(&spec_allocs);
+    int n_inputs_bound = 0;
+    for (const std::string &n : spec_allocs.names) {
+        if (n == spec_out) continue;
+        auto bit = r.func_rename.find(n);
+        if (bit == r.func_rename.end()) continue;
+        if (bit->second.empty() || bit->second[0] != 'u') {
+            fprintf(stderr,
+                    "test_case_study_hvx_mac_widening: spec input '%s' "
+                    "bound to '%s', which is not a user ImageParam\n",
+                    n.c_str(), bit->second.c_str());
+            exit(1);
+        }
+        ++n_inputs_bound;
+    }
+    if (n_inputs_bound != 2) {
+        fprintf(stderr,
+                "test_case_study_hvx_mac_widening: expected 2 spec "
+                "inputs (a, b) bound; got %d\n",
+                n_inputs_bound);
+        exit(1);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -797,6 +971,7 @@ int main(int argc, char **argv) {
     test_match_simplify_unequal_integers_still_fail();
     test_case_study_vfmadd231ps_256();
     test_case_study_sdot_gemv_4x4();
+    test_case_study_hvx_mac_widening();
 
     printf("Success!\n");
     return 0;
