@@ -7,6 +7,15 @@ vcpkg_from_github(
     SHA512 2378ab44e6ea3cd9bfede86a413c5d5503b8cd0d072bbee7099bd149897a58d74b57c06214f6b163242f5ac8bcdbb81a59632016ebd4c12a717786e1c387c9e3
     PATCHES remove-fetchcontent.patch
 )
+file(READ "${SOURCE_PATH}/CMakeLists.txt" cmake_contents)
+string(REPLACE
+    "project (iwasm LANGUAGES C)"
+    "project (iwasm LANGUAGES C)\nif (MSVC)\n  enable_language(ASM_MASM)\nendif ()"
+    cmake_contents
+    "${cmake_contents}"
+)
+file(WRITE "${SOURCE_PATH}/CMakeLists.txt" "${cmake_contents}")
+
 
 if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
     set(WAMR_BUILD_TARGET "X86_32")
@@ -14,7 +23,7 @@ elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
     set(WAMR_BUILD_TARGET "X86_64")
 elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm")
     set(WAMR_BUILD_TARGET "ARM")
-elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
+elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64" OR VCPKG_TARGET_ARCHITECTURE STREQUAL "aarch64")
     set(WAMR_BUILD_TARGET "AARCH64")
 else()
     message(FATAL_ERROR "Unsupported architecture: ${VCPKG_TARGET_ARCHITECTURE}")
