@@ -488,11 +488,6 @@ protected:
         mutate(op->false_value);
         // func_info now holds the false-branch info.
 
-        // Ids touched on both branches: combine with select(cond, t, f),
-        // so make_select can collapse `select(c, X, X) -> X` when the
-        // two branches contributed the same Expr.
-        // Ids touched on only one branch: AND the predicate with the
-        // appropriate side of the condition.
         auto merge_into_old = [&](size_t id, const Expr &u, const Expr &l) {
             auto [q, inserted] = old.try_emplace(id, FuncInfo{u, l});
             if (!inserted) {
@@ -505,13 +500,16 @@ protected:
             size_t id = p.first;
             auto it_t = true_info.find(id);
             Expr u, l;
+            // Select evaluates both sides but only uses one, so `loaded` is
+            // the unconditional OR of the two branches while `used` is gated
+            // by the condition.
             if (it_t != true_info.end()) {
                 u = make_select(op->condition, it_t->second.used, p.second.used);
-                l = make_select(op->condition, it_t->second.loaded, p.second.loaded);
+                l = make_or(it_t->second.loaded, p.second.loaded);
                 true_info.erase(it_t);
             } else {
                 u = make_and(p.second.used, !op->condition);
-                l = make_and(p.second.loaded, !op->condition);
+                l = p.second.loaded;
             }
             merge_into_old(id, u, l);
         }
@@ -521,7 +519,7 @@ protected:
         for (auto &p : true_info) {
             size_t id = p.first;
             Expr u = make_and(p.second.used, op->condition);
-            Expr l = make_and(p.second.loaded, op->condition);
+            Expr l = p.second.loaded;
             merge_into_old(id, u, l);
         }
         func_info.clear();
