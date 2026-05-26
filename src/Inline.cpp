@@ -101,7 +101,6 @@ class Inliner : public IRMutator {
     using IRMutator::visit;
 
     Function func;
-    bool leave_decl;
 
     Expr visit(const Call *op) override {
         if (op->name == func.name()) {
@@ -126,16 +125,6 @@ class Inliner : public IRMutator {
             }
 
             found++;
-
-            if (leave_decl) {
-                // Leave an inlining marker. It's a pure intrinsic because we
-                // want it to be deduped by CSE. The Func is encoded as a
-                // StringImm, not a Variable, because this is just a name for a
-                // profiler report, not a reference to a named value that's in
-                // scope.
-                body = Call::make(body.type(), Call::inline_marker,
-                                  {func.name(), body}, Call::PureIntrinsic);
-            }
 
             return body;
 
@@ -184,16 +173,15 @@ class Inliner : public IRMutator {
 public:
     int found = 0;
 
-    Inliner(const Function &f, bool leave_decl = false)
-        : func(f),
-          leave_decl(leave_decl) {
+    Inliner(const Function &f)
+        : func(f) {
         internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
         validate_schedule_inlined_function(f);
     }
 };
 
-Stmt inline_function(const Stmt &s, const Function &f, bool leave_decl) {
-    return Inliner(f, leave_decl)(s);
+Stmt inline_function(const Stmt &s, const Function &f) {
+    return Inliner(f)(s);
 }
 
 Expr inline_function(Expr e, const Function &f) {

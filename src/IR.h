@@ -656,22 +656,11 @@ struct Call : public ExprNode<Call> {
         // One loop nest level further in than the current compute_at, if not already innermost
         declare_box_required_inwards,
 
-        // Declares a Func was inlined here the given number of times
-        declare_inlined,
-
         // Declares that the following stmt computes a particular stage of
         // a particular Func. Used by the profiler to bill points computed
         // in the pure def separately from points computed in update defs.
         // Args: (Variable<Handle> handle for the func, Int<32> stage_idx).
         declare_stage,
-
-        // Wraps the value of an extern-stage call to tag any inline_marker
-        // chains in the args with the extern stage they're being evaluated
-        // for. resolve_inline_markers uses the tag as the fallback
-        // billing target (no surrounding Provide exists for extern
-        // stages). Args: (StringImm stage name, body). Returns body.type();
-        // resolve_inline_markers strips the wrapper.
-        extern_stage_marker,
 
         div_round_to_zero,
 
@@ -703,10 +692,6 @@ struct Call : public ExprNode<Call> {
         if_then_else_mask,
         image_load,
         image_store,
-
-        // A temporary annotation used while inlining to track what called what
-        // for profiling purposes
-        inline_marker,
 
         lerp,
 

@@ -2016,9 +2016,6 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     uint64_t scalar_loads, vector_loads, gathers, bytes_loaded;
     uint64_t scalar_stores, vector_stores, scatters, bytes_stored;
 
-    /** The number of times a call to this Func was inlined. */
-    uint64_t inlined_calls;
-
     /** Bitfield of halide_profiler_func_flag_* values. Initialised once
      * at instance start from a per-Func constants array; the runtime
      * does not mutate it. */

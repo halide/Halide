@@ -793,15 +793,6 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
     // Make the extern call
     Expr e = f.make_call_to_extern_definition(extern_call_args, target);
 
-    if (target.has_feature(Target::Profile)) {
-        // Tag the extern call so resolve_inline_markers can bill any
-        // inline_marker chains in the args to this extern stage. (The
-        // extern call has no surrounding Provide for the markers to
-        // anchor on.)
-        e = Call::make(e.type(), Call::extern_stage_marker,
-                       {Expr(f.name()), e}, Call::PureIntrinsic);
-    }
-
     // Check if it succeeded
     string result_name = unique_name('t');
     Expr result = Variable::make(Int(32), result_name);
@@ -2704,7 +2695,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
         if (group_should_be_inlined(funcs)) {
             debug(1) << "Inlining " << funcs[0].name() << "\n";
-            s = inline_function(s, funcs[0], target.has_feature(Target::Profile));
+            s = inline_function(s, funcs[0]);
         } else {
             debug(1) << "Injecting realization of " << funcs << "\n";
             InjectFunctionRealization injector(funcs, is_output_list, inwards, target, env);

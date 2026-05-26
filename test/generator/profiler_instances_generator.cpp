@@ -22,10 +22,6 @@ public:
     // failure scenario. Always passed in as 1 by the aottest, but the
     // compiler can't see that, so sliding can't determine the sign.
     Input<int> stride{"stride"};
-    // Used to verify that the trivial wrapper Func baked into an
-    // Input<Buffer> doesn't get a stats entry (see the assertion in
-    // the aottest).
-    Input<Buffer<int, 1>> in{"in"};
     Output<Buffer<int, 1>> out{"out"};
 
     void generate() {
@@ -34,60 +30,12 @@ public:
         Var x;
         RDom r(0, 16);
 
-        // Inlined Func reached from two compute_root callers.
-        Func multi_inlined("multi_inlined");
-        multi_inlined(x) = x * 3;
-
-        // Inlining chain a -> b -> c, all inlined into the callers.
-        Func chain_a("chain_a"), chain_b("chain_b"), chain_c("chain_c");
-        chain_a(x) = x;
-        chain_b(x) = chain_a(x) * 2;
-        chain_c(x) = chain_b(x) + 1;
-
         // Non-inlined Func with an unscheduled update def, reached from two
         // compute_root callers. The default-schedule lowering injects a
         // separate Realize/Produce inside each caller.
         Func update_f("update_f");
         update_f(x) = 0;
         update_f(x) += r;
-
-        // A subexpression that gets shared inside a single Provide by CSE
-        // (referenced in both the index and the value of an update Provide).
-        Func cse_shared("cse_shared"), cse_user("cse_user");
-        cse_shared(x) = (x * 17) & 0xff;
-        cse_user(x) = 0;
-        cse_user(clamp(cse_shared(r), 0, 15)) += cse_shared(r);
-
-        // Diamond inlining: `diamond_shared` is reached via two different
-        // inlining contexts (`diamond_left` and `diamond_right`) that both
-        // sit inside another outer marker (`diamond_outer`). All four Funcs
-        // get inlined into `diamond_user`. After CSE the shared marker for
-        // diamond_shared ends up bound in a LetStmt above the Provide, and
-        // diamond_left/diamond_right both reference it. The LCA of those
-        // two parents in the inlining graph is `diamond_outer` — that's
-        // what the LCA computation in PreAllocateEntries needs to find.
-        Func diamond_shared("diamond_shared");
-        Func diamond_left("diamond_left"), diamond_right("diamond_right");
-        Func diamond_outer("diamond_outer"), diamond_user("diamond_user");
-        diamond_shared(x) = x * 2 + 1;
-        diamond_left(x) = diamond_shared(x) + 10;
-        diamond_right(x) = diamond_shared(x) + 20;
-        diamond_outer(x) = diamond_left(x) * diamond_right(x);
-        diamond_user(x) = diamond_outer(x) + x;
-
-        // Forced-inline Func: `forced_inline` is called once at a bounded
-        // index and once at a data-dependent index (`forced_data(x)`).
-        // Halide's bounds analysis can't determine a finite extent for
-        // forced_inline because of the data-dependent call, so it can't be
-        // compute_at'd anywhere — it has to be inlined. The body clamps
-        // its arg before indexing into the input buffer, so the inlined
-        // code is well-defined. We just need it to compile cleanly and
-        // show up in stats with inlined_calls billed.
-        Func forced_data("forced_data"), forced_inline("forced_inline");
-        forced_data(x) = (x * 31) & 0x7f;
-        forced_inline(x) = forced_data(clamp(x, 0, 127));
-        Func forced_user("forced_user");
-        forced_user(x) = forced_inline(x) + forced_inline(forced_data(x));
 
         // RoundUp tail strategy on a compute_root Func: the loop trip
         // count is rounded up to a multiple of the factor and the body
@@ -249,35 +197,11 @@ public:
             mixed_sched.update(1).gpu_tile(x, xi, 8);
         }
 
-        // Extern stage with an inlined Func in its scalar call arg.
-        // `extern_inlined` is inlined into `extern_stage_e`'s arg, so the
-        // resolve_inline_markers path needs to attribute it to the extern
-        // stage (via extern_stage_marker — there's no surrounding Provide
-        // to anchor on). The aottest checks that the inlined entry's parent
-        // in the report is `extern_stage_e`, not the surrounding caller.
-        Func extern_inlined("extern_inlined"), extern_stage_e("extern_stage_e");
-        extern_inlined(x) = x * 7 + 3;
+        // Extern stage.
+        Func extern_stage_e("extern_stage_e");
         extern_stage_e.define_extern("test_extern_stage",
-                                     {Expr(extern_inlined(2))}, Int(32), 1);
+                                     {Expr(2)}, Int(32), 1);
         extern_stage_e.compute_root();
-
-        // `tab` is an inlined Func read at an index whose bounds-inferred
-        // interval doesn't fit in int32. The uint16 cast widens ux's
-        // interval to [0, 65535] regardless of what bounds inference
-        // knows about x, so `ux * ux` reaches 65535*65535 =
-        // 4_294_836_225 which overflows int32. The simplifier
-        // materialises a signed_integer_overflow intrinsic for the
-        // offending corner, and it ends up inside the bounds Expr that
-        // inject_profiling emits in the declare_box_required_at_root
-        // marker for tab. Without the poison-drop pre-pass that marker
-        // reaches codegen and user_errors; with it the marker is
-        // silently dropped and the generator compiles.
-        Func tab("tab");
-        tab(x) = x;
-
-        Func tab_caller("tab_caller");
-        Expr ux = cast<int32_t>(cast<uint16_t>(x));
-        tab_caller(x) = tab(ux * ux);
 
         // Inwards-counter test:
         // f(xf, yf) = g(yf). g only depends on yf. With g.compute_root,
@@ -309,41 +233,22 @@ public:
         inwards_red_at_y(x) = 0;
         inwards_red_at_y(x) += inwards_f_at_y(r_inwards, x);
 
-        // Funcs to exercise the Func::in() machinery. `in_target_naked`
-        // gets a naked in() wrapper (no consumer arg) -- the wrapper's
-        // profiler display name should be "in_target_naked.in()".
-        // `in_target_consumer` gets a wrapper specific to the consumer
-        // `in_consumer` -- the display name should be
-        // "in_target_consumer.in(in_consumer)".
-        Func in_target_naked("in_target_naked"), in_target_consumer("in_target_consumer"),
-             in_consumer("in_consumer");
-        in_target_naked(x) = x + 7;
-        in_target_consumer(x) = x + 11;
-        in_consumer(x) = in_target_consumer(x) + 1;
-        Func naked_wrapper = in_target_naked.in();
-        Func consumer_wrapper = in_target_consumer.in(in_consumer);
-
         Func caller_g("caller_g"), caller_h("caller_h");
-        caller_g(x) = multi_inlined(x) + chain_c(x) + update_f(x);
-        caller_h(x) = multi_inlined(x) - chain_c(x) + update_f(x);
+        caller_g(x) = update_f(x);
+        caller_h(x) = update_f(x) * 2;
 
-        Expr out_value = caller_g(x) + caller_h(x) + cse_user(x) + diamond_user(x) +
-                         forced_user(x) + roundup_outer(x) + guard_outer(x) +
+        Expr out_value = caller_g(x) + caller_h(x) +
+                         roundup_outer(x) + guard_outer(x) +
                          stencil_out(x) + unrolled_pu(x % 4) + cw_a(x) + cw_b(x) +
                          slide_out(x) + slide_fail_f(x) + extern_stage_e(x) +
-                         tab_caller(x) + in(x) +
-                         inwards_red_root(x) + inwards_red_at_y(x) +
-                         naked_wrapper(x) + in_consumer(x);
+                         inwards_red_root(x) + inwards_red_at_y(x);
         if (get_target().has_gpu_feature()) {
             out_value = out_value + approx_out(x) + xfer_out(x) + mixed_sched(x);
         }
         out(x) = out_value;
 
-        // Make caller_g/caller_h non-inlined so multi_inlined and chain_*
-        // each get two parent contexts.
         caller_g.compute_root();
         caller_h.compute_root();
-        cse_user.compute_root();
     }
 };
 

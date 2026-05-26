@@ -80,8 +80,7 @@ WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_
                                                 uint64_t scalar_stores,
                                                 uint64_t vector_stores,
                                                 uint64_t scatters,
-                                                uint64_t bytes_stored,
-                                                uint64_t inlined_calls) {
+                                                uint64_t bytes_stored) {
     using namespace Halide::Runtime::Internal::Synchronization;
 
     halide_profiler_func_stats &stats = instance->funcs[id];
@@ -112,7 +111,6 @@ WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_
     UPDATE_COUNTER(vector_stores);
     UPDATE_COUNTER(scatters);
     UPDATE_COUNTER(bytes_stored);
-    UPDATE_COUNTER(inlined_calls);
 
 #undef UPDATE_COUNTER
     return 0;

@@ -1178,7 +1178,6 @@ protected:
             if (op->is_intrinsic(Call::absd) && op->type.is_float()) {
                 return abs(op->args[0] - op->args[1]);
             } else if (op->is_intrinsic({Call::return_second,
-                                          Call::inline_marker,
                                           Call::if_then_else})) {
                 // For if_then_else this is probably more conservative
                 // than necessary.

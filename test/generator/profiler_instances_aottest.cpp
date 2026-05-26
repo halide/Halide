@@ -79,54 +79,6 @@ void check_two_compute_root_callers(const halide_profiler_pipeline_stats *p) {
     REQUIRE(h[0]->canonical_id == (int)(h[0] - p->funcs));
 }
 
-void check_inlined_func_multiple_callers(const halide_profiler_pipeline_stats *p) {
-    auto fs = entries_of(p, "multi_inlined");
-    REQUIRE(fs.size() == 2);
-    REQUIRE(fs[0]->canonical_id == fs[1]->canonical_id);
-
-    int g_idx = parent_id_of(p, "caller_g");
-    int h_idx = parent_id_of(p, "caller_h");
-    bool parents_ok = (fs[0]->parent == g_idx && fs[1]->parent == h_idx) ||
-                      (fs[0]->parent == h_idx && fs[1]->parent == g_idx);
-    REQUIRE(parents_ok);
-    REQUIRE(fs[0]->inlined_calls > 0);
-    REQUIRE(fs[1]->inlined_calls > 0);
-}
-
-void check_inlining_chain(const halide_profiler_pipeline_stats *p) {
-    // a -> b -> c -> caller_{g,h}: each link must point at the next-out one.
-    auto a = entries_of(p, "chain_a");
-    auto b = entries_of(p, "chain_b");
-    auto c = entries_of(p, "chain_c");
-    REQUIRE(a.size() == 2);
-    REQUIRE(b.size() == 2);
-    REQUIRE(c.size() == 2);
-    for (auto *fs : a) {
-        REQUIRE(strcmp(parent_name(p, fs), "chain_b") == 0);
-    }
-    for (auto *fs : b) {
-        REQUIRE(strcmp(parent_name(p, fs), "chain_c") == 0);
-    }
-    for (auto *fs : c) {
-        const char *pn = parent_name(p, fs);
-        REQUIRE(strcmp(pn, "caller_g") == 0 || strcmp(pn, "caller_h") == 0);
-    }
-    // All entries of the same name share a canonical_id.
-    REQUIRE(a[0]->canonical_id == a[1]->canonical_id);
-    REQUIRE(b[0]->canonical_id == b[1]->canonical_id);
-    REQUIRE(c[0]->canonical_id == c[1]->canonical_id);
-    // Each link has billed inlined calls in every entry.
-    for (auto *fs : a) {
-        REQUIRE(fs->inlined_calls > 0);
-    }
-    for (auto *fs : b) {
-        REQUIRE(fs->inlined_calls > 0);
-    }
-    for (auto *fs : c) {
-        REQUIRE(fs->inlined_calls > 0);
-    }
-}
-
 void check_unscheduled_update_multiple_entries(const halide_profiler_pipeline_stats *p) {
     auto fs = entries_of(p, "update_f");
     REQUIRE(fs.size() == 2);
@@ -135,43 +87,6 @@ void check_unscheduled_update_multiple_entries(const halide_profiler_pipeline_st
     REQUIRE(fs[1]->realizations > 0);
     REQUIRE(fs[0]->productions > 0);
     REQUIRE(fs[1]->productions > 0);
-    // A Func with update definitions can't actually be inlined as code —
-    // it needs scratch storage across stages — so no matter how it's
-    // "unscheduled", its inlined_calls counter must stay at zero. It
-    // shows up as a producer (realizations/productions) instead.
-    REQUIRE(fs[0]->inlined_calls == 0);
-    REQUIRE(fs[1]->inlined_calls == 0);
-}
-
-void check_cse_hoisted_marker(const halide_profiler_pipeline_stats *p) {
-    // cse_shared appears in both the arg and the value of cse_user's update
-    // Provide; Inline.cpp's CSE will hoist the shared computation into a
-    // LetStmt above the Provide. The post-pass has to strip that.
-    auto fs = entries_of(p, "cse_shared");
-    REQUIRE(!fs.empty());
-    uint64_t total = 0;
-    for (auto *inst : fs) {
-        total += inst->inlined_calls;
-    }
-    REQUIRE(total > 0);
-}
-
-// Diamond inlining: diamond_shared is reached from diamond_outer via two
-// different intermediate markers (diamond_left and diamond_right). CSE
-// factors diamond_shared's marker into a let above the Provide so its
-// entry has two parents in the inlining graph. The LCA computation
-// in PreAllocateEntries should attribute it to diamond_outer (the
-// deepest node both diamond_left and diamond_right share), not to the
-// Provide root or to whichever edge happened to be processed last.
-void check_diamond_lca_attribution(const halide_profiler_pipeline_stats *p) {
-    auto outer = entries_of(p, "diamond_outer");
-    auto shared = entries_of(p, "diamond_shared");
-    REQUIRE(!outer.empty());
-    REQUIRE(!shared.empty());
-    int outer_idx = (int)(outer[0] - p->funcs);
-    for (auto *fs : shared) {
-        REQUIRE(fs->parent == outer_idx);
-    }
 }
 
 // RoundUp tail strategy on a compute_root Func over-computes the tail
@@ -261,17 +176,6 @@ void check_tiled_stencil_modest_recompute(const halide_profiler_pipeline_stats *
 // can't compute a finite root box for an unbounded Func, so it doesn't
 // emit declare_box_required_root for it and the canonical entry's
 // counter stays at zero (no recompute ratio is meaningful).
-void check_forced_inline(const halide_profiler_pipeline_stats *p) {
-    auto fs = entries_of(p, "forced_inline");
-    REQUIRE(!fs.empty());
-    uint64_t total = 0;
-    for (auto *inst : fs) {
-        total += inst->inlined_calls;
-        REQUIRE(inst->points_required_at_root == 0);
-    }
-    REQUIRE(total > 0);
-}
-
 // Sliding window: stencil producer with compute_at xi, store_at xo. With
 // sliding, each produce-firing past the warmup computes just the leading
 // edge of the stencil. Summed per produce-firing per outer tile that
@@ -399,20 +303,6 @@ void check_mixed_host_device_update_defs(const halide_profiler_pipeline_stats *p
     REQUIRE(found_mid_func_copy);
 }
 
-// Extern stage with an inlined Func in its scalar arg: the inlined entry
-// should be parented to the extern stage (not to whatever surrounds it),
-// confirming the extern_stage_marker path in resolve_inline_markers
-// correctly anchors inline_markers buried in extern call args.
-void check_extern_stage_inlined_parent(const halide_profiler_pipeline_stats *p) {
-    auto ei = entries_of(p, "extern_inlined");
-    REQUIRE(!ei.empty());
-    int ese_id = parent_id_of(p, "extern_stage_e");
-    for (auto *fs : ei) {
-        REQUIRE(fs->parent == ese_id);
-        REQUIRE(fs->inlined_calls > 0);
-    }
-}
-
 // inwards_g_root and inwards_g_at_y are the two halves of the
 // f(xf, yf) = g(yf) scenario for the "compute one level inwards"
 // counter. For the compute_root half, moving inwards to
@@ -452,53 +342,6 @@ void check_inwards_counter(const halide_profiler_pipeline_stats *p) {
 // zero (we lose the root-box count for the poisoned chain but
 // everything else still works). tab_caller, the inlined wrapper that
 // consumes tab, still has a well-defined root box of its own.
-// ImageParam::create_func emits a built-in wrapper Func through which
-// every access to the input buffer flows. The Function is given a
-// profiler_display_name like "<input_name> (input)" so the user
-// recognizes it in the report.
-void check_input_wrapper(const halide_profiler_pipeline_stats *p) {
-    // Internal IR name "in_im" should not appear -- the entry uses the
-    // display name instead.
-    REQUIRE(entries_of(p, "in_im").empty());
-    auto fs = entries_of(p, "in (input)");
-    REQUIRE(!fs.empty());
-    // The wrapper was actually exercised in the pipeline.
-    uint64_t total_inlined_calls = 0;
-    for (auto *inst : fs) {
-        total_inlined_calls += inst->inlined_calls;
-    }
-    REQUIRE(total_inlined_calls > 0);
-}
-
-// Func::in() and Func::in(consumer) create wrapper Funcs whose
-// profiler display name is set from get_wrapper.
-void check_func_in_wrappers(const halide_profiler_pipeline_stats *p) {
-    {
-        auto fs = entries_of(p, "in_target_naked.in()");
-        REQUIRE(!fs.empty());
-        for (auto *inst : fs) {
-            REQUIRE(inst->inlined_calls > 0);
-        }
-    }
-    {
-        auto fs = entries_of(p, "in_target_consumer.in(in_consumer)");
-        REQUIRE(!fs.empty());
-        for (auto *inst : fs) {
-            REQUIRE(inst->inlined_calls > 0);
-        }
-    }
-}
-
-void check_poisoned_root_box_dropped(const halide_profiler_pipeline_stats *p) {
-    auto caller = entries_of(p, "tab_caller");
-    REQUIRE(caller.size() == 1);
-    REQUIRE(caller[0]->inlined_calls > 0);
-    auto tab = entries_of(p, "tab");
-    REQUIRE(tab.size() == 1);
-    REQUIRE(tab[0]->inlined_calls > 0);
-    REQUIRE(tab[0]->points_required_at_root == 0);
-}
-
 void check_points_required_at_root_canonical_only(const halide_profiler_pipeline_stats *p) {
     // For any Func with multiple entries, at most one entry should have a
     // non-zero points_required_at_root (the canonical one — that's where the
@@ -522,12 +365,8 @@ void check_points_required_at_root_canonical_only(const halide_profiler_pipeline
         REQUIRE(with_pr <= 1);
         entries_with_pr_at_root += with_pr;
     };
-    check("multi_inlined");
-    check("chain_a");
-    check("chain_b");
-    check("chain_c");
     check("update_f");
-    REQUIRE(total_multi_entry_funcs >= 3);
+    REQUIRE(total_multi_entry_funcs >= 1);
 }
 
 }  // namespace
@@ -536,12 +375,10 @@ int main(int argc, char **argv) {
     // Size deliberately not a multiple of the RoundUp/GuardWithIf split
     // factor (10), so the tail strategies actually do something.
     Buffer<int, 1> output(73);
-    Buffer<int, 1> in(73);
-    in.fill(0);
     // stride=1 is hidden from the compiler — the slide_fail_g scenario
     // calls g(stride*x) and g(stride*x + 3), and since the sign of stride
     // is unknown at compile time, sliding-window monotonicity fails.
-    profiler_instances(1, in, output);
+    profiler_instances(1, output);
 
     halide_profiler_state *s = halide_profiler_get_state();
     REQUIRE(s != nullptr);
@@ -555,12 +392,7 @@ int main(int argc, char **argv) {
     REQUIRE(target != nullptr);
 
     check_two_compute_root_callers(target);
-    check_inlined_func_multiple_callers(target);
-    check_inlining_chain(target);
     check_unscheduled_update_multiple_entries(target);
-    check_cse_hoisted_marker(target);
-    check_diamond_lca_attribution(target);
-    check_forced_inline(target);
     check_roundup_overstores_bytes(target);
     check_guardwithif_no_overstore(target);
     check_unrolled_pure_update(target);
@@ -568,7 +400,6 @@ int main(int argc, char **argv) {
     check_tiled_stencil_modest_recompute(target);
     check_sliding_window_counters(target);
     check_sliding_window_failure_counters(target);
-    check_extern_stage_inlined_parent(target);
     check_inwards_counter(target);
     // Only present when the pipeline was built with a GPU feature — the
     // generator gates the corresponding Funcs on get_target().has_gpu_feature().
@@ -582,9 +413,6 @@ int main(int argc, char **argv) {
         check_mixed_host_device_update_defs(target);
     }
     check_points_required_at_root_canonical_only(target);
-    check_poisoned_root_box_dropped(target);
-    check_input_wrapper(target);
-    check_func_in_wrappers(target);
 
     printf("Success!\n");
     return 0;

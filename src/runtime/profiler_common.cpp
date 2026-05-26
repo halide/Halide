@@ -691,8 +691,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         "--------------------------------------------------------------------------------------------------------\n";
     constexpr const char *func_row =
         "NNNNNNNNNNNNNNNNNNNNNNNNN|TTTTTTTTT PPPPPPPP|HHHHHH |LLLLLL|KKKKKK|AAAAAA|MMMMMM|VVVVVV|RRRRRRRR |YYYYY|";
-    constexpr const char *inlined_func_row =
-        "NNNNNNNNNNNNNNNNNNNNNNNNN|IIIIIIIIIIIIIIIIII|       |      |      |      |      |      |RRRRRRRR |YYYYY|";
     constexpr const char *allocation_func_row =
         "NNNNNNNNNNNNNNNNNNNNNNNNN|ZZZZZZZZZZZZZZZZZZ|       |      |      |AAAAAA|MMMMMM|VVVVVV|         |     |";
     // Column legend printed once above the func table. Each pipe column
@@ -934,10 +932,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             // source p->funcs[] array read-only.
             uint64_t self_time = src.time;
             uint64_t subtree_time = cum_stats[i].time;
-            if (src.inlined_calls && src.parent >= 0) {
-                self_time = p->funcs[src.parent].time;
-                subtree_time = self_time;
-            }
             dst.time += self_time;
             if (src.memory_peak > dst.memory_peak) {
                 dst.memory_peak = src.memory_peak;
@@ -1029,11 +1023,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             // points_computed (pure-def stage-0 stores × lanes) captures
             // forms of over-computation that the box-required counter
             // misses: tail strategies like RoundUp, and cases where
-            // sliding-window failed. Inlined Funcs don't have stage-0
-            // stores at all, so for them we fall back to inlined_calls.
-            uint64_t numerator = fs->points_computed + fs->inlined_calls;
+            // sliding-window failed.
             float recompute = fs->points_required_at_root ?
-                                  (numerator / (float)fs->points_required_at_root) :
+                                  (fs->points_computed / (float)fs->points_required_at_root) :
                                   0.f;
             uint64_t total_vector_loads = fs->vector_loads + fs->gathers;
             uint64_t total_vector_stores = fs->vector_stores + fs->scatters;
@@ -1206,8 +1198,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 // ratio for any inlined Func that looks suspicious; the
                 // cure is to try compute_at and see if it gets faster.
                 if (recompute > 2.0f &&
-                    fs->parent >= 0 &&
-                    !fs->inlined_calls) {
+                    fs->parent >= 0) {
                     if (emit) {
                         sstr << fs->name << " redundantly recomputes each value " << recompute
                              << " times on average. ";
@@ -1253,7 +1244,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
                 return false;
             case warning_no_vector_ops:
-                if (!vector_loads_or_stores && !fs->inlined_calls) {
+                if (!vector_loads_or_stores) {
                     if (emit) {
                         sstr << fs->name << " performs no vector loads or stores. Ensure it is"
                              << " vectorized.";
@@ -1405,8 +1396,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             const char *row_template = func_row;
             if (fs->kind == halide_profiler_func_kind_allocation) {
                 row_template = allocation_func_row;
-            } else if (fs->inlined_calls) {
-                row_template = inlined_func_row;
             }
             apply_template(row_template, [&](char c, int w) {
                 switch (c) {
@@ -1454,13 +1443,10 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     // points_computed counter (pure-def stage-0 stores
                     // by lane count, summed across instances) so the
                     // ratio reflects what was actually computed, not
-                    // just the realize-box-size machinery. For inlined
-                    // Funcs there are no stage-0 stores, so we fall
-                    // back to inlined_calls.
+                    // just the realize-box-size machinery.
                     uint64_t at_root = p->funcs[fs->canonical_id].points_required_at_root;
                     if (at_root) {
-                        float recompute = ((fs->points_computed + fs->inlined_calls) /
-                                           (float)at_root);
+                        float recompute = (fs->points_computed / (float)at_root);
                         emit_float(recompute, w);
                     } else {
                         pad_bytes_to(sstr.size() + w);
@@ -1501,15 +1487,14 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                         }
                     }
                     break;
-                case 'I':
                 case 'Z': {
-                    // "(inlined)" / "(allocation)" placeholder, centered in
+                    // "(allocation)" placeholder, centered in
                     // the run width and painted in the same mid-gray as the
                     // section headers. Track the ANSI bytes we emit so we
                     // can bump the pad target by exactly that many bytes
                     // (they don't count toward visible width).
                     uint64_t target = sstr.size() + w;
-                    const char *text = (c == 'I') ? "(inlined)" : "(allocation)";
+                    const char *text = "(allocation)";
                     int text_len = 0;
                     while (text[text_len]) {
                         text_len++;
@@ -1769,8 +1754,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     field_u64("          ", "scalar_stores", fs->scalar_stores);
                     field_u64("          ", "vector_stores", fs->vector_stores);
                     field_u64("          ", "scatters", fs->scatters);
-                    field_u64("          ", "bytes_stored", fs->bytes_stored);
-                    field_u64("          ", "inlined_calls", fs->inlined_calls, true);
+                    field_u64("          ", "bytes_stored", fs->bytes_stored, true);
                     json << "        }";
 
                     // Flush periodically so we don't overflow the buffer for

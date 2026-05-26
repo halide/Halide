@@ -194,7 +194,6 @@ bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
 class Inliner : public IRMutator {
 public:
     std::set<Function, Function::Compare> to_inline;
-    bool keep_inlined_calls = false;
 
     Expr do_inlining(const Expr &e) {
         return common_subexpression_elimination(mutate(e));
@@ -218,14 +217,6 @@ protected:
     }
 
     Expr visit(const Call *op) override {
-        // The Inliner is the only thing that constructs inline_markers, and
-        // it's only invoked once per cond_val.value, so we should never
-        // walk into one. Walking into args[0] (which preserves the
-        // original Call for diamond-dependency dedup) would re-trigger
-        // inlining of any Funcs that appear in the call's index args,
-        // producing nested inline_markers that grow exponentially.
-        internal_assert(!op->is_intrinsic(Call::inline_marker))
-            << "Inliner should never encounter an inline_marker — it constructs them.\n";
         if (op->func.defined()) {
             Function f(op->func);
             if (to_inline.count(f)) {
@@ -234,17 +225,6 @@ protected:
                 const vector<string> &func_args = f.args();
                 for (size_t i = 0; i < args.size(); i++) {
                     body = Let::make(f.name() + "." + func_args[i], args[i], body);
-                }
-
-                if (keep_inlined_calls) {
-                    // Wrap with inline_marker so boxes_required can still
-                    // see the original call when analyzing the inlined
-                    // body — it walks the marker's first arg (the call)
-                    // to record the box required for the inlined Func.
-                    // A post-pass strips these markers unconditionally
-                    // after bounds inference is done; until then they
-                    // act like return_second(call, body).
-                    body = Call::make(op->type, Call::inline_marker, {op, body}, Call::PureIntrinsic);
                 }
 
                 return body;
@@ -909,7 +889,6 @@ public:
 
         // Figure out which functions will be inlined away
         vector<bool> inlined(f.size());
-        inliner.keep_inlined_calls = profiling;
         for (size_t i = 0; i < inlined.size(); i++) {
             if (i < f.size() - 1 &&
                 f[i].schedule().compute_level().is_inlined() &&
@@ -1654,19 +1633,6 @@ Stmt bounds_inference(Stmt s,
     // shared subexpressions become LetStmts above the block of
     // declarations rather than duplicated tree text per declaration.
     s = rewrite_deferred_root_box_markers(s, inferrer.deferred_root_boxes);
-
-    // The Inliner wraps calls to inlined Funcs in inline_marker so that
-    // boxes_required and related analyses can still see them. They have
-    // no role past this point — the inlined Func has no buffer or
-    // producer, so leaving them in would crash codegen — strip them all
-    // unconditionally.
-    s = mutate_with(s, [&](auto *self, const Call *op) -> Expr {
-        if (op->is_intrinsic(Call::inline_marker)) {
-            internal_assert(op->args.size() == 2);
-            return self->mutate(op->args[1]);
-        }
-        return self->visit_base(op);
-    });
 
     return s.as<For>()->body;
 }
