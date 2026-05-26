@@ -58,7 +58,6 @@ Instruction make_vfmadd_style_named() {
         .build();
 }
 
-
 Target target_with(const std::vector<Target::Feature> &feats) {
     Target t("x86-64-linux");
     for (Target::Feature f : feats) {
@@ -112,6 +111,13 @@ void test_use_site_pipeline_still_compiles() {
     a(x) = 1.0f;
     b(x) = 2.0f;
     c(x) = 3.0f;
+    // compute_root so the inputs survive to canonical form as Loads;
+    // Phase 5 emit substitution structurally matches the spec's
+    // `a * b + c` against the user body, which requires Loads from a/b/c
+    // (not constant-folded inline definitions).
+    a.compute_root();
+    b.compute_root();
+    c.compute_root();
     out(x) = a(x) * b(x) + c(x);
     out.implement_with(x, instr);
 
@@ -143,7 +149,8 @@ void test_find_implement_with_loop_returns_for_node() {
                     std::ostringstream os;
                     os << s;
                     return os.str();
-                })().c_str());
+                })()
+                    .c_str());
         exit(1);
     }
     const Internal::For *f = loop.as<Internal::For>();
@@ -1118,9 +1125,11 @@ void test_case_study_ptx_gpu_mac() {
                 "test_case_study_ptx_gpu_mac: locator missed "
                 "(spec_defined=%d user_defined=%d). spec For names:\n",
                 (int)spec_loop.defined(), (int)user_loop.defined());
-        for (const auto &n : spec_fors.names) fprintf(stderr, "  %s\n", n.c_str());
+        for (const auto &n : spec_fors.names)
+            fprintf(stderr, "  %s\n", n.c_str());
         fprintf(stderr, "user For names:\n");
-        for (const auto &n : user_fors.names) fprintf(stderr, "  %s\n", n.c_str());
+        for (const auto &n : user_fors.names)
+            fprintf(stderr, "  %s\n", n.c_str());
         exit(1);
     }
 
@@ -1178,28 +1187,28 @@ void test_case_study_ptx_gpu_mac() {
 // bound must transfer onto the matched user Func.
 void test_multi_output_tuple_primary_compiles() {
     Instruction instr = Instruction::declare("tuple_pair_test")
-        .spec([]() -> Pipeline {
-            Var i("i");
-            Func x(Float(32), 1, "x"),
-                out(std::vector<Type>{Float(32), Float(32)}, 1, "out");
-            Expr est = x(i) * 2.0f;
-            Expr refined = x(i) * 3.0f;
-            out(i) = Tuple(est, refined);
-            x.bound(i, 0, 4);
-            out.bound(i, 0, 4);
-            return Pipeline({out});
-        })
-        .require({})
-        .emit(stub_emit)
-        .build();
+                            .spec([]() -> Pipeline {
+                                Var i("i");
+                                Func x(Float(32), 1, "x"),
+                                    out(std::vector<Type>{Float(32), Float(32)}, 1, "out");
+                                Expr est = x(i) * 2.0f;
+                                Expr refined = x(i) * 3.0f;
+                                out(i) = Tuple(est, refined);
+                                x.bound(i, 0, 4);
+                                out.bound(i, 0, 4);
+                                return Pipeline({out});
+                            })
+                            .require({})
+                            .emit(stub_emit)
+                            .build();
 
     Var ux("ux");
     ImageParam x_in(Float(32), 1, "ux_buf");
     x_in.dim(0).set_bounds(0, 4);
     Func uout(std::vector<Type>{Float(32), Float(32)}, 1, "user_out_tuple");
-    Expr ue = x_in(ux) * 2.0f;
-    Expr ur = x_in(ux) * 3.0f;
-    uout(ux) = Tuple(ue, ur);
+    Expr u_est = x_in(ux) * 2.0f;
+    Expr u_ref = x_in(ux) * 3.0f;
+    uout(ux) = Tuple(u_est, u_ref);
     uout.bound(ux, 0, 4);
     uout.implement_with(ux, instr);
 
@@ -1217,21 +1226,21 @@ void test_multi_output_tuple_primary_compiles() {
 // spec's bounds on `status` must transfer onto `my_status`.
 void test_multi_output_co_outputs_compile() {
     Instruction instr = Instruction::declare("tile_op_test")
-        .spec([]() -> Pipeline {
-            Var i("i");
-            Func a(Float(32), 1, "ta_in"),
-                result(Float(32), 1, "result"),
-                status(Int(32), 1, "status");
-            result(i) = a(i) + 1.0f;
-            status(i) = cast<int32_t>(a(i)) + 1;
-            a.bound(i, 0, 4);
-            result.bound(i, 0, 4);
-            status.bound(i, 0, 4);
-            return Pipeline({result, status});
-        })
-        .require({})
-        .emit(stub_emit)
-        .build();
+                            .spec([]() -> Pipeline {
+                                Var i("i");
+                                Func a(Float(32), 1, "ta_in"),
+                                    result(Float(32), 1, "result"),
+                                    status(Int(32), 1, "status");
+                                result(i) = a(i) + 1.0f;
+                                status(i) = cast<int32_t>(a(i)) + 1;
+                                a.bound(i, 0, 4);
+                                result.bound(i, 0, 4);
+                                status.bound(i, 0, 4);
+                                return Pipeline({result, status});
+                            })
+                            .require({})
+                            .emit(stub_emit)
+                            .build();
 
     Var ux("ux");
     ImageParam a_in(Float(32), 1, "ta_in_buf");
@@ -1264,19 +1273,19 @@ void test_align_storage_conflict_detected() {
     }
 
     Instruction instr = Instruction::declare("align_storage_test")
-        .spec([]() -> Pipeline {
-            Var i("i");
-            Func a(Float(32), 1, "a_as"),
-                out(Float(32), 1, "out_as");
-            out(i) = a(i) + 1.0f;
-            out.bound(i, 0, 16);
-            out.align_storage(i, 64);  // spec requires 64-byte alignment
-            a.bound(i, 0, 16);
-            return Pipeline({out});
-        })
-        .require({})
-        .emit(stub_emit)
-        .build();
+                            .spec([]() -> Pipeline {
+                                Var i("i");
+                                Func a(Float(32), 1, "a_as"),
+                                    out(Float(32), 1, "out_as");
+                                out(i) = a(i) + 1.0f;
+                                out.bound(i, 0, 16);
+                                out.align_storage(i, 64);  // spec requires 64-byte alignment
+                                a.bound(i, 0, 16);
+                                return Pipeline({out});
+                            })
+                            .require({})
+                            .emit(stub_emit)
+                            .build();
 
     ImageParam a_in(Float(32), 1, "a_as_buf");
     a_in.dim(0).set_bounds(0, 16);

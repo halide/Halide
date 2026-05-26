@@ -49,6 +49,13 @@ Instruction make_vfmadd_style() {
 // named per `user_var_name`. Sub-Funcs are *named* matching the spec's
 // input Func names ("a", "b", "c") so the schedule-transfer step finds
 // them in env.
+//
+// The sub-Funcs are scheduled compute_root() so their bodies survive
+// to canonical form as Loads (rather than inlining their constant
+// definitions and collapsing the output body to a constant via
+// Simplify). The Phase 5 emit substitution structurally matches the
+// spec body against the user body, so the user body must actually
+// produce loads-and-arithmetic in canonical form.
 Func make_user_pipeline(const std::string &out_name,
                         const std::string &user_var_name) {
     Var x(user_var_name);
@@ -56,6 +63,9 @@ Func make_user_pipeline(const std::string &out_name,
     a(x) = 1.0f;
     b(x) = 2.0f;
     c(x) = 3.0f;
+    a.compute_root();
+    b.compute_root();
+    c.compute_root();
     out(x) = a(x) * b(x) + c(x);
     return out;
 }
@@ -187,24 +197,28 @@ void test_conflicting_bound_errors() {
 }
 
 void test_input_func_name_mismatch_is_silent() {
-    // If the spec references an input Func named "a" but the user's
-    // pipeline has no such Func, Phase 3 should not error -- the matcher
-    // (Phase 4) is responsible for diagnosing structural mismatches.
+    // Originally a Phase 3 test for "silently skip inputs we can't name-
+    // map." Phase 4's structural matcher and Phase 5's emit substitution
+    // changed the semantics: input Funcs are bound by structural
+    // correspondence (the matcher's func_rename), not by name match. So
+    // a user pipeline whose inputs are named "p"/"q"/"r" -- different
+    // from the spec's "a"/"b"/"c" -- still compiles end-to-end, with
+    // the matcher binding the spec input names to the user names.
     Instruction instr = make_vfmadd_style();
 
-    // User pipeline that uses different names ("p", "q", "r" rather than
-    // "a", "b", "c"). The user-side Calls are anonymous to Phase 3.
     Var x("x");
     Func p_in("p"), q("q"), r("r"), out("out_mismatch");
     p_in(x) = 1.0f;
     q(x) = 2.0f;
     r(x) = 3.0f;
+    p_in.compute_root();
+    q.compute_root();
+    r.compute_root();
     out(x) = p_in(x) * q(x) + r(x);
     out.implement_with(x, instr);
 
     Target t = target_with({Target::FMA, Target::AVX2});
     Pipeline pipe(out);
-    // Should not throw -- Phase 3 silently skips inputs it cannot map.
     (void)pipe.compile_to_module({}, "test_mismatch", t);
 }
 
