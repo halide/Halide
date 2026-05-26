@@ -901,7 +901,7 @@ public:
 };
 
 // It is convenient to be able to assume that loops have a .loop_min.orig
-// let in addition to .loop_min. Most of these will get simplified away.
+// let giving the original loop min. Most of these will get simplified away.
 class AddLoopMinOrig : public IRMutator {
     using IRMutator::visit;
 
@@ -916,7 +916,7 @@ class AddLoopMinOrig : public IRMutator {
         } else {
             result = For::make(op->name, min, max, op->for_type, op->partition_policy, op->device_api, body);
         }
-        return LetStmt::make(op->name + ".loop_min.orig", Variable::make(Int(32), op->name + ".loop_min"), result);
+        return LetStmt::make(op->name + ".loop_min.orig", op->min, result);
     }
 };
 

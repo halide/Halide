@@ -1,6 +1,8 @@
 #include "Halide.h"
-#include "HalideRuntimeOpenCL.h"
 #include <stdio.h>
+#ifdef HALIDE_RUNTIME_OPENCL
+#include "HalideRuntimeOpenCL.h"
+#endif
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -8,18 +10,21 @@ using namespace Halide::Internal;
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
 
-    if (!t.has_feature(halide_target_feature_opencl)) {
-        printf("[SKIP] No OpenCL target enabled.\n");
+    if (!t.has_feature(halide_target_feature_opencl) &&
+        !t.has_feature(halide_target_feature_d3d12compute)) {
+        printf("[SKIP] No OpenCL or D3D12Compute target enabled.\n");
         return 0;
     }
 
-    const auto *interface = get_device_interface_for_device_api(DeviceAPI::OpenCL);
-    assert(interface->compute_capability != nullptr);
-    int major, minor;
-    int err = interface->compute_capability(nullptr, &major, &minor);
-    if (err != 0 || (major == 1 && minor < 2)) {
-        printf("[SKIP] OpenCL %d.%d is less than required 1.2.\n", major, minor);
-        return 0;
+    if (t.has_feature(halide_target_feature_opencl)) {
+        const auto *interface = get_device_interface_for_device_api(DeviceAPI::OpenCL);
+        assert(interface->compute_capability != nullptr);
+        int major, minor;
+        int err = interface->compute_capability(nullptr, &major, &minor);
+        if (err != 0 || (major == 1 && minor < 2)) {
+            printf("[SKIP] OpenCL %d.%d is less than required 1.2.\n", major, minor);
+            return 0;
+        }
     }
 
     // Check dynamic allocations into Heap and Texture memory
