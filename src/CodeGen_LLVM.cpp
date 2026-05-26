@@ -2845,6 +2845,44 @@ void CodeGen_LLVM::visit(const Call *op) {
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
+    // implement_with escape hatch: a Call whose name starts with
+    // "llvm." (the LLVM intrinsic namespace) is codegen'd directly
+    // here so that the caller-provided vector argument types are
+    // preserved through the call signature. Halide's generic extern
+    // path below scalarises vectors and would declare the intrinsic
+    // with the wrong (scalar) signature, producing "Intrinsic has
+    // incorrect return type" verification failures. And call_intrin
+    // also doesn't fit: it forces every argument type to share the
+    // result's scalar element type, which is wrong for cross-type
+    // intrinsics like SMMLA (int8x16 inputs -> int32x4 result).
+    //
+    // Spec authors writing emit callbacks that need to invoke an LLVM
+    // intrinsic directly (e.g. llvm.aarch64.neon.smmla.v4i32.v16i8
+    // for ARM i8mm) construct a Call::PureExtern (or Call::Extern)
+    // with the intrinsic name and rely on this dispatch.
+    if ((op->call_type == Call::Extern ||
+         op->call_type == Call::PureExtern) &&
+        op->name.compare(0, 5, "llvm.") == 0) {
+        std::vector<llvm::Value *> arg_values(op->args.size());
+        std::vector<llvm::Type *> arg_types(op->args.size());
+        for (size_t i = 0; i < op->args.size(); i++) {
+            arg_values[i] = codegen(op->args[i]);
+            arg_types[i] = arg_values[i]->getType();
+        }
+        llvm::Type *llvm_result_type = llvm_type_of(op->type);
+        llvm::Function *fn = module->getFunction(op->name);
+        if (!fn) {
+            FunctionType *func_t =
+                FunctionType::get(llvm_result_type, arg_types, false);
+            fn = llvm::Function::Create(
+                func_t, llvm::Function::ExternalLinkage,
+                op->name, module.get());
+            fn->setCallingConv(CallingConv::C);
+        }
+        value = builder->CreateCall(fn, arg_values);
+        return;
+    }
+
     value = call_overloaded_intrin(op->type, op->name, op->args);
     if (value) {
         return;
