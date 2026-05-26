@@ -1171,6 +1171,85 @@ void test_case_study_ptx_gpu_mac() {
     }
 }
 
+// Multi-output: Tuple-valued primary. The spec output is a single Func
+// with a 2-tuple value (estimate + Newton refinement, modeled on the
+// ARM frecpe/frecps pair from DESIGN.md §3.5). With the multi-output
+// restriction lifted, compile must succeed and the spec's tuple-Func
+// bound must transfer onto the matched user Func.
+void test_multi_output_tuple_primary_compiles() {
+    Instruction instr = Instruction::declare("tuple_pair_test")
+        .spec([]() -> Pipeline {
+            Var i("i");
+            Func x(Float(32), 1, "x"),
+                out(std::vector<Type>{Float(32), Float(32)}, 1, "out");
+            Expr est = x(i) * 2.0f;
+            Expr refined = x(i) * 3.0f;
+            out(i) = Tuple(est, refined);
+            x.bound(i, 0, 4);
+            out.bound(i, 0, 4);
+            return Pipeline({out});
+        })
+        .require({})
+        .emit(stub_emit)
+        .build();
+
+    Var ux("ux");
+    ImageParam x_in(Float(32), 1, "ux_buf");
+    x_in.dim(0).set_bounds(0, 4);
+    Func uout(std::vector<Type>{Float(32), Float(32)}, 1, "user_out_tuple");
+    Expr ue = x_in(ux) * 2.0f;
+    Expr ur = x_in(ux) * 3.0f;
+    uout(ux) = Tuple(ue, ur);
+    uout.bound(ux, 0, 4);
+    uout.implement_with(ux, instr);
+
+    Target t = target_with({});
+    Pipeline pipe(uout);
+    // Should not throw --- previously errored with
+    // "multi-output instructions are not yet supported".
+    (void)pipe.compile_to_module({x_in}, "test_tuple_pair", t);
+}
+
+// Multi-output: co-outputs. The spec produces two separate output
+// Funcs (`result` and `status`) computed at a shared tile boundary
+// (modeled on DESIGN.md §3.6). The user's directive lists `my_status`
+// as a co-output of `my_result`. With the restriction lifted, the
+// spec's bounds on `status` must transfer onto `my_status`.
+void test_multi_output_co_outputs_compile() {
+    Instruction instr = Instruction::declare("tile_op_test")
+        .spec([]() -> Pipeline {
+            Var i("i");
+            Func a(Float(32), 1, "ta_in"),
+                result(Float(32), 1, "result"),
+                status(Int(32), 1, "status");
+            result(i) = a(i) + 1.0f;
+            status(i) = cast<int32_t>(a(i)) + 1;
+            a.bound(i, 0, 4);
+            result.bound(i, 0, 4);
+            status.bound(i, 0, 4);
+            return Pipeline({result, status});
+        })
+        .require({})
+        .emit(stub_emit)
+        .build();
+
+    Var ux("ux");
+    ImageParam a_in(Float(32), 1, "ta_in_buf");
+    a_in.dim(0).set_bounds(0, 4);
+    Func my_result("my_result"), my_status("my_status");
+    my_result(ux) = a_in(ux) + 1.0f;
+    my_status(ux) = cast<int32_t>(a_in(ux)) + 1;
+    my_result.bound(ux, 0, 4);
+    my_status.bound(ux, 0, 4);
+    my_result.implement_with(ux, instr, std::vector<Func>{my_status});
+
+    Target t = target_with({});
+    Pipeline pipe(std::vector<Func>{my_result, my_status});
+    // Should not throw --- previously errored with
+    // "multi-output instructions are not yet supported".
+    (void)pipe.compile_to_module({a_in}, "test_co_outputs", t);
+}
+
 // Wire-in regression: prove the matcher path in
 // apply_implement_with_directives resolves spec inputs by structural
 // correspondence (via func_rename) rather than by name match. The user
@@ -1267,6 +1346,8 @@ int main(int argc, char **argv) {
     test_case_study_hvx_mac_widening();
     test_case_study_ptx_gpu_mac();
     test_wire_in_matches_renamed_spec_inputs();
+    test_multi_output_tuple_primary_compiles();
+    test_multi_output_co_outputs_compile();
 
     printf("Success!\n");
     return 0;

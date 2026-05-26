@@ -159,8 +159,16 @@ VarRenameMap bare_var_renames_from_matcher(
 // (out.min.0 / out.extent.0) and will not structurally match the
 // spec's constant-bound For. Positional rename is sufficient here: the
 // directive anchors spec-arg-0 to user-arg-0 by construction.
+//
+// Multi-output instructions: the directive's `co_output_names` lists
+// the user-side Funcs that share the implementation with `user_primary`.
+// For each co-output, the spec's corresponding output Func (matched by
+// position in spec.outputs()) has its bounds transferred onto the user
+// co-output. Single-output specs (Tuple-valued primaries included) take
+// the same path with an empty co_output_names list.
 void apply_primary_transfer(const ImplementWithDirective &d,
                             Function &user_primary,
+                            std::map<std::string, Function> &env,
                             const Target &target) {
     const Instruction &instr = d.instruction;
     internal_assert(instr.defined())
@@ -173,19 +181,34 @@ void apply_primary_transfer(const ImplementWithDirective &d,
     Pipeline spec = instr.spec();
     const std::vector<Func> &spec_outputs = spec.outputs();
 
-    // Phase 3 supports single-output instructions only. Multi-output
-    // (co_outputs) requires a name-keyed mapping that is more naturally
-    // landed alongside the matcher in Phase 4.
-    user_assert(spec_outputs.size() == 1 && d.co_output_names.empty())
-        << "implement_with: multi-output instructions are not yet supported. "
-        << "Instruction \"" << instr.name() << "\" has " << spec_outputs.size()
-        << " outputs and the directive on Func \"" << user_primary.name()
-        << "\" lists " << d.co_output_names.size() << " co-outputs. "
-        << "Single-output instructions only are supported in this build.\n";
+    // Co-output arity must match. spec.outputs()[0] always pairs with
+    // user_primary; spec.outputs()[k] for k >= 1 pairs with the k-th
+    // entry of d.co_output_names. Tuple-valued primaries (single Func,
+    // multi-component output) still have spec_outputs.size() == 1 and
+    // no co-output requirement.
+    user_assert(spec_outputs.size() == 1 + d.co_output_names.size())
+        << "implement_with: instruction \"" << instr.name()
+        << "\" has " << spec_outputs.size() << " output Funcs, but the "
+        << "directive on Func \"" << user_primary.name() << "\" lists "
+        << d.co_output_names.size() << " co-output(s) (expected "
+        << (spec_outputs.size() == 0 ? 0 : spec_outputs.size() - 1) << ").\n";
 
     Function spec_primary = spec_outputs[0].function();
     VarRenameMap primary_map = build_var_rename(spec_primary, user_primary);
     transfer_bounds(spec_primary, user_primary, primary_map, instr.name());
+
+    for (size_t k = 0; k < d.co_output_names.size(); ++k) {
+        Function spec_co = spec_outputs[k + 1].function();
+        const std::string &user_co_name = d.co_output_names[k];
+        auto it = env.find(user_co_name);
+        user_assert(it != env.end())
+            << "implement_with: directive on Func \"" << user_primary.name()
+            << "\" names co-output \"" << user_co_name
+            << "\", but no Func with that name is reachable in the lowering "
+               "environment.\n";
+        VarRenameMap co_map = build_var_rename(spec_co, it->second);
+        transfer_bounds(spec_co, it->second, co_map, instr.name());
+    }
 }
 
 // Post-matcher pass for a single directive: spec-input bound transfer.
@@ -370,7 +393,7 @@ void apply_implement_with_directives(std::map<std::string, Function> &env,
         internal_assert(it != env.end())
             << "implement_with: pending directive references Func \""
             << pending[i].first << "\" which is not in the lowering env.\n";
-        apply_primary_transfer(pending[i].second, it->second, target);
+        apply_primary_transfer(pending[i].second, it->second, env, target);
     }
 
     // Second pass: run the matcher on each directive against the
