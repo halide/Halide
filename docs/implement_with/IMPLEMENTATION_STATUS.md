@@ -2,15 +2,16 @@
 
 **Branch:** `alexreinking/implement_with` (worktree at
 `/var/home/alex/dev/Halide/implement_with`)
-**Current phase:** Phase 4 in progress. Structural matcher (alpha-
-rename + commutativity + Simplify-equivalence fallback) is now
-exercised end to end by a vfmadd231ps_256 case study that lowers
-both a spec and a realistic Halide user pipeline through the
-canonical-form prefix and asserts the resulting bindings. Three
-case studies remain (SDOT, HVX/AMX, PTX MMA); the wire-in to
-`apply_implement_with_directives` and joint multi-output matching
-are deferred to future sessions.
-**Last updated:** 2026-05-25 (session 7)
+**Current phase:** Phase 4 substantially complete. All four case
+studies from DESIGN.md §3.3-§3.4 (vfmadd231ps_256, sdot_gemv_4x4,
+hvx_mac_widening, ptx_gpu_mac) land end to end, each exercising a
+distinct property of the canonical-form prefix (basic scalar FMA;
+2-stage reduction with 2D Loads + Casts; vector intrinsic lifting
+via find_intrinsics; GPU For loop types). Open Phase 4 work: the
+`apply_implement_with_directives` matcher wire-in (task #8), joint
+multi-output matching (task #9), and extended schedule transfer
+beyond bounds (task #10). Once those land Phase 4 is closed.
+**Last updated:** 2026-05-25 (session 8)
 
 This file is the single source of truth for *where we are*. The design doc
 ([`DESIGN.md`](DESIGN.md)) is the spec; this file is the trace. Update at
@@ -25,12 +26,82 @@ the end of every session.
 | 1     | Infrastructure (inert API)               | **Done**    | Session 1. Two commits on branch. |
 | 2     | Spec-pattern Funcs                       | **Done**    | Session 2. Two commits on branch. |
 | 3     | Schedule transfer + constraint install   | **Done**    | Session 3. Single-output, bounds only; vectorize/align/etc. deferred. |
-| 4     | Matcher (canonicalization + structural)  | In progress | Session 5: PTX MMA added to case studies; `lower_to_canonical_form` exposed; `lower_spec_to_canonical_form` and `find_implement_with_loop` landed. Session 6: structural matcher with alpha-rename + commutativity landed (`match_canonical_form` + `MatchResult`). Session 7: spec-input wildcard observability (stubs now `compute_root()`), Simplify-equivalence fallback for integer Exprs, `lower_pipeline_to_canonical_form` helper, and the vfmadd231ps_256 case study landed. Three case studies (SDOT, HVX/AMX, PTX MMA) and the apply_implement_with_directives wire-in remain. |
+| 4     | Matcher (canonicalization + structural)  | In progress | Session 5: PTX MMA added to case studies; `lower_to_canonical_form` exposed; `lower_spec_to_canonical_form` and `find_implement_with_loop` landed. Session 6: structural matcher with alpha-rename + commutativity landed (`match_canonical_form` + `MatchResult`). Session 7: spec-input wildcard observability (stubs now `compute_root()`), Simplify-equivalence fallback for integer Exprs, `lower_pipeline_to_canonical_form` helper, and the vfmadd231ps_256 case study landed. Session 8: remaining three case studies (sdot_gemv_4x4, hvx_mac_widening, ptx_gpu_mac) landed; matcher exercised across two-stage reductions, vector intrinsic lifting, and GPU For loop types. apply_implement_with_directives wire-in, joint multi-output, and extended schedule transfer remain. |
 | 5     | Emit + lowering integration              | Not started | |
 | 6     | Diagnostics                              | Not started | |
 | 7 (v1.5) | Affine match parameters               | Not started | |
 
 ---
+
+## Session 8 — what landed (Phase 4: remaining case studies, 2026-05-25)
+
+### Source changes
+
+None. All three new case studies are pure test additions; the
+matcher, canonical-form lowering, and `find_implement_with_loop`
+machinery from sessions 5-7 cover the cases without modification.
+
+### Tests added to `implement_with_phase4.cpp` (3 commits)
+
+- **`test_case_study_sdot_gemv_4x4`** — SDOT 4x4 GEMV reduction
+  (DESIGN.md §3.4). Spec is a two-stage Func (init + update) with
+  `RDom k(0, 4)` reducing `cast<int32>(A(i, k)) * cast<int32>(b(k))`
+  into `out(i)`. User pipeline mirrors with ImageParams; both A
+  inputs need `dim(0).set_stride(1)` and `dim(1).set_stride(4)` to
+  produce structurally-equal Load indices on both sides. Matched
+  region is the update-stage's i-loop. Exercises: 2D Loads with
+  reduction-domain inner index, Cast(int8 -> int32) widening,
+  finding the update stage's For specifically, the matcher walking
+  through an inner reduction For loop.
+
+- **`test_case_study_hvx_mac_widening`** — HVX MAC via
+  find_intrinsics inside canonical form. Target is
+  `hexagon-32-noos-hvx_v66`. Both spec and user author the un-lifted
+  `cast<int32>(a) * cast<int32>(b)` form; find_intrinsics lifts it
+  to `widening_mul` + `widen_right_add` on both sides. The matcher
+  succeeds against the lifted form. A `CountWideningMul` IRVisitor
+  sanity-checks that widening_mul actually appears in both Stmts
+  and inside the matched region (otherwise the test would be
+  silently testing the un-lifted form). Requires explicit `split` +
+  `vectorize` (find_intrinsics_for_type is vector-only).
+
+- **`test_case_study_ptx_gpu_mac`** — GPU/PTX case study. Target
+  `host-cuda-cuda_capability_61`. Both sides use
+  `gpu_tile(x, y, xi, yi, 32, 8)`. Canonical form is taken *before*
+  inject_gpu_offload (per DECISIONS.md OQ#5), so spec and user
+  share `ForType::GPUBlock` / `ForType::GPUThread` loop structure.
+  A `HasGPUFor` IRVisitor confirms both kinds of GPU For nodes
+  reach canonical form on the spec side, then the outermost block
+  For is matched against its user counterpart. In a full MMA flow
+  the emit callback would lower the matched region to a
+  `wmma.mma.*` sequence; the case study tests only the matcher's
+  GPU loop traversal, not emit-side intrinsic generation.
+
+### Decisions made under uncertainty
+
+- **`out(i) = c(i)` direct FuncRef-to-FuncRef assignment** — the
+  spec-thunk auto-stub only fires from `FuncRef::operator Expr()`;
+  the `FuncRef::operator=(const FuncRef &)` overload routes through
+  `Tuple(FuncRef)` which asserts on undefined Funcs *before* the
+  stub can fire. The SDOT test works around this by binding an
+  intermediate `Expr c_val = c(i)`. Long-term fix would be either
+  to teach `Tuple(FuncRef)` about `in_spec_thunk()` or to teach
+  `FuncRef::operator=(FuncRef)` to force the Expr conversion when
+  the RHS is undefined. Filed informally as a Phase-2 follow-up;
+  the workaround is documented at the test's call site.
+- **Auto-stub pure-arg names follow the call site.** The §3.4
+  example uses `A.bound(_1, 0, 4)`, but the auto-stubbed A's pure
+  args are named after the call's args (`A(i, k)` -> args "i" and
+  "k$0"). Neither `_1` nor a fresh Var resolves. The SDOT test
+  drops bounds on auto-stubbed inputs entirely and lets bounds
+  inference derive their required regions from the consumer's
+  bound + the constant-extent RDom.
+- **GPU For naming** — gpu_tile produces names of the form
+  `<func>.s1.<orig>.<orig>.block_id_<dim>` (the original var name
+  appears twice, once from the stage-level scheduling and once
+  from gpu_tile's own internal split). The test locates the
+  outermost block For (`y.y.block_id_y`); on locator miss it dumps
+  all For names from both sides for debuggability.
 
 ## Session 7 — what landed (Phase 4: wildcards, Simplify, case study, 2026-05-25)
 
@@ -515,13 +586,12 @@ See [`DECISIONS.md`](DECISIONS.md). Highlights from session 1:
 
 ## Session handoff — next session start here
 
-The Phase 4 matcher core (alpha-rename + commutativity + Simplify-
-equivalence + spec-input wildcards) is feature-complete and exercised
-by an end-to-end vfmadd case study. The remaining Phase 4 work breaks
-into two independent tracks: more case studies (to validate the
-target-specific canonical-form gates) and the schedule-transfer
-wire-in (to make the matcher's `var_rename` reach Phase 3's bound
-transfer). Either is a reasonable first item for the next session.
+All four Phase 4 case studies land. The remaining Phase 4 work is
+two-and-a-half items: the matcher wire-in (which is the load-
+bearing one — Phase 3 currently uses positional rename, not the
+matcher's `var_rename`), joint multi-output matching, and extended
+schedule transfer beyond bounds. Once those land Phase 4 is closed
+and the project can move to Phase 5 (emit + lowering integration).
 
 1. **Wire the matcher into `apply_implement_with_directives`.**
    The hard part is *getting* the user-side canonical IR: the
@@ -556,8 +626,9 @@ transfer). Either is a reasonable first item for the next session.
    Tuple-valued primaries and `compute_with`-fused co-outputs at
    the same loop level. Lift the `co_output_names.empty()` and
    `outputs().size() == 1` restrictions in
-   `apply_implement_with_directives`. Required for the SDOT 4×4
-   GEMV case study below.
+   `apply_implement_with_directives`. Required for the full §3.4
+   "four broadcasting SDOTs" variant (the single-output reduction
+   form landed in session 8 as the SDOT case study).
 
 3. **Extend schedule transfer beyond bounds.** Once the matcher's
    `var_rename` is wired in (item 1), layer `align_storage`,
@@ -565,35 +636,29 @@ transfer). Either is a reasonable first item for the next session.
    path into `ApplyImplementWith.cpp`. Currently only
    `FuncSchedule::bounds()` transfers, single-output only.
 
-4. **Remaining Phase 4 case studies.** vfmadd231ps_256 landed in
-   session 7. Three remain, each chosen to exercise a distinct
-   property of the canonical-form prefix:
-   - **SDOT 4×4 GEMV on ARM** (DESIGN.md §3.4 — multi-instruction
-     emit) — needs joint matching of the four broadcasting SDOTs;
-     blocked on item 2 above (joint multi-output) for full
-     coverage, but a single-output reduction variant could land
-     first.
-   - **HVX MAC sequences *or* AMX tile triples** — validates that
-     `find_intrinsics` (HVX) and gated `extract_tile_operations`
-     (AMX) inside the canonical-form prefix produce match-friendly
-     IR. At least one of these should be wired up; both is better.
-     HVX target builds without extra LLVM components; AMX requires
-     LLVM with X86 target enabled.
-   - **PTX MMA on CUDA (NVPTX tensor cores)** — validates LLVM-
-     backed GPU matching. Canonical form is taken *before*
-     `inject_gpu_offload`, so spec and use-site share
-     `For::GPUBlock`/`For::GPUThread` loop structure. Warp-scoped
-     fragment IR exercises shared-state subtleties the CPU case
-     studies cannot. Required for declaring OQ#5 "settled" beyond
-     v1's no-stability-promise scope.
+### Smaller follow-ups surfaced by session 8
 
-5. **Non-zero ImageParam mins (Phase 7 prep).** The vfmadd case
-   study pins input mins to 0 because the matcher's Simplify-
-   equivalence fallback cannot prove `x - ua.min.0 == x` when
-   `ua.min.0` is symbolic. Real Halide pipelines use non-zero mins.
-   Affine match parameters (Phase 7, v1.5) handle this properly;
-   no Phase 4 changes needed, but worth a note when planning the
-   case studies above.
+- **Auto-stub through `Tuple(FuncRef)`.** `out(i) = c(i)` (direct
+  FuncRef-to-FuncRef assignment) routes through `Tuple(FuncRef)`,
+  which asserts before the spec-thunk auto-stub gets a chance to
+  fire. Workaround in the SDOT test is `Expr c_val = c(i); out(i)
+  = c_val;`. A one-line fix in `Tuple(const FuncRef &)` to honor
+  `Internal::in_spec_thunk()` (or in
+  `FuncRef::operator=(const FuncRef &)` to force Expr conversion
+  for undefined RHS) would remove the wart.
+- **Auto-stub pure-arg names.** The §3.4 example uses
+  `A.bound(_1, 0, 4)`, but the auto-stubbed Func's pure args come
+  from the call site (`A(i, k)` -> args "i" and "k$0"), so neither
+  `_1` nor any user-visible Var resolves. Either (a) the
+  auto-stub should expose the names it picks via a getter, or (b)
+  spec authors should be steered away from `bound(_N, ...)` in
+  the design doc. Currently undocumented. The SDOT case study
+  works around it by relying on bounds inference.
+- **Non-zero ImageParam mins (Phase 7 prep).** Three of four case
+  studies pin input mins to 0 because the matcher's Simplify-
+  equivalence fallback can't prove `x - ua.min.0 == x` when
+  `ua.min.0` is symbolic. Real Halide pipelines use non-zero mins.
+  Affine match parameters (Phase 7, v1.5) handle this properly.
 
 ### What is NOT yet done that's worth noting
 

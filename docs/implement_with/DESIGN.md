@@ -791,6 +791,30 @@ a problem.
 
 Format: `YYYY-MM-DD (session N)` — short summary of what changed.
 
+- **2026-05-25 (session 8, Phase 4 remaining case studies):** All
+  three remaining case studies from the Phase 4 plan land as
+  test-only additions to `implement_with_phase4.cpp` (no source
+  changes — sessions 5-7's matcher infrastructure covers them):
+  (1) `test_case_study_sdot_gemv_4x4` (DESIGN.md §3.4) — single-
+  output reduction form of the four-broadcasting-SDOTs pattern;
+  two-stage `out` with an RDom k(0, 4) reducing `cast<int32>(A(i,
+  k)) * cast<int32>(b(k))`. Matched at the update-stage's i-loop.
+  (2) `test_case_study_hvx_mac_widening` (HVX target) — validates
+  that `find_intrinsics` runs consistently inside the canonical-
+  form prefix; both spec and user author the un-lifted Cast/Mul
+  form, both get lifted to `widening_mul` + `widen_right_add`,
+  matcher succeeds against the lifted form. (3)
+  `test_case_study_ptx_gpu_mac` (host-cuda target) — validates
+  matcher traversal of `ForType::GPUBlock` / `ForType::GPUThread`
+  loops; canonical form is taken before `inject_gpu_offload`, so
+  spec and user share GPU loop structure. Three documented
+  authoring warts uncovered: direct FuncRef-to-FuncRef
+  assignment of an undefined spec input bypasses auto-stub
+  (workaround: `Expr c_val = c(i)`); auto-stubbed Funcs name
+  their pure args from the call site, so `bound(_1, ...)`
+  doesn't resolve; `gpu_tile` names post-tile block loops as
+  `<func>.s1.<orig>.<orig>.block_id_<dim>`.
+
 - **2026-05-25 (session 7, Phase 4 wildcards + Simplify + case
   study):** Three matcher-completion pieces landed plus the first
   Phase 4 case study. (1) Spec-input Func wildcards are now
