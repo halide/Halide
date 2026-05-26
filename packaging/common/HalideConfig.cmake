@@ -16,7 +16,9 @@ macro(Halide_find_component_dependency comp dep)  # nolint
     find_package(${dep} ${ARGN} ${Halide_quiet})
 
     if (NOT ${dep}_FOUND AND ${CMAKE_FIND_PACKAGE_NAME}_FIND_REQUIRED_${comp})
-        Halide_fail("${CMAKE_FIND_PACKAGE_NAME} could not be found because dependency ${dep} could not be found.")
+        Halide_fail(
+            "${CMAKE_FIND_PACKAGE_NAME} could not be found because dependency ${dep} could not be found."
+        )
     endif ()
 endmacro()
 
@@ -58,10 +60,7 @@ set(Halide_ASAN_ENABLED "@Halide_ASAN_ENABLED@")
 
 include(CMakeFindDependencyMacro)
 
-find_dependency(
-    HalideHelpers "@Halide_VERSION@" EXACT
-    HINTS "@PACKAGE_Halide_INSTALL_HELPERSDIR@"
-)
+find_dependency(HalideHelpers "@Halide_VERSION@" EXACT HINTS "@PACKAGE_Halide_INSTALL_HELPERSDIR@")
 
 if (Halide_comp_PNG)
     Halide_find_component_dependency(PNG PNG)

@@ -1,12 +1,7 @@
 pybind11_add_module(Halide_Python)
 add_library(Halide::Python ALIAS Halide_Python)
 
-set_target_properties(
-    Halide_Python
-    PROPERTIES
-    OUTPUT_NAME halide_
-    EXPORT_NAME Python
-)
+set_target_properties(Halide_Python PROPERTIES OUTPUT_NAME halide_ EXPORT_NAME Python)
 
 target_sources(
     Halide_Python
@@ -49,14 +44,10 @@ target_sources(
 # do this, they should use the CMAKE_PROJECT_Halide_Python_INCLUDE_BEFORE variable to override it
 # just for this project, rather than globally, and they should ensure that the last path component
 # is `halide`. Otherwise, the tests will break.
-set_target_properties(
-    Halide_Python PROPERTIES LIBRARY_OUTPUT_DIRECTORY "$<CONFIG>/halide"
-)
+set_target_properties(Halide_Python PROPERTIES LIBRARY_OUTPUT_DIRECTORY "$<CONFIG>/halide")
 
 if (Halide_ASAN_ENABLED)
-    set_target_properties(
-        Halide_Python PROPERTIES CMAKE_SHARED_LINKER_FLAGS -shared-libasan
-    )
+    set_target_properties(Halide_Python PROPERTIES CMAKE_SHARED_LINKER_FLAGS -shared-libasan)
 endif ()
 
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
@@ -67,26 +58,28 @@ target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 #   Ref: https://bugs.python.org/issue36085
 #   Ref: https://docs.python.org/3/whatsnew/3.8.html#bpo-36085-whatsnew
 add_custom_command(
-    TARGET Halide_Python POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy -t $<TARGET_FILE_DIR:Halide_Python> $<TARGET_RUNTIME_DLLS:Halide_Python>
-    COMMAND_EXPAND_LISTS
-    VERBATIM
+    TARGET Halide_Python
+    POST_BUILD
+    COMMAND
+        ${CMAKE_COMMAND} -E copy -t $<TARGET_FILE_DIR:Halide_Python>
+        $<TARGET_RUNTIME_DLLS:Halide_Python>
+    COMMAND_EXPAND_LISTS VERBATIM
 )
 
 # Copy our Python source files over so that we have a valid package in the binary directory.
-set(python_sources
-    __init__.py
-    _generator_helpers.py
-    imageio.py)
+set(python_sources __init__.py _generator_helpers.py imageio.py)
 
-list(TRANSFORM python_sources PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/"
-     OUTPUT_VARIABLE python_sources_source_dir)
+list(TRANSFORM python_sources
+    PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/"
+    OUTPUT_VARIABLE python_sources_source_dir
+)
 
 set(stamp_file "$<CONFIG>/Halide_Python_sources.stamp")
 add_custom_command(
     OUTPUT "${stamp_file}"
     COMMAND "${CMAKE_COMMAND}" -E make_directory $<TARGET_FILE_DIR:Halide_Python>
-    COMMAND "${CMAKE_COMMAND}" -E copy -t $<TARGET_FILE_DIR:Halide_Python> ${python_sources_source_dir}
+    COMMAND
+        "${CMAKE_COMMAND}" -E copy -t $<TARGET_FILE_DIR:Halide_Python> ${python_sources_source_dir}
     COMMAND "${CMAKE_COMMAND}" -E touch ${stamp_file}
     DEPENDS ${python_sources_source_dir}
     VERBATIM
