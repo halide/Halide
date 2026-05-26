@@ -20,10 +20,21 @@ else()
     message(FATAL_ERROR "Unsupported architecture: ${VCPKG_TARGET_ARCHITECTURE}")
 endif()
 
+if(VCPKG_TARGET_IS_LINUX)
+    set(WAMR_BUILD_PLATFORM "linux")
+elseif(VCPKG_TARGET_IS_WINDOWS)
+    set(WAMR_BUILD_PLATFORM "windows")
+elseif(VCPKG_TARGET_IS_OSX)
+    set(WAMR_BUILD_PLATFORM "darwin")
+else()
+    message(FATAL_ERROR "Unsupported target platform")
+endif()
+
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
         -DWAMR_BUILD_TARGET=${WAMR_BUILD_TARGET}
+        -DWAMR_BUILD_PLATFORM=${WAMR_BUILD_PLATFORM}
 )
 
 vcpkg_cmake_install()
