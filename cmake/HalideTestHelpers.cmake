@@ -163,7 +163,9 @@ function(tests)
         add_halide_test(
             "${TARGET}"
             ARGS ${args_ARGS}
-            GROUPS ${args_GROUPS} ${args_EXPECT_FAILURE} ${args_USE_EXIT_CODE_ONLY}
+            GROUPS
+            ${args_GROUPS}  #
+            ${args_EXPECT_FAILURE} ${args_USE_EXIT_CODE_ONLY}
         )
     endforeach ()
 

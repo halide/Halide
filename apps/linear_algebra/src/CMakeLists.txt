@@ -28,29 +28,29 @@ add_halide_blas_library(
     TARGET halide_scopy_impl
     NAME saxpy
     GENERATOR_ARGS vectorize=true scale_x=false add_to_y=false
-    FEATURES no_asserts
-) # needed for efficiency
+    FEATURES no_asserts  # needed for efficiency
+)
 
 add_halide_blas_library(
     TARGET halide_dcopy_impl
     NAME daxpy
     GENERATOR_ARGS vectorize=true scale_x=false add_to_y=false
-    FEATURES no_asserts
-) # needed for efficiency
+    FEATURES no_asserts  # needed for efficiency
+)
 
 add_halide_blas_library(
     TARGET halide_sscal_impl
     NAME saxpy
     GENERATOR_ARGS vectorize=true scale_x=true add_to_y=false
-    FEATURES no_asserts
-) # needed for efficiency
+    FEATURES no_asserts  # needed for efficiency
+)
 
 add_halide_blas_library(
     TARGET halide_dscal_impl
     NAME daxpy
     GENERATOR_ARGS vectorize=true scale_x=true add_to_y=false
-    FEATURES no_asserts
-) # needed for efficiency
+    FEATURES no_asserts  # needed for efficiency
+)
 
 add_halide_blas_library(
     TARGET halide_saxpy_impl
@@ -68,29 +68,29 @@ add_halide_blas_library(
     TARGET halide_sdot
     NAME sdot
     GENERATOR_ARGS vectorize=true
-    FEATURES no_asserts
-) # needed to run correctly
+    FEATURES no_asserts  # needed to run correctly
+)
 
 add_halide_blas_library(
     TARGET halide_ddot
     NAME ddot
     GENERATOR_ARGS vectorize=true
-    FEATURES no_asserts
-) # needed to run correctly
+    FEATURES no_asserts  # needed to run correctly
+)
 
 add_halide_blas_library(
     TARGET halide_sasum
     NAME sasum
     GENERATOR_ARGS vectorize=true
-    FEATURES no_asserts
-) # needed to run correctly
+    FEATURES no_asserts  # needed to run correctly
+)
 
 add_halide_blas_library(
     TARGET halide_dasum
     NAME dasum
     GENERATOR_ARGS vectorize=true
-    FEATURES no_asserts
-) # needed to run correctly
+    FEATURES no_asserts  # needed to run correctly
+)
 
 add_halide_blas_library(
     TARGET halide_sgemv_notrans

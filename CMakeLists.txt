@@ -15,7 +15,7 @@ enable_testing()
 file(CONFIGURE
     OUTPUT "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/HalideConfig.cmake"
     CONTENT [[set(Halide_FOUND 1)
-               set(Halide_VERSION @Halide_VERSION@)]]
+              set(Halide_VERSION @Halide_VERSION@)]]
 )
 
 file(CONFIGURE
@@ -140,8 +140,7 @@ function(set_halide_compiler_warnings NAME)
         $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"
         $<$<CXX_COMPILER_ID:MSVC>:/wd4146>  # 4146: unary minus applied to unsigned type
         $<$<CXX_COMPILER_ID:MSVC>:/wd4244>  # 4244: conversion, possible loss of data
-        # 4267: conversion from 'size_t' to 'int', possible loss of data
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4267>
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # 4267: size_t -> int narrowing
     )
 endfunction()
 

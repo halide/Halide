@@ -135,8 +135,7 @@ function(add_halide_generator TARGET)
                     ${TARGET}
                     PRIVATE
                     $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wdeprecated-declarations>
-                    # 4996: compiler encountered deprecated declaration
-                    $<$<CXX_COMPILER_ID:MSVC>:/w14996>
+                    $<$<CXX_COMPILER_ID:MSVC>:/w14996>  # 4996: deprecated decl
                 )
 
                 if (CMAKE_GENERATOR STREQUAL "Xcode")
@@ -818,11 +817,18 @@ function(add_halide_library TARGET)
     )
 
     set(generator_args
-        COMMAND ${generator_cmd} DEPENDS ${generator_cmd_deps} ${ARG_DEPENDS} EXTRA_OUTPUTS
-        ${extra_outputs} FILE_BASE_NAME "${ARG_FILE_BASE_NAME}" FUNCTION_NAME "${ARG_FUNCTION_NAME}"
-        GENERATOR "${ARG_GENERATOR}" GRADIENT_DESCENT "${ARG_GRADIENT_DESCENT}" OUTPUT_DIR
-        "${ARG_OUTPUT_DIR}" PARAMS ${ARG_PARAMS} PLUGINS ${ARG_PLUGINS} TYPE "${library_type}"
-        USE_RUNTIME "${ARG_USE_RUNTIME}"
+        COMMAND ${generator_cmd}  #
+        DEPENDS ${generator_cmd_deps} ${ARG_DEPENDS}  #
+        EXTRA_OUTPUTS ${extra_outputs}  #
+        FILE_BASE_NAME "${ARG_FILE_BASE_NAME}"  #
+        FUNCTION_NAME "${ARG_FUNCTION_NAME}"  #
+        GENERATOR "${ARG_GENERATOR}"  #
+        GRADIENT_DESCENT "${ARG_GRADIENT_DESCENT}"  #
+        OUTPUT_DIR "${ARG_OUTPUT_DIR}"  #
+        PARAMS ${ARG_PARAMS}  #
+        PLUGINS ${ARG_PLUGINS}  #
+        TYPE "${library_type}"  #
+        USE_RUNTIME "${ARG_USE_RUNTIME}"  #
     )
 
     list(JOIN ARG_FEATURES "-" ARG_FEATURES)
@@ -1432,10 +1438,9 @@ function(add_halide_xcframework TARGET)
     endforeach ()
 
     add_custom_target(${TARGET} ALL
-        DEPENDS
-            ${ARG_LIBRARIES}
-            ${xcfw_commands}
+        ${xcfw_commands}
         COMMAND xcodebuild -create-xcframework ${xcfw_create_args} -output "${xcfw}"
+        DEPENDS ${ARG_LIBRARIES}
         COMMENT "Packaging ${TARGET}.xcframework"
     )
     set_property(TARGET ${TARGET} PROPERTY FOLDER "Halide Internal")
