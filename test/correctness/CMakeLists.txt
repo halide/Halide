@@ -187,6 +187,7 @@ tests(GROUPS correctness
       implement_with_phase3.cpp
       implement_with_phase4.cpp
       implement_with_phase5.cpp
+      implement_with_smmla.cpp
       implicit_args.cpp
       implicit_args_tests.cpp
       implicit_pure_def_with_rvar_args.cpp
