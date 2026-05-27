@@ -10,11 +10,20 @@ vcpkg_from_github(
 file(READ "${SOURCE_PATH}/CMakeLists.txt" cmake_contents)
 string(REPLACE
     "project (iwasm LANGUAGES C)"
-    "project (iwasm LANGUAGES C)\nif (MSVC)\n  enable_language(ASM_MASM)\n  add_compile_definitions(_Alignof=__alignof)\n  add_compile_definitions(__builtin_alignof=__alignof)\nendif ()"
+    "project (iwasm LANGUAGES C)\nif (MSVC)\n  enable_language(ASM_MASM)\nendif ()"
     cmake_contents
     "${cmake_contents}"
 )
 file(WRITE "${SOURCE_PATH}/CMakeLists.txt" "${cmake_contents}")
+
+file(READ "${SOURCE_PATH}/core/shared/platform/include/platform_wasi_types.h" wasi_types_contents)
+string(REPLACE
+    "/* clang-format off */"
+    "/* clang-format off */\n#if defined(_MSC_VER) && !defined(__cplusplus)\n#undef _Alignof\n#define _Alignof(Type) offsetof(struct { char c; Type member; }, member)\n#endif"
+    wasi_types_contents
+    "${wasi_types_contents}"
+)
+file(WRITE "${SOURCE_PATH}/core/shared/platform/include/platform_wasi_types.h" "${wasi_types_contents}")
 
 
 file(READ "${SOURCE_PATH}/build-scripts/version.cmake" version_cmake_contents)
