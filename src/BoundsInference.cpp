@@ -803,7 +803,12 @@ public:
         // Compute the intrinsic relationships between the stages of
         // the functions.
 
-        // Figure out which functions will be inlined away.
+        // Figure out which functions will be inlined away. First sanity check
+        // that none of the outputs are inlined, or the code below would do the
+        // wrong thing with them.
+        for (const Function &o : outputs) {
+            internal_assert(!o.schedule().compute_level().is_inlined());
+        }
         vector<bool> inlined(f.size());
         for (size_t i = 0; i < inlined.size(); i++) {
             inlined[i] = (i < f.size() - 1 &&
@@ -857,16 +862,6 @@ public:
                 cond_val.value = inliner(cond_val.value);
             }
         }
-
-        // Remove the inlined stages
-        vector<Stage> new_stages;
-        for (const auto &stage : stages) {
-            if (!stage.func.schedule().compute_level().is_inlined() ||
-                !stage.func.can_be_inlined()) {
-                new_stages.push_back(stage);
-            }
-        }
-        new_stages.swap(stages);
 
         // Dump the stages post-inlining for debugging
         /*
