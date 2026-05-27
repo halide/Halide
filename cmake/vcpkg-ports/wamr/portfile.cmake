@@ -19,11 +19,20 @@ file(WRITE "${SOURCE_PATH}/CMakeLists.txt" "${cmake_contents}")
 file(READ "${SOURCE_PATH}/core/shared/platform/include/platform_wasi_types.h" wasi_types_contents)
 string(REPLACE
     "/* clang-format off */"
-    "/* clang-format off */\n#if defined(_MSC_VER) && !defined(__cplusplus)\n#undef _Alignof\n#define _Alignof __alignof\n#endif"
+    "/* clang-format off */\n#if defined(_MSC_VER)\n#define __builtin_alignof __alignof\n#if !defined(__cplusplus)\n#undef _Alignof\n#define _Alignof __alignof\n#endif\n#endif"
     wasi_types_contents
     "${wasi_types_contents}"
 )
 file(WRITE "${SOURCE_PATH}/core/shared/platform/include/platform_wasi_types.h" "${wasi_types_contents}")
+
+file(READ "${SOURCE_PATH}/build-scripts/version.cmake" version_cmake_contents)
+string(REGEX REPLACE
+    "configure_file\\([^)]*\\)"
+    "#configure_file_removed_by_vcpkg"
+    version_cmake_contents
+    "${version_cmake_contents}"
+)
+file(WRITE "${SOURCE_PATH}/build-scripts/version.cmake" "${version_cmake_contents}")
 
 
 if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
