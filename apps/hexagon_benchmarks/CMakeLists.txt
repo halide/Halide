@@ -36,7 +36,10 @@ endif ()
 
 # Test that the app actually works!
 add_test(NAME hexagon_benchmarks COMMAND process -n 1)
-set_tests_properties(hexagon_benchmarks PROPERTIES
-                     LABELS hexagon_benchmarks
-                     PASS_REGULAR_EXPRESSION "Success!"
-                     SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+set_tests_properties(
+    hexagon_benchmarks
+    PROPERTIES
+    LABELS hexagon_benchmarks
+    PASS_REGULAR_EXPRESSION "Success!"
+    SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+)
