@@ -333,10 +333,6 @@ struct Target {
      * for that data type when compiling for this Target. */
     int natural_vector_size(const Halide::Type &t) const;
 
-    /** Given a data type, return an estimate of the "natural" vector size
-     * for that data type in streaming mode in aarch64 SME. */
-    int natural_vector_size(const Halide::Type &t, bool is_sme_streaming) const;
-
     /** Return the fixed SME streaming vector length in bits selected by this target,
      * or 0 if no SME_SVL feature is set. */
     int sme_streaming_vector_bits() const;
@@ -344,8 +340,8 @@ struct Target {
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
     template<typename data_t>
-    int natural_vector_size(bool is_sme_streaming = false) const {
-        return natural_vector_size(type_of<data_t>(), is_sme_streaming);
+    int natural_vector_size() const {
+        return natural_vector_size(type_of<data_t>());
     }
 
     /** Return true iff 64 bits and has_feature(LargeBuffers). */

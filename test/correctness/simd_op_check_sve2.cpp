@@ -1458,7 +1458,10 @@ private:
     int native_vector_bits() const {
         // In this test, if target has SME, we run test in streaming mode,
         // so the target's SME_SVL feature is applied.
-        return target.natural_vector_size(Int(8), has_sme()) * 8;
+        if (has_sme()) {
+            return target.sme_streaming_vector_bits();
+        }
+        return target.natural_vector_size(Int(8)) * 8;
     }
 
     bool is_float16_supported() const {

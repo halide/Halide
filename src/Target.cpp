@@ -1714,10 +1714,6 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
     }
 }
 
-int Target::natural_vector_size(const Halide::Type &t) const {
-    return natural_vector_size(t, false);
-}
-
 int Target::sme_streaming_vector_bits() const {
     int result = 0;
     auto set_result = [&result](int bits) {
@@ -1743,7 +1739,7 @@ int Target::sme_streaming_vector_bits() const {
     return result;
 }
 
-int Target::natural_vector_size(const Halide::Type &t, bool is_sme_streaming) const {
+int Target::natural_vector_size(const Halide::Type &t) const {
     user_assert(!has_unknowns())
         << "natural_vector_size cannot be used on a Target with Unknown values.\n";
 
@@ -1751,13 +1747,9 @@ int Target::natural_vector_size(const Halide::Type &t, bool is_sme_streaming) co
     const int data_size = t.bytes();
 
     if (arch == Target::ARM) {
-        if (is_sme_streaming &&
-            sme_streaming_vector_bits() != 0 &&
-            has_feature(Halide::Target::SME2)) {
-            return sme_streaming_vector_bits() / (data_size * 8);
-        } else if (vector_bits != 0 &&
-                   (has_feature(Halide::Target::SVE2) ||
-                    (t.is_float() && has_feature(Halide::Target::SVE)))) {
+        if (vector_bits != 0 &&
+            (has_feature(Halide::Target::SVE2) ||
+             (t.is_float() && has_feature(Halide::Target::SVE)))) {
             return vector_bits / (data_size * 8);
         } else {
             return 16 / data_size;
@@ -2166,8 +2158,6 @@ void target_test() {
     internal_assert(Target::sme_svl_feature_from_bits(1024) == Target::SME_SVL1024) << "SME SVL feature lookup failed.\n";
     Target with_sme_svl(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE2, Target::SME2, Target::SME_SVL1024}, 512);
     internal_assert(with_sme_svl.sme_streaming_vector_bits() == 1024) << "SME SVL not populated in constructor.\n";
-    internal_assert(with_sme_svl.natural_vector_size(Int(32), true) == 32) << "Wrong natural_vector_size with SME streaming.\n";
-    internal_assert(with_sme_svl.natural_vector_size(Int(32), false) == 16) << "Wrong natural_vector_size without SME streaming.\n";
 
     std::cout << "Target test passed\n";
 }
