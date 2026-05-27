@@ -90,6 +90,7 @@ public:
                                      bool trace_realizations,
                                      const std::vector<std::string> &trace_tags,
                                      bool no_profiling,
+                                     const std::string &profiler_display_name,
                                      bool frozen);
 
     /** Get a handle on the halide function contents that this Function

@@ -357,6 +357,7 @@ void Function::update_with_deserialization(const std::string &name,
                                            bool trace_realizations,
                                            const std::vector<std::string> &trace_tags,
                                            bool no_profiling,
+                                           const std::string &profiler_display_name,
                                            bool frozen) {
     contents->name = name;
     contents->origin_name = origin_name;
@@ -379,6 +380,7 @@ void Function::update_with_deserialization(const std::string &name,
     contents->trace_realizations = trace_realizations;
     contents->trace_tags = trace_tags;
     contents->no_profiling = no_profiling;
+    contents->profiler_display_name = profiler_display_name;
     contents->frozen = frozen;
 }
 
