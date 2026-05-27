@@ -536,7 +536,6 @@ protected:
             }
             std::vector<Stmt> stores;
             stores.reserve(num_counters);
-            // TODO: Joint CSE across RHSs
             for (int i = 0; i < num_counters; i++) {
                 if (!c.counters[i].defined()) {
                     continue;
@@ -556,7 +555,6 @@ protected:
             std::vector<Expr> args(2 + num_counters);
             args[0] = Variable::make(Handle(), names.profiler_instance);
             args[1] = id;
-            // TODO: Joint CSE across RHSs
             for (int i = 0; i < num_counters; i++) {
                 Expr count = c.counters[i];
                 args[i + 2] = count.defined() ? count : make_zero(UInt(64));
@@ -1354,7 +1352,6 @@ private:
             leaf_task = !contains_parallel_or_blocking_node.result;
 
             if (leaf_task) {
-                // TODO: Shouldn't this be *outside* activate thread, so that the func setting is done by a single leaf?
                 body = claim_sampling_token(body, profiler_shared_sampling_token, profiler_local_sampling_token);
             }
 

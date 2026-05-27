@@ -791,9 +791,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             }
         }
 
-        // TODO: inlined Funcs, or even Funcs with update definitions that have
-        // multiple callers but are unscheduled could have multiple parents!
-
         // Use the tree order to compute some cumulative stats
         struct CumulativeStats {
             // Time taken by this func and all children
