@@ -1206,7 +1206,6 @@ WEAK void halide_profiler_reset() {
     // state without grabbing the global profiler state's lock.
     halide_profiler_state *s = halide_profiler_get_state();
     LockProfiler lock(s);
-    // halide_abort_if_false(nullptr, s->instances == nullptr);
     halide_profiler_reset_unlocked(s);
 }
 
