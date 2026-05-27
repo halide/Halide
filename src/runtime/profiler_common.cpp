@@ -170,10 +170,8 @@ WEAK void sampling_profiler_thread(void *) {
     halide_mutex_unlock(&s->lock);
 }
 
-// Print `str` to halide_print, wrapping so no line exceeds `max_cols`
-// columns. Words are separated by spaces. The first line starts at
-// column 0; every subsequent line is preceded by `indent` spaces (counted
-// against max_cols). No trailing newline is added on the final line.
+// Word-wrap `str` to `max_cols` columns; every line after the first is
+// preceded by `indent` spaces.
 WEAK void print_wrapped(void *user_context, int indent, int max_cols, const char *str) {
     const char *start = str;
     char *line_buf = (char *)__builtin_alloca(max_cols + 2);
@@ -491,24 +489,11 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         support_colors = true;
     }
 
-    // ---- Profiler report formatting --------------------------------------
-    //
-    // Column-aligned lines are produced from `const char *` templates. A run
-    // of identical "marker" characters is a wildcard slot: the marker char
-    // picks the slot type (and hence its formatter), and the run length is
-    // the slot width. Anything else is literal text. So the templates
-    // literally show the layout, including widths -- no width constants, no
-    // named tokens. To widen a column, type more of the marker. To
-    // rearrange columns, reorder marker runs.
-    //
-    // Markers:
-    //   N name      T time      P percent     H active threads
-    //   L loops     K tasks     A allocs      M mem peak / stack peak
-    //   V mem avg   R recompute S section label
-    //
-    // (No lowercase letters are markers, so "|threads|", "  parallel   ",
-    // "|recompute]", " ::::]", and the second-line column legend, all pass
-    // through verbatim.)
+    // Column-aligned rows are produced from `const char *` templates. A
+    // run of an uppercase marker char is a slot — the marker picks the
+    // formatter (see apply_template's switch below), and the run length
+    // is the slot width. Anything else is literal. To widen a column,
+    // type more of the marker.
 
     auto pad_bytes_to = [&](uint64_t target, char pad_char = ' ') {
         char buf[2] = {pad_char, 0};
@@ -670,19 +655,13 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         }
     };
 
-    // ---- Templates ----
-    // The N slot in func_row absorbs its own 2-space indent. Trailing \n's
-    // are added by the caller so color reset (when enabled) can be emitted
-    // just before the final newline.
     constexpr const char *horiz_rule =
         "--------------------------------------------------------------------------------------------------------\n";
     constexpr const char *func_row =
         "NNNNNNNNNNNNNNNNNNNNNNNNN|TTTTTTTTT PPPPPPPP|HHHHHH |AAAAAA|MMMMMM|VVVVVV|";
     constexpr const char *allocation_func_row =
         "NNNNNNNNNNNNNNNNNNNNNNNNN|ZZZZZZZZZZZZZZZZZZ|       |AAAAAA|MMMMMM|VVVVVV|";
-    // Column legend printed once above the func table. Each pipe column
-    // and label width matches func_row. Hand-aligned -- if you resize a
-    // column, eyeball this too.
+    // Hand-aligned with func_row above; resize together.
     constexpr const char *column_legend_row_1 =
         "  name                   | time     percent | active| heap | peak | avg  |";
     constexpr const char *column_legend_row_2 =
@@ -735,12 +714,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             continue;
         }
 
-        // Compute each func's depth in the compute_at tree (parent==-1 is a
-        // root, otherwise parent is an index into p->funcs), a DFS traversal
-        // of that tree, and whether each func is the last child of its
-        // parent (used to draw the right tree-art glyph). The DFS order is
-        // the default sort so children sit right under their parents; the
-        // depth + is_last_sibling drive the per-row indent in emit_name.
+        // DFS over the compute_at tree (parent == -1 is a root). The
+        // order becomes the row order; depth + is_last_sibling drive
+        // the tree-art glyphs in emit_name.
         int *func_depth = (int *)__builtin_alloca(p->num_funcs * sizeof(int));
         int *tree_order = (int *)__builtin_alloca(p->num_funcs * sizeof(int));
         bool *visited = (bool *)__builtin_alloca(p->num_funcs * sizeof(bool));
@@ -800,8 +776,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             }
         }
 
-        // Filter (skip empty bookkeeping slots) in tree-DFS order, and
-        // optionally re-sort with the user-requested comparator.
+        // Rows to print, in tree-DFS order, skipping bookkeeping slots
+        // that would be noise (no time, no allocs).
         int f_stats_count = 0;
         const halide_profiler_func_stats **f_stats =
             (const halide_profiler_func_stats **)__builtin_alloca(p->num_funcs * sizeof(const halide_profiler_func_stats *));
@@ -809,9 +785,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         for (int t = 0; t < tree_count; t++) {
             int i = tree_order[t];
             const halide_profiler_func_stats *fs = p->funcs + i;
-            // Skip the overhead / thread-idle bookkeeping slots if they
-            // didn't accumulate any time, and the malloc/free slots if
-            // no heap allocations happened — they'd just be noise.
             if ((fs->kind == halide_profiler_func_kind_overhead ||
                  fs->kind == halide_profiler_func_kind_thread_idle) &&
                 fs->time == 0) {
@@ -826,34 +799,24 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         }
 
 
-        // Func name slot. Draws the schedule's compute_at tree using
-        // box-drawing glyphs in the same dark gray (xterm 238) used for the
-        // column separators. One column per tree level:
-        //   "  "    leading indent (so root names sit just past " [")
-        //   "│"     ancestor whose subtree continues (more siblings to come)
-        //   " "     ancestor whose subtree is finished
-        //   "├"     current func, with siblings still to come
-        //   "└"     current func, last sibling
-        // Each glyph is 1 visible column but 3 UTF-8 bytes, and ANSI color
-        // codes are non-visible too, so the byte target for the slot is
-        // bumped by the count of non-visible bytes for each glyph emitted.
+        // Func name slot, including a tree-art indent. One column per
+        // tree level: │ continues an ancestor's subtree; ├/└ are this
+        // row's connector. Glyphs and ANSI escapes contribute zero
+        // visible width but multiple bytes, hence the byte-target dance.
         auto emit_name = [&](const halide_profiler_func_stats *fs, int width) {
             uint64_t target = sstr.size() + width;
             sstr << "  ";
             int idx = (int)(fs - p->funcs);
             int depth = func_depth[idx];
             if (depth > 0) {
-                // Walk up the parent chain to record each ancestor (and the
-                // func itself at the deepest slot).
                 int lineage[64];
                 int j = idx;
                 for (int k = depth; k > 0; k--) {
                     lineage[k - 1] = j;
                     j = p->funcs[j].parent;
                 }
-                // Emit a single 1-column tree-art glyph in dark gray.
-                // Returns the count of bytes emitted that don't count toward
-                // visible width.
+                // Returns the count of bytes emitted that don't count
+                // toward visible width.
                 auto emit_glyph = [&](const char *glyph) -> uint64_t {
                     uint64_t before = sstr.size();
                     if (support_colors) {
@@ -881,8 +844,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             pad_bytes_to(target);
         };
 
-        // Render a func-table row by walking `func_row` and dispatching on
-        // the marker char of each run. Width is the run length.
         auto print_func_row = [&](const halide_profiler_func_stats *fs,
                                   const CumulativeStats *cs) {
             sstr.clear();
@@ -925,8 +886,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     }
                     break;
                 case '|':
-                    // Column separator in a very dark gray (xterm 256-color
-                    // 238) so it sits well behind the data values.
+                    // Column separator, dimmed so the data stands out.
                     for (int i = 0; i < w; i++) {
                         if (support_colors) {
                             sstr << "\033[38;5;238m\xe2\x94\x82\033[39m";
@@ -936,11 +896,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     }
                     break;
                 case 'Z': {
-                    // "(allocation)" placeholder, centered in
-                    // the run width and painted in the same mid-gray as the
-                    // section headers. Track the ANSI bytes we emit so we
-                    // can bump the pad target by exactly that many bytes
-                    // (they don't count toward visible width).
+                    // Centered "(allocation)" placeholder in the time
+                    // column for hoist_storage allocation rows.
                     uint64_t target = sstr.size() + w;
                     const char *text = "(allocation)";
                     int text_len = 0;
@@ -971,9 +928,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             halide_print(user_context, sstr.str());
         };
 
-        // Print the column legend once before the table. Styled dim
-        // italic gray, with the same dark-gray vertical separators used
-        // in the func rows.
         auto print_legend_row = [&](const char *row) {
             sstr.clear();
             if (support_colors) {
@@ -1001,11 +955,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         print_legend_row(column_legend_row_1);
         print_legend_row(column_legend_row_2);
 
-        // The DFS-of-the-parent-tree order put copies as children of the
-        // producer they're inside, so they thread into the timeline view
-        // alongside the regular Funcs. Keep the " (copy to ...)" suffix on
-        // each copy row so it's clear what it is without needing a
-        // separate section header.
         for (int i = 0; i < f_stats_count; i++) {
             const halide_profiler_func_stats *fs = f_stats[i];
             const CumulativeStats *cs = cum_stats + (fs - p->funcs);
@@ -1018,8 +967,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
     }
 
     if (const char *raw_str = getenv("HL_PROFILER_JSON_OUTPUT")) {
-        // Dump the raw counter values to a JSON file -- mostly intended for
-        // debugging the counters themselves, but useful for offline analysis.
+        // Dump the raw stats to a JSON file for offline analysis.
         void *f = halide_fopen(raw_str, "w");
         if (f) {
             StringStreamPrinter<4096> json(user_context);

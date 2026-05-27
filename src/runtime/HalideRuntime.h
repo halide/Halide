@@ -1869,46 +1869,27 @@ void halide_register_argv_and_metadata(
 
 /** The functions below here are relevant for pipelines compiled with
  * the -profile target flag, which runs a sampling profiler thread
- * alongside the pipeline.
- *
- * GPU note: when building with -profile, Halide injects a synchronous
- * halide_device_sync at the end of every GPU kernel launch so that the
- * reported per-Func times reflect actual compute time rather than just
- * launch overhead. Without these syncs the asynchronous launches return
- * to the host immediately and the device's compute time ends up billed
- * to whatever blocking host operation runs next (typically the next
- * copy-to-host or the end-of-pipeline device-free). The trade-off is
- * that profiled GPU pipelines lose any host-device or kernel-kernel
- * overlap they would otherwise have, so absolute runtimes from a
- * profile-target build are biased upward and should not be compared to
- * unprofiled runs. */
+ * alongside the pipeline. -profile also forces a synchronous
+ * halide_device_sync after every GPU kernel launch so per-Func times
+ * reflect real compute time; this removes any overlap the schedule was
+ * getting, so absolute runtimes under -profile run slower than without. */
 
-/** Kinds of entries in halide_profiler_func_stats. Carried as a small
- * tag on each entry so the report doesn't have to recognize special
- * slots by their index, or recognize copy synthetics by parsing their
- * name. */
+/** Tag identifying what a halide_profiler_func_stats entry represents.
+ * Lets the reporter handle bookkeeping slots and synthetic entries by
+ * tag rather than by index or by parsing the name. */
 enum halide_profiler_func_kind {
-    /** A normal Halide Func. */
     halide_profiler_func_kind_func = 0,
-    /** Pipeline overhead — id 0 in every pipeline. */
     halide_profiler_func_kind_overhead = 1,
-    /** Time the calling thread spent waiting for parallel tasks — id 1. */
     halide_profiler_func_kind_thread_idle = 2,
-    /** Time spent in halide_malloc — id 2. */
     halide_profiler_func_kind_malloc = 3,
-    /** Time spent in halide_free — id 3. */
     halide_profiler_func_kind_free = 4,
-    /** Synthetic entry timing a halide_copy_to_host call. The
-     * buffer_func_id field on the entry is the canonical id of the Func
-     * whose buffer is being copied. */
+    /** A halide_copy_to_host call. The buffer_func_id field is the
+     * canonical id of the Func whose buffer is being copied. */
     halide_profiler_func_kind_copy_to_host = 5,
-    /** Synthetic entry timing a halide_copy_to_device call. */
     halide_profiler_func_kind_copy_to_device = 6,
-    /** An entry for a Realize/free pair without a matching Produce at
-     * the same scope — i.e., a hoist_storage allocation site whose
-     * production happens deeper in the IR. Carries the memory columns
-     * for the buffer's lifetime; the time/compute columns belong to
-     * the separate production entry for the same Func. */
+    /** A hoist_storage Realize whose Produce sits deeper in the IR.
+     * Carries the memory columns for the buffer's lifetime; the
+     * time/compute columns belong to the separate production entry. */
     halide_profiler_func_kind_allocation = 7,
 };
 
@@ -1921,14 +1902,11 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * Func is compute_root. */
     int parent;
 
-    /** The id of the canonical instance of this Func.
-     *
-     * A Func can appear more than once in this array: inlined Funcs called
-     * from multiple callers, or Funcs with unscheduled update definitions,
-     * get a separate "instance" per occurrence so each can carry its own
-     * counters. canonical_id is the id of the first instance and is the
-     * shared key for deduplicating instances back to a Func — e.g. for
-     * rolling up per-Func aggregates or grouping in JSON output. */
+    /** Id of this Func's canonical entry. A Func can appear in this
+     * array more than once (e.g. an unscheduled Func with an update
+     * definition reached from multiple callers); canonical_id is the
+     * id of the first such appearance, the shared key for rolling
+     * instances back up to a Func. */
     int canonical_id;
 
     /** Total time taken evaluating this Func (in nanoseconds). */
@@ -1943,9 +1921,6 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The peak stack allocation of this Func's threads. */
     uint64_t stack_peak;
 
-    // Everything field after this point is a counter. They are aggregated by
-    // blindly adding.
-
     /** The total memory allocation of this Func. */
     uint64_t memory_total;
 
@@ -1956,15 +1931,11 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The total number of times heap storage for this Func was allocated. */
     uint64_t num_allocs;
 
-    /** Tag identifying what this entry represents — see
-     * halide_profiler_func_kind. Lets the reporter handle bookkeeping
-     * slots and synthetic copy entries by tag rather than by hardcoded
-     * id or by parsing the name. */
+    /** See halide_profiler_func_kind. */
     uint8_t kind;
 
-    /** For copy-synthetic entries (kind == copy_to_host or copy_to_device),
-     * the canonical id of the Func whose buffer is being copied. -1 on
-     * every other kind. */
+    /** For copy synthetics (kind == copy_to_host/copy_to_device), the
+     * canonical id of the Func whose buffer is being copied. -1 otherwise. */
     int buffer_func_id;
 };
 

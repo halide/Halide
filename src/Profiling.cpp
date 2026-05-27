@@ -22,95 +22,41 @@ using std::map;
 using std::string;
 using std::vector;
 
-// =============================================================================
-// Profiling injection
-// =============================================================================
+// Profiling injection. Runs after bounds inference, before storage
+// flattening, when the "profile" target feature is on.
 //
-// When a pipeline is compiled with the "profile" target feature, this
-// lowering pass instruments the IR with calls into the Halide profiler
-// runtime. At run time the profiler collects per-Func statistics — time
-// spent, memory used — which the runtime prints as a report when the
-// pipeline terminates (or makes available as JSON to external tools).
+// Time is collected by sampling: a background thread periodically reads
+// a "current func" word that the generated code writes when the pipeline
+// transitions between Funcs. We additionally bill memory allocations,
+// stack peaks, active-thread counts, and host<->device copy times.
 //
-// Time is collected by sampling: a background profiler thread (started
-// lazily by the runtime on first use) periodically reads a "current func"
-// word that the generated code writes whenever the executing pipeline
-// transitions between Funcs. The distribution of samples across Funcs
-// gives the time profile. This handles wall time cheaply: the only thing
-// the generated code does on the hot path is one store of an integer id.
+// Two sub-passes:
 //
-// This pass is responsible for emitting the set_current_func writes plus
-// all the surrounding scaffolding (instance start and stop, thread
-// activity tracking around parallel constructs, sampling token management
-// for leaf tasks, stack-peak accounting, memory tracking).
+//  1) PreAllocateEntries — walks the IR and assigns each profiled
+//     producer (plus the synthetic copy-to-host/device sites and
+//     hoist_storage allocations) an entry id, matching its eventual slot
+//     in the runtime's halide_profiler_func_stats array. The walk order
+//     fixes the id order, which the reporter then walks as a tree.
 //
-// -----------------------------------------------------------------------------
-// Structure of the pass
-// -----------------------------------------------------------------------------
+//  2) InjectProfiling — emits the runtime calls
+//     (halide_profiler_set_current_func, _memory_allocate/_free,
+//     _incr/decr_active_threads, sampling-token plumbing,
+//     copy-to-host/device timing) and wraps the whole IR with
+//     halide_profiler_instance_start / _end.
 //
-// inject_profiling is the only top-level pass. It runs after bounds
-// inference but before storage flattening, and runs two sub-passes over
-// the IR:
+// Entries (rows in the stats array):
 //
-//  1) PreAllocateEntries. Enumerates every entry (see below) for every
-//     Func and assigns each one an integer id matching its eventual slot in
-//     the runtime's halide_profiler_func_stats array.
-//
-//  2) InjectProfiling. Emits the runtime scaffolding:
-//       - halide_profiler_set_current_func writes so the sampler knows which
-//         instance the CPU is currently executing.
-//       - halide_profiler_memory_allocate / _memory_free wrappers around
-//         heap allocations, plus per-entry peak-stack accounting.
-//       - halide_profiler_incr/decr_active_threads around parallel for, fork
-//         and acquire, so the runtime can compute average active-thread
-//         counts.
-//       - Sampling-token plumbing so leaf parallel tasks contend cheaply for
-//         the sampling slot.
-//       - Copy-to-host / copy-to-device timing.
-//
-// After those two passes, inject_profiling wraps the whole IR with a
-// halide_profiler_instance_start call (which registers the pipeline instance
-// with the global profiler and returns an error code we assert on) and a
-// register_destructor for halide_profiler_instance_end, and emits the
-// func_names / func_parents tables the runtime needs to print the report.
-//
-// -----------------------------------------------------------------------------
-// Entries
-// -----------------------------------------------------------------------------
-//
-// Each row in the per-Func stats array is an "entry". Most Funcs need
-// exactly one entry, but a non-inlined Func whose update definitions have
-// no explicit schedule (e.g. h_1(x,y) += g_2(x+1,y); h_2(x,y) += g_2(x+1,y);
-// with g_2 left at its default schedule) gets a separate Realize/Producer
-// block per caller, because there's no shared compute_at level for it, and
-// thus a separate entry per appearance.
-//
-// Two reasons for tracking them separately rather than aggregating at
-// billing time:
-//
-//  1) Each entry has a distinct parent Func — the producer it lives inside.
-//     The reporter prints stats as a tree, so the parent relationship is
-//     part of the output, not just a runtime detail.
-//
-//  2) Local stats (peak memory, recompute ratio, time%) are meaningful
-//     per-entry. A Func called from a hot caller and a cold caller can
-//     have very different profiles, and merging them would erase the
-//     signal.
-//
-// Names::id_for_entry(name, parent_id) is the allocator: it gives back
-// the same id for the same (name, parent) pair and a fresh id otherwise.
-// PreAllocateEntries drives the allocation by walking ProducerConsumer
-// nodes; the other passes look up the same ids by replaying the same
-// producer-stack context.
-//
-// EntryInfo::canonical_id remembers, for each entry, the first id that was
-// allocated for its name. That lets the reporter optionally show a
-// rolled-up "by Func" view.
+// Most Funcs map to one entry. An unscheduled Func with an update def
+// reached from multiple callers gets a separate Realize/Produce per
+// caller, hence a separate entry per appearance — letting per-caller
+// time%, peak memory, etc. show separately rather than collapsing them.
+// `canonical_id` points each instance at the first id allocated for its
+// name so the reporter can roll them back up "by Func" if it chooses.
 
 namespace {
 
-// All names that need to be unique, just in case someone does something
-// perverse like naming a func "profiler_instance".
+// Unique names for the IR symbols this pass introduces, plus the entry
+// table (one EntryInfo per row in halide_profiler_func_stats).
 struct Names {
     const std::string &pipeline_name;
     const std::map<std::string, Function> &env;
@@ -126,8 +72,7 @@ struct Names {
     std::string profiler_func_buffer_func_ids;
     std::string profiler_start_error_code;
 
-    // IDs 0-3 are reserved for bookkeeping slots; the kind field on each
-    // disambiguates them from real Funcs at report time.
+    // IDs 0-3 are reserved for bookkeeping slots, in this order.
     const int overhead_id = 0, thread_idle_id = 1, malloc_id = 2, free_id = 3;
 
     Names(const std::string &pipeline_name, const std::map<std::string, Function> &env)
@@ -145,9 +90,8 @@ struct Names {
           profiler_func_buffer_func_ids(unique_name("profiler_func_buffer_func_ids")),
           profiler_start_error_code(unique_name("profiler_start_error_code")) {
 
-        // Reserve the bookkeeping slots first, so their indices match the
-        // *_id constants. Each gets a specific kind so the reporter can
-        // recognize it without hardcoding its index.
+        // Reserve the bookkeeping slots first so their ids match the
+        // *_id constants above.
         struct {
             const char *name;
             halide_profiler_func_kind kind;
@@ -162,36 +106,27 @@ struct Names {
         }
     }
 
-    // One EntryInfo per entry — see the file-level "Entries" comment.
     struct EntryInfo {
-        std::string name;     // display name (what the report prints)
-        std::string ir_name;  // the IR-level name used by InjectCounters
-                              // to match Stores/Loads/Producers back to
-                              // this entry. Differs from `name` only when
-                              // a Function::profiler_display_name override
-                              // is in effect.
-        int parent_id;     // immediate parent entry, or -1 if at the root
-        int canonical_id;  // first id allocated for this name, used for
-                           // per-Func (rolled-up) reporting
+        // Display name shown in the report. Differs from ir_name only
+        // when a Function::profiler_display_name override is set.
+        std::string name;
+        // IR-level Func name, used to dedup entries.
+        std::string ir_name;
+        int parent_id;     // immediate parent entry, or -1 at root
+        int canonical_id;  // first entry id allocated for this ir_name
         halide_profiler_func_kind kind;
-        int buffer_func_id;  // for copy synthetics, canonical id of the
-                             // Func whose buffer is being copied; -1
-                             // otherwise
+        // For copy synthetics, the canonical id of the Func whose
+        // buffer is being copied; -1 otherwise.
+        int buffer_func_id;
     };
     std::vector<EntryInfo> entry_info;
-    // First id allocated for each name — the canonical entry.
     std::map<std::string, int> canonical_id_for_name;
-    // (parent_id, name) -> id — used to deduplicate when the same (parent,
-    // name) pair is encountered more than once. Keyed on the IR-level
-    // Function name so two appearances of the same Func dedup correctly,
-    // even when the entry's display name is a Function::profiler_display_name
-    // override.
+    // (parent_id, ir_name) -> id. Keyed on IR name so two appearances of
+    // a Func that share a profiler_display_name still dedup correctly.
     std::map<std::pair<int, std::string>, int> entry_map;
 
-    // Get (or allocate) the id for a specific entry, keyed on the Func
-    // name plus its immediate parent entry in the IR. Two appearances of
-    // the same Func with different parents get different ids; two
-    // appearances with the same parent share one id.
+    // Get or allocate the id for (ir_name, parent_id). Same name under
+    // different parents gets different ids.
     int id_for_entry(const std::string &ir_name, int parent_id,
                      halide_profiler_func_kind kind = halide_profiler_func_kind_func,
                      int buffer_func_id = -1) {
@@ -213,9 +148,7 @@ struct Names {
         return it->second;
     }
 
-    // Shorthand for the id of the root-level (parent = -1) entry for a
-    // name. Used for Funcs we know have only one entry (e.g. produced at
-    // the pipeline root).
+    // Shorthand for the root-level (parent = -1) entry for a name.
     int id_for_name(const std::string &name) {
         return id_for_entry(name, -1);
     }
@@ -234,23 +167,6 @@ struct Names {
         return (int)entry_info.size();
     }
 };
-
-// Unwrap a Broadcast(...) wrapper from an arg, then extract the Func name.
-// declare_box_required_at_root / declare_stage carry the Func name as a
-// StringImm in their first arg — the name is just a label for the
-// profiler report, not a symbol that exists in scope, so using a
-// StringImm keeps it from being matched by passes like
-// InjectHostDevBufferCopies that substitute Variables named after Funcs.
-// The arg can show up wrapped in a Broadcast after vectorization.
-const std::string &handle_name(const Expr &e) {
-    const Expr *inner = &e;
-    if (const Broadcast *b = e.as<Broadcast>()) {
-        inner = &b->value;
-    }
-    const StringImm *s = inner->as<StringImm>();
-    internal_assert(s) << e;
-    return s->value;
-}
 
 // First pass: enumerate the entries (see file-level comment) and assign
 // each one an id. Walks every ProducerConsumer node (one entry per
@@ -278,19 +194,13 @@ class PreAllocateEntries : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const Allocate *op) override {
-        // Eagerly mint the entry at the Allocate site so it falls in IR
-        // order — for hoist_storage Funcs this puts the allocation
-        // entry before the production entry in the report. For Funcs
-        // without hoist_storage the Allocate and Produce sit in the
-        // same scope and id_for_entry is idempotent.
         int id = -1;
         if (is_profiled_func(op->name)) {
             id = names.id_for_entry(op->name, producer_id);
         }
         Stmt result = IRMutator::visit(op);
-        // After walking the body, the matching Produce (if any at this
-        // scope) has been minted. If not, this is a hoist_storage
-        // allocation site — mark its kind accordingly.
+        // If no Produce at this scope minted the same id, this is a
+        // hoist_storage allocation site — give it the allocation kind.
         if (id >= 0 && !produce_minted_ids.count(id)) {
             names.entry_info[id].kind = halide_profiler_func_kind_allocation;
         }
@@ -308,17 +218,8 @@ class PreAllocateEntries : public IRMutator {
     }
 
     Expr visit(const Call *op) override {
-        // Eagerly allocate ids for the synthetic copy "Funcs" produced by
-        // InjectProfiling::inject_buffer_copy_timing. Allocating them here
-        // (during the encounter-order walk) rather than later in
-        // InjectProfiling makes the ids fall in IR order alongside their
-        // sibling producers, so the report's DFS-by-id traversal renders
-        // them in their correct timeline position. id_for_entry is
-        // idempotent on (name, parent), so InjectProfiling's later lookup
-        // returns the same id. Parent is the immediately enclosing
-        // producer, so a copy_to_device(foo) emitted inside Produce(bar)
-        // nests under bar in the report — making it clear which consumer
-        // the copy was preparing data for.
+        // Mint entries for copy-to-host/device sites so they get ids in
+        // IR order (the report renders by id).
         if (op->name == "halide_copy_to_host" || op->name == "halide_copy_to_device") {
             if (!op->args.empty()) {
                 if (const Variable *v = op->args.front().as<Variable>()) {
@@ -328,11 +229,6 @@ class PreAllocateEntries : public IRMutator {
                         const char *tag = to_device ? " (copy to device)" : " (copy to host)";
                         halide_profiler_func_kind kind =
                             to_device ? halide_profiler_func_kind_copy_to_device : halide_profiler_func_kind_copy_to_host;
-                        // Look up the canonical id of the Func whose
-                        // buffer this is. The Func's producer has
-                        // already been visited (it's the producer this
-                        // copy sits inside, or a sibling allocated
-                        // earlier), so the name is in the map.
                         int buffer_func_id = -1;
                         auto it = names.canonical_id_for_name.find(buffer_name);
                         if (it != names.canonical_id_for_name.end()) {
@@ -342,7 +238,6 @@ class PreAllocateEntries : public IRMutator {
                     }
                 }
             }
-            return IRMutator::visit(op);
         }
         return IRMutator::visit(op);
     }
@@ -454,10 +349,8 @@ private:
     struct AllocSize {
         bool on_stack;
         Expr size;
-        // Entry id resolved at Allocate time. The matching Free may sit at
-        // a different point in the producer stack than the Allocate (the
-        // Allocate can be hoisted while the Free stays deep), so caching the
-        // id here keeps the two billed to the same entry.
+        // Entry id resolved at Allocate time; Free uses the cached value
+        // since the producer stack may differ at the two sites.
         int id;
     };
 
@@ -485,14 +378,11 @@ private:
         }
     }
 
-    // Resolve a Func name to its entry id under the currently-active
-    // producer chain. Must match the entry id PreAllocateEntries
-    // allocated for the corresponding producer.
+    // Resolve a Func name to the entry id PreAllocateEntries minted for
+    // it under the currently-active producer chain.
     int get_func_entry_id(const string &name) {
         int parent = stack.back();
-        // The bottom of the stack is the overhead sentinel; treat it as "no
-        // parent" so pipeline-root producers come out as parent=-1, matching
-        // how PreAllocateEntries allocates them (its producer_id starts at -1).
+        // overhead_id is a sentinel at stack bottom; treat it as "no parent".
         if (parent == names.overhead_id) {
             parent = -1;
         }
@@ -511,7 +401,7 @@ private:
         }
         most_recently_set_func = id;
         Expr last_arg = in_leaf_task ? profiler_local_sampling_token : reinterpret(Handle(), make_zero(UInt(64)));
-        // This call gets inlined and becomes a single store instruction.
+        // Inlined to a single store.
         Stmt s = Evaluate::make(Call::make(Int(32), "halide_profiler_set_current_func",
                                            {profiler_instance, id, last_arg}, Call::Extern));
 
@@ -553,8 +443,7 @@ private:
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::profiling_enable_instance_marker)) {
-            // We're out of the bounds query code. This instance should be
-            // tracked (including any samples taken before this point.
+            // End of the bounds-query prelude — start collecting samples.
             return Call::make(Int(32), "halide_profiler_enable_instance",
                               {profiler_instance}, Call::Extern);
         } else {
@@ -573,10 +462,9 @@ private:
 
         bool on_stack = can_fit_on_stack && !op->new_expr.defined();
 
-        // Resolve the id once here. visit(Free) may fire at a different
-        // producer-stack depth than this Allocate (the Allocate can be hoisted
-        // while the Free stays inside an enclosing producer's body), so we
-        // cache the id and have Free use it instead of re-querying stack.back().
+        // Resolve and cache the entry id here so visit(Free) can use it;
+        // Allocate may have been hoisted out of the producer that
+        // surrounds Free.
         int idx;
         switch (classify(op->name)) {
         case Kind::ProfiledFunc:
@@ -728,10 +616,8 @@ private:
     Stmt visit(const For *op) override {
         Stmt body = op->body;
 
-        // The for loop indicates a device transition or a
-        // parallel job launch. Decrement the number of active
-        // threads outside the loop, and increment it inside the
-        // body.
+        // Device transitions and parallel launches need an active-thread
+        // bracket around the body (incremented inside, decremented out).
         bool update_active_threads = (op->device_api == DeviceAPI::Hexagon ||
                                       op->is_unordered_parallel());
 
@@ -782,9 +668,7 @@ private:
             body = mutate(body);
             profiling_memory = old_profiling_memory;
 
-            // Get the profiler state pointer from scratch inside the
-            // kernel. There will be a separate copy of the state on
-            // the DSP that the host side will periodically query.
+            // Use the DSP-side copy of the profiler state.
             Expr get_state = Call::make(Handle(), "halide_hexagon_remote_profiler_get_global_instance", {}, Call::Extern);
             body = substitute(names.profiler_instance, Variable::make(Handle(), names.hvx_profiler_instance), body);
             body = LetStmt::make(names.hvx_profiler_instance, get_state, body);
@@ -801,19 +685,10 @@ private:
 
         Stmt stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
 
-        // Force a device sync after every GPU kernel launch. Kernel
-        // launches are asynchronous, so without this the actual compute
-        // time gets billed to whatever blocking host operation runs
-        // next (typically a halide_copy_to_host, or the end-of-pipeline
-        // device-free) and the profiler attributes time to the wrong
-        // row. We only do this when building with -profile (this whole
-        // pass only runs in that case), and only at the outermost GPU
-        // loop — inner GPU loops live inside the kernel body, which
-        // this pass does not descend into. The trade-off is that any
-        // overlap (host work, future kernel launches) that the
-        // schedule was relying on disappears, so the absolute time of
-        // a profiled GPU build is biased upward; that's documented in
-        // HalideRuntime.h.
+        // Sync after each outermost GPU launch so kernel time is billed
+        // to the right row rather than to a later blocking host call.
+        // This costs any overlap the schedule was getting; see the
+        // -profile target-feature doc in HalideRuntime.h.
         if (op->device_api != DeviceAPI::None &&
             op->device_api != DeviceAPI::Host &&
             op->device_api != DeviceAPI::Hexagon) {
@@ -851,15 +726,10 @@ private:
         return IfThenElse::make(std::move(condition), std::move(then_case), std::move(else_case));
     }
 
-    // Pattern emitted by InjectHostDevBufferCopies:
-    //   let err = halide_copy_to_{host,device}(buf, ...) in
-    //     assert(err == 0)
-    //     <rest>
-    // We bill the copy as its own synthetic Func ("<name> (copy to {host,device})")
-    // so its time shows up as its own line in the profile. The synthetic func
-    // is active for the duration of the copy plus the assert and (for
-    // copy_to_device) a device-sync barrier; after that we go back to whatever
-    // producer is on the stack.
+    // Bill a halide_copy_to_{host,device} call (and its trailing assert,
+    // plus a device sync for copy_to_device) as a synthetic Func so it
+    // gets its own row in the report. InjectHostDevBufferCopies emits it
+    // as `let err = halide_copy_to_*(buf, ...) in assert(err == 0); ...`.
     Stmt inject_buffer_copy_timing(const LetStmt *op, const Call *call) {
         const Variable *var = call->args.front().as<Variable>();
         internal_assert(var)
@@ -871,12 +741,6 @@ private:
 
         bool to_device = call->name == "halide_copy_to_device";
         const char *tag = to_device ? " (copy to device)" : " (copy to host)";
-        // Parent the synthetic copy "Func" to whichever producer it sits
-        // inside, so it nests under that producer in the timeline view.
-        // PreAllocateEntries allocates these ids eagerly using the same
-        // parent, so id_for_entry here just looks up the existing id.
-        // overhead_id sits at the bottom of the stack as a sentinel — at
-        // the outermost level it stands in for "no enclosing producer".
         int parent_id = stack.back();
         if (parent_id == names.overhead_id) {
             parent_id = -1;
@@ -884,8 +748,6 @@ private:
         int copy_id = names.id_for_entry(buffer_name + tag, parent_id);
         Stmt start_profiler = set_current_func(copy_id);
 
-        // The copy is followed by an assert; we wrap both (and, for
-        // copy_to_device, the subsequent device sync) in the timed window.
         const AssertStmt *copy_assert = nullptr;
         Stmt other;
         if (const Block *block = op->body.as<Block>()) {
