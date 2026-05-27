@@ -12,10 +12,12 @@ add_subdirectory(cmake-twice)
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/gray_small.pgm)
 if (EXISTS ${IMAGE})
     configure_file(${IMAGE} gray_small.pgm COPYONLY)
-    add_test(NAME add_filter
-             COMMAND add_filter gray_small.pgm 16 out.pgm)
-    set_tests_properties(add_filter PROPERTIES
-                         LABELS HelloBaremetal
-                         PASS_REGULAR_EXPRESSION "Success!"
-                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+    add_test(NAME add_filter COMMAND add_filter gray_small.pgm 16 out.pgm)
+    set_tests_properties(
+        add_filter
+        PROPERTIES
+        LABELS HelloBaremetal
+        PASS_REGULAR_EXPRESSION "Success!"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+    )
 endif ()
