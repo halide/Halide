@@ -1177,10 +1177,10 @@ protected:
             const bool widen_0 = can_widen(op->args[0]), widen_1 = can_widen(op->args[1]);
             if (op->is_intrinsic(Call::absd) && op->type.is_float()) {
                 return abs(op->args[0] - op->args[1]);
-            } else if (op->is_intrinsic({Call::return_second,
-                                          Call::if_then_else})) {
-                // For if_then_else this is probably more conservative
-                // than necessary.
+            } else if (op->is_intrinsic(Call::return_second)) {
+                return op->args[1];
+            } else if (op->is_intrinsic(Call::if_then_else)) {
+                // Probably more conservative than necessary
                 return op->args[1];
             } else if (op->is_intrinsic(Call::rounding_shift_right)) {
                 // TODO: uses bitwise ops we may not handle well

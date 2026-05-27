@@ -1,14 +1,9 @@
 #include <algorithm>
-#include <cstdlib>
 #include <map>
 #include <set>
 #include <string>
 
-#include "Bounds.h"
 #include "CodeGen_Internal.h"
-#include "DeviceInterface.h"
-#include "ExprUsesVar.h"
-#include "FindCalls.h"
 #include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -938,7 +933,7 @@ private:
 }  // namespace
 
 
-Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env, const Target &target) {
+Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env) {
     Names names(pipeline_name, env);
 
     // 1) Allocate an id for every entry. After this, names.entry_info

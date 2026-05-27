@@ -122,6 +122,7 @@ LoopLevel &LoopLevel::lock() {
 }
 
 bool LoopLevel::defined() const {
+    check_locked();
     return contents->var_name != undefined_looplevel_name;
 }
 

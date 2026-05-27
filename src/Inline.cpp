@@ -167,6 +167,7 @@ class Inliner : public IRMutator {
         if (found > 0) {
             stmt = common_subexpression_elimination(stmt);
         }
+
         return stmt;
     }
 

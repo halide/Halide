@@ -29,9 +29,6 @@
 #include "Expr.h"
 
 namespace Halide {
-
-struct Target;
-
 namespace Internal {
 
 class Function;
@@ -43,7 +40,7 @@ class Function;
  * storage flattening, but after all bounds inference.
  *
  */
-Stmt inject_profiling(const Stmt &, const std::string &, const std::map<std::string, Function> &env, const Target &target);
+Stmt inject_profiling(const Stmt &, const std::string &, const std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

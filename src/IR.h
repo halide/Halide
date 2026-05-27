@@ -677,7 +677,6 @@ struct Call : public ExprNode<Call> {
         if_then_else_mask,
         image_load,
         image_store,
-
         lerp,
 
         // Loop partitioning hints used to help identify the 'steady state' of
