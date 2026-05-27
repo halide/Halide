@@ -50,8 +50,7 @@ endif ()
 
 # Canonical include root for hannk headers (e.g. "util/error_util.h").
 add_library(hannk_headers INTERFACE)
-target_include_directories(hannk_headers INTERFACE
-                           $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
+target_include_directories(hannk_headers INTERFACE $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
 # ----------------------------
 
@@ -72,29 +71,29 @@ endif ()
 
 # Benchmarking executable
 add_executable(benchmark benchmark.cpp)
-target_link_libraries(benchmark PRIVATE
-                      tflite_parser
-                      interpreter
-                      error_util
-                      file_util
-                      hannk_log_stderr
-                      Halide::Tools  # for halide_benchmark.h
-                      Halide::Runtime)
+target_link_libraries(
+    benchmark
+    PRIVATE
+    tflite_parser
+    interpreter
+    error_util
+    file_util
+    hannk_log_stderr
+    Halide::Tools  # for halide_benchmark.h
+    Halide::Runtime
+)
 
 add_executable(compare_vs_tflite compare_vs_tflite.cpp)
-target_link_libraries(compare_vs_tflite PRIVATE
-                      hannk_log_stderr
-                      model_runner
-                      Halide::Runtime)
-target_include_directories(compare_vs_tflite
-                           PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
+target_link_libraries(compare_vs_tflite PRIVATE hannk_log_stderr model_runner Halide::Runtime)
+target_include_directories(compare_vs_tflite PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
 # TODO: Surely there's a better way to set Emscripten flags.
 if (Halide_TARGET MATCHES "wasm")
     foreach (t IN ITEMS benchmark compare_vs_tflite)
         # Note: "SHELL:" prevents de-duplication of the -s flag.
         target_link_options(
-            ${t} PRIVATE
+            ${t}
+            PRIVATE
             "SHELL:-s ALLOW_MEMORY_GROWTH=1"
             "SHELL:-s ENVIRONMENT=node"
             "SHELL:-s NODERAWFS"
@@ -104,13 +103,17 @@ if (Halide_TARGET MATCHES "wasm")
 endif ()
 
 if (Halide_TARGET MATCHES "wasm" AND NODE_JS_EXECUTABLE)
-    execute_process(COMMAND "${NODE_JS_EXECUTABLE}" --version
-                    OUTPUT_VARIABLE NODE_JS_VERSION_RAW
-                    OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(
+        COMMAND "${NODE_JS_EXECUTABLE}" --version
+        OUTPUT_VARIABLE NODE_JS_VERSION_RAW
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
     string(REPLACE "v" "" NODE_JS_VERSION ${NODE_JS_VERSION_RAW})
 
     if (NODE_JS_VERSION VERSION_LESS "16.13")
-        message(FATAL_ERROR "Halide requires Node v16.13 or later, but found ${NODE_JS_VERSION_RAW} at ${NODE_JS_EXECUTABLE}. Please set NODE_JS_EXECUTABLE on the CMake command line.")
+        message(
+            FATAL_ERROR "Halide requires Node v16.13 or later, but found ${NODE_JS_VERSION_RAW} at ${NODE_JS_EXECUTABLE}. Please set NODE_JS_EXECUTABLE on the CMake command line."
+        )
     endif ()
 endif ()
 
@@ -245,9 +248,7 @@ foreach (t IN LISTS TEST_FILES)
 
     # Emscripten sets CMAKE_CROSSCOMPILING_TOOLCHAIN to NODE_JS_EXECUTABLE,
     # which ensures these tests will run in Node.
-    add_test(NAME ${test_name}
-             COMMAND compare_vs_tflite ${t} --benchmark 0)
+    add_test(NAME ${test_name} COMMAND compare_vs_tflite ${t} --benchmark 0)
 
-    set_tests_properties(${test_name} PROPERTIES
-                         LABELS hannk_tests)
+    set_tests_properties(${test_name} PROPERTIES LABELS hannk_tests)
 endforeach ()

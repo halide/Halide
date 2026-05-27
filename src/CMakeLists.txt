@@ -15,7 +15,8 @@ endif ()
 
 # Set the (shared) library version
 set(Halide_VERSION_OVERRIDE "${Halide_VERSION}"
-    CACHE STRING "VERSION to set for custom Halide packaging")
+    CACHE STRING "VERSION to set for custom Halide packaging"
+)
 mark_as_advanced(Halide_VERSION_OVERRIDE)
 
 if (NOT Halide_VERSION_OVERRIDE STREQUAL "")
@@ -26,7 +27,8 @@ if (NOT Halide_VERSION_OVERRIDE STREQUAL "")
 endif ()
 
 set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
-    CACHE STRING "SOVERSION to set for custom Halide packaging")
+    CACHE STRING "SOVERSION to set for custom Halide packaging"
+)
 mark_as_advanced(Halide_SOVERSION_OVERRIDE)
 
 if (NOT Halide_SOVERSION_OVERRIDE STREQUAL "")
@@ -424,16 +426,9 @@ target_sources(
     # keep-sorted end
 )
 
-set(C_TEMPLATE_FILES
-    CodeGen_C_prologue
-    CodeGen_C_vectors
-)
+set(C_TEMPLATE_FILES CodeGen_C_prologue CodeGen_C_vectors)
 
-set(HTML_TEMPLATE_FILES
-    StmtToHTML_dependencies.html
-    StmtToHTML.js
-    StmtToHTML.css
-)
+set(HTML_TEMPLATE_FILES StmtToHTML_dependencies.html StmtToHTML.js StmtToHTML.css)
 
 ##
 # Build and import the runtime.
@@ -451,10 +446,12 @@ foreach (f IN LISTS C_TEMPLATE_FILES)
     set(SRC "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${f}.template.cpp>")
     set(DST "c_template.${f}.template.cpp")
 
-    add_custom_command(OUTPUT "${DST}"
-                       COMMAND binary2cpp "halide_c_template_${f}" < "${SRC}" > "${DST}"
-                       DEPENDS "${SRC}" binary2cpp
-                       VERBATIM)
+    add_custom_command(
+        OUTPUT "${DST}"
+        COMMAND binary2cpp "halide_c_template_${f}" < "${SRC}" > "${DST}"
+        DEPENDS "${SRC}" binary2cpp
+        VERBATIM
+    )
     target_sources(Halide PRIVATE ${DST})
 endforeach ()
 
@@ -463,10 +460,12 @@ foreach (f IN LISTS HTML_TEMPLATE_FILES)
     string(REPLACE "." "_" VARNAME "halide_html_template_${f}")
     set(DST "html_template.${f}.cpp")
 
-    add_custom_command(OUTPUT "${DST}"
-                       COMMAND binary2cpp "${VARNAME}" < "${SRC}" > "${DST}"
-                       DEPENDS "${SRC}" binary2cpp
-                       VERBATIM)
+    add_custom_command(
+        OUTPUT "${DST}"
+        COMMAND binary2cpp "${VARNAME}" < "${SRC}" > "${DST}"
+        DEPENDS "${SRC}" binary2cpp
+        VERBATIM
+    )
     target_sources(Halide PRIVATE ${DST})
 endforeach ()
 
@@ -477,15 +476,19 @@ endforeach ()
 set(HALIDE_H "${Halide_BINARY_DIR}/include/Halide.h")
 set(LICENSE_PATH "${Halide_SOURCE_DIR}/LICENSE.txt")
 set(headers "$<TARGET_PROPERTY:Halide,HEADER_SET_private_headers>")
-add_custom_command(OUTPUT "${HALIDE_H}"
-                   COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${Halide_BINARY_DIR}/include>"
-                   COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" "${headers}" > "$<SHELL_PATH:${HALIDE_H}>.tmp"
-                   COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<SHELL_PATH:${HALIDE_H}>.tmp" "$<SHELL_PATH:${HALIDE_H}>"
-                   COMMAND ${CMAKE_COMMAND} -E rm "$<SHELL_PATH:${HALIDE_H}>.tmp"
-                   DEPENDS build_halide_h "${LICENSE_PATH}" "${headers}"
-                   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
-                   COMMAND_EXPAND_LISTS
-                   VERBATIM)
+add_custom_command(
+    OUTPUT "${HALIDE_H}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${Halide_BINARY_DIR}/include>"
+    COMMAND
+        build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" "${headers}" > "$<SHELL_PATH:${HALIDE_H}>.tmp"
+    COMMAND
+        ${CMAKE_COMMAND} -E copy_if_different "$<SHELL_PATH:${HALIDE_H}>.tmp"
+        "$<SHELL_PATH:${HALIDE_H}>"
+    COMMAND ${CMAKE_COMMAND} -E rm "$<SHELL_PATH:${HALIDE_H}>.tmp"
+    DEPENDS build_halide_h "${LICENSE_PATH}" "${headers}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
+    COMMAND_EXPAND_LISTS VERBATIM
+)
 add_custom_target(HalideIncludes DEPENDS "${HALIDE_H}")
 add_dependencies(Halide HalideIncludes)
 
@@ -509,14 +512,9 @@ foreach (backend IN LISTS Halide_LLVM_COMPONENTS)
 endforeach ()
 
 # GPU backends
-find_package(
-    SPIRV-Headers 1.5.5 REQUIRED
-    HINTS "${Halide_SOURCE_DIR}/dependencies/spirv"
-)
+find_package(SPIRV-Headers 1.5.5 REQUIRED HINTS "${Halide_SOURCE_DIR}/dependencies/spirv")
 
-target_link_libraries(
-    Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:SPIRV-Headers::SPIRV-Headers>"
-)
+target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:SPIRV-Headers::SPIRV-Headers>")
 
 target_compile_definitions(Halide PRIVATE WITH_D3D12)
 target_compile_definitions(Halide PRIVATE WITH_METAL)
@@ -527,7 +525,7 @@ target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
 
 if (WITH_COMPILER_PROFILING)
     target_compile_definitions(Halide PRIVATE WITH_COMPILER_PROFILING)
-endif()
+endif ()
 
 
 ##
@@ -546,7 +544,9 @@ if (WITH_SERIALIZATION)
     set(fb_header "${fb_dir}/halide_ir.fbs.h")
     add_custom_command(
         OUTPUT "${fb_header}"
-        COMMAND flatbuffers::flatc --cpp --cpp-std C++17 --no-union-value-namespacing --keep-prefix --filename-suffix ".fbs" -o "${fb_dir}" "${fb_def}"
+        COMMAND
+            flatbuffers::flatc --cpp --cpp-std C++17 --no-union-value-namespacing --keep-prefix
+            --filename-suffix ".fbs" -o "${fb_dir}" "${fb_def}"
         DEPENDS flatbuffers::flatc "${fb_def}"
         VERBATIM
     )
@@ -556,10 +556,7 @@ if (WITH_SERIALIZATION)
     target_sources(
         Halide
         PRIVATE
-        FILE_SET fb_headers
-        TYPE HEADERS
-        BASE_DIRS "${fb_dir}"
-        FILES "${fb_header}"
+        FILE_SET fb_headers TYPE HEADERS BASE_DIRS "${fb_dir}" FILES "${fb_header}"
     )
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
 endif ()
@@ -573,17 +570,19 @@ endif ()
 # Note that we (deliberately) redeclare these versions here, even though the macros
 # with identical versions are expected to be defined in source; this allows us to
 # ensure that the versions defined between all build systems are identical.
-target_compile_definitions(Halide PUBLIC
-                           HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
-                           HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
-                           HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
+target_compile_definitions(
+    Halide
+    PUBLIC
+    HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
+    HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
+    HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH}
+)
 
 ##
 # WasmExecutor backend selection
 ##
 
-set(Halide_WASM_BACKEND "wabt"
-    CACHE STRING "Which backend to use for Halide's WASM testing.")
+set(Halide_WASM_BACKEND "wabt" CACHE STRING "Which backend to use for Halide's WASM testing.")
 set_property(CACHE Halide_WASM_BACKEND PROPERTY STRINGS "wabt;V8;OFF")
 
 if (MSVC AND Halide_WASM_BACKEND STREQUAL "wabt")
@@ -613,9 +612,11 @@ endif ()
 ## TODO: implement something similar for Windows/link.exe
 # https://github.com/halide/Halide/issues/4651
 include(TargetExportScript)
-target_export_script(Halide
-                     APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
-                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
+target_export_script(
+    Halide
+    APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
+    GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript"
+)
 
 ##
 # Set compiler options for libHalide
@@ -634,12 +635,13 @@ endif ()
 # Simplify_*.cpp).  500% of the default is sufficient in practice.
 target_compile_options(Halide PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/Zm500>)
 
-target_compile_definitions(Halide
-                           PRIVATE
-                           # Disable warnings about standard C functions that have more secure replacements
-                           # in the Windows API.
-                           $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
-                           $<$<CXX_COMPILER_ID:MSVC>:_SCL_SECURE_NO_WARNINGS>
+target_compile_definitions(
+    Halide
+    PRIVATE
+    # Disable warnings about standard C functions that have more secure replacements
+    # in the Windows API.
+    $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+    $<$<CXX_COMPILER_ID:MSVC>:_SCL_SECURE_NO_WARNINGS>
 )
 
 ##
@@ -671,9 +673,7 @@ else ()
         "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/EHs-c->"
         "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-exceptions>"
     )
-    target_compile_definitions(
-        Halide PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>"
-    )
+    target_compile_definitions(Halide PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>")
 endif ()
 
 ##

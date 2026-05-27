@@ -605,85 +605,67 @@ struct Call : public ExprNode<Call> {
     // Please keep this list sorted alphabetically; the specific enum values
     // are *not* guaranteed to be stable across time.
     enum IntrinsicOp {
+        // keep-sorted start sticky_comments=yes
         abs,
-
         // Absolute difference between two values. absd(a, b) = abs(a - b), but
         // without overflow issues for integer types.
         absd,
-
         // Marks the point where assertions on input images should be inserted
         add_image_checks_marker,
-
         alloca,
         bitwise_and,
         bitwise_not,
         bitwise_or,
         bitwise_xor,
-
         // Converts a boolean to a mask. Scalar bools become -1 (all bits set) when true,
         // 0 when false. Vector bools are converted to proper vector masks.
         bool_to_mask,
-
         // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
         bundle,
-
         // Takes a sequence of (condition, function) pairs, and calls the first
         // function for which the associated condition is true. Caches this
         // choice and directly calls the associated function on all subsequent
         // uses. Args to the containing function are passed through to the
         // callee. Used to implement multi-target switching.
         call_cached_indirect_function,
-
         // Casts a mask (boolean vector) to a different bit width
         cast_mask,
-
         // Concatenate bits of the args, with least significant bits as the
         // first arg (i.e. little-endian)
         concat_bits,
         count_leading_zeros,
         count_trailing_zeros,
         debug_to_file,
-
         // Declares that a box region of an allocation has been touched (used by bounds inference)
         declare_box_touched,
-
         div_round_to_zero,
-
         // A shuffle operation with runtime-varying indices.
         dynamic_shuffle,
-
         // Extract some contiguous slice of bits from the argument starting at
         // the nth bit, counting from the least significant bit, with the number
         // of bits determined by the return type.
         extract_bits,
-
         // Extracts a single element from a mask vector
         extract_mask_element,
-
-        // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
-        get_runtime_vscale,
-
         // Returns the runtime value of ARM SME streaming vscale (the vector length multiplier in streaming mode)
         get_runtime_streaming_vscale,
+        // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
+        get_runtime_vscale,
         get_user_context,
         gpu_thread_barrier,
         halving_add,
         halving_sub,
-
         // Hexagon HVX gather/scatter operations for indirect memory access
         hvx_gather,
         hvx_scatter,
         hvx_scatter_acc,
         hvx_scatter_release,
-
         if_then_else,
-
         // Vectorized if-then-else that operates on mask types
         if_then_else_mask,
         image_load,
         image_store,
         lerp,
-
         // Loop partitioning hints used to help identify the 'steady state' of
         // loops. likely marks an if condition expression as likely to be true,
         // or marks the side of a min or max node which dominates in the steady
@@ -691,75 +673,56 @@ struct Call : public ExprNode<Call> {
         // innermost loop.
         likely,
         likely_if_innermost,
-
         // Loads a member from a typed struct (used for halide_buffer_t and
         // related structures)
         load_typed_struct_member,
-
         make_struct,
-
         // Marks an expression to be memoized (computed once and cached)
         memoize_expr,
-
         mod_round_to_zero,
         mul_shift_right,
         mux,
         popcount,
         prefetch,
-
         // Marks the point where profiling should start counting pipeline instances
         // (used to exclude bounds queries from profiling)
         profiling_enable_instance_marker,
-
         // Promises that a value is clamped to the given range. This allows the compiler
         // to optimize based on this assumption. promise_clamped is safe (adds a runtime check),
         // unsafe_promise_clamped skips the check.
         promise_clamped,
-
         random,
-
         // Registers a destructor function to be called when an object goes out
         // of scope. Used internally in codegen.
         register_destructor,
-
         // Runtime assertions. require checks the condition and errors if false.
         // require_mask is the vectorized version that operates on masks.
         require,
         require_mask,
-
         // Evaluates both arguments but returns the second one. Used to sequence side effects.
         return_second,
-
         // Round a floating point value to nearest integer, with ties going to even
         round,
-
         rounding_halving_add,
         rounding_mul_shift_right,
         rounding_shift_left,
         rounding_shift_right,
         saturating_add,
-        saturating_sub,
         saturating_cast,
-
+        saturating_sub,
         // Used to implement scatter and gather (see IROperator.h)
         scatter_gather,
-
         // Vectorized select that operates on mask types (similar to if_then_else_mask)
         select_mask,
-
         shift_left,
         shift_right,
-
         // Represents a signed integer overflow that occurred. Used to mark overflow points
         // rather than producing undefined behavior.
         signed_integer_overflow,
-
         size_of_halide_buffer_t,
-
         // Marks the point in lowering where the outermost skip stages checks
         // should be introduced.
         skip_stages_marker,
-
         // Takes a realization name and a loop variable. Declares that values of
         // the realization that were stored on earlier loop iterations of the
         // given loop are potentially loaded in this loop iteration somewhere
@@ -768,10 +731,8 @@ struct Call : public ExprNode<Call> {
         // nodes. Communicates to storage folding that sliding window took
         // place.
         sliding_window_marker,
-
         // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         sorted_avg,
-
         // strict floating point ops. These are floating point ops that we would
         // like to optimize around (or let llvm optimize around) by treating
         // them as reals and ignoring the existence of nan and inf. Using these
@@ -787,28 +748,22 @@ struct Call : public ExprNode<Call> {
         strict_min,
         strict_mul,
         strict_sub,
-
         // Convert a list of Exprs to a string
         stringify,
-
         // Query properties of the compiled-for target (resolved at compile-time)
         target_arch_is,
         target_bits,
         target_has_feature,
         target_natural_vector_size,
         target_os_is,
-
         // An undef is a magic value where storing it has no observable effect.
         undef,
-
         // Mark a code path as unreachable so that it can be dead-code eliminated.
         unreachable,
-
         // Promise an expression is bounded. Not checked. Injected by the
         // compiler itself during lowering when an early pass needs to
         // communicate boundedness to a later pass.
         unsafe_promise_clamped,
-
         // One-sided variants of widening_add, widening_mul, and widening_sub.
         // arg[0] + widen(arg[1])
         widen_right_add,
@@ -816,13 +771,12 @@ struct Call : public ExprNode<Call> {
         widen_right_mul,
         // arg[0] - widen(arg[1])
         widen_right_sub,
-
         widening_add,
         widening_mul,
         widening_shift_left,
         widening_shift_right,
         widening_sub,
-
+        // keep-sorted end
         IntrinsicOpCount  // Sentinel: keep last.
     };
 
