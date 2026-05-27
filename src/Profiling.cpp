@@ -34,10 +34,9 @@ using std::vector;
 // When a pipeline is compiled with the "profile" target feature, this
 // lowering pass instruments the IR with calls into the Halide profiler
 // runtime. At run time the profiler then collects per-Func statistics —
-// time spent, memory used, points realized, kinds of loads issued, parallel
-// loops launched, inlined call counts, and so on — which the runtime prints
-// as a report when the pipeline terminates (or makes available as JSON to
-// external tools).
+// time spent, memory used, parallel loops launched, and a few counters
+// for recompute analysis — which the runtime prints as a report when the
+// pipeline terminates (or makes available as JSON to external tools).
 //
 // Two complementary mechanisms collect data at run time:
 //
@@ -48,12 +47,12 @@ using std::vector;
 //    profile. This handles wall time cheaply: the only thing the generated
 //    code does on the hot path is one store of an integer id.
 //
-//  - Direct counters. Discrete events that need exact counts (loads, stores,
-//    allocations, parallel launches, inlined call sites, ...) can't be
-//    reliably sampled, so the generated code calls
-//    halide_profiler_update_counters at appropriate points to bump per-Func
-//    64-bit counters by computed amounts. The runtime keeps one
-//    halide_profiler_func_stats struct per id; the counters live in there.
+//  - Direct counters. Discrete events that need exact counts (parallel
+//    launches, points computed, points required at root) can't be reliably
+//    sampled, so the generated code calls halide_profiler_update_counters
+//    at appropriate points to bump per-Func 64-bit counters by computed
+//    amounts. The runtime keeps one halide_profiler_func_stats struct per
+//    id; the counters live in there.
 //
 // This pass is responsible for emitting both — the set_current_func writes,
 // the counter updates, and all the surrounding scaffolding (instance start
@@ -61,29 +60,17 @@ using std::vector;
 // token management for leaf tasks, stack-peak accounting, etc.).
 //
 // -----------------------------------------------------------------------------
-// Structure of the passes in this file
+// Structure of the pass
 // -----------------------------------------------------------------------------
 //
-// This file exposes two top-level passes. resolve_inline_markers runs very
-// early in lowering — immediately after schedule_functions — to consume the
-// inline_marker intrinsics that Inline.cpp leaves at every inlined call
-// site and turn them into stmt-level declare_inlined intrinsics. Doing it
-// early lets every later pass safely transform Provides without tripping
-// on inline_marker (which has no codegen support). It's the only pass here
-// that's not gated on "we're actually instrumenting"; the markers always
-// need to be removed if they're there.
-//
-// inject_profiling is the main pass and runs much later, after bounds
-// inference but before storage flattening. It consumes declare_inlined,
-// declare_box_required_at_{realization,production,root}, and emits all the
-// runtime calls. It runs three sub-passes over the IR:
+// inject_profiling is the only top-level pass. It runs after bounds
+// inference but before storage flattening, consumes declare_box_required_at_root
+// and declare_stage markers, and emits all the runtime calls. It runs three
+// sub-passes over the IR:
 //
 //  1) PreAllocateEntries. Enumerates every entry (see below) for every
 //     Func and assigns each one an integer id matching its eventual slot in
-//     the runtime's halide_profiler_func_stats array. To save the next pass
-//     from re-parsing the inlining graph, it also rewrites each
-//     declare_inlined intrinsic to a flat list of the resolved entry ids;
-//     the intrinsic's type (carrying the vector lane count) is preserved.
+//     the runtime's halide_profiler_func_stats array.
 //
 //  2) InjectCounters. Walks the IR and accumulates per-entry counter
 //     contributions, flushing them as halide_profiler_update_counters calls.
@@ -126,63 +113,32 @@ using std::vector;
 // Inputs from earlier lowering passes
 // -----------------------------------------------------------------------------
 //
-// ScheduleFunctions and Inline emit some intrinsics specifically for the
-// profiler that this pass consumes and strips out:
-//
-//  - declare_box_required_at_realization(f, min0, max0, min1, max1, ...):
-//    emitted by ScheduleFunctions at every Realize node. The box (mins/maxes
-//    per dimension) is the set of points of f realized at that realize node.
-//    We bill the box size to f's PointsRequiredAtRealization counter and
-//    bump Realizations.
-//
-//  - declare_box_required_at_production(f, ...): emitted by ScheduleFunctions
-//    just inside the ProducerConsumer node. Uses the same .s0.var.min/.max
-//    vars, but bounds inference binds those to per-production values at this
-//    scope. Captures over-computation that the realize-box counter misses
-//    (e.g. sliding-window failure: many produce iterations each recomputing
-//    the full realize box).
+// ScheduleFunctions emits an intrinsic specifically for the profiler
+// that this pass consumes and strips out:
 //
 //  - declare_box_required_at_root(f, ...): emitted by ScheduleFunctions at the
 //    outermost level for every Func. The box is the pipeline-wide total
-//    number of points of f required by all consumers. We duplicate that
-//    count into every entry for f as PointsRequiredAtRoot, so each entry
-//    has the same shared denominator when computing a local recompute
-//    ratio.
-//
-//  - declare_inlined(...): emitted by a post-pass after Inline.cpp, one per
-//    inlined call chain inside a Provide. The args encode a small graph:
-//    the first N handle args name nodes (node 0 is the surrounding
-//    producer, nodes 1..N-1 are the inlined Funcs in the chain), and the
-//    trailing int args are (parent_idx, callee_idx) edges. Each non-root
-//    node represents one inlined call site and bills +1 (× surrounding
-//    vector lanes) to InlinedCalls. PreAllocateEntries rewrites this
-//    intrinsic in place; downstream we just read the resolved ids out of
-//    the args and strip the intrinsic.
+//    number of points of f required by all consumers. We bill that count to
+//    f's canonical entry as PointsRequiredAtRoot, which is the denominator
+//    of the recompute ratio.
 //
 // -----------------------------------------------------------------------------
 // Entries
 // -----------------------------------------------------------------------------
 //
 // Each row in the per-Func stats array is an "entry". Most Funcs need
-// exactly one entry, but some need several:
+// exactly one entry, but a non-inlined Func whose update definitions have
+// no explicit schedule (e.g. h_1(x,y) += g_2(x+1,y); h_2(x,y) += g_2(x+1,y);
+// with g_2 left at its default schedule) gets a separate Realize/Producer
+// block per caller, because there's no shared compute_at level for it, and
+// thus a separate entry per appearance.
 //
-//  - An inlined Func called from multiple callers gets its body substituted
-//    at every call site, and each substituted copy can be transformed
-//    independently (different surrounding loop trip counts, different
-//    vectorization, different inlining chains nested above it).
-//
-//  - A non-inlined Func whose update definitions have no explicit schedule
-//    (e.g. h_1(x,y) += g_2(x+1,y); h_2(x,y) += g_2(x+1,y); with g_2 left at
-//    its default schedule) gets a separate Realize/Producer block per
-//    caller, because there's no shared compute_at level for it.
-//
-// Each such appearance gets its own entry and its own row in the report.
 // Two reasons for tracking them separately rather than aggregating at
 // billing time:
 //
-//  1) Each entry has a distinct parent Func — the producer or inlining
-//     chain it lives inside. The reporter prints stats as a tree, so the
-//     parent relationship is part of the output, not just a runtime detail.
+//  1) Each entry has a distinct parent Func — the producer it lives inside.
+//     The reporter prints stats as a tree, so the parent relationship is
+//     part of the output, not just a runtime detail.
 //
 //  2) Local stats (peak memory, recompute ratio, time%) are meaningful
 //     per-entry. A Func called from a hot caller and a cold caller can
@@ -192,14 +148,12 @@ using std::vector;
 // Names::id_for_entry(name, parent_id) is the allocator: it gives back
 // the same id for the same (name, parent) pair and a fresh id otherwise.
 // PreAllocateEntries drives the allocation by walking ProducerConsumer
-// nodes and declare_inlined intrinsics; the other passes look up the same
-// ids by replaying the same producer-stack / inlining-chain context.
+// nodes; the other passes look up the same ids by replaying the same
+// producer-stack context.
 //
 // EntryInfo::canonical_id remembers, for each entry, the first id that was
 // allocated for its name. That lets the reporter optionally show a
-// rolled-up "by Func" view, and lets per-Func warnings (heuristics like
-// "this Func is being recomputed too much") fire once per Func rather than
-// once per entry.
+// rolled-up "by Func" view.
 
 namespace {
 
@@ -217,7 +171,6 @@ struct Names {
     std::string profiler_func_canonical_ids;
     std::string profiler_func_stack_peak_buf;
     std::string profiler_func_kinds;
-    std::string profiler_func_flags;
     std::string profiler_func_buffer_func_ids;
     std::string profiler_start_error_code;
 
@@ -237,7 +190,6 @@ struct Names {
           profiler_func_canonical_ids(unique_name("profiler_func_canonical_ids")),
           profiler_func_stack_peak_buf(unique_name("profiler_func_stack_peak_buf")),
           profiler_func_kinds(unique_name("profiler_func_kinds")),
-          profiler_func_flags(unique_name("profiler_func_flags")),
           profiler_func_buffer_func_ids(unique_name("profiler_func_buffer_func_ids")),
           profiler_start_error_code(unique_name("profiler_start_error_code")) {
 
@@ -268,10 +220,6 @@ struct Names {
         int buffer_func_id;  // for copy synthetics, canonical id of the
                              // Func whose buffer is being copied; -1
                              // otherwise
-        // Initial value of halide_profiler_func_stats::flags. Read once
-        // at instance-start time from the per-entry constants array;
-        // the runtime does not subsequently mutate it.
-        uint8_t flags;
     };
     std::vector<EntryInfo> entry_info;
     // First id allocated for each name — the canonical entry.
@@ -294,7 +242,6 @@ struct Names {
         if (inserted) {
             int canon = canonical_id_for_name.try_emplace(ir_name, it->second).first->second;
             std::string display_name = ir_name;
-            uint8_t flags = 0;
             if (kind == halide_profiler_func_kind_func) {
                 auto eit = env.find(ir_name);
                 if (eit != env.end()) {
@@ -304,7 +251,7 @@ struct Names {
                     }
                 }
             }
-            entry_info.push_back({display_name, parent_id, canon, kind, buffer_func_id, flags});
+            entry_info.push_back({display_name, parent_id, canon, kind, buffer_func_id});
         }
         return it->second;
     }
@@ -332,10 +279,10 @@ struct Names {
 };
 
 // Unwrap a Broadcast(...) wrapper from an arg, then extract the Func name.
-// declare_inlined / declare_box_required / declare_stage / inline_marker
-// carry the Func name as a StringImm in their first arg — the name is just
-// a label for the profiler report, not a symbol that exists in scope, so
-// using a StringImm keeps it from being matched by passes like
+// declare_box_required_at_root / declare_stage carry the Func name as a
+// StringImm in their first arg — the name is just a label for the
+// profiler report, not a symbol that exists in scope, so using a
+// StringImm keeps it from being matched by passes like
 // InjectHostDevBufferCopies that substitute Variables named after Funcs.
 // The arg can show up wrapped in a Broadcast after vectorization.
 const std::string &handle_name(const Expr &e) {
@@ -350,12 +297,7 @@ const std::string &handle_name(const Expr &e) {
 
 // First pass: enumerate the entries (see file-level comment) and assign
 // each one an id. Walks every ProducerConsumer node (one entry per
-// producer, parented to the surrounding producer) and every declare_inlined
-// intrinsic (one entry per non-root node of the inlining graph the
-// intrinsic encodes). To save the next pass from re-parsing the
-// declare_inlined graph, this pass also rewrites each declare_inlined to
-// just the flat list of resolved entry ids — the intrinsic's type is
-// preserved so the surrounding vector lane count is still available.
+// producer, parented to the surrounding producer).
 class PreAllocateEntries : public IRMutator {
     Names &names;
     const std::map<std::string, Function> &env;
@@ -478,11 +420,6 @@ public:
         }
     }
 
-    // Entries whose counter contributions were hoisted out of a GPU
-    // kernel via upper-bound substitution (or summed across an impure-
-    // condition IfThenElse) and so may be over-counted in the report.
-    std::set<int> approximated_entries;
-
 protected:
     Names &names;
     const map<string, Function> &env;
@@ -506,26 +443,12 @@ protected:
     // - halide_profile_update_counters in profiler_inlined.cpp
     // - the fields of halide_profiler_func_stats in HalideRuntime.h
     // - the block of code that prints counters to json in profiler_common.cpp
-    enum { Realizations = 0,
-           Productions,
-           ParallelLoops,
+    enum { ParallelLoops = 0,
            ParallelTasks,
-           PointsRequiredAtRealization,
-           PointsRequiredAtProduction,
            PointsRequiredAtRoot,
-           PointsRequiredInwards,
-           ProductionsIfInwards,
-           PointsComputed,
-           ScalarLoads,
-           VectorLoads,
-           Gathers,
-           BytesLoaded,
-           ScalarStores,
-           VectorStores,
-           Scatters,
-           BytesStored };
+           PointsComputed };
 
-    static constexpr int num_counters = BytesStored + 1;
+    static constexpr int num_counters = PointsComputed + 1;
 
     struct Counters {
 
@@ -586,9 +509,7 @@ protected:
     // mid-kernel hoist conservatively out of the kernel — substituting an
     // upper bound for loop vars, wrapping in a Let for LetStmts, and
     // wrapping in a Select for IfThenElse (or taking the max of the
-    // branches when the condition is impure). Any entry whose contribution
-    // is hoisted via an upper-bound substitution is recorded in
-    // approximated_entries and flagged in its profile-report notes.
+    // branches when the condition is impure).
     bool in_gpu = false;
     // thread-local counters
     std::string local_counters;
@@ -705,7 +626,6 @@ protected:
                     } else {
                         c.counters[i] = Expr();
                     }
-                    approximated_entries.insert(id);
                 }
             }
             recompute_free_vars(c);
@@ -731,7 +651,6 @@ protected:
                         c.counters[i] = Let::make(name, value, c.counters[i]);
                     } else {
                         c.counters[i] = Expr();
-                        approximated_entries.insert(id);
                     }
                 }
             }
@@ -775,7 +694,6 @@ protected:
                     // execution — so the tight conservative upper bound on
                     // the contribution is max(then, else).
                     merged.counters[i] = max(ti, ei);
-                    approximated_entries.insert(id);
                 }
             }
             recompute_free_vars(merged);
@@ -800,25 +718,7 @@ protected:
     }
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::declare_box_required_at_realization)) {
-            // Emitted at the Realize node for the func. The Realize sits
-            // inside the parent producer and contains this func's
-            // ProducerConsumer, so the right entry id is parented to the
-            // current producer.
-            Counters &c = counters[names.id_for_entry(handle_name(op->args[0]), producer_id)];
-            c.count(PointsRequiredAtRealization, box_total(op));
-            c.count(Realizations);
-            return make_zero(op->type);
-        } else if (op->is_intrinsic(Call::declare_box_required_at_production)) {
-            // Emitted just inside the ProducerConsumer node. The same
-            // .s0.var.min/.max vars used at the Realize site are also bound
-            // here by bounds inference, but to the per-production values,
-            // so this captures e.g. sliding-window over-computation that
-            // the realize-box counter misses.
-            Counters &c = counters[names.id_for_entry(handle_name(op->args[0]), producer_id)];
-            c.count(PointsRequiredAtProduction, box_total(op));
-            return make_zero(op->type);
-        } else if (op->is_intrinsic(Call::declare_box_required_at_root)) {
+        if (op->is_intrinsic(Call::declare_box_required_at_root)) {
             // Bill the pipeline-wide root box to this Func's canonical
             // entry only. It's a Func-level fact, not a per-entry one, so
             // summing it across entries would over-count. The reporter
@@ -830,14 +730,6 @@ protected:
                 // canonical id is the first id allocated for the name, so
                 // it->second.front() is always the canonical id.
                 counters[it->second.front()].count(PointsRequiredAtRoot, box_total(op));
-            }
-            return make_zero(op->type);
-        } else if (op->is_intrinsic(Call::declare_box_required_inwards)) {
-            // Emitted one compute_at level further in than the current compute_at.
-            auto it = entries_by_name.find(handle_name(op->args[0]));
-            if (it != entries_by_name.end()) {
-                counters[it->second.front()].count(PointsRequiredInwards, box_total(op));
-                counters[it->second.front()].count(ProductionsIfInwards);
             }
             return make_zero(op->type);
         } else if (op->is_intrinsic(Call::declare_stage)) {
@@ -855,17 +747,12 @@ protected:
         }
     }
 
-    // True for Stores/Loads to or from buffers we want to bill: a Func's
-    // own storage, or an input/output parameter / image. False for internal
-    // bookkeeping buffers like storage-folding head trackers, async
-    // semaphores, and sampling tokens — we don't want their accesses
-    // inflating the byte / scalar-load counts of the enclosing producer.
+    // True for Stores to buffers we want to bill: a Func's own storage, or
+    // an output parameter. False for internal bookkeeping buffers like
+    // storage-folding head trackers, async semaphores, and sampling
+    // tokens — we don't want their stores inflating points_computed.
     bool is_real_data_buffer(const Store *op) const {
         return op->param.defined() || is_func(names.prefix(op->name));
-    }
-    bool is_real_data_buffer(const Load *op) const {
-        return op->param.defined() || op->image.defined() ||
-               is_func(names.prefix(op->name));
     }
 
     Stmt visit(const Store *op) override {
@@ -879,15 +766,6 @@ protected:
                          names.id_for_name(f);
             Counters &c = counters[id];
             int lanes = op->value.type().lanes();
-            if (op->index.type().is_scalar()) {
-                c.count(ScalarStores);
-            } else if (const Ramp *r = op->index.as<Ramp>();
-                       r && is_const_one(r->stride)) {
-                c.count(VectorStores);
-            } else {
-                c.count(Scatters);
-            }
-            c.count(BytesStored, make_const(UInt(64), op->value.type().bytes() * lanes));
             // Only the pure def (stage 0) contributes to "points computed";
             // update-def stores are a separate kind of work and shouldn't
             // show up as recompute. For Tuple-valued Funcs each output
@@ -911,32 +789,11 @@ protected:
         return IRMutator::visit(op);
     }
 
-    Expr visit(const Load *op) override {
-        // We bill these to the Func we're producing, not the Func being
-        // loaded. These counters are about what kinds of loads we do while
-        // computing a given Func.
-        if (producer_id >= 0 && is_real_data_buffer(op)) {
-            Counters &c = counters[producer_id];
-            if (op->index.type().is_scalar()) {
-                c.count(ScalarLoads);
-            } else if (const Ramp *r = op->index.as<Ramp>();
-                       r && is_const_one(r->stride)) {
-                c.count(VectorLoads);
-            } else {
-                c.count(Gathers);
-            }
-            c.count(BytesLoaded, make_const(UInt(64), op->type.bytes() * op->type.lanes()));
-        }
-        return IRMutator::visit(op);
-    }
-
     Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             // One entry per producer node, parented to the surrounding
             // producer. See file-level comment for why this matters.
             int id = names.id_for_entry(op->name, producer_id);
-            Counters &c = counters[id];
-            c.count(Productions);
             ScopedValue<int> old(producer_id, id);
             return IRMutator::visit(op);
         } else {
@@ -1618,13 +1475,7 @@ private:
             parent_id = -1;
         }
         int copy_id = names.id_for_entry(buffer_name + tag, parent_id);
-        // Bump a counter per copy invocation so tests/reports can see
-        // exactly how many times it fired (the sample-based `time` is too
-        // coarse for fast copies).
-        Stmt count_call = Evaluate::make(
-            Call::make(Int(32), "halide_profiler_count_host_device_copy",
-                       {profiler_instance, make_const(Int(32), copy_id)}, Call::Extern));
-        Stmt start_profiler = Block::make(count_call, set_current_func(copy_id));
+        Stmt start_profiler = set_current_func(copy_id);
 
         // The copy is followed by an assert; we wrap both (and, for
         // copy_to_device, the subsequent device sync) in the timed window.
@@ -1682,17 +1533,10 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     //    is the full set of entries we'll report on.
     Stmt s = PreAllocateEntries(names, env)(stmt);
 
-    // 2) Inject the counter-update calls for stats (loads, stores,
-    //    realizations, parallel loops, inlined call billing, etc.).
+    // 2) Inject the counter-update calls for stats (parallel loops,
+    //    points computed, etc.).
     InjectCounters injector(names, env);
     s = injector(s);
-    // Fold the approximated-entry set into each EntryInfo's flags
-    // bitfield so it gets passed in via the per-entry constants array
-    // at halide_profiler_instance_start, alongside the other initial-
-    // flag bits set by id_for_entry.
-    for (int id : injector.approximated_entries) {
-        names.entry_info[id].flags |= halide_profiler_func_flag_counters_approximated;
-    }
 
     // 3) Inject the rest of the profiler scaffolding: thread activation,
     //    memory tracking, current-func tracking, copy-to-host/device timing.
@@ -1707,7 +1551,6 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     Expr func_parents_buf = Variable::make(Handle(), names.profiler_func_parents);
     Expr func_canonical_ids_buf = Variable::make(Handle(), names.profiler_func_canonical_ids);
     Expr func_kinds_buf = Variable::make(Handle(), names.profiler_func_kinds);
-    Expr func_flags_buf = Variable::make(Handle(), names.profiler_func_flags);
     Expr func_buffer_func_ids_buf = Variable::make(Handle(), names.profiler_func_buffer_func_ids);
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_instance_start",
@@ -1717,7 +1560,6 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
                                       func_parents_buf,
                                       func_canonical_ids_buf,
                                       func_kinds_buf,
-                                      func_flags_buf,
                                       func_buffer_func_ids_buf,
                                       make_const(UInt(64), target.natural_vector_size(UInt(8))),
                                       instance},
@@ -1769,7 +1611,6 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     std::vector<Expr> func_parents(num_funcs);
     std::vector<Expr> func_canonical_ids(num_funcs);
     std::vector<Expr> func_kinds(num_funcs);
-    std::vector<Expr> func_flags(num_funcs);
     std::vector<Expr> func_buffer_func_ids(num_funcs);
     for (int i = 0; i < num_funcs; i++) {
         const auto &info = names.entry_info[i];
@@ -1777,7 +1618,6 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
         func_parents[i] = info.parent_id;
         func_canonical_ids[i] = info.canonical_id;
         func_kinds[i] = make_const(UInt(8), (uint8_t)info.kind);
-        func_flags[i] = make_const(UInt(8), info.flags);
         func_buffer_func_ids[i] = info.buffer_func_id;
     }
 
@@ -1785,7 +1625,6 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     s = LetStmt::make(names.profiler_func_parents, Call::make(Handle(), Call::make_struct, func_parents, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_canonical_ids, Call::make(Handle(), Call::make_struct, func_canonical_ids, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_kinds, Call::make(Handle(), Call::make_struct, func_kinds, Call::Intrinsic), s);
-    s = LetStmt::make(names.profiler_func_flags, Call::make(Handle(), Call::make_struct, func_flags, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_buffer_func_ids, Call::make(Handle(), Call::make_struct, func_buffer_func_ids, Call::Intrinsic), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 

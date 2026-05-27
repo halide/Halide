@@ -1384,18 +1384,6 @@ public:
         return stmt;
     }
 
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::declare_box_required_inwards) &&
-            !op->args.empty()) {
-            if (const StringImm *name = op->args[0].as<StringImm>()) {
-                // Treat the inwards-decl site as an inner production of this
-                // Func, so that the logic above knows that we need to compute
-                // valid bounds for it and all its consumers here.
-                inner_productions.insert(name->value);
-            }
-        }
-        return IRMutator::visit(op);
-    }
 };
 
 // Helper: take a Box and a Func name and produce the args vector for a

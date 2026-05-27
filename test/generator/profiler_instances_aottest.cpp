@@ -72,8 +72,6 @@ void check_two_compute_root_callers(const halide_profiler_pipeline_stats *p) {
     auto h = entries_of(p, "caller_h");
     REQUIRE(g.size() == 1);
     REQUIRE(h.size() == 1);
-    REQUIRE(g[0]->productions > 0);
-    REQUIRE(h[0]->productions > 0);
     // Each is its own canonical (only one entry per name).
     REQUIRE(g[0]->canonical_id == (int)(g[0] - p->funcs));
     REQUIRE(h[0]->canonical_id == (int)(h[0] - p->funcs));
@@ -83,10 +81,6 @@ void check_unscheduled_update_multiple_entries(const halide_profiler_pipeline_st
     auto fs = entries_of(p, "update_f");
     REQUIRE(fs.size() == 2);
     REQUIRE(fs[0]->canonical_id == fs[1]->canonical_id);
-    REQUIRE(fs[0]->realizations > 0);
-    REQUIRE(fs[1]->realizations > 0);
-    REQUIRE(fs[0]->productions > 0);
-    REQUIRE(fs[1]->productions > 0);
 }
 
 // RoundUp tail strategy on a compute_root Func over-computes the tail
@@ -121,9 +115,6 @@ void check_unrolled_pure_update(const halide_profiler_pipeline_stats *p) {
     auto fs = entries_of(p, "unrolled_pu");
     REQUIRE(fs.size() == 1);
     REQUIRE(fs[0]->points_computed == 4);
-    // Total stores = pure-def + update-def = 8.
-    uint64_t total_stores = fs[0]->scalar_stores + fs[0]->vector_stores + fs[0]->scatters;
-    REQUIRE(total_stores == 8);
 }
 
 // compute_with: two Funcs share a loop nest, so their stage stores
@@ -155,97 +146,16 @@ void check_compute_with(const halide_profiler_pipeline_stats *p) {
     REQUIRE(b_computed == p->funcs[b_canon].points_required_at_root);
 }
 
-// compute_at of a stencil producer into tiles of the consumer: each tile
-// loads a slightly wider box (halo) of the producer, so tile-boundary
-// points are computed in more than one tile. Recompute is modest — > 1
-// but well under 2.
-void check_tiled_stencil_modest_recompute(const halide_profiler_pipeline_stats *p) {
-    auto fs = entries_of(p, "stencil_p");
-    REQUIRE(fs.size() == 1);
-    REQUIRE(fs[0]->points_required_at_root > 0);
-    REQUIRE(fs[0]->points_required_at_realization > fs[0]->points_required_at_root);
-    REQUIRE(fs[0]->points_required_at_realization < 2 * fs[0]->points_required_at_root);
-}
-
-// Forced-inline Func — `forced_inline` is called with a data-dependent
-// index so Halide can't bound it; it has to be inlined. The interesting
-// thing being tested here is that the inline_marker for it survives the
-// post-pass cleanly (rather than leaking to codegen), gets a slot in the
-// stats array, and bills inlined calls. We also assert that
-// points_required_at_root is zero on every entry: BoundsInference
-// can't compute a finite root box for an unbounded Func, so it doesn't
-// emit declare_box_required_root for it and the canonical entry's
-// counter stays at zero (no recompute ratio is meaningful).
-// Sliding window: stencil producer with compute_at xi, store_at xo. With
-// sliding, each produce-firing past the warmup computes just the leading
-// edge of the stencil. Summed per produce-firing per outer tile that
-// equals the realize-box per outer tile (the strips tile the stored
-// box). Both should be substantially less than num_inner_iters * 3
-// (which is what production would be without sliding), and both should
-// exceed points_required_at_root only by the per-tile halo overhead.
-void check_sliding_window_counters(const halide_profiler_pipeline_stats *p) {
-    auto fs = entries_of(p, "slide_p");
-    REQUIRE(fs.size() == 1);
-    uint64_t at_real = fs[0]->points_required_at_realization;
-    uint64_t at_prod = fs[0]->points_required_at_production;
-    uint64_t at_root = fs[0]->points_required_at_root;
-    REQUIRE(at_root > 0);
-    REQUIRE(at_real > 0);
-    REQUIRE(at_prod > 0);
-    // Sliding pulled the per-production cost in line with the realize
-    // box (both sum the stored stripe per outer tile).
-    REQUIRE(at_prod == at_real);
-    // Both exceed the root box only by per-tile halo (small fraction).
-    REQUIRE(at_real >= at_root);
-    REQUIRE(at_real < 2 * at_root);
-}
-
-// Sliding-window FAILURE diagnostic: when the producer is called with a
-// data-dependent stride that bounds analysis can't sign-bound, sliding's
-// monotonicity check fails. The producer fires once per inner iter and
-// recomputes its full footprint each time. points_required_at_production
-// summed per produce-firing therefore substantially exceeds the realize
-// box (which is just the stored stripe per outer tile). Comparing the
-// two counters surfaces the slide failure.
-void check_sliding_window_failure_counters(const halide_profiler_pipeline_stats *p) {
-    auto fs = entries_of(p, "slide_fail_g");
-    REQUIRE(fs.size() == 1);
-    uint64_t at_real = fs[0]->points_required_at_realization;
-    uint64_t at_prod = fs[0]->points_required_at_production;
-    REQUIRE(at_real > 0);
-    REQUIRE(at_prod > 0);
-    // The smoking gun: production summed per produce-firing is much
-    // larger than the realization-time storage box per outer tile.
-    REQUIRE(at_prod > at_real);
-}
-
-// GPU-only: RDom::where with a Func-load predicate becomes an IfThenElse
-// inside the update body whose condition is impure. Inside a GPU kernel,
-// InjectCounters can't flush mid-kernel, so it hoists the depending
-// counter contributions via max-of-branches and flags the entry's
-// stats as approximated.
-void check_counters_approximated_on_impure_if(const halide_profiler_pipeline_stats *p) {
-    auto fs = entries_of(p, "approx_out");
-    REQUIRE(!fs.empty());
-    bool any_approx = false;
-    for (auto *inst : fs) {
-        any_approx = any_approx || (inst->flags & halide_profiler_func_flag_counters_approximated);
-    }
-    REQUIRE(any_approx);
-}
-
 // GPU-only: an outer CPU loop with a host-then-device-then-host data
 // chain forces explicit halide_copy_to_host / halide_copy_to_device calls
 // to fire once per outer iteration. The synthetic copy "Func" entries
 // should be parented somewhere inside the xfer_out producer tree (rather
-// than at the pipeline root), and their realizations counter should
-// equal the outer-loop trip count.
+// than at the pipeline root).
 void check_copy_synthetics_parented_to_producer(const halide_profiler_pipeline_stats *p) {
     auto xfer_out = entries_of(p, "xfer_out");
     REQUIRE(xfer_out.size() == 1);
     int xfer_out_id = (int)(xfer_out[0] - p->funcs);
 
-    // Walk up the parent chain and check whether `ancestor_id` is in it.
     auto descends_from = [&](int idx, int ancestor_id) {
         while (idx >= 0) {
             if (idx == ancestor_id) {
@@ -259,17 +169,9 @@ void check_copy_synthetics_parented_to_producer(const halide_profiler_pipeline_s
     auto check = [&](const char *copy_name) {
         auto fs = entries_of(p, copy_name);
         REQUIRE(fs.size() == 1);
-        // The synthetic copy "Func" must thread into the timeline under
-        // xfer_out (the producer that contains the outer CPU loop), not
-        // appear as a root-level entry. Its immediate parent may be the
-        // consumer (host or device producer) that needed the data, which
-        // is itself nested under xfer_out.
         int idx = (int)(fs[0] - p->funcs);
         REQUIRE(p->funcs[idx].parent != -1);
         REQUIRE(descends_from(p->funcs[idx].parent, xfer_out_id));
-        // It must have fired more than once (the outer loop has multiple
-        // iterations). The counter is bumped exactly once per copy.
-        REQUIRE(fs[0]->realizations > 1);
     };
     check("xfer_dev (copy to host)");
     check("xfer_host (copy to device)");
@@ -277,16 +179,12 @@ void check_copy_synthetics_parented_to_producer(const halide_profiler_pipeline_s
 
 // GPU-only: when a Func has multiple update defs and some are scheduled
 // on host while others are on device, IHDBC injects copy synthetics
-// inside the Func's own producer. The "Func has stages on different
-// devices" rule should fire (signaled by the parent-of-copy having the
-// same base name as the copy buffer).
+// inside the Func's own producer.
 void check_mixed_host_device_update_defs(const halide_profiler_pipeline_stats *p) {
     auto fs = entries_of(p, "mixed_sched");
     REQUIRE(fs.size() == 1);
     int mixed_id = (int)(fs[0] - p->funcs);
 
-    // Find at least one copy synthetic that's a direct child of
-    // mixed_sched whose name starts with "mixed_sched ".
     bool found_mid_func_copy = false;
     for (int i = 0; i < p->num_funcs; i++) {
         const halide_profiler_func_stats *child = p->funcs + i;
@@ -296,37 +194,9 @@ void check_mixed_host_device_update_defs(const halide_profiler_pipeline_stats *p
         if (strncmp(child->name, "mixed_sched ", strlen("mixed_sched ")) == 0 &&
             (strstr(child->name, " (copy to host)") || strstr(child->name, " (copy to device)"))) {
             found_mid_func_copy = true;
-            // Counter should reflect the copy firing at least once.
-            REQUIRE(child->realizations >= 1);
         }
     }
     REQUIRE(found_mid_func_copy);
-}
-
-// inwards_g_root and inwards_g_at_y are the two halves of the
-// f(xf, yf) = g(yf) scenario for the "compute one level inwards"
-// counter. For the compute_root half, moving inwards to
-// compute_at(f, yf) doesn't change the per-yf work, so
-// points_required_inwards equals points_required_at_realization
-// (and the "could compute further inside" perf warning would fire).
-// For the compute_at(f, yf) half, moving inwards to compute_at(f, xf)
-// recomputes g(yf) once per xf — points_required_inwards is much
-// larger than realization (and the warning correctly stays silent).
-void check_inwards_counter(const halide_profiler_pipeline_stats *p) {
-    auto g_root = entries_of(p, "inwards_g_root");
-    REQUIRE(g_root.size() == 1);
-    REQUIRE(g_root[0]->points_required_at_realization > 0);
-    REQUIRE(g_root[0]->points_required_inwards ==
-            g_root[0]->points_required_at_realization);
-
-    auto g_at_y = entries_of(p, "inwards_g_at_y");
-    REQUIRE(g_at_y.size() == 1);
-    REQUIRE(g_at_y[0]->points_required_at_realization > 0);
-    // The factor is extent(r_inwards) = 16 in the generator; allow
-    // some slack but require it to be clearly above the realization.
-    REQUIRE(g_at_y[0]->points_required_inwards >
-            g_at_y[0]->points_required_at_realization * 4);
-
 }
 
 // tab is an inlined Func whose root box is `ux * ux` for
@@ -397,15 +267,8 @@ int main(int argc, char **argv) {
     check_guardwithif_no_overstore(target);
     check_unrolled_pure_update(target);
     check_compute_with(target);
-    check_tiled_stencil_modest_recompute(target);
-    check_sliding_window_counters(target);
-    check_sliding_window_failure_counters(target);
-    check_inwards_counter(target);
     // Only present when the pipeline was built with a GPU feature — the
     // generator gates the corresponding Funcs on get_target().has_gpu_feature().
-    if (!entries_of(target, "approx_out").empty()) {
-        check_counters_approximated_on_impure_if(target);
-    }
     if (!entries_of(target, "xfer_out").empty()) {
         check_copy_synthetics_parented_to_producer(target);
     }

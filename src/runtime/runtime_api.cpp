@@ -168,7 +168,6 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_profiler_get_state,
     (void *)&halide_profiler_instance_start,
     (void *)&halide_profiler_instance_end,
-    (void *)&halide_profiler_count_host_device_copy,
     (void *)&halide_profiler_memory_allocate,
     (void *)&halide_profiler_memory_free,
     (void *)&halide_profiler_report,

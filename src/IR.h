@@ -649,12 +649,7 @@ struct Call : public ExprNode<Call> {
 
         // Declares that region required of a particular Func at this
         // scope. Injected by ScheduleFunctions and used by the profiler.
-        declare_box_required_at_realization,
-        declare_box_required_at_production,
         declare_box_required_at_root,
-
-        // One loop nest level further in than the current compute_at, if not already innermost
-        declare_box_required_inwards,
 
         // Declares that the following stmt computes a particular stage of
         // a particular Func. Used by the profiler to bill points computed

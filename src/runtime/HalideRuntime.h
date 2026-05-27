@@ -1912,16 +1912,6 @@ enum halide_profiler_func_kind {
     halide_profiler_func_kind_allocation = 7,
 };
 
-/** Bit values for halide_profiler_func_stats::flags. */
-enum halide_profiler_func_flag {
-    /** Set if some of this Func's counter contributions could not be
-     * exactly accumulated (e.g. they were hoisted out of a GPU kernel via
-     * an upper-bound substitution, or out of an IfThenElse with an impure
-     * condition by summing both branches). Numerical counters are
-     * therefore conservative upper bounds rather than exact totals. */
-    halide_profiler_func_flag_counters_approximated = 1 << 0,
-};
-
 /** Per-Func state tracked by the sampling profiler. */
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The name of this Func. A global constant string. */
@@ -1966,40 +1956,16 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The total number of times heap storage for this Func was allocated. */
     uint64_t num_allocs;
 
-    /** The number of times this Func was realized (i.e. a store_at site). */
-    uint64_t realizations;
-
-    /** The number of times a region of this Func was produced (i.e. a
-     * compute_at site) */
-    uint64_t productions;
-
     /** The number of parallel loops launched to compute some of this
      * Func. I.e. the number of times halide_do_par_for was called due to one of
      * this Func's parallel loops. Next, the total number of iterations of those
      * loops. */
     uint64_t parallel_loops, parallel_tasks;
 
-    /** The total number of points required of this Func aggregated across all
-     * realizations (i.e. at the store_at sites). */
-    uint64_t points_required_at_realization;
-
-    /** The total number of points required of this Func aggregated across all
-     * productions (i.e. at the compute_at sites). When sliding-window
-     * succeeds, this is less than the per-production naive sum; when sliding
-     * fails it matches points_required_at_realization summed over
-     * productions. */
-    uint64_t points_required_at_production;
-
     /** The number of points required of this Func at root. Will be less than
      * points_required when there is redundant recompute due to use of
      * compute_at. */
     uint64_t points_required_at_root;
-
-    /** The number of points required of this Func if it had been compute_at one
-     * level further inwards into the loop nest of its consumers, and the number
-     * of times it would have been produced under the same condition. Used to
-     * evaluate if a computing further in might be a good idea. */
-    uint64_t points_required_inwards, productions_if_inwards;
 
     /** The number of points actually computed by this Func's pure
      * definition (its stage-0 stores), weighted by vector lane count.
@@ -2010,16 +1976,6 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * stores keeps update definitions from being conflated as
      * "recompute". */
     uint64_t points_computed;
-
-    /** The number of loads and stores of various types done while evaluating
-     * this Func. */
-    uint64_t scalar_loads, vector_loads, gathers, bytes_loaded;
-    uint64_t scalar_stores, vector_stores, scatters, bytes_stored;
-
-    /** Bitfield of halide_profiler_func_flag_* values. Initialised once
-     * at instance start from a per-Func constants array; the runtime
-     * does not mutate it. */
-    uint8_t flags;
 
     /** Tag identifying what this entry represents — see
      * halide_profiler_func_kind. Lets the reporter handle bookkeeping
