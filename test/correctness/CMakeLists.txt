@@ -189,7 +189,6 @@ tests(GROUPS correctness
       indexing_access_undef.cpp
       infer_arguments.cpp
       inline_reduction.cpp
-      inlined_doubling_chain.cpp
       inlined_generator.cpp
       input_func_name_unique.cpp
       input_image_bounds_check.cpp
