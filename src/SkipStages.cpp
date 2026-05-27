@@ -397,6 +397,21 @@ protected:
         }
     }
 
+    // select on bools that collapses select(c, X, X) -> X and the
+    // constant-cond cases.
+    Expr make_select(const Expr &c, const Expr &t, const Expr &f) {
+        if (is_const_one(c)) {
+            return t;
+        }
+        if (is_const_zero(c)) {
+            return f;
+        }
+        if (t.same_as(f)) {
+            return t;
+        }
+        return select(c, t, f);
+    }
+
     void merge_func_info(std::map<size_t, FuncInfo> *old,
                          const std::map<size_t, FuncInfo> &new_info,
                          const Expr &used = Expr{},
@@ -468,10 +483,46 @@ protected:
         std::map<size_t, FuncInfo> old;
         old.swap(func_info);
         mutate(op->true_value);
-        merge_func_info(&old, func_info, op->condition);
-        func_info.clear();
+        std::map<size_t, FuncInfo> true_info;
+        true_info.swap(func_info);
         mutate(op->false_value);
-        merge_func_info(&old, func_info, !op->condition);
+        // func_info now holds the false-branch info.
+
+        auto merge_into_old = [&](size_t id, const Expr &u, const Expr &l) {
+            auto [q, inserted] = old.try_emplace(id, FuncInfo{u, l});
+            if (!inserted) {
+                q->second.used = make_or(q->second.used, u);
+                q->second.loaded = make_or(q->second.loaded, l);
+            }
+        };
+
+        for (auto &p : func_info) {
+            size_t id = p.first;
+            auto it_t = true_info.find(id);
+            Expr u, l;
+            // Select evaluates both sides but only uses one, so `loaded` is
+            // the unconditional OR of the two branches while `used` is gated
+            // by the condition.
+            if (it_t != true_info.end()) {
+                u = make_select(op->condition, it_t->second.used, p.second.used);
+                l = make_or(it_t->second.loaded, p.second.loaded);
+                true_info.erase(it_t);
+            } else {
+                u = make_and(p.second.used, !op->condition);
+                l = p.second.loaded;
+            }
+            merge_into_old(id, u, l);
+        }
+        // The ids left in true_info are the ones that were only touched
+        // on the true branch (the ones present in both branches were
+        // combined and erased in the loop above).
+        for (auto &p : true_info) {
+            size_t id = p.first;
+            Expr u = make_and(p.second.used, op->condition);
+            Expr l = p.second.loaded;
+            merge_into_old(id, u, l);
+        }
+        func_info.clear();
         old.swap(func_info);
         mutate(op->condition);  // Check for any calls in the condition
 

@@ -74,6 +74,9 @@ tests(GROUPS error
       impossible_constraints.cpp
       incomplete_target.cpp
       init_def_should_be_all_vars.cpp
+      input_buffer_func_name_collision.cpp
+      input_generator_buffer_func_name_collision.cpp
+      input_param_func_name_collision.cpp
       inspect_loop_level.cpp
       lerp_float_weight_out_of_range.cpp
       lerp_mismatch.cpp
