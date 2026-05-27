@@ -10,7 +10,7 @@ vcpkg_from_github(
 file(READ "${SOURCE_PATH}/CMakeLists.txt" cmake_contents)
 string(REPLACE
     "project (iwasm LANGUAGES C)"
-    "project (iwasm LANGUAGES C)\nif (MSVC)\n  enable_language(ASM_MASM)\nendif ()"
+    "project (iwasm LANGUAGES C)\nif (MSVC)\n  enable_language(ASM_MASM)\nendif ()" # nolint
     cmake_contents
     "${cmake_contents}"
 )
