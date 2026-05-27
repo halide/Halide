@@ -798,7 +798,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             f_stats[f_stats_count++] = fs;
         }
 
-
         // Func name slot, including a tree-art indent. One column per
         // tree level: │ continues an ancestor's subtree; ├/└ are this
         // row's connector. Glyphs and ANSI escapes contribute zero

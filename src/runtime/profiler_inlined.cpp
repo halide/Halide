@@ -60,5 +60,4 @@ WEAK_INLINE int halide_profiler_decr_active_threads(halide_profiler_instance_sta
 
     return atomic_fetch_sub_sequentially_consistent(&(instance->active_threads), 1);
 }
-
 }

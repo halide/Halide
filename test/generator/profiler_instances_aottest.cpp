@@ -32,11 +32,11 @@ void fail(const char *what) {
     exit(1);
 }
 
-#define REQUIRE(cond)                              \
-    do {                                           \
-        if (!(cond)) {                             \
-            fail("REQUIRE(" #cond ") failed");     \
-        }                                          \
+#define REQUIRE(cond)                          \
+    do {                                       \
+        if (!(cond)) {                         \
+            fail("REQUIRE(" #cond ") failed"); \
+        }                                      \
     } while (0)
 
 // Find every entry (row in the per-Func stats array) with the given name.
