@@ -10,7 +10,7 @@ vcpkg_from_github(
 file(READ "${SOURCE_PATH}/CMakeLists.txt" cmake_contents)
 string(REPLACE
     "project (iwasm LANGUAGES C)"
-    "project (iwasm LANGUAGES C)\nif (MSVC)\n  enable_language(ASM_MASM)\nendif ()" # nolint
+    "project (iwasm LANGUAGES C)\nif (MSVC)\n  enable_language(ASM_MASM) # nolint\nendif ()"
     cmake_contents
     "${cmake_contents}"
 )
@@ -25,8 +25,8 @@ file(WRITE "${SOURCE_PATH}/CMakeLists.txt" "${cmake_contents}")
 
 
 file(READ "${SOURCE_PATH}/build-scripts/version.cmake" version_cmake_contents)
-string(REGEX REPLACE
-    "configure_file\\([^)]*\\)"
+string(REGEX
+    REPLACE "configure_file\\([^)]*\\)"
     "#configure_file_removed_by_vcpkg"
     version_cmake_contents
     "${version_cmake_contents}"
@@ -34,33 +34,31 @@ string(REGEX REPLACE
 file(WRITE "${SOURCE_PATH}/build-scripts/version.cmake" "${version_cmake_contents}")
 
 
-if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
+if (VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
     set(WAMR_BUILD_TARGET "X86_32")
-elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
+elseif (VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
     set(WAMR_BUILD_TARGET "X86_64")
-elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm")
+elseif (VCPKG_TARGET_ARCHITECTURE STREQUAL "arm")
     set(WAMR_BUILD_TARGET "ARM")
-elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64" OR VCPKG_TARGET_ARCHITECTURE STREQUAL "aarch64")
+elseif (VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64" OR VCPKG_TARGET_ARCHITECTURE STREQUAL "aarch64")
     set(WAMR_BUILD_TARGET "AARCH64")
-else()
+else ()
     message(FATAL_ERROR "Unsupported architecture: ${VCPKG_TARGET_ARCHITECTURE}")
-endif()
+endif ()
 
-if(VCPKG_TARGET_IS_LINUX)
+if (VCPKG_TARGET_IS_LINUX)
     set(WAMR_BUILD_PLATFORM "linux")
-elseif(VCPKG_TARGET_IS_WINDOWS)
+elseif (VCPKG_TARGET_IS_WINDOWS)
     set(WAMR_BUILD_PLATFORM "windows")
-elseif(VCPKG_TARGET_IS_OSX)
+elseif (VCPKG_TARGET_IS_OSX)
     set(WAMR_BUILD_PLATFORM "darwin")
-else()
+else ()
     message(FATAL_ERROR "Unsupported target platform")
-endif()
+endif ()
 
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
-    OPTIONS
-        -DWAMR_BUILD_TARGET=${WAMR_BUILD_TARGET}
-        -DWAMR_BUILD_PLATFORM=${WAMR_BUILD_PLATFORM}
+    OPTIONS -DWAMR_BUILD_TARGET=${WAMR_BUILD_TARGET} -DWAMR_BUILD_PLATFORM=${WAMR_BUILD_PLATFORM}
 )
 
 vcpkg_cmake_install()
@@ -68,7 +66,4 @@ vcpkg_cmake_config_fixup(PACKAGE_NAME iwasm CONFIG_PATH lib/cmake/iwasm)
 
 vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE")
 
-file(REMOVE_RECURSE
-     "${CURRENT_PACKAGES_DIR}/debug/include"
-     "${CURRENT_PACKAGES_DIR}/debug/share"
-)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include" "${CURRENT_PACKAGES_DIR}/debug/share")
