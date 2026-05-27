@@ -212,7 +212,12 @@ struct Names {
 
     // One EntryInfo per entry — see the file-level "Entries" comment.
     struct EntryInfo {
-        std::string name;
+        std::string name;     // display name (what the report prints)
+        std::string ir_name;  // the IR-level name used by InjectCounters
+                              // to match Stores/Loads/Producers back to
+                              // this entry. Differs from `name` only when
+                              // a Function::profiler_display_name override
+                              // is in effect.
         int parent_id;     // immediate parent entry, or -1 if at the root
         int canonical_id;  // first id allocated for this name, used for
                            // per-Func (rolled-up) reporting
@@ -251,7 +256,7 @@ struct Names {
                     }
                 }
             }
-            entry_info.push_back({display_name, parent_id, canon, kind, buffer_func_id});
+            entry_info.push_back({display_name, ir_name, parent_id, canon, kind, buffer_func_id});
         }
         return it->second;
     }
@@ -412,11 +417,11 @@ public:
     InjectCounters(Names &names, const map<string, Function> &env)
         : names(names), env(env) {
         // The previous pass populated names.entry_info with every entry.
-        // Index them by name so declare_box_required_root (which carries a
-        // pipeline-wide root-box count for a Func, not for any specific
-        // entry for it) can duplicate that count to every entry.
+        // Index them by IR name so declare_box_required_root (which
+        // carries the IR-level Func name from ScheduleFunctions) can
+        // find all entries for a Func.
         for (int i = 0; i < names.num_ids(); i++) {
-            entries_by_name[names.entry_info[i].name].push_back(i);
+            entries_by_name[names.entry_info[i].ir_name].push_back(i);
         }
     }
 
@@ -759,7 +764,7 @@ protected:
             // Stores in a producer block are to the Func being produced, so
             // bill them to the current producer's entry id. (That's the
             // right entry even if f has multiple entries elsewhere.)
-            int id = (producer_id >= 0 && names.entry_info[producer_id].name == f) ?
+            int id = (producer_id >= 0 && names.entry_info[producer_id].ir_name == f) ?
                          producer_id :
                          names.id_for_name(f);
             Counters &c = counters[id];
