@@ -19,7 +19,7 @@ file(WRITE "${SOURCE_PATH}/CMakeLists.txt" "${cmake_contents}")
 file(READ "${SOURCE_PATH}/core/shared/platform/include/platform_wasi_types.h" wasi_types_contents)
 string(REPLACE
     "/* clang-format off */"
-    "/* clang-format off */\n#if defined(_MSC_VER) && !defined(__cplusplus)\n#undef _Alignof\n#define _Alignof(Type) ((size_t)&(((struct { char c; Type member; }*)0)->member))\n#endif"
+    "/* clang-format off */\n#if defined(_MSC_VER) && !defined(__cplusplus)\n#undef _Alignof\n#define _Alignof __alignof\n#endif"
     wasi_types_contents
     "${wasi_types_contents}"
 )
