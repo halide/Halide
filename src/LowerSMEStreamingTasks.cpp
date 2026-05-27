@@ -27,7 +27,7 @@ struct LowerSMEStreamingTasks : public IRMutator {
 
     Stmt visit(const For *loop) override {
         if (loop->device_api != DeviceAPI::None) {
-            internal_assert(loop->device_api == DeviceAPI::Host || loop->device_api == DeviceAPI::Host_SMEStreaming);
+            internal_assert(loop->device_api == DeviceAPI::Host || loop->device_api == DeviceAPI::SMEStreaming);
             // After this mutation, it doesn't need to be marked as SMEStreaming anymore
             Stmt body;
             if (equal(loop->min, loop->max)) {
@@ -37,10 +37,10 @@ struct LowerSMEStreamingTasks : public IRMutator {
                                  DeviceAPI::None, loop->body);
             }
 
-            const bool next_is_streaming = (loop->device_api == DeviceAPI::Host_SMEStreaming);
+            const bool next_is_streaming = (loop->device_api == DeviceAPI::SMEStreaming);
             // We extract a separate task only when transiting to/from SMEStreaming
-            // 1. Any(except for Host_SMEStreaming) -> Host_SMEStreaming
-            // 2. Host_SMEStreaming -> Host
+            // 1. Any(except for SMEStreaming) -> SMEStreaming
+            // 2. SMEStreaming -> Host
             if (in_streaming != next_is_streaming && target.has_feature(Target::SME2)) {
                 debug(DBG) << "Switching to " << to_streaming_str(next_is_streaming)
                            << " from " << to_streaming_str(in_streaming)

@@ -2064,7 +2064,7 @@ Stage &Stage::hexagon(const VarOrRVar &x) {
 }
 
 Stage &Stage::sme_streaming(bool enable, const VarOrRVar &x) {
-    set_dim_device_api(x, enable ? DeviceAPI::Host_SMEStreaming : DeviceAPI::Host);
+    set_dim_device_api(x, enable ? DeviceAPI::SMEStreaming : DeviceAPI::Host);
     return *this;
 }
 

@@ -27,7 +27,7 @@ void define_enums(py::module &m) {
         .value("OpenCL", DeviceAPI::OpenCL)
         .value("Metal", DeviceAPI::Metal)
         .value("Hexagon", DeviceAPI::Hexagon)
-        .value("Host_SMEStreaming", DeviceAPI::Host_SMEStreaming);
+        .value("SMEStreaming", DeviceAPI::SMEStreaming);
 
     py::enum_<LinkageType>(m, "LinkageType")
         .value("External", LinkageType::External)

@@ -24,7 +24,7 @@ enum class DeviceAPI {
     D3D12Compute,
     Vulkan,
     WebGPU,
-    Host_SMEStreaming,
+    SMEStreaming,
 };
 
 /** An array containing all the device apis. Useful for iterating
@@ -40,7 +40,7 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::D3D12Compute,
                                      DeviceAPI::Vulkan,
                                      DeviceAPI::WebGPU,
-                                     DeviceAPI::Host_SMEStreaming};
+                                     DeviceAPI::SMEStreaming};
 
 }  // namespace Halide
 

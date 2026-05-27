@@ -493,7 +493,7 @@ private:
             body = LetStmt::make(names.hvx_profiler_instance, get_state, body);
         } else if (op->device_api == DeviceAPI::None ||
                    op->device_api == DeviceAPI::Host ||
-                   op->device_api == DeviceAPI::Host_SMEStreaming) {
+                   op->device_api == DeviceAPI::SMEStreaming) {
             body = mutate(body);
         } else {
             body = op->body;

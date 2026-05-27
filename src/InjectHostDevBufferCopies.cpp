@@ -116,8 +116,8 @@ protected:
             << "A GPU API should have been selected by this stage in lowering\n";
         DeviceAPI old = current_device_api;
         if (op->device_api != DeviceAPI::None) {
-            // In the context of device buffer, we treat Host_SMEStreaming as Host.
-            if (op->device_api == DeviceAPI::Host_SMEStreaming) {
+            // In the context of device buffer, we treat SMEStreaming as Host.
+            if (op->device_api == DeviceAPI::SMEStreaming) {
                 current_device_api = DeviceAPI::Host;
             } else {
                 current_device_api = op->device_api;
@@ -667,7 +667,7 @@ protected:
 
     Stmt visit(const For *op) override {
         if (op->device_api != DeviceAPI::Host &&
-            op->device_api != DeviceAPI::Host_SMEStreaming &&
+            op->device_api != DeviceAPI::SMEStreaming &&
             op->device_api != DeviceAPI::None) {
             // Don't enter device loops
             return op;

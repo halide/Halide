@@ -169,7 +169,7 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
 
 namespace Internal {
 Expr make_device_interface_call(DeviceAPI device_api, MemoryType memory_type) {
-    if (device_api == DeviceAPI::Host || device_api == DeviceAPI::Host_SMEStreaming) {
+    if (device_api == DeviceAPI::Host || device_api == DeviceAPI::SMEStreaming) {
         return make_zero(type_of<const halide_device_interface_t *>());
     }
 
