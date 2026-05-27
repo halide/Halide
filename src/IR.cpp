@@ -625,8 +625,6 @@ const char *const intrinsic_op_names[] = {
     "count_trailing_zeros",
     "debug_to_file",
     "declare_box_touched",
-    "declare_box_required_at_root",
-    "declare_stage",
     "div_round_to_zero",
     "dynamic_shuffle",
     "extract_bits",

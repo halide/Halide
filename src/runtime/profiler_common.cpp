@@ -251,7 +251,6 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         const int *func_canonical_ids,
                                         const uint8_t *func_kinds,
                                         const int *func_buffer_func_ids,
-                                        uint64_t native_vector_bytes,
                                         halide_profiler_instance_state *instance) {
     // Tell the instance where we stashed the per-func state - just after the
     // instance itself.
@@ -296,7 +295,6 @@ WEAK int halide_profiler_instance_start(void *user_context,
             // Allocating space to track the statistics failed.
             return halide_error_out_of_memory(user_context);
         }
-        p->native_vector_bytes = native_vector_bytes;
 
         // Tell the instance the pipeline to which it belongs.
         instance->pipeline_stats = p;
@@ -679,16 +677,16 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
     constexpr const char *horiz_rule =
         "--------------------------------------------------------------------------------------------------------\n";
     constexpr const char *func_row =
-        "NNNNNNNNNNNNNNNNNNNNNNNNN|TTTTTTTTT PPPPPPPP|HHHHHH |LLLLLL|KKKKKK|AAAAAA|MMMMMM|VVVVVV|RRRRRRRR |";
+        "NNNNNNNNNNNNNNNNNNNNNNNNN|TTTTTTTTT PPPPPPPP|HHHHHH |AAAAAA|MMMMMM|VVVVVV|";
     constexpr const char *allocation_func_row =
-        "NNNNNNNNNNNNNNNNNNNNNNNNN|ZZZZZZZZZZZZZZZZZZ|       |      |      |AAAAAA|MMMMMM|VVVVVV|         |";
+        "NNNNNNNNNNNNNNNNNNNNNNNNN|ZZZZZZZZZZZZZZZZZZ|       |AAAAAA|MMMMMM|VVVVVV|";
     // Column legend printed once above the func table. Each pipe column
     // and label width matches func_row. Hand-aligned -- if you resize a
     // column, eyeball this too.
     constexpr const char *column_legend_row_1 =
-        "  name                   | time     percent | active|  parallel   | heap | peak | avg  |recompute|";
+        "  name                   | time     percent | active| heap | peak | avg  |";
     constexpr const char *column_legend_row_2 =
-        "                         |                  |threads| loops| tasks|allocs|  mem |  mem |  ratio  |";
+        "                         |                  |threads|allocs|  mem |  mem |";
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
@@ -696,21 +694,13 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             continue;
         }
 
-        // Is the pipeline entirely serial?
-        uint64_t total_parallel_loops = 0;
-        uint64_t total_parallel_tasks = 0;
-        for (int i = 0; i < p->num_funcs; i++) {
-            total_parallel_loops += p->funcs[i].parallel_loops;
-            total_parallel_tasks += p->funcs[i].parallel_tasks;
-        }
-        bool serial = total_parallel_loops == 0;
-
         // Pipeline summary (free-form, not column-aligned). Times are
         // averaged over billed_runs (runs that produced samples), not
         // total runs — see halide_profiler_instance_end for why.
         {
             float total_ms = p->time / 1000000.0f;
             int time_runs = p->billed_runs ? p->billed_runs : 1;
+            float threads = p->active_threads_numerator / (p->active_threads_denominator + 1e-10f);
             sstr.clear();
             emit_dim(horiz_rule);
             sstr << p->name << "\n"
@@ -721,14 +711,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 sstr << " (" << p->billed_runs << " timed)";
             }
             sstr << "  time per run: " << total_ms / time_runs << " ms\n";
-            if (!serial) {
-                float threads = p->active_threads_numerator / (p->active_threads_denominator + 1e-10f);
-                sstr << " average threads used: " << threads
-                     << "  parallel loops: ";
-                emit_si(total_parallel_loops / p->runs);
-                sstr << "  parallel tasks: ";
-                emit_si(total_parallel_tasks / p->runs);
-                sstr << "\n";
+            if (threads > 1.01f) {
+                sstr << " average threads used: " << threads << "\n";
             }
             sstr << " heap allocations: " << p->num_allocs
                  << "  peak heap usage: ";
@@ -798,11 +782,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             // Average threads active for this func and all children
             uint64_t active_threads_numerator;
             uint64_t active_threads_denominator;
-
-            // Number of tasks for all containing parallel loops. Note this is
-            // cumulative in the opposite direction - it incorporates
-            // information from parents, not children.
-            uint64_t parallel_tasks;
         };
         size_t cum_stats_size = p->num_funcs * sizeof(CumulativeStats);
         CumulativeStats *cum_stats = (CumulativeStats *)__builtin_alloca(cum_stats_size);
@@ -818,20 +797,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 cum_stats[parent].time += cum_stats[j].time;
                 cum_stats[parent].active_threads_numerator += cum_stats[j].active_threads_numerator;
                 cum_stats[parent].active_threads_denominator += cum_stats[j].active_threads_denominator;
-            }
-        }
-        // Propagation to children: parallel_tasks latches downward — a Func
-        // realized inside its parent's parallel loop "inherits" the parent's
-        // task count if it doesn't have one of its own.
-        for (int i = 0; i < p->num_funcs; i++) {
-            int j = tree_order[i];
-            int parent = p->funcs[j].parent;
-            if (parent >= 0) {
-                if (p->funcs[j].parallel_tasks == 0) {
-                    cum_stats[j].parallel_tasks = cum_stats[parent].parallel_tasks;
-                } else {
-                    cum_stats[j].parallel_tasks = p->funcs[j].parallel_tasks;
-                }
             }
         }
 
@@ -946,12 +911,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                         pad_bytes_to(sstr.size() + w);
                     }
                     break;
-                case 'L':
-                    emit_normalized_counter(fs->parallel_loops, p->runs, w);
-                    break;
-                case 'K':
-                    emit_normalized_counter(fs->parallel_tasks, p->runs, w);
-                    break;
                 case 'A':
                     emit_normalized_counter(fs->num_allocs, p->runs, w);
                     break;
@@ -965,22 +924,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                         pad_bytes_to(sstr.size() + w);
                     }
                     break;
-                case 'R': {
-                    // points_required_at_root is billed only to the
-                    // canonical instance; look it up there. Use the
-                    // points_computed counter (pure-def stage-0 stores
-                    // by lane count, summed across instances) so the
-                    // ratio reflects what was actually computed, not
-                    // just the realize-box-size machinery.
-                    uint64_t at_root = p->funcs[fs->canonical_id].points_required_at_root;
-                    if (at_root) {
-                        float recompute = (fs->points_computed / (float)at_root);
-                        emit_float(recompute, w);
-                    } else {
-                        pad_bytes_to(sstr.size() + w);
-                    }
-                    break;
-                }
                 case '|':
                     // Column separator in a very dark gray (xterm 256-color
                     // 238) so it sits well behind the data values.
@@ -1142,7 +1085,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 field_u64("      ", "memory_total", pp->memory_total);
                 field_u64("      ", "active_threads_numerator", pp->active_threads_numerator);
                 field_u64("      ", "active_threads_denominator", pp->active_threads_denominator);
-                field_u64("      ", "native_vector_bytes", pp->native_vector_bytes);
                 json << "      \"funcs\": [";
 
                 for (int i = 0; i < pp->num_funcs; i++) {
@@ -1161,11 +1103,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     field_u64("          ", "stack_peak", fs->stack_peak);
                     field_u64("          ", "active_threads_numerator", fs->active_threads_numerator);
                     field_u64("          ", "active_threads_denominator", fs->active_threads_denominator);
-                    field_u64("          ", "num_allocs", fs->num_allocs);
-                    field_u64("          ", "parallel_loops", fs->parallel_loops);
-                    field_u64("          ", "parallel_tasks", fs->parallel_tasks);
-                    field_u64("          ", "points_required_at_root", fs->points_required_at_root);
-                    field_u64("          ", "points_computed", fs->points_computed, true);
+                    field_u64("          ", "num_allocs", fs->num_allocs, true);
                     json << "        }";
 
                     // Flush periodically so we don't overflow the buffer for

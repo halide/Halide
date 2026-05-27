@@ -1201,13 +1201,7 @@ public:
     }
 
     Stmt operator()(const Stmt &stmt) {
-        Stmt s = IRMutator::operator()(stmt);
-        if (target.has_feature(Target::Profile)) {
-            for (size_t i = 0; i < funcs.size(); i++) {
-                s = declare_box(s, funcs[i], Call::declare_box_required_at_root);
-            }
-        }
-        return s;
+        return IRMutator::operator()(stmt);
     }
 
 protected:
@@ -1218,26 +1212,14 @@ protected:
     using IRMutator::visit;
 
     // Emit a (intrin, name_arg, min_0, max_0, min_1, max_1, ...) Call
-    // wrapping `stmt`. The shape of name_arg depends on the intrinsic:
-    //
-    //   - declare_box_touched is a real annotation that bounds inference
-    //     uses to know which Realize node is being touched. Its first arg
-    //     must be a Variable<Handle>(func.name()) — a reference to the
-    //     Realize-named buffer in scope — because passes that substitute
-    //     names of in-scope buffers (most notably box_touched analysis
-    //     itself) follow that name.
-    //
-    //   - declare_box_required_at_{realization,production,root} are
-    //     profiler markers. The first arg is just a label for the
-    //     profiler report and is not in scope as a buffer; it's a
-    //     StringImm so the buffer-name-following passes leave it alone.
+    // wrapping `stmt`. Used for declare_box_touched, which bounds
+    // inference uses to know which Realize node is being touched. Its
+    // first arg must be a Variable<Handle>(func.name()) — a reference
+    // to the Realize-named buffer in scope — because passes that
+    // substitute names of in-scope buffers (most notably box_touched
+    // analysis itself) follow that name.
     Stmt declare_box(const Stmt &stmt, const Function &f, Call::IntrinsicOp intrin) {
-        Expr name_arg;
-        if (intrin == Call::declare_box_touched) {
-            name_arg = Variable::make(Handle(), f.name());
-        } else {
-            name_arg = Expr(f.name());
-        }
+        Expr name_arg = Variable::make(Handle(), f.name());
         std::vector<Expr> args;
         args.reserve(2 * f.dimensions() + 1);
         args.push_back(std::move(name_arg));
@@ -1837,18 +1819,6 @@ private:
 
             Stmt produce_def = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
                                                         replacements, add_lets, aliases);
-            if (target.has_feature(Target::Profile)) {
-                // Mark the start of this Func's stage so InjectCounters can
-                // distinguish pure-def stores from update-def stores even
-                // when there's no surrounding For loop with a stage-named
-                // var to key off (zero-dimensional or fully-unrolled Funcs,
-                // or stages of Funcs whose pure def has no Vars).
-                Expr marker = Call::make(Int(32), Call::declare_stage,
-                                         {Expr(f.name()),
-                                          make_const(Int(32), func_stage.second)},
-                                         Call::Intrinsic);
-                produce_def = Block::make(Evaluate::make(marker), produce_def);
-            }
             producer = inject_stmt(producer, produce_def, def.schedule().fuse_level().level);
         }
 

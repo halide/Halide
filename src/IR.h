@@ -647,16 +647,6 @@ struct Call : public ExprNode<Call> {
         // Declares that a box region of an allocation has been touched (used by bounds inference)
         declare_box_touched,
 
-        // Declares that region required of a particular Func at this
-        // scope. Injected by ScheduleFunctions and used by the profiler.
-        declare_box_required_at_root,
-
-        // Declares that the following stmt computes a particular stage of
-        // a particular Func. Used by the profiler to bill points computed
-        // in the pure def separately from points computed in update defs.
-        // Args: (Variable<Handle> handle for the func, Int<32> stage_idx).
-        declare_stage,
-
         div_round_to_zero,
 
         // A shuffle operation with runtime-varying indices.

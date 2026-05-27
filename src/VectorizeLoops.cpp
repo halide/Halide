@@ -545,18 +545,6 @@ protected:
             max_lanes = std::max(new_arg.type().lanes(), max_lanes);
         }
 
-        // Profiler counter markers (declare_box_required_at_root) carry per-lane
-        // counter contributions encoded in their type's lane count, so they
-        // must be widened to the full lane count of the surrounding
-        // vectorized loop even when their args don't reference any
-        // vectorized vars.
-        if (op->is_intrinsic({Call::declare_box_required_at_root})) {
-            max_lanes = 1;
-            for (const auto &vv : vectorized_vars) {
-                max_lanes *= vv.lanes;
-            }
-        }
-
         if (!changed && max_lanes <= 1) {
             return op;
         } else if (op->name == Call::trace) {

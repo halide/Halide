@@ -33,65 +33,35 @@ using std::vector;
 //
 // When a pipeline is compiled with the "profile" target feature, this
 // lowering pass instruments the IR with calls into the Halide profiler
-// runtime. At run time the profiler then collects per-Func statistics —
-// time spent, memory used, parallel loops launched, and a few counters
-// for recompute analysis — which the runtime prints as a report when the
+// runtime. At run time the profiler collects per-Func statistics — time
+// spent, memory used — which the runtime prints as a report when the
 // pipeline terminates (or makes available as JSON to external tools).
 //
-// Two complementary mechanisms collect data at run time:
+// Time is collected by sampling: a background profiler thread (started
+// lazily by the runtime on first use) periodically reads a "current func"
+// word that the generated code writes whenever the executing pipeline
+// transitions between Funcs. The distribution of samples across Funcs
+// gives the time profile. This handles wall time cheaply: the only thing
+// the generated code does on the hot path is one store of an integer id.
 //
-//  - Sampling. A background profiler thread (started lazily by the runtime
-//    on first use) periodically reads a "current func" word that the
-//    generated code writes whenever the executing pipeline transitions
-//    between Funcs. The distribution of samples across Funcs gives the time
-//    profile. This handles wall time cheaply: the only thing the generated
-//    code does on the hot path is one store of an integer id.
-//
-//  - Direct counters. Discrete events that need exact counts (parallel
-//    launches, points computed, points required at root) can't be reliably
-//    sampled, so the generated code calls halide_profiler_update_counters
-//    at appropriate points to bump per-Func 64-bit counters by computed
-//    amounts. The runtime keeps one halide_profiler_func_stats struct per
-//    id; the counters live in there.
-//
-// This pass is responsible for emitting both — the set_current_func writes,
-// the counter updates, and all the surrounding scaffolding (instance start
-// and stop, thread activity tracking around parallel constructs, sampling
-// token management for leaf tasks, stack-peak accounting, etc.).
+// This pass is responsible for emitting the set_current_func writes plus
+// all the surrounding scaffolding (instance start and stop, thread
+// activity tracking around parallel constructs, sampling token management
+// for leaf tasks, stack-peak accounting, memory tracking).
 //
 // -----------------------------------------------------------------------------
 // Structure of the pass
 // -----------------------------------------------------------------------------
 //
 // inject_profiling is the only top-level pass. It runs after bounds
-// inference but before storage flattening, consumes declare_box_required_at_root
-// and declare_stage markers, and emits all the runtime calls. It runs three
-// sub-passes over the IR:
+// inference but before storage flattening, and runs two sub-passes over
+// the IR:
 //
 //  1) PreAllocateEntries. Enumerates every entry (see below) for every
 //     Func and assigns each one an integer id matching its eventual slot in
 //     the runtime's halide_profiler_func_stats array.
 //
-//  2) InjectCounters. Walks the IR and accumulates per-entry counter
-//     contributions, flushing them as halide_profiler_update_counters calls.
-//     Counters are hoisted as far out as possible: a Store inside a loop of
-//     trip count N becomes a single "+N" update outside the loop rather than
-//     N "+1" updates inside it. This keeps the per-iteration overhead of
-//     profiling close to zero.
-//
-//     If a counter update fails to hoist all the way out of a parallel loop
-//     — typically because the contribution depends on the parallel loop var
-//     itself, or on something defined inside the body — we don't want each
-//     iteration to do an atomic add directly into the global stats struct.
-//     Instead InjectCounters allocates a small thread-local buffer
-//     ("local_counters") on the stack of each parallel task, accumulates
-//     contributions there with ordinary (non-atomic) adds, and then emits
-//     one halide_profiler_update_counters call per task at the end of the
-//     loop body that folds the local buffer into the shared per-entry
-//     counters with a single atomic update. This trades a fixed per-task
-//     overhead for keeping the hot inner loop free of atomics.
-//
-//  3) InjectProfiling. Emits the rest of the runtime scaffolding:
+//  2) InjectProfiling. Emits the runtime scaffolding:
 //       - halide_profiler_set_current_func writes so the sampler knows which
 //         instance the CPU is currently executing.
 //       - halide_profiler_memory_allocate / _memory_free wrappers around
@@ -103,24 +73,11 @@ using std::vector;
 //         the sampling slot.
 //       - Copy-to-host / copy-to-device timing.
 //
-// After those three passes, inject_profiling wraps the whole IR with a
+// After those two passes, inject_profiling wraps the whole IR with a
 // halide_profiler_instance_start call (which registers the pipeline instance
 // with the global profiler and returns an error code we assert on) and a
 // register_destructor for halide_profiler_instance_end, and emits the
 // func_names / func_parents tables the runtime needs to print the report.
-//
-// -----------------------------------------------------------------------------
-// Inputs from earlier lowering passes
-// -----------------------------------------------------------------------------
-//
-// ScheduleFunctions emits an intrinsic specifically for the profiler
-// that this pass consumes and strips out:
-//
-//  - declare_box_required_at_root(f, ...): emitted by ScheduleFunctions at the
-//    outermost level for every Func. The box is the pipeline-wide total
-//    number of points of f required by all consumers. We bill that count to
-//    f's canonical entry as PointsRequiredAtRoot, which is the denominator
-//    of the recompute ratio.
 //
 // -----------------------------------------------------------------------------
 // Entries
@@ -398,553 +355,6 @@ class PreAllocateEntries : public IRMutator {
 public:
     PreAllocateEntries(Names &names, const std::map<std::string, Function> &env)
         : names(names), env(env) {
-    }
-};
-
-// Second pass: inject counters for various stats as far outermost as possible,
-// to minimize overhead. For example, instead of this:
-// for (x in [min, max]) {
-//   increment_counter(..., 1);
-//   ...
-// }
-// We want to inject this:
-// increment_counter(..., max - min + 1);
-// for (x in [min, max]) {
-//   ...
-// }
-class InjectCounters : public IRMutator {
-public:
-    InjectCounters(Names &names, const map<string, Function> &env)
-        : names(names), env(env) {
-        // The previous pass populated names.entry_info with every entry.
-        // Index them by IR name so declare_box_required_root (which
-        // carries the IR-level Func name from ScheduleFunctions) can
-        // find all entries for a Func.
-        for (int i = 0; i < names.num_ids(); i++) {
-            entries_by_name[names.entry_info[i].ir_name].push_back(i);
-        }
-    }
-
-protected:
-    Names &names;
-    const map<string, Function> &env;
-
-    using IRMutator::visit;
-
-    // ID of the currently-produced Func
-    int producer_id = -1;
-
-    // Per-Func flag: are we currently inside that Func's pure def?
-    // Updated by the declare_stage marker that ScheduleFunctions emits
-    // at the start of each stage's loop nest (the marker also carries
-    // the Func name). A per-Func map handles compute_with cases where
-    // the stages of different Funcs are interleaved in the IR — each
-    // Store consults the flag for its own Func.
-    std::map<std::string, bool> func_in_pure_stage;
-
-    // The counters we track. This list must be kept in sync with multiple other
-    // things. If you add a counter, also update:
-    // - the num_counters int below the enum
-    // - halide_profile_update_counters in profiler_inlined.cpp
-    // - the fields of halide_profiler_func_stats in HalideRuntime.h
-    // - the block of code that prints counters to json in profiler_common.cpp
-    enum { ParallelLoops = 0,
-           ParallelTasks,
-           PointsRequiredAtRoot,
-           PointsComputed };
-
-    static constexpr int num_counters = PointsComputed + 1;
-
-    struct Counters {
-
-        Expr counters[num_counters];
-
-        void add(const Counters &other) {
-            for (int i = 0; i < num_counters; i++) {
-                if (counters[i].defined()) {
-                    if (other.counters[i].defined()) {
-                        counters[i] += other.counters[i];
-                    }
-                } else {
-                    counters[i] = other.counters[i];
-                }
-            }
-            free_vars.insert(other.free_vars.begin(), other.free_vars.end());
-        }
-
-        void mul(const Expr &e) {
-            for (int i = 0; i < num_counters; i++) {
-                if (counters[i].defined()) {
-                    counters[i] *= e;
-                }
-            }
-            add_free_vars(e);
-        }
-
-        void count(int c, const Expr &e) {
-            internal_assert(e.defined() && e.type() == UInt(64)) << e;
-            if (counters[c].defined()) {
-                counters[c] += e;
-            } else {
-                counters[c] = e;
-            }
-            add_free_vars(e);
-        }
-
-        void count(int c) {
-            count(c, make_one(UInt(64)));
-        }
-
-        void add_free_vars(const Expr &e) {
-            visit_with(e, [&](auto *, const Variable *var) {
-                free_vars.insert(var->name);
-            });
-        }
-
-        // The free vars in the expressions
-        std::set<std::string> free_vars;
-    };
-
-    const For *enclosing_loop = nullptr, *enclosing_parallel_loop = nullptr;
-    // True while mutating the body of any GPU loop. The CPU local_counters
-    // mechanism doesn't translate to GPU code (the buffer would have to be
-    // device-accessible, with atomic adds, and IHDBC has already run by the
-    // time we're injecting profiling). Instead, when in_gpu is set, we
-    // make any counter contribution that would normally have to flush
-    // mid-kernel hoist conservatively out of the kernel — substituting an
-    // upper bound for loop vars, wrapping in a Let for LetStmts, and
-    // wrapping in a Select for IfThenElse (or taking the max of the
-    // branches when the condition is impure).
-    bool in_gpu = false;
-    // thread-local counters
-    std::string local_counters;
-    // A map from a func id and a counter id to a slot in the local counters array
-    std::map<std::pair<int, int>, int> local_counters_indices;
-
-    std::map<int, Counters> counters;
-
-    // name -> all entry ids with that name. Built once in the constructor;
-    // only declare_box_required_root reads it.
-    std::map<std::string, std::vector<int>> entries_by_name;
-
-    bool is_func(const std::string &name) const {
-        return env.find(name) != env.end();
-    }
-
-    Stmt flush(const Stmt &s, int id, const Counters &c) {
-        if (enclosing_loop &&
-            enclosing_parallel_loop &&
-            enclosing_loop != enclosing_parallel_loop) {
-            // Flush to local counters
-            if (local_counters.empty()) {
-                local_counters = unique_name("local_counters");
-            }
-            std::vector<Stmt> stores;
-            stores.reserve(num_counters);
-            for (int i = 0; i < num_counters; i++) {
-                if (!c.counters[i].defined()) {
-                    continue;
-                }
-                int n = (int)local_counters_indices.size();
-                int idx =
-                    local_counters_indices.try_emplace({id, i}, n).first->second;
-                Expr old = Load::make(UInt(64), local_counters, idx,
-                                      Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
-                stores.push_back(Store::make(local_counters, old + c.counters[i], idx,
-                                             Parameter{}, const_true(), ModulusRemainder{}));
-            }
-            stores.push_back(s);
-            return Block::make(stores);
-        } else {
-            // Flush to global counters
-            std::vector<Expr> args(2 + num_counters);
-            args[0] = Variable::make(Handle(), names.profiler_instance);
-            args[1] = id;
-            for (int i = 0; i < num_counters; i++) {
-                Expr count = c.counters[i];
-                args[i + 2] = count.defined() ? count : make_zero(UInt(64));
-            }
-            Expr call = Call::make(Int(32), "halide_profiler_update_counters", args, Call::Extern);
-            return Block::make(Evaluate::make(std::move(call)), s);
-        }
-    }
-
-    Stmt flush_all(const Stmt &stmt) {
-        Stmt s = stmt;
-        for (auto p : counters) {
-            s = flush(s, p.first, p.second);
-        }
-        counters.clear();
-        return s;
-    }
-
-    Stmt flush_all_that_depend_on_var(const Stmt &stmt, const std::string &var) {
-        Stmt s = stmt;
-        for (auto it = counters.begin(); it != counters.end();) {
-            const auto &[id, c] = *it;
-            if (c.free_vars.count(var)) {
-                s = flush(s, id, c);
-                it = counters.erase(it);
-            } else {
-                it++;
-            }
-        }
-        return s;
-    }
-
-    void merge(const std::map<int, Counters> &other) {
-        for (const auto &it : other) {
-            counters[it.first].add(it.second);
-        }
-    }
-
-    // Recompute a Counters object's free_vars set from its current Exprs.
-    // Used after any hoisting operation that mutates the Exprs in place.
-    static void recompute_free_vars(Counters &c) {
-        c.free_vars.clear();
-        for (int i = 0; i < num_counters; i++) {
-            if (c.counters[i].defined()) {
-                c.add_free_vars(c.counters[i]);
-            }
-        }
-    }
-
-    // GPU hoisting: if `var` (a closing-out loop var) appears in a counter
-    // contribution, substitute an upper bound for it so the contribution
-    // becomes hoistable. Mark the entry as approximated since the result
-    // is an over-estimate. If no finite upper bound can be found, drop the
-    // contribution entirely (still mark approximated).
-    void hoist_loop_var_upper_bound(const For *op) {
-        Scope<Interval> scope;
-        scope.push(op->name, Interval(op->min, op->max));
-        for (auto &[id, c] : counters) {
-            if (!c.free_vars.count(op->name)) {
-                continue;
-            }
-            for (int i = 0; i < num_counters; i++) {
-                if (c.counters[i].defined() && expr_uses_var(c.counters[i], op->name)) {
-                    Interval iv = bounds_of_expr_in_scope(c.counters[i], scope);
-                    if (iv.has_upper_bound()) {
-                        c.counters[i] = simplify(iv.max);
-                    } else {
-                        c.counters[i] = Expr();
-                    }
-                }
-            }
-            recompute_free_vars(c);
-        }
-    }
-
-    // GPU hoisting: when a LetStmt is closing out, any counter contribution
-    // that depends on the let-bound name gets wrapped in an exact Let —
-    // but only if the RHS is pure. An impure RHS (e.g. a Load whose
-    // backing buffer may be mutated, or a non-pure Call) would be
-    // re-evaluated in a different scope by the wrapped Let, which can
-    // change its meaning. In that case we drop the contribution and mark
-    // the entry approximated.
-    void hoist_let(const std::string &name, const Expr &value) {
-        bool value_pure = is_pure(value);
-        for (auto &[id, c] : counters) {
-            if (!c.free_vars.count(name)) {
-                continue;
-            }
-            for (int i = 0; i < num_counters; i++) {
-                if (c.counters[i].defined() && expr_uses_var(c.counters[i], name)) {
-                    if (value_pure) {
-                        c.counters[i] = Let::make(name, value, c.counters[i]);
-                    } else {
-                        c.counters[i] = Expr();
-                    }
-                }
-            }
-            recompute_free_vars(c);
-        }
-    }
-
-    // GPU hoisting: combine the then- and else-branch counter contributions
-    // of an IfThenElse into the outer scope. For a pure condition, exact via
-    // Select. For an impure condition (e.g. a Load), upper-bound the
-    // contribution by max(then, else) (the branches are mutually exclusive)
-    // and mark the entries as approximated.
-    void hoist_if(const Expr &condition,
-                  std::map<int, Counters> &then_counters,
-                  std::map<int, Counters> &else_counters) {
-        bool cond_pure = is_pure(condition);
-        std::set<int> ids;
-        for (const auto &p : then_counters) {
-            ids.insert(p.first);
-        }
-        for (const auto &p : else_counters) {
-            ids.insert(p.first);
-        }
-        for (int id : ids) {
-            Counters merged;
-            auto *t = then_counters.count(id) ? &then_counters[id] : nullptr;
-            auto *e = else_counters.count(id) ? &else_counters[id] : nullptr;
-            for (int i = 0; i < num_counters; i++) {
-                Expr tv = (t && t->counters[i].defined()) ? t->counters[i] : Expr();
-                Expr ev = (e && e->counters[i].defined()) ? e->counters[i] : Expr();
-                if (!tv.defined() && !ev.defined()) {
-                    continue;
-                }
-                Expr zero64 = make_zero(UInt(64));
-                Expr ti = tv.defined() ? tv : zero64;
-                Expr ei = ev.defined() ? ev : zero64;
-                if (cond_pure) {
-                    merged.counters[i] = select(condition, ti, ei);
-                } else {
-                    // Branches are mutually exclusive — only one runs per
-                    // execution — so the tight conservative upper bound on
-                    // the contribution is max(then, else).
-                    merged.counters[i] = max(ti, ei);
-                }
-            }
-            recompute_free_vars(merged);
-            counters[id].add(merged);
-        }
-    }
-
-    // Compute the total number of points in a box passed to declare_box_required*.
-    // The args after the func handle are (min, max) pairs per dim; the result is
-    // a scalar UInt(64) total, reduced across any surrounding vector lanes.
-    static Expr box_total(const Call *op) {
-        int lanes = op->type.lanes();
-        Expr total = make_one(UInt(64, lanes));
-        for (size_t i = 1; i < op->args.size(); i += 2) {
-            total *= cast(total.type(), op->args[i + 1] + 1 - op->args[i]);
-        }
-        if (lanes > 1) {
-            total = VectorReduce::make(VectorReduce::Add, total, 1);
-        }
-        // Simplifying here removes false dependences on loop vars.
-        return simplify(total);
-    }
-
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::declare_box_required_at_root)) {
-            // Bill the pipeline-wide root box to this Func's canonical
-            // entry only. It's a Func-level fact, not a per-entry one, so
-            // summing it across entries would over-count. The reporter
-            // looks it up via fs->canonical_id when computing each entry's
-            // local recompute ratio.
-            auto it = entries_by_name.find(handle_name(op->args[0]));
-            if (it != entries_by_name.end()) {
-                // entries_by_name was filled in id-ascending order, and the
-                // canonical id is the first id allocated for the name, so
-                // it->second.front() is always the canonical id.
-                counters[it->second.front()].count(PointsRequiredAtRoot, box_total(op));
-            }
-            return make_zero(op->type);
-        } else if (op->is_intrinsic(Call::declare_stage)) {
-            // Marker from ScheduleFunctions saying "we're starting stage N
-            // of Func F here". Update our per-Func pure-def flag and strip
-            // the marker from the IR.
-            internal_assert(op->args.size() == 2);
-            auto stage = as_const_int(op->args[1]);
-            internal_assert(stage);
-            func_in_pure_stage[handle_name(op->args[0])] = (*stage == 0);
-            return make_zero(op->type);
-        } else {
-            // Counter events are never nested, so no recursive mutate call.
-            return op;
-        }
-    }
-
-    // True for Stores to buffers we want to bill: a Func's own storage, or
-    // an output parameter. False for internal bookkeeping buffers like
-    // storage-folding head trackers, async semaphores, and sampling
-    // tokens — we don't want their stores inflating points_computed.
-    bool is_real_data_buffer(const Store *op) const {
-        return op->param.defined() || is_func(names.prefix(op->name));
-    }
-
-    Stmt visit(const Store *op) override {
-        if (is_real_data_buffer(op)) {
-            std::string f = names.prefix(op->name);
-            // Stores in a producer block are to the Func being produced, so
-            // bill them to the current producer's entry id. (That's the
-            // right entry even if f has multiple entries elsewhere.)
-            int id = (producer_id >= 0 && names.entry_info[producer_id].ir_name == f) ?
-                         producer_id :
-                         names.id_for_name(f);
-            Counters &c = counters[id];
-            int lanes = op->value.type().lanes();
-            // Only the pure def (stage 0) contributes to "points computed";
-            // update-def stores are a separate kind of work and shouldn't
-            // show up as recompute. For Tuple-valued Funcs each output
-            // point produces one Store per tuple element (to buffers
-            // f.0, f.1, ...), so counting all of them would inflate
-            // points_computed by the tuple arity. Skip any store whose
-            // buffer name's final dotted component parses as a non-zero
-            // integer -- those are the non-canonical tuple elements.
-            auto it = func_in_pure_stage.find(f);
-            if (it != func_in_pure_stage.end() && it->second) {
-                size_t last_dot = op->name.rfind('.');
-                const char *tail = (last_dot == std::string::npos) ? op->name.c_str() : op->name.c_str() + last_dot + 1;
-                char *end = nullptr;
-                long idx = std::strtol(tail, &end, 10);
-                bool is_dup_tuple_element = (*end == '\0' && idx != 0);
-                if (!is_dup_tuple_element) {
-                    c.count(PointsComputed, make_const(UInt(64), lanes));
-                }
-            }
-        }
-        return IRMutator::visit(op);
-    }
-
-    Stmt visit(const ProducerConsumer *op) override {
-        if (op->is_producer) {
-            // One entry per producer node, parented to the surrounding
-            // producer. See file-level comment for why this matters.
-            int id = names.id_for_entry(op->name, producer_id);
-            ScopedValue<int> old(producer_id, id);
-            return IRMutator::visit(op);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
-    Stmt visit(const For *op) override {
-        // GPU loops are also is_unordered_parallel(). We can't use the CPU
-        // local_counters mechanism inside a GPU kernel (device memory,
-        // atomics, IHDBC ordering), so when in_gpu we hoist any
-        // closing-out contributions instead of flushing — see the helper
-        // methods above.
-        ScopedValue<bool> bind_gpu(in_gpu, in_gpu || is_gpu(op->for_type));
-
-        decltype(counters) old;
-        old.swap(counters);
-
-        Stmt body;
-        {
-            ScopedValue<const For *> bind1(enclosing_loop, op);
-            ScopedValue<const For *> bind2(enclosing_parallel_loop,
-                                           op->is_unordered_parallel() ?
-                                               op :
-                                               enclosing_parallel_loop);
-            body = mutate(op->body);
-        }
-
-        if (op->is_unordered_parallel() &&
-            !local_counters.empty()) {
-            // Flush any thread-local counters to global state
-            std::map<int, Counters> to_flush;
-            for (auto [p, idx] : local_counters_indices) {
-                auto [id, counter] = p;
-                to_flush[id].counters[counter] =
-                    Load::make(UInt(64), local_counters, idx,
-                               Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
-            }
-
-            counters.swap(to_flush);
-            Stmt post_flush = flush_all(Evaluate::make(0));
-            counters.swap(to_flush);
-
-            std::vector<Stmt> stmts;
-            stmts.reserve(local_counters_indices.size() + 2);
-            for (int i = 0; i < (int)local_counters_indices.size(); i++) {
-                stmts.push_back(Store::make(local_counters, make_zero(UInt(64)), i,
-                                            Parameter{}, const_true(), ModulusRemainder{}));
-            }
-
-            stmts.push_back(std::move(body));
-            stmts.push_back(post_flush);
-            body = Block::make(stmts);
-
-            Expr size = (int)local_counters_indices.size();
-            body = Allocate::make(local_counters, UInt(64), MemoryType::Stack, {size}, const_true(), body);
-        }
-
-        // Scale up the counters by the loop trip count
-        Expr e = simplify(op->extent());
-
-        if (in_gpu) {
-            // Don't try to flush in the middle of a GPU kernel — hoist
-            // depending contributions out via upper-bound substitution.
-            hoist_loop_var_upper_bound(op);
-        } else {
-            body = flush_all_that_depend_on_var(body, op->name);
-        }
-
-        for (auto &[_, c] : counters) {
-            c.mul(e);
-        }
-
-        merge(old);
-
-        if (op->is_unordered_parallel()) {
-            // The parallel loop belongs to the currently-producing Func.
-            int id = producer_id >= 0 ? producer_id : names.id_for_name(names.prefix(op->name));
-            counters[id].count(ParallelLoops);
-            counters[id].count(ParallelTasks, cast(UInt(64), e));
-        }
-
-        return For::make(op->name, op->min, op->max,
-                         op->for_type, op->partition_policy, op->device_api, std::move(body));
-    }
-
-    Stmt visit(const LetStmt *op) override {
-        decltype(counters) old;
-        counters.swap(old);
-        Stmt body = mutate(op->body);
-        if (in_gpu) {
-            hoist_let(op->name, op->value);
-        } else {
-            body = flush_all_that_depend_on_var(body, op->name);
-        }
-        merge(old);
-        return LetStmt::make(op->name, op->value, body);
-    }
-
-    Stmt visit(const IfThenElse *op) override {
-        if (in_gpu) {
-            // Inside a GPU kernel we can't flush in the branches; instead
-            // combine the branch contributions into the outer scope via
-            // Select (or a conservative max of the branches if the
-            // condition is impure).
-            decltype(counters) outer;
-            counters.swap(outer);
-            Stmt then_case = mutate(op->then_case);
-            decltype(counters) then_counters;
-            counters.swap(then_counters);
-            Stmt else_case;
-            decltype(counters) else_counters;
-            if (op->else_case.defined()) {
-                else_case = mutate(op->else_case);
-                counters.swap(else_counters);
-            }
-            counters.swap(outer);
-            hoist_if(op->condition, then_counters, else_counters);
-            return IfThenElse::make(op->condition, then_case, else_case);
-        }
-
-        decltype(counters) old;
-        counters.swap(old);
-        Stmt then_case, else_case;
-        then_case = mutate(op->then_case);
-        then_case = flush_all(then_case);
-        if (op->else_case.defined()) {
-            else_case = mutate(op->else_case);
-            else_case = flush_all(else_case);
-        }
-        counters.swap(old);
-        return IfThenElse::make(op->condition, then_case, else_case);
-    }
-
-    Stmt visit(const Block *op) override {
-        // Put the outermost counter update just outside the timing start
-        const Evaluate *eval = op->first.as<Evaluate>();
-        const Call *call = eval ? eval->value.as<Call>() : nullptr;
-        if (call && call->is_intrinsic(Call::profiling_enable_instance_marker)) {
-            return flush_all(IRMutator::visit(op));
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
-public:
-    Stmt operator()(const Stmt &s) {
-        return flush_all(IRMutator::operator()(s));
     }
 };
 
@@ -1535,13 +945,8 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     //    is the full set of entries we'll report on.
     Stmt s = PreAllocateEntries(names, env)(stmt);
 
-    // 2) Inject the counter-update calls for stats (parallel loops,
-    //    points computed, etc.).
-    InjectCounters injector(names, env);
-    s = injector(s);
-
-    // 3) Inject the rest of the profiler scaffolding: thread activation,
-    //    memory tracking, current-func tracking, copy-to-host/device timing.
+    // 2) Inject the profiler scaffolding: thread activation, memory
+    //    tracking, current-func tracking, copy-to-host/device timing.
     InjectProfiling profiling(names, env);
     s = profiling(s);
 
@@ -1563,7 +968,6 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
                                       func_canonical_ids_buf,
                                       func_kinds_buf,
                                       func_buffer_func_ids_buf,
-                                      make_const(UInt(64), target.natural_vector_size(UInt(8))),
                                       instance},
                                      Call::Extern);
 
