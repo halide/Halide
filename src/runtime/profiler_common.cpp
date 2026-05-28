@@ -64,7 +64,7 @@ public:
 
 WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipeline_name,
                                                              int num_funcs,
-                                                             const uint64_t *func_names,
+                                                             const char *const *func_names,
                                                              const int *func_parents,
                                                              const int *func_canonical_ids,
                                                              const int *func_kinds,
@@ -98,7 +98,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     }
     __builtin_memset(p->funcs, 0, func_stats_storage);
     for (int i = 0; i < num_funcs; i++) {
-        p->funcs[i].name = (const char *)(func_names[i]);
+        p->funcs[i].name = func_names[i];
         p->funcs[i].parent = func_parents[i];
         p->funcs[i].canonical_id = func_canonical_ids[i];
         p->funcs[i].kind = (halide_profiler_func_kind)func_kinds[i];
@@ -244,7 +244,7 @@ WEAK halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const ch
 WEAK int halide_profiler_instance_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
-                                        const uint64_t *func_names,
+                                        const char *const *func_names,
                                         const int *func_parents,
                                         const int *func_canonical_ids,
                                         const int *func_kinds,
