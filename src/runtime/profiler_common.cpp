@@ -67,7 +67,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
                                                              const uint64_t *func_names,
                                                              const int *func_parents,
                                                              const int *func_canonical_ids,
-                                                             const uint8_t *func_kinds,
+                                                             const int *func_kinds,
                                                              const int *func_buffer_func_ids) {
     halide_profiler_state *s = halide_profiler_get_state();
 
@@ -101,7 +101,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
         p->funcs[i].name = (const char *)(func_names[i]);
         p->funcs[i].parent = func_parents[i];
         p->funcs[i].canonical_id = func_canonical_ids[i];
-        p->funcs[i].kind = func_kinds[i];
+        p->funcs[i].kind = (halide_profiler_func_kind)func_kinds[i];
         p->funcs[i].buffer_func_id = func_buffer_func_ids[i];
     }
     s->pipelines = p;
@@ -247,7 +247,7 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         const uint64_t *func_names,
                                         const int *func_parents,
                                         const int *func_canonical_ids,
-                                        const uint8_t *func_kinds,
+                                        const int *func_kinds,
                                         const int *func_buffer_func_ids,
                                         halide_profiler_instance_state *instance) {
     // Tell the instance where we stashed the per-func state - just after the

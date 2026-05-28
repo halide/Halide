@@ -879,7 +879,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
         func_names[i] = info.name;
         func_parents[i] = info.parent_id;
         func_canonical_ids[i] = info.canonical_id;
-        func_kinds[i] = make_const(UInt(8), (uint8_t)info.kind);
+        func_kinds[i] = make_const(Int(32), (int)info.kind);
         func_buffer_func_ids[i] = info.buffer_func_id;
     }
 

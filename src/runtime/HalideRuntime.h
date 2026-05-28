@@ -1909,8 +1909,14 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * instances back up to a Func. */
     int canonical_id;
 
+    enum halide_profiler_func_kind kind;
+
+    /** For copy synthetics (kind == copy_to_host/copy_to_device), the
+     * canonical id of the Func whose buffer is being copied. -1 otherwise. */
+    int buffer_func_id;
+
     /** Total time taken evaluating this Func (in nanoseconds). */
-    uint64_t time;
+    uint64_t HALIDE_ATTRIBUTE_ALIGN(8) time;
 
     /** The current memory allocation of this Func. */
     uint64_t memory_current;
@@ -1930,13 +1936,6 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
 
     /** The total number of times heap storage for this Func was allocated. */
     uint64_t num_allocs;
-
-    /** See halide_profiler_func_kind. */
-    uint8_t kind;
-
-    /** For copy synthetics (kind == copy_to_host/copy_to_device), the
-     * canonical id of the Func whose buffer is being copied. -1 otherwise. */
-    int buffer_func_id;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
