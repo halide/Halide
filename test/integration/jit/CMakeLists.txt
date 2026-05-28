@@ -3,11 +3,11 @@ project(jit)
 
 enable_testing()
 
-set(jit_HALIDE_VERSION ""
-    CACHE STRING "Optional version argument to find_package(Halide)")
+set(jit_HALIDE_VERSION "" CACHE STRING "Optional version argument to find_package(Halide)")
 
 set(jit_HALIDE_COMPONENTS ""
-    CACHE STRING "Optional required-components argument to find_package(Halide)")
+    CACHE STRING "Optional required-components argument to find_package(Halide)"
+)
 
 find_package(Halide ${jit_HALIDE_VERSION} REQUIRED ${jit_HALIDE_COMPONENTS})
 

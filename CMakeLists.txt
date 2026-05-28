@@ -1,8 +1,10 @@
 cmake_minimum_required(VERSION 3.28)
-project(Halide
-        VERSION 22.0.0
-        DESCRIPTION "Halide compiler and libraries"
-        HOMEPAGE_URL "https://halide-lang.org")
+project(
+    Halide
+    VERSION 22.0.0
+    DESCRIPTION "Halide compiler and libraries"
+    HOMEPAGE_URL "https://halide-lang.org"
+)
 
 enable_testing()
 
@@ -10,12 +12,16 @@ enable_testing()
 # Disable find_package(Halide) inside the build
 ##
 
-file(CONFIGURE OUTPUT "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/HalideConfig.cmake"
-     CONTENT [[set(Halide_FOUND 1)
-               set(Halide_VERSION @Halide_VERSION@)]])
+file(CONFIGURE
+    OUTPUT "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/HalideConfig.cmake"
+    CONTENT [[set(Halide_FOUND 1)
+              set(Halide_VERSION @Halide_VERSION@)]]
+)
 
-file(CONFIGURE OUTPUT "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/HalideHelpersConfig.cmake"
-     CONTENT "set(HalideHelpers_FOUND 1)\n")
+file(CONFIGURE
+    OUTPUT "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/HalideHelpersConfig.cmake"
+    CONTENT "set(HalideHelpers_FOUND 1)\n"
+)
 
 ##
 # Set up project-wide properties
@@ -37,9 +43,10 @@ option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if (NOT is_multi_config AND CMAKE_BUILD_TYPE STREQUAL "")
     string(JOIN "" error_message
-           "Halide cannot be built when CMAKE_BUILD_TYPE is empty. "
-           "Please set CMAKE_BUILD_TYPE to one of the standard types: "
-           "Debug, Release, RelWithDebInfo, or MinSizeRel.")
+        "Halide cannot be built when CMAKE_BUILD_TYPE is empty. "
+        "Please set CMAKE_BUILD_TYPE to one of the standard types: "
+        "Debug, Release, RelWithDebInfo, or MinSizeRel."
+    )
     message(FATAL_ERROR "${error_message}")
 endif ()
 
@@ -58,11 +65,17 @@ set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 # Require standard C++17
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard to use. Halide requires 17 or higher.")
-option(CMAKE_CXX_STANDARD_REQUIRED "When enabled, the value of CMAKE_CXX_STANDARD is a requirement." ON)
-option(CMAKE_CXX_EXTENSIONS "When enabled, compiler-specific language extensions are enabled (e.g. -std=gnu++17)" OFF)
+option(CMAKE_CXX_STANDARD_REQUIRED
+    "When enabled, the value of CMAKE_CXX_STANDARD is a requirement." ON
+)
+option(CMAKE_CXX_EXTENSIONS
+    "When enabled, compiler-specific language extensions are enabled (e.g. -std=gnu++17)" OFF
+)
 
 if (CMAKE_CXX_STANDARD LESS 17)
-    message(FATAL_ERROR "Halide requires C++17 or newer but CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}")
+    message(
+        FATAL_ERROR "Halide requires C++17 or newer but CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}"
+    )
 endif ()
 
 # Build Halide with ccache if the package is present and the user requested it
@@ -74,11 +87,14 @@ if (Halide_CCACHE_BUILD)
         CCACHE_CPP2=yes
         CCACHE_HASHDIR=yes
         CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime
-        CACHE STRING "Parameters to pass through to ccache")
+        CACHE STRING "Parameters to pass through to ccache"
+    )
     mark_as_advanced(Halide_CCACHE_PARAMS)
 
     set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
-    set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+    set(CMAKE_CXX_COMPILER_LAUNCHER
+        ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM}
+    )
 
     # Per https://ccache.dev/manual/latest.html#_precompiled_headers,
     # we must set -fno-pch-timestamp when using Clang + CCache + PCH
@@ -93,7 +109,9 @@ endif ()
 # Detect whether or not ASAN is enabled. Don't cache the result to ensure this
 # check happens every time we reconfigure.
 unset(Halide_ASAN_ENABLED CACHE)
-check_cxx_symbol_exists(HALIDE_INTERNAL_USING_ASAN "${Halide_SOURCE_DIR}/src/Util.h" Halide_ASAN_ENABLED)
+check_cxx_symbol_exists(
+    HALIDE_INTERNAL_USING_ASAN "${Halide_SOURCE_DIR}/src/Util.h" Halide_ASAN_ENABLED
+)
 
 if (Halide_ASAN_ENABLED)
     set(Halide_ANY_SANITIZERS_ENABLED 1)
@@ -107,27 +125,22 @@ function(set_halide_compiler_warnings NAME)
         ${NAME}
         PRIVATE
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall>
-
         # variable length arrays in C++ are a Clang extension, we don't want to use them
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wvla-extension>
-
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wimplicit-fallthrough>
-
         # GCC warns when these warnings are given to plain-C sources
         $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Woverloaded-virtual>
         $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wsuggest-override>
-
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-destructor-override>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-override>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wdeprecated-declarations>
-
         $<$<CXX_COMPILER_ID:MSVC>:/W3>
         $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"
         $<$<CXX_COMPILER_ID:MSVC>:/wd4146>  # 4146: unary minus applied to unsigned type
         $<$<CXX_COMPILER_ID:MSVC>:/wd4244>  # 4244: conversion, possible loss of data
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # 4267: conversion from 'size_t' to 'int', possible loss of data
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # 4267: size_t -> int narrowing
     )
 endfunction()
 
@@ -137,13 +150,17 @@ endfunction()
 ##
 
 ## Threads
-option(THREADS_PREFER_PTHREAD_FLAG "When enabled, prefer to use the -pthread flag to explicit linking" ON)
+option(THREADS_PREFER_PTHREAD_FLAG
+    "When enabled, prefer to use the -pthread flag to explicit linking" ON
+)
 find_package(Threads REQUIRED)
 
 ## LLVM
-find_package(Halide_LLVM 21...99 REQUIRED  # Use 99 to fake a minimum-only constraint
-             COMPONENTS WebAssembly X86
-             OPTIONAL_COMPONENTS AArch64 ARM Hexagon NVPTX PowerPC RISCV)
+find_package(
+    Halide_LLVM 21...99 REQUIRED  # Use 99 to fake a minimum-only constraint
+    COMPONENTS WebAssembly X86
+    OPTIONAL_COMPONENTS AArch64 ARM Hexagon NVPTX PowerPC RISCV
+)
 
 _Halide_pkgdep(Halide_LLVM PACKAGE_VARS Halide_LLVM_SHARED_LIBS)
 
@@ -167,23 +184,27 @@ find_package(PNG)
 Halide_feature(Halide_BUILDING_IN_CI "Enable if building in CI" OFF ADVANCED)
 
 Halide_feature(Halide_ENABLE_EXCEPTIONS "Enable exceptions in Halide" ON)
-Halide_feature(Halide_ENABLE_RTTI "Enable RTTI in Halide" ON
-               DEPENDS LLVM_ENABLE_RTTI)
+Halide_feature(Halide_ENABLE_RTTI "Enable RTTI in Halide" ON DEPENDS LLVM_ENABLE_RTTI)
 
-Halide_feature(WITH_AUTOSCHEDULERS "Build the Halide autoschedulers" ON
-               DEPENDS BUILD_SHARED_LIBS)
+Halide_feature(WITH_AUTOSCHEDULERS "Build the Halide autoschedulers" ON DEPENDS BUILD_SHARED_LIBS)
 Halide_feature(WITH_DOCS "Halide's Doxygen documentation" OFF)
 Halide_feature(WITH_PACKAGING "Halide's CMake package install rules" TOP_LEVEL)
-Halide_feature(WITH_PYTHON_BINDINGS "Halide's native Python module (not the whole pip package)" ON
-               DEPENDS Halide_ENABLE_EXCEPTIONS AND Halide_ENABLE_RTTI)
+Halide_feature(
+    WITH_PYTHON_BINDINGS "Halide's native Python module (not the whole pip package)" ON
+    DEPENDS Halide_ENABLE_EXCEPTIONS AND Halide_ENABLE_RTTI
+)
 Halide_feature(WITH_SERIALIZATION "Include experimental Serialization/Deserialization code" ON)
-Halide_feature(WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
-               "Intercepting JIT compilation with a serialization roundtrip, for test only"
-               OFF ADVANCED
-               DEPENDS WITH_SERIALIZATION)
+Halide_feature(
+    WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
+    "Intercepting JIT compilation with a serialization roundtrip, for test only"
+    OFF ADVANCED
+    DEPENDS WITH_SERIALIZATION
+)
 Halide_feature(WITH_TESTS "Halide's unit test suite" TOP_LEVEL)
 Halide_feature(WITH_TUTORIALS "Halide's tutorial code" TOP_LEVEL)
-Halide_feature(WITH_UTILS "Optional utility programs for Halide, including HalideTraceViz" TOP_LEVEL)
+Halide_feature(
+    WITH_UTILS "Optional utility programs for Halide, including HalideTraceViz" TOP_LEVEL
+)
 
 
 ##
