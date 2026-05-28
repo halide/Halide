@@ -28,7 +28,7 @@ message(STATUS "Halide_TARGET: ${Halide_TARGET}")
 if (Halide_TARGET MATCHES "wasm")
     message(WARNING "Skipping apps when building under wasm")
     return()
-endif()
+endif ()
 
 # keep-sorted start case=no ignore_prefixes=#
 # add_app(auto_viz)  # TODO(#5374): missing CMake build

@@ -5,11 +5,16 @@ add_library(Halide::PyStubs ALIAS Halide_PyStubs)
 # phantom dependency which gets propagated into our install setup. All we
 # really need here is a path to the include directories for pybind11, which
 # BUILD_LOCAL_INTERFACE will accomplish,
-target_link_libraries(Halide_PyStubs PRIVATE Halide::Halide $<BUILD_LOCAL_INTERFACE:pybind11::pybind11>)
+target_link_libraries(
+    Halide_PyStubs
+    PRIVATE Halide::Halide $<BUILD_LOCAL_INTERFACE:pybind11::pybind11>
+)
 
-set_target_properties(Halide_PyStubs PROPERTIES
-                      EXPORT_NAME PyStubs
-                      OUTPUT_NAME HalidePyStubs
-                      CXX_VISIBILITY_PRESET hidden
-                      VISIBILITY_INLINES_HIDDEN TRUE
-                      POSITION_INDEPENDENT_CODE ON)
+set_target_properties(Halide_PyStubs
+    PROPERTIES
+    EXPORT_NAME PyStubs
+    OUTPUT_NAME HalidePyStubs
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN TRUE
+    POSITION_INDEPENDENT_CODE ON
+)
