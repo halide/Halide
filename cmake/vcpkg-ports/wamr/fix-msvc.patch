@@ -1,0 +1,27 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -10,7 +10,10 @@ if(ESP_PLATFORM)
+   return()
+ endif()
+ 
+ project (iwasm LANGUAGES C)
++if (MSVC)
++  enable_language(ASM_MASM)
++endif ()
+ 
+ set(CMAKE_CXX_STANDARD 17)
+ 
+@@ -24,7 +27,11 @@ endif ()
+ set (CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")
+ set (CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "")
+ 
+-set (CMAKE_C_STANDARD 99)
++if (MSVC)
++  set (CMAKE_C_STANDARD 11)
++else ()
++  set (CMAKE_C_STANDARD 99)
++endif ()
+ 
+ # Set WAMR_BUILD_TARGET, currently values supported:
+ # "X86_64", "AMD_64", "X86_32", "AARCH64[sub]", "ARM[sub]", "THUMB[sub]",

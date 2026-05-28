@@ -5,34 +5,11 @@ vcpkg_from_github(
     REPO bytecodealliance/wasm-micro-runtime
     REF 8c18e3f68b16c4bcaf05996b2636f6ed2b4cf629  # WAMR-2.4.4
     SHA512 2378ab44e6ea3cd9bfede86a413c5d5503b8cd0d072bbee7099bd149897a58d74b57c06214f6b163242f5ac8bcdbb81a59632016ebd4c12a717786e1c387c9e3
-    PATCHES remove-fetchcontent.patch
+    PATCHES
+    disable-configure-file.patch
+    fix-msvc.patch
+    remove-fetchcontent.patch
 )
-file(READ "${SOURCE_PATH}/CMakeLists.txt" cmake_contents)
-string(REPLACE
-    "project (iwasm LANGUAGES C)"
-    "project (iwasm LANGUAGES C)\nif (MSVC)\n  enable_language(ASM_MASM) # nolint\nendif ()"
-    cmake_contents
-    "${cmake_contents}"
-)
-string(REPLACE
-    "set (CMAKE_C_STANDARD 99)"
-    "if (MSVC)\n  set (CMAKE_C_STANDARD 11)\nelse ()\n  set (CMAKE_C_STANDARD 99)\nendif ()"
-    cmake_contents
-    "${cmake_contents}"
-)
-file(WRITE "${SOURCE_PATH}/CMakeLists.txt" "${cmake_contents}")
-
-
-
-file(READ "${SOURCE_PATH}/build-scripts/version.cmake" version_cmake_contents)
-string(REGEX
-    REPLACE "configure_file\\([^)]*\\)"
-    "#configure_file_removed_by_vcpkg"
-    version_cmake_contents
-    "${version_cmake_contents}"
-)
-file(WRITE "${SOURCE_PATH}/build-scripts/version.cmake" "${version_cmake_contents}")
-
 
 if (VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
     set(WAMR_BUILD_TARGET "X86_32")
