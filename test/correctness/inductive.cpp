@@ -131,13 +131,13 @@ int sum_2d_test() {
     f.compute_at(h, x).store_root();
     Buffer<int> im = h.realize({80, 80});
     auto func = [](int x, int y) {
-        int ans = 0;
+        int result = 0;
         for (int a = 0; a <= x; a++) {
             for (int b = 0; b <= y; b++) {
-                ans += a;
+                result += a;
             }
         }
-        return ans;
+        return result;
     };
     if (check_image(im, func)) {
         return 1;
@@ -157,11 +157,11 @@ int sum_1d_test() {
     f.compute_at(h, x);
     Buffer<int> im = h.realize({80, 80});
     auto func = [](int x, int y) {
-        int ans = 0;
+        int result = 0;
         for (int a = 0; a <= y; a++) {
-            ans += 2 * x + a;
+            result += 2 * x + a;
         }
-        return ans;
+        return result;
     };
     if (check_image(im, func)) {
         return 1;
@@ -180,18 +180,18 @@ int multi_baseline_test() {
     f.compute_at(h, x);
     Buffer<int> im = h.realize({80, 20});
     auto func = [](int x, int y) {
-        std::vector<int> ans;
+        std::vector<int> result;
 
         for (int a = 0; a <= y; a++) {
             if (a <= 0) {
-                ans.emplace_back(4 * x);
+                result.emplace_back(4 * x);
             } else if (a <= 3) {
-                ans.emplace_back(2 * x + (2 * x + a) + ans[a - 1]);
+                result.emplace_back(2 * x + (2 * x + a) + result[a - 1]);
             } else {
-                ans.emplace_back(2 * x + a + ans[a - 1] + (2 * x + a) + ans[a - 1]);
+                result.emplace_back(2 * x + a + result[a - 1] + (2 * x + a) + result[a - 1]);
             }
         }
-        return ans[y];
+        return result[y];
     };
     if (check_image(im, func)) {
         return 1;
