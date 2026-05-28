@@ -661,14 +661,14 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     // memory leaks. We need to break these cycles.
     WeakenFunctionPtrs weakener(contents.get());
     for (auto &arg : init_def_args) {
-        arg = weakener.mutate(arg);
+        arg = weakener(arg);
     }
     for (auto &value : values) {
-        value = weakener.mutate(value);
+        value = weakener(value);
     }
     if (check.reduction_domain.defined()) {
         check.reduction_domain.set_predicate(
-            weakener.mutate(check.reduction_domain.predicate()));
+            weakener(check.reduction_domain.predicate()));
     }
 
     ReductionDomain rdom;
