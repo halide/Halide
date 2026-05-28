@@ -560,11 +560,11 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         pad_bytes_to(target);
     };
 
-    auto emit_percentage = [&](uint64_t numer, uint64_t denom, int width) {
+    auto emit_percentage = [&](uint64_t numerator, uint64_t denom, int width) {
         uint64_t target = sstr.size() + width;
         int perthousand = 0;
         if (denom != 0) {
-            perthousand = (1000 * numer) / denom;
+            perthousand = (1000 * numerator) / denom;
         }
         sstr << "(";
         if (perthousand < 100) {
