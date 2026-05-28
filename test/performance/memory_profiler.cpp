@@ -1,63 +1,88 @@
 #include "Halide.h"
+#include "HalideRuntime.h"
 #include <stdio.h>
+#include <string.h>
 
 using namespace Halide;
+
+namespace {
+
+// JITCache::finish_profiling calls halide_profiler_reset() right after
+// the report fires, so we have to snapshot stats while the pipeline is
+// still alive. halide_trace_end_pipeline fires inside the pipeline
+// body — per-instance memory and stack counters are already populated
+// by the time it fires; they just haven't been folded into
+// pipeline_stats yet.
+using GetStateFn = halide_profiler_state *(*)();
+GetStateFn jit_profiler_get_state = nullptr;
+Target jit_target;
+const char *target_func_name = "";
 
 int heap_peak = 0;
 int num_mallocs = 0;
 int malloc_avg = 0;
 int stack_peak = 0;
+bool captured = false;
+
+int32_t snapshot_trace(JITUserContext *, const halide_trace_event_t *e) {
+    if (captured || e->event != halide_trace_end_pipeline) {
+        return 0;
+    }
+    if (!jit_profiler_get_state) {
+        jit_profiler_get_state =
+            (GetStateFn)Internal::JITSharedRuntime::find_symbol(jit_target, "halide_profiler_get_state");
+        if (!jit_profiler_get_state) {
+            return 0;
+        }
+    }
+    captured = true;
+    halide_profiler_instance_state *inst = jit_profiler_get_state()->instances;
+    if (!inst) {
+        return 0;
+    }
+    halide_profiler_pipeline_stats *p = inst->pipeline_stats;
+    size_t target_len = strlen(target_func_name);
+    for (int i = 0; i < p->num_funcs; i++) {
+        const char *name = p->funcs[i].name;
+        if (strncmp(name, target_func_name, target_len) != 0) {
+            continue;
+        }
+        // Match exact or stage-qualified (e.g. "g_4" or "g_4.s0"), but not
+        // a longer-named Func like "g_42".
+        char next = name[target_len];
+        if (next != '\0' && next != '.') {
+            continue;
+        }
+        const halide_profiler_func_stats *fs = &inst->funcs[i];
+        if (fs->num_allocs > 0) {
+            heap_peak = (int)fs->memory_peak;
+            num_mallocs = (int)fs->num_allocs;
+            malloc_avg = (int)(fs->memory_total / fs->num_allocs);
+        }
+        if (fs->stack_peak > 0) {
+            stack_peak = (int)fs->stack_peak;
+        }
+    }
+    return 0;
+}
 
 void reset_stats() {
     heap_peak = 0;
     num_mallocs = 0;
     malloc_avg = 0;
     stack_peak = 0;
+    captured = false;
 }
 
-void my_print(JITUserContext *, const char *msg) {
-    float this_ms, this_threads, this_percentage;
-    int idx, this_heap_peak;
-    int this_num_mallocs, this_malloc_avg, this_stack_peak;
-    int val;
-
-    // printf("%s", msg);
-    val = sscanf(msg, " g_%d: %fms (%f%%) threads: %f peak: %d num: %d avg: %d",
-                 &idx, &this_ms, &this_percentage, &this_threads, &this_heap_peak,
-                 &this_num_mallocs, &this_malloc_avg);
-    if (val == 7) {
-        heap_peak = this_heap_peak;
-        num_mallocs = this_num_mallocs;
-        malloc_avg = this_malloc_avg;
-    }
-
-    val = sscanf(msg, " g_%d: %fms (%f%%) peak: %d num: %d avg: %d",
-                 &idx, &this_ms, &this_percentage, &this_heap_peak,
-                 &this_num_mallocs, &this_malloc_avg);
-    if (val == 6) {
-        heap_peak = this_heap_peak;
-        num_mallocs = this_num_mallocs;
-        malloc_avg = this_malloc_avg;
-    }
-
-    val = sscanf(msg, " g_%d: %fms (%f%%) threads: %f stack: %d",
-                 &idx, &this_ms, &this_percentage, &this_threads, &this_stack_peak);
-    if (val == 5) {
-        stack_peak = this_stack_peak;
-    }
-
-    val = sscanf(msg, " g_%d: %fms (%f%%) stack: %d",
-                 &idx, &this_ms, &this_percentage, &this_stack_peak);
-    if (val == 4) {
-        stack_peak = this_stack_peak;
-    }
+void install_handlers(Pipeline &pipe, const Target &target, const char *name) {
+    target_func_name = name;
+    jit_target = target;
+    pipe.trace_pipeline();
+    pipe.jit_handlers().custom_trace = snapshot_trace;
 }
 
-// Return 0 if there is no error found
 int check_error(int exp_heap_peak, int exp_num_mallocs,
                 int exp_malloc_avg, int exp_stack_peak) {
-    /*printf("Memory heap_peak: %d bytes, num_mallocs: %d, malloc_avg: %d, "
-            "stack_peak: %d\n", heap_peak, num_mallocs, malloc_avg, stack_peak);*/
     if (heap_peak != exp_heap_peak) {
         printf("Peak heap was %d instead of %d\n", heap_peak, exp_heap_peak);
         return 1;
@@ -77,11 +102,8 @@ int check_error(int exp_heap_peak, int exp_num_mallocs,
     return 0;
 }
 
-// Return 0 if there is no error found
 int check_error_parallel(int min_heap_peak, int max_heap_peak, int exp_num_mallocs,
                          int exp_malloc_avg, int exp_stack_peak) {
-    /*printf("Memory heap_peak: %d bytes, num_mallocs: %d, malloc_avg: %d, "
-            "stack_peak: %d\n", heap_peak, num_mallocs, malloc_avg, stack_peak);*/
     if (heap_peak < min_heap_peak || heap_peak > max_heap_peak) {
         printf("Peak heap was %d which was outside the range of [%d, %d]\n",
                heap_peak, min_heap_peak, max_heap_peak);
@@ -102,6 +124,8 @@ int check_error_parallel(int min_heap_peak, int max_heap_peak, int exp_num_mallo
     return 0;
 }
 
+}  // namespace
+
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (target.arch == Target::WebAssembly) {
@@ -115,7 +139,6 @@ int main(int argc, char **argv) {
 
     {
         printf("Running simple stack allocation test...\n");
-        // On stack allocation (less than or equal to 1024*16 and buffer g1 size is constant 64x64)
         const int size_x = 64;
         const int size_y = 64;
         Func f1("f_1"), g1("g_1");
@@ -123,10 +146,11 @@ int main(int argc, char **argv) {
         f1(x, y) = g1(x % size_x, y % size_y);
         g1.compute_root();
 
-        f1.jit_handlers().custom_print = my_print;
+        Pipeline pipe(f1);
+        install_handlers(pipe, t, "g_1");
 
         reset_stats();
-        f1.realize({size_x, size_y}, t);
+        pipe.realize({size_x, size_y}, t);
         int stack_size = size_x * size_y * sizeof(int);
         if (check_error(0, 0, 0, stack_size) != 0) {
             return 1;
@@ -135,7 +159,6 @@ int main(int argc, char **argv) {
 
     {
         printf("Running simple heap allocation test 1...\n");
-        // On heap allocation (bigger than 1024*16)
         const int size_x = 1000;
         const int size_y = 1000;
 
@@ -144,10 +167,11 @@ int main(int argc, char **argv) {
         f2(x, y) = g2(x - 1, y) + g2(x, y - 1);
         g2.compute_root();
 
-        f2.jit_handlers().custom_print = my_print;
+        Pipeline pipe(f2);
+        install_handlers(pipe, t, "g_2");
 
         reset_stats();
-        f2.realize({size_x, size_y}, t);
+        pipe.realize({size_x, size_y}, t);
         int total = (size_x + 1) * (size_y + 1) * sizeof(int);
         if (check_error(total, 1, total, 0) != 0) {
             return 1;
@@ -156,16 +180,16 @@ int main(int argc, char **argv) {
 
     {
         printf("Running heap allocate condition is always false test...\n");
-        // Allocate condition is always false
         Func f3("f_3"), g3("g_3");
         g3(x, y) = x * y;
         f3(x, y) = select(1 == 2, g3(x - 1, y), 0);
         g3.compute_root();
 
-        f3.jit_handlers().custom_print = my_print;
+        Pipeline pipe(f3);
+        install_handlers(pipe, t, "g_3");
 
         reset_stats();
-        f3.realize({1000, 1000}, t);
+        pipe.realize({1000, 1000}, t);
         if (check_error(0, 0, 0, 0) != 0) {
             return 1;
         }
@@ -173,16 +197,16 @@ int main(int argc, char **argv) {
 
     {
         printf("Running stack allocate condition is always false test...\n");
-        // Allocate condition is always false
         Func f3("f_3"), g3("g_3");
         g3(x, y) = x * y;
         f3(x, y) = select(1 == 2, g3((x - 1) % 10, y % 10), 0);
         g3.compute_root();
 
-        f3.jit_handlers().custom_print = my_print;
+        Pipeline pipe(f3);
+        install_handlers(pipe, t, "g_3");
 
         reset_stats();
-        f3.realize({1000, 1000}, t);
+        pipe.realize({1000, 1000}, t);
         if (check_error(0, 0, 0, 0) != 0) {
             return 1;
         }
@@ -206,14 +230,15 @@ int main(int argc, char **argv) {
         f4.compute_root();
         f5.compute_root();
 
-        f6.jit_handlers().custom_print = my_print;
+        Pipeline pipe(f6);
+        install_handlers(pipe, t, "g_4");
 
         int total = 0;
 
         reset_stats();
         toggle1.set(true);
         toggle2.set(true);
-        f6.realize({size_x}, t);
+        pipe.realize({size_x}, t);
         total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
             return 1;
@@ -222,7 +247,7 @@ int main(int argc, char **argv) {
         reset_stats();
         toggle1.set(true);
         toggle2.set(false);
-        f6.realize({size_x}, t);
+        pipe.realize({size_x}, t);
         total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
             return 1;
@@ -231,7 +256,7 @@ int main(int argc, char **argv) {
         reset_stats();
         toggle1.set(false);
         toggle2.set(true);
-        f6.realize({size_x}, t);
+        pipe.realize({size_x}, t);
         total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
             return 1;
@@ -240,7 +265,7 @@ int main(int argc, char **argv) {
         reset_stats();
         toggle1.set(false);
         toggle2.set(false);
-        f6.realize({size_x}, t);
+        pipe.realize({size_x}, t);
         if (check_error(0, 0, 0, 0) != 0) {
             return 1;
         }
@@ -259,10 +284,11 @@ int main(int argc, char **argv) {
         g5.store_at(f8, y).compute_at(f8, y);
         f7.compute_at(f8, y);
 
-        f8.jit_handlers().custom_print = my_print;
+        Pipeline pipe(f8);
+        install_handlers(pipe, t, "g_5");
 
         reset_stats();
-        f8.realize({size_x, size_y}, t);
+        pipe.realize({size_x, size_y}, t);
         int peak = size_x * sizeof(int);
         int total = size_x * size_y * sizeof(int);
         if (check_error(peak, size_y, total / size_y, 0) != 0) {
@@ -285,10 +311,11 @@ int main(int argc, char **argv) {
 
         f10.parallel(y);
 
-        f10.jit_handlers().custom_print = my_print;
+        Pipeline pipe(f10);
+        install_handlers(pipe, t, "g_6");
 
         reset_stats();
-        f10.realize({size_x, size_y}, t);
+        pipe.realize({size_x, size_y}, t);
         int min_heap_peak = size_x * sizeof(int);
         int total = size_x * size_y * sizeof(int);
         if (check_error_parallel(min_heap_peak, total, size_y, total / size_y, 0) != 0) {
@@ -298,7 +325,6 @@ int main(int argc, char **argv) {
 
     {
         printf("Running simple heap allocation test 2...\n");
-        // On heap allocation (bigger than 1024*16 and buffer g7 size is constant 65x64)
         const int size_x = 65;
         const int size_y = 64;
         Func f11("f_11"), g7("g_7");
@@ -306,10 +332,11 @@ int main(int argc, char **argv) {
         f11(x, y) = g7(x % size_x, y % size_y);
         g7.compute_root();
 
-        f11.jit_handlers().custom_print = my_print;
+        Pipeline pipe(f11);
+        install_handlers(pipe, t, "g_7");
 
         reset_stats();
-        f11.realize({size_x, size_y}, t);
+        pipe.realize({size_x, size_y}, t);
         int total = size_x * size_y * sizeof(int);
         if (check_error(total, 1, total, 0) != 0) {
             return 1;
@@ -327,10 +354,11 @@ int main(int argc, char **argv) {
 
         f12.parallel(y);
 
-        f12.jit_handlers().custom_print = my_print;
+        Pipeline pipe(f12);
+        install_handlers(pipe, t, "g_8");
 
         reset_stats();
-        f12.realize({size_x, size_y}, t);
+        pipe.realize({size_x, size_y}, t);
         int stack_size = size_x * size_y * sizeof(int);
         if (check_error(0, 0, 0, stack_size) != 0) {
             return 1;
