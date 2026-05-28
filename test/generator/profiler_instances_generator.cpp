@@ -25,7 +25,8 @@ public:
     Output<Buffer<int, 1>> out{"out"};
 
     void generate() {
-        assert(get_target().has_feature(Target::Profile));
+        assert(get_target().has_feature(Target::Profile) ||
+               get_target().has_feature(Target::ProfileByTimer));
 
         Var x;
         RDom r(0, 16);
