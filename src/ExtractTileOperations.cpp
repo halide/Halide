@@ -516,6 +516,13 @@ class ExtractTileOperations : public IRMutator {
             ScopedValue<string> old_amx_name(amx_name, op->name + ".amx.");
             ScopedValue<string> old_tile_name(tile_name, op->name);
             ScopedValue<bool> old_in_alloc(in_allocate, true);
+            // Reset per-allocation state so sequential allocations (e.g. from
+            // unrolled register-blocked loops) don't pollute each other's subtile
+            // registry or tile-dimension bookkeeping.
+            ScopedValue<std::vector<MultiRamp>> old_subtiles(amx_subtiles, {});
+            ScopedValue<int> old_found_I(found_I, -1);
+            ScopedValue<int> old_found_J(found_J, -1);
+            ScopedValue<int> old_found_K(found_K, -1);
             Stmt body = op->body;
 
             pass = 0;
@@ -580,9 +587,24 @@ class ExtractTileOperations : public IRMutator {
         // All three convert ops either succeed, or do their own user_error internally.
 
         if (op->name != tile_name) {
-            const auto *load = op->value.as<Load>();
+            // Look through any paired transpose_vector wrappers (Shuffle nodes with
+            // is_transpose() == true) generated when the consumer's vector dimension
+            // order doesn't match the AMXTile storage order. An even number of
+            // matching-factor transposes is an identity.
+            const Expr *val = &op->value;
+            while (const Shuffle *s = val->as<Shuffle>()) {
+                if (s->is_transpose() && s->vectors.size() == 1) {
+                    val = &s->vectors[0];
+                } else {
+                    break;
+                }
+            }
+            const auto *load = val->as<Load>();
             if (!load || load->name != tile_name) {
-                return op;
+                // The value doesn't resolve to a tile load — recurse normally so
+                // that any nested Load from tile_name is caught by the Load visitor's
+                // user_assert rather than silently slipping through.
+                return IRMutator::visit(op);
             }
             if (pass == 1) {
                 return convert_to_tile_store(op, get_subtile_name(load->index), found_I, found_J);
