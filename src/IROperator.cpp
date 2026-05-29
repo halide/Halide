@@ -609,12 +609,17 @@ Expr lossless_negate(const Expr &x) {
     } else if (const FloatImm *f = x.as<FloatImm>()) {
         return FloatImm::make(f->type, -f->value);
     } else if (const Cast *c = x.as<Cast>()) {
-        Expr value = lossless_negate(c->value);
-        if (value.defined()) {
-            // This logic is only sound if we know the cast can't overflow.
-            value = lossless_cast(c->type, value);
+        // Only safe to negate through a cast when the inner type is signed.
+        // For unsigned inner types, negation wraps modularly (e.g., -uint8(65)
+        // = uint8(191)), so cast(outer, -inner) != -cast(outer, inner).
+        if (c->value.type().is_int()) {
+            Expr value = lossless_negate(c->value);
             if (value.defined()) {
-                return value;
+                // This logic is only sound if we know the cast can't overflow.
+                value = lossless_cast(c->type, value);
+                if (value.defined()) {
+                    return value;
+                }
             }
         }
     } else if (const Ramp *r = x.as<Ramp>()) {
