@@ -568,6 +568,22 @@ void test_float_select_condition_not_simplified() {
          {"z", make_const(Float(32), 1.5e9f)}});
 }
 
+void test_outer_interval_max_min() {
+    // max(x, 1) * 2 <= x is always false: the max branch gives 2*x <= x (so
+    // x <= 0) while the constant branch gives 2 <= x (so x >= 2); these
+    // constraints are disjoint, so the outer interval is empty.
+    check_outer_interval(max(x, 1) * 2 <= x, Interval::pos_inf(), Interval::neg_inf());
+
+    // max(abs(select(x < 0, f(x-1), 5)), 2) <= x: the constant branch requires
+    // 2 <= x (i.e. x >= 2), so x < 2 is always false regardless of f.
+    // abs(Int(32)) returns UInt(32) in Halide, so cast back to Int(32) first to
+    // keep max(...) as the outermost node (otherwise an implicit Cast wraps it).
+    Expr fx1 = Call::make(Int(32), "f", {x - 1}, Call::PureExtern);
+    Expr abs_val = cast<int32_t>(Halide::abs(select(x < 0, fx1, Expr(5))));
+    Expr expr2 = max(abs_val, 2) <= x;
+    check_outer_interval(expr2, 2, Interval::pos_inf());
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -599,6 +615,7 @@ int main(int argc, char **argv) {
     test_simplify_preserves_float_to_uint_cast_chain();
     test_float_mul_eq_zero_divisor_not_rewritten();
     test_float_select_condition_not_simplified();
+    test_outer_interval_max_min();
     std::printf("Success!\n");
     return 0;
 }
