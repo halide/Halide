@@ -51,20 +51,6 @@ std::vector<const halide_profiler_func_stats *> entries_of(
     return out;
 }
 
-const char *parent_name(const halide_profiler_pipeline_stats *p,
-                        const halide_profiler_func_stats *fs) {
-    if (fs->parent < 0) {
-        return "(root)";
-    }
-    return p->funcs[fs->parent].name;
-}
-
-int parent_id_of(const halide_profiler_pipeline_stats *p, const char *name) {
-    auto xs = entries_of(p, name);
-    REQUIRE(xs.size() == 1);
-    return (int)(xs[0] - p->funcs);
-}
-
 // Assertions on the profiler state. -----------------------------------------
 
 void check_two_compute_root_callers(const halide_profiler_pipeline_stats *p) {
