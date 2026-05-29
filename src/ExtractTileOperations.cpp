@@ -331,7 +331,7 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     auto lhs_call = Call::make(lhs_type, "tile_load",
                                {I, K * element_width, lhs_var,
                                 lhs_mr.base * element_width, lhs_stride_bytes},
-                               Call::Intrinsic);
+                               Call::PureIntrinsic);
 
     auto rhs_var = Variable::make(Handle(), rhs_load->name);
     auto rhs_type = rhs_load->type.with_lanes(1024 / element_width);
@@ -339,7 +339,7 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     auto rhs_call = Call::make(rhs_type, "tile_load",
                                {Ko, col_bytes, rhs_var,
                                 rhs_mr.base * element_width, rhs_stride_bytes},
-                               Call::Intrinsic);
+                               Call::PureIntrinsic);
 
     Type res_type = op->value.type().with_lanes(256);
     Expr subtile_idx = Ramp::make(0, 1, 256);
