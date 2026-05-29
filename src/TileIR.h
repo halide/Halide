@@ -363,6 +363,8 @@ enum AttributeTag : uint8_t {
     AttrString = 5,
     AttrArray = 6,
     AttrDenseElements = 7,
+    AttrDictionary = 10,
+    AttrOptimizationHints = 11,
 };
 
 /** Low-level binary writer using LEB128 varint encoding. */
@@ -415,6 +417,18 @@ public:
     uint32_t add_token();
     uint32_t add_function(uint32_t num_params, const std::vector<uint32_t> &param_type_idxs,
                           uint32_t num_results, const std::vector<uint32_t> &result_type_idxs);
+
+    /** Add a tensor_view type:
+     *   tensor_view<shape x element_type, strides=[strides]> */
+    uint32_t add_tensor_view(uint32_t element_type_idx,
+                             const std::vector<int64_t> &shape,
+                             const std::vector<int64_t> &strides);
+
+    /** Add a partition_view<tile=tile_shape, tensor_view=...>.
+     * dim_map empty == default 1-1 mapping. */
+    uint32_t add_partition_view(const std::vector<int32_t> &tile_shape,
+                                uint32_t tensor_view_idx,
+                                const std::vector<int32_t> &dim_map);
     void encode(Encoder &enc) const;
 
     /** Get the type index for a Halide type, creating tile types as needed.
@@ -438,6 +452,11 @@ private:
         std::vector<uint32_t> params;
         uint32_t num_results = 0;
         std::vector<uint32_t> result_idxs;
+        // tensor_view: shape stored in `shape`, strides stored here.
+        std::vector<int64_t> strides;
+        // partition_view: tile_shape stored here, dim_map stored below.
+        std::vector<int32_t> tile_shape;
+        std::vector<int32_t> dim_map;
     };
     std::vector<TypeEntry> types;
     std::map<std::string, uint32_t> type_map;
@@ -471,6 +490,12 @@ public:
     uint8_t flags = 0;
     Encoder body;
     uint32_t next_ssa_id = 0;
+
+    // Per-arch optimization hints. If non-empty, FuncHasOptHints is set
+    // and an OptimizationHintsAttr is emitted in the function table.
+    // arch_name -> {hint_name -> int_value}
+    // hint_name is e.g. "occupancy" or "num_cta_in_cga".
+    std::map<std::string, std::map<std::string, int32_t>> optimization_hints;
 
     uint32_t alloc_id() {
         return next_ssa_id++;

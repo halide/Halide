@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
     if (t.has_gpu_feature()) {
         Var ji{"ji"}, ii{"ii"};
         RVar ki{"ki"}, ko{"ko"};
-        wrap.gpu_tile(j, i, ji, ii, 16, 16);
+        wrap.gpu_tile(j, i, ji, ii, 32, 16);
         mm.compute_at(wrap, j)
             .gpu_threads(i, j)
             .update()
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
     } else {
         Var ji{"ji"}, ii{"ii"};
         RVar ki{"ki"}, ko{"ko"};
-        wrap.tile(j, i, ji, ii, 16, 16);
+        wrap.tile(j, i, ji, ii, 32, 32);
         wrap.vectorize(ji).vectorize(ii);
         mm.compute_at(wrap, j)
             .vectorize(i)

@@ -39,18 +39,21 @@ class RemapCUDATileIRLoops : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
-        // Tile IR has no local memory model (no alloca equivalent) and we
-        // don't yet support shared memory. Force all allocations inside
-        // CUDATileIR kernels to MemoryType::Heap so that FuseGPUThreadLoops
-        // hoists them to host-side device_malloc and passes the device
-        // pointer as a kernel argument. Shared allocations get demoted to
-        // heap too (correctness preserved; perf suboptimal).
+        // Tile IR has no shared memory yet. Re-route shared allocations
+        // through MemoryType::Stack so FuseGPUThreadLoops leaves them
+        // inside the kernel body; the Tile IR codegen then promotes
+        // those whose every Load/Store is a loop-invariant full-tile
+        // access into pure SSA register tiles (no global storage,
+        // threaded through enclosing serial-For iter_args). Allocates
+        // that don't fit that pattern stay Heap and get hoisted to a
+        // host-side device_malloc as before.
         if (in_cuda_tile_ir &&
-            op->memory_type != MemoryType::Heap) {
+            op->memory_type != MemoryType::Heap &&
+            op->memory_type != MemoryType::Stack) {
             debug(2) << "RemapCUDATileIRLoops: forcing " << op->name
-                     << " to MemoryType::Heap\n";
+                     << " to MemoryType::Stack (register-tile candidate)\n";
             Stmt body = mutate(op->body);
-            return Allocate::make(op->name, op->type, MemoryType::Heap,
+            return Allocate::make(op->name, op->type, MemoryType::Stack,
                                   op->extents, op->condition, body,
                                   op->new_expr, op->free_function,
                                   op->padding);

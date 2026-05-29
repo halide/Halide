@@ -153,7 +153,9 @@ class InjectGpuOffload : public IRMutator {
             // be stale for serial loops left behind after vectorization).
             // TODO: kernels that use tensor-core ops need more threads;
             // tileiras embeds REQNTID in the kernel ELF — reading that
-            // at launch time is the right fix.
+            // at launch time is the right fix. cuFuncGetAttribute with
+            // MAX_THREADS_PER_BLOCK does NOT report REQNTID — it reports
+            // the device soft-max instead.
             for (int i = 0; i < 3; i++) {
                 bounds.num_threads[i] = 1;
             }

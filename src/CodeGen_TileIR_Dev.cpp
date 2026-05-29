@@ -59,19 +59,104 @@ class LowerEuclideanDivMod : public IRMutator {
 class LowerMma : public IRMutator {
     using IRMutator::visit;
 
+    // Stack of enclosing For loop names (Serial/Unrolled), needed so the
+    // Store visitor can decompose addresses in terms of the innermost
+    // loop variable.
+    std::vector<std::string> for_stack;
+
+    Stmt visit(const For *op) override {
+        if (op->for_type == ForType::Serial ||
+            op->for_type == ForType::Unrolled) {
+            for_stack.push_back(op->name);
+            Stmt result = IRMutator::visit(op);
+            for_stack.pop_back();
+            return result;
+        }
+        return IRMutator::visit(op);
+    }
+
     // Peel off casts / bitcasts that only change element type.
     static Expr strip_cast(const Expr &e) {
         if (auto c = e.as<Cast>()) return c->value;
         return e;
     }
 
-    // Try to decompose a Load index of shape MNK lanes produced by
-    // Ramp(Broadcast(outer_base, MN), Broadcast(outer_stride, MN), M)
-    //   + Broadcast(Ramp(inner_base, inner_stride, K), MN)
-    // Returns true on success with the extracted pieces. The
-    // 2D tile is interpreted as shape [M, K] in row-major order with
-    // address = outer_base + i*outer_stride + inner_base + k*inner_stride.
-    static bool parse_lhs_index(const Expr &idx, int M, int K, int MN,
+    // Split a simplify()'d expression into a (non-const part) + (const).
+    // The simplifier canonicalizes Add/Sub trees so any constant lands
+    // on the right of the root Add, which makes this a simple peek.
+    static void split_off_const(const Expr &e_in,
+                                Expr &non_const_part,
+                                int64_t &const_part) {
+        Expr e = simplify(e_in);
+        if (const IntImm *c = e.as<IntImm>()) {
+            const_part = c->value;
+            non_const_part = make_zero(e.type());
+            return;
+        }
+        if (const Add *a = e.as<Add>()) {
+            if (const IntImm *c = a->b.as<IntImm>()) {
+                const_part = c->value;
+                non_const_part = a->a;
+                return;
+            }
+        }
+        const_part = 0;
+        non_const_part = e;
+    }
+
+    // Decompose `e` as a*var + b where a doesn't depend on var. Returns
+    // false if e isn't linear in var.
+    static bool linear_decomp(const Expr &e, const std::string &var,
+                              Expr &a, Expr &b) {
+        if (!expr_uses_var(e, var)) {
+            a = make_zero(e.type());
+            b = e;
+            return true;
+        }
+        if (auto v = e.as<Variable>()) {
+            if (v->name == var) {
+                a = make_one(e.type());
+                b = make_zero(e.type());
+                return true;
+            }
+            return false;
+        }
+        if (auto add = e.as<Add>()) {
+            Expr a1, b1, a2, b2;
+            if (!linear_decomp(add->a, var, a1, b1)) return false;
+            if (!linear_decomp(add->b, var, a2, b2)) return false;
+            a = simplify(a1 + a2);
+            b = simplify(b1 + b2);
+            return true;
+        }
+        if (auto sub = e.as<Sub>()) {
+            Expr a1, b1, a2, b2;
+            if (!linear_decomp(sub->a, var, a1, b1)) return false;
+            if (!linear_decomp(sub->b, var, a2, b2)) return false;
+            a = simplify(a1 - a2);
+            b = simplify(b1 - b2);
+            return true;
+        }
+        if (auto mul = e.as<Mul>()) {
+            Expr a1, b1, a2, b2;
+            if (!linear_decomp(mul->a, var, a1, b1)) return false;
+            if (!linear_decomp(mul->b, var, a2, b2)) return false;
+            // (a1*v + b1)(a2*v + b2) — quadratic unless a1*a2 == 0.
+            if (!is_const_zero(simplify(a1 * a2))) return false;
+            a = simplify(a1 * b2 + a2 * b1);
+            b = simplify(b1 * b2);
+            return true;
+        }
+        return false;
+    }
+
+    // Try to decompose a Load index of shape MNK lanes produced by Halide
+    // when the lane layout is i*(N*K) + j*K + k:
+    //   Ramp(Broadcast(outer_base, N*K), Broadcast(outer_stride, N*K), M)
+    //   + Broadcast(Ramp(inner_base, inner_stride, K), M*N)
+    // (For square tiles where M==K the outer and inner broadcast factors
+    // happen to match, hence why the older NK==MN check worked.)
+    static bool parse_lhs_index(const Expr &idx, int M, int N, int K,
                                 Expr &outer_base, Expr &outer_stride,
                                 Expr &inner_base, Expr &inner_stride) {
         const Add *add = idx.as<Add>();
@@ -79,7 +164,6 @@ class LowerMma : public IRMutator {
         const Ramp *outer = add->a.as<Ramp>();
         const Broadcast *bcast = add->b.as<Broadcast>();
         if (!outer || !bcast) {
-            // Try swapped order.
             outer = add->b.as<Ramp>();
             bcast = add->a.as<Broadcast>();
             if (!outer || !bcast) return false;
@@ -88,7 +172,10 @@ class LowerMma : public IRMutator {
         const Broadcast *obase = outer->base.as<Broadcast>();
         const Broadcast *ostride = outer->stride.as<Broadcast>();
         if (!obase || !ostride) return false;
-        if (obase->lanes != MN || ostride->lanes != MN) return false;
+        const int NK = N * K;
+        const int MN = M * N;
+        if (obase->lanes != NK || ostride->lanes != NK) return false;
+        if (bcast->lanes != MN) return false;
         const Ramp *inner = bcast->value.as<Ramp>();
         if (!inner || inner->lanes != K) return false;
         outer_base = obase->value;
@@ -118,8 +205,13 @@ class LowerMma : public IRMutator {
     }
 
     Stmt visit(const Store *store_op) override {
+        bool trace = getenv("HL_TILEIR_LOWERMMA_TRACE") != nullptr;
+        if (trace) std::cerr << "LowerMma visit Store " << store_op->name << "\n";
+        auto fail = [&](const char *why) {
+            if (trace) std::cerr << "LowerMma fail: " << why << "\n";
+        };
         const Add *add = store_op->value.as<Add>();
-        if (!add) return IRMutator::visit(store_op);
+        if (!add) { fail("not Add"); return IRMutator::visit(store_op); }
 
         Expr a_stripped = strip_cast(add->a);
         Expr b_stripped = strip_cast(add->b);
@@ -128,22 +220,23 @@ class LowerMma : public IRMutator {
         Expr acc_side;
         if (auto *v = a_stripped.as<VectorReduce>()) { vr = v; acc_side = b_stripped; }
         else if (auto *v = b_stripped.as<VectorReduce>()) { vr = v; acc_side = a_stripped; }
-        if (!vr || vr->op != VectorReduce::Add) return IRMutator::visit(store_op);
+        if (!vr || vr->op != VectorReduce::Add) { fail("no VectorReduce::Add"); return IRMutator::visit(store_op); }
 
         // acc must be a Load of the same buffer at the same index.
         const Load *acc_ld = acc_side.as<Load>();
-        if (!acc_ld || acc_ld->name != store_op->name) return IRMutator::visit(store_op);
-        if (!equal(acc_ld->index, store_op->index)) return IRMutator::visit(store_op);
+        if (!acc_ld || acc_ld->name != store_op->name) { fail("acc not self-load"); return IRMutator::visit(store_op); }
+        if (!equal(acc_ld->index, store_op->index)) { fail("acc idx mismatch"); return IRMutator::visit(store_op); }
 
         // The body of the reduce should be Mul(lhs, rhs).
         const Mul *mul = vr->value.as<Mul>();
-        if (!mul) return IRMutator::visit(store_op);
+        if (!mul) { fail("reduce body not Mul"); return IRMutator::visit(store_op); }
 
         int MN = vr->type.lanes();
         int MNK = mul->type.lanes();
-        if (MN == 0 || MNK % MN != 0) return IRMutator::visit(store_op);
+        if (MN == 0 || MNK % MN != 0) { fail("MN/MNK mismatch"); return IRMutator::visit(store_op); }
         int K = MNK / MN;
         Halide::Type acc_type = vr->type;
+        if (trace) std::cerr << "LowerMma: MN=" << MN << " MNK=" << MNK << " K=" << K << "\n";
 
         // Unwrap casts to get the raw f16 loads.
         Expr lhs_inner = strip_cast(mul->a);
@@ -155,62 +248,199 @@ class LowerMma : public IRMutator {
         const Broadcast *lhs_bc = lhs_inner.as<Broadcast>();
         bool rhs_is_b = rhs_bc && rhs_bc->value.type().lanes() * rhs_bc->lanes == MNK;
         bool lhs_is_b = !rhs_is_b && lhs_bc && lhs_bc->value.type().lanes() * lhs_bc->lanes == MNK;
-        if (!rhs_is_b && !lhs_is_b) return IRMutator::visit(store_op);
+        if (!rhs_is_b && !lhs_is_b) { fail("no B-broadcast side"); return IRMutator::visit(store_op); }
 
         Expr B_side = rhs_is_b ? rhs_inner : lhs_inner;
         Expr A_side = rhs_is_b ? lhs_inner : rhs_inner;
         const Broadcast *B_bc = B_side.as<Broadcast>();
         int M = B_bc->lanes;
-        if (M <= 0 || MN % M != 0) return IRMutator::visit(store_op);
+        if (M <= 0 || MN % M != 0) { fail("M invalid"); return IRMutator::visit(store_op); }
         int N = MN / M;
-        if (M * N * K != MNK) return IRMutator::visit(store_op);
+        if (M * N * K != MNK) { fail("M*N*K != MNK"); return IRMutator::visit(store_op); }
+        if (trace) std::cerr << "LowerMma: M=" << M << " N=" << N << " K=" << K << "\n";
 
         // Unwrap the cast on the broadcast's inner value to get the B load.
         Expr B_load_expr = strip_cast(B_bc->value);
         const Load *B_ld = B_load_expr.as<Load>();
         const Load *A_ld = A_side.as<Load>();
-        if (!A_ld || !B_ld) return IRMutator::visit(store_op);
+        if (!A_ld || !B_ld) { fail("A or B not Load"); return IRMutator::visit(store_op); }
 
         // Decompose indices.
         Expr A_ob, A_os, A_ib, A_is;
-        if (!parse_lhs_index(A_ld->index, M, K, MN, A_ob, A_os, A_ib, A_is)) {
+        if (!parse_lhs_index(A_ld->index, M, N, K, A_ob, A_os, A_ib, A_is)) {
+            if (trace) std::cerr << "LowerMma fail: parse_lhs_index on " << A_ld->index << "\n";
             return IRMutator::visit(store_op);
         }
         Expr B_ib, B_is, B_os;
         if (!parse_rhs_index(B_ld->index, K, N, B_ib, B_is, B_os)) {
+            if (trace) std::cerr << "LowerMma fail: parse_rhs_index on " << B_ld->index << "\n";
             return IRMutator::visit(store_op);
         }
 
         // Pass the matrix-load *structure* through to the codegen as a
-        // Call intrinsic. The Tile IR backend will build a 2-D pointer
-        // tile and emit a single OpLoadPtrTkoOp per matrix, which is the
-        // shape tileiras can fold into LDSM/MMA.
+        // Call intrinsic. The Tile IR backend will build a TMA-style
+        // tensor_view + partition_view per matrix and emit a single
+        // OpLoadViewTkoOp per matrix, which is what tileiras needs to
+        // actually fold into MMA.
         //
-        // We thread the buffer identity as a 1-element Load (so the
-        // codegen can look up the kernel-arg ID for the buffer) and the
-        // 2-D shape and strides as separate scalar Exprs.
+        // For the partition_view path we need to express the per-tile
+        // base as `tile_coord_axis * tile_extent_axis * stride_axis`
+        // (so we can divide each axis-base by `(tile_extent * stride)`
+        // to recover the tile coord). Verify this decomposition holds.
         Halide::Type A_elem = A_ld->type.element_of();
         Halide::Type B_elem = B_ld->type.element_of();
-        Expr A_row_start = simplify(A_ob + A_ib);
-        Expr A_id_load = Load::make(A_elem, A_ld->name, A_row_start,
-                                    A_ld->image, A_ld->param,
-                                    const_true(), ModulusRemainder());
-        Expr B_id_load = Load::make(B_elem, B_ld->name, B_ib,
-                                    B_ld->image, B_ld->param,
-                                    const_true(), ModulusRemainder());
+
+        // Try to decompose `base` as `tile_coord * (tile_extent*stride)
+        // + extra_offset`. First try the easy "exact divide" case (works
+        // when there are no symbolic input mins). If that fails, look
+        // for a free Variable in `base` whose coefficient under
+        // linear_decomp equals `tile_extent*stride` — that's the tile
+        // coord, and the rest is a flat-element offset that the codegen
+        // will fold into the buffer ptr via OffsetOp.
+        auto try_tile_coord = [&](const Expr &base, int tile_extent,
+                                  const Expr &stride,
+                                  Expr &tile_coord,
+                                  Expr &extra_offset) -> bool {
+            Expr divisor = simplify(IntImm::make(Int(32), tile_extent) * stride);
+            Expr coord = simplify(base / divisor);
+            Expr residual = simplify(base - coord * divisor);
+            if (is_const_zero(residual)) {
+                tile_coord = coord;
+                extra_offset = make_zero(Int(32));
+                return true;
+            }
+            // Walk `base`, collect free Variable names, try each as the
+            // candidate tile-coord variable.
+            class FindVars : public IRVisitor {
+            public:
+                std::vector<std::string> names;
+                using IRVisitor::visit;
+                void visit(const Variable *v) override {
+                    if (std::find(names.begin(), names.end(), v->name) ==
+                        names.end()) {
+                        names.push_back(v->name);
+                    }
+                }
+            } finder;
+            base.accept(&finder);
+            for (const std::string &vname : finder.names) {
+                Expr a, b;
+                if (!linear_decomp(base, vname, a, b)) continue;
+                Expr diff = simplify(a - divisor);
+                if (!is_const_zero(diff)) continue;
+                tile_coord = Variable::make(Int(32), vname);
+                extra_offset = b;
+                return true;
+            }
+            return false;
+        };
+
+        // Identify the innermost enclosing Serial loop variable so we
+        // can split B_ib into a K-tile contribution (varies with the
+        // loop var) and an N-tile contribution (doesn't).
+        if (for_stack.empty()) return IRMutator::visit(store_op);
+        const std::string &loop_var = for_stack.back();
+
+        Expr A_i_tile, A_k_tile, A_i_extra, A_k_extra;
+        if (!try_tile_coord(A_ob, M, A_os, A_i_tile, A_i_extra)) {
+            if (trace) std::cerr << "LowerMma fail: A_ob tile_coord A_ob=" << A_ob << " M=" << M << " A_os=" << A_os << "\n";
+            return IRMutator::visit(store_op);
+        }
+        if (!try_tile_coord(A_ib, K, A_is, A_k_tile, A_k_extra)) {
+            if (trace) std::cerr << "LowerMma fail: A_ib tile_coord A_ib=" << A_ib << " K=" << K << " A_is=" << A_is << "\n";
+            return IRMutator::visit(store_op);
+        }
+        // Combined extra-offset for A is the sum of the two axes' residuals.
+        Expr A_extra = simplify(A_i_extra + A_k_extra);
+
+        // B_ib = K_tile * (K * B_is) + N_tile * (N * B_os).
+        // K-tile is the part that varies with `loop_var`; N-tile is the
+        // residual. Use a linear decomposition rather than `%` so we
+        // don't depend on the simplifier knowing the bound on N_tile.
+        Expr B_a_loop, B_b_loop;
+        if (!linear_decomp(B_ib, loop_var, B_a_loop, B_b_loop)) {
+            if (trace) std::cerr << "LowerMma fail: linear_decomp B_ib=" << B_ib << " loop_var=" << loop_var << "\n";
+            return IRMutator::visit(store_op);
+        }
+        // B_a_loop is the coefficient of `loop_var` in B_ib (as a
+        // const-or-no-loop-var expr), and B_b_loop is the rest.
+        Expr K_axis_total_stride = simplify(IntImm::make(Int(32), K) * B_is);
+        Expr N_axis_total_stride = simplify(IntImm::make(Int(32), N) * B_os);
+        // K_tile = B_a_loop / (K * B_is) * loop_var  (= loop_var when
+        //   coefficient matches exactly).
+        // The general form we accept:
+        //   B_ib = (c1 * loop_var + c2) * (K * B_is)  // K-tile address
+        //         + N_tile_expr * (N * B_os)           // N-tile address
+        //         + extra                               // pointer offset
+        // where c1, c2 are non-negative integer constants. c1 > 1 falls
+        // out of `unroll(ko, c1)` schedules: each loop iteration covers
+        // c1 K-tiles back-to-back.
+        const IntImm *Kis_imm = K_axis_total_stride.as<IntImm>();
+        if (!Kis_imm) {
+            if (trace) std::cerr << "LowerMma fail: K_axis_total_stride non-const " << K_axis_total_stride << "\n";
+            return IRMutator::visit(store_op);
+        }
+        int64_t Kis = Kis_imm->value;
+
+        Expr B_a_loop_s = simplify(B_a_loop);
+        const IntImm *a_imm = B_a_loop_s.as<IntImm>();
+        if (!a_imm || a_imm->value <= 0 || Kis <= 0 || a_imm->value % Kis != 0) {
+            if (trace) std::cerr << "LowerMma fail: B_a_loop=" << B_a_loop_s
+                                 << " not a positive integer multiple of K*B_is=" << Kis << "\n";
+            return IRMutator::visit(store_op);
+        }
+        int64_t c1 = a_imm->value / Kis;
+
+        // Pull the constant integer part out of B_b_loop, then fold any
+        // K-aligned portion of it into c2.
+        int64_t b_const = 0;
+        Expr b_no_const;
+        split_off_const(B_b_loop, b_no_const, b_const);
+        int64_t c2 = b_const / Kis;
+        int64_t b_const_residual = b_const - c2 * Kis;
+        Expr B_n_input = b_no_const;
+        if (b_const_residual != 0) {
+            B_n_input = simplify(B_n_input + IntImm::make(Int(32), b_const_residual));
+        }
+
+        Expr B_k_tile;
+        if (c1 == 1 && c2 == 0) {
+            B_k_tile = Variable::make(Int(32), loop_var);
+        } else {
+            Expr lv = Variable::make(Int(32), loop_var);
+            B_k_tile = simplify(IntImm::make(Int(32), c1) * lv +
+                                IntImm::make(Int(32), c2));
+        }
+
+        Expr B_n_tile, B_n_extra;
+        if (!try_tile_coord(B_n_input, N, B_os, B_n_tile, B_n_extra)) {
+            if (trace) std::cerr << "LowerMma fail: B_n tile_coord B_n_input=" << B_n_input << " N=" << N << " B_os=" << B_os << "\n";
+            return IRMutator::visit(store_op);
+        }
+        Expr B_extra = B_n_extra;
 
         // tile_ir_mmaf args:
-        //   0: A_id_load (scalar Load -- buffer ident; index = A 2-D base)
-        //   1: A_row_stride (Expr, scalar)
-        //   2: A_col_stride (Expr, scalar)
-        //   3: B_id_load    (scalar Load -- buffer ident; index = B 2-D base)
-        //   4: B_row_stride (K stride for B[k,n])
-        //   5: B_col_stride (N stride for B[k,n])
-        //   6: acc_load     (existing 1-D Load of the M*N accumulator tile)
-        //   7-9: M, K, N    (constants)
+        //   0: A_id_load     (scalar Load — buffer ident; index = 0)
+        //   1: A_i_tile      (Expr, i-tile coordinate in partition_view)
+        //   2: A_k_tile      (Expr, k-tile coordinate)
+        //   3: A_row_stride  (Halide stride along M axis = A_os)
+        //   4: A_col_stride  (= A_is)
+        //   5: B_id_load     (scalar Load — buffer ident; index = 0)
+        //   6: B_k_tile      (k-tile coordinate)
+        //   7: B_n_tile      (n-tile coordinate)
+        //   8: B_row_stride  (along K axis = B_is)
+        //   9: B_col_stride  (along N axis = B_os)
+        //  10: acc_load      (existing 1-D Halide Load of the M*N accumulator tile)
+        //  11-13: M, K, N    (constants)
+        Expr A_id_load = Load::make(A_elem, A_ld->name, IntImm::make(Int(32), 0),
+                                    A_ld->image, A_ld->param,
+                                    const_true(), ModulusRemainder());
+        Expr B_id_load = Load::make(B_elem, B_ld->name, IntImm::make(Int(32), 0),
+                                    B_ld->image, B_ld->param,
+                                    const_true(), ModulusRemainder());
         Expr mma_call = Call::make(acc_type, "tile_ir_mmaf",
-            {A_id_load, A_os, A_is,
-             B_id_load, B_is, B_os,
+            {A_id_load, A_i_tile, A_k_tile, A_os, A_is, A_extra,
+             B_id_load, B_k_tile, B_n_tile, B_is, B_os, B_extra,
              acc_side,
              IntImm::make(Int(32), M),
              IntImm::make(Int(32), K),
@@ -240,12 +470,122 @@ public:
 
     uint32_t current_id = 0;
     Scope<uint32_t> symbol_table;
-    // Maps buffer-arg name → its registered element type (the T in
-    // tile<ptr<T>>). We need this when a load/store uses a different
-    // element type (e.g. clustered heap allocs declared as uint8 but
-    // accessed as int16/int32), so we can insert a PtrToPtr cast to
-    // avoid type-mismatch failures in OffsetOp.
     std::map<std::string, Halide::Type> buffer_elem_types;
+
+    // ---- Register tiles ------------------------------------------------
+    // Allocations whose every Load/Store is a full-tile access at one
+    // canonical index get promoted to live entirely as SSA tile values.
+    // No global allocation, no Load/Store traffic — the value is just
+    // whatever `current_id` says, threaded through enclosing serial For
+    // loops as iter_args.
+    struct RegTile {
+        uint32_t current_id;          // SSA id of the tile's current value
+        uint32_t tile_type_idx;       // Tile IR type index for the tile
+        Halide::Type halide_type;     // Halide vector type
+    };
+    Scope<RegTile> reg_tiles;
+    // For each promoted Allocate, a canonical (let-substituted, simplified)
+    // index Expr so we can match future Loads/Stores against it. Keyed
+    // by buffer name.
+    std::map<std::string, Expr> reg_tile_index;
+
+    // Active LetStmt bindings (mirroring the IR scope). Used to
+    // canonicalize index expressions when matching a Load/Store against
+    // a register-tile's expected index. Distinct from `symbol_table`,
+    // which holds SSA ids; this map holds the original Halide Exprs.
+    std::map<std::string, Expr> active_lets;
+
+    // Substitute all active lets and simplify, so two indices that are
+    // equivalent after let-folding compare equal.
+    Expr canonicalize_index(const Expr &e) {
+        if (active_lets.empty()) return simplify(e);
+        return simplify(substitute(active_lets, e));
+    }
+
+    // Walks the body of an Allocate and decides whether the named
+    // buffer's accesses are all (a) full-tile (lanes == total_extent),
+    // (b) Ramp(_, 1, total_extent) shape, and (c) the same canonical
+    // index. If so, returns the canonical index Expr (the value to
+    // match Loads/Stores against later); otherwise returns an undefined
+    // Expr.
+    class RegisterTileAnalyzer : public IRVisitor {
+    public:
+        std::string buf_name;
+        int total_extent = 0;
+        bool ok = true;
+        Expr canonical;
+        Halide::Type halide_type;
+        std::map<std::string, Expr> active_lets;
+        // Names of loop variables introduced inside the body. If a Store
+        // index depends on one of these, the access isn't loop-invariant
+        // and we can't canonicalize.
+        std::vector<std::string> inner_loop_vars;
+
+        using IRVisitor::visit;
+        void visit(const LetStmt *op) override {
+            active_lets[op->name] = op->value;
+            op->body.accept(this);
+            active_lets.erase(op->name);
+        }
+        void visit(const Let *op) override {
+            active_lets[op->name] = op->value;
+            op->body.accept(this);
+            active_lets.erase(op->name);
+        }
+        void visit(const For *op) override {
+            inner_loop_vars.push_back(op->name);
+            IRVisitor::visit(op);
+            inner_loop_vars.pop_back();
+        }
+        void check(const Expr &idx, const Halide::Type &val_type) {
+            if (!ok) return;
+            if (val_type.lanes() != total_extent) { ok = false; return; }
+            Expr canon = active_lets.empty() ? simplify(idx)
+                                             : simplify(substitute(active_lets, idx));
+            const Ramp *r = canon.as<Ramp>();
+            if (!r || r->lanes != total_extent || !is_const_one(r->stride)) {
+                ok = false; return;
+            }
+            // The base must not depend on any loop variable introduced
+            // inside this Allocate's scope (otherwise the access is not
+            // loop-invariant and the slice isn't promotable).
+            for (const std::string &v : inner_loop_vars) {
+                if (expr_uses_var(r->base, v)) { ok = false; return; }
+            }
+            if (canonical.defined() && !equal(canonical, canon)) { ok = false; return; }
+            canonical = canon;
+            halide_type = val_type;
+        }
+        void visit(const Load *op) override {
+            if (op->name == buf_name) check(op->index, op->type);
+            IRVisitor::visit(op);
+        }
+        void visit(const Store *op) override {
+            if (op->name == buf_name) check(op->index, op->value.type());
+            IRVisitor::visit(op);
+        }
+        // We don't try to handle nested Allocates of the same name.
+        void visit(const Allocate *op) override {
+            if (op->name == buf_name) { ok = false; return; }
+            IRVisitor::visit(op);
+        }
+    };
+
+    // Pre-walk a For body looking for which currently-promoted register
+    // tiles get written. Returns those names in source order.
+    class FindRegTileWrites : public IRVisitor {
+    public:
+        const Scope<RegTile> *reg_tiles;
+        std::vector<std::string> written;
+        using IRVisitor::visit;
+        void visit(const Store *op) override {
+            if (reg_tiles->contains(op->name) &&
+                std::find(written.begin(), written.end(), op->name) == written.end()) {
+                written.push_back(op->name);
+            }
+            IRVisitor::visit(op);
+        }
+    };
 
 private:
     TileIR::Module &module;
@@ -984,7 +1324,24 @@ private:
         return fallback.element_of();
     }
 
+    // Returns true if `name` is a register tile and `idx` matches its
+    // canonical index after let substitution.
+    bool reg_tile_index_matches(const std::string &name, const Expr &idx) {
+        if (!reg_tiles.contains(name)) return false;
+        auto it = reg_tile_index.find(name);
+        if (it == reg_tile_index.end()) return false;
+        return equal(canonicalize_index(idx), it->second);
+    }
+
     void visit(const Load *op) override {
+        if (reg_tile_index_matches(op->name, op->index)) {
+            uint32_t cur = get_reg_tile_current(op->name);
+            user_assert(cur != UINT32_MAX)
+                << "Tile IR codegen: register tile '" << op->name
+                << "' loaded before any store\n";
+            current_id = cur;
+            return;
+        }
         internal_assert(symbol_table.contains(op->name))
             << "Buffer not found in Tile IR codegen: " << op->name << "\n";
         uint32_t buf_id = symbol_table.get(op->name);
@@ -999,6 +1356,16 @@ private:
     }
 
     void visit(const Store *op) override {
+        if (reg_tile_index_matches(op->name, op->index)) {
+            op->value.accept(this);
+            // Update the register tile's current SSA id in place. Since
+            // `reg_tiles` is a Halide::Internal::Scope, we get a const ref
+            // back from .get(); we have to bypass that. Push a fresh
+            // binding shadowing the previous (or just reach in via a
+            // helper).
+            update_reg_tile(op->name, current_id);
+            return;
+        }
         internal_assert(symbol_table.contains(op->name))
             << "Buffer not found in Tile IR codegen: " << op->name << "\n";
         uint32_t buf_id = symbol_table.get(op->name);
@@ -1014,15 +1381,49 @@ private:
         emit_store(offset_ptr, val_id, mask_id);
     }
 
+    // The Scope<T> API doesn't give a mutable ref to the topmost binding,
+    // so we keep a parallel mutable map of register-tile current ids and
+    // sync the Scope binding's value through reseating.
+    std::map<std::string, uint32_t> reg_tile_current;
+    void update_reg_tile(const std::string &name, uint32_t new_id) {
+        reg_tile_current[name] = new_id;
+    }
+    uint32_t get_reg_tile_current(const std::string &name) {
+        auto it = reg_tile_current.find(name);
+        return (it == reg_tile_current.end()) ? UINT32_MAX : it->second;
+    }
+
+    // RAII helper that mirrors a let binding into active_lets so
+    // canonicalize_index() can substitute it.
+    struct LetTracker {
+        std::map<std::string, Expr> &lets;
+        std::string name;
+        bool was_present;
+        Expr prev_value;
+        LetTracker(std::map<std::string, Expr> &lets, const std::string &n, const Expr &v)
+            : lets(lets), name(n) {
+            auto it = lets.find(n);
+            was_present = (it != lets.end());
+            if (was_present) prev_value = it->second;
+            lets[n] = v;
+        }
+        ~LetTracker() {
+            if (was_present) lets[name] = prev_value;
+            else lets.erase(name);
+        }
+    };
+
     void visit(const Let *op) override {
         op->value.accept(this);
         ScopedBinding<uint32_t> binding(symbol_table, op->name, current_id);
+        LetTracker lt(active_lets, op->name, op->value);
         op->body.accept(this);
     }
 
     void visit(const LetStmt *op) override {
         op->value.accept(this);
         ScopedBinding<uint32_t> binding(symbol_table, op->name, current_id);
+        LetTracker lt(active_lets, op->name, op->value);
         op->body.accept(this);
     }
 
@@ -1051,190 +1452,7 @@ private:
         body().write_varint(scalar_i32_tile);  // result type z
     }
 
-    // Match a Halide `For ko { Lets...; Store(buf, idx, tile_ir_mmaf(...)) }`
-    // pattern where the Store's value is our mmaf intrinsic and the
-    // accumulator argument is `Load(buf, idx)` at the same address as
-    // the Store. If so, emit a Tile IR ForOp with a C-tile iter_arg so
-    // the accumulator stays in registers across iterations — this is
-    // what tileiras needs to actually emit MMA instructions.
-    //
-    // Returns true if the pattern matched and was emitted.
-    bool try_emit_matmul_loop(const For *op) {
-        if (op->for_type != ForType::Serial &&
-            op->for_type != ForType::Unrolled) return false;
-
-        // Walk the body: collect enclosing Lets and find the final Store.
-        std::vector<std::pair<std::string, Expr>> lets;
-        const Stmt *cur = &op->body;
-        while (true) {
-            if (const LetStmt *ls = cur->as<LetStmt>()) {
-                lets.emplace_back(ls->name, ls->value);
-                cur = &ls->body;
-            } else {
-                break;
-            }
-        }
-        const Store *store = cur->as<Store>();
-        if (!store) return false;
-
-        const Call *mma = store->value.as<Call>();
-        if (!mma || mma->name != "tile_ir_mmaf") return false;
-        if (mma->args.size() != 10) return false;
-
-        const Load *acc_load = mma->args[6].as<Load>();
-        if (!acc_load || acc_load->name != store->name) return false;
-        if (!equal(acc_load->index, store->index)) return false;
-        // The acc index must NOT depend on the loop var (otherwise we
-        // can't promote it to a single iter_arg).
-        if (expr_uses_var(store->index, op->name)) return false;
-
-        const Load *A_id = mma->args[0].as<Load>();
-        const Load *B_id = mma->args[3].as<Load>();
-        const IntImm *M_imm = mma->args[7].as<IntImm>();
-        const IntImm *K_imm = mma->args[8].as<IntImm>();
-        const IntImm *N_imm = mma->args[9].as<IntImm>();
-        if (!A_id || !B_id || !M_imm || !K_imm || !N_imm) return false;
-        int64_t M = M_imm->value, K = K_imm->value, N = N_imm->value;
-
-        Halide::Type elem_op = A_id->type.element_of();
-        Halide::Type elem_acc = acc_load->type.element_of();
-
-        // --- Outer-scope work: emit the loop bounds and the initial
-        // accumulator load. ---
-        op->min.accept(this);
-        uint32_t min_id = current_id;
-        op->extent().accept(this);
-        uint32_t extent_id = current_id;
-        uint32_t ub_id = emit_int_binop_overflow(OpAddIOp, Int(32), min_id, extent_id);
-        uint32_t step_id = emit_constant_int(Int(32), 1);
-
-        // Initial C load (1D), reshape to 2D.
-        acc_load->index.accept(this);
-        uint32_t outer_acc_idx_id = current_id;
-        // Re-emit the load via emit_load on a 1-D ptr tile.
-        internal_assert(symbol_table.contains(store->name));
-        uint32_t buf_id = symbol_table.get(store->name);
-        Halide::Type buf_elem = lookup_buffer_elem_type(store->name, acc_load->type);
-        uint32_t init_acc_ptr = emit_offset_ptr(buf_id, outer_acc_idx_id,
-                                                acc_load->type, buf_elem);
-        // emit_load updates current_token; capture the post-load token.
-        emit_load(acc_load->type, init_acc_ptr);
-        uint32_t init_C_1d = current_id;
-
-        // Reshape 1-D MN → 2-D MxN.
-        uint32_t scalar_acc_idx = module.types.add_scalar(elem_acc);
-        uint32_t C_2d_tidx = module.types.add_tile({M, N}, scalar_acc_idx);
-        uint32_t init_C_2d = emit_reshape(init_C_1d, C_2d_tidx);
-
-        // We're going to thread BOTH the C tile and the memory token
-        // through the ForOp's iter_args.
-        uint32_t init_token = ensure_current_token();
-        uint32_t token_type = module.types.add_token();
-
-        // --- Loop body in a sub-encoder. ---
-        BlockScope scope = begin_block_scope();
-        uint32_t iv_id = alloc_id();
-        uint32_t iter_C_id = alloc_id();
-        uint32_t iter_token_id = alloc_id();
-        current_token = iter_token_id;
-
-        // Bind the loop var, replay the LetStmts (so things like t19,
-        // t20 in the test resolve), then emit A/B 2-D loads and the
-        // MmaFOp.
-        std::vector<ScopedBinding<uint32_t>> let_bindings;
-        ScopedBinding<uint32_t> iv_binding(symbol_table, op->name, iv_id);
-        for (auto &[name, value] : lets) {
-            value.accept(this);
-            let_bindings.emplace_back(symbol_table, name, current_id);
-        }
-
-        // Emit A/B 2-D loads (same shape as in emit_tile_ir_mmaf).
-        A_id->index.accept(this);
-        uint32_t A_base = current_id;
-        mma->args[1].accept(this);
-        uint32_t A_row_s = current_id;
-        mma->args[2].accept(this);
-        uint32_t A_col_s = current_id;
-        B_id->index.accept(this);
-        uint32_t B_base = current_id;
-        mma->args[4].accept(this);
-        uint32_t B_row_s = current_id;
-        mma->args[5].accept(this);
-        uint32_t B_col_s = current_id;
-
-        uint32_t A_buf_id = symbol_table.get(A_id->name);
-        uint32_t B_buf_id = symbol_table.get(B_id->name);
-
-        uint32_t A_idx_2d = build_2d_index_tile(M, K, A_base, A_row_s, A_col_s);
-        uint32_t A_ptr_2d = emit_2d_offset_ptr(A_buf_id, A_idx_2d, M, K, elem_op);
-        uint32_t A_load_2d = emit_2d_load(A_ptr_2d, M, K, elem_op);
-
-        uint32_t B_idx_2d = build_2d_index_tile(K, N, B_base, B_row_s, B_col_s);
-        uint32_t B_ptr_2d = emit_2d_offset_ptr(B_buf_id, B_idx_2d, K, N, elem_op);
-        uint32_t B_load_2d = emit_2d_load(B_ptr_2d, K, N, elem_op);
-
-        // MmaFOp: result has same type as acc.
-        uint32_t new_C_2d = alloc_id();
-        emit_op(OpMmaFOp);
-        body().write_varint(C_2d_tidx);
-        body().write_varint(A_load_2d);
-        body().write_varint(B_load_2d);
-        body().write_varint(iter_C_id);
-
-        // ContinueOp yields (new_C, current_token).
-        uint32_t final_token_in = current_token;
-        emit_op(OpContinueOp);
-        body().write_varint(0);  // numResults = 0 (isVariadic)
-        body().write_varint(2);  // numOperands = 2 (new_C, token)
-        body().write_varint(new_C_2d);
-        body().write_varint(final_token_in);
-
-        // Capture body bytes & restore outer encoder.
-        uint32_t block_op_count = op_count;
-        Encoder block_body;
-        std::swap(block_body, function.body);
-        std::swap(scope.saved_body, function.body);
-        op_count = scope.saved_op_count;
-        function.next_ssa_id = scope.saved_next_ssa_id;
-        current_token = scope.saved_current_token;
-
-        // Emit the ForOp: 2 results (C tile, token), 5 operands, 1
-        // region with 3 block args.
-        emit_op(OpForOp);
-        body().write_varint(2);            // numResults
-        body().write_varint(C_2d_tidx);    // result 0: C tile
-        body().write_varint(token_type);   // result 1: token
-        body().write_varint(5);            // numOperands (lb, ub, step, init_C, init_token)
-        body().write_varint(min_id);
-        body().write_varint(ub_id);
-        body().write_varint(step_id);
-        body().write_varint(init_C_2d);
-        body().write_varint(init_token);
-        body().write_varint(1);            // numRegions
-        body().write_varint(1);            // numBlocks
-        body().write_varint(3);            // numBlockArgs
-        body().write_varint(type_idx(Int(32)));  // induction var
-        body().write_varint(C_2d_tidx);          // C iter_arg
-        body().write_varint(token_type);         // token iter_arg
-        body().write_varint(block_op_count);
-        body().write_bytes(block_body.data().data(), block_body.size());
-
-        // Allocate the ForOp's results: C_final, token_out.
-        uint32_t final_C_2d = alloc_id();
-        current_token = alloc_id();
-
-        // Reshape final C tile back to 1-D and store.
-        uint32_t final_C_1d = emit_reshape(final_C_2d, type_idx(acc_load->type));
-
-        // Emit Store(buf, outer_acc_idx, final_C_1d).
-        uint32_t store_ptr = emit_offset_ptr(buf_id, outer_acc_idx_id,
-                                             acc_load->type, buf_elem);
-        emit_store(store_ptr, final_C_1d);
-        return true;
-    }
-
     void visit(const For *op) override {
-        if (try_emit_matmul_loop(op)) return;
         if (op->for_type == ForType::GPUBlock) {
             ensure_block_ids();
 
@@ -1268,71 +1486,120 @@ private:
             uint32_t extent_id = current_id;
             uint32_t ub_id = emit_int_binop_overflow(OpAddIOp, Int(32), min_id, extent_id);
 
-            // step = 1
             uint32_t step_id = emit_constant_int(Int(32), 1);
 
-            // Thread a memory token through the loop as an iter_arg so
-            // that loads/stores across iterations have a serial dataflow
-            // dependency. This prevents the compiler from reordering
-            // loads of one iteration before stores of the previous.
+            // Pre-walk body: which register tiles in scope get written
+            // inside this loop? Each must be threaded as an iter_arg so
+            // its in-register value flows from one iteration to the next.
+            FindRegTileWrites finder;
+            finder.reg_tiles = &reg_tiles;
+            op->body.accept(&finder);
+            std::vector<std::string> threaded = finder.written;
+
+            // Capture pre-loop SSA ids for each threaded register tile.
+            std::vector<uint32_t> init_tile_ids;
+            std::vector<uint32_t> tile_type_idxs;
+            init_tile_ids.reserve(threaded.size());
+            tile_type_idxs.reserve(threaded.size());
+            for (const std::string &n : threaded) {
+                uint32_t cur = get_reg_tile_current(n);
+                user_assert(cur != UINT32_MAX)
+                    << "Tile IR codegen: register tile '" << n
+                    << "' is written inside a serial loop but has no "
+                       "value before the loop\n";
+                init_tile_ids.push_back(cur);
+                tile_type_idxs.push_back(reg_tiles.get(n).tile_type_idx);
+            }
+
+            // Thread a memory token through too, for load/store ordering
+            // across iterations.
             uint32_t init_token = ensure_current_token();
             uint32_t token_type = module.types.add_token();
 
-            // Emit the block body into a sub-encoder to count ops
+            // Build the block body in a sub-encoder.
             BlockScope scope = begin_block_scope();
 
-            // Block args: induction variable (i32 tile) + token iter_arg
+            // Block args: induction var, token, then one per threaded tile.
             uint32_t iv_id = alloc_id();
             uint32_t iter_token_id = alloc_id();
-            // The loop body starts with the iter_arg token.
+            std::vector<uint32_t> iter_tile_ids;
+            iter_tile_ids.reserve(threaded.size());
+            for (size_t i = 0; i < threaded.size(); i++) {
+                iter_tile_ids.push_back(alloc_id());
+            }
+
             current_token = iter_token_id;
+            // Save outer current ids; rebind to iter_arg ids.
+            std::vector<uint32_t> saved_outer_ids;
+            saved_outer_ids.reserve(threaded.size());
+            for (size_t i = 0; i < threaded.size(); i++) {
+                saved_outer_ids.push_back(get_reg_tile_current(threaded[i]));
+                update_reg_tile(threaded[i], iter_tile_ids[i]);
+            }
+
             {
                 ScopedBinding<uint32_t> binding(symbol_table, op->name, iv_id);
                 op->body.accept(this);
             }
 
-            // ContinueOp yields the updated token back to the loop.
+            // Capture post-body current ids for the threaded tiles.
+            std::vector<uint32_t> yield_tile_ids;
+            yield_tile_ids.reserve(threaded.size());
+            for (const std::string &n : threaded) {
+                yield_tile_ids.push_back(get_reg_tile_current(n));
+            }
             uint32_t final_token = current_token;
+
             emit_op(OpContinueOp);
             body().write_varint(0);  // numResults = 0 (isVariadic)
-            body().write_varint(1);  // numOperands = 1 (final token)
+            body().write_varint(1 + threaded.size());  // numOperands
             body().write_varint(final_token);
+            for (uint32_t id : yield_tile_ids) {
+                body().write_varint(id);
+            }
 
-            // Capture block op count and body bytes
             uint32_t block_op_count = op_count;
             Encoder block_body;
             std::swap(block_body, function.body);
-            // Restore original encoder
             std::swap(scope.saved_body, function.body);
             op_count = scope.saved_op_count;
             function.next_ssa_id = scope.saved_next_ssa_id;
-            // Restore parent token and then update to ForOp's result.
             current_token = scope.saved_current_token;
 
-            // Now emit the ForOp with the captured block
+            // Restore outer reg-tile current ids; we'll overwrite them
+            // with the ForOp result ids below.
+            for (size_t i = 0; i < threaded.size(); i++) {
+                update_reg_tile(threaded[i], saved_outer_ids[i]);
+            }
+
             emit_op(OpForOp);
-            body().write_varint(1);           // numResults (1: token)
-            body().write_varint(token_type);  // result type = token
-            // Operands: lb, ub, step + initValues
-            body().write_varint(4);  // numOperands = 4 (lb, ub, step, init)
+            // Results: token, then one per threaded tile.
+            body().write_varint(1 + threaded.size());
+            body().write_varint(token_type);
+            for (uint32_t t : tile_type_idxs) body().write_varint(t);
+            // Operands: lb, ub, step, init_token, init_tile_*
+            body().write_varint(4 + threaded.size());
             body().write_varint(min_id);
             body().write_varint(ub_id);
             body().write_varint(step_id);
             body().write_varint(init_token);
+            for (uint32_t id : init_tile_ids) body().write_varint(id);
 
-            // 1 region, 1 block, 2 block args
-            body().write_varint(1);                  // numRegions
-            body().write_varint(1);                  // numBlocks
-            body().write_varint(2);                  // numBlockArgs
-            body().write_varint(type_idx(Int(32)));  // induction var type
-            body().write_varint(token_type);         // iter_arg token type
-            body().write_varint(block_op_count);     // numOps
+            body().write_varint(1);          // numRegions
+            body().write_varint(1);          // numBlocks
+            body().write_varint(2 + threaded.size());  // numBlockArgs (iv + token + tiles)
+            body().write_varint(type_idx(Int(32)));    // iv type
+            body().write_varint(token_type);           // token iter_arg type
+            for (uint32_t t : tile_type_idxs) body().write_varint(t);
+            body().write_varint(block_op_count);
             body().write_bytes(block_body.data().data(), block_body.size());
 
-            // Allocate the ForOp's result (token) in parent scope.
-            // The reader assigns SSA IDs to results after the block is
-            // parsed, so we do the same.
+            // Allocate result SSA ids in source order: token first, then
+            // tile results.
             current_token = alloc_id();
+            for (size_t i = 0; i < threaded.size(); i++) {
+                update_reg_tile(threaded[i], alloc_id());
+            }
         } else {
             internal_error << "Unsupported for_type in Tile IR codegen: "
                            << op->for_type << "\n";
@@ -1780,10 +2047,59 @@ private:
     }
 
     void visit(const Allocate *op) override {
-        // Allocations should have been hoisted to heap by
-        // RemapCUDATileIRLoops and ExtractSharedAndHeapAllocations before
-        // reaching here. Any remaining Allocate nodes are pass-through.
+        // Heap allocations were hoisted to host-side device_malloc and
+        // entered as kernel args; nothing for us to do at the Allocate.
+        if (op->memory_type == MemoryType::Heap) {
+            op->body.accept(this);
+            return;
+        }
+        // Otherwise it's a register-tile candidate (Stack from
+        // RemapCUDATileIRLoops). Run the analyzer on the body.
+        int64_t total_extent = 1;
+        for (const Expr &e : op->extents) {
+            const IntImm *imm = e.as<IntImm>();
+            if (!imm) {
+                user_error << "Tile IR codegen: register-tile candidate '"
+                           << op->name << "' has non-constant extent\n";
+            }
+            total_extent *= imm->value;
+        }
+
+        RegisterTileAnalyzer ana;
+        ana.buf_name = op->name;
+        ana.total_extent = (int)total_extent;
+        ana.active_lets = active_lets;
+        op->body.accept(&ana);
+        if (!ana.ok || !ana.canonical.defined()) {
+            user_error << "Tile IR codegen: cannot promote '" << op->name
+                       << "' to a register tile (accesses are not all "
+                       "loop-invariant full-tile reads/writes at one index) "
+                       "and shared/local memory is not yet supported.\n";
+        }
+
+        if (getenv("HL_TILEIR_REGTILE_TRACE")) {
+            std::cerr << "RegTile promote: " << op->name
+                      << " extent=" << total_extent
+                      << " canonical=" << ana.canonical << "\n";
+        }
+
+        RegTile rt;
+        rt.halide_type = ana.halide_type;
+        rt.tile_type_idx = type_idx(ana.halide_type);
+        // Initial value is undefined until first Store. We give it a
+        // sentinel id; if a Load occurs before any Store we'll error.
+        rt.current_id = UINT32_MAX;
+        ScopedBinding<RegTile> binding(reg_tiles, op->name, rt);
+        // Track the canonical Expr alongside.
+        Expr saved_canon;
+        bool had_prev = (reg_tile_index.count(op->name) > 0);
+        if (had_prev) saved_canon = reg_tile_index[op->name];
+        reg_tile_index[op->name] = ana.canonical;
+
         op->body.accept(this);
+
+        if (had_prev) reg_tile_index[op->name] = saved_canon;
+        else reg_tile_index.erase(op->name);
     }
 
     void visit(const Free *op) override {
@@ -1921,71 +2237,328 @@ private:
         return result_id;
     }
 
-    // Emit a complete matmul tile load + mmaf + store-via-reshape from
-    // the tile_ir_mmaf intrinsic call.
-    void emit_tile_ir_mmaf(const Call *op) {
-        // Args: A_id_load, A_row_stride, A_col_stride,
-        //       B_id_load, B_row_stride, B_col_stride,
-        //       acc_load, M, K, N
-        internal_assert(op->args.size() == 10);
+    // ---------------------------------------------------------------
+    // TMA-style matrix loads via tensor_view + partition_view + load_view_tko.
+    // This is the path that triggers tileiras to emit actual MMA ops.
+    // ---------------------------------------------------------------
+
+    // Emit OpMakeTensorViewOp on a kernel-arg buffer pointer.
+    // shape and strides are static (passed via the type, no dynamic
+    // operands).
+    uint32_t emit_make_tensor_view_static(uint32_t buf_id,
+                                          uint32_t tensor_view_tidx) {
+        uint32_t out = alloc_id();
+        emit_op(OpMakeTensorViewOp);
+        body().write_varint(1);                      // numResults
+        body().write_varint(tensor_view_tidx);       // result type
+        // AttrSizedOperandSegments: base (required, 1), dynShape (variadic,
+        // count + ids), dynStrides (variadic, count + ids).
+        body().write_varint(buf_id);                 // base
+        body().write_varint(0);                      // dynShape count = 0
+        body().write_varint(0);                      // dynStrides count = 0
+        return out;
+    }
+
+    // Emit OpMakePartitionViewOp.
+    uint32_t emit_make_partition_view(uint32_t tensor_view_id,
+                                      uint32_t partition_view_tidx) {
+        uint32_t out = alloc_id();
+        emit_op(OpMakePartitionViewOp);
+        // MakePartitionView: 1 fixed result, 1 fixed operand, no variadics.
+        // Operator::isVariadic() == false → no numResults varint.
+        body().write_varint(partition_view_tidx);     // result type
+        body().write_varint(tensor_view_id);          // operand
+        return out;
+    }
+
+    // Flag bits for LoadViewTko (probed similarly to LoadPtrTko):
+    //   bit 0 = memory_scope, bit 1 = optimization_hints, bit 2 = token.
+    static constexpr uint32_t LoadViewFlagOptHints = 0x2;
+    static constexpr uint32_t LoadViewFlagToken = 0x4;
+
+    // Write a self-contained OptimizationHintsAttr with one arch entry
+    // (sm_120) carrying allow_tma=true. Nudges tileiras toward the TMA
+    // / cp.async load path, which feeds HMMA via LDSM instead of
+    // per-thread LDG.E.U16.
+    // Emit LoadViewTko optimization_hints. By default carries
+    // { sm_120: { allow_tma: true } }; additional fields are env-gated:
+    //   HL_TILEIR_LATENCY=N → adds { latency: N }
+    void write_load_view_opt_hints_allow_tma() {
+        int latency = 0;
+        if (const char *s = getenv("HL_TILEIR_LATENCY")) latency = atoi(s);
+
+        body().write_varint(1);  // outer dict: 1 arch entry
+        body().write_varint(module.strings.add("sm_120"));
+        // Self-contained per-arch DictionaryAttr.
+        body().write_varint(AttrDictionary);
+        uint32_t n_hints = 1 + (latency != 0 ? 1 : 0);
+        body().write_varint(n_hints);
+        // allow_tma = true (self-contained BoolAttr)
+        body().write_varint(module.strings.add("allow_tma"));
+        body().write_varint(AttrBool);
+        body().write_byte(1);
+        // latency = <env> (self-contained IntegerAttr, i32)
+        if (latency != 0) {
+            body().write_varint(module.strings.add("latency"));
+            body().write_varint(AttrInteger);
+            body().write_varint(module.types.add_scalar(Halide::Int(32)));
+            body().write_varint((uint64_t)(uint32_t)latency);
+        }
+    }
+
+    // Emit OpLoadViewTkoOp on a partition_view at the given 2D tile index.
+    // Returns the loaded tile SSA id.
+    uint32_t emit_load_view_tko(uint32_t partition_view_id,
+                                uint32_t result_tile_tidx,
+                                const std::vector<uint32_t> &index_ids) {
+        uint32_t result_id = alloc_id();
+        uint32_t token_out = alloc_id();
+        (void)token_out;
+        emit_op(OpLoadViewTkoOp);
+        body().write_varint(2);
+        body().write_varint(result_tile_tidx);
+        body().write_varint(module.types.add_token());
+        uint32_t flags = 0;
+        if (current_token != UINT32_MAX) flags |= LoadViewFlagToken;
+        // Always attach `{sm_120: {allow_tma: true}}` unless disabled:
+        // on sm_120 tileiras currently ignores it (emits regular LDG),
+        // but on sm_100+ it triggers LDTM + UTCHMMA for 5th-gen tensor
+        // cores. Harmless on archs where it's not honored.
+        const char *tma_env = getenv("HL_TILEIR_ALLOW_TMA");
+        const bool emit_opt_hints = (tma_env == nullptr || atoi(tma_env) != 0);
+        if (emit_opt_hints) flags |= LoadViewFlagOptHints;
+        body().write_varint(flags);
+        body().write_varint(static_cast<uint32_t>(MemOrderWeak));
+        // optimization_hints (opt — only if flag bit 1).
+        if (flags & LoadViewFlagOptHints) {
+            write_load_view_opt_hints_allow_tma();
+        }
+        body().write_varint(partition_view_id);
+        body().write_varint(index_ids.size());
+        for (uint32_t id : index_ids) body().write_varint(id);
+        if (flags & LoadViewFlagToken) {
+            body().write_varint(current_token);
+        }
+        current_token = token_out;
+        return result_id;
+    }
+
+    // Build a tile-coordinate scalar SSA id (rank-0 i32 tile) from a Halide
+    // Expr by first accepting the Expr to produce a scalar, then ensuring
+    // the result type is rank-0 tile<i32>.
+    uint32_t emit_scalar_i32(const Expr &e) {
+        e.accept(this);
+        return current_id;
+    }
+
+    // Emit a TMA-style 2D matrix load:
+    //   tv = make_tensor_view(buf, shape=[shape0, shape1], strides=[s0, s1])
+    //   pv = make_partition_view(tv) with tile=(M, K)
+    //   tile = load_view_tko(pv, [i_tile, k_tile])
+    uint32_t emit_tma_matrix_load(uint32_t buf_id,
+                                  int64_t shape0, int64_t shape1,
+                                  int64_t stride0, int64_t stride1,
+                                  int64_t M, int64_t K,
+                                  uint32_t tile_i_id, uint32_t tile_j_id,
+                                  const Halide::Type &elem_type) {
+        uint32_t scalar_idx = module.types.add_scalar(elem_type);
+        uint32_t tv_tidx = module.types.add_tensor_view(scalar_idx,
+                                                        {shape0, shape1},
+                                                        {stride0, stride1});
+        uint32_t pv_tidx = module.types.add_partition_view({(int32_t)M, (int32_t)K},
+                                                            tv_tidx, {0, 1});
+        uint32_t result_tidx = module.types.add_tile({M, K}, scalar_idx);
+
+        uint32_t tv_id = emit_make_tensor_view_static(buf_id, tv_tidx);
+        uint32_t pv_id = emit_make_partition_view(tv_id, pv_tidx);
+        return emit_load_view_tko(pv_id, result_tidx, {tile_i_id, tile_j_id});
+    }
+
+    // tile_ir_mmaf intrinsic arg layout:
+    //   0:  A_id_load           6:  B_id_load
+    //   1:  A_i_tile (Expr)     7:  B_k_tile (Expr)
+    //   2:  A_k_tile (Expr)     8:  B_n_tile (Expr)
+    //   3:  A_row_stride (Expr) 9:  B_row_stride (Expr)
+    //   4:  A_col_stride (Expr) 10: B_col_stride (Expr)
+    //   5:  A_extra (Expr,      11: B_extra (Expr,
+    //       flat element                   flat element
+    //       offset into A)                 offset into B)
+    //  12:  acc_load
+    //  13:  M (IntImm)
+    //  14:  K (IntImm)
+    //  15:  N (IntImm)
+    static int mmaf_num_args() { return 16; }
+
+    // Emit OffsetOp on a scalar (rank-0) buffer pointer: returns a fresh
+    // scalar tile<ptr<elem>> shifted by `extra_id` elements.
+    uint32_t emit_offset_buf(uint32_t buf_id, uint32_t extra_id,
+                             const Halide::Type &elem_type) {
+        uint32_t scalar_elem_idx = module.types.add_scalar(elem_type);
+        uint32_t ptr_type_idx = module.types.add_pointer(scalar_elem_idx);
+        uint32_t scalar_ptr_tile = module.types.add_tile({}, ptr_type_idx);
+        uint32_t out = alloc_id();
+        emit_op(OpOffsetOp);
+        body().write_varint(scalar_ptr_tile);
+        body().write_varint(buf_id);
+        body().write_varint(extra_id);
+        return out;
+    }
+
+    // Emit the per-iteration 2D loads + MmaFOp from a tile_ir_mmaf
+    // intrinsic call, returning the SSA id of the resulting MxN f32 tile
+    // (2D — the caller is responsible for any reshape back to 1D).
+    uint32_t emit_mmaf_with_acc_2d(const Call *op, uint32_t acc_2d_id,
+                                   int64_t M, int64_t K, int64_t N,
+                                   const Halide::Type &elem_op,
+                                   const Halide::Type &elem_acc) {
         const Load *A_id = op->args[0].as<Load>();
-        const Load *B_id = op->args[3].as<Load>();
+        const Load *B_id = op->args[6].as<Load>();
         internal_assert(A_id && B_id);
-        const IntImm *M_imm = op->args[7].as<IntImm>();
-        const IntImm *K_imm = op->args[8].as<IntImm>();
-        const IntImm *N_imm = op->args[9].as<IntImm>();
-        internal_assert(M_imm && K_imm && N_imm);
-        int64_t M = M_imm->value, K = K_imm->value, N = N_imm->value;
-
-        Halide::Type elem_op = A_id->type.element_of();
-        Halide::Type elem_acc = op->type.element_of();
-
-        // Resolve buffer SSA ids and base indices.
         internal_assert(symbol_table.contains(A_id->name));
         internal_assert(symbol_table.contains(B_id->name));
-        uint32_t A_buf_id = symbol_table.get(A_id->name);
-        uint32_t B_buf_id = symbol_table.get(B_id->name);
+        uint32_t A_buf_id_raw = symbol_table.get(A_id->name);
+        uint32_t B_buf_id_raw = symbol_table.get(B_id->name);
 
-        A_id->index.accept(this);
-        uint32_t A_base = current_id;
-        op->args[1].accept(this);
-        uint32_t A_row_s = current_id;
-        op->args[2].accept(this);
-        uint32_t A_col_s = current_id;
+        // Compile-time strides (we currently only handle constant strides
+        // because the tensor_view shape is also static).
+        const IntImm *A_rs_imm = op->args[3].as<IntImm>();
+        const IntImm *A_cs_imm = op->args[4].as<IntImm>();
+        const IntImm *B_rs_imm = op->args[9].as<IntImm>();
+        const IntImm *B_cs_imm = op->args[10].as<IntImm>();
+        internal_assert(A_rs_imm && A_cs_imm && B_rs_imm && B_cs_imm)
+            << "tile_ir_mmaf currently requires static row/col strides\n";
+        int64_t A_rs = A_rs_imm->value, A_cs = A_cs_imm->value;
+        int64_t B_rs = B_rs_imm->value, B_cs = B_cs_imm->value;
 
-        B_id->index.accept(this);
-        uint32_t B_base = current_id;
-        op->args[4].accept(this);
-        uint32_t B_row_s = current_id;
-        op->args[5].accept(this);
-        uint32_t B_col_s = current_id;
+        // Fold the per-matrix flat element offset (e.g. -A.min.1 *
+        // A_row_stride) into the buffer pointer with a single OffsetOp.
+        // This lets the matcher accept any base whose tile coord we
+        // could extract via linear_decomp + a constant remainder.
+        uint32_t A_extra_id = emit_scalar_i32(op->args[5]);
+        uint32_t B_extra_id = emit_scalar_i32(op->args[11]);
+        uint32_t A_buf_id = emit_offset_buf(A_buf_id_raw, A_extra_id, elem_op);
+        uint32_t B_buf_id = emit_offset_buf(B_buf_id_raw, B_extra_id, elem_op);
 
-        // Build 2D pointer tiles + 2D loads for A and B.
-        uint32_t A_idx_2d = build_2d_index_tile(M, K, A_base, A_row_s, A_col_s);
-        uint32_t A_ptr_2d = emit_2d_offset_ptr(A_buf_id, A_idx_2d, M, K, elem_op);
-        uint32_t A_load_2d = emit_2d_load(A_ptr_2d, M, K, elem_op);
+        // Resolve the real tensor_view shape from each buffer's
+        // Parameter. For each (row_stride, col_stride) pair, look up the
+        // Parameter dim whose stride_constraint matches, and use that
+        // dim's extent_constraint as the shape. Falls back to a
+        // huge-power-of-2 if extents are not statically known; overridden
+        // entirely by HL_TILEIR_BIG.
+        int64_t fallback_big = 1LL << 30;
+        if (const char *s = getenv("HL_TILEIR_BIG")) fallback_big = atoll(s);
 
-        uint32_t B_idx_2d = build_2d_index_tile(K, N, B_base, B_row_s, B_col_s);
-        uint32_t B_ptr_2d = emit_2d_offset_ptr(B_buf_id, B_idx_2d, K, N, elem_op);
-        uint32_t B_load_2d = emit_2d_load(B_ptr_2d, K, N, elem_op);
+        auto resolve_shape = [&](const Parameter &p, int64_t row_stride,
+                                 int64_t col_stride,
+                                 int64_t &shape0, int64_t &shape1) {
+            shape0 = shape1 = fallback_big;
+            if (!p.defined()) return;
+            int ndims = p.dimensions();
+            auto stride_value = [&](int d) -> int64_t {
+                Expr e = simplify(p.stride_constraint(d));
+                const IntImm *imm = e.as<IntImm>();
+                return imm ? imm->value : -1;
+            };
+            auto extent_value = [&](int d) -> int64_t {
+                Expr e = simplify(p.extent_constraint(d));
+                const IntImm *imm = e.as<IntImm>();
+                return imm ? imm->value : fallback_big;
+            };
+            for (int d = 0; d < ndims; d++) {
+                if (stride_value(d) == row_stride) shape0 = extent_value(d);
+                if (stride_value(d) == col_stride) shape1 = extent_value(d);
+            }
+        };
 
-        // Accumulator: arrive as a 1-D MN-lane Halide load. Accept it
-        // (which lowers to a 1-D OpLoadPtrTkoOp), then Reshape to 2-D.
-        op->args[6].accept(this);
-        uint32_t C_1d = current_id;
+        int64_t A_shape0, A_shape1, B_shape0, B_shape1;
+        resolve_shape(A_id->param, A_rs, A_cs, A_shape0, A_shape1);
+        resolve_shape(B_id->param, B_rs, B_cs, B_shape0, B_shape1);
+
+        // For comparison: setting HL_TILEIR_NO_TMA=1 swaps the
+        // tensor_view + partition_view + load_view_tko sequence for a
+        // 2D pointer-tile load (Iota+Reshape+Broadcast index built on
+        // the fly + OffsetOp + LoadPtrTko). Used to confirm whether TMA
+        // is actually required for tileiras to pick HMMA.
+        bool no_tma = getenv("HL_TILEIR_NO_TMA") != nullptr;
+
+        uint32_t A_i_tile_id = emit_scalar_i32(op->args[1]);
+        uint32_t A_k_tile_id = emit_scalar_i32(op->args[2]);
+        uint32_t A_load_2d;
+        if (no_tma) {
+            // base = A_i_tile * (M * A_rs) + A_k_tile * (K * A_cs)
+            uint32_t A_M_rs = emit_constant_int(Int(32), M * A_rs);
+            uint32_t A_K_cs = emit_constant_int(Int(32), K * A_cs);
+            uint32_t A_i_part = emit_int_binop_overflow(OpMulIOp, Int(32), A_i_tile_id, A_M_rs);
+            uint32_t A_k_part = emit_int_binop_overflow(OpMulIOp, Int(32), A_k_tile_id, A_K_cs);
+            uint32_t A_base = emit_int_binop_overflow(OpAddIOp, Int(32), A_i_part, A_k_part);
+            uint32_t A_rs_id = emit_constant_int(Int(32), A_rs);
+            uint32_t A_cs_id = emit_constant_int(Int(32), A_cs);
+            uint32_t A_idx2d = build_2d_index_tile(M, K, A_base, A_rs_id, A_cs_id);
+            uint32_t A_ptr2d = emit_2d_offset_ptr(A_buf_id, A_idx2d, M, K, elem_op);
+            A_load_2d = emit_2d_load(A_ptr2d, M, K, elem_op);
+        } else {
+            A_load_2d = emit_tma_matrix_load(A_buf_id, A_shape0, A_shape1,
+                                             A_rs, A_cs, M, K,
+                                             A_i_tile_id, A_k_tile_id,
+                                             elem_op);
+        }
+
+        uint32_t B_k_tile_id = emit_scalar_i32(op->args[7]);
+        uint32_t B_n_tile_id = emit_scalar_i32(op->args[8]);
+        uint32_t B_load_2d;
+        if (no_tma) {
+            uint32_t B_K_rs = emit_constant_int(Int(32), K * B_rs);
+            uint32_t B_N_cs = emit_constant_int(Int(32), N * B_cs);
+            uint32_t B_k_part = emit_int_binop_overflow(OpMulIOp, Int(32), B_k_tile_id, B_K_rs);
+            uint32_t B_n_part = emit_int_binop_overflow(OpMulIOp, Int(32), B_n_tile_id, B_N_cs);
+            uint32_t B_base = emit_int_binop_overflow(OpAddIOp, Int(32), B_k_part, B_n_part);
+            uint32_t B_rs_id = emit_constant_int(Int(32), B_rs);
+            uint32_t B_cs_id = emit_constant_int(Int(32), B_cs);
+            uint32_t B_idx2d = build_2d_index_tile(K, N, B_base, B_rs_id, B_cs_id);
+            uint32_t B_ptr2d = emit_2d_offset_ptr(B_buf_id, B_idx2d, K, N, elem_op);
+            B_load_2d = emit_2d_load(B_ptr2d, K, N, elem_op);
+        } else {
+            B_load_2d = emit_tma_matrix_load(B_buf_id, B_shape0, B_shape1,
+                                             B_rs, B_cs, K, N,
+                                             B_k_tile_id, B_n_tile_id,
+                                             elem_op);
+        }
+
+        // Emit OpMmaFOp.
         uint32_t scalar_acc_idx = module.types.add_scalar(elem_acc);
         uint32_t C_mn_tidx = module.types.add_tile({M, N}, scalar_acc_idx);
-        uint32_t C_2d = emit_reshape(C_1d, C_mn_tidx);
-
-        // OpMmaFOp: result is tile<MxN> (same as acc).
         uint32_t result_2d = alloc_id();
         emit_op(OpMmaFOp);
         body().write_varint(C_mn_tidx);
         body().write_varint(A_load_2d);
         body().write_varint(B_load_2d);
-        body().write_varint(C_2d);
+        body().write_varint(acc_2d_id);
+        return result_2d;
+    }
 
-        // Reshape 2-D → 1-D for the enclosing Store.
+    // Standalone (non-loop-fused) emit path: load 1-D acc, reshape to 2-D,
+    // mmaf, reshape back to 1-D for the enclosing Store.
+    void emit_tile_ir_mmaf(const Call *op) {
+        internal_assert((int)op->args.size() == mmaf_num_args());
+        const IntImm *M_imm = op->args[13].as<IntImm>();
+        const IntImm *K_imm = op->args[14].as<IntImm>();
+        const IntImm *N_imm = op->args[15].as<IntImm>();
+        internal_assert(M_imm && K_imm && N_imm);
+        int64_t M = M_imm->value, K = K_imm->value, N = N_imm->value;
+
+        Halide::Type elem_op = op->args[0].type().element_of();
+        Halide::Type elem_acc = op->type.element_of();
+
+        // Accept the 1-D acc Halide load.
+        op->args[12].accept(this);
+        uint32_t C_1d = current_id;
+        uint32_t scalar_acc_idx = module.types.add_scalar(elem_acc);
+        uint32_t C_mn_tidx = module.types.add_tile({M, N}, scalar_acc_idx);
+        uint32_t C_2d = emit_reshape(C_1d, C_mn_tidx);
+
+        uint32_t result_2d = emit_mmaf_with_acc_2d(op, C_2d, M, K, N,
+                                                   elem_op, elem_acc);
+
         uint32_t result_1d = emit_reshape(result_2d, type_idx(op->type));
         current_id = result_1d;
     }
@@ -2640,6 +3213,12 @@ public:
     void add_kernel(Stmt stmt,
                     const std::string &name,
                     const std::vector<DeviceArgument> &args) override {
+        if (getenv("HL_TILEIR_DUMP_KERNEL")) {
+            // Optional: dump the kernel IR right before codegen, for
+            // diagnosing register-tile promotion / matmul matching.
+            std::cerr << "=== Tile-IR kernel " << name << " (pre-codegen) ===\n"
+                      << stmt << "\n=== end ===\n";
+        }
         debug(2) << "CodeGen_TileIR_Dev::add_kernel " << name << "\n"
                  << stmt << "\n";
 
@@ -2647,6 +3226,22 @@ public:
         func.name = name;
         func.name_idx = module.strings.add(name);
         func.flags = FuncKindKernel;
+        // Tell tileiras we want it to seriously consider tensor cores /
+        // multiple CTAs per CGA. Without these hints, small mmaf kernels
+        // get scalarized to FMA. The arch string must match the device
+        // we're targeting; we use sm_120 (Blackwell consumer) as default
+        // since lower-capability Halide flags don't roundtrip through
+        // here yet.
+        // TODO: derive arch from target.has_feature(CUDACapability_*).
+        func.optimization_hints["sm_120"]["occupancy"] = 4;
+        // num_cta_in_cga=2 ("2-CTA mode") is critical for big GEMMs on
+        // Blackwell. Previously broke multi-block atomic histograms
+        // when set unconditionally; revisit. For now, opt in via env.
+        int num_cta = 1;
+        if (const char *s = getenv("HL_TILEIR_NUM_CTA_IN_CGA")) {
+            num_cta = atoi(s);
+        }
+        func.optimization_hints["sm_120"]["num_cta_in_cga"] = num_cta;
 
         current_kernel_name = name;
 
@@ -2709,6 +3304,20 @@ public:
             std::ofstream f("/tmp/halide_tile_ir.bin", std::ios::binary);
             f.write(output.data(), output.size());
             debug(2) << "Wrote Tile IR bytecode to /tmp/halide_tile_ir.bin\n";
+        }
+        // If HL_TILEIR_DUMP_MLIR is set, shell out to cuda-tile-translate
+        // to print the bytecode in docs-style MLIR. The path can be
+        // overridden via HL_TILEIR_TRANSLATE.
+        if (getenv("HL_TILEIR_DUMP_MLIR")) {
+            const char *tool = getenv("HL_TILEIR_TRANSLATE");
+            if (!tool) tool = "cuda-tile-translate";
+            std::string cmd = std::string(tool) +
+                " -cudatilebc-to-mlir /tmp/halide_tile_ir.bin >&2";
+            std::fprintf(stderr, "=== Tile IR (MLIR) for %s ===\n",
+                         current_kernel_name.c_str());
+            int r = std::system(cmd.c_str());
+            (void)r;
+            std::fprintf(stderr, "=== end ===\n");
         }
         return output;
     }

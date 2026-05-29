@@ -139,15 +139,23 @@ void StringTable::encode(Encoder &enc) const {
 std::string TypeTable::make_key(TypeTag tag, uint32_t aux1,
                                 const std::vector<int64_t> &shape,
                                 const std::vector<uint32_t> &params) const {
-    std::ostringstream oss;
-    oss << static_cast<int>(tag) << ":" << aux1;
-    for (auto s : shape) {
-        oss << ":" << s;
+    // Hot path on huge schedules: avoid ostringstream / locale init.
+    // Pack into a fixed-layout binary key.
+    std::string key;
+    key.resize(8 + 4 + shape.size() * 8 + params.size() * 4);
+    char *p = key.data();
+    uint32_t header[2] = {static_cast<uint32_t>(tag), aux1};
+    std::memcpy(p, header, 8); p += 8;
+    uint32_t shape_n = static_cast<uint32_t>(shape.size());
+    std::memcpy(p, &shape_n, 4); p += 4;
+    if (!shape.empty()) {
+        std::memcpy(p, shape.data(), shape.size() * 8);
+        p += shape.size() * 8;
     }
-    for (auto p : params) {
-        oss << ",p" << p;
+    if (!params.empty()) {
+        std::memcpy(p, params.data(), params.size() * 4);
     }
-    return oss.str();
+    return key;
 }
 
 uint32_t TypeTable::add_scalar(const Halide::Type &t) {
@@ -257,6 +265,44 @@ uint32_t TypeTable::add_function(uint32_t num_params, const std::vector<uint32_t
     return idx;
 }
 
+uint32_t TypeTable::add_tensor_view(uint32_t element_type_idx,
+                                    const std::vector<int64_t> &shape,
+                                    const std::vector<int64_t> &strides) {
+    // Make a key encoding all parameters.
+    std::string key = make_key(TypeTensorView, element_type_idx, shape);
+    for (auto s : strides) key += ",s" + std::to_string(s);
+    auto it = type_map.find(key);
+    if (it != type_map.end()) return it->second;
+    uint32_t idx = static_cast<uint32_t>(types.size());
+    TypeEntry entry;
+    entry.tag = TypeTensorView;
+    entry.aux1 = element_type_idx;
+    entry.shape = shape;
+    entry.strides = strides;
+    types.push_back(entry);
+    type_map[key] = idx;
+    return idx;
+}
+
+uint32_t TypeTable::add_partition_view(const std::vector<int32_t> &tile_shape,
+                                       uint32_t tensor_view_idx,
+                                       const std::vector<int32_t> &dim_map) {
+    std::string key = "pv:" + std::to_string(tensor_view_idx);
+    for (auto t : tile_shape) key += ",t" + std::to_string(t);
+    for (auto d : dim_map) key += ",d" + std::to_string(d);
+    auto it = type_map.find(key);
+    if (it != type_map.end()) return it->second;
+    uint32_t idx = static_cast<uint32_t>(types.size());
+    TypeEntry entry;
+    entry.tag = TypePartitionView;
+    entry.aux1 = tensor_view_idx;
+    entry.tile_shape = tile_shape;
+    entry.dim_map = dim_map;
+    types.push_back(entry);
+    type_map[key] = idx;
+    return idx;
+}
+
 // Round up to the next power of two. Returns x if already a power of two.
 static int64_t next_power_of_two(int64_t x) {
     int64_t p = 1;
@@ -318,6 +364,24 @@ void TypeTable::encode(Encoder &enc) const {
             for (auto r : t.result_idxs) {
                 type_data_enc.write_varint(r);
             }
+            break;
+        case TypeTensorView:
+            // elementTypeIndex(varint), shape size+i64s, strides size+i64s
+            type_data_enc.write_varint(t.aux1);
+            type_data_enc.write_varint(t.shape.size());
+            for (auto d : t.shape) type_data_enc.write_le_i64(d);
+            type_data_enc.write_varint(t.strides.size());
+            for (auto s : t.strides) type_data_enc.write_le_i64(s);
+            break;
+        case TypePartitionView:
+            // tile_shape size+i32s, tensor_view_idx(varint), dim_map size+i32s,
+            // hasPadding byte (0 = no padding).
+            type_data_enc.write_varint(t.tile_shape.size());
+            for (auto s : t.tile_shape) type_data_enc.write_le_i32(s);
+            type_data_enc.write_varint(t.aux1);
+            type_data_enc.write_varint(t.dim_map.size());
+            for (auto d : t.dim_map) type_data_enc.write_le_i32(d);
+            type_data_enc.write_byte(0);  // no padding value
             break;
         default:
             break;
@@ -398,6 +462,27 @@ void Module::encode(std::vector<char> &output) const {
     enc.write_le_u8(kVersionMinor);
     enc.write_le_u16(kVersionTag);
 
+    // Pre-register strings/types referenced by per-function optimization
+    // hint attributes (these need to live in the string/type tables that
+    // are encoded BEFORE the function table).
+    StringTable &mutable_strings = const_cast<StringTable &>(strings);
+    TypeTable &mutable_types = const_cast<TypeTable &>(types);
+    bool has_any_hints = false;
+    for (const auto &func : functions) {
+        if (!func.optimization_hints.empty() && (func.flags & FuncKindKernel)) {
+            has_any_hints = true;
+            for (const auto &arch_entry : func.optimization_hints) {
+                mutable_strings.add(arch_entry.first);
+                for (const auto &hint : arch_entry.second) {
+                    mutable_strings.add(hint.first);
+                }
+            }
+        }
+    }
+    if (has_any_hints) {
+        mutable_types.add_scalar(Halide::Int(32));
+    }
+
     // Type section
     types.encode(enc);
 
@@ -412,11 +497,45 @@ void Module::encode(std::vector<char> &output) const {
         Encoder section;
         section.write_varint(functions.size());
 
+        // i32 type idx for optimization-hint IntegerAttrs (already
+        // pre-registered above).
+        uint32_t i32_type_idx = mutable_types.add_scalar(Halide::Int(32));
+
         for (const auto &func : functions) {
+            uint8_t flags = func.flags;
+            if (!func.optimization_hints.empty() &&
+                (flags & FuncKindKernel)) {
+                flags |= FuncHasOptHints;
+            }
             section.write_varint(func.name_idx);
             section.write_varint(func.func_type_idx);
-            section.write_byte(func.flags);
+            section.write_byte(flags);
             section.write_varint(0);  // functionLocIndex (no debug info)
+
+            if (flags & FuncHasOptHints) {
+                // Self-contained OptimizationHintsAttr.
+                section.write_varint(AttrOptimizationHints);
+                // Inner DictionaryAttr (NOT self-contained — no tag).
+                section.write_varint(func.optimization_hints.size());
+                for (const auto &arch_entry : func.optimization_hints) {
+                    uint32_t arch_str_idx =
+                        mutable_strings.add(arch_entry.first);
+                    section.write_varint(arch_str_idx);
+                    // Self-contained DictionaryAttr for the per-arch hints.
+                    section.write_varint(AttrDictionary);
+                    section.write_varint(arch_entry.second.size());
+                    for (const auto &hint : arch_entry.second) {
+                        uint32_t hint_str_idx =
+                            mutable_strings.add(hint.first);
+                        section.write_varint(hint_str_idx);
+                        // Self-contained IntegerAttr.
+                        section.write_varint(AttrInteger);
+                        section.write_varint(i32_type_idx);
+                        section.write_varint((uint64_t)(uint32_t)hint.second);
+                    }
+                }
+            }
+
             section.write_varint(func.body.size());
             section.write_bytes(func.body.data().data(), func.body.size());
         }

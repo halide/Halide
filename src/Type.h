@@ -280,7 +280,20 @@ struct Expr;
  * types. Instead vectorize a function. */
 struct Type {
 private:
+    // The runtime type tag. The lanes sub-field of this is being
+    // deprecated: callers should use Type::lanes() (which reads the
+    // uint32_t lanes_ below) so that vector widths beyond uint16_t can
+    // be represented. We still write the (possibly truncated) lanes
+    // count into halide_type_t::lanes for now so that internal pieces
+    // that read it directly (e.g. IRMatcher's flag-packing scheme,
+    // serializers) keep working for vectors that fit in 16 bits.
     halide_type_t type;
+
+    // The compile-time vector width. The source of truth for Type::lanes().
+    // Lives in the 4 bytes of padding between the 4-byte halide_type_t
+    // and the 8-byte handle_type pointer on 64-bit, so it costs no
+    // extra space.
+    uint32_t lanes_ = 1;
 
 public:
     /** Aliases for halide_type_code_t values for legacy compatibility
@@ -300,7 +313,7 @@ public:
 
     // Default ctor initializes everything to predictable-but-unlikely values
     Type()
-        : type(Handle, 0, 0) {
+        : type(Handle, 0, 0), lanes_(0) {
     }
 
     /** Construct a runtime representation of a Halide type from:
@@ -308,9 +321,11 @@ public:
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
     Type(halide_type_code_t code, int bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
-        : type(code, (uint8_t)bits, (uint16_t)lanes), handle_type(handle_type) {
-        user_assert(lanes == type.lanes)
-            << "Halide only supports vector types with up to 65535 lanes. " << lanes << " lanes requested.";
+        : type(code, (uint8_t)bits, (uint16_t)lanes),
+          lanes_((uint32_t)lanes),
+          handle_type(handle_type) {
+        user_assert(lanes >= 0)
+            << "Number of vector lanes must be non-negative; got " << lanes << "\n";
         user_assert(bits == type.bits)
             << "Halide only supports types with up to 255 bits. " << bits << " bits requested.";
     }
@@ -326,11 +341,12 @@ public:
      * the runtime value. */
     HALIDE_ALWAYS_INLINE
     Type(const halide_type_t &that, const halide_handle_cplusplus_type *handle_type = nullptr)
-        : type(that), handle_type(handle_type) {
+        : type(that), lanes_(that.lanes), handle_type(handle_type) {
     }
 
     /** Unwrap the runtime halide_type_t for use in runtime calls, etc.
-     * Representation is exactly equivalent. */
+     * If this Type holds more than 65535 lanes the halide_type_t::lanes
+     * field will be truncated; use `lanes()` for the full uint32 value. */
     HALIDE_ALWAYS_INLINE
     operator halide_type_t() const {
         return type;
@@ -351,7 +367,7 @@ public:
     /** Return the number of vector elements in this type. */
     HALIDE_ALWAYS_INLINE
     int lanes() const {
-        return type.lanes;
+        return (int)lanes_;
     }
 
     /** Return Type with same number of bits and lanes, but new_code for a type code. */
@@ -469,20 +485,21 @@ public:
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
-        return type == other.type && (code() != Handle || same_handle_type(other));
+        return type == other.type && lanes_ == other.lanes_ &&
+               (code() != Handle || same_handle_type(other));
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
-        return type != other.type || (code() == Handle && !same_handle_type(other));
+        return type != other.type || lanes_ != other.lanes_ ||
+               (code() == Handle && !same_handle_type(other));
     }
 
-    /** Compare two types for equality */
+    /** Compare a Type to a halide_type_t. */
     bool operator==(const halide_type_t &other) const {
         return type == other;
     }
 
-    /** Compare two types for inequality */
     bool operator!=(const halide_type_t &other) const {
         return type != other;
     }

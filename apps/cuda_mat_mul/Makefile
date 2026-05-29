@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 MATRIX_SIZE ?= 1024
 
-CUDA_SDK ?= /usr/local/cuda-10.0
+CUDA_SDK ?= /usr/local/cuda
 
 CXXFLAGS += -I $(CUDA_SDK)/include
 LDFLAGS += -L $(CUDA_SDK)/lib64 -Wl,-rpath,$(CUDA_SDK)/lib64
@@ -17,7 +17,13 @@ $(BIN)/%/mat_mul.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
 	$^ -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) target=host-cuda-cuda_capability_50 size=$(MATRIX_SIZE)
 
-$(BIN)/%/runner: runner.cpp $(BIN)/%/mat_mul.a
+# Tile-IR variant: f16 inputs, f32 acc/output, sm_120 + cuda_tile_ir target.
+# Function name is mat_mul_tileir to avoid colliding with the f32 one.
+$(BIN)/%/mat_mul_tileir.a: $(GENERATOR_BIN)/mat_mul.generator
+	@mkdir -p $(@D)
+	$^ -g mat_mul -f mat_mul_tileir -e $(GENERATOR_OUTPUTS) -o $(@D) target=host-cuda-cuda_tile_ir-cuda_capability_50 size=$(MATRIX_SIZE) tile_ir=true
+
+$(BIN)/%/runner: runner.cpp $(BIN)/%/mat_mul.a $(BIN)/%/mat_mul_tileir.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -lcudart -lcublas
 
