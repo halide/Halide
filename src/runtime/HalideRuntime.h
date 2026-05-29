@@ -1960,7 +1960,6 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * stores keeps update definitions from being conflated as
      * "recompute". */
     uint64_t points_computed;
-
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist

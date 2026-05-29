@@ -606,6 +606,7 @@ struct Call : public ExprNode<Call> {
     // are *not* guaranteed to be stable across time.
     enum IntrinsicOp {
         // keep-sorted start sticky_comments=yes
+
         abs,
         // Absolute difference between two values. absd(a, b) = abs(a - b), but
         // without overflow issues for integer types.
@@ -641,11 +642,11 @@ struct Call : public ExprNode<Call> {
         // downstream passes that need to see allocations still can.
         // Args: (StringImm Func name, size in bytes, IntImm memory type).
         declare_allocation,
-        // Declares that a box region of an allocation has been touched (used by bounds inference)
-        declare_box_touched,
         // Declares that region required of a particular Func at this
         // scope. Injected by ScheduleFunctions and used by the profiler.
         declare_box_required_at_root,
+        // Declares that a box region of an allocation has been touched (used by bounds inference)
+        declare_box_touched,
         // Declares that the following stmt computes a particular stage of
         // a particular Func. Used by the profiler to bill points computed
         // in the pure def separately from points computed in update defs.
@@ -676,7 +677,6 @@ struct Call : public ExprNode<Call> {
         if_then_else_mask,
         image_load,
         image_store,
-
         lerp,
         // Loop partitioning hints used to help identify the 'steady state' of
         // loops. likely marks an if condition expression as likely to be true,
