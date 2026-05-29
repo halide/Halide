@@ -636,6 +636,11 @@ struct Call : public ExprNode<Call> {
         count_leading_zeros,
         count_trailing_zeros,
         debug_to_file,
+        // Marks an allocation that has been stripped from the IR (e.g. by
+        // FuseGPUThreadLoops fusing it into a shared buffer), so that
+        // downstream passes that need to see allocations still can.
+        // Args: (StringImm Func name, size in bytes, IntImm memory type).
+        declare_allocation,
         // Declares that a box region of an allocation has been touched (used by bounds inference)
         declare_box_touched,
         // Declares that region required of a particular Func at this

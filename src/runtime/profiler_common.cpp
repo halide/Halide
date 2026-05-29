@@ -438,15 +438,10 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
     // does not free the structs unless user specifically calls
     // halide_profiler_reset().
 
-    // Update per-instance memory stats
-    atomic_add_fetch_sequentially_consistent(&instance->num_allocs, 1);
-    atomic_add_fetch_sequentially_consistent(&instance->memory_total, incr);
+    // num_allocs and memory_total go through halide_profiler_update_counters.
     uint64_t p_mem_current = atomic_add_fetch_sequentially_consistent(&instance->memory_current, incr);
     sync_compare_max_and_swap(&instance->memory_peak, p_mem_current);
 
-    // Update per-func memory stats
-    atomic_add_fetch_sequentially_consistent(&func->num_allocs, 1);
-    atomic_add_fetch_sequentially_consistent(&func->memory_total, incr);
     uint64_t f_mem_current = atomic_add_fetch_sequentially_consistent(&func->memory_current, incr);
     sync_compare_max_and_swap(&func->memory_peak, f_mem_current);
 }

@@ -147,25 +147,6 @@ struct Names {
                         display_name = f.profiler_display_name();
                     }
                 }
-            } else if (kind == halide_profiler_func_kind_allocation &&
-                       starts_with(ir_name, "allocgroup__")) {
-                // Render "allocgroup__f1$0.0__f2$0.1.buffer" as
-                // "f1$0.0,f2$0.1.buffer": split off the "allocgroup" tag,
-                // join the rest with commas.
-                //
-                // TODO(next PR): once the per-Func counter machinery is
-                // back, attribute the bytes to each participating Func
-                // instead of presenting one combined row. The right place
-                // to thread that data through is a "declare_allocation"
-                // intrinsic emitted by FuseGPUThreadLoops at the position
-                // where it strips the Allocate, carrying the Func name,
-                // size, and MemoryType — the profiler can then bill the
-                // size to each Func via a hoistable counter (the GPU
-                // runtime has no memory_allocate hook, so we can't track
-                // it as a live allocation).
-                std::vector<std::string> parts = split_string(ir_name, "__");
-                parts.erase(parts.begin());  // drop the "allocgroup" tag
-                display_name = join_strings(parts, ",");
             }
             entry_info.push_back({display_name, ir_name, parent_id, canon, kind, buffer_func_id});
         }
@@ -191,6 +172,37 @@ struct Names {
         return (int)entry_info.size();
     }
 };
+
+Expr compute_allocation_size(const vector<Expr> &extents,
+                             const Expr &condition,
+                             const Type &type,
+                             const std::string &name,
+                             bool &can_fit_on_stack) {
+    can_fit_on_stack = true;
+
+    Expr cond = simplify(condition);
+    if (is_const_zero(cond)) {
+        return make_zero(UInt(64));
+    }
+
+    int64_t constant_size = Allocate::constant_allocation_size(extents, name);
+    if (constant_size > 0) {
+        int64_t stack_bytes = constant_size * type.bytes();
+        if (can_allocation_fit_on_stack(stack_bytes)) {
+            return make_const(UInt(64), stack_bytes);
+        }
+    }
+
+    internal_assert(!extents.empty());
+
+    can_fit_on_stack = false;
+    Expr size = cast<uint64_t>(extents[0]);
+    for (size_t i = 1; i < extents.size(); i++) {
+        size *= extents[i];
+    }
+    size = simplify(Select::make(condition, size * type.bytes(), make_zero(UInt(64))));
+    return size;
+}
 
 // Unwrap a Broadcast(...) wrapper from an arg, then extract the Func name.
 // declare_box_required_at_root / declare_stage carry the Func name as a
@@ -224,20 +236,14 @@ class PreAllocateEntries : public IRMutator {
     // halide_profiler_func_kind_allocation.
     std::set<int> produce_minted_ids;
 
-    bool is_profiled_func(const std::string &name) const {
-        auto it = env.find(name);
-        if (it == env.end()) {
-            it = env.find(names.prefix(name));
-        }
-        return it != env.end() && !it->second.should_not_profile();
-    }
-
     using IRMutator::visit;
 
     Stmt visit(const Allocate *op) override {
         int id = -1;
-        if (is_profiled_func(op->name)) {
-            id = names.id_for_entry(op->name, producer_id);
+        std::string fname = names.prefix(op->name);
+        auto it = env.find(fname);
+        if (it != env.end() && !it->second.should_not_profile()) {
+            id = names.id_for_entry(fname, producer_id);
         }
         Stmt result = IRMutator::visit(op);
         // If no Produce at this scope minted the same id, this is a
@@ -333,10 +339,12 @@ protected:
     // The counters we track. This list must be kept in sync with multiple other
     // things. If you add a counter, also update:
     // - the num_counters int below the enum
-    // - halide_profile_update_counters in profiler_inlined.cpp
+    // - halide_profiler_update_counters in profiler_inlined.cpp
     // - the fields of halide_profiler_func_stats in HalideRuntime.h
     // - the block of code that prints counters to json in profiler_common.cpp
-    enum { ParallelLoops = 0,
+    enum { MemoryTotal = 0,
+           NumAllocs,
+           ParallelLoops,
            ParallelTasks,
            PointsRequiredAtRoot,
            PointsComputed };
@@ -623,6 +631,16 @@ protected:
                 counters[it->second.front()].count(PointsRequiredAtRoot, box_total(op));
             }
             return make_zero(op->type);
+        } else if (op->is_intrinsic(Call::declare_allocation)) {
+            internal_assert(op->args.size() == 3);
+            std::string fname = names.prefix(handle_name(op->args[0]));
+            auto eit = env.find(fname);
+            if (eit != env.end() && !eit->second.should_not_profile()) {
+                int id = names.id_for_entry(fname, producer_id);
+                counters[id].count(NumAllocs);
+                counters[id].count(MemoryTotal, cast(UInt(64), op->args[1]));
+            }
+            return make_zero(op->type);
         } else if (op->is_intrinsic(Call::declare_stage)) {
             // Marker from ScheduleFunctions saying "we're starting stage N
             // of Func F here". Update our per-Func pure-def flag and strip
@@ -690,6 +708,24 @@ protected:
         } else {
             return IRMutator::visit(op);
         }
+    }
+
+    Stmt visit(const Allocate *op) override {
+        // Bill heap allocations to NumAllocs and MemoryTotal.
+        std::string fname = names.prefix(op->name);
+        auto eit = env.find(fname);
+        if (eit != env.end() && !eit->second.should_not_profile()) {
+            bool can_fit_on_stack;
+            Expr size = compute_allocation_size(op->extents, op->condition,
+                                                op->type, op->name, can_fit_on_stack);
+            bool on_stack = can_fit_on_stack && !op->new_expr.defined();
+            if (!is_const_zero(size) && !on_stack) {
+                int id = names.id_for_entry(fname, producer_id);
+                counters[id].count(NumAllocs, cast(UInt(64), op->condition));
+                counters[id].count(MemoryTotal, size);
+            }
+        }
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const For *op) override {
@@ -996,39 +1032,6 @@ private:
         return s;
     }
 
-    Expr compute_allocation_size(const vector<Expr> &extents,
-                                 const Expr &condition,
-                                 const Type &type,
-                                 const std::string &name,
-                                 bool &can_fit_on_stack) {
-        can_fit_on_stack = true;
-
-        Expr cond = simplify(condition);
-        if (is_const_zero(cond)) {  // Condition always false
-            return make_zero(UInt(64));
-        }
-
-        int64_t constant_size = Allocate::constant_allocation_size(extents, name);
-        if (constant_size > 0) {
-            int64_t stack_bytes = constant_size * type.bytes();
-            if (can_allocation_fit_on_stack(stack_bytes)) {  // Allocation on stack
-                return make_const(UInt(64), stack_bytes);
-            }
-        }
-
-        // Check that the allocation is not scalar (if it were scalar
-        // it would have constant size).
-        internal_assert(!extents.empty());
-
-        can_fit_on_stack = false;
-        Expr size = cast<uint64_t>(extents[0]);
-        for (size_t i = 1; i < extents.size(); i++) {
-            size *= extents[i];
-        }
-        size = simplify(Select::make(condition, size * type.bytes(), make_zero(UInt(64))));
-        return size;
-    }
-
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::profiling_enable_instance_marker)) {
             // End of the bounds-query prelude — start collecting samples.
@@ -1085,7 +1088,7 @@ private:
         }
 
         vector<Stmt> tasks;
-        bool track_heap_allocation = !is_const_zero(size) && !on_stack && profiling_memory;
+        bool track_heap_allocation = !is_const_zero(size) && !on_stack && profiling_memory && idx >= 0;
         if (track_heap_allocation) {
             debug(3) << "  Allocation on heap: " << op->name
                      << "(" << size << ") in pipeline "
@@ -1129,7 +1132,7 @@ private:
         if (!is_const_zero(alloc.size)) {
             int idx = alloc.id;
             if (!alloc.on_stack) {
-                if (profiling_memory) {
+                if (profiling_memory && idx >= 0) {
                     debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << names.pipeline_name << "\n";
 
                     vector<Stmt> tasks{

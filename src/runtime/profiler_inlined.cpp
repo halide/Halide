@@ -63,6 +63,8 @@ WEAK_INLINE int halide_profiler_decr_active_threads(halide_profiler_instance_sta
 
 WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_state *instance,
                                                 int id,
+                                                uint64_t memory_total,
+                                                uint64_t num_allocs,
                                                 uint64_t parallel_loops,
                                                 uint64_t parallel_tasks,
                                                 uint64_t points_required_at_root,
@@ -79,12 +81,23 @@ WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_
         atomic_fetch_add_sequentially_consistent(&(stats.X), X); \
     }
 
+    UPDATE_COUNTER(memory_total);
+    UPDATE_COUNTER(num_allocs);
     UPDATE_COUNTER(parallel_loops);
     UPDATE_COUNTER(parallel_tasks);
     UPDATE_COUNTER(points_required_at_root);
     UPDATE_COUNTER(points_computed);
 
 #undef UPDATE_COUNTER
+
+    // Mirror memory_total and num_allocs at the instance level.
+    if (memory_total) {
+        atomic_add_fetch_sequentially_consistent(&instance->memory_total, memory_total);
+    }
+    if (num_allocs) {
+        atomic_add_fetch_sequentially_consistent(&instance->num_allocs, (int)num_allocs);
+    }
+
     return 0;
 }
 }

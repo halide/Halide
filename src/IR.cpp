@@ -625,6 +625,7 @@ constexpr const char *intrinsic_op_names[] = {
     "count_leading_zeros",
     "count_trailing_zeros",
     "debug_to_file",
+    "declare_allocation",
     "declare_box_touched",
     "declare_box_required_at_root",
     "declare_stage",
