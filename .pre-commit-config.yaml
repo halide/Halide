@@ -112,8 +112,14 @@ repos:
     hooks:
       - id: taplo-format
 
+  - repo: https://github.com/halide/cmtk-pre-commit
+    rev: v0.1.0
+    hooks:
+      - id: cmtk
+
   - repo: local
     hooks:
+
       - id: check-cmake-file-lists
         name: check CMake file lists
         entry: python3 tools/check_cmake_file_lists.py
