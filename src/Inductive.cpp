@@ -16,6 +16,8 @@ namespace Internal {
 using std::string;
 using std::vector;
 
+namespace {
+
 class BaseCaseSolver : public IRVisitor {
     using IRVisitor::visit;
     const vector<string> &vars;
@@ -31,16 +33,24 @@ class BaseCaseSolver : public IRVisitor {
 
     void visit(const Call *op) override {
         if (op->is_intrinsic(Call::if_then_else)) {
+            if (nested_select == 0) {
+                visit_with(op->args[0], [&](auto *self, const Call *inner_op) {
+                    user_assert(inner_op->name != func) << "Function " << func << " contains an inductive function reference outside of a select operation value.\n";
+                    self->visit_base(inner_op);
+                });
+            }
+
             nested_select += 1;
             vector<Interval> old_intervals = condition_intervals;
             for (size_t i = 0; i < vars.size(); i++) {
-                condition_intervals[i] = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(simplify(op->args[0]), vars[i]));
+                Interval inter = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(simplify(op->args[0]), vars[i]));
+                condition_intervals[i] = Interval(inter.min, Interval::pos_inf());
                 bounds.push(vars[i], condition_intervals[i]);
             }
-
             op->args[1].accept(this);
             for (size_t i = 0; i < vars.size(); i++) {
-                condition_intervals[i] = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(simplify(!op->args[0]), vars[i]));
+                Interval inter = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(simplify(!op->args[0]), vars[i]));
+                condition_intervals[i] = Interval(inter.min, Interval::pos_inf());
                 bounds.pop(vars[i]);
                 bounds.push(vars[i], condition_intervals[i]);
             }
@@ -51,7 +61,7 @@ class BaseCaseSolver : public IRVisitor {
             }
             nested_select -= 1;
         } else if (op->name == func) {
-            user_assert(nested_select > 0) << "Function " << func << " contains an inductive function reference outside of a select operation.\n";
+            user_assert(nested_select > 0) << "Function " << func << " contains an inductive function reference outside of a select operation value.\n";
             user_assert(nested_select == 1) << "Function " << func << " contains an inductive function reference inside a nested select operation.\n";
             bool found_inductive = false;
             for (size_t position = 0; position < vars.size(); position++) {
@@ -67,7 +77,9 @@ class BaseCaseSolver : public IRVisitor {
                     found_inductive = true;
                     new_interval = Interval(Interval::neg_inf(), start_box[position].max);
                 } else {
-                    new_interval = Interval::everything();
+                    std::ostringstream err;
+                    err << "Inductive variable " << vars[position] << " in inductive function " << func << " is not provably monotonically decreasing outside of the base case.";
+                    user_error << err.str() << "\n";
                 }
                 new_interval = Interval::make_intersection(new_interval, condition_intervals[position]);
                 Scope<Interval> i_scope;
@@ -93,7 +105,7 @@ public:
     }
 };
 
-// anonymous namespace
+}  // anonymous namespace
 
 Box expand_to_include_base_case(const vector<string> &vars, const Expr &RHS, const string &func, const Box &box_required) {
     Expr substed = substitute_in_all_lets(RHS);
@@ -107,19 +119,6 @@ Box expand_to_include_base_case(const vector<string> &vars, const Expr &RHS, con
     }
 
     return box2;
-}
-
-Box expand_to_include_base_case(const Function &fn, const Box &box_required, const int &pos) {
-    return expand_to_include_base_case(fn.args(), fn.values()[pos], fn.name(), box_required);
-}
-
-Box expand_to_include_base_case(const Function &fn, const Box &box_required) {
-    Box b = expand_to_include_base_case(fn.args(), fn.values()[0], fn.name(), box_required);
-    for (size_t pos = 1; pos < fn.values().size(); pos++) {
-        Box b2 = expand_to_include_base_case(fn.args(), fn.values()[pos], fn.name(), box_required);
-        merge_boxes(b, b2);
-    }
-    return b;
 }
 
 }  // namespace Internal

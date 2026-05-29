@@ -666,10 +666,6 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     for (auto &value : values) {
         value = weakener(value);
     }
-    if (check.reduction_domain.defined()) {
-        check.reduction_domain.set_predicate(
-            weakener(check.reduction_domain.predicate()));
-    }
 
     ReductionDomain rdom;
     contents->init_def = Definition(init_def_args, values, rdom, true);
@@ -1116,63 +1112,24 @@ bool Function::has_pure_definition() const {
 }
 
 bool Function::is_inductive() const {
-    class RecursiveHelper : public IRVisitor {
-        using IRVisitor::visit;
-        const string &func;
-        void visit(const Call *op) override {
-            if (op->name == func) {
-                recursive = true;
-            }
-            IRVisitor::visit(op);
-        }
-
-    public:
-        bool recursive = false;
-        RecursiveHelper(const string &func)
-            : func(func) {
-        }
-    };
-
     if (!has_pure_definition()) {
         return false;
     }
 
-    RecursiveHelper r(name());
+    bool recursive = false;
     for (const Expr &e : definition().values()) {
-        e.accept(&r);
+        visit_with(e, [&](auto *self, const Call *op) {
+            if (op->name == name()) {
+                recursive = true;
+            }
+            self->visit_base(op);
+        });
     }
 
-    return r.recursive;
+    return recursive;
 }
 
 bool Function::is_inductive(const string &var) const {
-    class RecursiveHelper : public IRVisitor {
-        using IRVisitor::visit;
-        const string &func;
-        const string &var;
-        const int &pos;
-        void visit(const Call *op) override {
-            if (op->name == func) {
-                recursive = true;
-                if (const auto &v = op->args[pos].as<Variable>()) {
-                    if (v->name != var) {
-                        inductive_in_var = true;
-                    }
-                } else {
-                    inductive_in_var = true;
-                }
-            }
-            IRVisitor::visit(op);
-        }
-
-    public:
-        bool recursive = false;
-        bool inductive_in_var = false;
-        RecursiveHelper(const string &func, const string &var, const int &pos)
-            : func(func), var(var), pos(pos) {
-        }
-    };
-
     if (!has_pure_definition()) {
         return false;
     }
@@ -1185,15 +1142,30 @@ bool Function::is_inductive(const string &var) const {
             }
         }
     }
+
     if (pos == -1) {
         return false;
     }
-    RecursiveHelper r(name(), var, pos);
+
+    bool recursive = false;
+    bool inductive_in_var = false;
     for (const Expr &e : definition().values()) {
-        e.accept(&r);
+        visit_with(e, [&](auto *self, const Call *op) {
+            if (op->name == name()) {
+                recursive = true;
+                if (const auto &v = op->args[pos].as<Variable>()) {
+                    if (v->name != var) {
+                        inductive_in_var = true;
+                    }
+                } else {
+                    inductive_in_var = true;
+                }
+            }
+            self->visit_base(op);
+        });
     }
 
-    return r.inductive_in_var;
+    return inductive_in_var;
 }
 
 bool Function::can_be_inlined() const {

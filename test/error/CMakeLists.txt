@@ -76,7 +76,10 @@ tests(
     implicit_args.cpp
     impossible_constraints.cpp
     incomplete_target.cpp
-    inductive_loop.cpp
+    inductive_2d_arbitrary.cpp
+    inductive_cond_nested.cpp
+    inductive_cond_self_reference.cpp
+    inductive_loop_1.cpp
     inductive_loop_2.cpp
     inductive_loop_3.cpp
     inductive_nested_select.cpp
