@@ -293,7 +293,7 @@ encoder or player.
 E.g. to encode a video:
  HL_TARGET=host-trace_all <command to make pipeline> && \
  HL_TRACE_FILE=/dev/stdout <command to run pipeline> | \
- HalideTraceViz --size 1920 1080 --timestep 10000 <the -f args> | \
+ HalideTraceViz -s 1920 1080 -t 10000 <the -f args> | \
  avconv -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 output.avi
 
 To just watch the trace instead of encoding a video replace the last
@@ -304,10 +304,10 @@ The arguments to HalideTraceViz specify how to lay out and render the
 Funcs of interest. It acts like a stateful drawing API. The following
 parameters should be set zero or one times:
 
- --size width height: The size of the output frames. Defaults to
+ --size, -s width height: The size of the output frames. Defaults to
      1920x1080.
 
- --timestep timestep: How many Halide computations should be covered
+ --timestep, -t timestep: How many Halide computations should be covered
      by each frame. Defaults to 10000.
 
  --decay A B: How quickly should the yellow and blue highlights decay
@@ -712,7 +712,7 @@ void process_args(int argc, char **argv, VizState *state) {
     int i = 1;
     while (i < argc) {
         std::string next = argv[i];
-        if (next == "--size") {
+        if (next == "--size" || next == "-s") {
             expect(i + 2 < argc, i);
             globals.frame_size.x = parse_int(argv[++i]);
             globals.frame_size.y = parse_int(argv[++i]);
@@ -772,8 +772,10 @@ void process_args(int argc, char **argv, VizState *state) {
             config.strides.clear();
             while (i + 1 < argc) {
                 const char *next_arg = argv[i + 1];
-                if (next_arg[0] == '-' &&
-                    next_arg[1] == '-') {
+                if ((next_arg[0] == '-' &&
+                     next_arg[1] == '-') ||
+                    !strcmp(next_arg, "-s") ||
+                    !strcmp(next_arg, "-t")) {
                     break;
                 }
                 expect(i + 2 < argc, i);
@@ -816,7 +818,7 @@ void process_args(int argc, char **argv, VizState *state) {
                 labels_seen.insert(func);
             }
             fi.config.labels.emplace_back(text, offset, n);
-        } else if (next == "--timestep") {
+        } else if (next == "--timestep" || next == "-t") {
             expect(i + 1 < argc, i);
             globals.timestep = parse_int(argv[++i]);
         } else if (next == "--decay") {
