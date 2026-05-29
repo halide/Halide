@@ -98,10 +98,10 @@ bool matmul(Halide::Target target) {
     mm(y, x) = cast<int32_t>(0);
     mm(y, x) += cast<int32_t>(A(r.x, x)) * B(r.x % 4, y, r.x / 4);
 
-    // Ensure all (x, y) tile sizes are the same so that loops are fused.
-    int tile_y = 8;
-    int tile_x = 6;
-    int tile_r = 4;
+    // Tile sizes match the full AMX hardware tile
+    int tile_y = 16;
+    int tile_x = 16;
+    int tile_r = 16;
 
     // Schedule the reduction
     Var rxi("rxi"), ryi("ryi");
@@ -149,6 +149,7 @@ bool matmul(Halide::Target target) {
     // Uncomment to check the asm
     // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A, B}, target);
     // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
+    // result.compile_to_conceptual_stmt(Internal::get_test_tmp_dir() + "tiled_matmul.stmt", {A, B});
 
     auto time = Tools::benchmark(20, 20, [&]() {
         result.realize(out);
@@ -188,9 +189,10 @@ bool matmul_bf16(Halide::Target target) {
     mm(x, y) = cast<float>(0);
     mm(x, y) += cast<float>(cast<float>(A(r.x, y))) * cast<float>(B(r.x % 2, x, r.x / 2));
 
-    int tile_x = 8;
-    int tile_y = 8;
-    int tile_r = 2;
+    // Tile sizes match the full AMX hardware tile
+    int tile_x = 16;
+    int tile_y = 16;
+    int tile_r = 16;
 
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
@@ -233,7 +235,8 @@ bool matmul_bf16(Halide::Target target) {
 
     // Uncomment to check the asm
     // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
-    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
+    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.s", {A, B}, target);
+    // result.compile_to_conceptual_stmt(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.stmt", {A, B});
 
     auto time = Tools::benchmark(20, 20, [&]() {
         result.realize(out);
