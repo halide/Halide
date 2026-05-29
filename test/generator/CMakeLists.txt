@@ -610,14 +610,18 @@ _add_halide_aot_tests(
 # profiler_instances_generator.cpp
 # Requires profiler support (which requires threading), not yet available for wasm tests or the C backend
 # (https://github.com/halide/Halide/issues/7272)
-_add_halide_libraries(profiler_instances
-                      ENABLE_IF NOT ${_USING_WASM}
-                      OMIT_C_BACKEND
-                      FEATURES profile)
-_add_halide_aot_tests(profiler_instances
-                      ENABLE_IF NOT ${_USING_WASM}
-                      OMIT_C_BACKEND
-                      GROUPS multithreaded)
+_add_halide_libraries(
+    profiler_instances
+    ENABLE_IF NOT ${_USING_WASM}
+    OMIT_C_BACKEND
+    FEATURES profile
+)
+_add_halide_aot_tests(
+    profiler_instances
+    ENABLE_IF NOT ${_USING_WASM}
+    OMIT_C_BACKEND
+    GROUPS multithreaded
+)
 
 # metadata_tester_aottest.cpp
 # metadata_tester_generator.cpp
