@@ -154,7 +154,9 @@ bool matmul(Halide::Target target) {
     auto time = Tools::benchmark(20, 20, [&]() {
         result.realize(out);
     });
-    std::cout << "Exec time: " << time << "\n";
+    // 2 ops per MAC (multiply + accumulate)
+    double gops = 2.0 * row * col * acc / (time * 1e9);
+    std::cout << "Exec time: " << time << "s  (" << std::fixed << std::setprecision(1) << gops << " GOPS)\n";
     std::cout << "Success!\n";
     return true;
 }
@@ -241,8 +243,9 @@ bool matmul_bf16(Halide::Target target) {
     auto time = Tools::benchmark(20, 20, [&]() {
         result.realize(out);
     });
-
-    std::cout << "Exec time: " << time << "\n";
+    // 2 ops per MAC (multiply + accumulate)
+    double gflops = 2.0 * row * col * acc / (time * 1e9);
+    std::cout << "Exec time: " << time << "s  (" << std::fixed << std::setprecision(1) << gflops << " GFLOPS)\n";
     std::cout << "Success!\n";
     return true;
 }
