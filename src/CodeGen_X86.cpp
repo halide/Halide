@@ -118,6 +118,18 @@ protected:
 
 private:
     Scope<MemoryType> mem_type;
+
+    // Per-function noalias scope metadata for AMX tile operations.  Stored as a
+    // struct so they can be lazily created and invalidated when the function changes.
+    struct AMXNoAliasScopes {
+        llvm::Function *fn = nullptr;
+        llvm::MDNode *domain = nullptr;
+        llvm::MDNode *input = nullptr;   // lhs / rhs tile loads
+        llvm::MDNode *output = nullptr;  // tile stores
+    } amx_scopes;
+
+    // Return (creating if needed) the noalias scope pair for the current function.
+    AMXNoAliasScopes &get_amx_noalias_scopes();
 };
 
 CodeGen_X86::CodeGen_X86(Target t)
@@ -334,6 +346,22 @@ void CodeGen_X86::init_module() {
         }
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
+}
+
+CodeGen_X86::AMXNoAliasScopes &CodeGen_X86::get_amx_noalias_scopes() {
+    if (amx_scopes.fn == function) {
+        return amx_scopes;
+    }
+    // New function — create fresh scopes so different kernels don't share domain.
+    amx_scopes.fn = function;
+    llvm::LLVMContext &ctx = *context;
+    amx_scopes.domain = llvm::MDNode::getDistinct(ctx, {
+        llvm::MDString::get(ctx, "halide.amx")});
+    amx_scopes.input = llvm::MDNode::getDistinct(ctx, {
+        llvm::MDString::get(ctx, "halide.amx.input"), amx_scopes.domain});
+    amx_scopes.output = llvm::MDNode::getDistinct(ctx, {
+        llvm::MDString::get(ctx, "halide.amx.output"), amx_scopes.domain});
+    return amx_scopes;
 }
 
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
@@ -609,6 +637,24 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
+    // Annotate tile_load and tile_store with noalias scope metadata so that
+    // LLVM's alias analysis can prove that tile stores to the output do not
+    // alias tile loads from the inputs.  This enables LLVM's loop fusion pass
+    // to merge adjacent k-loops produced by an unrolled register-blocked schedule.
+    if (op->name == "tile_load" || op->name == "tile_store") {
+        CodeGen_CPU::visit(op);
+        if (auto *ci = llvm::dyn_cast_or_null<llvm::CallInst>(value)) {
+            auto &sc = get_amx_noalias_scopes();
+            llvm::LLVMContext &ctx = *context;
+            bool is_load = (op->name == "tile_load");
+            llvm::MDNode *my_scope = llvm::MDNode::get(ctx, {is_load ? sc.input : sc.output});
+            llvm::MDNode *other_scope = llvm::MDNode::get(ctx, {is_load ? sc.output : sc.input});
+            ci->setMetadata(llvm::LLVMContext::MD_alias_scope, my_scope);
+            ci->setMetadata(llvm::LLVMContext::MD_noalias, other_scope);
+        }
+        return;
+    }
+
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors beyond this point.
         CodeGen_CPU::visit(op);
