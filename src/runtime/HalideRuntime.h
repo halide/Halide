@@ -1927,6 +1927,9 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The peak stack allocation of this Func's threads. */
     uint64_t stack_peak;
 
+    // Everything field after this point is a counter. They are aggregated by
+    // blindly adding.
+
     /** The total memory allocation of this Func. */
     uint64_t memory_total;
 
@@ -1936,6 +1939,28 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
 
     /** The total number of times heap storage for this Func was allocated. */
     uint64_t num_allocs;
+
+    /** The number of parallel loops launched to compute some of this
+     * Func. I.e. the number of times halide_do_par_for was called due to one of
+     * this Func's parallel loops. Next, the total number of iterations of those
+     * loops. */
+    uint64_t parallel_loops, parallel_tasks;
+
+    /** The number of points required of this Func at root. Will be less than
+     * points_required when there is redundant recompute due to use of
+     * compute_at. */
+    uint64_t points_required_at_root;
+
+    /** The number of points actually computed by this Func's pure
+     * definition (its stage-0 stores), weighted by vector lane count.
+     * Captures forms of over-computation that the box-required counters
+     * miss: tail strategies like RoundUp that write past the requested
+     * extent, and cases where sliding-window failed so each produce-node
+     * iteration computes the full required box. Counting just stage-0
+     * stores keeps update definitions from being conflated as
+     * "recompute". */
+    uint64_t points_computed;
+
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
@@ -1956,6 +1981,10 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
     /** The average number of thread pool worker threads doing useful
      * work while computing this pipeline. */
     uint64_t active_threads_numerator, active_threads_denominator;
+
+    /** The native vector width for the target this pipeline ran on, in
+     * bytes. This is used to drive some performance warnings. */
+    uint64_t native_vector_bytes;
 
     /** The name of this pipeline. A global constant string. */
     const char *name;
