@@ -2,6 +2,7 @@
 #include "halide_benchmark.h"
 #include "halide_test_dirs.h"
 
+#include <chrono>
 #include <iomanip>
 #include <iostream>
 
@@ -73,9 +74,9 @@ bool matmul(Halide::Target target) {
     auto lhs = typename std::conditional<lhs_signed, make_int_t, make_uint_t>::type{};
     auto rhs = typename std::conditional<rhs_signed, make_int_t, make_uint_t>::type{};
 
-    const int row = 16;
-    const int col = 16;
-    const int acc = 16;
+    const int row = 256;
+    const int col = 256;
+    const int acc = 64;
 
     Var x("x"), y("y");
     ImageParam A(lhs(8), 2, "lhs");
@@ -151,12 +152,19 @@ bool matmul(Halide::Target target) {
     // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
     // result.compile_to_conceptual_stmt(Internal::get_test_tmp_dir() + "tiled_matmul.stmt", {A, B});
 
-    auto time = Tools::benchmark(20, 20, [&]() {
+    // Warm up JIT compilation before benchmarking
+    result.realize(out);
+    const int bench_iters = 200;
+    auto t0 = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < bench_iters; i++) {
         result.realize(out);
-    });
+    }
+    auto t1 = std::chrono::high_resolution_clock::now();
+    double time = std::chrono::duration<double>(t1 - t0).count() / bench_iters;
     // 2 ops per MAC (multiply + accumulate)
     double gops = 2.0 * row * col * acc / (time * 1e9);
-    std::cout << "Exec time: " << time << "s  (" << std::fixed << std::setprecision(1) << gops << " GOPS)\n";
+    std::cout << "Exec time: " << std::scientific << std::setprecision(3) << time
+              << "s  (" << std::fixed << std::setprecision(1) << gops << " GOPS)\n";
     std::cout << "Success!\n";
     return true;
 }
@@ -173,10 +181,9 @@ bool equal_eps(float lhs, float rhs, float eps) {
 bool matmul_bf16(Halide::Target target) {
     (void)target;
 
-    // lhs: 32x16, rhs: 16x32
-    const int row = 32;
-    const int col = 32;
-    const int acc = 16;
+    const int row = 256;
+    const int col = 256;
+    const int acc = 64;
 
     Var x("x"), y("y");
     ImageParam A(BFloat(16), 2, "lhs");
@@ -240,12 +247,19 @@ bool matmul_bf16(Halide::Target target) {
     // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.s", {A, B}, target);
     // result.compile_to_conceptual_stmt(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.stmt", {A, B});
 
-    auto time = Tools::benchmark(20, 20, [&]() {
+    // Warm up JIT compilation before benchmarking
+    result.realize(out);
+    const int bench_iters = 200;
+    auto t0 = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < bench_iters; i++) {
         result.realize(out);
-    });
+    }
+    auto t1 = std::chrono::high_resolution_clock::now();
+    double time = std::chrono::duration<double>(t1 - t0).count() / bench_iters;
     // 2 ops per MAC (multiply + accumulate)
     double gflops = 2.0 * row * col * acc / (time * 1e9);
-    std::cout << "Exec time: " << time << "s  (" << std::fixed << std::setprecision(1) << gflops << " GFLOPS)\n";
+    std::cout << "Exec time: " << std::scientific << std::setprecision(3) << time
+              << "s  (" << std::fixed << std::setprecision(1) << gflops << " GFLOPS)\n";
     std::cout << "Success!\n";
     return true;
 }
