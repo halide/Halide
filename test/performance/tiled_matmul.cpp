@@ -68,11 +68,11 @@ bool matmul(Halide::Target target) {
     // used for compiling to llvm IR or asm
     (void)target;
 
-    constexpr bool lhs_signed = std::is_signed<LhsInt8>::value;
-    constexpr bool rhs_signed = std::is_signed<RhsInt8>::value;
+    constexpr bool lhs_signed = std::is_signed_v<LhsInt8>;
+    constexpr bool rhs_signed = std::is_signed_v<RhsInt8>;
 
-    auto lhs = typename std::conditional<lhs_signed, make_int_t, make_uint_t>::type{};
-    auto rhs = typename std::conditional<rhs_signed, make_int_t, make_uint_t>::type{};
+    auto lhs = std::conditional_t<lhs_signed, make_int_t, make_uint_t>{};
+    auto rhs = std::conditional_t<rhs_signed, make_int_t, make_uint_t>{};
 
     const int row = 256;
     const int col = 256;
