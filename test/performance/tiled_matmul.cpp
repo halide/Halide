@@ -74,9 +74,9 @@ bool matmul(Halide::Target target) {
     auto lhs = std::conditional_t<lhs_signed, make_int_t, make_uint_t>{};
     auto rhs = std::conditional_t<rhs_signed, make_int_t, make_uint_t>{};
 
-    const int row = 256;
-    const int col = 256;
-    const int acc = 64;
+    const int row = getenv("MM_ROW") ? atoi(getenv("MM_ROW")) : 1024;
+    const int col = getenv("MM_COL") ? atoi(getenv("MM_COL")) : 1024;
+    const int acc = getenv("MM_ACC") ? atoi(getenv("MM_ACC")) : 1024;
 
     Var x("x"), y("y");
     ImageParam A(lhs(8), 2, "lhs");
@@ -99,13 +99,20 @@ bool matmul(Halide::Target target) {
     mm(y, x) = cast<int32_t>(0);
     mm(y, x) += cast<int32_t>(A(r.x, x)) * B(r.x % 4, y, r.x / 4);
 
-    // Tile sizes match the full AMX hardware tile
+    // Tile sizes match the full AMX hardware tile. For int8 the native tile is
+    // 16 rows x 64 bytes, so a single tile_matmul can reduce over K = 64.
     int tile_y = 16;
     int tile_x = 16;
-    int tile_r = 16;
+    int tile_r = 64;
+
+    // Register-block a 2x2 grid of output tiles. This keeps 4 accumulator tiles
+    // live (so the TMUL latency is hidden across independent chains) and reuses
+    // each loaded LHS/RHS tile across two accumulators.
+    int outer_y = col > tile_y ? 2 : 1;
+    int outer_x = row > tile_x ? 2 : 1;
 
     // Schedule the reduction
-    Var rxi("rxi"), ryi("ryi");
+    Var rxi("rxi"), ryi("ryi"), rxo("rxo"), ryo("ryo");
     RVar rri("rri"), rro("rro");
     mm.compute_at(mm.in(), y)
         .store_in(MemoryType::AMXTile)
@@ -119,21 +126,30 @@ bool matmul(Halide::Target target) {
         .atomic()
         .vectorize(rri)
         .vectorize(ryi)
-        .vectorize(rxi);
+        .vectorize(rxi)
+        // Register-block over a 2x2 grid of tiles.
+        .tile(y, x, ryo, rxo, outer_y, outer_x)
+        .reorder({rri, ryi, rxi, ryo, rxo, rro, y, x})
+        .unroll(ryo)
+        .unroll(rxo);
 
     // Schedule the initialization
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), y)
         .tile(y, x, iyi, ixi, tile_y, tile_x)
         .vectorize(iyi)
-        .vectorize(ixi);
+        .vectorize(ixi)
+        .unroll(y)
+        .unroll(x);
 
     // Schedule the consumer
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
-        .tile(y, x, mmyi, mmxi, tile_y, tile_x)
-        .vectorize(mmyi)
-        .vectorize(mmxi);
+        .tile(y, x, mmyi, mmxi, tile_y * outer_y, tile_x * outer_x)
+        .vectorize(mmyi, tile_y)
+        .vectorize(mmxi, tile_x)
+        .unroll(mmyi)
+        .unroll(mmxi);
 
     Buffer<LhsInt8> a_buf(acc, row);
     fill_buffer_a(a_buf, row, acc);
@@ -148,13 +164,15 @@ bool matmul(Halide::Target target) {
     Func result = mm.in();
 
     // Uncomment to check the asm
-    // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A, B}, target);
-    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
-    // result.compile_to_conceptual_stmt(Internal::get_test_tmp_dir() + "tiled_matmul.stmt", {A, B});
+    if (getenv("DUMP_IR")) {
+        result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A, B}, target);
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
+        result.compile_to_conceptual_stmt(Internal::get_test_tmp_dir() + "tiled_matmul.stmt", {A, B});
+    }
 
     // Warm up JIT compilation before benchmarking
     result.realize(out);
-    const int bench_iters = 200;
+    const int bench_iters = getenv("BENCH_ITERS") ? atoi(getenv("BENCH_ITERS")) : 200;
     auto t0 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < bench_iters; i++) {
         result.realize(out);
@@ -181,9 +199,9 @@ bool equal_eps(float lhs, float rhs, float eps) {
 bool matmul_bf16(Halide::Target target) {
     (void)target;
 
-    const int row = 256;
-    const int col = 256;
-    const int acc = 64;
+    const int row = getenv("MM_ROW") ? atoi(getenv("MM_ROW")) : 1024;
+    const int col = getenv("MM_COL") ? atoi(getenv("MM_COL")) : 1024;
+    const int acc = getenv("MM_ACC") ? atoi(getenv("MM_ACC")) : 1024;
 
     Var x("x"), y("y");
     ImageParam A(BFloat(16), 2, "lhs");
@@ -198,12 +216,18 @@ bool matmul_bf16(Halide::Target target) {
     mm(x, y) = cast<float>(0);
     mm(x, y) += cast<float>(cast<float>(A(r.x, y))) * cast<float>(B(r.x % 2, x, r.x / 2));
 
-    // Tile sizes match the full AMX hardware tile
+    // Tile sizes match the full AMX hardware tile. For bf16 the native tile is
+    // 16 rows x 64 bytes, so a single tile_matmul can reduce over K = 32.
     int tile_x = 16;
     int tile_y = 16;
-    int tile_r = 16;
+    int tile_r = 32;
 
-    Var rxi("rxi"), ryi("ryi");
+    // Register-block a 2x2 grid of output tiles (4 live accumulators), as in
+    // the int8 path, to hide TMUL latency and reuse loaded tiles.
+    int outer_x = col > tile_x ? 2 : 1;
+    int outer_y = row > tile_y ? 2 : 1;
+
+    Var rxi("rxi"), ryi("ryi"), rxo("rxo"), ryo("ryo");
     RVar rri("rri"), rro("rro");
 
     mm.compute_at(mm.in(), x)
@@ -215,20 +239,28 @@ bool matmul_bf16(Halide::Target target) {
         .atomic()
         .vectorize(rri)
         .vectorize(rxi)
-        .vectorize(ryi);
+        .vectorize(ryi)
+        .tile(x, y, rxo, ryo, outer_x, outer_y)
+        .reorder({rri, rxi, ryi, rxo, ryo, rro, x, y})
+        .unroll(rxo)
+        .unroll(ryo);
 
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), x)
         .tile(x, y, ixi, iyi, tile_x, tile_y)
         .vectorize(ixi)
-        .vectorize(iyi);
+        .vectorize(iyi)
+        .unroll(x)
+        .unroll(y);
 
     // schedule the consumer
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
-        .tile(x, y, mmxi, mmyi, tile_x, tile_y)
-        .vectorize(mmxi)
-        .vectorize(mmyi);
+        .tile(x, y, mmxi, mmyi, tile_x * outer_x, tile_y * outer_y)
+        .vectorize(mmxi, tile_x)
+        .vectorize(mmyi, tile_y)
+        .unroll(mmxi)
+        .unroll(mmyi);
 
     Func result = mm.in();
 
@@ -243,9 +275,11 @@ bool matmul_bf16(Halide::Target target) {
     Buffer<float> out(col, row);
 
     // Uncomment to check the asm
-    // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
-    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.s", {A, B}, target);
-    // result.compile_to_conceptual_stmt(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.stmt", {A, B});
+    if (getenv("DUMP_IR")) {
+        result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.s", {A, B}, target);
+        result.compile_to_conceptual_stmt(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.stmt", {A, B});
+    }
 
     // Warm up JIT compilation before benchmarking
     result.realize(out);
