@@ -74,9 +74,9 @@ bool matmul(Halide::Target target) {
     auto lhs = std::conditional_t<lhs_signed, make_int_t, make_uint_t>{};
     auto rhs = std::conditional_t<rhs_signed, make_int_t, make_uint_t>{};
 
-    const int row = getenv("MM_ROW") ? atoi(getenv("MM_ROW")) : 1024;
-    const int col = getenv("MM_COL") ? atoi(getenv("MM_COL")) : 1024;
-    const int acc = getenv("MM_ACC") ? atoi(getenv("MM_ACC")) : 1024;
+    const int row = 1024;
+    const int col = 1024;
+    const int acc = 1024;
 
     Var x("x"), y("y");
     ImageParam A(lhs(8), 2, "lhs");
@@ -164,15 +164,13 @@ bool matmul(Halide::Target target) {
     Func result = mm.in();
 
     // Uncomment to check the asm
-    if (getenv("DUMP_IR")) {
-        result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A, B}, target);
-        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
-        result.compile_to_conceptual_stmt(Internal::get_test_tmp_dir() + "tiled_matmul.stmt", {A, B});
-    }
+    // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A, B}, target);
+    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
+    // result.compile_to_conceptual_stmt(Internal::get_test_tmp_dir() + "tiled_matmul.stmt", {A, B});
 
     // Warm up JIT compilation before benchmarking
     result.realize(out);
-    const int bench_iters = getenv("BENCH_ITERS") ? atoi(getenv("BENCH_ITERS")) : 200;
+    const int bench_iters = 200;
     auto t0 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < bench_iters; i++) {
         result.realize(out);
@@ -199,9 +197,9 @@ bool equal_eps(float lhs, float rhs, float eps) {
 bool matmul_bf16(Halide::Target target) {
     (void)target;
 
-    const int row = getenv("MM_ROW") ? atoi(getenv("MM_ROW")) : 1024;
-    const int col = getenv("MM_COL") ? atoi(getenv("MM_COL")) : 1024;
-    const int acc = getenv("MM_ACC") ? atoi(getenv("MM_ACC")) : 1024;
+    const int row = 1024;
+    const int col = 1024;
+    const int acc = 1024;
 
     Var x("x"), y("y");
     ImageParam A(BFloat(16), 2, "lhs");
@@ -275,11 +273,9 @@ bool matmul_bf16(Halide::Target target) {
     Buffer<float> out(col, row);
 
     // Uncomment to check the asm
-    if (getenv("DUMP_IR")) {
-        result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
-        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.s", {A, B}, target);
-        result.compile_to_conceptual_stmt(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.stmt", {A, B});
-    }
+    // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
+    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.s", {A, B}, target);
+    // result.compile_to_conceptual_stmt(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.stmt", {A, B});
 
     // Warm up JIT compilation before benchmarking
     result.realize(out);
