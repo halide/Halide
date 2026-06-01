@@ -2,21 +2,19 @@
 
 import struct
 
-
-def test_imports():
-    """Test that all modules can be imported."""
-    from neotrace.trace import EventCode, FuncStats, HalideType, Trace, TypeCode
-    from neotrace.viewer import TraceViewer
+from neotrace.trace import (
+    _NATIVE_TRACE_AVAILABLE,
+    EventCode,
+    HalideType,
+    Trace,
+    TypeCode,
+)
 
 
 def test_native_availability():
     """Report which trace implementation is being used."""
-    from neotrace.trace import _NATIVE_TRACE_AVAILABLE
     # This test just reports the status, doesn't assert
     print(f"Native trace module available: {_NATIVE_TRACE_AVAILABLE}")
-
-
-from neotrace.trace import EventCode, HalideType, Trace, TypeCode, _NATIVE_TRACE_AVAILABLE
 
 
 def make_packet(
