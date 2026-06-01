@@ -7,7 +7,6 @@
 #include <functional>
 #include <map>
 #include <optional>
-#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -148,8 +147,6 @@ public:
         std::map<int32_t, std::tuple<int32_t, std::string, int32_t>> id_to_info;
         // LOADs to process for DAG
         std::vector<std::pair<std::string, int32_t>> load_packets;
-        // Funcs with static bounds from tags
-        std::set<std::string> funcs_with_static_bounds;
 
         size_t pos = 0;
         size_t last_progress = 0;
@@ -191,7 +188,7 @@ public:
 
             // Handle event types
             if (ev == halide_trace_tag && trace_tag.rfind("func_type_and_dim:", 0) == 0) {
-                parse_func_type_and_dim(qualified, trace_tag, trace.funcs_, funcs_with_static_bounds);
+                parse_func_type_and_dim(qualified, trace_tag, trace.funcs_);
             } else if (ev == halide_trace_begin_realization) {
                 if (trace.funcs_.find(qualified) == trace.funcs_.end()) {
                     trace.funcs_[qualified] = FuncStats{qualified};
@@ -209,16 +206,12 @@ public:
                 if (trace.funcs_.find(qualified) == trace.funcs_.end()) {
                     trace.funcs_[qualified] = FuncStats{qualified};
                 }
-                if (funcs_with_static_bounds.find(qualified) == funcs_with_static_bounds.end()) {
-                    update_stats_inline(pkt_ptr, trace.funcs_[qualified]);
-                }
+                update_stats_inline(pkt_ptr, trace.funcs_[qualified]);
             } else if (ev == halide_trace_store) {
                 if (trace.funcs_.find(qualified) == trace.funcs_.end()) {
                     trace.funcs_[qualified] = FuncStats{qualified};
                 }
-                if (funcs_with_static_bounds.find(qualified) == funcs_with_static_bounds.end()) {
-                    update_stats_inline(pkt_ptr, trace.funcs_[qualified]);
-                }
+                update_stats_inline(pkt_ptr, trace.funcs_[qualified]);
             }
 
             // Build packet
@@ -368,8 +361,7 @@ private:
 
     static void parse_func_type_and_dim(const std::string &qualified,
                                         const std::string &trace_tag,
-                                        std::map<std::string, FuncStats> &funcs,
-                                        std::set<std::string> &funcs_with_static_bounds) {
+                                        std::map<std::string, FuncStats> &funcs) {
         std::istringstream iss(trace_tag);
         std::string prefix;
         iss >> prefix;  // "func_type_and_dim:"
@@ -400,7 +392,6 @@ private:
             }
             funcs[qualified].min_coords = std::move(min_coords);
             funcs[qualified].max_coords = std::move(max_coords);
-            funcs_with_static_bounds.insert(qualified);
         }
     }
 
