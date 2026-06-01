@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Profile trace loading to identify bottlenecks."""
 
 import cProfile
@@ -17,7 +16,10 @@ def main():
         print(f"File not found: {trace_path}")
         sys.exit(1)
 
-    print(f"Profiling load of {trace_path} ({trace_path.stat().st_size / 1024 / 1024:.1f} MB)")
+    print(
+        f"Profiling load of {trace_path} "
+        f"({trace_path.stat().st_size / 1024 / 1024:.1f} MB)"
+    )
     print()
 
     from neotrace.trace import Trace

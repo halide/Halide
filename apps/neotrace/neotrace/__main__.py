@@ -5,7 +5,6 @@ Command-line entry point for neotrace.
 from __future__ import annotations
 
 import argparse
-
 import sys
 from pathlib import Path
 
@@ -58,9 +57,8 @@ def main():
         sys.exit(run_viewer(args.trace))
 
     elif args.command == "info":
-        from tqdm import tqdm
-
         from halide import Trace
+        from tqdm import tqdm
 
         last_bytes = 0
         with tqdm(unit="B", unit_scale=True, unit_divisor=1024) as pbar:
