@@ -4,6 +4,7 @@ Interactive trace viewer using Qt.
 
 from __future__ import annotations
 
+import bisect
 import time as _time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -436,10 +437,20 @@ class TraceViewer(QMainWindow):
         self._playback_timer.timeout.connect(self._on_playback_tick)
         self._playback_step = 10000  # Packets per tick (increased for performance)
 
+        # Scrub debounce — defer rendering until slider stops moving
+        self._scrub_timer = QTimer(self)
+        self._scrub_timer.setSingleShot(True)
+        self._scrub_timer.setInterval(50)
+        self._scrub_timer.timeout.connect(self._on_scrub_settled)
+        self._pending_scrub_time: int = -1
+
         # Cache for func name lookups
         self._func_name_cache: dict[str, FuncItem | None] = {}
         # Cached packets list — trace.packets copies the C++ vector every access
         self._packets: list[TracePacket] = []
+        # Sorted indices of store packets — lets _render_range skip
+        # non-stores via bisect
+        self._store_indices: list[int] = []
 
         self._setup_ui()
         self._setup_menu()
@@ -539,6 +550,9 @@ class TraceViewer(QMainWindow):
             self._packets = (
                 trace.packets
             )  # Cache once; avoids full C++ vector copy each access
+            self._store_indices = (
+                trace.store_indices()
+            )  # Sorted indices for bisect in _render_range
 
             # Clear func name cache
             self._func_name_cache = {}
@@ -846,80 +860,125 @@ class TraceViewer(QMainWindow):
 
         import sys
 
-        n_packets = abs(time - last_time)
+        if time > last_time:
+            direction = "fwd" if last_time >= 0 else "init"
+        elif time < last_time:
+            direction = "bwd"
+        else:
+            direction = "="
+        n_packets = time + 1 if direction in ("bwd", "init") else abs(time - last_time)
         gv = 1000 * self._prof_get_values
+        co = 1000 * self._prof_coord
         up = 1000 * self._prof_update_pixel
-        co = 1000 * self._prof_coord - up
         msg = (
-            f"packets={n_packets}  stores={n_stores}  "
+            f"[{direction}] packets={n_packets}  stores={n_stores}  "
             f"process={1000 * (t1 - t0):.1f}ms "
-            f"[get_values={gv:.1f}ms  coord={co:.1f}ms  update_pixel={up:.1f}ms]  "
+            f"[get_values={gv:.1f}ms  coord={co:.1f}ms  batch_write={up:.1f}ms]  "
             f"pixmap={1000 * (t2 - t1):.1f}ms  total={1000 * (t2 - t0):.1f}ms"
         )
         print(msg, file=sys.stderr)
         self.status_bar.showMessage(msg)
-
-    def _render_range(self, start: int, end: int) -> int:
-        """Process packets in the given range [start, end). Returns store count."""
-        if not self.state.trace:
-            return 0
-
-        n_stores = 0
-        packets = self._packets
-        for i in range(start, min(end, len(packets))):
-            packet = packets[i]
-            if packet.is_store:
-                self._process_store(packet)
-                n_stores += 1
-        return n_stores
 
     # Profiling accumulators — reset each tick in _render_to_time
     _prof_get_values: float = 0.0
     _prof_update_pixel: float = 0.0
     _prof_coord: float = 0.0
 
-    def _process_store(self, packet: TracePacket):
-        """Process a store packet."""
-        # Use cached lookup if available
-        func_name = packet.func
-        item = self._get_func_item_for_packet(func_name)
-        if item is None:
-            return
+    def _render_range(self, start: int, end: int) -> int:
+        """
+        Process packets in [start, end), batch-applying pixel writes.
+        Returns store count.
+        """
+        if not self.state.trace:
+            return 0
 
-        ta = _time.perf_counter()
-        values = packet.get_values()
-        tb = _time.perf_counter()
-        self._prof_get_values += tb - ta
+        # Collect pixel writes per func before touching any numpy arrays.
+        # pending[id(item)] = [px_list, py_list, val_list, item]
+        pending: dict[int, list] = {}
 
-        if not values:
-            return
+        n_stores = 0
+        packets = self._packets
+        store_indices = self._store_indices
+        end = min(end, len(packets))
 
-        tc = _time.perf_counter()
-        dims_per_lane = (
-            len(packet.coordinates) // packet.type_lanes
-            if packet.type_lanes > 0
-            else len(packet.coordinates)
-        )
+        # Binary-search to the first store in range, then walk only store packets.
+        lo = bisect.bisect_left(store_indices, start)
+        hi = bisect.bisect_right(store_indices, end - 1)
+        for si in range(lo, hi):
+            i = store_indices[si]
+            packet = packets[i]
 
-        coords = packet.coordinates
-        n_lanes = packet.type_lanes
-        for lane in range(n_lanes):
-            # Get coordinates for this lane
-            if dims_per_lane >= 2:
-                x = coords[0 * n_lanes + lane]
-                y = coords[1 * n_lanes + lane]
-            elif dims_per_lane == 1:
-                x = coords[lane]
-                y = 0
+            item = self._get_func_item_for_packet(packet.func)
+            if item is None:
+                continue
+
+            ta = _time.perf_counter()
+            values = packet.get_values()
+            self._prof_get_values += _time.perf_counter() - ta
+            if not values:
+                continue
+
+            tc = _time.perf_counter()
+            coords = packet.coordinates
+            n_lanes = packet.type_lanes
+            dims_per_lane = len(coords) // n_lanes if n_lanes > 0 else len(coords)
+            min_x = item.min_x
+            min_y = item.min_y
+
+            key = id(item)
+            if key not in pending:
+                pending[key] = [[], [], [], item]
+            px_list, py_list, val_list, _ = pending[key]
+
+            for lane in range(n_lanes):
+                if dims_per_lane >= 2:
+                    x = coords[lane] - min_x  # coords[0*n_lanes + lane]
+                    y = coords[n_lanes + lane] - min_y  # coords[1*n_lanes + lane]
+                elif dims_per_lane == 1:
+                    x = coords[lane] - min_x
+                    y = -min_y
+                else:
+                    x = -min_x
+                    y = -min_y
+                if lane < len(values):
+                    px_list.append(x)
+                    py_list.append(y)
+                    val_list.append(values[lane])
+
+            self._prof_coord += _time.perf_counter() - tc
+            n_stores += 1
+
+        # Batch-apply all collected pixel writes via numpy fancy indexing:
+        # one vectorised normalisation + three indexed writes per func,
+        # instead of three scalar __setitem__ calls per pixel.
+        tp = _time.perf_counter()
+        for px_list, py_list, val_list, item in pending.values():
+            if not px_list:
+                continue
+            xs = np.asarray(px_list, dtype=np.intp)
+            ys = np.asarray(py_list, dtype=np.intp)
+            vals = np.asarray(val_list)
+
+            min_v = item.config.min_value
+            max_v = item.config.max_value
+            if max_v > min_v:
+                normalized = np.clip(
+                    (255.0 * (vals - min_v) / (max_v - min_v)), 0, 255
+                ).astype(np.uint8)
             else:
-                x = y = 0
+                normalized = np.full(len(xs), 128, dtype=np.uint8)
 
-            if lane < len(values):
-                td = _time.perf_counter()
-                item.update_pixel(x, y, values[lane], is_store=True)
-                self._prof_update_pixel += _time.perf_counter() - td
-
-        self._prof_coord += _time.perf_counter() - tc
+            mask = (xs >= 0) & (xs < item.width) & (ys >= 0) & (ys < item.height)
+            xs = xs[mask]
+            ys = ys[mask]
+            normalized = normalized[mask]
+            if len(xs):
+                item.data[ys, xs, 0] = normalized
+                item.data[ys, xs, 1] = normalized
+                item.data[ys, xs, 2] = normalized
+                item._dirty = True
+        self._prof_update_pixel += _time.perf_counter() - tp
+        return n_stores
 
     def _get_func_item_for_packet(self, func_name: str) -> FuncItem | None:
         """Get the FuncItem for a packet's func name, with caching."""
@@ -937,8 +996,17 @@ class TraceViewer(QMainWindow):
         return None
 
     def _on_time_changed(self, time: int):
-        """Handle timeline scrubbing."""
-        self._render_to_time(time)
+        """
+        Handle timeline scrubbing — debounced so only the settled position renders.
+        """
+        self._pending_scrub_time = time
+        self._scrub_timer.start()  # restart resets the 50ms window
+
+    def _on_scrub_settled(self):
+        """
+        Called 50ms after the last slider movement; renders the final position.
+        """
+        self._render_to_time(self._pending_scrub_time)
 
     def _on_play_toggled(self, playing: bool):
         """Handle play/pause toggle."""
