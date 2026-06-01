@@ -4,6 +4,7 @@ Interactive trace viewer using Qt.
 
 from __future__ import annotations
 
+import time as _time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -437,6 +438,8 @@ class TraceViewer(QMainWindow):
 
         # Cache for func name lookups
         self._func_name_cache: dict[str, FuncItem | None] = {}
+        # Cached packets list — trace.packets copies the C++ vector every access
+        self._packets: list[TracePacket] = []
 
         self._setup_ui()
         self._setup_menu()
@@ -533,6 +536,9 @@ class TraceViewer(QMainWindow):
 
             self.state.trace = trace
             self.state.current_time = -1  # Reset so first render processes all packets
+            self._packets = (
+                trace.packets
+            )  # Cache once; avoids full C++ vector copy each access
 
             # Clear func name cache
             self._func_name_cache = {}
@@ -542,7 +548,7 @@ class TraceViewer(QMainWindow):
 
             # Update UI
             self.func_list.set_funcs(trace.funcs)
-            self.timeline.set_range(len(trace.packets) - 1)
+            self.timeline.set_range(len(self._packets) - 1)
 
             # Add func items to canvas
             self.canvas.clear_funcs()
@@ -556,7 +562,7 @@ class TraceViewer(QMainWindow):
             self.timeline.set_time(0)
 
             self.status_bar.showMessage(
-                f"Loaded {path.name}: {len(trace.packets)} packets, "
+                f"Loaded {path.name}: {len(self._packets)} packets, "
                 f"{len(trace.funcs)} funcs"
             )
         except InterruptedError:
@@ -807,33 +813,70 @@ class TraceViewer(QMainWindow):
 
         last_time = self.state.current_time
 
+        self._prof_get_values = 0.0
+        self._prof_update_pixel = 0.0
+        self._prof_coord = 0.0
+        t0 = _time.perf_counter()
+
         # Determine rendering strategy
-        if time > last_time and last_time >= 0:
-            # Moving forward: incremental update
-            self._render_range(last_time + 1, time + 1)
+        if time > last_time:
+            if last_time < 0:
+                # Starting fresh: render from the beginning
+                n_stores = self._render_range(0, time + 1)
+            else:
+                # Moving forward: incremental update
+                n_stores = self._render_range(last_time + 1, time + 1)
         elif time < last_time:
             # Moving backward: must re-render from scratch
             for item in self.canvas.func_items.values():
                 item._init_data_array()
-            self._render_range(0, time + 1)
-        # else: time == last_time, nothing to do
+            n_stores = self._render_range(0, time + 1)
+        else:
+            n_stores = 0
+
+        t1 = _time.perf_counter()
 
         # Refresh all pixmaps
         for item in self.canvas.func_items.values():
             item.refresh_pixmap()
 
+        t2 = _time.perf_counter()
+
         self.state.current_time = time
 
-    def _render_range(self, start: int, end: int):
-        """Process packets in the given range [start, end)."""
-        if not self.state.trace:
-            return
+        import sys
 
-        packets = self.state.trace.packets
+        n_packets = abs(time - last_time)
+        gv = 1000 * self._prof_get_values
+        up = 1000 * self._prof_update_pixel
+        co = 1000 * self._prof_coord - up
+        msg = (
+            f"packets={n_packets}  stores={n_stores}  "
+            f"process={1000 * (t1 - t0):.1f}ms "
+            f"[get_values={gv:.1f}ms  coord={co:.1f}ms  update_pixel={up:.1f}ms]  "
+            f"pixmap={1000 * (t2 - t1):.1f}ms  total={1000 * (t2 - t0):.1f}ms"
+        )
+        print(msg, file=sys.stderr)
+        self.status_bar.showMessage(msg)
+
+    def _render_range(self, start: int, end: int) -> int:
+        """Process packets in the given range [start, end). Returns store count."""
+        if not self.state.trace:
+            return 0
+
+        n_stores = 0
+        packets = self._packets
         for i in range(start, min(end, len(packets))):
             packet = packets[i]
             if packet.is_store:
                 self._process_store(packet)
+                n_stores += 1
+        return n_stores
+
+    # Profiling accumulators — reset each tick in _render_to_time
+    _prof_get_values: float = 0.0
+    _prof_update_pixel: float = 0.0
+    _prof_coord: float = 0.0
 
     def _process_store(self, packet: TracePacket):
         """Process a store packet."""
@@ -843,29 +886,40 @@ class TraceViewer(QMainWindow):
         if item is None:
             return
 
+        ta = _time.perf_counter()
         values = packet.get_values()
+        tb = _time.perf_counter()
+        self._prof_get_values += tb - ta
+
         if not values:
             return
 
+        tc = _time.perf_counter()
         dims_per_lane = (
             len(packet.coordinates) // packet.type_lanes
             if packet.type_lanes > 0
             else len(packet.coordinates)
         )
 
-        for lane in range(packet.type_lanes):
+        coords = packet.coordinates
+        n_lanes = packet.type_lanes
+        for lane in range(n_lanes):
             # Get coordinates for this lane
             if dims_per_lane >= 2:
-                x = packet.coordinates[0 * packet.type_lanes + lane]
-                y = packet.coordinates[1 * packet.type_lanes + lane]
+                x = coords[0 * n_lanes + lane]
+                y = coords[1 * n_lanes + lane]
             elif dims_per_lane == 1:
-                x = packet.coordinates[lane]
+                x = coords[lane]
                 y = 0
             else:
                 x = y = 0
 
             if lane < len(values):
+                td = _time.perf_counter()
                 item.update_pixel(x, y, values[lane], is_store=True)
+                self._prof_update_pixel += _time.perf_counter() - td
+
+        self._prof_coord += _time.perf_counter() - tc
 
     def _get_func_item_for_packet(self, func_name: str) -> FuncItem | None:
         """Get the FuncItem for a packet's func name, with caching."""
@@ -901,7 +955,7 @@ class TraceViewer(QMainWindow):
         if not self.state.trace:
             return
 
-        max_time = len(self.state.trace.packets) - 1
+        max_time = len(self._packets) - 1
         new_time = min(self.state.current_time + self._playback_step, max_time)
 
         if new_time >= max_time:
