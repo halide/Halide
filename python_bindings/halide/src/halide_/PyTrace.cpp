@@ -319,6 +319,19 @@ public:
         return result;
     }
 
+    // Returns the indices of all store packets, in order.
+    // Cached once at load time in Python to avoid iterating all packets per render.
+    std::vector<size_t> store_indices() const {
+        std::vector<size_t> result;
+        result.reserve(packets_.size() / 4);
+        for (size_t i = 0; i < packets_.size(); ++i) {
+            if (packets_[i].is_store()) {
+                result.push_back(i);
+            }
+        }
+        return result;
+    }
+
     std::string dag_as_dot() const {
         std::ostringstream ss;
         ss << "digraph dag {\n";
@@ -533,6 +546,7 @@ void define_trace(py::module &m) {
         .def_property_readonly("dag_edges", &Trace::dag_edges)
         .def_property_readonly("packets", &Trace::packets)
         .def("filter_loads_stores", &Trace::filter_loads_stores)
+        .def("store_indices", &Trace::store_indices)
         .def("dag_as_dot", &Trace::dag_as_dot);
 }
 
