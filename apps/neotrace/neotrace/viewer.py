@@ -9,6 +9,7 @@ from pathlib import Path
 
 import graphviz
 import numpy as np
+from halide import FuncStats, Trace, TracePacket
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import (
     QBrush,
@@ -41,8 +42,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-from halide import FuncStats, Trace, TracePacket
 
 
 @dataclass
@@ -557,7 +556,8 @@ class TraceViewer(QMainWindow):
             self.timeline.set_time(0)
 
             self.status_bar.showMessage(
-                f"Loaded {path.name}: {len(trace.packets)} packets, {len(trace.funcs)} funcs"
+                f"Loaded {path.name}: {len(trace.packets)} packets, "
+                f"{len(trace.funcs)} funcs"
             )
         except InterruptedError:
             self.status_bar.showMessage("Loading cancelled")
@@ -848,16 +848,16 @@ class TraceViewer(QMainWindow):
             return
 
         dims_per_lane = (
-            packet.dimensions // packet.type.lanes
-            if packet.type.lanes > 0
-            else packet.dimensions
+            len(packet.coordinates) // packet.type_lanes
+            if packet.type_lanes > 0
+            else len(packet.coordinates)
         )
 
-        for lane in range(packet.type.lanes):
+        for lane in range(packet.type_lanes):
             # Get coordinates for this lane
             if dims_per_lane >= 2:
-                x = packet.coordinates[0 * packet.type.lanes + lane]
-                y = packet.coordinates[1 * packet.type.lanes + lane]
+                x = packet.coordinates[0 * packet.type_lanes + lane]
+                y = packet.coordinates[1 * packet.type_lanes + lane]
             elif dims_per_lane == 1:
                 x = packet.coordinates[lane]
                 y = 0
