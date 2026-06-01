@@ -36,6 +36,19 @@ add_halide_library(
     autoscheduler.experimental_gpu_schedule=1
 )
 
+add_halide_library(
+    local_laplacian_trace
+    FROM local_laplacian.generator
+    GENERATOR local_laplacian
+    FEATURES trace_all
+    FUNCTION_NAME local_laplacian
+)
+
+# Trace executable
+add_executable(process_viz process.cpp)
+target_link_libraries(process_viz PRIVATE Halide::ImageIO local_laplacian_trace)
+target_compile_definitions(process_viz PRIVATE NO_AUTO_SCHEDULE)
+
 # Main executable
 add_executable(local_laplacian_process process.cpp)
 target_link_libraries(
