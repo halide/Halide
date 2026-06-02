@@ -51,6 +51,7 @@ from PySide6.QtWidgets import (
 class DisplayMode(IntEnum):
     VALUE = 0
     RECOMPUTE_HEAT = 1
+    TEMPORAL = 2
 
 
 @dataclass
@@ -127,6 +128,13 @@ class FuncItem(QGraphicsPixmapItem):
         self.last_value = np.full((height, width), np.nan, dtype=np.float32)
         # Redundant write count: incremented when the same value is written again
         self.counts = np.zeros((height, width), dtype=np.int32)
+        # Relative store ordinal of the *first* write to each pixel; NaN = never
+        # written. Drives the temporal-order heatmap. Subsequent rewrites
+        # (recomputes) do not change this, keeping it orthogonal to `counts`.
+        self.write_times = np.full((height, width), np.nan, dtype=np.float32)
+        # Monotonic store counter for this func, used to stamp write_times.
+        # Reset here so backward scrubs (which re-init) restart the ordering.
+        self._write_time_base = 0
         self.width = width
         self.height = height
         self.min_x = self.stats.min_coords[0] if self.stats.min_coords else 0
@@ -165,6 +173,36 @@ class FuncItem(QGraphicsPixmapItem):
             np.uint8
         )
         rgba[:, :, 2] = 0
+        return rgba
+
+    def _build_temporal_rgba(self) -> np.ndarray:
+        """Build an RGBA heatmap colored by when each pixel was first written.
+
+        Never written → black. Otherwise the first-write ordinal is normalized
+        per-func to [0, 1] and mapped blue (early) → yellow (late) via the
+        linear ramp R=t, G=t, B=1-t. Per-func normalization keeps each func's
+        own realization window legible rather than collapsing to a flat hue.
+        """
+        h, w = self.write_times.shape
+        rgba = np.zeros((h, w, 4), dtype=np.uint8)
+        rgba[:, :, 3] = 255
+
+        written = ~np.isnan(self.write_times)
+        if not written.any():
+            return rgba
+
+        wt = self.write_times[written]
+        lo = float(wt.min())
+        hi = float(wt.max())
+        t = np.zeros((h, w), dtype=np.float32)
+        if hi > lo:
+            t[written] = (self.write_times[written] - lo) / (hi - lo)
+        # If hi == lo (single distinct time) t stays 0 → uniform blue.
+
+        ramp = (t * 255.0).clip(0, 255).astype(np.uint8)
+        rgba[:, :, 0] = np.where(written, ramp, 0)
+        rgba[:, :, 1] = np.where(written, ramp, 0)
+        rgba[:, :, 2] = np.where(written, (255 - ramp), 0)
         return rgba
 
     def _create_axis_labels(self):
@@ -219,13 +257,15 @@ class FuncItem(QGraphicsPixmapItem):
 
     def _update_pixmap(self):
         """
-        Update the pixmap from the data array (or heatmap if in RECOMPUTE_HEAT mode).
+        Update the pixmap from the data array, or from a heatmap when in
+        RECOMPUTE_HEAT / TEMPORAL display mode.
         """
-        source = (
-            self._build_heat_rgba()
-            if self.display_mode == DisplayMode.RECOMPUTE_HEAT
-            else self.data
-        )
+        if self.display_mode == DisplayMode.RECOMPUTE_HEAT:
+            source = self._build_heat_rgba()
+        elif self.display_mode == DisplayMode.TEMPORAL:
+            source = self._build_temporal_rgba()
+        else:
+            source = self.data
         zoom = self.config.zoom
         h, w = source.shape[:2]
 
@@ -603,6 +643,12 @@ class TraceViewer(QMainWindow):
         self._recompute_action.triggered.connect(self._toggle_recompute_mode)
         view_menu.addAction(self._recompute_action)
 
+        self._temporal_action = QAction("Temporal &Order", self)
+        self._temporal_action.setCheckable(True)
+        self._temporal_action.setShortcut(QKeySequence("Ctrl+T"))
+        self._temporal_action.triggered.connect(self._toggle_temporal_mode)
+        view_menu.addAction(self._temporal_action)
+
     def _open_file(self):
         """Open a trace file."""
         path, _ = QFileDialog.getOpenFileName(
@@ -662,6 +708,7 @@ class TraceViewer(QMainWindow):
             # Add func items to canvas
             self.canvas.clear_funcs()
             self._recompute_action.setChecked(False)
+            self._temporal_action.setChecked(False)
             for name, stats in trace.funcs.items():
                 config = self.state.func_configs.get(name)
                 if config and config.visible:
@@ -1011,6 +1058,13 @@ class TraceViewer(QMainWindow):
             xs = xs - item.min_x
             ys = ys - item.min_y
 
+            # Stamp each store with a monotonically increasing ordinal, in
+            # packet order, before masking. Used for the temporal heatmap.
+            times = np.arange(
+                item._write_time_base, item._write_time_base + len(xs)
+            ).astype(np.float32)
+            item._write_time_base += len(xs)
+
             min_v = item.config.min_value
             max_v = item.config.max_value
             if max_v > min_v:
@@ -1023,6 +1077,7 @@ class TraceViewer(QMainWindow):
             mask = (xs >= 0) & (xs < item.width) & (ys >= 0) & (ys < item.height)
             xs, ys, normalized = xs[mask], ys[mask], normalized[mask]
             vals_m = vals[mask].astype(np.float32)
+            times = times[mask]
             if len(xs):
                 item.data[ys, xs, 0] = normalized
                 item.data[ys, xs, 1] = normalized
@@ -1035,13 +1090,32 @@ class TraceViewer(QMainWindow):
                 if is_recomp.any():
                     np.add.at(item.counts, (ys[is_recomp], xs[is_recomp]), 1)
                 item.last_value[ys, xs] = vals_m
+                # Record first-write time only for pixels not yet stamped.
+                # Assign in reverse so that for pixels written more than once
+                # within this batch the earliest (smallest) time wins.
+                first = np.isnan(item.write_times[ys, xs])
+                if first.any():
+                    fi = np.where(first)[0][::-1]
+                    item.write_times[ys[fi], xs[fi]] = times[fi]
                 item._dirty = True
             n_pixels += len(xs)
         self._prof_update_pixel += _time.perf_counter() - tp
         return n_pixels
 
     def _toggle_recompute_mode(self, checked: bool):
+        if checked:
+            # Display mode is a single value, so the two heatmaps are mutually
+            # exclusive — turning one on turns the other off.
+            self._temporal_action.setChecked(False)
         mode = DisplayMode.RECOMPUTE_HEAT if checked else DisplayMode.VALUE
+        for item in self.canvas.func_items.values():
+            item.display_mode = mode
+            item._update_pixmap()
+
+    def _toggle_temporal_mode(self, checked: bool):
+        if checked:
+            self._recompute_action.setChecked(False)
+        mode = DisplayMode.TEMPORAL if checked else DisplayMode.VALUE
         for item in self.canvas.func_items.values():
             item.display_mode = mode
             item._update_pixmap()
