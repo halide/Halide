@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
+    QFont,
     QImage,
     QKeySequence,
     QPainter,
@@ -318,13 +319,19 @@ class TraceCanvas(QGraphicsView):
         self.scene.addItem(item)
         self.func_items[func_name] = item
 
-        # Add label as a child of the item so it moves with it
+        # Add label as a child of the item so it moves with it.
+        # ItemIgnoresTransformations keeps it at a fixed screen size when zoomed out.
         display_name = func_name.split(":")[-1] if ":" in func_name else func_name
         label = self.scene.addSimpleText(display_name)
-        label.setParentItem(item)  # Make label a child of the func item
-        label.setPos(0, -20)  # Position relative to parent (above it)
-        label.setBrush(QBrush(QColor(200, 200, 200)))
-        item.label = label  # Store reference on item
+        label.setParentItem(item)
+        font = QFont()
+        font.setPointSize(14)
+        label.setFont(font)
+        label.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
+        label.setBrush(QBrush(QColor(220, 220, 220)))
+        label_h = label.boundingRect().height()
+        label.setPos(0, -(label_h + 4))
+        item.label = label
         self.func_labels[func_name] = label
 
         return item
@@ -408,15 +415,16 @@ class FuncListWidget(QWidget):
     def set_funcs(self, funcs: dict[str, FuncStats]):
         """Populate the list with funcs."""
         self.list_widget.clear()
-        for name, stats in sorted(funcs.items()):
-            item = QListWidgetItem(name)
+        for name, _stats in sorted(funcs.items()):
+            short = name.split(":")[-1] if ":" in name else name
+            item = QListWidgetItem(short)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Checked)
-            item.setData(Qt.ItemDataRole.UserRole, stats)
+            item.setData(Qt.ItemDataRole.UserRole, name)  # full qualified name
             self.list_widget.addItem(item)
 
     def _on_item_changed(self, item: QListWidgetItem):
-        name = item.text()
+        name = item.data(Qt.ItemDataRole.UserRole)  # full qualified name
         visible = item.checkState() == Qt.CheckState.Checked
         self.func_visibility_changed.emit(name, visible)
 
@@ -567,6 +575,9 @@ class TraceViewer(QMainWindow):
             # Don't render initially - let user scrub to desired time
             # This avoids the long initial render for large traces
             self.timeline.set_time(0)
+
+            # Fit all funcs into view after the event loop has laid out the window
+            QTimer.singleShot(0, self._fit_all)
 
             self.status_bar.showMessage(
                 f"Loaded {path.name}: {len(self._packets)} packets, "
