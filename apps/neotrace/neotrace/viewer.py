@@ -53,6 +53,7 @@ class DisplayMode(IntEnum):
     RECOMPUTE_HEAT = 1
     TEMPORAL = 2
     REUSE_DIST = 3
+    LOAD_COUNT = 4
 
 
 @dataclass
@@ -146,6 +147,21 @@ class FuncItem(QGraphicsPixmapItem):
         # _apply_reuse_distances; harmless defaults until then.
         self.reuse_norm_min = 0.0
         self.reuse_norm_max = 1.0
+        # Per-pixel load count accumulated up to the current scrub time. Like
+        # `data` it grows as the user scrubs forward (loads that have happened
+        # so far) and is rebuilt from zero on backward scrubs, so the heatmap
+        # tracks the scrub position. Input-only buffers (no stores) accumulate
+        # here too, which is exactly where the interesting stencil footprints
+        # live. Only populated while LOAD_COUNT mode is active (see
+        # _accumulate_load_counts) to keep scrubbing fast otherwise.
+        self.load_counts = np.zeros((height, width), dtype=np.int32)
+        # This func's whole-trace max load count, used as a fixed log color
+        # scale so brightness stays stable while scrubbing. Per-func (not
+        # global) because load counts are dominated by boundary-clamp and
+        # lookup-table outliers; a per-func scale lets each func use the full
+        # ramp and makes its stencil footprint legible. Set by
+        # _apply_load_count_scale; harmless default until then.
+        self.load_count_norm_max = 1.0
         self.width = width
         self.height = height
         self.min_x = self.stats.min_coords[0] if self.stats.min_coords else 0
@@ -266,6 +282,41 @@ class FuncItem(QGraphicsPixmapItem):
             rgba[:, :, 2] = np.where(has_reuse, b, rgba[:, :, 2])
         return rgba
 
+    def _build_load_count_rgba(self) -> np.ndarray:
+        """Build an RGBA heatmap from per-pixel load counts.
+
+        Never loaded (count == 0) → black. Otherwise the count is log-scaled
+        against this func's whole-trace max and mapped through the classic
+        "hot" ramp black → red → yellow → white, so hot spots (heavily re-read
+        pixels — stencil centers, redundantly read compute_root buffers) glow
+        bright. The footprint of a stencil kernel shows up as a structured
+        bright region around each consumed pixel.
+
+        The scale is each func's fixed whole-trace max (not the current
+        accumulated max) so brightness does not jump around as the user
+        scrubs; pixels simply fill in toward their final color. Per-func
+        rather than global because load counts are dominated by outliers —
+        a single boundary-clamped input pixel may be read 10^5+ times while a
+        lookup table is read 10^5 times — which on a shared scale would crush
+        every interior pipeline func into near-black. A per-func scale lets
+        each func's stencil structure read clearly.
+        """
+        h, w = self.load_counts.shape
+        rgba = np.zeros((h, w, 4), dtype=np.uint8)
+        rgba[:, :, 3] = 255
+
+        denom = float(np.log1p(self.load_count_norm_max))
+        if denom <= 0.0 or not self.load_counts.any():
+            return rgba
+
+        t = (np.log1p(self.load_counts.astype(np.float32)) / denom).clip(0.0, 1.0)
+        # "hot" colormap: R ramps over [0, 1/3], G over [1/3, 2/3], B over
+        # [2/3, 1]. count == 0 → t == 0 → black, so no masking is needed.
+        rgba[:, :, 0] = (np.clip(3.0 * t, 0.0, 1.0) * 255.0).astype(np.uint8)
+        rgba[:, :, 1] = (np.clip(3.0 * t - 1.0, 0.0, 1.0) * 255.0).astype(np.uint8)
+        rgba[:, :, 2] = (np.clip(3.0 * t - 2.0, 0.0, 1.0) * 255.0).astype(np.uint8)
+        return rgba
+
     def _create_axis_labels(self):
         """Create axis coordinate labels as child items."""
         label_color = QBrush(QColor(150, 150, 150))
@@ -327,6 +378,8 @@ class FuncItem(QGraphicsPixmapItem):
             source = self._build_temporal_rgba()
         elif self.display_mode == DisplayMode.REUSE_DIST:
             source = self._build_reuse_rgba()
+        elif self.display_mode == DisplayMode.LOAD_COUNT:
+            source = self._build_load_count_rgba()
         else:
             source = self.data
         zoom = self.config.zoom
@@ -640,6 +693,11 @@ class TraceViewer(QMainWindow):
         # Cached whole-trace reuse distances {func: (xs, ys, mean_dist)};
         # populated once per trace, re-applied after backward scrubs
         self._reuse_dist_cache: dict = {}
+        # Per-func whole-trace max load count {func: max} → fixed log color
+        # scale for the load-count heatmap. Computed once per trace; the
+        # per-pixel counts themselves are accumulated incrementally while the
+        # mode is active.
+        self._load_count_max_by_func: dict[str, float] = {}
 
         self._setup_ui()
         self._setup_menu()
@@ -721,6 +779,12 @@ class TraceViewer(QMainWindow):
         self._reuse_action.triggered.connect(self._toggle_reuse_mode)
         view_menu.addAction(self._reuse_action)
 
+        self._load_count_action = QAction("&Load Count Heatmap", self)
+        self._load_count_action.setCheckable(True)
+        self._load_count_action.setShortcut(QKeySequence("Ctrl+L"))
+        self._load_count_action.triggered.connect(self._toggle_load_count_mode)
+        view_menu.addAction(self._load_count_action)
+
     def _open_file(self):
         """Open a trace file."""
         path, _ = QFileDialog.getOpenFileName(
@@ -773,6 +837,15 @@ class TraceViewer(QMainWindow):
             self._reuse_dist_cache = trace.collect_reuse_distances(
                 0, len(self._packets)
             )
+            # Whole-trace load counts — only each func's max is kept, as a
+            # fixed per-func color scale; the per-pixel counts are re-derived
+            # incrementally while scrubbing (see _accumulate_load_counts).
+            load_counts = trace.collect_load_counts(0, len(self._packets))
+            self._load_count_max_by_func = {
+                name: float(max(1, int(cs.max())))
+                for name, (_xs, _ys, cs) in load_counts.items()
+                if len(cs)
+            }
 
             # Initialize func configs with auto-layout
             self._auto_layout()
@@ -786,6 +859,7 @@ class TraceViewer(QMainWindow):
             self._recompute_action.setChecked(False)
             self._temporal_action.setChecked(False)
             self._reuse_action.setChecked(False)
+            self._load_count_action.setChecked(False)
             for name, stats in trace.funcs.items():
                 config = self.state.func_configs.get(name)
                 if config and config.visible:
@@ -793,6 +867,8 @@ class TraceViewer(QMainWindow):
 
             # Populate the static whole-trace reuse distances onto the items.
             self._apply_reuse_distances()
+            # Stamp the fixed load-count color scale onto the items.
+            self._apply_load_count_scale()
 
             # Don't render initially - let user scrub to desired time
             # This avoids the long initial render for large traces
@@ -1069,11 +1145,26 @@ class TraceViewer(QMainWindow):
             # Moving backward: must re-render from scratch
             for item in self.canvas.func_items.values():
                 item._init_data_array()
-            # _init_data_array cleared reuse_dist; re-apply the static data.
+            # _init_data_array cleared reuse_dist / load-count scale; re-apply
+            # the static data.
             self._apply_reuse_distances()
+            self._apply_load_count_scale()
             n_stores = self._render_range(0, time + 1)
         else:
             n_stores = 0
+
+        # Load counts only accumulate while the heatmap is active, mirroring
+        # the scrub position. The ranges below match the store strategy above:
+        # forward extends incrementally; init and backward both start from a
+        # zeroed load_counts (fresh items / _init_data_array), so they rescan
+        # from 0; an unchanged time leaves the counts untouched (re-scanning
+        # would double-count, since nothing re-zeroed them).
+        if self._load_count_action.isChecked():
+            if time > last_time:
+                start = last_time + 1 if last_time >= 0 else 0
+                self._accumulate_load_counts(start, time + 1)
+            elif time < last_time:
+                self._accumulate_load_counts(0, time + 1)
 
         t1 = _time.perf_counter()
 
@@ -1196,6 +1287,7 @@ class TraceViewer(QMainWindow):
                 self._recompute_action,
                 self._temporal_action,
                 self._reuse_action,
+                self._load_count_action,
             ):
                 if other is not action:
                     other.setChecked(False)
@@ -1216,6 +1308,14 @@ class TraceViewer(QMainWindow):
 
     def _toggle_reuse_mode(self, checked: bool):
         self._set_display_mode(DisplayMode.REUSE_DIST, self._reuse_action, checked)
+
+    def _toggle_load_count_mode(self, checked: bool):
+        # Load counts are only accumulated while the mode is active (see
+        # _render_to_time), so on entering the mode rebuild them from scratch
+        # up to the current scrub position.
+        if checked:
+            self._rebuild_load_counts(self.state.current_time)
+        self._set_display_mode(DisplayMode.LOAD_COUNT, self._load_count_action, checked)
 
     def _apply_load_pixels(self):
         """
@@ -1300,6 +1400,63 @@ class TraceViewer(QMainWindow):
             if len(xs_m):
                 item.reuse_dist[ys_m, xs_m] = dists[mask].astype(np.float32)
                 item._dirty = True
+
+    def _apply_load_count_scale(self):
+        """Set each item's fixed per-func load-count color scale.
+
+        Each func's whole-trace max is computed once at load
+        (`_load_count_max_by_func`) and stamped onto its item so the "hot"
+        ramp uses a stable scale. Re-applied after backward scrubs, since
+        _init_data_array resets it to the default.
+        """
+        for item in self.canvas.func_items.values():
+            item.load_count_norm_max = 1.0
+        for func_name, max_count in self._load_count_max_by_func.items():
+            item = self._get_func_item_for_packet(func_name)
+            if item is not None:
+                item.load_count_norm_max = max_count
+
+    def _accumulate_load_counts(self, start: int, end: int):
+        """Add load counts for packets in [start, end) into each item.
+
+        Each (x, y) appears once per func in the C++ result, so the in-place
+        `+=` has no duplicate indices and correctly accumulates across the
+        successive ranges produced by forward scrubbing.
+        """
+        if not self.state.trace or start >= end:
+            return
+        counts = self.state.trace.collect_load_counts(start, end)
+        for func_name, (xs, ys, cs) in counts.items():
+            if len(xs) == 0:
+                continue
+            item = self._get_func_item_for_packet(func_name)
+            if item is None:
+                continue
+            xs_off = xs - item.min_x
+            ys_off = ys - item.min_y
+            mask = (
+                (xs_off >= 0)
+                & (xs_off < item.width)
+                & (ys_off >= 0)
+                & (ys_off < item.height)
+            )
+            xs_m, ys_m = xs_off[mask], ys_off[mask]
+            if len(xs_m):
+                item.load_counts[ys_m, xs_m] += cs[mask]
+                item._dirty = True
+
+    def _rebuild_load_counts(self, time: int):
+        """Reset and recompute every item's load_counts for [0, time + 1].
+
+        Used when entering the mode (which must establish the baseline at the
+        current scrub position) and after backward scrubs.
+        """
+        for item in self.canvas.func_items.values():
+            item.load_counts[:] = 0
+        if time >= 0:
+            self._accumulate_load_counts(0, time + 1)
+        for item in self.canvas.func_items.values():
+            item.refresh_pixmap()
 
     def _update_sidebar_stats(self):
         stats: dict[str, tuple[float, float]] = {}

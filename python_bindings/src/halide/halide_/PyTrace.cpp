@@ -543,6 +543,66 @@ public:
         return result;
     }
 
+    // Return {func_name: (xs, ys, counts)} where each entry is one unique (x, y)
+    // touched by a load event in [start, end) and `counts` is how many times that
+    // pixel was loaded. Unlike collect_load_pixels (which deduplicates to one entry
+    // per pixel), this accumulates a count. Used by the load-count heatmap, which
+    // accumulates these per-range counts as the user scrubs forward.
+    py::dict collect_load_counts(size_t start, size_t end) const {
+        struct FuncData {
+            std::unordered_map<int64_t, int32_t> counts;  // packed_xy -> load count
+        };
+        std::map<std::string, FuncData> per_func;
+
+        if (start >= end) {
+            return py::dict();
+        }
+
+        end = std::min(end, packets_.size());
+        for (size_t idx = start; idx < end; ++idx) {
+            const auto &pkt = packets_[idx];
+            if (pkt.event != halide_trace_load) continue;
+
+            auto &fd = per_func[pkt.func];
+
+            const int n_lanes = pkt.type_lanes;
+            const int n_coords = static_cast<int>(pkt.coordinates.size());
+            const int dims = n_lanes > 0 ? n_coords / n_lanes : n_coords;
+
+            for (int lane = 0; lane < n_lanes; ++lane) {
+                int32_t x = 0, y = 0;
+                if (dims >= 2) {
+                    x = pkt.coordinates[lane];
+                    y = pkt.coordinates[n_lanes + lane];
+                } else if (dims == 1) {
+                    x = pkt.coordinates[lane];
+                }
+                const int64_t key = (static_cast<int64_t>(x) << 32) | static_cast<uint32_t>(y);
+                fd.counts[key] += 1;
+            }
+        }
+
+        py::dict result;
+        for (auto &[name, fd] : per_func) {
+            auto n = static_cast<py::ssize_t>(fd.counts.size());
+            py::array_t<int32_t> xs_arr(n), ys_arr(n), counts_arr(n);
+            if (n > 0) {
+                int32_t *xp = xs_arr.mutable_data();
+                int32_t *yp = ys_arr.mutable_data();
+                int32_t *cp = counts_arr.mutable_data();
+                py::ssize_t i = 0;
+                for (auto &[key, c] : fd.counts) {
+                    xp[i] = static_cast<int32_t>(key >> 32);
+                    yp[i] = static_cast<int32_t>(static_cast<uint32_t>(key));
+                    cp[i] = c;
+                    ++i;
+                }
+            }
+            result[py::str(name)] = py::make_tuple(xs_arr, ys_arr, counts_arr);
+        }
+        return result;
+    }
+
     // Return {func_name: (xs, ys, mean_distances)} for the reuse distance of each
     // stored pixel: the number of packets between a store and the first subsequent
     // load of the same (func, x, y). Pixels written multiple times accumulate one
@@ -848,6 +908,9 @@ void define_trace(py::module &m) {
         .def("collect_load_pixels", &Trace::collect_load_pixels, py::arg("start"), py::arg("end"), "Return {func_name: (xs, ys, values)} for load events in [start, end), "
                                                                                                    "deduplicated to one entry per unique (x, y) per func (first load wins). "
                                                                                                    "Use this to infer the contents of input buffers that have no store events.")
+        .def("collect_load_counts", &Trace::collect_load_counts, py::arg("start"), py::arg("end"), "Return {func_name: (xs, ys, counts)} for load events in [start, end), "
+                                                                                                   "one entry per unique (x, y) per func with the number of times it was "
+                                                                                                   "loaded (int32). Accumulate across ranges for the load-count heatmap.")
         .def("collect_reuse_distances", &Trace::collect_reuse_distances, py::arg("start"), py::arg("end"), "Return {func_name: (xs, ys, mean_distances)} for the reuse distance of "
                                                                                                            "each stored pixel: packets elapsed between a store and the first "
                                                                                                            "subsequent load of the same (func, x, y), averaged over all such pairs. "
