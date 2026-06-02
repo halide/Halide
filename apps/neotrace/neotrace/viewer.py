@@ -52,6 +52,7 @@ class DisplayMode(IntEnum):
     VALUE = 0
     RECOMPUTE_HEAT = 1
     TEMPORAL = 2
+    REUSE_DIST = 3
 
 
 @dataclass
@@ -135,6 +136,16 @@ class FuncItem(QGraphicsPixmapItem):
         # Monotonic store counter for this func, used to stamp write_times.
         # Reset here so backward scrubs (which re-init) restart the ordering.
         self._write_time_base = 0
+        # Mean reuse distance (store → first subsequent load, in packets) per
+        # pixel; NaN = stored-but-never-read or never-stored. This is a static
+        # whole-trace quantity populated from collect_reuse_distances, so it is
+        # re-applied (not recomputed) after backward scrubs reset this array.
+        self.reuse_dist = np.full((height, width), np.nan, dtype=np.float32)
+        # Global (whole-pipeline) min/max reuse distance, used as a shared log
+        # color scale so magnitude is comparable across funcs. Set by
+        # _apply_reuse_distances; harmless defaults until then.
+        self.reuse_norm_min = 0.0
+        self.reuse_norm_max = 1.0
         self.width = width
         self.height = height
         self.min_x = self.stats.min_coords[0] if self.stats.min_coords else 0
@@ -205,6 +216,56 @@ class FuncItem(QGraphicsPixmapItem):
         rgba[:, :, 2] = np.where(written, (255 - ramp), 0)
         return rgba
 
+    def _build_reuse_rgba(self) -> np.ndarray:
+        """Build an RGBA heatmap from per-pixel mean reuse distance.
+
+        Never stored             → black
+        Stored but never read    → gray (128, 128, 128)
+        Stored and later read    → blue (short distance) → red (long distance)
+
+        Distances span many orders of magnitude (compute_at ~10 packets vs.
+        compute_root 10^6+), so they are log-scaled against a *global*
+        (whole-pipeline) min→max range:
+        (log1p(dist) - log1p(global_min)) / (log1p(global_max) - log1p(global_min)).
+
+        A global scale (rather than per-func) is essential: per-func
+        normalization makes every func saturate near red because the log-space
+        median sits just below each func's own max. Sharing one scale lets a
+        well-scheduled func with short distances actually read blue.
+        """
+        h, w = self.reuse_dist.shape
+        rgba = np.zeros((h, w, 4), dtype=np.uint8)
+        rgba[:, :, 3] = 255
+
+        # write_times is set only on real stores (not by _apply_load_pixels), so
+        # it — unlike last_value — distinguishes a stored pixel from an
+        # input-buffer pixel that only has loads. Input buffers stay black.
+        #
+        # Gate everything on `stored` (current scrub position): reuse_dist is a
+        # whole-trace quantity, so without this gate every read pixel would be
+        # colored from t=0 and scrubbing would not change the image. Gating by
+        # write_times reveals each pixel's reuse color only once it has actually
+        # been computed at the current time.
+        stored = ~np.isnan(self.write_times)
+        has_reuse = stored & ~np.isnan(self.reuse_dist)
+        # Stored but never read → gray. (Disjoint from has_reuse.)
+        rgba[stored & ~has_reuse] = (128, 128, 128, 255)
+
+        if has_reuse.any():
+            lo = float(np.log1p(self.reuse_norm_min))
+            hi = float(np.log1p(self.reuse_norm_max))
+            t = np.zeros((h, w), dtype=np.float32)
+            if hi > lo:
+                t[has_reuse] = (np.log1p(self.reuse_dist[has_reuse]) - lo) / (hi - lo)
+            # If hi == lo (all distances equal) t stays 0 → uniform blue.
+            t = t.clip(0.0, 1.0)
+            r = (t * 255.0).clip(0, 255).astype(np.uint8)
+            b = ((1.0 - t) * 255.0).clip(0, 255).astype(np.uint8)
+            rgba[:, :, 0] = np.where(has_reuse, r, rgba[:, :, 0])
+            rgba[:, :, 1] = np.where(has_reuse, 0, rgba[:, :, 1])
+            rgba[:, :, 2] = np.where(has_reuse, b, rgba[:, :, 2])
+        return rgba
+
     def _create_axis_labels(self):
         """Create axis coordinate labels as child items."""
         label_color = QBrush(QColor(150, 150, 150))
@@ -264,6 +325,8 @@ class FuncItem(QGraphicsPixmapItem):
             source = self._build_heat_rgba()
         elif self.display_mode == DisplayMode.TEMPORAL:
             source = self._build_temporal_rgba()
+        elif self.display_mode == DisplayMode.REUSE_DIST:
+            source = self._build_reuse_rgba()
         else:
             source = self.data
         zoom = self.config.zoom
@@ -574,6 +637,9 @@ class TraceViewer(QMainWindow):
         # Cached load-pixel data for input funcs (no store events); populated
         # once per trace
         self._load_pixel_cache: dict = {}
+        # Cached whole-trace reuse distances {func: (xs, ys, mean_dist)};
+        # populated once per trace, re-applied after backward scrubs
+        self._reuse_dist_cache: dict = {}
 
         self._setup_ui()
         self._setup_menu()
@@ -649,6 +715,12 @@ class TraceViewer(QMainWindow):
         self._temporal_action.triggered.connect(self._toggle_temporal_mode)
         view_menu.addAction(self._temporal_action)
 
+        self._reuse_action = QAction("Reuse &Distance", self)
+        self._reuse_action.setCheckable(True)
+        self._reuse_action.setShortcut(QKeySequence("Ctrl+U"))
+        self._reuse_action.triggered.connect(self._toggle_reuse_mode)
+        view_menu.addAction(self._reuse_action)
+
     def _open_file(self):
         """Open a trace file."""
         path, _ = QFileDialog.getOpenFileName(
@@ -697,6 +769,10 @@ class TraceViewer(QMainWindow):
             self._load_pixel_cache = {
                 k: v for k, v in load_pixels.items() if k not in store_funcs
             }
+            # Whole-trace reuse distances (store → first subsequent load).
+            self._reuse_dist_cache = trace.collect_reuse_distances(
+                0, len(self._packets)
+            )
 
             # Initialize func configs with auto-layout
             self._auto_layout()
@@ -709,10 +785,14 @@ class TraceViewer(QMainWindow):
             self.canvas.clear_funcs()
             self._recompute_action.setChecked(False)
             self._temporal_action.setChecked(False)
+            self._reuse_action.setChecked(False)
             for name, stats in trace.funcs.items():
                 config = self.state.func_configs.get(name)
                 if config and config.visible:
                     self.canvas.add_func(name, stats, config)
+
+            # Populate the static whole-trace reuse distances onto the items.
+            self._apply_reuse_distances()
 
             # Don't render initially - let user scrub to desired time
             # This avoids the long initial render for large traces
@@ -989,6 +1069,8 @@ class TraceViewer(QMainWindow):
             # Moving backward: must re-render from scratch
             for item in self.canvas.func_items.values():
                 item._init_data_array()
+            # _init_data_array cleared reuse_dist; re-apply the static data.
+            self._apply_reuse_distances()
             n_stores = self._render_range(0, time + 1)
         else:
             n_stores = 0
@@ -1102,23 +1184,38 @@ class TraceViewer(QMainWindow):
         self._prof_update_pixel += _time.perf_counter() - tp
         return n_pixels
 
-    def _toggle_recompute_mode(self, checked: bool):
+    def _set_display_mode(self, mode: DisplayMode, action: QAction, checked: bool):
+        """Apply a display mode across all func items.
+
+        Display mode is a single value, so the heatmap toggles are mutually
+        exclusive: enabling one unchecks the others and falls back to VALUE when
+        the active toggle is switched off.
+        """
         if checked:
-            # Display mode is a single value, so the two heatmaps are mutually
-            # exclusive — turning one on turns the other off.
-            self._temporal_action.setChecked(False)
-        mode = DisplayMode.RECOMPUTE_HEAT if checked else DisplayMode.VALUE
+            for other in (
+                self._recompute_action,
+                self._temporal_action,
+                self._reuse_action,
+            ):
+                if other is not action:
+                    other.setChecked(False)
+            new_mode = mode
+        else:
+            new_mode = DisplayMode.VALUE
         for item in self.canvas.func_items.values():
-            item.display_mode = mode
+            item.display_mode = new_mode
             item._update_pixmap()
 
+    def _toggle_recompute_mode(self, checked: bool):
+        self._set_display_mode(
+            DisplayMode.RECOMPUTE_HEAT, self._recompute_action, checked
+        )
+
     def _toggle_temporal_mode(self, checked: bool):
-        if checked:
-            self._recompute_action.setChecked(False)
-        mode = DisplayMode.TEMPORAL if checked else DisplayMode.VALUE
-        for item in self.canvas.func_items.values():
-            item.display_mode = mode
-            item._update_pixmap()
+        self._set_display_mode(DisplayMode.TEMPORAL, self._temporal_action, checked)
+
+    def _toggle_reuse_mode(self, checked: bool):
+        self._set_display_mode(DisplayMode.REUSE_DIST, self._reuse_action, checked)
 
     def _apply_load_pixels(self):
         """
@@ -1163,6 +1260,46 @@ class TraceViewer(QMainWindow):
                 # counts stays zero — loads are not redundant recomputes
                 item._dirty = True
             item.refresh_pixmap()
+
+    def _apply_reuse_distances(self):
+        """Stamp each FuncItem's reuse_dist array from the whole-trace cache.
+
+        Reuse distance is a static property of the full execution, so it is
+        applied once at load and re-applied after backward scrubs (which reset
+        the per-item arrays in _init_data_array). Marks items dirty so the
+        pixmap regenerates if the reuse-distance mode is active.
+        """
+        # Global min/max over every func's distances → shared color scale.
+        global_min = np.inf
+        global_max = 0.0
+        for _name, (_xs, _ys, dists) in self._reuse_dist_cache.items():
+            if len(dists):
+                global_min = min(global_min, float(dists.min()))
+                global_max = max(global_max, float(dists.max()))
+        if not np.isfinite(global_min):
+            global_min = 0.0
+
+        for item in self.canvas.func_items.values():
+            item.reuse_norm_min = global_min
+            item.reuse_norm_max = global_max
+
+        for func_name, (xs, ys, dists) in self._reuse_dist_cache.items():
+            item = self._get_func_item_for_packet(func_name)
+            if item is None:
+                continue
+
+            xs_off = xs - item.min_x
+            ys_off = ys - item.min_y
+            mask = (
+                (xs_off >= 0)
+                & (xs_off < item.width)
+                & (ys_off >= 0)
+                & (ys_off < item.height)
+            )
+            xs_m, ys_m = xs_off[mask], ys_off[mask]
+            if len(xs_m):
+                item.reuse_dist[ys_m, xs_m] = dists[mask].astype(np.float32)
+                item._dirty = True
 
     def _update_sidebar_stats(self):
         stats: dict[str, tuple[float, float]] = {}

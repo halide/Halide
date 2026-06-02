@@ -9,6 +9,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -542,6 +543,90 @@ public:
         return result;
     }
 
+    // Return {func_name: (xs, ys, mean_distances)} for the reuse distance of each
+    // stored pixel: the number of packets between a store and the first subsequent
+    // load of the same (func, x, y). Pixels written multiple times accumulate one
+    // distance per (store, first-following-load) pair and report the mean.
+    //
+    // Pixels that were stored but never read are absent from the result (the caller
+    // paints them gray); pixels that were never stored never appear at all.
+    py::dict collect_reuse_distances(size_t start, size_t end) const {
+        struct Accum {
+            double sum_dist = 0.0;
+            int64_t count = 0;
+        };
+        struct FuncData {
+            std::unordered_map<int64_t, size_t> last_store;  // packed_xy -> store idx
+            std::unordered_map<int64_t, Accum> accum;        // packed_xy -> distances
+        };
+        std::map<std::string, FuncData> per_func;
+
+        if (start >= end) {
+            return py::dict();
+        }
+
+        end = std::min(end, packets_.size());
+        for (size_t idx = start; idx < end; ++idx) {
+            const auto &pkt = packets_[idx];
+            const bool is_store = pkt.event == halide_trace_store;
+            const bool is_load = pkt.event == halide_trace_load;
+            if (!is_store && !is_load) continue;
+
+            auto &fd = per_func[pkt.func];
+
+            const int n_lanes = pkt.type_lanes;
+            const int n_coords = static_cast<int>(pkt.coordinates.size());
+            const int dims = n_lanes > 0 ? n_coords / n_lanes : n_coords;
+
+            for (int lane = 0; lane < n_lanes; ++lane) {
+                int32_t x = 0, y = 0;
+                if (dims >= 2) {
+                    x = pkt.coordinates[lane];
+                    y = pkt.coordinates[n_lanes + lane];
+                } else if (dims == 1) {
+                    x = pkt.coordinates[lane];
+                }
+                const int64_t key = (static_cast<int64_t>(x) << 32) | static_cast<uint32_t>(y);
+
+                if (is_store) {
+                    // Overwrite: distance is measured from the most recent store,
+                    // which is what physically occupies the pixel at load time.
+                    fd.last_store[key] = idx;
+                } else {
+                    auto sit = fd.last_store.find(key);
+                    if (sit != fd.last_store.end()) {
+                        auto &a = fd.accum[key];
+                        a.sum_dist += static_cast<double>(idx - sit->second);
+                        a.count += 1;
+                        // Erase so we only count store -> first read, not every read.
+                        fd.last_store.erase(sit);
+                    }
+                }
+            }
+        }
+
+        py::dict result;
+        for (auto &[name, fd] : per_func) {
+            auto n = static_cast<py::ssize_t>(fd.accum.size());
+            py::array_t<int32_t> xs_arr(n), ys_arr(n);
+            py::array_t<double> mean_arr(n);
+            if (n > 0) {
+                int32_t *xp = xs_arr.mutable_data();
+                int32_t *yp = ys_arr.mutable_data();
+                double *mp = mean_arr.mutable_data();
+                py::ssize_t i = 0;
+                for (auto &[key, a] : fd.accum) {
+                    xp[i] = static_cast<int32_t>(key >> 32);
+                    yp[i] = static_cast<int32_t>(static_cast<uint32_t>(key));
+                    mp[i] = a.count > 0 ? a.sum_dist / static_cast<double>(a.count) : 0.0;
+                    ++i;
+                }
+            }
+            result[py::str(name)] = py::make_tuple(xs_arr, ys_arr, mean_arr);
+        }
+        return result;
+    }
+
     std::string dag_as_dot() const {
         std::ostringstream ss;
         ss << "digraph dag {\n";
@@ -763,6 +848,10 @@ void define_trace(py::module &m) {
         .def("collect_load_pixels", &Trace::collect_load_pixels, py::arg("start"), py::arg("end"), "Return {func_name: (xs, ys, values)} for load events in [start, end), "
                                                                                                    "deduplicated to one entry per unique (x, y) per func (first load wins). "
                                                                                                    "Use this to infer the contents of input buffers that have no store events.")
+        .def("collect_reuse_distances", &Trace::collect_reuse_distances, py::arg("start"), py::arg("end"), "Return {func_name: (xs, ys, mean_distances)} for the reuse distance of "
+                                                                                                           "each stored pixel: packets elapsed between a store and the first "
+                                                                                                           "subsequent load of the same (func, x, y), averaged over all such pairs. "
+                                                                                                           "Stored-but-never-read pixels are absent.")
         .def("dag_as_dot", &Trace::dag_as_dot);
 }
 
