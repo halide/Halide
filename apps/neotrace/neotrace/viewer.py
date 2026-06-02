@@ -4,7 +4,6 @@ Interactive trace viewer using Qt.
 
 from __future__ import annotations
 
-import bisect
 import time as _time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -448,9 +447,6 @@ class TraceViewer(QMainWindow):
         self._func_name_cache: dict[str, FuncItem | None] = {}
         # Cached packets list — trace.packets copies the C++ vector every access
         self._packets: list[TracePacket] = []
-        # Sorted indices of store packets — lets _render_range skip
-        # non-stores via bisect
-        self._store_indices: list[int] = []
 
         self._setup_ui()
         self._setup_menu()
@@ -550,9 +546,6 @@ class TraceViewer(QMainWindow):
             self._packets = (
                 trace.packets
             )  # Cache once; avoids full C++ vector copy each access
-            self._store_indices = (
-                trace.store_indices()
-            )  # Sorted indices for bisect in _render_range
 
             # Clear func name cache
             self._func_name_cache = {}
@@ -827,9 +820,8 @@ class TraceViewer(QMainWindow):
 
         last_time = self.state.current_time
 
-        self._prof_get_values = 0.0
+        self._prof_collect = 0.0
         self._prof_update_pixel = 0.0
-        self._prof_coord = 0.0
         t0 = _time.perf_counter()
 
         # Determine rendering strategy
@@ -867,97 +859,48 @@ class TraceViewer(QMainWindow):
         else:
             direction = "="
         n_packets = time + 1 if direction in ("bwd", "init") else abs(time - last_time)
-        gv = 1000 * self._prof_get_values
-        co = 1000 * self._prof_coord
+        cl = 1000 * self._prof_collect
         up = 1000 * self._prof_update_pixel
         msg = (
-            f"[{direction}] packets={n_packets}  stores={n_stores}  "
+            f"[{direction}] packets={n_packets}  pixels={n_stores}  "
             f"process={1000 * (t1 - t0):.1f}ms "
-            f"[get_values={gv:.1f}ms  coord={co:.1f}ms  batch_write={up:.1f}ms]  "
+            f"[collect={cl:.1f}ms  batch_write={up:.1f}ms]  "
             f"pixmap={1000 * (t2 - t1):.1f}ms  total={1000 * (t2 - t0):.1f}ms"
         )
         print(msg, file=sys.stderr)
         self.status_bar.showMessage(msg)
 
     # Profiling accumulators — reset each tick in _render_to_time
-    _prof_get_values: float = 0.0
+    _prof_collect: float = 0.0
     _prof_update_pixel: float = 0.0
-    _prof_coord: float = 0.0
 
     def _render_range(self, start: int, end: int) -> int:
-        """
-        Process packets in [start, end), batch-applying pixel writes.
-        Returns store count.
+        """Process packets in [start, end) and batch-write pixels.
+
+        Returns total pixel count written.
         """
         if not self.state.trace:
             return 0
 
-        # Collect pixel writes per func before touching any numpy arrays.
-        # pending[id(item)] = [px_list, py_list, val_list, item]
-        pending: dict[int, list] = {}
+        end = min(end, len(self._packets))
 
-        n_stores = 0
-        packets = self._packets
-        store_indices = self._store_indices
-        end = min(end, len(packets))
+        # Single C++ call: decode all store pixels in the range, grouped by func.
+        ta = _time.perf_counter()
+        pixel_data = self.state.trace.collect_pixels(start, end)
+        self._prof_collect += _time.perf_counter() - ta
 
-        # Binary-search to the first store in range, then walk only store packets.
-        lo = bisect.bisect_left(store_indices, start)
-        hi = bisect.bisect_right(store_indices, end - 1)
-        for si in range(lo, hi):
-            i = store_indices[si]
-            packet = packets[i]
-
-            item = self._get_func_item_for_packet(packet.func)
+        # Batch-apply per func: normalise + fancy-index write.
+        tp = _time.perf_counter()
+        n_pixels = 0
+        for func_name, (xs, ys, vals) in pixel_data.items():
+            if len(xs) == 0:
+                continue
+            item = self._get_func_item_for_packet(func_name)
             if item is None:
                 continue
 
-            ta = _time.perf_counter()
-            values = packet.get_values()
-            self._prof_get_values += _time.perf_counter() - ta
-            if not values:
-                continue
-
-            tc = _time.perf_counter()
-            coords = packet.coordinates
-            n_lanes = packet.type_lanes
-            dims_per_lane = len(coords) // n_lanes if n_lanes > 0 else len(coords)
-            min_x = item.min_x
-            min_y = item.min_y
-
-            key = id(item)
-            if key not in pending:
-                pending[key] = [[], [], [], item]
-            px_list, py_list, val_list, _ = pending[key]
-
-            for lane in range(n_lanes):
-                if dims_per_lane >= 2:
-                    x = coords[lane] - min_x  # coords[0*n_lanes + lane]
-                    y = coords[n_lanes + lane] - min_y  # coords[1*n_lanes + lane]
-                elif dims_per_lane == 1:
-                    x = coords[lane] - min_x
-                    y = -min_y
-                else:
-                    x = -min_x
-                    y = -min_y
-                if lane < len(values):
-                    px_list.append(x)
-                    py_list.append(y)
-                    val_list.append(values[lane])
-
-            self._prof_coord += _time.perf_counter() - tc
-            n_stores += 1
-
-        # Batch-apply all collected pixel writes via numpy fancy indexing:
-        # one vectorised normalisation + three indexed writes per func,
-        # instead of three scalar __setitem__ calls per pixel.
-        tp = _time.perf_counter()
-        for px_list, py_list, val_list, item in pending.values():
-            if not px_list:
-                continue
-            xs = np.asarray(px_list, dtype=np.intp)
-            ys = np.asarray(py_list, dtype=np.intp)
-            vals = np.asarray(val_list)
+            xs = xs - item.min_x
+            ys = ys - item.min_y
 
             min_v = item.config.min_value
             max_v = item.config.max_value
@@ -969,16 +912,15 @@ class TraceViewer(QMainWindow):
                 normalized = np.full(len(xs), 128, dtype=np.uint8)
 
             mask = (xs >= 0) & (xs < item.width) & (ys >= 0) & (ys < item.height)
-            xs = xs[mask]
-            ys = ys[mask]
-            normalized = normalized[mask]
+            xs, ys, normalized = xs[mask], ys[mask], normalized[mask]
             if len(xs):
                 item.data[ys, xs, 0] = normalized
                 item.data[ys, xs, 1] = normalized
                 item.data[ys, xs, 2] = normalized
                 item._dirty = True
+            n_pixels += len(xs)
         self._prof_update_pixel += _time.perf_counter() - tp
-        return n_stores
+        return n_pixels
 
     def _get_func_item_for_packet(self, func_name: str) -> FuncItem | None:
         """Get the FuncItem for a packet's func name, with caching."""

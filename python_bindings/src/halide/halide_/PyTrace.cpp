@@ -244,6 +244,9 @@ public:
                 pkt.trace_tag = trace.strings_[intern_string(trace_tag)];
             }
 
+            if (ev == halide_trace_store) {
+                trace.store_indices_.push_back(trace.packets_.size());
+            }
             trace.packets_.push_back(std::move(pkt));
 
             pos += pkt_ptr->size;
@@ -320,14 +323,112 @@ public:
     }
 
     // Returns the indices of all store packets, in order.
-    // Cached once at load time in Python to avoid iterating all packets per render.
-    std::vector<size_t> store_indices() const {
-        std::vector<size_t> result;
-        result.reserve(packets_.size() / 4);
-        for (size_t i = 0; i < packets_.size(); ++i) {
-            if (packets_[i].is_store()) {
-                result.push_back(i);
+    const std::vector<size_t> &store_indices() const {
+        return store_indices_;
+    }
+
+    // Returns {func_name: (xs, ys, values)} for all store packets with index
+    // in [start, end).  xs and ys are int32 numpy arrays of absolute
+    // coordinates; values is a float64 array of decoded scalar values.
+    // Lane-vectorized stores are expanded: each lane becomes one row.
+    py::dict collect_pixels(size_t start, size_t end) const {
+        struct FuncData {
+            std::vector<int32_t> xs;
+            std::vector<int32_t> ys;
+            std::vector<double> values;
+        };
+        std::map<std::string, FuncData> per_func;
+
+        if (start >= end) {
+            return py::dict();
+        }
+
+        auto it_lo = std::lower_bound(store_indices_.begin(), store_indices_.end(), start);
+        auto it_hi = std::upper_bound(store_indices_.begin(), store_indices_.end(), end - 1);
+
+        for (auto it = it_lo; it != it_hi; ++it) {
+            const auto &pkt = packets_[*it];
+            auto &fd = per_func[pkt.func];
+
+            const int n_lanes = pkt.type_lanes;
+            const int n_coords = static_cast<int>(pkt.coordinates.size());
+            const int dims = n_lanes > 0 ? n_coords / n_lanes : n_coords;
+            const size_t elem_size = (pkt.type_bits + 7) / 8;
+
+            for (int lane = 0; lane < n_lanes; ++lane) {
+                // Decode coordinates (same layout as HalideTraceViz / viewer.py)
+                int32_t x = 0, y = 0;
+                if (dims >= 2) {
+                    x = pkt.coordinates[lane];
+                    y = pkt.coordinates[n_lanes + lane];
+                } else if (dims == 1) {
+                    x = pkt.coordinates[lane];
+                }
+
+                // Decode value to float64
+                double val = 0.0;
+                if (!pkt.value.empty() && (lane + 1) * elem_size <= pkt.value.size()) {
+                    const uint8_t *ptr = pkt.value.data() + lane * elem_size;
+                    if (pkt.type_code == halide_type_float) {
+                        if (pkt.type_bits == 32) {
+                            float v;
+                            std::memcpy(&v, ptr, 4);
+                            val = v;
+                        } else if (pkt.type_bits == 64) {
+                            std::memcpy(&val, ptr, 8);
+                        }
+                    } else if (pkt.type_code == halide_type_int) {
+                        if (pkt.type_bits == 8) {
+                            val = static_cast<int8_t>(*ptr);
+                        } else if (pkt.type_bits == 16) {
+                            int16_t v;
+                            std::memcpy(&v, ptr, 2);
+                            val = v;
+                        } else if (pkt.type_bits == 32) {
+                            int32_t v;
+                            std::memcpy(&v, ptr, 4);
+                            val = v;
+                        } else if (pkt.type_bits == 64) {
+                            int64_t v;
+                            std::memcpy(&v, ptr, 8);
+                            val = static_cast<double>(v);
+                        }
+                    } else if (pkt.type_code == halide_type_uint) {
+                        if (pkt.type_bits == 8) {
+                            val = *ptr;
+                        } else if (pkt.type_bits == 16) {
+                            uint16_t v;
+                            std::memcpy(&v, ptr, 2);
+                            val = v;
+                        } else if (pkt.type_bits == 32) {
+                            uint32_t v;
+                            std::memcpy(&v, ptr, 4);
+                            val = v;
+                        } else if (pkt.type_bits == 64) {
+                            uint64_t v;
+                            std::memcpy(&v, ptr, 8);
+                            val = static_cast<double>(v);
+                        }
+                    }
+                }
+
+                fd.xs.push_back(x);
+                fd.ys.push_back(y);
+                fd.values.push_back(val);
             }
+        }
+
+        py::dict result;
+        for (auto &[name, fd] : per_func) {
+            auto n = static_cast<py::ssize_t>(fd.xs.size());
+            py::array_t<int32_t> xs_arr(n), ys_arr(n);
+            py::array_t<double> vals_arr(n);
+            if (n > 0) {
+                std::memcpy(xs_arr.mutable_data(), fd.xs.data(), n * sizeof(int32_t));
+                std::memcpy(ys_arr.mutable_data(), fd.ys.data(), n * sizeof(int32_t));
+                std::memcpy(vals_arr.mutable_data(), fd.values.data(), n * sizeof(double));
+            }
+            result[py::str(name)] = py::make_tuple(xs_arr, ys_arr, vals_arr);
         }
         return result;
     }
@@ -367,6 +468,7 @@ public:
 
 private:
     std::vector<TracePacket> packets_;
+    std::vector<size_t> store_indices_;  // Pre-computed at load time for O(log n) range queries
     std::map<std::string, FuncStats> funcs_;
     std::map<int32_t, std::string> pipelines_;
     std::map<std::string, std::set<std::string>> dag_edges_;
@@ -547,6 +649,8 @@ void define_trace(py::module &m) {
         .def_property_readonly("packets", &Trace::packets)
         .def("filter_loads_stores", &Trace::filter_loads_stores)
         .def("store_indices", &Trace::store_indices)
+        .def("collect_pixels", &Trace::collect_pixels, py::arg("start"), py::arg("end"), "Return {func_name: (xs, ys, values)} numpy arrays for store packets "
+                                                                                         "with index in [start, end).  Values are float64; coordinates are int32.")
         .def("dag_as_dot", &Trace::dag_as_dot);
 }
 
