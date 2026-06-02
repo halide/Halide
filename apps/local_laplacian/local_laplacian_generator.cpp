@@ -19,8 +19,16 @@ public:
         /* THE ALGORITHM */
         const int J = pyramid_levels;
 
+        auto make_pyramid = [](const char *prefix) {
+            std::vector<Func> funcs;
+            funcs.reserve(maxJ);
+            for (int i = 0; i < maxJ; ++i)
+                funcs.emplace_back(std::string(prefix) + "_" + std::to_string(i));
+            return funcs;
+        };
+
         // Make the remapping function as a lookup table.
-        Func remap;
+        Func remap{"remap"};
         Expr fx = cast<float>(x) / 256.0f;
         remap(x) = alpha * fx * exp(-fx * fx / 2.0f);
 
@@ -28,15 +36,15 @@ public:
         Func clamped = Halide::BoundaryConditions::repeat_edge(input);
 
         // Convert to floating point
-        Func floating;
+        Func floating{"floating"};
         floating(x, y, c) = clamped(x, y, c) / 65535.0f;
 
         // Get the luminance channel
-        Func gray;
+        Func gray{"gray"};
         gray(x, y) = 0.299f * floating(x, y, 0) + 0.587f * floating(x, y, 1) + 0.114f * floating(x, y, 2);
 
         // Make the processed Gaussian pyramid.
-        Func gPyramid[maxJ];
+        auto gPyramid = make_pyramid("gPyramid");
         // Do a lookup into a lut with 256 entries per intensity level
         Expr level = k * (1.0f / (levels - 1));
         Expr idx = gray(x, y) * cast<float>(levels - 1) * 256.0f;
@@ -47,21 +55,21 @@ public:
         }
 
         // Get its laplacian pyramid
-        Func lPyramid[maxJ];
+        auto lPyramid = make_pyramid("lPyramid");
         lPyramid[J - 1](x, y, k) = gPyramid[J - 1](x, y, k);
         for (int j = J - 2; j >= 0; j--) {
             lPyramid[j](x, y, k) = gPyramid[j](x, y, k) - upsample(gPyramid[j + 1])(x, y, k);
         }
 
         // Make the Gaussian pyramid of the input
-        Func inGPyramid[maxJ];
+        auto inGPyramid = make_pyramid("inGPyramid");
         inGPyramid[0](x, y) = gray(x, y);
         for (int j = 1; j < J; j++) {
             inGPyramid[j](x, y) = downsample(inGPyramid[j - 1])(x, y);
         }
 
         // Make the laplacian pyramid of the output
-        Func outLPyramid[maxJ];
+        auto outLPyramid = make_pyramid("outLPyramid");
         for (int j = 0; j < J; j++) {
             // Split input pyramid value into integer and floating parts
             Expr level = inGPyramid[j](x, y) * cast<float>(levels - 1);
@@ -72,14 +80,14 @@ public:
         }
 
         // Make the Gaussian pyramid of the output
-        Func outGPyramid[maxJ];
+        auto outGPyramid = make_pyramid("outGPyramid");
         outGPyramid[J - 1](x, y) = outLPyramid[J - 1](x, y);
         for (int j = J - 2; j >= 0; j--) {
             outGPyramid[j](x, y) = upsample(outGPyramid[j + 1])(x, y) + outLPyramid[j](x, y);
         }
 
         // Reintroduce color (Connelly: use eps to avoid scaling up noise w/ apollo3.png input)
-        Func color;
+        Func color{"color"};
         float eps = 0.01f;
         color(x, y, c) = input(x, y, c) * (outGPyramid[0](x, y) + eps) / (gray(x, y) + eps);
 
