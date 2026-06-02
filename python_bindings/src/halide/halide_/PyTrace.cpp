@@ -9,6 +9,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace Halide::PythonBindings {
@@ -433,6 +434,114 @@ public:
         return result;
     }
 
+    // Return {func_name: (xs, ys, values)} for load events in [start, end).
+    // Each (x, y) coordinate is included at most once per func (first load wins),
+    // so the result is suitable for inferring input buffer contents.
+    py::dict collect_load_pixels(size_t start, size_t end) const {
+        struct FuncData {
+            std::vector<int32_t> xs;
+            std::vector<int32_t> ys;
+            std::vector<double> values;
+            std::unordered_set<int64_t> seen;  // packed (x,y) for deduplication
+        };
+        std::map<std::string, FuncData> per_func;
+
+        if (start >= end) {
+            return py::dict();
+        }
+
+        end = std::min(end, packets_.size());
+        for (size_t idx = start; idx < end; ++idx) {
+            const auto &pkt = packets_[idx];
+            if (pkt.event != halide_trace_load) continue;
+
+            auto &fd = per_func[pkt.func];
+
+            const int n_lanes = pkt.type_lanes;
+            const int n_coords = static_cast<int>(pkt.coordinates.size());
+            const int dims = n_lanes > 0 ? n_coords / n_lanes : n_coords;
+            const size_t elem_size = (pkt.type_bits + 7) / 8;
+
+            for (int lane = 0; lane < n_lanes; ++lane) {
+                int32_t x = 0, y = 0;
+                if (dims >= 2) {
+                    x = pkt.coordinates[lane];
+                    y = pkt.coordinates[n_lanes + lane];
+                } else if (dims == 1) {
+                    x = pkt.coordinates[lane];
+                }
+
+                // Deduplicate: skip if we've already recorded a value at (x, y)
+                const int64_t key = (static_cast<int64_t>(x) << 32) | static_cast<uint32_t>(y);
+                if (!fd.seen.insert(key).second) continue;
+
+                double val = 0.0;
+                if (!pkt.value.empty() && (lane + 1) * elem_size <= pkt.value.size()) {
+                    const uint8_t *ptr = pkt.value.data() + lane * elem_size;
+                    if (pkt.type_code == halide_type_float) {
+                        if (pkt.type_bits == 32) {
+                            float v;
+                            std::memcpy(&v, ptr, 4);
+                            val = v;
+                        } else if (pkt.type_bits == 64) {
+                            std::memcpy(&val, ptr, 8);
+                        }
+                    } else if (pkt.type_code == halide_type_int) {
+                        if (pkt.type_bits == 8) {
+                            val = static_cast<int8_t>(*ptr);
+                        } else if (pkt.type_bits == 16) {
+                            int16_t v;
+                            std::memcpy(&v, ptr, 2);
+                            val = v;
+                        } else if (pkt.type_bits == 32) {
+                            int32_t v;
+                            std::memcpy(&v, ptr, 4);
+                            val = v;
+                        } else if (pkt.type_bits == 64) {
+                            int64_t v;
+                            std::memcpy(&v, ptr, 8);
+                            val = static_cast<double>(v);
+                        }
+                    } else if (pkt.type_code == halide_type_uint) {
+                        if (pkt.type_bits == 8) {
+                            val = *ptr;
+                        } else if (pkt.type_bits == 16) {
+                            uint16_t v;
+                            std::memcpy(&v, ptr, 2);
+                            val = v;
+                        } else if (pkt.type_bits == 32) {
+                            uint32_t v;
+                            std::memcpy(&v, ptr, 4);
+                            val = v;
+                        } else if (pkt.type_bits == 64) {
+                            uint64_t v;
+                            std::memcpy(&v, ptr, 8);
+                            val = static_cast<double>(v);
+                        }
+                    }
+                }
+
+                fd.xs.push_back(x);
+                fd.ys.push_back(y);
+                fd.values.push_back(val);
+            }
+        }
+
+        py::dict result;
+        for (auto &[name, fd] : per_func) {
+            auto n = static_cast<py::ssize_t>(fd.xs.size());
+            py::array_t<int32_t> xs_arr(n), ys_arr(n);
+            py::array_t<double> vals_arr(n);
+            if (n > 0) {
+                std::memcpy(xs_arr.mutable_data(), fd.xs.data(), n * sizeof(int32_t));
+                std::memcpy(ys_arr.mutable_data(), fd.ys.data(), n * sizeof(int32_t));
+                std::memcpy(vals_arr.mutable_data(), fd.values.data(), n * sizeof(double));
+            }
+            result[py::str(name)] = py::make_tuple(xs_arr, ys_arr, vals_arr);
+        }
+        return result;
+    }
+
     std::string dag_as_dot() const {
         std::ostringstream ss;
         ss << "digraph dag {\n";
@@ -651,6 +760,9 @@ void define_trace(py::module &m) {
         .def("store_indices", &Trace::store_indices)
         .def("collect_pixels", &Trace::collect_pixels, py::arg("start"), py::arg("end"), "Return {func_name: (xs, ys, values)} numpy arrays for store packets "
                                                                                          "with index in [start, end).  Values are float64; coordinates are int32.")
+        .def("collect_load_pixels", &Trace::collect_load_pixels, py::arg("start"), py::arg("end"), "Return {func_name: (xs, ys, values)} for load events in [start, end), "
+                                                                                                   "deduplicated to one entry per unique (x, y) per func (first load wins). "
+                                                                                                   "Use this to infer the contents of input buffers that have no store events.")
         .def("dag_as_dot", &Trace::dag_as_dot);
 }
 

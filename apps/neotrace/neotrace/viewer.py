@@ -531,6 +531,9 @@ class TraceViewer(QMainWindow):
         self._func_name_cache: dict[str, FuncItem | None] = {}
         # Cached packets list — trace.packets copies the C++ vector every access
         self._packets: list[TracePacket] = []
+        # Cached load-pixel data for input funcs (no store events); populated
+        # once per trace
+        self._load_pixel_cache: dict = {}
 
         self._setup_ui()
         self._setup_menu()
@@ -637,8 +640,17 @@ class TraceViewer(QMainWindow):
                 trace.packets
             )  # Cache once; avoids full C++ vector copy each access
 
-            # Clear func name cache
+            # Clear func name cache and load-pixel cache
             self._func_name_cache = {}
+            load_pixels = trace.collect_load_pixels(0, len(self._packets))
+            store_funcs = set(trace.collect_pixels(0, len(self._packets)).keys())
+            # Only keep funcs that have NO store events — true input-only buffers.
+            # Including funcs with stores would pre-populate last_value before their
+            # stores arrive, making every subsequent store look like a redundant
+            # recompute.
+            self._load_pixel_cache = {
+                k: v for k, v in load_pixels.items() if k not in store_funcs
+            }
 
             # Initialize func configs with auto-layout
             self._auto_layout()
@@ -940,6 +952,7 @@ class TraceViewer(QMainWindow):
         for item in self.canvas.func_items.values():
             item.refresh_pixmap()
 
+        self._apply_load_pixels()
         self._update_sidebar_stats()
 
         t2 = _time.perf_counter()
@@ -1032,6 +1045,50 @@ class TraceViewer(QMainWindow):
         for item in self.canvas.func_items.values():
             item.display_mode = mode
             item._update_pixmap()
+
+    def _apply_load_pixels(self):
+        """
+        Populate FuncItems for input-only buffers (no store events anywhere in
+        the trace).
+
+        The cache only contains funcs with zero stores, so there is no risk of
+        pre-populating last_value before stores arrive and corrupting the
+        redundant-recompute detection.  Called after every render so that
+        backward scrubs (which reset last_value) are re-populated.
+        """
+        for func_name, (xs, ys, vals) in self._load_pixel_cache.items():
+            item = self._get_func_item_for_packet(func_name)
+            if item is None:
+                continue
+
+            xs_off = xs - item.min_x
+            ys_off = ys - item.min_y
+            min_v = item.config.min_value
+            max_v = item.config.max_value
+            if max_v > min_v:
+                normalized = np.clip(
+                    (255.0 * (vals - min_v) / (max_v - min_v)), 0, 255
+                ).astype(np.uint8)
+            else:
+                normalized = np.full(len(xs_off), 128, dtype=np.uint8)
+
+            mask = (
+                (xs_off >= 0)
+                & (xs_off < item.width)
+                & (ys_off >= 0)
+                & (ys_off < item.height)
+            )
+            xs_m, ys_m = xs_off[mask], ys_off[mask]
+            normalized = normalized[mask]
+            vals_m = vals[mask].astype(np.float32)
+            if len(xs_m):
+                item.data[ys_m, xs_m, 0] = normalized
+                item.data[ys_m, xs_m, 1] = normalized
+                item.data[ys_m, xs_m, 2] = normalized
+                item.last_value[ys_m, xs_m] = vals_m
+                # counts stays zero — loads are not redundant recomputes
+                item._dirty = True
+            item.refresh_pixmap()
 
     def _update_sidebar_stats(self):
         stats: dict[str, tuple[float, float]] = {}
