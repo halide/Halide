@@ -1,6 +1,6 @@
 # Func display modes & properties panel
 
-**Status:** [ ] Not started\
+**Status:** [x] Done\
 **Priority:** High\
 **Needs new C++:** Yes\
 **Keyboard shortcut:** Ctrl+P (toggle the panel)
@@ -143,25 +143,61 @@ The decode loop already computes `dims` and indexes `coords[lane]` /
 channel is a one-line addition. Spatial axes are then "the two dims that aren't
 `color_dim`."
 
+## Design decisions (as built)
+
+- **Authoritative shape comes from the tag, not the aggregated coords.** The
+  channel heuristic needs clean extents, but `min_coords`/`max_coords` are
+  widened by raw load/store coordinates and get polluted on the channel axis
+  (`input` reports a dim-2 max of 192, not 3). So C++ now captures the
+  *declared* shape into `FuncStats::realize_min`/`realize_extent` from the
+  `func_type_and_dim` tag (and `begin_realization` as a fallback) and never
+  widens it. `input` has no `begin_realization` at all — the tag is the only
+  source — so preserving the tag was essential.
+- **Auto-detect extent-3 only.** Extent 3 on the first/last dim → RGB. Extent 4
+  is deliberately *not* auto-detected: it is just as often a bin count as RGBA
+  (local_laplacian's `gPyramid` levels have a `k` extent of 4), and colorizing
+  those is wrong — k-slices belong to
+  [channel-decomposition.md](channel-decomposition.md). RGBA is a manual panel
+  choice. Result: only `input` and `output` colorize automatically.
+- **Channel routing via a per-`color_dim` second pass.** `color_dim` is
+  per-func, but `collect_pixels` decodes all funcs in one call. The hot path
+  (`collect_pixels(start, end)`, `color_dim = -1`) is unchanged and handles
+  every grayscale/scalar func. Color funcs are then handled by one extra
+  `collect_pixels(start, end, cd)` per *distinct* `color_dim` in use (usually
+  just one), routing each value into its RGBA slot. `collect_load_pixels` dedups
+  on `(x, y, channel)` when a color dim is set, so all channels of an input
+  image survive; the color-aware load results are cached per `color_dim`.
+- **`data` holds final colors, so property edits replay.** Min/max, colormap,
+  and normalization all bake into the per-pixel RGBA at store time, so editing
+  them triggers a `_full_rerender` (re-init + replay to the current time — the
+  backward-scrub path). Cheap enough for an interactive edit; avoids keeping a
+  parallel raw-value buffer.
+- **Scalar colormaps** (grayscale/hot/diverging/viridis) and normalizations
+  (linear/log/signed) apply only to grayscale-interpretation funcs; color funcs
+  route the linear-normalized value straight into the channel. `remap` (1-D,
+  signed) auto-defaults to a diverging line plot. Viridis uses a compact
+  11-point LUT — fidelity isn't critical for a debug colormap.
+
 ## Implementation checklist
 
-- [ ] Add a dockable "Display Properties" `QDockWidget`; toggle with Ctrl+P
-- [ ] Connect `TraceCanvas.func_selected` → populate the panel from the selected
+- [x] Add a dockable "Display Properties" `QDockWidget`; toggle with Ctrl+P
+- [x] Connect `TraceCanvas.func_selected` → populate the panel from the selected
   `FuncItem`'s `FuncConfig`
-- [ ] Extend `FuncConfig`: `channel_order`, `colormap`, `normalization`,
-  `plot_1d` (build on the existing `color_dim`); thread through export/import
-- [ ] C++: surface the color-dim coordinate from `collect_pixels` /
-  `collect_load_pixels` (new variant or optional arg) + binding
-- [ ] `_init_data_array`: derive spatial extents from non-color dims when a color
-  dim is set
-- [ ] `_render_range` / `_apply_load_pixels`: route value into
+- [x] Extend `FuncConfig`: `channel_order`, `colormap`, `normalization`,
+  `plot_1d` (build on the existing `color_dim`); thread through export
+- [x] C++: optional `color_dim` arg on `collect_pixels` / `collect_load_pixels`
+  (appends a `cs` channel array) + `FuncStats.realize_min`/`realize_extent` +
+  bindings
+- [x] `_init_data_array`: derive spatial extents from non-color dims when a color
+  dim is set (handles planar *and* interleaved)
+- [x] `_render_range` / `_apply_load_pixels`: route value into
   `data[..., channel]` by channel index
-- [ ] Planar (outermost dim) and interleaved (innermost dim) presets
-- [ ] Diverging colormap + auto signed range; wire up `remap`
-- [ ] 1-D strip vs. line-plot toggle
-- [ ] Default channel interpretation from `begin_realization` extents
-  (last/first dim extent ∈ {3,4} → RGB/RGBA)
-- [ ] Sidebar/menu affordance to open the panel; "auto from stats" range reset
+- [x] Planar (outermost dim) and interleaved (innermost dim) presets
+- [x] Diverging colormap + auto signed range; wire up `remap`
+- [x] 1-D strip vs. line-plot toggle
+- [x] Default channel interpretation from declared extents (extent-3 → RGB;
+  extent-4/RGBA left to the panel — see design decisions)
+- [x] Menu affordance to open the panel; "auto from stats" range reset
 
 ## Open questions
 

@@ -18,9 +18,12 @@ dependencies = [
   "tqdm>=4.67.1",
 ]
 
+[dependency-groups]
+dev = ["pytest>=9.0.2", "pyyaml>=6.0.0", "ruff>=0.14.13"]
+
+
 [project.scripts]
 neotrace = "neotrace.__main__:main"
-
 
 [tool.ruff]
 target-version = "py310"
@@ -41,6 +44,3 @@ explicit = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["neotrace"]
-
-[dependency-groups]
-dev = ["pytest>=9.0.2", "ruff>=0.14.13"]

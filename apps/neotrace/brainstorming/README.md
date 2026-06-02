@@ -5,7 +5,7 @@
 | [temporal-order.md](temporal-order.md)               | Color pixels by when they were first written          | High     | Done        | No       |
 | [reuse-distance.md](reuse-distance.md)               | Color pixels by write→first-read gap                  | High     | Done        | Yes      |
 | [load-count-heatmap.md](load-count-heatmap.md)       | Color pixels by how often they are loaded             | Medium   | Done        | Yes      |
-| [func-display-modes.md](func-display-modes.md)       | Per-func display panel: planar/interleaved RGB, LUTs  | High     | Not started | Yes      |
+| [func-display-modes.md](func-display-modes.md)       | Per-func display panel: planar/interleaved RGB, LUTs  | High     | Done        | Yes      |
 | [timeline-gantt.md](timeline-gantt.md)               | Gantt strip showing per-func active intervals         | Medium   | Not started | No       |
 | [channel-decomposition.md](channel-decomposition.md) | Expand k-slices into side-by-side tiles               | Low      | Not started | No       |
 | [diff-mode.md](diff-mode.md)                         | Highlight pixels that changed since a pinned position | Low      | Not started | No       |

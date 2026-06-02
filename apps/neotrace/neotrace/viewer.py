@@ -27,7 +27,12 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QComboBox,
+    QDockWidget,
+    QDoubleSpinBox,
     QFileDialog,
+    QFormLayout,
     QGraphicsItem,
     QGraphicsPixmapItem,
     QGraphicsScene,
@@ -56,6 +61,102 @@ class DisplayMode(IntEnum):
     LOAD_COUNT = 4
 
 
+# Display channel index for each character of a FuncConfig.channel_order string.
+_CHANNEL_SLOT = {"r": 0, "g": 1, "b": 2, "a": 3}
+
+# Compact viridis control points (matplotlib viridis sampled at 0, 0.1, …, 1.0),
+# linearly interpolated in _viridis. A debug colormap doesn't need full fidelity.
+_VIRIDIS = np.array(
+    [
+        [68, 1, 84],
+        [72, 33, 115],
+        [64, 67, 135],
+        [52, 94, 141],
+        [41, 120, 142],
+        [32, 144, 140],
+        [34, 167, 132],
+        [68, 190, 112],
+        [121, 209, 81],
+        [189, 222, 38],
+        [253, 231, 37],
+    ],
+    dtype=np.float32,
+)
+
+
+def _normalize_values(
+    vals: np.ndarray, min_v: float, max_v: float, mode: str
+) -> np.ndarray:
+    """Map raw values to t in [0, 1] under the given normalization mode.
+
+    linear  — (v - min) / (max - min)
+    log     — log1p over [min, max], for quantities spanning many magnitudes
+    signed  — center 0 at t = 0.5 over [-A, A], A = max(|min|, |max|); for
+              diverging data like the signed `remap` LUT
+    """
+    vals = vals.astype(np.float32)
+    if mode == "log":
+        lo = float(np.log1p(max(0.0, min_v)))
+        hi = float(np.log1p(max(0.0, max_v)))
+        if hi > lo:
+            t = (np.log1p(np.clip(vals, 0.0, None)) - lo) / (hi - lo)
+        else:
+            t = np.zeros_like(vals)
+    elif mode == "signed":
+        a = max(abs(min_v), abs(max_v), 1e-12)
+        t = 0.5 + 0.5 * (vals / a)
+    else:  # linear
+        if max_v > min_v:
+            t = (vals - min_v) / (max_v - min_v)
+        else:
+            t = np.full_like(vals, 0.5)
+    return np.clip(t, 0.0, 1.0)
+
+
+def _viridis(t: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Interpolate the viridis control points for t in [0, 1]."""
+    x = np.clip(t, 0.0, 1.0) * (len(_VIRIDIS) - 1)
+    i0 = np.floor(x).astype(np.int32)
+    i1 = np.minimum(i0 + 1, len(_VIRIDIS) - 1)
+    f = (x - i0)[..., None]
+    c = _VIRIDIS[i0] * (1.0 - f) + _VIRIDIS[i1] * f
+    return (
+        c[..., 0].astype(np.uint8),
+        c[..., 1].astype(np.uint8),
+        c[..., 2].astype(np.uint8),
+    )
+
+
+def _apply_colormap(
+    t: np.ndarray, name: str
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Map normalized t in [0, 1] to (r, g, b) uint8 arrays via a scalar colormap.
+
+    grayscale — r = g = b = t
+    hot       — black → red → yellow → white
+    diverging — blue → white → red (pair with the "signed" normalization)
+    viridis   — perceptually uniform sequential
+    """
+    if name == "hot":
+        r = (np.clip(3.0 * t, 0.0, 1.0) * 255.0).astype(np.uint8)
+        g = (np.clip(3.0 * t - 1.0, 0.0, 1.0) * 255.0).astype(np.uint8)
+        b = (np.clip(3.0 * t - 2.0, 0.0, 1.0) * 255.0).astype(np.uint8)
+    elif name == "diverging":
+        lower = t < 0.5
+        r = np.where(lower, t * 2.0, 1.0)
+        g = np.where(lower, t * 2.0, (1.0 - t) * 2.0)
+        b = np.where(lower, 1.0, (1.0 - t) * 2.0)
+        r = (np.clip(r, 0.0, 1.0) * 255.0).astype(np.uint8)
+        g = (np.clip(g, 0.0, 1.0) * 255.0).astype(np.uint8)
+        b = (np.clip(b, 0.0, 1.0) * 255.0).astype(np.uint8)
+    elif name == "viridis":
+        r, g, b = _viridis(t)
+    else:  # grayscale
+        v = (t * 255.0).astype(np.uint8)
+        r = g = b = v
+    return r, g, b
+
+
 @dataclass
 class FuncConfig:
     """Configuration for how a Func is displayed."""
@@ -64,7 +165,19 @@ class FuncConfig:
     zoom: float = 4.0
     min_value: float = 0.0
     max_value: float = 255.0
-    color_dim: int = -1  # -1 = grayscale, otherwise index of color dimension
+    # Channel interpretation. color_dim is the index of the Halide dimension
+    # that acts as the color/channel axis (-1 = grayscale scalar). The two
+    # remaining dims are spatial. channel_order maps channel index → display
+    # channel ("rgb", "rgba", "bgr", …); channels beyond its length are ignored.
+    color_dim: int = -1
+    channel_order: str = "rgb"
+    # Scalar (grayscale-interpretation) display controls; ignored when a color
+    # dim is active. colormap ∈ {grayscale, hot, diverging, viridis};
+    # normalization ∈ {linear, log, signed}.
+    colormap: str = "grayscale"
+    normalization: str = "linear"
+    # Render a 1-D func as a value-vs-index line plot instead of a strip.
+    plot_1d: bool = False
     visible: bool = True
 
 
@@ -108,16 +221,54 @@ class FuncItem(QGraphicsPixmapItem):
         # Create axis labels as child items (move with the func)
         self._create_axis_labels()
 
+    def _spatial_dim_indices(self) -> tuple[int | None, int | None]:
+        """Return the (x_dim, y_dim) coordinate indices for this func.
+
+        The spatial axes are the first two dimensions that are not the color
+        dimension. With color_dim == -1 this is (0, 1) — the default layout.
+        For planar RGB f(x, y, c) (color_dim == 2) it stays (0, 1); for
+        interleaved RGB f(c, x, y) (color_dim == 0) it becomes (1, 2).
+        """
+        ndims = len(self.stats.min_coords)
+        cd = self.config.color_dim
+        dims = [d for d in range(ndims) if d != cd]
+        xd = dims[0] if len(dims) >= 1 else None
+        yd = dims[1] if len(dims) >= 2 else None
+        return xd, yd
+
     def _init_data_array(self):
         """Initialize the numpy array for storing Func values."""
-        if len(self.stats.min_coords) >= 2:
-            width = self.stats.max_coords[0] - self.stats.min_coords[0]
-            height = self.stats.max_coords[1] - self.stats.min_coords[1]
-        elif len(self.stats.min_coords) == 1:
-            width = self.stats.max_coords[0] - self.stats.min_coords[0]
-            height = 1
+        mn = self.stats.min_coords
+        mx = self.stats.max_coords
+        xd, yd = self._spatial_dim_indices()
+
+        if xd is not None and xd < len(mn):
+            width = mx[xd] - mn[xd]
+            min_x = mn[xd]
         else:
-            width = height = 1
+            width = 1
+            min_x = 0
+        if yd is not None and yd < len(mn):
+            height = mx[yd] - mn[yd]
+            min_y = mn[yd]
+        else:
+            height = 1
+            min_y = 0
+
+        # Minimum coordinate of the color dimension, used to convert a raw
+        # channel coordinate into a 0-based channel index. Prefer the clean
+        # declared shape (realize_min); fall back to the aggregated min.
+        cd = self.config.color_dim
+        if cd >= 0:
+            rm = self.stats.realize_min
+            if cd < len(rm):
+                self.color_dim_min = rm[cd]
+            elif cd < len(mn):
+                self.color_dim_min = mn[cd]
+            else:
+                self.color_dim_min = 0
+        else:
+            self.color_dim_min = 0
 
         # Clamp to reasonable sizes
         width = max(1, min(width, 4096))
@@ -164,8 +315,8 @@ class FuncItem(QGraphicsPixmapItem):
         self.load_count_norm_max = 1.0
         self.width = width
         self.height = height
-        self.min_x = self.stats.min_coords[0] if self.stats.min_coords else 0
-        self.min_y = self.stats.min_coords[1] if len(self.stats.min_coords) > 1 else 0
+        self.min_x = min_x
+        self.min_y = min_y
         self._dirty = True  # Mark for pixmap regeneration
 
     def _build_heat_rgba(self) -> np.ndarray:
@@ -321,11 +472,12 @@ class FuncItem(QGraphicsPixmapItem):
         """Create axis coordinate labels as child items."""
         label_color = QBrush(QColor(150, 150, 150))
         rendered_w, rendered_h = self.get_rendered_size()
+        xd, yd = self._spatial_dim_indices()
 
         # X-axis label: [min_x, max_x) below the image
-        if self.stats.min_coords:
-            min_x = self.stats.min_coords[0]
-            max_x = self.stats.max_coords[0] if self.stats.max_coords else min_x + 1
+        if xd is not None and xd < len(self.stats.min_coords):
+            min_x = self.stats.min_coords[xd]
+            max_x = self.stats.max_coords[xd]
             x_label_text = f"[{min_x}, {max_x})"
             self.x_axis_label = QGraphicsSimpleTextItem(x_label_text, self)
             self.x_axis_label.setBrush(label_color)
@@ -336,13 +488,9 @@ class FuncItem(QGraphicsPixmapItem):
             self.x_axis_label = None
 
         # Y-axis label: [min_y, max_y) to the left, rotated 90 degrees
-        if len(self.stats.min_coords) > 1:
-            min_y = self.stats.min_coords[1]
-            max_y = (
-                self.stats.max_coords[1]
-                if len(self.stats.max_coords) > 1
-                else min_y + 1
-            )
+        if yd is not None and yd < len(self.stats.min_coords):
+            min_y = self.stats.min_coords[yd]
+            max_y = self.stats.max_coords[yd]
             y_label_text = f"[{min_y}, {max_y})"
             self.y_axis_label = QGraphicsSimpleTextItem(y_label_text, self)
             self.y_axis_label.setBrush(label_color)
@@ -367,11 +515,52 @@ class FuncItem(QGraphicsPixmapItem):
             step = max(1, int(1 / zoom))
             return max(1, w // step), max(1, h // step)
 
+    def _build_line_plot_rgba(self) -> np.ndarray:
+        """Render a 1-D func as a value-vs-index plot (for LUTs like remap).
+
+        Each column x plots its (normalized) value as a point; far more legible
+        than a 1-pixel-tall grayscale strip. A faint zero axis is drawn when the
+        normalization is signed. Rendered at native resolution and shown without
+        zoom scaling (see _update_pixmap), since downsampling a plot is useless.
+        """
+        w = self.width
+        plot_h = 80
+        rgba = np.zeros((plot_h, w, 4), dtype=np.uint8)
+        rgba[:, :, 0:3] = 20  # dark background
+        rgba[:, :, 3] = 255
+
+        if self.height == 1:
+            vals = self.last_value[0]
+        else:
+            vals = np.nanmean(self.last_value, axis=0)
+        valid = ~np.isnan(vals)
+        if not valid.any():
+            return rgba
+
+        mn = self.config.min_value
+        mx = self.config.max_value
+        norm = self.config.normalization
+        t = _normalize_values(np.nan_to_num(vals).astype(np.float32), mn, mx, norm)
+        ys = np.clip(((1.0 - t) * (plot_h - 1)).astype(np.int32), 0, plot_h - 1)
+        xs = np.arange(w)
+
+        # Faint zero axis for signed/diverging data.
+        if norm == "signed" and mn < 0.0 < mx:
+            zt = _normalize_values(np.array([0.0], np.float32), mn, mx, norm)[0]
+            zy = int(np.clip((1.0 - zt) * (plot_h - 1), 0, plot_h - 1))
+            rgba[zy, :, 0:3] = 70
+
+        rgba[ys[valid], xs[valid], 0] = 90
+        rgba[ys[valid], xs[valid], 1] = 200
+        rgba[ys[valid], xs[valid], 2] = 255
+        return rgba
+
     def _update_pixmap(self):
         """
         Update the pixmap from the data array, or from a heatmap when in
         RECOMPUTE_HEAT / TEMPORAL display mode.
         """
+        skip_scale = False
         if self.display_mode == DisplayMode.RECOMPUTE_HEAT:
             source = self._build_heat_rgba()
         elif self.display_mode == DisplayMode.TEMPORAL:
@@ -380,12 +569,17 @@ class FuncItem(QGraphicsPixmapItem):
             source = self._build_reuse_rgba()
         elif self.display_mode == DisplayMode.LOAD_COUNT:
             source = self._build_load_count_rgba()
+        elif self.config.plot_1d and self.height == 1:
+            source = self._build_line_plot_rgba()
+            skip_scale = True  # plot is pre-sized; scaling would garble it
         else:
             source = self.data
         zoom = self.config.zoom
         h, w = source.shape[:2]
 
-        if zoom >= 1:
+        if skip_scale:
+            scaled = source
+        elif zoom >= 1:
             # Scale up using repeat
             izoom = max(1, int(zoom))
             scaled = np.repeat(np.repeat(source, izoom, axis=0), izoom, axis=1)
@@ -451,6 +645,8 @@ class TraceCanvas(QGraphicsView):
         super().__init__(parent)
         self.scene = QGraphicsScene(self)
         self.setScene(self.scene)
+        # Surface clicks on a func to the display-properties panel.
+        self.scene.selectionChanged.connect(self._on_selection_changed)
 
         # Enable scrollbars and smooth scrolling
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -548,6 +744,13 @@ class TraceCanvas(QGraphicsView):
     def get_func_item(self, func_name: str) -> FuncItem | None:
         """Get a func item by name."""
         return self.func_items.get(func_name)
+
+    def _on_selection_changed(self):
+        """Emit func_selected for the first selected FuncItem, if any."""
+        for it in self.scene.selectedItems():
+            if isinstance(it, FuncItem):
+                self.func_selected.emit(it.func_name)
+                return
 
 
 class TimelineWidget(QWidget):
@@ -661,6 +864,185 @@ class FuncListWidget(QWidget):
         self.list_widget.blockSignals(False)
 
 
+class DisplayPropertiesPanel(QDockWidget):
+    """Dockable editor for the selected func's display properties.
+
+    Bound to the canvas selection (TraceCanvas.func_selected). Edits the
+    selected func's FuncConfig live and emits config_changed so the viewer can
+    re-render. Only affects DisplayMode.VALUE; the heatmap modes are orthogonal.
+    """
+
+    # (func_name, needs_reinit): needs_reinit is True when the data array shape
+    # may have changed (color-dim / interpretation edits) and the item must be
+    # re-initialized before re-rendering.
+    config_changed = Signal(str, bool)
+
+    _INTERPRETATIONS = (
+        "Grayscale",
+        "Planar RGB",
+        "Planar RGBA",
+        "Interleaved RGB",
+        "Interleaved RGBA",
+    )
+    _COLORMAPS = ("grayscale", "hot", "diverging", "viridis")
+    _NORMALIZATIONS = ("linear", "log", "signed")
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__("Display Properties", parent)
+        self.setObjectName("DisplayPropertiesPanel")
+        self._item: FuncItem | None = None
+        self._loading = False  # suppress change signals while populating
+
+        body = QWidget()
+        form = QFormLayout(body)
+        form.setContentsMargins(8, 8, 8, 8)
+
+        self._name_label = QLabel("(no selection)")
+        self._name_label.setWordWrap(True)
+        form.addRow(self._name_label)
+
+        self._interp = QComboBox()
+        self._interp.addItems(self._INTERPRETATIONS)
+        self._interp.currentIndexChanged.connect(self._on_interp_changed)
+        form.addRow("Channels", self._interp)
+
+        self._colormap = QComboBox()
+        self._colormap.addItems(self._COLORMAPS)
+        self._colormap.currentIndexChanged.connect(lambda _i: self._on_scalar_changed())
+        form.addRow("Colormap", self._colormap)
+
+        self._norm = QComboBox()
+        self._norm.addItems(self._NORMALIZATIONS)
+        self._norm.currentIndexChanged.connect(lambda _i: self._on_scalar_changed())
+        form.addRow("Normalize", self._norm)
+
+        self._min_spin = QDoubleSpinBox()
+        self._max_spin = QDoubleSpinBox()
+        for sb in (self._min_spin, self._max_spin):
+            sb.setRange(-1e12, 1e12)
+            sb.setDecimals(4)
+            sb.setKeyboardTracking(False)
+            sb.editingFinished.connect(self._on_range_changed)
+        form.addRow("Min value", self._min_spin)
+        form.addRow("Max value", self._max_spin)
+
+        self._auto_btn = QPushButton("Auto from stats")
+        self._auto_btn.clicked.connect(self._on_auto_range)
+        form.addRow(self._auto_btn)
+
+        self._plot_1d = QCheckBox("Line plot (1-D)")
+        self._plot_1d.toggled.connect(self._on_scalar_changed)
+        form.addRow(self._plot_1d)
+
+        self.setWidget(body)
+        self._set_enabled(False)
+
+    def _set_enabled(self, on: bool):
+        for w in (
+            self._interp,
+            self._colormap,
+            self._norm,
+            self._min_spin,
+            self._max_spin,
+            self._auto_btn,
+            self._plot_1d,
+        ):
+            w.setEnabled(on)
+
+    def set_func(self, item: FuncItem | None):
+        """Populate the panel from a FuncItem's current config."""
+        self._item = item
+        if item is None:
+            self._name_label.setText("(no selection)")
+            self._set_enabled(False)
+            return
+
+        self._loading = True
+        try:
+            cfg = item.config
+            short = item.func_name.split(":")[-1]
+            ndims = len(item.stats.min_coords)
+            self._name_label.setText(f"{short}  ({ndims}-D)")
+            self._set_enabled(True)
+
+            # Interpretation
+            self._interp.setCurrentText(self._interp_label(cfg, ndims))
+            self._colormap.setCurrentText(cfg.colormap)
+            self._norm.setCurrentText(cfg.normalization)
+            self._min_spin.setValue(float(cfg.min_value))
+            self._max_spin.setValue(float(cfg.max_value))
+            self._plot_1d.setChecked(bool(cfg.plot_1d))
+            self._plot_1d.setEnabled(item.height == 1)
+            # Scalar controls only matter when not in a color interpretation.
+            scalar = cfg.color_dim < 0
+            self._colormap.setEnabled(scalar)
+            self._norm.setEnabled(True)
+        finally:
+            self._loading = False
+
+    @staticmethod
+    def _interp_label(cfg: FuncConfig, ndims: int) -> str:
+        if cfg.color_dim < 0:
+            return "Grayscale"
+        rgba = len(cfg.channel_order) >= 4
+        if cfg.color_dim == 0 and ndims >= 3:
+            return "Interleaved RGBA" if rgba else "Interleaved RGB"
+        return "Planar RGBA" if rgba else "Planar RGB"
+
+    def _emit(self, needs_reinit: bool):
+        if self._item is not None and not self._loading:
+            self.config_changed.emit(self._item.func_name, needs_reinit)
+
+    def _on_interp_changed(self, _idx: int):
+        if self._item is None or self._loading:
+            return
+        cfg = self._item.config
+        ndims = len(self._item.stats.min_coords)
+        choice = self._interp.currentText()
+        if choice == "Grayscale":
+            cfg.color_dim = -1
+        elif choice.startswith("Planar"):
+            cfg.color_dim = max(0, ndims - 1)
+            cfg.channel_order = "rgba" if choice.endswith("RGBA") else "rgb"
+        else:  # Interleaved
+            cfg.color_dim = 0
+            cfg.channel_order = "rgba" if choice.endswith("RGBA") else "rgb"
+        # Re-sync dependent control enablement.
+        self._colormap.setEnabled(cfg.color_dim < 0)
+        self._emit(needs_reinit=True)
+
+    def _on_scalar_changed(self, *_args):
+        if self._item is None or self._loading:
+            return
+        cfg = self._item.config
+        cfg.colormap = self._colormap.currentText()
+        cfg.normalization = self._norm.currentText()
+        cfg.plot_1d = self._plot_1d.isChecked()
+        self._emit(needs_reinit=False)
+
+    def _on_range_changed(self):
+        if self._item is None or self._loading:
+            return
+        cfg = self._item.config
+        cfg.min_value = self._min_spin.value()
+        cfg.max_value = self._max_spin.value()
+        self._emit(needs_reinit=False)
+
+    def _on_auto_range(self):
+        if self._item is None:
+            return
+        st = self._item.stats
+        lo = st.min_value if st.min_value is not None else 0.0
+        hi = st.max_value if st.max_value is not None else 255.0
+        if lo == hi:
+            hi = lo + 1.0
+        self._loading = True
+        self._min_spin.setValue(float(lo))
+        self._max_spin.setValue(float(hi))
+        self._loading = False
+        self._on_range_changed()
+
+
 class TraceViewer(QMainWindow):
     """Main window for the trace viewer."""
 
@@ -690,6 +1072,9 @@ class TraceViewer(QMainWindow):
         # Cached load-pixel data for input funcs (no store events); populated
         # once per trace
         self._load_pixel_cache: dict = {}
+        # Channel-aware load-pixel data per color_dim {cd: {func: (xs,ys,vals,cs)}}
+        # for color input buffers; filled lazily and reused across renders.
+        self._load_pixel_cache_cd: dict[int, dict] = {}
         # Cached whole-trace reuse distances {func: (xs, ys, mean_dist)};
         # populated once per trace, re-applied after backward scrubs
         self._reuse_dist_cache: dict = {}
@@ -724,6 +1109,12 @@ class TraceViewer(QMainWindow):
         splitter.addWidget(self.canvas)
 
         splitter.setSizes([200, 1400])
+
+        # Display-properties dock, bound to the canvas selection.
+        self.props_panel = DisplayPropertiesPanel(self)
+        self.props_panel.config_changed.connect(self._on_props_changed)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.props_panel)
+        self.canvas.func_selected.connect(self._on_func_selected)
 
         # Keyboard shortcuts for zoom
         zoom_in_shortcut = QShortcut(QKeySequence.StandardKey.ZoomIn, self)
@@ -785,6 +1176,18 @@ class TraceViewer(QMainWindow):
         self._load_count_action.triggered.connect(self._toggle_load_count_mode)
         view_menu.addAction(self._load_count_action)
 
+        view_menu.addSeparator()
+        self._props_action = QAction("Display &Properties", self)
+        self._props_action.setCheckable(True)
+        self._props_action.setChecked(True)
+        self._props_action.setShortcut(QKeySequence("Ctrl+P"))
+        self._props_action.triggered.connect(
+            lambda checked: self.props_panel.setVisible(checked)
+        )
+        # Keep the menu check in sync if the dock is closed via its title bar.
+        self.props_panel.visibilityChanged.connect(self._props_action.setChecked)
+        view_menu.addAction(self._props_action)
+
     def _open_file(self):
         """Open a trace file."""
         path, _ = QFileDialog.getOpenFileName(
@@ -824,6 +1227,7 @@ class TraceViewer(QMainWindow):
 
             # Clear func name cache and load-pixel cache
             self._func_name_cache = {}
+            self._load_pixel_cache_cd = {}
             load_pixels = trace.collect_load_pixels(0, len(self._packets))
             store_funcs = set(trace.collect_pixels(0, len(self._packets)).keys())
             # Only keep funcs that have NO store events — true input-only buffers.
@@ -849,6 +1253,8 @@ class TraceViewer(QMainWindow):
 
             # Initialize func configs with auto-layout
             self._auto_layout()
+            # Detect channel interpretation / colormaps from the declared shape.
+            self._apply_detected_display_configs()
 
             # Update UI
             self.func_list.set_funcs(trace.funcs)
@@ -978,6 +1384,65 @@ class TraceViewer(QMainWindow):
         except Exception as e:
             self.status_bar.showMessage(f"GraphViz layout failed: {e}")
             return None
+
+    def _detect_display_config(
+        self, stats: FuncStats
+    ) -> tuple[int, str, str, str, bool]:
+        """Infer sensible display defaults from a func's declared shape/values.
+
+        Returns (color_dim, channel_order, colormap, normalization, plot_1d).
+
+        Channel detection uses the clean declared extents (realize_extent),
+        which — unlike min_coords/max_coords — are not polluted on the channel
+        axis: a last (or first) dimension of extent 3/4 is taken as planar (or
+        interleaved) RGB(A). Signed 1-D funcs default to a diverging line plot
+        (e.g. the remap LUT).
+        """
+        ext = list(stats.realize_extent)
+        if not ext:
+            ext = [b - a for a, b in zip(stats.min_coords, stats.max_coords)]
+        ndims = len(ext)
+
+        # Only auto-detect extent-3 (RGB) as color. Extent 4 is ambiguous —
+        # RGBA, but also a common pyramid/bin count (e.g. local_laplacian's
+        # gPyramid has 4 intensity levels in its last dim) — so RGBA must be
+        # opted into via the panel rather than guessed, to avoid colorizing
+        # genuine k-slice funcs (those belong to channel decomposition).
+        color_dim = -1
+        channel_order = "rgb"
+        if ndims >= 3:
+            if ext[-1] == 3:
+                color_dim = ndims - 1
+            elif ext[0] == 3:
+                color_dim = 0
+
+        colormap = "grayscale"
+        normalization = "linear"
+        plot_1d = False
+        if color_dim < 0:
+            lo = stats.min_value if stats.min_value is not None else 0.0
+            hi = stats.max_value if stats.max_value is not None else 0.0
+            if lo < 0.0 < hi:
+                colormap = "diverging"
+                normalization = "signed"
+            if ndims == 1:
+                plot_1d = True
+        return color_dim, channel_order, colormap, normalization, plot_1d
+
+    def _apply_detected_display_configs(self):
+        """Stamp detected display defaults onto every func's config."""
+        if not self.state.trace:
+            return
+        for name, stats in self.state.trace.funcs.items():
+            cfg = self.state.func_configs.get(name)
+            if cfg is None:
+                continue
+            cd, order, cmap, norm, p1d = self._detect_display_config(stats)
+            cfg.color_dim = cd
+            cfg.channel_order = order
+            cfg.colormap = cmap
+            cfg.normalization = norm
+            cfg.plot_1d = p1d
 
     def _auto_layout(self):
         """Automatically lay out funcs using DAG structure when available."""
@@ -1203,6 +1668,93 @@ class TraceViewer(QMainWindow):
     _prof_collect: float = 0.0
     _prof_update_pixel: float = 0.0
 
+    def _active_color_dims(self) -> list[int]:
+        """Distinct color_dim values (>= 0) among the current func items."""
+        dims = {
+            item.config.color_dim
+            for item in self.canvas.func_items.values()
+            if item.config.color_dim >= 0
+        }
+        return sorted(dims)
+
+    def _channel_slots(self, item: FuncItem, cs: np.ndarray) -> np.ndarray:
+        """Map raw color-dim coordinates to RGBA slot indices (-1 = drop).
+
+        channel_order[i] gives the display channel for channel index i; the
+        index is the color coordinate minus the color dimension's min.
+        """
+        order = item.config.channel_order or "rgb"
+        idx = cs - item.color_dim_min
+        slots = np.full(len(cs), -1, dtype=np.int64)
+        for i, ch in enumerate(order):
+            slot = _CHANNEL_SLOT.get(ch, -1)
+            if slot >= 0:
+                slots[idx == i] = slot
+        return slots
+
+    def _apply_store_pixels(
+        self,
+        item: FuncItem,
+        xs: np.ndarray,
+        ys: np.ndarray,
+        vals: np.ndarray,
+        cs: np.ndarray | None = None,
+    ) -> int:
+        """Normalize + batch-write one func's stores into its data array.
+
+        Routes through a scalar colormap (grayscale interpretation) or into a
+        per-channel RGBA slot (color interpretation). The recompute / last_value
+        / write_times bookkeeping stays channel-agnostic, keyed on (x, y), as
+        the heatmap modes expect.
+        """
+        xs = xs - item.min_x
+        ys = ys - item.min_y
+
+        # Stamp each store with a monotonically increasing ordinal, in packet
+        # order, before masking. Used for the temporal heatmap.
+        times = np.arange(
+            item._write_time_base, item._write_time_base + len(xs)
+        ).astype(np.float32)
+        item._write_time_base += len(xs)
+
+        mask = (xs >= 0) & (xs < item.width) & (ys >= 0) & (ys < item.height)
+        xs, ys = xs[mask], ys[mask]
+        vals_m = vals[mask].astype(np.float32)
+        times = times[mask]
+        if not len(xs):
+            return 0
+
+        cfg = item.config
+        t = _normalize_values(vals_m, cfg.min_value, cfg.max_value, cfg.normalization)
+        if cs is not None and cfg.color_dim >= 0:
+            slots = self._channel_slots(item, cs[mask])
+            inten = (t * 255.0).astype(np.uint8)
+            valid = slots >= 0
+            if valid.any():
+                item.data[ys[valid], xs[valid], slots[valid]] = inten[valid]
+        else:
+            r, g, b = _apply_colormap(t, cfg.colormap)
+            item.data[ys, xs, 0] = r
+            item.data[ys, xs, 1] = g
+            item.data[ys, xs, 2] = b
+
+        # Redundant only when the same value is written again. Different-value
+        # overwrites (fold_storage reuse, multi-channel) are intentional.
+        prev = item.last_value[ys, xs]
+        is_recomp = ~np.isnan(prev) & (prev == vals_m)
+        if is_recomp.any():
+            np.add.at(item.counts, (ys[is_recomp], xs[is_recomp]), 1)
+        item.last_value[ys, xs] = vals_m
+        # Record first-write time only for pixels not yet stamped. Assign in
+        # reverse so that for pixels written more than once within this batch
+        # the earliest (smallest) time wins.
+        first = np.isnan(item.write_times[ys, xs])
+        if first.any():
+            fi = np.where(first)[0][::-1]
+            item.write_times[ys[fi], xs[fi]] = times[fi]
+        item._dirty = True
+        return len(xs)
+
     def _render_range(self, start: int, end: int) -> int:
         """Process packets in [start, end) and batch-write pixels.
 
@@ -1218,60 +1770,31 @@ class TraceViewer(QMainWindow):
         pixel_data = self.state.trace.collect_pixels(start, end)
         self._prof_collect += _time.perf_counter() - ta
 
-        # Batch-apply per func: normalise + fancy-index write.
+        # Batch-apply per func. Grayscale/scalar funcs use the default decode;
+        # color funcs are handled in a second pass with their color_dim so the
+        # channel coordinate is available and the spatial axes are correct.
         tp = _time.perf_counter()
         n_pixels = 0
         for func_name, (xs, ys, vals) in pixel_data.items():
             if len(xs) == 0:
                 continue
             item = self._get_func_item_for_packet(func_name)
-            if item is None:
+            if item is None or item.config.color_dim >= 0:
                 continue
+            n_pixels += self._apply_store_pixels(item, xs, ys, vals)
 
-            xs = xs - item.min_x
-            ys = ys - item.min_y
-
-            # Stamp each store with a monotonically increasing ordinal, in
-            # packet order, before masking. Used for the temporal heatmap.
-            times = np.arange(
-                item._write_time_base, item._write_time_base + len(xs)
-            ).astype(np.float32)
-            item._write_time_base += len(xs)
-
-            min_v = item.config.min_value
-            max_v = item.config.max_value
-            if max_v > min_v:
-                normalized = np.clip(
-                    (255.0 * (vals - min_v) / (max_v - min_v)), 0, 255
-                ).astype(np.uint8)
-            else:
-                normalized = np.full(len(xs), 128, dtype=np.uint8)
-
-            mask = (xs >= 0) & (xs < item.width) & (ys >= 0) & (ys < item.height)
-            xs, ys, normalized = xs[mask], ys[mask], normalized[mask]
-            vals_m = vals[mask].astype(np.float32)
-            times = times[mask]
-            if len(xs):
-                item.data[ys, xs, 0] = normalized
-                item.data[ys, xs, 1] = normalized
-                item.data[ys, xs, 2] = normalized
-                # Redundant only when the same value is written again.
-                # Different-value overwrites (fold_storage reuse, multi-channel)
-                # are intentional and excluded.
-                prev = item.last_value[ys, xs]
-                is_recomp = ~np.isnan(prev) & (prev == vals_m)
-                if is_recomp.any():
-                    np.add.at(item.counts, (ys[is_recomp], xs[is_recomp]), 1)
-                item.last_value[ys, xs] = vals_m
-                # Record first-write time only for pixels not yet stamped.
-                # Assign in reverse so that for pixels written more than once
-                # within this batch the earliest (smallest) time wins.
-                first = np.isnan(item.write_times[ys, xs])
-                if first.any():
-                    fi = np.where(first)[0][::-1]
-                    item.write_times[ys[fi], xs[fi]] = times[fi]
-                item._dirty = True
-            n_pixels += len(xs)
+        for cd in self._active_color_dims():
+            ta = _time.perf_counter()
+            color_data = self.state.trace.collect_pixels(start, end, cd)
+            self._prof_collect += _time.perf_counter() - ta
+            for func_name, entry in color_data.items():
+                xs, ys, vals, cs = entry
+                if len(xs) == 0:
+                    continue
+                item = self._get_func_item_for_packet(func_name)
+                if item is None or item.config.color_dim != cd:
+                    continue
+                n_pixels += self._apply_store_pixels(item, xs, ys, vals, cs)
         self._prof_update_pixel += _time.perf_counter() - tp
         return n_pixels
 
@@ -1317,6 +1840,56 @@ class TraceViewer(QMainWindow):
             self._rebuild_load_counts(self.state.current_time)
         self._set_display_mode(DisplayMode.LOAD_COUNT, self._load_count_action, checked)
 
+    def _load_pixels_for_cd(self, cd: int) -> dict:
+        """Channel-aware whole-trace load pixels for a given color_dim, cached.
+
+        Deterministic in cd, so it is computed once and reused across renders
+        and config changes.
+        """
+        cache = self._load_pixel_cache_cd.get(cd)
+        if cache is None and self.state.trace is not None:
+            cache = self.state.trace.collect_load_pixels(0, len(self._packets), cd)
+            self._load_pixel_cache_cd[cd] = cache
+        return cache or {}
+
+    def _write_load_pixels(
+        self,
+        item: FuncItem,
+        xs: np.ndarray,
+        ys: np.ndarray,
+        vals: np.ndarray,
+        cs: np.ndarray | None,
+    ):
+        """Write input-buffer load values into an item (no recompute tracking)."""
+        xs_off = xs - item.min_x
+        ys_off = ys - item.min_y
+        mask = (
+            (xs_off >= 0)
+            & (xs_off < item.width)
+            & (ys_off >= 0)
+            & (ys_off < item.height)
+        )
+        xs_m, ys_m = xs_off[mask], ys_off[mask]
+        vals_m = vals[mask].astype(np.float32)
+        if not len(xs_m):
+            return
+
+        cfg = item.config
+        t = _normalize_values(vals_m, cfg.min_value, cfg.max_value, cfg.normalization)
+        if cs is not None and cfg.color_dim >= 0:
+            slots = self._channel_slots(item, cs[mask])
+            inten = (t * 255.0).astype(np.uint8)
+            valid = slots >= 0
+            if valid.any():
+                item.data[ys_m[valid], xs_m[valid], slots[valid]] = inten[valid]
+        else:
+            r, g, b = _apply_colormap(t, cfg.colormap)
+            item.data[ys_m, xs_m, 0] = r
+            item.data[ys_m, xs_m, 1] = g
+            item.data[ys_m, xs_m, 2] = b
+        item.last_value[ys_m, xs_m] = vals_m  # counts stays zero (loads ≠ recompute)
+        item._dirty = True
+
     def _apply_load_pixels(self):
         """
         Populate FuncItems for input-only buffers (no store events anywhere in
@@ -1325,40 +1898,22 @@ class TraceViewer(QMainWindow):
         The cache only contains funcs with zero stores, so there is no risk of
         pre-populating last_value before stores arrive and corrupting the
         redundant-recompute detection.  Called after every render so that
-        backward scrubs (which reset last_value) are re-populated.
+        backward scrubs (which reset last_value) are re-populated. Color input
+        buffers (e.g. a planar RGB `input`) are routed per-channel using the
+        channel-aware load cache for their color_dim.
         """
         for func_name, (xs, ys, vals) in self._load_pixel_cache.items():
             item = self._get_func_item_for_packet(func_name)
             if item is None:
                 continue
-
-            xs_off = xs - item.min_x
-            ys_off = ys - item.min_y
-            min_v = item.config.min_value
-            max_v = item.config.max_value
-            if max_v > min_v:
-                normalized = np.clip(
-                    (255.0 * (vals - min_v) / (max_v - min_v)), 0, 255
-                ).astype(np.uint8)
+            cd = item.config.color_dim
+            if cd >= 0:
+                entry = self._load_pixels_for_cd(cd).get(func_name)
+                if entry is not None:
+                    cxs, cys, cvals, ccs = entry
+                    self._write_load_pixels(item, cxs, cys, cvals, ccs)
             else:
-                normalized = np.full(len(xs_off), 128, dtype=np.uint8)
-
-            mask = (
-                (xs_off >= 0)
-                & (xs_off < item.width)
-                & (ys_off >= 0)
-                & (ys_off < item.height)
-            )
-            xs_m, ys_m = xs_off[mask], ys_off[mask]
-            normalized = normalized[mask]
-            vals_m = vals[mask].astype(np.float32)
-            if len(xs_m):
-                item.data[ys_m, xs_m, 0] = normalized
-                item.data[ys_m, xs_m, 1] = normalized
-                item.data[ys_m, xs_m, 2] = normalized
-                item.last_value[ys_m, xs_m] = vals_m
-                # counts stays zero — loads are not redundant recomputes
-                item._dirty = True
+                self._write_load_pixels(item, xs, ys, vals, None)
             item.refresh_pixmap()
 
     def _apply_reuse_distances(self):
@@ -1457,6 +2012,42 @@ class TraceViewer(QMainWindow):
             self._accumulate_load_counts(0, time + 1)
         for item in self.canvas.func_items.values():
             item.refresh_pixmap()
+
+    def _full_rerender(self):
+        """Re-initialize every item and replay stores to the current time.
+
+        Used when a display-property edit changes how stored values map to
+        pixels (color interpretation, value range, colormap, normalization) —
+        the per-pixel `data` array holds final colors, so it must be rebuilt.
+        Mirrors the backward-scrub path in _render_to_time.
+        """
+        if not self.state.trace:
+            return
+        time = self.state.current_time
+        for item in self.canvas.func_items.values():
+            item._init_data_array()
+        self._apply_reuse_distances()
+        self._apply_load_count_scale()
+        if time >= 0:
+            self._render_range(0, time + 1)
+        if self._load_count_action.isChecked():
+            self._rebuild_load_counts(time)
+        for item in self.canvas.func_items.values():
+            item.refresh_pixmap()
+        self._apply_load_pixels()
+        self._update_sidebar_stats()
+
+    def _on_func_selected(self, func_name: str):
+        """Populate the display-properties panel from the clicked func."""
+        self.props_panel.set_func(self.canvas.func_items.get(func_name))
+
+    def _on_props_changed(self, func_name: str, needs_reinit: bool):
+        """A display-property edit landed — rebuild the affected pixels.
+
+        _full_rerender always re-initializes the data arrays, so it covers both
+        shape changes (needs_reinit) and in-place recolors uniformly.
+        """
+        self._full_rerender()
 
     def _update_sidebar_stats(self):
         stats: dict[str, tuple[float, float]] = {}
@@ -1563,6 +2154,10 @@ class TraceViewer(QMainWindow):
                     "min_value": cfg.min_value,
                     "max_value": cfg.max_value,
                     "color_dim": cfg.color_dim,
+                    "channel_order": cfg.channel_order,
+                    "colormap": cfg.colormap,
+                    "normalization": cfg.normalization,
+                    "plot_1d": cfg.plot_1d,
                     "visible": cfg.visible,
                 }
                 for name, cfg in self.state.func_configs.items()

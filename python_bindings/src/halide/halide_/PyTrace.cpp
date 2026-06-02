@@ -22,6 +22,14 @@ struct FuncStats {
     std::vector<int> max_coords;
     std::optional<double> min_value;
     std::optional<double> max_value;
+    // Authoritative declared per-dimension shape, captured from the
+    // func_type_and_dim trace tag (or begin_realization as a fallback) and
+    // never widened by load/store coordinates. Unlike min_coords/max_coords,
+    // which aggregate raw coordinates and can be polluted on the channel axis
+    // (e.g. input reports a dim-2 max of 192), these stay clean — so they are
+    // the reliable source for "the last dimension has extent 3 → planar RGB".
+    std::vector<int> realize_min;
+    std::vector<int> realize_extent;
 };
 
 // A single trace packet
@@ -195,6 +203,20 @@ public:
                 if (trace.funcs_.find(qualified) == trace.funcs_.end()) {
                     trace.funcs_[qualified] = FuncStats{qualified};
                 }
+                // begin_realization coordinates are [min, extent] pairs per
+                // dimension — the authoritative declared shape. Capture it once
+                // (the tag is preferred when present; this is the fallback).
+                auto &st = trace.funcs_[qualified];
+                if (st.realize_extent.empty() && pkt_ptr->dimensions > 0) {
+                    const int *co = pkt_ptr->coordinates();
+                    const int ndims = pkt_ptr->dimensions / 2;
+                    st.realize_min.resize(ndims);
+                    st.realize_extent.resize(ndims);
+                    for (int i = 0; i < ndims; ++i) {
+                        st.realize_min[i] = co[2 * i];
+                        st.realize_extent[i] = co[2 * i + 1];
+                    }
+                }
                 if (pipeline_it != parent_to_pipeline.end()) {
                     parent_to_pipeline[pkt_ptr->id] = pipeline_it->second;
                 }
@@ -329,14 +351,39 @@ public:
         return store_indices_;
     }
 
+    // Pick the first two dimension indices that are not the color dimension.
+    // With color_dim == -1 this yields (0, 1) — the default x = dim0, y = dim1
+    // layout. For planar RGB f(x, y, c) (color_dim == 2) it stays (0, 1); for
+    // interleaved RGB f(c, x, y) (color_dim == 0) it becomes (1, 2).
+    static void spatial_dims(int dims, int color_dim, int &xd, int &yd) {
+        xd = -1;
+        yd = -1;
+        for (int d = 0; d < dims; ++d) {
+            if (d == color_dim) continue;
+            if (xd < 0) {
+                xd = d;
+            } else if (yd < 0) {
+                yd = d;
+                break;
+            }
+        }
+    }
+
     // Returns {func_name: (xs, ys, values)} for all store packets with index
     // in [start, end).  xs and ys are int32 numpy arrays of absolute
     // coordinates; values is a float64 array of decoded scalar values.
     // Lane-vectorized stores are expanded: each lane becomes one row.
-    py::dict collect_pixels(size_t start, size_t end) const {
+    //
+    // When color_dim >= 0 the spatial axes are taken from the two dimensions
+    // that are not color_dim, and a fourth int32 array `cs` (the value of the
+    // color dimension per element) is appended to each tuple, so the caller can
+    // route values into separate display channels. With color_dim == -1
+    // (default) the behavior and 3-tuple return are unchanged.
+    py::dict collect_pixels(size_t start, size_t end, int color_dim = -1) const {
         struct FuncData {
             std::vector<int32_t> xs;
             std::vector<int32_t> ys;
+            std::vector<int32_t> cs;
             std::vector<double> values;
         };
         std::map<std::string, FuncData> per_func;
@@ -357,15 +404,15 @@ public:
             const int dims = n_lanes > 0 ? n_coords / n_lanes : n_coords;
             const size_t elem_size = (pkt.type_bits + 7) / 8;
 
+            int xd, yd;
+            spatial_dims(dims, color_dim, xd, yd);
+            const bool has_color = color_dim >= 0 && color_dim < dims;
+
             for (int lane = 0; lane < n_lanes; ++lane) {
                 // Decode coordinates (same layout as HalideTraceViz / viewer.py)
-                int32_t x = 0, y = 0;
-                if (dims >= 2) {
-                    x = pkt.coordinates[lane];
-                    y = pkt.coordinates[n_lanes + lane];
-                } else if (dims == 1) {
-                    x = pkt.coordinates[lane];
-                }
+                int32_t x = xd >= 0 ? pkt.coordinates[xd * n_lanes + lane] : 0;
+                int32_t y = yd >= 0 ? pkt.coordinates[yd * n_lanes + lane] : 0;
+                int32_t c = has_color ? pkt.coordinates[color_dim * n_lanes + lane] : 0;
 
                 // Decode value to float64
                 double val = 0.0;
@@ -417,6 +464,9 @@ public:
                 fd.xs.push_back(x);
                 fd.ys.push_back(y);
                 fd.values.push_back(val);
+                if (color_dim >= 0) {
+                    fd.cs.push_back(c);
+                }
             }
         }
 
@@ -430,7 +480,15 @@ public:
                 std::memcpy(ys_arr.mutable_data(), fd.ys.data(), n * sizeof(int32_t));
                 std::memcpy(vals_arr.mutable_data(), fd.values.data(), n * sizeof(double));
             }
-            result[py::str(name)] = py::make_tuple(xs_arr, ys_arr, vals_arr);
+            if (color_dim >= 0) {
+                py::array_t<int32_t> cs_arr(n);
+                if (n > 0) {
+                    std::memcpy(cs_arr.mutable_data(), fd.cs.data(), n * sizeof(int32_t));
+                }
+                result[py::str(name)] = py::make_tuple(xs_arr, ys_arr, vals_arr, cs_arr);
+            } else {
+                result[py::str(name)] = py::make_tuple(xs_arr, ys_arr, vals_arr);
+            }
         }
         return result;
     }
@@ -438,12 +496,22 @@ public:
     // Return {func_name: (xs, ys, values)} for load events in [start, end).
     // Each (x, y) coordinate is included at most once per func (first load wins),
     // so the result is suitable for inferring input buffer contents.
-    py::dict collect_load_pixels(size_t start, size_t end) const {
+    //
+    // When color_dim >= 0 the spatial axes come from the two non-color
+    // dimensions, deduplication keys on (x, y, channel) so each channel is kept,
+    // and a fourth int32 array `cs` (the color-dim coordinate) is appended to
+    // each tuple. With color_dim == -1 (default) the behavior and 3-tuple
+    // return are unchanged.
+    py::dict collect_load_pixels(size_t start, size_t end, int color_dim = -1) const {
         struct FuncData {
             std::vector<int32_t> xs;
             std::vector<int32_t> ys;
+            std::vector<int32_t> cs;
             std::vector<double> values;
-            std::unordered_set<int64_t> seen;  // packed (x,y) for deduplication
+            std::unordered_set<int64_t> seen;  // packed (x,y), color_dim < 0
+            // Per-channel packed (x,y) sets, so distinct channels at the same
+            // (x, y) are each retained when color_dim >= 0.
+            std::unordered_map<int32_t, std::unordered_set<int64_t>> seen_ch;
         };
         std::map<std::string, FuncData> per_func;
 
@@ -463,18 +531,23 @@ public:
             const int dims = n_lanes > 0 ? n_coords / n_lanes : n_coords;
             const size_t elem_size = (pkt.type_bits + 7) / 8;
 
-            for (int lane = 0; lane < n_lanes; ++lane) {
-                int32_t x = 0, y = 0;
-                if (dims >= 2) {
-                    x = pkt.coordinates[lane];
-                    y = pkt.coordinates[n_lanes + lane];
-                } else if (dims == 1) {
-                    x = pkt.coordinates[lane];
-                }
+            int xd, yd;
+            spatial_dims(dims, color_dim, xd, yd);
+            const bool has_color = color_dim >= 0 && color_dim < dims;
 
-                // Deduplicate: skip if we've already recorded a value at (x, y)
+            for (int lane = 0; lane < n_lanes; ++lane) {
+                int32_t x = xd >= 0 ? pkt.coordinates[xd * n_lanes + lane] : 0;
+                int32_t y = yd >= 0 ? pkt.coordinates[yd * n_lanes + lane] : 0;
+                int32_t c = has_color ? pkt.coordinates[color_dim * n_lanes + lane] : 0;
+
+                // Deduplicate: skip if we've already recorded this (x, y) — or
+                // (x, y) for this channel when a color dim is active.
                 const int64_t key = (static_cast<int64_t>(x) << 32) | static_cast<uint32_t>(y);
-                if (!fd.seen.insert(key).second) continue;
+                if (color_dim >= 0) {
+                    if (!fd.seen_ch[c].insert(key).second) continue;
+                } else {
+                    if (!fd.seen.insert(key).second) continue;
+                }
 
                 double val = 0.0;
                 if (!pkt.value.empty() && (lane + 1) * elem_size <= pkt.value.size()) {
@@ -525,6 +598,9 @@ public:
                 fd.xs.push_back(x);
                 fd.ys.push_back(y);
                 fd.values.push_back(val);
+                if (color_dim >= 0) {
+                    fd.cs.push_back(c);
+                }
             }
         }
 
@@ -538,7 +614,15 @@ public:
                 std::memcpy(ys_arr.mutable_data(), fd.ys.data(), n * sizeof(int32_t));
                 std::memcpy(vals_arr.mutable_data(), fd.values.data(), n * sizeof(double));
             }
-            result[py::str(name)] = py::make_tuple(xs_arr, ys_arr, vals_arr);
+            if (color_dim >= 0) {
+                py::array_t<int32_t> cs_arr(n);
+                if (n > 0) {
+                    std::memcpy(cs_arr.mutable_data(), fd.cs.data(), n * sizeof(int32_t));
+                }
+                result[py::str(name)] = py::make_tuple(xs_arr, ys_arr, vals_arr, cs_arr);
+            } else {
+                result[py::str(name)] = py::make_tuple(xs_arr, ys_arr, vals_arr);
+            }
         }
         return result;
     }
@@ -759,8 +843,18 @@ private:
             if (funcs.find(qualified) == funcs.end()) {
                 funcs[qualified] = FuncStats{qualified};
             }
-            funcs[qualified].min_coords = std::move(min_coords);
-            funcs[qualified].max_coords = std::move(max_coords);
+            // Preserve the clean declared shape before min/max_coords get
+            // widened by raw load/store coordinates. This is the authoritative
+            // source for channel detection (see FuncStats::realize_extent).
+            auto &st = funcs[qualified];
+            st.realize_min.assign(min_coords.size(), 0);
+            st.realize_extent.assign(min_coords.size(), 0);
+            for (size_t i = 0; i < min_coords.size(); ++i) {
+                st.realize_min[i] = min_coords[i];
+                st.realize_extent[i] = max_coords[i] - min_coords[i];
+            }
+            st.min_coords = std::move(min_coords);
+            st.max_coords = std::move(max_coords);
         }
     }
 
@@ -858,6 +952,8 @@ void define_trace(py::module &m) {
         .def_readonly("name", &FuncStats::name)
         .def_readonly("min_coords", &FuncStats::min_coords)
         .def_readonly("max_coords", &FuncStats::max_coords)
+        .def_readonly("realize_min", &FuncStats::realize_min)
+        .def_readonly("realize_extent", &FuncStats::realize_extent)
         .def_property_readonly("min_value", [](const FuncStats &s) -> py::object {
             return s.min_value.has_value() ? py::cast(*s.min_value) : py::none();
         })
@@ -903,11 +999,15 @@ void define_trace(py::module &m) {
         .def_property_readonly("packets", &Trace::packets)
         .def("filter_loads_stores", &Trace::filter_loads_stores)
         .def("store_indices", &Trace::store_indices)
-        .def("collect_pixels", &Trace::collect_pixels, py::arg("start"), py::arg("end"), "Return {func_name: (xs, ys, values)} numpy arrays for store packets "
-                                                                                         "with index in [start, end).  Values are float64; coordinates are int32.")
-        .def("collect_load_pixels", &Trace::collect_load_pixels, py::arg("start"), py::arg("end"), "Return {func_name: (xs, ys, values)} for load events in [start, end), "
-                                                                                                   "deduplicated to one entry per unique (x, y) per func (first load wins). "
-                                                                                                   "Use this to infer the contents of input buffers that have no store events.")
+        .def("collect_pixels", &Trace::collect_pixels, py::arg("start"), py::arg("end"), py::arg("color_dim") = -1, "Return {func_name: (xs, ys, values)} numpy arrays for store packets "
+                                                                                                                    "with index in [start, end).  Values are float64; coordinates are int32. "
+                                                                                                                    "When color_dim >= 0, spatial axes come from the non-color dims and a "
+                                                                                                                    "fourth int32 array `cs` (the color-dim coordinate) is appended per func.")
+        .def("collect_load_pixels", &Trace::collect_load_pixels, py::arg("start"), py::arg("end"), py::arg("color_dim") = -1, "Return {func_name: (xs, ys, values)} for load events in [start, end), "
+                                                                                                                              "deduplicated to one entry per unique (x, y) per func (first load wins). "
+                                                                                                                              "Use this to infer the contents of input buffers that have no store events. "
+                                                                                                                              "When color_dim >= 0, dedup keys on (x, y, channel) and a fourth int32 "
+                                                                                                                              "array `cs` (the color-dim coordinate) is appended per func.")
         .def("collect_load_counts", &Trace::collect_load_counts, py::arg("start"), py::arg("end"), "Return {func_name: (xs, ys, counts)} for load events in [start, end), "
                                                                                                    "one entry per unique (x, y) per func with the number of times it was "
                                                                                                    "loaded (int32). Accumulate across ranges for the load-count heatmap.")
