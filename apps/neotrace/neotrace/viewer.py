@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import time as _time
 from dataclasses import dataclass, field
+from enum import IntEnum
 from pathlib import Path
 
 import graphviz
@@ -13,6 +14,7 @@ import numpy as np
 from halide import FuncStats, Trace, TracePacket
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import (
+    QAction,
     QBrush,
     QColor,
     QFont,
@@ -44,6 +46,11 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+
+class DisplayMode(IntEnum):
+    VALUE = 0
+    RECOMPUTE_HEAT = 1
 
 
 @dataclass
@@ -84,6 +91,7 @@ class FuncItem(QGraphicsPixmapItem):
         self.config = config
         self.label = None  # Will be set by TraceCanvas.add_func
         self._dirty = False  # Track whether pixmap needs regeneration
+        self.display_mode = DisplayMode.VALUE
 
         # Make it draggable
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
@@ -112,14 +120,52 @@ class FuncItem(QGraphicsPixmapItem):
         width = max(1, min(width, 4096))
         height = max(1, min(height, 4096))
 
-        # RGBA array
+        # RGBA array for displayed values
         self.data = np.zeros((height, width, 4), dtype=np.uint8)
         self.data[:, :, 3] = 255  # Fully opaque
+        # Last raw value written to each pixel; NaN = never written
+        self.last_value = np.full((height, width), np.nan, dtype=np.float32)
+        # Redundant write count: incremented when the same value is written again
+        self.counts = np.zeros((height, width), dtype=np.int32)
         self.width = width
         self.height = height
         self.min_x = self.stats.min_coords[0] if self.stats.min_coords else 0
         self.min_y = self.stats.min_coords[1] if len(self.stats.min_coords) > 1 else 0
         self._dirty = True  # Mark for pixmap regeneration
+
+    def _build_heat_rgba(self) -> np.ndarray:
+        """Build an RGBA heatmap from per-pixel redundant write counts.
+
+        Never written         → black
+        Written, no recompute → green  (counts == 0)
+        Written, recomputed N times → red, log-scaled  (counts > 0)
+
+        counts[y, x] is incremented only when the same raw value is written
+        to (x, y) again — so fold_storage reuse and multi-channel writes
+        (which write different values) are correctly ignored.
+        """
+        h, w = self.counts.shape
+        rgba = np.zeros((h, w, 4), dtype=np.uint8)
+        rgba[:, :, 3] = 255
+
+        written = ~np.isnan(self.last_value)
+        if not written.any():
+            return rgba
+
+        max_recomp = int(self.counts.max()) if self.counts.any() else 0
+        if max_recomp > 0:
+            denom = max(1.0, float(np.log1p(max_recomp)))
+            t = (np.log1p(self.counts.astype(np.float32)) / denom).clip(0.0, 1.0)
+        else:
+            t = np.zeros((h, w), dtype=np.float32)
+
+        # Interpolate green (0,200,0) → red (255,0,0) by t
+        rgba[:, :, 0] = np.where(written, (t * 255.0).clip(0, 255), 0).astype(np.uint8)
+        rgba[:, :, 1] = np.where(written, ((1.0 - t) * 200.0).clip(0, 200), 0).astype(
+            np.uint8
+        )
+        rgba[:, :, 2] = 0
+        return rgba
 
     def _create_axis_labels(self):
         """Create axis coordinate labels as child items."""
@@ -172,18 +218,25 @@ class FuncItem(QGraphicsPixmapItem):
             return max(1, w // step), max(1, h // step)
 
     def _update_pixmap(self):
-        """Update the pixmap from the data array."""
+        """
+        Update the pixmap from the data array (or heatmap if in RECOMPUTE_HEAT mode).
+        """
+        source = (
+            self._build_heat_rgba()
+            if self.display_mode == DisplayMode.RECOMPUTE_HEAT
+            else self.data
+        )
         zoom = self.config.zoom
-        h, w = self.data.shape[:2]
+        h, w = source.shape[:2]
 
         if zoom >= 1:
             # Scale up using repeat
             izoom = max(1, int(zoom))
-            scaled = np.repeat(np.repeat(self.data, izoom, axis=0), izoom, axis=1)
+            scaled = np.repeat(np.repeat(source, izoom, axis=0), izoom, axis=1)
         else:
             # Scale down using slicing (simple nearest-neighbor downscale)
             step = max(1, int(1 / zoom))
-            scaled = self.data[::step, ::step, :]
+            scaled = source[::step, ::step, :]
 
         # Convert to QImage
         height, width = scaled.shape[:2]
@@ -428,6 +481,29 @@ class FuncListWidget(QWidget):
         visible = item.checkState() == Qt.CheckState.Checked
         self.func_visibility_changed.emit(name, visible)
 
+    def update_recompute_stats(self, stats: dict[str, tuple[float, float]]):
+        """Update item text with per-func recompute percentages and avg write counts."""
+        self.list_widget.blockSignals(True)
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            name = item.data(Qt.ItemDataRole.UserRole)
+            short = name.split(":")[-1] if ":" in name else name
+            if name in stats:
+                pct, avg = stats[name]
+                if pct > 0:
+                    item.setText(f"{short}  ({pct:.0f}% recomp, +{avg:.2f}x)")
+                    color = (
+                        QColor(255, 100, 100) if pct >= 10 else QColor(255, 200, 100)
+                    )
+                    item.setForeground(QBrush(color))
+                else:
+                    item.setText(short)
+                    item.setForeground(QBrush(QColor(200, 200, 200)))
+            else:
+                item.setText(short)
+                item.setForeground(QBrush(QColor(200, 200, 200)))
+        self.list_widget.blockSignals(False)
+
 
 class TraceViewer(QMainWindow):
     """Main window for the trace viewer."""
@@ -517,6 +593,12 @@ class TraceViewer(QMainWindow):
         view_menu = menu_bar.addMenu("&View")
         view_menu.addAction("&Reset Zoom", self._reset_zoom, "Ctrl+0")
         view_menu.addAction("&Fit All", self._fit_all, "Ctrl+F")
+        view_menu.addSeparator()
+        self._recompute_action = QAction("&Recompute Heatmap", self)
+        self._recompute_action.setCheckable(True)
+        self._recompute_action.setShortcut(QKeySequence("Ctrl+R"))
+        self._recompute_action.triggered.connect(self._toggle_recompute_mode)
+        view_menu.addAction(self._recompute_action)
 
     def _open_file(self):
         """Open a trace file."""
@@ -567,6 +649,7 @@ class TraceViewer(QMainWindow):
 
             # Add func items to canvas
             self.canvas.clear_funcs()
+            self._recompute_action.setChecked(False)
             for name, stats in trace.funcs.items():
                 config = self.state.func_configs.get(name)
                 if config and config.visible:
@@ -857,6 +940,8 @@ class TraceViewer(QMainWindow):
         for item in self.canvas.func_items.values():
             item.refresh_pixmap()
 
+        self._update_sidebar_stats()
+
         t2 = _time.perf_counter()
 
         self.state.current_time = time
@@ -924,23 +1009,55 @@ class TraceViewer(QMainWindow):
 
             mask = (xs >= 0) & (xs < item.width) & (ys >= 0) & (ys < item.height)
             xs, ys, normalized = xs[mask], ys[mask], normalized[mask]
+            vals_m = vals[mask].astype(np.float32)
             if len(xs):
                 item.data[ys, xs, 0] = normalized
                 item.data[ys, xs, 1] = normalized
                 item.data[ys, xs, 2] = normalized
+                # Redundant only when the same value is written again.
+                # Different-value overwrites (fold_storage reuse, multi-channel)
+                # are intentional and excluded.
+                prev = item.last_value[ys, xs]
+                is_recomp = ~np.isnan(prev) & (prev == vals_m)
+                if is_recomp.any():
+                    np.add.at(item.counts, (ys[is_recomp], xs[is_recomp]), 1)
+                item.last_value[ys, xs] = vals_m
                 item._dirty = True
             n_pixels += len(xs)
         self._prof_update_pixel += _time.perf_counter() - tp
         return n_pixels
+
+    def _toggle_recompute_mode(self, checked: bool):
+        mode = DisplayMode.RECOMPUTE_HEAT if checked else DisplayMode.VALUE
+        for item in self.canvas.func_items.values():
+            item.display_mode = mode
+            item._update_pixmap()
+
+    def _update_sidebar_stats(self):
+        stats: dict[str, tuple[float, float]] = {}
+        for func_name, item in self.canvas.func_items.items():
+            written = int((~np.isnan(item.last_value)).sum())
+            if written == 0:
+                stats[func_name] = (0.0, 0.0)
+                continue
+            recomp_pixels = int((item.counts > 0).sum())
+            pct = 100.0 * recomp_pixels / written
+            # avg extra: total redundant writes / written pixels (0 = no waste)
+            avg_extra = float(item.counts.sum()) / written
+            stats[func_name] = (pct, avg_extra)
+        self.func_list.update_recompute_stats(stats)
 
     def _get_func_item_for_packet(self, func_name: str) -> FuncItem | None:
         """Get the FuncItem for a packet's func name, with caching."""
         if func_name in self._func_name_cache:
             return self._func_name_cache[func_name]
 
-        # Search for matching item
+        # collect_pixels returns bare names; canvas keys are qualified ("pkg:func").
+        # Use exact-suffix matching on ":" to avoid "gPyramid_1" matching
+        # "local_laplacian:gPyramid_0_clone_in_gPyramid_1$0" as a substring.
+        suffix = f":{func_name}"
         for name, item in self.canvas.func_items.items():
-            if func_name in name or name.endswith(f":{func_name}"):
+            if name == func_name or name.endswith(suffix):
                 self._func_name_cache[func_name] = item
                 return item
 
