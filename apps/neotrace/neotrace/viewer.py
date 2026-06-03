@@ -18,6 +18,7 @@ from PySide6.QtGui import (
     QBrush,
     QColor,
     QFont,
+    QFontMetrics,
     QImage,
     QKeySequence,
     QPainter,
@@ -63,6 +64,18 @@ class DisplayMode(IntEnum):
 
 # Display channel index for each character of a FuncConfig.channel_order string.
 _CHANNEL_SLOT = {"r": 0, "g": 1, "b": 2, "a": 3}
+
+# Func name labels are drawn at a fixed screen size (ItemIgnoresTransformations),
+# so the DAG layout must reserve space for them in the same units. Both the
+# rendered label (add_func) and the layout (_dag_layout) use this one font.
+_LABEL_POINT_SIZE = 12
+
+
+def _label_font() -> QFont:
+    font = QFont()
+    font.setPointSize(_LABEL_POINT_SIZE)
+    return font
+
 
 # Compact viridis control points (matplotlib viridis sampled at 0, 0.1, …, 1.0),
 # linearly interpolated in _viridis. A debug colormap doesn't need full fidelity.
@@ -515,6 +528,24 @@ class FuncItem(QGraphicsPixmapItem):
             step = max(1, int(1 / zoom))
             return max(1, w // step), max(1, h // step)
 
+    def position_label(self, view_scale: float = 1.0):
+        """Center the (fixed screen-size) name label over the image.
+
+        The label has ItemIgnoresTransformations, so it renders at a constant
+        device size regardless of zoom — but its *position* is in scene units,
+        which the view scales. Dividing the label's pixel extent by the current
+        view scale converts it to scene units, keeping the label centered above
+        the image at any zoom (otherwise wide labels drift off to one side).
+        """
+        if self.label is None:
+            return
+        rendered_w, _rendered_h = self.get_rendered_size()
+        bounds = self.label.boundingRect()
+        s = view_scale if view_scale > 0 else 1.0
+        self.label.setPos(
+            (rendered_w - bounds.width() / s) / 2, -(bounds.height() + 4) / s
+        )
+
     def _build_line_plot_rgba(self) -> np.ndarray:
         """Render a 1-D func as a value-vs-index plot (for LUTs like remap).
 
@@ -685,10 +716,16 @@ class TraceCanvas(QGraphicsView):
                     self.setTransformationAnchor(
                         QGraphicsView.ViewportAnchor.AnchorViewCenter
                     )
+                    self.reposition_labels()
             event.accept()
         else:
             # Regular scroll - let parent handle panning
             super().wheelEvent(event)
+
+    def reposition_labels(self):
+        """Re-center every func's fixed-size label for the current zoom."""
+        for item in self.func_items.values():
+            item.position_label(self._zoom)
 
     def zoom_in(self):
         """Zoom in by a fixed factor."""
@@ -697,6 +734,7 @@ class TraceCanvas(QGraphicsView):
         if new_zoom <= self._max_zoom:
             self._zoom = new_zoom
             self.scale(factor, factor)
+            self.reposition_labels()
 
     def zoom_out(self):
         """Zoom out by a fixed factor."""
@@ -705,6 +743,7 @@ class TraceCanvas(QGraphicsView):
         if new_zoom >= self._min_zoom:
             self._zoom = new_zoom
             self.scale(factor, factor)
+            self.reposition_labels()
 
     def clear_funcs(self):
         """Remove all func items and labels."""
@@ -729,15 +768,14 @@ class TraceCanvas(QGraphicsView):
         display_name = func_name.split(":")[-1] if ":" in func_name else func_name
         label = self.scene.addSimpleText(display_name)
         label.setParentItem(item)
-        font = QFont()
-        font.setPointSize(14)
-        label.setFont(font)
+        label.setFont(_label_font())
         label.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
         label.setBrush(QBrush(QColor(220, 220, 220)))
-        label_h = label.boundingRect().height()
-        label.setPos(0, -(label_h + 4))
         item.label = label
         self.func_labels[func_name] = label
+        # Center it over the image at the current zoom. The DAG layout reserves
+        # matching width/height (at 1:1) so labels don't collide there.
+        item.position_label(self._zoom)
 
         return item
 
@@ -1323,13 +1361,23 @@ class TraceViewer(QMainWindow):
         # GraphViz uses inches for dimensions (72 points = 1 inch)
         # We'll convert pixel sizes to inches for proper spacing
         DPI = 72.0
+        # Vertical gap reserved between a label and the image below it (px).
+        LABEL_GAP = 12
+
+        # Labels are fixed screen-size, so reserve their pixel extent in the
+        # layout. Measured with the same font add_func draws with.
+        fm = QFontMetrics(_label_font())
 
         try:
             dot = graphviz.Digraph(engine="dot")
             dot.attr(rankdir="LR")  # Left to right (inputs on left, outputs on right)
             dot.attr("node", shape="box")
             # Increase separation between nodes and ranks for clarity
-            dot.attr("graph", nodesep="0.5", ranksep="1.0")
+            dot.attr("graph", nodesep="0.4", ranksep="0.8")
+
+            # Per-node (box_w, box_h, label_w, label_h) in px, for converting
+            # GraphViz centers back to box top-left corners below.
+            node_dims: dict[str, tuple[int, int, int, int]] = {}
 
             # Use sanitized IDs to avoid GraphViz port syntax issues with colons
             # Map: sanitized_id -> original_name
@@ -1340,20 +1388,20 @@ class TraceViewer(QMainWindow):
                 id_to_name[node_id] = name
                 short_name = name.split(":")[-1] if ":" in name else name
 
-                # Tell GraphViz the actual size of each node so it can space properly
-                if name in func_sizes:
-                    pw, ph = func_sizes[name]
-                    # Convert pixels to inches, add padding for labels
-                    width_in = (pw + 20) / DPI
-                    height_in = (ph + 30) / DPI  # Extra for label above
-                else:
-                    width_in = height_in = 1.0
+                pw, ph = func_sizes.get(name, (40, 40))
+                label_w = fm.horizontalAdvance(short_name)
+                label_h = fm.height()
+                node_dims[name] = (pw, ph, label_w, label_h)
 
+                # Reserve the larger of image / label width, plus the label
+                # height above the image, so neighbouring labels never collide.
+                node_w = max(pw, label_w) + 24
+                node_h = ph + label_h + LABEL_GAP
                 dot.node(
                     node_id,
                     short_name,
-                    width=f"{width_in:.2f}",
-                    height=f"{height_in:.2f}",
+                    width=f"{node_w / DPI:.2f}",
+                    height=f"{node_h / DPI:.2f}",
                     fixedsize="true",
                 )
 
@@ -1367,18 +1415,26 @@ class TraceViewer(QMainWindow):
 
             plain = dot.pipe(format="plain").decode("utf-8")
 
+            # Box top-left positions (the label is drawn above, centered, by
+            # add_func; here we reserve the matching space within each node).
             positions: dict[str, tuple[float, float]] = {}
 
             for line in plain.split("\n"):
                 parts = line.split()
                 if len(parts) >= 5 and parts[0] == "node":
                     node_id = parts[1]
-                    # GraphViz plain format: x and y are in inches, convert to pixels
-                    x = float(parts[2]) * DPI
-                    y = float(parts[3]) * DPI
-                    # Map back to original name
-                    if node_id in id_to_name:
-                        positions[id_to_name[node_id]] = (x, y)
+                    if node_id not in id_to_name:
+                        continue
+                    # GraphViz plain format: x and y are node centers in inches.
+                    cx = float(parts[2]) * DPI
+                    cy = float(parts[3]) * DPI
+                    name = id_to_name[node_id]
+                    pw, ph, _lw, label_h = node_dims[name]
+                    # Center the image horizontally under the node; push it below
+                    # the reserved label band so the label sits inside the node.
+                    box_x = cx - pw / 2
+                    box_y = cy - ph / 2 + (label_h + LABEL_GAP) / 2
+                    positions[name] = (box_x, box_y)
 
             return positions if positions else None
         except Exception as e:
@@ -1500,15 +1556,12 @@ class TraceViewer(QMainWindow):
         dag_positions = self._dag_layout(func_sizes)
 
         if dag_positions:
-            # Use DAG positions directly - GraphViz already accounts for node sizes
-            # Positions are node centers, so we offset to get top-left corner
+            # _dag_layout already returns image top-left corners with label space
+            # reserved, so use them directly.
             for name in func_info:
                 zoom, rw, rh, min_val, max_val = func_info[name]
                 if name in dag_positions:
-                    cx, cy = dag_positions[name]
-                    # Convert from center to top-left, add padding
-                    px = cx - rw / 2 + padding
-                    py = cy - rh / 2 + padding + label_height
+                    px, py = dag_positions[name]
                 else:
                     # Func not in DAG, place at the end
                     px = padding
@@ -2171,11 +2224,25 @@ class TraceViewer(QMainWindow):
         """Reset canvas zoom to 100%."""
         self.canvas.resetTransform()
         self.canvas._zoom = 1.0
+        self.canvas.reposition_labels()
 
     def _fit_all(self):
-        """Fit all items in view."""
+        """Fit all items in view, but never below 1:1.
+
+        Labels are fixed screen-size and the DAG layout reserves their footprint
+        at 1:1, so zooming out past 100% would make them overlap again. When the
+        whole scene can't fit at 1:1 we cap the zoom and leave it pannable
+        (centered on the content) rather than shrinking everything.
+        """
         bounds = self.canvas.scene.itemsBoundingRect()
         self.canvas.fitInView(bounds, Qt.AspectRatioMode.KeepAspectRatio)
+        scale = self.canvas.transform().m11()
+        if scale < 1.0:
+            self.canvas.resetTransform()  # back to 1:1
+            self.canvas.centerOn(bounds.center())
+            scale = 1.0
+        self.canvas._zoom = scale
+        self.canvas.reposition_labels()
 
 
 def run_viewer(trace_path: Path | None = None):
