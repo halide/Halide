@@ -183,11 +183,17 @@ bool matmul(Halide::Target target) {
 
     // Tile sizes match the full AMX hardware tile. For int8 the native tile is
     // 16 rows x 64 bytes, so a single tile_matmul can reduce over K = 64.
-    // Register-block a 2x2 grid of output tiles. This keeps 4 accumulator tiles
-    // live (so the TMUL latency is hidden across independent chains) and reuses
-    // each loaded LHS/RHS tile across two accumulators.
-    int outer_y = col > tile_y ? getenv_int("RB_Y", 2) : 1;
-    int outer_x = row > tile_x ? getenv_int("RB_X", 2) : 1;
+    // Register-block over a small grid of output tiles. 2x2 is the robust
+    // bandwidth-bound shape. Small resident problems do better with more reuse
+    // of each RHS tile across rows.
+    int default_outer_x = 2;
+    int default_outer_y = 2;
+    if (row <= 512 && col <= 512 && acc <= 512) {
+        default_outer_x = 3;
+        default_outer_y = 1;
+    }
+    int outer_y = col > tile_y ? getenv_int("RB_Y", default_outer_y) : 1;
+    int outer_x = row > tile_x ? getenv_int("RB_X", default_outer_x) : 1;
     if (outer_y <= 0 || outer_x <= 0) {
         std::cerr << "RB_X and RB_Y must be positive.\n";
         return false;
@@ -196,11 +202,12 @@ bool matmul(Halide::Target target) {
         std::cerr << "PACK_B currently requires RB_Y to be a power of two.\n";
         return false;
     }
+    Func result = mm.in();
 
     // Schedule the reduction
     Var rxi("rxi"), ryi("ryi"), rxo("rxo"), ryo("ryo");
     RVar rri("rri"), rro("rro");
-    mm.compute_at(mm.in(), y)
+    mm.compute_at(result, y)
         .store_in(MemoryType::AMXTile)
         .update()
         // Split into (x,y) tile
@@ -221,7 +228,7 @@ bool matmul(Halide::Target target) {
 
     // Schedule the initialization
     Var ixi("ixi"), iyi("iyi");
-    mm.compute_at(mm.in(), y)
+    mm.compute_at(result, y)
         .tile(y, x, iyi, ixi, tile_y, tile_x)
         .vectorize(iyi)
         .vectorize(ixi)
@@ -230,8 +237,9 @@ bool matmul(Halide::Target target) {
 
     // Schedule the consumer
     Var mmxi("mmxi"), mmyi("mmyi");
-    mm.in()
+    result
         .tile(y, x, mmyi, mmxi, tile_y * outer_y, tile_x * outer_x)
+        .reorder({mmyi, mmxi, y, x})
         .vectorize(mmyi, tile_y)
         .vectorize(mmxi, tile_x)
         .unroll(mmyi)
@@ -254,7 +262,6 @@ bool matmul(Halide::Target target) {
 
     Buffer<int32_t> out(col, row);
 
-    Func result = mm.in();
     result.output_buffer().dim(0).set_min(0).set_extent(col).set_stride(1);
     result.output_buffer().dim(1).set_min(0).set_extent(row).set_stride(col);
 
