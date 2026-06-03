@@ -369,9 +369,9 @@ protected:
         }
 
         void mul(const Expr &e) {
-            for (int i = 0; i < num_counters; i++) {
-                if (counters[i].defined()) {
-                    counters[i] *= e;
+            for (auto &counter : counters) {
+                if (counter.defined()) {
+                    counter *= e;
                 }
             }
             add_free_vars(e);
@@ -467,7 +467,7 @@ protected:
 
     Stmt flush_all(const Stmt &stmt) {
         Stmt s = stmt;
-        for (auto p : counters) {
+        for (const auto &p : counters) {
             s = flush(s, p.first, p.second);
         }
         counters.clear();
@@ -498,9 +498,9 @@ protected:
     // Used after any hoisting operation that mutates the Exprs in place.
     static void recompute_free_vars(Counters &c) {
         c.free_vars.clear();
-        for (int i = 0; i < num_counters; i++) {
-            if (c.counters[i].defined()) {
-                c.add_free_vars(c.counters[i]);
+        for (const auto &counter : c.counters) {
+            if (counter.defined()) {
+                c.add_free_vars(counter);
             }
         }
     }
@@ -517,13 +517,13 @@ protected:
             if (!c.free_vars.count(op->name)) {
                 continue;
             }
-            for (int i = 0; i < num_counters; i++) {
-                if (c.counters[i].defined() && expr_uses_var(c.counters[i], op->name)) {
-                    Interval iv = bounds_of_expr_in_scope(c.counters[i], scope);
+            for (auto &counter : c.counters) {
+                if (counter.defined() && expr_uses_var(counter, op->name)) {
+                    Interval iv = bounds_of_expr_in_scope(counter, scope);
                     if (iv.has_upper_bound()) {
-                        c.counters[i] = simplify(iv.max);
+                        counter = simplify(iv.max);
                     } else {
-                        c.counters[i] = Expr();
+                        counter = Expr();
                     }
                 }
             }
@@ -544,12 +544,12 @@ protected:
             if (!c.free_vars.count(name)) {
                 continue;
             }
-            for (int i = 0; i < num_counters; i++) {
-                if (c.counters[i].defined() && expr_uses_var(c.counters[i], name)) {
+            for (auto &counter : c.counters) {
+                if (counter.defined() && expr_uses_var(counter, name)) {
                     if (value_pure) {
-                        c.counters[i] = Let::make(name, value, c.counters[i]);
+                        counter = Let::make(name, value, counter);
                     } else {
-                        c.counters[i] = Expr();
+                        counter = Expr();
                     }
                 }
             }
