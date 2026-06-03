@@ -1203,8 +1203,8 @@ public:
     Stmt operator()(const Stmt &stmt) {
         Stmt s = IRMutator::operator()(stmt);
         if (target.has_feature(Target::Profile)) {
-            for (size_t i = 0; i < funcs.size(); i++) {
-                s = declare_box(s, funcs[i], Call::declare_box_required_at_root);
+            for (const auto &func : funcs) {
+                s = declare_box(s, func, Call::declare_box_required_at_root);
             }
         }
         return s;
