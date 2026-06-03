@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "halidoscope"
+version = "0.1.0"
+description = "FastAPI backend for Halidoscope"
+requires-python = ">=3.13"
+dependencies = ["fastapi[standard]>=0.115", "halide", "numpy>=2.4.5"]
+
+[project.scripts]
+dev = "backend.main:run"
+
+[tool.uv.sources]
+halide = { path = "../../.." }
+numpy = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+
+[[tool.uv.index]]
+name = "piwheels"
+url = "https://piwheels.org/simple"
+explicit = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
+
+[dependency-groups]
+dev = ["ruff>=0.14"]
