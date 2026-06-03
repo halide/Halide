@@ -761,7 +761,6 @@ class SlidingWindow : public IRMutator {
     // Keep track of realizations we want to slide, from innermost to
     // outermost.
     list<Function> sliding;
-
     Scope<Interval> bounds_scope;
 
     using IRMutator::visit;
@@ -822,7 +821,6 @@ class SlidingWindow : public IRMutator {
 
         list<pair<string, Expr>> prev_loop_mins;
         list<pair<string, Expr>> new_lets;
-
         for (const Function &func : sliding) {
             debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
 
