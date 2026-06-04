@@ -49,6 +49,7 @@ def _register_trace(trace: Any) -> dict[str, Any]:
     session_id = str(uuid.uuid4())
     payload = {
         "session_id": session_id,
+        "num_packets": len(trace),
         "funcs": {name: _serialize_func_stats(s) for name, s in trace.funcs.items()},
         "dag_edges": {k: list(v) for k, v in trace.dag_edges.items()},
         "pipelines": {str(k): v for k, v in trace.pipelines.items()},
