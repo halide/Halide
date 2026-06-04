@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "halidoscope",
+  "productName": "Halidoscope",
   "version": "0.1.0",
   "identifier": "com.halide.halidescope",
   "build": {
@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "halidoscope",
-        "width": 800,
-        "height": 600
+        "title": "Halidoscope",
+        "width": 1512,
+        "height": 982
       }
     ],
     "security": {
