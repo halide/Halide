@@ -1,64 +1,63 @@
 import * as React from "react";
+import type { Node, NodeProps } from "@xyflow/react";
 
-interface FuncCanvasProps {
-  name: string;
-  width: number;
-  height: number;
-  xs: number[];
-  ys: number[];
-  values: number[];
-}
+import { useCanvasRegistry } from "../hooks/canvas-registry";
+import { NodeData } from "../types";
 
-const MAX_DISPLAY_PX = 800;
+type FuncNode = Node<NodeData, "funcCanvas">;
 
-function FuncCanvas({ name, width, height, xs, ys, values }: FuncCanvasProps) {
-  const canvas = React.useRef<HTMLCanvasElement>(null);
-  const scale = Math.min(1, MAX_DISPLAY_PX / width, MAX_DISPLAY_PX / height);
+/**
+ * Renders a single Halide func's store values into a canvas. The canvas owns a
+ * persistent {@link ImageData} buffer and registers a draw/clear handle with the
+ * {@link CanvasRegistry}, so incremental range updates accumulate on top of each
+ * other (forward scrub) until a clear resets it (backward scrub / new trace).
+ */
+function FuncCanvas({
+  id,
+  data: { name, width, height },
+}: NodeProps<FuncNode>) {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const canvasRegistry = useCanvasRegistry();
 
   React.useEffect(() => {
-    const ctx = canvas.current?.getContext("2d");
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
 
-    if (ctx) {
-      const imageData = ctx.createImageData(width, height);
-      for (let i = 0; i < imageData.data.length; i += 4) {
-        imageData.data[i + 3] = 255;
-      }
+    const image = ctx.createImageData(width, height);
 
-      ctx.putImageData(imageData, 0, 0);
-    }
+    const reset = () => {
+      const data = image.data;
+      data.fill(0);
+      // Opaque black background.
+      for (let i = 3; i < data.length; i += 4) data[i] = 255;
+      ctx.putImageData(image, 0, 0);
+    };
 
-    // if (ctx) {
-    //   const imageData = ctx.createImageData(width, height);
+    reset();
 
-    //   for (let i = 0; i < xs.length; i++) {
-    //     const idx = 4 * (ys[i] * width + xs[i]);
-    //     imageData.data[idx + 0] = values[i]; // R
-    //     imageData.data[idx + 1] = values[i]; // G
-    //     imageData.data[idx + 2] = values[i]; // B
-    //     imageData.data[idx + 3] = 255;
-    //   }
+    const unregister = canvasRegistry.register(id, {
+      draw: ({ xs, ys, values }) => {
+        const data = image.data;
+        for (let i = 0; i < xs.length; i++) {
+          const idx = 4 * (ys[i] * width + xs[i]);
+          const v = values[i];
+          data[idx] = v;
+          data[idx + 1] = v;
+          data[idx + 2] = v;
+          data[idx + 3] = 255;
+        }
+        ctx.putImageData(image, 0, 0);
+      },
+      clear: reset,
+    });
 
-    //   ctx.putImageData(imageData, 0, 0);
-    // }
-  }, [xs, ys, values, width, height]);
+    return unregister;
+  }, [id, width, height, canvasRegistry]);
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-mono uppercase text-slate-400">
-        {name}
-        {scale < 1 && (
-          <span className="ml-2 text-slate-500">
-            {Math.round(scale * 100)}%
-          </span>
-        )}
-      </span>
-      <canvas
-        ref={canvas}
-        width={width}
-        height={height}
-        style={{ width: width * scale, height: height * scale }}
-        className="border border-slate-600"
-      ></canvas>
+      <span className="text-sm font-mono uppercase text-ps-text">{name}</span>
+      <canvas ref={canvasRef} width={width} height={height} />
     </div>
   );
 }
