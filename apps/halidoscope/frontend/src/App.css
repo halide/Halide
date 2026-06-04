@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
 
 :root {
   font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
@@ -14,4 +15,13 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
+}
+
+@theme {
+  --color-ps-primary: oklch(0.4423 0 0);
+  --color-ps-secondary: oklch(0.2768 0 0);
+  --color-ps-text: oklch(0.8975 0 0);
+  --color-ps-border-primary: oklch(0.3407 0 0);
+  --color-ps-border-secondary: oklch(0.3979 0 0);
+  --color-ps-border-tertiary: oklch(0.4997 0 0);
 }
