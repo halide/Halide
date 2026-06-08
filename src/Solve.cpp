@@ -312,6 +312,12 @@ protected:
             } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b)) {
                 // f(x)*a - g(x)*a -> (f(x) - g(x))*a;
                 expr = mutate((mul_a->a - mul_b->a) * mul_a->b);
+            } else if (mul_a && equal(mul_a->a, b)) {
+                // f(x)*a - f(x) -> f(x) * (a - 1)
+                expr = mutate(b * (mul_a->b - 1));
+            } else if (mul_b && equal(mul_b->a, a)) {
+                // f(x) - f(x)*a -> f(x) * (1 - a)
+                expr = mutate(a * (make_one(a.type()) - mul_b->b));
             } else if (div_a && !a_failed && no_overflow_int(op->type) && can_prove(div_a->b != 0)) {
                 // f(x)/a - g(x) -> (f(x) - g(x) * a) / a
                 // Same overflow and div-by-zero concerns as the Add case above.
@@ -1053,7 +1059,35 @@ class SolveForInterval : public IRVisitor {
         if (!already_solved) {
             SolverResult solved = solve_expression(le, var, scope);
             if (!solved.fully_solved) {
-                fail();
+                // solve_expression failed; try direct max/min decomposition on the LHS.
+                if (const Max *max_fallback = le->a.as<Max>()) {
+                    // max(a, b) <= c <==> a <= c && b <= c
+                    (max_fallback->a <= le->b && max_fallback->b <= le->b).accept(this);
+                } else if (const Min *min_fallback = le->a.as<Min>()) {
+                    // min(a, b) <= c <==> a <= c || b <= c
+                    (min_fallback->a <= le->b || min_fallback->b <= le->b).accept(this);
+                } else if (const Mul *mul_fallback = le->a.as<Mul>()) {
+                    // max/min(a, b) * pos_c <= rhs <==> a*pos_c <= rhs [&&/||] b*pos_c <= rhs
+                    const Max *mxf = mul_fallback->a.as<Max>();
+                    const Min *mnf = mul_fallback->a.as<Min>();
+                    Expr factor = mul_fallback->b;
+                    if (!mxf && !mnf) {
+                        mxf = mul_fallback->b.as<Max>();
+                        mnf = mul_fallback->b.as<Min>();
+                        factor = mul_fallback->a;
+                    }
+                    if (mxf && is_positive_const(factor)) {
+                        // max(a, b) * pos_c <= rhs <==> a*pos_c <= rhs && b*pos_c <= rhs
+                        (mxf->a * factor <= le->b && mxf->b * factor <= le->b).accept(this);
+                    } else if (mnf && is_positive_const(factor)) {
+                        // min(a, b) * pos_c <= rhs <==> a*pos_c <= rhs || b*pos_c <= rhs
+                        (mnf->a * factor <= le->b || mnf->b * factor <= le->b).accept(this);
+                    } else {
+                        fail();
+                    }
+                } else {
+                    fail();
+                }
             } else {
                 already_solved = true;
                 solved.result.accept(this);
@@ -1110,7 +1144,35 @@ class SolveForInterval : public IRVisitor {
         if (!already_solved) {
             SolverResult solved = solve_expression(ge, var, scope);
             if (!solved.fully_solved) {
-                fail();
+                // solve_expression failed; try direct max/min decomposition on the LHS.
+                if (const Max *max_fallback = ge->a.as<Max>()) {
+                    // max(a, b) >= c <==> a >= c || b >= c
+                    (max_fallback->a >= ge->b || max_fallback->b >= ge->b).accept(this);
+                } else if (const Min *min_fallback = ge->a.as<Min>()) {
+                    // min(a, b) >= c <==> a >= c && b >= c
+                    (min_fallback->a >= ge->b && min_fallback->b >= ge->b).accept(this);
+                } else if (const Mul *mul_fallback = ge->a.as<Mul>()) {
+                    // max/min(a, b) * pos_c >= rhs <==> a*pos_c >= rhs [||/&&] b*pos_c >= rhs
+                    const Max *mxf = mul_fallback->a.as<Max>();
+                    const Min *mnf = mul_fallback->a.as<Min>();
+                    Expr factor = mul_fallback->b;
+                    if (!mxf && !mnf) {
+                        mxf = mul_fallback->b.as<Max>();
+                        mnf = mul_fallback->b.as<Min>();
+                        factor = mul_fallback->a;
+                    }
+                    if (mxf && is_positive_const(factor)) {
+                        // max(a, b) * pos_c >= rhs <==> a*pos_c >= rhs || b*pos_c >= rhs
+                        (mxf->a * factor >= ge->b || mxf->b * factor >= ge->b).accept(this);
+                    } else if (mnf && is_positive_const(factor)) {
+                        // min(a, b) * pos_c >= rhs <==> a*pos_c >= rhs && b*pos_c >= rhs
+                        (mnf->a * factor >= ge->b && mnf->b * factor >= ge->b).accept(this);
+                    } else {
+                        fail();
+                    }
+                } else {
+                    fail();
+                }
             } else {
                 already_solved = true;
                 solved.result.accept(this);
