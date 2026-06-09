@@ -2,22 +2,25 @@ import * as React from "react";
 import type { Node, NodeProps } from "@xyflow/react";
 
 import { useCanvasRegistry } from "../hooks/canvas-registry";
-import { NodeData } from "../types";
+import { NodeData, ChannelData } from "../types";
 
 type FuncNode = Node<NodeData, "funcCanvas">;
 
-/**
- * Renders a single Halide func's store values into a canvas. The canvas owns a
- * persistent {@link ImageData} buffer and registers a draw/clear handle with the
- * {@link CanvasRegistry}, so incremental range updates accumulate on top of each
- * other (forward scrub) until a clear resets it (backward scrub / new trace).
- */
 function FuncCanvas({
   id,
   data: { name, width, height },
 }: NodeProps<FuncNode>) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const canvasRegistry = useCanvasRegistry();
+
+  const applyChannel = React.useCallback(
+    (imageData: ImageDataArray, ch: ChannelData, offset: number) => {
+      for (let i = 0; i < ch.xs.length; i++) {
+        imageData[4 * (ch.ys[i] * width + ch.xs[i]) + offset] = ch.values[i];
+      }
+    },
+    [width],
+  );
 
   React.useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d");
@@ -36,27 +39,45 @@ function FuncCanvas({
     reset();
 
     const unregister = canvasRegistry.register(id, {
-      draw: ({ xs, ys, values }) => {
+      draw: ({ xs, ys, values, r, g, b }) => {
         const data = image.data;
-        for (let i = 0; i < xs.length; i++) {
-          const idx = 4 * (ys[i] * width + xs[i]);
-          const v = values[i];
-          data[idx] = v;
-          data[idx + 1] = v;
-          data[idx + 2] = v;
-          data[idx + 3] = 255;
+
+        if (r) {
+          applyChannel(data, r, 0);
         }
+
+        if (g) {
+          applyChannel(data, g, 1);
+        }
+
+        if (b) {
+          applyChannel(data, b, 2);
+        }
+
+        if (xs && ys && values) {
+          for (let i = 0; i < xs.length; i++) {
+            const idx = 4 * (ys[i] * width + xs[i]);
+            const v = values[i];
+            data[idx] = v;
+            data[idx + 1] = v;
+            data[idx + 2] = v;
+            data[idx + 3] = 255;
+          }
+        }
+
         ctx.putImageData(image, 0, 0);
       },
       clear: reset,
     });
 
     return unregister;
-  }, [id, width, height, canvasRegistry]);
+  }, [id, width, height, canvasRegistry, applyChannel]);
 
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-sm font-mono uppercase text-ps-text">{name}</span>
+    <div className="flex flex-col gap-2">
+      <span className="font-mono uppercase text-ps-text text-responsive whitespace-nowrap">
+        {name}
+      </span>
       <canvas ref={canvasRef} width={width} height={height} />
     </div>
   );
