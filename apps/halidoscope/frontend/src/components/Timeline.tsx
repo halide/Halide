@@ -225,7 +225,7 @@ function Timeline({ packetCount, sessionId, canvasRegistry }: TimelineProps) {
             className="relative top-1/2 -translate-y-1/2 flex items-center select-none touch-none w-full h-5"
             defaultValue={[0]}
             max={packetCount - 1}
-            step={1}
+            step={10000}
             onValueChange={(values) => onScrub(values[0])}
             value={[packetIndex]}
             disabled={disabled}
@@ -234,7 +234,7 @@ function Timeline({ packetCount, sessionId, canvasRegistry }: TimelineProps) {
               <Slider.Range className="absolute bg-ps-border-primary h-full rounded-sm" />
             </Slider.Track>
             <Slider.Thumb
-              className="h-4.5 w-6 rounded-sm cursor-pointer block bg-ps-text shadow-lg"
+              className="h-5 w-6 rounded-sm cursor-pointer block bg-ps-text shadow-lg border border-ps-border-tertiary"
               aria-label="Volume"
             />
           </Slider.Root>
