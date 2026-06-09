@@ -21,6 +21,10 @@ function Canvas({ funcs, dagEdges }: CanvasProps) {
 
   const { zoom } = useViewport();
 
+  React.useEffect(() => {
+    document.documentElement.style.setProperty("--zoom-level", zoom.toString());
+  }, [zoom]);
+
   return (
     <div className="w-full h-full">
       <ReactFlow
@@ -32,7 +36,7 @@ function Canvas({ funcs, dagEdges }: CanvasProps) {
         fitViewOptions={{ padding: 0.1 }}
         proOptions={{ hideAttribution: true }}
       />
-      <div className="absolute bottom-2 right-2 bg-ps-primary text-ps-text text-xs font-mono px-2 py-1 rounded">
+      <div className="absolute bottom-2 right-2 bg-ps-primary text-ps-text text-xs px-2 py-1 rounded">
         Zoom: {Math.round(zoom * 100)}%
       </div>
     </div>

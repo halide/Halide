@@ -16,7 +16,7 @@ from halide import FuncStats, Trace
 
 log = logging.getLogger(__name__)
 
-app = FastAPI(title="halide-viz backend")
+app = FastAPI(title="Halidoscope Backend")
 
 origins = ["http://localhost:1420"]
 app.add_middleware(
@@ -91,7 +91,7 @@ def _get_func_item_for_packet(session_id: str, func_name: str) -> Any:
 
     funcs = _sessions[session_id]["funcs"]
     for name, stats in funcs.items():
-        if func_name in name or name.endswith(f":{func_name}"):
+        if name == func_name or name.endswith(f":{func_name}"):
             cache[func_name] = stats
             return stats
 
@@ -103,7 +103,7 @@ def _render_range(session_id: str, start: int, end: int) -> list[dict[str, Any]]
     packets = _packets[session_id]
     store_indices = _store_indices[session_id]
 
-    # pending: func_name -> [px_list, py_list, val_list, func_stats]
+    # pending: func_name -> [px_list, py_list, c_list, val_list, func_stats]
     pending: dict[str, list] = {}
 
     end = min(end, len(packets))
@@ -129,9 +129,9 @@ def _render_range(session_id: str, start: int, end: int) -> list[dict[str, Any]]
         min_x = min_coords[0] if min_coords else 0
         min_y = min_coords[1] if len(min_coords) > 1 else 0
 
-        if packet.func not in pending:
-            pending[packet.func] = [[], [], [], func_stats]
-        px_list, py_list, val_list, _ = pending[packet.func]
+        if func_stats["name"] not in pending:
+            pending[func_stats["name"]] = [[], [], [], [], func_stats]
+        px_list, py_list, c_list, val_list, _ = pending[func_stats["name"]]
 
         for lane in range(n_lanes):
             if dims_per_lane >= 2:
@@ -143,13 +143,19 @@ def _render_range(session_id: str, start: int, end: int) -> list[dict[str, Any]]
             else:
                 x = -min_x
                 y = -min_y
+            c = (
+                coords[2 * n_lanes + lane]
+                if dims_per_lane >= 3 and 2 * n_lanes + lane < len(coords)
+                else -1
+            )
             if lane < len(values):
                 px_list.append(x)
                 py_list.append(y)
+                c_list.append(c)
                 val_list.append(values[lane])
 
     updates = []
-    for func_name, (px_list, py_list, val_list, func_stats) in pending.items():
+    for func_name, (px_list, py_list, c_list, val_list, func_stats) in pending.items():
         if not px_list:
             continue
 
@@ -182,7 +188,26 @@ def _render_range(session_id: str, start: int, end: int) -> list[dict[str, Any]]
         ys = ys[mask]
         normalized = normalized[mask]
 
-        if len(xs):
+        is_color = (
+            len(min_coords) >= 3
+            and len(max_coords) >= 3
+            and max_coords[2] - min_coords[2] >= 3
+        )
+
+        if is_color:
+            cs = np.asarray(c_list, dtype=np.intp)[mask]
+            update: dict[str, Any] = {"func": func_name}
+            for ch_idx, key in [(0, "r"), (1, "g"), (2, "b")]:
+                m = cs == ch_idx
+                if m.any():
+                    update[key] = {
+                        "xs": xs[m].tolist(),
+                        "ys": ys[m].tolist(),
+                        "values": normalized[m].tolist(),
+                    }
+            if len(update) > 1:
+                updates.append(update)
+        elif len(xs):
             updates.append(
                 {
                     "func": func_name,
