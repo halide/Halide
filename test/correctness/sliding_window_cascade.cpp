@@ -20,7 +20,6 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    int count = 0;
     const int N = 100;
     Var x("x");
     Func f[N];
