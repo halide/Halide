@@ -1,6 +1,7 @@
 #include "SlidingWindow.h"
 
 #include "Bounds.h"
+#include "CSE.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
@@ -86,7 +87,7 @@ public:
 // Perform all the substitutions in a scope
 Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
     ExpandExpr ee(scope);
-    Expr result = ee(e);
+    Expr result = common_subexpression_elimination(ee(e));
     debug(4) << "Expanded " << e << " into " << result << "\n";
     return result;
 }
