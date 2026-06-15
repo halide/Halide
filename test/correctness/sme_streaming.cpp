@@ -144,7 +144,7 @@ std::optional<Buffer<float>> realize_ref(Func &f) {
 
 bool check_correctness(const std::string &name, Func &f, const Buffer<float> &ref_output) {
     Buffer<float> with_streaming = f.realize({WIDTH}, get_jit_target_from_environment());
-    constexpr float REL_TOLERANCE = 1e-6;
+    constexpr float REL_TOLERANCE = 1e-6f;
     for (int x = 0; x < WIDTH; x++) {
         float diff = std::fabs(with_streaming(x) - ref_output(x));
         float tolerance = REL_TOLERANCE * std::max(std::fabs(ref_output(x)), std::fabs(with_streaming(x)));
