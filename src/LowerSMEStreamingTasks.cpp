@@ -41,7 +41,7 @@ struct LowerSMEStreamingTasks : public IRMutator {
             // We extract a separate task only when transiting to/from SMEStreaming
             // 1. Any(except for SMEStreaming) -> SMEStreaming
             // 2. SMEStreaming -> Host
-            if (in_streaming != next_is_streaming && target.has_feature(Target::SME2)) {
+            if (in_streaming != next_is_streaming) {
                 debug(DBG) << "Switching to " << to_streaming_str(next_is_streaming)
                            << " from " << to_streaming_str(in_streaming)
                            << " in loop " << loop->name << "\n";
@@ -106,10 +106,8 @@ struct LowerSMEStreamingTasks : public IRMutator {
         return is_streaming ? "streaming" : "nonstreaming";
     }
 
-    LowerSMEStreamingTasks(const Target &t) : target(t) {
-    }
+    LowerSMEStreamingTasks() = default;
 
-    Target target;
     bool in_streaming = false;
     std::vector<LoweredFunc> closure_implementations;
 };
@@ -117,9 +115,9 @@ struct LowerSMEStreamingTasks : public IRMutator {
 }  // namespace
 
 Stmt lower_sme_streaming_tasks(const Stmt &s, std::vector<LoweredFunc> &closure_implementations,
-                               const std::string &name, const Target &t) {
+                               const std::string &name, const Target &) {
 
-    LowerSMEStreamingTasks lowering_mutator(t);
+    LowerSMEStreamingTasks lowering_mutator;
     Stmt result = lowering_mutator(s);
 
     // Main body will be dumped as part of standard lowering debugging, but closures will not be.

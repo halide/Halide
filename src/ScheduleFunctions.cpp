@@ -2156,8 +2156,8 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
-    // If the func is scheduled on the gpu, check that the relevant
-    // api is enabled in the target.
+    // If the func is scheduled to use device API,
+    // check that the relevant feature is enabled in the target.
     vector<Definition> definitions;
     if (f.has_pure_definition()) {
         definitions.push_back(f.definition());

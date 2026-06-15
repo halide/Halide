@@ -112,6 +112,7 @@ tests(
     round_up_and_blend_race.cpp
     run_with_large_stack_throws.cpp
     shift_inwards_and_blend_race.cpp
+    sme_streaming_without_target_feature.cpp
     specialize_fail.cpp
     split_inner_wrong_tail_strategy.cpp
     split_non_innermost_predicated.cpp

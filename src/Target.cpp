@@ -1709,6 +1709,8 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::Vulkan;
     case DeviceAPI::WebGPU:
         return Target::WebGPU;
+    case DeviceAPI::SMEStreaming:
+        return Target::SME2;
     default:
         return Target::FeatureEnd;
     }

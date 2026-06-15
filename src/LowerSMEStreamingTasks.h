@@ -28,7 +28,7 @@ struct LoweredFunc;
  * The extracted task functions are appended to closure_implementations.
  */
 Stmt lower_sme_streaming_tasks(const Stmt &s, std::vector<LoweredFunc> &closure_implementations,
-                               const std::string &name, const Target &t);
+                               const std::string &name, const Target &);
 
 }  // namespace Internal
 }  // namespace Halide

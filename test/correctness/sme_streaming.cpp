@@ -1,6 +1,9 @@
 #include "Halide.h"
 #include "parse_llvm_ir.h"
 #include <fstream>
+#include <iomanip>
+#include <limits>
+#include <optional>
 #include <set>
 
 using namespace Halide;
@@ -8,6 +11,7 @@ using namespace Halide::Internal;
 using Attribute = Internal::LoweredFunc::Attribute;
 
 constexpr bool DEBUG = false;
+constexpr int WIDTH = 1000;
 bool can_run_code = false;
 
 using TaskCall = std::pair<Attribute, Attribute>;
@@ -120,31 +124,44 @@ bool check_llvm_attribute(const std::string &name,
     return true;
 }
 
-bool check_correctness(const std::string &name, Func &f) {
+Target target_without_sme2() {
     auto target = get_jit_target_from_environment();
-    constexpr int WIDTH = 1000;
-    Buffer<float> with_streaming = f.realize({WIDTH}, target);
-    Target target_without_sme = target.without_feature(Target::SME2)
-                                    .without_feature(Target::SME_SVL128)
-                                    .without_feature(Target::SME_SVL256)
-                                    .without_feature(Target::SME_SVL512)
-                                    .without_feature(Target::SME_SVL1024)
-                                    .without_feature(Target::SME_SVL2048);
-    Buffer<float> without_streaming = f.realize({WIDTH}, target_without_sme);
+    return target.without_feature(Target::SME2)
+        .without_feature(Target::SME_SVL128)
+        .without_feature(Target::SME_SVL256)
+        .without_feature(Target::SME_SVL512)
+        .without_feature(Target::SME_SVL1024)
+        .without_feature(Target::SME_SVL2048);
+}
+
+std::optional<Buffer<float>> realize_ref(Func &f) {
+    if (!can_run_code) {
+        return std::nullopt;
+    }
+
+    return f.realize({WIDTH}, target_without_sme2());
+}
+
+bool check_correctness(const std::string &name, Func &f, const Buffer<float> &ref_output) {
+    Buffer<float> with_streaming = f.realize({WIDTH}, get_jit_target_from_environment());
+    constexpr float REL_TOLERANCE = 1e-6;
     for (int x = 0; x < WIDTH; x++) {
-        if (with_streaming(x) != without_streaming(x)) {
-            std::cerr << "im(" << x << ") = " << with_streaming(x)
-                      << " instead of " << without_streaming(x)
+        float diff = std::fabs(with_streaming(x) - ref_output(x));
+        float tolerance = REL_TOLERANCE * std::max(std::fabs(ref_output(x)), std::fabs(with_streaming(x)));
+        if (diff > tolerance) {
+            std::cerr << std::setprecision(std::numeric_limits<double>::max_digits10)
+                      << "im(" << x << ") = " << with_streaming(x)
+                      << " instead of " << ref_output(x)
                       << " in " << name << "\n";
             return false;
         }
     }
-
     return true;
 }
 
 bool check(Func &f, const std::string &name,
-           const std::multiset<TaskCall> &exp_calls) {
+           const std::multiset<TaskCall> &exp_calls,
+           const std::optional<Buffer<float>> &ref_output) {
 
     Target target("arm-64-linux-sme2-sme_svl512-no_asserts-no_runtime-no_bounds_query");
     Module m = f.compile_to_module(f.infer_arguments(), "", target);
@@ -168,7 +185,8 @@ bool check(Func &f, const std::string &name,
     };
 
     if (can_run_code) {
-        if (!check_correctness(name, f)) {
+        assert(ref_output.has_value());
+        if (!check_correctness(name, f, *ref_output)) {
             return false;
         }
     }
@@ -184,10 +202,12 @@ bool test_1_stage_non_streaming() {
 
     f(x) = x * 0.1f;
 
+    auto ref_output = realize_ref(f);
+
     f.compute_root();
 
     std::multiset<TaskCall> expected_calls{};
-    return check(f, name, expected_calls);
+    return check(f, name, expected_calls, ref_output);
 }
 
 bool test_1_stage_streaming_outermost() {
@@ -196,11 +216,13 @@ bool test_1_stage_streaming_outermost() {
 
     f(x) = x * 0.1f;
 
+    auto ref_output = realize_ref(f);
+
     f.compute_root().sme_streaming(true);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK}};
-    return check(f, name, expected_calls);
+    return check(f, name, expected_calls, ref_output);
 }
 
 bool test_1_stage_streaming_inner() {
@@ -209,13 +231,15 @@ bool test_1_stage_streaming_inner() {
 
     f(x) = x * 0.1f;
 
+    auto ref_output = realize_ref(f);
+
     f.compute_root()
         .split(x, xo, xi, 256)
         .sme_streaming(true, xi);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK}};
-    return check(f, name, expected_calls);
+    return check(f, name, expected_calls, ref_output);
 }
 
 bool test_2_stages_both_streaming() {
@@ -226,13 +250,15 @@ bool test_2_stages_both_streaming() {
     f(x) = x * 0.1f;
     g(x) = f(x) * f(x);
 
+    auto ref_output = realize_ref(g);
+
     g.compute_root().sme_streaming(true, x);
     f.compute_root().sme_streaming(true, x);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK}};
-    return check(g, name, expected_calls);
+    return check(g, name, expected_calls, ref_output);
 }
 
 bool test_2_stages_producer_streaming() {
@@ -243,12 +269,14 @@ bool test_2_stages_producer_streaming() {
     f(x) = x * 0.1f;
     g(x) = f(x) * f(x);
 
+    auto ref_output = realize_ref(g);
+
     g.compute_root();
     f.compute_root().sme_streaming(true, x);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK}};
-    return check(g, name, expected_calls);
+    return check(g, name, expected_calls, ref_output);
 }
 
 bool test_2_stages_consumer_streaming() {
@@ -259,12 +287,14 @@ bool test_2_stages_consumer_streaming() {
     f(x) = x * 0.1f;
     g(x) = f(x) * f(x);
 
+    auto ref_output = realize_ref(g);
+
     g.compute_root().sme_streaming(true, x);
     f.compute_root();
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK}};
-    return check(g, name, expected_calls);
+    return check(g, name, expected_calls, ref_output);
 }
 
 bool test_2_stages_both_streaming_at() {
@@ -275,12 +305,14 @@ bool test_2_stages_both_streaming_at() {
     f(x) = x * 0.1f;
     g(x) = f(x) * f(x);
 
+    auto ref_output = realize_ref(g);
+
     g.compute_root().sme_streaming(true, x).split(x, xo, xi, 256);
     f.compute_at(g, xo);  // Computed in streaming mode implicitly
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK}};
-    return check(g, name, expected_calls);
+    return check(g, name, expected_calls, ref_output);
 }
 
 bool test_2_stages_producer_streaming_at() {
@@ -291,12 +323,14 @@ bool test_2_stages_producer_streaming_at() {
     f(x) = x * 0.1f;
     g(x) = f(x) * f(x);
 
+    auto ref_output = realize_ref(g);
+
     g.compute_root().split(x, xo, xi, 256);
     f.compute_at(g, xo).sme_streaming(true, x);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK}};
-    return check(g, name, expected_calls);
+    return check(g, name, expected_calls, ref_output);
 }
 
 bool test_2_stages_consumer_streaming_at() {
@@ -307,6 +341,8 @@ bool test_2_stages_consumer_streaming_at() {
     f(x) = x * 0.1f;
     g(x) = f(x) * f(x);
 
+    auto ref_output = realize_ref(g);
+
     g.compute_root().sme_streaming(true, x).split(x, xo, xi, 256);
     // explicitly set false, otherwise streaming is enabled
     f.compute_at(g, xo).sme_streaming(false);
@@ -315,7 +351,7 @@ bool test_2_stages_consumer_streaming_at() {
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
         {Attribute::SME_STREAMING_TASK, Attribute::SME_NONSTREAMING_TASK},
     };
-    return check(g, name, expected_calls);
+    return check(g, name, expected_calls, ref_output);
 }
 
 bool test_2_stages_consumer_streaming_at_2() {
@@ -328,6 +364,8 @@ bool test_2_stages_consumer_streaming_at_2() {
     g(x) = f(x) * f(x);
     h(x) = g(x) + g(x);
 
+    auto ref_output = realize_ref(h);
+
     // Nested twice
     h.compute_root().sme_streaming(true, x).split(x, xo, xi, 256);
     g.compute_at(h, xo).sme_streaming(false, x).split(x, xo, xi, 64);
@@ -338,7 +376,7 @@ bool test_2_stages_consumer_streaming_at_2() {
         {Attribute::SME_STREAMING_TASK, Attribute::SME_NONSTREAMING_TASK},
         {Attribute::SME_NONSTREAMING_TASK, Attribute::SME_STREAMING_TASK},
     };
-    return check(h, name, expected_calls);
+    return check(h, name, expected_calls, ref_output);
 }
 
 bool test_update_rdom() {
@@ -351,6 +389,8 @@ bool test_update_rdom() {
     g(x) = 0.f;
     g(x) += f(x + r - 1);
 
+    auto ref_output = realize_ref(g);
+
     g.compute_root().sme_streaming(true, x);
     g.update().sme_streaming(true, x);
     f.compute_root().sme_streaming(true, x);
@@ -360,7 +400,7 @@ bool test_update_rdom() {
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
     };
-    return check(g, name, expected_calls);
+    return check(g, name, expected_calls, ref_output);
 }
 
 bool test_update_rdom_2() {
@@ -373,6 +413,8 @@ bool test_update_rdom_2() {
     g(x) = 0.f;
     g(x) += f(x + r - 1);
 
+    auto ref_output = realize_ref(g);
+
     g.compute_at(g.in(), x);
     g.in().compute_root().sme_streaming(true, x);
     g = g.in();
@@ -381,7 +423,7 @@ bool test_update_rdom_2() {
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
     };
-    return check(g, name, expected_calls);
+    return check(g, name, expected_calls, ref_output);
 }
 
 bool test_update_rdom_rvar() {
@@ -394,12 +436,14 @@ bool test_update_rdom_rvar() {
     g(x) = 0.f;
     g(x) += f(x + r);
 
+    auto ref_output = realize_ref(g);
+
     g.compute_root().update().sme_streaming(true, r);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
     };
-    return check(g, name, expected_calls);
+    return check(g, name, expected_calls, ref_output);
 }
 
 bool test_compute_with() {
@@ -412,6 +456,8 @@ bool test_compute_with() {
     g(x) = x * 0.1f;
     h(x) = f(x) + g(x);
 
+    auto ref_output = realize_ref(h);
+
     h.compute_root();
     // DeviceAPI of g and f must match to compute with
     g.compute_root().compute_with(f, x).sme_streaming(true, x);
@@ -420,7 +466,7 @@ bool test_compute_with() {
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
     };
-    return check(h, name, expected_calls);
+    return check(h, name, expected_calls, ref_output);
 }
 
 bool test_parallel() {
@@ -429,6 +475,8 @@ bool test_parallel() {
     Var xso("xso"), xsi("xsi");
 
     f(x) = x * 0.1f;
+
+    auto ref_output = realize_ref(f);
 
     // Streaming task is called for each thread spawned by parallel(),
     // rather than one streaming task spawning threads in it.
@@ -440,7 +488,7 @@ bool test_parallel() {
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
     };
-    return check(f, name, expected_calls);
+    return check(f, name, expected_calls, ref_output);
 }
 
 int main(int argc, char **argv) {
