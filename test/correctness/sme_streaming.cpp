@@ -218,7 +218,7 @@ bool test_1_stage_streaming_outermost() {
 
     auto ref_output = realize_ref(f);
 
-    f.compute_root().sme_streaming(true);
+    f.compute_root().sme_streaming();
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK}};
@@ -235,7 +235,7 @@ bool test_1_stage_streaming_inner() {
 
     f.compute_root()
         .split(x, xo, xi, 256)
-        .sme_streaming(true, xi);
+        .sme_streaming(xi);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK}};
@@ -252,8 +252,8 @@ bool test_2_stages_both_streaming() {
 
     auto ref_output = realize_ref(g);
 
-    g.compute_root().sme_streaming(true, x);
-    f.compute_root().sme_streaming(true, x);
+    g.compute_root().sme_streaming(x);
+    f.compute_root().sme_streaming(x);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
@@ -272,7 +272,7 @@ bool test_2_stages_producer_streaming() {
     auto ref_output = realize_ref(g);
 
     g.compute_root();
-    f.compute_root().sme_streaming(true, x);
+    f.compute_root().sme_streaming(x);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK}};
@@ -289,7 +289,7 @@ bool test_2_stages_consumer_streaming() {
 
     auto ref_output = realize_ref(g);
 
-    g.compute_root().sme_streaming(true, x);
+    g.compute_root().sme_streaming(x);
     f.compute_root();
 
     std::multiset<TaskCall> expected_calls{
@@ -307,7 +307,7 @@ bool test_2_stages_both_streaming_at() {
 
     auto ref_output = realize_ref(g);
 
-    g.compute_root().sme_streaming(true, x).split(x, xo, xi, 256);
+    g.compute_root().sme_streaming(x).split(x, xo, xi, 256);
     f.compute_at(g, xo);  // Computed in streaming mode implicitly
 
     std::multiset<TaskCall> expected_calls{
@@ -326,7 +326,7 @@ bool test_2_stages_producer_streaming_at() {
     auto ref_output = realize_ref(g);
 
     g.compute_root().split(x, xo, xi, 256);
-    f.compute_at(g, xo).sme_streaming(true, x);
+    f.compute_at(g, xo).sme_streaming(x);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK}};
@@ -343,9 +343,9 @@ bool test_2_stages_consumer_streaming_at() {
 
     auto ref_output = realize_ref(g);
 
-    g.compute_root().sme_streaming(true, x).split(x, xo, xi, 256);
-    // explicitly set false, otherwise streaming is enabled
-    f.compute_at(g, xo).sme_streaming(false);
+    g.compute_root().sme_streaming(x).split(x, xo, xi, 256);
+    // Explicitly set Host, otherwise streaming is enabled.
+    f.compute_at(g, xo).host();
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
@@ -367,9 +367,9 @@ bool test_2_stages_consumer_streaming_at_2() {
     auto ref_output = realize_ref(h);
 
     // Nested twice
-    h.compute_root().sme_streaming(true, x).split(x, xo, xi, 256);
-    g.compute_at(h, xo).sme_streaming(false, x).split(x, xo, xi, 64);
-    f.compute_at(g, xo).sme_streaming(true, x);
+    h.compute_root().sme_streaming(x).split(x, xo, xi, 256);
+    g.compute_at(h, xo).host(x).split(x, xo, xi, 64);
+    f.compute_at(g, xo).sme_streaming(x);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
@@ -391,9 +391,9 @@ bool test_update_rdom() {
 
     auto ref_output = realize_ref(g);
 
-    g.compute_root().sme_streaming(true, x);
-    g.update().sme_streaming(true, x);
-    f.compute_root().sme_streaming(true, x);
+    g.compute_root().sme_streaming(x);
+    g.update().sme_streaming(x);
+    f.compute_root().sme_streaming(x);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
@@ -416,7 +416,7 @@ bool test_update_rdom_2() {
     auto ref_output = realize_ref(g);
 
     g.compute_at(g.in(), x);
-    g.in().compute_root().sme_streaming(true, x);
+    g.in().compute_root().sme_streaming(x);
     g = g.in();
     f.compute_root();
 
@@ -438,7 +438,7 @@ bool test_update_rdom_rvar() {
 
     auto ref_output = realize_ref(g);
 
-    g.compute_root().update().sme_streaming(true, r);
+    g.compute_root().update().sme_streaming(r);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
@@ -460,8 +460,8 @@ bool test_compute_with() {
 
     h.compute_root();
     // DeviceAPI of g and f must match to compute with
-    g.compute_root().compute_with(f, x).sme_streaming(true, x);
-    f.compute_root().sme_streaming(true, x);
+    g.compute_root().compute_with(f, x).sme_streaming(x);
+    f.compute_root().sme_streaming(x);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},
@@ -483,7 +483,7 @@ bool test_parallel() {
     f.compute_root()
         .split(x, xo, xi, 256)
         .parallel(xo)
-        .sme_streaming(true, xi);
+        .sme_streaming(xi);
 
     std::multiset<TaskCall> expected_calls{
         {Attribute::NO_ATTRIBUTE, Attribute::SME_STREAMING_TASK},

@@ -78,12 +78,12 @@ public:
 
     void apply_additional_schedule(Stage &stage) const override {
         if (target.has_feature(Target::SME2)) {
-            stage.sme_streaming(true);
+            stage.sme_streaming();
         }
     }
     void apply_additional_schedule(Func &f) const override {
         if (target.has_feature(Target::SME2)) {
-            f.sme_streaming(true);
+            f.sme_streaming();
         }
     }
 

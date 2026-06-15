@@ -26,17 +26,7 @@ struct LowerSMEStreamingTasks : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const For *loop) override {
-        if (loop->device_api != DeviceAPI::None) {
-            internal_assert(loop->device_api == DeviceAPI::Host || loop->device_api == DeviceAPI::SMEStreaming);
-            // After this mutation, it doesn't need to be marked as SMEStreaming anymore
-            Stmt body;
-            if (equal(loop->min, loop->max)) {
-                body = LetStmt::make(loop->name, loop->min, loop->body);
-            } else {
-                body = For::make(loop->name, loop->min, loop->max, loop->for_type, loop->partition_policy,
-                                 DeviceAPI::None, loop->body);
-            }
-
+        if (loop->device_api == DeviceAPI::Host || loop->device_api == DeviceAPI::SMEStreaming) {
             const bool next_is_streaming = (loop->device_api == DeviceAPI::SMEStreaming);
             // We extract a separate task only when transiting to/from SMEStreaming
             // 1. Any(except for SMEStreaming) -> SMEStreaming
@@ -46,12 +36,19 @@ struct LowerSMEStreamingTasks : public IRMutator {
                            << " from " << to_streaming_str(in_streaming)
                            << " in loop " << loop->name << "\n";
 
+                // After this mutation, it doesn't need to be marked as SMEStreaming anymore
+                Stmt body;
+                if (equal(loop->min, loop->max)) {
+                    body = LetStmt::make(loop->name, loop->min, loop->body);
+                } else {
+                    body = For::make(loop->name, loop->min, loop->max, loop->for_type, loop->partition_policy,
+                                     DeviceAPI::None, loop->body);
+                }
+
                 ScopedValue<bool> streaming_state(in_streaming, next_is_streaming);
 
                 auto s = do_as_streaming_task(body, loop->name);
                 return s;
-            } else {
-                return mutate(body);
             }
         }
 

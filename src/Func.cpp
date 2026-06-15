@@ -2063,8 +2063,13 @@ Stage &Stage::hexagon(const VarOrRVar &x) {
     return *this;
 }
 
-Stage &Stage::sme_streaming(bool enable, const VarOrRVar &x) {
-    set_dim_device_api(x, enable ? DeviceAPI::SMEStreaming : DeviceAPI::Host);
+Stage &Stage::sme_streaming(const VarOrRVar &x) {
+    set_dim_device_api(x, DeviceAPI::SMEStreaming);
+    return *this;
+}
+
+Stage &Stage::host(const VarOrRVar &x) {
+    set_dim_device_api(x, DeviceAPI::Host);
     return *this;
 }
 
@@ -2860,9 +2865,15 @@ Func &Func::hexagon(const VarOrRVar &x) {
     return *this;
 }
 
-Func &Func::sme_streaming(bool enable, const VarOrRVar &x) {
+Func &Func::sme_streaming(const VarOrRVar &x) {
     invalidate_cache();
-    Stage(func, func.definition(), 0).sme_streaming(enable, x);
+    Stage(func, func.definition(), 0).sme_streaming(x);
+    return *this;
+}
+
+Func &Func::host(const VarOrRVar &x) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).host(x);
     return *this;
 }
 

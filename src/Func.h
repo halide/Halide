@@ -463,7 +463,9 @@ public:
 
     Stage &hexagon(const VarOrRVar &x = Var::outermost());
 
-    Stage &sme_streaming(bool enable, const VarOrRVar &x = Var::outermost());
+    Stage &sme_streaming(const VarOrRVar &x = Var::outermost());
+
+    Stage &host(const VarOrRVar &x = Var::outermost());
 
     Stage &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
@@ -2023,10 +2025,14 @@ public:
     Func &hexagon(const VarOrRVar &x = Var::outermost());
 
     /** Schedule for aarch64 SME Streaming Mode.
-     * When a loop is marked with sme_streaming(true), that loop including its inner loops
-     * are executed in Streaming mode. Marking with sme_streaming(false) prevents the loop
-     * from being executed in Streaming mode. */
-    Func &sme_streaming(bool enable, const VarOrRVar &x = Var::outermost());
+     * When a loop is marked with sme_streaming(), that loop including its inner loops
+     * are executed in Streaming mode. */
+    Func &sme_streaming(const VarOrRVar &x = Var::outermost());
+
+    /** Schedule a loop for execution on the host. This can be used inside an
+     * device loop to prevent nested inner loops from being executed on device.
+     * Currently, supported only in sme_streaming() loop. */
+    Func &host(const VarOrRVar &x = Var::outermost());
 
     /** Prefetch data written to or read from a Func or an ImageParam by a
      * subsequent loop iteration, at an optionally specified iteration offset. You may specify

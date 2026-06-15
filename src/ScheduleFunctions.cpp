@@ -2553,6 +2553,27 @@ class RemoveLoopsOverOutermost : public IRMutator {
     }
 };
 
+class ValidateHostLoopContext : public IRVisitor {
+    using IRVisitor::visit;
+
+    DeviceAPI current_device_api = DeviceAPI::Host;
+
+    void visit(const For *op) override {
+        if (op->device_api == DeviceAPI::Host) {
+            user_assert(current_device_api == DeviceAPI::Host ||
+                        current_device_api == DeviceAPI::SMEStreaming)
+                << "The host() schedule directive cannot be used inside a "
+                << current_device_api << " loop. It is currently only supported "
+                << "to leave an enclosing sme_streaming() loop or in host loop redundantly.\n";
+        }
+
+        const DeviceAPI next_device_api =
+            op->device_api == DeviceAPI::None ? current_device_api : op->device_api;
+        ScopedValue<DeviceAPI> scoped_device_api(current_device_api, next_device_api);
+        IRVisitor::visit(op);
+    }
+};
+
 bool group_should_be_inlined(const vector<Function> &funcs) {
     return (funcs.size() == 1 &&
             (funcs[0].has_extern_definition() || funcs[0].definition().schedule().fused_pairs().empty()) &&
@@ -2625,6 +2646,9 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     // We can also remove all the loops over __outermost now.
     s = RemoveLoopsOverOutermost()(s);
+
+    ValidateHostLoopContext validate_host_loop_context;
+    s.accept(&validate_host_loop_context);
 
     return s;
 }

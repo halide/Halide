@@ -71,6 +71,7 @@ tests(
     fuse_vectorized_var_with_rvar.cpp
     hoist_storage_extern.cpp
     hoist_storage_without_compute_at.cpp
+    host_inside_gpu_loop.cpp
     implicit_args.cpp
     impossible_constraints.cpp
     incomplete_target.cpp

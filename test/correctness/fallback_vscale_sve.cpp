@@ -86,7 +86,7 @@ bool test_streaming_vscale(int vectorization_factor, int vector_bits, int stream
     Func f(name);
     f(x, y) = absd(x, y);
     f.compute_root()
-        .sme_streaming(true)  // This extracts streaming task
+        .sme_streaming()  // This extracts streaming task
         .vectorize(x, vectorization_factor);
 
     Target t("arm-64-linux-no_asserts-no_runtime-no_bounds_query");

@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     Var x("x");
 
     f(x) = x;
-    f.compute_root().sme_streaming(true);
+    f.compute_root().sme_streaming();
 
     Target target = get_jit_target_from_environment()
                         .without_feature(Target::SME2)
