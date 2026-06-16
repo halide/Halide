@@ -1,17 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getMatches } from "@tauri-apps/plugin-cli";
-import { ReactFlowProvider } from "@xyflow/react";
 import * as React from "react";
 
-import Canvas from "./components/Canvas";
-import Sidebar from "./components/Sidebar";
-import Timeline from "./components/Timeline";
-import {
-  CanvasRegistry,
-  CanvasRegistryProvider,
-} from "./hooks/canvas-registry";
-import { FuncStats } from "./types";
-import { loadTracePath, deregisterTrace } from "./utils/api";
+import ViewTabs from "@/components/views/ViewTabs";
+import type { FuncStats } from "@/types";
+import { CanvasRegistry } from "@/hooks/canvas-registry";
+import { TraceContextProvider } from "@/hooks/trace";
+import { loadTracePath, deregisterTrace } from "@/utils/api";
 
 import "./App.css";
 
@@ -22,6 +17,9 @@ function App() {
   const [packetCount, setPacketCount] = React.useState<number>(0);
   const [canvasRegistry, setCanvasRegistry] =
     React.useState<CanvasRegistry | null>(null);
+  const [globalMaxStoreCount, setGlobalMaxStoreCount] =
+    React.useState<number>(0);
+  const [globalMaxLoadCount, setGlobalMaxLoadCount] = React.useState<number>(0);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -39,15 +37,22 @@ function App() {
           : `${await invoke<string>("get_cwd")}/${tracePath}`;
 
         try {
-          const { session_id, funcs, dag_edges, num_packets } =
-            await loadTracePath(resolved, controller.signal);
+          const {
+            session_id,
+            funcs,
+            dag_edges,
+            num_packets,
+            global_max_store_count,
+            global_max_load_count,
+          } = await loadTracePath(resolved, controller.signal);
 
           loadedSessionId = session_id;
           setSessionId(session_id);
           setFuncs(funcs);
           setDagEdges(dag_edges);
           setPacketCount(num_packets);
-
+          setGlobalMaxStoreCount(global_max_store_count);
+          setGlobalMaxLoadCount(global_max_load_count);
           setCanvasRegistry(new CanvasRegistry());
         } catch (err) {
           if ((err as Error).name !== "AbortError") {
@@ -69,29 +74,21 @@ function App() {
   }, []);
 
   return (
-    <CanvasRegistryProvider value={canvasRegistry}>
-      <main className="absolute inset-0 bg-ps-secondary flex text-white">
-        <Sidebar funcs={funcs} />
-        <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 min-h-0 relative">
-            {Object.keys(funcs).length > 0 ? (
-              <ReactFlowProvider>
-                <Canvas funcs={funcs} dagEdges={dagEdges} />
-              </ReactFlowProvider>
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <p className="animate-pulse">Loading trace...</p>
-              </div>
-            )}
-          </div>
-          <Timeline
-            packetCount={packetCount}
-            sessionId={sessionId}
-            canvasRegistry={canvasRegistry}
-          />
-        </div>
+    <TraceContextProvider
+      value={{
+        sessionId,
+        funcs,
+        dagEdges,
+        packetCount,
+        canvasRegistry,
+        globalMaxStoreCount,
+        globalMaxLoadCount,
+      }}
+    >
+      <main className="absolute inset-0 flex">
+        <ViewTabs />
       </main>
-    </CanvasRegistryProvider>
+    </TraceContextProvider>
   );
 }
 

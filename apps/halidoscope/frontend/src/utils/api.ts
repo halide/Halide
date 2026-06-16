@@ -7,6 +7,8 @@ interface LoadTraceResponse {
   funcs: Record<string, FuncStats>;
   dag_edges: Record<string, string[]>;
   num_packets: number;
+  global_max_store_count: number;
+  global_max_load_count: number;
 }
 
 /**

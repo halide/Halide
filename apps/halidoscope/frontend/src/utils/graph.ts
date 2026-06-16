@@ -1,33 +1,29 @@
 import Dagre from "@dagrejs/dagre";
 import type { Node, Edge } from "@xyflow/react";
 
-import { FuncStats, NodeData } from "../types";
-import { computeFuncSize } from "./func";
+import { FuncStats, NodeTypes } from "../types";
 
 /**
  * Build xyflow nodes from the backend's funcs payload, which maps Halide func
  * @param funcs
  * @returns
  */
-export function buildNodes(funcs: Record<string, FuncStats>): Node<NodeData>[] {
+export function buildNodes(
+  funcs: Record<string, FuncStats>,
+  type: NodeTypes,
+): Node<FuncStats>[] {
   return Object.entries(funcs).map(([name, stats]) => {
-    const { width, height } = computeFuncSize(stats);
-
     return {
       id: name,
-      type: "funcCanvas",
+      type: type,
       position: {
         x: 0,
         y: 0,
       },
-      data: {
-        ...stats,
-        width,
-        height,
-      },
+      data: stats,
       style: {
-        width,
-        height,
+        width: stats.width,
+        height: stats.height,
       },
     };
   });
@@ -57,9 +53,9 @@ export function buildEdges(dagEdges: Record<string, string[]>): Edge[] {
 }
 
 export function getLayoutedElements(
-  nodes: Node<NodeData>[],
+  nodes: Node<FuncStats>[],
   edges: Edge[],
-): { nodes: Node<NodeData>[]; edges: Edge[] } {
+): { nodes: Node<FuncStats>[]; edges: Edge[] } {
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: "LR", nodesep: 40, ranksep: 80 });
 
