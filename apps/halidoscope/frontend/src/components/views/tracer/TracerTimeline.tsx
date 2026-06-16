@@ -1,26 +1,33 @@
 import * as d3 from "d3";
+import { useAtom } from "jotai";
 import { Slider } from "radix-ui";
 import * as React from "react";
 
-import { CanvasRegistry } from "../hooks/canvas-registry";
-import { RangeRequest, RenderResponse } from "../types";
+import { CanvasRegistry } from "@/hooks/canvas-registry";
+import { playbackModeAtom } from "@/state/playback";
+import { RangeRequest, RenderResponse } from "@/types";
 import {
   PLAYBACK_INTERVAL_MS,
   PLAYBACK_STEP,
   SCRUB_DEBOUNCE_MS,
   WS_ENDPOINT,
-} from "../utils/constants";
+} from "@/utils/constants";
 
-interface TimelineProps {
+interface TracerTimelineProps {
   packetCount: number;
   sessionId: string;
   canvasRegistry: CanvasRegistry | null;
 }
 
-function Timeline({ packetCount, sessionId, canvasRegistry }: TimelineProps) {
+function TracerTimeline({
+  packetCount,
+  sessionId,
+  canvasRegistry,
+}: TracerTimelineProps) {
   // Track the current packet index.
   const [packetIndex, setPacketIndex] = React.useState<number>(0);
   const [playing, setPlaying] = React.useState<boolean>(false);
+  const [playbackMode] = useAtom(playbackModeAtom);
   const wsRef = React.useRef<WebSocket | null>(null);
 
   // Use refs to synchronously track mutable state without triggering re-renders.
@@ -70,7 +77,11 @@ function Timeline({ packetCount, sessionId, canvasRegistry }: TimelineProps) {
     // Send the request over the WebSocket.
     inFlightRef.current = true;
     pendingEndRef.current = targetEnd;
-    const request: RangeRequest = { start, end: targetEnd };
+    const request: RangeRequest = {
+      start,
+      end: targetEnd,
+    };
+
     wsRef.current.send(JSON.stringify(request));
   }, [canvasRegistry]);
 
@@ -108,7 +119,19 @@ function Timeline({ packetCount, sessionId, canvasRegistry }: TimelineProps) {
       return;
     }
 
-    wsRef.current = new WebSocket(`${WS_ENDPOINT}/ws/${sessionId}`);
+    let wsPath;
+    switch (playbackMode) {
+      case "loads":
+        wsPath = `${WS_ENDPOINT}/ws/${sessionId}/loads`;
+        break;
+      case "stores":
+        wsPath = `${WS_ENDPOINT}/ws/${sessionId}/stores`;
+        break;
+      default:
+        wsPath = `${WS_ENDPOINT}/ws/${sessionId}`;
+        break;
+    }
+    wsRef.current = new WebSocket(wsPath);
 
     wsRef.current.onopen = () => {
       pump();
@@ -146,7 +169,7 @@ function Timeline({ packetCount, sessionId, canvasRegistry }: TimelineProps) {
         wsRef.current = null;
       }
     };
-  }, [pump, canvasRegistry, sessionId]);
+  }, [pump, canvasRegistry, sessionId, playbackMode]);
 
   // Playback loop: advance the playhead on a fixed interval and pump after each
   // step. Rendering may lag the playhead on large traces; it catches up via the
@@ -211,12 +234,12 @@ function Timeline({ packetCount, sessionId, canvasRegistry }: TimelineProps) {
           {ticks.map((tick) => (
             <div
               key={tick}
-              className="absolute top-2 bottom-2 border-l border-ps-text/30 border-dotted"
+              className="absolute top-2 bottom-2 border-l border-ps-text-primary/30 border-dotted"
               style={{
                 left: `${(tick / Math.max(packetCount - 1, 1)) * 100}%`,
               }}
             >
-              <p className="text-xs text-ps-text pl-1">
+              <p className="text-xs text-ps-text-primary pl-1">
                 {d3.format(".2s")(tick)}
               </p>
             </div>
@@ -230,19 +253,19 @@ function Timeline({ packetCount, sessionId, canvasRegistry }: TimelineProps) {
             value={[packetIndex]}
             disabled={disabled}
           >
-            <Slider.Track className="relative flex-1 h-3 bg-ps-text rounded-sm border border-ps-text/30">
+            <Slider.Track className="relative flex-1 h-3 bg-ps-text-primary rounded-sm border border-ps-text-primary/30">
               <Slider.Range className="absolute bg-ps-border-primary h-full rounded-sm" />
             </Slider.Track>
             <Slider.Thumb
-              className="h-5 w-6 rounded-sm cursor-pointer block bg-ps-text shadow-lg border border-ps-border-tertiary"
+              className="h-5 w-6 rounded-sm cursor-pointer block bg-ps-text-primary shadow-lg border border-ps-border-tertiary"
               aria-label="Volume"
             />
           </Slider.Root>
         </div>
       </div>
       <div className="flex flex-col items-end gap-0.5 text-sm w-[15%]">
-        <span className="text-ps-text/60">Packets</span>
-        <span className="text-ps-text">
+        <span className="text-ps-text-primary/60">Packets</span>
+        <span className="text-ps-text-primary">
           {packetIndex.toLocaleString()} /{" "}
           {Math.max(packetCount - 1, 0).toLocaleString()}
         </span>
@@ -251,4 +274,4 @@ function Timeline({ packetCount, sessionId, canvasRegistry }: TimelineProps) {
   );
 }
 
-export default Timeline;
+export default TracerTimeline;

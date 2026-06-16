@@ -332,6 +332,95 @@ public:
         return result;
     }
 
+    // Returns the indices of all load packets, in order.
+    // Cached once at load time in Python to avoid iterating all packets per render.
+    std::vector<size_t> load_indices() const {
+        std::vector<size_t> result;
+        result.reserve(packets_.size() / 4);
+        for (size_t i = 0; i < packets_.size(); ++i) {
+            if (packets_[i].is_load()) {
+                result.push_back(i);
+            }
+        }
+        return result;
+    }
+
+    // Returns the maximum store count and maximum load count per Func across all
+    // pixels. Runs entirely in C++ to avoid per-packet Python/pybind11 overhead.
+    // Result: dict keyed by qualified func name, each value a dict with:
+    //   max_store_count: int
+    //   max_load_count:  int
+    py::dict compute_max_load_store_counts() const {
+        // Map unqualified name -> FuncStats* for packet lookup.
+        // (TracePacket.func is always the unqualified name; funcs_ keys are qualified.)
+        std::map<std::string, const FuncStats *> unqualified_to_stats;
+        for (const auto &[name, stats] : funcs_) {
+            auto colon = name.rfind(':');
+            std::string unqualified = (colon != std::string::npos) ? name.substr(colon + 1) : name;
+            unqualified_to_stats.emplace(unqualified, &stats);
+        }
+
+        struct FuncAccum {
+            std::vector<int32_t> store_counts;
+            std::vector<int32_t> load_counts;
+            int32_t width;
+            int32_t height;
+            int32_t min_x;
+            int32_t min_y;
+        };
+
+        std::map<std::string, FuncAccum> accum;
+        for (const auto &[qualified, stats] : funcs_) {
+            if (stats.min_coords.empty() || stats.max_coords.empty()) continue;
+            const int32_t width = stats.max_coords[0] - stats.min_coords[0];
+            const int32_t height =
+                (stats.min_coords.size() > 1 && stats.max_coords.size() > 1) ? stats.max_coords[1] - stats.min_coords[1] : 1;
+            if (width <= 0 || height <= 0) continue;
+            accum[qualified] = FuncAccum{
+                std::vector<int32_t>(height * width, 0),
+                std::vector<int32_t>(height * width, 0),
+                width,
+                height,
+                stats.min_coords[0],
+                (stats.min_coords.size() > 1) ? stats.min_coords[1] : 0,
+            };
+        }
+
+        for (const auto &pkt : packets_) {
+            if (!pkt.is_load_or_store()) continue;
+
+            auto stats_it = unqualified_to_stats.find(pkt.func);
+            if (stats_it == unqualified_to_stats.end()) continue;
+
+            auto accum_it = accum.find(stats_it->second->name);
+            if (accum_it == accum.end()) continue;
+
+            FuncAccum &fa = accum_it->second;
+            const int32_t n_lanes = std::max(1, (int32_t)pkt.type_lanes);
+            const int32_t dims_per_lane = (int32_t)pkt.coordinates.size() / n_lanes;
+            int32_t *arr = pkt.is_store() ? fa.store_counts.data() : fa.load_counts.data();
+
+            for (int32_t l = 0; l < n_lanes; ++l) {
+                const int32_t x = pkt.coordinates[l] - fa.min_x;
+                const int32_t y = (dims_per_lane >= 2) ? pkt.coordinates[n_lanes + l] - fa.min_y : -fa.min_y;
+                if (x >= 0 && x < fa.width && y >= 0 && y < fa.height) {
+                    arr[y * fa.width + x]++;
+                }
+            }
+        }
+
+        py::dict result;
+        for (const auto &[qualified, fa] : accum) {
+            const int32_t max_store = *std::max_element(fa.store_counts.begin(), fa.store_counts.end());
+            const int32_t max_load = *std::max_element(fa.load_counts.begin(), fa.load_counts.end());
+            py::dict entry;
+            entry["max_store_count"] = max_store;
+            entry["max_load_count"] = max_load;
+            result[py::cast(qualified)] = entry;
+        }
+        return result;
+    }
+
     std::string dag_as_dot() const {
         std::ostringstream ss;
         ss << "digraph dag {\n";
@@ -410,20 +499,34 @@ private:
 
     static void update_stats_inline(const halide_trace_packet_t *pkt,
                                     FuncStats &stats) {
-        // Update coordinate ranges using the helper method
+        // Update coordinate ranges using the helper method.
+        // Coordinates are dim-major: [x0..xL, y0..yL, c0..cL] where L = type.lanes.
+        // pkt->dimensions = logical_dims * lanes, so we must stride by lanes to get
+        // the correct coordinate for each logical dimension.
         if (pkt->dimensions > 0) {
             const int *coords = pkt->coordinates();
+            const int n_lanes = std::max(1, static_cast<int>(pkt->type.lanes));
+            const int logical_dims = pkt->dimensions / n_lanes;
             if (stats.min_coords.empty()) {
-                stats.min_coords.resize(pkt->dimensions);
-                stats.max_coords.resize(pkt->dimensions);
-                for (int i = 0; i < pkt->dimensions; ++i) {
-                    stats.min_coords[i] = coords[i];
-                    stats.max_coords[i] = coords[i] + 1;
+                stats.min_coords.resize(logical_dims);
+                stats.max_coords.resize(logical_dims);
+                for (int d = 0; d < logical_dims; ++d) {
+                    int mn = coords[d * n_lanes];
+                    int mx = coords[d * n_lanes] + 1;
+                    for (int l = 1; l < n_lanes; ++l) {
+                        mn = std::min(mn, coords[d * n_lanes + l]);
+                        mx = std::max(mx, coords[d * n_lanes + l] + 1);
+                    }
+                    stats.min_coords[d] = mn;
+                    stats.max_coords[d] = mx;
                 }
             } else {
-                for (int i = 0; i < pkt->dimensions && i < static_cast<int>(stats.min_coords.size()); ++i) {
-                    stats.min_coords[i] = std::min(stats.min_coords[i], coords[i]);
-                    stats.max_coords[i] = std::max(stats.max_coords[i], coords[i] + 1);
+                for (int d = 0; d < logical_dims && d < static_cast<int>(stats.min_coords.size()); ++d) {
+                    for (int l = 0; l < n_lanes; ++l) {
+                        const int coord = coords[d * n_lanes + l];
+                        stats.min_coords[d] = std::min(stats.min_coords[d], coord);
+                        stats.max_coords[d] = std::max(stats.max_coords[d], coord + 1);
+                    }
                 }
             }
         }
@@ -547,7 +650,9 @@ void define_trace(py::module &m) {
         .def_property_readonly("packets", &Trace::packets)
         .def("filter_loads_stores", &Trace::filter_loads_stores)
         .def("store_indices", &Trace::store_indices)
-        .def("dag_as_dot", &Trace::dag_as_dot);
+        .def("load_indices", &Trace::load_indices)
+        .def("dag_as_dot", &Trace::dag_as_dot)
+        .def("compute_max_load_store_counts", &Trace::compute_max_load_store_counts);
 }
 
 }  // namespace Halide::PythonBindings
