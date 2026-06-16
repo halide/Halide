@@ -1,14 +1,13 @@
-export interface FuncStats {
+export interface FuncStats extends Record<string, unknown> {
   name: string;
+  width: number;
+  height: number;
   min_coords: number[];
   max_coords: number[];
   min_value: number;
   max_value: number;
-}
-
-export interface NodeData extends Record<string, unknown>, FuncStats {
-  width: number;
-  height: number;
+  max_store_count: number;
+  max_load_count: number;
 }
 
 /** Per-channel pixel writes for one color channel of a color func. */
@@ -26,6 +25,7 @@ export interface ChannelData {
  * @property xs The x-coordinates of the updated pixels.
  * @property ys The y-coordinates of the updated pixels.
  * @property values Normalized 0-255 values for the updated pixels (Grayscale).
+ * @property counts Incremental store counts at each (x, y) for the stores endpoint.
  * @property r The red channel for the updated pixels.
  * @property g The green channel for the updated pixels.
  * @property b The blue channel for the updated pixels.
@@ -35,12 +35,15 @@ export interface FuncUpdate {
   xs?: number[];
   ys?: number[];
   values?: number[];
+  counts?: number[];
   r?: ChannelData;
   g?: ChannelData;
   b?: ChannelData;
 }
 
-/** A range request sent to the backend WebSocket. Renders stores in [start, end). */
+/**
+ * A range request sent to the backend WebSocket. Renders packets in [start, end).
+ */
 export interface RangeRequest {
   start: number;
   end: number;
@@ -53,3 +56,5 @@ export interface RenderResponse {
   start: number;
   end: number;
 }
+
+export type NodeTypes = "funcCanvas";

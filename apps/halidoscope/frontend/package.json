@@ -17,6 +17,7 @@
     "@tauri-apps/plugin-opener": "^2",
     "@xyflow/react": "^12.11.0",
     "d3": "^7.9.0",
+    "jotai": "^2.20.1",
     "radix-ui": "^1.4.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -33,6 +34,6 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.60.1",
-    "vite": "^7.0.4"
+    "vite": "^8.0.16"
   }
 }
