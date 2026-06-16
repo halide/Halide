@@ -22,14 +22,45 @@
 @theme {
   --color-ps-primary: oklch(0.4423 0 0);
   --color-ps-secondary: oklch(0.2768 0 0);
-  --color-ps-text: oklch(0.8975 0 0);
+  --color-ps-titlebar: oklch(0.3791 0 0);
+  --color-ps-text-primary: oklch(0.8975 0 0);
+  --color-ps-text-secondary: oklch(0.7444 0 0);
   --color-ps-border-primary: oklch(0.3407 0 0);
   --color-ps-border-secondary: oklch(0.3979 0 0);
   --color-ps-border-tertiary: oklch(0.4997 0 0);
+
+  --text-tiny: 0.625rem;
+  --text-tiny--line-height: 1.5;
 }
 
 @layer components {
   .text-responsive {
     font-size: clamp(0.5rem, calc(1rem / var(--zoom-level)), 1.5rem);
+  }
+
+  @keyframes slideDown {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+
+  .accordion-content[data-state="open"] {
+    animation: slideDown 300ms cubic-bezier(0.87, 0, 0.13, 1);
+  }
+
+  .accordion-content[data-state="closed"] {
+    animation: slideUp 300ms cubic-bezier(0.87, 0, 0.13, 1);
   }
 }
