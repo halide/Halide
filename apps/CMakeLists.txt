@@ -64,6 +64,7 @@ add_app(hexagon_benchmarks)
 # add_app(hexagon_dma)  # TODO(#5374): missing CMake build
 add_app(hist)
 add_app(iir_blur)
+add_app(iir_cascade)
 add_app(interpolate)
 add_app(lens_blur)
 add_app(linear_algebra)
