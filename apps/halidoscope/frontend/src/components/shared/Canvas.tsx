@@ -6,21 +6,16 @@ import {
   type Node,
   type Edge,
 } from "@xyflow/react";
-import { useAtom } from "jotai";
+import { useSetAtom } from "jotai";
 import * as React from "react";
 
 import FuncCanvas from "@/components/views/tracer/FuncCanvas";
-import FuncEdge from "@/components/views/tracer/FuncEdge";
-import { FuncStats, NodeTypes } from "@/types";
+import { FuncMeta, NodeTypes } from "@/types";
 import { buildEdges, buildNodes, getLayoutedElements } from "@/utils/graph";
 import { funcAtom } from "@/state/func";
 
 const NODE_TYPES = {
   funcCanvas: FuncCanvas,
-};
-
-const EDGE_TYPES = {
-  funcEdge: FuncEdge,
 };
 
 function hideEdge(hidden: boolean) {
@@ -33,7 +28,7 @@ function hideEdge(hidden: boolean) {
 }
 
 interface CanvasProps {
-  funcs: Record<string, FuncStats>;
+  funcs: Record<string, FuncMeta>;
   dagEdges: Record<string, string[]>;
   type: NodeTypes;
 }
@@ -44,10 +39,10 @@ function Canvas({ funcs, dagEdges, type }: CanvasProps) {
   }, [funcs, dagEdges, type]);
 
   const [nodes, _setNodes, onNodesChange] =
-    useNodesState<Node<FuncStats>>(initialNodes);
+    useNodesState<Node<FuncMeta>>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialEdges);
   const [hidden, _setHidden] = React.useState<boolean>(false);
-  const [_func, setFunc] = useAtom(funcAtom);
+  const setFunc = useSetAtom(funcAtom);
 
   const { zoom } = useViewport();
 
@@ -60,12 +55,11 @@ function Canvas({ funcs, dagEdges, type }: CanvasProps) {
   }, [hidden, setEdges]);
 
   return (
-    <div className="w-full h-full relative">
+    <div className="relative h-full w-full">
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={NODE_TYPES}
-        edgeTypes={EDGE_TYPES}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         minZoom={0.01}
@@ -74,7 +68,7 @@ function Canvas({ funcs, dagEdges, type }: CanvasProps) {
         proOptions={{ hideAttribution: true }}
         onNodeClick={(_, node) => setFunc(node.data.name)}
       />
-      <div className="absolute bottom-2 right-2 bg-ps-primary text-ps-text-primary text-xs px-2 py-1 rounded">
+      <div className="bg-ps-primary text-ps-text-primary absolute right-2 bottom-2 rounded px-2 py-1 text-xs">
         Zoom: {Math.round(zoom * 100)}%
       </div>
     </div>

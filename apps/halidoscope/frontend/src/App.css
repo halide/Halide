@@ -19,6 +19,18 @@
   --zoom-level: 1;
 }
 
+/* Chrome, Safari, Edge, Opera */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox */
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 @theme {
   --color-ps-primary: oklch(0.4423 0 0);
   --color-ps-secondary: oklch(0.2768 0 0);

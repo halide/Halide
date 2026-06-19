@@ -1,60 +1,44 @@
-export interface FuncStats extends Record<string, unknown> {
+/** How a Func's values are mapped to pixels. Mirrors the Rust `RenderMode`. */
+export type RenderMode = "grayscale" | "rgb";
+
+/**
+ * Per-Func metadata returned by the `open_trace` command. Mirrors the Rust
+ * `FuncMeta`. Carries everything the UI needs to size canvases, bound the
+ * scrub timeline, and populate the inspector panel.
+ */
+export interface FuncMeta extends Record<string, unknown> {
   name: string;
   width: number;
   height: number;
+  channels: number;
+  default_mode: RenderMode;
+  num_stores: number;
   min_coords: number[];
   max_coords: number[];
-  min_value: number;
-  max_value: number;
+  min_value: number | null;
+  max_value: number | null;
   max_store_count: number;
   max_load_count: number;
+  max_redundant_count: number;
+  /**
+   * Frequency distributions of per-pixel counts, indexed by count value (index `k` holds the
+   * number of pixel locations with exactly `k` stores/loads/redundant stores). The `0` bin is
+   * included. Length is the corresponding `max_*_count + 1`; empty when the Func has no usable
+   * extent. Ready to render directly as a histogram.
+   */
+  store_count_histogram: number[];
+  load_count_histogram: number[];
+  redundant_count_histogram: number[];
 }
 
-/** Per-channel pixel writes for one color channel of a color func. */
-export interface ChannelData {
-  xs: number[];
-  ys: number[];
-  values: number[];
-}
-
-/**
- * A single Func's pixel updates for a rendered range, as returned by the
- * backend.
- *
- * @property func The name of the Func being updated.
- * @property xs The x-coordinates of the updated pixels.
- * @property ys The y-coordinates of the updated pixels.
- * @property values Normalized 0-255 values for the updated pixels (Grayscale).
- * @property counts Incremental store counts at each (x, y) for the stores endpoint.
- * @property r The red channel for the updated pixels.
- * @property g The green channel for the updated pixels.
- * @property b The blue channel for the updated pixels.
- */
-export interface FuncUpdate {
-  func: string;
-  xs?: number[];
-  ys?: number[];
-  values?: number[];
-  counts?: number[];
-  r?: ChannelData;
-  g?: ChannelData;
-  b?: ChannelData;
-}
-
-/**
- * A range request sent to the backend WebSocket. Renders packets in [start, end).
- */
-export interface RangeRequest {
-  start: number;
-  end: number;
-}
-
-/** The backend's response to a {@link RangeRequest}. */
-export interface RenderResponse {
-  updates: FuncUpdate[];
-  done: boolean;
-  start: number;
-  end: number;
+/** Top-level payload returned by `open_trace`. Mirrors the Rust `TraceMeta`. */
+export interface TraceMeta {
+  funcs: FuncMeta[];
+  total_packets: number;
+  dag_edges: Record<string, string[]>;
+  global_max_store_count: number;
+  global_max_load_count: number;
+  global_max_redundant_count: number;
 }
 
 export type NodeTypes = "funcCanvas";
