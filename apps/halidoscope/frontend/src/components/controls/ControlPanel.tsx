@@ -6,10 +6,10 @@ interface ControlPanelProps {
 
 function ControlPanel({ setHidden }: ControlPanelProps) {
   return (
-    <div className="absolute top-2 right-2 bg-ps-primary rounded text-xs p-2">
+    <div className="bg-ps-primary absolute top-2 right-2 rounded p-2 text-xs">
       <div className="flex items-center gap-2">
         <Checkbox.Root
-          className="bg-ps-border-primary w-4 h-4 flex items-center justify-center rounded-xs"
+          className="bg-ps-border-primary flex h-4 w-4 items-center justify-center rounded-xs"
           defaultChecked
           id="toggle-edges"
           onCheckedChange={(checked) => setHidden(checked === false)}

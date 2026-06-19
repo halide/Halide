@@ -1,11 +1,11 @@
 import { useAtom } from "jotai";
 import { Accordion } from "radix-ui";
 
-import type { FuncStats } from "@/types";
+import type { FuncMeta } from "@/types";
 import { funcAtom } from "@/state/func";
 
 interface FuncsPanelProps {
-  funcs: Record<string, FuncStats>;
+  funcs: Record<string, FuncMeta>;
 }
 
 function FuncsPanel({ funcs }: FuncsPanelProps) {
@@ -15,7 +15,7 @@ function FuncsPanel({ funcs }: FuncsPanelProps) {
     <Accordion.Root
       type="single"
       collapsible
-      className="w-full text-xs px-3 py-2 flex flex-col"
+      className="flex w-full flex-col px-3 py-2 text-xs"
       value={func ?? undefined}
       onValueChange={(value) => setFunc(value)}
     >
@@ -25,7 +25,7 @@ function FuncsPanel({ funcs }: FuncsPanelProps) {
           value={func.name}
           className="group flex flex-col"
         >
-          <Accordion.Trigger className="flex items-center gap-1 w-full text-left uppercase font-mono py-2">
+          <Accordion.Trigger className="flex w-full items-center gap-1 py-2 text-left font-mono uppercase">
             <svg
               className="transition-transform duration-200 group-data-[state=open]:rotate-90"
               width="8"
@@ -37,43 +37,43 @@ function FuncsPanel({ funcs }: FuncsPanelProps) {
             </svg>
             {func.name}
           </Accordion.Trigger>
-          <Accordion.Content className="accordion-content overflow-hidden ml-3">
-            <div className="grid grid-cols-2 text-tiny bg-ps-border-tertiary gap-y-px border border-ps-border-tertiary">
-              <span className="font-sans text-ps-text-secondary font-semibold bg-ps-primary p-1">
+          <Accordion.Content className="accordion-content ml-3 overflow-hidden">
+            <div className="text-tiny bg-ps-border-tertiary border-ps-border-tertiary grid grid-cols-2 gap-y-px border">
+              <span className="text-ps-text-secondary bg-ps-border-primary p-1 font-sans font-semibold">
                 Minimum Coordinates
               </span>
-              <span className="font-mono bg-ps-primary p-1">
+              <span className="bg-ps-border-primary p-1 font-mono">
                 ({func.min_coords.join(",")})
               </span>
-              <span className="font-sans text-ps-text-secondary font-semibold bg-ps-primary p-1">
+              <span className="text-ps-text-secondary bg-ps-border-primary p-1 font-sans font-semibold">
                 Maximum Coordinates
               </span>
-              <span className="font-mono bg-ps-primary p-1">
+              <span className="bg-ps-border-primary p-1 font-mono">
                 ({func.max_coords.join(",")})
               </span>
-              <span className="font-sans text-ps-text-secondary font-semibold bg-ps-primary p-1">
+              <span className="text-ps-text-secondary bg-ps-border-primary p-1 font-sans font-semibold">
                 Minimum Value
               </span>
-              <span className="font-mono bg-ps-primary p-1">
+              <span className="bg-ps-border-primary p-1 font-mono">
                 {func.min_value}
               </span>
-              <span className="font-sans text-ps-text-secondary font-semibold bg-ps-primary p-1">
+              <span className="text-ps-text-secondary bg-ps-border-primary p-1 font-sans font-semibold">
                 Maximum Value
               </span>
-              <span className="font-mono bg-ps-primary p-1">
+              <span className="bg-ps-border-primary p-1 font-mono">
                 {func.max_value}
               </span>
-              <span className="font-sans text-ps-text-secondary font-semibold bg-ps-primary p-1">
+              <span className="text-ps-text-secondary bg-ps-border-primary p-1 font-sans font-semibold">
                 Maximum Store Count
               </span>
-              <span className="font-mono bg-ps-primary p-1">
-                {func.max_store_count}
+              <span className="bg-ps-border-primary p-1 font-mono">
+                {func.max_store_count.toLocaleString()}
               </span>
-              <span className="font-sans text-ps-text-secondary font-semibold bg-ps-primary p-1">
+              <span className="text-ps-text-secondary bg-ps-border-primary p-1 font-sans font-semibold">
                 Maximum Load Count
               </span>
-              <span className="font-mono bg-ps-primary p-1">
-                {func.max_load_count}
+              <span className="bg-ps-border-primary p-1 font-mono">
+                {func.max_load_count.toLocaleString()}
               </span>
             </div>
           </Accordion.Content>
