@@ -1,63 +1,62 @@
-import { BACKEND_ENDPOINT } from "./constants";
+import { invoke } from "@tauri-apps/api/core";
 
-import type { FuncStats } from "../types";
+import type { RenderMode, TraceMeta } from "../types";
+import type { VisualizationMode } from "../state/visualization";
 
-interface LoadTraceResponse {
-  session_id: string;
-  funcs: Record<string, FuncStats>;
-  dag_edges: Record<string, string[]>;
-  num_packets: number;
-  global_max_store_count: number;
-  global_max_load_count: number;
+/**
+ * Parse a Halide trace from disk and return its metadata.
+ *
+ * @param path Absolute path to the `.hltrace` file.
+ * @returns The {@link TraceMeta} describing every Func and the global timeline.
+ * @throws If the backend fails to read or parse the trace.
+ */
+export async function openTrace(path: string): Promise<TraceMeta> {
+  return invoke<TraceMeta>("open_trace", { path });
 }
 
 /**
- * Load a Halide trace from the specified path on disk.
+ * Render a Func's framebuffer state at a point on the global timeline.
  *
- * @param path The absolute path to the trace file on disk. Passed to the
- * --trace CLI argument. If a relative path is provided, the calling code is
- * responsible for resolving it against the current working directory.
- * @param signal An {@link AbortSignal} to cancel the request.
- * @returns An {@link LoadTraceResponse} containing the session ID, func stats,
- * DAG edges, and total number of packets in the trace.
- * @throws An error if the request fails or the response is not OK.
+ * The backend accumulates the Func's stores up to `globalIndex` and returns a
+ * `width * height * 4` RGBA8 buffer (delivered as an `ArrayBuffer`), ready to
+ * hand to `putImageData`.
+ *
+ * @param func The qualified Func name.
+ * @param globalIndex Position on the global packet timeline.
+ * @param mode Optional override of the Func's inferred render mode.
+ * @returns The raw RGBA8 bytes for the frame.
  */
-export async function loadTracePath(
-  path: string,
-  signal: AbortSignal,
-): Promise<LoadTraceResponse> {
-  const response = await fetch(`${BACKEND_ENDPOINT}/load-path`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path }),
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to load trace: ${response.statusText}`);
-  }
-
-  return response.json();
+export async function renderAt(
+  func: string,
+  globalIndex: number,
+  mode?: RenderMode,
+): Promise<ArrayBuffer> {
+  return invoke<ArrayBuffer>("render_at", { func, globalIndex, mode });
 }
 
 /**
- * Deregister a trace session on the backend, freeing associated resources.
- *
- * @param session The session ID to deregister.
- * @returns A promise resolving to the JSON response from the backend.
- * @throws An error if the request fails or the response is not OK.
+ * Render a heatmap of store or load counts for `func` up to `globalIndex`.
+ * The mode must be "Store Frequency" or "Load Frequency" — the string is
+ * passed directly to the Rust backend. Returns a `width * height * 4` RGBA8
+ * buffer with the inferno colormap applied.
  */
-export async function deregisterTrace(
-  session: string,
-): Promise<{ deleted: string }> {
-  const response = await fetch(`${BACKEND_ENDPOINT}/session/${session}`, {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
-  });
+export async function renderHeatmap(
+  func: string,
+  globalIndex: number,
+  mode: Exclude<VisualizationMode, "True Values" | "Redundant Stores">,
+): Promise<ArrayBuffer> {
+  return invoke<ArrayBuffer>("render_heatmap", { func, globalIndex, mode });
+}
 
-  if (!response.ok) {
-    throw new Error(`Failed to deregister trace: ${response.statusText}`);
-  }
-
-  return response.json();
+/**
+ * Render a heatmap of redundant store counts for `func` up to `globalIndex`.
+ * A store is redundant when it writes the same value to a location that already
+ * holds that value. Returns a `width * height * 4` RGBA8 buffer with the Reds
+ * colormap applied; pixels with zero redundant stores are black.
+ */
+export async function renderRedundant(
+  func: string,
+  globalIndex: number,
+): Promise<ArrayBuffer> {
+  return invoke<ArrayBuffer>("render_redundant", { func, globalIndex });
 }

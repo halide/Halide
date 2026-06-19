@@ -1,7 +1,7 @@
 import Dagre from "@dagrejs/dagre";
 import type { Node, Edge } from "@xyflow/react";
 
-import { FuncStats, NodeTypes } from "../types";
+import { FuncMeta, NodeTypes } from "../types";
 
 /**
  * Build xyflow nodes from the backend's funcs payload, which maps Halide func
@@ -9,9 +9,9 @@ import { FuncStats, NodeTypes } from "../types";
  * @returns
  */
 export function buildNodes(
-  funcs: Record<string, FuncStats>,
+  funcs: Record<string, FuncMeta>,
   type: NodeTypes,
-): Node<FuncStats>[] {
+): Node<FuncMeta>[] {
   return Object.entries(funcs).map(([name, stats]) => {
     return {
       id: name,
@@ -37,7 +37,11 @@ export function buildNodes(
  * @returns An array of edges formatted for use with xyflow, where each edge has an id, source, and target.
  */
 export function buildEdges(dagEdges: Record<string, string[]>): Edge[] {
-  const edges: { id: string; source: string; target: string }[] = [];
+  const edges: {
+    id: string;
+    source: string;
+    target: string;
+  }[] = [];
 
   for (const [producer, consumers] of Object.entries(dagEdges)) {
     for (const consumer of consumers) {
@@ -53,9 +57,9 @@ export function buildEdges(dagEdges: Record<string, string[]>): Edge[] {
 }
 
 export function getLayoutedElements(
-  nodes: Node<FuncStats>[],
+  nodes: Node<FuncMeta>[],
   edges: Edge[],
-): { nodes: Node<FuncStats>[]; edges: Edge[] } {
+): { nodes: Node<FuncMeta>[]; edges: Edge[] } {
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: "LR", nodesep: 40, ranksep: 80 });
 
