@@ -41,7 +41,7 @@ jobs:
       MACOSX_DEPLOYMENT_TARGET: 11
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
