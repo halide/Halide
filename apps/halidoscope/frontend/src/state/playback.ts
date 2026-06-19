@@ -1,5 +1,5 @@
 import { atom } from "jotai";
 
-export type PlaybackMode = "normal" | "stores" | "loads";
+import { DEFAULT_PLAYBACK_RATE } from "@/utils/constants";
 
-export const playbackModeAtom = atom<PlaybackMode>("normal");
+export const playbackRateAtom = atom<number>(DEFAULT_PLAYBACK_RATE);

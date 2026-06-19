@@ -1,24 +1,21 @@
 import * as React from "react";
 
-import { FuncStats } from "@/types";
-import { CanvasRegistry } from "@/hooks/canvas-registry";
+import { FuncMeta } from "@/types";
 
 const TraceContext = React.createContext<{
-  sessionId: string;
-  funcs: Record<string, FuncStats>;
+  funcs: Record<string, FuncMeta>;
   dagEdges: Record<string, string[]>;
   packetCount: number;
-  canvasRegistry: CanvasRegistry | null;
   globalMaxStoreCount: number;
   globalMaxLoadCount: number;
+  globalMaxRedundantCount: number;
 }>({
-  sessionId: "",
   funcs: {},
   dagEdges: {},
   packetCount: 0,
-  canvasRegistry: null,
   globalMaxStoreCount: 0,
   globalMaxLoadCount: 0,
+  globalMaxRedundantCount: 0,
 });
 
 export const TraceContextProvider = TraceContext.Provider;

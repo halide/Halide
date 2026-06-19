@@ -1,3 +1,7 @@
+pub mod commands;
+pub mod render;
+pub mod trace;
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn get_cwd() -> Result<String, String> {
@@ -19,7 +23,14 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![get_cwd])
+        .manage(commands::AppState::default())
+        .invoke_handler(tauri::generate_handler![
+            get_cwd,
+            commands::open_trace,
+            commands::render_at,
+            commands::render_heatmap,
+            commands::render_redundant
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

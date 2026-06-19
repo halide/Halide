@@ -1,92 +1,84 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getMatches } from "@tauri-apps/plugin-cli";
+import { useSetAtom } from "jotai";
 import * as React from "react";
 
-import ViewTabs from "@/components/views/ViewTabs";
-import type { FuncStats } from "@/types";
-import { CanvasRegistry } from "@/hooks/canvas-registry";
+import Tracer from "@/components/views/tracer/Tracer";
 import { TraceContextProvider } from "@/hooks/trace";
-import { loadTracePath, deregisterTrace } from "@/utils/api";
+import type { FuncMeta } from "@/types";
+import { openTrace } from "@/utils/api";
 
 import "./App.css";
+import { funcAtom } from "./state/func";
 
 function App() {
-  const [sessionId, setSessionId] = React.useState<string>("");
-  const [funcs, setFuncs] = React.useState<Record<string, FuncStats>>({});
+  const [funcs, setFuncs] = React.useState<Record<string, FuncMeta>>({});
   const [dagEdges, setDagEdges] = React.useState<Record<string, string[]>>({});
   const [packetCount, setPacketCount] = React.useState<number>(0);
-  const [canvasRegistry, setCanvasRegistry] =
-    React.useState<CanvasRegistry | null>(null);
   const [globalMaxStoreCount, setGlobalMaxStoreCount] =
     React.useState<number>(0);
   const [globalMaxLoadCount, setGlobalMaxLoadCount] = React.useState<number>(0);
+  const [globalMaxRedundantCount, setGlobalMaxRedundantCount] =
+    React.useState<number>(0);
+
+  const setActiveFunc = useSetAtom(funcAtom);
 
   React.useEffect(() => {
-    const controller = new AbortController();
-    // Track the loaded session ID locally so the cleanup closure always has
-    // the correct value even though sessionId state starts as "".
-    let loadedSessionId = "";
-
     async function loadTraceFromCLI() {
       const matches = await getMatches();
       const tracePath = matches.args.trace?.value;
 
-      if (typeof tracePath === "string") {
-        const resolved = tracePath.startsWith("/")
-          ? tracePath
-          : `${await invoke<string>("get_cwd")}/${tracePath}`;
+      if (typeof tracePath !== "string") {
+        return;
+      }
 
-        try {
-          const {
-            session_id,
-            funcs,
-            dag_edges,
-            num_packets,
-            global_max_store_count,
-            global_max_load_count,
-          } = await loadTracePath(resolved, controller.signal);
+      const resolved = tracePath.startsWith("/")
+        ? tracePath
+        : `${await invoke<string>("get_cwd")}/${tracePath}`;
 
-          loadedSessionId = session_id;
-          setSessionId(session_id);
-          setFuncs(funcs);
-          setDagEdges(dag_edges);
-          setPacketCount(num_packets);
-          setGlobalMaxStoreCount(global_max_store_count);
-          setGlobalMaxLoadCount(global_max_load_count);
-          setCanvasRegistry(new CanvasRegistry());
-        } catch (err) {
-          if ((err as Error).name !== "AbortError") {
-            console.error("Error loading trace from CLI: ", err);
-          }
+      try {
+        const {
+          funcs,
+          total_packets,
+          dag_edges,
+          global_max_store_count,
+          global_max_load_count,
+          global_max_redundant_count,
+        } = await openTrace(resolved);
+
+        const byName: Record<string, FuncMeta> = {};
+        for (const func of funcs) {
+          byName[func.name] = func;
         }
+
+        setFuncs(byName);
+        setDagEdges(dag_edges);
+        setPacketCount(total_packets);
+        setGlobalMaxStoreCount(global_max_store_count);
+        setGlobalMaxLoadCount(global_max_load_count);
+        setGlobalMaxRedundantCount(global_max_redundant_count);
+        setActiveFunc(funcs[0]?.name ?? "");
+      } catch (err) {
+        console.error("Error loading trace from CLI: ", err);
       }
     }
 
     loadTraceFromCLI();
-
-    return () => {
-      controller.abort();
-
-      if (loadedSessionId) {
-        deregisterTrace(loadedSessionId).catch((err) => console.error(err));
-      }
-    };
-  }, []);
+  }, [setActiveFunc]);
 
   return (
     <TraceContextProvider
       value={{
-        sessionId,
         funcs,
         dagEdges,
         packetCount,
-        canvasRegistry,
         globalMaxStoreCount,
         globalMaxLoadCount,
+        globalMaxRedundantCount,
       }}
     >
-      <main className="absolute inset-0 flex">
-        <ViewTabs />
+      <main className="h-screen w-screen">
+        <Tracer />
       </main>
     </TraceContextProvider>
   );
