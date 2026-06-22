@@ -27,8 +27,8 @@ int main(int argc, char **argv) {
 
     const int matrix_size = 992;
 
-    ImageParam A(type_of<float>(), 2);
-    ImageParam B(type_of<float>(), 2);
+    ImageParam A(type_of<float>(), 2, "A");
+    ImageParam B(type_of<float>(), 2, "B");
 
     Var x("x"), y("y");
     RDom k(0, matrix_size);
