@@ -1,5 +1,7 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
+#include "halide_test_dirs.h"
+
 #include <cstdio>
 
 using namespace Halide;
@@ -25,7 +27,8 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    const int matrix_size = 992;
+    constexpr int matrix_size = 992;
+    constexpr float gflops = 2.0f * matrix_size * matrix_size * matrix_size / 1e9f;
 
     ImageParam A(type_of<float>(), 2, "A");
     ImageParam B(type_of<float>(), 2, "B");
@@ -69,9 +72,9 @@ int main(int argc, char **argv) {
     const int inner_tile_x = is_aarch64 ? 4 * vec : 3 * vec;
     const int inner_tile_y = is_avx512 ? 8 : 4;
 
-    // The shape of the outer tiling. On ARM64, use a narrower y-tile so the
-    // B panel (inner_tile_x × matrix_k × 4 bytes = ~62KB) fits in L1
-    // alongside the C accumulator buffer.
+    // The shape of the outer tiling. On ARM64, use a narrower y-tile and wider
+    // k-tile so the B panel (inner_tile_x × matrix_k × 4 bytes = ~62KB) fits in
+    // L1 alongside the C accumulator buffer.
     const int tile_y = matrix_size / (is_aarch64 ? 8 : 4);
     const int tile_k = matrix_size / (is_aarch64 ? 4 : 16);
 
@@ -134,11 +137,26 @@ int main(int argc, char **argv) {
     A.set(mat_A);
     B.set(mat_B);
 
+    // TODO: we really need a generic performance testing harness
+    if (Internal::get_env_variable("DUMP_SCHEDULE") == "1") {
+        Target simple_target = get_jit_target_from_environment()
+                                   .with_feature(Target::NoAsserts)
+                                   .with_feature(Target::NoBoundsQuery)
+                                   .with_feature(Target::NoRuntime);
+        const auto temp_dir = Internal::get_test_tmp_dir();
+        const auto asm_path = temp_dir + "matrix_mul.S";
+        const auto stmt_path = temp_dir + "matrix_mul.stmt";
+        out.compile_to_assembly(asm_path, {A, B}, simple_target);
+        out.compile_to_conceptual_stmt(stmt_path, {A, B}, Text, simple_target);
+        printf("Assembly dumped to %s\n", asm_path.c_str());
+        printf("Halide IR dumped to %s\n", stmt_path.c_str());
+    }
+
+    // warm up one round (pre-compile jit)
     out.realize(output);
 
-    double t = benchmark([&]() {
-        out.realize(output);
-    });
+    double elapsed = benchmark([&] { out.realize(output); });
+    printf("Benchmark: %fms, %f GFLOP/s\n", elapsed * 1e3, (gflops / elapsed));
 
     // check results
     Buffer<float> output_ref(matrix_size, matrix_size);
@@ -147,22 +165,21 @@ int main(int argc, char **argv) {
     simple_version(mat_A.data(), mat_B.data(), output_ref.data(), mat_A.width(), mat_A.stride(1));
     out.realize(output_halide);
 
-    bool halide_correct = true;
-    for (int iy = 0; iy < matrix_size && halide_correct; iy++) {
-        for (int ix = 0; ix < matrix_size; ix++) {
-            halide_correct = halide_correct && (std::abs(output_ref(ix, iy) - output_halide(ix, iy)) < 0.001f);
+    bool halide_correct = [&] {
+        for (int iy = 0; iy < matrix_size; iy++) {
+            for (int ix = 0; ix < matrix_size; ix++) {
+                if (std::abs(output_ref(ix, iy) - output_halide(ix, iy)) > 0.001f) {
+                    return false;
+                }
+            }
         }
-    }
+        return true;
+    }();
 
-    if (halide_correct) {
-        printf("Halide results - OK\n");
-    } else {
-        printf("Halide results - FAIL\n");
+    if (!halide_correct) {
+        printf("FAIL - matrix values were incorrect\n");
         return 1;
     }
-
-    float gflops = 2.0f * matrix_size * matrix_size * matrix_size / 1e9f;
-    printf("Halide: %fms, %f GFLOP/s\n\n", t * 1e3, (gflops / t));
 
     printf("Success!\n");
     return 0;
