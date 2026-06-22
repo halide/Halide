@@ -609,12 +609,23 @@ Expr lossless_negate(const Expr &x) {
     } else if (const FloatImm *f = x.as<FloatImm>()) {
         return FloatImm::make(f->type, -f->value);
     } else if (const Cast *c = x.as<Cast>()) {
-        Expr value = lossless_negate(c->value);
-        if (value.defined()) {
-            // This logic is only sound if we know the cast can't overflow.
-            value = lossless_cast(c->type, value);
+        // Unsigned inner types wrap modularly (-uint8(65) = 191), and signed
+        // integer inner types wrap at INT_TYPE_MIN (-int8(-128) = -128), so both
+        // make cast(outer, -inner) != -cast(outer, inner). Floats are exact.
+        // For signed integers, only proceed when bounds exclude INT_TYPE_MIN.
+        bool inner_negation_safe = c->value.type().is_float();
+        if (!inner_negation_safe && c->value.type().is_int()) {
+            ConstantInterval ci = constant_integer_bounds(c->value);
+            inner_negation_safe = ci.min_defined && !c->value.type().is_min(ci.min);
+        }
+        if (inner_negation_safe) {
+            Expr value = lossless_negate(c->value);
             if (value.defined()) {
-                return value;
+                // This logic is only sound if we know the cast can't overflow.
+                value = lossless_cast(c->type, value);
+                if (value.defined()) {
+                    return value;
+                }
             }
         }
     } else if (const Ramp *r = x.as<Ramp>()) {
