@@ -9,6 +9,7 @@ const TraceContext = React.createContext<{
   globalMaxStoreCount: number;
   globalMaxLoadCount: number;
   globalMaxRedundantCount: number;
+  globalMaxReuseDistance: number;
 }>({
   funcs: {},
   dagEdges: {},
@@ -16,6 +17,7 @@ const TraceContext = React.createContext<{
   globalMaxStoreCount: 0,
   globalMaxLoadCount: 0,
   globalMaxRedundantCount: 0,
+  globalMaxReuseDistance: 0,
 });
 
 export const TraceContextProvider = TraceContext.Provider;

@@ -29,7 +29,8 @@ pub fn run() {
             commands::open_trace,
             commands::render_at,
             commands::render_heatmap,
-            commands::render_redundant
+            commands::render_redundant,
+            commands::render_reuse_distance
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
