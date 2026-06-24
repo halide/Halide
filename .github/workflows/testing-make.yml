@@ -72,6 +72,7 @@ jobs:
               pkg-config \
               libpng-dev \
               libjpeg-turbo8-dev \
+              libopencv-dev \
               "llvm-${LLVM_VERSION}-dev" \
               "clang-${LLVM_VERSION}" \
               "lld-${LLVM_VERSION}" \
