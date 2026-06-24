@@ -16,7 +16,7 @@ function FuncsPanel({ funcs }: FuncsPanelProps) {
       type="single"
       collapsible
       className="flex w-full flex-col px-3 py-2 text-xs"
-      value={func ?? undefined}
+      value={func}
       onValueChange={(value) => setFunc(value)}
     >
       {Object.values(funcs).map((func) => (
