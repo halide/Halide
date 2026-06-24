@@ -676,7 +676,6 @@ struct BufferSize {
 void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
                                                     const string &name,
                                                     const vector<DeviceArgument> &args) {
-
     debug(2) << "Adding Metal kernel " << name << "\n";
 
     // Figure out which arguments should be passed in constant.
@@ -834,6 +833,7 @@ void CodeGen_Metal_Dev::init_module() {
 
     // Write out the Halide math functions.
     src_stream << "#pragma clang diagnostic ignored \"-Wunused-function\"\n"
+               << "#pragma METAL fp math_mode(" << (any_strict_float ? "safe)\n" : "fast)\n")
                << "#include <metal_stdlib>\n"
                << "using namespace metal;\n"  // Seems like the right way to go.
                << "namespace {\n"

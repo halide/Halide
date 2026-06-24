@@ -126,7 +126,7 @@ WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t *halide_b
     debug(user_context) << "Vulkan: Released memory for device region ("
                         << "user_context: " << user_context << ", "
                         << "buffer: " << halide_buffer << ", "
-                        << "size_in_bytes: " << (uint64_t)device_region->size << ")\n";
+                        << "size_in_bytes: " << (uint64_t)device_region->allocation.size << ")\n";
 
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
@@ -272,7 +272,7 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
     size_t size = buf->size_in_bytes();
     if (buf->device) {
         MemoryRegion *device_region = (MemoryRegion *)(buf->device);
-        if (device_region->size >= size) {
+        if (device_region->allocation.size >= size) {
             debug(user_context) << "Vulkan: Requested allocation for existing device memory ... using existing buffer!\n";
             return halide_error_code_success;
         } else {
@@ -485,10 +485,12 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
     // define the src and dst config
     bool from_host = true;
     bool to_host = false;
+
+    uint64_t src_offset = copy_helper.src_begin;
+    uint64_t dst_offset = copy_helper.dst_begin + (device_region->indexing.offset * halide_buffer->type.bytes());
+
     copy_helper.src = (uint64_t)(staging_buffer);
     copy_helper.dst = (uint64_t)(device_buffer);
-    uint64_t src_offset = copy_helper.src_begin;
-    uint64_t dst_offset = copy_helper.dst_begin + device_region->range.head_offset;
 
     // enqueue the copy operation, using the allocated buffers
     error_code = vk_do_multidimensional_copy(user_context, cmds.command_buffer, copy_helper,
@@ -654,10 +656,11 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     bool from_host = false;
     bool to_host = true;
     uint64_t copy_dst = copy_helper.dst;
+    uint64_t src_offset = copy_helper.src_begin + (device_region->indexing.offset * halide_buffer->type.bytes());
+    uint64_t dst_offset = copy_helper.dst_begin;
+
     copy_helper.src = (uint64_t)(device_buffer);
     copy_helper.dst = (uint64_t)(staging_buffer);
-    uint64_t src_offset = copy_helper.src_begin + device_region->range.head_offset;
-    uint64_t dst_offset = copy_helper.dst_begin;
 
     // enqueue the copy operation, using the allocated buffers
     int error_code = vk_do_multidimensional_copy(user_context, cmds.command_buffer, copy_helper,
@@ -934,13 +937,14 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
 
         // define the src and dst config
         uint64_t copy_dst = copy_helper.dst;
+        uint64_t src_offset = copy_helper.src_begin + (src_buffer_region->indexing.offset * src->type.bytes());
+        uint64_t dst_offset = copy_helper.dst_begin + (dst_buffer_region->indexing.offset * dst->type.bytes());
+
         copy_helper.src = (uint64_t)(src_device_buffer);
         copy_helper.dst = (uint64_t)(dst_device_buffer);
-        uint64_t src_offset = copy_helper.src_begin + src_buffer_region->range.head_offset;
-        uint64_t dst_offset = copy_helper.dst_begin + dst_buffer_region->range.head_offset;
 
-        debug(user_context) << " src region=" << (void *)src_memory_region << " buffer=" << (void *)src_device_buffer << " crop_offset=" << (uint64_t)src_buffer_region->range.head_offset << " copy_offset=" << src_offset << "\n";
-        debug(user_context) << " dst region=" << (void *)dst_memory_region << " buffer=" << (void *)dst_device_buffer << " crop_offset=" << (uint64_t)dst_buffer_region->range.head_offset << " copy_offset=" << dst_offset << "\n";
+        debug(user_context) << " src region=" << (void *)src_memory_region << " buffer=" << (void *)src_device_buffer << " copy_offset=" << src_offset << "\n";
+        debug(user_context) << " dst region=" << (void *)dst_memory_region << " buffer=" << (void *)dst_device_buffer << " copy_offset=" << dst_offset << "\n";
 
         // enqueue the copy operation, using the allocated buffers
         error_code = vk_do_multidimensional_copy(user_context, cmds.command_buffer, copy_helper,

@@ -219,7 +219,7 @@ def test_callable_buffer_conventions():
         assert output_strides[1] == 3
         assert output_strides[2] == 36
 
-        # F-contiguous input reverses axes too (it is no longer left as-is).
+        # F-contiguous input reverses axes too.
         input_f = np.zeros((16, 12, 3), dtype=np.int32, order="F")
         echo_dims_callable(input_f, output_extents, output_strides)
         assert output_extents[0] == 3

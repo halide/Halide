@@ -95,10 +95,11 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
     // broadcast. Note that it doesn't matter what the indices
     // are.
     const Broadcast *b1 = new_vectors[0].as<Broadcast>();
-    if (b1) {
+    if (b1 && b1->value.type().is_scalar()) {
         bool can_collapse = true;
         for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
-            if (const Broadcast *b2 = new_vectors[i].as<Broadcast>()) {
+            if (const Broadcast *b2 = new_vectors[i].as<Broadcast>();
+                b2 && b2->value.type().is_scalar()) {
                 Expr check = mutate(b1->value - b2->value, nullptr);
                 can_collapse &= is_const_zero(check);
             } else {
@@ -294,8 +295,11 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
                 vector<Expr> new_concat_vectors;
                 for (const auto &v : inner_shuffle->vectors) {
                     // Check if current concat vector overlaps with slice.
-                    if ((concat_index >= slice_min && concat_index <= slice_max) ||
-                        ((concat_index + v.type().lanes() - 1) >= slice_min && (concat_index + v.type().lanes() - 1) <= slice_max)) {
+                    // Standard interval overlap: [a, b] and [c, d] overlap
+                    // iff a <= d && c <= b.
+                    int v_start = concat_index;
+                    int v_end = concat_index + v.type().lanes() - 1;
+                    if (v_start <= slice_max && slice_min <= v_end) {
                         if (new_slice_start < 0) {
                             new_slice_start = concat_index;
                         }

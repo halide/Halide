@@ -322,11 +322,11 @@ private:
 }  // namespace
 
 Stmt eliminate_bool_vectors(const Stmt &s) {
-    return EliminateBoolVectors().mutate(s);
+    return EliminateBoolVectors()(s);
 }
 
 Expr eliminate_bool_vectors(const Expr &e) {
-    return EliminateBoolVectors().mutate(e);
+    return EliminateBoolVectors()(e);
 }
 
 }  // namespace Internal

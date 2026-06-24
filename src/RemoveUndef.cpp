@@ -628,7 +628,7 @@ private:
 
 Stmt remove_undef(Stmt s) {
     RemoveUndef r;
-    s = r.mutate(s);
+    s = r(s);
     internal_assert(!r.predicate.defined())
         << "Undefined expression leaked outside of a Store node: "
         << r.predicate << "\n";

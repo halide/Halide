@@ -408,7 +408,7 @@ inline void fix_chunky_strides(const Shape &constrained_shape, Shape *new_shape)
     // and stride[2] to exact values, leaving stride[1] unconstrained;
     // in practice, we must ensure that stride[1] == stride[0] * extent[0]
     // and stride[0] = extent[2] to get results that are not garbled.
-    // This is unpleasantly hacky and will likely need aditional enhancements.
+    // This is unpleasantly hacky and will likely need additional enhancements.
     // (Note that there are, theoretically, other stride combinations that might
     // need fixing; in practice, ~all generators that aren't planar tend
     // to be classically chunky.)
@@ -791,7 +791,7 @@ struct ArgData {
             return;
         }
 
-        // Ensure that the input Buffer meets our constraints; if it doesn't, allcoate
+        // Ensure that the input Buffer meets our constraints; if it doesn't, allocate
         // and copy into a new Buffer.
         bool updated = false;
         Shape new_shape = get_shape(buffer_value);

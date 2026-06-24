@@ -36,8 +36,7 @@ public:
 }  // namespace
 
 Expr qualify(const string &prefix, const Expr &value) {
-    QualifyExpr q(prefix);
-    return q.mutate(value);
+    return QualifyExpr(prefix)(value);
 }
 
 }  // namespace Internal

@@ -393,6 +393,52 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // Sliding a producer along the outer loop of a pair of outputs fused
+        // together with compute_with. Previously triggered an internal compiler
+        // error referencing a missing .loop_min symbol on the fused loop.
+        count = 0;
+        Func f, g1, g2;
+        f(x, y) = call_counter(x, y);
+        g1(x, y) = f(x, y - 1) + f(x, y + 1);
+        g2(x, y) = f(x, y - 1) - f(x, y + 1);
+
+        f.store_root().compute_at(g1, y);
+        g2.compute_with(g1, x);
+
+        Pipeline({g1, g2}).realize({10, 10});
+
+        // f spans y in [-1, 10], so 12 rows of 10 = 120 calls when slid.
+        if (count != 120) {
+            printf("f was called %d times instead of %d times\n", count, 120);
+            return 1;
+        }
+    }
+
+    {
+        // Sliding a cascade of filters. Halide needs bounds propagation
+        // to prove that the innermost filters have monotonic bounds.
+        count = 0;
+        Func f1, f2, f3, f4, g;
+        f1(x) = call_counter(x, 0);
+        f2(x) = f1(0) + f1(x);
+        f3(x) = f2(0) + f2(x);
+        f4(x) = f3(0) + f3(x);
+        g(x) = f4(0) + f4(x);
+        f1.store_root().compute_at(g, x);
+        f2.store_root().compute_at(g, x);
+        f3.store_root().compute_at(g, x);
+        f4.store_root().compute_at(g, x);
+        g.bound(x, 0, 10);
+
+        g.realize({10});
+        // f1 spans x in [0, 9], so 10 calls when slid.
+        if (count != 10) {
+            printf("f1 was called %d times instead of %d times\n", count, 10);
+            return 1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

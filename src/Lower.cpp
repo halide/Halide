@@ -155,11 +155,6 @@ void lower_impl(const vector<Function> &output_funcs,
     bool any_strict_float = strictify_float(env, t);
     result_module.set_any_strict_float(any_strict_float);
 
-    // Output functions should all be computed and stored at root.
-    for (const Function &f : outputs) {
-        Func(f).compute_root().store_root();
-    }
-
     // Finalize all the LoopLevels
     for (auto &iter : env) {
         iter.second.lock_loop_levels();
@@ -331,10 +326,6 @@ void lower_impl(const vector<Function> &output_funcs,
         debug(1) << "Selecting a GPU API for extern stages...\n";
         s = select_gpu_api(s, t);
         log("Lowering after selecting a GPU API for extern stages:", s);
-    } else {
-        debug(1) << "Injecting host-dirty marking...\n";
-        s = inject_host_dev_buffer_copies(s, t);
-        log("Lowering after injecting host-dirty marking:", s);
     }
 
     debug(1) << "Simplifying...\n";
@@ -381,7 +372,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after partitioning loops:", s);
 
     debug(1) << "Staging strided loads...\n";
-    s = stage_strided_loads(s);
+    s = stage_strided_loads(s, t);
     log("Lowering after staging strided loads:", s);
 
     debug(1) << "Trimming loops to the region over which they do something...\n";
@@ -473,7 +464,7 @@ void lower_impl(const vector<Function> &output_funcs,
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
             debug(1) << "Running custom lowering pass " << i << "...\n";
-            s = custom_passes[i]->mutate(s);
+            s = (*custom_passes[i])(s);
             debug(1) << "Lowering after custom pass " << i << ":\n"
                      << s << "\n\n";
         }

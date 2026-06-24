@@ -3,6 +3,16 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    // SVE2 backend has the below LLVM issue which has been fixed in LLVM 22.
+    // "LLVM ERROR: Unable to widen vector store"
+    // https://github.com/llvm/llvm-project/issues/54424
+    if (Internal::get_llvm_version() < 220 &&
+        get_jit_target_from_environment().has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
+               Internal::get_llvm_version());
+        return 0;
+    }
+
     // This test exercises predicated vector loads and stores with a single
     // lane. These require special handling because Halide's IR does not
     // distinguish between scalars and single-element vectors, while LLVM

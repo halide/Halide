@@ -151,12 +151,15 @@ bool associative_op_pattern_match(const Expr &e,
                 match.emplace(iter.first, iter.second);
             } else {
                 if (iter.first != match_iter->first || !equal(iter.second, match_iter->second)) {
+                    debug(5) << "Failed to match: (" << iter.first << ", " << iter.second << ") != ("
+                             << match_iter->first << ", " << match_iter->second << ")\n";
                     return false;
                 }
             }
         }
         return true;
     }
+    debug(5) << "expr_match(" << op << ", " << e << ") == false\n";
     return false;
 }
 
@@ -339,7 +342,7 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
 
         // Replace any self-reference to Func 'f' with a Var
         ConvertSelfRef csr(f, args, idx, op_x_names);
-        exprs[idx] = csr.mutate(exprs[idx]);
+        exprs[idx] = csr(exprs[idx]);
         if (!csr.is_solvable) {
             return AssociativeOp();
         }
@@ -537,8 +540,8 @@ void associativity_test() {
         Expr f_call_0 = Call::make(t, "f", {x_idx}, Call::CallType::Halide, FunctionPtr(), 0);
 
         for (const Expr &e : {cast<uint8_t>(min(cast<uint16_t>(x) + y, 255)),
-                              select(x > 255 - y, cast<uint8_t>(255), y),
-                              select(x < -y, y, cast<uint8_t>(255)),
+                              select(x > 255 - y, make_const(UInt(8), 255), x + y),
+                              select(x < ~y, x + y, make_const(UInt(8), 255)),
                               saturating_add(x, y),
                               saturating_add(y, x),
                               saturating_cast<uint8_t>(widening_add(x, y))}) {

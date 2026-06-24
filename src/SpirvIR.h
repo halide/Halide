@@ -24,12 +24,12 @@
 #include "Type.h"
 
 #include <spirv/unified1/GLSL.std.450.h>  // GLSL extended instructions for common intrinsics
-#include <spirv/unified1/spirv.h>         // Use v1.6 headers but only use the minimal viable format version (for maximum compatiblity)
+#include <spirv/unified1/spirv.h>         // Use v1.6 headers but only use the minimal viable format version (for maximum compatibility)
 
 namespace Halide {
 namespace Internal {
 
-/** Precision requirment for return values */
+/** Precision requirement for return values */
 enum SpvPrecision {
     SpvFullPrecision,
     SpvRelaxedPrecision,
@@ -363,7 +363,7 @@ public:
     SpvBuilder(const SpvBuilder &) = delete;
     SpvBuilder &operator=(const SpvBuilder &) = delete;
 
-    // Reserve a unique ID to use for identifying a specifc kind of SPIR-V result **/
+    // Reserve a unique ID to use for identifying a specific kind of SPIR-V result **/
     SpvId reserve_id(SpvKind = SpvResultId);
 
     // Look up the specific kind of SPIR-V item from its unique ID

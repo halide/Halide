@@ -48,7 +48,7 @@ public:
     // returns the raw string table pointer
     const char **data() const;
 
-    // scans the table for existance of the given string within any entry (linear scan w/string compare!)
+    // scans the table for existence of the given string within any entry (linear scan w/string compare!)
     bool contains(const char *str) const;
 
     size_t size() const {

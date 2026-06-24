@@ -4,20 +4,14 @@
 
 set(REASON_FAILURE_MESSAGE "")
 
-# Fallback configurations for weirdly built LLVMs
-set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel Release RelWithDebInfo "")
-set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel "")
-set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
-
 set(llvm_paths "")
-foreach (
-    template IN ITEMS
-    "/opt/homebrew/opt/llvm@@VERSION@" # Homebrew on macOS
-    "/usr/lib/llvm-@VERSION@" # Debian/Ubuntu packages
-    "/usr/local/lib/llvm-@VERSION@" # Third-party packages
-    "/opt/llvm-@VERSION@" # Third-party packages
+foreach (template IN ITEMS
+    "/opt/homebrew/opt/llvm@@VERSION@"  # Homebrew on macOS
+    "/usr/lib/llvm-@VERSION@"  # Debian/Ubuntu packages
+    "/usr/local/lib/llvm-@VERSION@"  # Third-party packages
+    "/opt/llvm-@VERSION@"  # Third-party packages
 )
-    foreach (VERSION RANGE 20 22) # inclusive!
+    foreach (VERSION RANGE 21 23) # inclusive!
         string(CONFIGURE "${template}" path @ONLY)
         list(APPEND llvm_paths "${path}")
     endforeach ()
@@ -28,7 +22,7 @@ find_package(LLVM PATHS ${llvm_paths})
 
 # Neither LLVM_VERSION nor LLVM_PACKAGE_VERSION work as find_package arguments
 # in git/development builds as they include a "git" suffix. This applies at
-# time of writing to versions 18-21, inclusive.
+# time of writing to versions 21-23, inclusive.
 if (LLVM_FOUND)
     set(Halide_LLVM_VERSION "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
 endif ()
@@ -57,9 +51,9 @@ if (LLVM_FOUND)
     find_package(
         Clang "${Halide_LLVM_VERSION}" EXACT
         HINTS
-        "${LLVM_INSTALL_PREFIX}" # Same root as the LLVM we found
-        "${LLVM_DIR}/../clang" # LLVM found in $ROOT/lib/cmake/llvm
-        "${LLVM_DIR}/../lib/cmake/clang" # LLVM found in $ROOT/cmake
+        "${LLVM_INSTALL_PREFIX}"  # Same root as the LLVM we found
+        "${LLVM_DIR}/../clang"  # LLVM found in $ROOT/lib/cmake/llvm
+        "${LLVM_DIR}/../lib/cmake/clang"  # LLVM found in $ROOT/cmake
     )
 
     foreach (comp IN LISTS LLVM_TARGETS_TO_BUILD)
@@ -73,14 +67,15 @@ if (LLVM_FOUND)
                 # Homebrew split the LLVM and LLD packages as of version 19, so
                 # having multiple LLVM versions installed leads to the newest
                 # LLD being found without this hint.
-                "${LLVM_INSTALL_PREFIX}/../lld@${LLVM_VERSION_MAJOR}"
+                "${LLVM_DIR}/../../../../lld@${LLVM_VERSION_MAJOR}"
                 "${LLVM_DIR}/../lld"
                 "${LLVM_DIR}/../lib/cmake/lld"
             )
             if (NOT LLD_FOUND)
                 string(APPEND REASON_FAILURE_MESSAGE
-                       "WebAssembly was not found because liblld is missing. "
-                       "Did you `apt install liblld-dev` or `brew install lld`?\n")
+                    "WebAssembly was not found because liblld is missing. "
+                    "Did you `apt install liblld-dev` or `brew install lld`?\n"
+                )
                 continue()
             endif ()
 
@@ -90,9 +85,10 @@ if (LLVM_FOUND)
             # runtime. See: https://github.com/halide/Halide/issues/5471
             if (LLVM_LINK_LLVM_DYLIB AND NOT Halide_LLVM_SHARED_LIBS)
                 string(APPEND REASON_FAILURE_MESSAGE
-                       "WebAssembly was not found because LLD required by was linked to shared LLVM "
-                       "(LLVM_LINK_LLVM_DYLIB=${LLVM_LINK_LLVM_DYLIB}) but static LLVM was requested "
-                       "(Halide_LLVM_SHARED_LIBS=${Halide_LLVM_SHARED_LIBS}).\n")
+                    "WebAssembly was not found because LLD required by was linked to shared LLVM "
+                    "(LLVM_LINK_LLVM_DYLIB=${LLVM_LINK_LLVM_DYLIB}) but static LLVM was requested "
+                    "(Halide_LLVM_SHARED_LIBS=${Halide_LLVM_SHARED_LIBS}).\n"
+                )
                 continue()
             endif ()
         endif ()
@@ -104,23 +100,26 @@ if (LLVM_FOUND)
     if (Halide_LLVM_SHARED_LIBS AND NOT TARGET "${Halide_LLVM_SHARED_LIBRARY}")
         string(APPEND Halide_LLVM_SHARED_LIBRARY "-NOTFOUND")
         string(APPEND REASON_FAILURE_MESSAGE
-               "Halide_LLVM_SHARED_LIBS=${Halide_LLVM_SHARED_LIBS} but the shared LLVM target does not exist.\n")
+            "Halide_LLVM_SHARED_LIBS=${Halide_LLVM_SHARED_LIBS} but the shared LLVM target does not exist.\n"
+        )
     endif ()
 endif ()
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(
     Halide_LLVM
-    REQUIRED_VARS LLVM_CONFIG Clang_CONFIG Halide_LLVM_SHARED_LIBRARY
+    REQUIRED_VARS
+        LLVM_CONFIG
+        Clang_CONFIG
+        Halide_LLVM_SHARED_LIBRARY
     VERSION_VAR Halide_LLVM_VERSION
     REASON_FAILURE_MESSAGE "${REASON_FAILURE_MESSAGE}"
-    HANDLE_COMPONENTS
-    HANDLE_VERSION_RANGE
+    HANDLE_COMPONENTS HANDLE_VERSION_RANGE
 )
 
-function(_Halide_LLVM_link target visibility)
+function(_Halide_LLVM_link target)
     llvm_map_components_to_libnames(comps ${ARGN})
-    target_link_libraries("${target}" "${visibility}" ${comps})
+    target_link_libraries("${target}" INTERFACE ${comps})
 endfunction()
 
 if (Halide_LLVM_FOUND)
@@ -159,7 +158,7 @@ if (Halide_LLVM_FOUND)
         if (Halide_LLVM_SHARED_LIBS)
             target_link_libraries(Halide_LLVM::Core INTERFACE LLVM ${CMAKE_DL_LIBS})
         else ()
-            _Halide_LLVM_link(Halide_LLVM::Core INTERFACE orcjit bitwriter linker passes)
+            _Halide_LLVM_link(Halide_LLVM::Core orcjit bitwriter linker passes)
         endif ()
     endif ()
 
@@ -169,7 +168,7 @@ if (Halide_LLVM_FOUND)
             target_link_libraries(Halide_LLVM::${comp} INTERFACE Halide_LLVM::Core)
 
             if (NOT Halide_LLVM_SHARED_LIBS)
-                _Halide_LLVM_link(Halide_LLVM::${comp} INTERFACE ${comp})
+                _Halide_LLVM_link(Halide_LLVM::${comp} ${comp})
             endif ()
 
             if (comp STREQUAL "WebAssembly")

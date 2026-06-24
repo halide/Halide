@@ -28,9 +28,9 @@ adb push ${HEXAGON_RUNTIME_PATH}/bin/v60/signed_by_debug/libhalide_hexagon_remot
 
 # If there's a testsig installed in the usual location, copy it to
 # $DEVICE_PATH so it is visible to our modified $ASDP_LIBRARY_PATH.
-adb shell cp /system/lib/rfsa/adsp/testsig* ${DEVICE_PATH} > /dev/null || true
+adb shell cp /system/lib/rfsa/adsp/testsig* ${DEVICE_PATH} >/dev/null || true
 
 # Push and run the app!
 adb push ${BIN}/${APP_TARGET}/test ${DEVICE_PATH}
 adb shell chmod +x ${DEVICE_PATH}/test
-adb shell ${DEVICE_ENV} ${DEVICE_PATH}/test
+adb shell "${DEVICE_ENV}" ${DEVICE_PATH}/test

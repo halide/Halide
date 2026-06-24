@@ -4,7 +4,7 @@ set -eo pipefail
 # Prerequisite :
 #     Halide is installed system-wide in your host machine or discoverable via CMAKE_PREFIX_PATH
 
-cd "$(dirname ${BASH_SOURCE[0]})"
+cd "$(dirname "${BASH_SOURCE[0]}")"
 readonly TOOLCHAIN_FILE="${PWD}/../cmake/toolchain.noos-arm32-sample.cmake"
 readonly GEN_PACKAGE="HelloBaremetal-add_generator"
 
@@ -22,8 +22,8 @@ cmake --build build-host/ --target "${GEN_PACKAGE}"
 # Build application with cross compiler,
 # where the generator executable built in Step 1 is just imported and called
 cmake -S . -B build-target \
-	    -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
-	    -DGEN_PACKAGE="${GEN_PACKAGE}" \
-	    -D${GEN_PACKAGE}_ROOT:FILEPATH=build-host
+    -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
+    -DGEN_PACKAGE="${GEN_PACKAGE}" \
+    -D${GEN_PACKAGE}_ROOT:FILEPATH=build-host
 
 cmake --build build-target/

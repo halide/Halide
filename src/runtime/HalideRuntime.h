@@ -98,6 +98,9 @@ extern "C" {
 #define HALIDE_RUNTIME_ASAN_DETECTED
 #endif
 
+#if !defined(HALIDE_CPP_COMPILER_HAS_FLOAT16)
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 0
+
 #if !defined(HALIDE_RUNTIME_ASAN_DETECTED)
 
 // clang had _Float16 added as a reserved name in clang 8, but
@@ -105,10 +108,11 @@ extern "C" {
 // Ideally there would be a better way to detect if the type
 // is supported, even in a compiler independent fashion, but
 // coming up with one has proven elusive.
-#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__)
+#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__) && !defined(__wasm__)
 #if defined(__is_identifier)
 #if !__is_identifier(_Float16)
-#define HALIDE_CPP_COMPILER_HAS_FLOAT16
+#undef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 1
 #endif
 #endif
 #endif
@@ -117,12 +121,17 @@ extern "C" {
 // For now, we say that if >= v12, and compiling on x86 or arm,
 // we assume support. This may need revision.
 #if defined(__GNUC__) && (__GNUC__ >= 12)
-#if defined(__x86_64__) || (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) || ((defined(__arm__) || defined(__aarch64__)) && (__GNUC__ >= 13))
-#define HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if defined(__x86_64__) ||                                              \
+    (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) ||     \
+    (defined(__arm__) && (__GNUC__ >= 13) && __ARM_FP16_FORMAT_IEEE) || \
+    (defined(__aarch64__) && (__GNUC__ >= 13))
+#undef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 1
 #endif
 #endif
 
 #endif  // !HALIDE_RUNTIME_ASAN_DETECTED
+#endif  // !defined(HALIDE_CPP_COMPILER_HAS_FLOAT16)
 
 #endif  // !COMPILING_HALIDE_RUNTIME
 
@@ -258,7 +267,7 @@ typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int)
 
 /** A task representing a serial for loop evaluated over some range.
  * Note that task_parent is a pass through argument that should be
- * passed to any dependent taks that are invoked using halide_do_parallel_tasks
+ * passed to any dependent tasks that are invoked using halide_do_parallel_tasks
  * underneath this call. */
 typedef int (*halide_loop_task_t)(void *user_context, int min, int extent,
                                   uint8_t *closure, void *task_parent);
@@ -948,7 +957,7 @@ extern int halide_get_gpu_device(void *user_context);
 /** Set the soft maximum amount of memory, in bytes, that the LRU
  *  cache will use to memoize Func results.  This is not a strict
  *  maximum in that concurrency and simultaneous use of memoized
- *  reults larger than the cache size can both cause it to
+ *  results larger than the cache size can both cause it to
  *  temporariliy be larger than the size specified here.
  */
 extern void halide_memoization_cache_set_size(int64_t size);
@@ -976,7 +985,7 @@ extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *ca
 
 /** Given a cache key for a memoized result, currently constructed
  *  from the Func name and top-level Func name plus the arguments of
- *  the computation, store the result in the cache for futre access by
+ *  the computation, store the result in the cache for future access by
  *  halide_memoization_cache_lookup. (The internals of the cache key
  *  should be considered opaque by this function.) Data is copied out
  *  from the inputs and inputs are unmodified. The last argument is a
@@ -1469,6 +1478,16 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx10_1,                ///< Intel AVX10 version 1 support. vector_bits is used to indicate width.
     halide_target_feature_x86_apx,                ///< Intel x86 APX support. Covers initial set of features released as APX: egpr,push2pop2,ppx,ndd .
     halide_target_feature_simulator,              ///< Target is for a simulator environment. Currently only applies to iOS.
+    halide_target_feature_hlsl_sm60,              ///< Enable D3D12 Shader Model 6.0 (DXIL, 64-bit types, wave intrinsics). Requires d3d12compute. Uses DXC compiler.
+    halide_target_feature_hlsl_sm61,              ///< Enable D3D12 Shader Model 6.1
+    halide_target_feature_hlsl_sm62,              ///< Enable D3D12 Shader Model 6.2 (native 16-bit scalar types with -enable-16bit-types)
+    halide_target_feature_hlsl_sm63,              ///< Enable D3D12 Shader Model 6.3
+    halide_target_feature_hlsl_sm64,              ///< Enable D3D12 Shader Model 6.4
+    halide_target_feature_hlsl_sm65,              ///< Enable D3D12 Shader Model 6.5
+    halide_target_feature_hlsl_sm66,              ///< Enable D3D12 Shader Model 6.6 (64-bit atomics, packed 8-bit types)
+    halide_target_feature_hlsl_sm67,              ///< Enable D3D12 Shader Model 6.7
+    halide_target_feature_hlsl_sm68,              ///< Enable D3D12 Shader Model 6.8
+    halide_target_feature_hlsl_sm69,              ///< Enable D3D12 Shader Model 6.9 (long vectors 5-1024 lanes, native 16-bit/wave/int64 required)
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
@@ -2000,7 +2019,7 @@ struct halide_profiler_state {
 
     /** If this callback is defined, the profiler asserts that there is a single
      * live instance, and then uses it to get the current func and number of
-     * active threads insted of reading the fields in the instance. This is used
+     * active threads instead of reading the fields in the instance. This is used
      * so that the profiler can follow along with execution that occurs
      * elsewhere (e.g. on an accelerator). */
     void (*get_remote_profiler_state)(int *func, int *active_workers);
@@ -2043,7 +2062,7 @@ extern void halide_profiler_shutdown(void);
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
 
-/** These routines are called to temporarily disable and then reenable
+/** These routines are called to temporarily disable and then re-enable
  * the profiler. */
 //@{
 extern void halide_profiler_lock(struct halide_profiler_state *);
@@ -2149,7 +2168,7 @@ HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of() {
     return halide_type_t(halide_type_handle, 64);
 }
 
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<_Float16>() {
     return halide_type_t(halide_type_float, 16);

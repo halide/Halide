@@ -144,7 +144,7 @@ public:
 }  // namespace
 
 Stmt optimize_shuffles(Stmt s, int lut_alignment) {
-    s = OptimizeShuffles(lut_alignment).mutate(s);
+    s = OptimizeShuffles(lut_alignment)(s);
     return s;
 }
 

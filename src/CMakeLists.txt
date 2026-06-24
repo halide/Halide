@@ -15,7 +15,8 @@ endif ()
 
 # Set the (shared) library version
 set(Halide_VERSION_OVERRIDE "${Halide_VERSION}"
-    CACHE STRING "VERSION to set for custom Halide packaging")
+    CACHE STRING "VERSION to set for custom Halide packaging"
+)
 mark_as_advanced(Halide_VERSION_OVERRIDE)
 
 if (NOT Halide_VERSION_OVERRIDE STREQUAL "")
@@ -26,7 +27,8 @@ if (NOT Halide_VERSION_OVERRIDE STREQUAL "")
 endif ()
 
 set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
-    CACHE STRING "SOVERSION to set for custom Halide packaging")
+    CACHE STRING "SOVERSION to set for custom Halide packaging"
+)
 mark_as_advanced(Halide_SOVERSION_OVERRIDE)
 
 if (NOT Halide_SOVERSION_OVERRIDE STREQUAL "")
@@ -49,6 +51,7 @@ target_sources(
     FILE_SET private_headers
     TYPE HEADERS
     FILES
+    # keep-sorted start case=no
     AbstractGenerator.h
     AddAtomicMutex.h
     AddImageChecks.h
@@ -63,9 +66,9 @@ target_sources(
     AsyncProducers.h
     AutoScheduleUtils.h
     BoundaryConditions.h
+    BoundConstantExtentLoops.h
     Bounds.h
     BoundsInference.h
-    BoundConstantExtentLoops.h
     BoundSmallAllocations.h
     Buffer.h
     Callable.h
@@ -73,13 +76,13 @@ target_sources(
     ClampUnsafeAccesses.h
     Closure.h
     CodeGen_C.h
+    CodeGen_CPU.h
     CodeGen_D3D12Compute_Dev.h
     CodeGen_GPU_Dev.h
     CodeGen_Internal.h
     CodeGen_LLVM.h
     CodeGen_Metal_Dev.h
     CodeGen_OpenCL_Dev.h
-    CodeGen_Posix.h
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
@@ -87,13 +90,14 @@ target_sources(
     CodeGen_WebGPU_Dev.h
     CompilerLogger.h
     ConciseCasts.h
-    CPlusPlusMangle.h
     ConstantBounds.h
     ConstantInterval.h
+    CPlusPlusMangle.h
     CSE.h
     Debug.h
     DebugArguments.h
     DebugToFile.h
+    DecomposeVectorShuffle.h
     Definition.h
     Deinterleave.h
     Derivative.h
@@ -158,6 +162,7 @@ target_sources(
     Module.h
     ModulusRemainder.h
     Monotonic.h
+    MultiRamp.h
     ObjectInstanceRegistry.h
     OffloadGPULoops.h
     OptimizeShuffles.h
@@ -220,6 +225,7 @@ target_sources(
     VectorizeLoops.h
     WasmExecutor.h
     WrapCalls.h
+    # keep-sorted end
 )
 
 # The sources that go into libHalide. For the sake of IDE support, headers that
@@ -227,6 +233,7 @@ target_sources(
 target_sources(
     Halide
     PRIVATE
+    # keep-sorted start case=no
     AbstractGenerator.cpp
     AddAtomicMutex.cpp
     AddImageChecks.cpp
@@ -241,9 +248,9 @@ target_sources(
     AsyncProducers.cpp
     AutoScheduleUtils.cpp
     BoundaryConditions.cpp
+    BoundConstantExtentLoops.cpp
     Bounds.cpp
     BoundsInference.cpp
-    BoundConstantExtentLoops.cpp
     BoundSmallAllocations.cpp
     Buffer.cpp
     Callable.cpp
@@ -252,6 +259,7 @@ target_sources(
     Closure.cpp
     CodeGen_ARM.cpp
     CodeGen_C.cpp
+    CodeGen_CPU.cpp
     CodeGen_D3D12Compute_Dev.cpp
     CodeGen_GPU_Dev.cpp
     CodeGen_Hexagon.cpp
@@ -259,7 +267,6 @@ target_sources(
     CodeGen_LLVM.cpp
     CodeGen_Metal_Dev.cpp
     CodeGen_OpenCL_Dev.cpp
-    CodeGen_Posix.cpp
     CodeGen_PowerPC.cpp
     CodeGen_PTX_Dev.cpp
     CodeGen_PyTorch.cpp
@@ -269,13 +276,14 @@ target_sources(
     CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp
-    CPlusPlusMangle.cpp
     ConstantBounds.cpp
     ConstantInterval.cpp
+    CPlusPlusMangle.cpp
     CSE.cpp
     Debug.cpp
     DebugArguments.cpp
     DebugToFile.cpp
+    DecomposeVectorShuffle.cpp
     Definition.cpp
     Deinterleave.cpp
     Derivative.cpp
@@ -332,6 +340,7 @@ target_sources(
     Module.cpp
     ModulusRemainder.cpp
     Monotonic.cpp
+    MultiRamp.cpp
     ObjectInstanceRegistry.cpp
     OffloadGPULoops.cpp
     OptimizeShuffles.cpp
@@ -364,7 +373,6 @@ target_sources(
     Simplify_Add.cpp
     Simplify_And.cpp
     Simplify_Call.cpp
-    Simplify_Reinterpret.cpp
     Simplify_Cast.cpp
     Simplify_Div.cpp
     Simplify_EQ.cpp
@@ -377,6 +385,7 @@ target_sources(
     Simplify_Mul.cpp
     Simplify_Not.cpp
     Simplify_Or.cpp
+    Simplify_Reinterpret.cpp
     Simplify_Select.cpp
     Simplify_Shuffle.cpp
     Simplify_Stmts.cpp
@@ -412,18 +421,12 @@ target_sources(
     VectorizeLoops.cpp
     WasmExecutor.cpp
     WrapCalls.cpp
+    # keep-sorted end
 )
 
-set(C_TEMPLATE_FILES
-    CodeGen_C_prologue
-    CodeGen_C_vectors
-)
+set(C_TEMPLATE_FILES CodeGen_C_prologue CodeGen_C_vectors)
 
-set(HTML_TEMPLATE_FILES
-    StmtToHTML_dependencies.html
-    StmtToHTML.js
-    StmtToHTML.css
-)
+set(HTML_TEMPLATE_FILES StmtToHTML_dependencies.html StmtToHTML.js StmtToHTML.css)
 
 ##
 # Build and import the runtime.
@@ -441,10 +444,12 @@ foreach (f IN LISTS C_TEMPLATE_FILES)
     set(SRC "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${f}.template.cpp>")
     set(DST "c_template.${f}.template.cpp")
 
-    add_custom_command(OUTPUT "${DST}"
-                       COMMAND binary2cpp "halide_c_template_${f}" < "${SRC}" > "${DST}"
-                       DEPENDS "${SRC}" binary2cpp
-                       VERBATIM)
+    add_custom_command(
+        OUTPUT "${DST}"
+        COMMAND binary2cpp "halide_c_template_${f}" < "${SRC}" > "${DST}"
+        DEPENDS "${SRC}" binary2cpp
+        VERBATIM
+    )
     target_sources(Halide PRIVATE ${DST})
 endforeach ()
 
@@ -453,10 +458,12 @@ foreach (f IN LISTS HTML_TEMPLATE_FILES)
     string(REPLACE "." "_" VARNAME "halide_html_template_${f}")
     set(DST "html_template.${f}.cpp")
 
-    add_custom_command(OUTPUT "${DST}"
-                       COMMAND binary2cpp "${VARNAME}" < "${SRC}" > "${DST}"
-                       DEPENDS "${SRC}" binary2cpp
-                       VERBATIM)
+    add_custom_command(
+        OUTPUT "${DST}"
+        COMMAND binary2cpp "${VARNAME}" < "${SRC}" > "${DST}"
+        DEPENDS "${SRC}" binary2cpp
+        VERBATIM
+    )
     target_sources(Halide PRIVATE ${DST})
 endforeach ()
 
@@ -467,15 +474,19 @@ endforeach ()
 set(HALIDE_H "${Halide_BINARY_DIR}/include/Halide.h")
 set(LICENSE_PATH "${Halide_SOURCE_DIR}/LICENSE.txt")
 set(headers "$<TARGET_PROPERTY:Halide,HEADER_SET_private_headers>")
-add_custom_command(OUTPUT "${HALIDE_H}"
-                   COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${Halide_BINARY_DIR}/include>"
-                   COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" "${headers}" > "$<SHELL_PATH:${HALIDE_H}>.tmp"
-                   COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<SHELL_PATH:${HALIDE_H}>.tmp" "$<SHELL_PATH:${HALIDE_H}>"
-                   COMMAND ${CMAKE_COMMAND} -E rm "$<SHELL_PATH:${HALIDE_H}>.tmp"
-                   DEPENDS build_halide_h "${LICENSE_PATH}" "${headers}"
-                   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
-                   COMMAND_EXPAND_LISTS
-                   VERBATIM)
+add_custom_command(
+    OUTPUT "${HALIDE_H}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${Halide_BINARY_DIR}/include>"
+    COMMAND
+        build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" "${headers}" > "$<SHELL_PATH:${HALIDE_H}>.tmp"
+    COMMAND
+        ${CMAKE_COMMAND} -E copy_if_different "$<SHELL_PATH:${HALIDE_H}>.tmp"
+        "$<SHELL_PATH:${HALIDE_H}>"
+    COMMAND ${CMAKE_COMMAND} -E rm "$<SHELL_PATH:${HALIDE_H}>.tmp"
+    DEPENDS build_halide_h "${LICENSE_PATH}" "${headers}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
+    COMMAND_EXPAND_LISTS VERBATIM
+)
 add_custom_target(HalideIncludes DEPENDS "${HALIDE_H}")
 add_dependencies(Halide HalideIncludes)
 
@@ -499,14 +510,9 @@ foreach (backend IN LISTS Halide_LLVM_COMPONENTS)
 endforeach ()
 
 # GPU backends
-find_package(
-    SPIRV-Headers 1.5.5 REQUIRED
-    HINTS "${Halide_SOURCE_DIR}/dependencies/spirv"
-)
+find_package(SPIRV-Headers 1.5.5 REQUIRED HINTS "${Halide_SOURCE_DIR}/dependencies/spirv")
 
-target_link_libraries(
-    Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:SPIRV-Headers::SPIRV-Headers>"
-)
+target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:SPIRV-Headers::SPIRV-Headers>")
 
 target_compile_definitions(Halide PRIVATE WITH_D3D12)
 target_compile_definitions(Halide PRIVATE WITH_METAL)
@@ -515,34 +521,30 @@ target_compile_definitions(Halide PRIVATE WITH_SPIRV)
 target_compile_definitions(Halide PRIVATE WITH_VULKAN)
 target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
 
+if (WITH_COMPILER_PROFILING)
+    target_compile_definitions(Halide PRIVATE WITH_COMPILER_PROFILING)
+endif ()
+
+
 ##
 # Flatbuffers and Serialization dependencies.
 ##
 
 # Build serialization, enabled by default
 if (WITH_SERIALIZATION)
-    # Sadly, there seem to be at least three variations of the Flatbuffer
-    # package in terms of the case of the relevant CMake files. Fortunately,
-    # the IMPORTED targets appear to be consistently named `flatbuffers`.
-    find_package(
-        flatbuffers 23.5.26 REQUIRED
-        NAMES flatbuffers Flatbuffers FlatBuffers
-    )
-    _Halide_pkgdep(flatbuffers)
+    find_package(FlatBuffers REQUIRED)
+    _Halide_pkgdep(FlatBuffers)
 
-    if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
-        target_sources(Halide PRIVATE "$<TARGET_OBJECTS:flatbuffers::flatbuffers>")
-        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:flatbuffers::flatbuffers>>")
-    else ()
-        target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
-    endif ()
+    target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
 
     set(fb_def "${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs")
     set(fb_dir "${Halide_BINARY_DIR}/include/flatc")
     set(fb_header "${fb_dir}/halide_ir.fbs.h")
     add_custom_command(
         OUTPUT "${fb_header}"
-        COMMAND flatbuffers::flatc --cpp --cpp-std C++17 --no-union-value-namespacing --keep-prefix --filename-suffix ".fbs" -o "${fb_dir}" "${fb_def}"
+        COMMAND
+            flatbuffers::flatc --cpp --cpp-std C++17 --no-union-value-namespacing --keep-prefix
+            --filename-suffix ".fbs" -o "${fb_dir}" "${fb_def}"
         DEPENDS flatbuffers::flatc "${fb_def}"
         VERBATIM
     )
@@ -552,10 +554,7 @@ if (WITH_SERIALIZATION)
     target_sources(
         Halide
         PRIVATE
-        FILE_SET fb_headers
-        TYPE HEADERS
-        BASE_DIRS "${fb_dir}"
-        FILES "${fb_header}"
+        FILE_SET fb_headers TYPE HEADERS BASE_DIRS "${fb_dir}" FILES "${fb_header}"
     )
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
 endif ()
@@ -569,17 +568,19 @@ endif ()
 # Note that we (deliberately) redeclare these versions here, even though the macros
 # with identical versions are expected to be defined in source; this allows us to
 # ensure that the versions defined between all build systems are identical.
-target_compile_definitions(Halide PUBLIC
-                           HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
-                           HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
-                           HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
+target_compile_definitions(
+    Halide
+    PUBLIC
+    HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
+    HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
+    HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH}
+)
 
 ##
 # WasmExecutor backend selection
 ##
 
-set(Halide_WASM_BACKEND "wabt"
-    CACHE STRING "Which backend to use for Halide's WASM testing.")
+set(Halide_WASM_BACKEND "wabt" CACHE STRING "Which backend to use for Halide's WASM testing.")
 set_property(CACHE Halide_WASM_BACKEND PROPERTY STRINGS "wabt;V8;OFF")
 
 if (MSVC AND Halide_WASM_BACKEND STREQUAL "wabt")
@@ -588,16 +589,10 @@ if (MSVC AND Halide_WASM_BACKEND STREQUAL "wabt")
 endif ()
 
 if (Halide_WASM_BACKEND STREQUAL "wabt")
-    find_package(wabt 1.0.39 REQUIRED)
+    find_package(wabt REQUIRED)
     _Halide_pkgdep(wabt)
 
-    if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
-        target_sources(Halide PRIVATE "$<TARGET_OBJECTS:wabt::wabt>")
-        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:wabt::wabt>>")
-    else ()
-        target_link_libraries(Halide PRIVATE wabt::wabt)
-    endif ()
-
+    target_link_libraries(Halide PRIVATE wabt::wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
 elseif (Halide_WASM_BACKEND STREQUAL "V8")
     find_package(V8 REQUIRED)
@@ -615,9 +610,11 @@ endif ()
 ## TODO: implement something similar for Windows/link.exe
 # https://github.com/halide/Halide/issues/4651
 include(TargetExportScript)
-target_export_script(Halide
-                     APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
-                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
+target_export_script(
+    Halide
+    APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
+    GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript"
+)
 
 ##
 # Set compiler options for libHalide
@@ -626,19 +623,23 @@ target_export_script(Halide
 set_halide_compiler_warnings(Halide)
 
 if (CMAKE_GENERATOR MATCHES "Visual Studio")
-    # We could expose the /MP flag to all targets, but that might end up saturating the build
-    # since multiple MSBuild projects might get built in parallel, each of which compiling their
-    # source files in parallel; the Halide library itself is a "knot" point of the build graph,
-    # so compiling its files in parallel should not oversubscribe the system
-    target_compile_options(Halide PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/MP>)
+    # /MP is intentionally omitted here: Simplify_*.cpp and IRMatch.h have deep
+    # template instantiations that exhaust MSVC heap under parallel compilation.
+    # MSBuild already parallelises across projects; intra-project /MP multiplies
+    # memory pressure and triggers C1002 / D8040.
 endif ()
 
-target_compile_definitions(Halide
-                           PRIVATE
-                           # Disable warnings about standard C functions that have more secure replacements
-                           # in the Windows API.
-                           $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
-                           $<$<CXX_COMPILER_ID:MSVC>:_SCL_SECURE_NO_WARNINGS>
+# Raise MSVC's compiler heap limit for template-heavy TUs (IRMatch.h,
+# Simplify_*.cpp).  500% of the default is sufficient in practice.
+target_compile_options(Halide PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/Zm500>)
+
+target_compile_definitions(
+    Halide
+    PRIVATE
+    # Disable warnings about standard C functions that have more secure replacements
+    # in the Windows API.
+    $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+    $<$<CXX_COMPILER_ID:MSVC>:_SCL_SECURE_NO_WARNINGS>
 )
 
 ##
@@ -670,9 +671,7 @@ else ()
         "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/EHs-c->"
         "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-exceptions>"
     )
-    target_compile_definitions(
-        Halide PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>"
-    )
+    target_compile_definitions(Halide PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>")
 endif ()
 
 ##

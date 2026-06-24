@@ -176,7 +176,7 @@ def test(addconstant_impl_func, offset):
 
     try:
         # Expected requirement failure #2 -- note that for AOT-compiled
-        # code in Python, the error message is stricly numeric (the text
+        # code in Python, the error message is strictly numeric (the text
         # of the error isn't currently propagated int he exception).
         scalar_i32 = -1
         addconstant_impl_func(

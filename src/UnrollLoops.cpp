@@ -11,6 +11,7 @@ namespace Internal {
 namespace {
 
 class UnrollLoops : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const For *for_loop) override {
@@ -19,8 +20,7 @@ class UnrollLoops : public IRMutator {
             Expr extent = simplify(for_loop->extent());
             const IntImm *e = extent.as<IntImm>();
 
-            internal_assert(e)
-                << "Loop over " << for_loop->name << " should have had a constant extent\n";
+            internal_assert(e) << "Loop over " << for_loop->name << " should have had a constant extent\n";
             body = mutate(body);
 
             if (e->value == 1) {
@@ -53,7 +53,7 @@ class UnrollLoops : public IRMutator {
 }  // namespace
 
 Stmt unroll_loops(const Stmt &s) {
-    Stmt stmt = UnrollLoops().mutate(s);
+    Stmt stmt = UnrollLoops()(s);
     // Unrolling duplicates variable names. Other passes assume variable names are unique.
     return uniquify_variable_names(stmt);
 }

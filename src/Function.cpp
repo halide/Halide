@@ -1,7 +1,5 @@
 #include <atomic>
 #include <cstdlib>
-#include <memory>
-#include <set>
 #include <utility>
 
 #include "CSE.h"
@@ -168,10 +166,10 @@ struct FunctionContents {
         if (!extern_function_name.empty()) {
             for (ExternFuncArgument &i : extern_arguments) {
                 if (i.is_expr()) {
-                    i.expr = mutator->mutate(i.expr);
+                    i.expr = (*mutator)(i.expr);
                 }
             }
-            extern_proxy_expr = mutator->mutate(extern_proxy_expr);
+            extern_proxy_expr = (*mutator)(extern_proxy_expr);
         }
     }
 };
@@ -837,14 +835,14 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
     // memory leaks. We need to break these cycles.
     WeakenFunctionPtrs weakener(contents.get());
     for (auto &arg : args) {
-        arg = weakener.mutate(arg);
+        arg = weakener(arg);
     }
     for (auto &value : values) {
-        value = weakener.mutate(value);
+        value = weakener(value);
     }
     if (check.reduction_domain.defined()) {
         check.reduction_domain.set_predicate(
-            weakener.mutate(check.reduction_domain.predicate()));
+            weakener(check.reduction_domain.predicate()));
     }
 
     Definition r(args, values, check.reduction_domain, false);

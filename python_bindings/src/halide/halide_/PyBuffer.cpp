@@ -351,13 +351,13 @@ void define_buffer(py::module &m) {
         py::class_<Buffer<>, PyBuffer>(m, "Buffer", py::buffer_protocol())
 
             // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
-            // most notably, we can convert to an ndarray by calling numpy.array(m_buffer). This
+            // most notably, we can convert to an ndarray by calling numpy.array(other_buffer). This
             // always reverses the axes.
             .def_buffer([](Buffer<> &b) -> py::buffer_info {
                 return to_buffer_info(b, /*reverse_axes*/ true);
             })
 
-            // Returns a NumPy array that is a view of (i.e. shares storage with) this Buffer.
+            // Returns a NumPy array that is a view of (shares storage with) this Buffer.
             .def(
                 "numpy_view", [](Buffer<> &self, bool reverse_axes) -> py::array {
                     // base = py::cast(self) ensures that `self` outlives the returned view.

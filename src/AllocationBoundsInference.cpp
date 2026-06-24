@@ -169,8 +169,8 @@ class StripDeclareBoxTouched : public IRMutator {
 Stmt allocation_bounds_inference(Stmt s,
                                  const map<string, Function> &env,
                                  const FuncValueBounds &fb) {
-    s = AllocationInference(env, fb).mutate(s);
-    s = StripDeclareBoxTouched().mutate(s);
+    s = AllocationInference(env, fb)(s);
+    s = StripDeclareBoxTouched()(s);
     return s;
 }
 

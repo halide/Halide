@@ -365,10 +365,10 @@ int generate_filter_main(int argc, char **argv, const GeneratorFactoryProvider &
 // select_type<> is to std::conditional as switch is to if:
 // it allows a multiway compile-time type definition via the form
 //
-//    select_type<cond<condition1, type1>,
-//                cond<condition2, type2>,
+//    select_type<cond<condition-1, type1>,
+//                cond<condition-2, type2>,
 //                ....
-//                cond<conditionN, typeN>>::type
+//                cond<condition-N, typeN>>::type
 //
 // Note that the conditions are evaluated in order; the first evaluating to true
 // is chosen.
@@ -2065,7 +2065,7 @@ public:
     void set_estimate(const TBase &value) {
         this->check_gio_access();
         user_assert(value == nullptr) << "nullptr is the only valid estimate for Input<PointerType>";
-        Expr e = reinterpret(type_of<T2>(), cast<uint64_t>(0));
+        Expr e = reinterpret(type_of<T2>(), make_zero(UInt(64)));
         for (Parameter &p : this->parameters_) {
             p.set_estimate(e);
         }

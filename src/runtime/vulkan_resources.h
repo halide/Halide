@@ -11,7 +11,7 @@ namespace Runtime {
 namespace Internal {
 namespace Vulkan {
 
-// Defines the specialization constants used for dynamically overiding the dispatch size
+// Defines the specialization constants used for dynamically overriding the dispatch size
 struct VulkanWorkgroupSizeBinding {
     uint32_t constant_id[3] = {0};  // zero if unused
 };
@@ -284,12 +284,10 @@ bool vk_needs_scalar_uniform_buffer(void *user_context,
                                     size_t arg_sizes[],
                                     void *args[],
                                     int8_t arg_is_buffer[]) {
-    int i = 0;
-    while (arg_sizes[i] > 0) {
-        if (!arg_is_buffer[i]) {
-            return true;
-        }
-        i++;
+
+    // if any args exist, we need at least 1x uniform buffer
+    if (arg_sizes[0] > 0) {
+        return true;
     }
     return false;
 }
@@ -594,7 +592,8 @@ int vk_update_descriptor_set(void *user_context,
         if (arg_is_buffer[i]) {
 
             // get the allocated region for the buffer
-            MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(((halide_buffer_t *)args[i])->device);
+            halide_buffer_t *halide_buffer = (halide_buffer_t *)args[i];
+            MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(halide_buffer->device);
             MemoryRegion *owner = allocator->owner_of(user_context, device_region);
 
             // retrieve the buffer from the region
@@ -604,9 +603,8 @@ int vk_update_descriptor_set(void *user_context,
                 return halide_error_code_internal_error;
             }
 
-            VkDeviceSize range_offset = device_region->range.head_offset;
-            VkDeviceSize range_size = device_region->size - device_region->range.head_offset - device_region->range.tail_offset;
-            halide_abort_if_false(user_context, (device_region->size - device_region->range.head_offset - device_region->range.tail_offset) > 0);
+            VkDeviceSize range_offset = 0;
+            VkDeviceSize range_size = device_region->allocation.size;
             VkDescriptorBufferInfo device_buffer_info = {
                 *device_buffer,  // the buffer
                 range_offset,    // range offset
@@ -650,14 +648,41 @@ size_t vk_estimate_scalar_uniform_buffer_size(void *user_context,
                                               size_t arg_sizes[],
                                               void *args[],
                                               int8_t arg_is_buffer[]) {
-    int i = 0;
-    int scalar_uniform_buffer_size = 0;
-    while (arg_sizes[i] > 0) {
+    size_t scalar_arg_sizes = 0;
+    uint32_t buffer_count = 0;
+
+    // Add up all arg sizes for scalar params
+    for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (!arg_is_buffer[i]) {
-            scalar_uniform_buffer_size += arg_sizes[i];
+            scalar_arg_sizes += arg_sizes[i];
+        } else {
+            buffer_count++;
         }
-        i++;
     }
+
+    // Add space for index offsets for storage buffers (to support arbitrary crops)
+    size_t buffer_offset_arg_sizes = 0;
+    if (buffer_count) {
+        for (size_t i = 0; arg_sizes[i] > 0; i++) {
+            if (arg_is_buffer[i]) {
+                buffer_offset_arg_sizes += sizeof(int32_t);
+            }
+        }
+    }
+
+    size_t end_of_scalar_args = aligned_offset(scalar_arg_sizes, sizeof(int32_t));
+    size_t scalar_uniform_buffer_size = end_of_scalar_args + buffer_offset_arg_sizes;
+
+#ifdef DEBUG_RUNTIME
+    debug(user_context)
+        << " vk_estimate_scalar_uniform_buffer_size (user_context: " << user_context << "): "
+        << "scalar_uniform_buffer_size: " << (uint32_t)scalar_uniform_buffer_size << ", "
+        << "scalar_arg_sizes: " << (uint32_t)scalar_arg_sizes << ", "
+        << "end_of_scalar_args: " << (uint32_t)end_of_scalar_args << ", "
+        << "buffer_count: " << (uint32_t)buffer_count << ", "
+        << "buffer_offset_arg_sizes: " << (uint32_t)buffer_offset_arg_sizes << ")\n";
+#endif
+
     return scalar_uniform_buffer_size;
 }
 
@@ -724,12 +749,37 @@ int vk_update_scalar_uniform_buffer(void *user_context,
         return halide_error_code_internal_error;
     }
 
-    // copy to the (host-visible/coherent) scalar uniform buffer
+    // Copy all scalar params to the (host-visible/coherent) scalar uniform buffer
     size_t arg_offset = 0;
+    size_t buffer_count = 0;
     for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (!arg_is_buffer[i]) {
+            halide_debug_assert(user_context, (arg_offset + arg_sizes[i]) <= region->allocation.size);
             memcpy(host_ptr + arg_offset, args[i], arg_sizes[i]);
             arg_offset += arg_sizes[i];
+        } else {
+            buffer_count++;
+        }
+    }
+
+    // Copy all storage buffer offsets (to support arbitrary crops)
+    if (buffer_count) {
+
+        // Force alignment for the buffer offsets (e.g. all Int32 members in Uniform blocks must be 4-byte aligned)
+        arg_offset = aligned_offset(arg_offset, sizeof(int32_t));
+
+        // Copy all storage buffer offsets (to support arbitrary crops)
+        for (size_t i = 0; arg_sizes[i] > 0; i++) {
+            if (arg_is_buffer[i]) {
+
+                // get the allocated region for the buffer
+                MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(((halide_buffer_t *)args[i])->device);
+                halide_debug_assert(user_context, device_region != nullptr);
+                RegionIndexing region_indexing = device_region->indexing;
+                halide_debug_assert(user_context, (arg_offset + sizeof(int32_t)) <= region->allocation.size);
+                memcpy(host_ptr + arg_offset, &(region_indexing.offset), sizeof(int32_t));
+                arg_offset += sizeof(int32_t);
+            }
         }
     }
 
@@ -945,7 +995,7 @@ int vk_setup_compute_pipeline(void *user_context,
             } else {
                 // dynamic allocation
                 if (shared_mem_constant_id > 0) {
-                    error(user_context) << "Vulkan: Multiple dynamic shared memory allocations found! Only one is suported!!\n";
+                    error(user_context) << "Vulkan: Multiple dynamic shared memory allocations found! Only one is supported!!\n";
                     result = VK_ERROR_TOO_MANY_OBJECTS;
                     break;
                 }
@@ -1152,7 +1202,7 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
     // ... [4] Dynamic workgroup dimensions bound to specialization constants
     // ....... [0] Constant id to use for local_size_x (zero if it was statically declared and not bound to a specialization constant)
     // ....... [1] Constant id to use for local_size_y
-    // ....... [2] Constant id ot use for local_size_z
+    // ....... [2] Constant id to use for local_size_z
     //
     // NOTE: See CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_header() for the encoding
     //
@@ -1541,7 +1591,7 @@ VulkanCompiledShaderModule *vk_compile_shader_module(void *user_context, VulkanM
     VkShaderModuleCreateInfo shader_info = {
         VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         nullptr,                      // pointer to structure extending this
-        0,                            // flags (curently unused)
+        0,                            // flags (currently unused)
         (size_t)binary_size,          // code size in bytes
         (const uint32_t *)binary_ptr  // source
     };
@@ -1791,7 +1841,7 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
 
 int vk_device_crop_from_offset(void *user_context,
                                const struct halide_buffer_t *src,
-                               int64_t offset,
+                               int64_t byte_offset,
                                struct halide_buffer_t *dst) {
 
     VulkanContext ctx(user_context);
@@ -1804,7 +1854,7 @@ int vk_device_crop_from_offset(void *user_context,
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    if (offset < 0) {
+    if (byte_offset < 0) {
         error(user_context) << "Vulkan: Invalid offset for device crop!\n";
         return halide_error_code_device_crop_failed;
     }
@@ -1812,12 +1862,16 @@ int vk_device_crop_from_offset(void *user_context,
     // get the allocated region for the device
     MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(src->device);
     if (device_region == nullptr) {
-        error(user_context) << "Vulkan: Failed to crop region! Invalide device region!\n";
+        error(user_context) << "Vulkan: Failed to crop region! Invalid device region!\n";
         return halide_error_code_device_crop_failed;
     }
 
-    // create the croppeg region from the allocated region
-    MemoryRegion *cropped_region = ctx.allocator->create_crop(user_context, device_region, (uint64_t)offset);
+    // create the cropped region from the allocated region by computing a relative offset
+    // from the start of the region as an index based on the declared type size which
+    // will be passed as a shader parameter to adjust the indices during loads/stores
+    RegionIndexing region_indexing = {};
+    region_indexing.offset = byte_offset / src->type.bytes();
+    MemoryRegion *cropped_region = ctx.allocator->create_crop(user_context, device_region, region_indexing);
     if ((cropped_region == nullptr) || (cropped_region->handle == nullptr)) {
         error(user_context) << "Vulkan: Failed to crop region! Unable to create memory region!\n";
         return halide_error_code_device_crop_failed;

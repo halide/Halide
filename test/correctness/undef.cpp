@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         // That code needlessly set the entire buffer to zero before
         // computing fibonacci. We know for our use of fibonacci that
         // we'll never ask for values that haven't been set by the update
-        // step, except for entires 0 and 1. But Halide can't prove this,
+        // step, except for entries 0 and 1. But Halide can't prove this,
         // because a user may realize fib over a negative region, or
         // beyond 102.
 

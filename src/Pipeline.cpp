@@ -143,7 +143,7 @@ struct PipelineContents {
      * together. */
     vector<InferredArgument> inferred_args;
 
-    /** List of C funtions and Funcs to satisfy HalideExtern* and
+    /** List of C functions and Funcs to satisfy HalideExtern* and
      * define_extern calls. */
     std::map<std::string, JITExtern> jit_externs;
 

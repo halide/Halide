@@ -124,7 +124,15 @@ public:
                 }
             }
 
-            // Truncate the bounds to the new type.
+            // For UInt64 constants, the remainder might not be representable as an int64
+            if (t.bits() == 64 && t.is_uint() &&
+                alignment.modulus == 0 && alignment.remainder < 0) {
+                // Forget the leading two bits to get a representable modulus
+                // and remainder.
+                alignment.modulus = (int64_t)1 << 62;
+                alignment.remainder = alignment.remainder & (alignment.modulus - 1);
+            }
+
             bounds.cast_to(t);
         }
 
@@ -241,6 +249,10 @@ public:
     // We never want to return make_const anything in the simplifier without
     // also setting the ExprInfo, so shadow the global make_const.
     Expr make_const(const Type &t, int64_t c, ExprInfo *info) {
+        if (t.is_uint() && c < 0) {
+            // Wrap it around
+            return make_const(t, (uint64_t)c, info);
+        }
         c = normalize_constant(t, c);
         set_expr_info_to_constant(info, c);
         return Halide::Internal::make_const(t, c);

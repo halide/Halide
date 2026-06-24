@@ -141,8 +141,7 @@ public:
 }  // namespace
 
 Expr lower_random(const Expr &e, const vector<VarOrRVar> &free_vars, int tag) {
-    LowerRandom r(free_vars, tag);
-    return r.mutate(e);
+    return LowerRandom(free_vars, tag)(e);
 }
 
 }  // namespace Internal

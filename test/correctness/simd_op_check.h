@@ -18,16 +18,16 @@ using namespace Halide;
 Expr input(const Type &t, const Expr &arg) {
     return Internal::Call::make(t, "input", {arg}, Internal::Call::Extern);
 }
-Expr in_f16(const Expr &arg) {
+[[maybe_unused]] Expr in_f16(const Expr &arg) {
     return input(Float(16), arg);
 }
-Expr in_bf16(const Expr &arg) {
+[[maybe_unused]] Expr in_bf16(const Expr &arg) {
     return input(BFloat(16), arg);
 }
-Expr in_f32(const Expr &arg) {
+[[maybe_unused]] Expr in_f32(const Expr &arg) {
     return input(Float(32), arg);
 }
-Expr in_f64(const Expr &arg) {
+[[maybe_unused]] Expr in_f64(const Expr &arg) {
     return input(Float(64), arg);
 }
 Expr in_i8(const Expr &arg) {
@@ -167,10 +167,7 @@ public:
         std::string fn_name = "test_" + name + "_vecwidth" + std::to_string(vector_width);
         std::string file_name = output_directory + fn_name;
 
-        auto ext = Internal::get_output_info(target);
         std::map<OutputFileType, std::string> outputs = {
-            {OutputFileType::c_header, file_name + ext.at(OutputFileType::c_header).extension},
-            {OutputFileType::object, file_name + ext.at(OutputFileType::object).extension},
             {OutputFileType::assembly, file_name + ".s"},
             {OutputFileType::llvm_assembly, file_name + ".ll"},
         };
@@ -297,7 +294,7 @@ public:
                 : image_params(image_params) {
             }
         } hook_up_image_params(image_params);
-        e = hook_up_image_params.mutate(e);
+        e = hook_up_image_params(e);
 
         class HasInlineReduction : public Internal::IRVisitor {
             using Internal::IRVisitor::visit;
@@ -350,22 +347,22 @@ public:
                 .vectorize(xi);
         }
 
-        // We'll check over H rows, but we won't let the pipeline know H
-        // statically, as that can trigger some simplifications that change
-        // instruction selection.
-        Param<int> rows;
-        rows.set(H);
-        arg_types.push_back(rows);
-
-        // The output to the pipeline is the maximum absolute difference as a double.
-        RDom r_check(0, W, 0, rows);
-        Halide::Func error("error_" + name);
-        error() = Halide::cast<double>(maximum(absd(f(r_check.x, r_check.y), f_scalar(r_check.x, r_check.y))));
-
-        compile_and_check(error, op, name, vector_width, arg_types, error_msg);
+        compile_and_check(f, op, name, vector_width, arg_types, error_msg);
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
+            // We'll check over H rows, but we won't let the pipeline know H
+            // statically, as that can trigger some simplifications that change
+            // instruction selection.
+            Param<int> rows;
+            rows.set(H);
+            arg_types.push_back(rows);
+
+            // The output to the pipeline is the maximum absolute difference as a double.
+            RDom r_check(0, W, 0, rows);
+            Halide::Func error("error_" + name);
+            error() = Halide::cast<double>(maximum(absd(f(r_check.x, r_check.y), f_scalar(r_check.x, r_check.y))));
+
             Target run_target = get_run_target();
 
             // Make some unallocated input buffers
@@ -503,7 +500,14 @@ public:
             if (!sharder.should_run(t)) continue;
             const auto &task = tasks.at(t);
             futures.push_back(pool.async([&]() {
-                return check_one(task.op, task.name, task.vector_width, task.expr);
+                // Run check_one on a large-stack thread to avoid overflowing the
+                // default 512 KB worker stack during deeply recursive LLVM codegen
+                // (especially under coverage instrumentation).
+                TestResult result;
+                Internal::run_with_large_stack([&] {
+                    result = check_one(task.op, task.name, task.vector_width, task.expr);
+                });
+                return result;
             }));
         }
 

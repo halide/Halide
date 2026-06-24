@@ -16,7 +16,6 @@ using std::string;
 using std::vector;
 
 Simplify::Simplify(const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) {
-
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
         ExprInfo info;
@@ -450,7 +449,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
             std::vector<pair<Type, string>> out_vars;
         } renamer;
 
-        e = renamer.mutate(e);
+        e = renamer(e);
 
         // Look for a concrete counter-example with random probing
         static std::mt19937 rng(0);

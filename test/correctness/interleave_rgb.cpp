@@ -103,6 +103,16 @@ bool test_deinterleave(int x_stride) {
 }
 
 int main(int argc, char **argv) {
+    // LLVM 20 is missing llvm.vector.deinterleave4 for SVE and LLVM 21
+    // asserts (getFixedValue on scalable TypeSize). Fixed in LLVM 22 by:
+    // https://github.com/llvm/llvm-project/commit/d1500d12be60 (PR #169764)
+    if (Internal::get_llvm_version() < 220 &&
+        get_jit_target_from_environment().has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
+               Internal::get_llvm_version());
+        return 0;
+    }
+
     for (int x_stride : {3, 4}) {
         if (!test_interleave<uint8_t>(x_stride)) return 1;
         if (!test_interleave<uint16_t>(x_stride)) return 1;

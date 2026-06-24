@@ -17,7 +17,22 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         // know.
         *info = ExprInfo{};
     } else {
+        int64_t old_min = value_info.bounds.min;
+        bool old_min_defined = value_info.bounds.min_defined;
         value_info.cast_to(op->type);
+        if (value.type().is_float() && op->type.is_int_or_uint()) {
+            // ExprInfo::cast_to handles integer casts, where narrowing wraps
+            // and preserves alignment modulo the destination width. Float to
+            // integer casts saturate instead, so the old alignment can be
+            // wrong after the cast.
+            value_info.alignment = ModulusRemainder();
+        }
+        if (op->type.is_uint() && op->type.bits() == 64 && old_min_defined && old_min > 0) {
+            // It's impossible for a cast *to* a uint64 in Halide to lower the
+            // min. Casts to uint64_t don't overflow for any source type.
+            value_info.bounds.min_defined = true;
+            value_info.bounds.min = old_min;
+        }
         value_info.trim_bounds_using_alignment();
         if (info) {
             *info = value_info;
@@ -25,7 +40,7 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         // It's possible we just reduced to a constant. E.g. if we cast an
         // even number to uint1 we get zero.
         if (value_info.bounds.is_single_point()) {
-            return make_const(op->type, value_info.bounds.min, nullptr);
+            return make_const(op->type, value_info.bounds.min, info);
         }
     }
 
@@ -102,13 +117,14 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
     } else if (cast &&
                op->type.is_int_or_uint() &&
                cast->type.is_int_or_uint() &&
+               cast->value.type().is_int_or_uint() &&
                op->type.bits() <= cast->type.bits() &&
                op->type.bits() <= op->value.type().bits()) {
         // If this is a cast between integer types, where the
         // outer cast is narrower than the inner cast and the
         // inner cast's argument, the inner cast can be
-        // eliminated. The inner cast is either a sign extend
-        // or a zero extend, and the outer cast truncates the extended bits
+        // eliminated. The inner cast is either a sign-extend
+        // or a zero-extend, and the outer cast truncates the extended bits.
         if (op->type == cast->value.type()) {
             return mutate(cast->value, info);
         } else {

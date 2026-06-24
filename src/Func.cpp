@@ -16,6 +16,7 @@
 #include "CodeGen_LLVM.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
+#include "FindCalls.h"
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
@@ -614,7 +615,7 @@ vector<Expr> substitute_self_reference(const vector<Expr> &values, const string 
     vector<Expr> result;
     result.reserve(values.size());
     for (const auto &val : values) {
-        result.push_back(subs.mutate(val));
+        result.push_back(subs(val));
     }
     return result;
 }
@@ -1072,9 +1073,19 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     return intm;
 }
 
-void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor, bool exact, TailStrategy tail) {
+void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor_arg, bool exact, TailStrategy tail) {
     debug(4) << "In schedule for " << name() << ", split " << old << " into "
-             << outer << " and " << inner << " with factor of " << factor << "\n";
+             << outer << " and " << inner << " with factor of " << factor_arg << "\n";
+
+    user_assert(factor_arg.defined())
+        << "In schedule for " << name() << ", split factor for splitting "
+        << old << " is undefined.\n";
+    user_assert(Int(32).can_represent(factor_arg.type()))
+        << "In schedule for " << name() << ", split factor for splitting "
+        << old << " has type " << factor_arg.type()
+        << ", which is not representable as int32.\n";
+    Expr factor = cast<int32_t>(factor_arg);
+
     vector<Dim> &dims = definition.schedule().dims();
 
     definition.schedule().touched() = true;
@@ -2176,7 +2187,60 @@ Func create_clone_wrapper(Function wrapped_fn, const string &wrapper_name) {
     return wrapper;
 }
 
-Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &fs, bool clone) {
+// Walk down the call graph from 'start'. Whenever we find a Func that directly
+// calls 'target', record it and stop descending that branch — we don't want to
+// pick up unrelated direct callers that happen to live deeper in the subtree.
+void collect_direct_callers_of(const Function &target,
+                               const Function &start,
+                               std::set<std::string> &visited,
+                               std::map<std::string, Function> &result) {
+    if (start.name() == target.name()) {
+        return;
+    }
+    if (!visited.insert(start.name()).second) {
+        return;
+    }
+    std::map<std::string, Function> direct = find_direct_calls(start);
+    if (direct.count(target.name())) {
+        result.emplace(start.name(), start);
+        return;
+    }
+    for (const auto &kv : direct) {
+        collect_direct_callers_of(target, kv.second, visited, result);
+    }
+}
+
+// Expand a user-supplied list of caller Funcs to the set of *direct* callers of
+// 'target' that lie on a path from any of those callers down to 'target'.
+// Funcs that already directly call 'target' pass through unchanged. If a Func
+// has no static path to 'target' at all, leave it alone: the IR may not yet
+// reflect a wrapper rewrite from a previous in()/clone_in(), and the existing
+// in()/clone_in() semantics permit registering a wrapper for such Funcs.
+vector<Func> resolve_transitive_callers(const Function &target, const vector<Func> &fs) {
+    vector<Func> out;
+    std::set<std::string> emitted;
+    auto emit = [&](const Function &g) {
+        if (emitted.insert(g.name()).second) {
+            out.emplace_back(g);
+        }
+    };
+    for (const Func &f : fs) {
+        std::map<std::string, Function> direct_callers;
+        std::set<std::string> visited;
+        collect_direct_callers_of(target, f.function(), visited, direct_callers);
+        if (direct_callers.empty()) {
+            emit(f.function());
+        } else {
+            for (const auto &kv : direct_callers) {
+                emit(kv.second);
+            }
+        }
+    }
+    return out;
+}
+
+Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &fs_in, bool clone) {
+    vector<Func> fs = fs_in.empty() ? fs_in : resolve_transitive_callers(wrapped_fn, fs_in);
     // Either all Funcs in 'fs' have the same wrapper or they don't already
     // have any wrappers. Otherwise, throw an error. If 'fs' is empty, then
     // it is a global wrapper.
@@ -3190,7 +3254,7 @@ Func define_base_case(const Internal::Function &func, const vector<Expr> &a, con
     // Reuse names of existing pure args
     for (size_t i = 0; i < a.size(); i++) {
         if (const Variable *v = a[i].as<Variable>()) {
-            if (!v->param.defined()) {
+            if (!v->param.defined() && !v->reduction_domain.defined()) {
                 pure_args[i] = Var(v->name);
             }
         } else {
