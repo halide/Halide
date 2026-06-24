@@ -75,11 +75,11 @@ class BaseCaseSolver : public IRVisitor {
                     bounds.push(vars[i], condition_intervals[i]);
                 }
                 op->args[2].accept(this);
-                condition_intervals = old_intervals;
                 for (const auto &var : vars) {
                     bounds.pop(var);
                 }
             }
+            condition_intervals = old_intervals;
             nested_select -= 1;
         } else if (op->name == func) {
             user_assert(nested_select > 0) << "Function " << func << " contains an inductive function reference outside of a select operation value.\n";
