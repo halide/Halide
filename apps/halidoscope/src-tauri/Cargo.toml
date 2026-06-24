@@ -1,8 +1,8 @@
 [package]
-name = "frontend"
+name = "halidoscope"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "An interactive visualizer for Halide traces."
+authors = ["Parker Ziegler <pziegler@adobe.com>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,7 +11,7 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "frontend_lib"
+name = "halidoscope_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -30,7 +30,7 @@ tauri-plugin-cli = "2.0.0"
 # `tauri dev` builds with the dev profile, whose default opt-level = 0 leaves the
 # trace parser (a tight binary loop over millions of packets) badly unoptimized
 # — multi-minute loads on large traces. Optimize codegen while keeping fast
-# incremental builds and debuggability. This is the single biggest startup win.
+# incremental builds and debuggability.
 [profile.dev]
 opt-level = 3
 
