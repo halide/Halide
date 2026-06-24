@@ -4,6 +4,7 @@ export type VisualizationMode =
   | "True Values"
   | "Store Frequency"
   | "Load Frequency"
-  | "Redundant Stores";
+  | "Redundant Stores"
+  | "Reuse Distance";
 
 export const visualizationModeAtom = atom<VisualizationMode>("True Values");

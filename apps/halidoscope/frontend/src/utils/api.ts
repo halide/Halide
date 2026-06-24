@@ -43,7 +43,7 @@ export async function renderAt(
 export async function renderHeatmap(
   func: string,
   globalIndex: number,
-  mode: Exclude<VisualizationMode, "True Values" | "Redundant Stores">,
+  mode: Exclude<VisualizationMode, "True Values" | "Redundant Stores" | "Reuse Distance">,
 ): Promise<ArrayBuffer> {
   return invoke<ArrayBuffer>("render_heatmap", { func, globalIndex, mode });
 }
@@ -59,4 +59,18 @@ export async function renderRedundant(
   globalIndex: number,
 ): Promise<ArrayBuffer> {
   return invoke<ArrayBuffer>("render_redundant", { func, globalIndex });
+}
+
+/**
+ * Render a heatmap of maximum store-to-load reuse distances for `func` up to
+ * `globalIndex`. Reuse distance is measured in total packets elapsed between a
+ * store and the next load from the same (x, y, channel). Returns a
+ * `width * height * 4` RGBA8 buffer; pixels with no store→load pair are black,
+ * positive distances map through the Inferno colormap.
+ */
+export async function renderReuseDistance(
+  func: string,
+  globalIndex: number,
+): Promise<ArrayBuffer> {
+  return invoke<ArrayBuffer>("render_reuse_distance", { func, globalIndex });
 }

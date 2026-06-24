@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tauri::ipc::Response;
 use tauri::State;
 
-use crate::render::{HeatmapState, RedundantState, RenderState};
+use crate::render::{HeatmapState, RedundantState, RenderState, ReuseDistanceState};
 use crate::trace::Trace;
 
 /// How a Func's values are mapped to pixels.
@@ -49,10 +49,7 @@ pub struct FuncMeta {
     pub height: u32,
     pub channels: u32,
     pub default_mode: RenderMode,
-    /// Number of store events for this Func across the whole trace.
     pub num_stores: u32,
-    /// Per-dimension coordinate extent, half-open `[min, max)`. Surfaced for the
-    /// funcs inspector panel.
     pub min_coords: Vec<i32>,
     pub max_coords: Vec<i32>,
     pub min_value: Option<f64>,
@@ -60,12 +57,13 @@ pub struct FuncMeta {
     pub max_store_count: i32,
     pub max_load_count: i32,
     pub max_redundant_count: i32,
-    /// Frequency distributions of per-pixel counts, indexed by count value (the `0` bin is
-    /// included). Length is the corresponding `max_*_count + 1`; empty when the Func has no
-    /// usable extent. Rendered directly as histograms by the frontend.
+    pub max_reuse_distance: i64,
     pub store_count_histogram: Vec<u32>,
     pub load_count_histogram: Vec<u32>,
     pub redundant_count_histogram: Vec<u32>,
+    pub reuse_distance_histogram: Vec<u32>,
+    pub liveness_start: u32,
+    pub liveness_end: u32,
 }
 
 /// Top-level payload returned by `open_trace`.
@@ -77,6 +75,7 @@ pub struct TraceMeta {
     pub global_max_store_count: i32,
     pub global_max_load_count: i32,
     pub global_max_redundant_count: i32,
+    pub global_max_reuse_distance: i64,
 }
 
 impl TraceMeta {
@@ -87,6 +86,7 @@ impl TraceMeta {
         let mut global_max_store_count = 0;
         let mut global_max_load_count = 0;
         let mut global_max_redundant_count = 0;
+        let mut global_max_reuse_distance = 0i64;
 
         let funcs = trace
             .funcs
@@ -110,6 +110,11 @@ impl TraceMeta {
                 if stats.max_redundant_count > global_max_redundant_count {
                     global_max_redundant_count = stats.max_redundant_count;
                 }
+                if stats.max_reuse_distance > global_max_reuse_distance {
+                    global_max_reuse_distance = stats.max_reuse_distance;
+                }
+
+                let liveness_range = trace.func_liveness_range(name).unwrap_or(&(0, 0));
 
                 FuncMeta {
                     name: name.clone(),
@@ -125,9 +130,13 @@ impl TraceMeta {
                     max_store_count: stats.max_store_count,
                     max_load_count: stats.max_load_count,
                     max_redundant_count: stats.max_redundant_count,
+                    max_reuse_distance: stats.max_reuse_distance,
                     store_count_histogram: stats.store_count_histogram.clone(),
                     load_count_histogram: stats.load_count_histogram.clone(),
                     redundant_count_histogram: stats.redundant_count_histogram.clone(),
+                    reuse_distance_histogram: stats.reuse_distance_histogram.clone(),
+                    liveness_start: liveness_range.0,
+                    liveness_end: liveness_range.1,
                 }
             })
             .collect();
@@ -145,6 +154,7 @@ impl TraceMeta {
             global_max_store_count,
             global_max_load_count,
             global_max_redundant_count,
+            global_max_reuse_distance,
         }
     }
 }
@@ -158,6 +168,7 @@ struct Loaded {
     renderers: HashMap<String, RenderState>,
     heatmap_renderers: HashMap<String, HeatmapState>,
     redundant_renderers: HashMap<String, RedundantState>,
+    reuse_distance_renderers: HashMap<String, ReuseDistanceState>,
 }
 
 /// App-wide state managed by Tauri. A single trace is loaded at a time; opening a new one replaces
@@ -182,6 +193,7 @@ pub fn open_trace(path: String, state: State<AppState>) -> Result<TraceMeta, Str
         renderers: HashMap::new(),
         heatmap_renderers: HashMap::new(),
         redundant_renderers: HashMap::new(),
+        reuse_distance_renderers: HashMap::new(),
     });
     Ok(meta)
 }
@@ -286,6 +298,44 @@ pub fn render_redundant(
     let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
     let k = store_indices.partition_point(|&p| p <= global_index as usize);
     rs.seek(trace, store_indices, k);
+
+    Ok(Response::new(rs.to_rgba()))
+}
+
+/// Renders a heatmap of maximum store-to-load reuse distances for `func` up to `global_index`
+/// and returns raw RGBA8 bytes. Reuse distance is the number of packets elapsed between a store
+/// and the next load from the same (x, y, channel). Both event streams are merged in global order
+/// so the two-pointer seek reflects the correct pairing. Pixels with no observed store→load pair
+/// are black; positive distances map through the Inferno colormap normalized against the per-Func
+/// full-trace maximum.
+#[tauri::command]
+pub fn render_reuse_distance(
+    func: String,
+    global_index: u32,
+    state: State<AppState>,
+) -> Result<Response, String> {
+    let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
+    let loaded = guard.as_mut().ok_or("no trace loaded")?;
+    let Loaded {
+        trace,
+        reuse_distance_renderers,
+        ..
+    } = loaded;
+
+    if !reuse_distance_renderers.contains_key(&func) {
+        let rs = ReuseDistanceState::new(trace, &func)
+            .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
+        reuse_distance_renderers.insert(func.clone(), rs);
+    }
+    let rs = reuse_distance_renderers
+        .get_mut(&func)
+        .expect("just inserted");
+
+    let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
+    let load_indices = trace.func_load_indices(&func).unwrap_or(&[]);
+    let store_k = store_indices.partition_point(|&p| p <= global_index as usize);
+    let load_k = load_indices.partition_point(|&p| p <= global_index as usize);
+    rs.seek(trace, store_indices, load_indices, store_k, load_k);
 
     Ok(Response::new(rs.to_rgba()))
 }

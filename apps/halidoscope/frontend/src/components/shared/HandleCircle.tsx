@@ -10,7 +10,7 @@ function HandleCircle() {
       height="20"
       className="pointer-events-none absolute top-1/2 left-1/2"
       style={{
-        transform: `translate(-50%, -50%) scale(clamp(0.25, ${0.5 / zoom}, 1))`,
+        transform: `translate(-50%, -50%) scale(min(${0.5 / zoom}, 0.25))`,
       }}
     >
       <circle cx="10" cy="10" r="8" className="fill-ps-text-primary" />
