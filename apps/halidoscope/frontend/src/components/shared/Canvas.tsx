@@ -1,31 +1,24 @@
 import {
+  applyEdgeChanges,
   ReactFlow,
-  useEdgesState,
   useNodesState,
   useViewport,
   type Node,
   type Edge,
+  type EdgeChange,
 } from "@xyflow/react";
-import { useSetAtom } from "jotai";
+import { useAtom, useSetAtom } from "jotai";
 import * as React from "react";
 
 import FuncCanvas from "@/components/views/tracer/FuncCanvas";
+import { funcAtom } from "@/state/func";
+import { edgesAtom } from "@/state/graph";
 import { FuncMeta, NodeTypes } from "@/types";
 import { buildEdges, buildNodes, getLayoutedElements } from "@/utils/graph";
-import { funcAtom } from "@/state/func";
 
 const NODE_TYPES = {
   funcCanvas: FuncCanvas,
 };
-
-function hideEdge(hidden: boolean) {
-  return function handleVisibilityChange(edge: Edge) {
-    return {
-      ...edge,
-      hidden,
-    };
-  };
-}
 
 interface CanvasProps {
   funcs: Record<string, FuncMeta>;
@@ -40,19 +33,25 @@ function Canvas({ funcs, dagEdges, type }: CanvasProps) {
 
   const [nodes, _setNodes, onNodesChange] =
     useNodesState<Node<FuncMeta>>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialEdges);
-  const [hidden, _setHidden] = React.useState<boolean>(false);
+  const [edges, setEdges] = useAtom(edgesAtom);
   const setFunc = useSetAtom(funcAtom);
+
+  React.useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
+
+  const onEdgesChange = React.useCallback(
+    (changes: EdgeChange<Edge>[]) => {
+      setEdges((eds) => applyEdgeChanges(changes, eds));
+    },
+    [setEdges],
+  );
 
   const { zoom } = useViewport();
 
   React.useEffect(() => {
     document.documentElement.style.setProperty("--zoom-level", zoom.toString());
   }, [zoom]);
-
-  React.useEffect(() => {
-    setEdges((eds) => eds.map(hideEdge(hidden)));
-  }, [hidden, setEdges]);
 
   return (
     <div className="relative h-full w-full">

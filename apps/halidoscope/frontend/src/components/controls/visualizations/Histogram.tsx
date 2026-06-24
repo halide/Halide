@@ -1,25 +1,32 @@
 import * as Plot from "@observablehq/plot";
 import * as d3 from "d3";
+import { useAtomValue } from "jotai";
 import * as React from "react";
 
-const RAMP_STOPS = 32;
-const STOPS = Array.from({ length: RAMP_STOPS + 1 }, (_, i) => {
-  const t = i / RAMP_STOPS;
-  return { offset: t, color: d3.rgb(d3.interpolateInferno(t)).formatHex() };
-});
-const RAMP_DY = 12;
+import { histogramAtom, HistogramScale } from "@/state/histogram";
 
 interface HistogramProps {
-  data: { x: number; y: number }[];
+  data: { x1: number; x2: number; y: number }[];
+  domain: [number, number];
   labels: {
     x: string;
   };
 }
 
-function Histogram({ data, labels }: HistogramProps) {
+function Histogram({ data, domain, labels }: HistogramProps) {
   const ref = React.useRef<HTMLDivElement>(null);
-  const gradient = React.useRef<SVGLinearGradientElement>(null);
-  const rampId = `histogram-ramp-${React.useId().replace(/:/g, "")}`;
+  const histogramScale = useAtomValue(histogramAtom) as HistogramScale;
+  // Build the data for the bottom colorbar.
+  const colorbar = React.useMemo(() => {
+    const range = domain[1] - domain[0];
+    const count = range <= 64 ? range : 64;
+    const step = range / count;
+    return new Array(count).fill(0).map((_, i) => ({
+      x1: domain[0] + i * step,
+      x2: domain[0] + (i + 1) * step,
+      y: 0,
+    }));
+  }, [domain]);
 
   React.useEffect(() => {
     if (!ref.current) {
@@ -33,87 +40,68 @@ function Histogram({ data, labels }: HistogramProps) {
       marginBottom: 60,
       y: {
         grid: true,
-        label: "Pixel Count",
+        label: "Coordinate Count",
         tickFormat: (value) => d3.format(".2s")(value),
+        ticks: 8,
       },
       x: {
+        domain,
         label: labels.x,
         labelAnchor: "right",
         labelArrow: "right",
-        tickSize: 0,
+        tickFormat: (value) => d3.format(".2s")(value),
         tickPadding: 24,
+        tickSize: 0,
+        type: histogramScale,
+        interval: domain[1] <= 64 ? 1 : undefined,
       },
       color: {
+        // Constrain the color scale to the bounds used for computing the canvas
+        // on the backend.
+        domain: [0, domain[1] - 1],
         scheme: "Inferno",
+        type: "linear",
       },
       marks: [
-        Plot.barY(data, { x: "x", y: "y", fill: "x" }),
-        Plot.ruleY([0], {
-          stroke: `url(#${rampId})`,
+        Plot.rectY(data, { x1: "x1", x2: "x2", y: "y", fill: "x1" }),
+        Plot.ruleY(colorbar, {
+          stroke: "x1",
           strokeWidth: 8,
-          dy: RAMP_DY,
+          x1: "x1",
+          x2: "x2",
+          y: 0,
+          dy: 12,
         }),
       ],
     });
 
     ref.current.append(plot);
 
-    const xScale = plot.scale("x");
-    if (xScale && gradient.current && data.length > 0) {
-      const bandwidth = xScale.bandwidth ?? 0;
-      const left = xScale.apply(data[0]!.x);
-      const right = xScale.apply(data[data.length - 1]!.x) + bandwidth;
-
-      gradient.current.setAttribute("x1", String(left));
-      gradient.current.setAttribute("x2", String(right));
-
-      // Plot draws the rule across the full frame; clip its rendered line(s) to the same
-      // footprint so the strip starts and ends with the bars rather than at the axes. The rule
-      // group is the only element stroked with our gradient, so we can find it by that url.
-      plot
-        .querySelector(`[stroke="url(#${rampId})"]`)
-        ?.querySelectorAll("line")
-        .forEach((line) => {
-          line.setAttribute("x1", String(left));
-          line.setAttribute("x2", String(right));
-        });
-    }
-
     return () => {
       plot.remove();
     };
-  }, [data, labels, rampId]);
+  }, [data, domain, labels, histogramScale, colorbar]);
 
-  return (
-    <>
+  return data.every((d) => d.y === 0) ? (
+    <div className="flex h-full flex-col items-center justify-center gap-2">
       <svg
-        width="0"
-        height="0"
-        aria-hidden="true"
-        style={{ position: "absolute" }}
+        xmlns="http://www.w3.org/2000/svg"
+        className="text-ps-text-secondary h-12 w-12"
+        fill="none"
+        viewBox="0 0 24 24"
+        strokeWidth="1"
+        stroke="currentColor"
       >
-        <defs>
-          <linearGradient
-            ref={gradient}
-            id={rampId}
-            gradientUnits="userSpaceOnUse"
-            x1="0"
-            y1="0"
-            x2="1"
-            y2="0"
-          >
-            {STOPS.map((stop) => (
-              <stop
-                key={stop.offset}
-                offset={stop.offset}
-                stopColor={stop.color}
-              />
-            ))}
-          </linearGradient>
-        </defs>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 4.5l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"
+        />
       </svg>
-      <div ref={ref} />
-    </>
+      <span className="text-ps-text-secondary text-sm">No data to display</span>
+    </div>
+  ) : (
+    <div ref={ref} />
   );
 }
 

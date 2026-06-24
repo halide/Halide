@@ -20,15 +20,13 @@ export interface FuncMeta extends Record<string, unknown> {
   max_store_count: number;
   max_load_count: number;
   max_redundant_count: number;
-  /**
-   * Frequency distributions of per-pixel counts, indexed by count value (index `k` holds the
-   * number of pixel locations with exactly `k` stores/loads/redundant stores). The `0` bin is
-   * included. Length is the corresponding `max_*_count + 1`; empty when the Func has no usable
-   * extent. Ready to render directly as a histogram.
-   */
+  max_reuse_distance: number;
   store_count_histogram: number[];
   load_count_histogram: number[];
   redundant_count_histogram: number[];
+  reuse_distance_histogram: number[];
+  liveness_start: number;
+  liveness_end: number;
 }
 
 /** Top-level payload returned by `open_trace`. Mirrors the Rust `TraceMeta`. */
@@ -39,6 +37,7 @@ export interface TraceMeta {
   global_max_store_count: number;
   global_max_load_count: number;
   global_max_redundant_count: number;
+  global_max_reuse_distance: number;
 }
 
 export type NodeTypes = "funcCanvas";
