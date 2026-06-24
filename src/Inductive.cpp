@@ -31,10 +31,6 @@ class BaseCaseSolver : public IRVisitor {
 
     int nested_select = 0;
 
-    void visit(const Select *op) override {
-        std::cout << "what";
-    }
-
     void visit(const Call *op) override {
         if (op->is_intrinsic(Call::if_then_else)) {
             // Theoretically there is no need to check op->args[0].
