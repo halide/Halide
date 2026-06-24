@@ -1,14 +1,11 @@
 include ../support/Makefile.inc
 
 # process.cpp compares against OpenCV's StereoBM.
-# Auto-disable if opencv4 is not available via pkg-config.
+# Auto-disable if opencv4 calib3d header is not available.
 OPENCV_CXXFLAGS := $(shell pkg-config --cflags opencv4 2>/dev/null)
 OPENCV_LIBS := $(shell pkg-config --libs opencv4 2>/dev/null)
-ifeq ($(OPENCV_CXXFLAGS),)
-  STEREOBM_BUILD_OPENCV ?= 0
-else
-  STEREOBM_BUILD_OPENCV ?= 1
-endif
+HAVE_OPENCV_CALIB3D := $(shell echo '\#include <opencv2/calib3d.hpp>' | $(CXX) $(OPENCV_CXXFLAGS) -x c++ - -fsyntax-only 2>/dev/null && echo yes)
+STEREOBM_BUILD_OPENCV ?= $(if $(HAVE_OPENCV_CALIB3D),1,0)
 
 # We set parameters here to feed into both OpenCV and our generator, so that they are consistent.
 STEREOBM_WINSIZE ?= 9
