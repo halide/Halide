@@ -1,8 +1,7 @@
 import halide as hl
 import numpy as np
-
-from simplepy_generator import SimplePy
 import simplecpp_pystub  # noqa: F401 - needed for create_callable_from_generator("simplecpp") to work
+from simplepy_generator import SimplePy
 
 
 def test_callable():
@@ -181,17 +180,25 @@ def test_callable_buffer_conventions():
 
         def generate(self):
             g = self
+            # Relax dim(0).stride == 1 constraint so that we can echo arbitrary strides.
+            g.input.dim(0).set_stride(hl.Expr())
             d = hl.Var("d")
-            g.output_extents[d] = hl.mux(d, [
-                g.input.dim(0).extent(),
-                g.input.dim(1).extent(),
-                g.input.dim(2).extent()
-            ])
-            g.output_strides[d] = hl.mux(d, [
-                g.input.dim(0).stride(),
-                g.input.dim(1).stride(),
-                g.input.dim(2).stride()
-            ])
+            g.output_extents[d] = hl.mux(
+                d,
+                [
+                    g.input.dim(0).extent(),
+                    g.input.dim(1).extent(),
+                    g.input.dim(2).extent(),
+                ],
+            )
+            g.output_strides[d] = hl.mux(
+                d,
+                [
+                    g.input.dim(0).stride(),
+                    g.input.dim(1).stride(),
+                    g.input.dim(2).stride(),
+                ],
+            )
 
     with hl.GeneratorContext(hl.Target("host-debug")):
         echo_dims = EchoDims()
@@ -199,10 +206,11 @@ def test_callable_buffer_conventions():
 
         output_extents = hl.Buffer(hl.Int(32), [3])
         output_strides = hl.Buffer(hl.Int(32), [3])
-        
-        # C-contiguous input reverses dimensions.
-        # Note that numpy defaults to `order='C'`.
-        input_c = np.zeros((16, 12, 3), dtype=np.int32, order='C')
+
+        # Test that buffer protocol arguments always reverse axes, regardless of storage order.
+
+        # C-contiguous input (numpy's default order; order="C" is superfluous).
+        input_c = np.zeros((16, 12, 3), dtype=np.int32, order="C")
         echo_dims_callable(input_c, output_extents, output_strides)
         assert output_extents[0] == 3
         assert output_extents[1] == 12
@@ -211,33 +219,47 @@ def test_callable_buffer_conventions():
         assert output_strides[1] == 3
         assert output_strides[2] == 36
 
-        # F-contiguous input preserves dimensions.
-        input_f = np.zeros((16, 12, 3), dtype=np.int32, order='F')
+        # F-contiguous input reverses axes too (it is no longer left as-is).
+        input_f = np.zeros((16, 12, 3), dtype=np.int32, order="F")
         echo_dims_callable(input_f, output_extents, output_strides)
-        assert output_extents[0] == 16
+        assert output_extents[0] == 3
         assert output_extents[1] == 12
-        assert output_extents[2] == 3
-        assert output_strides[0] == 1
+        assert output_extents[2] == 16
+        assert output_strides[0] == 192
         assert output_strides[1] == 16
-        assert output_strides[2] == 192
+        assert output_strides[2] == 1
 
-        # Non-contiguous inputs are rejected.
-        input_noncontig = np.zeros((16, 12, 3), dtype=np.int32)
-        input_noncontig = np.transpose(input_noncontig, (1, 0, 2))
-        try:
-            echo_dims_callable(input_noncontig, output_extents, output_strides)
-        except hl.HalideError as e:
-            assert "Invalid buffer: only C or F contiguous buffers are supported" in str(e)
-        else:
-            assert False, "Did not see expected exception!"
+        # Non-contiguous inputs are allowed.
+        # input_noncontig has shape (12, 16, 3) and strides (0, 36, 1) (in elements).
+        # Halide will reverse axes.
+        input_noncontig = np.transpose(np.zeros((16, 12, 3), dtype=np.int32), (1, 0, 2))
+        echo_dims_callable(input_noncontig, output_extents, output_strides)
+        assert output_extents[0] == 3
+        assert output_extents[1] == 16
+        assert output_extents[2] == 12
+        assert output_strides[0] == 1
+        assert output_strides[1] == 36
+        assert output_strides[2] == 3
+
+        # Negative strides are allowed.
+        # Halide reverses axes.
+        input_neg = np.zeros((16, 12, 3), dtype=np.int32)[::-1, :, :]
+        echo_dims_callable(input_neg, output_extents, output_strides)
+        assert output_extents[0] == 3
+        assert output_extents[1] == 12
+        assert output_extents[2] == 16
+        # Reversing axis 0 makes its stride negative; after axis reversal that
+        # axis becomes Halide's last dimension (dim 2).
+        assert output_strides[0] == 1
+        assert output_strides[1] == 3
+        assert output_strides[2] == -36
 
 
 if __name__ == "__main__":
     # test_callable()
 
     def via_simplecpp_pystub(target, generator_params):
-        return hl.create_callable_from_generator(target, "simplecpp",
-                                                 generator_params)
+        return hl.create_callable_from_generator(target, "simplecpp", generator_params)
 
     def via_simplepy(target, generator_params):
         with hl.GeneratorContext(target):
