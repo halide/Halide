@@ -11,6 +11,7 @@ const VISUALIZATION_MODES = [
   { value: "Store Frequency", label: "Store Frequency" },
   { value: "Load Frequency", label: "Load Frequency" },
   { value: "Redundant Stores", label: "Redundant Stores" },
+  { value: "Reuse Distance", label: "Reuse Distance" },
 ] as const;
 
 function VisualizationSelect() {

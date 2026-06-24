@@ -179,6 +179,7 @@ pub struct RedundantState {
     last_values: Vec<Option<u64>>,
     /// Redundant-store count per spatial pixel, indexed by `y * width + x`.
     redundant_counts: Vec<i32>,
+    global_max_redundant_count: i32,
     applied_k: usize,
 }
 
@@ -187,10 +188,17 @@ impl RedundantState {
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
         let n_pixels = geom.width * geom.height;
+        let global_max_redundant_count = trace
+            .funcs
+            .values()
+            .map(|s| s.max_redundant_count)
+            .max()
+            .unwrap_or(0);
         Some(Self {
             geom,
             last_values: vec![None; n_pixels * geom.channels],
             redundant_counts: vec![0i32; n_pixels],
+            global_max_redundant_count,
             applied_k: 0,
         })
     }
@@ -257,22 +265,17 @@ impl RedundantState {
 
     /// Produces a `width × height × 4` RGBA8 buffer. Pixels with zero redundant stores are black;
     /// pixels with one or more are mapped through the Reds colormap, normalized against the
-    /// per-Func full-trace maximum so the scale is stable while scrubbing.
+    /// global full-trace maximum so intensities are comparable across all Funcs.
     pub fn to_rgba(&self) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            max_redundant_count,
-            ..
-        } = self.geom;
+        let FuncGeometry { width, height, .. } = self.geom;
 
         let gradient = colorous::INFERNO;
         let lut: [[u8; 3]; 256] = std::array::from_fn(|i| {
             let c = gradient.eval_continuous(i as f64 / 255.0);
             [c.r, c.g, c.b]
         });
-        let scale = if max_redundant_count > 0 {
-            255.0 / max_redundant_count as f64
+        let scale = if self.global_max_redundant_count > 0 {
+            255.0 / self.global_max_redundant_count as f64
         } else {
             0.0
         };
@@ -303,6 +306,8 @@ pub struct HeatmapState {
     geom: FuncGeometry,
     mode: HeatmapMode,
     counts: Vec<i32>,
+    global_max_store_count: i32,
+    global_max_load_count: i32,
     applied_k: usize,
 }
 
@@ -311,10 +316,24 @@ impl HeatmapState {
     pub fn new(trace: &Trace, func: &str, mode: HeatmapMode) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
         let counts = vec![0i32; geom.width * geom.height];
+        let global_max_store_count = trace
+            .funcs
+            .values()
+            .map(|s| s.max_store_count)
+            .max()
+            .unwrap_or(0);
+        let global_max_load_count = trace
+            .funcs
+            .values()
+            .map(|s| s.max_load_count)
+            .max()
+            .unwrap_or(0);
         Some(Self {
             geom,
             mode,
             counts,
+            global_max_store_count,
+            global_max_load_count,
             applied_k: 0,
         })
     }
@@ -366,19 +385,13 @@ impl HeatmapState {
     }
 
     /// Produces a `width × height × 4` RGBA8 buffer with the inferno colormap applied. Counts are
-    /// normalized against the per-Func full-trace maximum so the scale is consistent as the
-    /// playhead moves.
+    /// normalized against the global full-trace maximum so intensities are comparable across all
+    /// Funcs.
     pub fn to_rgba(&self) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            max_store_count,
-            max_load_count,
-            ..
-        } = self.geom;
+        let FuncGeometry { width, height, .. } = self.geom;
         let max_count = match self.mode {
-            HeatmapMode::Stores => max_store_count,
-            HeatmapMode::Loads => max_load_count,
+            HeatmapMode::Stores => self.global_max_store_count,
+            HeatmapMode::Loads => self.global_max_load_count,
         };
 
         // Build a 256-entry LUT once before the pixel loop. Calling eval_continuous 256 times is
@@ -402,6 +415,222 @@ impl HeatmapState {
             chunk[0] = r;
             chunk[1] = g;
             chunk[2] = b;
+            chunk[3] = 255;
+        }
+        out
+    }
+}
+
+// ── Reuse distance rendering ──────────────────────────────────────────────────
+
+/// Per-pixel maximum reuse distance for one Func, seekable along the global timeline.
+///
+/// For intermediate Funcs (those with stores) the anchor is the most recent store per
+/// `(x, y, channel)`; reuse distance is measured to the next load from the same location.
+///
+/// For pipeline inputs (loads only, no stores) the anchor is the *first* load per location —
+/// treating that load as a free "memcpy" — and subsequent loads measure distance from it.
+///
+/// Both the store and load index lists are merged in global order during seeking.
+/// Backward seeks reset and replay from zero.
+pub struct ReuseDistanceState {
+    geom: FuncGeometry,
+    /// Whether this Func is a pipeline input (no store events in the trace).
+    is_input: bool,
+    /// Per `(x, y, channel)` anchor, flat row-major:
+    /// `anchor_at[(y * width + x) * channels + c]`.
+    /// For intermediate Funcs: global index of the most recent store (`usize::MAX` = none yet).
+    /// For inputs: global index of the first load (`usize::MAX` = none yet).
+    anchor_at: Vec<usize>,
+    /// Maximum observed reuse distance per spatial pixel, indexed by `y * width + x`.
+    max_reuse_distance: Vec<i64>,
+    /// Trace-wide maximum reuse distance, used to normalize the color scale consistently across
+    /// all Funcs regardless of which one is being viewed.
+    global_max_reuse_distance: i64,
+    /// Number of this Func's store events processed.
+    applied_store_k: usize,
+    /// Number of this Func's load events processed.
+    applied_load_k: usize,
+}
+
+impl ReuseDistanceState {
+    /// Builds an empty reuse distance state for `func`, or `None` if the Func has no usable
+    /// geometry.
+    pub fn new(trace: &Trace, func: &str) -> Option<Self> {
+        let geom = trace.func_geometry(func)?;
+        let n_cells = geom.width * geom.height * geom.channels;
+        let is_input = trace.func_store_indices(func).map_or(true, |s| s.is_empty());
+        let global_max_reuse_distance = trace
+            .funcs
+            .values()
+            .map(|s| s.max_reuse_distance)
+            .max()
+            .unwrap_or(0);
+        Some(Self {
+            geom,
+            is_input,
+            anchor_at: vec![usize::MAX; n_cells],
+            max_reuse_distance: vec![0i64; geom.width * geom.height],
+            global_max_reuse_distance,
+            applied_store_k: 0,
+            applied_load_k: 0,
+        })
+    }
+
+    fn reset(&mut self) {
+        self.anchor_at.iter_mut().for_each(|v| *v = usize::MAX);
+        self.max_reuse_distance.iter_mut().for_each(|d| *d = 0);
+        self.applied_store_k = 0;
+        self.applied_load_k = 0;
+    }
+
+    /// Seeks to the state after the first `target_store_k` stores and `target_load_k` loads.
+    /// Events are replayed in global packet order via a two-pointer merge of the two sorted index
+    /// lists. Backward seeks (either counter regresses) reset and replay from zero.
+    pub fn seek(
+        &mut self,
+        trace: &Trace,
+        store_indices: &[usize],
+        load_indices: &[usize],
+        target_store_k: usize,
+        target_load_k: usize,
+    ) {
+        let target_store_k = target_store_k.min(store_indices.len());
+        let target_load_k = target_load_k.min(load_indices.len());
+
+        if target_store_k < self.applied_store_k || target_load_k < self.applied_load_k {
+            self.reset();
+        }
+
+        let store_slice = &store_indices[self.applied_store_k..target_store_k];
+        let load_slice = &load_indices[self.applied_load_k..target_load_k];
+        let mut si = 0;
+        let mut li = 0;
+
+        while si < store_slice.len() || li < load_slice.len() {
+            let next_is_store = si < store_slice.len()
+                && (li >= load_slice.len() || store_slice[si] < load_slice[li]);
+
+            if next_is_store {
+                self.apply_store(&trace.packets[store_slice[si]], store_slice[si]);
+                si += 1;
+            } else {
+                self.apply_load(&trace.packets[load_slice[li]], load_slice[li]);
+                li += 1;
+            }
+        }
+
+        self.applied_store_k = target_store_k;
+        self.applied_load_k = target_load_k;
+    }
+
+    fn apply_store(&mut self, pkt: &TracePacket, global_idx: usize) {
+        // Pipeline inputs have no stores; skip to avoid a stale anchor being set.
+        if self.is_input {
+            return;
+        }
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            min_x,
+            min_y,
+            min_c,
+            ..
+        } = self.geom;
+        let n_lanes = pkt.type_.lanes.max(1) as usize;
+        let dims_per_lane = pkt.coordinates.len() / n_lanes;
+        for lane in 0..n_lanes {
+            let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
+            if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
+                continue;
+            }
+            let c = if dims_per_lane >= 3 {
+                pkt.coordinates[2 * n_lanes + lane] - min_c
+            } else {
+                0
+            };
+            if c < 0 || c as usize >= channels {
+                continue;
+            }
+            let val_idx = (y as usize * width + x as usize) * channels + c as usize;
+            self.anchor_at[val_idx] = global_idx;
+        }
+    }
+
+    fn apply_load(&mut self, pkt: &TracePacket, global_idx: usize) {
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            min_x,
+            min_y,
+            min_c,
+            ..
+        } = self.geom;
+        let n_lanes = pkt.type_.lanes.max(1) as usize;
+        let dims_per_lane = pkt.coordinates.len() / n_lanes;
+        for lane in 0..n_lanes {
+            let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
+            if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
+                continue;
+            }
+            let c = if dims_per_lane >= 3 {
+                pkt.coordinates[2 * n_lanes + lane] - min_c
+            } else {
+                0
+            };
+            if c < 0 || c as usize >= channels {
+                continue;
+            }
+            let val_idx = (y as usize * width + x as usize) * channels + c as usize;
+            let pixel_idx = y as usize * width + x as usize;
+            if self.is_input {
+                // First load is the free memcpy; establish the anchor and record no distance.
+                // Subsequent loads to the same location measure from that first load.
+                if self.anchor_at[val_idx] == usize::MAX {
+                    self.anchor_at[val_idx] = global_idx;
+                } else {
+                    let dist = (global_idx - self.anchor_at[val_idx]) as i64;
+                    if dist > self.max_reuse_distance[pixel_idx] {
+                        self.max_reuse_distance[pixel_idx] = dist;
+                    }
+                }
+            } else if self.anchor_at[val_idx] != usize::MAX {
+                let dist = (global_idx - self.anchor_at[val_idx]) as i64;
+                if dist > self.max_reuse_distance[pixel_idx] {
+                    self.max_reuse_distance[pixel_idx] = dist;
+                }
+            }
+        }
+    }
+
+    /// Produces a `width × height × 4` RGBA8 buffer. Pixels with no observed store→load pair are
+    /// black; positive distances map through the Inferno colormap normalized against the per-Func
+    /// full-trace maximum so the scale is stable while scrubbing.
+    pub fn to_rgba(&self) -> Vec<u8> {
+        let FuncGeometry { width, height, .. } = self.geom;
+
+        let gradient = colorous::INFERNO;
+        let lut: [[u8; 3]; 256] = std::array::from_fn(|i| {
+            let c = gradient.eval_continuous(i as f64 / 255.0);
+            [c.r, c.g, c.b]
+        });
+        let scale = if self.global_max_reuse_distance > 0 {
+            255.0 / self.global_max_reuse_distance as f64
+        } else {
+            0.0
+        };
+
+        let mut out = vec![0u8; width * height * 4];
+        for (chunk, &dist) in out.chunks_exact_mut(4).zip(self.max_reuse_distance.iter()) {
+            if dist > 0 {
+                let ti = (dist as f64 * scale) as usize;
+                let [r, g, b] = lut[ti.min(255)];
+                chunk[0] = r;
+                chunk[1] = g;
+                chunk[2] = b;
+            }
             chunk[3] = 255;
         }
         out
