@@ -20,6 +20,8 @@ function App() {
   const [globalMaxLoadCount, setGlobalMaxLoadCount] = React.useState<number>(0);
   const [globalMaxRedundantCount, setGlobalMaxRedundantCount] =
     React.useState<number>(0);
+  const [globalMaxReuseDistance, setGlobalMaxReuseDistance] =
+    React.useState<number>(0);
 
   const setActiveFunc = useSetAtom(funcAtom);
 
@@ -44,6 +46,7 @@ function App() {
           global_max_store_count,
           global_max_load_count,
           global_max_redundant_count,
+          global_max_reuse_distance,
         } = await openTrace(resolved);
 
         const byName: Record<string, FuncMeta> = {};
@@ -57,6 +60,7 @@ function App() {
         setGlobalMaxStoreCount(global_max_store_count);
         setGlobalMaxLoadCount(global_max_load_count);
         setGlobalMaxRedundantCount(global_max_redundant_count);
+        setGlobalMaxReuseDistance(global_max_reuse_distance);
         setActiveFunc(funcs[0]?.name ?? "");
       } catch (err) {
         console.error("Error loading trace from CLI: ", err);
@@ -75,6 +79,7 @@ function App() {
         globalMaxStoreCount,
         globalMaxLoadCount,
         globalMaxRedundantCount,
+        globalMaxReuseDistance,
       }}
     >
       <main className="h-screen w-screen">

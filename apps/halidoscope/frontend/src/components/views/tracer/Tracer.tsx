@@ -10,7 +10,7 @@ function Tracer() {
 
   return (
     <div className="bg-ps-secondary flex h-full w-full flex-col text-white">
-      <div className="relative flex flex-1">
+      <div className="relative flex flex-1 overflow-hidden">
         {Object.keys(funcs).length > 0 ? (
           <>
             <ReactFlowProvider>

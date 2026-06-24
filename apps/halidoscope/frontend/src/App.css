@@ -40,6 +40,7 @@ input[type="number"] {
   --color-ps-border-primary: oklch(0.3407 0 0);
   --color-ps-border-secondary: oklch(0.3979 0 0);
   --color-ps-border-tertiary: oklch(0.4997 0 0);
+  --color-highlight: oklch(0.77 0.1919 163.7);
 
   --text-tiny: 0.625rem;
   --text-tiny--line-height: 1.5;
@@ -47,7 +48,8 @@ input[type="number"] {
 
 @layer components {
   .text-responsive {
-    font-size: clamp(0.5rem, calc(1rem / var(--zoom-level)), 1.5rem);
+    font-size: min(calc(0.75rem / var(--zoom-level)), 0.75rem);
+    line-height: min(calc(1rem / var(--zoom-level)), 1rem);
   }
 
   @keyframes slideDown {
