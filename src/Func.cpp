@@ -75,6 +75,10 @@ Func::Func(const Type &required_type, int required_dims, const string &name)
     : func({required_type}, required_dims, unique_name(name)) {
 }
 
+Func::Func(const std::vector<Type> &required_types, const string &name)
+    : func(required_types, AnyDims, unique_name(name)) {
+}
+
 Func::Func(const std::vector<Type> &required_types, int required_dims, const string &name)
     : func(required_types, required_dims, unique_name(name)) {
 }
@@ -3490,6 +3494,10 @@ FuncRef::operator Expr() const {
         << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
     */
 
+    user_assert(func.required_types().empty() || func.outputs() == 1)
+        << "Can't convert a reference Func \"" << func.name()
+        << "\" to an Expr, because " << func.name() << " returns a Tuple.\n";
+
     if (!(func.has_pure_definition() || func.has_extern_definition())) {
         Type t = Type(Type::Unknown, 0, 1);
         if (!func.required_types().empty()) {
@@ -3499,16 +3507,12 @@ FuncRef::operator Expr() const {
                           func.get_contents(), 0, Buffer<>(), Parameter());
     }
 
-    user_assert(func.outputs() == 1)
-        << "Can't convert a reference Func \"" << func.name()
-        << "\" to an Expr, because " << func.name() << " returns a Tuple.\n";
-
     return Call::make(func, args);
 }
 
 FuncTupleElementRef FuncRef::operator[](int i) const {
-    user_assert(func.has_pure_definition() || func.has_extern_definition())
-        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
+    /*user_assert(func.has_pure_definition() || func.has_extern_definition())
+        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n"; */
 
     user_assert(func.outputs() != 1)
         << "Can't index into a reference to Func \"" << func.name()

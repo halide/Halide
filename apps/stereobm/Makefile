@@ -1,10 +1,13 @@
 include ../support/Makefile.inc
 
 # process.cpp compares against OpenCV's StereoBM.
-STEREOBM_BUILD_OPENCV ?= 1
-ifeq ($(STEREOBM_BUILD_OPENCV),1)
-  OPENCV_CXXFLAGS := $(shell pkg-config --cflags opencv4 2>/dev/null)
-  OPENCV_LIBS := $(shell pkg-config --libs opencv4 2>/dev/null)
+# Auto-disable if opencv4 is not available via pkg-config.
+OPENCV_CXXFLAGS := $(shell pkg-config --cflags opencv4 2>/dev/null)
+OPENCV_LIBS := $(shell pkg-config --libs opencv4 2>/dev/null)
+ifeq ($(OPENCV_CXXFLAGS),)
+  STEREOBM_BUILD_OPENCV ?= 0
+else
+  STEREOBM_BUILD_OPENCV ?= 1
 endif
 
 # We set parameters here to feed into both OpenCV and our generator, so that they are consistent.

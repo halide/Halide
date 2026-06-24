@@ -220,6 +220,46 @@ int type_declare_test() {
     return 0;
 }
 
+int tuple_test() {
+    Func g = Func(std::vector<Type>{Int(32), Int(32)}, "g");
+    Func h("h");
+    Var x("x"), y("y");
+
+    g(x, y) = Tuple(select(x <= 0, 0, g(max(0, x - 1), y)[0] + x + y), x - y);
+    h(x, y) = g(10, y)[0] / 4 + g(10, y)[1] + x;
+
+    g.compute_root();
+
+    Buffer<int> im = h.realize({10, 10});
+    auto func = [](int x, int y) {
+        return (y * (5 + 5) + (5 + 5) * (5 + 6) / 2) / 4 + 10 - y + x;
+    };
+    if (check_image(im, func)) {
+        return 1;
+    }
+    return 0;
+}
+
+int tuple_test_2() {
+    Func g = Func(std::vector<Type>{Int(32), Int(32)}, "g");
+    Func h("h");
+    Var x("x"), y("y");
+
+    g(x, y) = Tuple(select(x <= 0, 0, g(max(0, x - 1), y)[0] + x + y), select(y <= 0, 0, g(x, max(0, y - 1))[1] + x + y));
+    h(x, y) = g(x, y)[0] + g(x, y)[1];
+
+    g.compute_root();
+
+    Buffer<int> im = h.realize({10, 10});
+    auto func = [](int x, int y) {
+        return y * x + x * (x + 1) / 2 + x * y + y * (y + 1) / 2;
+    };
+    if (check_image(im, func)) {
+        return 1;
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -238,6 +278,8 @@ int main(int argc, char **argv) {
         {"1d sum test", sum_1d_test},
         {"multi-baseline test", multi_baseline_test},
         {"type declaration test", type_declare_test},
+        {"tuple test", tuple_test},
+        {"tuple test 2", tuple_test_2},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;

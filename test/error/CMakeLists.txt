@@ -86,6 +86,7 @@ tests(
     inductive_nested_select.cpp
     inductive_no_select.cpp
     inductive_reorder.cpp
+    inductive_tuple_to_expr.cpp
     inductive_update.cpp
     inductive_var_swap.cpp
     inductive_vectorize.cpp

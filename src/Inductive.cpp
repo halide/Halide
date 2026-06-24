@@ -134,9 +134,11 @@ Box expand_to_include_base_case(const vector<string> &vars, const Expr &RHS, con
     BaseCaseSolver b(vars, func, box_required.bounds);
     substed.accept(&b);
     for (size_t i = 0; i < vars.size(); i++) {
-        user_assert(b.result_intervals[i].is_bounded()) << "Unable to prove that the inductive function " << func << " uses a bounded interval";
-        Interval new_interval(min(b.result_intervals[i].min, box_required[i].min), box_required[i].max);
-        box2[i] = new_interval;
+        user_assert(b.result_intervals[i].is_bounded() || b.result_intervals[i].is_empty()) << "Unable to prove that the inductive function " << func << " uses a bounded interval";
+        if (!b.result_intervals[i].is_empty()) {
+            Interval new_interval(min(b.result_intervals[i].min, box_required[i].min), box_required[i].max);
+            box2[i] = new_interval;
+        }
     }
 
     return box2;

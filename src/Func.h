@@ -789,6 +789,11 @@ public:
 
     /** Declare a new undefined function with the given name.
      * If required_types is not empty, the function will be constrained to represent
+     * Tuples of the same arity and types. (If required_types is empty, there is no constraint.) */
+    explicit Func(const std::vector<Type> &required_types, const std::string &name);
+
+    /** Declare a new undefined function with the given name.
+     * If required_types is not empty, the function will be constrained to represent
      * Tuples of the same arity and types. (If required_types is empty, there is no constraint.)
      * If required_dims is not AnyDims, the function will be constrained to exactly
      * that many dimensions. */

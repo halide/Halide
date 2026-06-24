@@ -1012,9 +1012,9 @@ public:
             }
             debug(4) << "Expanding bounds for inductively defined function " << s.func.name() << "\n";
             for (const auto &b1 : s.bounds) {
-                const Box &b = b1.second;
+                // const Box &b = b1.second;
                 for (const auto &cval : s.exprs) {
-                    s.bounds[b1.first] = expand_to_include_base_case(s.func.args(), cval.value, s.func.name(), b);
+                    s.bounds[b1.first] = expand_to_include_base_case(s.func.args(), cval.value, s.func.name(), s.bounds[b1.first]);
                 }
             }
         }
