@@ -31,33 +31,58 @@ class BaseCaseSolver : public IRVisitor {
 
     int nested_select = 0;
 
+    void visit(const Select *op) override {
+        std::cout << "what";
+    }
+
     void visit(const Call *op) override {
         if (op->is_intrinsic(Call::if_then_else)) {
-            if (nested_select == 0) {
-                visit_with(op->args[0], [&](auto *self, const Call *inner_op) {
-                    user_assert(inner_op->name != func) << "Function " << func << " contains an inductive function reference outside of a select operation value.\n";
-                    self->visit_base(inner_op);
-                });
-            }
+            // Theoretically there is no need to check op->args[0].
+            // Select nodes are only converted to if_then_else when the condition is pure,
+            // which means the condition cannot have any recursive calls.
+            // std::cout<<"cond is" << op->args[0];
+            op->args[0].accept(this);
+
+            bool left_recurse = false, right_recurse = false;
+            visit_with(op->args[1], [&](auto *self, const Call *inner_op) {
+                if (inner_op->name == func) {
+                    left_recurse = true;
+                }
+                self->visit_base(inner_op);
+            });
+            visit_with(op->args[2], [&](auto *self, const Call *inner_op) {
+                if (inner_op->name == func) {
+                    right_recurse = true;
+                }
+                self->visit_base(inner_op);
+            });
+            // Again, this check is theoretically unnecessary
+            user_assert(!(left_recurse && right_recurse)) << "Select node in inductive function " << func << " does not have a base case";
 
             nested_select += 1;
             vector<Interval> old_intervals = condition_intervals;
-            for (size_t i = 0; i < vars.size(); i++) {
-                Interval inter = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(simplify(op->args[0]), vars[i]));
-                condition_intervals[i] = Interval(inter.min, Interval::pos_inf());
-                bounds.push(vars[i], condition_intervals[i]);
+            if (left_recurse) {
+                for (size_t i = 0; i < vars.size(); i++) {
+                    Interval inter = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(simplify(op->args[0]), vars[i]));
+                    condition_intervals[i] = Interval(inter.min, Interval::pos_inf());
+                    bounds.push(vars[i], condition_intervals[i]);
+                }
+                op->args[1].accept(this);
+                for (const auto &var : vars) {
+                    bounds.pop(var);
+                }
             }
-            op->args[1].accept(this);
-            for (size_t i = 0; i < vars.size(); i++) {
-                Interval inter = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(simplify(!op->args[0]), vars[i]));
-                condition_intervals[i] = Interval(inter.min, Interval::pos_inf());
-                bounds.pop(vars[i]);
-                bounds.push(vars[i], condition_intervals[i]);
-            }
-            op->args[2].accept(this);
-            condition_intervals = old_intervals;
-            for (const auto &var : vars) {
-                bounds.pop(var);
+            if (right_recurse) {
+                for (size_t i = 0; i < vars.size(); i++) {
+                    Interval inter = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(simplify(!op->args[0]), vars[i]));
+                    condition_intervals[i] = Interval(inter.min, Interval::pos_inf());
+                    bounds.push(vars[i], condition_intervals[i]);
+                }
+                op->args[2].accept(this);
+                condition_intervals = old_intervals;
+                for (const auto &var : vars) {
+                    bounds.pop(var);
+                }
             }
             nested_select -= 1;
         } else if (op->name == func) {

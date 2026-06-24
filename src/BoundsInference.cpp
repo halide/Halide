@@ -387,6 +387,7 @@ public:
             // don't care what sites are loaded, just what sites need
             // to have the correct value in them. So remap all selects
             // to if_then_elses to get tighter bounds.
+            // The implementation of expand_to_base_case relies on this conversion.
             class SelectToIfThenElse : public IRMutator {
                 using IRMutator::visit;
                 Expr visit(const Select *op) override {
