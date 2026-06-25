@@ -363,9 +363,8 @@ void define_buffer(py::module &m) {
                     // base = py::cast(self) ensures that `self` outlives the returned view.
                     return py::array(to_buffer_info(self, reverse_axes), /*base*/ py::cast(self));
                 },
-                py::arg("reverse_axes") = true,
-                "Returns a NumPy array that is a view of this Buffer. By default the axes are "
-                "reversed. Pass reverse_axes=False to preserve the original axis order.")
+                py::arg("reverse_axes") = true, "Returns a NumPy array that is a view of this Buffer. By default the axes are "
+                                                "reversed. Pass reverse_axes=False to preserve the original axis order.")
 
             .def(py::init_alias<>())
             .def(py::init_alias<const Buffer<> &>())
@@ -392,11 +391,7 @@ void define_buffer(py::module &m) {
 
             // Note that this exists solely to allow you to create a Buffer with a null host ptr;
             // this is necessary for some bounds-query operations (e.g. Func::infer_input_bounds).
-            .def_static(
-                "make_bounds_query", [](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
-                    return Buffer<>(type, nullptr, sizes, name);
-                },
-                py::arg("type"), py::arg("sizes"), py::arg("name") = "")
+            .def_static("make_bounds_query", [](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> { return Buffer<>(type, nullptr, sizes, name); }, py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
             .def_static("make_scalar", static_cast<Buffer<> (*)(Type, const std::string &)>(Buffer<>::make_scalar), py::arg("type"), py::arg("name") = "")
             .def_static("make_interleaved", static_cast<Buffer<> (*)(Type, int, int, int, const std::string &)>(Buffer<>::make_interleaved), py::arg("type"), py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("name") = "")
