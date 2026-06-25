@@ -1,41 +1,39 @@
 import { useAtomValue } from "jotai";
+import { Separator } from "radix-ui";
 import * as React from "react";
-import { Label, Separator } from "radix-ui";
 
-import GraphDisplay from "@/components/controls/visualizations/GraphDisplay";
-import Histogram from "@/components/controls/visualizations/Histogram";
-import HistogramSelect from "@/components/controls/visualizations/HistogramSelect";
-import PlaybackRate from "@/components/controls/visualizations/PlaybackRate";
-import VisualizationSelect from "@/components/controls/visualizations/VisualizationsSelect";
+import ControlSection from "@/components/controls/ControlSection";
+import GraphDisplay from "@/components/controls/graph/GraphDisplay";
+import LivenessControls from "@/components/controls/liveness/LivenessControls";
+import PlaybackRate from "@/components/controls/playback/PlaybackRate";
+import RenderMode from "@/components/controls/render/RenderMode";
+import Histogram from "@/components/controls/histogram/Histogram";
+import HistogramSelect from "@/components/controls/histogram/HistogramSelect";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
 import { histogramAtom, type HistogramScale } from "@/state/histogram";
-import {
-  type VisualizationMode,
-  visualizationModeAtom,
-} from "@/state/visualization";
+import { type RenderMode as RM, renderModeAtom } from "@/state/render";
 import { FuncMeta } from "@/types";
 
-const VISUALIZATION_MODE_TO_HISTOGRAM_DATA_KEY: Record<
-  VisualizationMode,
-  keyof FuncMeta | ""
-> = {
-  "True Values": "",
+const RENDER_MODE_TO_HISTOGRAM_DATA_KEY: Record<RM, keyof FuncMeta | ""> = {
+  Grayscale: "",
+  RGB: "",
   "Store Frequency": "store_count_histogram",
   "Load Frequency": "load_count_histogram",
   "Redundant Stores": "redundant_count_histogram",
   "Reuse Distance": "reuse_distance_histogram",
 };
 
-const VISUALIZATION_MODE_TO_LABEL: Record<VisualizationMode, string> = {
-  "True Values": "",
+const RENDER_MODE_TO_LABEL: Record<RM, string> = {
+  Grayscale: "",
+  RGB: "",
   "Store Frequency": "Store Count",
   "Load Frequency": "Load Count",
   "Redundant Stores": "Redundant Store Count",
   "Reuse Distance": "Reuse Distance (Packets)",
 };
 
-function VisualizationsPanel() {
+function VisualizationPanel() {
   const {
     funcs,
     globalMaxStoreCount,
@@ -43,11 +41,11 @@ function VisualizationsPanel() {
     globalMaxRedundantCount,
     globalMaxReuseDistance,
   } = useTraceContext();
-  const visualizationMode = useAtomValue(visualizationModeAtom);
+  const renderMode = useAtomValue(renderModeAtom);
   const activeFunc = useAtomValue(funcAtom);
   const histogramScale = useAtomValue(histogramAtom) as HistogramScale;
 
-  const dataKey = VISUALIZATION_MODE_TO_HISTOGRAM_DATA_KEY[visualizationMode];
+  const dataKey = RENDER_MODE_TO_HISTOGRAM_DATA_KEY[renderMode];
   const hasHistogram = dataKey && activeFunc && funcs[activeFunc];
   const domainMin = histogramScale === "log" ? 1 : 0;
 
@@ -61,7 +59,7 @@ function VisualizationsPanel() {
 
     const data = funcs[activeFunc][dataKey as keyof FuncMeta] as number[];
 
-    switch (visualizationMode) {
+    switch (renderMode) {
       case "Store Frequency":
         return {
           data: data.map((pixels, i) => ({ x1: i, x2: i + 1, y: pixels })),
@@ -96,7 +94,7 @@ function VisualizationsPanel() {
     activeFunc,
     funcs,
     dataKey,
-    visualizationMode,
+    renderMode,
     domainMin,
     globalMaxStoreCount,
     globalMaxLoadCount,
@@ -106,43 +104,38 @@ function VisualizationsPanel() {
 
   return (
     <div className="flex flex-col gap-4 px-3 py-4">
-      <div className="flex flex-col gap-2">
-        <Label.Root
-          className="text-ps-text-primary font-semibold tracking-widest uppercase"
-          htmlFor="visualization-select"
-        >
-          Visualization
-        </Label.Root>
-        <VisualizationSelect />
-      </div>
+      <ControlSection title="Render Mode">
+        <RenderMode />
+      </ControlSection>
       {hasHistogram ? (
         <>
           <Separator.Root className="bg-ps-border-tertiary h-px" />
-          <div className="flex flex-col gap-2">
-            <Label.Root className="text-ps-text-primary font-semibold tracking-widest uppercase">
-              Histogram
-            </Label.Root>
+          <ControlSection title="Histogram">
             <div className="flex flex-col gap-4">
               <HistogramSelect />
               <Histogram
                 data={histogramData}
                 domain={histogramDomain}
-                labels={{ x: VISUALIZATION_MODE_TO_LABEL[visualizationMode] }}
+                labels={{ x: RENDER_MODE_TO_LABEL[renderMode] }}
               />
             </div>
-          </div>
+          </ControlSection>
         </>
       ) : null}
       <Separator.Root className="bg-ps-border-tertiary h-px" />
-      <div className="flex flex-col gap-2">
-        <Label.Root className="text-ps-text-primary font-semibold tracking-widest uppercase">
-          Parameters
-        </Label.Root>
-        <PlaybackRate />
+      <ControlSection title="Liveness">
+        <LivenessControls />
+      </ControlSection>
+      <Separator.Root className="bg-ps-border-tertiary h-px" />
+      <ControlSection title="Graph Display">
         <GraphDisplay />
-      </div>
+      </ControlSection>
+      <Separator.Root className="bg-ps-border-tertiary h-px" />
+      <ControlSection title="Playback">
+        <PlaybackRate />
+      </ControlSection>
     </div>
   );
 }
 
-export default VisualizationsPanel;
+export default VisualizationPanel;

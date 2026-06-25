@@ -5,39 +5,26 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::ipc::Response;
 use tauri::State;
 
-use crate::render::{HeatmapState, RedundantState, RenderState, ReuseDistanceState};
+use crate::render::{
+    GrayscaleState, LoadFrequencyState, RedundantState, ReuseDistanceState, RgbState,
+    StoreFrequencyState,
+};
 use crate::trace::Trace;
 
-/// How a Func's values are mapped to pixels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum RenderMode {
-    Grayscale,
-    Rgb,
+/// A half-open packet-index interval `[start, end]` used for liveness and produce/consume ranges.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct IndexRange {
+    pub start: u32,
+    pub end: u32,
 }
 
-/// Which access type to visualize in a heatmap render. Variant names match the frontend's
-/// `VisualizationMode` strings so they can be passed through without conversion.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum HeatmapMode {
-    #[serde(rename = "Store Frequency")]
-    Stores,
-    #[serde(rename = "Load Frequency")]
-    Loads,
-}
-
-/// The default render mode inferred from a Func's channel count: 3 or 4 channels are treated as
-/// color, everything else as grayscale. Shared by the metadata derivation and `render_at` so the
-/// inferred default never diverges.
-pub fn default_mode(channels: u32) -> RenderMode {
-    if channels == 3 || channels == 4 {
-        RenderMode::Rgb
-    } else {
-        RenderMode::Grayscale
+impl IndexRange {
+    fn from_tuple((start, end): (u32, u32)) -> Self {
+        Self { start, end }
     }
 }
 
@@ -48,7 +35,6 @@ pub struct FuncMeta {
     pub width: u32,
     pub height: u32,
     pub channels: u32,
-    pub default_mode: RenderMode,
     pub num_stores: u32,
     pub min_coords: Vec<i32>,
     pub max_coords: Vec<i32>,
@@ -62,8 +48,9 @@ pub struct FuncMeta {
     pub load_count_histogram: Vec<u32>,
     pub redundant_count_histogram: Vec<u32>,
     pub reuse_distance_histogram: Vec<u32>,
-    pub liveness_start: u32,
-    pub liveness_end: u32,
+    pub buffer_liveness: IndexRange,
+    pub produce_ranges: Vec<IndexRange>,
+    pub consume_ranges: Vec<IndexRange>,
 }
 
 /// Top-level payload returned by `open_trace`.
@@ -97,31 +84,20 @@ impl TraceMeta {
                     Some(g) => (g.width as u32, g.height as u32, g.channels as u32),
                     None => (0, 0, 1),
                 };
-                let default_mode = default_mode(channels);
                 let stores = trace.func_store_indices(name);
                 let num_stores = stores.map(<[usize]>::len).unwrap_or(0) as u32;
 
-                if stats.max_store_count > global_max_store_count {
-                    global_max_store_count = stats.max_store_count;
-                }
-                if stats.max_load_count > global_max_load_count {
-                    global_max_load_count = stats.max_load_count;
-                }
-                if stats.max_redundant_count > global_max_redundant_count {
-                    global_max_redundant_count = stats.max_redundant_count;
-                }
-                if stats.max_reuse_distance > global_max_reuse_distance {
-                    global_max_reuse_distance = stats.max_reuse_distance;
-                }
-
-                let liveness_range = trace.func_liveness_range(name).unwrap_or(&(0, 0));
+                global_max_store_count = stats.max_store_count.max(global_max_store_count);
+                global_max_load_count = stats.max_load_count.max(global_max_load_count);
+                global_max_redundant_count =
+                    stats.max_redundant_count.max(global_max_redundant_count);
+                global_max_reuse_distance = stats.max_reuse_distance.max(global_max_reuse_distance);
 
                 FuncMeta {
                     name: name.clone(),
                     width,
                     height,
                     channels,
-                    default_mode,
                     num_stores,
                     min_coords: stats.min_coords.clone(),
                     max_coords: stats.max_coords.clone(),
@@ -135,8 +111,26 @@ impl TraceMeta {
                     load_count_histogram: stats.load_count_histogram.clone(),
                     redundant_count_histogram: stats.redundant_count_histogram.clone(),
                     reuse_distance_histogram: stats.reuse_distance_histogram.clone(),
-                    liveness_start: liveness_range.0,
-                    liveness_end: liveness_range.1,
+                    buffer_liveness: IndexRange::from_tuple(
+                        trace
+                            .func_buffer_liveness_range(name)
+                            .unwrap_or(&(0, 0))
+                            .clone(),
+                    ),
+                    produce_ranges: trace
+                        .func_produce_ranges(name)
+                        .unwrap_or(&[])
+                        .iter()
+                        .copied()
+                        .map(IndexRange::from_tuple)
+                        .collect(),
+                    consume_ranges: trace
+                        .func_consume_ranges(name)
+                        .unwrap_or(&[])
+                        .iter()
+                        .copied()
+                        .map(IndexRange::from_tuple)
+                        .collect(),
                 }
             })
             .collect();
@@ -161,18 +155,20 @@ impl TraceMeta {
 
 // ── Tauri-managed state ───────────────────────────────────────────────────────
 
-/// The currently loaded trace plus a per-Func render cache. The cache keeps each Func's
-/// framebuffer warm across requests so forward scrubbing only applies the delta of new stores.
+/// The currently loaded trace plus per-Func render caches, one map per rendering pathway. Each
+/// cache keeps its Func's state warm across requests so forward scrubbing only applies the delta.
 struct Loaded {
     trace: Trace,
-    renderers: HashMap<String, RenderState>,
-    heatmap_renderers: HashMap<String, HeatmapState>,
+    grayscale_renderers: HashMap<String, GrayscaleState>,
+    rgb_renderers: HashMap<String, RgbState>,
+    store_frequency_renderers: HashMap<String, StoreFrequencyState>,
+    load_frequency_renderers: HashMap<String, LoadFrequencyState>,
     redundant_renderers: HashMap<String, RedundantState>,
     reuse_distance_renderers: HashMap<String, ReuseDistanceState>,
 }
 
 /// App-wide state managed by Tauri. A single trace is loaded at a time; opening a new one replaces
-/// it (and drops the stale render cache).
+/// it (and drops all stale render caches).
 #[derive(Default)]
 pub struct AppState {
     inner: Mutex<Option<Loaded>>,
@@ -190,92 +186,148 @@ pub fn open_trace(path: String, state: State<AppState>) -> Result<TraceMeta, Str
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
     *guard = Some(Loaded {
         trace,
-        renderers: HashMap::new(),
-        heatmap_renderers: HashMap::new(),
+        grayscale_renderers: HashMap::new(),
+        rgb_renderers: HashMap::new(),
+        store_frequency_renderers: HashMap::new(),
+        load_frequency_renderers: HashMap::new(),
         redundant_renderers: HashMap::new(),
         reuse_distance_renderers: HashMap::new(),
     });
     Ok(meta)
 }
 
-/// Renders `func`'s framebuffer state at global timeline position `global_index` and returns it
-/// as raw RGBA8 bytes (delivered to the frontend as an `ArrayBuffer`, bypassing JSON). `mode`
-/// overrides the Func's inferred default when provided. Both scrubbing and playback drive this
-/// single command.
+/// Renders `func` as a grayscale image at `global_index` and returns raw RGBA8 bytes. Channel 0
+/// is normalized to [0, 255] and replicated across R/G/B.
 #[tauri::command]
-pub fn render_at(
+pub fn render_grayscale(
     func: String,
     global_index: u32,
-    mode: Option<RenderMode>,
-    state: State<AppState>,
-) -> Result<Response, String> {
-    let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
-    let loaded = guard.as_mut().ok_or("no trace loaded")?;
-    // Split the borrow so the trace can be read while a renderer is mutated.
-    let Loaded {
-        trace, renderers, ..
-    } = loaded;
-
-    // Get or lazily build this Func's render state.
-    if !renderers.contains_key(&func) {
-        let rs = RenderState::new(trace, &func)
-            .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
-        renderers.insert(func.clone(), rs);
-    }
-    let renderer = renderers.get_mut(&func).expect("just inserted");
-
-    // Resolve the global timeline index into a store count: how many of this Func's stores have
-    // occurred by `global_index` (inclusive).
-    let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
-    let k = store_indices.partition_point(|&p| p <= global_index as usize);
-    renderer.seek(trace, store_indices, k);
-
-    let mode = mode.unwrap_or_else(|| default_mode(renderer.channels() as u32));
-    Ok(Response::new(renderer.to_rgba(mode)))
-}
-
-/// Renders a heatmap of store or load counts for `func` up to `global_index` and returns raw RGBA8
-/// bytes. Mirrors `render_at` — forward seeks apply only the new events; backward seeks clear and
-/// replay. Counts are normalized against the per-Func full-trace maximum so the color scale is stable.
-#[tauri::command]
-pub fn render_heatmap(
-    func: String,
-    global_index: u32,
-    mode: HeatmapMode,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
     let loaded = guard.as_mut().ok_or("no trace loaded")?;
     let Loaded {
         trace,
-        heatmap_renderers,
+        grayscale_renderers,
         ..
     } = loaded;
 
-    if !heatmap_renderers.contains_key(&func) {
-        let hs = HeatmapState::new(trace, &func, mode)
+    if !grayscale_renderers.contains_key(&func) {
+        let rs = GrayscaleState::new(trace, &func)
             .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
-        heatmap_renderers.insert(func.clone(), hs);
+        grayscale_renderers.insert(func.clone(), rs);
     }
-    let hs = heatmap_renderers.get_mut(&func).expect("just inserted");
+    let renderer = grayscale_renderers.get_mut(&func).expect("just inserted");
 
-    let event_indices = match mode {
-        HeatmapMode::Stores => trace.func_store_indices(&func).unwrap_or(&[]),
-        HeatmapMode::Loads => trace.func_load_indices(&func).unwrap_or(&[]),
-    };
-    let k = event_indices.partition_point(|&p| p <= global_index as usize);
-    hs.seek(trace, event_indices, k, mode);
+    let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
+    let k = store_indices.partition_point(|&p| p <= global_index as usize);
+    renderer.seek(trace, store_indices, k);
 
-    Ok(Response::new(hs.to_rgba()))
+    Ok(Response::new(renderer.to_rgba()))
+}
+
+/// Renders `func` as an RGB image at `global_index` and returns raw RGBA8 bytes. Planes 0/1/2
+/// map to R/G/B; missing planes default to 0.
+#[tauri::command]
+pub fn render_rgb(
+    func: String,
+    global_index: u32,
+    state: State<AppState>,
+) -> Result<Response, String> {
+    let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
+    let loaded = guard.as_mut().ok_or("no trace loaded")?;
+    let Loaded {
+        trace,
+        rgb_renderers,
+        ..
+    } = loaded;
+
+    if !rgb_renderers.contains_key(&func) {
+        let rs = RgbState::new(trace, &func)
+            .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
+        rgb_renderers.insert(func.clone(), rs);
+    }
+    let renderer = rgb_renderers.get_mut(&func).expect("just inserted");
+
+    let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
+    let k = store_indices.partition_point(|&p| p <= global_index as usize);
+    renderer.seek(trace, store_indices, k);
+
+    Ok(Response::new(renderer.to_rgba()))
+}
+
+/// Renders a heatmap of store counts for `func` up to `global_index` and returns raw RGBA8 bytes.
+/// Counts are normalized against the global full-trace maximum so the color scale is stable while
+/// scrubbing.
+#[tauri::command]
+pub fn render_store_frequency(
+    func: String,
+    global_index: u32,
+    state: State<AppState>,
+) -> Result<Response, String> {
+    let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
+    let loaded = guard.as_mut().ok_or("no trace loaded")?;
+    let Loaded {
+        trace,
+        store_frequency_renderers,
+        ..
+    } = loaded;
+
+    if !store_frequency_renderers.contains_key(&func) {
+        let hs = StoreFrequencyState::new(trace, &func)
+            .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
+        store_frequency_renderers.insert(func.clone(), hs);
+    }
+    let renderer = store_frequency_renderers
+        .get_mut(&func)
+        .expect("just inserted");
+
+    let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
+    let k = store_indices.partition_point(|&p| p <= global_index as usize);
+    renderer.seek(trace, store_indices, k);
+
+    Ok(Response::new(renderer.to_rgba()))
+}
+
+/// Renders a heatmap of load counts for `func` up to `global_index` and returns raw RGBA8 bytes.
+/// Counts are normalized against the global full-trace maximum so the color scale is stable while
+/// scrubbing.
+#[tauri::command]
+pub fn render_load_frequency(
+    func: String,
+    global_index: u32,
+    state: State<AppState>,
+) -> Result<Response, String> {
+    let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
+    let loaded = guard.as_mut().ok_or("no trace loaded")?;
+    let Loaded {
+        trace,
+        load_frequency_renderers,
+        ..
+    } = loaded;
+
+    if !load_frequency_renderers.contains_key(&func) {
+        let hs = LoadFrequencyState::new(trace, &func)
+            .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
+        load_frequency_renderers.insert(func.clone(), hs);
+    }
+    let renderer = load_frequency_renderers
+        .get_mut(&func)
+        .expect("just inserted");
+
+    let load_indices = trace.func_load_indices(&func).unwrap_or(&[]);
+    let k = load_indices.partition_point(|&p| p <= global_index as usize);
+    renderer.seek(trace, load_indices, k);
+
+    Ok(Response::new(renderer.to_rgba()))
 }
 
 /// Renders a heatmap of redundant store counts for `func` up to `global_index` and returns raw
-/// RGBA8 bytes. A store is redundant when it writes the same value to a location that already holds
-/// that value. Counts are normalized against the per-Func full-trace maximum so the scale is stable
-/// while scrubbing. Pixels with zero redundant stores are black; positive counts map through the
-/// Reds colormap.
+/// RGBA8 bytes. A store is redundant when it writes the same value to a location that already
+/// holds that value. Pixels with zero redundant stores are black; positive counts map through the
+/// Inferno colormap normalized against the global full-trace maximum.
 #[tauri::command]
-pub fn render_redundant(
+pub fn render_redundant_stores(
     func: String,
     global_index: u32,
     state: State<AppState>,
@@ -293,20 +345,19 @@ pub fn render_redundant(
             .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
         redundant_renderers.insert(func.clone(), rs);
     }
-    let rs = redundant_renderers.get_mut(&func).expect("just inserted");
+    let renderer = redundant_renderers.get_mut(&func).expect("just inserted");
 
     let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
     let k = store_indices.partition_point(|&p| p <= global_index as usize);
-    rs.seek(trace, store_indices, k);
+    renderer.seek(trace, store_indices, k);
 
-    Ok(Response::new(rs.to_rgba()))
+    Ok(Response::new(renderer.to_rgba()))
 }
 
 /// Renders a heatmap of maximum store-to-load reuse distances for `func` up to `global_index`
 /// and returns raw RGBA8 bytes. Reuse distance is the number of packets elapsed between a store
-/// and the next load from the same (x, y, channel). Both event streams are merged in global order
-/// so the two-pointer seek reflects the correct pairing. Pixels with no observed store→load pair
-/// are black; positive distances map through the Inferno colormap normalized against the per-Func
+/// and the next load from the same (x, y, channel). Pixels with no observed store→load pair are
+/// black; positive distances map through the Inferno colormap normalized against the global
 /// full-trace maximum.
 #[tauri::command]
 pub fn render_reuse_distance(
@@ -327,7 +378,7 @@ pub fn render_reuse_distance(
             .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
         reuse_distance_renderers.insert(func.clone(), rs);
     }
-    let rs = reuse_distance_renderers
+    let renderer = reuse_distance_renderers
         .get_mut(&func)
         .expect("just inserted");
 
@@ -335,7 +386,7 @@ pub fn render_reuse_distance(
     let load_indices = trace.func_load_indices(&func).unwrap_or(&[]);
     let store_k = store_indices.partition_point(|&p| p <= global_index as usize);
     let load_k = load_indices.partition_point(|&p| p <= global_index as usize);
-    rs.seek(trace, store_indices, load_indices, store_k, load_k);
+    renderer.seek(trace, store_indices, load_indices, store_k, load_k);
 
-    Ok(Response::new(rs.to_rgba()))
+    Ok(Response::new(renderer.to_rgba()))
 }

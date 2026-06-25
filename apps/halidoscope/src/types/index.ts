@@ -1,5 +1,8 @@
-/** How a Func's values are mapped to pixels. Mirrors the Rust `RenderMode`. */
-export type RenderMode = "grayscale" | "rgb";
+/** A packet-index interval `[start, end]`. Mirrors the Rust `IndexRange`. */
+export interface IndexRange {
+  start: number;
+  end: number;
+}
 
 /**
  * Per-Func metadata returned by the `open_trace` command. Mirrors the Rust
@@ -11,7 +14,6 @@ export interface FuncMeta extends Record<string, unknown> {
   width: number;
   height: number;
   channels: number;
-  default_mode: RenderMode;
   num_stores: number;
   min_coords: number[];
   max_coords: number[];
@@ -25,8 +27,9 @@ export interface FuncMeta extends Record<string, unknown> {
   load_count_histogram: number[];
   redundant_count_histogram: number[];
   reuse_distance_histogram: number[];
-  liveness_start: number;
-  liveness_end: number;
+  buffer_liveness: IndexRange;
+  produce_ranges: IndexRange[];
+  consume_ranges: IndexRange[];
 }
 
 /** Top-level payload returned by `open_trace`. Mirrors the Rust `TraceMeta`. */
