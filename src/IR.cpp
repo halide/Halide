@@ -603,12 +603,13 @@ Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx) {
         << "Value index out of range in call to halide function\n";
     /*internal_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Call to undefined halide function\n"; */
-    if (func.has_pure_definition() || func.has_extern_definition())
+    if (func.has_pure_definition() || func.has_extern_definition()) {
         return make(func.output_types()[(size_t)idx], func.name(), args, Halide,
                     func.get_contents(), idx, Buffer<>(), Parameter());
-    else
+    } else {
         return make(func.required_types()[(size_t)idx], func.name(), args, Halide,
                     func.get_contents(), idx, Buffer<>(), Parameter());
+    }
 }
 
 namespace {
