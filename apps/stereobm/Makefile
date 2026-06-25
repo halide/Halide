@@ -44,7 +44,7 @@ $(BIN)/%/stereobm.a: $(GENERATOR_BIN)/stereobm.generator
 
 $(BIN)/%/process_opencv: process.cpp $(BIN)/%/stereobm.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -DSTEREOBM_BUILD_OPENCV=1 $(STEREOBM_DEFINES) $(OPENCV_CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENCV_LIBS)
+	$(CXX) $(CXXFLAGS) -Wno-cast-qual -DSTEREOBM_BUILD_OPENCV=1 $(STEREOBM_DEFINES) $(OPENCV_CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENCV_LIBS)
 
 $(BIN)/%/process: process.cpp $(BIN)/%/stereobm.a
 	@mkdir -p $(@D)
