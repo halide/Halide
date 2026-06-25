@@ -41,7 +41,8 @@ input[type="number"] {
   --color-ps-border-secondary: oklch(0.3979 0 0);
   --color-ps-border-tertiary: oklch(0.4997 0 0);
   --color-highlight: oklch(0.77 0.1919 163.7);
-
+  --color-produce: oklch(0.837 0.14 75);
+  --color-consume: oklch(0.74 0.175 305.4);
   --text-tiny: 0.625rem;
   --text-tiny--line-height: 1.5;
 }

@@ -7,14 +7,17 @@ import {
   type Edge,
   type EdgeChange,
 } from "@xyflow/react";
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import * as React from "react";
 
 import FuncCanvas from "@/components/views/tracer/FuncCanvas";
 import { funcAtom } from "@/state/func";
 import { edgesAtom } from "@/state/graph";
+import { livenessAtom } from "@/state/liveness";
+import { packetAtom } from "@/state/packet";
 import { FuncMeta, NodeTypes } from "@/types";
 import { buildEdges, buildNodes, getLayoutedElements } from "@/utils/graph";
+import { isFuncConsuming, isFuncProducing } from "@/utils/liveness";
 
 const NODE_TYPES = {
   funcCanvas: FuncCanvas,
@@ -47,6 +50,52 @@ function Canvas({ funcs, dagEdges, type }: CanvasProps) {
     [setEdges],
   );
 
+  const livenessMode = useAtomValue(livenessAtom);
+  const packetIndex = useAtomValue(packetAtom);
+
+  const consumingFuncs = React.useMemo(() => {
+    if (livenessMode !== "produce-consume") {
+      return new Set<string>();
+    }
+
+    const fs = new Set<string>();
+    for (const [funcName, func] of Object.entries(funcs)) {
+      if (isFuncConsuming(func, packetIndex)) {
+        fs.add(funcName);
+      }
+    }
+
+    return fs;
+  }, [livenessMode, funcs, packetIndex]);
+
+  const producingFuncs = React.useMemo(() => {
+    if (livenessMode !== "produce-consume") {
+      return new Set<string>();
+    }
+
+    const fs = new Set<string>();
+    for (const [funcName, func] of Object.entries(funcs)) {
+      if (isFuncProducing(func, packetIndex)) {
+        fs.add(funcName);
+      }
+    }
+
+    return fs;
+  }, [livenessMode, funcs, packetIndex]);
+
+  const styledEdges = React.useMemo(() => {
+    return edges.map((edge) => {
+      if (consumingFuncs.has(edge.source) && producingFuncs.has(edge.target)) {
+        return {
+          ...edge,
+          style: { stroke: "var(--color-produce)" },
+        };
+      }
+
+      return edge;
+    });
+  }, [edges, consumingFuncs, producingFuncs]);
+
   const { zoom } = useViewport();
 
   React.useEffect(() => {
@@ -57,7 +106,7 @@ function Canvas({ funcs, dagEdges, type }: CanvasProps) {
     <div className="relative h-full w-full">
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={styledEdges}
         nodeTypes={NODE_TYPES}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}

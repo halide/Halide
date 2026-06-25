@@ -8,7 +8,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "check:types": "tsc --noEmit",
+    "lint": "eslint src/**/*.{ts,tsx}"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",

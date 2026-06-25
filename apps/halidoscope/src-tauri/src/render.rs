@@ -1,37 +1,34 @@
 //! Framebuffer rendering for Halidoscope.
 //!
-//! A `RenderState` holds the accumulated pixel state for a single Func after applying the first
-//! `applied_k` of its store events, plus everything needed to normalize and emit RGBA. It is
-//! deliberately decoupled from `Trace`: the packets and the Func's store-index list are passed
-//! into `seek`, so the state can live in Tauri-managed state alongside the (separately owned)
-//! parsed trace without a self-referential borrow.
+//! Each rendering pathway has its own state type that accumulates pixel data from trace events
+//! and emits RGBA8 for `putImageData`. States are decoupled from `Trace`: event index slices are
+//! passed into `seek` so states can live in Tauri-managed storage alongside the parsed trace.
+
 use ::colorous;
 
-use crate::commands::{HeatmapMode, RenderMode};
 use crate::trace::{pixel_xy, FuncGeometry, Trace, TracePacket};
 
-pub struct RenderState {
+// ── Grayscale rendering ───────────────────────────────────────────────────────
+
+/// Accumulated pixel state for a single Func. Channel 0 is normalized to [0, 255] and replicated
+/// across R/G/B in `to_rgba`. Forward seeks apply only the delta; backward seeks clear and replay.
+pub struct GrayscaleState {
     geom: FuncGeometry,
     min_v: f64,
     max_v: f64,
-    /// Latest normalized intensity per (pixel, channel), row-major with the channel as the minor
-    /// axis: `framebuffer[(y * width + x) * channels + c]`. Length is `width * height * channels`.
-    /// Unwritten cells stay 0 (black).
+    /// Latest normalized intensity per (pixel, channel), row-major with channel as the minor axis.
+    /// Length is `width * height * channels`. Unwritten cells stay 0.
     framebuffer: Vec<u8>,
-    /// Number of this Func's store events currently reflected in `framebuffer`.
     applied_k: usize,
 }
 
-impl RenderState {
-    /// Builds an empty render state for `func`, or `None` if the Func has no usable geometry (no
-    /// coordinate extent / zero area).
+impl GrayscaleState {
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
         let stats = trace.funcs.get(func)?;
         let min_v = stats.min_value.unwrap_or(0.0);
         let max_v = stats.max_value.unwrap_or(255.0);
         let framebuffer = vec![0u8; geom.width * geom.height * geom.channels];
-
         Some(Self {
             geom,
             min_v,
@@ -41,25 +38,18 @@ impl RenderState {
         })
     }
 
-    /// Brings the framebuffer to the state after the first `target_k` stores. Forward seeks apply
-    /// only the delta (`applied_k..target_k`); backward seeks clear and replay from zero.
-    /// `store_indices` is the Func's global packet-index list (from `Trace::func_store_indices`).
     pub fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
         let target_k = target_k.min(store_indices.len());
-
         if target_k < self.applied_k {
-            // Rewind: no per-pixel history is kept, so reset and replay forward.
             self.framebuffer.iter_mut().for_each(|b| *b = 0);
             self.applied_k = 0;
         }
-
         for &global_idx in &store_indices[self.applied_k..target_k] {
             self.apply_store(&trace.packets[global_idx]);
         }
         self.applied_k = target_k;
     }
 
-    /// Writes one store packet's lanes into the framebuffer (last write wins).
     fn apply_store(&mut self, pkt: &TracePacket) {
         let n_lanes = pkt.type_.lanes.max(1) as usize;
         let dims_per_lane = pkt.coordinates.len() / n_lanes;
@@ -72,7 +62,6 @@ impl RenderState {
             min_c,
             ..
         } = self.geom;
-
         for lane in 0..n_lanes {
             let Some(v) = pkt.decoded_value(lane) else {
                 continue;
@@ -81,7 +70,6 @@ impl RenderState {
             if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
                 continue;
             }
-            // Channel is logical dim 2 when present; otherwise the single plane 0.
             let c = if dims_per_lane >= 3 {
                 pkt.coordinates[2 * n_lanes + lane] - min_c
             } else {
@@ -95,7 +83,6 @@ impl RenderState {
         }
     }
 
-    /// Maps a decoded value to a [0, 255] intensity.
     #[inline]
     fn normalize(&self, v: f64) -> u8 {
         if self.max_v > self.min_v {
@@ -105,63 +92,328 @@ impl RenderState {
         }
     }
 
-    /// Produces a `width * height * 4` RGBA8 buffer ready for `putImageData`. `Rgb` maps planes
-    /// 0/1/2 to R/G/B (missing planes are 0); `Grayscale` replicates plane 0 across R/G/B.
-    /// Alpha is always opaque.
-    pub fn to_rgba(&self, mode: RenderMode) -> Vec<u8> {
+    /// Produces a `width * height * 4` RGBA8 buffer. Channel 0 is replicated across R/G/B.
+    pub fn to_rgba(&self) -> Vec<u8> {
         let FuncGeometry {
             width,
             height,
             channels,
             ..
         } = self.geom;
-        let pixels = width * height;
-        let mut out = vec![0u8; pixels * 4];
-
-        // Hoist the mode branch and the channel-count checks outside the pixel loop so each
-        // inner loop is branch-free and LLVM can auto-vectorize it.
+        let mut out = vec![0u8; width * height * 4];
         let fb = &self.framebuffer;
-        match mode {
-            RenderMode::Grayscale => {
-                for (chunk, src) in out.chunks_exact_mut(4).zip(fb.chunks_exact(channels)) {
-                    let v = src[0];
-                    chunk[0] = v;
-                    chunk[1] = v;
-                    chunk[2] = v;
-                    chunk[3] = 255;
-                }
+        if channels >= 3 {
+            for (chunk, src) in out.chunks_exact_mut(4).zip(fb.chunks_exact(channels)) {
+                // Use grayscale weights from scikit-image:
+                // https://scikit-image.org/docs/stable/auto_examples/color_exposure/plot_rgb_to_gray.html
+                let gray = src[0] as f64 * 0.2125 + src[1] as f64 * 0.7154 + src[2] as f64 * 0.0721;
+                chunk[0] = gray as u8;
+                chunk[1] = gray as u8;
+                chunk[2] = gray as u8;
+                chunk[3] = 255;
             }
-            RenderMode::Rgb => {
-                if channels >= 3 {
-                    for (chunk, src) in out.chunks_exact_mut(4).zip(fb.chunks_exact(channels)) {
-                        chunk[0] = src[0];
-                        chunk[1] = src[1];
-                        chunk[2] = src[2];
-                        chunk[3] = 255;
-                    }
-                } else if channels == 2 {
-                    for (chunk, src) in out.chunks_exact_mut(4).zip(fb.chunks_exact(channels)) {
-                        chunk[0] = src[0];
-                        chunk[1] = src[1];
-                        chunk[2] = 0;
-                        chunk[3] = 255;
-                    }
-                } else {
-                    for (chunk, src) in out.chunks_exact_mut(4).zip(fb.chunks_exact(channels)) {
-                        chunk[0] = src[0];
-                        chunk[1] = 0;
-                        chunk[2] = 0;
-                        chunk[3] = 255;
-                    }
-                }
+        } else {
+            for (chunk, src) in out.chunks_exact_mut(4).zip(fb.chunks_exact(channels)) {
+                chunk[0] = src[0];
+                chunk[1] = src[0];
+                chunk[2] = src[0];
+                chunk[3] = 255;
             }
         }
         out
     }
 
-    /// Number of channel planes (logical dim 2 extent, or 1).
     pub fn channels(&self) -> usize {
         self.geom.channels
+    }
+}
+
+// ── RGB rendering ─────────────────────────────────────────────────────────────
+
+/// Same accumulation logic as `GrayscaleState`, but `to_rgba` maps planes 0/1/2 directly to
+/// R/G/B. Missing planes default to 0. Alpha is always opaque.
+pub struct RgbState {
+    geom: FuncGeometry,
+    min_v: f64,
+    max_v: f64,
+    /// Latest normalized intensity per (pixel, channel), row-major with channel as the minor axis.
+    /// Length is `width * height * channels`. Unwritten cells stay 0.
+    framebuffer: Vec<u8>,
+    applied_k: usize,
+}
+
+impl RgbState {
+    pub fn new(trace: &Trace, func: &str) -> Option<Self> {
+        let geom = trace.func_geometry(func)?;
+        let stats = trace.funcs.get(func)?;
+        let min_v = stats.min_value.unwrap_or(0.0);
+        let max_v = stats.max_value.unwrap_or(255.0);
+        let framebuffer = vec![0u8; geom.width * geom.height * geom.channels];
+        Some(Self {
+            geom,
+            min_v,
+            max_v,
+            framebuffer,
+            applied_k: 0,
+        })
+    }
+
+    pub fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
+        let target_k = target_k.min(store_indices.len());
+        if target_k < self.applied_k {
+            self.framebuffer.iter_mut().for_each(|b| *b = 0);
+            self.applied_k = 0;
+        }
+        for &global_idx in &store_indices[self.applied_k..target_k] {
+            self.apply_store(&trace.packets[global_idx]);
+        }
+        self.applied_k = target_k;
+    }
+
+    fn apply_store(&mut self, pkt: &TracePacket) {
+        let n_lanes = pkt.type_.lanes.max(1) as usize;
+        let dims_per_lane = pkt.coordinates.len() / n_lanes;
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            min_x,
+            min_y,
+            min_c,
+            ..
+        } = self.geom;
+        for lane in 0..n_lanes {
+            let Some(v) = pkt.decoded_value(lane) else {
+                continue;
+            };
+            let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
+            if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
+                continue;
+            }
+            let c = if dims_per_lane >= 3 {
+                pkt.coordinates[2 * n_lanes + lane] - min_c
+            } else {
+                0
+            };
+            if c < 0 || c as usize >= channels {
+                continue;
+            }
+            let idx = (y as usize * width + x as usize) * channels + c as usize;
+            self.framebuffer[idx] = self.normalize(v);
+        }
+    }
+
+    #[inline]
+    fn normalize(&self, v: f64) -> u8 {
+        (255.0 * (v - self.min_v) / (self.max_v - self.min_v)).clamp(0.0, 255.0) as u8
+    }
+
+    /// Produces a `width * height * 4` RGBA8 buffer. Planes 0/1/2 map to R/G/B;
+    /// missing planes are 0. Alpha is always opaque.
+    pub fn to_rgba(&self) -> Vec<u8> {
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            ..
+        } = self.geom;
+        let mut out = vec![0u8; width * height * 4];
+        let fb = &self.framebuffer;
+        if channels >= 3 {
+            for (chunk, src) in out.chunks_exact_mut(4).zip(fb.chunks_exact(channels)) {
+                chunk[0] = src[0];
+                chunk[1] = src[1];
+                chunk[2] = src[2];
+                chunk[3] = 255;
+            }
+        } else {
+            for (chunk, src) in out.chunks_exact_mut(4).zip(fb.chunks_exact(channels)) {
+                chunk[0] = src[0];
+                chunk[1] = src[0];
+                chunk[2] = src[0];
+                chunk[3] = 255;
+            }
+        }
+        out
+    }
+
+    pub fn channels(&self) -> usize {
+        self.geom.channels
+    }
+}
+
+// ── Store frequency rendering ─────────────────────────────────────────────────
+
+/// Accumulated per-pixel store counts for one Func, seekable along the global timeline. Forward
+/// seeks apply only the new events; backward seeks clear and replay. The global max store count
+/// is used for normalization so the color scale is stable across the entire scrub range.
+pub struct StoreFrequencyState {
+    geom: FuncGeometry,
+    counts: Vec<i32>,
+    global_max_store_count: i32,
+    applied_k: usize,
+}
+
+impl StoreFrequencyState {
+    pub fn new(trace: &Trace, func: &str) -> Option<Self> {
+        let geom = trace.func_geometry(func)?;
+        let counts = vec![0i32; geom.width * geom.height];
+        let global_max_store_count = trace
+            .funcs
+            .values()
+            .map(|s| s.max_store_count)
+            .max()
+            .unwrap_or(0);
+        Some(Self {
+            geom,
+            counts,
+            global_max_store_count,
+            applied_k: 0,
+        })
+    }
+
+    pub fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
+        let target_k = target_k.min(store_indices.len());
+        if target_k < self.applied_k {
+            self.counts.iter_mut().for_each(|c| *c = 0);
+            self.applied_k = 0;
+        }
+        for &idx in &store_indices[self.applied_k..target_k] {
+            self.increment_pixel(&trace.packets[idx]);
+        }
+        self.applied_k = target_k;
+    }
+
+    fn increment_pixel(&mut self, pkt: &TracePacket) {
+        let FuncGeometry {
+            width,
+            height,
+            min_x,
+            min_y,
+            ..
+        } = self.geom;
+        let n_lanes = pkt.type_.lanes.max(1) as usize;
+        let dims_per_lane = pkt.coordinates.len() / n_lanes;
+        for l in 0..n_lanes {
+            let (x, y) = pixel_xy(pkt, l, n_lanes, dims_per_lane, min_x, min_y);
+            if x >= 0 && y >= 0 && (x as usize) < width && (y as usize) < height {
+                self.counts[y as usize * width + x as usize] += 1;
+            }
+        }
+    }
+
+    /// Produces a `width × height × 4` RGBA8 buffer with the Inferno colormap applied. Counts
+    /// are normalized against the global full-trace maximum so intensities are comparable across
+    /// all Funcs.
+    pub fn to_rgba(&self) -> Vec<u8> {
+        let FuncGeometry { width, height, .. } = self.geom;
+        let gradient = colorous::INFERNO;
+        let lut: [[u8; 3]; 256] = std::array::from_fn(|i| {
+            let c = gradient.eval_continuous(i as f64 / 255.0);
+            [c.r, c.g, c.b]
+        });
+        let scale = if self.global_max_store_count > 0 {
+            255.0 / self.global_max_store_count as f64
+        } else {
+            0.0
+        };
+        let mut out = vec![0u8; width * height * 4];
+        for (chunk, &count) in out.chunks_exact_mut(4).zip(self.counts.iter()) {
+            let ti = (count as f64 * scale) as usize;
+            let [r, g, b] = lut[ti.min(255)];
+            chunk[0] = r;
+            chunk[1] = g;
+            chunk[2] = b;
+            chunk[3] = 255;
+        }
+        out
+    }
+}
+
+// ── Load frequency rendering ──────────────────────────────────────────────────
+
+/// Mirrors `StoreFrequencyState` but tracks load events instead of store events. The global max
+/// load count is used for normalization so the color scale is stable across the entire scrub range.
+pub struct LoadFrequencyState {
+    geom: FuncGeometry,
+    counts: Vec<i32>,
+    global_max_load_count: i32,
+    applied_k: usize,
+}
+
+impl LoadFrequencyState {
+    pub fn new(trace: &Trace, func: &str) -> Option<Self> {
+        let geom = trace.func_geometry(func)?;
+        let counts = vec![0i32; geom.width * geom.height];
+        let global_max_load_count = trace
+            .funcs
+            .values()
+            .map(|s| s.max_load_count)
+            .max()
+            .unwrap_or(0);
+        Some(Self {
+            geom,
+            counts,
+            global_max_load_count,
+            applied_k: 0,
+        })
+    }
+
+    pub fn seek(&mut self, trace: &Trace, load_indices: &[usize], target_k: usize) {
+        let target_k = target_k.min(load_indices.len());
+        if target_k < self.applied_k {
+            self.counts.iter_mut().for_each(|c| *c = 0);
+            self.applied_k = 0;
+        }
+        for &idx in &load_indices[self.applied_k..target_k] {
+            self.increment_pixel(&trace.packets[idx]);
+        }
+        self.applied_k = target_k;
+    }
+
+    fn increment_pixel(&mut self, pkt: &TracePacket) {
+        let FuncGeometry {
+            width,
+            height,
+            min_x,
+            min_y,
+            ..
+        } = self.geom;
+        let n_lanes = pkt.type_.lanes.max(1) as usize;
+        let dims_per_lane = pkt.coordinates.len() / n_lanes;
+        for l in 0..n_lanes {
+            let (x, y) = pixel_xy(pkt, l, n_lanes, dims_per_lane, min_x, min_y);
+            if x >= 0 && y >= 0 && (x as usize) < width && (y as usize) < height {
+                self.counts[y as usize * width + x as usize] += 1;
+            }
+        }
+    }
+
+    /// Produces a `width × height × 4` RGBA8 buffer with the Inferno colormap applied. Counts
+    /// are normalized against the global full-trace maximum so intensities are comparable across
+    /// all Funcs.
+    pub fn to_rgba(&self) -> Vec<u8> {
+        let FuncGeometry { width, height, .. } = self.geom;
+        let gradient = colorous::INFERNO;
+        let lut: [[u8; 3]; 256] = std::array::from_fn(|i| {
+            let c = gradient.eval_continuous(i as f64 / 255.0);
+            [c.r, c.g, c.b]
+        });
+        let scale = if self.global_max_load_count > 0 {
+            255.0 / self.global_max_load_count as f64
+        } else {
+            0.0
+        };
+        let mut out = vec![0u8; width * height * 4];
+        for (chunk, &count) in out.chunks_exact_mut(4).zip(self.counts.iter()) {
+            let ti = (count as f64 * scale) as usize;
+            let [r, g, b] = lut[ti.min(255)];
+            chunk[0] = r;
+            chunk[1] = g;
+            chunk[2] = b;
+            chunk[3] = 255;
+        }
+        out
     }
 }
 
@@ -264,7 +516,7 @@ impl RedundantState {
     }
 
     /// Produces a `width × height × 4` RGBA8 buffer. Pixels with zero redundant stores are black;
-    /// pixels with one or more are mapped through the Reds colormap, normalized against the
+    /// pixels with one or more are mapped through the Inferno colormap, normalized against the
     /// global full-trace maximum so intensities are comparable across all Funcs.
     pub fn to_rgba(&self) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
@@ -289,132 +541,6 @@ impl RedundantState {
                 chunk[1] = g;
                 chunk[2] = b;
             }
-            chunk[3] = 255;
-        }
-        out
-    }
-}
-
-// ── Heatmap rendering ─────────────────────────────────────────────────────────
-
-/// Accumulated per-pixel event counts for one Func, seekable along the global timeline. Mirrors
-/// `RenderState` but tracks a count per pixel instead of the latest normalized value. Forward
-/// seeks apply only the new events; backward seeks clear and replay. The full-trace max count
-/// (pre-computed at parse time and stored in `FuncGeometry`) is used for normalization so the
-/// color scale is stable across the entire scrub range.
-pub struct HeatmapState {
-    geom: FuncGeometry,
-    mode: HeatmapMode,
-    counts: Vec<i32>,
-    global_max_store_count: i32,
-    global_max_load_count: i32,
-    applied_k: usize,
-}
-
-impl HeatmapState {
-    /// Builds an empty heatmap state for `func`, or `None` if the Func has no usable geometry.
-    pub fn new(trace: &Trace, func: &str, mode: HeatmapMode) -> Option<Self> {
-        let geom = trace.func_geometry(func)?;
-        let counts = vec![0i32; geom.width * geom.height];
-        let global_max_store_count = trace
-            .funcs
-            .values()
-            .map(|s| s.max_store_count)
-            .max()
-            .unwrap_or(0);
-        let global_max_load_count = trace
-            .funcs
-            .values()
-            .map(|s| s.max_load_count)
-            .max()
-            .unwrap_or(0);
-        Some(Self {
-            geom,
-            mode,
-            counts,
-            global_max_store_count,
-            global_max_load_count,
-            applied_k: 0,
-        })
-    }
-
-    /// Seeks to the state after the first `target_k` events of `new_mode`. If `new_mode` differs
-    /// from the cached mode the counts are cleared first. `event_indices` must be the Func's
-    /// global packet-index list for that mode.
-    pub fn seek(
-        &mut self,
-        trace: &Trace,
-        event_indices: &[usize],
-        target_k: usize,
-        new_mode: HeatmapMode,
-    ) {
-        if new_mode != self.mode {
-            self.counts.iter_mut().for_each(|c| *c = 0);
-            self.applied_k = 0;
-            self.mode = new_mode;
-        }
-
-        let target_k = target_k.min(event_indices.len());
-        if target_k < self.applied_k {
-            self.counts.iter_mut().for_each(|c| *c = 0);
-            self.applied_k = 0;
-        }
-
-        for &idx in &event_indices[self.applied_k..target_k] {
-            self.increment_pixel(&trace.packets[idx]);
-        }
-        self.applied_k = target_k;
-    }
-
-    fn increment_pixel(&mut self, pkt: &TracePacket) {
-        let FuncGeometry {
-            width,
-            height,
-            min_x,
-            min_y,
-            ..
-        } = self.geom;
-        let n_lanes = pkt.type_.lanes.max(1) as usize;
-        let dims_per_lane = pkt.coordinates.len() / n_lanes;
-        for l in 0..n_lanes {
-            let (x, y) = pixel_xy(pkt, l, n_lanes, dims_per_lane, min_x, min_y);
-            if x >= 0 && y >= 0 && (x as usize) < width && (y as usize) < height {
-                self.counts[y as usize * width + x as usize] += 1;
-            }
-        }
-    }
-
-    /// Produces a `width × height × 4` RGBA8 buffer with the inferno colormap applied. Counts are
-    /// normalized against the global full-trace maximum so intensities are comparable across all
-    /// Funcs.
-    pub fn to_rgba(&self) -> Vec<u8> {
-        let FuncGeometry { width, height, .. } = self.geom;
-        let max_count = match self.mode {
-            HeatmapMode::Stores => self.global_max_store_count,
-            HeatmapMode::Loads => self.global_max_load_count,
-        };
-
-        // Build a 256-entry LUT once before the pixel loop. Calling eval_continuous 256 times is
-        // negligible; doing it once per pixel at 750K+ pixels is the choppy inner loop culprit.
-        // 256 × 3 bytes = 768 bytes, fits entirely in L1 cache.
-        let gradient = colorous::INFERNO;
-        let lut: [[u8; 3]; 256] = std::array::from_fn(|i| {
-            let c = gradient.eval_continuous(i as f64 / 255.0);
-            [c.r, c.g, c.b]
-        });
-        let scale = if max_count > 0 {
-            255.0 / max_count as f64
-        } else {
-            0.0
-        };
-
-        let mut out = vec![0u8; width * height * 4];
-        for (chunk, &count) in out.chunks_exact_mut(4).zip(self.counts.iter()) {
-            let ti = (count as f64 * scale) as usize;
-            let [r, g, b] = lut[ti.min(255)];
-            chunk[0] = r;
-            chunk[1] = g;
-            chunk[2] = b;
             chunk[3] = 255;
         }
         out
@@ -459,7 +585,9 @@ impl ReuseDistanceState {
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
         let n_cells = geom.width * geom.height * geom.channels;
-        let is_input = trace.func_store_indices(func).map_or(true, |s| s.is_empty());
+        let is_input = trace
+            .func_store_indices(func)
+            .map_or(true, |s| s.is_empty());
         let global_max_reuse_distance = trace
             .funcs
             .values()
