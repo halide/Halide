@@ -27,9 +27,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_cwd,
             commands::open_trace,
-            commands::render_at,
-            commands::render_heatmap,
-            commands::render_redundant,
+            commands::render_grayscale,
+            commands::render_rgb,
+            commands::render_store_frequency,
+            commands::render_load_frequency,
+            commands::render_redundant_stores,
             commands::render_reuse_distance
         ])
         .run(tauri::generate_context!())

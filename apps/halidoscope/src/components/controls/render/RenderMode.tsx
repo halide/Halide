@@ -1,30 +1,15 @@
 import { Select } from "radix-ui";
 import { useAtom } from "jotai";
 
-import {
-  visualizationModeAtom,
-  type VisualizationMode,
-} from "@/state/visualization";
-
-const VISUALIZATION_MODES = [
-  { value: "True Values", label: "True Values" },
-  { value: "Store Frequency", label: "Store Frequency" },
-  { value: "Load Frequency", label: "Load Frequency" },
-  { value: "Redundant Stores", label: "Redundant Stores" },
-  { value: "Reuse Distance", label: "Reuse Distance" },
-] as const;
+import { renderModeAtom, RENDER_MODES, type RenderMode } from "@/state/render";
 
 function VisualizationSelect() {
-  const [visualizationMode, setVisualizationMode] = useAtom(
-    visualizationModeAtom,
-  );
+  const [renderMode, setVisualizationMode] = useAtom(renderModeAtom);
 
   return (
     <Select.Root
-      value={visualizationMode}
-      onValueChange={(value) =>
-        setVisualizationMode(value as VisualizationMode)
-      }
+      value={renderMode}
+      onValueChange={(value) => setVisualizationMode(value as RenderMode)}
     >
       <Select.Trigger
         id="visualization-select"
@@ -54,13 +39,13 @@ function VisualizationSelect() {
         className="bg-ps-border-primary text-ps-text-primary border-ps-border-tertiary z-10 max-h-(--radix-select-content-available-height) w-(--radix-select-trigger-width) rounded border"
       >
         <Select.Viewport>
-          {VISUALIZATION_MODES.map(({ value, label }) => (
+          {RENDER_MODES.map((value) => (
             <Select.Item
               key={value}
               value={value}
               className="hover:bg-ps-border-tertiary cursor-pointer p-2 transition-colors"
             >
-              <Select.ItemText>{label}</Select.ItemText>
+              <Select.ItemText>{value}</Select.ItemText>
             </Select.Item>
           ))}
         </Select.Viewport>

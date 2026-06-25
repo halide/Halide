@@ -14,6 +14,7 @@ interface HistogramProps {
 }
 
 function Histogram({ data, domain, labels }: HistogramProps) {
+  console.log("Data: ", data);
   const ref = React.useRef<HTMLDivElement>(null);
   const histogramScale = useAtomValue(histogramAtom) as HistogramScale;
   // Build the data for the bottom colorbar.
