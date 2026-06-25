@@ -24,7 +24,9 @@ function HistogramSelect() {
             id="func-select"
             className="bg-ps-border-primary text-ps-text-primary border-ps-border-tertiary inline-flex h-8 w-full items-center justify-center rounded border px-2 uppercase focus:outline-none"
           >
-            <Select.Value />
+            <span className="truncate">
+              <Select.Value />
+            </span>
             <Select.Icon className="ml-auto">
               <svg
                 xmlns="http://www.w3.org/2000/svg"

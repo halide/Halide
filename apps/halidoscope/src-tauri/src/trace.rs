@@ -234,7 +234,9 @@ pub struct Trace {
     pub dag_edges: BTreeMap<String, BTreeSet<String>>,
     pub store_indices_by_func: BTreeMap<String, Vec<usize>>,
     pub load_indices_by_func: BTreeMap<String, Vec<usize>>,
-    pub liveness_range_by_func: BTreeMap<String, (u32, u32)>,
+    pub buffer_liveness_range_by_func: BTreeMap<String, (u32, u32)>,
+    pub produce_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>>,
+    pub consume_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>>,
 }
 
 // ── Binary parsing helpers ────────────────────────────────────────────────────
@@ -429,7 +431,9 @@ impl Trace {
         let mut dag_edges: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         let mut store_indices_by_func: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         let mut load_indices_by_func: BTreeMap<String, Vec<usize>> = BTreeMap::new();
-        let mut liveness_range_by_func: BTreeMap<String, (u32, u32)> = BTreeMap::new();
+        let mut buffer_liveness_range_by_func: BTreeMap<String, (u32, u32)> = BTreeMap::new();
+        let mut produce_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
+        let mut consume_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
 
         // id -> pipeline name: propagated down the parent chain so every event in a pipeline can
         // compute its qualified name.
@@ -549,7 +553,7 @@ impl Trace {
                     // Start the liveness range for this Func at the current packet index.
                     let idx = packets.len() as u32;
 
-                    liveness_range_by_func
+                    buffer_liveness_range_by_func
                         .entry(qualified.clone())
                         .and_modify(|range| range.0 = range.0.min(idx))
                         .or_insert((idx, idx));
@@ -558,7 +562,7 @@ impl Trace {
                     // End the liveness range for this Func at the current packet index.
                     let idx = packets.len() as u32;
 
-                    liveness_range_by_func
+                    buffer_liveness_range_by_func
                         .entry(qualified.clone())
                         .and_modify(|range| range.1 = range.1.max(idx))
                         .or_insert((idx, idx));
@@ -594,6 +598,40 @@ impl Trace {
                     let stats = funcs.entry(qualified.clone()).or_default();
                     update_coord_range(&pkt, stats);
                     update_value_range(&pkt, stats);
+                }
+                EventCode::Produce => {
+                    let idx = packets.len() as u32;
+
+                    produce_ranges_by_func
+                        .entry(qualified.clone())
+                        .or_default()
+                        .push((idx, idx));
+                }
+                EventCode::EndProduce => {
+                    let idx = packets.len() as u32;
+
+                    if let Some(ranges) = produce_ranges_by_func.get_mut(qualified.as_str()) {
+                        if let Some(last) = ranges.last_mut() {
+                            last.1 = idx;
+                        }
+                    }
+                }
+                EventCode::Consume => {
+                    let idx = packets.len() as u32;
+
+                    consume_ranges_by_func
+                        .entry(qualified.clone())
+                        .or_default()
+                        .push((idx, idx));
+                }
+                EventCode::EndConsume => {
+                    let idx = packets.len() as u32;
+
+                    if let Some(ranges) = consume_ranges_by_func.get_mut(qualified.as_str()) {
+                        if let Some(last) = ranges.last_mut() {
+                            last.1 = idx;
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -927,7 +965,9 @@ impl Trace {
             dag_edges,
             store_indices_by_func,
             load_indices_by_func,
-            liveness_range_by_func,
+            buffer_liveness_range_by_func,
+            produce_ranges_by_func,
+            consume_ranges_by_func,
         })
     }
 
@@ -944,8 +984,20 @@ impl Trace {
         self.load_indices_by_func.get(qualified).map(Vec::as_slice)
     }
 
-    pub fn func_liveness_range(&self, qualified: &str) -> Option<&(u32, u32)> {
-        self.liveness_range_by_func.get(qualified)
+    pub fn func_buffer_liveness_range(&self, qualified: &str) -> Option<&(u32, u32)> {
+        self.buffer_liveness_range_by_func.get(qualified)
+    }
+
+    pub fn func_produce_ranges(&self, qualified: &str) -> Option<&[(u32, u32)]> {
+        self.produce_ranges_by_func
+            .get(qualified)
+            .map(Vec::as_slice)
+    }
+
+    pub fn func_consume_ranges(&self, qualified: &str) -> Option<&[(u32, u32)]> {
+        self.consume_ranges_by_func
+            .get(qualified)
+            .map(Vec::as_slice)
     }
 
     /// Spatial layout for `qualified`, or `None` if it has no usable coordinate extent. Reuses
