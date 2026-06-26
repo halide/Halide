@@ -1,8 +1,12 @@
+use tauri_plugin_cli::CliExt;
+
+use crate::cli::halidoscope_cli;
+
+pub mod cli;
 pub mod commands;
 pub mod render;
 pub mod trace;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn get_cwd() -> Result<String, String> {
     std::env::current_dir()
@@ -17,9 +21,18 @@ fn get_cwd() -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_cli::init())
         .setup(|app| {
-            #[cfg(desktop)]
-            app.handle().plugin(tauri_plugin_cli::init())?;
+            match app.cli().matches() {
+                Ok(matches) => match matches.subcommand {
+                    Some(subcommand) => halidoscope_cli(subcommand),
+                    None => {}
+                },
+                Err(e) => {
+                    eprintln!("Error parsing CLI arguments: {}", e);
+                    std::process::exit(1);
+                }
+            }
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
