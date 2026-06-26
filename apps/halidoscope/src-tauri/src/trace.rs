@@ -408,6 +408,7 @@ fn parse_func_type_and_dim(
     // path is "tag seeds, accesses expand."
     if !min_coords.is_empty() {
         let entry = funcs.entry(qualified.to_owned()).or_default();
+        entry.name = qualified.to_owned();
         entry.min_coords = min_coords;
         entry.max_coords = max_coords;
     }
@@ -548,7 +549,8 @@ impl Trace {
                     parse_func_type_and_dim(&qualified, &trace_tag, &mut funcs);
                 }
                 EventCode::BeginRealization => {
-                    funcs.entry(qualified.clone()).or_default();
+                    let entry = funcs.entry(qualified.clone()).or_default();
+                    entry.name = qualified.clone();
 
                     // Start the liveness range for this Func at the current packet index.
                     let idx = packets.len() as u32;
@@ -577,7 +579,10 @@ impl Trace {
 
                     // Add the load event to the list of pending loads to support DAG inference.
                     pending_loads.push((func_name.clone(), parent_id));
-                    let stats = funcs.entry(qualified.clone()).or_default();
+                    let stats = funcs.entry(qualified.clone()).or_insert_with(|| FuncStats {
+                        name: qualified.clone(),
+                        ..Default::default()
+                    });
 
                     // Update the min/max coordinate and value ranges for this Func based on the
                     // current load packet.
@@ -595,7 +600,10 @@ impl Trace {
 
                     // Update the min/max coordinate and value ranges for this Func based on the
                     // current store packet.
-                    let stats = funcs.entry(qualified.clone()).or_default();
+                    let stats = funcs.entry(qualified.clone()).or_insert_with(|| FuncStats {
+                        name: qualified.clone(),
+                        ..Default::default()
+                    });
                     update_coord_range(&pkt, stats);
                     update_value_range(&pkt, stats);
                 }
@@ -1046,7 +1054,7 @@ fn count_histogram(counts: &[i32]) -> (i32, Vec<u32>) {
 
 /// Returns `(width, height, min_x, min_y)` for a Func, or `None` if the stats
 /// have no coordinate information or produce a zero-area extent.
-fn func_extents(stats: &FuncStats) -> Option<(usize, usize, i32, i32)> {
+pub fn func_extents(stats: &FuncStats) -> Option<(usize, usize, i32, i32)> {
     if stats.min_coords.is_empty() || stats.max_coords.is_empty() {
         return None;
     }
