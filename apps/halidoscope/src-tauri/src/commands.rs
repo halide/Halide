@@ -10,7 +10,7 @@ use tauri::ipc::Response;
 use tauri::State;
 
 use crate::render::{
-    GrayscaleState, LoadFrequencyState, RedundantState, ReuseDistanceState, RgbState,
+    GrayscaleState, LoadFrequencyState, RedundantState, Renderer, ReuseDistanceState, RgbState,
     StoreFrequencyState,
 };
 use crate::trace::Trace;
