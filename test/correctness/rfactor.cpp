@@ -1298,6 +1298,348 @@ int isnan_max_rfactor_test() {
     return 0;
 }
 
+int hoisted_rfactor_test() {
+    ImageParam A{Int(8), 2, "A"};
+    ImageParam B{Int(8), 2, "B"};
+    ImageParam As{Float(16), 1, "As"};
+    ImageParam Bs{Float(16), 1, "Bs"};
+
+    Var i{"i"}, j{"j"}, u{"u"};
+    RDom k({{0, A.dim(1).extent() / 4 * 4}}, "k");
+    RVar ko{"ko"}, ki{"ki"};
+
+    Func C{"C"};
+    C(i, j) += widening_mul(As(i), Bs(j)) * cast(Int(32), widening_mul(A(i, k), B(j, k)));
+    C.bound(i, 0, A.dim(0).extent());
+    C.bound(j, 0, B.dim(0).extent());
+
+    // Split k into (ko, ki) and rfactor ko to u, so the intermediate accumulates
+    // over ki. widening_mul(As(i), Bs(j)) is invariant in k, so by distributivity:
+    //
+    //   sum_k(scale(i,j) * inner(i,j,k)) = scale(i,j) * sum_k(inner(i,j,k))
+    //
+    // Hoisting should move the loop-invariant scale factor out of the
+    // intermediate reduction, so the intermediate accumulates only the inner
+    // integer product and the scale is applied during write-back.
+    Func C_intm = C.update().split(k, ko, ki, 4).rfactor({{ko, u}}, RFactorOptions::HoistInvariantFactor);
+
+    internal_assert(C_intm.types()[0] == Int(32))
+        << "hoisted rfactor: expected C_intm to be Int(32), got " << C_intm.types()[0] << "\n";
+
+    // Numerical correctness: result must match a reference that applies the full
+    // non-hoisted reduction.
+    const int M = 8, N = 8, K = 16;
+    Buffer<int8_t> a_buf(M, K), b_buf(N, K);
+    Buffer<float16_t> as_buf(M), bs_buf(N);
+    for (int m = 0; m < M; m++) {
+        for (int n_k = 0; n_k < K; n_k++) {
+            a_buf(m, n_k) = (int8_t)((m + n_k) % 7 - 3);
+        }
+        as_buf(m) = float16_t((float)(m + 1) * 0.5f);
+    }
+    for (int n = 0; n < N; n++) {
+        for (int n_k = 0; n_k < K; n_k++) {
+            b_buf(n, n_k) = (int8_t)((n + n_k + 1) % 5 - 2);
+        }
+        bs_buf(n) = float16_t((float)(n + 1) * 0.25f);
+    }
+    A.set(a_buf);
+    B.set(b_buf);
+    As.set(as_buf);
+    Bs.set(bs_buf);
+
+    Buffer<float> result = C.realize({M, N});
+
+    // Reference: plain reduction without rfactor.
+    Buffer<float> ref(M, N);
+    ref.fill(0.f);
+    for (int m = 0; m < M; m++) {
+        for (int n = 0; n < N; n++) {
+            for (int kk = 0; kk < K; kk++) {
+                ref(m, n) += (float)as_buf(m) * (float)bs_buf(n) *
+                             (float)((int32_t)(int16_t)((int16_t)a_buf(m, kk) * (int16_t)b_buf(n, kk)));
+            }
+        }
+    }
+
+    for (int m = 0; m < M; m++) {
+        for (int n = 0; n < N; n++) {
+            internal_assert(std::abs(result(m, n) - ref(m, n)) < 1e-6f)
+                << "hoisted rfactor mismatch at (" << m << ", " << n << "): "
+                << result(m, n) << " vs ref " << ref(m, n) << "\n";
+        }
+    }
+
+    return 0;
+}
+
+// Hoisted rfactor with outer Min and additive factor:
+//   min_k(offset(i) + body(i, k)) = offset(i) + min_k(body(i, k))
+// The intermediate accumulates min without the offset; write-back adds it once.
+int hoisted_rfactor_min_test() {
+    ImageParam offset_p{Float(32), 1, "offset_p"};
+    ImageParam data_p{Float(32), 2, "data_p"};
+
+    Var i{"i"}, u{"u"};
+    const int K = 16;
+    RDom k(0, K, "k");
+
+    Func C{"C"};
+    C(i) = Float(32).max();
+    C(i) = min(C(i), offset_p(i) + data_p(i, k));
+
+    RVar ko{"ko"}, ki{"ki"};
+    C.update().split(k, ko, ki, 4);
+    Func C_intm = C.update().rfactor({{ko, u}}, RFactorOptions::HoistInvariantFactor);
+    C_intm.compute_root();
+
+    const int M = 8;
+    Buffer<float> off(M), dat(M, K);
+    for (int m = 0; m < M; m++) {
+        off(m) = (float)(m + 1);
+        for (int kk = 0; kk < K; kk++) {
+            dat(m, kk) = (float)(((m * K + kk) % 7) - 3);
+        }
+    }
+    offset_p.set(off);
+    data_p.set(dat);
+
+    Buffer<float> result = C.realize({M});
+
+    Buffer<float> ref(M);
+    for (int m = 0; m < M; m++) {
+        float v = std::numeric_limits<float>::max();
+        for (int kk = 0; kk < K; kk++) {
+            v = std::min(v, off(m) + dat(m, kk));
+        }
+        ref(m) = v;
+    }
+
+    for (int m = 0; m < M; m++) {
+        internal_assert(result(m) == ref(m))
+            << "hoisted rfactor min mismatch at " << m << ": "
+            << result(m) << " vs ref " << ref(m) << "\n";
+    }
+    return 0;
+}
+
+// Hoisted rfactor with outer Or (bool) and And factor:
+//   or_k(mask(i) && check(i, k)) = mask(i) && or_k(check(i, k))
+// The intermediate accumulates or without the mask; write-back applies it once.
+int hoisted_rfactor_or_test() {
+    ImageParam mask_p{Bool(), 1, "mask_p"};
+    ImageParam check_p{Bool(), 2, "check_p"};
+
+    Var i{"i"}, u{"u"};
+    const int K = 16;
+    RDom k(0, K, "k");
+
+    Func valid{"valid"};
+    valid(i) = cast<bool>(false);
+    valid(i) = valid(i) || (mask_p(i) && check_p(i, k));
+
+    RVar ko{"ko"}, ki{"ki"};
+    valid.update().split(k, ko, ki, 4);
+    Func valid_intm = valid.update().rfactor({{ko, u}}, RFactorOptions::HoistInvariantFactor);
+    valid_intm.compute_root();
+
+    const int M = 8;
+    Buffer<bool> mask(M), chk(M, K);
+    for (int m = 0; m < M; m++) {
+        mask(m) = (m % 2 == 0);
+        for (int kk = 0; kk < K; kk++) {
+            chk(m, kk) = ((m + kk) % 3 == 0);
+        }
+    }
+    mask_p.set(mask);
+    check_p.set(chk);
+
+    Buffer<bool> result = valid.realize({M});
+
+    for (int m = 0; m < M; m++) {
+        bool ref = false;
+        for (int kk = 0; kk < K; kk++) {
+            ref = ref || (mask(m) && chk(m, kk));
+        }
+        internal_assert(result(m) == ref)
+            << "hoisted rfactor or mismatch at " << m << ": "
+            << (int)result(m) << " vs ref " << (int)ref << "\n";
+    }
+    return 0;
+}
+
+// Hoisted rfactor with outer Min and an additive float offset over an integer
+// body:
+//   min_k(offset(i) + body(i, k)) = offset(i) + min_k(body(i, k))
+// The float offset implicitly promotes the integer body to float. Hoisting
+// strips that promotion so the intermediate accumulates min over Int(32); the
+// offset is added once at write-back. This exercises the min/max narrowing path:
+// the intermediate's identity must be Int(32).max(), not a cast of the original
+// Float(32) identity.
+int hoisted_rfactor_min_narrow_test() {
+    ImageParam offset_p{Float(32), 1, "offset_p"};
+    ImageParam data_p{Int(32), 2, "data_p"};
+
+    Var i{"i"}, u{"u"};
+    const int K = 16;
+    RDom k(0, K, "k");
+
+    Func C{"C"};
+    C(i) = Float(32).max();
+    C(i) = min(C(i), offset_p(i) + data_p(i, k));
+
+    RVar ko{"ko"}, ki{"ki"};
+    C.update().split(k, ko, ki, 4);
+    Func C_intm = C.update().rfactor({{ko, u}}, RFactorOptions::HoistInvariantFactor);
+    C_intm.compute_root();
+
+    internal_assert(C_intm.types()[0] == Int(32))
+        << "hoisted rfactor min: expected C_intm to be Int(32), got " << C_intm.types()[0] << "\n";
+
+    const int M = 8;
+    Buffer<float> off(M);
+    Buffer<int> dat(M, K);
+    for (int m = 0; m < M; m++) {
+        off(m) = (float)(m + 1) * 0.5f;
+        for (int kk = 0; kk < K; kk++) {
+            dat(m, kk) = ((m * K + kk) % 7) - 3;
+        }
+    }
+    offset_p.set(off);
+    data_p.set(dat);
+
+    Buffer<float> result = C.realize({M});
+
+    Buffer<float> ref(M);
+    for (int m = 0; m < M; m++) {
+        float v = std::numeric_limits<float>::max();
+        for (int kk = 0; kk < K; kk++) {
+            v = std::min(v, off(m) + (float)dat(m, kk));
+        }
+        ref(m) = v;
+    }
+
+    for (int m = 0; m < M; m++) {
+        internal_assert(result(m) == ref(m))
+            << "hoisted rfactor min narrow mismatch at " << m << ": "
+            << result(m) << " vs ref " << ref(m) << "\n";
+    }
+    return 0;
+}
+
+// Hoisted rfactor strips implicit int-to-float Cast nodes so the intermediate
+// can accumulate at integer type. It must not strip strict_cast, since that
+// explicitly requests that the conversion happen before the reduction.
+int hoisted_rfactor_strict_cast_test() {
+    Buffer<int32_t> data(2);
+    data(0) = 16777217;
+    data(1) = -16777216;
+
+    Var u{"u"};
+    RDom k(0, 2, "k");
+
+    Func f{"f"};
+    f() = 0.0f;
+    f() += 1.5f * strict_float(cast<float>(data(k)));
+
+    RVar ko{"ko"}, ki{"ki"};
+    f.update().split(k, ko, ki, 2);
+    Func intm = f.update().rfactor({{ko, u}}, RFactorOptions::HoistInvariantFactor);
+    intm.compute_root();
+
+    internal_assert(intm.types()[0] == Float(32))
+        << "hoisted rfactor strict_cast: expected intm to remain Float(32), got "
+        << intm.types()[0] << "\n";
+
+    Buffer<float> result = f.realize();
+    internal_assert(result() == 0.0f)
+        << "hoisted rfactor strict_cast mismatch: " << result()
+        << " vs ref 0\n";
+
+    return 0;
+}
+
+// A factor may depend on an RVar that rfactor preserves. In the intermediate
+// update below, r.y is replaced by the pure Var u, so scale(u) is invariant
+// over the intermediate's reduction over r.x and can be hoisted to writeback.
+int hoisted_rfactor_preserved_rvar_factor_test() {
+    ImageParam scale_p{Float(32), 1, "scale_p"};
+    ImageParam data_p{Int(32), 2, "data_p"};
+
+    Var u{"u"};
+    const int X = 8, Y = 4;
+    RDom r(0, X, 0, Y, "r");
+
+    Func f{"f"};
+    f() = 0.0f;
+    f() += scale_p(r.y) * data_p(r.x, r.y);
+
+    Func intm = f.update().rfactor({{r.y, u}}, RFactorOptions::HoistInvariantFactor);
+    intm.compute_root();
+
+    internal_assert(intm.types()[0] == Int(32))
+        << "hoisted rfactor preserved-rvar factor: expected intm to be Int(32), got "
+        << intm.types()[0] << "\n";
+
+    Buffer<float> scale(Y);
+    Buffer<int> data(X, Y);
+    for (int y = 0; y < Y; y++) {
+        scale(y) = (float)(y + 1);
+        for (int x = 0; x < X; x++) {
+            data(x, y) = (x + 2 * y) % 7 - 3;
+        }
+    }
+    scale_p.set(scale);
+    data_p.set(data);
+
+    Buffer<float> result = f.realize();
+
+    float ref = 0.0f;
+    for (int y = 0; y < Y; y++) {
+        int partial = 0;
+        for (int x = 0; x < X; x++) {
+            partial += data(x, y);
+        }
+        ref += scale(y) * (float)partial;
+    }
+
+    internal_assert(result() == ref)
+        << "hoisted rfactor preserved-rvar factor mismatch: "
+        << result() << " vs ref " << ref << "\n";
+
+    return 0;
+}
+
+// The min/max + add hoisting law is only valid for integer types where addition
+// has no defined wraparound behavior. For UInt(8), hoisting the invariant 250
+// would incorrectly turn min_k((250 + x_k) mod 256) into
+// (250 + min_k(x_k)) mod 256.
+int hoisted_rfactor_unsigned_min_fallback_test() {
+    Buffer<uint8_t> data(2);
+    data(0) = 1;
+    data(1) = 10;
+
+    Var u{"u"};
+    RDom k(0, 2, "k");
+
+    Func f{"f"};
+    f() = UInt(8).max();
+    f() = min(f(), cast<uint8_t>(250) + data(k));
+
+    RVar ko{"ko"}, ki{"ki"};
+    f.update().split(k, ko, ki, 2);
+    Func intm = f.update().rfactor({{ko, u}}, RFactorOptions::HoistInvariantFactor);
+    intm.compute_root();
+
+    Buffer<uint8_t> result = f.realize();
+    const uint8_t expected = 4;
+    internal_assert(result() == expected)
+        << "hoisted rfactor unsigned min fallback mismatch: "
+        << (int)result() << " vs ref " << (int)expected << "\n";
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -1347,6 +1689,13 @@ int main(int argc, char **argv) {
         {"rfactor bounds tests", rfactor_precise_bounds_test},
         {"isnan max rfactor test (bitwise or)", isnan_max_rfactor_test<BitwiseOr>},
         {"isnan max rfactor test (logical or)", isnan_max_rfactor_test<LogicalOr>},
+        {"hoisted rfactor test (add/mul)", hoisted_rfactor_test},
+        {"hoisted rfactor test (min/add)", hoisted_rfactor_min_test},
+        {"hoisted rfactor test (min/add, narrowing)", hoisted_rfactor_min_narrow_test},
+        {"hoisted rfactor test (strict_cast preserved)", hoisted_rfactor_strict_cast_test},
+        {"hoisted rfactor test (preserved-rvar factor)", hoisted_rfactor_preserved_rvar_factor_test},
+        {"hoisted rfactor test (min/add, unsigned fallback)", hoisted_rfactor_unsigned_min_fallback_test},
+        {"hoisted rfactor test (or/and)", hoisted_rfactor_or_test},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;
