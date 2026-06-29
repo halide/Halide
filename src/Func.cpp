@@ -573,9 +573,9 @@ std::string Stage::dump_argument_list() const {
     return dump_dim_list(definition.schedule().dims());
 }
 
-Func Stage::rfactor(const RVar &r, const Var &v) {
+Func Stage::rfactor(const RVar &r, const Var &v, RFactorOptions options) {
     definition.schedule().touched() = true;
-    return rfactor({{r, v}});
+    return rfactor({{r, v}}, options);
 }
 
 // Helpers for rfactor implementation
@@ -742,6 +742,166 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
     return {new_rdom, dim_projection};
 }
 
+// A semiring distributive law used by hoisted rfactor: `inner` distributes over
+// the outer (reduction) op, so a loop-invariant operand of `inner` can be
+// hoisted out of the reduction.
+struct DistributiveLaw {
+    IRNodeType outer_op;
+    IRNodeType inner_op;
+    // The +/* ring auto-promotes an integer body to the factor's float type;
+    // when true, we strip that implicit promotion so the intermediate keeps
+    // the integer accumulation type.
+    bool strip_promotion_cast;
+};
+
+constexpr DistributiveLaw distributive_laws[] = {
+    {IRNodeType::Add, IRNodeType::Mul, true},  // sum_k(s * x_k) = s * sum_k(x_k)
+    {IRNodeType::Min, IRNodeType::Add, true},  // min_k(c + x_k) = c + min_k(x_k)
+    {IRNodeType::Max, IRNodeType::Add, true},  // max_k(c + x_k) = c + max_k(x_k)
+    {IRNodeType::Or, IRNodeType::And, false},  // or_k(p && x_k)  = p && or_k(x_k)
+    {IRNodeType::And, IRNodeType::Or, false},  // and_k(p || x_k) = p || and_k(x_k)
+};
+
+bool distributive_law_valid_for_type(const DistributiveLaw &law, Type t) {
+    if (law.outer_op == IRNodeType::Min || law.outer_op == IRNodeType::Max) {
+        // Hoisting min/max over addition relies on addition being order-preserving.
+        // This is not true for unsigned or narrow signed integer wraparound.
+        return !t.can_overflow();
+    }
+    return true;
+}
+
+// nullopt if no law's outer_op matches, or if the matching law is invalid for `op`'s type.
+optional<DistributiveLaw> distributive_law_for(const Expr &op) {
+    for (const DistributiveLaw &law : distributive_laws) {
+        if (law.outer_op == op.node_type()) {
+            return distributive_law_valid_for_type(law, op.type()) ? std::make_optional(law) : std::nullopt;
+        }
+    }
+    return std::nullopt;
+}
+
+// If `e` is a binary op of node type `op` and exactly one of its two operands
+// satisfies `is_selected`, returns {selected operand, other operand}. Returns
+// nullopt if `e` isn't a binary `op`, or if neither/both operands match.
+template<typename Predicate>
+optional<pair<Expr, Expr>> select_binary_operand(const Expr &e, IRNodeType op, Predicate &&is_selected) {
+    if (e.node_type() != op) {
+        return std::nullopt;
+    }
+    // `op` is always a binary op, so this is guaranteed to have a value.
+    auto [a, b] = *as_binary_operands(e);
+    const bool a_sel = is_selected(a);
+    const bool b_sel = is_selected(b);
+    if (a_sel == b_sel) {
+        return std::nullopt;
+    }
+    return a_sel ? std::make_pair(a, b) : std::make_pair(b, a);
+}
+
+struct HoistedFactor {
+    IRNodeType op;
+    Expr factor;      // The loop-invariant distributable factor, expressed in
+                      // the preserved update's coordinate system.
+    Expr inner_body;  // The remaining body after removing the factor, with any
+                      // implicit float-promotion cast stripped (for the +/* ring).
+};
+
+// Given the non-self-reference increment from an update body and the
+// distributive law of the outer associative op, extract a loop-invariant factor
+// that distributes over the outer op. `intermediate_vars` is the set of RVar
+// names the factor must NOT reference after projecting into the intermediate
+// update (the rvars the intermediate reduces over).
+optional<HoistedFactor> extract_factor(const Expr &increment,
+                                       const DistributiveLaw &law,
+                                       const Scope<> &intermediate_vars,
+                                       const RFactorProjection &to_intermediate,
+                                       const RFactorProjection &to_preserved) {
+    auto is_intermediate_rvar_free = [&](const Expr &e) {
+        return !expr_uses_vars(to_intermediate(e), intermediate_vars);
+    };
+
+    optional<pair<Expr, Expr>> split = select_binary_operand(increment, law.inner_op, is_intermediate_rvar_free);
+    if (!split) {
+        return std::nullopt;
+    }
+    Expr factor = to_preserved(split->first);
+    Expr body = split->second;
+
+    if (law.strip_promotion_cast) {
+        // Strip only the outer promotion cast; strict_cast inside the body is left alone.
+        if (const Cast *c = body.as<Cast>()) {
+            if (body.type().is_float() && c->value.type().is_int_or_uint()) {
+                body = c->value;
+            }
+        }
+    }
+
+    return HoistedFactor{law.inner_op, factor, body};
+}
+
+vector<optional<HoistedFactor>> extract_hoisted_factors(const vector<Expr> &values,
+                                                        const AssociativeOp &prover_result,
+                                                        const string &func_name,
+                                                        const Scope<> &intermediate_vars,
+                                                        const RFactorProjection &to_intermediate,
+                                                        const RFactorProjection &to_preserved) {
+    vector<optional<HoistedFactor>> result(values.size());
+
+    auto is_orig_self_ref = [&](const Expr &e) {
+        const Call *c = e.as<Call>();
+        return c && c->name == func_name && c->call_type == Call::Halide;
+    };
+
+    auto extract_increment = [&](const Expr &val, const DistributiveLaw &law) -> optional<Expr> {
+        optional<pair<Expr, Expr>> split = select_binary_operand(val, law.outer_op, is_orig_self_ref);
+        return split ? std::make_optional(split->second) : std::nullopt;
+    };
+
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (optional<DistributiveLaw> law = distributive_law_for(prover_result.pattern.ops[i])) {
+            if (optional<Expr> increment = extract_increment(values[i], *law)) {
+                result[i] = extract_factor(*increment, *law, intermediate_vars,
+                                           to_intermediate, to_preserved);
+            }
+        }
+    }
+    return result;
+}
+
+// Build the identities for the intermediate's pure definition. A hoisted element
+// accumulates its inner body at that body's (possibly narrower) type, so its
+// identity is the outer reduction op's identity in that type; other elements
+// keep the prover's identity.
+Tuple build_intm_identities(const AssociativePattern &pattern,
+                            const vector<optional<HoistedFactor>> &hoisted_factors) {
+    vector<Expr> result = pattern.identities;
+    for (size_t i = 0; i < result.size(); ++i) {
+        if (hoisted_factors[i]) {
+            const HoistedFactor &factor = *hoisted_factors[i];
+            const IRNodeType outer_op = pattern.ops[i].node_type();
+            std::optional<Expr> identity = get_associative_identity(factor.inner_body.type(), outer_op);
+            internal_assert(identity)
+                << "Could not find an unambiguous identity for "
+                << IRNodeType_string(outer_op) << " over " << factor.inner_body.type() << "\n";
+            result[i] = *identity;
+        }
+    }
+    return Tuple(result);
+}
+
+// The intermediate accumulated the inner body at its own (possibly narrower)
+// type, so cast back to the outer op's type before recombining with the factor.
+Expr apply_hoisted_factor(Expr r, const optional<HoistedFactor> &factor, Type result_type) {
+    if (!factor) {
+        return r;
+    }
+    if (r.type() != result_type) {
+        r = cast(result_type, r);
+    }
+    return make_binary_op(factor->op, factor->factor, r);
+}
+
 }  // namespace
 
 pair<vector<Split>, vector<Split>> Stage::rfactor_validate_args(const std::vector<std::pair<RVar, Var>> &preserved, const AssociativeOp &prover_result) {
@@ -838,7 +998,7 @@ pair<vector<Split>, vector<Split>> Stage::rfactor_validate_args(const std::vecto
     return std::make_pair(std::move(var_splits), std::move(rvar_splits));
 }
 
-Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
+Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved, RFactorOptions options) {
     user_assert(!definition.is_init()) << "rfactor() must be called on an update definition\n";
 
     definition.schedule().touched() = true;
@@ -935,11 +1095,29 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     // Intermediate func
     Func intm(function.name() + "_intm");
 
+    // Must happen before intm(args)=Tuple(...) so that output_types is set correctly
+    // from the start. substitute_self_reference uses intm.types() to determine the
+    // Call type, and changing output_types afterward has no effect.
+    const size_t n_vals = definition.values().size();
+    vector<optional<HoistedFactor>> hoisted_factors(n_vals);
+    if (has_rfactor_option(options, RFactorOptions::HoistInvariantFactor)) {
+        // A factor is hoistable if, after projecting the original expression
+        // into the intermediate update, it does not depend on any RVar reduced
+        // by that intermediate update. It may depend on preserved RVars.
+        Scope<> intermediate_vars;
+        for (const auto &[var, min, extent] : intermediate_rdom.domain()) {
+            intermediate_vars.push(var);
+        }
+        hoisted_factors = extract_hoisted_factors(definition.values(), prover_result,
+                                                  function.name(), intermediate_vars,
+                                                  to_intermediate, to_preserved);
+    }
+
     // Intermediate pure definition
     {
         vector<Expr> args = dim_vars_exprs;
         args.insert(args.end(), preserved_vars.begin(), preserved_vars.end());
-        intm(args) = Tuple(prover_result.pattern.identities);
+        intm(args) = build_intm_identities(prover_result.pattern, hoisted_factors);
     }
 
     // Intermediate update definition
@@ -948,7 +1126,22 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         args.insert(args.end(), preserved_vars.begin(), preserved_vars.end());
         args = to_intermediate(args);
 
+        // For a hoisted element, replace the value with the outer op applied to
+        // a self-reference and the inner body; the factor is re-applied later at
+        // write-back. The self-reference is a call to the original func typed at
+        // the intermediate's (possibly different) accumulation type, so the outer
+        // op does not re-promote the inner body; substitute_self_reference then
+        // retargets it to the intermediate.
         vector<Expr> values = definition.values();
+        for (size_t i = 0; i < n_vals; ++i) {
+            if (hoisted_factors[i]) {
+                Expr self_ref = Call::make(hoisted_factors[i]->inner_body.type(), function.name(),
+                                           dim_vars_exprs, Call::Halide, FunctionPtr(), (int)i);
+                values[i] = make_binary_op(prover_result.pattern.ops[i].node_type(),
+                                           self_ref, hoisted_factors[i]->inner_body);
+            }
+        }
+
         values = substitute_self_reference(values, function.name(), intm.function(), preserved_vars);
         values = to_intermediate(values);
         intm.function().define_update(args, values, intermediate_rdom);
@@ -1000,11 +1193,12 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         for (size_t i = 0; i < definition.values().size(); ++i) {
             if (!prover_result.ys[i].var.empty()) {
                 Expr r = (definition.values().size() == 1) ? Expr(intm(f_load_args)) : Expr(intm(f_load_args)[i]);
+                r = apply_hoisted_factor(r, hoisted_factors[i], prover_result.pattern.ops[i].type());
                 add_let(preserved_map, prover_result.ys[i].var, r);
             }
 
             if (!prover_result.xs[i].var.empty()) {
-                Expr prev_val = Call::make(intm.types()[i], function.name(),
+                Expr prev_val = Call::make(function.output_types()[i], function.name(),
                                            dim_vars_exprs, Call::CallType::Halide,
                                            FunctionPtr(), i);
                 add_let(preserved_map, prover_result.xs[i].var, prev_val);

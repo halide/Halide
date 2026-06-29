@@ -18,6 +18,7 @@
 #include "Var.h"
 
 #include <map>
+#include <type_traits>
 #include <utility>
 
 namespace Halide {
@@ -65,6 +66,26 @@ class Function;
 struct Split;
 struct StorageDim;
 }  // namespace Internal
+
+enum class RFactorOptions : uint32_t {
+    None = 0,
+    HoistInvariantFactor = 1 << 0,
+};
+
+inline RFactorOptions operator|(RFactorOptions a, RFactorOptions b) {
+    using T = std::underlying_type_t<RFactorOptions>;
+    return static_cast<RFactorOptions>(static_cast<T>(a) | static_cast<T>(b));
+}
+
+inline RFactorOptions operator&(RFactorOptions a, RFactorOptions b) {
+    using T = std::underlying_type_t<RFactorOptions>;
+    return static_cast<RFactorOptions>(static_cast<T>(a) & static_cast<T>(b));
+}
+
+inline bool has_rfactor_option(RFactorOptions options, RFactorOptions flag) {
+    using T = std::underlying_type_t<RFactorOptions>;
+    return (static_cast<T>(options) & static_cast<T>(flag)) != 0;
+}
 
 /** A single definition of a Func. May be a pure or update definition. */
 class Stage {
@@ -185,10 +206,33 @@ public:
      *       f(x, y) = max(f(x, y), f_intm(x, y, rxo))
      * \endcode
      *
+     * If `options` contains `RFactorOptions::HoistInvariantFactor`, rfactor applies
+     * the distributive law of a semiring to hoist a loop-invariant factor from the
+     * intermediate accumulation to the write-back step. For a factor that does not
+     * depend on any RVar being reduced in the intermediate, the valid hoistings are:
+     *
+     *   Outer op    Inner combine   Law
+     *   ---------   -------------   ---
+     *   + (sum)     *               sum_k(s * x_k) = s * sum_k(x_k)
+     *   min         +               min_k(c + x_k) = c + min_k(x_k)
+     *   max         +               max_k(c + x_k) = c + max_k(x_k)
+     *   || (bool)   &&              or_k(p && x_k) = p && or_k(x_k)
+     *   && (bool)   ||              and_k(p || x_k) = p || and_k(x_k)
+     *
+     * For the arithmetic laws (every row above except the boolean ||/&&), rfactor
+     * also strips the implicit float-promotion cast that Halide inserts when a
+     * float factor or offset combines with an integer body, allowing the
+     * intermediate to accumulate at the integer type (e.g. Int(32) instead of
+     * Float(32)). Strict casts are preserved; use strict_float(cast(...)) when
+     * this conversion must not be deferred.
+     *
+     * This reduces the number of factor applications from |K_inner| × |K_pres| to
+     * |K_pres|. If no distributable factor is found, hoisted rfactor falls back
+     * silently to normal rfactor behavior.
      */
     // @{
-    Func rfactor(const std::vector<std::pair<RVar, Var>> &preserved);
-    Func rfactor(const RVar &r, const Var &v);
+    Func rfactor(const std::vector<std::pair<RVar, Var>> &preserved, RFactorOptions options = RFactorOptions::None);
+    Func rfactor(const RVar &r, const Var &v, RFactorOptions options = RFactorOptions::None);
     // @}
 
     /** Schedule the iteration over this stage to be fused with another

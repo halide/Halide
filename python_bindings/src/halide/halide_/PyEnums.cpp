@@ -60,6 +60,10 @@ void define_enums(py::module &m) {
         .value("GuardWithIf", PrefetchBoundStrategy::GuardWithIf)
         .value("NonFaulting", PrefetchBoundStrategy::NonFaulting);
 
+    py::enum_<RFactorOptions>(m, "RFactorOptions")
+        .value("None", RFactorOptions::None)
+        .value("HoistInvariantFactor", RFactorOptions::HoistInvariantFactor);
+
     py::enum_<StmtOutputFormat>(m, "StmtOutputFormat")
         .value("Text", StmtOutputFormat::Text)
         .value("HTML", StmtOutputFormat::HTML);

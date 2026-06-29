@@ -14,10 +14,10 @@ void define_stage(py::module &m) {
             .def("dump_argument_list", &Stage::dump_argument_list)
             .def("name", &Stage::name)
 
-            .def("rfactor", static_cast<Func (Stage::*)(const std::vector<std::pair<RVar, Var>> &)>(&Stage::rfactor),
-                 py::arg("preserved"))
-            .def("rfactor", static_cast<Func (Stage::*)(const RVar &, const Var &)>(&Stage::rfactor),
-                 py::arg("r"), py::arg("v"))
+            .def("rfactor", static_cast<Func (Stage::*)(const std::vector<std::pair<RVar, Var>> &, RFactorOptions)>(&Stage::rfactor),
+                 py::arg("preserved"), py::arg("options") = RFactorOptions::None)
+            .def("rfactor", static_cast<Func (Stage::*)(const RVar &, const Var &, RFactorOptions)>(&Stage::rfactor),
+                 py::arg("r"), py::arg("v"), py::arg("options") = RFactorOptions::None)
 
             .def("split_vars", [](const Stage &stage) -> py::list {
                 auto vars = stage.split_vars();
