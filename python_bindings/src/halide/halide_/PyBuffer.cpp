@@ -367,7 +367,12 @@ void define_buffer(py::module &m) {
                                                 "reversed. Pass reverse_axes=False to preserve the original axis order.")
 
             .def(py::init_alias<>())
-            .def(py::init_alias<const Buffer<> &>())
+            // keep_alive</*Nurse*/ 1, /*Patient*/ 2>: this copy shares the source's data pointer
+            // without taking ownership (the source may itself wrap external memory, e.g. a numpy
+            // array kept alive only by the source Buffer).
+            //
+            // In keep_alive<1, 2>, 1 refers to `this`, 2 refers to the argument `Buffer<> &` arg.
+            .def(py::init_alias<const Buffer<> &>(), py::keep_alive<1, 2>())
 
             // This py::init_alias allows us to use any buffer-like Python entity to create a
             // Buffer<> (most notably, an ndarray). reverse_axes = True by default.
