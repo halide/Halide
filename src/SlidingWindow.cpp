@@ -1,6 +1,7 @@
 #include "SlidingWindow.h"
 
 #include "Bounds.h"
+#include "CSE.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
@@ -86,7 +87,7 @@ public:
 // Perform all the substitutions in a scope
 Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
     ExpandExpr ee(scope);
-    Expr result = ee(e);
+    Expr result = common_subexpression_elimination(ee(e));
     debug(4) << "Expanded " << e << " into " << result << "\n";
     return result;
 }
@@ -223,6 +224,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Expr loop_min;
     set<int> &slid_dimensions;
     Scope<Expr> scope;
+    Scope<Interval> &bounds_scope;
 
     // For loops strictly between the loop being slid over and the current
     // node (not including the loop being slid over itself).
@@ -282,8 +284,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 internal_assert(min_val && max_val);
                 Expr min_req = *min_val;
                 Expr max_req = *max_val;
-                min_req = expand_expr(min_req, scope);
-                max_req = expand_expr(max_req, scope);
+                min_req = simplify(expand_expr(min_req, scope), bounds_scope);
+                max_req = simplify(expand_expr(max_req, scope), bounds_scope);
 
                 debug(3) << func_args[i] << ":" << min_req << ", " << max_req << "\n";
                 if (expr_depends_on_var(min_req, loop_var) ||
@@ -594,7 +596,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope)));
+        ScopedBinding<Interval> bind_bounds(bounds_scope, op->name,
+                                            bounds_of_expr_in_scope(op->value, bounds_scope));
+        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope), bounds_scope));
+
         Stmt new_body = mutate(op->body);
 
         Expr value = op->value;
@@ -613,8 +618,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
 public:
-    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions)
-        : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)), slid_dimensions(slid_dimensions) {
+    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions,
+                                   Scope<Interval> &bounds_scope)
+        : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)),
+          slid_dimensions(slid_dimensions), bounds_scope(bounds_scope) {
     }
 
     Expr new_loop_min;
@@ -755,8 +762,15 @@ class SlidingWindow : public IRMutator {
     // Keep track of realizations we want to slide, from innermost to
     // outermost.
     list<Function> sliding;
+    Scope<Interval> bounds_scope;
 
     using IRMutator::visit;
+
+    Stmt visit(const LetStmt *op) override {
+        ScopedBinding<Interval> bind(bounds_scope, op->name,
+                                     bounds_of_expr_in_scope(op->value, bounds_scope));
+        return IRMutator::visit(op);
+    }
 
     Stmt visit(const Realize *op) override {
         // Find the args for this function
@@ -827,7 +841,14 @@ class SlidingWindow : public IRMutator {
 
             set<int> &slid_dims = slid_dimensions[func.name()];
             size_t old_slid_dims_size = slid_dims.size();
-            SlidingWindowOnFunctionAndLoop slider(func, name, prev_loop_min, slid_dims);
+
+            Interval min_bounds = bounds_of_expr_in_scope(loop_min, bounds_scope);
+            Interval max_bounds = bounds_of_expr_in_scope(loop_max, bounds_scope);
+            ScopedBinding<Interval> bind_bounds(bounds_scope, op->name,
+                                                Interval(min_bounds.min, max_bounds.max));
+
+            SlidingWindowOnFunctionAndLoop slider(func, name, prev_loop_min, slid_dims, bounds_scope);
+
             body = slider(body);
 
             if (func.schedule().memory_type() == MemoryType::Register &&
