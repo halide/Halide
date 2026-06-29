@@ -143,47 +143,47 @@ public:
      * with the new pure Vars added to the outermost.
      *
      * For example, f.update(0).rfactor({{r.y, u}}) would rewrite a pipeline like this:
-     \code
-     f(x, y) = 0;
-     f(x, y) += g(r.x, r.y);
-     \endcode
+     * \code
+     * f(x, y) = 0;
+     * f(x, y) += g(r.x, r.y);
+     * \endcode
      * into a pipeline like this:
-     \code
-     f_intm(x, y, u) = 0;
-     f_intm(x, y, u) += g(r.x, u);
-
-     f(x, y) = 0;
-     f(x, y) += f_intm(x, y, r.y);
-     \endcode
+     * \code
+     * f_intm(x, y, u) = 0;
+     * f_intm(x, y, u) += g(r.x, u);
+     *
+     * f(x, y) = 0;
+     * f(x, y) += f_intm(x, y, r.y);
+     * \endcode
      *
      * This has a variety of uses. You can use it to split computation of an associative reduction:
-     \code
-     f(x, y) = 10;
-     RDom r(0, 96);
-     f(x, y) = max(f(x, y), g(x, y, r.x));
-     f.update(0).split(r.x, rxo, rxi, 8).reorder(y, x).parallel(x);
-     f.update(0).rfactor({{rxo, u}}).compute_root().parallel(u).update(0).parallel(u);
-     \endcode
+     * \code
+     * f(x, y) = 10;
+     * RDom r(0, 96);
+     * f(x, y) = max(f(x, y), g(x, y, r.x));
+     * f.update(0).split(r.x, rxo, rxi, 8).reorder(y, x).parallel(x);
+     * f.update(0).rfactor({{rxo, u}}).compute_root().parallel(u).update(0).parallel(u);
+     * \endcode
      *
      *, which is equivalent to:
-     \code
-     parallel for u = 0 to 11:
-       for y:
-         for x:
-           f_intm(x, y, u) = -inf
-     parallel for x:
-       for y:
-         parallel for u = 0 to 11:
-           for rxi = 0 to 7:
-             f_intm(x, y, u) = max(f_intm(x, y, u), g(8*u + rxi))
-     for y:
-       for x:
-         f(x, y) = 10
-     parallel for x:
-       for y:
-         for rxo = 0 to 11:
-           f(x, y) = max(f(x, y), f_intm(x, y, rxo))
-     \endcode
+     * \code
+     * parallel for u = 0 to 11:
+     *   for y:
+     *     for x:
+     *       f_intm(x, y, u) = -inf
+     * parallel for x:
+     *   for y:
+     *     parallel for u = 0 to 11:
+     *       for rxi = 0 to 7:
+     *         f_intm(x, y, u) = max(f_intm(x, y, u), g(8*u + rxi))
+     * for y:
+     *   for x:
+     *     f(x, y) = 10
+     * parallel for x:
+     *   for y:
+     *     for rxo = 0 to 11:
+     *       f(x, y) = max(f(x, y), f_intm(x, y, rxo))
+     * \endcode
      *
      */
     // @{
