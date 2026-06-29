@@ -300,6 +300,7 @@ tests(
     sliding_over_guard_with_if.cpp
     sliding_reduction.cpp
     sliding_window.cpp
+    sliding_window_cascade.cpp
     solve.cpp
     sort_exprs.cpp
     specialize.cpp
