@@ -415,6 +415,30 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // Sliding a cascade of filters. Halide needs bounds propagation
+        // to prove that the innermost filters have monotonic bounds.
+        count = 0;
+        Func f1, f2, f3, f4, g;
+        f1(x) = call_counter(x, 0);
+        f2(x) = f1(0) + f1(x);
+        f3(x) = f2(0) + f2(x);
+        f4(x) = f3(0) + f3(x);
+        g(x) = f4(0) + f4(x);
+        f1.store_root().compute_at(g, x);
+        f2.store_root().compute_at(g, x);
+        f3.store_root().compute_at(g, x);
+        f4.store_root().compute_at(g, x);
+        g.bound(x, 0, 10);
+
+        g.realize({10});
+        // f1 spans x in [0, 9], so 10 calls when slid.
+        if (count != 10) {
+            printf("f1 was called %d times instead of %d times\n", count, 10);
+            return 1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }
