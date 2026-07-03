@@ -682,17 +682,27 @@ string dequalify(string name) {
     return name;
 }
 
-vector<Dim> subst_dims(const SubstitutionMap &substitution_map, const vector<Dim> &dims) {
-    auto new_dims = dims;
-    for (auto &dim : new_dims) {
-        if (const auto it = substitution_map.find(dim.var); it != substitution_map.end()) {
-            const Variable *new_var = it->second.as<Variable>();
-            internal_assert(new_var);
-            dim.var = new_var->name;
-        }
+struct RFactorProjection {
+    const SubstitutionMap &rdom_promises;
+    const SubstitutionMap &vars;
+
+    template<typename T>
+    T operator()(const T &x) const {
+        return substitute(vars, substitute(rdom_promises, x));
     }
-    return new_dims;
-}
+
+    vector<Dim> operator()(const vector<Dim> &dims) const {
+        auto new_dims = dims;
+        for (auto &dim : new_dims) {
+            if (const auto it = vars.find(dim.var); it != vars.end()) {
+                const Variable *new_var = it->second.as<Variable>();
+                internal_assert(new_var);
+                dim.var = new_var->name;
+            }
+        }
+        return new_dims;
+    }
+};
 
 pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, const ReductionDomain &rdom, const vector<Split> &splits) {
     // The bounds projections maps expressions that reference the old RDom
@@ -918,6 +928,9 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     // Project the RDom into each side
     ReductionDomain intermediate_rdom, preserved_rdom;
     SubstitutionMap intermediate_map, preserved_map;
+    RFactorProjection to_intermediate{rdom_promises, intermediate_map};
+    RFactorProjection to_preserved{rdom_promises, preserved_map};
+
     {
         // Intermediate
         std::tie(intermediate_rdom, intermediate_map) = project_rdom(intermediate_rdims, rdom, rvar_splits);
@@ -926,9 +939,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
 
         {
-            Expr pred = intermediate_rdom.predicate();
-            pred = substitute(rdom_promises, pred);
-            pred = substitute(intermediate_map, pred);
+            Expr pred = to_intermediate(intermediate_rdom.predicate());
             intermediate_rdom.set_predicate(simplify(pred));
         }
 
@@ -941,9 +952,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
             intm_rdom.push(var, Interval{min, min + extent - 1});
         }
         {
-            Expr pred = preserved_rdom.predicate();
-            pred = substitute(rdom_promises, pred);
-            pred = substitute(preserved_map, pred);
+            Expr pred = to_preserved(preserved_rdom.predicate());
             pred = or_condition_over_domain(pred, intm_rdom);
             preserved_rdom.set_predicate(pred);
         }
@@ -963,13 +972,11 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     {
         vector<Expr> args = definition.args();
         args.insert(args.end(), preserved_vars.begin(), preserved_vars.end());
-        args = substitute(rdom_promises, args);
-        args = substitute(intermediate_map, args);
+        args = to_intermediate(args);
 
         vector<Expr> values = definition.values();
         values = substitute_self_reference(values, function.name(), intm.function(), preserved_vars);
-        values = substitute(rdom_promises, values);
-        values = substitute(intermediate_map, values);
+        values = to_intermediate(values);
         intm.function().define_update(args, values, intermediate_rdom);
 
         // Intermediate schedule
@@ -1003,7 +1010,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
 
         intm.function().update(0).schedule() = definition.schedule().get_copy();
-        intm.function().update(0).schedule().dims() = subst_dims(intermediate_map, intm_dims);
+        intm.function().update(0).schedule().dims() = to_intermediate(intm_dims);
         intm.function().update(0).schedule().rvars() = intermediate_rdom.domain();
         intm.function().update(0).schedule().splits() = var_splits;
     }
@@ -1063,9 +1070,9 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
 
         definition.args() = dim_vars_exprs;
-        definition.values() = substitute(preserved_map, substitute(rdom_promises, prover_result.pattern.ops));
+        definition.values() = to_preserved(prover_result.pattern.ops);
         definition.predicate() = preserved_rdom.predicate();
-        definition.schedule().dims() = subst_dims(preserved_map, reducing_dims);
+        definition.schedule().dims() = to_preserved(reducing_dims);
         definition.schedule().rvars() = preserved_rdom.domain();
         definition.schedule().splits() = var_splits;
     }
