@@ -573,55 +573,6 @@ std::string Stage::dump_argument_list() const {
     return dump_dim_list(definition.schedule().dims());
 }
 
-namespace {
-
-class SubstituteSelfReference : public IRMutator {
-    using IRMutator::visit;
-
-    const string func;
-    const Function substitute;
-    const vector<Var> new_args;
-
-    Expr visit(const Call *c) override {
-        Expr expr = IRMutator::visit(c);
-        c = expr.as<Call>();
-        internal_assert(c);
-
-        if ((c->call_type == Call::Halide) && (func == c->name)) {
-            debug(4) << "...Replace call to Func \"" << c->name << "\" with "
-                     << "\"" << substitute.name() << "\"\n";
-            vector<Expr> args;
-            args.insert(args.end(), c->args.begin(), c->args.end());
-            args.insert(args.end(), new_args.begin(), new_args.end());
-            expr = Call::make(substitute, args, c->value_index);
-        }
-        return expr;
-    }
-
-public:
-    SubstituteSelfReference(const string &func, const Function &substitute,
-                            const vector<Var> &new_args)
-        : func(func), substitute(substitute), new_args(new_args) {
-        internal_assert(substitute.get_contents().defined());
-    }
-};
-
-/** Substitute all self-reference calls to 'func' with 'substitute' which
- * args (LHS) is the old args (LHS) plus 'new_args' in that order.
- * Expect this method to be called on the value (RHS) of an update definition. */
-vector<Expr> substitute_self_reference(const vector<Expr> &values, const string &func,
-                                       const Function &substitute, const vector<Var> &new_args) {
-    SubstituteSelfReference subs(func, substitute, new_args);
-    vector<Expr> result;
-    result.reserve(values.size());
-    for (const auto &val : values) {
-        result.push_back(subs(val));
-    }
-    return result;
-}
-
-}  // anonymous namespace
-
 Func Stage::rfactor(const RVar &r, const Var &v) {
     definition.schedule().touched() = true;
     return rfactor({{r, v}});
@@ -629,6 +580,29 @@ Func Stage::rfactor(const RVar &r, const Var &v) {
 
 // Helpers for rfactor implementation
 namespace {
+
+// Replace self-references to `func_name` with calls to the intermediate `intm`,
+// appending the preserved vars to the call's args. Expected to be called on the
+// values (RHS) of an update definition.
+vector<Expr> substitute_self_reference(vector<Expr> values,
+                                       const string &func_name,
+                                       const Function &intm,
+                                       const vector<Var> &preserved_vars) {
+    for (Expr &v : values) {
+        v = mutate_with(v, [&](auto *self, const Call *c) -> Expr {
+            Expr expr = self->visit_base(c);
+            c = expr.as<Call>();
+            internal_assert(c);
+            if (c->call_type == Call::Halide && func_name == c->name) {
+                vector<Expr> args(c->args);
+                args.insert(args.end(), preserved_vars.begin(), preserved_vars.end());
+                expr = Call::make(intm, args, c->value_index);
+            }
+            return expr;
+        });
+    }
+    return values;
+}
 
 optional<Dim> find_dim(const vector<Dim> &items, const VarOrRVar &v) {
     const auto has_v = std::find_if(items.begin(), items.end(), [&](auto &x) {
