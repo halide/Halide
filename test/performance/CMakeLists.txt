@@ -28,6 +28,7 @@ tests(
     realize_overhead.cpp
     rgb_interleaved.cpp
     tiled_matmul.cpp
+    tiled_matmul_arm_neon.cpp
     vectorize.cpp
     wrap.cpp
     # keep-sorted end
