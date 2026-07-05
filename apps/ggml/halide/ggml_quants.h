@@ -167,4 +167,18 @@ void ggml_quants_halide_dequantize_f16(const void *x, float *y, int64_t k);
 
 void ggml_quants_halide_quantize_bf16(const float *x, void *y, int64_t k);
 void ggml_quants_halide_dequantize_bf16(const void *x, float *y, int64_t k);
+
+// Repack quantize_mat kernels: interleave 4 contiguous rows of `k` floats
+// into one packed activation-format block per `k`-sized chunk (see
+// repack_quantize_mat_generators.cpp). Signature-compatible with
+// quantize_fn_t (same as every other quantize_* above) -- these are just
+// keyed by activation format + interleave width rather than weight type,
+// since GGML itself only has 4 distinct quantize_mat implementations shared
+// across every repack weight type (see k_repack_entries in
+// providers/ggml_provider.cpp and this library's registration in
+// providers/halide_provider.cpp).
+void ggml_quants_halide_repack_quantize_mat_q8_0_4x4(const float *x, void *y, int64_t k);
+void ggml_quants_halide_repack_quantize_mat_q8_0_4x8(const float *x, void *y, int64_t k);
+void ggml_quants_halide_repack_quantize_mat_q8_k_4x4(const float *x, void *y, int64_t k);
+void ggml_quants_halide_repack_quantize_mat_q8_k_4x8(const float *x, void *y, int64_t k);
 }

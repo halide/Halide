@@ -66,10 +66,14 @@
 #include "q6_k_dequantize.h"
 #include "q6_k_quantize.h"
 #include "q6_k_vec_dot.h"
+#include "q8_0_4x4_quantize_mat.h"
+#include "q8_0_4x8_quantize_mat.h"
 #include "q8_0_dequantize.h"
 #include "q8_0_quantize.h"
 #include "q8_0_vec_dot.h"
 #include "q8_1_quantize.h"
+#include "q8_k_4x4_quantize_mat.h"
+#include "q8_k_4x8_quantize_mat.h"
 #include "q8_k_quantize.h"
 #include "tq1_0_dequantize.h"
 #include "tq1_0_quantize.h"
@@ -972,6 +976,54 @@ void ggml_quants_halide_dequantize_bf16(const void *x, float *y, int64_t k) {
     Buffer<uint16_t, 1> xb(const_cast<uint16_t *>(static_cast<const uint16_t *>(x)), static_cast<int>(k));
     Buffer<float, 1> yb(y, static_cast<int>(k));
     check(bf16_dequantize(xb, yb), "bf16_dequantize");
+}
+
+//
+// Repack quantize_mat -- interleaves 4 contiguous rows of `k` floats (row r
+// at x[r*k .. r*k+k)) into one packed activation-format block per chunk.
+// `x` is wrapped as a 2-D buffer (dim 0: column-within-row, extent k; dim 1:
+// row, extent 4, stride k) so the generator can address x_(col, row)
+// directly instead of hand-computing `row*k + col`.
+//
+
+void ggml_quants_halide_repack_quantize_mat_q8_0_4x4(const float *x, void *y, int64_t k) {
+    constexpr int kQK = 32, kBlockBytes = 4 * 2 + kQK * 4;
+    const int32_t nb = static_cast<int32_t>(k / kQK);
+    halide_dimension_t xshape[2] = {{0, static_cast<int32_t>(k), 1}, {0, 4, static_cast<int32_t>(k)}};
+    Buffer<float, 2> xb(const_cast<float *>(x), 2, xshape);
+    halide_dimension_t yshape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
+    Buffer<uint8_t, 2> blocks(static_cast<uint8_t *>(y), 2, yshape);
+    check(q8_0_4x4_quantize_mat(xb, blocks), "q8_0_4x4_quantize_mat");
+}
+
+void ggml_quants_halide_repack_quantize_mat_q8_0_4x8(const float *x, void *y, int64_t k) {
+    constexpr int kQK = 32, kBlockBytes = 4 * 2 + kQK * 4;
+    const int32_t nb = static_cast<int32_t>(k / kQK);
+    halide_dimension_t xshape[2] = {{0, static_cast<int32_t>(k), 1}, {0, 4, static_cast<int32_t>(k)}};
+    Buffer<float, 2> xb(const_cast<float *>(x), 2, xshape);
+    halide_dimension_t yshape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
+    Buffer<uint8_t, 2> blocks(static_cast<uint8_t *>(y), 2, yshape);
+    check(q8_0_4x8_quantize_mat(xb, blocks), "q8_0_4x8_quantize_mat");
+}
+
+void ggml_quants_halide_repack_quantize_mat_q8_k_4x4(const float *x, void *y, int64_t k) {
+    constexpr int kQK = 256, kBlockBytes = 4 * 4 + kQK * 4 + (kQK / 16) * 4 * 2;
+    const int32_t nb = static_cast<int32_t>(k / kQK);
+    halide_dimension_t xshape[2] = {{0, static_cast<int32_t>(k), 1}, {0, 4, static_cast<int32_t>(k)}};
+    Buffer<float, 2> xb(const_cast<float *>(x), 2, xshape);
+    halide_dimension_t yshape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
+    Buffer<uint8_t, 2> blocks(static_cast<uint8_t *>(y), 2, yshape);
+    check(q8_k_4x4_quantize_mat(xb, blocks), "q8_k_4x4_quantize_mat");
+}
+
+void ggml_quants_halide_repack_quantize_mat_q8_k_4x8(const float *x, void *y, int64_t k) {
+    constexpr int kQK = 256, kBlockBytes = 4 * 4 + kQK * 4 + (kQK / 16) * 4 * 2;
+    const int32_t nb = static_cast<int32_t>(k / kQK);
+    halide_dimension_t xshape[2] = {{0, static_cast<int32_t>(k), 1}, {0, 4, static_cast<int32_t>(k)}};
+    Buffer<float, 2> xb(const_cast<float *>(x), 2, xshape);
+    halide_dimension_t yshape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
+    Buffer<uint8_t, 2> blocks(static_cast<uint8_t *>(y), 2, yshape);
+    check(q8_k_4x8_quantize_mat(xb, blocks), "q8_k_4x8_quantize_mat");
 }
 
 }  // extern "C"

@@ -124,4 +124,43 @@ void register_halide_provider(KernelRegistries &registries) {
 
     registries.quantize.register_candidate(GGML_TYPE_BF16, "halide", ggml_quants_halide_quantize_bf16);
     registries.dequantize.register_candidate(GGML_TYPE_BF16, "halide", ggml_quants_halide_dequantize_bf16);
+
+    // Repack quantize_mat: GGML itself only has 4 distinct implementations
+    // (2 activation formats x 2 interleave widths), reused across every
+    // repack weight type that shares one -- see k_repack_entries in
+    // ggml_provider.cpp, which this table mirrors label-for-label so the
+    // registered RepackKey (used by bench_repack.cpp for act_type/base_type)
+    // matches exactly. gemv/gemm repack candidates are a later step.
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q4_0, GGML_TYPE_Q8_0, 4, 4, "q4_0_4x4_q8_0"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_0_4x4);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q4_0, GGML_TYPE_Q8_0, 8, 4, "q4_0_4x8_q8_0"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_0_4x8);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q4_0, GGML_TYPE_Q8_0, 8, 8, "q4_0_8x8_q8_0"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_0_4x8);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q4_K, GGML_TYPE_Q8_K, 8, 4, "q4_K_8x4_q8_K"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_k_4x4);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q4_K, GGML_TYPE_Q8_K, 8, 8, "q4_K_8x8_q8_K"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_k_4x8);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q5_K, GGML_TYPE_Q8_K, 8, 4, "q5_K_8x4_q8_K"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_k_4x4);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q5_K, GGML_TYPE_Q8_K, 8, 8, "q5_K_8x8_q8_K"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_k_4x8);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q6_K, GGML_TYPE_Q8_K, 8, 4, "q6_K_8x4_q8_K"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_k_4x4);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q6_K, GGML_TYPE_Q8_K, 8, 8, "q6_K_8x8_q8_K"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_k_4x8);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q2_K, GGML_TYPE_Q8_K, 8, 8, "q2_K_8x8_q8_K"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_k_4x8);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_IQ4_NL, GGML_TYPE_Q8_0, 4, 4, "iq4_nl_4x4_q8_0"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_0_4x4);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_IQ4_NL, GGML_TYPE_Q8_0, 8, 8, "iq4_nl_8x8_q8_0"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_0_4x8);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_MXFP4, GGML_TYPE_Q8_0, 4, 4, "mxfp4_4x4_q8_0"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_0_4x4);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_MXFP4, GGML_TYPE_Q8_0, 8, 8, "mxfp4_8x8_q8_0"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_0_4x8);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q8_0, GGML_TYPE_Q8_0, 4, 4, "q8_0_4x4_q8_0"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_0_4x4);
+    registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q8_0, GGML_TYPE_Q8_0, 8, 4, "q8_0_4x8_q8_0"},
+                                                      "halide", ggml_quants_halide_repack_quantize_mat_q8_0_4x8);
 }

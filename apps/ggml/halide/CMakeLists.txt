@@ -29,6 +29,7 @@ add_halide_generator(
     iq1_m_generators.cpp
     f16_generators.cpp
     bf16_generators.cpp
+    repack_quantize_mat_generators.cpp
 )
 
 add_halide_library(q4_0_quantize FROM quants.generator GENERATOR q4_0_quantize)
@@ -105,6 +106,10 @@ add_halide_library(f16_quantize FROM quants.generator GENERATOR f16_quantize)
 add_halide_library(f16_dequantize FROM quants.generator GENERATOR f16_dequantize)
 add_halide_library(bf16_quantize FROM quants.generator GENERATOR bf16_quantize)
 add_halide_library(bf16_dequantize FROM quants.generator GENERATOR bf16_dequantize)
+add_halide_library(q8_0_4x4_quantize_mat FROM quants.generator GENERATOR q8_0_4x4_quantize_mat)
+add_halide_library(q8_0_4x8_quantize_mat FROM quants.generator GENERATOR q8_0_4x8_quantize_mat)
+add_halide_library(q8_k_4x4_quantize_mat FROM quants.generator GENERATOR q8_k_4x4_quantize_mat)
+add_halide_library(q8_k_4x8_quantize_mat FROM quants.generator GENERATOR q8_k_4x8_quantize_mat)
 
 # ggml_extern_quantize.cpp implements the extern-stage C functions that
 # several of the quantize pipelines above call out to -- see that file for
@@ -126,7 +131,8 @@ target_link_libraries(
     iq2_xxs_vec_dot iq2_xs_dequantize iq2_xs_vec_dot iq2_s_quantize iq2_s_dequantize iq2_s_vec_dot
     iq3_xxs_quantize iq3_xxs_dequantize iq3_xxs_vec_dot iq3_s_quantize iq3_s_dequantize
     iq3_s_vec_dot iq1_s_dequantize iq1_s_vec_dot iq1_m_dequantize iq1_m_vec_dot f16_quantize
-    f16_dequantize bf16_quantize bf16_dequantize ggml::ggml
+    f16_dequantize bf16_quantize bf16_dequantize q8_0_4x4_quantize_mat q8_0_4x8_quantize_mat
+    q8_k_4x4_quantize_mat q8_k_4x8_quantize_mat ggml::ggml
 )
 target_include_directories(ggml_quants_halide PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
