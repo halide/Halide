@@ -16,13 +16,13 @@ Two pieces of prior work motivate this:
    inference call" relationship between the two directions is enforced by
    nothing but convention and comments.
 
-2. A research prototype at `~/dev/hl-approx/practice/blockquant.py` explores
-   building the same set of formats compositionally instead: a small
-   `Approximation` ABC (`encode`/`decode`, each operating on Halide `Func`s)
-   with a handful of primitives (`BlockLayout`, `LinearInt`, `ShiftByMin`,
-   `PackN*`) that compose (`Composition`/`Apply`) to reconstruct all of
-   Q2_K..Q8_K. It's Python-only, JIT-only, and only covers quantize/ dequantize
-   round trips (no vec_dot, no repack, no scheduling story).
+2. A private Python research prototype explores building the same set of formats
+   compositionally instead: a small `Approximation` ABC (`encode`/`decode`, each
+   operating on Halide `Func`s) with a handful of primitives (block layout
+   reshaping, a linear integer quantizer, a shift-by-min helper for affine
+   schemes, bit-packers) that compose to reconstruct all of Q2_K..Q8_K. It's
+   Python-only, JIT-only, and only covers quantize/dequantize round trips (no
+   vec_dot, no repack, no scheduling story).
 
 This document proposes promoting the core of that prototype (`Approximation`)
 into a first-class Halide C++ concept, plus two small pieces of surrounding API
@@ -45,12 +45,12 @@ its own footing in the API.
 ## Core concept: `Approximation`
 
 ```cpp
-// blockquant.py's Approximation.encode/decode each return (funcs, handles):
-// the "public" Func(s) that participate in the signature contract, plus
-// extra intermediate Funcs (reduction accumulators, per-block stats, etc.)
-// that have no meaning outside scheduling but still need someone to
-// schedule them. Both are preserved in the C++ port -- see "approximate_by"
-// below for why silently dropping handles is a real bug, not a simplification.
+// encode()/decode() each return (funcs, handles): the "public" Func(s) that
+// participate in the signature contract, plus extra intermediate Funcs
+// (reduction accumulators, per-block stats, etc.) that have no meaning
+// outside scheduling but still need someone to schedule them -- see
+// "approximate_by" below for why silently dropping handles is a real bug,
+// not a simplification.
 struct EncodeResult {
     std::vector<Func> encoded;  // the signature-contract output(s)
     std::vector<Func> handles;  // scheduling-only, no semantic meaning
@@ -72,24 +72,21 @@ public:
 };
 ```
 
-This is a direct port of `blockquant.py`'s `Approximation` ABC, with virtual
-dispatch chosen specifically because the Python prototype's `compose()` holds a
-runtime-heterogeneous list of `Approximation` objects and calls
-`encode`/`decode` on each via duck typing (`compose`, `Composition`, `Apply` in
-`blockquant.py`) — a C++ port needs the same kind of runtime-polymorphic list,
-which virtual dispatch gives directly. (A templated/CRTP alternative was
-considered and rejected for this reason: it would make `compose()`-style
-heterogeneous lists require type erasure some other way, for no benefit here.)
+Virtual dispatch is used specifically because composed Approximations
+(`Compose`/`Apply`, below) need to hold a runtime-heterogeneous list of
+`Approximation` references and call `encode`/`decode` on each polymorphically.
+(A templated/CRTP alternative was considered and rejected for this reason: it
+would make composed, heterogeneous chains require type erasure some other way,
+for no benefit here.)
 
 **Signature contract.** `decode(encode(f).encoded).decoded[0]` must reproduce
 `f`'s arg list and value type exactly — that's what makes it valid to splice
 back into a call graph in place of `f`. This is not proposed to be enforced
 generically by the base class in v1; each concrete `Approximation` is
-responsible for it, the same way `blockquant.py`'s `make_error_func` treats it
-as a testable property (round-trip error + convergence) rather than a type-level
-guarantee. `approximate_by`'s substitution step (see below) does do a shape/type
-check at the point of substitution, which catches violations, just not at
-`Approximation`-definition time.
+responsible for it, treating round-trip error and convergence as a testable
+property rather than a type-level guarantee. `approximate_by`'s substitution
+step (see below) does do a shape/type check at the point of substitution, which
+catches violations, just not at `Approximation`-definition time.
 
 **`encode`'s output arity is scheme-dependent, and that's fine.** This follows
 directly from a memory-layout choice each `Approximation` makes:
@@ -185,18 +182,17 @@ entry point" concern only would have applied if this were being built as
 external, non-core code.
 
 **Returning `handles` is not optional.** Both `encode` and `decode` can
-introduce intermediate Funcs with update definitions (per-block reductions,
-`ShiftByMin`'s `mins`, etc.). Left unscheduled, Halide doesn't error on these —
-it computes them at the innermost valid loop level by default (a Func can only
-fail to compile this way if something explicitly forces `.compute_inline()` on
-it, which is illegal for a Func with an update definition). But that default
-placement is exactly that, a default: the caller has no way to override it, or
-to apply the fusion patterns from "Scope: placement is not semantics" below
-(e.g. `compute_at`-ing `enc.encoded` into a producer for dynamic activation
-requantization). Mirroring `blockquant.py`'s `make_error_func` — which
-explicitly does
-`for func in encoded + e_handles + d_handles: func.compute_root()` — the struct
-above bundles exactly that same set for the caller to schedule.
+introduce intermediate Funcs with update definitions (per-block reductions, a
+shift-by-min helper's own min-reduction, etc.). Left unscheduled, Halide doesn't
+error on these — it computes them at the innermost valid loop level by default
+(a Func can only fail to compile this way if something explicitly forces
+`.compute_inline()` on it, which is illegal for a Func with an update
+definition). But that default placement is exactly that, a default: the caller
+has no way to override it, or to apply the fusion patterns from "Scope:
+placement is not semantics" below (e.g. `compute_at`-ing `enc.encoded` into a
+producer for dynamic activation requantization). The struct above bundles every
+encode/decode handle together for exactly this reason — so the caller can
+schedule all of them, not just the primary output.
 
 ### Consequence: consumers must already exist
 
@@ -317,12 +313,11 @@ lifecycle (`call_configure()` → `call_generate()` → `call_schedule()`,
 
 - **`configure()`** is the real "compiler driver": it looks up `Approximation`
   objects by name from an independent, non-Generator registry
-  (`make_approximation(name)` — the C++ analog of `blockquant.py`'s flat
-  `GGML_MODES` list, just addressable by name), decides which Inputs/Outputs to
-  declare based on `GeneratorParam`s (per-argument scheme choice, a
-  `quantize_only` mode, a `weight_precomputed` flag selecting between the split
-  and combined-artifact shapes), and stores the selected `Approximation`s as
-  members.
+  (`make_approximation(name)`, a lookup table of named schemes), decides which
+  Inputs/Outputs to declare based on `GeneratorParam`s (per-argument scheme
+  choice, a `quantize_only` mode, a `weight_precomputed` flag selecting between
+  the split and combined-artifact shapes), and stores the selected
+  `Approximation`s as members.
 - **`generate()`** must exist (`static_assert(has_generate_method_v<T>)`,
   `src/Generator.h:3901`) but can be a thin pass-through: it builds the actual
   op math using the `Approximation`s selected in `configure()` (weight value via
@@ -398,7 +393,7 @@ design is validated.
 | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `Approximation`: virtual-dispatch abstract class, operates on `Func`s only                  | Decided                                                                                                      |
 | `Approximation` makes no placement claims (offline vs fused)                                | Decided                                                                                                      |
-| `encode`/`decode` return `(funcs, handles)`, not bare `vector<Func>`                        | Decided; handles are scheduling-only, mirrors `blockquant.py`'s `make_error_func` pattern                    |
+| `encode`/`decode` return `(funcs, handles)`, not bare `vector<Func>`                        | Decided; handles are scheduling-only intermediates, kept separate from the signature-contract output         |
 | `decode(encode(f).encoded).decoded[0]` signature contract                                   | Decided; enforced only at `approximate_by`'s substitution time in v1, not at `Approximation`-definition time |
 | `encode`'s output arity/layout (packed vs planar)                                           | Left to each `Approximation`; not decided by the framework                                                   |
 | `approximate_by`: eager, destructive `substitute_calls`, not `Func::in`                     | Decided; needed so it composes with `compute_offline` — see rejected-`Func::in` writeup above                |
@@ -415,9 +410,9 @@ design is validated.
 
 - `apps/ggml/halide/*_generators.cpp` — the manually-duplicated
   quantize/dequantize/vec_dot implementations this design generalizes.
-- `~/dev/hl-approx/practice/blockquant.py` — the Python prototype
-  `Approximation` is ported from, including its `(funcs, handles)` return
-  convention (`make_error_func`).
+- A private Python research prototype exploring the same compositional
+  `Approximation` idea, including its `(funcs, handles)` return convention — not
+  a public artifact, referenced here only for context.
 - `apps/hannk/halide/conv_generator.cpp` — sole in-repo precedent for a
   non-trivial `configure()`.
 - `src/Func.cpp: Stage::rfactor` — the eager, destructive graph-editing

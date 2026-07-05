@@ -3,10 +3,10 @@
 
 /** \file
  * Defines Approximation, a core interface for lossy, quantified
- * Func-to-Func transformations (e.g. a quantize/dequantize round trip).
- * See Func::approximate_by(), which splices such a round trip into an
- * existing call graph, and doc/ApproximationDesign.md for the design
- * rationale.
+ * Func-to-Func transformations (e.g. a quantize/dequantize round trip), and
+ * Compose/Apply, which build larger Approximations out of smaller ones. See
+ * Func::approximate_by(), which splices such a round trip into an existing
+ * call graph, and doc/ApproximationDesign.md for the design rationale.
  */
 
 #include <vector>
@@ -25,19 +25,29 @@ struct EncodeResult {
     std::vector<Func> handles;
 };
 
-/** The result of Approximation::decode(): decoded[0] is the round-trip
- * replacement for whatever Func was originally encoded, plus any
- * additional scheduling-only handles. */
+/** The result of Approximation::decode(): decoded is the round-trip
+ * replacement for whatever Func(s) were originally encoded, plus any
+ * additional scheduling-only handles. When an Approximation is used
+ * directly with Func::approximate_by(), decoded must contain exactly one
+ * Func; when it's used as one stage of a larger Compose/Apply chain,
+ * decoded may contain however many Funcs the next stage down expects. */
 struct DecodeResult {
     std::vector<Func> decoded;
     std::vector<Func> handles;
 };
 
 /** Approximation is the base class for a lossy, quantified transformation
- * of a Func's values -- e.g. quantize-then-dequantize. Unlike an ordinary
- * schedule directive, an Approximation deliberately changes the *value*
- * computed, not just how or where it's computed: decode(encode(f)) is
- * expected to approximately reproduce f, not exactly reproduce it.
+ * of one or more Funcs' values -- e.g. quantize-then-dequantize. Unlike an
+ * ordinary schedule directive, an Approximation deliberately changes the
+ * *value* computed, not just how or where it's computed: decode(encode(f))
+ * is expected to approximately reproduce f, not exactly reproduce it.
+ *
+ * encode()/decode() take and return a *vector* of Funcs, not a single Func,
+ * even though the common case (a leaf Approximation like a plain quantizer)
+ * only ever uses one. This is what makes Compose and Apply below possible:
+ * a composed Approximation's inner stage can produce multiple Funcs (e.g. a
+ * quantized-values Func plus a separate scale Func), and the next stage
+ * needs to be able to consume all of them, or select just one to act on.
  *
  * An Approximation makes no claim about *where* or *when* encode/decode are
  * computed relative to the rest of a pipeline (offline vs fused inline,
@@ -52,18 +62,18 @@ class Approximation {
 public:
     virtual ~Approximation() = default;
 
-    /** Produce the encoded form of `f`. EncodeResult::encoded's first
-     * element is not required to have the same type or dimensionality as
-     * `f` -- an Approximation is free to choose a packed representation
-     * (a single opaque byte buffer, fields recovered via reinterpret<>()
-     * inside decode) or a planar one (multiple typed Funcs, one per
-     * field). Either is legitimate; the framework does not decide. */
-    virtual EncodeResult encode(Func f) = 0;
+    /** Produce the encoded form of `inputs`. EncodeResult::encoded's
+     * elements are not required to have the same type, dimensionality, or
+     * count as `inputs` -- an Approximation is free to choose a packed
+     * representation (a single opaque byte buffer, fields recovered via
+     * reinterpret<>() inside decode) or a planar one (multiple typed Funcs,
+     * one per field). Either is legitimate; the framework does not
+     * decide. */
+    virtual EncodeResult encode(std::vector<Func> inputs) = 0;
 
-    /** Reconstruct an approximation of the original Func from its encoded
-     * form. DecodeResult::decoded must contain exactly one Func, and it
-     * must match the original Func's argument list and value type(s)
-     * exactly, so it can be used in its place. */
+    /** Reconstruct an approximation of the original Func(s) from their
+     * encoded form. See DecodeResult for the constraint on `decoded`'s
+     * size, which depends on how this Approximation is used. */
     virtual DecodeResult decode(std::vector<Func> encoded) = 0;
 };
 
@@ -79,6 +89,48 @@ public:
 struct ApproximationResult {
     Func replacement;
     std::vector<Func> handles;
+};
+
+/** Sequentially composes two Approximations: encode() runs `inner` first,
+ * then `outer` on inner's encoded output; decode() runs the mirror image,
+ * `outer` first, then `inner` on outer's decoded output. Neither `outer`
+ * nor `inner` is owned by the Compose object -- both must outlive it, the
+ * same way Func::approximate_by() doesn't own the Approximation passed to
+ * it. */
+class Compose : public Approximation {
+public:
+    Compose(Approximation &outer, Approximation &inner)
+        : outer_(outer), inner_(inner) {
+    }
+
+    EncodeResult encode(std::vector<Func> inputs) override;
+    DecodeResult decode(std::vector<Func> encoded) override;
+
+private:
+    Approximation &outer_;
+    Approximation &inner_;
+};
+
+/** Applies `inner` to just the sub-range `[idx, idx + arity)` of a Func
+ * vector, passing every other element through unchanged -- e.g. applying a
+ * quantizer to just the "shifted" component of an affine (shift + scale)
+ * scheme's encoded output while leaving the shift amount itself untouched.
+ * `encode_arity`/`decode_arity` (how many Funcs `inner` consumes at that
+ * position for each direction) must be given explicitly, since C++ has no
+ * way to infer them generically from `inner` itself. `inner` is not owned
+ * by the Apply object -- it must outlive it. */
+class Apply : public Approximation {
+public:
+    Apply(int idx, int encode_arity, int decode_arity, Approximation &inner)
+        : idx_(idx), encode_arity_(encode_arity), decode_arity_(decode_arity), inner_(inner) {
+    }
+
+    EncodeResult encode(std::vector<Func> inputs) override;
+    DecodeResult decode(std::vector<Func> encoded) override;
+
+private:
+    int idx_, encode_arity_, decode_arity_;
+    Approximation &inner_;
 };
 
 }  // namespace Halide

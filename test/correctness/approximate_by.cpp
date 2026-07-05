@@ -16,7 +16,8 @@ constexpr int kBlockSize = 8;
 // substitution.
 class SymmetricQuantizer : public Approximation {
 public:
-    EncodeResult encode(Func f) override {
+    EncodeResult encode(std::vector<Func> inputs) override {
+        Func f = inputs[0];
         Var x("x"), i("i");
         RDom r(0, kBlockSize, "r");
 

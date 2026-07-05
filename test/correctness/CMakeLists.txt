@@ -6,6 +6,7 @@ tests(
     # keep-sorted start case=no
     align_bounds.cpp
     approximate_by.cpp
+    approximation_composition.cpp
     argmax.cpp
     async_device_copy.cpp
     autodiff.cpp

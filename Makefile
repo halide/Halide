@@ -450,6 +450,7 @@ SOURCE_FILES = \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
+  Approximation.cpp \
   Argument.cpp \
   AssociativeOpsTable.cpp \
   Associativity.cpp \

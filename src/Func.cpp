@@ -2556,7 +2556,7 @@ Func Func::clone_in(const vector<Func> &fs) {
 }
 
 ApproximationResult Func::approximate_by(Approximation &p, const vector<Func> &consumers) {
-    EncodeResult enc = p.encode(*this);
+    EncodeResult enc = p.encode({*this});
     user_assert(!enc.encoded.empty())
         << "approximate_by: Approximation::encode(" << name() << ") returned no Funcs\n";
 
