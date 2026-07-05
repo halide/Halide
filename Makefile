@@ -653,6 +653,7 @@ HEADER_FILES = \
   AlignLoads.h \
   AllocationBoundsInference.h \
   ApplySplit.h \
+  Approximation.h \
   Argument.h \
   AssociativeOpsTable.h \
   Associativity.h \

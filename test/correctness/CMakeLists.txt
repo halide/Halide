@@ -5,6 +5,7 @@ tests(
     SOURCES
     # keep-sorted start case=no
     align_bounds.cpp
+    approximate_by.cpp
     argmax.cpp
     async_device_copy.cpp
     autodiff.cpp

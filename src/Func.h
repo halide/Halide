@@ -59,6 +59,8 @@ struct VarOrRVar {
 };
 
 class ImageParam;
+class Approximation;
+struct ApproximationResult;
 
 namespace Internal {
 struct AssociativeOp;
@@ -1482,6 +1484,18 @@ public:
     Func clone_in(const Func &f);
     Func clone_in(const std::vector<Func> &fs);
     //@}
+
+    /** Eagerly and destructively replace every call to this Func inside
+     * each Func in 'consumers' with a call to the round trip
+     * p.decode(p.encode(*this)) instead. The substitution happens
+     * immediately, the same way Func::rfactor() immediately rewrites a
+     * Func's definition, rather than being deferred to lowering the way
+     * Func::in() is -- see Approximation.h and doc/ApproximationDesign.md
+     * for the rationale. Because the substitution is eager, it can only
+     * rewrite Funcs that are already fully defined at the point of the
+     * call -- there is no "global" mode that also covers Funcs written
+     * later, unlike Func::in(). */
+    ApproximationResult approximate_by(Approximation &p, const std::vector<Func> &consumers);
 
     /** Eagerly and immediately replace every call this Func makes to each
      * Func in 'callees' with that Func's own value expression (its pure

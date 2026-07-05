@@ -10,6 +10,7 @@
 #endif
 
 #include "ApplySplit.h"
+#include "Approximation.h"
 #include "Argument.h"
 #include "Associativity.h"
 #include "Callable.h"
@@ -2552,6 +2553,41 @@ Func Func::clone_in(const vector<Func> &fs) {
     }
     invalidate_cache();
     return get_wrapper(func, name() + "_clone", fs, true);
+}
+
+ApproximationResult Func::approximate_by(Approximation &p, const vector<Func> &consumers) {
+    EncodeResult enc = p.encode(*this);
+    user_assert(!enc.encoded.empty())
+        << "approximate_by: Approximation::encode(" << name() << ") returned no Funcs\n";
+
+    DecodeResult dec = p.decode(enc.encoded);
+    user_assert(dec.decoded.size() == 1)
+        << "approximate_by: Approximation::decode() must return exactly one Func (the "
+        << "round-trip replacement), but returned " << dec.decoded.size() << "\n";
+
+    Func round_trip = dec.decoded[0];
+    user_assert(round_trip.dimensions() == dimensions())
+        << "approximate_by: decode(encode(" << name() << "))'s result (" << round_trip.name()
+        << ") has " << round_trip.dimensions() << " dimensions, but " << name() << " has "
+        << dimensions() << " -- Approximation implementations must reproduce the original "
+        << "Func's signature exactly\n";
+    user_assert(round_trip.types() == types())
+        << "approximate_by: decode(encode(" << name() << "))'s result (" << round_trip.name()
+        << ") has a different type than " << name() << " -- Approximation implementations "
+        << "must reproduce the original Func's signature exactly\n";
+
+    for (const Func &g : consumers) {
+        user_assert(g.name() != name())
+            << "approximate_by: " << name() << " cannot be its own consumer\n";
+        // Eager and destructive, like Func::rfactor() -- not deferred to
+        // lowering the way Func::in() is. See Approximation.h for why.
+        g.function().substitute_calls(func, round_trip.function());
+    }
+
+    vector<Func> handles = enc.encoded;
+    handles.insert(handles.end(), enc.handles.begin(), enc.handles.end());
+    handles.insert(handles.end(), dec.handles.begin(), dec.handles.end());
+    return {round_trip, handles};
 }
 
 Func &Func::inline_calls(const vector<Func> &callees) {
