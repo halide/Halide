@@ -31,6 +31,8 @@
 
 #include "Halide.h"
 
+#include "activation_dequant.h"
+
 using namespace Halide;
 
 namespace {
@@ -113,7 +115,69 @@ public:
     }
 };
 
+// vec_dot(Q3_K, Q8_K): plain dequantize-then-multiply-and-sum, mirroring
+// Q4_0's vec_dot generator (see q4_0_generators.cpp for the rationale).
+class Q3_KVecDotGenerator : public Generator<Q3_KVecDotGenerator> {
+public:
+    Input<Buffer<uint8_t, 2>> x_blocks_{"x_blocks"};
+    Input<Buffer<uint8_t, 2>> y_blocks_{"y_blocks"};  // Q8_K activation format
+    Output<Buffer<float, 0>> result_{"result"};
+
+    void generate() {
+        RDom r(0, x_blocks_.dim(1).extent() * kQK_K, "r");
+
+        auto x_val = [&](Expr x) -> Expr {
+            Expr gi = x % kQK_K;
+            Expr i = x / kQK_K;
+
+            Expr half = gi / 128;
+            Expr local = gi % 128;
+            Expr j = local / 32;
+            Expr rem32 = local % 32;
+            Expr shift = j * 2;
+            Expr bit_pos = half * 4 + j;
+
+            Expr q_byte_idx = half * 32 + rem32;
+            Expr scale_idx = half * 8 + j * 2 + select(rem32 >= 16, 1, 0);
+
+            Expr q_byte = x_blocks_(kQsOffset + q_byte_idx, i);
+            Expr twobit = cast<int32_t>((q_byte >> shift) & 3);
+
+            Expr hm_byte = x_blocks_(kHmaskOffset + rem32, i);
+            Expr high_set = ((cast<uint32_t>(hm_byte) >> bit_pos) & 1) != 0;
+            Expr offset4 = select(high_set, 0, 4);
+
+            Expr low_byte_idx = scale_idx % 8;
+            Expr use_high_nibble = scale_idx >= 8;
+            Expr scale_low_byte = x_blocks_(kScalesOffset + low_byte_idx, i);
+            Expr low_val = select(use_high_nibble,
+                                  cast<int32_t>(scale_low_byte >> 4),
+                                  cast<int32_t>(scale_low_byte & 0x0f));
+            Expr high2_byte_idx = (scale_idx % 4) + 8;
+            Expr high2_shift = (scale_idx / 4) * 2;
+            Expr high2 = cast<int32_t>((x_blocks_(kScalesOffset + high2_byte_idx, i) >> high2_shift) & 0x3);
+            Expr scale_signed = (low_val | (high2 << 4)) - 32;
+
+            Expr d_lo = cast<uint16_t>(x_blocks_(kDOffset + 0, i));
+            Expr d_hi = cast<uint16_t>(x_blocks_(kDOffset + 1, i));
+            Expr d = cast<float>(reinterpret<float16_t>(d_lo | (d_hi << 8)));
+
+            Expr dl = d * cast<float>(scale_signed);
+
+            return dl * cast<float>(twobit - offset4);
+        };
+
+        result_() = sum(x_val(r) * ggml_halide::q8_k_value(y_blocks_, r));
+
+        x_blocks_.dim(0).set_bounds(0, kBlockBytes);
+        x_blocks_.dim(1).set_min(0);
+        y_blocks_.dim(0).set_bounds(0, 292);
+        y_blocks_.dim(1).set_min(0);
+    }
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(Q3_KDequantizeGenerator, q3_k_dequantize)
 HALIDE_REGISTER_GENERATOR(Q3_KQuantizeGenerator, q3_k_quantize)
+HALIDE_REGISTER_GENERATOR(Q3_KVecDotGenerator, q3_k_vec_dot)

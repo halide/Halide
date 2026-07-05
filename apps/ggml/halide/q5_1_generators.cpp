@@ -21,6 +21,8 @@
 
 #include "Halide.h"
 
+#include "activation_dequant.h"
+
 using namespace Halide;
 
 namespace {
@@ -158,7 +160,52 @@ public:
     }
 };
 
+// vec_dot(Q5_1, Q8_1): plain dequantize-then-multiply-and-sum, mirroring
+// Q4_0's vec_dot generator (see q4_0_generators.cpp for the rationale).
+class Q5_1VecDotGenerator : public Generator<Q5_1VecDotGenerator> {
+public:
+    Input<Buffer<uint8_t, 2>> x_blocks_{"x_blocks"};
+    Input<Buffer<uint8_t, 2>> y_blocks_{"y_blocks"};  // Q8_1 activation format
+    Output<Buffer<float, 0>> result_{"result"};
+
+    void generate() {
+        RDom r(0, x_blocks_.dim(1).extent() * kQK5_1, "r");
+
+        auto x_val = [&](Expr x) -> Expr {
+            Expr i = x / kQK5_1;
+            Expr j = x % kQK5_1;
+            Expr byte_idx = j % (kQK5_1 / 2);
+            Expr is_low = j < (kQK5_1 / 2);
+            Expr byte = x_blocks_(8 + byte_idx, i);
+            Expr nibble = cast<uint32_t>(select(is_low, byte & 0x0f, (byte >> 4) & 0x0f));
+            Expr qh = cast<uint32_t>(x_blocks_(4, i)) |
+                      (cast<uint32_t>(x_blocks_(5, i)) << 8) |
+                      (cast<uint32_t>(x_blocks_(6, i)) << 16) |
+                      (cast<uint32_t>(x_blocks_(7, i)) << 24);
+            Expr xh_lo = ((qh >> (byte_idx + 0)) << 4) & 0x10u;
+            Expr xh_hi = (qh >> (byte_idx + 12)) & 0x10u;
+            Expr xh = select(is_low, xh_lo, xh_hi);
+            Expr val = cast<float>(nibble | xh);
+            Expr d_lo = cast<uint16_t>(x_blocks_(0, i));
+            Expr d_hi = cast<uint16_t>(x_blocks_(1, i));
+            Expr d = cast<float>(reinterpret<float16_t>(d_lo | (d_hi << 8)));
+            Expr m_lo = cast<uint16_t>(x_blocks_(2, i));
+            Expr m_hi = cast<uint16_t>(x_blocks_(3, i));
+            Expr m = cast<float>(reinterpret<float16_t>(m_lo | (m_hi << 8)));
+            return val * d + m;
+        };
+
+        result_() = sum(x_val(r) * ggml_halide::q8_1_value(y_blocks_, r));
+
+        x_blocks_.dim(0).set_bounds(0, kBlockBytes);
+        x_blocks_.dim(1).set_min(0);
+        y_blocks_.dim(0).set_bounds(0, 36);
+        y_blocks_.dim(1).set_min(0);
+    }
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(Q5_1DequantizeGenerator, q5_1_dequantize)
 HALIDE_REGISTER_GENERATOR(Q5_1QuantizeGenerator, q5_1_quantize)
+HALIDE_REGISTER_GENERATOR(Q5_1VecDotGenerator, q5_1_vec_dot)

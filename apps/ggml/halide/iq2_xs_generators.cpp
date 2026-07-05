@@ -24,6 +24,7 @@
 
 #include "Halide.h"
 
+#include "activation_dequant.h"
 #include "iq_grids_data.h"
 
 using namespace Halide;
@@ -91,6 +92,64 @@ public:
     }
 };
 
+// vec_dot(IQ2_XS, Q8_K): plain dequantize-then-multiply-and-sum, mirroring
+// Q4_0's vec_dot generator (see q4_0_generators.cpp for the rationale).
+class IQ2_XSVecDotGenerator : public Generator<IQ2_XSVecDotGenerator> {
+public:
+    Input<Buffer<uint8_t, 2>> x_blocks_{"x_blocks"};
+    Input<Buffer<uint8_t, 2>> y_blocks_{"y_blocks"};  // Q8_K activation format
+    Output<Buffer<float, 0>> result_{"result"};
+
+    void generate() {
+        Buffer<uint64_t, 1> grid(512, "iq2xs_grid");
+        for (int idx = 0; idx < 512; idx++)
+            grid(idx) = iq_grids::iq2xs_grid[idx];
+
+        Buffer<uint8_t, 1> ksigns(128, "ksigns_iq2xs");
+        for (int idx = 0; idx < 128; idx++)
+            ksigns(idx) = iq_grids::ksigns_iq2xs[idx];
+
+        RDom r(0, x_blocks_.dim(1).extent() * kQK_K, "r");
+
+        auto x_val = [&](Expr x) -> Expr {
+            Expr i = x / kQK_K;
+            Expr gi = x % kQK_K;
+            Expr ib32 = gi / 32;
+            Expr local = gi % 32;
+            Expr l = local / 8;
+            Expr j = local % 8;
+
+            Expr qs_idx = ib32 * 4 + l;
+            Expr q_lo = cast<uint16_t>(x_blocks_(kQsOffset + qs_idx * 2 + 0, i));
+            Expr q_hi = cast<uint16_t>(x_blocks_(kQsOffset + qs_idx * 2 + 1, i));
+            Expr qs_val = q_lo | (q_hi << 8);
+
+            Expr grid_idx = qs_val & 511;
+            Expr sign_idx = cast<uint8_t>(qs_val >> 9);
+
+            Expr scales_byte = x_blocks_(kScalesOffset + ib32, i);
+            Expr nibble = select(l < 2, scales_byte & 0x0f, scales_byte >> 4);
+            Expr db = IQ2_XSDequantizeGenerator::d_decode(x_blocks_, kDOffset, i) *
+                      (0.5f + cast<float>(nibble)) * 0.25f;
+
+            Expr grid_val = grid(grid_idx);
+            Expr grid_byte = cast<uint8_t>((grid_val >> (cast<uint64_t>(j) * 8)) & 0xff);
+            Expr signs = ksigns(sign_idx);
+            Expr sign_bit = (cast<uint32_t>(signs) & (cast<uint32_t>(1) << j)) != 0;
+
+            return db * cast<float>(grid_byte) * select(sign_bit, -1.0f, 1.0f);
+        };
+
+        result_() = sum(x_val(r) * ggml_halide::q8_k_value(y_blocks_, r));
+
+        x_blocks_.dim(0).set_bounds(0, kBlockBytes);
+        x_blocks_.dim(1).set_min(0);
+        y_blocks_.dim(0).set_bounds(0, 292);
+        y_blocks_.dim(1).set_min(0);
+    }
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(IQ2_XSDequantizeGenerator, iq2_xs_dequantize)
+HALIDE_REGISTER_GENERATOR(IQ2_XSVecDotGenerator, iq2_xs_vec_dot)

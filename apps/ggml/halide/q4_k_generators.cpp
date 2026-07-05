@@ -29,6 +29,8 @@
 
 #include "Halide.h"
 
+#include "activation_dequant.h"
+
 using namespace Halide;
 
 namespace {
@@ -109,7 +111,66 @@ public:
     }
 };
 
+// vec_dot(Q4_K, Q8_K): plain dequantize-then-multiply-and-sum, mirroring
+// Q4_0's vec_dot generator (see q4_0_generators.cpp for the rationale).
+class Q4_KVecDotGenerator : public Generator<Q4_KVecDotGenerator> {
+public:
+    Input<Buffer<uint8_t, 2>> x_blocks_{"x_blocks"};
+    Input<Buffer<uint8_t, 2>> y_blocks_{"y_blocks"};  // Q8_K activation format
+    Output<Buffer<float, 0>> result_{"result"};
+
+    void generate() {
+        RDom r(0, x_blocks_.dim(1).extent() * kQK_K, "r");
+
+        auto x_val = [&](Expr x) -> Expr {
+            Expr gi = x % kQK_K;
+            Expr i = x / kQK_K;
+
+            Expr iter = gi / 64;
+            Expr local64 = gi % 64;
+            Expr half64 = local64 / 32;
+            Expr l = local64 % 32;
+
+            Expr scale_idx = iter * 2 + half64;
+
+            Expr qs_byte = x_blocks_(kQsOffset + iter * 32 + l, i);
+            Expr nibble = select(half64 == 0, cast<int32_t>(qs_byte & 0x0f), cast<int32_t>(qs_byte >> 4));
+
+            Expr jj = clamp(scale_idx - 4, 0, 3);
+            Expr sc = select(scale_idx < 4,
+                             x_blocks_(kScalesOffset + scale_idx, i) & 0x3f,
+                             cast<uint8_t>((x_blocks_(kScalesOffset + 8 + jj, i) & 0x0f) |
+                                           ((x_blocks_(kScalesOffset + jj, i) >> 6) << 4)));
+            Expr m = select(scale_idx < 4,
+                            x_blocks_(kScalesOffset + scale_idx + 4, i) & 0x3f,
+                            cast<uint8_t>((x_blocks_(kScalesOffset + 8 + jj, i) >> 4) |
+                                          ((x_blocks_(kScalesOffset + 4 + jj, i) >> 6) << 4)));
+
+            Expr d_lo = cast<uint16_t>(x_blocks_(kDOffset + 0, i));
+            Expr d_hi = cast<uint16_t>(x_blocks_(kDOffset + 1, i));
+            Expr d = cast<float>(reinterpret<float16_t>(d_lo | (d_hi << 8)));
+
+            Expr dmin_lo = cast<uint16_t>(x_blocks_(kDminOffset + 0, i));
+            Expr dmin_hi = cast<uint16_t>(x_blocks_(kDminOffset + 1, i));
+            Expr dmin = cast<float>(reinterpret<float16_t>(dmin_lo | (dmin_hi << 8)));
+
+            Expr d1 = d * cast<float>(sc);
+            Expr m1 = dmin * cast<float>(m);
+
+            return d1 * cast<float>(nibble) - m1;
+        };
+
+        result_() = sum(x_val(r) * ggml_halide::q8_k_value(y_blocks_, r));
+
+        x_blocks_.dim(0).set_bounds(0, kBlockBytes);
+        x_blocks_.dim(1).set_min(0);
+        y_blocks_.dim(0).set_bounds(0, 292);
+        y_blocks_.dim(1).set_min(0);
+    }
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(Q4_KDequantizeGenerator, q4_k_dequantize)
 HALIDE_REGISTER_GENERATOR(Q4_KQuantizeGenerator, q4_k_quantize)
+HALIDE_REGISTER_GENERATOR(Q4_KVecDotGenerator, q4_k_vec_dot)

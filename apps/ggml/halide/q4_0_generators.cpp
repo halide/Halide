@@ -12,6 +12,8 @@
 
 #include "Halide.h"
 
+#include "activation_dequant.h"
+
 using namespace Halide;
 
 namespace {
@@ -106,7 +108,47 @@ public:
     }
 };
 
+// vec_dot(Q4_0, Q8_0): a plain elementwise dequantize-then-multiply-and-sum
+// dot product -- mathematically equivalent to GGML's integer-factored
+// accumulation (d_x*d_y*sum(qx*qy)), just re-grouped; vec_dot is a
+// tolerance-checked benchmark, not bit-exact, so this is a valid
+// reimplementation of the same reduction. See activation_dequant.h for why
+// the Q8_0 (activation) side is a shared helper instead of being duplicated
+// per weight type.
+class Q4_0VecDotGenerator : public Generator<Q4_0VecDotGenerator> {
+public:
+    Input<Buffer<uint8_t, 2>> x_blocks_{"x_blocks"};
+    Input<Buffer<uint8_t, 2>> y_blocks_{"y_blocks"};  // Q8_0 activation format
+    Output<Buffer<float, 0>> result_{"result"};
+
+    void generate() {
+        RDom r(0, x_blocks_.dim(1).extent() * kQK4_0, "r");
+
+        auto x_val = [&](Expr x) -> Expr {
+            Expr i = x / kQK4_0;
+            Expr j = x % kQK4_0;
+            Expr byte_idx = j % (kQK4_0 / 2);
+            Expr is_low = j < (kQK4_0 / 2);
+            Expr byte = x_blocks_(2 + byte_idx, i);
+            Expr nibble = select(is_low, byte & 0x0f, (byte >> 4) & 0x0f);
+            Expr q = cast<int32_t>(nibble) - 8;
+            Expr lo = cast<uint16_t>(x_blocks_(0, i));
+            Expr hi = cast<uint16_t>(x_blocks_(1, i));
+            Expr d = cast<float>(reinterpret<float16_t>(lo | (hi << 8)));
+            return cast<float>(q) * d;
+        };
+
+        result_() = sum(x_val(r) * ggml_halide::q8_0_value(y_blocks_, r));
+
+        x_blocks_.dim(0).set_bounds(0, kBlockBytes);
+        x_blocks_.dim(1).set_min(0);
+        y_blocks_.dim(0).set_bounds(0, 34);
+        y_blocks_.dim(1).set_min(0);
+    }
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(Q4_0DequantizeGenerator, q4_0_dequantize)
 HALIDE_REGISTER_GENERATOR(Q4_0QuantizeGenerator, q4_0_quantize)
+HALIDE_REGISTER_GENERATOR(Q4_0VecDotGenerator, q4_0_vec_dot)

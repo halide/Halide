@@ -27,6 +27,7 @@
 
 #include "Halide.h"
 
+#include "activation_dequant.h"
 #include "iq_grids_data.h"
 
 using namespace Halide;
@@ -92,6 +93,63 @@ public:
     }
 };
 
+// vec_dot(IQ1_S, Q8_K): plain dequantize-then-multiply-and-sum, mirroring
+// Q4_0's vec_dot generator (see q4_0_generators.cpp for the rationale).
+class IQ1_SVecDotGenerator : public Generator<IQ1_SVecDotGenerator> {
+public:
+    Input<Buffer<uint8_t, 2>> x_blocks_{"x_blocks"};
+    Input<Buffer<uint8_t, 2>> y_blocks_{"y_blocks"};  // Q8_K activation format
+    Output<Buffer<float, 0>> result_{"result"};
+
+    void generate() {
+        Buffer<uint64_t, 1> grid(2048, "iq1s_grid");
+        for (int idx = 0; idx < 2048; idx++)
+            grid(idx) = iq_grids::iq1s_grid[idx];
+
+        RDom r(0, x_blocks_.dim(1).extent() * kQK_K, "r");
+
+        auto x_val = [&](Expr x) -> Expr {
+            Expr i = x / kQK_K;
+            Expr gi = x % kQK_K;
+            Expr ib = gi / 32;
+            Expr local = gi % 32;
+            Expr l = local / 8;
+            Expr j = local % 8;
+
+            Expr qh_lo = cast<uint16_t>(x_blocks_(kQhOffset + ib * 2 + 0, i));
+            Expr qh_hi = cast<uint16_t>(x_blocks_(kQhOffset + ib * 2 + 1, i));
+            Expr qh_val = qh_lo | (qh_hi << 8);
+
+            Expr dl_scale = cast<int32_t>((qh_val >> 12) & 7);
+
+            Expr d_lo = cast<uint16_t>(x_blocks_(kDOffset + 0, i));
+            Expr d_hi = cast<uint16_t>(x_blocks_(kDOffset + 1, i));
+            Expr d = cast<float>(reinterpret<float16_t>(d_lo | (d_hi << 8)));
+            Expr dl = d * cast<float>(2 * dl_scale + 1);
+
+            Expr delta = select((qh_val & 0x8000) != 0, -kIQ1S_DELTA, kIQ1S_DELTA);
+
+            Expr qs_byte = x_blocks_(kQsOffset + ib * 4 + l, i);
+            Expr high3 = cast<uint32_t>((qh_val >> (cast<uint16_t>(l) * 3)) & 7);
+            Expr grid_idx = clamp(cast<int32_t>(cast<uint16_t>(cast<uint32_t>(qs_byte) + (high3 << 8))), 0, 2047);
+
+            Expr grid_val = grid(grid_idx);
+            Expr grid_byte_bits = cast<uint8_t>((grid_val >> (cast<uint64_t>(j) * 8)) & 0xff);
+            Expr grid_signed = reinterpret<int8_t>(grid_byte_bits);
+
+            return dl * (cast<float>(grid_signed) + delta);
+        };
+
+        result_() = sum(x_val(r) * ggml_halide::q8_k_value(y_blocks_, r));
+
+        x_blocks_.dim(0).set_bounds(0, kBlockBytes);
+        x_blocks_.dim(1).set_min(0);
+        y_blocks_.dim(0).set_bounds(0, 292);
+        y_blocks_.dim(1).set_min(0);
+    }
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(IQ1_SDequantizeGenerator, iq1_s_dequantize)
+HALIDE_REGISTER_GENERATOR(IQ1_SVecDotGenerator, iq1_s_vec_dot)

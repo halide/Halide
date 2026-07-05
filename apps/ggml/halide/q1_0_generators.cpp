@@ -19,6 +19,8 @@
 
 #include "Halide.h"
 
+#include "activation_dequant.h"
+
 using namespace Halide;
 
 namespace {
@@ -101,7 +103,41 @@ public:
     }
 };
 
+// vec_dot(Q1_0, Q8_0): plain dequantize-then-multiply-and-sum, mirroring
+// Q4_0's vec_dot generator (see q4_0_generators.cpp for the rationale).
+class Q1_0VecDotGenerator : public Generator<Q1_0VecDotGenerator> {
+public:
+    Input<Buffer<uint8_t, 2>> x_blocks_{"x_blocks"};
+    Input<Buffer<uint8_t, 2>> y_blocks_{"y_blocks"};  // Q8_0 activation format
+    Output<Buffer<float, 0>> result_{"result"};
+
+    void generate() {
+        RDom r(0, x_blocks_.dim(1).extent() * kQK, "r");
+
+        auto x_val = [&](Expr x) -> Expr {
+            Expr i = x / kQK;
+            Expr j = x % kQK;
+            Expr byte_idx = j / 8;
+            Expr bit_off = j % 8;
+            Expr byte_val = x_blocks_(kQsOffset + byte_idx, i);
+            Expr bit = (byte_val >> bit_off) & 1;
+            Expr d_lo = cast<uint16_t>(x_blocks_(kDOffset + 0, i));
+            Expr d_hi = cast<uint16_t>(x_blocks_(kDOffset + 1, i));
+            Expr d = cast<float>(reinterpret<float16_t>(d_lo | (d_hi << 8)));
+            return select(bit != 0, d, -d);
+        };
+
+        result_() = sum(x_val(r) * ggml_halide::q8_0_value(y_blocks_, r));
+
+        x_blocks_.dim(0).set_bounds(0, kBlockBytes);
+        x_blocks_.dim(1).set_min(0);
+        y_blocks_.dim(0).set_bounds(0, 34);
+        y_blocks_.dim(1).set_min(0);
+    }
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(Q1_0DequantizeGenerator, q1_0_dequantize)
 HALIDE_REGISTER_GENERATOR(Q1_0QuantizeGenerator, q1_0_quantize)
+HALIDE_REGISTER_GENERATOR(Q1_0VecDotGenerator, q1_0_vec_dot)

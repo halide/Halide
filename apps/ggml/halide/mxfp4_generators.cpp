@@ -22,6 +22,8 @@
 
 #include "Halide.h"
 
+#include "activation_dequant.h"
+
 using namespace Halide;
 
 namespace {
@@ -86,7 +88,44 @@ public:
     }
 };
 
+// vec_dot(MXFP4, Q8_0): plain dequantize-then-multiply-and-sum, mirroring
+// Q4_0's vec_dot generator (see q4_0_generators.cpp for the rationale).
+class MXFP4VecDotGenerator : public Generator<MXFP4VecDotGenerator> {
+public:
+    Input<Buffer<uint8_t, 2>> x_blocks_{"x_blocks"};
+    Input<Buffer<uint8_t, 2>> y_blocks_{"y_blocks"};  // Q8_0 activation format
+    Output<Buffer<float, 0>> result_{"result"};
+
+    void generate() {
+        RDom r(0, x_blocks_.dim(1).extent() * kQK, "r");
+
+        auto x_val = [&](Expr x) -> Expr {
+            Expr i = x / kQK;
+            Expr j = x % kQK;
+            Expr byte_idx = j % (kQK / 2);
+            Expr is_low = j < (kQK / 2);
+            Expr byte = x_blocks_(kQsOffset + byte_idx, i);
+            Expr nibble = cast<int32_t>(select(is_low, byte & 0x0f, byte >> 4));
+            Expr val = lookup_mxfp4(nibble);
+            Expr e = x_blocks_(kEOffset, i);
+            Expr bits = select(cast<uint32_t>(e) < 2,
+                               cast<uint32_t>(0x00200000) << cast<uint32_t>(e),
+                               (cast<uint32_t>(e) - 1) << 23);
+            Expr d = reinterpret<float>(bits);
+            return cast<float>(val) * d;
+        };
+
+        result_() = sum(x_val(r) * ggml_halide::q8_0_value(y_blocks_, r));
+
+        x_blocks_.dim(0).set_bounds(0, kBlockBytes);
+        x_blocks_.dim(1).set_min(0);
+        y_blocks_.dim(0).set_bounds(0, 34);
+        y_blocks_.dim(1).set_min(0);
+    }
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(MXFP4DequantizeGenerator, mxfp4_dequantize)
 HALIDE_REGISTER_GENERATOR(MXFP4QuantizeGenerator, mxfp4_quantize)
+HALIDE_REGISTER_GENERATOR(MXFP4VecDotGenerator, mxfp4_vec_dot)

@@ -19,6 +19,8 @@
 
 #include "Halide.h"
 
+#include "activation_dequant.h"
+
 using namespace Halide;
 
 namespace {
@@ -99,7 +101,30 @@ public:
     }
 };
 
+// vec_dot(Q8_0, Q8_0): plain dequantize-then-multiply-and-sum, mirroring
+// Q4_0's vec_dot generator (see q4_0_generators.cpp for the rationale).
+// Both sides share the same block_q8_0 layout, so the same helper (see
+// activation_dequant.h) is used for x and y.
+class Q8_0VecDotGenerator : public Generator<Q8_0VecDotGenerator> {
+public:
+    Input<Buffer<uint8_t, 2>> x_blocks_{"x_blocks"};
+    Input<Buffer<uint8_t, 2>> y_blocks_{"y_blocks"};
+    Output<Buffer<float, 0>> result_{"result"};
+
+    void generate() {
+        RDom r(0, x_blocks_.dim(1).extent() * kQK8_0, "r");
+
+        result_() = sum(ggml_halide::q8_0_value(x_blocks_, r) * ggml_halide::q8_0_value(y_blocks_, r));
+
+        x_blocks_.dim(0).set_bounds(0, kBlockBytes);
+        x_blocks_.dim(1).set_min(0);
+        y_blocks_.dim(0).set_bounds(0, kBlockBytes);
+        y_blocks_.dim(1).set_min(0);
+    }
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(Q8_0DequantizeGenerator, q8_0_dequantize)
 HALIDE_REGISTER_GENERATOR(Q8_0QuantizeGenerator, q8_0_quantize)
+HALIDE_REGISTER_GENERATOR(Q8_0VecDotGenerator, q8_0_vec_dot)

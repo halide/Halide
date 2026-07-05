@@ -8,51 +8,75 @@
 #include "f16_dequantize.h"
 #include "f16_quantize.h"
 #include "iq1_m_dequantize.h"
+#include "iq1_m_vec_dot.h"
 #include "iq1_s_dequantize.h"
+#include "iq1_s_vec_dot.h"
 #include "iq2_s_dequantize.h"
 #include "iq2_s_quantize.h"
+#include "iq2_s_vec_dot.h"
 #include "iq2_xs_dequantize.h"
+#include "iq2_xs_vec_dot.h"
 #include "iq2_xxs_dequantize.h"
+#include "iq2_xxs_vec_dot.h"
 #include "iq3_s_dequantize.h"
 #include "iq3_s_quantize.h"
+#include "iq3_s_vec_dot.h"
 #include "iq3_xxs_dequantize.h"
 #include "iq3_xxs_quantize.h"
+#include "iq3_xxs_vec_dot.h"
 #include "iq4_nl_dequantize.h"
 #include "iq4_nl_quantize.h"
+#include "iq4_nl_vec_dot.h"
 #include "iq4_xs_dequantize.h"
 #include "iq4_xs_quantize.h"
+#include "iq4_xs_vec_dot.h"
 #include "mxfp4_dequantize.h"
 #include "mxfp4_quantize.h"
+#include "mxfp4_vec_dot.h"
 #include "nvfp4_dequantize.h"
 #include "nvfp4_quantize.h"
+#include "nvfp4_vec_dot.h"
 #include "q1_0_dequantize.h"
 #include "q1_0_quantize.h"
+#include "q1_0_vec_dot.h"
 #include "q2_k_dequantize.h"
 #include "q2_k_quantize.h"
+#include "q2_k_vec_dot.h"
 #include "q3_k_dequantize.h"
 #include "q3_k_quantize.h"
+#include "q3_k_vec_dot.h"
 #include "q4_0_dequantize.h"
 #include "q4_0_quantize.h"
+#include "q4_0_vec_dot.h"
 #include "q4_1_dequantize.h"
 #include "q4_1_quantize.h"
+#include "q4_1_vec_dot.h"
 #include "q4_k_dequantize.h"
 #include "q4_k_quantize.h"
+#include "q4_k_vec_dot.h"
 #include "q5_0_dequantize.h"
 #include "q5_0_quantize.h"
+#include "q5_0_vec_dot.h"
 #include "q5_1_dequantize.h"
 #include "q5_1_quantize.h"
+#include "q5_1_vec_dot.h"
 #include "q5_k_dequantize.h"
 #include "q5_k_quantize.h"
+#include "q5_k_vec_dot.h"
 #include "q6_k_dequantize.h"
 #include "q6_k_quantize.h"
+#include "q6_k_vec_dot.h"
 #include "q8_0_dequantize.h"
 #include "q8_0_quantize.h"
+#include "q8_0_vec_dot.h"
 #include "q8_1_quantize.h"
 #include "q8_k_quantize.h"
 #include "tq1_0_dequantize.h"
 #include "tq1_0_quantize.h"
+#include "tq1_0_vec_dot.h"
 #include "tq2_0_dequantize.h"
 #include "tq2_0_quantize.h"
+#include "tq2_0_vec_dot.h"
 
 using Halide::Runtime::Buffer;
 
@@ -90,6 +114,18 @@ void ggml_quants_halide_dequantize_q4_0(const void *x, float *y, int64_t k) {
     check(q4_0_dequantize(blocks, yb), "q4_0_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_q4_0_q8_0(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                          size_t by, int nrc) {
+    constexpr int kQK = 32, kBlockBytesX = 2 + kQK / 2, kBlockBytesY = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(q4_0_vec_dot(xb, yb, result), "q4_0_vec_dot");
+}
+
 //
 // Q4_1 -- block size 32, 20 bytes/block (2 delta + 2 min + 16 packed nibbles).
 //
@@ -110,6 +146,18 @@ void ggml_quants_halide_dequantize_q4_1(const void *x, float *y, int64_t k) {
     Buffer<uint8_t, 2> blocks(const_cast<uint8_t *>(static_cast<const uint8_t *>(x)), 2, shape);
     Buffer<float, 1> yb(y, static_cast<int>(k));
     check(q4_1_dequantize(blocks, yb), "q4_1_dequantize");
+}
+
+void ggml_quants_halide_vec_dot_q4_1_q8_1(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                          size_t by, int nrc) {
+    constexpr int kQK = 32, kBlockBytesX = 4 + kQK / 2, kBlockBytesY = 4 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(q4_1_vec_dot(xb, yb, result), "q4_1_vec_dot");
 }
 
 //
@@ -134,6 +182,18 @@ void ggml_quants_halide_dequantize_q5_0(const void *x, float *y, int64_t k) {
     check(q5_0_dequantize(blocks, yb), "q5_0_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_q5_0_q8_0(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                          size_t by, int nrc) {
+    constexpr int kQK = 32, kBlockBytesX = 2 + 4 + kQK / 2, kBlockBytesY = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(q5_0_vec_dot(xb, yb, result), "q5_0_vec_dot");
+}
+
 //
 // Q5_1 -- block size 32, 24 bytes/block (2 delta + 2 min + 4 qh + 16 packed nibbles).
 //
@@ -156,6 +216,18 @@ void ggml_quants_halide_dequantize_q5_1(const void *x, float *y, int64_t k) {
     check(q5_1_dequantize(blocks, yb), "q5_1_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_q5_1_q8_1(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                          size_t by, int nrc) {
+    constexpr int kQK = 32, kBlockBytesX = 4 + 4 + kQK / 2, kBlockBytesY = 4 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(q5_1_vec_dot(xb, yb, result), "q5_1_vec_dot");
+}
+
 //
 // Q8_0 -- block size 32, 34 bytes/block (2 delta + 32 int8 values).
 //
@@ -176,6 +248,18 @@ void ggml_quants_halide_dequantize_q8_0(const void *x, float *y, int64_t k) {
     Buffer<uint8_t, 2> blocks(const_cast<uint8_t *>(static_cast<const uint8_t *>(x)), 2, shape);
     Buffer<float, 1> yb(y, static_cast<int>(k));
     check(q8_0_dequantize(blocks, yb), "q8_0_dequantize");
+}
+
+void ggml_quants_halide_vec_dot_q8_0_q8_0(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                          size_t by, int nrc) {
+    constexpr int kQK = 32, kBlockBytes = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(q8_0_vec_dot(xb, yb, result), "q8_0_vec_dot");
 }
 
 //
@@ -231,6 +315,18 @@ void ggml_quants_halide_dequantize_q2_k(const void *x, float *y, int64_t k) {
     check(q2_k_dequantize(blocks, yb), "q2_k_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_q2_k_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                          size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = 16 + kQK / 4 + 4, kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(q2_k_vec_dot(xb, yb, result), "q2_k_vec_dot");
+}
+
 //
 // Q6_K -- superblock size 256, 210 bytes/block (128 ql + 64 qh + 16 signed
 // int8 scales + 2 delta). Dequantize is native Halide; quantize calls out
@@ -255,6 +351,19 @@ void ggml_quants_halide_dequantize_q6_k(const void *x, float *y, int64_t k) {
     check(q6_k_dequantize(blocks, yb), "q6_k_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_q6_k_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                          size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = kQK / 2 + kQK / 4 + kQK / 16 + 2,
+                  kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(q6_k_vec_dot(xb, yb, result), "q6_k_vec_dot");
+}
+
 //
 // Q4_K -- superblock size 256, 144 bytes/block (2 delta + 2 dmin + 12 packed
 // scale/min bytes + 128 packed-4-bit bytes). Dequantize is native Halide;
@@ -277,6 +386,18 @@ void ggml_quants_halide_dequantize_q4_k(const void *x, float *y, int64_t k) {
     Buffer<uint8_t, 2> blocks(const_cast<uint8_t *>(static_cast<const uint8_t *>(x)), 2, shape);
     Buffer<float, 1> yb(y, static_cast<int>(k));
     check(q4_k_dequantize(blocks, yb), "q4_k_dequantize");
+}
+
+void ggml_quants_halide_vec_dot_q4_k_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                          size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = 4 + 12 + kQK / 2, kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(q4_k_vec_dot(xb, yb, result), "q4_k_vec_dot");
 }
 
 //
@@ -304,6 +425,18 @@ void ggml_quants_halide_dequantize_q5_k(const void *x, float *y, int64_t k) {
     check(q5_k_dequantize(blocks, yb), "q5_k_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_q5_k_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                          size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = 4 + 12 + kQK / 8 + kQK / 2, kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(q5_k_vec_dot(xb, yb, result), "q5_k_vec_dot");
+}
+
 //
 // Q3_K -- superblock size 256, 110 bytes/block (32 hmask + 64 packed-2-bit
 // bytes + 12 packed scale bytes + 2 delta). Dequantize is native Halide;
@@ -328,6 +461,18 @@ void ggml_quants_halide_dequantize_q3_k(const void *x, float *y, int64_t k) {
     check(q3_k_dequantize(blocks, yb), "q3_k_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_q3_k_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                          size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = kQK / 8 + kQK / 4 + 12 + 2, kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(q3_k_vec_dot(xb, yb, result), "q3_k_vec_dot");
+}
+
 //
 // Q1_0 -- block size 128, 18 bytes/block (2 delta + 16 sign-bit bytes).
 // Closed-form both directions, fully native.
@@ -349,6 +494,22 @@ void ggml_quants_halide_dequantize_q1_0(const void *x, float *y, int64_t k) {
     Buffer<uint8_t, 2> blocks(const_cast<uint8_t *>(static_cast<const uint8_t *>(x)), 2, shape);
     Buffer<float, 1> yb(y, static_cast<int>(k));
     check(q1_0_dequantize(blocks, yb), "q1_0_dequantize");
+}
+
+void ggml_quants_halide_vec_dot_q1_0_q8_0(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                          size_t by, int nrc) {
+    // Q1_0's own block size (128) differs from Q8_0's (32) -- unlike the
+    // same-granularity types above, nb must be computed separately per side.
+    constexpr int kQKX = 128, kBlockBytesX = 2 + kQKX / 8;
+    constexpr int kQKY = 32, kBlockBytesY = 2 + kQKY;
+    const int32_t nbx = static_cast<int32_t>(n / kQKX);
+    const int32_t nby = static_cast<int32_t>(n / kQKY);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nbx, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nby, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(q1_0_vec_dot(xb, yb, result), "q1_0_vec_dot");
 }
 
 //
@@ -375,6 +536,18 @@ void ggml_quants_halide_dequantize_mxfp4(const void *x, float *y, int64_t k) {
     check(mxfp4_dequantize(blocks, yb), "mxfp4_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_mxfp4_q8_0(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                           size_t by, int nrc) {
+    constexpr int kQK = 32, kBlockBytesX = 1 + kQK / 2, kBlockBytesY = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(mxfp4_vec_dot(xb, yb, result), "mxfp4_vec_dot");
+}
+
 //
 // NVFP4 -- block size 64, 36 bytes/block (4 UE4M3 scales + 32 packed-4-bit
 // codebook-index bytes). Dequantize is native Halide; quantize calls out to
@@ -399,6 +572,22 @@ void ggml_quants_halide_dequantize_nvfp4(const void *x, float *y, int64_t k) {
     check(nvfp4_dequantize(blocks, yb), "nvfp4_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_nvfp4_q8_0(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                           size_t by, int nrc) {
+    // NVFP4's own block size (64) differs from Q8_0's (32) -- see Q1_0's
+    // vec_dot wrapper above for why nb must be computed separately per side.
+    constexpr int kQKX = 64, kSub = 16, kBlockBytesX = kQKX / kSub + kQKX / 2;
+    constexpr int kQKY = 32, kBlockBytesY = 2 + kQKY;
+    const int32_t nbx = static_cast<int32_t>(n / kQKX);
+    const int32_t nby = static_cast<int32_t>(n / kQKY);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nbx, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nby, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(nvfp4_vec_dot(xb, yb, result), "nvfp4_vec_dot");
+}
+
 //
 // IQ4_NL -- block size 32, 18 bytes/block (2 delta + 16 packed-4-bit
 // codebook-index bytes). Dequantize is native Halide; quantize calls out to
@@ -421,6 +610,18 @@ void ggml_quants_halide_dequantize_iq4_nl(const void *x, float *y, int64_t k) {
     Buffer<uint8_t, 2> blocks(const_cast<uint8_t *>(static_cast<const uint8_t *>(x)), 2, shape);
     Buffer<float, 1> yb(y, static_cast<int>(k));
     check(iq4_nl_dequantize(blocks, yb), "iq4_nl_dequantize");
+}
+
+void ggml_quants_halide_vec_dot_iq4_nl_q8_0(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                            size_t by, int nrc) {
+    constexpr int kQK = 32, kBlockBytesX = 2 + kQK / 2, kBlockBytesY = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(iq4_nl_vec_dot(xb, yb, result), "iq4_nl_vec_dot");
 }
 
 //
@@ -448,6 +649,18 @@ void ggml_quants_halide_dequantize_iq4_xs(const void *x, float *y, int64_t k) {
     check(iq4_xs_dequantize(blocks, yb), "iq4_xs_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_iq4_xs_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                            size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = 2 + 2 + 4 + kQK / 2, kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(iq4_xs_vec_dot(xb, yb, result), "iq4_xs_vec_dot");
+}
+
 //
 // TQ1_0 -- superblock size 256, 54 bytes/block (48 base-3-packed qs + 4
 // base-3-packed qh + 2 delta). Dequantize is native Halide; quantize calls
@@ -470,6 +683,18 @@ void ggml_quants_halide_dequantize_tq1_0(const void *x, float *y, int64_t k) {
     Buffer<uint8_t, 2> blocks(const_cast<uint8_t *>(static_cast<const uint8_t *>(x)), 2, shape);
     Buffer<float, 1> yb(y, static_cast<int>(k));
     check(tq1_0_dequantize(blocks, yb), "tq1_0_dequantize");
+}
+
+void ggml_quants_halide_vec_dot_tq1_0_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                           size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = 54, kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(tq1_0_vec_dot(xb, yb, result), "tq1_0_vec_dot");
 }
 
 //
@@ -497,6 +722,18 @@ void ggml_quants_halide_dequantize_tq2_0(const void *x, float *y, int64_t k) {
     check(tq2_0_dequantize(blocks, yb), "tq2_0_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_tq2_0_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                           size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = kQK / 4 + 2, kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(tq2_0_vec_dot(xb, yb, result), "tq2_0_vec_dot");
+}
+
 //
 // IQ2_XXS -- superblock size 256, 66 bytes/block (2 delta + 64 packed qs).
 // Dequantize only -- see ggml_quants.h for why there's no quantize here.
@@ -511,6 +748,18 @@ void ggml_quants_halide_dequantize_iq2_xxs(const void *x, float *y, int64_t k) {
     check(iq2_xxs_dequantize(blocks, yb), "iq2_xxs_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_iq2_xxs_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                             size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = 2 + kQK / 8 * 2, kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(iq2_xxs_vec_dot(xb, yb, result), "iq2_xxs_vec_dot");
+}
+
 //
 // IQ2_XS -- superblock size 256, 74 bytes/block. Dequantize only.
 //
@@ -522,6 +771,18 @@ void ggml_quants_halide_dequantize_iq2_xs(const void *x, float *y, int64_t k) {
     Buffer<uint8_t, 2> blocks(const_cast<uint8_t *>(static_cast<const uint8_t *>(x)), 2, shape);
     Buffer<float, 1> yb(y, static_cast<int>(k));
     check(iq2_xs_dequantize(blocks, yb), "iq2_xs_dequantize");
+}
+
+void ggml_quants_halide_vec_dot_iq2_xs_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                            size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = 2 + kQK / 8 * 2 + kQK / 32, kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(iq2_xs_vec_dot(xb, yb, result), "iq2_xs_vec_dot");
 }
 
 //
@@ -547,6 +808,19 @@ void ggml_quants_halide_dequantize_iq2_s(const void *x, float *y, int64_t k) {
     check(iq2_s_dequantize(blocks, yb), "iq2_s_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_iq2_s_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                           size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = 2 + kQK / 8 + kQK / 8 + kQK / 32 + kQK / 32,
+                  kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(iq2_s_vec_dot(xb, yb, result), "iq2_s_vec_dot");
+}
+
 //
 // IQ3_XXS -- superblock size 256, 98 bytes/block. Dequantize is native
 // Halide; quantize calls out to GGML's own reference.
@@ -568,6 +842,18 @@ void ggml_quants_halide_dequantize_iq3_xxs(const void *x, float *y, int64_t k) {
     Buffer<uint8_t, 2> blocks(const_cast<uint8_t *>(static_cast<const uint8_t *>(x)), 2, shape);
     Buffer<float, 1> yb(y, static_cast<int>(k));
     check(iq3_xxs_dequantize(blocks, yb), "iq3_xxs_dequantize");
+}
+
+void ggml_quants_halide_vec_dot_iq3_xxs_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                             size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = 2 + 3 * kQK / 8, kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(iq3_xxs_vec_dot(xb, yb, result), "iq3_xxs_vec_dot");
 }
 
 //
@@ -593,6 +879,19 @@ void ggml_quants_halide_dequantize_iq3_s(const void *x, float *y, int64_t k) {
     check(iq3_s_dequantize(blocks, yb), "iq3_s_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_iq3_s_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                           size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = 2 + kQK / 4 + kQK / 32 + kQK / 8 + kQK / 64,
+                  kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(iq3_s_vec_dot(xb, yb, result), "iq3_s_vec_dot");
+}
+
 //
 // IQ1_S -- superblock size 256, 50 bytes/block. Dequantize only.
 //
@@ -606,6 +905,18 @@ void ggml_quants_halide_dequantize_iq1_s(const void *x, float *y, int64_t k) {
     check(iq1_s_dequantize(blocks, yb), "iq1_s_dequantize");
 }
 
+void ggml_quants_halide_vec_dot_iq1_s_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                           size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = 2 + kQK / 8 + kQK / 16, kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(iq1_s_vec_dot(xb, yb, result), "iq1_s_vec_dot");
+}
+
 //
 // IQ1_M -- superblock size 256, 56 bytes/block. Dequantize only.
 //
@@ -617,6 +928,18 @@ void ggml_quants_halide_dequantize_iq1_m(const void *x, float *y, int64_t k) {
     Buffer<uint8_t, 2> blocks(const_cast<uint8_t *>(static_cast<const uint8_t *>(x)), 2, shape);
     Buffer<float, 1> yb(y, static_cast<int>(k));
     check(iq1_m_dequantize(blocks, yb), "iq1_m_dequantize");
+}
+
+void ggml_quants_halide_vec_dot_iq1_m_q8_k(int n, float *s, size_t bs, const void *vx, size_t bx, const void *vy,
+                                           size_t by, int nrc) {
+    constexpr int kQK = 256, kBlockBytesX = kQK / 8 + kQK / 16 + kQK / 32, kBlockBytesY = 4 + kQK + (kQK / 16) * 2;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
+    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
+    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
+    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
+    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
+    check(iq1_m_vec_dot(xb, yb, result), "iq1_m_vec_dot");
 }
 
 //

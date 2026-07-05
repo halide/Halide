@@ -31,6 +31,7 @@
 
 #include "Halide.h"
 
+#include "activation_dequant.h"
 #include "iq_grids_data.h"
 
 using namespace Halide;
@@ -112,6 +113,72 @@ public:
     }
 };
 
+// vec_dot(IQ1_M, Q8_K): plain dequantize-then-multiply-and-sum, mirroring
+// Q4_0's vec_dot generator (see q4_0_generators.cpp for the rationale).
+class IQ1_MVecDotGenerator : public Generator<IQ1_MVecDotGenerator> {
+public:
+    Input<Buffer<uint8_t, 2>> x_blocks_{"x_blocks"};
+    Input<Buffer<uint8_t, 2>> y_blocks_{"y_blocks"};  // Q8_K activation format
+    Output<Buffer<float, 0>> result_{"result"};
+
+    void generate() {
+        Buffer<uint64_t, 1> grid(2048, "iq1s_grid");
+        for (int idx = 0; idx < 2048; idx++)
+            grid(idx) = iq_grids::iq1s_grid[idx];
+
+        RDom r(0, x_blocks_.dim(1).extent() * kQK_K, "r");
+
+        auto x_val = [&](Expr x) -> Expr {
+            Expr i = x / kQK_K;
+            Expr gi = x % kQK_K;
+            Expr ib = gi / 32;
+            Expr local = gi % 32;
+            Expr l2 = local / 8;
+            Expr j = local % 8;
+
+            auto sc_word = [&](Expr k) {
+                Expr lo = cast<uint32_t>(x_blocks_(kScalesOffset + k * 2 + 0, i));
+                Expr hi = cast<uint32_t>(x_blocks_(kScalesOffset + k * 2 + 1, i));
+                return lo | (hi << 8);
+            };
+            Expr sc0 = sc_word(0), sc1 = sc_word(1), sc2 = sc_word(2), sc3 = sc_word(3);
+            Expr d_bits = (sc0 >> 12) | ((sc1 >> 8) & 0xf0) | ((sc2 >> 4) & 0xf00) | (sc3 & 0xf000);
+            Expr d = cast<float>(reinterpret<float16_t>(cast<uint16_t>(d_bits)));
+
+            Expr qh_half = l2 / 2;
+            Expr parity = l2 % 2;
+
+            Expr qh_byte = cast<uint32_t>(x_blocks_(kQhOffset + ib * 2 + qh_half, i));
+            Expr qs_byte = x_blocks_(kQsOffset + ib * 4 + l2, i);
+            Expr extra_bits = select(parity == 0, (qh_byte << 8) & 0x700, (qh_byte << 4) & 0x700);
+            Expr grid_idx = clamp(cast<int32_t>(cast<uint16_t>(cast<uint32_t>(qs_byte) + extra_bits)), 0, 2047);
+
+            Expr delta_mask = select(parity == 0, cast<uint32_t>(0x08), cast<uint32_t>(0x80));
+            Expr delta = select((qh_byte & delta_mask) != 0, -kIQ1S_DELTA, kIQ1S_DELTA);
+
+            Expr sc_idx = ib / 2;
+            Expr sc_word_val = select(sc_idx == 0, sc0, select(sc_idx == 1, sc1, select(sc_idx == 2, sc2, sc3)));
+            Expr shift = (ib % 2) * 6 + qh_half * 3;
+            Expr scale3 = (sc_word_val >> cast<uint32_t>(shift)) & 7;
+            Expr dl = d * cast<float>(2 * scale3 + 1);
+
+            Expr grid_val = grid(grid_idx);
+            Expr grid_byte_bits = cast<uint8_t>((grid_val >> (cast<uint64_t>(j) * 8)) & 0xff);
+            Expr grid_signed = reinterpret<int8_t>(grid_byte_bits);
+
+            return dl * (cast<float>(grid_signed) + delta);
+        };
+
+        result_() = sum(x_val(r) * ggml_halide::q8_k_value(y_blocks_, r));
+
+        x_blocks_.dim(0).set_bounds(0, kBlockBytes);
+        x_blocks_.dim(1).set_min(0);
+        y_blocks_.dim(0).set_bounds(0, 292);
+        y_blocks_.dim(1).set_min(0);
+    }
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(IQ1_MDequantizeGenerator, iq1_m_dequantize)
+HALIDE_REGISTER_GENERATOR(IQ1_MVecDotGenerator, iq1_m_vec_dot)

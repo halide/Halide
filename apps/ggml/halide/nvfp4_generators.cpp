@@ -27,6 +27,8 @@
 
 #include "Halide.h"
 
+#include "activation_dequant.h"
+
 using namespace Halide;
 
 namespace {
@@ -101,7 +103,53 @@ public:
     }
 };
 
+// vec_dot(NVFP4, Q8_0): plain dequantize-then-multiply-and-sum, mirroring
+// Q4_0's vec_dot generator (see q4_0_generators.cpp for the rationale).
+// NVFP4's own block size (64) differs from Q8_0's (32) -- no issue, since
+// each side's value function independently derives its own block/lane
+// indices from the shared flat element index.
+class NVFP4VecDotGenerator : public Generator<NVFP4VecDotGenerator> {
+public:
+    Input<Buffer<uint8_t, 2>> x_blocks_{"x_blocks"};
+    Input<Buffer<uint8_t, 2>> y_blocks_{"y_blocks"};  // Q8_0 activation format
+    Output<Buffer<float, 0>> result_{"result"};
+
+    void generate() {
+        RDom r(0, x_blocks_.dim(1).extent() * kQK, "r");
+
+        auto x_val = [&](Expr x) -> Expr {
+            Expr i = x / kQK;
+            Expr gi = x % kQK;
+            Expr sub = gi / kSubSize;
+            Expr local = gi % kSubSize;
+            Expr j = local % (kSubSize / 2);
+            Expr is_low = local < (kSubSize / 2);
+            Expr qs_byte_idx = sub * (kSubSize / 2) + j;
+            Expr byte = x_blocks_(kQsOffset + qs_byte_idx, i);
+            Expr nibble = cast<int32_t>(select(is_low, byte & 0x0f, byte >> 4));
+            Expr val = lookup_mxfp4(nibble);
+            Expr ue = x_blocks_(kDOffset + sub, i);                    // codespell:ignore ue
+            Expr is_zero = (ue == 0) || (ue == 0x7f);                  // codespell:ignore ue
+            Expr exp_ = cast<int32_t>(cast<uint32_t>(ue) >> 3) & 0xf;  // codespell:ignore ue
+            Expr man_ = cast<int32_t>(ue) & 0x7;                       // codespell:ignore ue
+            Expr raw = select(exp_ == 0,
+                              cast<float>(man_) / 512.0f,
+                              (1.0f + cast<float>(man_) / 8.0f) * pow(2.0f, cast<float>(exp_ - 7)));
+            Expr d = select(is_zero, 0.0f, raw * 0.5f);
+            return cast<float>(val) * d;
+        };
+
+        result_() = sum(x_val(r) * ggml_halide::q8_0_value(y_blocks_, r));
+
+        x_blocks_.dim(0).set_bounds(0, kBlockBytes);
+        x_blocks_.dim(1).set_min(0);
+        y_blocks_.dim(0).set_bounds(0, 34);
+        y_blocks_.dim(1).set_min(0);
+    }
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(NVFP4DequantizeGenerator, nvfp4_dequantize)
 HALIDE_REGISTER_GENERATOR(NVFP4QuantizeGenerator, nvfp4_quantize)
+HALIDE_REGISTER_GENERATOR(NVFP4VecDotGenerator, nvfp4_vec_dot)
