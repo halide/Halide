@@ -1373,6 +1373,61 @@ int hoisted_rfactor_test() {
     return 0;
 }
 
+// When HoistInvariantFactor strips a float-promotion cast to expose a
+// narrower int type underneath (e.g. widening_mul(int8, int8), which is
+// only Int(16)), the intermediate must not accumulate at that raw,
+// possibly-too-narrow width: the original (float) accumulation had no
+// overflow risk, and the intermediate shouldn't introduce one just because
+// a narrow type happened to be sitting under the promotion cast. This
+// reproduces exactly that scenario with a reduction long enough (64 terms
+// of magnitude up to 127*127) to overflow Int(16) if the fix regresses.
+int hoisted_rfactor_widens_narrow_int_test() {
+    const int K = 64;
+    ImageParam A{Int(8), 1, "A"};
+    ImageParam B{Int(8), 1, "B"};
+    ImageParam Scale{Float(32), 1, "Scale"};
+
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Acc{"Acc"};
+    Acc(i) = 0.0f;
+    // No explicit cast<int32_t>() here -- unlike hoisted_rfactor_test above,
+    // this is deliberately the "naive" shape a decode()-then-multiply
+    // composition produces (see test/correctness/approximation_composition.cpp),
+    // relying on HoistInvariantFactor to pick a safe accumulation width on
+    // its own rather than the caller having to know to widen it by hand.
+    Acc(i) += Scale(i) * cast<float>(widening_mul(A(r), B(r)));
+
+    Func Acc_intm = Acc.update().rfactor({}, RFactorOptions::HoistInvariantFactor);
+    internal_assert(Acc_intm.types()[0] == Int(32))
+        << "hoisted rfactor: expected the narrow Int(16) product to be widened to "
+        << "Int(32) for safe accumulation, got " << Acc_intm.types()[0] << "\n";
+    Acc_intm.compute_root();
+
+    Buffer<int8_t> a_buf(K), b_buf(K);
+    for (int k = 0; k < K; k++) {
+        // Same sign every term (max magnitude, same direction) so the
+        // partial sums only ever grow -- the worst case for narrow-int
+        // overflow, and guaranteed to exceed Int(16)'s range well before k
+        // reaches K.
+        a_buf(k) = 127;
+        b_buf(k) = 127;
+    }
+    Buffer<float> scale_buf(1);
+    scale_buf(0) = 1.0f;
+    A.set(a_buf);
+    B.set(b_buf);
+    Scale.set(scale_buf);
+
+    Buffer<float> result = Acc.realize({1});
+    const float expected = (float)K * 127.0f * 127.0f;
+    internal_assert(result(0) == expected)
+        << "hoisted rfactor narrow-int widening: got " << result(0) << ", expected " << expected << "\n";
+
+    return 0;
+}
+
 // Hoisted rfactor with outer Min and additive factor:
 //   min_k(offset(i) + body(i, k)) = offset(i) + min_k(body(i, k))
 // The intermediate accumulates min without the offset; write-back adds it once.
@@ -1690,6 +1745,7 @@ int main(int argc, char **argv) {
         {"isnan max rfactor test (bitwise or)", isnan_max_rfactor_test<BitwiseOr>},
         {"isnan max rfactor test (logical or)", isnan_max_rfactor_test<LogicalOr>},
         {"hoisted rfactor test (add/mul)", hoisted_rfactor_test},
+        {"hoisted rfactor test (add/mul, narrow int widened)", hoisted_rfactor_widens_narrow_int_test},
         {"hoisted rfactor test (min/add)", hoisted_rfactor_min_test},
         {"hoisted rfactor test (min/add, narrowing)", hoisted_rfactor_min_narrow_test},
         {"hoisted rfactor test (strict_cast preserved)", hoisted_rfactor_strict_cast_test},

@@ -868,8 +868,14 @@ optional<HoistedFactor> extract_factor(const Expr &increment,
     if (law.strip_promotion_cast) {
         // Strip only the outer promotion cast; strict_cast inside the body is left alone.
         if (const Cast *c = body.as<Cast>()) {
+            int acc_bits = body.type().bits();
             if (body.type().is_float() && c->value.type().is_int_or_uint()) {
                 body = c->value;
+                // When strength reducing a float accumulator to an integer accumulator,
+                // avoid losing precision by picking a type that's at least as wide.
+                if (acc_bits > body.type().bits()) {
+                    body = cast(body.type().with_bits(acc_bits), body);
+                }
             }
         }
     }
