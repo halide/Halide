@@ -4,6 +4,7 @@ use crate::cli::halidoscope_cli;
 
 pub mod cli;
 pub mod commands;
+pub mod graph;
 pub mod render;
 pub mod trace;
 

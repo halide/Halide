@@ -1,6 +1,10 @@
+use std::ffi::OsStr;
+use std::path::Path;
+
 use image;
 use tauri_plugin_cli::SubcommandMatches;
 
+use crate::graph::to_dot;
 use crate::render::{
     GrayscaleState, LoadFrequencyState, RedundantState, Renderer, ReuseDistanceState, RgbState,
     StoreFrequencyState,
@@ -124,6 +128,53 @@ pub fn halidoscope_cli(subcommand: Box<SubcommandMatches>) {
                 func
             );
             std::process::exit(1);
+        }
+        "dot" => {
+            let args = &subcommand.matches.args;
+
+            let trace = args
+                .get("trace")
+                .and_then(|a| a.value.as_str())
+                .unwrap_or_else(|| {
+                    eprintln!("Error: --trace argument is required.");
+                    std::process::exit(1);
+                });
+            let destination = args.get("destination").and_then(|a| a.value.as_str());
+
+            // Load and parse the trace.
+            let tr = Trace::load_from_file(trace).unwrap_or_else(|e| {
+                eprintln!("Error loading trace: {}", e);
+                std::process::exit(1);
+            });
+            let dot = to_dot(&tr.dag_edges);
+
+            match destination {
+                Some(dest) => {
+                    let ext = Path::new(dest).extension().and_then(OsStr::to_str);
+
+                    match ext {
+                        Some("txt") | Some("gv") | Some("dot") => {
+                            if let Err(e) = std::fs::write(dest, &dot) {
+                                eprintln!("Failed to write DOT file: {}", e);
+                                std::process::exit(1);
+                            }
+
+                            println!("DOT file written to {}", dest);
+                            std::process::exit(0);
+                        }
+                        _ => {
+                            eprintln!(
+                                "Unsupported file extension for DOT file, must be one of .txt, .gv, or .dot."
+                            );
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                None => {
+                    println!("{}", dot);
+                    std::process::exit(0);
+                }
+            }
         }
         cmd => {
             eprintln!("Unknown subcommand {}", cmd);
