@@ -9,20 +9,7 @@
 #include "Error.h"
 #include "Util.h"
 #include "WasmExecutor.h"
-
-#if defined(__linux__) && defined(__x86_64__)
-#include <asm/prctl.h>
-#include <setjmp.h>
-#include <signal.h>
-#include <sys/syscall.h>
-#include <unistd.h>
-#ifndef ARCH_REQ_XCOMP_PERM
-#define ARCH_REQ_XCOMP_PERM 0x1023
-#endif
-#ifndef XFEATURE_XTILEDATA
-#define XFEATURE_XTILEDATA 18
-#endif
-#endif
+#include "x86_amx_probe.h"
 
 #if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
 #if defined(__FreeBSD__)
@@ -116,39 +103,6 @@ struct cpuid_result {
 }
 
 #endif
-
-[[nodiscard]] bool amx_is_usable() {
-#if defined(__linux__) && defined(__x86_64__) && defined(SYS_arch_prctl)
-    static sigjmp_buf jmpbuf;
-    auto sigill_handler = [](int) {
-        siglongjmp(jmpbuf, 1);
-    };
-
-    if (syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA) != 0) {
-        return false;
-    }
-
-    struct sigaction sa = {};
-    struct sigaction old_sa = {};
-    sa.sa_handler = sigill_handler;
-    sigemptyset(&sa.sa_mask);
-    if (sigaction(SIGILL, &sa, &old_sa) != 0) {
-        return false;
-    }
-
-    bool ok = false;
-    if (sigsetjmp(jmpbuf, 1) == 0) {
-        // tilerelease %tmm0
-        __asm__ __volatile__(".byte 0xc4, 0xe2, 0x78, 0x49, 0xc0" ::: "memory");
-        ok = true;
-    }
-
-    sigaction(SIGILL, &old_sa, nullptr);
-    return ok;
-#else
-    return true;
-#endif
-}
 
 #if defined(__x86_64__) || defined(__i386__) || defined(_M_IX86) || defined(_M_AMD64)
 
@@ -542,7 +496,7 @@ Target calculate_host_target() {
                 // TODO: port to family/model -based detection.
                 if ((info3.eax & avxvnni) == avxvnni) {
                     initial_features.push_back(Target::AVXVNNI);
-                    if ((info3.eax & avx512bf16) == avx512bf16 && amx_is_usable()) {
+                    if ((info3.eax & avx512bf16) == avx512bf16 && Internal::x86_amx_is_usable()) {
                         initial_features.push_back(Target::AVX512_SapphireRapids);
                     }
                 }
