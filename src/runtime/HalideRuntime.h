@@ -707,6 +707,12 @@ extern halide_trace_t halide_set_custom_trace(halide_trace_t trace);
 
 /** The header of a packet in a binary trace. All fields are 32-bit. */
 struct halide_trace_packet_t {
+#ifdef __cplusplus
+    HALIDE_ALWAYS_INLINE halide_trace_packet_t()
+        : size(0), event(halide_trace_load), parent_id(0), id(0), thread_id(0), dimensions(0) {
+    }
+#endif
+
     /** The total size of this packet in bytes. Always a multiple of
      * four. Equivalently, the number of bytes until the next
      * packet. */
@@ -732,11 +738,7 @@ struct halide_trace_packet_t {
     };
     union {
         struct halide_type_t type;
-#ifdef __cplusplus
-        int32_t thread_id = 0;
-#else
         int32_t thread_id;
-#endif
     };
     int32_t dimensions;
     // @}
