@@ -116,11 +116,6 @@ public:
         text(xi, y, xo) = cast<uint8_t>(abs(cast<int16_t>(xsobel0(xi + xo * tilesize, y)) - cast<int16_t>(filtercap)));
         zerotext(xi, xo) = sum(cast<uint16_t>(text(xi, rwin, xo)));
         textsum(xi, y, xo) = select(y <= 0, zerotext(xi, xo), textsum(xi, y - 1, xo) + text(xi, y + winsize - 1, xo) - text(xi, y - 1, xo));
-        // textblury(xi) is the width-winsize sliding window of textsum in x,
-        // written as an O(1)/pixel inductive running sum (mirrors blur_y's xi
-        // scan) so it can be fused into blur_y's xi loop via compute_with: the
-        // SAD update vectorizes over di while this stays a scalar 1-add/pixel
-        // texture update in the same loop -- exactly OpenCV's structure.
         textf1(y, xo) = sum(textsum(rwin, y, xo));
         textblury(xi, y, xo) = select(xi <= 0, textf1(y, xo), likely(textblury(max(xi - 1, 0), y, xo) + textsum(xi + winsize - 1, y, xo) - textsum(max(xi - 1, 0), y, xo)));
 
