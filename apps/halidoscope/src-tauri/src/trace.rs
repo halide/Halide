@@ -230,7 +230,6 @@ pub struct FuncGeometry {
 pub struct Trace {
     pub packets: Vec<TracePacket>,
     pub funcs: BTreeMap<String, FuncStats>,
-    pub pipelines: BTreeMap<i32, String>,
     pub dag_edges: BTreeMap<String, BTreeSet<String>>,
     pub store_indices_by_func: BTreeMap<String, Vec<usize>>,
     pub load_indices_by_func: BTreeMap<String, Vec<usize>>,
@@ -356,7 +355,7 @@ fn update_value_range(pkt: &TracePacket, stats: &mut FuncStats) {
 // ── func_type_and_dim tag parsing ─────────────────────────────────────────────
 
 fn parse_func_type_and_dim(
-    qualified: &str,
+    func_name: &str,
     trace_tag: &str,
     funcs: &mut BTreeMap<String, FuncStats>,
 ) {
@@ -407,8 +406,8 @@ fn parse_func_type_and_dim(
     // In practice Halide emits this tag at pipeline start, before any load/store, so the common
     // path is "tag seeds, accesses expand."
     if !min_coords.is_empty() {
-        let entry = funcs.entry(qualified.to_owned()).or_default();
-        entry.name = qualified.to_owned();
+        let entry = funcs.entry(func_name.to_owned()).or_default();
+        entry.name = func_name.to_owned();
         entry.min_coords = min_coords;
         entry.max_coords = max_coords;
     }
@@ -428,7 +427,6 @@ impl Trace {
 
         let mut packets: Vec<TracePacket> = Vec::new();
         let mut funcs: BTreeMap<String, FuncStats> = BTreeMap::new();
-        let mut pipelines: BTreeMap<i32, String> = BTreeMap::new();
         let mut dag_edges: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         let mut store_indices_by_func: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         let mut load_indices_by_func: BTreeMap<String, Vec<usize>> = BTreeMap::new();
@@ -436,11 +434,7 @@ impl Trace {
         let mut produce_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
         let mut consume_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
 
-        // id -> pipeline name: propagated down the parent chain so every event in a pipeline can
-        // compute its qualified name.
-        let mut parent_to_pipeline: HashMap<i32, String> = HashMap::new();
-
-        // id -> (event, qualified_name, parent_id): needed for DAG inference after all packets are
+        // id -> (event, func_name, parent_id): needed for DAG inference after all packets are
         // parsed.
         let mut id_to_info: HashMap<i32, (EventCode, String, i32)> = HashMap::new();
 
@@ -502,30 +496,7 @@ impl Trace {
                 .unwrap_or_default();
 
             // ── Pipeline context propagation ─────────────────────────────────────────────────────
-            match ev {
-                EventCode::BeginPipeline => {
-                    pipelines.insert(id, func_name.clone());
-                    parent_to_pipeline.insert(id, func_name.clone());
-                }
-                EventCode::EndPipeline => {
-                    parent_to_pipeline.remove(&parent_id);
-                }
-                _ => {
-                    // Propagate the pipeline name down the parent chain so every event can compute
-                    // the pipeline it belongs to.
-                    if let Some(pl) = parent_to_pipeline.get(&parent_id).cloned() {
-                        parent_to_pipeline.insert(id, pl);
-                    }
-                }
-            }
-
-            // ── Qualified name ───────────────────────────────────────────────────────────────────
-            let qualified = match parent_to_pipeline.get(&parent_id) {
-                Some(pl) if !pl.is_empty() => format!("{}:{}", pl, func_name),
-                _ => func_name.clone(),
-            };
-
-            id_to_info.insert(id, (ev, qualified.clone(), parent_id));
+            id_to_info.insert(id, (ev, func_name.clone(), parent_id));
 
             // ── Build the packet ─────────────────────────────────────────────────────────────────
             let pkt = TracePacket {
@@ -546,17 +517,17 @@ impl Trace {
             // max_coords; their interaction is order-dependent by design.
             match ev {
                 EventCode::Tag if trace_tag.starts_with("func_type_and_dim:") => {
-                    parse_func_type_and_dim(&qualified, &trace_tag, &mut funcs);
+                    parse_func_type_and_dim(&func_name, &trace_tag, &mut funcs);
                 }
                 EventCode::BeginRealization => {
-                    let entry = funcs.entry(qualified.clone()).or_default();
-                    entry.name = qualified.clone();
+                    let entry = funcs.entry(func_name.clone()).or_default();
+                    entry.name = func_name.clone();
 
                     // Start the liveness range for this Func at the current packet index.
                     let idx = packets.len() as u32;
 
                     buffer_liveness_range_by_func
-                        .entry(qualified.clone())
+                        .entry(func_name.clone())
                         .and_modify(|range| range.0 = range.0.min(idx))
                         .or_insert((idx, idx));
                 }
@@ -565,7 +536,7 @@ impl Trace {
                     let idx = packets.len() as u32;
 
                     buffer_liveness_range_by_func
-                        .entry(qualified.clone())
+                        .entry(func_name.clone())
                         .and_modify(|range| range.1 = range.1.max(idx))
                         .or_insert((idx, idx));
                 }
@@ -573,14 +544,14 @@ impl Trace {
                     // When we observe a load event, add its current index (equivalent to
                     // packets.len() before the push) to our BTreeMap of load indices for this Func.
                     load_indices_by_func
-                        .entry(qualified.clone())
+                        .entry(func_name.clone())
                         .or_default()
                         .push(packets.len());
 
                     // Add the load event to the list of pending loads to support DAG inference.
                     pending_loads.push((func_name.clone(), parent_id));
-                    let stats = funcs.entry(qualified.clone()).or_insert_with(|| FuncStats {
-                        name: qualified.clone(),
+                    let stats = funcs.entry(func_name.clone()).or_insert_with(|| FuncStats {
+                        name: func_name.clone(),
                         ..Default::default()
                     });
 
@@ -594,14 +565,14 @@ impl Trace {
                     // packets.len() before the push) to our BTreeMap of store indices for this
                     // Func.
                     store_indices_by_func
-                        .entry(qualified.clone())
+                        .entry(func_name.clone())
                         .or_default()
                         .push(packets.len());
 
                     // Update the min/max coordinate and value ranges for this Func based on the
                     // current store packet.
-                    let stats = funcs.entry(qualified.clone()).or_insert_with(|| FuncStats {
-                        name: qualified.clone(),
+                    let stats = funcs.entry(func_name.clone()).or_insert_with(|| FuncStats {
+                        name: func_name.clone(),
                         ..Default::default()
                     });
                     update_coord_range(&pkt, stats);
@@ -611,14 +582,14 @@ impl Trace {
                     let idx = packets.len() as u32;
 
                     produce_ranges_by_func
-                        .entry(qualified.clone())
+                        .entry(func_name.clone())
                         .or_default()
                         .push((idx, idx));
                 }
                 EventCode::EndProduce => {
                     let idx = packets.len() as u32;
 
-                    if let Some(ranges) = produce_ranges_by_func.get_mut(qualified.as_str()) {
+                    if let Some(ranges) = produce_ranges_by_func.get_mut(func_name.as_str()) {
                         if let Some(last) = ranges.last_mut() {
                             last.1 = idx;
                         }
@@ -628,14 +599,14 @@ impl Trace {
                     let idx = packets.len() as u32;
 
                     consume_ranges_by_func
-                        .entry(qualified.clone())
+                        .entry(func_name.clone())
                         .or_default()
                         .push((idx, idx));
                 }
                 EventCode::EndConsume => {
                     let idx = packets.len() as u32;
 
-                    if let Some(ranges) = consume_ranges_by_func.get_mut(qualified.as_str()) {
+                    if let Some(ranges) = consume_ranges_by_func.get_mut(func_name.as_str()) {
                         if let Some(last) = ranges.last_mut() {
                             last.1 = idx;
                         }
@@ -652,10 +623,7 @@ impl Trace {
         // Walk up the parent chain from each load to find the enclosing Produce event; that
         // Produce's func is a producer of the loaded func.
         for (func_name, load_parent_id) in &pending_loads {
-            let loaded_func = match parent_to_pipeline.get(load_parent_id) {
-                Some(pl) if !pl.is_empty() => format!("{}:{}", pl, func_name),
-                _ => func_name.clone(),
-            };
+            let loaded_func = func_name.clone();
 
             let mut current = *load_parent_id;
             loop {
@@ -675,11 +643,11 @@ impl Trace {
             }
         }
 
-        // Compute max per-pixel store/load counts for each Func using the qualified-name index
-        // lists. We extract extents first (shared borrow) then write back (mut borrow) to keep the
-        // two borrows of `funcs` non-overlapping.
-        for (qualified, indices) in &store_indices_by_func {
-            let extents = funcs.get(qualified.as_str()).and_then(func_extents);
+        // Compute max per-pixel store/load counts for each Func using the index lists. We extract
+        // extents first (shared borrow) then write back (mut borrow) to keep the two borrows of
+        // `funcs` non-overlapping.
+        for (func_name, indices) in &store_indices_by_func {
+            let extents = funcs.get(func_name.as_str()).and_then(func_extents);
             if let Some((w, h, min_x, min_y)) = extents {
                 let mut counts = vec![0i32; w * h];
                 for &idx in indices {
@@ -693,7 +661,7 @@ impl Trace {
                         }
                     }
                 }
-                if let Some(stats) = funcs.get_mut(qualified.as_str()) {
+                if let Some(stats) = funcs.get_mut(func_name.as_str()) {
                     let (max, hist) = count_histogram(&counts);
                     stats.max_store_count = max;
                     stats.store_count_histogram = hist;
@@ -701,8 +669,8 @@ impl Trace {
             }
         }
 
-        for (qualified, indices) in &load_indices_by_func {
-            let extents = funcs.get(qualified.as_str()).and_then(func_extents);
+        for (func_name, indices) in &load_indices_by_func {
+            let extents = funcs.get(func_name.as_str()).and_then(func_extents);
             if let Some((w, h, min_x, min_y)) = extents {
                 let mut counts = vec![0i32; w * h];
                 for &idx in indices {
@@ -716,7 +684,7 @@ impl Trace {
                         }
                     }
                 }
-                if let Some(stats) = funcs.get_mut(qualified.as_str()) {
+                if let Some(stats) = funcs.get_mut(func_name.as_str()) {
                     let (max, hist) = count_histogram(&counts);
                     stats.max_load_count = max;
                     stats.load_count_histogram = hist;
@@ -727,10 +695,10 @@ impl Trace {
         // Compute max per-pixel redundant store counts: replay all stores for each Func, tracking
         // the last value written to each (x, y, channel). A store is redundant when the incoming
         // value bit-matches the previously stored value at that location.
-        for (qualified, indices) in &store_indices_by_func {
-            let extents = funcs.get(qualified.as_str()).and_then(func_extents);
+        for (func_name, indices) in &store_indices_by_func {
+            let extents = funcs.get(func_name.as_str()).and_then(func_extents);
             if let Some((w, h, min_x, min_y)) = extents {
-                let stats = funcs.get(qualified.as_str()).unwrap();
+                let stats = funcs.get(func_name.as_str()).unwrap();
                 let (channels, min_c) = if stats.min_coords.len() >= 3 {
                     (
                         (stats.max_coords[2] - stats.min_coords[2]).max(1) as usize,
@@ -773,7 +741,7 @@ impl Trace {
                         last_values[val_idx] = Some(v_bits);
                     }
                 }
-                if let Some(stats) = funcs.get_mut(qualified.as_str()) {
+                if let Some(stats) = funcs.get_mut(func_name.as_str()) {
                     let (max, hist) = count_histogram(&redundant_counts);
                     stats.max_redundant_count = max;
                     stats.redundant_count_histogram = hist;
@@ -795,10 +763,10 @@ impl Trace {
         // Per-pixel distance vecs are collected here; histogram building is deferred until the
         // global max is known so all Funcs share the same bucket scale.
         let mut reuse_distances_by_func: BTreeMap<String, Vec<i64>> = BTreeMap::new();
-        for (qualified, store_indices) in &store_indices_by_func {
-            let extents = funcs.get(qualified.as_str()).and_then(func_extents);
+        for (func_name, store_indices) in &store_indices_by_func {
+            let extents = funcs.get(func_name.as_str()).and_then(func_extents);
             if let Some((w, h, min_x, min_y)) = extents {
-                let stats = funcs.get(qualified.as_str()).unwrap();
+                let stats = funcs.get(func_name.as_str()).unwrap();
                 let (channels, min_c) = if stats.min_coords.len() >= 3 {
                     (
                         (stats.max_coords[2] - stats.min_coords[2]).max(1) as usize,
@@ -808,7 +776,7 @@ impl Trace {
                     (1, 0)
                 };
                 let load_indices = load_indices_by_func
-                    .get(qualified.as_str())
+                    .get(func_name.as_str())
                     .map(Vec::as_slice)
                     .unwrap_or(&[]);
 
@@ -875,23 +843,23 @@ impl Trace {
                     }
                 }
 
-                if let Some(stats) = funcs.get_mut(qualified.as_str()) {
+                if let Some(stats) = funcs.get_mut(func_name.as_str()) {
                     stats.max_reuse_distance =
                         max_reuse_distances.iter().copied().max().unwrap_or(0);
                 }
-                reuse_distances_by_func.insert(qualified.clone(), max_reuse_distances);
+                reuse_distances_by_func.insert(func_name.clone(), max_reuse_distances);
             }
         }
 
         // Pipeline inputs: Funcs with loads but no stores. The first load at each (x, y, channel)
         // is free (analogous to a memcpy). Subsequent loads measure distance from that first load.
-        for (qualified, load_indices) in &load_indices_by_func {
-            if store_indices_by_func.contains_key(qualified.as_str()) {
+        for (func_name, load_indices) in &load_indices_by_func {
+            if store_indices_by_func.contains_key(func_name.as_str()) {
                 continue; // handled by the store-anchor loop above
             }
-            let extents = funcs.get(qualified.as_str()).and_then(func_extents);
+            let extents = funcs.get(func_name.as_str()).and_then(func_extents);
             if let Some((w, h, min_x, min_y)) = extents {
-                let stats = funcs.get(qualified.as_str()).unwrap();
+                let stats = funcs.get(func_name.as_str()).unwrap();
                 let (channels, min_c) = if stats.min_coords.len() >= 3 {
                     (
                         (stats.max_coords[2] - stats.min_coords[2]).max(1) as usize,
@@ -935,11 +903,11 @@ impl Trace {
                     }
                 }
 
-                if let Some(stats) = funcs.get_mut(qualified.as_str()) {
+                if let Some(stats) = funcs.get_mut(func_name.as_str()) {
                     stats.max_reuse_distance =
                         max_reuse_distances.iter().copied().max().unwrap_or(0);
                 }
-                reuse_distances_by_func.insert(qualified.clone(), max_reuse_distances);
+                reuse_distances_by_func.insert(func_name.clone(), max_reuse_distances);
             }
         }
 
@@ -951,7 +919,7 @@ impl Trace {
             .max()
             .unwrap_or(0);
         if global_max_reuse_distance > 0 {
-            for (qualified, distances) in &reuse_distances_by_func {
+            for (func_name, distances) in &reuse_distances_by_func {
                 let mut hist = vec![0u32; 64];
                 for &dist in distances {
                     if dist > 0 {
@@ -960,7 +928,7 @@ impl Trace {
                         hist[bucket] += 1;
                     }
                 }
-                if let Some(stats) = funcs.get_mut(qualified.as_str()) {
+                if let Some(stats) = funcs.get_mut(func_name.as_str()) {
                     stats.reuse_distance_histogram = hist;
                 }
             }
@@ -969,7 +937,6 @@ impl Trace {
         Ok(Self {
             packets,
             funcs,
-            pipelines,
             dag_edges,
             store_indices_by_func,
             load_indices_by_func,
@@ -981,38 +948,38 @@ impl Trace {
 
     // ── Render-path accessors ─────────────────────────────────────────────────
 
-    /// Global packet indices of `qualified`'s store events, in ascending order. `None` if the Func
+    /// Global packet indices of `func_name`'s store events, in ascending order. `None` if the Func
     /// emitted no stores. Use `partition_point(|&p| p <= g)` on the returned slice to turn a global
     /// timeline index `g` into the number of stores that have occurred by that point.
-    pub fn func_store_indices(&self, qualified: &str) -> Option<&[usize]> {
-        self.store_indices_by_func.get(qualified).map(Vec::as_slice)
+    pub fn func_store_indices(&self, func_name: &str) -> Option<&[usize]> {
+        self.store_indices_by_func.get(func_name).map(Vec::as_slice)
     }
 
-    pub fn func_load_indices(&self, qualified: &str) -> Option<&[usize]> {
-        self.load_indices_by_func.get(qualified).map(Vec::as_slice)
+    pub fn func_load_indices(&self, func_name: &str) -> Option<&[usize]> {
+        self.load_indices_by_func.get(func_name).map(Vec::as_slice)
     }
 
-    pub fn func_buffer_liveness_range(&self, qualified: &str) -> Option<&(u32, u32)> {
-        self.buffer_liveness_range_by_func.get(qualified)
+    pub fn func_buffer_liveness_range(&self, func_name: &str) -> Option<&(u32, u32)> {
+        self.buffer_liveness_range_by_func.get(func_name)
     }
 
-    pub fn func_produce_ranges(&self, qualified: &str) -> Option<&[(u32, u32)]> {
+    pub fn func_produce_ranges(&self, func_name: &str) -> Option<&[(u32, u32)]> {
         self.produce_ranges_by_func
-            .get(qualified)
+            .get(func_name)
             .map(Vec::as_slice)
     }
 
-    pub fn func_consume_ranges(&self, qualified: &str) -> Option<&[(u32, u32)]> {
+    pub fn func_consume_ranges(&self, func_name: &str) -> Option<&[(u32, u32)]> {
         self.consume_ranges_by_func
-            .get(qualified)
+            .get(func_name)
             .map(Vec::as_slice)
     }
 
-    /// Spatial layout for `qualified`, or `None` if it has no usable coordinate extent. Reuses
+    /// Spatial layout for `func_name`, or `None` if it has no usable coordinate extent. Reuses
     /// `func_extents` for pixel dims so the renderer and the metadata layer agree, and adds the
     /// channel axis (logical dim 2).
-    pub fn func_geometry(&self, qualified: &str) -> Option<FuncGeometry> {
-        let stats = self.funcs.get(qualified)?;
+    pub fn func_geometry(&self, func_name: &str) -> Option<FuncGeometry> {
+        let stats = self.funcs.get(func_name)?;
         let (width, height, min_x, min_y) = func_extents(stats)?;
         let (channels, min_c) = if stats.min_coords.len() >= 3 {
             (
