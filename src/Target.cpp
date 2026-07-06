@@ -491,12 +491,15 @@ Target calculate_host_target() {
             if ((info2.ebx & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
 
-                const uint32_t avxvnni = 1U << 4;     // avxvnni (note, not avx512vnni) result in eax
-                const uint32_t avx512bf16 = 1U << 5;  // bf16 result in eax, with cpuid(eax=7, ecx=1)
+                const uint32_t avxvnni = 1U << 4;   // avxvnni (note, not avx512vnni) result in eax
+                const uint32_t amx_bf16 = 1U << 22;  // amx_bf16 result in edx, with cpuid(eax=7, ecx=0)
+                const uint32_t amx_tile = 1U << 24;  // amx_tile result in edx, with cpuid(eax=7, ecx=0)
+                const uint32_t amx_int8 = 1U << 25;  // amx_int8 result in edx, with cpuid(eax=7, ecx=0)
+                const uint32_t amx = amx_bf16 | amx_tile | amx_int8;
                 // TODO: port to family/model -based detection.
                 if ((info3.eax & avxvnni) == avxvnni) {
                     initial_features.push_back(Target::AVXVNNI);
-                    if ((info3.eax & avx512bf16) == avx512bf16 && Internal::x86_amx_is_usable()) {
+                    if ((info2.edx & amx) == amx && Internal::x86_amx_is_usable()) {
                         initial_features.push_back(Target::AVX512_SapphireRapids);
                     }
                 }

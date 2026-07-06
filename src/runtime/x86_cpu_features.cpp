@@ -167,7 +167,10 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
         constexpr uint32_t avx512vl = 1U << 31;
         constexpr uint32_t avx512ifma = 1U << 21;
         constexpr uint32_t avxvnni = 1U << 4;
-        constexpr uint32_t avx512bf16 = 1U << 5;  // bf16 result in eax, cpuid(eax=7, ecx=1)
+        constexpr uint32_t amx_bf16 = 1U << 22;  // amx_bf16 result in edx, cpuid(eax=7, ecx=0)
+        constexpr uint32_t amx_tile = 1U << 24;  // amx_tile result in edx, cpuid(eax=7, ecx=0)
+        constexpr uint32_t amx_int8 = 1U << 25;  // amx_int8 result in edx, cpuid(eax=7, ecx=0)
+        constexpr uint32_t amx = amx_bf16 | amx_tile | amx_int8;
         constexpr uint32_t avx512 = avx512f | avx512cd;
         constexpr uint32_t avx512_knl = avx512 | avx512pf | avx512er;
         constexpr uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
@@ -188,7 +191,7 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
 
                 if ((info3.eax & avxvnni) == avxvnni) {
                     halide_set_available_cpu_feature(features, halide_target_feature_avxvnni);
-                    if ((info3.eax & avx512bf16) == avx512bf16 && ::Halide::Internal::x86_amx_is_usable()) {
+                    if ((info2.edx & amx) == amx && ::Halide::Internal::x86_amx_is_usable()) {
                         halide_set_available_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
                     }
                 }

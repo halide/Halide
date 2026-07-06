@@ -77,6 +77,12 @@ int main(int argc, char **argv) {
     if ((info[2] & (1 << 29)) && os_avx) host_features.set(halide_target_feature_f16c);
     if ((info[2] & (1 << 12)) && os_avx) host_features.set(halide_target_feature_fma);
 
+    cpuid(info, 7, 0);
+    const bool cpuid_has_amx =
+        (info[3] & ((1 << 22) | (1 << 24) | (1 << 25))) == ((1 << 22) | (1 << 24) | (1 << 25));
+    cpuid(info, 7, 1);
+    const bool cpuid_has_sapphire_rapids = cpuid_has_amx && (info[0] & (1 << 4));
+
     printf("host_features are: ");
     for (int i = 0; i < host_features.kWordCount; i++) {
         printf("%x %x\n", (unsigned)host_features.bits[i], (unsigned)(host_features.bits[i] >> 32));
@@ -89,6 +95,10 @@ int main(int argc, char **argv) {
     }
 
     if (Halide::get_host_target().has_feature(Halide::Target::AVX512_SapphireRapids)) {
+        if (!cpuid_has_sapphire_rapids) {
+            printf("Failure! get_host_target() reported avx512_sapphirerapids without the required CPUID bits.\n");
+            return 1;
+        }
         HostFeatures sapphire_rapids;
         sapphire_rapids.set(halide_target_feature_avx512_sapphirerapids);
         if (!halide_can_use_target_features(sapphire_rapids.kWordCount, sapphire_rapids.bits)) {
