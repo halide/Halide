@@ -60,10 +60,11 @@ public:
     GeneratorParam<int> mindisp{"mindisp", 0};                    // minimum disparity to consider.
     GeneratorParam<int> uniqueness_ratio{"uniqueness_ratio", 0};  // reject if the second-best match is too close to the best match, as a percentage of the best match score.
     GeneratorParam<int> filtercap{"filtercap", 31};               // clamp the prefiltering output to the range [0, filtercap*2].
-    Output<Buffer<int32_t, 2>> output{"output"};
+    Output<Buffer<int16_t, 2>> output{"output"};
 
     void generate() {
         const Type uint16 = UInt(16);
+        const Type int16 = Int(16);
         const Type int32 = Int(32);
         const int native_lanes = get_target().natural_vector_size<int16_t>();
 
@@ -110,13 +111,18 @@ public:
         blur_y(di, xi, y, xo) = select(xi <= 0, f1(di, y, xo), likely(blur_y(di, max(xi - 1, 0), y, xo) + vsum(di, xi + winsize - 1, y, xo) - vsum(di, max(xi - 1, 0), y, xo)));
 
         // compute the texture value for each pixel, which is the sum of pixels in the surrounding block
-        Func text("text"), zerotext("zerotext"), textsum("textsum"), textf1("textf1"), textblury("textblury");
+        Func text("text"), zerotext("zerotext"), textsum("textsum"), textf1("textf1");
+        Func textblury(uint16, "textblury");  // explicit type required for inductive self-reference
         text(xi, y, xo) = cast<uint8_t>(abs(cast<int16_t>(xsobel0(xi + xo * tilesize, y)) - cast<int16_t>(filtercap)));
         zerotext(xi, xo) = sum(cast<uint16_t>(text(xi, rwin, xo)));
         textsum(xi, y, xo) = select(y <= 0, zerotext(xi, xo), textsum(xi, y - 1, xo) + text(xi, y + winsize - 1, xo) - text(xi, y - 1, xo));
+        // textblury(xi) is the width-winsize sliding window of textsum in x,
+        // written as an O(1)/pixel inductive running sum (mirrors blur_y's xi
+        // scan) so it can be fused into blur_y's xi loop via compute_with: the
+        // SAD update vectorizes over di while this stays a scalar 1-add/pixel
+        // texture update in the same loop -- exactly OpenCV's structure.
         textf1(y, xo) = sum(textsum(rwin, y, xo));
-        textblury(xi, y, xo) = undef<uint16_t>();
-        textblury(rx, y, xo) = select(rx == 0, textf1(y, xo), textblury(max(rx - 1, 0), y, xo) + textsum(rx + winsize - 1, y, xo) - textsum(max(rx - 1, 0), y, xo));
+        textblury(xi, y, xo) = select(xi <= 0, textf1(y, xo), likely(textblury(max(xi - 1, 0), y, xo) + textsum(xi + winsize - 1, y, xo) - textsum(max(xi - 1, 0), y, xo)));
 
         // compute the best and second-best disparity for each pixel
         Func preout("preout");
@@ -137,17 +143,17 @@ public:
         p_clamped(xi, y, xo) = clamp(argmin1(xi, y, xo), 1, depth - 2);  // indexes into blur_y
 
         // subpixel refinement
-        Func subpout(int32, "subpout");
+        Func subpout(int16, "subpout");
         Expr p = cast<int32_t>(blur_y(cast(int32, p_clamped(xi, y, xo)) + 1, xi, y, xo));
         Expr n = cast<int32_t>(blur_y(cast(int32, p_clamped(xi, y, xo)) - 1, xi, y, xo));
         Expr d1 = p + n - 2 * preout(xi, y, xo) + abs(p - n);
         Expr q = (abs(p - n) * 256) / d1;
         Expr quot = select(p >= n, q, -q);
-        Expr subpout_expr = cast<int32_t>((cast<int16_t>(depth - p_clamped(xi, y, xo) - 1 + mindisp) * 256 + (select(d1 == 0, 0, quot) + 15)) >> 4);
-        subpout(xi, y, xo) = select(argmin1(xi, y, xo) > 0 && argmin1(xi, y, xo) < depth - 1, subpout_expr, cast<int32_t>(depth - argmin1(xi, y, xo) - 1 + mindisp) * 16);
+        Expr subpout_expr = cast<int16_t>((cast<int16_t>(depth - p_clamped(xi, y, xo) - 1 + mindisp) * 256 + (select(d1 == 0, 0, quot) + 15)) >> 4);
+        subpout(xi, y, xo) = select(argmin1(xi, y, xo) > 0 && argmin1(xi, y, xo) < depth - 1, subpout_expr, cast<int16_t>((depth - argmin1(xi, y, xo) - 1 + mindisp) * 16));
 
         // edge case handling
-        Expr filtered = cast<int32_t>((mindisp - 1) * 16);
+        Expr filtered = cast<int16_t>((mindisp - 1) * 16);
         Expr reject = textblury(xi, y, xo) < threshold;  // reject if block texture is too uniform
         if (int(uniqueness_ratio) > 0) {                 // reject if second-best disparity is too close to best disparity
             reject = reject || (cast<int32_t>(argmin2(xi, y, xo)) <= cast<int32_t>(preout(xi, y, xo)) + (cast<int32_t>(preout(xi, y, xo)) * cast<int32_t>(uniqueness_ratio)) / 100);
@@ -182,10 +188,12 @@ public:
         f1.compute_at(splitoutput, y).vectorize(di, depth);
         zero_blur.compute_at(splitoutput, xo).vectorize(di, depth);
 
-        zerotext.compute_at(splitoutput, xo);
+        zerotext.compute_at(splitoutput, xo).vectorize(xi, native_lanes);
+        textsum.compute_at(splitoutput, y).store_at(splitoutput, xo).vectorize(xi, native_lanes).fold_storage(y, 2);
         textf1.compute_at(splitoutput, y);
-        textsum.compute_at(splitoutput, y).store_at(splitoutput, xo).fold_storage(y, 2);
-        textblury.compute_at(splitoutput, y);
+        // scalar O(1) running sum fused into blur_y's xi-scan loop (OpenCV-style)
+        textblury.compute_at(splitoutput, y).store_at(splitoutput, y).fold_storage(xi, 2);
+        textblury.compute_with(blur_y, xi);
 
         output.vectorize(x, native_lanes);
     }

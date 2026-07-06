@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
     right = load_gray(argv[2]);
 #endif
 
-    Halide::Runtime::Buffer<int32_t, 2> output(left.width(), left.height());
+    Halide::Runtime::Buffer<int16_t, 2> output(left.width(), left.height());
 
     double best = benchmark([&]() {
         stereobm(left, right, output);
@@ -138,9 +138,9 @@ int main(int argc, char **argv) {
 
     // normalize output to range [0, 255]
     int32_t dmin = INT32_MAX, dmax = INT32_MIN;
-    output.for_each_value([&](int32_t v) {
-        dmin = std::min(dmin, v);
-        dmax = std::max(dmax, v);
+    output.for_each_value([&](int16_t v) {
+        dmin = std::min(dmin, (int32_t)v);
+        dmax = std::max(dmax, (int32_t)v);
     });
     double scale = (dmax > dmin) ? 255.0 / (dmax - dmin) : 0.0;
     Halide::Runtime::Buffer<uint8_t, 2> vis(output.width(), output.height());
