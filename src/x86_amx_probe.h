@@ -18,7 +18,8 @@
 namespace Halide::Internal {
 
 #if defined(__linux__) && defined(__x86_64__) && defined(SYS_arch_prctl)
-inline thread_local sigjmp_buf x86_amx_probe_jump_buffer;
+inline sigjmp_buf x86_amx_probe_jump_buffer;
+inline int x86_amx_probe_lock = 0;
 
 inline void x86_amx_probe_sigill_handler(int) {
     siglongjmp(x86_amx_probe_jump_buffer, 1);
@@ -28,12 +29,14 @@ inline void x86_amx_probe_sigill_handler(int) {
 inline bool x86_amx_is_usable() {
 #if defined(__linux__) && defined(__x86_64__) && defined(SYS_arch_prctl)
     // This temporarily installs a SIGILL handler, so it should only be called
-    // from one-time initialization paths. Current call sites are serialized by
-    // get_host_target()'s static initialization and halide_cpu_features_initialized_lock.
+    // from one-time initialization paths.
     // It is not safe to call from another signal handler or from contexts that
     // might nest this probe.
+    while (__sync_lock_test_and_set(&x86_amx_probe_lock, 1)) {
+    }
 
     if (syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA) != 0) {
+        __sync_lock_release(&x86_amx_probe_lock);
         return false;
     }
 
@@ -42,6 +45,7 @@ inline bool x86_amx_is_usable() {
     signal_action.sa_handler = x86_amx_probe_sigill_handler;
     sigemptyset(&signal_action.sa_mask);
     if (sigaction(SIGILL, &signal_action, &previous_signal_action) != 0) {
+        __sync_lock_release(&x86_amx_probe_lock);
         return false;
     }
 
@@ -52,8 +56,9 @@ inline bool x86_amx_is_usable() {
         ok = true;
     }
 
-    sigaction(SIGILL, &previous_signal_action, nullptr);
-    return ok;
+    const bool restored = sigaction(SIGILL, &previous_signal_action, nullptr) == 0;
+    __sync_lock_release(&x86_amx_probe_lock);
+    return ok && restored;
 #else
     return true;
 #endif
