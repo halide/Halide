@@ -192,5 +192,6 @@ int main(int argc, char **argv) {
            times[Hoisted] * 1000,
            times[PlainRfactor] / times[Hoisted]);
 
+    printf("Success!\n");
     return 0;
 }
