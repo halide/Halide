@@ -111,15 +111,32 @@ protected:
 
     // Remove a widening cast even if it changes the sign of the result.
     Expr strip_widening_cast(const Expr &x) {
-        if (can_narrow(x.type())) {
-            Expr narrow = lossless_narrow(x);
-            if (narrow.defined()) {
-                return narrow;
-            }
-            return lossless_cast(x.type().narrow().with_code(halide_type_uint), x);
-        } else {
+        if (!can_narrow(x.type())) {
             return Expr();
         }
+
+        Type inner_t = [](Expr e) {
+            while (const Cast *c = e.as<Cast>()) {
+                e = c->value;
+            }
+            return e.type();
+        }(x);
+
+        Expr best;
+        auto consider = [&](Type t) {
+            if (!best.defined() || t.bits() < best.type().bits()) {
+                Expr e = lossless_cast(t, x);
+                best = e.defined() ? e : best;
+            }
+        };
+
+        if (inner_t.is_int_or_uint() && inner_t != x.type()) {
+            consider(inner_t);
+        }
+        consider(x.type().narrow());
+        consider(x.type().narrow().with_code(halide_type_uint));
+
+        return best;
     }
 
     Expr to_rounding_shift(const Call *c) {
