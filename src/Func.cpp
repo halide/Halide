@@ -799,6 +799,18 @@ optional<pair<Expr, Expr>> select_binary_operand(const Expr &e, IRNodeType op, P
     return a_sel ? std::make_pair(a, b) : std::make_pair(b, a);
 }
 
+// Collect the leaves of a chain of `op`-typed binary nodes.
+// E.g., flatten (a*b)*(c*d) into [a, b, c, d]
+void flatten_associative_chain(const Expr &e, IRNodeType op, vector<Expr> &leaves) {
+    if (e.node_type() == op) {
+        auto [a, b] = *as_binary_operands(e);
+        flatten_associative_chain(a, op, leaves);
+        flatten_associative_chain(b, op, leaves);
+    } else {
+        leaves.push_back(e);
+    }
+}
+
 struct HoistedFactor {
     IRNodeType op;
     Expr factor;      // The loop-invariant distributable factor, expressed in
@@ -821,12 +833,37 @@ optional<HoistedFactor> extract_factor(const Expr &increment,
         return !expr_uses_vars(to_intermediate(e), intermediate_vars);
     };
 
-    optional<pair<Expr, Expr>> split = select_binary_operand(increment, law.inner_op, is_intermediate_rvar_free);
-    if (!split) {
+    // An invariant factor may be nested arbitrarily deep in an
+    // associative/commutative chain, so flatten the whole chain
+    // into leaves and partition by invariance. This is just
+    // commutative-ring algebra: l1*l2*...*lN can always be regrouped
+    // as (product of invariant leaves) * (product of dependent leaves),
+    // regardless of how the multiplication was parenthesized.
+    vector<Expr> leaves;
+    flatten_associative_chain(increment, law.inner_op, leaves);
+
+    vector<Expr> invariant_leaves, dependent_leaves;
+    for (const Expr &leaf : leaves) {
+        if (is_intermediate_rvar_free(leaf)) {
+            invariant_leaves.push_back(to_preserved(leaf));
+        } else {
+            dependent_leaves.push_back(leaf);
+        }
+    }
+    if (invariant_leaves.empty() || dependent_leaves.empty()) {
+        // Nothing to hoist, or the entire increment is invariant (a
+        // degenerate case not worth special-casing here).
         return std::nullopt;
     }
-    Expr factor = to_preserved(split->first);
-    Expr body = split->second;
+
+    Expr factor;
+    for (const Expr &leaf : invariant_leaves) {
+        factor = factor.defined() ? make_binary_op(law.inner_op, factor, leaf) : leaf;
+    }
+    Expr body;
+    for (const Expr &leaf : dependent_leaves) {
+        body = body.defined() ? make_binary_op(law.inner_op, body, leaf) : leaf;
+    }
 
     if (law.strip_promotion_cast) {
         // Strip only the outer promotion cast; strict_cast inside the body is left alone.
