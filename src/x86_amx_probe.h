@@ -33,6 +33,11 @@ inline bool x86_amx_is_usable() {
     // It is not safe to call from another signal handler or from contexts that
     // might nest this probe.
     while (__sync_lock_test_and_set(&x86_amx_probe_lock, 1)) {
+        // Contention here should be rare, but avoid hammering the CPU if another
+        // thread is already performing the probe.
+#ifdef SYS_sched_yield
+        syscall(SYS_sched_yield);
+#endif
     }
 
     if (syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA) != 0) {
@@ -60,6 +65,8 @@ inline bool x86_amx_is_usable() {
     __sync_lock_release(&x86_amx_probe_lock);
     return ok && restored;
 #else
+    // The extra permission/probe path is only needed on Linux x86_64, where AMX
+    // requires ARCH_REQ_XCOMP_PERM and hypervisors may still fault AMX instructions.
     return true;
 #endif
 }

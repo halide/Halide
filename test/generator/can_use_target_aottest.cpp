@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
         HostFeatures sapphire_rapids;
         sapphire_rapids.set(halide_target_feature_avx512_sapphirerapids);
         if (!halide_can_use_target_features(sapphire_rapids.kWordCount, sapphire_rapids.bits)) {
-            printf("Failure!\n");
+            printf("Failure! get_host_target() reported avx512_sapphirerapids, but halide_can_use_target_features() rejected it.\n");
             return 1;
         }
     }
