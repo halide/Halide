@@ -26,6 +26,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "ImageParam.h"
+#include "Inline.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Param.h"
@@ -2551,6 +2552,22 @@ Func Func::clone_in(const vector<Func> &fs) {
     }
     invalidate_cache();
     return get_wrapper(func, name() + "_clone", fs, true);
+}
+
+Func &Func::inline_calls(const vector<Func> &callees) {
+    invalidate_cache();
+    for (Func f : callees) {
+        user_assert(f.name() != name())
+            << "Func::inline_calls: " << name() << " cannot inline a call to itself\n";
+        user_assert(f.function().can_be_inlined())
+            << "Func::inline_calls: " << f.name()
+            << " must be a pure Func without update definitions, extern definitions, or specializations\n";
+        user_assert(find_direct_calls(func).count(f.name()))
+            << "Func::inline_calls: " << name() << " does not call " << f.name() << "\n";
+
+        inline_function(func, f.function());
+    }
+    return *this;
 }
 
 Func Func::copy_to_device(DeviceAPI d) {

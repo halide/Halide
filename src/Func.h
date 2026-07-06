@@ -1483,6 +1483,31 @@ public:
     Func clone_in(const std::vector<Func> &fs);
     //@}
 
+    /** Eagerly and immediately replace every call this Func makes to each
+     * Func in 'callees' with that Func's own value expression (its pure
+     * args substituted with the actual call-site arguments) -- i.e. force
+     * inlining to happen now, syntactically, rather than deferring to
+     * lowering. Each Func in 'callees' must be pure and must have no
+     * specializations.
+     *
+     * Useful when a later schedule-time analysis (e.g. Func::rfactor()'s
+     * HoistInvariantFactor, which only looks for an invariant factor
+     * written literally in a reduction's own value expression) needs to
+     * see through a Func-call boundary that would otherwise hide it.
+     *
+     * Throws an error if this Func doesn't call one of 'callees'.
+     */
+    /// @{
+    Func &inline_calls(const std::vector<Func> &callees);
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Func &>
+    inline_calls(const Func &f, Args &&...args) {
+        std::vector<Func> collected_args{f, std::forward<Args>(args)...};
+        return inline_calls(collected_args);
+    }
+    /// @}
+
     /** Declare that this function should be implemented by a call to
      * halide_buffer_copy with the given target device API. Asserts
      * that the Func has a pure definition which is a simple call to a
