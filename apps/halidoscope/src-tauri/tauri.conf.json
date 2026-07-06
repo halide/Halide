@@ -87,6 +87,23 @@
               "required": true
             }
           ]
+        },
+        "dot": {
+          "args": [
+            {
+              "name": "trace",
+              "short": "t",
+              "takesValue": true,
+              "description": "Path to .hltrace file to analyze for pipeline graph structure.",
+              "required": true
+            },
+            {
+              "name": "destination",
+              "index": 1,
+              "takesValue": true,
+              "description": "Path to write the output snapshot image."
+            }
+          ]
         }
       }
     }
