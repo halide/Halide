@@ -1428,6 +1428,106 @@ int hoisted_rfactor_widens_narrow_int_test() {
     return 0;
 }
 
+// A single top-level split can only find an invariant factor that sits as
+// one of a Mul's two *immediate* operands. This reproduces a shape where
+// two independent invariant factors are each nested inside their own
+// sub-product instead -- (scaleA(i) * castA) * (scaleB(i) * castB) -- the
+// way two independently-quantized operands, each decode()d on its own,
+// naturally compose (see test/correctness/approximation_composition.cpp).
+// Finding either factor requires flattening the whole multiplicative chain
+// into leaves and partitioning every leaf, not just checking a binary
+// node's two immediate children. Once both scales are hoisted out, the
+// remaining body is exactly cast<float>(a) * cast<float>(b) for int8 a, b
+// -- which HoistInvariantFactor should also fold to a widening_mul,
+// reaching the same Int(32) accumulation as
+// hoisted_rfactor_test above, despite neither being spelled out explicitly
+// anywhere in this reduction's source.
+int hoisted_rfactor_scattered_factors_test() {
+    const int K = 64;
+    ImageParam A{Int(8), 1, "A"};
+    ImageParam B{Int(8), 1, "B"};
+    ImageParam ScaleA{Float(32), 1, "ScaleA"};
+    ImageParam ScaleB{Float(32), 1, "ScaleB"};
+
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Acc{"Acc"};
+    Acc(i) = 0.0f;
+    Acc(i) += (cast<float>(A(r)) * ScaleA(i)) * (cast<float>(B(r)) * ScaleB(i));
+
+    Func Acc_intm = Acc.update().rfactor({}, RFactorOptions::HoistInvariantFactor);
+    internal_assert(Acc_intm.types()[0] == Int(32))
+        << "hoisted rfactor: expected both scattered scale factors to be found and hoisted, "
+        << "and the remaining int8*int8 product widened to Int(32), got " << Acc_intm.types()[0] << "\n";
+    Acc_intm.compute_root();
+
+    Buffer<int8_t> a_buf(K), b_buf(K);
+    Buffer<float> scale_a_buf(1), scale_b_buf(1);
+    for (int k = 0; k < K; k++) {
+        a_buf(k) = 127;
+        b_buf(k) = 127;
+    }
+    scale_a_buf(0) = 2.0f;
+    scale_b_buf(0) = 3.0f;
+    A.set(a_buf);
+    B.set(b_buf);
+    ScaleA.set(scale_a_buf);
+    ScaleB.set(scale_b_buf);
+
+    Buffer<float> result = Acc.realize({1});
+    const float expected = 2.0f * 3.0f * (float)K * 127.0f * 127.0f;
+    internal_assert(result(0) == expected)
+        << "hoisted rfactor scattered factors: got " << result(0) << ", expected " << expected << "\n";
+
+    return 0;
+}
+
+// Same shape as hoisted_rfactor_scattered_factors_test, but with UInt(8)
+// operands instead of Int(8) -- the widening-mul pattern table in
+// extract_factor() has separate entries for signed and unsigned sources, so
+// this exercises the unsigned ones.
+int hoisted_rfactor_scattered_factors_unsigned_test() {
+    const int K = 64;
+    ImageParam A{UInt(8), 1, "A"};
+    ImageParam B{UInt(8), 1, "B"};
+    ImageParam ScaleA{Float(32), 1, "ScaleA"};
+    ImageParam ScaleB{Float(32), 1, "ScaleB"};
+
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Acc{"Acc"};
+    Acc(i) = 0.0f;
+    Acc(i) += (cast<float>(A(r)) * ScaleA(i)) * (cast<float>(B(r)) * ScaleB(i));
+
+    Func Acc_intm = Acc.update().rfactor({}, RFactorOptions::HoistInvariantFactor);
+    internal_assert(Acc_intm.types()[0] == UInt(32))
+        << "hoisted rfactor: expected both scattered scale factors to be found and hoisted, "
+        << "and the remaining uint8*uint8 product widened to UInt(32), got " << Acc_intm.types()[0] << "\n";
+    Acc_intm.compute_root();
+
+    Buffer<uint8_t> a_buf(K), b_buf(K);
+    Buffer<float> scale_a_buf(1), scale_b_buf(1);
+    for (int k = 0; k < K; k++) {
+        a_buf(k) = 255;
+        b_buf(k) = 255;
+    }
+    scale_a_buf(0) = 2.0f;
+    scale_b_buf(0) = 3.0f;
+    A.set(a_buf);
+    B.set(b_buf);
+    ScaleA.set(scale_a_buf);
+    ScaleB.set(scale_b_buf);
+
+    Buffer<float> result = Acc.realize({1});
+    const float expected = 2.0f * 3.0f * (float)K * 255.0f * 255.0f;
+    internal_assert(result(0) == expected)
+        << "hoisted rfactor scattered factors (unsigned): got " << result(0) << ", expected " << expected << "\n";
+
+    return 0;
+}
+
 // Hoisted rfactor with outer Min and additive factor:
 //   min_k(offset(i) + body(i, k)) = offset(i) + min_k(body(i, k))
 // The intermediate accumulates min without the offset; write-back adds it once.
@@ -1746,6 +1846,8 @@ int main(int argc, char **argv) {
         {"isnan max rfactor test (logical or)", isnan_max_rfactor_test<LogicalOr>},
         {"hoisted rfactor test (add/mul)", hoisted_rfactor_test},
         {"hoisted rfactor test (add/mul, narrow int widened)", hoisted_rfactor_widens_narrow_int_test},
+        {"hoisted rfactor test (add/mul, scattered factors)", hoisted_rfactor_scattered_factors_test},
+        {"hoisted rfactor test (add/mul, scattered factors, unsigned)", hoisted_rfactor_scattered_factors_unsigned_test},
         {"hoisted rfactor test (min/add)", hoisted_rfactor_min_test},
         {"hoisted rfactor test (min/add, narrowing)", hoisted_rfactor_min_narrow_test},
         {"hoisted rfactor test (strict_cast preserved)", hoisted_rfactor_strict_cast_test},

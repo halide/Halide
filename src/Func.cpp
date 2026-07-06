@@ -21,6 +21,7 @@
 #include "Function.h"
 #include "IR.h"
 #include "IREquality.h"
+#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -866,6 +867,29 @@ optional<HoistedFactor> extract_factor(const Expr &increment,
     }
 
     if (law.strip_promotion_cast) {
+        // Match some lossless patterns that expose a single cast:
+        Expr a_i8 = Variable::make(Int(8), "a");
+        Expr b_i8 = Variable::make(Int(8), "b");
+        Expr a_u8 = Variable::make(UInt(8), "a");
+        Expr b_u8 = Variable::make(UInt(8), "b");
+
+        std::map<std::string, Expr> matches;
+        static const std::pair<Expr, Expr> patterns[] = {
+            {cast(Float(32), a_i8) * cast(Float(32), b_i8), cast(Float(32), widening_mul(a_i8, b_i8))},
+            {cast(Float(32), a_i8) + cast(Float(32), b_i8), cast(Float(32), widening_add(a_i8, b_i8))},
+            {cast(Float(32), a_i8) - cast(Float(32), b_i8), cast(Float(32), widening_sub(a_i8, b_i8))},
+            {cast(Float(32), a_u8) * cast(Float(32), b_u8), cast(Float(32), widening_mul(a_u8, b_u8))},
+            {cast(Float(32), a_u8) + cast(Float(32), b_u8), cast(Float(32), widening_add(a_u8, b_u8))},
+            {cast(Float(32), a_u8) - cast(Float(32), b_u8), cast(Float(32), widening_sub(a_u8, b_u8))},
+        };
+
+        for (const auto &[pattern, result] : patterns) {
+            if (expr_match(pattern, body, matches)) {
+                body = substitute(matches, result);
+                break;
+            }
+        }
+
         // Strip only the outer promotion cast; strict_cast inside the body is left alone.
         if (const Cast *c = body.as<Cast>()) {
             int acc_bits = body.type().bits();

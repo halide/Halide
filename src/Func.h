@@ -223,8 +223,12 @@ public:
      * also strips the implicit float-promotion cast that Halide inserts when a
      * float factor or offset combines with an integer body, allowing the
      * intermediate to accumulate at the integer type (e.g. Int(32) instead of
-     * Float(32)). Strict casts are preserved; use strict_float(cast(...)) when
-     * this conversion must not be deferred.
+     * Float(32)). It also recognizes exact products such as
+     * cast<float>(int8_a) * cast<float>(int8_b) as
+     * cast<float>(widening_mul(int8_a, int8_b)) before choosing the
+     * intermediate type, which can expose dot-product-friendly integer
+     * accumulations. Strict casts are preserved; use strict_float(cast(...))
+     * when this conversion must not be deferred.
      *
      * This reduces the number of factor applications from |K_inner| × |K_pres| to
      * |K_pres|. If no distributable factor is found, hoisted rfactor falls back
