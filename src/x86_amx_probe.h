@@ -18,10 +18,10 @@
 namespace Halide::Internal {
 
 #if defined(__linux__) && defined(__x86_64__) && defined(SYS_arch_prctl)
-inline thread_local sigjmp_buf x86_amx_probe_jmpbuf;
+inline thread_local sigjmp_buf x86_amx_probe_jump_buffer;
 
 inline void x86_amx_probe_sigill_handler(int) {
-    siglongjmp(x86_amx_probe_jmpbuf, 1);
+    siglongjmp(x86_amx_probe_jump_buffer, 1);
 }
 #endif
 
@@ -37,22 +37,22 @@ inline bool x86_amx_is_usable() {
         return false;
     }
 
-    struct sigaction sa = {};
-    struct sigaction old_sa = {};
-    sa.sa_handler = x86_amx_probe_sigill_handler;
-    sigemptyset(&sa.sa_mask);
-    if (sigaction(SIGILL, &sa, &old_sa) != 0) {
+    struct sigaction signal_action = {};
+    struct sigaction previous_signal_action = {};
+    signal_action.sa_handler = x86_amx_probe_sigill_handler;
+    sigemptyset(&signal_action.sa_mask);
+    if (sigaction(SIGILL, &signal_action, &previous_signal_action) != 0) {
         return false;
     }
 
     bool ok = false;
-    if (sigsetjmp(x86_amx_probe_jmpbuf, 1) == 0) {
+    if (sigsetjmp(x86_amx_probe_jump_buffer, 1) == 0) {
         // tilerelease %tmm0
         __asm__ __volatile__(".byte 0xc4, 0xe2, 0x78, 0x49, 0xc0" ::: "memory");
         ok = true;
     }
 
-    sigaction(SIGILL, &old_sa, nullptr);
+    sigaction(SIGILL, &previous_signal_action, nullptr);
     return ok;
 #else
     return true;

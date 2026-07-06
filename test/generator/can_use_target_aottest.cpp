@@ -89,9 +89,9 @@ int main(int argc, char **argv) {
     }
 
     if (Halide::get_host_target().has_feature(Halide::Target::AVX512_SapphireRapids)) {
-        HostFeatures sapphire_rapids;
-        sapphire_rapids.set(halide_target_feature_avx512_sapphirerapids);
-        if (!halide_can_use_target_features(sapphire_rapids.kWordCount, sapphire_rapids.bits)) {
+        HostFeatures sapphireRapids;
+        sapphireRapids.set(halide_target_feature_avx512_sapphirerapids);
+        if (!halide_can_use_target_features(sapphireRapids.kWordCount, sapphireRapids.bits)) {
             printf("Failure!\n");
             return 1;
         }
