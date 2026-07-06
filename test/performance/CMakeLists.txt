@@ -22,6 +22,7 @@ tests(
     interleave.cpp
     jit_stress.cpp
     lots_of_inputs.cpp
+    matvec_offline_split.cpp
     memcpy.cpp
     nested_vectorization_gemm.cpp
     packed_planar_fusion.cpp
