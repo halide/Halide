@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "Target.h"
 #include <stdio.h>
 
 #if defined(_MSC_VER) || defined(__x86_64__) || defined(__i386__)
@@ -85,6 +86,15 @@ int main(int argc, char **argv) {
     if (!halide_can_use_target_features(host_features.kWordCount, host_features.bits)) {
         printf("Failure!\n");
         return 1;
+    }
+
+    if (Halide::get_host_target().has_feature(Halide::Target::AVX512_SapphireRapids)) {
+        HostFeatures sapphirerapids;
+        sapphirerapids.set(halide_target_feature_avx512_sapphirerapids);
+        if (!halide_can_use_target_features(sapphirerapids.kWordCount, sapphirerapids.bits)) {
+            printf("Failure!\n");
+            return 1;
+        }
     }
 
     // Now start subtracting features; we should still be usable.
