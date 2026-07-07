@@ -181,4 +181,95 @@ void ggml_quants_halide_repack_quantize_mat_q8_0_4x4(const float *x, void *y, in
 void ggml_quants_halide_repack_quantize_mat_q8_0_4x8(const float *x, void *y, int64_t k);
 void ggml_quants_halide_repack_quantize_mat_q8_k_4x4(const float *x, void *y, int64_t k);
 void ggml_quants_halide_repack_quantize_mat_q8_k_4x8(const float *x, void *y, int64_t k);
+
+// Repack gemv/gemm: dot a repack-interleaved weight matrix (see
+// repack_quantize_mat_generators.cpp/repack_gemv_generators.cpp for the
+// packed layout) against, respectively, one plain-Q8_0 activation row
+// (gemv, matching gemx_fn_t's nr == 1 case) or `nr` activation rows packed 4
+// at a time by the matching repack_quantize_mat_* kernel above (gemm).
+// Q4_0's own two variants (4x4, 4x8) share one packed-weight byte layout
+// (see repack_gemv_generators.cpp); 8x8 uses a wider one. All 3 use
+// activations quantized by the matching-blocklen quantize_mat kernel, same
+// as ggml_provider.cpp's own k_repack_entries table.
+void ggml_quants_halide_repack_gemv_q4_0_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemv_q4_0_4x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemv_q4_0_8x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemv_q8_0_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemv_q8_0_4x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+
+void ggml_quants_halide_repack_gemm_q4_0_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemm_q4_0_4x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemm_q4_0_8x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemm_q8_0_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemm_q8_0_4x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+
+// IQ4_NL/MXFP4: same repack-interleave scheme as Q4_0 (nibble/halves split),
+// but a plain codebook lookup (no XOR trick) for the weight value, and only
+// two interleave widths each (4x4, 8x8 -- no 4x8), matching GGML's own
+// k_repack_entries.
+void ggml_quants_halide_repack_gemv_iq4_nl_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                    int nr, int nc);
+void ggml_quants_halide_repack_gemv_iq4_nl_8x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                    int nr, int nc);
+void ggml_quants_halide_repack_gemv_mxfp4_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                   int nr, int nc);
+void ggml_quants_halide_repack_gemv_mxfp4_8x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                   int nr, int nc);
+
+void ggml_quants_halide_repack_gemm_iq4_nl_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                    int nr, int nc);
+void ggml_quants_halide_repack_gemm_iq4_nl_8x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                    int nr, int nc);
+void ggml_quants_halide_repack_gemm_mxfp4_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                   int nr, int nc);
+void ggml_quants_halide_repack_gemm_mxfp4_8x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                   int nr, int nc);
+
+// Q4_K: 256-element superblocks, always 8 interleaved columns, paired with
+// Q8_K activations.
+void ggml_quants_halide_repack_gemv_q4_k_8x4_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemv_q4_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemm_q4_k_8x4_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemm_q4_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+
+// Q5_K: same 256-element superblock/8-column structure as Q4_K, plus a 5th
+// (high) bit array.
+void ggml_quants_halide_repack_gemv_q5_k_8x4_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemv_q5_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemm_q5_k_8x4_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemm_q5_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+
+// Q6_K: plain signed-int8-per-sub-group scales (no compact bit packing).
+void ggml_quants_halide_repack_gemv_q6_k_8x4_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemv_q6_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemm_q6_k_8x4_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemm_q6_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+
+// Q2_K: only one registered variant (8x8 -- GGML has no ARM 8x4 path).
+void ggml_quants_halide_repack_gemv_q2_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
+void ggml_quants_halide_repack_gemm_q2_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy, int nr,
+                                                  int nc);
 }

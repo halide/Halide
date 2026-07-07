@@ -32,13 +32,15 @@ constexpr int kDOffset = 0;
 constexpr int kQsOffset = 2;
 constexpr int kBlockBytes = kQsOffset + kQK / 2;  // 18
 
-// kvalues_iq4nl = {-127, -104, -83, -65, -49, -35, -22, -10,
-//                     1,   13,  25,  38,  53,  69,  89, 113}
+// kvalues_iq4nl: a small fixed codebook, embedded as compile-time constant
+// data (not an Input<Buffer<>>/ImageParam -- this Buffer is baked into the
+// compiled pipeline as a read-only resource) rather than a deep select()
+// chain.
 Expr lookup_iq4nl(Expr idx) {
-    return select(idx == 0, -127, idx == 1, -104, idx == 2, -83, idx == 3, -65,
-                  idx == 4, -49, idx == 5, -35, idx == 6, -22, idx == 7, -10,
-                  idx == 8, 1, idx == 9, 13, idx == 10, 25, idx == 11, 38,
-                  idx == 12, 53, idx == 13, 69, idx == 14, 89, 113);
+    static const int8_t kValues[16] = {-127, -104, -83, -65, -49, -35, -22, -10,
+                                       1, 13, 25, 38, 53, 69, 89, 113};
+    static const Buffer<int8_t> lut(const_cast<int8_t *>(kValues), 16, "kvalues_iq4nl");
+    return cast<int32_t>(lut(idx));
 }
 
 class IQ4_NLDequantizeGenerator : public Generator<IQ4_NLDequantizeGenerator> {

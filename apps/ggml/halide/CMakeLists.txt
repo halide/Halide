@@ -30,6 +30,8 @@ add_halide_generator(
     f16_generators.cpp
     bf16_generators.cpp
     repack_quantize_mat_generators.cpp
+    repack_gemv_generators.cpp
+    repack_gemm_generators.cpp
 )
 
 add_halide_library(q4_0_quantize FROM quants.generator GENERATOR q4_0_quantize)
@@ -111,6 +113,39 @@ add_halide_library(q8_0_4x8_quantize_mat FROM quants.generator GENERATOR q8_0_4x
 add_halide_library(q8_k_4x4_quantize_mat FROM quants.generator GENERATOR q8_k_4x4_quantize_mat)
 add_halide_library(q8_k_4x8_quantize_mat FROM quants.generator GENERATOR q8_k_4x8_quantize_mat)
 
+add_halide_library(q4_0_4x4_gemv FROM quants.generator GENERATOR q4_0_4x4_gemv)
+add_halide_library(q4_0_4x8_gemv FROM quants.generator GENERATOR q4_0_4x8_gemv)
+add_halide_library(q4_0_8x8_gemv FROM quants.generator GENERATOR q4_0_8x8_gemv)
+add_halide_library(q8_0_4x4_gemv FROM quants.generator GENERATOR q8_0_4x4_gemv)
+add_halide_library(q8_0_4x8_gemv FROM quants.generator GENERATOR q8_0_4x8_gemv)
+add_halide_library(q4_0_4x4_gemm FROM quants.generator GENERATOR q4_0_4x4_gemm)
+add_halide_library(q4_0_4x8_gemm FROM quants.generator GENERATOR q4_0_4x8_gemm)
+add_halide_library(q4_0_8x8_gemm FROM quants.generator GENERATOR q4_0_8x8_gemm)
+add_halide_library(q8_0_4x4_gemm FROM quants.generator GENERATOR q8_0_4x4_gemm)
+add_halide_library(q8_0_4x8_gemm FROM quants.generator GENERATOR q8_0_4x8_gemm)
+add_halide_library(iq4_nl_4x4_gemv FROM quants.generator GENERATOR iq4_nl_4x4_gemv)
+add_halide_library(iq4_nl_8x8_gemv FROM quants.generator GENERATOR iq4_nl_8x8_gemv)
+add_halide_library(mxfp4_4x4_gemv FROM quants.generator GENERATOR mxfp4_4x4_gemv)
+add_halide_library(mxfp4_8x8_gemv FROM quants.generator GENERATOR mxfp4_8x8_gemv)
+add_halide_library(iq4_nl_4x4_gemm FROM quants.generator GENERATOR iq4_nl_4x4_gemm)
+add_halide_library(iq4_nl_8x8_gemm FROM quants.generator GENERATOR iq4_nl_8x8_gemm)
+add_halide_library(mxfp4_4x4_gemm FROM quants.generator GENERATOR mxfp4_4x4_gemm)
+add_halide_library(mxfp4_8x8_gemm FROM quants.generator GENERATOR mxfp4_8x8_gemm)
+add_halide_library(q4_k_8x4_gemv FROM quants.generator GENERATOR q4_k_8x4_gemv)
+add_halide_library(q4_k_8x8_gemv FROM quants.generator GENERATOR q4_k_8x8_gemv)
+add_halide_library(q4_k_8x4_gemm FROM quants.generator GENERATOR q4_k_8x4_gemm)
+add_halide_library(q4_k_8x8_gemm FROM quants.generator GENERATOR q4_k_8x8_gemm)
+add_halide_library(q5_k_8x4_gemv FROM quants.generator GENERATOR q5_k_8x4_gemv)
+add_halide_library(q5_k_8x8_gemv FROM quants.generator GENERATOR q5_k_8x8_gemv)
+add_halide_library(q5_k_8x4_gemm FROM quants.generator GENERATOR q5_k_8x4_gemm)
+add_halide_library(q5_k_8x8_gemm FROM quants.generator GENERATOR q5_k_8x8_gemm)
+add_halide_library(q6_k_8x4_gemv FROM quants.generator GENERATOR q6_k_8x4_gemv)
+add_halide_library(q6_k_8x8_gemv FROM quants.generator GENERATOR q6_k_8x8_gemv)
+add_halide_library(q6_k_8x4_gemm FROM quants.generator GENERATOR q6_k_8x4_gemm)
+add_halide_library(q6_k_8x8_gemm FROM quants.generator GENERATOR q6_k_8x8_gemm)
+add_halide_library(q2_k_8x8_gemv FROM quants.generator GENERATOR q2_k_8x8_gemv)
+add_halide_library(q2_k_8x8_gemm FROM quants.generator GENERATOR q2_k_8x8_gemm)
+
 # ggml_extern_quantize.cpp implements the extern-stage C functions that
 # several of the quantize pipelines above call out to -- see that file for
 # why. It's the one source in this library that depends on GGML, hence the
@@ -132,7 +167,12 @@ target_link_libraries(
     iq3_xxs_quantize iq3_xxs_dequantize iq3_xxs_vec_dot iq3_s_quantize iq3_s_dequantize
     iq3_s_vec_dot iq1_s_dequantize iq1_s_vec_dot iq1_m_dequantize iq1_m_vec_dot f16_quantize
     f16_dequantize bf16_quantize bf16_dequantize q8_0_4x4_quantize_mat q8_0_4x8_quantize_mat
-    q8_k_4x4_quantize_mat q8_k_4x8_quantize_mat ggml::ggml
+    q8_k_4x4_quantize_mat q8_k_4x8_quantize_mat q4_0_4x4_gemv q4_0_4x8_gemv q4_0_8x8_gemv
+    q8_0_4x4_gemv q8_0_4x8_gemv q4_0_4x4_gemm q4_0_4x8_gemm q4_0_8x8_gemm q8_0_4x4_gemm
+    q8_0_4x8_gemm iq4_nl_4x4_gemv iq4_nl_8x8_gemv mxfp4_4x4_gemv mxfp4_8x8_gemv iq4_nl_4x4_gemm
+    iq4_nl_8x8_gemm mxfp4_4x4_gemm mxfp4_8x8_gemm q4_k_8x4_gemv q4_k_8x8_gemv q4_k_8x4_gemm
+    q4_k_8x8_gemm q5_k_8x4_gemv q5_k_8x8_gemv q5_k_8x4_gemm q5_k_8x8_gemm q6_k_8x4_gemv
+    q6_k_8x8_gemv q6_k_8x4_gemm q6_k_8x8_gemm q2_k_8x8_gemv q2_k_8x8_gemm ggml::ggml
 )
 target_include_directories(ggml_quants_halide PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 

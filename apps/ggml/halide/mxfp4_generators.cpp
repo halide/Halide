@@ -33,12 +33,14 @@ constexpr int kEOffset = 0;
 constexpr int kQsOffset = 1;
 constexpr int kBlockBytes = kQsOffset + kQK / 2;  // 17
 
-// kvalues_mxfp4 = {0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12}
+// kvalues_mxfp4: a small fixed codebook, embedded as compile-time constant
+// data (not an Input<Buffer<>>/ImageParam -- this Buffer is baked into the
+// compiled pipeline as a read-only resource) rather than a deep select()
+// chain.
 Expr lookup_mxfp4(Expr idx) {
-    return select(idx == 0, 0, idx == 1, 1, idx == 2, 2, idx == 3, 3,
-                  idx == 4, 4, idx == 5, 6, idx == 6, 8, idx == 7, 12,
-                  idx == 8, 0, idx == 9, -1, idx == 10, -2, idx == 11, -3,
-                  idx == 12, -4, idx == 13, -6, idx == 14, -8, -12);
+    static const int8_t kValues[16] = {0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12};
+    static const Buffer<int8_t> lut(const_cast<int8_t *>(kValues), 16, "kvalues_mxfp4");
+    return cast<int32_t>(lut(idx));
 }
 
 class MXFP4DequantizeGenerator : public Generator<MXFP4DequantizeGenerator> {

@@ -130,7 +130,9 @@ void register_halide_provider(KernelRegistries &registries) {
     // repack weight type that shares one -- see k_repack_entries in
     // ggml_provider.cpp, which this table mirrors label-for-label so the
     // registered RepackKey (used by bench_repack.cpp for act_type/base_type)
-    // matches exactly. gemv/gemm repack candidates are a later step.
+    // matches exactly. gemv/gemm repack candidates for every weight family
+    // GGML registers a repack entry for (Q4_0, Q8_0, IQ4_NL, MXFP4, Q4_K,
+    // Q5_K, Q6_K, Q2_K) are registered below.
     registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q4_0, GGML_TYPE_Q8_0, 4, 4, "q4_0_4x4_q8_0"},
                                                       "halide", ggml_quants_halide_repack_quantize_mat_q8_0_4x4);
     registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q4_0, GGML_TYPE_Q8_0, 8, 4, "q4_0_4x8_q8_0"},
@@ -163,4 +165,72 @@ void register_halide_provider(KernelRegistries &registries) {
                                                       "halide", ggml_quants_halide_repack_quantize_mat_q8_0_4x4);
     registries.repack_quantize_mat.register_candidate({GGML_TYPE_Q8_0, GGML_TYPE_Q8_0, 8, 4, "q8_0_4x8_q8_0"},
                                                       "halide", ggml_quants_halide_repack_quantize_mat_q8_0_4x8);
+
+    // gemv/gemm: same RepackKeys as the quantize_mat table above (base type,
+    // activation type, blocklen, ncols_interleaved, label must match
+    // label-for-label so bench_repack.cpp's per-key lookups line up).
+    registries.repack_gemv.register_candidate({GGML_TYPE_Q4_0, GGML_TYPE_Q8_0, 4, 4, "q4_0_4x4_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemv_q4_0_4x4_q8_0);
+    registries.repack_gemm.register_candidate({GGML_TYPE_Q4_0, GGML_TYPE_Q8_0, 4, 4, "q4_0_4x4_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemm_q4_0_4x4_q8_0);
+    registries.repack_gemv.register_candidate({GGML_TYPE_Q4_0, GGML_TYPE_Q8_0, 8, 4, "q4_0_4x8_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemv_q4_0_4x8_q8_0);
+    registries.repack_gemm.register_candidate({GGML_TYPE_Q4_0, GGML_TYPE_Q8_0, 8, 4, "q4_0_4x8_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemm_q4_0_4x8_q8_0);
+    registries.repack_gemv.register_candidate({GGML_TYPE_Q4_0, GGML_TYPE_Q8_0, 8, 8, "q4_0_8x8_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemv_q4_0_8x8_q8_0);
+    registries.repack_gemm.register_candidate({GGML_TYPE_Q4_0, GGML_TYPE_Q8_0, 8, 8, "q4_0_8x8_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemm_q4_0_8x8_q8_0);
+    registries.repack_gemv.register_candidate({GGML_TYPE_Q8_0, GGML_TYPE_Q8_0, 4, 4, "q8_0_4x4_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemv_q8_0_4x4_q8_0);
+    registries.repack_gemm.register_candidate({GGML_TYPE_Q8_0, GGML_TYPE_Q8_0, 4, 4, "q8_0_4x4_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemm_q8_0_4x4_q8_0);
+    registries.repack_gemv.register_candidate({GGML_TYPE_Q8_0, GGML_TYPE_Q8_0, 8, 4, "q8_0_4x8_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemv_q8_0_4x8_q8_0);
+    registries.repack_gemm.register_candidate({GGML_TYPE_Q8_0, GGML_TYPE_Q8_0, 8, 4, "q8_0_4x8_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemm_q8_0_4x8_q8_0);
+    registries.repack_gemv.register_candidate({GGML_TYPE_IQ4_NL, GGML_TYPE_Q8_0, 4, 4, "iq4_nl_4x4_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemv_iq4_nl_4x4_q8_0);
+    registries.repack_gemm.register_candidate({GGML_TYPE_IQ4_NL, GGML_TYPE_Q8_0, 4, 4, "iq4_nl_4x4_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemm_iq4_nl_4x4_q8_0);
+    registries.repack_gemv.register_candidate({GGML_TYPE_IQ4_NL, GGML_TYPE_Q8_0, 8, 8, "iq4_nl_8x8_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemv_iq4_nl_8x8_q8_0);
+    registries.repack_gemm.register_candidate({GGML_TYPE_IQ4_NL, GGML_TYPE_Q8_0, 8, 8, "iq4_nl_8x8_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemm_iq4_nl_8x8_q8_0);
+    registries.repack_gemv.register_candidate({GGML_TYPE_MXFP4, GGML_TYPE_Q8_0, 4, 4, "mxfp4_4x4_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemv_mxfp4_4x4_q8_0);
+    registries.repack_gemm.register_candidate({GGML_TYPE_MXFP4, GGML_TYPE_Q8_0, 4, 4, "mxfp4_4x4_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemm_mxfp4_4x4_q8_0);
+    registries.repack_gemv.register_candidate({GGML_TYPE_MXFP4, GGML_TYPE_Q8_0, 8, 8, "mxfp4_8x8_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemv_mxfp4_8x8_q8_0);
+    registries.repack_gemm.register_candidate({GGML_TYPE_MXFP4, GGML_TYPE_Q8_0, 8, 8, "mxfp4_8x8_q8_0"}, "halide",
+                                              ggml_quants_halide_repack_gemm_mxfp4_8x8_q8_0);
+    registries.repack_gemv.register_candidate({GGML_TYPE_Q4_K, GGML_TYPE_Q8_K, 8, 4, "q4_K_8x4_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemv_q4_k_8x4_q8_k);
+    registries.repack_gemm.register_candidate({GGML_TYPE_Q4_K, GGML_TYPE_Q8_K, 8, 4, "q4_K_8x4_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemm_q4_k_8x4_q8_k);
+    registries.repack_gemv.register_candidate({GGML_TYPE_Q4_K, GGML_TYPE_Q8_K, 8, 8, "q4_K_8x8_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemv_q4_k_8x8_q8_k);
+    registries.repack_gemm.register_candidate({GGML_TYPE_Q4_K, GGML_TYPE_Q8_K, 8, 8, "q4_K_8x8_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemm_q4_k_8x8_q8_k);
+    registries.repack_gemv.register_candidate({GGML_TYPE_Q5_K, GGML_TYPE_Q8_K, 8, 4, "q5_K_8x4_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemv_q5_k_8x4_q8_k);
+    registries.repack_gemm.register_candidate({GGML_TYPE_Q5_K, GGML_TYPE_Q8_K, 8, 4, "q5_K_8x4_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemm_q5_k_8x4_q8_k);
+    registries.repack_gemv.register_candidate({GGML_TYPE_Q5_K, GGML_TYPE_Q8_K, 8, 8, "q5_K_8x8_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemv_q5_k_8x8_q8_k);
+    registries.repack_gemm.register_candidate({GGML_TYPE_Q5_K, GGML_TYPE_Q8_K, 8, 8, "q5_K_8x8_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemm_q5_k_8x8_q8_k);
+    registries.repack_gemv.register_candidate({GGML_TYPE_Q6_K, GGML_TYPE_Q8_K, 8, 4, "q6_K_8x4_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemv_q6_k_8x4_q8_k);
+    registries.repack_gemm.register_candidate({GGML_TYPE_Q6_K, GGML_TYPE_Q8_K, 8, 4, "q6_K_8x4_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemm_q6_k_8x4_q8_k);
+    registries.repack_gemv.register_candidate({GGML_TYPE_Q6_K, GGML_TYPE_Q8_K, 8, 8, "q6_K_8x8_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemv_q6_k_8x8_q8_k);
+    registries.repack_gemm.register_candidate({GGML_TYPE_Q6_K, GGML_TYPE_Q8_K, 8, 8, "q6_K_8x8_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemm_q6_k_8x8_q8_k);
+    registries.repack_gemv.register_candidate({GGML_TYPE_Q2_K, GGML_TYPE_Q8_K, 8, 8, "q2_K_8x8_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemv_q2_k_8x8_q8_k);
+    registries.repack_gemm.register_candidate({GGML_TYPE_Q2_K, GGML_TYPE_Q8_K, 8, 8, "q2_K_8x8_q8_K"}, "halide",
+                                              ggml_quants_halide_repack_gemm_q2_k_8x8_q8_k);
 }

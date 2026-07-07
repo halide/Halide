@@ -24,12 +24,20 @@
 #include "iq3_xxs_dequantize.h"
 #include "iq3_xxs_quantize.h"
 #include "iq3_xxs_vec_dot.h"
+#include "iq4_nl_4x4_gemm.h"
+#include "iq4_nl_4x4_gemv.h"
+#include "iq4_nl_8x8_gemm.h"
+#include "iq4_nl_8x8_gemv.h"
 #include "iq4_nl_dequantize.h"
 #include "iq4_nl_quantize.h"
 #include "iq4_nl_vec_dot.h"
 #include "iq4_xs_dequantize.h"
 #include "iq4_xs_quantize.h"
 #include "iq4_xs_vec_dot.h"
+#include "mxfp4_4x4_gemm.h"
+#include "mxfp4_4x4_gemv.h"
+#include "mxfp4_8x8_gemm.h"
+#include "mxfp4_8x8_gemv.h"
 #include "mxfp4_dequantize.h"
 #include "mxfp4_quantize.h"
 #include "mxfp4_vec_dot.h"
@@ -39,18 +47,30 @@
 #include "q1_0_dequantize.h"
 #include "q1_0_quantize.h"
 #include "q1_0_vec_dot.h"
+#include "q2_k_8x8_gemm.h"
+#include "q2_k_8x8_gemv.h"
 #include "q2_k_dequantize.h"
 #include "q2_k_quantize.h"
 #include "q2_k_vec_dot.h"
 #include "q3_k_dequantize.h"
 #include "q3_k_quantize.h"
 #include "q3_k_vec_dot.h"
+#include "q4_0_4x4_gemm.h"
+#include "q4_0_4x4_gemv.h"
+#include "q4_0_4x8_gemm.h"
+#include "q4_0_4x8_gemv.h"
+#include "q4_0_8x8_gemm.h"
+#include "q4_0_8x8_gemv.h"
 #include "q4_0_dequantize.h"
 #include "q4_0_quantize.h"
 #include "q4_0_vec_dot.h"
 #include "q4_1_dequantize.h"
 #include "q4_1_quantize.h"
 #include "q4_1_vec_dot.h"
+#include "q4_k_8x4_gemm.h"
+#include "q4_k_8x4_gemv.h"
+#include "q4_k_8x8_gemm.h"
+#include "q4_k_8x8_gemv.h"
 #include "q4_k_dequantize.h"
 #include "q4_k_quantize.h"
 #include "q4_k_vec_dot.h"
@@ -60,13 +80,25 @@
 #include "q5_1_dequantize.h"
 #include "q5_1_quantize.h"
 #include "q5_1_vec_dot.h"
+#include "q5_k_8x4_gemm.h"
+#include "q5_k_8x4_gemv.h"
+#include "q5_k_8x8_gemm.h"
+#include "q5_k_8x8_gemv.h"
 #include "q5_k_dequantize.h"
 #include "q5_k_quantize.h"
 #include "q5_k_vec_dot.h"
+#include "q6_k_8x4_gemm.h"
+#include "q6_k_8x4_gemv.h"
+#include "q6_k_8x8_gemm.h"
+#include "q6_k_8x8_gemv.h"
 #include "q6_k_dequantize.h"
 #include "q6_k_quantize.h"
 #include "q6_k_vec_dot.h"
+#include "q8_0_4x4_gemm.h"
+#include "q8_0_4x4_gemv.h"
 #include "q8_0_4x4_quantize_mat.h"
+#include "q8_0_4x8_gemm.h"
+#include "q8_0_4x8_gemv.h"
 #include "q8_0_4x8_quantize_mat.h"
 #include "q8_0_dequantize.h"
 #include "q8_0_quantize.h"
@@ -1024,6 +1056,677 @@ void ggml_quants_halide_repack_quantize_mat_q8_k_4x8(const float *x, void *y, in
     halide_dimension_t yshape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
     Buffer<uint8_t, 2> blocks(static_cast<uint8_t *>(y), 2, yshape);
     check(q8_k_4x8_quantize_mat(xb, blocks), "q8_k_4x8_quantize_mat");
+}
+
+//
+// Repack gemv/gemm: dot a repack-interleaved weight matrix against a Q8_0
+// activation row (gemv) or `nr` rows packed 4 at a time (gemm). See
+// repack_gemv_generators.cpp/repack_gemm_generators.cpp for the packed
+// buffer layouts these shapes describe; `bs` (gemm's output row stride) is
+// unused by gemv, matching gemx_fn_t's own nr == 1 convention.
+//
+
+void ggml_quants_halide_repack_gemv_q4_0_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 32, kNCols = 4, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActBlockBytes = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(q4_0_4x4_gemv(wb, ab, sb), "q4_0_4x4_gemv");
+}
+
+void ggml_quants_halide_repack_gemv_q4_0_4x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 32, kNCols = 4, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActBlockBytes = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(q4_0_4x8_gemv(wb, ab, sb), "q4_0_4x8_gemv");
+}
+
+void ggml_quants_halide_repack_gemv_q4_0_8x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 32, kNCols = 8, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActBlockBytes = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(q4_0_8x8_gemv(wb, ab, sb), "q4_0_8x8_gemv");
+}
+
+void ggml_quants_halide_repack_gemv_q8_0_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 32, kNCols = 4, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 8) / 8;
+    constexpr int kActBlockBytes = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(q8_0_4x4_gemv(wb, ab, sb), "q8_0_4x4_gemv");
+}
+
+void ggml_quants_halide_repack_gemv_q8_0_4x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 32, kNCols = 4, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 8) / 8;
+    constexpr int kActBlockBytes = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(q8_0_4x8_gemv(wb, ab, sb), "q8_0_4x8_gemv");
+}
+
+void ggml_quants_halide_repack_gemm_q4_0_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    constexpr int kQK = 32, kNCols = 4, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActNRows = 4, kActBlockBytes = 2 * kActNRows + kQK * kActNRows;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {
+        {0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}, {0, nr_groups, kActBlockBytes * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(q4_0_4x4_gemm(wb, ab, sb), "q4_0_4x4_gemm");
+}
+
+void ggml_quants_halide_repack_gemm_q4_0_4x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    constexpr int kQK = 32, kNCols = 4, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActNRows = 4, kActBlockBytes = 2 * kActNRows + kQK * kActNRows;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {
+        {0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}, {0, nr_groups, kActBlockBytes * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(q4_0_4x8_gemm(wb, ab, sb), "q4_0_4x8_gemm");
+}
+
+void ggml_quants_halide_repack_gemm_q4_0_8x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    constexpr int kQK = 32, kNCols = 8, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActNRows = 4, kActBlockBytes = 2 * kActNRows + kQK * kActNRows;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {
+        {0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}, {0, nr_groups, kActBlockBytes * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(q4_0_8x8_gemm(wb, ab, sb), "q4_0_8x8_gemm");
+}
+
+void ggml_quants_halide_repack_gemm_q8_0_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    constexpr int kQK = 32, kNCols = 4, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 8) / 8;
+    constexpr int kActNRows = 4, kActBlockBytes = 2 * kActNRows + kQK * kActNRows;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {
+        {0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}, {0, nr_groups, kActBlockBytes * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(q8_0_4x4_gemm(wb, ab, sb), "q8_0_4x4_gemm");
+}
+
+void ggml_quants_halide_repack_gemm_q8_0_4x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    constexpr int kQK = 32, kNCols = 4, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 8) / 8;
+    constexpr int kActNRows = 4, kActBlockBytes = 2 * kActNRows + kQK * kActNRows;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {
+        {0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}, {0, nr_groups, kActBlockBytes * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(q8_0_4x8_gemm(wb, ab, sb), "q8_0_4x8_gemm");
+}
+
+//
+// IQ4_NL/MXFP4 repack gemv/gemm: same 3-D packed-buffer shapes as Q4_0's
+// above, but MXFP4's weight header is N bytes (1 E8M0 exponent per column)
+// instead of 2*N (an fp16 delta per column) -- see repack_gemv_generators.cpp.
+//
+
+void ggml_quants_halide_repack_gemv_iq4_nl_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                    int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 32, kNCols = 4, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActBlockBytes = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(iq4_nl_4x4_gemv(wb, ab, sb), "iq4_nl_4x4_gemv");
+}
+
+void ggml_quants_halide_repack_gemv_iq4_nl_8x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                    int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 32, kNCols = 8, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActBlockBytes = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(iq4_nl_8x8_gemv(wb, ab, sb), "iq4_nl_8x8_gemv");
+}
+
+void ggml_quants_halide_repack_gemv_mxfp4_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                   int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 32, kNCols = 4, kWeightBlockBytes = kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActBlockBytes = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(mxfp4_4x4_gemv(wb, ab, sb), "mxfp4_4x4_gemv");
+}
+
+void ggml_quants_halide_repack_gemv_mxfp4_8x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                   int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 32, kNCols = 8, kWeightBlockBytes = kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActBlockBytes = 2 + kQK;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(mxfp4_8x8_gemv(wb, ab, sb), "mxfp4_8x8_gemv");
+}
+
+void ggml_quants_halide_repack_gemm_iq4_nl_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                    int nr, int nc) {
+    constexpr int kQK = 32, kNCols = 4, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActNRows = 4, kActBlockBytes = 2 * kActNRows + kQK * kActNRows;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {
+        {0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}, {0, nr_groups, kActBlockBytes * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(iq4_nl_4x4_gemm(wb, ab, sb), "iq4_nl_4x4_gemm");
+}
+
+void ggml_quants_halide_repack_gemm_iq4_nl_8x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                    int nr, int nc) {
+    constexpr int kQK = 32, kNCols = 8, kWeightBlockBytes = 2 * kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActNRows = 4, kActBlockBytes = 2 * kActNRows + kQK * kActNRows;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {
+        {0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}, {0, nr_groups, kActBlockBytes * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(iq4_nl_8x8_gemm(wb, ab, sb), "iq4_nl_8x8_gemm");
+}
+
+void ggml_quants_halide_repack_gemm_mxfp4_4x4_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                   int nr, int nc) {
+    constexpr int kQK = 32, kNCols = 4, kWeightBlockBytes = kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActNRows = 4, kActBlockBytes = 2 * kActNRows + kQK * kActNRows;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {
+        {0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}, {0, nr_groups, kActBlockBytes * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(mxfp4_4x4_gemm(wb, ab, sb), "mxfp4_4x4_gemm");
+}
+
+void ggml_quants_halide_repack_gemm_mxfp4_8x8_q8_0(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                   int nr, int nc) {
+    constexpr int kQK = 32, kNCols = 8, kWeightBlockBytes = kNCols + (kQK * kNCols * 4) / 8;
+    constexpr int kActNRows = 4, kActBlockBytes = 2 * kActNRows + kQK * kActNRows;
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {
+        {0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}, {0, nr_groups, kActBlockBytes * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(mxfp4_8x8_gemm(wb, ab, sb), "mxfp4_8x8_gemm");
+}
+
+//
+// Q4_K repack gemv/gemm: 256-element superblocks, always 8 interleaved
+// columns, paired with Q8_K activations. See repack_gemv_generators.cpp/
+// repack_gemm_generators.cpp for the packed buffer layouts.
+//
+
+void ggml_quants_halide_repack_gemv_q4_k_8x4_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 256, kNCols = 8, kWeightBlockBytes = 16 + 16 + 96 + (kQK * kNCols * 4) / 8;
+    constexpr int kActBlockBytes = 4 + kQK + 2 * (kQK / 16);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(q4_k_8x4_gemv(wb, ab, sb), "q4_k_8x4_gemv");
+}
+
+void ggml_quants_halide_repack_gemv_q4_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 256, kNCols = 8, kWeightBlockBytes = 16 + 16 + 96 + (kQK * kNCols * 4) / 8;
+    constexpr int kActBlockBytes = 4 + kQK + 2 * (kQK / 16);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(q4_k_8x8_gemv(wb, ab, sb), "q4_k_8x8_gemv");
+}
+
+void ggml_quants_halide_repack_gemm_q4_k_8x4_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    constexpr int kQK = 256, kNCols = 8, kWeightBlockBytes = 16 + 16 + 96 + (kQK * kNCols * 4) / 8;
+    // block_q8_Kx4's real per-block size is 1168 bytes (16 header + 1024 qs +
+    // 128 bsums) -- that's the actual stride between consecutive blocks in
+    // memory, even though the Halide kernel only ever reads the first 1040
+    // bytes (header + qs; bsums are unused, see repack_gemm_generators.cpp).
+    constexpr int kActNRows = 4, kActBlockBytesUsed = 4 * kActNRows + kQK * kActNRows;
+    constexpr int kActBlockBytesReal = kActBlockBytesUsed + 2 * (kQK / 4);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {{0, kActBlockBytesUsed, 1},
+                                    {0, nb, kActBlockBytesReal},
+                                    {0, nr_groups, kActBlockBytesReal * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(q4_k_8x4_gemm(wb, ab, sb), "q4_k_8x4_gemm");
+}
+
+void ggml_quants_halide_repack_gemm_q4_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    constexpr int kQK = 256, kNCols = 8, kWeightBlockBytes = 16 + 16 + 96 + (kQK * kNCols * 4) / 8;
+    constexpr int kActNRows = 4, kActBlockBytesUsed = 4 * kActNRows + kQK * kActNRows;
+    constexpr int kActBlockBytesReal = kActBlockBytesUsed + 2 * (kQK / 4);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {{0, kActBlockBytesUsed, 1},
+                                    {0, nb, kActBlockBytesReal},
+                                    {0, nr_groups, kActBlockBytesReal * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(q4_k_8x8_gemm(wb, ab, sb), "q4_k_8x8_gemm");
+}
+
+//
+// Q5_K repack gemv/gemm: same 256-element superblock/8-column structure as
+// Q4_K, plus a 256-byte qh (5th bit) array between scales and qs.
+//
+
+void ggml_quants_halide_repack_gemv_q5_k_8x4_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 256, kNCols = 8;
+    constexpr int kWeightBlockBytes = 16 + 16 + 96 + (kQK * kNCols) / 8 + (kQK * kNCols * 4) / 8;
+    constexpr int kActBlockBytes = 4 + kQK + 2 * (kQK / 16);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(q5_k_8x4_gemv(wb, ab, sb), "q5_k_8x4_gemv");
+}
+
+void ggml_quants_halide_repack_gemv_q5_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 256, kNCols = 8;
+    constexpr int kWeightBlockBytes = 16 + 16 + 96 + (kQK * kNCols) / 8 + (kQK * kNCols * 4) / 8;
+    constexpr int kActBlockBytes = 4 + kQK + 2 * (kQK / 16);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(q5_k_8x8_gemv(wb, ab, sb), "q5_k_8x8_gemv");
+}
+
+void ggml_quants_halide_repack_gemm_q5_k_8x4_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    constexpr int kQK = 256, kNCols = 8;
+    constexpr int kWeightBlockBytes = 16 + 16 + 96 + (kQK * kNCols) / 8 + (kQK * kNCols * 4) / 8;
+    constexpr int kActNRows = 4, kActBlockBytesUsed = 4 * kActNRows + kQK * kActNRows;
+    constexpr int kActBlockBytesReal = kActBlockBytesUsed + 2 * (kQK / 4);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {{0, kActBlockBytesUsed, 1},
+                                    {0, nb, kActBlockBytesReal},
+                                    {0, nr_groups, kActBlockBytesReal * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(q5_k_8x4_gemm(wb, ab, sb), "q5_k_8x4_gemm");
+}
+
+void ggml_quants_halide_repack_gemm_q5_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    constexpr int kQK = 256, kNCols = 8;
+    constexpr int kWeightBlockBytes = 16 + 16 + 96 + (kQK * kNCols) / 8 + (kQK * kNCols * 4) / 8;
+    constexpr int kActNRows = 4, kActBlockBytesUsed = 4 * kActNRows + kQK * kActNRows;
+    constexpr int kActBlockBytesReal = kActBlockBytesUsed + 2 * (kQK / 4);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {{0, kActBlockBytesUsed, 1},
+                                    {0, nb, kActBlockBytesReal},
+                                    {0, nr_groups, kActBlockBytesReal * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(q5_k_8x8_gemm(wb, ab, sb), "q5_k_8x8_gemm");
+}
+
+//
+// Q6_K repack gemv/gemm: plain signed-int8-per-sub-group scales, no compact
+// bit packing -- see repack_gemv_generators.cpp/repack_gemm_generators.cpp.
+//
+
+void ggml_quants_halide_repack_gemv_q6_k_8x4_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 256, kNCols = 8;
+    constexpr int kWeightBlockBytes = 16 + 128 + (kQK * kNCols * 4) / 8 + (kQK * kNCols * 2) / 8;
+    constexpr int kActBlockBytes = 4 + kQK + 2 * (kQK / 16);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(q6_k_8x4_gemv(wb, ab, sb), "q6_k_8x4_gemv");
+}
+
+void ggml_quants_halide_repack_gemv_q6_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 256, kNCols = 8;
+    constexpr int kWeightBlockBytes = 16 + 128 + (kQK * kNCols * 4) / 8 + (kQK * kNCols * 2) / 8;
+    constexpr int kActBlockBytes = 4 + kQK + 2 * (kQK / 16);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(q6_k_8x8_gemv(wb, ab, sb), "q6_k_8x8_gemv");
+}
+
+void ggml_quants_halide_repack_gemm_q6_k_8x4_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    constexpr int kQK = 256, kNCols = 8;
+    constexpr int kWeightBlockBytes = 16 + 128 + (kQK * kNCols * 4) / 8 + (kQK * kNCols * 2) / 8;
+    constexpr int kActNRows = 4, kActBlockBytesUsed = 4 * kActNRows + kQK * kActNRows;
+    constexpr int kActBlockBytesReal = kActBlockBytesUsed + 2 * (kQK / 4);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {{0, kActBlockBytesUsed, 1},
+                                    {0, nb, kActBlockBytesReal},
+                                    {0, nr_groups, kActBlockBytesReal * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(q6_k_8x4_gemm(wb, ab, sb), "q6_k_8x4_gemm");
+}
+
+void ggml_quants_halide_repack_gemm_q6_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    constexpr int kQK = 256, kNCols = 8;
+    constexpr int kWeightBlockBytes = 16 + 128 + (kQK * kNCols * 4) / 8 + (kQK * kNCols * 2) / 8;
+    constexpr int kActNRows = 4, kActBlockBytesUsed = 4 * kActNRows + kQK * kActNRows;
+    constexpr int kActBlockBytesReal = kActBlockBytesUsed + 2 * (kQK / 4);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {{0, kActBlockBytesUsed, 1},
+                                    {0, nb, kActBlockBytesReal},
+                                    {0, nr_groups, kActBlockBytesReal * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(q6_k_8x8_gemm(wb, ab, sb), "q6_k_8x8_gemm");
+}
+
+//
+// Q2_K repack gemv/gemm: only one registered variant (8x8). See
+// repack_gemv_generators.cpp/repack_gemm_generators.cpp.
+//
+
+void ggml_quants_halide_repack_gemv_q2_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    (void)bs;
+    (void)nr;
+    constexpr int kQK = 256, kNCols = 8;
+    constexpr int kWeightBlockBytes = 16 + 16 + 128 + (kQK * kNCols * 2) / 8;
+    constexpr int kActBlockBytes = 4 + kQK + 2 * (kQK / 16);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[2] = {{0, kActBlockBytes, 1}, {0, nb, kActBlockBytes}};
+    Buffer<uint8_t, 2> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, ashape);
+    halide_dimension_t sshape[2] = {{0, kNCols, 1}, {0, nc_groups, kNCols}};
+    Buffer<float, 2> sb(s, 2, sshape);
+    check(q2_k_8x8_gemv(wb, ab, sb), "q2_k_8x8_gemv");
+}
+
+void ggml_quants_halide_repack_gemm_q2_k_8x8_q8_k(int n, float *s, size_t bs, const void *vx, const void *vy,
+                                                  int nr, int nc) {
+    constexpr int kQK = 256, kNCols = 8;
+    constexpr int kWeightBlockBytes = 16 + 16 + 128 + (kQK * kNCols * 2) / 8;
+    constexpr int kActNRows = 4, kActBlockBytesUsed = 4 * kActNRows + kQK * kActNRows;
+    constexpr int kActBlockBytesReal = kActBlockBytesUsed + 2 * (kQK / 4);
+    const int32_t nb = static_cast<int32_t>(n / kQK);
+    const int32_t nc_groups = static_cast<int32_t>(nc / kNCols);
+    const int32_t nr_groups = static_cast<int32_t>(nr / kActNRows);
+    const int32_t bs32 = static_cast<int32_t>(bs);
+    halide_dimension_t wshape[3] = {
+        {0, kWeightBlockBytes, 1}, {0, nb, kWeightBlockBytes}, {0, nc_groups, kWeightBlockBytes * nb}};
+    Buffer<uint8_t, 3> wb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 3, wshape);
+    halide_dimension_t ashape[3] = {{0, kActBlockBytesUsed, 1},
+                                    {0, nb, kActBlockBytesReal},
+                                    {0, nr_groups, kActBlockBytesReal * nb}};
+    Buffer<uint8_t, 3> ab(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 3, ashape);
+    halide_dimension_t sshape[4] = {
+        {0, kNCols, 1}, {0, nc_groups, kNCols}, {0, kActNRows, bs32}, {0, nr_groups, kActNRows * bs32}};
+    Buffer<float, 4> sb(s, 4, sshape);
+    check(q2_k_8x8_gemm(wb, ab, sb), "q2_k_8x8_gemm");
 }
 
 }  // extern "C"
