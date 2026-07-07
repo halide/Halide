@@ -26,12 +26,13 @@
 //                  GGML uses -- see index_q8_k below)
 //
 // Q8_0's per-row scale is the same amax/127 symmetric scale as plain Q8_0
-// (see q8_0_generators.cpp), using round() (roundf, not round-to-even).
-// Q8_K's per-row scale is the same -127/max signed scale as plain Q8_K (see
-// q8_k_generators.cpp), using the same round-to-nearest-even magic-number
-// trick -- but unlike plain Q8_K's quantize_row, this repack version has no
-// final MIN(127, ...) clamp (safe here since the scale is derived from this
-// exact block's own amax, so values can never exceed +-127 already).
+// (see quant_components.h's make_symmetric_block_scheme()), using round()
+// (roundf, not round-to-even). Q8_K's per-row scale is the same -127/max
+// signed scale as plain Q8_K (see quant_components.h's make_q8_k_scheme()),
+// using the same round-to-nearest-even magic-number trick -- but unlike
+// plain Q8_K's quantize_row, this repack version has no final MIN(127, ...)
+// clamp (safe here since the scale is derived from this exact block's own
+// amax, so values can never exceed +-127 already).
 //
 // This is intentionally unscheduled beyond the minimum Halide requires for
 // legality (an update-defined Func can't stay inline) -- scheduling for
@@ -50,7 +51,7 @@ constexpr int kQK_K = 256;
 constexpr int kNumGroups = kQK_K / 16;                                     // 16
 constexpr int kBlockBytesQ8_Kx4 = 4 * 4 + kQK_K * 4 + kNumGroups * 4 * 2;  // 1168
 
-// Same magic-number round-to-nearest-even trick as q8_k_generators.cpp's
+// Same magic-number round-to-nearest-even trick as quant_components.h's
 // nearest_int() (mirrors GGML's static inline nearest_int() in
 // src/ggml-quants.c).
 Expr nearest_int(Expr fval) {

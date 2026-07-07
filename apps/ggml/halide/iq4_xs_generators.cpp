@@ -1,6 +1,5 @@
-// From-scratch Halide reimplementation of GGML's IQ4_XS dequantize kernel
-// (see src/ggml-quants.c: dequantize_row_iq4_xs upstream, as of GGML
-// v0.15.3). No GGML headers are used by the dequantize generator -- it
+// GGML's IQ4_XS vec_dot kernel (see src/ggml-quants.c: dequantize_row_iq4_xs
+// upstream, as of GGML v0.15.3). No GGML headers are used here -- this file
 // encodes its own understanding of the 136-byte block_iq4_xs layout (a
 // 256-element superblock, 8 sub-blocks of 32 elements each), the
 // superblock generalization of IQ4_NL's fixed 16-value codebook:
@@ -11,13 +10,19 @@
 //   byte 8-135: qs[128] -- 4 bits per element (2 elements per byte), each a
 //               codebook index into the same kvalues_iq4nl table as IQ4_NL
 //
-// Quantize is NOT reimplemented here: GGML's reference quantizer runs a
-// per-sub-block error-minimizing search over that codebook, which is
-// deferred -- see ggml_extern_quantize.cpp for why and how this Func
-// instead calls out to GGML's own reference via a Halide extern stage.
-//
-// The dequantize generator is intentionally unscheduled -- scheduling for
-// performance is a later step.
+// IQ4_XS's quantize/dequantize kernels are no longer defined here -- they
+// are the "iq4_xs_quantize"/"iq4_xs_dequantize" GENERATOR_ARGS
+// instantiations of the generic, reusable Approximation-based
+// lookup_table_quantize/lookup_table_dequantize generators in
+// lookup_table_quant_generators.cpp (see quant_components.h's
+// IQ4XSDequantize, a mechanical transcription of this exact two-level-scale
+// codebook math into the Approximation interface; quantize still delegates
+// to GGML's own reference via a Halide extern stage there too, since GGML's
+// reference quantizer runs a per-sub-block error-minimizing search over
+// that codebook -- see ggml_extern_quantize.cpp for why). Only vec_dot,
+// which still hand-rolls its own dequantize math, is unscheduled beyond the
+// minimum Halide requires for legality -- scheduling for performance is a
+// later step.
 
 #include "Halide.h"
 
@@ -42,67 +47,6 @@ Expr lookup_iq4nl(Expr idx) {
                   idx == 8, 1, idx == 9, 13, idx == 10, 25, idx == 11, 38,
                   idx == 12, 53, idx == 13, 69, idx == 14, 89, 113);
 }
-
-class IQ4_XSDequantizeGenerator : public Generator<IQ4_XSDequantizeGenerator> {
-public:
-    // dim 0: byte-within-block (extent kBlockBytes), dim 1: block index.
-    Input<Buffer<uint8_t, 2>> blocks_{"blocks"};
-    Output<Buffer<float, 1>> y_{"y"};
-
-    void generate() {
-        Var x("x");
-
-        Expr i = x / kQK_K;
-        Expr gi = x % kQK_K;
-
-        Expr ib = gi / 32;  // sub-block, 0..7
-        Expr local = gi % 32;
-        Expr j = local % 16;  // 0..15
-        Expr is_low = local < 16;
-
-        Expr qs_byte_idx = ib * 16 + j;
-        Expr byte = blocks_(kQsOffset + qs_byte_idx, i);
-        Expr nibble = cast<int32_t>(select(is_low, byte & 0x0f, byte >> 4));
-        Expr val = lookup_iq4nl(nibble);
-
-        // ls = ((scales_l[ib/2] >> 4*(ib%2)) & 0xf) | (((scales_h >> 2*ib) & 3) << 4)
-        Expr scales_l_byte = blocks_(kScalesLOffset + ib / 2, i);
-        Expr low4 = cast<int32_t>((scales_l_byte >> ((ib % 2) * 4)) & 0x0f);
-
-        Expr sh_lo = cast<uint16_t>(blocks_(kScalesHOffset + 0, i));
-        Expr sh_hi = cast<uint16_t>(blocks_(kScalesHOffset + 1, i));
-        Expr scales_h = sh_lo | (sh_hi << 8);
-        Expr high2 = cast<int32_t>((scales_h >> cast<uint16_t>(ib * 2)) & 3);
-
-        Expr ls = low4 | (high2 << 4);
-
-        Expr d_lo = cast<uint16_t>(blocks_(kDOffset + 0, i));
-        Expr d_hi = cast<uint16_t>(blocks_(kDOffset + 1, i));
-        Expr d = cast<float>(reinterpret<float16_t>(d_lo | (d_hi << 8)));
-
-        Expr dl = d * cast<float>(ls - 32);
-
-        y_(x) = dl * cast<float>(val);
-
-        blocks_.dim(0).set_bounds(0, kBlockBytes);
-        blocks_.dim(1).set_min(0);
-        y_.dim(0).set_min(0);
-    }
-};
-
-class IQ4_XSQuantizeGenerator : public Generator<IQ4_XSQuantizeGenerator> {
-public:
-    Input<Buffer<float, 1>> x_{"x"};
-    // dim 0: byte-within-block (extent kBlockBytes), dim 1: block index.
-    Output<Buffer<uint8_t, 2>> blocks_{"blocks"};
-
-    void generate() {
-        std::vector<ExternFuncArgument> args = {Func(x_)};
-        blocks_.define_extern("iq4_xs_quantize_via_ggml", args, UInt(8), 2, NameMangling::C);
-        blocks_.dim(0).set_bounds(0, kBlockBytes);
-        blocks_.dim(1).set_min(0);
-    }
-};
 
 // vec_dot(IQ4_XS, Q8_K): plain dequantize-then-multiply-and-sum, mirroring
 // Q4_0's vec_dot generator (see q4_0_generators.cpp for the rationale).
@@ -151,6 +95,4 @@ public:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(IQ4_XSDequantizeGenerator, iq4_xs_dequantize)
-HALIDE_REGISTER_GENERATOR(IQ4_XSQuantizeGenerator, iq4_xs_quantize)
 HALIDE_REGISTER_GENERATOR(IQ4_XSVecDotGenerator, iq4_xs_vec_dot)

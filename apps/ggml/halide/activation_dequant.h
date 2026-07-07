@@ -15,8 +15,9 @@
 // multiply-and-sum -- mathematically equivalent to GGML's integer-
 // factored accumulation (see each block's affine formula), just re-grouped.
 //
-// Block layouts (see q8_0_generators.cpp / q8_1_generators.cpp /
-// q8_k_generators.cpp for the authoritative comments):
+// Block layouts (see quant_components.h's make_symmetric_block_scheme()/
+// make_symmetric_byte_sum_block_scheme()/make_q8_k_scheme() for the
+// authoritative comments):
 //   Q8_0: 34 bytes/block, 32 elements -- fp16 d, then 32 signed int8 qs.
 //   Q8_1: 36 bytes/block, 32 elements -- fp16 d, fp16 s (unused here), then
 //         32 signed int8 qs.
