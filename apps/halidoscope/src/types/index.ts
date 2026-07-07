@@ -30,6 +30,7 @@ export interface FuncMeta extends Record<string, unknown> {
   buffer_liveness: IndexRange;
   produce_ranges: IndexRange[];
   consume_ranges: IndexRange[];
+  thread_count: number;
 }
 
 /** Top-level payload returned by `open_trace`. Mirrors the Rust `TraceMeta`. */

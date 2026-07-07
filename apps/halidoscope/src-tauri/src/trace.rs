@@ -61,6 +61,8 @@ pub enum EventCode {
     BeginPipeline,
     EndPipeline,
     Tag,
+    BeginParallelTask,
+    EndParallelTask,
     Unknown(i32),
 }
 
@@ -78,6 +80,8 @@ impl EventCode {
             8 => Self::BeginPipeline,
             9 => Self::EndPipeline,
             10 => Self::Tag,
+            11 => Self::BeginParallelTask,
+            12 => Self::EndParallelTask,
             other => Self::Unknown(other),
         }
     }
@@ -87,11 +91,19 @@ impl EventCode {
 
 #[derive(Debug, Clone)]
 pub struct TracePacket {
+    /// This packet's own id, for the purpose of other packets' `parent_id`. Only meaningful for
+    /// non-load/store events; load/store packets are leaves (nothing parents against them) and
+    /// carry `value_index` in this slot instead, so `id` is meaningless for them.
     pub id: i32,
     pub event: EventCode,
     pub parent_id: i32,
+    /// Which tuple element was accessed. Only meaningful for load/store events.
     pub value_index: i32,
+    /// Only meaningful for load/store events.
     pub type_: HalideType,
+    /// The Halide-internal thread that executed a parallel task. Only meaningful for
+    /// `BeginParallelTask`; zero for every other event.
+    pub thread_id: i32,
     /// Coordinates in dim-major / lane-minor order: [x₀..xₙ, y₀..yₙ, c₀..cₙ] where n = type_.lanes.
     pub coordinates: Vec<i32>,
     pub value: Vec<u8>,
@@ -236,27 +248,25 @@ pub struct Trace {
     pub buffer_liveness_range_by_func: BTreeMap<String, (u32, u32)>,
     pub produce_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>>,
     pub consume_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>>,
+    pub thread_ids_by_func: BTreeMap<String, BTreeSet<i32>>,
 }
 
 // ── Binary parsing helpers ────────────────────────────────────────────────────
 
-// halide_trace_packet_t fixed header: 7 × 4 bytes = 28 bytes.
-//   u32  size        @ 0
-//   i32  id          @ 4
-//   u8   type.code   @ 8
-//   u8   type.bits   @ 9
-//   u16  type.lanes  @ 10
-//   i32  event       @ 12
-//   i32  parent_id   @ 16
-//   i32  value_index @ 20
-//   i32  dimensions  @ 24
+// halide_trace_packet_t fixed header: 6 × 4 bytes = 24 bytes.
+//   u32  size                                         @ 0
+//   i32  event                                        @ 4
+//   i32  parent_id                                    @ 8
+//   union { i32 id; i32 value_index; }                @ 12
+//   union { type{code, bits, lanes}; i32 thread_id; } @ 16
+//   i32  dimensions                                   @ 20
 //
 // Immediately after the header:
 //   i32  coordinates[dimensions]
 //   u8   value[type.lanes * ceil(type.bits / 8)]
 //   char func[]       (null-terminated)
 //   char trace_tag[]  (null-terminated; empty string if absent)
-const HEADER_BYTES: usize = 28;
+const HEADER_BYTES: usize = 24;
 
 // Helper functions to read little-endian integers from a byte buffer at a given offset. try_into()
 // will convert the slice to a fixed-size [u8; N] array. We inline these for performance since they
@@ -433,6 +443,7 @@ impl Trace {
         let mut buffer_liveness_range_by_func: BTreeMap<String, (u32, u32)> = BTreeMap::new();
         let mut produce_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
         let mut consume_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
+        let mut thread_ids_by_func: BTreeMap<String, BTreeSet<i32>> = BTreeMap::new();
 
         // id -> (event, func_name, parent_id): needed for DAG inference after all packets are
         // parsed.
@@ -440,6 +451,9 @@ impl Trace {
 
         // Loads we deferred for DAG inference.
         let mut pending_loads: Vec<(String, i32)> = Vec::new();
+
+        // Parallel task starts we deferred for accumulating thread IDs by Func.
+        let mut pending_parallel_tasks: Vec<(i32, i32)> = Vec::new();
 
         // Packet parsing loop.
         while pos + HEADER_BYTES <= total {
@@ -449,27 +463,52 @@ impl Trace {
             }
 
             // ── Fixed header fields ───────────────────────────────────────────
-            let id = i32_le(data, pos + 4);
-            let type_code = data[pos + 8];
-            let type_bits = data[pos + 9];
-            let type_lanes = u16_le(data, pos + 10);
-            let event = i32_le(data, pos + 12);
-            let parent_id = i32_le(data, pos + 16);
-            let value_index = i32_le(data, pos + 20);
-            let dimensions = i32_le(data, pos + 24) as usize;
+            let event = i32_le(data, pos + 4);
+            let parent_id = i32_le(data, pos + 8);
+            let dimensions = i32_le(data, pos + 20) as usize;
 
-            let type_ = HalideType {
-                code: TypeCode::from_u8(type_code),
-                bits: type_bits,
-                lanes: type_lanes,
-            };
             let ev = EventCode::from_i32(event);
+            let is_load_or_store = matches!(ev, EventCode::Load | EventCode::Store);
+
+            // Slot @ 12 is `id` for non-load/store events and `value_index` for load/store
+            // events; slot @ 16 is `type` for load/store events and `thread_id` (else 0)
+            // otherwise. See halide_trace_packet_t in HalideRuntime.h.
+            let (id, value_index) = if is_load_or_store {
+                (0, i32_le(data, pos + 12))
+            } else {
+                (i32_le(data, pos + 12), 0)
+            };
+
+            let (type_, thread_id) = if is_load_or_store {
+                let type_ = HalideType {
+                    code: TypeCode::from_u8(data[pos + 16]),
+                    bits: data[pos + 17],
+                    lanes: u16_le(data, pos + 18),
+                };
+                (type_, 0)
+            } else {
+                (
+                    HalideType {
+                        code: TypeCode::from_u8(0),
+                        bits: 0,
+                        lanes: 0,
+                    },
+                    i32_le(data, pos + 16),
+                )
+            };
+
             let pkt_data = &data[pos..pos + size];
 
             // ── Variable-length trailing fields ───────────────────────────────
             let coords_off = HEADER_BYTES;
             let value_off = coords_off + dimensions * 4;
-            let value_len = type_.value_bytes();
+            // Only load/store packets have a value; the type/thread_id slot isn't a real
+            // halide_type_t for other events, so value_bytes() must not be trusted for them.
+            let value_len = if is_load_or_store {
+                type_.value_bytes()
+            } else {
+                0
+            };
             let func_off = value_off + value_len;
 
             let coords: Vec<i32> = (0..dimensions)
@@ -496,7 +535,12 @@ impl Trace {
                 .unwrap_or_default();
 
             // ── Pipeline context propagation ─────────────────────────────────────────────────────
-            id_to_info.insert(id, (ev, func_name.clone(), parent_id));
+            // Load/store packets don't carry a real `id` (that slot holds `value_index`
+            // instead) and are leaves that nothing ever parents against, so they're excluded
+            // here to avoid a `value_index` colliding with and clobbering a real packet's entry.
+            if !is_load_or_store {
+                id_to_info.insert(id, (ev, func_name.clone(), parent_id));
+            }
 
             // ── Build the packet ─────────────────────────────────────────────────────────────────
             let pkt = TracePacket {
@@ -505,6 +549,7 @@ impl Trace {
                 parent_id,
                 value_index,
                 type_,
+                thread_id,
                 coordinates: coords,
                 value,
                 func: func_name.clone(),
@@ -612,6 +657,9 @@ impl Trace {
                         }
                     }
                 }
+                EventCode::BeginParallelTask => {
+                    pending_parallel_tasks.push((thread_id, parent_id));
+                }
                 _ => {}
             }
 
@@ -635,6 +683,23 @@ impl Trace {
                                 .or_default()
                                 .insert(producing_func.clone());
                         }
+                        break;
+                    }
+                    Some((_, _, next_parent)) => current = *next_parent,
+                    None => break,
+                }
+            }
+        }
+
+        for (thread_id, parent_id) in &pending_parallel_tasks {
+            let mut current = *parent_id;
+            loop {
+                match id_to_info.get(&current) {
+                    Some((EventCode::Produce, producing_func, _)) => {
+                        thread_ids_by_func
+                            .entry(producing_func.clone())
+                            .or_default()
+                            .insert(*thread_id);
                         break;
                     }
                     Some((_, _, next_parent)) => current = *next_parent,
@@ -943,6 +1008,7 @@ impl Trace {
             buffer_liveness_range_by_func,
             produce_ranges_by_func,
             consume_ranges_by_func,
+            thread_ids_by_func,
         })
     }
 
@@ -973,6 +1039,10 @@ impl Trace {
         self.consume_ranges_by_func
             .get(func_name)
             .map(Vec::as_slice)
+    }
+
+    pub fn func_thread_ids(&self, func_name: &str) -> Option<&BTreeSet<i32>> {
+        self.thread_ids_by_func.get(func_name)
     }
 
     /// Spatial layout for `func_name`, or `None` if it has no usable coordinate extent. Reuses
