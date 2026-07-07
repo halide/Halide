@@ -1557,6 +1557,14 @@ protected:
     void set_inputs(const std::vector<StubInput> &inputs);
     bool inputs_set = false;
 
+    // Adopts `p` (which must be a defined Buffer Parameter) as this Input's
+    // backing Parameter directly, immediately (not waiting for the
+    // ordinary InputsSet phase set_inputs() above is used for) -- sets
+    // inputs_set so init_internals() leaves it alone. Only used by
+    // GeneratorBase::add_input(const ImageParam &); see there for why this
+    // exists.
+    void adopt(const Parameter &p);
+
     virtual void set_def_min_max();
 
     void verify_internals() override;
@@ -2374,6 +2382,15 @@ protected:
     const char *input_or_output() const override {
         return "Output";
     }
+
+    // Adopts `f` (which must already be defined) as this Output's value
+    // directly, bypassing the usual "generate() assigns via operator()="
+    // path -- so init_internals() must leave `funcs_` alone once this has
+    // been called, the same way GeneratorInputBase::init_internals() skips
+    // its own rebuild when inputs_set is true. Only used by
+    // GeneratorBase::add_output(Func); see there for why this exists.
+    void adopt(const Func &f);
+    bool adopted_ = false;
 
 public:
     ~GeneratorOutputBase() override;
@@ -3403,6 +3420,27 @@ public:
         param_info_ptr->filter_outputs.push_back(p);
         return p;
     }
+
+    /** Declares an Input<Buffer<>> backed directly by `existing` -- e.g. an
+     * ImageParam a Pipeline::compute_offline() call minted, or a
+     * Func::approximate_by() round trip severed into -- instead of a fresh
+     * one for generate() to leave for the caller to Buffer::set(). Useful
+     * when a Generator's whole pipeline is assembled in configure() (see
+     * doc/ApproximationDesign.md's "Usage shape" section for the motivating
+     * case: quantize/dequantize sharing a single approximate_by()/
+     * compute_offline() call, each adopting whichever half applies to it),
+     * leaving generate() an empty stub. `existing` must already be defined
+     * (have a concrete type/dimensionality); its own name is used as the
+     * port's name. */
+    GeneratorInput<Buffer<>> *add_input(const ImageParam &existing);
+
+    /** Declares an Output<Buffer<>> whose value is `existing` directly --
+     * e.g. the encoded/decoded Func half of an approximate_by()/
+     * compute_offline() split -- instead of a fresh, undefined Func for
+     * generate() to assign via operator(). See add_input(const ImageParam&)
+     * above for the motivating use. `existing` must already be defined;
+     * its own name is used as the port's name. */
+    GeneratorOutput<Buffer<>> *add_output(const Func &existing);
 
     void add_requirement(const Expr &condition, const std::vector<Expr> &error_args);
 

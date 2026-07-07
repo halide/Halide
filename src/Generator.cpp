@@ -1462,6 +1462,28 @@ void GeneratorBase::pre_schedule() {
 void GeneratorBase::post_schedule() {
 }
 
+GeneratorInput<Buffer<>> *GeneratorBase::add_input(const ImageParam &existing) {
+    check_exact_phase(GeneratorBase::ConfigureCalled);
+    claim_name(existing.name(), "input");
+    auto *p = new GeneratorInput<Buffer<>>(existing.name(), existing.type(), existing.dimensions());
+    p->generator = this;
+    p->adopt(existing.parameter());
+    param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
+    param_info_ptr->filter_inputs.push_back(p);
+    return p;
+}
+
+GeneratorOutput<Buffer<>> *GeneratorBase::add_output(const Func &existing) {
+    check_exact_phase(GeneratorBase::ConfigureCalled);
+    claim_name(existing.name(), "output");
+    auto *p = new GeneratorOutput<Buffer<>>(existing.name(), existing.types(), existing.dimensions());
+    p->generator = this;
+    p->adopt(existing);
+    param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
+    param_info_ptr->filter_outputs.push_back(p);
+    return p;
+}
+
 void GeneratorBase::add_requirement(const Expr &condition, const std::vector<Expr> &error_args) {
     internal_assert(!pipeline.defined());
     requirements.push_back({condition, error_args});
@@ -2012,6 +2034,23 @@ void GeneratorInputBase::set_estimates_impl(const Region &estimates) {
     }
 }
 
+void GeneratorInputBase::adopt(const Parameter &p) {
+    user_assert(p.defined()) << "GeneratorBase::add_input(const ImageParam &): "
+                             << name() << " is not defined.\n";
+    user_assert(p.is_buffer()) << "GeneratorBase::add_input(const ImageParam &): "
+                               << name() << " is not a Buffer Parameter.\n";
+    check_matching_types({p.type()});
+    check_matching_dims(p.dimensions());
+    parameters_.clear();
+    exprs_.clear();
+    funcs_.clear();
+    funcs_.push_back(make_param_func(p, name()));
+    parameters_.push_back(p);
+    set_def_min_max();
+    verify_internals();
+    inputs_set = true;
+}
+
 GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
     : GIOBase(array_size, name, kind, t, d) {
     internal_assert(kind != ArgInfoKind::Scalar);
@@ -2033,6 +2072,9 @@ void GeneratorOutputBase::check_value_writable() const {
 }
 
 void GeneratorOutputBase::init_internals() {
+    if (adopted_) {
+        return;
+    }
     exprs_.clear();
     funcs_.clear();
     if (array_size_defined()) {
@@ -2042,6 +2084,17 @@ void GeneratorOutputBase::init_internals() {
             funcs_.emplace_back(t, d, array_name(i));
         }
     }
+}
+
+void GeneratorOutputBase::adopt(const Func &f) {
+    user_assert(f.defined()) << "GeneratorBase::add_output(const Func &): "
+                             << name() << " is not defined.\n";
+    check_matching_types(f.types());
+    check_matching_dims(f.dimensions());
+    exprs_.clear();
+    funcs_.clear();
+    funcs_.push_back(f);
+    adopted_ = true;
 }
 
 void GeneratorOutputBase::resize(size_t size) {
