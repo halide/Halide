@@ -75,6 +75,12 @@ function FuncsPanel({ funcs }: FuncsPanelProps) {
               <span className="bg-ps-border-primary p-1 font-mono">
                 {func.max_load_count.toLocaleString()}
               </span>
+              <span className="text-ps-text-secondary bg-ps-border-primary p-1 font-sans font-semibold">
+                Thread Count
+              </span>
+              <span className="bg-ps-border-primary p-1 font-mono">
+                {func.thread_count.toLocaleString()}
+              </span>
             </div>
           </Accordion.Content>
         </Accordion.Item>
