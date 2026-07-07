@@ -228,9 +228,12 @@ std::vector<Internal::Stmt> Pipeline::requirements() const {
     return contents->requirements;
 }
 
-ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever) {
+namespace {
+
+ComputeOfflineResult compute_offline_impl(const Pipeline &pipeline, const vector<Func> &to_sever,
+                                          const vector<ImageParam> *bind_to) {
     vector<Function> output_funcs;
-    for (const Func &f : outputs()) {
+    for (const Func &f : pipeline.outputs()) {
         output_funcs.push_back(f.function());
     }
     std::map<string, Function> env = build_environment(output_funcs);
@@ -249,15 +252,27 @@ ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever) {
     }
     std::map<string, Function> offline_env = build_environment(to_sever_funcs);
 
+    if (bind_to) {
+        user_assert(bind_to->size() == to_sever.size())
+            << "Pipeline::compute_offline(): bind_to has " << bind_to->size()
+            << " ImageParams, but to_sever has " << to_sever.size() << " Funcs\n";
+    }
+
     std::map<FunctionPtr, FunctionPtr> substitutions;
     vector<ImageParam> online_inputs;
     online_inputs.reserve(to_sever.size());
-    for (const Func &f : to_sever) {
+    for (size_t i = 0; i < to_sever.size(); i++) {
+        const Func &f = to_sever[i];
         user_assert(f.types().size() == 1)
             << "Pipeline::compute_offline() requires single-valued Funcs, but "
             << f.name() << " has " << f.types().size() << " values\n";
 
-        ImageParam im(f.types()[0], f.dimensions(), f.name() + "_im");
+        ImageParam im = bind_to ? (*bind_to)[i] : ImageParam(f.types()[0], f.dimensions(), f.name() + "_im");
+        if (bind_to) {
+            user_assert(im.type() == f.types()[0] && im.dimensions() == f.dimensions())
+                << "Pipeline::compute_offline(): bind_to[" << i << "] (" << im.name()
+                << ") has type/dimensionality mismatched with " << f.name() << "\n";
+        }
 
         Func stand_in(f.name() + "_offline_input");
         vector<Var> args = f.args();
@@ -276,6 +291,16 @@ ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever) {
     }
 
     return {Pipeline(to_sever), std::move(online_inputs)};
+}
+
+}  // namespace
+
+ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever) {
+    return compute_offline_impl(*this, to_sever, nullptr);
+}
+
+ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever, const vector<ImageParam> &bind_to) {
+    return compute_offline_impl(*this, to_sever, &bind_to);
 }
 
 /* static */

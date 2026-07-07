@@ -216,6 +216,21 @@ public:
      * Tuples). */
     ComputeOfflineResult compute_offline(const std::vector<Func> &to_sever);
 
+    /** Like compute_offline(const std::vector<Func> &) above, but binds each
+     * severed Func to a caller-supplied ImageParam instead of minting a
+     * fresh one -- e.g. a Generator's own Input<Buffer<>> (which converts to
+     * ImageParam implicitly), so the online half's severed input is exactly
+     * the port `configure()`/`add_input()` already declared, rather than an
+     * unrelated ImageParam nothing else in the compiled artifact knows
+     * about. `bind_to` must have the same length as `to_sever`, and each
+     * `bind_to[i]` must have the same type and dimensionality as
+     * `to_sever[i]`. `online_inputs` in the result is `bind_to` itself,
+     * returned for symmetry with the other overload -- callers that already
+     * have `bind_to` don't need it, but code generic over both overloads
+     * still gets a uniform result shape. */
+    ComputeOfflineResult compute_offline(const std::vector<Func> &to_sever,
+                                         const std::vector<ImageParam> &bind_to);
+
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
     AutoSchedulerResults apply_autoscheduler(const Target &target,
                                              const AutoschedulerParams &autoscheduler_params) const;
