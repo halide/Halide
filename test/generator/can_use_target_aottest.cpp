@@ -1,5 +1,5 @@
-#include "Halide.h"
 #include "HalideRuntime.h"
+#include "Target.h"
 #include <stdio.h>
 
 #if defined(_MSC_VER) || defined(__x86_64__) || defined(__i386__)
