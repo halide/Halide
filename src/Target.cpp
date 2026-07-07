@@ -9,7 +9,6 @@
 #include "Error.h"
 #include "Util.h"
 #include "WasmExecutor.h"
-#include "x86_amx_probe.h"
 
 #if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
 #if defined(__FreeBSD__)
@@ -499,7 +498,7 @@ Target calculate_host_target() {
                 // TODO: port to family/model -based detection.
                 if ((info3.eax & avxvnni) == avxvnni) {
                     initial_features.push_back(Target::AVXVNNI);
-                    if ((info2.edx & amx) == amx && Internal::x86_amx_is_usable()) {
+                    if ((info2.edx & amx) == amx) {
                         initial_features.push_back(Target::AVX512_SapphireRapids);
                     }
                 }

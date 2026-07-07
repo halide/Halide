@@ -1,6 +1,5 @@
 #include "HalideRuntime.h"
 #include "cpu_features.h"
-#include "x86_amx_probe.h"
 
 namespace Halide {
 namespace Runtime {
@@ -191,7 +190,7 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
 
                 if ((info3.eax & avxvnni) == avxvnni) {
                     halide_set_available_cpu_feature(features, halide_target_feature_avxvnni);
-                    if ((info2.edx & amx) == amx && ::Halide::Internal::x86_amx_is_usable()) {
+                    if ((info2.edx & amx) == amx) {
                         halide_set_available_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
                     }
                 }
