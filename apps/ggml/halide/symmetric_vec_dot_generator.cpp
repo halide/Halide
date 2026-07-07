@@ -92,8 +92,8 @@ public:
         Acc() = 0.0f;
         Acc() += Wt(r.x, r.y) * Vec(r.x, r.y);
 
-        ApproximationResult wt_r = Wt.approximate_by(wt_scheme, {Acc});
-        ApproximationResult act_r = Vec.approximate_by(act_scheme, {Acc});
+        ApproximationResult wt_r = Wt.approximate_by(*wt_scheme, {Acc});
+        ApproximationResult act_r = Vec.approximate_by(*act_scheme, {Acc});
         Acc.inline_calls({wt_r.replacement, act_r.replacement});
 
         std::vector<Func> to_sever = wt_r.encoded;

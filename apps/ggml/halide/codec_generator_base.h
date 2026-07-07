@@ -31,7 +31,11 @@ enum class Direction { Quantize,
                        Dequantize };
 
 struct SchemeAndBytes {
-    Halide::Compose scheme;
+    // The scheme is held as a polymorphic owning handle -- a single leaf, a
+    // Compose, or a TrustedInverse, whichever the format is (see the make_*()
+    // factories in quant_components.h) -- rather than a concrete Compose, so a
+    // one-Approximation scheme needn't be wrapped in a degenerate Compose{x}.
+    std::unique_ptr<Halide::Approximation> scheme;
     int block_bytes;
 };
 
@@ -50,7 +54,7 @@ public:
         Func identity("y");
         identity(x) = input(x);
 
-        ApproximationResult r = Func(input).approximate_by(sb.scheme, {identity});
+        ApproximationResult r = Func(input).approximate_by(*sb.scheme, {identity});
         for (Func h : r.handles) {
             h.compute_root();
         }
