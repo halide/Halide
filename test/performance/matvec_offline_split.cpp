@@ -329,5 +329,6 @@ int main(int argc, char **argv) {
            "Time with hoisted rfactor: %0.4f ms\n",
            time * 1000);
 
+    printf("Success!\n");
     return 0;
 }
