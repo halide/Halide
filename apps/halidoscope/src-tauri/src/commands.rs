@@ -2,7 +2,7 @@
 //!
 //! This module owns the types that cross the Tauri IPC boundary.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Mutex;
 
 use serde::Serialize;
@@ -51,6 +51,7 @@ pub struct FuncMeta {
     pub buffer_liveness: IndexRange,
     pub produce_ranges: Vec<IndexRange>,
     pub consume_ranges: Vec<IndexRange>,
+    pub thread_count: u32,
 }
 
 /// Top-level payload returned by `open_trace`.
@@ -131,6 +132,11 @@ impl TraceMeta {
                         .copied()
                         .map(IndexRange::from_tuple)
                         .collect(),
+                    thread_count: (trace
+                        .func_thread_ids(name)
+                        .unwrap_or(&BTreeSet::new())
+                        .len() as u32)
+                        .max(1),
                 }
             })
             .collect();
