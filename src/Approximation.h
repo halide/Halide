@@ -186,6 +186,58 @@ private:
     std::unique_ptr<Approximation> inner_;
 };
 
+/** Routes encode() to one Approximation and decode() to another, taking each
+ * direction from a *different* source. This is the deliberate backdoor out of
+ * the structural guarantee Compose provides.
+ *
+ * Every Approximation is meant to be an approximate identity, factored into a
+ * decode-after-encode pair (decode(encode(f)) ~= f). Compose preserves that by
+ * construction: it interleaves its stages' encode()s and decode()s in mirror
+ * order, so the composed round trip (d1 . d2) . (e2 . e1) is *guaranteed* to be
+ * an approximate identity for the same structural reason each stage is -- the
+ * two halves provably come from one stage list. TrustedInverse pairs an encode
+ * and a decode from unrelated Approximations, so nothing structural guarantees
+ * they compose to an identity: the caller is *trusted* to have supplied a true
+ * inverse pair. Hence the name -- "trusted" as in "taken on trust", not "known
+ * safe".
+ *
+ * The motivating case: a scheme whose forward map (quantize) is an opaque
+ * offline black box -- a per-block codeword search, a transcendental scale fit,
+ * typically an extern call -- that no composition of Halide Funcs reproduces
+ * bit-for-bit, but whose reverse map (dequantize) *is* an ordinary Compose of
+ * invertible primitives. Compose can't express that pairing; TrustedInverse
+ * can, keeping the decode side a clean composition while the encode side is
+ * whatever opaque Approximation actually produces the encoded form:
+ *
+ * \code
+ * TrustedInverse{
+ *     ExternQuantize{"q4_k_quantize_via_ggml"},   // encode(): values -> bytes
+ *     Compose{                                      // decode(): bytes -> values
+ *         StructPack{...}, Apply{...}, ..., BlockReshape{block_size},
+ *     },
+ * };
+ * \endcode
+ *
+ * The unused half of each side is never called (here, the ExternQuantize's
+ * decode() and the Compose's encode()); supplying an Approximation whose
+ * relevant half is a stub is expected. TrustedInverse owns both sides the same
+ * way Compose/Apply own their stages -- moved in, or taken directly if already
+ * a std::unique_ptr<Approximation>. */
+class TrustedInverse : public Approximation {
+public:
+    template<typename Enc, typename Dec>
+    TrustedInverse(Enc &&encoder, Dec &&decoder)
+        : encoder_(Internal::approximation_ptr(std::forward<Enc>(encoder))),
+          decoder_(Internal::approximation_ptr(std::forward<Dec>(decoder))) {
+    }
+
+    EncodeResult encode(std::vector<Func> inputs) override;
+    DecodeResult decode(std::vector<Func> encoded) override;
+
+private:
+    std::unique_ptr<Approximation> encoder_, decoder_;
+};
+
 }  // namespace Halide
 
 #endif

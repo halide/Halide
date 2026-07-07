@@ -66,4 +66,12 @@ DecodeResult Apply::decode(std::vector<Func> encoded) {
     return {decoded, inner_result.handles};
 }
 
+EncodeResult TrustedInverse::encode(std::vector<Func> inputs) {
+    return encoder_->encode(std::move(inputs));
+}
+
+DecodeResult TrustedInverse::decode(std::vector<Func> encoded) {
+    return decoder_->decode(std::move(encoded));
+}
+
 }  // namespace Halide
