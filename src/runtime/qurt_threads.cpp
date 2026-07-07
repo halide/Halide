@@ -1,12 +1,9 @@
 #include "HalideRuntime.h"
 #include "mini_qurt.h"
-#include "runtime_atomics.h"
 
 constexpr int MAX_THREADS = 256;
 
 using namespace Halide::Runtime::Internal::Qurt;
-
-extern "C" void halide_internal_set_current_thread_id(int32_t id);
 
 struct halide_thread {
     qurt_thread_t val;
@@ -18,11 +15,9 @@ struct spawned_thread {
     void *closure;
     void *stack;
     halide_thread handle;
-    int32_t thread_id;
 };
 void spawn_thread_helper(void *arg) {
     spawned_thread *t = (spawned_thread *)arg;
-    halide_internal_set_current_thread_id(t->thread_id);
     t->f(t->closure);
 }
 }  // namespace
@@ -32,70 +27,11 @@ extern "C" {
 extern void *memalign(size_t, size_t);
 extern qurt_thread_t qurt_thread_get_id();
 
-WEAK qurt_thread_t halide_thread_os_ids[MAX_THREADS];
-WEAK int32_t halide_thread_ids[MAX_THREADS];
-WEAK int32_t halide_thread_id_count;
-WEAK int32_t halide_thread_id_lock;
-WEAK int32_t halide_next_thread_id = 1;
-
-WEAK void halide_internal_set_current_thread_id(int32_t id) {
-    using namespace Halide::Runtime::Internal::Synchronization;
-
-    const qurt_thread_t os_id = qurt_thread_get_id();
-    int32_t expected = 0;
-    int32_t locked = 1;
-    while (!atomic_cas_strong_sequentially_consistent(&halide_thread_id_lock, &expected, &locked)) {
-        expected = 0;
-    }
-
-    for (int i = 0; i < halide_thread_id_count; i++) {
-        if (halide_thread_os_ids[i] == os_id) {
-            halide_thread_ids[i] = id;
-            int32_t unlocked = 0;
-            atomic_store_release(&halide_thread_id_lock, &unlocked);
-            return;
-        }
-    }
-
-    if (halide_thread_id_count < MAX_THREADS) {
-        const int slot = halide_thread_id_count++;
-        halide_thread_os_ids[slot] = os_id;
-        halide_thread_ids[slot] = id;
-    }
-
-    int32_t unlocked = 0;
-    atomic_store_release(&halide_thread_id_lock, &unlocked);
-}
+static_assert(sizeof(qurt_thread_t) == sizeof(uint32_t), "qurt_thread_t is expected to be 32 bits.");
 
 WEAK int32_t halide_current_thread_id() {
-    using namespace Halide::Runtime::Internal::Synchronization;
-
-    const qurt_thread_t os_id = qurt_thread_get_id();
-    int32_t expected = 0;
-    int32_t locked = 1;
-    while (!atomic_cas_strong_sequentially_consistent(&halide_thread_id_lock, &expected, &locked)) {
-        expected = 0;
-    }
-
-    for (int i = 0; i < halide_thread_id_count; i++) {
-        if (halide_thread_os_ids[i] == os_id) {
-            int32_t unlocked = 0;
-            atomic_store_release(&halide_thread_id_lock, &unlocked);
-            return halide_thread_ids[i];
-        }
-    }
-
-    int id = 1;
-    if (halide_thread_id_count < MAX_THREADS) {
-        id = atomic_fetch_add_sequentially_consistent(&halide_next_thread_id, 1);
-        const int slot = halide_thread_id_count++;
-        halide_thread_os_ids[slot] = os_id;
-        halide_thread_ids[slot] = id;
-    }
-
-    int32_t unlocked = 0;
-    atomic_store_release(&halide_thread_id_lock, &unlocked);
-    return id;
+    const uint32_t id = qurt_thread_get_id();
+    return (int32_t)(id ? id : 1);
 }
 
 int halide_host_cpu_count() {
@@ -125,7 +61,6 @@ WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure)
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
     t->f = f;
     t->closure = closure;
-    t->thread_id = Synchronization::atomic_fetch_add_sequentially_consistent(&halide_next_thread_id, 1);
     t->stack = memalign(128, STACK_SIZE);
     memset(&t->handle, 0, sizeof(t->handle));
     qurt_thread_attr_t thread_attr;

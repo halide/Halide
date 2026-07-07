@@ -391,9 +391,10 @@ extern bool halide_default_semaphore_try_acquire(struct halide_semaphore_t *, in
 
 struct halide_thread;
 
-/** Return a Halide-internal ID for the current thread. This is
- * allocated from a Halide counter, and is not an operating-system
- * thread ID. */
+/** Return a compact platform-specific ID for the current thread. This
+ * is derived from the platform's current-thread API, or from a
+ * runtime-owned counter on platforms that do not provide one, and is
+ * represented as a signed 32-bit integer for tracing. */
 extern int32_t halide_current_thread_id(void);
 
 /** Spawn a thread. Returns a handle to the thread for the purposes of
@@ -640,11 +641,9 @@ struct halide_trace_event_t {
      * event ancestry). */
     int32_t parent_id;
 
-    /** An internal ID for the Halide thread that emitted this trace
-     * event. This is allocated from a Halide counter and is not an
-     * operating-system thread ID. This is only populated for events that
-     * need it, such as halide_trace_begin_parallel_task; other events use
-     * zero. */
+    /** A compact platform-specific ID for the thread that emitted this
+     * trace event. This is only populated for events that need it, such
+     * as halide_trace_begin_parallel_task; other events use zero. */
     int32_t thread_id;
 
     /** If this was a load or store of a Tuple-valued Func, this is
@@ -688,11 +687,11 @@ struct halide_trace_event_t {
  * realization. A load or store that occurs within a parallel task can
  * be associated with the logical task that produced it by walking its
  * parent chain to a halide_trace_begin_parallel_task event. The id of
- * that event is a Halide-internal launch id, not an operating-system
- * thread id. The thread_id field of that begin_parallel_task event
- * identifies the Halide-internal thread launch that executed the task.
- * Load and store events do not repeat this ID. Within a single parallel
- * task, the ordering of events is meaningful.
+ * that event is a trace event id used for parent ancestry. The
+ * thread_id field of that begin_parallel_task event identifies the
+ * platform thread that executed the task. Load and store events do not
+ * repeat this ID. Within a single parallel task, the ordering of events
+ * is meaningful.
  *
  * Note that all tag events (if any) will occur just after the begin_pipeline
  * event, but before any begin_realization events. All tags for a given Func

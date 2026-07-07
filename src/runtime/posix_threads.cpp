@@ -1,5 +1,4 @@
 #include "HalideRuntime.h"
-#include "runtime_atomics.h"
 #include "runtime_internal.h"
 
 constexpr int MAX_THREADS = 256;
@@ -30,60 +29,19 @@ extern int pthread_mutex_lock(pthread_mutex_t *mutex);
 extern int pthread_mutex_unlock(pthread_mutex_t *mutex);
 extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
 
-typedef unsigned int pthread_key_t;
-
-extern int pthread_key_create(pthread_key_t *key, void (*destructor)(void *));
-extern int pthread_setspecific(pthread_key_t key, const void *value);
-extern void *pthread_getspecific(pthread_key_t key);
-
 }  // extern "C"
 
 namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-WEAK pthread_key_t halide_thread_id_key;
-WEAK int32_t halide_thread_id_key_state;
-WEAK int32_t halide_next_thread_id = 1;
-
-WEAK void init_halide_thread_id_key() {
-    using namespace Synchronization;
-
-    int32_t state;
-    atomic_load_acquire(&halide_thread_id_key_state, &state);
-    if (state != 2) {
-        int32_t expected = 0;
-        int32_t creating = 1;
-        if (atomic_cas_strong_sequentially_consistent(&halide_thread_id_key_state, &expected, &creating)) {
-            pthread_key_create(&halide_thread_id_key, nullptr);
-            int32_t ready = 2;
-            atomic_store_release(&halide_thread_id_key_state, &ready);
-        } else {
-            do {
-                atomic_load_acquire(&halide_thread_id_key_state, &state);
-            } while (state != 2);
-        }
-    }
-}
-
-WEAK int32_t allocate_halide_thread_id() {
-    return Synchronization::atomic_fetch_add_sequentially_consistent(&halide_next_thread_id, 1);
-}
-
-WEAK void set_current_halide_thread_id(int32_t id) {
-    init_halide_thread_id_key();
-    pthread_setspecific(halide_thread_id_key, (void *)(intptr_t)id);
-}
-
 struct spawned_thread {
     void (*f)(void *);
     void *closure;
     pthread_t handle;
-    int32_t thread_id;
 };
 WEAK void *spawn_thread_helper(void *arg) {
     spawned_thread *t = (spawned_thread *)arg;
-    set_current_halide_thread_id(t->thread_id);
     t->f(t->closure);
     return nullptr;
 }
@@ -96,23 +54,11 @@ extern "C" {
 
 using namespace Halide::Runtime::Internal;
 
-WEAK int32_t halide_current_thread_id() {
-    init_halide_thread_id_key();
-
-    intptr_t id = (intptr_t)pthread_getspecific(halide_thread_id_key);
-    if (id == 0) {
-        id = allocate_halide_thread_id();
-        pthread_setspecific(halide_thread_id_key, (void *)id);
-    }
-    return (int32_t)id;
-}
-
 WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
     t->f = f;
     t->closure = closure;
     t->handle = 0;
-    t->thread_id = allocate_halide_thread_id();
     pthread_create(&t->handle, nullptr, spawn_thread_helper, t);
     return (halide_thread *)t;
 }

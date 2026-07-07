@@ -75,7 +75,12 @@ int parallel_task_ancestor_id(int id) {
 }  // namespace
 
 int main(int argc, char **argv) {
-    Halide::Internal::JITSharedRuntime::set_num_threads(4);
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] WebAssembly JIT does not support threads.\n");
+        return 0;
+    }
+
+    Internal::JITSharedRuntime::set_num_threads(4);
 
     Func f("f");
     Var x("x"), y("y");
@@ -147,13 +152,13 @@ int main(int argc, char **argv) {
         }
         auto [host_it, host_inserted] = thread_id_for_host_thread.emplace(task.host_thread_id, task.thread_id);
         if (!host_inserted && host_it->second != task.thread_id) {
-            printf("A host thread mapped to multiple Halide thread IDs: %d and %d.\n",
+            printf("A host thread mapped to multiple trace thread IDs: %d and %d.\n",
                    host_it->second, task.thread_id);
             return 1;
         }
         auto [id_it, id_inserted] = host_thread_for_thread_id.emplace(task.thread_id, task.host_thread_id);
         if (!id_inserted && id_it->second != task.host_thread_id) {
-            printf("Halide thread ID %d mapped to multiple host threads.\n",
+            printf("Trace thread ID %d mapped to multiple host threads.\n",
                    task.thread_id);
             return 1;
         }
