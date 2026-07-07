@@ -4,6 +4,7 @@ import {
   Handle,
   type Node,
   type NodeProps,
+  NodeToolbar,
   Position,
   useEdges,
   useNodes,
@@ -134,10 +135,21 @@ function FuncCanvas({ data }: NodeProps<FuncNode>) {
   }, [packetIndex, name, width, height, renderMode]);
 
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-ps-text-primary text-responsive truncate font-mono whitespace-nowrap uppercase">
-        {name}
-      </span>
+    <>
+      <NodeToolbar isVisible position={Position.Top} align="start" offset={2}>
+        <span
+          className={clsx(
+            "text-ps-text-primary truncate font-mono whitespace-nowrap uppercase",
+            {
+              "text-tiny": zoom < 0.5,
+              "text-xs": zoom >= 0.5 && zoom < 1.5,
+              "text-sm": zoom >= 1.5,
+            },
+          )}
+        >
+          {name}
+        </span>
+      </NodeToolbar>
       <div
         className={clsx("ring-transparent", {
           "ring-highlight/30!": bufferLive,
@@ -180,7 +192,7 @@ function FuncCanvas({ data }: NodeProps<FuncNode>) {
           <HandleCircle />
         </Handle>
       ) : null}
-    </div>
+    </>
   );
 }
 
