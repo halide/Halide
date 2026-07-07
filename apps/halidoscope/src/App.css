@@ -48,11 +48,6 @@ input[type="number"] {
 }
 
 @layer components {
-  .text-responsive {
-    font-size: min(calc(0.75rem / var(--zoom-level)), 0.75rem);
-    line-height: min(calc(1rem / var(--zoom-level)), 1rem);
-  }
-
   @keyframes slideDown {
     from {
       height: 0;
