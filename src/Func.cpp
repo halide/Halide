@@ -2587,7 +2587,7 @@ ApproximationResult Func::approximate_by(Approximation &p, const vector<Func> &c
     vector<Func> handles = enc.encoded;
     handles.insert(handles.end(), enc.handles.begin(), enc.handles.end());
     handles.insert(handles.end(), dec.handles.begin(), dec.handles.end());
-    return {round_trip, handles};
+    return {round_trip, enc.encoded, handles};
 }
 
 Func &Func::inline_calls(const vector<Func> &callees) {

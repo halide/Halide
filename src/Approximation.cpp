@@ -5,23 +5,39 @@
 namespace Halide {
 
 EncodeResult Compose::encode(std::vector<Func> inputs) {
-    EncodeResult inner_result = inner_.encode(std::move(inputs));
-    EncodeResult outer_result = outer_.encode(inner_result.encoded);
+    user_assert(!stages_.empty()) << "Compose::encode: no stages\n";
 
-    std::vector<Func> handles = inner_result.encoded;
-    handles.insert(handles.end(), inner_result.handles.begin(), inner_result.handles.end());
-    handles.insert(handles.end(), outer_result.handles.begin(), outer_result.handles.end());
-    return {outer_result.encoded, handles};
+    std::vector<Func> handles;
+    std::vector<Func> current = std::move(inputs);
+    for (int i = (int)stages_.size() - 1; i >= 0; i--) {
+        EncodeResult r = stages_[i]->encode(std::move(current));
+        if (i > 0) {
+            // Not the final (outermost) stage -- its encoded output is an
+            // intermediate between stages, so it needs scheduling like any
+            // other handle, but isn't part of the signature contract this
+            // Compose itself returns.
+            handles.insert(handles.end(), r.encoded.begin(), r.encoded.end());
+        }
+        handles.insert(handles.end(), r.handles.begin(), r.handles.end());
+        current = std::move(r.encoded);
+    }
+    return {current, handles};
 }
 
 DecodeResult Compose::decode(std::vector<Func> encoded) {
-    DecodeResult outer_result = outer_.decode(std::move(encoded));
-    DecodeResult inner_result = inner_.decode(outer_result.decoded);
+    user_assert(!stages_.empty()) << "Compose::decode: no stages\n";
 
-    std::vector<Func> handles = outer_result.decoded;
-    handles.insert(handles.end(), outer_result.handles.begin(), outer_result.handles.end());
-    handles.insert(handles.end(), inner_result.handles.begin(), inner_result.handles.end());
-    return {inner_result.decoded, handles};
+    std::vector<Func> handles;
+    std::vector<Func> current = std::move(encoded);
+    for (int i = 0; i < (int)stages_.size(); i++) {
+        DecodeResult r = stages_[i]->decode(std::move(current));
+        if (i + 1 < (int)stages_.size()) {
+            handles.insert(handles.end(), r.decoded.begin(), r.decoded.end());
+        }
+        handles.insert(handles.end(), r.handles.begin(), r.handles.end());
+        current = std::move(r.decoded);
+    }
+    return {current, handles};
 }
 
 EncodeResult Apply::encode(std::vector<Func> inputs) {
@@ -29,7 +45,7 @@ EncodeResult Apply::encode(std::vector<Func> inputs) {
         << "Apply::encode: idx (" << idx_ << ") + encode_arity (" << encode_arity_
         << ") exceeds the input count (" << inputs.size() << ")\n";
     std::vector<Func> target(inputs.begin() + idx_, inputs.begin() + idx_ + encode_arity_);
-    EncodeResult inner_result = inner_.encode(std::move(target));
+    EncodeResult inner_result = inner_->encode(std::move(target));
 
     std::vector<Func> encoded(inputs.begin(), inputs.begin() + idx_);
     encoded.insert(encoded.end(), inner_result.encoded.begin(), inner_result.encoded.end());
@@ -42,7 +58,7 @@ DecodeResult Apply::decode(std::vector<Func> encoded) {
         << "Apply::decode: idx (" << idx_ << ") + decode_arity (" << decode_arity_
         << ") exceeds the input count (" << encoded.size() << ")\n";
     std::vector<Func> target(encoded.begin() + idx_, encoded.begin() + idx_ + decode_arity_);
-    DecodeResult inner_result = inner_.decode(std::move(target));
+    DecodeResult inner_result = inner_->decode(std::move(target));
 
     std::vector<Func> decoded(encoded.begin(), encoded.begin() + idx_);
     decoded.insert(decoded.end(), inner_result.decoded.begin(), inner_result.decoded.end());

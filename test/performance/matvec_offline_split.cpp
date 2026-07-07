@@ -205,10 +205,10 @@ int main(int argc, char **argv) {
     Func Vec("Vec");
     Vec(k) = cos(cast<float>(k) * 0.05f) * 3.0f;
 
-    SymmetricRowQuantize row_quantize(K);
-    BlockPack block_pack(reduce);
-    Apply pack_values_only(/*idx=*/0, /*encode_arity=*/1, /*decode_arity=*/1, block_pack);
-    Compose weight_scheme(pack_values_only, row_quantize);
+    Compose weight_scheme{
+        Apply{/*idx=*/0, /*encode_arity=*/1, /*decode_arity=*/1, BlockPack{reduce}},
+        SymmetricRowQuantize{K},
+    };
     SymmetricVectorQuantize vec_quantize(K);
 
     Var u{"u"};

@@ -9,6 +9,9 @@
  * call graph, and doc/ApproximationDesign.md for the design rationale.
  */
 
+#include <memory>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "Func.h"
@@ -77,6 +80,27 @@ public:
     virtual DecodeResult decode(std::vector<Func> encoded) = 0;
 };
 
+namespace Internal {
+
+/** Not for direct use. Type-erases an Approximation-derived value (or an
+ * already-type-erased std::unique_ptr<Approximation>, for the rare case
+ * where the concrete type is only known at runtime, e.g. chosen by an
+ * if/else) into an owned std::unique_ptr<Approximation> -- what lets
+ * Compose/Apply's constructors accept a plain mix of concrete Approximation
+ * values while still handling runtime-chosen ones, without exposing that
+ * distinction as something a caller has to think about. */
+// @{
+template<typename T>
+std::unique_ptr<Approximation> approximation_ptr(T &&value) {
+    return std::make_unique<std::decay_t<T>>(std::forward<T>(value));
+}
+inline std::unique_ptr<Approximation> approximation_ptr(std::unique_ptr<Approximation> value) {
+    return value;
+}
+// @}
+
+}  // namespace Internal
+
 /** The result of Func::approximate_by(): the primary replacement Func
  * (already spliced into every Func in `consumers`), plus every
  * intermediate Func produced by encode()/decode() along the way that needs
@@ -88,27 +112,53 @@ public:
  * handle to schedule. */
 struct ApproximationResult {
     Func replacement;
+    /** The Func(s) produced by encode() -- the signature-contract boundary
+     * between the original values and their approximated form (e.g. a
+     * quantizer's packed byte buffer). This is a subset of `handles` (kept
+     * there too, so existing code that schedules everything in `handles`
+     * doesn't need to change), broken out separately so callers can act on
+     * exactly this boundary -- e.g. Pipeline::compute_offline(result.encoded)
+     * -- without calling Approximation::encode() themselves. */
+    std::vector<Func> encoded;
     std::vector<Func> handles;
 };
 
-/** Sequentially composes two Approximations: encode() runs `inner` first,
- * then `outer` on inner's encoded output; decode() runs the mirror image,
- * `outer` first, then `inner` on outer's decoded output. Neither `outer`
- * nor `inner` is owned by the Compose object -- both must outlive it, the
- * same way Func::approximate_by() doesn't own the Approximation passed to
- * it. */
+/** Sequentially composes any number of Approximations into a pipeline:
+ * encode() runs `stages` back-to-front (the last stage first, on the
+ * original inputs), feeding each stage's encoded output to the one before
+ * it; decode() runs the mirror image, front-to-back. So `stages[0]` is the
+ * "outermost" stage -- the one whose encode() output is this Compose's own
+ * encoded result, and whose decode() input is this Compose's own encoded
+ * argument -- and `stages.back()` is "innermost", closest to the original
+ * values. This generalizes what used to be a fixed two-stage
+ * `Compose(outer, inner)`; that's just the two-element case.
+ *
+ * Compose owns every stage: each constructor argument is moved into (or, if
+ * already a std::unique_ptr<Approximation> -- e.g. because the concrete
+ * type was only known at runtime -- taken as) internal storage, so callers
+ * don't need to keep named locals alive alongside the Compose itself:
+ *
+ * \code
+ * Compose scheme{
+ *     StructPack{...},
+ *     Apply{1, 1, 1, Fp16Pack{}},
+ *     SymmetricAffineQuantize{block_size, qmax, rounding, anchor},
+ * };
+ * \endcode
+ */
 class Compose : public Approximation {
 public:
-    Compose(Approximation &outer, Approximation &inner)
-        : outer_(outer), inner_(inner) {
+    template<typename... Stages>
+    explicit Compose(Stages &&...stages) {
+        stages_.reserve(sizeof...(Stages));
+        (stages_.push_back(Internal::approximation_ptr(std::forward<Stages>(stages))), ...);
     }
 
     EncodeResult encode(std::vector<Func> inputs) override;
     DecodeResult decode(std::vector<Func> encoded) override;
 
 private:
-    Approximation &outer_;
-    Approximation &inner_;
+    std::vector<std::unique_ptr<Approximation>> stages_;
 };
 
 /** Applies `inner` to just the sub-range `[idx, idx + arity)` of a Func
@@ -117,12 +167,15 @@ private:
  * scheme's encoded output while leaving the shift amount itself untouched.
  * `encode_arity`/`decode_arity` (how many Funcs `inner` consumes at that
  * position for each direction) must be given explicitly, since C++ has no
- * way to infer them generically from `inner` itself. `inner` is not owned
- * by the Apply object -- it must outlive it. */
+ * way to infer them generically from `inner` itself. Apply owns `inner` --
+ * moved in (or taken directly, if already a std::unique_ptr<Approximation>)
+ * -- the same way Compose owns its stages. */
 class Apply : public Approximation {
 public:
-    Apply(int idx, int encode_arity, int decode_arity, Approximation &inner)
-        : idx_(idx), encode_arity_(encode_arity), decode_arity_(decode_arity), inner_(inner) {
+    template<typename Inner>
+    Apply(int idx, int encode_arity, int decode_arity, Inner &&inner)
+        : idx_(idx), encode_arity_(encode_arity), decode_arity_(decode_arity),
+          inner_(Internal::approximation_ptr(std::forward<Inner>(inner))) {
     }
 
     EncodeResult encode(std::vector<Func> inputs) override;
@@ -130,7 +183,7 @@ public:
 
 private:
     int idx_, encode_arity_, decode_arity_;
-    Approximation &inner_;
+    std::unique_ptr<Approximation> inner_;
 };
 
 }  // namespace Halide

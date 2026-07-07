@@ -217,11 +217,13 @@ int main(int argc, char **argv) {
     Vec(k) = cos(cast<float>(k) * 0.05f) * 3.0f;
 
     // Row-quantize Wt, then pack only the quantized-value Func. The scale
-    // Func passes through the composed approximation unchanged.
-    SymmetricRowQuantize row_quantize(K);
-    BlockPack block_pack(kReduce);
-    Apply pack_values_only(/*idx=*/0, /*encode_arity=*/1, /*decode_arity=*/1, block_pack);
-    Compose weight_scheme(pack_values_only, row_quantize);
+    // Func passes through the composed approximation unchanged. Compose
+    // owns both stages, so there's no need to keep separately-named locals
+    // alive alongside it.
+    Compose weight_scheme{
+        Apply{/*idx=*/0, /*encode_arity=*/1, /*decode_arity=*/1, BlockPack{kReduce}},
+        SymmetricRowQuantize{K},
+    };
 
     SymmetricVectorQuantize vec_quantize(K);
 
