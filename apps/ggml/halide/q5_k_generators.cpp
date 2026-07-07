@@ -16,8 +16,8 @@
 // the "q5_k_quantize"/"q5_k_dequantize" GENERATOR_ARGS instantiations of the
 // generic, reusable Approximation-based k_quant_quantize/k_quant_dequantize
 // generators in k_quant_generators.cpp (see quant_components.h's
-// KQuantDequantize/K4ScaleMinPack/CombinedBitsCode/SubBlockNibblePack/
-// RotatingBitPack, which reproduce this exact bit-interleaved scale/min
+// KQuantDequantize/K4ScaleMinPack/CombinedBitsCode/PlanarBitPack/
+// PlanarBitPack, which reproduce this exact bit-interleaved scale/min
 // packing and nibble+high-bit code layout; quantize still delegates to
 // GGML's own reference via a Halide extern stage there too -- see
 // ggml_extern_quantize.cpp for why). Only vec_dot, which still hand-rolls

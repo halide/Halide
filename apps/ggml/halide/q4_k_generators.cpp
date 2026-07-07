@@ -22,7 +22,7 @@
 // the "q4_k_quantize"/"q4_k_dequantize" GENERATOR_ARGS instantiations of the
 // generic, reusable Approximation-based k_quant_quantize/k_quant_dequantize
 // generators in k_quant_generators.cpp (see quant_components.h's
-// KQuantDequantize/K4ScaleMinPack/SubBlockNibblePack, which reproduce this
+// KQuantDequantize/K4ScaleMinPack/PlanarBitPack, which reproduce this
 // exact bit-interleaved scale/min packing and nibble layout; quantize still
 // delegates to GGML's own reference via a Halide extern stage there too,
 // since GGML's reference quantizer runs an iterative per-sub-block

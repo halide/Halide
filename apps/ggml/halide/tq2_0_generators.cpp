@@ -16,7 +16,7 @@
 // of the generic, reusable Approximation-based
 // lookup_table_quantize/lookup_table_dequantize generators in
 // lookup_table_quant_generators.cpp (see quant_components.h's
-// LookupTableQuantize/TwoBitPack; quantize still delegates to GGML's own
+// LookupTableQuantize/PlanarBitPack; quantize still delegates to GGML's own
 // reference via a Halide extern stage there too -- see
 // ggml_extern_quantize.cpp for why, kept consistent with TQ1_0's treatment
 // even though TQ2_0's quantizer is simpler). Only vec_dot, which still

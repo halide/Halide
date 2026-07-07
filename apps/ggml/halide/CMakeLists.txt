@@ -154,7 +154,7 @@ add_halide_library(
 # Q2_K's quantize/dequantize kernels are GENERATOR_ARGS instantiations of
 # the generic, reusable Approximation-based k_quant_quantize/
 # k_quant_dequantize generators (see k_quant_generators.cpp and
-# quant_components.h's KQuantDequantize/NibblePairPack/TwoBitPack).
+# quant_components.h's KQuantDequantize/NibblePairPack/PlanarBitPack).
 add_halide_library(
     q2_k_quantize
     FROM quants.generator
@@ -188,7 +188,7 @@ add_halide_library(q6_k_vec_dot FROM quants.generator GENERATOR q6_k_vec_dot)
 # Q4_K's quantize/dequantize kernels are GENERATOR_ARGS instantiations of
 # the generic, reusable Approximation-based k_quant_quantize/
 # k_quant_dequantize generators (see k_quant_generators.cpp and
-# quant_components.h's KQuantDequantize/K4ScaleMinPack/SubBlockNibblePack).
+# quant_components.h's KQuantDequantize/K4ScaleMinPack/PlanarBitPack).
 add_halide_library(
     q4_k_quantize
     FROM quants.generator
@@ -340,7 +340,7 @@ add_halide_library(tq1_0_vec_dot FROM quants.generator GENERATOR tq1_0_vec_dot)
 # TQ2_0's quantize/dequantize kernels are GENERATOR_ARGS instantiations of
 # the generic, reusable Approximation-based lookup_table_quantize/
 # lookup_table_dequantize generators (see lookup_table_quant_generators.cpp
-# and quant_components.h's LookupTableQuantize/TwoBitPack).
+# and quant_components.h's LookupTableQuantize/PlanarBitPack).
 add_halide_library(
     tq2_0_quantize
     FROM quants.generator

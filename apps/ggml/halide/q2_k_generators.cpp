@@ -13,7 +13,7 @@
 // the "q2_k_quantize"/"q2_k_dequantize" GENERATOR_ARGS instantiations of the
 // generic, reusable Approximation-based k_quant_quantize/k_quant_dequantize
 // generators in k_quant_generators.cpp (see quant_components.h's
-// KQuantDequantize/NibblePairPack/TwoBitPack; quantize still delegates to
+// KQuantDequantize/NibblePairPack/PlanarBitPack; quantize still delegates to
 // GGML's own reference via a Halide extern stage there too, since GGML's
 // reference quantizer runs an iterative per-sub-block error-minimizing
 // scale search -- make_qkx2_quants in src/ggml-quants.c -- see

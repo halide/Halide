@@ -1,6 +1,6 @@
 // Generic, GeneratorParam-driven quantize/dequantize pair for GGML's
 // K-quant super-block formats (see quant_components.h's KQuantDequantize/
-// CombinedBitsCode/SubBlockNibblePack/TwoBitPack/RotatingBitPack/
+// CombinedBitsCode/PlanarBitPack/
 // K4ScaleMinPack/NibblePairPack/Q3KScalePack for the reusable Approximation
 // pieces this assembles). "Q2_K"/"Q3_K"/"Q4_K"/"Q5_K"/"Q6_K" are not
 // distinct C++ classes here -- they're just different GENERATOR_ARGS
