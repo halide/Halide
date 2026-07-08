@@ -1537,6 +1537,34 @@ Expr select(Expr condition, Expr true_value, Expr false_value) {
     return Select::make(std::move(condition), std::move(true_value), std::move(false_value));
 }
 
+namespace {
+// Recursively rewrite a select into the if_then_else intrinsic, which lowers
+// to a real control-flow branch that evaluates only one side. Selects that
+// are directly the true/false value of a select are rewritten too, so the
+// nested-select chain produced by the multi-way select(c0, v0, c1, v1, ...)
+// becomes a full chain of branches. Non-select values are left untouched.
+Expr rewrite_select_to_branch(const Expr &e) {
+    const Select *s = e.as<Select>();
+    if (s == nullptr) {
+        return e;
+    }
+    return Call::make(s->type,
+                      Call::if_then_else,
+                      {s->condition,
+                       rewrite_select_to_branch(s->true_value),
+                       rewrite_select_to_branch(s->false_value)},
+                      Call::PureIntrinsic);
+}
+}  // namespace
+
+Expr Expr::branch() const {
+    user_assert(as<Select>() != nullptr)
+        << "Expr::branch() may only be called on the result of select(...). "
+        << "This expression is not a select:\n  "
+        << *this << "\n";
+    return rewrite_select_to_branch(*this);
+}
+
 Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
     user_assert(condition.size() == true_value.size() && true_value.size() == false_value.size())
         << "select() on Tuples requires all Tuples to have identical sizes.";
