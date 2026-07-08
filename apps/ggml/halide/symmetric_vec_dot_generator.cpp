@@ -1,143 +1,128 @@
-// Generic, GeneratorParam-driven vec_dot for two GGML symmetric per-block
-// affine formats (see quant_components.h). "Q4_0 x Q8_0" is not a distinct
-// C++ class here -- it's one GENERATOR_ARGS instantiation of this generator,
-// registered in CMakeLists.txt as q4_0_vec_dot.
+// Generic, family-driven vec_dot for the symmetric/affine per-block formats,
+// the vec_dot counterpart of symmetric_quant_generators.cpp's
+// SymmetricCodecGenerator. "q4_0_vec_dot"/"q4_1_vec_dot"/... are PARAMS
+// instantiations of this one generator (registered in CMakeLists.txt), not
+// per-format C++ classes. Weight and activation are both block-indexed codecs
+// from quant_components.h; VecDotGeneratorBase splices them via approximate_by/
+// compute_offline (see vec_dot_generator_base.h) -- generate() never calls
+// Approximation::encode()/decode() directly.
 //
-// Unlike the old hand-written *VecDotGenerator classes (which duplicated the
-// dequantize math already present in the matching *_generators.cpp file,
-// and left the reduction entirely unscheduled), this builds a naive fp32 dot
-// product, splices in both operands' quantize/dequantize round trips via
-// Func::approximate_by(), severs the (already-quantized, Input-supplied)
-// encode() halves away with Pipeline::compute_offline(), then uses
-// Func::inline_calls() + rfactor's RFactorOptions::HoistInvariantFactor to
-// reach a genuine Int(32) SDOT-eligible per-block accumulation -- the same
-// recipe test/correctness/approximation_composition.cpp and
-// test/performance/matvec_offline_split.cpp already validate, extended here
-// to a *per-block* (not just per-row/global) scale via a preserved-RVar
-// rfactor call, per test/correctness/rfactor.cpp's
-// hoisted_rfactor_preserved_rvar_factor_test.
-//
-// generate() never calls Approximation::encode()/decode() directly -- only
-// through Func::approximate_by().
+// The weight is one of the symmetric-family kinds (symmetric / affine /
+// symmetric_5bit / affine_5bit); the activation is Q8_0 or Q8_1. Single-scale
+// symmetric weights x Q8_0 reach an SDOT Int(32) inner dot; affine (+min) and
+// mismatched-block pairings (Q1_0 block 128 x Q8_0 block 32) fall back to a
+// Float reduction.
 
 #include "Halide.h"
 
 #include "quant_components.h"
+#include "vec_dot_generator_base.h"
 
 using namespace Halide;
 using namespace ggml_halide;
 
 namespace {
 
-class SymmetricVecDotGenerator : public Generator<SymmetricVecDotGenerator> {
+enum class WKind { Symmetric,
+                   Affine,
+                   Symmetric5Bit,
+                   Affine5Bit };
+enum class AKind { Q8_0,
+                   Q8_1 };
+
+class SymmetricVecDotGenerator : public VecDotGeneratorBase<SymmetricVecDotGenerator> {
 public:
     GeneratorParam<int> block_size{"block_size", 32};
 
+    GeneratorParam<WKind> w_kind{
+        "w_kind",
+        WKind::Symmetric,
+        {{"symmetric", WKind::Symmetric},
+         {"affine", WKind::Affine},
+         {"symmetric_5bit", WKind::Symmetric5Bit},
+         {"affine_5bit", WKind::Affine5Bit}}};
+    GeneratorParam<AKind> a_kind{
+        "a_kind",
+        AKind::Q8_0,
+        {{"q8_0", AKind::Q8_0},
+         {"q8_1", AKind::Q8_1}}};
+
+    // symmetric / symmetric_5bit weight params
     GeneratorParam<int> w_qmax{"w_qmax", 8};
     GeneratorParam<int> w_code_bits{"w_code_bits", 4};
     GeneratorParam<RoundingMode> w_rounding{
         "w_rounding",
         RoundingMode::TruncateHalfUpWithOffset,
         {{"nearest", RoundingMode::Nearest},
-         {"truncate_half_up_with_offset", RoundingMode::TruncateHalfUpWithOffset}}};
+         {"truncate_half_up_with_offset", RoundingMode::TruncateHalfUpWithOffset},
+         {"sign_only", RoundingMode::SignOnly}}};
     GeneratorParam<ScaleAnchor> w_anchor{
         "w_anchor",
         ScaleAnchor::ExtremeSignedValue,
         {{"abs_max", ScaleAnchor::AbsMax},
-         {"extreme_signed", ScaleAnchor::ExtremeSignedValue}}};
+         {"extreme_signed", ScaleAnchor::ExtremeSignedValue},
+         {"mean_abs", ScaleAnchor::MeanAbs}}};
 
+    // affine / affine_5bit weight params
+    GeneratorParam<int> w_levels{"w_levels", 15};
+    GeneratorParam<AffineRounding> w_affine_rounding{
+        "w_affine_rounding",
+        AffineRounding::ClampedInt8,
+        {{"clamped_int8", AffineRounding::ClampedInt8},
+         {"unclamped_uint8", AffineRounding::UnclampedUint8}}};
+
+    // activation param (Q8_0/Q8_1 are always 8-bit int8 codes)
     GeneratorParam<int> a_qmax{"a_qmax", 127};
-    GeneratorParam<int> a_code_bits{"a_code_bits", 8};
-    GeneratorParam<RoundingMode> a_rounding{
-        "a_rounding",
-        RoundingMode::Nearest,
-        {{"nearest", RoundingMode::Nearest},
-         {"truncate_half_up_with_offset", RoundingMode::TruncateHalfUpWithOffset}}};
-    GeneratorParam<ScaleAnchor> a_anchor{
-        "a_anchor",
-        ScaleAnchor::AbsMax,
-        {{"abs_max", ScaleAnchor::AbsMax},
-         {"extreme_signed", ScaleAnchor::ExtremeSignedValue}}};
 
-    // dim 0: byte-within-block, dim 1: block index.
-    Input<Buffer<uint8_t, 2>> *x_blocks_;  // weight format
-    Input<Buffer<uint8_t, 2>> *y_blocks_;  // activation format
-    Output<Buffer<float, 0>> *result_;
+    VecDotSpec build_vec_dot() const {
+        int wbs = block_size;
 
-    void configure() {
-        x_blocks_ = add_input<Buffer<uint8_t, 2>>("x_blocks");
-        y_blocks_ = add_input<Buffer<uint8_t, 2>>("y_blocks");
-        result_ = add_output<Buffer<float, 0>>("result");
-    }
-
-    void generate() {
-        int w_block_bytes = 2 + (w_code_bits == 4 ? (int)block_size / 2 : (int)block_size);
-        int a_block_bytes = 2 + (a_code_bits == 4 ? (int)block_size / 2 : (int)block_size);
-
-        auto wt_scheme = make_symmetric_block_codec(block_size, w_qmax, w_rounding, w_anchor, w_code_bits);
-        auto act_scheme = make_symmetric_block_codec(block_size, a_qmax, a_rounding, a_anchor, a_code_bits);
-
-        // "Obvious" naive placeholders -- never actually realized, since
-        // compute_offline() severs Acc from depending on them at all. Real
-        // values always come from the already-quantized x_blocks_/y_blocks_.
-        Var kk("kk"), blk("blk");
-        Func Wt("wt_naive"), Vec("vec_naive");
-        Wt(kk, blk) = 0.0f;
-        Vec(kk, blk) = 0.0f;
-
-        Var u("u");
-        RDom r(0, block_size, 0, x_blocks_->dim(1).extent(), "r");
-
-        Func Acc("acc");
-        Acc() = 0.0f;
-        Acc() += Wt(r.x, r.y) * Vec(r.x, r.y);
-
-        ApproximationResult wt_r = Wt.approximate_by(*wt_scheme, {Acc});
-        ApproximationResult act_r = Vec.approximate_by(*act_scheme, {Acc});
-        Acc.inline_calls({wt_r.replacement, act_r.replacement});
-
-        std::vector<Func> to_sever = wt_r.encoded;
-        to_sever.insert(to_sever.end(), act_r.encoded.begin(), act_r.encoded.end());
-        std::vector<ImageParam> bind_to = {*x_blocks_, *y_blocks_};
-        Pipeline({Acc}).compute_offline(to_sever, bind_to);
-
-        // wt_r.handles/act_r.handles mix real scheduling handles (the
-        // per-block stat reduction, which has an update definition and
-        // can't be left inline) with pure pass-through Funcs Halide already
-        // inlines by default -- only the former need explicit scheduling
-        // (same reasoning as matvec_offline_split.cpp).
-        for (Func h : wt_r.handles) {
-            if (h.has_update_definition()) {
-                h.compute_root();
-            }
-        }
-        for (Func h : act_r.handles) {
-            if (h.has_update_definition()) {
-                h.compute_root();
-            }
+        std::unique_ptr<Halide::Approximation> wc;
+        int wb;
+        ScheduleKind sched;
+        switch (w_kind.value()) {
+        case WKind::Symmetric:
+            wc = make_symmetric_block_codec(wbs, w_qmax, w_rounding, w_anchor, w_code_bits);
+            wb = 2 + (w_code_bits == 4 ? wbs / 2 : (w_code_bits == 1 ? wbs / 8 : wbs));
+            sched = ScheduleKind::SDOT;
+            break;
+        case WKind::Affine:
+            wc = make_affine_block_codec(wbs, w_levels, w_affine_rounding, w_code_bits);
+            wb = 2 + 2 + (w_code_bits == 4 ? wbs / 2 : wbs);
+            sched = ScheduleKind::Float;
+            break;
+        case WKind::Symmetric5Bit:
+            wc = make_symmetric_5bit_block_codec(wbs, w_qmax);
+            wb = 2 + 4 + wbs / 2;
+            sched = ScheduleKind::SDOT;
+            break;
+        case WKind::Affine5Bit:
+            wc = make_affine_5bit_block_codec(wbs, w_levels, w_affine_rounding);
+            wb = 2 + 2 + 4 + wbs / 2;
+            sched = ScheduleKind::Float;
+            break;
         }
 
-        // r.y (which block a term belongs to) is invariant for the
-        // per-block scale factors inline_calls() just exposed, even though
-        // it isn't invariant across the *whole* reduction -- preserving it
-        // (rather than an empty preserved set) is what lets
-        // HoistInvariantFactor find and hoist them despite that, per
-        // test/correctness/rfactor.cpp's
-        // hoisted_rfactor_preserved_rvar_factor_test. The intermediate then
-        // reduces only over r.x (within a block), scaled once per block at
-        // write-back -- a pure Int(32) dot product, eligible for SDOT.
-        Func Acc_intm = Acc.update().rfactor({{r.y, u}}, RFactorOptions::HoistInvariantFactor);
-        Acc_intm.compute_root()
-            .update()
-            .atomic()
-            .vectorize(r.x, block_size);
+        // Q8_0/Q8_1 activations are 32-element blocks. Build the codec at that
+        // natural block size, then Reblock to the weight's block size (a no-op
+        // when they already match, e.g. Q4_0/Q8_0); the byte width stays the
+        // natural-block width since y_blocks is stored at 32-element blocks.
+        const int a_nat = 32;
+        std::unique_ptr<Halide::Approximation> ac;
+        int ab;
+        switch (a_kind.value()) {
+        case AKind::Q8_0:
+            ac = make_symmetric_block_codec(a_nat, a_qmax, RoundingMode::Nearest, ScaleAnchor::AbsMax, 8);
+            ab = 2 + a_nat;
+            break;
+        case AKind::Q8_1:
+            ac = make_symmetric_byte_sum_block_codec(a_nat, a_qmax);
+            ab = 2 + 2 + a_nat;
+            break;
+        }
+        ac = reblock_activation(std::move(ac), a_nat, wbs);
 
-        (*result_)() = Acc();
-
-        x_blocks_->dim(0).set_bounds(0, w_block_bytes);
-        x_blocks_->dim(1).set_min(0);
-        y_blocks_->dim(0).set_bounds(0, a_block_bytes);
-        y_blocks_->dim(1).set_min(0);
+        return {std::move(wc), wb, std::move(ac), ab, wbs, sched};
     }
 };
 

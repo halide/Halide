@@ -40,7 +40,10 @@
 
 #include "Halide.h"
 
+#include "quant_components.h"
+
 using namespace Halide;
+using namespace ggml_halide;
 
 namespace {
 
@@ -51,242 +54,68 @@ constexpr int kQK_K = 256;
 constexpr int kNumGroups = kQK_K / 16;                                     // 16
 constexpr int kBlockBytesQ8_Kx4 = 4 * 4 + kQK_K * 4 + kNumGroups * 4 * 2;  // 1168
 
-// Same magic-number round-to-nearest-even trick as quant_components.h's
-// nearest_int() (mirrors GGML's static inline nearest_int() in
-// src/ggml-quants.c).
-Expr nearest_int(Expr fval) {
-    Expr val = fval + 12582912.0f;  // 1.5 * 2^23
-    Expr bits = reinterpret<int32_t>(val);
-    return (bits & 0x007fffff) - 0x00400000;
+// Shared "quantize_mat" pipeline: a 2-D activation x(col, row in [0,4)) flows
+// through the codec `scheme` (block-relayout + Q8 quantize + interleave) via
+// the same approximate_by/compute_offline idiom as codec_generator_base.h's
+// Quantize direction -- the encode half is adopted as the output block buffer.
+struct QuantizeMatPipe {
+    ImageParam x;
+    Func blocks_out;
+};
+inline QuantizeMatPipe build_quantize_mat(std::unique_ptr<Approximation> scheme, int block_bytes) {
+    ImageParam x(Float(32), 2, "x");  // dim 0: col-within-row (mult. of block), dim 1: row (4)
+    Var col("col"), row("row"), byte("byte"), ib("ib");
+    Func identity("qm_identity");
+    identity(col, row) = x(col, row);
+
+    ApproximationResult r = Func(x).approximate_by(*scheme, {identity});
+    for (Func h : r.handles) {
+        if (h.has_update_definition()) {
+            h.compute_root();
+        }
+    }
+
+    ImageParam blocks_in(UInt(8), 2, "blocks_in");
+    ComputeOfflineResult q = Pipeline({identity}).compute_offline(r.encoded, {blocks_in});
+
+    Func blocks_out("blocks");
+    blocks_out(byte, ib) = q.offline.outputs()[0](byte, ib);
+    blocks_out.output_buffer().dim(0).set_bounds(0, block_bytes);
+    blocks_out.output_buffer().dim(1).set_min(0);
+    x.dim(0).set_min(0);
+    x.dim(1).set_bounds(0, 4);
+    return {x, blocks_out};
 }
 
-class Q8_0_4x4QuantizeMatGenerator : public Generator<Q8_0_4x4QuantizeMatGenerator> {
+// q8_0_4x4 / q8_0_4x8 differ only by interleave width (blocklen).
+template<int Blocklen>
+class Q8_0QuantizeMatGenerator : public Generator<Q8_0QuantizeMatGenerator<Blocklen>> {
 public:
-    // dim 0: column-within-row (extent k, a multiple of kQK8_0), dim 1: row (extent 4).
-    Input<Buffer<float, 2>> x_{"x"};
-    // dim 0: byte-within-block (extent kBlockBytesQ8_0x4), dim 1: block index.
-    Output<Buffer<uint8_t, 2>> blocks_{"blocks"};
-
+    void configure() {
+        QuantizeMatPipe p = build_quantize_mat(make_q8_0x4_scheme(Blocklen), kBlockBytesQ8_0x4);
+        this->add_input(p.x);
+        this->add_output(p.blocks_out);
+    }
     void generate() {
-        constexpr int kBlk = 4;
-        Var row("row"), i("i"), j("j"), byte("byte");
-        RDom r(0, kQK8_0, "r");
-
-        Func amax_f("amax_f");
-        amax_f(row, i) = 0.0f;
-        amax_f(row, i) = max(amax_f(row, i), abs(x_(i * kQK8_0 + r, row)));
-        amax_f.compute_root();
-
-        Func scale("scale");
-        Expr d = amax_f(row, i) / 127.0f;
-        Expr id = select(d != 0.0f, 1.0f / d, 0.0f);
-        scale(row, i) = Tuple(d, id);
-        scale.compute_root();
-
-        Func qval("qval");  // 128 payload bytes per block, j in [0, 128)
-        Expr src_id = (j % (4 * kBlk)) / kBlk;
-        Expr src_offset = (j / (4 * kBlk)) * kBlk + (j % kBlk);
-        Expr id_ = scale(src_id, i)[1];
-        qval(j, i) = cast<int8_t>(round(x_(i * kQK8_0 + src_offset, src_id) * id_));
-        qval.compute_root();
-
-        Expr d_row = clamp(byte / 2, 0, 3);
-        Expr d_bits = reinterpret<uint16_t>(cast<float16_t>(scale(d_row, i)[0]));
-        Expr d_byte = select((byte % 2) == 0, cast<uint8_t>(d_bits & 0xff), cast<uint8_t>((d_bits >> 8) & 0xff));
-
-        Expr qs_byte = reinterpret<uint8_t>(qval(clamp(byte - 8, 0, kQK8_0 * 4 - 1), i));
-
-        blocks_(byte, i) = select(byte < 8, d_byte, qs_byte);
-
-        x_.dim(0).set_min(0);
-        x_.dim(1).set_bounds(0, 4);
-        blocks_.dim(0).set_bounds(0, kBlockBytesQ8_0x4);
-        blocks_.dim(1).set_min(0);
     }
 };
 
-class Q8_0_4x8QuantizeMatGenerator : public Generator<Q8_0_4x8QuantizeMatGenerator> {
+// q8_k_4x4 / q8_k_4x8: same shared pipeline, the Q8_K interleaved codec.
+template<int Blocklen>
+class Q8_KQuantizeMatGenerator : public Generator<Q8_KQuantizeMatGenerator<Blocklen>> {
 public:
-    Input<Buffer<float, 2>> x_{"x"};
-    Output<Buffer<uint8_t, 2>> blocks_{"blocks"};
-
-    void generate() {
-        constexpr int kBlk = 8;
-        Var row("row"), i("i"), j("j"), byte("byte");
-        RDom r(0, kQK8_0, "r");
-
-        Func amax_f("amax_f");
-        amax_f(row, i) = 0.0f;
-        amax_f(row, i) = max(amax_f(row, i), abs(x_(i * kQK8_0 + r, row)));
-        amax_f.compute_root();
-
-        Func scale("scale");
-        Expr d = amax_f(row, i) / 127.0f;
-        Expr id = select(d != 0.0f, 1.0f / d, 0.0f);
-        scale(row, i) = Tuple(d, id);
-        scale.compute_root();
-
-        Func qval("qval");
-        Expr src_id = (j % (4 * kBlk)) / kBlk;
-        Expr src_offset = (j / (4 * kBlk)) * kBlk + (j % kBlk);
-        Expr id_ = scale(src_id, i)[1];
-        qval(j, i) = cast<int8_t>(round(x_(i * kQK8_0 + src_offset, src_id) * id_));
-        qval.compute_root();
-
-        Expr d_row = clamp(byte / 2, 0, 3);
-        Expr d_bits = reinterpret<uint16_t>(cast<float16_t>(scale(d_row, i)[0]));
-        Expr d_byte = select((byte % 2) == 0, cast<uint8_t>(d_bits & 0xff), cast<uint8_t>((d_bits >> 8) & 0xff));
-
-        Expr qs_byte = reinterpret<uint8_t>(qval(clamp(byte - 8, 0, kQK8_0 * 4 - 1), i));
-
-        blocks_(byte, i) = select(byte < 8, d_byte, qs_byte);
-
-        x_.dim(0).set_min(0);
-        x_.dim(1).set_bounds(0, 4);
-        blocks_.dim(0).set_bounds(0, kBlockBytesQ8_0x4);
-        blocks_.dim(1).set_min(0);
+    void configure() {
+        QuantizeMatPipe p = build_quantize_mat(make_q8_kx4_scheme(Blocklen), kBlockBytesQ8_Kx4);
+        this->add_input(p.x);
+        this->add_output(p.blocks_out);
     }
-};
-
-class Q8_K_4x4QuantizeMatGenerator : public Generator<Q8_K_4x4QuantizeMatGenerator> {
-public:
-    Input<Buffer<float, 2>> x_{"x"};
-    Output<Buffer<uint8_t, 2>> blocks_{"blocks"};
-
     void generate() {
-        constexpr int kBlk = 4;
-        Var row("row"), i("i"), j("j"), byte("byte");
-        RDom r(0, kQK_K, "r");
-
-        // Per-(row,block) signed-max reduction (same "argmax"-style idiom as
-        // q8_k_generators.cpp's stat Func).
-        Func stat("stat");
-        stat(row, i) = Tuple(0.0f, 0.0f);  // {amax, max}
-        Expr v = x_(i * kQK_K + r, row);
-        Expr take = abs(v) > stat(row, i)[0];
-        stat(row, i) = Tuple(select(take, abs(v), stat(row, i)[0]), select(take, v, stat(row, i)[1]));
-        stat.compute_root();
-
-        Expr is_zero = stat(row, i)[0] == 0.0f;
-        Expr max_val = stat(row, i)[1];
-        Expr iscale_e = select(is_zero, 0.0f, -127.0f / max_val);
-        Expr d_e = select(is_zero, 0.0f, 1.0f / iscale_e);
-
-        Func scale("scale");
-        scale(row, i) = Tuple(d_e, iscale_e);
-        scale.compute_root();
-
-        Func qval("qval");  // 1024 payload values per block, j in [0, 1024)
-        Expr src_id = (j % (4 * kBlk)) / kBlk;
-        Expr src_offset = (j / (4 * kBlk)) * kBlk + (j % kBlk);
-        Expr iscale_ = scale(src_id, i)[1];
-        qval(j, i) = nearest_int(x_(i * kQK_K + src_offset, src_id) * iscale_);
-        qval.compute_root();
-
-        // GGML's index mapping from interleaved payload index j to the
-        // corresponding bsums slot (see ggml_quantize_mat_q8_K_4x4_generic:
-        // "Bsums values are interleaved in sequence of four bsums from each
-        // super block taken for interleaving"). Expressed in terms of the
-        // RDom below (rj), the variable this scatter update actually
-        // iterates over -- not the qval Func's own arg Var (j).
-        Func bsums("bsums");
-        Var idx("idx");
-        RDom rj(0, kQK_K * 4, "rj");
-        Expr index_q8_k = (((rj & (4 * kBlk - 1)) >> 2) << 2) + ((rj >> 8) << 4) + ((rj >> 6) & 3);
-        bsums(idx, i) = 0;
-        bsums(index_q8_k, i) += qval(rj, i);
-        bsums.compute_root();
-
-        Expr d_row = clamp(byte / 4, 0, 3);
-        Expr d_byte_in_row = clamp(byte % 4, 0, 3);
-        Expr d_bits = reinterpret<uint32_t>(scale(d_row, i)[0]);
-        Expr d_byte = cast<uint8_t>((d_bits >> (cast<uint32_t>(d_byte_in_row) * 8)) & 0xff);
-
-        Expr qs_byte = reinterpret<uint8_t>(cast<int8_t>(qval(clamp(byte - 16, 0, kQK_K * 4 - 1), i)));
-
-        Expr bsums_rel = clamp(byte - (16 + kQK_K * 4), 0, kNumGroups * 4 * 2 - 1);
-        Expr bsums_group = bsums_rel / 2;
-        Expr bsums_is_lo = (bsums_rel % 2) == 0;
-        Expr bsums_bits = reinterpret<uint16_t>(cast<int16_t>(bsums(bsums_group, i)));
-        Expr bsums_byte = cast<uint8_t>(select(bsums_is_lo, bsums_bits & 0xff, (bsums_bits >> 8) & 0xff));
-
-        blocks_(byte, i) =
-            select(byte < 16, d_byte, byte < 16 + kQK_K * 4, qs_byte, bsums_byte);
-
-        x_.dim(0).set_min(0);
-        x_.dim(1).set_bounds(0, 4);
-        blocks_.dim(0).set_bounds(0, kBlockBytesQ8_Kx4);
-        blocks_.dim(1).set_min(0);
-    }
-};
-
-class Q8_K_4x8QuantizeMatGenerator : public Generator<Q8_K_4x8QuantizeMatGenerator> {
-public:
-    Input<Buffer<float, 2>> x_{"x"};
-    Output<Buffer<uint8_t, 2>> blocks_{"blocks"};
-
-    void generate() {
-        constexpr int kBlk = 8;
-        Var row("row"), i("i"), j("j"), byte("byte");
-        RDom r(0, kQK_K, "r");
-
-        Func stat("stat");
-        stat(row, i) = Tuple(0.0f, 0.0f);
-        Expr v = x_(i * kQK_K + r, row);
-        Expr take = abs(v) > stat(row, i)[0];
-        stat(row, i) = Tuple(select(take, abs(v), stat(row, i)[0]), select(take, v, stat(row, i)[1]));
-        stat.compute_root();
-
-        Expr is_zero = stat(row, i)[0] == 0.0f;
-        Expr max_val = stat(row, i)[1];
-        Expr iscale_e = select(is_zero, 0.0f, -127.0f / max_val);
-        Expr d_e = select(is_zero, 0.0f, 1.0f / iscale_e);
-
-        Func scale("scale");
-        scale(row, i) = Tuple(d_e, iscale_e);
-        scale.compute_root();
-
-        Func qval("qval");
-        Expr src_id = (j % (4 * kBlk)) / kBlk;
-        Expr src_offset = (j / (4 * kBlk)) * kBlk + (j % kBlk);
-        Expr iscale_ = scale(src_id, i)[1];
-        qval(j, i) = nearest_int(x_(i * kQK_K + src_offset, src_id) * iscale_);
-        qval.compute_root();
-
-        Func bsums("bsums");
-        Var idx("idx");
-        RDom rj(0, kQK_K * 4, "rj");
-        Expr index_q8_k = (((rj & (4 * kBlk - 1)) >> 3) << 2) + ((rj >> 8) << 4) + ((rj >> 6) & 3);
-        bsums(idx, i) = 0;
-        bsums(index_q8_k, i) += qval(rj, i);
-        bsums.compute_root();
-
-        Expr d_row = clamp(byte / 4, 0, 3);
-        Expr d_byte_in_row = clamp(byte % 4, 0, 3);
-        Expr d_bits = reinterpret<uint32_t>(scale(d_row, i)[0]);
-        Expr d_byte = cast<uint8_t>((d_bits >> (cast<uint32_t>(d_byte_in_row) * 8)) & 0xff);
-
-        Expr qs_byte = reinterpret<uint8_t>(cast<int8_t>(qval(clamp(byte - 16, 0, kQK_K * 4 - 1), i)));
-
-        Expr bsums_rel = clamp(byte - (16 + kQK_K * 4), 0, kNumGroups * 4 * 2 - 1);
-        Expr bsums_group = bsums_rel / 2;
-        Expr bsums_is_lo = (bsums_rel % 2) == 0;
-        Expr bsums_bits = reinterpret<uint16_t>(cast<int16_t>(bsums(bsums_group, i)));
-        Expr bsums_byte = cast<uint8_t>(select(bsums_is_lo, bsums_bits & 0xff, (bsums_bits >> 8) & 0xff));
-
-        blocks_(byte, i) =
-            select(byte < 16, d_byte, byte < 16 + kQK_K * 4, qs_byte, bsums_byte);
-
-        x_.dim(0).set_min(0);
-        x_.dim(1).set_bounds(0, 4);
-        blocks_.dim(0).set_bounds(0, kBlockBytesQ8_Kx4);
-        blocks_.dim(1).set_min(0);
     }
 };
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(Q8_0_4x4QuantizeMatGenerator, q8_0_4x4_quantize_mat)
-HALIDE_REGISTER_GENERATOR(Q8_0_4x8QuantizeMatGenerator, q8_0_4x8_quantize_mat)
-HALIDE_REGISTER_GENERATOR(Q8_K_4x4QuantizeMatGenerator, q8_k_4x4_quantize_mat)
-HALIDE_REGISTER_GENERATOR(Q8_K_4x8QuantizeMatGenerator, q8_k_4x8_quantize_mat)
+HALIDE_REGISTER_GENERATOR(Q8_0QuantizeMatGenerator<4>, q8_0_4x4_quantize_mat)
+HALIDE_REGISTER_GENERATOR(Q8_0QuantizeMatGenerator<8>, q8_0_4x8_quantize_mat)
+HALIDE_REGISTER_GENERATOR(Q8_KQuantizeMatGenerator<4>, q8_k_4x4_quantize_mat)
+HALIDE_REGISTER_GENERATOR(Q8_KQuantizeMatGenerator<8>, q8_k_4x8_quantize_mat)

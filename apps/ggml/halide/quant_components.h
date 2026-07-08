@@ -68,22 +68,32 @@ namespace ggml_halide {
 // uses extents {8, 4, 8}: packed(elem, l, group, blk), where the flat
 // within-block index kk = elem + 8*l + 32*group (product of extents = block
 // size). The single-int constructor is exactly the one-extent case.
+//
+// `block_indexed` selects what the "flat" side looks like:
+//   - false (default): a fully-flat 1-D row f(k), k = blk*block_size + within
+//     -- the shape quantize_row/dequantize_row want.
+//   - true: a block-indexed 2-D f(kk, blk), within-block index kept separate
+//     from the block index -- the shape a per-block vec_dot reduction wants
+//     (so the block index stays a distinct RVar for the SDOT rfactor hoist).
+// In block-indexed mode a single-extent reshape is a (kk,blk) passthrough,
+// and a multi-extent one collapses the nested dims (elem,l,group,blk) into
+// (kk,blk) -- the only difference from flat mode is folding blk into k or not.
 class BlockReshape : public Halide::Approximation {
 public:
-    explicit BlockReshape(int block_size)
-        : extents_{block_size} {
+    explicit BlockReshape(int block_size, bool block_indexed = false)
+        : extents_{block_size}, block_indexed_(block_indexed) {
     }
-    explicit BlockReshape(std::vector<int> extents)
-        : extents_(std::move(extents)) {
+    explicit BlockReshape(std::vector<int> extents, bool block_indexed = false)
+        : extents_(std::move(extents)), block_indexed_(block_indexed) {
     }
 
     Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
         using namespace Halide;
-        Func flat = inputs[0];
+        Func flat = inputs[0];  // f(k), or f(kk, blk) when block_indexed_
         std::vector<Var> dims = block_vars();
         Var blk("blk");
 
-        // packed(d0, d1, ..., blk) = flat(blk*block_size + (d0 + e0*d1 + ...)).
+        // packed(d0, d1, ..., blk) = flat(<within>), within = d0 + e0*d1 + ...
         Expr within = cast<int>(0);
         int stride = 1;
         for (size_t i = 0; i < dims.size(); i++) {
@@ -93,30 +103,38 @@ public:
         std::vector<Var> args = dims;
         args.push_back(blk);
         Func packed("block_reshape_packed");
-        packed(args) = flat(blk * block_size() + within);
+        packed(args) = block_indexed_ ? flat(within, blk) : flat(blk * block_size() + within);
         return {{packed}, {}};
     }
 
     Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
         using namespace Halide;
         Func packed = encoded[0];
-        Var k("k");
+        Var k("k"), kk("kk"), blk("blk");
 
-        // flat(k) = packed(kk%e0, (kk/e0)%e1, ..., blk), kk = k % block_size.
-        Expr rem = k % block_size();
+        // Read packed(within%e0, (within/e0)%e1, ..., block); the within-block
+        // index and block index come from either a flat k or a (kk, blk) pair.
+        Expr within = block_indexed_ ? (Expr)kk : k % block_size();
+        Expr block = block_indexed_ ? (Expr)blk : k / block_size();
         std::vector<Expr> args;
+        Expr rem = within;
         for (int e : extents_) {
             args.push_back(rem % e);
             rem = rem / e;
         }
-        args.push_back(k / block_size());
-        Func flat("block_reshape_unpacked");
-        flat(k) = packed(args);
-        return {{flat}, {}};
+        args.push_back(block);
+        Func out("block_reshape_unpacked");
+        if (block_indexed_) {
+            out(kk, blk) = packed(args);
+        } else {
+            out(k) = packed(args);
+        }
+        return {{out}, {}};
     }
 
 private:
     std::vector<int> extents_;
+    bool block_indexed_;
 
     int block_size() const {
         int p = 1;
@@ -135,6 +153,78 @@ private:
         return vs;
     }
 };
+
+// ---------------------------------------------------------------------------
+// Lossless block-layout relayouts (Reblock, and the repack Interleave below).
+//
+// DESIGN NOTE (intended library form, deferred): the clean, general shape for
+// these is a *dimension-general* block-relayout -- a component that splits and
+// permutes arbitrary index dimensions, carrying any trailing dims through
+// untouched (the way the Python research sketch's BlockLayout(splits=...)/
+// SplitStorage do, via Halide's `_` placeholder), quantizing/packing whatever
+// falls out. That would let a single `BlockLayout` utility live in the core
+// Approximation library and compose in front of *any* lossy quant, with the
+// repack interleave being just one instantiation. We deliberately do NOT do
+// that here: `Func`/`Var` `_` wildcard semantics were a source of trouble, and
+// pinning them down is its own rabbit hole. Instead these relayouts are
+// written at fixed, concrete arities (folding any extra "lane" -- e.g. repack's
+// 4 interleaved rows -- into the block index blk), reusing the existing
+// (kk, blk) quant/pack components unchanged. When the wildcard story is sorted,
+// these should graduate to the dimension-general form.
+// ---------------------------------------------------------------------------
+
+// Losslessly re-view a block-indexed Func at a different block size (the flat
+// element order is unchanged; only the (kk, blk) factorization differs).
+// decode(): (kk_from, blk_from) at `from_block` -> (kk_to, blk_to) at
+// `to_block`, reading the same global element g = blk_to*to_block + kk_to from
+// its source position (g % from_block, g / from_block). encode() is the
+// mirror. This is what lets a vec_dot present an activation stored in its own
+// (smaller) block size -- e.g. Q8_0's 32-element blocks -- at a weight's
+// (larger) block size (Q1_0's 128, NVFP4's 64), so both operands share one
+// (kk, blk) and the Generator's reduction stays uniform. The block-structure
+// reconciliation lives here, in an Approximation, not open-coded in the
+// reduction.
+class Reblock : public Halide::Approximation {
+public:
+    Reblock(int from_block, int to_block)
+        : from_(from_block), to_(to_block) {
+    }
+
+    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
+        using namespace Halide;
+        Func in = inputs[0];  // (kk, blk) at to_block
+        Var kk("kk"), blk("blk");
+        Expr g = blk * from_ + kk;
+        Func out("reblock_encoded");
+        out(kk, blk) = in(g % to_, g / to_);
+        return {{out}, {}};
+    }
+
+    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
+        using namespace Halide;
+        Func in = encoded[0];  // (kk, blk) at from_block
+        Var kk("kk"), blk("blk");
+        Expr g = blk * to_ + kk;
+        Func out("reblock_decoded");
+        out(kk, blk) = in(g % from_, g / from_);
+        return {{out}, {}};
+    }
+
+private:
+    int from_, to_;
+};
+
+// An activation codec that decodes to (kk, blk) at `to_block`: `act_codec`
+// (block-indexed at the activation's own `from_block`) composed with a Reblock
+// when the two differ, else `act_codec` unchanged. Lets a vec_dot pair a weight
+// of one block size against an activation of another (Q1_0/NVFP4 x Q8_0).
+inline std::unique_ptr<Halide::Approximation> reblock_activation(
+    std::unique_ptr<Halide::Approximation> act_codec, int from_block, int to_block) {
+    if (from_block == to_block) {
+        return act_codec;
+    }
+    return std::make_unique<Halide::Compose>(std::move(act_codec), Reblock{from_block, to_block});
+}
 
 // ---------------------------------------------------------------------------
 // 2. The lossy step.
@@ -404,12 +494,12 @@ public:
 
     Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
         using namespace Halide;
-        Func bytes = encoded[0];  // bytes(byte, blk), byte in [0, 2)
+        Func bytes = encoded[0];  // bytes(byte, blk[, ...]), byte in [0, 2)
         Var blk("blk");
-        Expr lo = cast<uint16_t>(bytes(0, blk));
-        Expr hi = cast<uint16_t>(bytes(1, blk));
+        Expr lo = cast<uint16_t>(bytes(0, blk, _));
+        Expr hi = cast<uint16_t>(bytes(1, blk, _));
         Func scale("fp16_pack_scale");
-        scale(blk) = cast<float>(reinterpret<float16_t>(lo | (hi << 8)));
+        scale(blk, _) = cast<float>(reinterpret<float16_t>(lo | (hi << 8)));
         return {{scale}, {}};
     }
 };
@@ -469,29 +559,17 @@ public:
     }
 };
 
-// encode(float scale) -> 1 byte (an E8M0 power-of-two exponent, GGML's
-// MXFP4/NVFP4 scale format); decode(1 byte) -> float. decode() reproduces
-// ggml_e8m0_to_fp32_half's exact bit construction: d = 2^(e-128) for every
-// e in [0, 255], computed via a subnormal-exploiting shift trick for e<2
-// instead of a normal exponent-field write (both branches compute the same
-// uniform 2^(e-128); see the comment inline). encode() is log2-based and
-// therefore *not* bit-exact -- matching every other format's rationale for
-// deferring quantize to GGML's own reference (see ExternQuantize
-// below); it exists for interface completeness only, and is never actually
-// exercised by MXFP4/NVFP4 today, since their real encode() is an extern
-// call, not a round trip through this class.
+// decode(1 byte) -> float, an E8M0 power-of-two exponent (GGML's MXFP4/NVFP4
+// scale format). Reproduces ggml_e8m0_to_fp32_half's exact bit construction:
+// d = 2^(e-128) for every e in [0, 255], computed via a subnormal-exploiting
+// shift trick for e<2 instead of a normal exponent-field write (both branches
+// compute the same uniform 2^(e-128); see the comment inline). Decode-only:
+// MXFP4 quantize is extern-delegated (see ExternQuantize).
 class E8M0Pack : public Halide::Approximation {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
-        using namespace Halide;
-        Func scale = inputs[0];  // scale(blk)
-        Var blk("blk");
-        Expr log2e = 1.4426950408889634f;  // 1/log(2), since Halide only provides fast_log (natural log)
-        Expr e = cast<int32_t>(round(fast_log(max(scale(blk), 1e-38f)) * log2e + 128.0f));
-        Func byte("e8m0_pack_byte");
-        Var byte_idx("byte_idx");
-        byte(byte_idx, blk) = cast<uint8_t>(clamp(e, 0, 255));
-        return {{byte}, {}};
+    Halide::EncodeResult encode(std::vector<Halide::Func>) override {
+        _halide_user_error << "E8M0Pack is decode-only -- quantize is deferred to an ExternQuantize.\n";
+        return {};
     }
 
     Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
@@ -506,37 +584,20 @@ public:
     }
 };
 
-// encode(float scale(sub, blk)) -> 1 byte per sub-block (a UE4M3 unsigned
-// 4-exponent/3-mantissa float, GGML's NVFP4 per-sub-block scale format);
-// decode(1 byte per sub-block) -> float(sub, blk). decode() reproduces
-// ggml_ue4m3_to_fp32_half's exact construction: subnormal (exp==0) is
-// man/512, normal is (1+man/8)*2^(exp-7), both halved; byte 0x00 or 0x7f
-// (GGML's NVFP4 zero/sentinel bytes) decode to 0. Unlike Fp16Pack/E8M0Pack
-// (exactly one scale value per block), this is meant to be used with
-// ScaleDequant's `num_scales` > 1: the input/output Funcs here are
-// already indexed by `sub` directly (one byte each, no further byte-within-
-// field splitting needed, unlike Fp16Pack's 2-byte value). encode() is
-// log2-based and therefore *not* bit-exact -- matching every other format's
-// rationale for deferring quantize to GGML's own reference (see
-// ExternQuantize above); it exists for interface completeness only,
-// and is never actually exercised by NVFP4 today, since its real encode()
-// is an extern call, not a round trip through this class.
+// decode(1 byte per sub-block) -> float(sub, blk), a UE4M3 unsigned
+// 4-exponent/3-mantissa float (GGML's NVFP4 per-sub-block scale format).
+// Reproduces ggml_ue4m3_to_fp32_half's exact construction: subnormal
+// (exp==0) is man/512, normal is (1+man/8)*2^(exp-7), both halved; byte 0x00
+// or 0x7f (GGML's NVFP4 zero/sentinel bytes) decode to 0. Unlike
+// Fp16Pack/E8M0Pack (exactly one scale value per block), this is meant to be
+// used with ScaleDequant's `num_scales` > 1: the Funcs here are indexed by
+// `sub` directly (one byte each). Decode-only: NVFP4 quantize is
+// extern-delegated (see ExternQuantize).
 class UE4M3Pack : public Halide::Approximation {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
-        using namespace Halide;
-        Func scale = inputs[0];  // scale(sub, blk)
-        Var sub("sub"), blk("blk");
-        Expr log2e = 1.4426950408889634f;  // 1/log(2), since Halide only provides fast_log (natural log)
-        Expr v = scale(sub, blk) * 2.0f;
-        Expr e = cast<int32_t>(floor(fast_log(max(v, 1e-38f)) * log2e)) + 7;
-        Expr e_clamped = clamp(e, 0, 15);
-        Expr scale_pow = pow(2.0f, cast<float>(e_clamped - 7));
-        Expr man = cast<int32_t>(round((v / scale_pow - 1.0f) * 8.0f));
-        Expr man_clamped = clamp(man, 0, 7);
-        Func byte("ue4m3_pack_byte");
-        byte(sub, blk) = cast<uint8_t>((e_clamped << 3) | man_clamped);
-        return {{byte}, {}};
+    Halide::EncodeResult encode(std::vector<Halide::Func>) override {
+        _halide_user_error << "UE4M3Pack is decode-only -- quantize is deferred to an ExternQuantize.\n";
+        return {};
     }
 
     Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
@@ -771,64 +832,20 @@ public:
     }
 };
 
-// encode(codes(kk, blk) unsigned in {0, 1, 2}) -> 52 bytes {qs[48]; qh[4]};
-// decode reverses it. Reproduces GGML's TQ1_0 base-3 digit packing exactly:
-// 256 elements split into 3 sections -- a 32-byte/160-element run and a
-// 16-byte/80-element run, each packing 5 trits/byte via
-// `byte = ceil(digit_number * 256 / 243)` where `digit_number` is the
-// 5-digit base-3 number with digit 0 (from codes(n*window+m)) most
-// significant; then a 4-byte/16-element run packing only 4 real trits/byte
-// (the 5th, least-significant "digit" is always 0, appended by an extra
-// `*3` before the same ceiling-division formula) -- verified by hand against
-// GGML's quantize_row_tq1_0_ref. decode() reverses the ceiling-division
-// packing via the same multiply-truncate-rescale trick tq1_0_generators.cpp
-// originally hand-rolled (extracting digit `n`'s value needs multiplier
-// `3^n`, `n` counted from the most-significant digit -- not to be confused
-// with a digit's place-value weight, which runs the other way). `qmax` has
-// no effect here (there's no natural "centering" for a 3-valued digit, and
-// this is never composed as a symmetric-scheme codec) -- codes are always
-// the raw digit in [0, 3), suitable directly as a codebook index, matching
-// TQ2_0's {-1, 0, 1, unused} table convention.
+// decode(52 bytes {qs[48]; qh[4]}) -> codes(kk, blk), the raw base-3 digit in
+// [0, 3) -- GGML's TQ1_0 packing: 256 elements in 3 sections (a 160-element
+// and an 80-element run at 5 trits/byte, then a 16-element run at 4 real
+// trits/byte, its 5th digit always 0). decode() reverses the ceiling-division
+// packing (`byte = ceil(digit_number * 256 / 243)`) via the same
+// multiply-truncate-rescale trick tq1_0_generators.cpp hand-rolled: extracting
+// digit `n` needs multiplier `3^n`, `n` from the most-significant digit. Codes
+// feed a codebook index directly (TQ2_0's {-1, 0, 1, unused} convention).
+// Decode-only: TQ1_0 quantize is extern-delegated.
 class TritPack : public Halide::Approximation {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
-        using namespace Halide;
-        Func codes = inputs[0];
-        Var byte_idx("byte_idx"), blk("blk");
-
-        auto digit = [&](Expr kk_expr) -> Expr {
-            return cast<int32_t>(codes(kk_expr, blk));
-        };
-        auto ceil_pack = [&](Expr q) -> Expr {
-            return cast<uint8_t>((cast<uint32_t>(q) * 256 + 242) / 243);
-        };
-
-        Expr m_a = clamp(byte_idx, 0, 31);
-        Expr qa = digit(0 * 32 + m_a);
-        qa = qa * 3 + digit(1 * 32 + m_a);
-        qa = qa * 3 + digit(2 * 32 + m_a);
-        qa = qa * 3 + digit(3 * 32 + m_a);
-        qa = qa * 3 + digit(4 * 32 + m_a);
-
-        Expr m_b = clamp(byte_idx - 32, 0, 15);
-        Expr qb = digit(160 + 0 * 16 + m_b);
-        qb = qb * 3 + digit(160 + 1 * 16 + m_b);
-        qb = qb * 3 + digit(160 + 2 * 16 + m_b);
-        qb = qb * 3 + digit(160 + 3 * 16 + m_b);
-        qb = qb * 3 + digit(160 + 4 * 16 + m_b);
-
-        Expr j_c = clamp(byte_idx - 48, 0, 3);
-        Expr qc = digit(240 + j_c + 0 * 4);
-        qc = qc * 3 + digit(240 + j_c + 1 * 4);
-        qc = qc * 3 + digit(240 + j_c + 2 * 4);
-        qc = qc * 3 + digit(240 + j_c + 3 * 4);
-        qc = qc * 3;  // append the virtual, always-0 5th digit
-
-        Func bytes("trit_pack_bytes");
-        bytes(byte_idx, blk) = select(byte_idx < 32, ceil_pack(qa),
-                                      byte_idx < 48, ceil_pack(qb),
-                                      ceil_pack(qc));
-        return {{bytes}, {}};
+    Halide::EncodeResult encode(std::vector<Halide::Func>) override {
+        _halide_user_error << "TritPack is decode-only -- quantize is deferred to an ExternQuantize.\n";
+        return {};
     }
 
     Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
@@ -1108,6 +1125,47 @@ private:
     std::string extern_name_;
 };
 
+// The encoder half for formats that have NO forward map at all (the IQ1/IQ2
+// importance-matrix-only quantizers: GGML exposes no *_quantize_via_ggml for
+// them). encode() produces a correctly-shaped `blocks(byte, blk)` uint8 Func
+// so that Func::approximate_by() -- which always builds encode() before
+// decode() -- can splice the round trip; the value is a placeholder (0),
+// because Pipeline::compute_offline() always severs this encode and binds the
+// real already-quantized Input in its place, so it is never computed. This is
+// what lets a decode-only format still go through the standard
+// approximate_by/compute_offline path (exercising the framework) instead of a
+// bespoke direct-decode generator. decode() traps -- the paired decoder half
+// of the TrustedInverse owns dequantize.
+class SeveredEncode : public Halide::Approximation {
+public:
+    // `dims` is the dimensionality of the packed buffer this stands in for: 2
+    // for a plain (byte, blk) codec, 3 for a repack weight buffer
+    // (byte, k-block, col-group).
+    explicit SeveredEncode(int block_bytes, int dims = 2)
+        : block_bytes_(block_bytes), dims_(dims) {
+    }
+
+    Halide::EncodeResult encode(std::vector<Halide::Func>) override {
+        using namespace Halide;
+        std::vector<Var> args;
+        for (int d = 0; d < dims_; d++) {
+            args.push_back(Var("se" + std::to_string(d)));
+        }
+        Func blocks("severed_encode_blocks");
+        blocks(args) = cast<uint8_t>(0);
+        return {{blocks}, {}};
+    }
+
+    Halide::DecodeResult decode(std::vector<Halide::Func>) override {
+        _halide_user_error << "SeveredEncode::decode is never valid -- it is only "
+                              "the (always-severed) encoder half of a TrustedInverse.\n";
+        return {};
+    }
+
+private:
+    int block_bytes_, dims_;
+};
+
 // codes(kk, blk) -> table[codes], a fixed int8 codebook lookup -- the shared
 // codes->value step of every codebook-quantized format (IQ4_NL, MXFP4, TQ1_0,
 // TQ2_0, NVFP4, IQ4_XS). Apply'd on the codes field between unpacking and the
@@ -1138,8 +1196,12 @@ public:
         // inference a provable index range across this Func boundary, instead
         // of falling back to the full int8 range (accessing table at -128).
         // The grid leaves clamp their grid index the same way.
+        // Dimension-general (pure) decode: the Halide::_ placeholder carries
+        // any extra trailing "lane" dims (e.g. a matmul weight's column dims)
+        // through untouched; with zero trailing dims it collapses to the
+        // familiar (kk, blk). See the DESIGN NOTE by Reblock.
         Func values("codebook_values");
-        values(kk, blk) = table(clamp(cast<int32_t>(codes(kk, blk)), 0, table.dim(0).extent() - 1));
+        values(kk, blk, _) = table(clamp(cast<int32_t>(codes(kk, blk, _)), 0, table.dim(0).extent() - 1));
         return {{values}, {}};
     }
 
@@ -1171,12 +1233,15 @@ public:
         using namespace Halide;
         Func codes = encoded[0], scale = encoded[1];
         Var kk("kk"), blk("blk");
+        // Dimension-general via Halide::_: any trailing "lane" dims (a matmul
+        // weight's columns) ride through untouched; zero of them collapses to
+        // the familiar (kk, blk). See the DESIGN NOTE by Reblock.
         Func dequantized("scale_dequantized");
         if (num_scales_ == 1) {
-            dequantized(kk, blk) = cast<float>(cast<int32_t>(codes(kk, blk))) * scale(blk);
+            dequantized(kk, blk, _) = cast<float>(cast<int32_t>(codes(kk, blk, _))) * scale(blk, _);
         } else {
             int sub_size = block_size_ / num_scales_;
-            dequantized(kk, blk) = cast<float>(cast<int32_t>(codes(kk, blk))) * scale(kk / sub_size, blk);
+            dequantized(kk, blk, _) = cast<float>(cast<int32_t>(codes(kk, blk, _))) * scale(kk / sub_size, blk, _);
         }
         return {{dequantized}, {}};
     }
@@ -1210,11 +1275,11 @@ public:
         Func dequantized("two_level_dequantized");
         if (has_min_) {
             Func d = encoded[0], dmin = encoded[1], scale = encoded[2], min = encoded[3], codes = encoded[4];
-            dequantized(kk, blk) = d(blk) * cast<float>(scale(kk / sub_size_, blk)) * cast<float>(codes(kk, blk)) -
-                                   dmin(blk) * cast<float>(min(kk / sub_size_, blk));
+            dequantized(kk, blk, _) = d(blk, _) * cast<float>(scale(kk / sub_size_, blk, _)) * cast<float>(codes(kk, blk, _)) -
+                                      dmin(blk, _) * cast<float>(min(kk / sub_size_, blk, _));
         } else {
             Func d = encoded[0], scale = encoded[1], codes = encoded[2];
-            dequantized(kk, blk) = d(blk) * cast<float>(scale(kk / sub_size_, blk)) * cast<float>(codes(kk, blk));
+            dequantized(kk, blk, _) = d(blk, _) * cast<float>(scale(kk / sub_size_, blk, _)) * cast<float>(codes(kk, blk, _));
         }
         return {{dequantized}, {}};
     }
@@ -1280,16 +1345,13 @@ private:
 // min(sub, blk)}, each the field's own nibble -- Q2_K's scale/min packing:
 // unlike Q4_K/Q5_K's get_scale_min_k4 (below), each sub-block's (scale, min)
 // pair lives in its own byte with no bit-interleaving across sub-blocks at
-// all (low nibble = scale, high nibble = min).
+// all (low nibble = scale, high nibble = min). Decode-only: Q2_K quantize is
+// extern-delegated.
 class NibblePairPack : public Halide::Approximation {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
-        using namespace Halide;
-        Func scale = inputs[0], min = inputs[1];
-        Var sub("sub"), blk("blk");
-        Func bytes("nibble_pair_pack_bytes");
-        bytes(sub, blk) = cast<uint8_t>(cast<uint32_t>(scale(sub, blk)) | (cast<uint32_t>(min(sub, blk)) << 4));
-        return {{bytes}, {}};
+    Halide::EncodeResult encode(std::vector<Halide::Func>) override {
+        _halide_user_error << "NibblePairPack is decode-only -- quantize is deferred to an ExternQuantize.\n";
+        return {};
     }
 
     Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
@@ -1311,60 +1373,32 @@ public:
 // combined with a 2-bit high part borrowed from the top 2 bits of an
 // earlier byte (byte[sub-4] for scale, byte[sub] for min) -- a
 // bit-interleaved packing that fits 8 six-bit values into 6 bytes' worth of
-// budget instead of 8 (see q4_k_generators.cpp's original header comment
-// for the full derivation). encode() is the reverse of this -- never
-// actually exercised (K-quant quantize is always extern-delegated), so it
-// exists for interface completeness only, matching every other pack class
-// in this file whose encode() only has a real caller for some formats.
+// budget instead of 8 (see q4_k_generators.cpp's original header comment for
+// the full derivation). Decode-only: Q4_K/Q5_K quantize is extern-delegated.
 class K4ScaleMinPack : public Halide::Approximation {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
-        using namespace Halide;
-        Func scale = inputs[0], min = inputs[1];
-        Var byte_idx("byte_idx"), blk("blk");
-
-        auto sc = [&](Expr sub) -> Expr { return cast<uint32_t>(scale(sub, blk)); };
-        auto mn = [&](Expr sub) -> Expr { return cast<uint32_t>(min(sub, blk)); };
-
-        // byte[0..3] = scale[0..3] (low 6 bits); byte[4..7] = min[0..3] (low
-        // 6 bits); byte[8..11] = min[jj]'s low 4 bits | scale[jj]'s low 4
-        // bits (jj = byte_idx-8), plus each byte[jj]/byte[4+jj]'s top 2 bits
-        // hold scale[4+jj]/min[4+jj]'s high 2 bits (added in below).
-        Expr jj0 = clamp(byte_idx, 0, 3);
-        Expr jj1 = clamp(byte_idx - 4, 0, 3);
-        Expr jj2 = clamp(byte_idx - 8, 0, 3);
-        Expr byte_0_3 = sc(jj0) & 0x3f;
-        Expr byte_4_7 = mn(jj1) & 0x3f;
-        Expr byte_8_11 = (sc(jj2 + 4) & 0x0f) | ((mn(jj2 + 4) & 0x0f) << 4);
-
-        Func bytes("k4_scale_min_pack_bytes");
-        Expr base = select(byte_idx < 4, byte_0_3, byte_idx < 8, byte_4_7, byte_8_11);
-        // byte[0..3]'s top 2 bits hold scale[4..7]'s high 2 bits; byte[4..7]'s
-        // top 2 bits hold min[4..7]'s high 2 bits.
-        Expr with_high = select(byte_idx < 4, base | ((sc(byte_idx + 4) >> 4) << 6),
-                                byte_idx < 8, base | ((mn(byte_idx) >> 4) << 6),
-                                base);
-        bytes(byte_idx, blk) = cast<uint8_t>(with_high);
-        return {{bytes}, {}};
+    Halide::EncodeResult encode(std::vector<Halide::Func>) override {
+        _halide_user_error << "K4ScaleMinPack is decode-only -- quantize is deferred to an ExternQuantize.\n";
+        return {};
     }
 
     Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
         using namespace Halide;
-        Func bytes = encoded[0];  // bytes(byte_idx, blk), byte_idx in [0, 12)
+        Func bytes = encoded[0];  // bytes(byte_idx, blk[, ...]), byte_idx in [0, 12)
         Var sub("sub"), blk("blk");
 
         Expr jj = clamp(sub - 4, 0, 3);
         Expr sc = select(sub < 4,
-                         bytes(sub, blk) & 0x3f,
-                         cast<uint8_t>((bytes(8 + jj, blk) & 0x0f) | ((bytes(jj, blk) >> 6) << 4)));
+                         bytes(sub, blk, _) & 0x3f,
+                         cast<uint8_t>((bytes(8 + jj, blk, _) & 0x0f) | ((bytes(jj, blk, _) >> 6) << 4)));
         Expr m = select(sub < 4,
-                        bytes(sub + 4, blk) & 0x3f,
-                        cast<uint8_t>((bytes(8 + jj, blk) >> 4) | ((bytes(4 + jj, blk) >> 6) << 4)));
+                        bytes(sub + 4, blk, _) & 0x3f,
+                        cast<uint8_t>((bytes(8 + jj, blk, _) >> 4) | ((bytes(4 + jj, blk, _) >> 6) << 4)));
 
         Func scale("k4_scale_min_pack_scale");
-        scale(sub, blk) = sc;
+        scale(sub, blk, _) = sc;
         Func min("k4_scale_min_pack_min");
-        min(sub, blk) = m;
+        min(sub, blk, _) = m;
         return {{scale, min}, {}};
     }
 };
@@ -1376,34 +1410,12 @@ public:
 // live in byte (sub%8), taken from the byte's low nibble if sub<8 or high
 // nibble if sub>=8. The final signed value is (low|(high<<4)) - 32 (see
 // q3_k_generators.cpp's original header comment for the full derivation).
+// Decode-only: Q3_K quantize is extern-delegated.
 class Q3KScalePack : public Halide::Approximation {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
-        using namespace Halide;
-        Func scale = inputs[0];  // scale(sub, blk), signed in [-32, 31]
-        Var byte_idx("byte_idx"), blk("blk");
-
-        auto unsigned_at = [&](Expr sub) -> Expr {
-            return cast<uint32_t>(cast<int32_t>(scale(sub, blk)) + 32);
-        };
-
-        // byte[0..7]'s nibbles hold the low 4 bits of scale[0..7]/scale[8..15].
-        Expr low_lo = unsigned_at(clamp(byte_idx, 0, 7)) & 0x0f;
-        Expr low_hi = unsigned_at(clamp(byte_idx, 0, 7) + 8) & 0x0f;
-        Expr low_byte = low_lo | (low_hi << 4);
-
-        // byte[8..11]'s 4 pairs of 2 bits each hold the high 2 bits of
-        // scale[s]/scale[s+4]/scale[s+8]/scale[s+12] for s = byte_idx-8.
-        Expr s = clamp(byte_idx - 8, 0, 3);
-        Expr h0 = (unsigned_at(s) >> 4) & 0x3;
-        Expr h1 = (unsigned_at(s + 4) >> 4) & 0x3;
-        Expr h2 = (unsigned_at(s + 8) >> 4) & 0x3;
-        Expr h3 = (unsigned_at(s + 12) >> 4) & 0x3;
-        Expr high_byte = h0 | (h1 << 2) | (h2 << 4) | (h3 << 6);
-
-        Func bytes("q3k_scale_pack_bytes");
-        bytes(byte_idx, blk) = cast<uint8_t>(select(byte_idx < 8, low_byte, high_byte));
-        return {{bytes}, {}};
+    Halide::EncodeResult encode(std::vector<Halide::Func>) override {
+        _halide_user_error << "Q3KScalePack is decode-only -- quantize is deferred to an ExternQuantize.\n";
+        return {};
     }
 
     Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
@@ -1633,6 +1645,220 @@ private:
     Halide::Buffer<uint32_t> grid_;
 };
 
+// The four IQ1/IQ2 importance-matrix-only formats have no from_float extern
+// (GGML exposes no *_quantize_via_ggml), so their make_*_scheme() below pairs
+// this decode leaf with a SeveredEncode via TrustedInverse (a dequantize-only /
+// vec_dot-only round trip; the placeholder encode is always severed). Each is a
+// verified-unchanged transcription of the matching *_generators.cpp dequantize,
+// reading bytes(byte, blk) and emitting the {8,4,8} superblock form
+// (j/j-elem, l, group, blk) so the composed BlockReshape does the reshape.
+
+// IQ2_XS: 74-byte block. qs[32] as 32 little-endian uint16 (4 per group): low
+// 9 bits index the 512-entry uint64 iq2xs_grid, top 7 bits index ksigns_iq2xs;
+// scale a nibble byte array (2 l's/byte) via d*(0.5+nibble)*0.25.
+class IQ2XSGridDequantize : public Halide::Approximation {
+public:
+    IQ2XSGridDequantize()
+        : grid_(make_grid_buffer(iq_grids::iq2xs_grid, 512, "iq2xs_grid")),
+          ksigns_(make_grid_buffer(iq_grids::ksigns_iq2xs, 128, "ksigns_iq2xs")) {
+    }
+
+    Halide::EncodeResult encode(std::vector<Halide::Func>) override {
+        _halide_user_error << "IQ2XSGridDequantize is decode-only.\n";
+        return {};
+    }
+
+    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
+        using namespace Halide;
+        Func bytes = encoded[0];
+        Var j("j"), l("l"), ib32("ib32"), blk("blk");
+        constexpr int kQsOffset = 2;
+        constexpr int kScalesOffset = 66;
+
+        Expr qs_idx = ib32 * 4 + l;
+        Expr q_lo = cast<uint16_t>(bytes(kQsOffset + qs_idx * 2 + 0, blk));
+        Expr q_hi = cast<uint16_t>(bytes(kQsOffset + qs_idx * 2 + 1, blk));
+        Expr qs_val = cast<uint16_t>(q_lo | (q_hi << 8));
+        Expr grid_idx = clamp(cast<int32_t>(qs_val & 511), 0, 511);
+        Expr sign_idx = clamp(cast<int32_t>(qs_val >> 9), 0, 127);
+
+        Expr scales_byte = bytes(kScalesOffset + ib32, blk);
+        Expr nibble = select(l < 2, scales_byte & 0x0f, scales_byte >> 4);
+        Expr db = fp16_delta(bytes, 0, blk) * (0.5f + cast<float>(nibble)) * 0.25f;
+
+        Buffer<uint64_t> grid = grid_;
+        Expr grid_val = grid(grid_idx);
+        Expr grid_byte = cast<uint8_t>((grid_val >> (cast<uint64_t>(j) * 8)) & 0xff);
+        Buffer<uint8_t> ksigns = ksigns_;
+        Expr signs = ksigns(sign_idx);
+        Expr sign_bit = (cast<uint32_t>(signs) & (cast<uint32_t>(1) << j)) != 0;
+
+        Func dequantized("iq2xs_grid_dequantized");
+        dequantized(j, l, ib32, blk) = db * cast<float>(grid_byte) * select(sign_bit, -1.0f, 1.0f);
+        return {{dequantized}, {}};
+    }
+
+private:
+    Halide::Buffer<uint64_t> grid_;
+    Halide::Buffer<uint8_t> ksigns_;
+};
+
+// IQ2_XXS: 66-byte block. Per group, an 8-byte window: bytes 0..3 are 4 grid
+// indices (one per l) into the 256-entry uint64 iq2xxs_grid; bytes 4..7 form a
+// uint32 aux32 whose top 4 bits are a scale exponent (d*(0.5+exp)*0.25) and
+// whose low 28 bits pack four 7-bit ksigns indices.
+class IQ2XXSGridDequantize : public Halide::Approximation {
+public:
+    IQ2XXSGridDequantize()
+        : grid_(make_grid_buffer(iq_grids::iq2xxs_grid, 256, "iq2xxs_grid")),
+          ksigns_(make_grid_buffer(iq_grids::ksigns_iq2xs, 128, "ksigns_iq2xs")) {
+    }
+
+    Halide::EncodeResult encode(std::vector<Halide::Func>) override {
+        _halide_user_error << "IQ2XXSGridDequantize is decode-only.\n";
+        return {};
+    }
+
+    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
+        using namespace Halide;
+        Func bytes = encoded[0];
+        Var j("j"), l("l"), ib32("ib32"), blk("blk");
+        constexpr int kQsOffset = 2;
+
+        Expr grid_idx = clamp(cast<int32_t>(bytes(kQsOffset + ib32 * 8 + l, blk)), 0, 255);
+        Expr aux32 = le_u32(bytes, kQsOffset + ib32 * 8 + 4, blk);
+        Expr db = fp16_delta(bytes, 0, blk) * (0.5f + cast<float>(aux32 >> 28)) * 0.25f;
+        Expr sign_idx = clamp(cast<int32_t>((aux32 >> (cast<uint32_t>(l) * 7)) & 127), 0, 127);
+
+        Buffer<uint8_t> ksigns = ksigns_;
+        Expr signs = ksigns(sign_idx);
+        Buffer<uint64_t> grid = grid_;
+        Expr grid_val = grid(grid_idx);
+        Expr grid_byte = cast<uint8_t>((grid_val >> (cast<uint64_t>(j) * 8)) & 0xff);
+        Expr sign_bit = (cast<uint32_t>(signs) & (cast<uint32_t>(1) << j)) != 0;
+
+        Func dequantized("iq2xxs_grid_dequantized");
+        dequantized(j, l, ib32, blk) = db * cast<float>(grid_byte) * select(sign_bit, -1.0f, 1.0f);
+        return {{dequantized}, {}};
+    }
+
+private:
+    Halide::Buffer<uint64_t> grid_;
+    Halide::Buffer<uint8_t> ksigns_;
+};
+
+// IQ1_S: 50-byte block. qs[32] low grid-index bytes (one per l); qh[8] as 8
+// uint16 (one per group): 3 bits/l give the grid index's high 3 bits, bits
+// 12..14 a per-group scale (dl = d*(2*s+1)), bit 15 selects a +/-IQ1S_DELTA
+// added to every value. iq1s_grid entries are SIGNED bytes used directly.
+class IQ1SGridDequantize : public Halide::Approximation {
+public:
+    IQ1SGridDequantize()
+        : grid_(make_grid_buffer(iq_grids::iq1s_grid, 2048, "iq1s_grid")) {
+    }
+
+    Halide::EncodeResult encode(std::vector<Halide::Func>) override {
+        _halide_user_error << "IQ1SGridDequantize is decode-only.\n";
+        return {};
+    }
+
+    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
+        using namespace Halide;
+        Func bytes = encoded[0];
+        Var j("j"), l("l"), ib("ib"), blk("blk");
+        constexpr float kIQ1S_DELTA = 0.125f;
+        constexpr int kQsOffset = 2;
+        constexpr int kQhOffset = 34;
+
+        Expr qh_lo = cast<uint16_t>(bytes(kQhOffset + ib * 2 + 0, blk));
+        Expr qh_hi = cast<uint16_t>(bytes(kQhOffset + ib * 2 + 1, blk));
+        Expr qh_val = cast<uint16_t>(qh_lo | (qh_hi << 8));
+        Expr dl_scale = cast<int32_t>((qh_val >> 12) & 7);
+        Expr dl = fp16_delta(bytes, 0, blk) * cast<float>(2 * dl_scale + 1);
+        Expr delta = select((qh_val & 0x8000) != 0, -kIQ1S_DELTA, kIQ1S_DELTA);
+
+        Expr qs_byte = bytes(kQsOffset + ib * 4 + l, blk);
+        Expr high3 = cast<uint32_t>((qh_val >> (cast<uint16_t>(l) * 3)) & 7);
+        Expr grid_idx = clamp(cast<int32_t>(cast<uint16_t>(cast<uint32_t>(qs_byte) + (high3 << 8))), 0, 2047);
+
+        Buffer<uint64_t> grid = grid_;
+        Expr grid_val = grid(grid_idx);
+        Expr grid_signed = reinterpret<int8_t>(cast<uint8_t>((grid_val >> (cast<uint64_t>(j) * 8)) & 0xff));
+
+        Func dequantized("iq1s_grid_dequantized");
+        dequantized(j, l, ib, blk) = dl * (cast<float>(grid_signed) + delta);
+        return {{dequantized}, {}};
+    }
+
+private:
+    Halide::Buffer<uint64_t> grid_;
+};
+
+// IQ1_M: 56-byte block, NO separate delta field. qs[32] low index bytes;
+// qh[16] (2/group) give a high-3-bit grid extension + a sign-delta bit per l2;
+// scales[8] as 4 uint16: the block's shared fp16 d is bit-gathered from the
+// top nibble of all 4 words, each word's low 12 bits holding two 3-bit
+// per-group scales. Signed codebook + /-IQ1S_DELTA, same as IQ1_S.
+class IQ1MGridDequantize : public Halide::Approximation {
+public:
+    IQ1MGridDequantize()
+        : grid_(make_grid_buffer(iq_grids::iq1s_grid, 2048, "iq1s_grid")) {
+    }
+
+    Halide::EncodeResult encode(std::vector<Halide::Func>) override {
+        _halide_user_error << "IQ1MGridDequantize is decode-only.\n";
+        return {};
+    }
+
+    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
+        using namespace Halide;
+        Func bytes = encoded[0];
+        Var j("j"), l2("l2"), ib("ib"), blk("blk");
+        constexpr float kIQ1S_DELTA = 0.125f;
+        constexpr int kQsOffset = 0;
+        constexpr int kQhOffset = 32;
+        constexpr int kScalesOffset = 48;
+
+        auto sc_word = [&](int k) -> Expr {
+            Expr lo = cast<uint32_t>(bytes(kScalesOffset + k * 2 + 0, blk));
+            Expr hi = cast<uint32_t>(bytes(kScalesOffset + k * 2 + 1, blk));
+            return lo | (hi << 8);
+        };
+        Expr sc0 = sc_word(0), sc1 = sc_word(1), sc2 = sc_word(2), sc3 = sc_word(3);
+        Expr d_bits = (sc0 >> 12) | ((sc1 >> 8) & 0xf0) | ((sc2 >> 4) & 0xf00) | (sc3 & 0xf000);
+        Expr d = cast<float>(reinterpret<float16_t>(cast<uint16_t>(d_bits)));
+
+        Expr qh_half = l2 / 2;
+        Expr parity = l2 % 2;
+        Expr qh_byte = cast<uint32_t>(bytes(kQhOffset + ib * 2 + qh_half, blk));
+        Expr qs_byte = bytes(kQsOffset + ib * 4 + l2, blk);
+        // Constant-amount shifts per parity arm (a variable-amount shift into a
+        // buffer index defeats Halide bounds inference even when masked).
+        Expr extra_bits = select(parity == 0, (qh_byte << 8) & 0x700, (qh_byte << 4) & 0x700);
+        Expr grid_idx = clamp(cast<int32_t>(cast<uint16_t>(cast<uint32_t>(qs_byte) + extra_bits)), 0, 2047);
+
+        Expr delta_mask = select(parity == 0, cast<uint32_t>(0x08), cast<uint32_t>(0x80));
+        Expr delta = select((qh_byte & delta_mask) != 0, -kIQ1S_DELTA, kIQ1S_DELTA);
+
+        Expr sc_idx = ib / 2;
+        Expr sc_word_val = select(sc_idx == 0, sc0, select(sc_idx == 1, sc1, select(sc_idx == 2, sc2, sc3)));
+        Expr shift = (ib % 2) * 6 + qh_half * 3;
+        Expr scale3 = (sc_word_val >> cast<uint32_t>(shift)) & 7;
+        Expr dl = d * cast<float>(2 * scale3 + 1);
+
+        Buffer<uint64_t> grid = grid_;
+        Expr grid_val = grid(grid_idx);
+        Expr grid_signed = reinterpret<int8_t>(cast<uint8_t>((grid_val >> (cast<uint64_t>(j) * 8)) & 0xff));
+
+        Func dequantized("iq1m_grid_dequantized");
+        dequantized(j, l2, ib, blk) = dl * (cast<float>(grid_signed) + delta);
+        return {{dequantized}, {}};
+    }
+
+private:
+    Halide::Buffer<uint64_t> grid_;
+};
+
 // decode({scales_h(2 bytes), scales_l(4 bytes)}) -> scale(sub, blk) for sub in
 // [0, 8) -- IQ4_XS's per-sub-block 6-bit scale `ls`, already minus its 32 bias
 // so it feeds TwoLevelScaleDequant's `d * scale(sub) * value` directly. `ls`
@@ -1666,6 +1892,404 @@ public:
         return {{scale}, {}};
     }
 };
+
+// ---------------------------------------------------------------------------
+// 7. Repack: interleaved multi-row activation layout (block_q8_0x4 / q8_Kx4).
+//
+// These are repack-specific instances of the deferred general block-relayout
+// (see the DESIGN NOTE by Reblock): "block-layout change prior to applying the
+// same lossy quantization Approximations". The 4 interleaved rows are folded
+// into the block index blk = ib*4 + row, so the existing (kk, blk)
+// SymmetricAffineQuantize + BytePack + Fp16Pack run unchanged; only the two
+// relayouts here (input row-blocking and output interleave/header assembly)
+// are new. n_rows is fixed at 4 (repack's "x4").
+// ---------------------------------------------------------------------------
+
+// Losslessly re-view a 2-D activation x(col, row in [0,4)) as block-indexed
+// block(kk in [0, block_size), blk = ib*4 + row), where ib is the k-block. The
+// per-row scale then falls out of the quantizer as a per-blk scale.
+class RepackRowReshape : public Halide::Approximation {
+public:
+    explicit RepackRowReshape(int block_size)
+        : block_size_(block_size) {
+    }
+
+    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
+        using namespace Halide;
+        Func x = inputs[0];  // x(col, row)
+        Var kk("kk"), blk("blk");
+        Func block("repack_row_block");
+        block(kk, blk) = x((blk / 4) * block_size_ + kk, blk % 4);
+        return {{block}, {}};
+    }
+
+    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
+        using namespace Halide;
+        Func block = encoded[0];  // block(kk, blk)
+        Var col("col"), row("row");
+        Func x("repack_row_x");
+        x(col, row) = block(col % block_size_, (col / block_size_) * 4 + row);
+        return {{x}, {}};
+    }
+
+private:
+    int block_size_;
+};
+
+// Assemble one interleaved output block (byte, ib) from the per-(row) packed
+// code bytes and scale bytes of the 4 rows blk = ib*4 + row. Header: 4 deltas
+// (`delta_bytes` each, row order). Payload: codes interleaved in groups of
+// `blocklen` -- payload position jj -> (row = (jj % (4*bl))/bl,
+// kk = (jj/(4*bl))*bl + jj%bl), matching GGML's src_id/src_offset.
+class RepackInterleavePack : public Halide::Approximation {
+public:
+    RepackInterleavePack(int block_size, int blocklen, int delta_bytes, bool with_bsums = false)
+        : block_size_(block_size), blocklen_(blocklen), delta_bytes_(delta_bytes), with_bsums_(with_bsums) {
+    }
+
+    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
+        using namespace Halide;
+        Func code = inputs[0], scale = inputs[1];
+        Var byte("byte"), ib("ib");
+        int header = 4 * delta_bytes_;
+        int payload_end = header + block_size_ * 4;
+
+        Expr row_d = clamp(byte / delta_bytes_, 0, 3);
+        Expr delta_byte = scale(clamp(byte % delta_bytes_, 0, delta_bytes_ - 1), ib * 4 + row_d);
+
+        Expr jj = clamp(byte - header, 0, block_size_ * 4 - 1);
+        Expr row_p = (jj % (4 * blocklen_)) / blocklen_;
+        Expr kk_p = (jj / (4 * blocklen_)) * blocklen_ + (jj % blocklen_);
+        Expr code_byte = code(kk_p, ib * 4 + row_p);
+
+        Func blocks("repack_interleave_blocks");
+        if (!with_bsums_) {
+            blocks(byte, ib) = select(byte < header, delta_byte, code_byte);
+            return {{blocks}, {}};
+        }
+
+        // Q8_K's block_q8_Kx4 appends `bsums`: int16 group-sums of the int8
+        // codes, scattered across rows/groups by GGML's index_q8_k mapping.
+        // Reduce over the interleaved payload order (rj), same as GGML.
+        Var g("g");
+        Func bsums("repack_bsums");
+        RDom rj(0, block_size_ * 4, "rj");
+        Expr rp = (rj % (4 * blocklen_)) / blocklen_;
+        Expr kp = (rj / (4 * blocklen_)) * blocklen_ + (rj % blocklen_);
+        Expr qval = reinterpret<int8_t>(code(kp, ib * 4 + rp));
+        int shift = blocklen_ == 8 ? 3 : 2;  // log2(blocklen)
+        Expr idx = (((rj & (4 * blocklen_ - 1)) >> shift) << 2) + ((rj >> 8) << 4) + ((rj >> 6) & 3);
+        bsums(g, ib) = cast<int32_t>(0);
+        bsums(idx, ib) += cast<int32_t>(qval);
+
+        int nbsum = (block_size_ / 16) * 4;  // 64 groups
+        Expr bsum_rel = clamp(byte - payload_end, 0, nbsum * 2 - 1);
+        Expr bsum_g = bsum_rel / 2;
+        Expr bsum_is_lo = (bsum_rel % 2) == 0;
+        Expr bsum_bits = reinterpret<uint16_t>(cast<int16_t>(bsums(bsum_g, ib)));
+        Expr bsum_byte = cast<uint8_t>(select(bsum_is_lo, bsum_bits & 0xff, (bsum_bits >> 8) & 0xff));
+
+        blocks(byte, ib) = select(byte < header, delta_byte, byte < payload_end, code_byte, bsum_byte);
+        return {{blocks}, {bsums}};
+    }
+
+    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
+        using namespace Halide;
+        Func blocks = encoded[0];
+        Var kk("kk"), blk("blk"), sbyte("sbyte");
+        int header = 4 * delta_bytes_;
+
+        // blk = ib*4 + row: ib = blk/4, row = blk%4.
+        Func code("repack_interleave_code");
+        Expr jj = (kk / blocklen_) * (4 * blocklen_) + (blk % 4) * blocklen_ + (kk % blocklen_);
+        code(kk, blk) = blocks(header + jj, blk / 4);
+        Func scaleb("repack_interleave_scale");
+        scaleb(sbyte, blk) = blocks((blk % 4) * delta_bytes_ + sbyte, blk / 4);
+        return {{code, scaleb}, {}};
+    }
+
+private:
+    int block_size_, blocklen_, delta_bytes_;
+    bool with_bsums_;
+};
+
+// block_q8_0x4 codec: block-layout relayout + the same symmetric Q8_0 quantize
+// (amax/127, round) as make_symmetric_block_codec, interleaved by `blocklen`.
+inline std::unique_ptr<Halide::Approximation> make_q8_0x4_scheme(int blocklen) {
+    using namespace Halide;
+    return std::make_unique<Compose>(
+        RepackInterleavePack{32, blocklen, /*delta_bytes=*/2},
+        Apply{0, 1, 1, BytePack{}},  // codes -> bytes
+        Apply{1, 1, 1, Fp16Pack{}},  // scale -> fp16 bytes
+        SymmetricAffineQuantize{32, 127, RoundingMode::Nearest, ScaleAnchor::AbsMax},
+        RepackRowReshape{32});
+}
+
+// block_q8_Kx4 codec: same shape as make_q8_0x4_scheme but a 256-element block,
+// a float32 delta per row (F32Pack), the same round-to-even -127/max Q8_K
+// quantize as make_q8_k_codec, and the interleaved bsums field (with_bsums).
+inline std::unique_ptr<Halide::Approximation> make_q8_kx4_scheme(int blocklen) {
+    using namespace Halide;
+    return std::make_unique<Compose>(
+        RepackInterleavePack{256, blocklen, /*delta_bytes=*/4, /*with_bsums=*/true},
+        Apply{0, 1, 1, BytePack{}},  // codes -> bytes
+        Apply{1, 1, 1, F32Pack{}},   // scale -> float32 bytes
+        SymmetricAffineQuantize{256, 127, RoundingMode::NearestEvenClampedHigh,
+                                ScaleAnchor::ExtremeSignedValueTwoStep},
+        RepackRowReshape{256});
+}
+
+// ---------------------------------------------------------------------------
+// 8. Repack weight un-interleave (for gemv/gemm): decode the 3-D interleaved
+// weight buffer (byte, k-block, col-group) into per-element codes + per-block
+// scale, carrying the two column dims (col-in-group j, col-group x) as explicit
+// trailing dims so the dimension-general ScaleDequant/Codebook (Halide::_) run
+// unchanged and the matmul reduces over (kk, blk). Decode-only (the weight is
+// pre-quantized; SeveredEncode is the severed encoder half). This is the
+// decode twin of RepackInterleavePack, for the four "simple" weight families.
+// ---------------------------------------------------------------------------
+enum class RepackWeightCode { SignedByte,    // Q8_0: whole signed int8
+                              SignedNibble,  // Q4_0: two's-complement 4-bit (repack's XOR-0x8)
+                              RawNibble };   // IQ4_NL/MXFP4: raw 4-bit codebook index
+enum class RepackWeightScale { Fp16,         // 2*n_cols-byte fp16 delta header
+                               E8M0,         // n_cols-byte E8M0 exponent header
+                               F32 };        // 4*n_cols-byte float32 delta header (Q8_Kx4 activation)
+
+class UnInterleaveWeight : public Halide::Approximation {
+public:
+    UnInterleaveWeight(int n_cols, int blocklen, int block_size,
+                       RepackWeightCode code_kind, RepackWeightScale scale_kind)
+        : n_cols_(n_cols), blocklen_(blocklen), block_size_(block_size),
+          code_kind_(code_kind), scale_kind_(scale_kind) {
+    }
+
+    Halide::EncodeResult encode(std::vector<Halide::Func>) override {
+        _halide_user_error << "UnInterleaveWeight is decode-only (SeveredEncode is the "
+                              "severed encoder half of its TrustedInverse).\n";
+        return {};
+    }
+
+    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
+        using namespace Halide;
+        Func blocks = encoded[0];  // blocks(byte, k-block, col-group)
+        Var kk("kk"), blk("blk"), j("j"), x("x");
+        int header = scale_kind_ == RepackWeightScale::Fp16 ? 2 * n_cols_ : scale_kind_ == RepackWeightScale::F32 ? 4 * n_cols_ :
+                                                                                                                    n_cols_;
+
+        Func codes("uninterleave_codes");
+        if (code_kind_ == RepackWeightCode::SignedByte) {
+            Expr qs_idx = (kk / blocklen_) * n_cols_ * blocklen_ + j * blocklen_ + (kk % blocklen_);
+            codes(kk, blk, j, x) = reinterpret<int8_t>(blocks(header + qs_idx, blk, x));
+        } else {
+            Expr half = kk / (block_size_ / 2);
+            Expr el = kk % (block_size_ / 2);
+            Expr qs_idx = (el / blocklen_) * n_cols_ * blocklen_ + j * blocklen_ + (el % blocklen_);
+            Expr byte = blocks(header + qs_idx, blk, x);
+            Expr nib = cast<int32_t>(select(half == 0, byte & 0x0f, (byte >> 4) & 0x0f));
+            Expr code = code_kind_ == RepackWeightCode::SignedNibble ? select(nib < 8, nib, nib - 16) : nib;
+            codes(kk, blk, j, x) = cast<int8_t>(code);
+        }
+
+        Func scale("uninterleave_scale");
+        if (scale_kind_ == RepackWeightScale::Fp16) {
+            Expr lo = cast<uint16_t>(blocks(2 * j + 0, blk, x));
+            Expr hi = cast<uint16_t>(blocks(2 * j + 1, blk, x));
+            scale(blk, j, x) = cast<float>(reinterpret<float16_t>(cast<uint16_t>(lo | (hi << 8))));
+        } else if (scale_kind_ == RepackWeightScale::F32) {
+            Expr b0 = cast<uint32_t>(blocks(4 * j + 0, blk, x)), b1 = cast<uint32_t>(blocks(4 * j + 1, blk, x));
+            Expr b2 = cast<uint32_t>(blocks(4 * j + 2, blk, x)), b3 = cast<uint32_t>(blocks(4 * j + 3, blk, x));
+            scale(blk, j, x) = reinterpret<float>(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
+        } else {
+            Expr e = cast<uint32_t>(blocks(j, blk, x));
+            Expr bits = select(e < 2, cast<uint32_t>(0x00200000) << e, (e - 1) << 23);
+            scale(blk, j, x) = reinterpret<float>(bits);
+        }
+        return {{codes, scale}, {}};
+    }
+
+private:
+    int n_cols_, blocklen_, block_size_;
+    RepackWeightCode code_kind_;
+    RepackWeightScale scale_kind_;
+};
+
+// Weight-decode scheme for a "simple" repack weight family (Q4_0/Q8_0/IQ4_NL/
+// MXFP4): un-interleave -> [codebook] -> one-level scale. The col dims ride the
+// dimension-general ScaleDequant/Codebook via Halide::_. SeveredEncode (3-D)
+// stands in for the pre-quantized weight buffer, severed by the gemv/gemm
+// generator's compute_offline.
+inline std::unique_ptr<Halide::Approximation> make_repack_weight_scheme(
+    int n_cols, int blocklen, int block_bytes, RepackWeightCode code_kind, RepackWeightScale scale_kind,
+    Halide::Buffer<int8_t> table = {}, int block_size = 32) {
+    using namespace Halide;
+    UnInterleaveWeight unpack{n_cols, blocklen, block_size, code_kind, scale_kind};
+    if (code_kind == RepackWeightCode::RawNibble) {
+        return std::make_unique<TrustedInverse>(
+            SeveredEncode{block_bytes, 3},
+            Compose{std::move(unpack), Apply{0, 1, 1, Codebook{table}}, ScaleDequant{block_size, 1}});
+    }
+    return std::make_unique<TrustedInverse>(
+        SeveredEncode{block_bytes, 3}, Compose{std::move(unpack), ScaleDequant{block_size, 1}});
+}
+
+// K-quant repack weight decode (block_q{4,5,6,2}_Kx8, n_cols=8): a bespoke,
+// verified-unchanged transcription of the repack_gemv_generators.cpp
+// weight_value helpers -- the interleaved 256-element super-block with a
+// two-level scale (and, for Q4_K/Q5_K, get_scale_min_k4 with the column index
+// standing in for the sub-block index). Its decode reads the severed 3-D
+// weight buffer and emits Wt(kk, blk, j, x) directly (kept as one leaf rather
+// than composed from TwoLevelScaleDequant + the scale-min packs, because the
+// interleave is intricate enough that a direct transcription is far less
+// error-prone; the SeveredEncode encoder half is severed by the matmul
+// generator's compute_offline). blocklen is the interleave width (4 or 8).
+enum class KQuantWeightFamily { Q4_K,
+                                Q5_K,
+                                Q6_K,
+                                Q2_K };
+
+// The genuinely repack-specific half of a K-quant weight decode: the *byte
+// addressing* that maps a logical (element kk, sub-block, column j, col-group
+// x) back to the interleaved block's scattered qs/qh/ql bytes and its scale
+// region. It is the K-quant analog of UnInterleaveWeight -- pure permutation,
+// no dequant arithmetic. It emits the same logical field slots the plain
+// K-quant decode's StructPack+packs produce, so the shared downstream
+// Compose (Fp16Pack on the fp16 headers, then TwoLevelScaleDequant, in
+// LOGICAL element order) finishes the job identically:
+//
+//   Q4_K/Q5_K: {d_bytes, dmin_bytes, scale, min, codes}   sub_size 32
+//   Q6_K:      {d_bytes,            scale,      codes}     sub_size 16 (no min)
+//   Q2_K:      {d_bytes, dmin_bytes, scale, min, codes}    sub_size 16
+//
+// scale/min are produced as VALUES here (not bytes) because their bit layouts
+// can't be delegated to the plain packs: get_scale_min_k4 (Q4_K/Q5_K) does its
+// bit-math on what is the *column* index j in the repack while the sub-block
+// rides a separate axis -- an axis transpose K4ScaleMinPack's (sub-first)
+// interface can't express -- and the qs/qh code stream is column-interleaved,
+// so PlanarBitPack's contiguous-window assumption doesn't hold. The scale
+// index reduces to kk/sub_size in logical order for all four families
+// (verified: Q6_K's base_l/base_h and Q2_K's sm_idx both collapse to kk/16
+// since blocklen divides 16), which is exactly what TwoLevelScaleDequant
+// consumes, so no re-order is needed downstream.
+class KQuantDeInterleave : public Halide::Approximation {
+public:
+    KQuantDeInterleave(KQuantWeightFamily family, int blocklen)
+        : family_(family), blocklen_(blocklen) {
+    }
+
+    Halide::EncodeResult encode(std::vector<Halide::Func>) override {
+        _halide_user_error << "KQuantDeInterleave is decode-only (SeveredEncode is the severed encoder).\n";
+        return {};
+    }
+
+    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
+        using namespace Halide;
+        Func b = encoded[0];  // blocks(byte, k-superblock, col-group)
+        Var byte("byte"), kk("kk"), blk("blk"), sub("sub"), j("j"), x("x");
+        const int bl = blocklen_;
+        const int nc = 8;
+
+        Func codes("kq_codes"), scale("kq_scale"), min("kq_min"), d_bytes("kq_d"), dmin_bytes("kq_dmin");
+
+        if (family_ == KQuantWeightFamily::Q4_K || family_ == KQuantWeightFamily::Q5_K) {
+            const bool is_q5 = family_ == KQuantWeightFamily::Q5_K;
+            const int kScalesOffset = 32;
+            const int kQsOffset = is_q5 ? 384 : 128;
+            const int kQhOffset = 128;  // Q5_K only
+
+            Expr iter = kk / 64, local64 = kk % 64, half64 = local64 / 32, lpos = local64 % 32;
+            Expr k_inner = lpos / bl, ii = lpos % bl, k = iter * (32 / bl) + k_inner;
+            Expr qs_byte = b(kQsOffset + k * nc * bl + j * bl + ii, blk, x);
+            Expr nibble = cast<int32_t>(select(half64 == 0, qs_byte & 0x0f, qs_byte >> 4));
+            Expr value = nibble;
+            if (is_q5) {
+                Expr qh_byte = b(kQhOffset + k_inner * (bl * nc) + j * bl + ii, blk, x);
+                Expr h_bit = cast<int32_t>((cast<uint32_t>(qh_byte) >> (iter * 2 + half64)) & 1);
+                value = nibble | (h_bit << 4);
+            }
+            codes(kk, blk, j, x) = value;
+
+            // get_scale_min_k4, addressed by window(sub) and bit-position j.
+            Expr window = (sub / 4) * 48 + (sub % 4) * 12;
+            Expr jj = clamp(j - 4, 0, 3);
+            scale(sub, blk, j, x) =
+                select(j < 4, b(kScalesOffset + window + j, blk, x) & 0x3f,
+                       cast<uint8_t>((b(kScalesOffset + window + 8 + jj, blk, x) & 0x0f) |
+                                     ((b(kScalesOffset + window + jj, blk, x) >> 6) << 4)));
+            min(sub, blk, j, x) =
+                select(j < 4, b(kScalesOffset + window + j + 4, blk, x) & 0x3f,
+                       cast<uint8_t>((b(kScalesOffset + window + 8 + jj, blk, x) >> 4) |
+                                     ((b(kScalesOffset + window + 4 + jj, blk, x) >> 6) << 4)));
+
+            d_bytes(byte, blk, j, x) = b(2 * j + byte, blk, x);
+            dmin_bytes(byte, blk, j, x) = b(16 + 2 * j + byte, blk, x);
+            return {{d_bytes, dmin_bytes, scale, min, codes}, {}};
+        } else if (family_ == KQuantWeightFamily::Q6_K) {
+            const int kScalesOffset = 16, kQlOffset = 144, kQhOffset = 1168;
+            const int blocks_per_half = 64 / bl;
+            constexpr int kQlSize = (256 * 8) / 2, kQhSize = (256 * 8) / 4;
+
+            Expr local128 = kk % 128, is_high = local128 >= 64, pos64 = local128 % 64, i = pos64 % bl;
+            Expr base_l = kk - i - select(is_high, 64, 0), base_h = base_l + 64;
+            Expr k = (base_l / 128) * blocks_per_half + (base_l % 128) / bl;
+            Expr ql_byte = b(kQlOffset + clamp(k * nc * bl + j * bl + i, 0, kQlSize - 1), blk, x);
+            Expr nibble = cast<int32_t>(select(is_high, ql_byte >> 4, ql_byte & 0x0f));
+            Expr qh_shift = select(is_high, ((base_h % 128) / 32) * 2, ((base_l % 128) / 32) * 2);
+            Expr qh_idx_l = (base_l / 128) * 32 + ((base_l + i) % 32);
+            Expr qh_idx_h = (base_h / 128) * 32 + ((base_h + i) % 32);
+            Expr qh_off_l = clamp((qh_idx_l / bl) * (bl * nc) + j * bl + (qh_idx_l % bl), 0, kQhSize - 1);
+            Expr qh_off_h = clamp((qh_idx_h / bl) * (bl * nc) + j * bl + (qh_idx_h % bl), 0, kQhSize - 1);
+            Expr qh_byte = b(kQhOffset + select(is_high, qh_off_h, qh_off_l), blk, x);
+            Expr hi2 = cast<int32_t>((qh_byte >> qh_shift) & 3);
+            codes(kk, blk, j, x) = (nibble | (hi2 << 4)) - 32;
+
+            // 16 plain signed int8 scales, sub = kk/16 (see class comment).
+            scale(sub, blk, j, x) = cast<int32_t>(reinterpret<int8_t>(b(kScalesOffset + sub * nc + j, blk, x)));
+            d_bytes(byte, blk, j, x) = b(2 * j + byte, blk, x);
+            return {{d_bytes, scale, codes}, {}};
+        } else {  // Q2_K (blocklen fixed 8 upstream)
+            const int kDminOffset = 16, kScalesOffset = 32, kQsOffset = 160;
+            Expr half = kk / 128, local = kk % 128, subg = local / 32, rem32 = local % 32;
+            Expr k = half * 4 + rem32 / bl, i = rem32 % bl;
+            Expr qs_byte = b(kQsOffset + k * nc * bl + j * bl + i, blk, x);
+            codes(kk, blk, j, x) = cast<int32_t>((qs_byte >> (subg * 2)) & 3);
+
+            // scale/min nibble pair, sub = kk/16 (see class comment).
+            Expr sm_idx = (sub / 8) * 64 + ((sub % 8) / 2) * 16 + j * 2 + (sub % 2);
+            Expr sm_byte = b(kScalesOffset + sm_idx, blk, x);
+            scale(sub, blk, j, x) = cast<int32_t>(sm_byte & 0x0f);
+            min(sub, blk, j, x) = cast<int32_t>(sm_byte >> 4);
+            d_bytes(byte, blk, j, x) = b(2 * j + byte, blk, x);
+            dmin_bytes(byte, blk, j, x) = b(kDminOffset + 2 * j + byte, blk, x);
+            return {{d_bytes, dmin_bytes, scale, min, codes}, {}};
+        }
+    }
+
+private:
+    KQuantWeightFamily family_;
+    int blocklen_;
+};
+
+// K-quant repack weight scheme: the de-interleave addressing leaf composed
+// with the SAME arithmetic pieces the plain K-quant decode uses (Fp16Pack for
+// the fp16 headers, then TwoLevelScaleDequant in logical element order),
+// paired with a severed 3-D encoder (the weight is pre-quantized; encode is
+// severed by compute_offline). No BlockReshape: the weight stays block-indexed
+// (kk, blk) with the column dims (j, x) riding through.
+inline std::unique_ptr<Halide::Approximation> make_kquant_repack_weight_scheme(
+    KQuantWeightFamily family, int blocklen, int block_bytes) {
+    using namespace Halide;
+    const bool has_min = family != KQuantWeightFamily::Q6_K;
+    const int sub_size = family == KQuantWeightFamily::Q4_K || family == KQuantWeightFamily::Q5_K ? 32 : 16;
+    Compose decode =
+        has_min ? Compose{KQuantDeInterleave{family, blocklen},
+                          Apply{0, 1, 1, Fp16Pack{}},  // d_bytes -> d
+                          Apply{1, 1, 1, Fp16Pack{}},  // dmin_bytes -> dmin
+                          TwoLevelScaleDequant{sub_size, true}} :
+                  Compose{KQuantDeInterleave{family, blocklen},
+                          Apply{0, 1, 1, Fp16Pack{}},  // d_bytes -> d
+                          TwoLevelScaleDequant{sub_size, false}};
+    return std::make_unique<TrustedInverse>(SeveredEncode{block_bytes, 3}, std::move(decode));
+}
 
 // The make_*() factories below each return one owned Halide::Approximation
 // (as a std::unique_ptr<Halide::Approximation>, the framework's polymorphic
@@ -1715,14 +2339,14 @@ inline std::unique_ptr<Halide::Approximation> make_symmetric_block_scheme(
         BlockReshape{block_size});
 }
 
-// quantize -> pack codes -> pack scale -> pack min -> concatenate, scale
-// then min then codes (matching block_q4_1/block_q5_1's `{fp16 d; fp16 m;
-// ...qs;}` layout) -- the affine (min+scale) counterpart to
-// make_symmetric_block_codec(), used by Q4_1 (code_bits=4, ClampedInt8). Q5_1
-// pairs with make_affine_5bit_block_codec() below instead, since it also
+// quantize -> pack codes -> pack scale -> pack min -> concatenate (scale, min,
+// codes; matching block_q4_1/block_q5_1's `{fp16 d; fp16 m; ...qs;}` layout)
+// -> reshape -- the affine (min+scale) counterpart to
+// make_symmetric_block_scheme(), used by Q4_1 (code_bits=4, ClampedInt8). Q5_1
+// pairs with make_affine_5bit_block_scheme() below instead, since it also
 // needs the qh high-bit field.
-inline std::unique_ptr<Halide::Approximation> make_affine_block_codec(
-    int block_size, int levels, AffineRounding rounding, int code_bits) {
+inline std::unique_ptr<Halide::Approximation> make_affine_block_scheme(
+    int block_size, int levels, AffineRounding rounding, int code_bits, bool block_indexed = false) {
     using namespace Halide;
     std::unique_ptr<Approximation> code_pack =
         code_bits == 4 ? std::unique_ptr<Approximation>(std::make_unique<PlanarBitPack>(4, 2, block_size / 2, /*qmax=*/0)) : std::unique_ptr<Approximation>(std::make_unique<BytePack>());
@@ -1731,63 +2355,55 @@ inline std::unique_ptr<Halide::Approximation> make_affine_block_codec(
         Apply{2, 1, 1, Fp16Pack{}},            // pack min
         Apply{1, 1, 1, Fp16Pack{}},            // pack scale
         Apply{0, 1, 1, std::move(code_pack)},  // pack codes
-        AffineQuantize{block_size, levels, rounding});
+        AffineQuantize{block_size, levels, rounding},
+        BlockReshape{block_size, block_indexed});
 }
-
-// make_affine_block_codec() + BlockReshape: the full flat-array
-// quantize_row/dequantize_row scheme.
-inline std::unique_ptr<Halide::Approximation> make_affine_block_scheme(
+inline std::unique_ptr<Halide::Approximation> make_affine_block_codec(
     int block_size, int levels, AffineRounding rounding, int code_bits) {
-    return std::make_unique<Halide::Compose>(
-        make_affine_block_codec(block_size, levels, rounding, code_bits),
-        BlockReshape{block_size});
+    return make_affine_block_scheme(block_size, levels, rounding, code_bits, /*block_indexed=*/true);
 }
 
-// Symmetric quantize (like make_symmetric_block_codec()) but 5-bit: the
+// Symmetric quantize (like make_symmetric_block_scheme()) but 5-bit: the
 // extra 5th bit goes through FiveBitPack instead of PlanarBitPack, producing
 // an extra `qh` field between the scale and the nibble bytes in the output
 // layout (matching block_q5_0's `{fp16 d; qh[4]; qs[16];}`). `qmax` is
 // always 16 (5-bit signed range [-16, 15]).
-inline std::unique_ptr<Halide::Approximation> make_symmetric_5bit_block_codec(int block_size, int qmax) {
+inline std::unique_ptr<Halide::Approximation> make_symmetric_5bit_block_scheme(int block_size, int qmax,
+                                                                               bool block_indexed = false) {
     using namespace Halide;
     return std::make_unique<Compose>(
         StructPack{{2, 4, block_size / 2}, {2, 1, 0}},
         Apply{2, 1, 1, Fp16Pack{}},
         Apply{0, 1, 2, FiveBitPack{block_size, qmax}},
-        SymmetricAffineQuantize{block_size, qmax, RoundingMode::TruncateHalfUpWithOffset, ScaleAnchor::ExtremeSignedValue});
+        SymmetricAffineQuantize{block_size, qmax, RoundingMode::TruncateHalfUpWithOffset, ScaleAnchor::ExtremeSignedValue},
+        BlockReshape{block_size, block_indexed});
+}
+inline std::unique_ptr<Halide::Approximation> make_symmetric_5bit_block_codec(int block_size, int qmax) {
+    return make_symmetric_5bit_block_scheme(block_size, qmax, /*block_indexed=*/true);
 }
 
-// make_symmetric_5bit_block_codec() + BlockReshape: the full flat-array
-// quantize_row/dequantize_row scheme.
-inline std::unique_ptr<Halide::Approximation> make_symmetric_5bit_block_scheme(int block_size, int qmax) {
-    return std::make_unique<Halide::Compose>(
-        make_symmetric_5bit_block_codec(block_size, qmax),
-        BlockReshape{block_size});
-}
-
-// Affine quantize (like make_affine_block_codec()) but 5-bit: same
-// FiveBitPack addition as make_symmetric_5bit_block_codec(), plus the min
+// Affine quantize (like make_affine_block_scheme()) but 5-bit: same
+// FiveBitPack addition as make_symmetric_5bit_block_scheme(), plus the min
 // field affine quantization needs, matching block_q5_1's
 // `{fp16 d; fp16 m; qh[4]; qs[16];}`. `qmax=0` when calling FiveBitPack
 // here (unlike Q5_0's 16): AffineQuantize's codes are already unsigned
 // [0, levels], not centered, so there's no offset to re-apply before
 // splitting into nibble+high-bit.
-inline std::unique_ptr<Halide::Approximation> make_affine_5bit_block_codec(int block_size, int levels, AffineRounding rounding) {
+inline std::unique_ptr<Halide::Approximation> make_affine_5bit_block_scheme(int block_size, int levels,
+                                                                            AffineRounding rounding,
+                                                                            bool block_indexed = false) {
     using namespace Halide;
     return std::make_unique<Compose>(
         StructPack{{2, 2, 4, block_size / 2}, {2, 3, 1, 0}},
         Apply{3, 1, 1, Fp16Pack{}},                           // pack min
         Apply{2, 1, 1, Fp16Pack{}},                           // pack scale
         Apply{0, 1, 2, FiveBitPack{block_size, /*qmax=*/0}},  // pack codes
-        AffineQuantize{block_size, levels, rounding});
+        AffineQuantize{block_size, levels, rounding},
+        BlockReshape{block_size, block_indexed});
 }
-
-// make_affine_5bit_block_codec() + BlockReshape: the full flat-array
-// quantize_row/dequantize_row scheme.
-inline std::unique_ptr<Halide::Approximation> make_affine_5bit_block_scheme(int block_size, int levels, AffineRounding rounding) {
-    return std::make_unique<Halide::Compose>(
-        make_affine_5bit_block_codec(block_size, levels, rounding),
-        BlockReshape{block_size});
+inline std::unique_ptr<Halide::Approximation> make_affine_5bit_block_codec(int block_size, int levels,
+                                                                           AffineRounding rounding) {
+    return make_affine_5bit_block_scheme(block_size, levels, rounding, /*block_indexed=*/true);
 }
 
 // Symmetric byte-packed quantize (like make_symmetric_block_codec() with
@@ -1799,7 +2415,8 @@ inline std::unique_ptr<Halide::Approximation> make_affine_5bit_block_scheme(int 
 // Q8_1 as the activation format. AppendCodeSum needs no Apply wrapper: it
 // consumes and produces the *whole* current list (like quantize itself),
 // not just one element of it.
-inline std::unique_ptr<Halide::Approximation> make_symmetric_byte_sum_block_codec(int block_size, int qmax) {
+inline std::unique_ptr<Halide::Approximation> make_symmetric_byte_sum_block_scheme(int block_size, int qmax,
+                                                                                   bool block_indexed = false) {
     using namespace Halide;
     return std::make_unique<Compose>(
         StructPack{{2, 2, block_size}, {1, 2, 0}},
@@ -1807,17 +2424,15 @@ inline std::unique_ptr<Halide::Approximation> make_symmetric_byte_sum_block_code
         Apply{1, 1, 1, Fp16Pack{}},  // pack scale
         Apply{0, 1, 1, BytePack{}},  // pack codes
         AppendCodeSum{block_size},
-        SymmetricAffineQuantize{block_size, qmax, RoundingMode::Nearest, ScaleAnchor::AbsMax});
+        SymmetricAffineQuantize{block_size, qmax, RoundingMode::Nearest, ScaleAnchor::AbsMax},
+        BlockReshape{block_size, block_indexed});
 }
 
-// make_symmetric_byte_sum_block_codec() + BlockReshape: the full flat-array
-// quantize_row scheme (see above -- there is normally no matching
-// dequantize_row Generator, but this is still available for completeness/
-// consistency with every other scheme here).
-inline std::unique_ptr<Halide::Approximation> make_symmetric_byte_sum_block_scheme(int block_size, int qmax) {
-    return std::make_unique<Halide::Compose>(
-        make_symmetric_byte_sum_block_codec(block_size, qmax),
-        BlockReshape{block_size});
+// Block-indexed (kk, blk) codec sibling of make_symmetric_byte_sum_block_scheme,
+// for Q8_1 as a vec_dot activation. The derived `s` field is dropped by
+// AppendCodeSum::decode, so decode yields a plain d*code dequant.
+inline std::unique_ptr<Halide::Approximation> make_symmetric_byte_sum_block_codec(int block_size, int qmax) {
+    return make_symmetric_byte_sum_block_scheme(block_size, qmax, /*block_indexed=*/true);
 }
 
 // Q8_K: activation-only (quantize_row only, matching Q8_1's own situation
@@ -1829,7 +2444,8 @@ inline std::unique_ptr<Halide::Approximation> make_symmetric_byte_sum_block_sche
 // nearest-int-then-reciprocal-pair quantizer bit-for-bit -- see their own
 // comments in SymmetricAffineQuantize above for why the usual
 // Nearest/ExtremeSignedValue formulas aren't equivalent here.
-inline std::unique_ptr<Halide::Approximation> make_q8_k_codec(int block_size, int qmax) {
+inline std::unique_ptr<Halide::Approximation> make_q8_k_scheme(int block_size, int qmax,
+                                                               bool block_indexed = false) {
     using namespace Halide;
     return std::make_unique<Compose>(
         StructPack{{4, block_size, (block_size / 16) * 2}, {1, 0, 2}},
@@ -1838,13 +2454,15 @@ inline std::unique_ptr<Halide::Approximation> make_q8_k_codec(int block_size, in
         Apply{0, 1, 1, BytePack{}},   // pack codes
         AppendGroupSumsInt16{16},
         SymmetricAffineQuantize{block_size, qmax, RoundingMode::NearestEvenClampedHigh,
-                                ScaleAnchor::ExtremeSignedValueTwoStep});
+                                ScaleAnchor::ExtremeSignedValueTwoStep},
+        BlockReshape{block_size, block_indexed});
 }
 
-inline std::unique_ptr<Halide::Approximation> make_q8_k_scheme(int block_size, int qmax) {
-    return std::make_unique<Halide::Compose>(
-        make_q8_k_codec(block_size, qmax),
-        BlockReshape{block_size});
+// Block-indexed (kk, blk) codec sibling of make_q8_k_scheme, for Q8_K as a
+// vec_dot activation. The derived `bsums` field is dropped by
+// AppendGroupSumsInt16::decode, so decode yields a plain d*code dequant.
+inline std::unique_ptr<Halide::Approximation> make_q8_k_codec(int block_size, int qmax) {
+    return make_q8_k_scheme(block_size, qmax, /*block_indexed=*/true);
 }
 
 // ---------------------------------------------------------------------------
@@ -1864,7 +2482,7 @@ inline std::unique_ptr<Halide::Approximation> make_codebook_scheme(
     std::string extern_name, int block_size, Halide::Buffer<int8_t> table,
     std::unique_ptr<Halide::Approximation> code_pack, int code_bytes,
     std::unique_ptr<Halide::Approximation> scale_pack, int scale_bytes,
-    int num_scales, bool scale_first) {
+    int num_scales, bool scale_first, bool block_indexed = false) {
     using namespace Halide;
     StructPack layout = scale_first ? StructPack{{scale_bytes, code_bytes}, {1, 0}} : StructPack{{code_bytes, scale_bytes}, {0, 1}};
     return std::make_unique<TrustedInverse>(
@@ -1875,7 +2493,7 @@ inline std::unique_ptr<Halide::Approximation> make_codebook_scheme(
             Apply{0, 1, 1, Codebook{std::move(table)}},  // codes -> codebook values
             Apply{1, 1, 1, std::move(scale_pack)},       // scale bytes -> scale
             ScaleDequant{block_size, num_scales},
-            BlockReshape{block_size},
+            BlockReshape{block_size, block_indexed},
         });
 }
 
@@ -1889,7 +2507,7 @@ inline std::unique_ptr<Halide::Approximation> make_k_quant_scheme(
     std::string extern_name, int block_size, int sub_size,
     std::vector<int> field_widths, std::vector<int> input_index, bool has_min,
     std::unique_ptr<Halide::Approximation> scale_min_pack,
-    std::unique_ptr<Halide::Approximation> code_pack) {
+    std::unique_ptr<Halide::Approximation> code_pack, bool block_indexed = false) {
     using namespace Halide;
     Compose decode = has_min ? Compose{
                                    StructPack{field_widths, input_index},
@@ -1898,7 +2516,7 @@ inline std::unique_ptr<Halide::Approximation> make_k_quant_scheme(
                                    Apply{2, 2, 1, std::move(scale_min_pack)},  // scale_min -> {scale, min}
                                    Apply{4, 1, 1, std::move(code_pack)},       // codes
                                    TwoLevelScaleDequant{sub_size, true},
-                                   BlockReshape{block_size},
+                                   BlockReshape{block_size, block_indexed},
                                } :
                                Compose{
                                    StructPack{field_widths, input_index},
@@ -1906,7 +2524,7 @@ inline std::unique_ptr<Halide::Approximation> make_k_quant_scheme(
                                    Apply{1, 1, 1, std::move(scale_min_pack)},  // scale
                                    Apply{2, 1, 1, std::move(code_pack)},       // codes
                                    TwoLevelScaleDequant{sub_size, false},
-                                   BlockReshape{block_size},
+                                   BlockReshape{block_size, block_indexed},
                                };
     return std::make_unique<TrustedInverse>(ExternQuantize{std::move(extern_name)}, std::move(decode));
 }
@@ -1916,11 +2534,11 @@ inline std::unique_ptr<Halide::Approximation> make_k_quant_scheme(
 // BlockReshape(`block_extents`) doing the flat<->block reshape.
 inline std::unique_ptr<Halide::Approximation> make_grid_scheme(
     std::string extern_name, std::unique_ptr<Halide::Approximation> grid_leaf,
-    std::vector<int> block_extents) {
+    std::vector<int> block_extents, bool block_indexed = false) {
     using namespace Halide;
     return std::make_unique<TrustedInverse>(
         ExternQuantize{std::move(extern_name)},
-        Compose{std::move(grid_leaf), BlockReshape{std::move(block_extents)}});
+        Compose{std::move(grid_leaf), BlockReshape{std::move(block_extents), block_indexed}});
 }
 
 // IQ4_NL: 32-element blocks, 4-bit codes into a 16-value non-uniform
@@ -1928,39 +2546,50 @@ inline std::unique_ptr<Halide::Approximation> make_grid_scheme(
 // quantize; decode unpacks {code_bytes, scale_bytes} (ScaleFirst), looks the
 // nibbles up in the codebook, applies the one fp16 scale, and reshapes to a
 // flat row.
-inline std::unique_ptr<Halide::Approximation> make_iq4_nl_scheme() {
+inline std::unique_ptr<Halide::Approximation> make_iq4_nl_scheme(bool block_indexed = false) {
     using namespace Halide;
     static const int8_t kValues[16] = {-127, -104, -83, -65, -49, -35, -22, -10,
                                        1, 13, 25, 38, 53, 69, 89, 113};
     static const Buffer<int8_t> table(const_cast<int8_t *>(kValues), 16, "kvalues_iq4nl");
     return make_codebook_scheme("iq4_nl_quantize_via_ggml", 32, table,
                                 std::make_unique<PlanarBitPack>(4, 2, 16, 0), 16,
-                                std::make_unique<Fp16Pack>(), 2, 1, /*scale_first=*/true);
+                                std::make_unique<Fp16Pack>(), 2, 1, /*scale_first=*/true, block_indexed);
+}
+
+// Block-indexed (kk, blk) codec sibling of make_iq4_nl_scheme, for vec_dot.
+inline std::unique_ptr<Halide::Approximation> make_iq4_nl_codec() {
+    return make_iq4_nl_scheme(/*block_indexed=*/true);
 }
 
 // MXFP4: 32-element blocks, 4-bit codes into the same-shaped 16-value
 // codebook as IQ4_NL (different values), one E8M0 (1-byte, power-of-two)
 // scale per block -- {e8m0 e; qs[16];}, 17 bytes.
-inline std::unique_ptr<Halide::Approximation> make_mxfp4_scheme() {
+inline std::unique_ptr<Halide::Approximation> make_mxfp4_scheme(bool block_indexed = false) {
     using namespace Halide;
     static const int8_t kValues[16] = {0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12};
     static const Buffer<int8_t> table(const_cast<int8_t *>(kValues), 16, "kvalues_mxfp4");
     return make_codebook_scheme("mxfp4_quantize_via_ggml", 32, table,
                                 std::make_unique<PlanarBitPack>(4, 2, 16, 0), 16,
-                                std::make_unique<E8M0Pack>(), 1, 1, /*scale_first=*/true);
+                                std::make_unique<E8M0Pack>(), 1, 1, /*scale_first=*/true, block_indexed);
+}
+inline std::unique_ptr<Halide::Approximation> make_mxfp4_codec() {
+    return make_mxfp4_scheme(/*block_indexed=*/true);
 }
 
 // TQ2_0: 256-element superblock, 2-bit codes (each in {0,1,2}, meaning
 // {-1,0,1}) via PlanarBitPack(2, 4, 32, 0)'s window-interleaved layout, one
 // fp16 scale -- {qs[64]; fp16 d;}, 66 bytes -- qs *before* d, unlike most
 // formats here (StructPack's codes-first field order below).
-inline std::unique_ptr<Halide::Approximation> make_tq2_0_scheme() {
+inline std::unique_ptr<Halide::Approximation> make_tq2_0_scheme(bool block_indexed = false) {
     using namespace Halide;
     static const int8_t kValues[4] = {-1, 0, 1, 0};  // index 3 is never produced
     static const Buffer<int8_t> table(const_cast<int8_t *>(kValues), 4, "kvalues_tq2_0");
     return make_codebook_scheme("tq2_0_quantize_via_ggml", 256, table,
                                 std::make_unique<PlanarBitPack>(2, 4, 32, 0), 64,
-                                std::make_unique<Fp16Pack>(), 2, 1, /*scale_first=*/false);
+                                std::make_unique<Fp16Pack>(), 2, 1, /*scale_first=*/false, block_indexed);
+}
+inline std::unique_ptr<Halide::Approximation> make_tq2_0_codec() {
+    return make_tq2_0_scheme(/*block_indexed=*/true);
 }
 
 // TQ1_0: 256-element superblock, base-3 codes (each in {0,1,2}, meaning
@@ -1968,13 +2597,16 @@ inline std::unique_ptr<Halide::Approximation> make_tq2_0_scheme() {
 // fp16 scale -- {qs[48]; qh[4]; fp16 d;}, 54 bytes -- qs+qh (combined, 52
 // bytes) *before* d, like TQ2_0. Reuses TQ2_0's exact {-1, 0, 1, unused}
 // codebook (TritPack's codes are the same raw 0/1/2 digit either way).
-inline std::unique_ptr<Halide::Approximation> make_tq1_0_scheme() {
+inline std::unique_ptr<Halide::Approximation> make_tq1_0_scheme(bool block_indexed = false) {
     using namespace Halide;
     static const int8_t kValues[4] = {-1, 0, 1, 0};  // index 3 is never produced
     static const Buffer<int8_t> table(const_cast<int8_t *>(kValues), 4, "kvalues_tq1_0");
     return make_codebook_scheme("tq1_0_quantize_via_ggml", 256, table,
                                 std::make_unique<TritPack>(), 52,
-                                std::make_unique<Fp16Pack>(), 2, 1, /*scale_first=*/false);
+                                std::make_unique<Fp16Pack>(), 2, 1, /*scale_first=*/false, block_indexed);
+}
+inline std::unique_ptr<Halide::Approximation> make_tq1_0_codec() {
+    return make_tq1_0_scheme(/*block_indexed=*/true);
 }
 
 // NVFP4: 64-element block, 4 sub-blocks of 16 elements each, 4-bit codes
@@ -1983,13 +2615,16 @@ inline std::unique_ptr<Halide::Approximation> make_tq1_0_scheme() {
 // {d[4]; qs[32];}, 36 bytes -- ScaleDequant's num_scales=4 (not 1) is what
 // makes each sub-block's dequantize use its own scale byte instead of one
 // shared scale for the whole 64-element block.
-inline std::unique_ptr<Halide::Approximation> make_nvfp4_scheme() {
+inline std::unique_ptr<Halide::Approximation> make_nvfp4_scheme(bool block_indexed = false) {
     using namespace Halide;
     static const int8_t kValues[16] = {0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12};
     static const Buffer<int8_t> table(const_cast<int8_t *>(kValues), 16, "kvalues_nvfp4");
     return make_codebook_scheme("nvfp4_quantize_via_ggml", 64, table,
                                 std::make_unique<PlanarBitPack>(4, 2, 8, 0), 32,
-                                std::make_unique<UE4M3Pack>(), 4, /*num_scales=*/4, /*scale_first=*/true);
+                                std::make_unique<UE4M3Pack>(), 4, /*num_scales=*/4, /*scale_first=*/true, block_indexed);
+}
+inline std::unique_ptr<Halide::Approximation> make_nvfp4_codec() {
+    return make_nvfp4_scheme(/*block_indexed=*/true);
 }
 
 // Q4_K: 256-element superblock, 8 sub-blocks of 32 elements each, plain
@@ -1997,11 +2632,14 @@ inline std::unique_ptr<Halide::Approximation> make_nvfp4_scheme() {
 // (scale, min) pairs (K4ScaleMinPack) -- {fp16 d; fp16 dmin; scales[12];
 // qs[128];}, 144 bytes, fields already in {d, dmin, scale_min, code} logical
 // order. Two-level scale (d*scale(sub)*code - dmin*min(sub)).
-inline std::unique_ptr<Halide::Approximation> make_q4_k_scheme() {
+inline std::unique_ptr<Halide::Approximation> make_q4_k_scheme(bool block_indexed = false) {
     using namespace Halide;
     return make_k_quant_scheme("q4_k_quantize_via_ggml", 256, 32, {2, 2, 12, 128}, {0, 1, 2, 3}, true,
                                std::make_unique<K4ScaleMinPack>(),
-                               std::make_unique<PlanarBitPack>(4, 2, 32, 0));
+                               std::make_unique<PlanarBitPack>(4, 2, 32, 0), block_indexed);
+}
+inline std::unique_ptr<Halide::Approximation> make_q4_k_codec() {
+    return make_q4_k_scheme(/*block_indexed=*/true);
 }
 
 // Q5_K: same super-block/sub-block/scale-min shape as Q4_K, but each code
@@ -2012,7 +2650,7 @@ inline std::unique_ptr<Halide::Approximation> make_q4_k_scheme() {
 // 160-byte combined "code" field, split by an inner Compose {StructPack ->
 // unpack qh/qs -> CombineBits} (HighFirst: qh before qs), offset=0 since
 // Q5_K's code is a plain 0..31 unsigned magnitude, not recentered.
-inline std::unique_ptr<Halide::Approximation> make_q5_k_scheme() {
+inline std::unique_ptr<Halide::Approximation> make_q5_k_scheme(bool block_indexed = false) {
     using namespace Halide;
     return make_k_quant_scheme(
         "q5_k_quantize_via_ggml", 256, 32, {2, 2, 12, 160}, {0, 1, 2, 3}, true,
@@ -2023,7 +2661,11 @@ inline std::unique_ptr<Halide::Approximation> make_q5_k_scheme() {
             StructPack{{32, 128}, {1, 0}},               // {qh[32]; qs[128];} -> {low, high}
             Apply{0, 1, 1, PlanarBitPack{4, 2, 32, 0}},  // qs -> low nibble
             Apply{1, 1, 1, PlanarBitPack{1, 8, 32, 0}},  // qh -> high bit
-            CombineBits{16, 0}));
+            CombineBits{16, 0}),
+        block_indexed);
+}
+inline std::unique_ptr<Halide::Approximation> make_q5_k_codec() {
+    return make_q5_k_scheme(/*block_indexed=*/true);
 }
 
 // Q2_K: 256-element superblock, 16 sub-blocks of 16 elements each, plain
@@ -2033,11 +2675,14 @@ inline std::unique_ptr<Halide::Approximation> make_q5_k_scheme() {
 // {scale_min, code, d, dmin} order (scale_min/code *before* d/dmin, unlike
 // Q4_K/Q5_K); StructPack's input_index normalizes back to {d, dmin,
 // scale_min, code}.
-inline std::unique_ptr<Halide::Approximation> make_q2_k_scheme() {
+inline std::unique_ptr<Halide::Approximation> make_q2_k_scheme(bool block_indexed = false) {
     using namespace Halide;
     return make_k_quant_scheme("q2_k_quantize_via_ggml", 256, 16, {16, 64, 2, 2}, {2, 3, 0, 1}, true,
                                std::make_unique<NibblePairPack>(),
-                               std::make_unique<PlanarBitPack>(2, 4, 32, 0));
+                               std::make_unique<PlanarBitPack>(2, 4, 32, 0), block_indexed);
+}
+inline std::unique_ptr<Halide::Approximation> make_q2_k_codec() {
+    return make_q2_k_scheme(/*block_indexed=*/true);
 }
 
 // Q3_K: 256-element superblock, 16 sub-blocks of 16 elements each, no min
@@ -2050,7 +2695,7 @@ inline std::unique_ptr<Halide::Approximation> make_q2_k_scheme() {
 // hmask+qs are adjacent in memory, treated as one 96-byte combined "code"
 // field (HighFirst: hmask before qs); on-disk {code, scale, d} normalizes to
 // logical {d, scale, code}.
-inline std::unique_ptr<Halide::Approximation> make_q3_k_scheme() {
+inline std::unique_ptr<Halide::Approximation> make_q3_k_scheme(bool block_indexed = false) {
     using namespace Halide;
     return make_k_quant_scheme(
         "q3_k_quantize_via_ggml", 256, 16, {96, 12, 2}, {2, 1, 0}, false,
@@ -2061,7 +2706,11 @@ inline std::unique_ptr<Halide::Approximation> make_q3_k_scheme() {
             StructPack{{32, 64}, {1, 0}},                // {hmask[32]; qs[64];} -> {low, high}
             Apply{0, 1, 1, PlanarBitPack{2, 4, 32, 0}},  // qs -> low 2 bits
             Apply{1, 1, 1, PlanarBitPack{1, 8, 32, 0}},  // hmask -> high bit
-            CombineBits{4, 4}));
+            CombineBits{4, 4}),
+        block_indexed);
+}
+inline std::unique_ptr<Halide::Approximation> make_q3_k_codec() {
+    return make_q3_k_scheme(/*block_indexed=*/true);
 }
 
 // Q6_K: 256-element superblock, 16 sub-blocks of 16 elements each, no min --
@@ -2072,7 +2721,7 @@ inline std::unique_ptr<Halide::Approximation> make_q3_k_scheme() {
 // reinterpret<int8_t> is exactly what this needs) -- {ql[128]; qh[64];
 // scales[16]; fp16 d;}, 210 bytes. ql+qh are adjacent in memory, treated as
 // one 192-byte combined "code" field (LowFirst: ql before qh).
-inline std::unique_ptr<Halide::Approximation> make_q6_k_scheme() {
+inline std::unique_ptr<Halide::Approximation> make_q6_k_scheme(bool block_indexed = false) {
     using namespace Halide;
     return make_k_quant_scheme(
         "q6_k_quantize_via_ggml", 256, 16, {192, 16, 2}, {2, 1, 0}, false,
@@ -2083,7 +2732,11 @@ inline std::unique_ptr<Halide::Approximation> make_q6_k_scheme() {
             StructPack{{128, 64}, {0, 1}},               // {ql[128]; qh[64];} -> {low, high}
             Apply{0, 1, 1, PlanarBitPack{4, 2, 64, 0}},  // ql -> low nibble
             Apply{1, 1, 1, PlanarBitPack{2, 4, 32, 0}},  // qh -> high 2 bits
-            CombineBits{16, 32}));
+            CombineBits{16, 32}),
+        block_indexed);
+}
+inline std::unique_ptr<Halide::Approximation> make_q6_k_codec() {
+    return make_q6_k_scheme(/*block_indexed=*/true);
 }
 
 // IQ2_S/IQ3_XXS/IQ3_S: see IQ2SGridDequantize/IQ3XXSGridDequantize/
@@ -2092,16 +2745,65 @@ inline std::unique_ptr<Halide::Approximation> make_q6_k_scheme() {
 // sub-formula worth abstracting). Extern quantize; the grid leaf's decode
 // produces block-indexed values, and BlockReshape composes the flat<->block
 // reshape on top.
-inline std::unique_ptr<Halide::Approximation> make_iq2_s_scheme() {
-    return make_grid_scheme("iq2_s_quantize_via_ggml", std::make_unique<IQ2SGridDequantize>(), {8, 4, 8});
+inline std::unique_ptr<Halide::Approximation> make_iq2_s_scheme(bool block_indexed = false) {
+    return make_grid_scheme("iq2_s_quantize_via_ggml", std::make_unique<IQ2SGridDequantize>(), {8, 4, 8}, block_indexed);
+}
+inline std::unique_ptr<Halide::Approximation> make_iq2_s_codec() {
+    return make_iq2_s_scheme(/*block_indexed=*/true);
 }
 
-inline std::unique_ptr<Halide::Approximation> make_iq3_xxs_scheme() {
-    return make_grid_scheme("iq3_xxs_quantize_via_ggml", std::make_unique<IQ3XXSGridDequantize>(), {8, 4, 8});
+inline std::unique_ptr<Halide::Approximation> make_iq3_xxs_scheme(bool block_indexed = false) {
+    return make_grid_scheme("iq3_xxs_quantize_via_ggml", std::make_unique<IQ3XXSGridDequantize>(), {8, 4, 8}, block_indexed);
+}
+inline std::unique_ptr<Halide::Approximation> make_iq3_xxs_codec() {
+    return make_iq3_xxs_scheme(/*block_indexed=*/true);
 }
 
-inline std::unique_ptr<Halide::Approximation> make_iq3_s_scheme() {
-    return make_grid_scheme("iq3_s_quantize_via_ggml", std::make_unique<IQ3SGridDequantize>(), {8, 4, 8});
+inline std::unique_ptr<Halide::Approximation> make_iq3_s_scheme(bool block_indexed = false) {
+    return make_grid_scheme("iq3_s_quantize_via_ggml", std::make_unique<IQ3SGridDequantize>(), {8, 4, 8}, block_indexed);
+}
+inline std::unique_ptr<Halide::Approximation> make_iq3_s_codec() {
+    return make_iq3_s_scheme(/*block_indexed=*/true);
+}
+
+// IQ2_XS/IQ2_XXS/IQ1_S/IQ1_M: importance-matrix-only formats with no forward
+// map -- SeveredEncode stands in for the (always-severed) encode half so the
+// dequantize/vec_dot still go through approximate_by/compute_offline. Block
+// bytes: 74 / 66 / 50 / 56.
+inline std::unique_ptr<Halide::Approximation> make_iq2_xs_scheme(bool block_indexed = false) {
+    using namespace Halide;
+    return std::make_unique<TrustedInverse>(
+        SeveredEncode{74}, Compose{IQ2XSGridDequantize{}, BlockReshape{{8, 4, 8}, block_indexed}});
+}
+inline std::unique_ptr<Halide::Approximation> make_iq2_xs_codec() {
+    return make_iq2_xs_scheme(/*block_indexed=*/true);
+}
+
+inline std::unique_ptr<Halide::Approximation> make_iq2_xxs_scheme(bool block_indexed = false) {
+    using namespace Halide;
+    return std::make_unique<TrustedInverse>(
+        SeveredEncode{66}, Compose{IQ2XXSGridDequantize{}, BlockReshape{{8, 4, 8}, block_indexed}});
+}
+inline std::unique_ptr<Halide::Approximation> make_iq2_xxs_codec() {
+    return make_iq2_xxs_scheme(/*block_indexed=*/true);
+}
+
+inline std::unique_ptr<Halide::Approximation> make_iq1_s_scheme(bool block_indexed = false) {
+    using namespace Halide;
+    return std::make_unique<TrustedInverse>(
+        SeveredEncode{50}, Compose{IQ1SGridDequantize{}, BlockReshape{{8, 4, 8}, block_indexed}});
+}
+inline std::unique_ptr<Halide::Approximation> make_iq1_s_codec() {
+    return make_iq1_s_scheme(/*block_indexed=*/true);
+}
+
+inline std::unique_ptr<Halide::Approximation> make_iq1_m_scheme(bool block_indexed = false) {
+    using namespace Halide;
+    return std::make_unique<TrustedInverse>(
+        SeveredEncode{56}, Compose{IQ1MGridDequantize{}, BlockReshape{{8, 4, 8}, block_indexed}});
+}
+inline std::unique_ptr<Halide::Approximation> make_iq1_m_codec() {
+    return make_iq1_m_scheme(/*block_indexed=*/true);
 }
 
 // IQ4_XS: 256-element superblock, 8 sub-blocks of 32 elements, the superblock
@@ -2110,7 +2812,7 @@ inline std::unique_ptr<Halide::Approximation> make_iq3_s_scheme() {
 // `d * (ls - 32)`, a two-level scale (no min) whose per-sub-block `ls` is
 // bit-interleaved across two byte fields (IQ4XSScalePack) -- {fp16 d;
 // scales_h[2]; scales_l[4]; qs[128];}, 136 bytes.
-inline std::unique_ptr<Halide::Approximation> make_iq4_xs_scheme() {
+inline std::unique_ptr<Halide::Approximation> make_iq4_xs_scheme(bool block_indexed = false) {
     using namespace Halide;
     static const int8_t kValues[16] = {-127, -104, -83, -65, -49, -35, -22, -10,
                                        1, 13, 25, 38, 53, 69, 89, 113};
@@ -2124,8 +2826,11 @@ inline std::unique_ptr<Halide::Approximation> make_iq4_xs_scheme() {
             Apply{2, 1, 1, PlanarBitPack{4, 2, 16, 0}},  // qs -> nibbles
             Apply{2, 1, 1, Codebook{table}},             // nibbles -> codebook values
             TwoLevelScaleDequant{32, false},
-            BlockReshape{256},
+            BlockReshape{256, block_indexed},
         });
+}
+inline std::unique_ptr<Halide::Approximation> make_iq4_xs_codec() {
+    return make_iq4_xs_scheme(/*block_indexed=*/true);
 }
 
 }  // namespace ggml_halide

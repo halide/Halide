@@ -40,7 +40,11 @@ enum class Family { IQ4_NL,
                     IQ2_S,
                     IQ3_XXS,
                     IQ3_S,
-                    IQ4_XS };
+                    IQ4_XS,
+                    IQ2_XS,
+                    IQ2_XXS,
+                    IQ1_S,
+                    IQ1_M };
 
 template<Direction dir>
 class LookupTableCodecGenerator : public CodecGeneratorBase<LookupTableCodecGenerator<dir>, dir> {
@@ -56,7 +60,11 @@ public:
          {"iq2_s", Family::IQ2_S},
          {"iq3_xxs", Family::IQ3_XXS},
          {"iq3_s", Family::IQ3_S},
-         {"iq4_xs", Family::IQ4_XS}}};
+         {"iq4_xs", Family::IQ4_XS},
+         {"iq2_xs", Family::IQ2_XS},
+         {"iq2_xxs", Family::IQ2_XXS},
+         {"iq1_s", Family::IQ1_S},
+         {"iq1_m", Family::IQ1_M}}};
 
     SchemeAndBytes build_scheme() const {
         // switch's controlling expression can't resolve GeneratorParam<T>'s
@@ -81,6 +89,17 @@ public:
             return {make_iq3_s_scheme(), 110};  // {fp16 d; qs[64]; qh[8]; signs[32]; scales[4];}
         case Family::IQ4_XS:
             return {make_iq4_xs_scheme(), 136};  // {fp16 d; scales_h[2]; scales_l[4]; qs[128];}
+        // Importance-matrix-only (dequantize direction only -- no quantize
+        // library is built for these; SeveredEncode stands in for the missing
+        // forward map).
+        case Family::IQ2_XS:
+            return {make_iq2_xs_scheme(), 74};
+        case Family::IQ2_XXS:
+            return {make_iq2_xxs_scheme(), 66};
+        case Family::IQ1_S:
+            return {make_iq1_s_scheme(), 50};
+        case Family::IQ1_M:
+            return {make_iq1_m_scheme(), 56};
         }
         _halide_internal_error << "unreachable Family\n";
     }

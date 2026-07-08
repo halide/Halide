@@ -1,36 +1,15 @@
 add_halide_generator(
     quants.generator
     SOURCES
-    q4_1_generators.cpp
-    q5_0_generators.cpp
-    q5_1_generators.cpp
-    q2_k_generators.cpp
-    q6_k_generators.cpp
-    q4_k_generators.cpp
-    q5_k_generators.cpp
-    q3_k_generators.cpp
-    q1_0_generators.cpp
-    mxfp4_generators.cpp
-    nvfp4_generators.cpp
-    iq4_nl_generators.cpp
-    iq4_xs_generators.cpp
-    tq1_0_generators.cpp
-    tq2_0_generators.cpp
-    iq2_xxs_generators.cpp
-    iq2_xs_generators.cpp
-    iq2_s_generators.cpp
-    iq3_xxs_generators.cpp
-    iq3_s_generators.cpp
-    iq1_s_generators.cpp
-    iq1_m_generators.cpp
     f16_generators.cpp
     bf16_generators.cpp
     repack_quantize_mat_generators.cpp
-    repack_gemv_generators.cpp
-    repack_gemm_generators.cpp
+    repack_matmul_generator.cpp
     symmetric_quant_generators.cpp
     symmetric_vec_dot_generator.cpp
     lookup_table_quant_generators.cpp
+    lookup_table_vec_dot_generator.cpp
+    k_quant_vec_dot_generator.cpp
     k_quant_generators.cpp
 )
 
@@ -59,8 +38,8 @@ add_halide_library(
     FROM quants.generator
     GENERATOR symmetric_vec_dot
     PARAMS
-    block_size=32 w_qmax=8 w_code_bits=4 w_rounding=truncate_half_up_with_offset
-    w_anchor=extreme_signed a_qmax=127 a_code_bits=8 a_rounding=nearest a_anchor=abs_max
+    w_kind=symmetric block_size=32 w_qmax=8 w_code_bits=4 w_rounding=truncate_half_up_with_offset
+    w_anchor=extreme_signed a_kind=q8_0 a_qmax=127
 )
 # Q4_1 is affine (min+scale, not symmetric): quant_components.h's
 # AffineQuantize + NibblePack, matching block_q4_1's {fp16 d; fp16 m; qs[16];}.
@@ -76,7 +55,14 @@ add_halide_library(
     GENERATOR symmetric_dequantize
     PARAMS kind=affine block_size=32 levels=15 code_bits=4 affine_rounding=clamped_int8
 )
-add_halide_library(q4_1_vec_dot FROM quants.generator GENERATOR q4_1_vec_dot)
+add_halide_library(
+    q4_1_vec_dot
+    FROM quants.generator
+    GENERATOR symmetric_vec_dot
+    PARAMS
+    w_kind=affine block_size=32 w_levels=15 w_code_bits=4 w_affine_rounding=clamped_int8 a_kind=q8_1
+    a_qmax=127
+)
 # Q5_0 is symmetric like Q4_0, but 5-bit: quant_components.h's
 # SymmetricAffineQuantize + FiveBitPack, matching block_q5_0's
 # {fp16 d; qh[4]; qs[16];}.
@@ -92,7 +78,12 @@ add_halide_library(
     GENERATOR symmetric_dequantize
     PARAMS kind=symmetric_5bit block_size=32 qmax=16
 )
-add_halide_library(q5_0_vec_dot FROM quants.generator GENERATOR q5_0_vec_dot)
+add_halide_library(
+    q5_0_vec_dot
+    FROM quants.generator
+    GENERATOR symmetric_vec_dot
+    PARAMS w_kind=symmetric_5bit block_size=32 w_qmax=16 a_kind=q8_0 a_qmax=127
+)
 # Q5_1 is affine like Q4_1, but 5-bit: quant_components.h's AffineQuantize +
 # FiveBitPack, matching block_q5_1's {fp16 d; fp16 m; qh[4]; qs[16];}.
 add_halide_library(
@@ -107,7 +98,14 @@ add_halide_library(
     GENERATOR symmetric_dequantize
     PARAMS kind=affine_5bit block_size=32 levels=31 affine_rounding=unclamped_uint8
 )
-add_halide_library(q5_1_vec_dot FROM quants.generator GENERATOR q5_1_vec_dot)
+add_halide_library(
+    q5_1_vec_dot
+    FROM quants.generator
+    GENERATOR symmetric_vec_dot
+    PARAMS
+    w_kind=affine_5bit block_size=32 w_levels=31 w_affine_rounding=unclamped_uint8 a_kind=q8_1
+    a_qmax=127
+)
 add_halide_library(
     q8_0_quantize
     FROM quants.generator
@@ -125,8 +123,8 @@ add_halide_library(
     FROM quants.generator
     GENERATOR symmetric_vec_dot
     PARAMS
-    block_size=32 w_qmax=127 w_code_bits=8 w_rounding=nearest w_anchor=abs_max a_qmax=127
-    a_code_bits=8 a_rounding=nearest a_anchor=abs_max
+    w_kind=symmetric block_size=32 w_qmax=127 w_code_bits=8 w_rounding=nearest w_anchor=abs_max
+    a_kind=q8_0 a_qmax=127
 )
 # Q8_1 is symmetric byte-packed like Q8_0, plus AppendCodeSum's derived 's'
 # field, matching block_q8_1's {fp16 d; fp16 s; qs[32];}. Activation-only
@@ -167,7 +165,7 @@ add_halide_library(
     GENERATOR k_quant_dequantize
     PARAMS family=q2_k
 )
-add_halide_library(q2_k_vec_dot FROM quants.generator GENERATOR q2_k_vec_dot)
+add_halide_library(q2_k_vec_dot FROM quants.generator GENERATOR k_quant_vec_dot PARAMS family=q2_k)
 # Q6_K's quantize/dequantize kernels are GENERATOR_ARGS instantiations of
 # the generic, reusable Approximation-based k_quant_quantize/
 # k_quant_dequantize generators (see k_quant_generators.cpp and
@@ -184,7 +182,7 @@ add_halide_library(
     GENERATOR k_quant_dequantize
     PARAMS family=q6_k
 )
-add_halide_library(q6_k_vec_dot FROM quants.generator GENERATOR q6_k_vec_dot)
+add_halide_library(q6_k_vec_dot FROM quants.generator GENERATOR k_quant_vec_dot PARAMS family=q6_k)
 # Q4_K's quantize/dequantize kernels are GENERATOR_ARGS instantiations of
 # the generic, reusable Approximation-based k_quant_quantize/
 # k_quant_dequantize generators (see k_quant_generators.cpp and
@@ -201,7 +199,7 @@ add_halide_library(
     GENERATOR k_quant_dequantize
     PARAMS family=q4_k
 )
-add_halide_library(q4_k_vec_dot FROM quants.generator GENERATOR q4_k_vec_dot)
+add_halide_library(q4_k_vec_dot FROM quants.generator GENERATOR k_quant_vec_dot PARAMS family=q4_k)
 # Q5_K's quantize/dequantize kernels are GENERATOR_ARGS instantiations of
 # the generic, reusable Approximation-based k_quant_quantize/
 # k_quant_dequantize generators (see k_quant_generators.cpp and
@@ -218,7 +216,7 @@ add_halide_library(
     GENERATOR k_quant_dequantize
     PARAMS family=q5_k
 )
-add_halide_library(q5_k_vec_dot FROM quants.generator GENERATOR q5_k_vec_dot)
+add_halide_library(q5_k_vec_dot FROM quants.generator GENERATOR k_quant_vec_dot PARAMS family=q5_k)
 # Q3_K's quantize/dequantize kernels are GENERATOR_ARGS instantiations of
 # the generic, reusable Approximation-based k_quant_quantize/
 # k_quant_dequantize generators (see k_quant_generators.cpp and
@@ -235,7 +233,7 @@ add_halide_library(
     GENERATOR k_quant_dequantize
     PARAMS family=q3_k
 )
-add_halide_library(q3_k_vec_dot FROM quants.generator GENERATOR q3_k_vec_dot)
+add_halide_library(q3_k_vec_dot FROM quants.generator GENERATOR k_quant_vec_dot PARAMS family=q3_k)
 # Q1_0 is symmetric with a mean-abs scale and sign-only (1-bit) codes:
 # quant_components.h's SymmetricAffineQuantize (ScaleAnchor::MeanAbs,
 # RoundingMode::SignOnly) + BitPack, matching block_q1_0's {fp16 d; qs[16];}.
@@ -251,7 +249,14 @@ add_halide_library(
     GENERATOR symmetric_dequantize
     PARAMS block_size=128 qmax=1 code_bits=1 rounding=sign_only anchor=mean_abs
 )
-add_halide_library(q1_0_vec_dot FROM quants.generator GENERATOR q1_0_vec_dot)
+add_halide_library(
+    q1_0_vec_dot
+    FROM quants.generator
+    GENERATOR symmetric_vec_dot
+    PARAMS
+    w_kind=symmetric block_size=128 w_qmax=1 w_code_bits=1 w_rounding=sign_only w_anchor=mean_abs
+    a_kind=q8_0 a_qmax=127
+)
 # MXFP4/IQ4_NL's quantize/dequantize kernels are GENERATOR_ARGS
 # instantiations of the generic, reusable Approximation-based
 # lookup_table_quantize/lookup_table_dequantize generators (see
@@ -272,7 +277,12 @@ add_halide_library(
     GENERATOR lookup_table_dequantize
     PARAMS family=mxfp4
 )
-add_halide_library(mxfp4_vec_dot FROM quants.generator GENERATOR mxfp4_vec_dot)
+add_halide_library(
+    mxfp4_vec_dot
+    FROM quants.generator
+    GENERATOR lookup_table_vec_dot
+    PARAMS family=mxfp4
+)
 # NVFP4's quantize/dequantize kernels are GENERATOR_ARGS instantiations of
 # the generic, reusable Approximation-based lookup_table_quantize/
 # lookup_table_dequantize generators (see lookup_table_quant_generators.cpp
@@ -289,7 +299,12 @@ add_halide_library(
     GENERATOR lookup_table_dequantize
     PARAMS family=nvfp4
 )
-add_halide_library(nvfp4_vec_dot FROM quants.generator GENERATOR nvfp4_vec_dot)
+add_halide_library(
+    nvfp4_vec_dot
+    FROM quants.generator
+    GENERATOR lookup_table_vec_dot
+    PARAMS family=nvfp4
+)
 add_halide_library(
     iq4_nl_quantize
     FROM quants.generator
@@ -302,7 +317,12 @@ add_halide_library(
     GENERATOR lookup_table_dequantize
     PARAMS family=iq4_nl
 )
-add_halide_library(iq4_nl_vec_dot FROM quants.generator GENERATOR iq4_nl_vec_dot)
+add_halide_library(
+    iq4_nl_vec_dot
+    FROM quants.generator
+    GENERATOR lookup_table_vec_dot
+    PARAMS family=iq4_nl
+)
 # IQ4_XS's quantize/dequantize kernels are GENERATOR_ARGS instantiations of
 # the generic, reusable Approximation-based lookup_table_quantize/
 # lookup_table_dequantize generators (see lookup_table_quant_generators.cpp
@@ -319,7 +339,12 @@ add_halide_library(
     GENERATOR lookup_table_dequantize
     PARAMS family=iq4_xs
 )
-add_halide_library(iq4_xs_vec_dot FROM quants.generator GENERATOR iq4_xs_vec_dot)
+add_halide_library(
+    iq4_xs_vec_dot
+    FROM quants.generator
+    GENERATOR lookup_table_vec_dot
+    PARAMS family=iq4_xs
+)
 # TQ1_0's quantize/dequantize kernels are GENERATOR_ARGS instantiations of
 # the generic, reusable Approximation-based lookup_table_quantize/
 # lookup_table_dequantize generators (see lookup_table_quant_generators.cpp
@@ -336,7 +361,12 @@ add_halide_library(
     GENERATOR lookup_table_dequantize
     PARAMS family=tq1_0
 )
-add_halide_library(tq1_0_vec_dot FROM quants.generator GENERATOR tq1_0_vec_dot)
+add_halide_library(
+    tq1_0_vec_dot
+    FROM quants.generator
+    GENERATOR lookup_table_vec_dot
+    PARAMS family=tq1_0
+)
 # TQ2_0's quantize/dequantize kernels are GENERATOR_ARGS instantiations of
 # the generic, reusable Approximation-based lookup_table_quantize/
 # lookup_table_dequantize generators (see lookup_table_quant_generators.cpp
@@ -353,11 +383,36 @@ add_halide_library(
     GENERATOR lookup_table_dequantize
     PARAMS family=tq2_0
 )
-add_halide_library(tq2_0_vec_dot FROM quants.generator GENERATOR tq2_0_vec_dot)
-add_halide_library(iq2_xxs_dequantize FROM quants.generator GENERATOR iq2_xxs_dequantize)
-add_halide_library(iq2_xxs_vec_dot FROM quants.generator GENERATOR iq2_xxs_vec_dot)
-add_halide_library(iq2_xs_dequantize FROM quants.generator GENERATOR iq2_xs_dequantize)
-add_halide_library(iq2_xs_vec_dot FROM quants.generator GENERATOR iq2_xs_vec_dot)
+add_halide_library(
+    tq2_0_vec_dot
+    FROM quants.generator
+    GENERATOR lookup_table_vec_dot
+    PARAMS family=tq2_0
+)
+add_halide_library(
+    iq2_xxs_dequantize
+    FROM quants.generator
+    GENERATOR lookup_table_dequantize
+    PARAMS family=iq2_xxs
+)
+add_halide_library(
+    iq2_xxs_vec_dot
+    FROM quants.generator
+    GENERATOR lookup_table_vec_dot
+    PARAMS family=iq2_xxs
+)
+add_halide_library(
+    iq2_xs_dequantize
+    FROM quants.generator
+    GENERATOR lookup_table_dequantize
+    PARAMS family=iq2_xs
+)
+add_halide_library(
+    iq2_xs_vec_dot
+    FROM quants.generator
+    GENERATOR lookup_table_vec_dot
+    PARAMS family=iq2_xs
+)
 # IQ2_S/IQ3_XXS/IQ3_S's quantize/dequantize kernels are GENERATOR_ARGS
 # instantiations of the generic, reusable Approximation-based
 # lookup_table_quantize/lookup_table_dequantize generators (see
@@ -375,7 +430,12 @@ add_halide_library(
     GENERATOR lookup_table_dequantize
     PARAMS family=iq2_s
 )
-add_halide_library(iq2_s_vec_dot FROM quants.generator GENERATOR iq2_s_vec_dot)
+add_halide_library(
+    iq2_s_vec_dot
+    FROM quants.generator
+    GENERATOR lookup_table_vec_dot
+    PARAMS family=iq2_s
+)
 add_halide_library(
     iq3_xxs_quantize
     FROM quants.generator
@@ -388,7 +448,12 @@ add_halide_library(
     GENERATOR lookup_table_dequantize
     PARAMS family=iq3_xxs
 )
-add_halide_library(iq3_xxs_vec_dot FROM quants.generator GENERATOR iq3_xxs_vec_dot)
+add_halide_library(
+    iq3_xxs_vec_dot
+    FROM quants.generator
+    GENERATOR lookup_table_vec_dot
+    PARAMS family=iq3_xxs
+)
 add_halide_library(
     iq3_s_quantize
     FROM quants.generator
@@ -401,11 +466,36 @@ add_halide_library(
     GENERATOR lookup_table_dequantize
     PARAMS family=iq3_s
 )
-add_halide_library(iq3_s_vec_dot FROM quants.generator GENERATOR iq3_s_vec_dot)
-add_halide_library(iq1_s_dequantize FROM quants.generator GENERATOR iq1_s_dequantize)
-add_halide_library(iq1_s_vec_dot FROM quants.generator GENERATOR iq1_s_vec_dot)
-add_halide_library(iq1_m_dequantize FROM quants.generator GENERATOR iq1_m_dequantize)
-add_halide_library(iq1_m_vec_dot FROM quants.generator GENERATOR iq1_m_vec_dot)
+add_halide_library(
+    iq3_s_vec_dot
+    FROM quants.generator
+    GENERATOR lookup_table_vec_dot
+    PARAMS family=iq3_s
+)
+add_halide_library(
+    iq1_s_dequantize
+    FROM quants.generator
+    GENERATOR lookup_table_dequantize
+    PARAMS family=iq1_s
+)
+add_halide_library(
+    iq1_s_vec_dot
+    FROM quants.generator
+    GENERATOR lookup_table_vec_dot
+    PARAMS family=iq1_s
+)
+add_halide_library(
+    iq1_m_dequantize
+    FROM quants.generator
+    GENERATOR lookup_table_dequantize
+    PARAMS family=iq1_m
+)
+add_halide_library(
+    iq1_m_vec_dot
+    FROM quants.generator
+    GENERATOR lookup_table_vec_dot
+    PARAMS family=iq1_m
+)
 add_halide_library(f16_quantize FROM quants.generator GENERATOR f16_quantize)
 add_halide_library(f16_dequantize FROM quants.generator GENERATOR f16_dequantize)
 add_halide_library(bf16_quantize FROM quants.generator GENERATOR bf16_quantize)
@@ -415,38 +505,198 @@ add_halide_library(q8_0_4x8_quantize_mat FROM quants.generator GENERATOR q8_0_4x
 add_halide_library(q8_k_4x4_quantize_mat FROM quants.generator GENERATOR q8_k_4x4_quantize_mat)
 add_halide_library(q8_k_4x8_quantize_mat FROM quants.generator GENERATOR q8_k_4x8_quantize_mat)
 
-add_halide_library(q4_0_4x4_gemv FROM quants.generator GENERATOR q4_0_4x4_gemv)
-add_halide_library(q4_0_4x8_gemv FROM quants.generator GENERATOR q4_0_4x8_gemv)
-add_halide_library(q4_0_8x8_gemv FROM quants.generator GENERATOR q4_0_8x8_gemv)
-add_halide_library(q8_0_4x4_gemv FROM quants.generator GENERATOR q8_0_4x4_gemv)
-add_halide_library(q8_0_4x8_gemv FROM quants.generator GENERATOR q8_0_4x8_gemv)
-add_halide_library(q4_0_4x4_gemm FROM quants.generator GENERATOR q4_0_4x4_gemm)
-add_halide_library(q4_0_4x8_gemm FROM quants.generator GENERATOR q4_0_4x8_gemm)
-add_halide_library(q4_0_8x8_gemm FROM quants.generator GENERATOR q4_0_8x8_gemm)
-add_halide_library(q8_0_4x4_gemm FROM quants.generator GENERATOR q8_0_4x4_gemm)
-add_halide_library(q8_0_4x8_gemm FROM quants.generator GENERATOR q8_0_4x8_gemm)
-add_halide_library(iq4_nl_4x4_gemv FROM quants.generator GENERATOR iq4_nl_4x4_gemv)
-add_halide_library(iq4_nl_8x8_gemv FROM quants.generator GENERATOR iq4_nl_8x8_gemv)
-add_halide_library(mxfp4_4x4_gemv FROM quants.generator GENERATOR mxfp4_4x4_gemv)
-add_halide_library(mxfp4_8x8_gemv FROM quants.generator GENERATOR mxfp4_8x8_gemv)
-add_halide_library(iq4_nl_4x4_gemm FROM quants.generator GENERATOR iq4_nl_4x4_gemm)
-add_halide_library(iq4_nl_8x8_gemm FROM quants.generator GENERATOR iq4_nl_8x8_gemm)
-add_halide_library(mxfp4_4x4_gemm FROM quants.generator GENERATOR mxfp4_4x4_gemm)
-add_halide_library(mxfp4_8x8_gemm FROM quants.generator GENERATOR mxfp4_8x8_gemm)
-add_halide_library(q4_k_8x4_gemv FROM quants.generator GENERATOR q4_k_8x4_gemv)
-add_halide_library(q4_k_8x8_gemv FROM quants.generator GENERATOR q4_k_8x8_gemv)
-add_halide_library(q4_k_8x4_gemm FROM quants.generator GENERATOR q4_k_8x4_gemm)
-add_halide_library(q4_k_8x8_gemm FROM quants.generator GENERATOR q4_k_8x8_gemm)
-add_halide_library(q5_k_8x4_gemv FROM quants.generator GENERATOR q5_k_8x4_gemv)
-add_halide_library(q5_k_8x8_gemv FROM quants.generator GENERATOR q5_k_8x8_gemv)
-add_halide_library(q5_k_8x4_gemm FROM quants.generator GENERATOR q5_k_8x4_gemm)
-add_halide_library(q5_k_8x8_gemm FROM quants.generator GENERATOR q5_k_8x8_gemm)
-add_halide_library(q6_k_8x4_gemv FROM quants.generator GENERATOR q6_k_8x4_gemv)
-add_halide_library(q6_k_8x8_gemv FROM quants.generator GENERATOR q6_k_8x8_gemv)
-add_halide_library(q6_k_8x4_gemm FROM quants.generator GENERATOR q6_k_8x4_gemm)
-add_halide_library(q6_k_8x8_gemm FROM quants.generator GENERATOR q6_k_8x8_gemm)
-add_halide_library(q2_k_8x8_gemv FROM quants.generator GENERATOR q2_k_8x8_gemv)
-add_halide_library(q2_k_8x8_gemm FROM quants.generator GENERATOR q2_k_8x8_gemm)
+add_halide_library(
+    q4_0_4x4_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=q4_0 n_cols=4 blocklen=4
+)
+add_halide_library(
+    q4_0_4x8_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=q4_0 n_cols=4 blocklen=8
+)
+add_halide_library(
+    q4_0_8x8_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=q4_0 n_cols=8 blocklen=8
+)
+add_halide_library(
+    q8_0_4x4_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=q8_0 n_cols=4 blocklen=4
+)
+add_halide_library(
+    q8_0_4x8_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=q8_0 n_cols=4 blocklen=8
+)
+add_halide_library(
+    q4_0_4x4_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=q4_0 n_cols=4 blocklen=4
+)
+add_halide_library(
+    q4_0_4x8_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=q4_0 n_cols=4 blocklen=8
+)
+add_halide_library(
+    q4_0_8x8_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=q4_0 n_cols=8 blocklen=8
+)
+add_halide_library(
+    q8_0_4x4_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=q8_0 n_cols=4 blocklen=4
+)
+add_halide_library(
+    q8_0_4x8_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=q8_0 n_cols=4 blocklen=8
+)
+add_halide_library(
+    iq4_nl_4x4_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=iq4_nl n_cols=4 blocklen=4
+)
+add_halide_library(
+    iq4_nl_8x8_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=iq4_nl n_cols=8 blocklen=8
+)
+add_halide_library(
+    mxfp4_4x4_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=mxfp4 n_cols=4 blocklen=4
+)
+add_halide_library(
+    mxfp4_8x8_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=mxfp4 n_cols=8 blocklen=8
+)
+add_halide_library(
+    iq4_nl_4x4_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=iq4_nl n_cols=4 blocklen=4
+)
+add_halide_library(
+    iq4_nl_8x8_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=iq4_nl n_cols=8 blocklen=8
+)
+add_halide_library(
+    mxfp4_4x4_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=mxfp4 n_cols=4 blocklen=4
+)
+add_halide_library(
+    mxfp4_8x8_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=mxfp4 n_cols=8 blocklen=8
+)
+add_halide_library(
+    q4_k_8x4_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=q4_k n_cols=8 blocklen=4
+)
+add_halide_library(
+    q4_k_8x8_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=q4_k n_cols=8 blocklen=8
+)
+add_halide_library(
+    q4_k_8x4_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=q4_k n_cols=8 blocklen=4
+)
+add_halide_library(
+    q4_k_8x8_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=q4_k n_cols=8 blocklen=8
+)
+add_halide_library(
+    q5_k_8x4_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=q5_k n_cols=8 blocklen=4
+)
+add_halide_library(
+    q5_k_8x8_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=q5_k n_cols=8 blocklen=8
+)
+add_halide_library(
+    q5_k_8x4_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=q5_k n_cols=8 blocklen=4
+)
+add_halide_library(
+    q5_k_8x8_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=q5_k n_cols=8 blocklen=8
+)
+add_halide_library(
+    q6_k_8x4_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=q6_k n_cols=8 blocklen=4
+)
+add_halide_library(
+    q6_k_8x8_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=q6_k n_cols=8 blocklen=8
+)
+add_halide_library(
+    q6_k_8x4_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=q6_k n_cols=8 blocklen=4
+)
+add_halide_library(
+    q6_k_8x8_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=q6_k n_cols=8 blocklen=8
+)
+add_halide_library(
+    q2_k_8x8_gemv
+    FROM quants.generator
+    GENERATOR repack_gemv
+    PARAMS family=q2_k n_cols=8 blocklen=8
+)
+add_halide_library(
+    q2_k_8x8_gemm
+    FROM quants.generator
+    GENERATOR repack_gemm
+    PARAMS family=q2_k n_cols=8 blocklen=8
+)
 
 # ggml_extern_quantize.cpp implements the extern-stage C functions that
 # several of the quantize pipelines above call out to -- see that file for

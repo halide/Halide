@@ -10,10 +10,11 @@
 // has no public to_float for it), so there is nothing to implement.
 //
 // Every vec_dot_<x>_<y> function computes the dot product between a row of
-// weight-type x and a row of activation-type y (y is x's GGML vec_dot_type),
-// via a from-scratch Halide reimplementation -- see each type's
-// *_generators.cpp VecDot generator, and activation_dequant.h for the
-// shared Q8_0/Q8_1/Q8_K activation-side helpers they all call.
+// weight-type x and a row of activation-type y (y is x's GGML vec_dot_type).
+// Both operands flow through the Approximation framework: the generic
+// symmetric/lookup_table/k_quant vec_dot generators splice weight and
+// activation codecs from quant_components.h via approximate_by/compute_offline
+// (see vec_dot_generator_base.h).
 
 #include <cstddef>
 #include <cstdint>
