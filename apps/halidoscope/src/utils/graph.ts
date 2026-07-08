@@ -1,12 +1,13 @@
 import Dagre from "@dagrejs/dagre";
 import type { Node, Edge } from "@xyflow/react";
 
-import { FuncMeta, NodeTypes } from "../types";
+import { EdgeTypes, FuncMeta, NodeTypes } from "@/types";
 
 /**
  * Build xyflow nodes from the backend's funcs payload, which maps Halide func
- * @param funcs
- * @returns
+ * @param funcs The funcs payload from the backend.
+ * @param type The node type to assign to each node.
+ * @returns An array of nodes formatted for use with @xyflow/react.
  */
 export function buildNodes(
   funcs: Record<string, FuncMeta>,
@@ -15,7 +16,7 @@ export function buildNodes(
   return Object.entries(funcs).map(([name, stats]) => {
     return {
       id: name,
-      type: type,
+      type,
       position: {
         x: 0,
         y: 0,
@@ -34,19 +35,25 @@ export function buildNodes(
  * consumers to their producers.
  *
  * @param dagEdges The dag_edges payload from the backend.
- * @returns An array of edges formatted for use with xyflow, where each edge has an id, source, and target.
+ * @param type The edge type to assign to each edge.
+ * @returns An array of edges formatted for use with @xyflow/react.
  */
-export function buildEdges(dagEdges: Record<string, string[]>): Edge[] {
+export function buildEdges(
+  dagEdges: Record<string, string[]>,
+  type: EdgeTypes,
+): Edge[] {
   const edges: {
     id: string;
     source: string;
     target: string;
+    type: EdgeTypes;
   }[] = [];
 
   for (const [producer, consumers] of Object.entries(dagEdges)) {
     for (const consumer of consumers) {
       edges.push({
         id: `${producer}-${consumer}`,
+        type,
         source: producer,
         target: consumer,
       });
@@ -61,7 +68,7 @@ export function getLayoutedElements(
   edges: Edge[],
 ): { nodes: Node<FuncMeta>[]; edges: Edge[] } {
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: "LR", nodesep: 40, ranksep: 80 });
+  g.setGraph({ rankdir: "LR", nodesep: 60, ranksep: 80 });
 
   edges.forEach((edge) => g.setEdge(edge.source, edge.target));
   nodes.forEach((node) => {

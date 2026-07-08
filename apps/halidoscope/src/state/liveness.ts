@@ -1,5 +1,8 @@
 import { atom } from "jotai";
 
-export type LivenessMode = "none" | "realizations" | "produce-consume";
+export type LivenessMode = "realizations" | "produce-consume";
 
-export const livenessAtom = atom<LivenessMode>("none");
+export const livenessAtom = atom<{ active: boolean; mode: LivenessMode }>({
+  active: false,
+  mode: "realizations",
+});

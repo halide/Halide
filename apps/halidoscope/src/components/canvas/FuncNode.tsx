@@ -10,11 +10,12 @@ import {
   useNodes,
   useViewport,
 } from "@xyflow/react";
-import clsx from "clsx";
+import { clsx } from "clsx";
 import { useAtomValue } from "jotai";
 import * as React from "react";
 
-import HandleCircle from "@/components/shared/HandleCircle";
+import HandleCircle from "@/components/canvas/HandleCircle";
+import { useTraceContext } from "@/hooks/trace";
 import { livenessAtom } from "@/state/liveness";
 import { packetAtom } from "@/state/packet";
 import { renderModeAtom } from "@/state/render";
@@ -27,40 +28,52 @@ import {
   renderRedundantStores,
   renderReuseDistance,
 } from "@/utils/api";
-import {
-  isFuncBufferLive,
-  isFuncConsuming,
-  isFuncProducing,
-} from "@/utils/liveness";
+import { isFuncBufferLive, isEdgeLive } from "@/utils/liveness";
 
-type FuncNode = Node<FuncMeta, "funcCanvas">;
-
-function FuncCanvas({ data }: NodeProps<FuncNode>) {
+function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   const { name, width, height } = data;
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
-  const livenessMode = useAtomValue(livenessAtom);
+  const { funcs } = useTraceContext();
+  const liveness = useAtomValue(livenessAtom);
   const packetIndex = useAtomValue(packetAtom);
   const renderMode = useAtomValue(renderModeAtom);
 
-  const bufferLive = React.useMemo(
-    () =>
-      livenessMode === "realizations" && isFuncBufferLive(data, packetIndex),
-    [livenessMode, data, packetIndex],
-  );
-  const producing = React.useMemo(
-    () =>
-      livenessMode === "produce-consume" && isFuncProducing(data, packetIndex),
-    [livenessMode, data, packetIndex],
-  );
-  const consuming = React.useMemo(
-    () =>
-      livenessMode === "produce-consume" && isFuncConsuming(data, packetIndex),
-    [livenessMode, data, packetIndex],
-  );
-
   const nodes = useNodes();
   const edges = useEdges();
+
+  const bufferLive = React.useMemo(
+    () =>
+      liveness.active &&
+      liveness.mode === "realizations" &&
+      isFuncBufferLive(data, packetIndex),
+    [liveness, data, packetIndex],
+  );
+
+  const producing = React.useMemo(
+    () =>
+      liveness.active &&
+      liveness.mode === "produce-consume" &&
+      edges.some(
+        (edge) =>
+          edge.source === name &&
+          isEdgeLive(funcs, edge.source, edge.target, packetIndex),
+      ),
+    [liveness, edges, funcs, name, packetIndex],
+  );
+
+  const consuming = React.useMemo(
+    () =>
+      liveness.active &&
+      liveness.mode === "produce-consume" &&
+      edges.some(
+        (edge) =>
+          edge.target === name &&
+          isEdgeLive(funcs, edge.source, edge.target, packetIndex),
+      ),
+    [liveness, edges, funcs, name, packetIndex],
+  );
+
   const incomingEdgeCount = React.useMemo(
     () => getIncomers({ id: name }, nodes, edges).length,
     [name, nodes, edges],
@@ -105,11 +118,11 @@ function FuncCanvas({ data }: NodeProps<FuncNode>) {
             case "Load Frequency":
               buffer = await renderLoadFrequency(name, target);
               break;
-            case "Reuse Distance":
-              buffer = await renderReuseDistance(name, target);
-              break;
             case "Redundant Stores":
               buffer = await renderRedundantStores(name, target);
+              break;
+            case "Reuse Distance":
+              buffer = await renderReuseDistance(name, target);
               break;
           }
 
@@ -136,14 +149,20 @@ function FuncCanvas({ data }: NodeProps<FuncNode>) {
 
   return (
     <>
-      <NodeToolbar isVisible position={Position.Top} align="start" offset={2}>
+      <NodeToolbar
+        isVisible
+        position={Position.Top}
+        align="start"
+        offset={2}
+        style={{ maxWidth: `${width * zoom}px` }}
+        className="truncate"
+      >
         <span
           className={clsx(
-            "text-ps-text-primary truncate font-mono whitespace-nowrap uppercase",
+            "text-ps-text-primary font-mono whitespace-nowrap uppercase",
             {
               "text-tiny": zoom < 0.5,
-              "text-xs": zoom >= 0.5 && zoom < 1.5,
-              "text-sm": zoom >= 1.5,
+              "text-xs": zoom >= 0.5,
             },
           )}
         >
@@ -152,7 +171,7 @@ function FuncCanvas({ data }: NodeProps<FuncNode>) {
       </NodeToolbar>
       <div
         className={clsx("ring-transparent", {
-          "ring-highlight/30!": bufferLive,
+          "ring-realization/30!": bufferLive,
           "ring-produce/30!": producing,
           "ring-consume/30!": consuming,
           "ring-4": zoom < 1,
@@ -164,7 +183,7 @@ function FuncCanvas({ data }: NodeProps<FuncNode>) {
           width={width}
           height={height}
           className={clsx("ring-transparent", {
-            "ring-highlight!": bufferLive,
+            "ring-realization!": bufferLive,
             "ring-produce!": producing,
             "ring-consume!": consuming,
             "ring-2": zoom < 1,
@@ -196,4 +215,4 @@ function FuncCanvas({ data }: NodeProps<FuncNode>) {
   );
 }
 
-export default FuncCanvas;
+export default FuncNode;
