@@ -148,6 +148,10 @@ struct ApproximationResult {
  */
 class Compose : public Approximation {
 public:
+    explicit Compose(std::vector<std::unique_ptr<Approximation>> stages)
+        : stages_(std::move(stages)) {
+    }
+
     template<typename... Stages>
     explicit Compose(Stages &&...stages) {
         stages_.reserve(sizeof...(Stages));
@@ -156,6 +160,22 @@ public:
 
     EncodeResult encode(std::vector<Func> inputs) override;
     DecodeResult decode(std::vector<Func> encoded) override;
+
+private:
+    std::vector<std::unique_ptr<Approximation>> stages_;
+};
+
+class ComposeBuilder {
+public:
+    template<typename Stage>
+    ComposeBuilder &add(Stage &&stage) {
+        stages_.emplace_back(Internal::approximation_ptr(std::forward<Stage>(stage)));
+        return *this;
+    }
+
+    [[nodiscard]] std::unique_ptr<Approximation> build() {
+        return std::make_unique<Compose>(std::move(stages_));
+    }
 
 private:
     std::vector<std::unique_ptr<Approximation>> stages_;
@@ -176,6 +196,11 @@ public:
     Apply(int idx, int encode_arity, int decode_arity, Inner &&inner)
         : idx_(idx), encode_arity_(encode_arity), decode_arity_(decode_arity),
           inner_(Internal::approximation_ptr(std::forward<Inner>(inner))) {
+    }
+
+    template<typename Inner>
+    Apply(int idx, Inner &&inner)
+        : Apply(idx, 1, 1, std::forward<Inner>(inner)) {
     }
 
     EncodeResult encode(std::vector<Func> inputs) override;
@@ -268,6 +293,39 @@ public:
     DecodeResult decode(std::vector<Func> encoded) override {
         return {encoded, {}};
     }
+};
+
+class Permute : public Approximation {
+public:
+    explicit Permute(std::vector<int> permutation) : forward_(std::move(permutation)) {
+        backward_.resize(forward_.size());
+        for (int i = 0; i < (int)forward_.size(); i++) {
+            backward_[forward_[i]] = i;
+        }
+    }
+
+    EncodeResult encode(std::vector<Func> inputs) override {
+        user_assert(inputs.size() == forward_.size()) << "Permutation size does not match input size";
+        std::vector<Func> result;
+        result.reserve(inputs.size());
+        for (int i = 0; i < (int)inputs.size(); i++) {
+            result.push_back(inputs[forward_[i]]);
+        }
+        return {result, {}};
+    }
+
+    DecodeResult decode(std::vector<Func> encoded) override {
+        user_assert(encoded.size() == forward_.size()) << "Permutation size does not match encoded size";
+        std::vector<Func> result;
+        result.reserve(encoded.size());
+        for (int i = 0; i < (int)encoded.size(); i++) {
+            result.push_back(encoded[backward_[i]]);
+        }
+        return {result, {}};
+    }
+
+private:
+    std::vector<int> forward_, backward_;
 };
 
 }  // namespace Halide
