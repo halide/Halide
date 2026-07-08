@@ -3,7 +3,7 @@
 // activation operands are decoded through the Approximation framework
 // (approximate_by + compute_offline), and the interleaved weight layout is a
 // lossless relayout (UnInterleaveWeight) composed in front of the same lossy
-// quant -- the col dims ride the dimension-general ScaleDequant/Codebook via
+// quant -- the col dims ride the dimension-general LinearDequant/Codebook via
 // Halide::_. One generator backs every (family, n_cols, blocklen) gemv library
 // (32 hand-rolled kernels -> 2 generic generators). This file covers the four
 // "simple" weight families (Q4_0/Q8_0/IQ4_NL/MXFP4); the interleaved K-quant
@@ -49,19 +49,19 @@ WeightSpec weight_spec(WFamily fam, int n_cols, int blocklen) {
     switch (fam) {
     case WFamily::Q4_0:
         return {make_repack_weight_scheme(n_cols, blocklen, 18 * n_cols,
-                                          RepackWeightCode::SignedNibble, RepackWeightScale::Fp16),
+                                          RepackWeightCode::SignedNibble, ScaleFormat::Fp16),
                 18 * n_cols};
     case WFamily::Q8_0:
         return {make_repack_weight_scheme(n_cols, blocklen, 34 * n_cols,
-                                          RepackWeightCode::SignedByte, RepackWeightScale::Fp16),
+                                          RepackWeightCode::SignedByte, ScaleFormat::Fp16),
                 34 * n_cols};
     case WFamily::IQ4_NL:
         return {make_repack_weight_scheme(n_cols, blocklen, 18 * n_cols,
-                                          RepackWeightCode::RawNibble, RepackWeightScale::Fp16, iq4nl_lut),
+                                          RepackWeightCode::RawNibble, ScaleFormat::Fp16, iq4nl_lut),
                 18 * n_cols};
     case WFamily::MXFP4:
         return {make_repack_weight_scheme(n_cols, blocklen, 17 * n_cols,
-                                          RepackWeightCode::RawNibble, RepackWeightScale::E8M0, mxfp4_lut),
+                                          RepackWeightCode::RawNibble, ScaleFormat::E8M0, mxfp4_lut),
                 17 * n_cols};
     // K-quant weights (n_cols=8 always): a bespoke interleaved decode leaf.
     case WFamily::Q4_K:
@@ -100,7 +100,8 @@ public:
         int block_size = kq ? 256 : 32;
         WeightSpec w = weight_spec(family, n_cols, blocklen);
         // Activation: plain Q8_K for K-quant weights, plain Q8_0 otherwise.
-        auto act = kq ? make_q8_k_codec(256, 127) : make_symmetric_block_codec(32, 127, RoundingMode::Nearest, ScaleAnchor::AbsMax, 8);
+        auto act = kq ? make_q8_k_scheme(256, 127, Layout::BlockIndexed).scheme
+                      : make_symmetric_block_scheme(32, 127, RoundingMode::Nearest, ScaleAnchor::AbsMax, 8, Layout::BlockIndexed).scheme;
         int act_bytes = kq ? (4 + 256 + 2 * (256 / 16)) : (2 + 32);
 
         ImageParam weight_blocks(UInt(8), 3, "weight_blocks");  // (byte, k-block, col-group)
@@ -169,11 +170,11 @@ ActSpec act_spec(bool kquant, int blocklen) {
         // (16 B) + interleaved qs (1024 B) = 1040 B; the 128 B of bsums are
         // never touched, so the input is bound to 1040, not the full 1168.
         return {make_repack_weight_scheme(4, blocklen, 1040, RepackWeightCode::SignedByte,
-                                          RepackWeightScale::F32, {}, 256),
+                                          ScaleFormat::F32, {}, 256),
                 1040, 256};
     }
     return {make_repack_weight_scheme(4, blocklen, 136, RepackWeightCode::SignedByte,
-                                      RepackWeightScale::Fp16),
+                                      ScaleFormat::Fp16),
             136, 32};
 }
 

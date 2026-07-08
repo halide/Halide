@@ -25,19 +25,19 @@
 
 #include "Halide.h"
 
+#include "quant_components.h"
+
 namespace ggml_halide {
 
 enum class Direction { Quantize,
                        Dequantize };
 
-struct SchemeAndBytes {
-    // The scheme is held as a polymorphic owning handle -- a single leaf, a
-    // Compose, or a TrustedInverse, whichever the format is (see the make_*()
-    // factories in quant_components.h) -- rather than a concrete Compose, so a
-    // one-Approximation scheme needn't be wrapped in a degenerate Compose{x}.
-    std::unique_ptr<Halide::Approximation> scheme;
-    int block_bytes;
-};
+// SchemeAndBytes itself now lives in quant_components.h (its `scheme` is
+// held as a polymorphic owning handle -- a single leaf, a Compose, or a
+// TrustedInverse, whichever the format is; see the make_*() factories
+// there) -- moved there so those factories can return it directly instead
+// of every Generator switch hand-summing a byte count alongside a bare
+// scheme.
 
 template<typename Derived, Direction dir>
 class CodecGeneratorBase : public Halide::Generator<Derived> {

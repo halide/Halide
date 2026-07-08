@@ -35,7 +35,7 @@ public:
 
     // Q8_K activation codec (block_q8_K = {float d; qs[256]; bsums[16]} = 292 bytes).
     static std::unique_ptr<Halide::Approximation> q8_k_codec() {
-        return make_q8_k_codec(256, 127);
+        return make_q8_k_scheme(256, 127, Layout::BlockIndexed).scheme;
     }
 
     VecDotSpec build_vec_dot() const {
@@ -43,15 +43,15 @@ public:
         // scale -> Float schedule.
         switch (family.value()) {
         case Family::Q2_K:
-            return {make_q2_k_codec(), 84, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_q2_k_scheme(Layout::BlockIndexed).scheme, 84, q8_k_codec(), 292, 256, ScheduleKind::Float};
         case Family::Q3_K:
-            return {make_q3_k_codec(), 110, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_q3_k_scheme(Layout::BlockIndexed).scheme, 110, q8_k_codec(), 292, 256, ScheduleKind::Float};
         case Family::Q4_K:
-            return {make_q4_k_codec(), 144, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_q4_k_scheme(Layout::BlockIndexed).scheme, 144, q8_k_codec(), 292, 256, ScheduleKind::Float};
         case Family::Q5_K:
-            return {make_q5_k_codec(), 176, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_q5_k_scheme(Layout::BlockIndexed).scheme, 176, q8_k_codec(), 292, 256, ScheduleKind::Float};
         case Family::Q6_K:
-            return {make_q6_k_codec(), 210, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_q6_k_scheme(Layout::BlockIndexed).scheme, 210, q8_k_codec(), 292, 256, ScheduleKind::Float};
         }
         _halide_internal_error << "KQuantVecDotGenerator: family not yet converted\n";
         return {};

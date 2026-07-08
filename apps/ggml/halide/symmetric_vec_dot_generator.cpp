@@ -82,22 +82,22 @@ public:
         ScheduleKind sched;
         switch (w_kind.value()) {
         case WKind::Symmetric:
-            wc = make_symmetric_block_codec(wbs, w_qmax, w_rounding, w_anchor, w_code_bits);
+            wc = make_symmetric_block_scheme(wbs, w_qmax, w_rounding, w_anchor, w_code_bits, Layout::BlockIndexed).scheme;
             wb = 2 + (w_code_bits == 4 ? wbs / 2 : (w_code_bits == 1 ? wbs / 8 : wbs));
             sched = ScheduleKind::SDOT;
             break;
         case WKind::Affine:
-            wc = make_affine_block_codec(wbs, w_levels, w_affine_rounding, w_code_bits);
+            wc = make_affine_block_scheme(wbs, w_levels, w_affine_rounding, w_code_bits, Layout::BlockIndexed).scheme;
             wb = 2 + 2 + (w_code_bits == 4 ? wbs / 2 : wbs);
             sched = ScheduleKind::Float;
             break;
         case WKind::Symmetric5Bit:
-            wc = make_symmetric_5bit_block_codec(wbs, w_qmax);
+            wc = make_symmetric_5bit_block_scheme(wbs, w_qmax, Layout::BlockIndexed).scheme;
             wb = 2 + 4 + wbs / 2;
             sched = ScheduleKind::SDOT;
             break;
         case WKind::Affine5Bit:
-            wc = make_affine_5bit_block_codec(wbs, w_levels, w_affine_rounding);
+            wc = make_affine_5bit_block_scheme(wbs, w_levels, w_affine_rounding, Layout::BlockIndexed).scheme;
             wb = 2 + 2 + 4 + wbs / 2;
             sched = ScheduleKind::Float;
             break;
@@ -112,11 +112,11 @@ public:
         int ab;
         switch (a_kind.value()) {
         case AKind::Q8_0:
-            ac = make_symmetric_block_codec(a_nat, a_qmax, RoundingMode::Nearest, ScaleAnchor::AbsMax, 8);
+            ac = make_symmetric_block_scheme(a_nat, a_qmax, RoundingMode::Nearest, ScaleAnchor::AbsMax, 8, Layout::BlockIndexed).scheme;
             ab = 2 + a_nat;
             break;
         case AKind::Q8_1:
-            ac = make_symmetric_byte_sum_block_codec(a_nat, a_qmax);
+            ac = make_symmetric_byte_sum_block_scheme(a_nat, a_qmax, Layout::BlockIndexed).scheme;
             ab = 2 + 2 + a_nat;
             break;
         }

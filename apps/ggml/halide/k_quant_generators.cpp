@@ -1,8 +1,7 @@
 // Generic, GeneratorParam-driven quantize/dequantize pair for GGML's
-// K-quant super-block formats (see quant_components.h's KQuantDequantize/
-// CombinedBitsCode/PlanarBitPack/
-// K4ScaleMinPack/NibblePairPack/Q3KScalePack for the reusable Approximation
-// pieces this assembles). "Q2_K"/"Q3_K"/"Q4_K"/"Q5_K"/"Q6_K" are not
+// K-quant super-block formats (see quant_components.h's make_k_quant_scheme/
+// CombineBits/PlanarBitPack/K4ScaleMinPack/Q3KScalePack for the reusable
+// Approximation pieces this assembles). "Q2_K"/"Q3_K"/"Q4_K"/"Q5_K"/"Q6_K" are not
 // distinct C++ classes here -- they're just different GENERATOR_ARGS
 // instantiations of the same generator template, registered in
 // CMakeLists.txt as q4_k_quantize/q4_k_dequantize etc. -- following the
@@ -55,18 +54,21 @@ public:
     SchemeAndBytes build_scheme() const {
         // switch's controlling expression can't resolve GeneratorParam<T>'s
         // implicit conversion operators unambiguously -- .value() sidesteps
-        // that by returning the plain Family directly.
+        // that by returning the plain Family directly. Each make_*_scheme()
+        // now returns its own block_bytes alongside the scheme (computed from
+        // the same field list it builds internally), so there's no byte
+        // arithmetic to duplicate here.
         switch (family.value()) {
         case Family::Q2_K:
-            return {make_q2_k_scheme(), 84};  // {scales[16]; qs[64]; fp16 d; fp16 dmin;}
+            return make_q2_k_scheme();  // {scales[16]; qs[64]; fp16 d; fp16 dmin;}
         case Family::Q3_K:
-            return {make_q3_k_scheme(), 110};  // {hmask[32]; qs[64]; scales[12]; fp16 d;}
+            return make_q3_k_scheme();  // {hmask[32]; qs[64]; scales[12]; fp16 d;}
         case Family::Q4_K:
-            return {make_q4_k_scheme(), 144};  // {fp16 d; fp16 dmin; scales[12]; qs[128];}
+            return make_q4_k_scheme();  // {fp16 d; fp16 dmin; scales[12]; qs[128];}
         case Family::Q5_K:
-            return {make_q5_k_scheme(), 176};  // {fp16 d; fp16 dmin; scales[12]; qh[32]; qs[128];}
+            return make_q5_k_scheme();  // {fp16 d; fp16 dmin; scales[12]; qh[32]; qs[128];}
         case Family::Q6_K:
-            return {make_q6_k_scheme(), 210};  // {ql[128]; qh[64]; scales[16]; fp16 d;}
+            return make_q6_k_scheme();  // {ql[128]; qh[64]; scales[16]; fp16 d;}
         }
         _halide_internal_error << "unreachable Family\n";
     }

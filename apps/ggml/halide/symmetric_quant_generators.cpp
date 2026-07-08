@@ -92,34 +92,23 @@ public:
     SchemeAndBytes build_scheme() const {
         // switch's controlling expression can't resolve GeneratorParam<T>'s
         // implicit conversion operators unambiguously -- .value() sidesteps
-        // that by returning the plain SchemeKind directly.
+        // that by returning the plain SchemeKind directly. Each make_*_scheme()
+        // now returns its own block_bytes alongside the scheme (computed from
+        // the same field list it builds internally), so there's no byte
+        // arithmetic to duplicate here.
         switch (kind.value()) {
-        case SchemeKind::Symmetric: {
-            int code_bytes = code_bits == 4 ? block_size / 2 : code_bits == 1 ? block_size / 8 :
-                                                                                block_size;
-            int bytes = 2 + code_bytes;
-            return {make_symmetric_block_scheme(block_size, qmax, rounding, anchor, code_bits), bytes};
-        }
-        case SchemeKind::Affine: {
-            int bytes = 4 + (code_bits == 4 ? block_size / 2 : block_size);
-            return {make_affine_block_scheme(block_size, levels, affine_rounding, code_bits), bytes};
-        }
-        case SchemeKind::Symmetric5Bit: {
-            int bytes = 2 + 4 + block_size / 2;
-            return {make_symmetric_5bit_block_scheme(block_size, qmax), bytes};
-        }
-        case SchemeKind::Affine5Bit: {
-            int bytes = 4 + 4 + block_size / 2;
-            return {make_affine_5bit_block_scheme(block_size, levels, affine_rounding), bytes};
-        }
-        case SchemeKind::SymmetricByteSum: {
-            int bytes = 4 + block_size;
-            return {make_symmetric_byte_sum_block_scheme(block_size, qmax), bytes};
-        }
-        case SchemeKind::Q8K: {
-            int bytes = 4 + block_size + (block_size / 16) * 2;
-            return {make_q8_k_scheme(block_size, qmax), bytes};
-        }
+        case SchemeKind::Symmetric:
+            return make_symmetric_block_scheme(block_size, qmax, rounding, anchor, code_bits);
+        case SchemeKind::Affine:
+            return make_affine_block_scheme(block_size, levels, affine_rounding, code_bits);
+        case SchemeKind::Symmetric5Bit:
+            return make_symmetric_5bit_block_scheme(block_size, qmax);
+        case SchemeKind::Affine5Bit:
+            return make_affine_5bit_block_scheme(block_size, levels, affine_rounding);
+        case SchemeKind::SymmetricByteSum:
+            return make_symmetric_byte_sum_block_scheme(block_size, qmax);
+        case SchemeKind::Q8K:
+            return make_q8_k_scheme(block_size, qmax);
         }
         _halide_internal_error << "unreachable SchemeKind\n";
     }

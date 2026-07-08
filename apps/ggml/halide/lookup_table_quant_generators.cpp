@@ -69,37 +69,42 @@ public:
     SchemeAndBytes build_scheme() const {
         // switch's controlling expression can't resolve GeneratorParam<T>'s
         // implicit conversion operators unambiguously -- .value() sidesteps
-        // that by returning the plain Family directly.
+        // that by returning the plain Family directly. Every make_*_scheme()
+        // now returns its own block_bytes alongside the scheme (from its
+        // field table, or -- for the IQ grid leaves, which are deliberately
+        // NOT field-table-decomposed; see quant_components.h section 6's
+        // design note -- the hand-verified constant declared next to the
+        // leaf), so there's no literal byte count to keep in sync here.
         switch (family.value()) {
         case Family::IQ4_NL:
-            return {make_iq4_nl_scheme(), 18};  // {fp16 d; qs[16];}
+            return make_iq4_nl_scheme();
         case Family::MXFP4:
-            return {make_mxfp4_scheme(), 17};  // {e8m0 e; qs[16];}
+            return make_mxfp4_scheme();
         case Family::TQ2_0:
-            return {make_tq2_0_scheme(), 66};  // {qs[64]; fp16 d;}
+            return make_tq2_0_scheme();
         case Family::TQ1_0:
-            return {make_tq1_0_scheme(), 54};  // {qs[48]; qh[4]; fp16 d;}
+            return make_tq1_0_scheme();
         case Family::NVFP4:
-            return {make_nvfp4_scheme(), 36};  // {d[4]; qs[32];}
+            return make_nvfp4_scheme();
         case Family::IQ2_S:
-            return {make_iq2_s_scheme(), 82};  // {fp16 d; qs[32]; signs[32]; qh[8]; scales[8];}
+            return make_iq2_s_scheme();  // {fp16 d; qs[32]; signs[32]; qh[8]; scales[8];}
         case Family::IQ3_XXS:
-            return {make_iq3_xxs_scheme(), 98};  // {fp16 d; qs[64]; scales_and_signs[32];}
+            return make_iq3_xxs_scheme();  // {fp16 d; qs[64]; scales_and_signs[32];}
         case Family::IQ3_S:
-            return {make_iq3_s_scheme(), 110};  // {fp16 d; qs[64]; qh[8]; signs[32]; scales[4];}
+            return make_iq3_s_scheme();  // {fp16 d; qs[64]; qh[8]; signs[32]; scales[4];}
         case Family::IQ4_XS:
-            return {make_iq4_xs_scheme(), 136};  // {fp16 d; scales_h[2]; scales_l[4]; qs[128];}
+            return make_iq4_xs_scheme();  // {fp16 d; scales_h[2]; scales_l[4]; qs[128];}
         // Importance-matrix-only (dequantize direction only -- no quantize
         // library is built for these; SeveredEncode stands in for the missing
         // forward map).
         case Family::IQ2_XS:
-            return {make_iq2_xs_scheme(), 74};
+            return make_iq2_xs_scheme();
         case Family::IQ2_XXS:
-            return {make_iq2_xxs_scheme(), 66};
+            return make_iq2_xxs_scheme();
         case Family::IQ1_S:
-            return {make_iq1_s_scheme(), 50};
+            return make_iq1_s_scheme();
         case Family::IQ1_M:
-            return {make_iq1_m_scheme(), 56};
+            return make_iq1_m_scheme();
         }
         _halide_internal_error << "unreachable Family\n";
     }

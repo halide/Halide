@@ -51,11 +51,11 @@ public:
 
     // Q8_0 activation codec (block_q8_0 = {fp16 d; qs[32]} = 34 bytes).
     static std::unique_ptr<Halide::Approximation> q8_0_codec() {
-        return make_symmetric_block_codec(32, 127, RoundingMode::Nearest, ScaleAnchor::AbsMax, 8);
+        return make_symmetric_block_scheme(32, 127, RoundingMode::Nearest, ScaleAnchor::AbsMax, 8, Layout::BlockIndexed).scheme;
     }
     // Q8_K activation codec (block_q8_K = {float d; qs[256]; bsums[16]} = 292 bytes).
     static std::unique_ptr<Halide::Approximation> q8_k_codec() {
-        return make_q8_k_codec(256, 127);
+        return make_q8_k_scheme(256, 127, Layout::BlockIndexed).scheme;
     }
 
     VecDotSpec build_vec_dot() const {
@@ -63,40 +63,40 @@ public:
         case Family::IQ4_NL:
             // 4-bit codebook, single fp16 scale x Q8_0: single per-block scale
             // and int8 codebook values -> SDOT-eligible.
-            return {make_iq4_nl_codec(), 18, q8_0_codec(), 34, 32, ScheduleKind::SDOT};
+            return {make_iq4_nl_scheme(Layout::BlockIndexed).scheme, 18, q8_0_codec(), 34, 32, ScheduleKind::SDOT};
         case Family::MXFP4:
             // Same single-scale codebook shape as IQ4_NL (E8M0 scale) x Q8_0.
-            return {make_mxfp4_codec(), 17, q8_0_codec(), 34, 32, ScheduleKind::SDOT};
+            return {make_mxfp4_scheme(Layout::BlockIndexed).scheme, 17, q8_0_codec(), 34, 32, ScheduleKind::SDOT};
         case Family::NVFP4:
             // 64-element block (4 sub-scales) x Q8_0 (32-block): the activation
             // is Reblocked 32 -> 64 so both share the weight's block. Sub-block
             // scales -> Float.
-            return {make_nvfp4_codec(), 36, reblock_activation(q8_0_codec(), 32, 64), 34, 64, ScheduleKind::Float};
+            return {make_nvfp4_scheme(Layout::BlockIndexed).scheme, 36, reblock_activation(q8_0_codec(), 32, 64), 34, 64, ScheduleKind::Float};
         // TQ1_0/TQ2_0 x Q8_K, IQ4_XS x Q8_K: single fp16 scale (TQ) or two-level
         // scale (IQ4_XS) -> Float schedule for now.
         case Family::TQ2_0:
-            return {make_tq2_0_codec(), 66, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_tq2_0_scheme(Layout::BlockIndexed).scheme, 66, q8_k_codec(), 292, 256, ScheduleKind::Float};
         case Family::TQ1_0:
-            return {make_tq1_0_codec(), 54, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_tq1_0_scheme(Layout::BlockIndexed).scheme, 54, q8_k_codec(), 292, 256, ScheduleKind::Float};
         case Family::IQ4_XS:
-            return {make_iq4_xs_codec(), 136, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_iq4_xs_scheme(Layout::BlockIndexed).scheme, 136, q8_k_codec(), 292, 256, ScheduleKind::Float};
         // Grid formats x Q8_K: per-group scale + sign -> Float schedule. The
         // block-indexed codec collapses the leaf's {8,4,8} output to (kk, blk).
         case Family::IQ2_S:
-            return {make_iq2_s_codec(), 82, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_iq2_s_scheme(Layout::BlockIndexed).scheme, 82, q8_k_codec(), 292, 256, ScheduleKind::Float};
         case Family::IQ3_XXS:
-            return {make_iq3_xxs_codec(), 98, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_iq3_xxs_scheme(Layout::BlockIndexed).scheme, 98, q8_k_codec(), 292, 256, ScheduleKind::Float};
         case Family::IQ3_S:
-            return {make_iq3_s_codec(), 110, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_iq3_s_scheme(Layout::BlockIndexed).scheme, 110, q8_k_codec(), 292, 256, ScheduleKind::Float};
         // Importance-matrix-only formats (SeveredEncode weight scheme) x Q8_K.
         case Family::IQ2_XS:
-            return {make_iq2_xs_codec(), 74, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_iq2_xs_scheme(Layout::BlockIndexed).scheme, 74, q8_k_codec(), 292, 256, ScheduleKind::Float};
         case Family::IQ2_XXS:
-            return {make_iq2_xxs_codec(), 66, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_iq2_xxs_scheme(Layout::BlockIndexed).scheme, 66, q8_k_codec(), 292, 256, ScheduleKind::Float};
         case Family::IQ1_S:
-            return {make_iq1_s_codec(), 50, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_iq1_s_scheme(Layout::BlockIndexed).scheme, 50, q8_k_codec(), 292, 256, ScheduleKind::Float};
         case Family::IQ1_M:
-            return {make_iq1_m_codec(), 56, q8_k_codec(), 292, 256, ScheduleKind::Float};
+            return {make_iq1_m_scheme(Layout::BlockIndexed).scheme, 56, q8_k_codec(), 292, 256, ScheduleKind::Float};
         default:
             break;
         }
