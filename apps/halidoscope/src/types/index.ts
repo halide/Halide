@@ -44,4 +44,5 @@ export interface TraceMeta {
   global_max_reuse_distance: number;
 }
 
-export type NodeTypes = "funcCanvas";
+export type NodeTypes = "funcNode";
+export type EdgeTypes = "funcEdge";
