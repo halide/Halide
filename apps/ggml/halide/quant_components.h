@@ -1001,9 +1001,9 @@ public:
         Expr byte_abs = select(kk < 160, byte_a, select(kk < 240, byte_b, byte_c));
 
         Expr byte_val = bytes(byte_abs, blk);
-        Expr p3 = select(n == 0, 1, n == 1, 3, n == 2, 9, n == 3, 27, n == 4, 81, 243);
+        Expr p3 = mux(n, {1, 3, 9, 27, 81, 243});
 
-        Expr q_trunc = cast<uint8_t>(cast<uint32_t>(byte_val) * cast<uint32_t>(p3));
+        Expr q_trunc = cast<uint8_t>(widening_mul(byte_val, p3));
         Expr xi = cast<int32_t>((cast<uint16_t>(q_trunc) * 3) >> 8);
 
         Func codes("trit_pack_codes");
@@ -1096,17 +1096,18 @@ private:
 // packed(...))" pattern duplicated in every *_generators.cpp quantize
 // function today.
 //
-// `field_widths[k]`/`input_index[k]` describe the k-th field *in output
-// byte order*: it is `field_widths[k]` bytes wide, and its unpacked form is
-// `inputs[input_index[k]]` (encode) / `encoded[input_index[k]]` (decode).
-// This indirection exists because the vector StructPack receives is in
-// whatever order the rest of the Compose/Apply chain produced it in (e.g.
-// {codes_bytes, scale_bytes}), which need not match the on-disk field order
-// (e.g. block_q4_0 stores the scale before the codes).
+// `field_widths[k]` is the k-th field's width in bytes, *in on-disk byte
+// order*: `inputs[k]`/`encoded[k]` (encode/decode respectively) must already
+// be in that same order. When the rest of a Compose/Apply chain produces
+// fields in some other order (e.g. {codes_bytes, scale_bytes} when the
+// on-disk layout is scale-then-codes, as in block_q4_0), reorder into byte
+// order with a Permute stage composed in front of/behind this one --
+// FieldLayout below is the one call site that needs this, via
+// Permute{slots_of(fields_)}.
 class StructPack : public Halide::Approximation {
 public:
-    StructPack(std::vector<int> field_widths, std::vector<int> input_index)
-        : field_widths_(std::move(field_widths)), input_index_(std::move(input_index)) {
+    explicit StructPack(std::vector<int> field_widths)
+        : field_widths_(std::move(field_widths)) {
     }
 
     Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
@@ -1121,7 +1122,7 @@ public:
         for (int k = (int)field_widths_.size() - 1; k >= 0; k--) {
             Expr local = clamp(byte - offsets[k], 0, field_widths_[k] - 1);
             Expr in_range = byte >= offsets[k] && byte < offsets[k] + field_widths_[k];
-            result = select(in_range, inputs[input_index_[k]](local, blk), result);
+            result = select(in_range, inputs[k](local, blk), result);
         }
 
         Func packed("struct_pack_packed");
@@ -1135,11 +1136,12 @@ public:
         std::vector<int> offsets = offsets_in_output_order();
         Var local("local"), blk("blk");
 
-        std::vector<Func> fields(field_widths_.size());
+        std::vector<Func> fields;
+        fields.reserve(field_widths_.size());
         for (int k = 0; k < (int)field_widths_.size(); k++) {
             Func field("struct_pack_field_" + std::to_string(k));
             field(local, blk) = packed(local + offsets[k], blk);
-            fields[input_index_[k]] = field;
+            fields.push_back(field);
         }
         return {fields, {}};
     }
@@ -1199,137 +1201,44 @@ struct BlockLayout {
     int bytes;
 };
 
-// The Approximation behind make_block_layout(): logically "a StructPack
-// concatenating every field, plus one Apply per field group" -- but spelled
-// out as its own class rather than literally built from Halide::Compose/
-// Apply, because Compose/Apply's constructors are fixed-arity variadic
-// templates (the stage count is a compile-time parameter pack) and can't be
-// assembled from a runtime-sized std::vector<FieldSpec>. FieldLayout
-// reproduces the exact same two-directions-mirror-each-other semantics by
-// hand.
-//
-// decode(): run StructPack::decode() first (one Func per physical on-disk
-// field, each landing at its own pre-collapse slot), then each group's Apply,
-// DESCENDING by slot. Descending order means a group's own (unshifted) slot
-// is always still the right index when we get to it: any group already
-// processed sits *above* it and collapsing at a lower slot only shifts
-// things above that slot's span, i.e. exactly the (already-finished, no
-// longer indexed by position) groups above -- never a still-to-be-processed
-// one, since every one of those is, by construction, at or below the current
-// slot. The final vector's field order falls out for free: it's each
-// group's rank among all groups sorted ascending by slot (collapsing never
-// reorders groups relative to one another, only removes the gaps between
-// them) -- which is exactly the {codes, scale[, min]} / {d[, dmin],
-// scale_min, code} ordering every terminal quantize/dequantize stage here
-// expects, by construction of the slot numbers each make_*_scheme call site
-// assigns.
-//
-// encode() is decode()'s mirror: expand each group back into its `arity`
-// physical fields, ASCENDING by slot, then StructPack::encode() the fully-
-// expanded field vector. Ascending is what makes the same unshifted slot
-// values work in the opposite direction -- a group's slot is exactly the sum
-// of every earlier (lower-slot) group's arity (fields are contiguous, no
-// gaps), which is exactly the position its data has reached once every
-// earlier group has already been expanded in front of it.
-class FieldLayout : public Halide::Approximation {
-public:
-    explicit FieldLayout(std::vector<FieldSpec> fields)
-        : fields_(std::move(fields)),
-          struct_pack_(std::make_unique<StructPack>(widths_of(fields_), slots_of(fields_))) {
-    }
-
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
-        std::vector<Halide::Func> handles;
-        for (const FieldSpec *f : leaders(/*descending=*/false)) {
-            splice_encode(inputs, *f, handles);
-        }
-        Halide::EncodeResult sp = struct_pack_->encode(std::move(inputs));
-        handles.insert(handles.end(), sp.handles.begin(), sp.handles.end());
-        return {sp.encoded, handles};
-    }
-
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
-        Halide::DecodeResult sp = struct_pack_->decode(std::move(encoded));
-        std::vector<Halide::Func> current = sp.decoded;
-        std::vector<Halide::Func> handles = sp.handles;
-        for (const FieldSpec *f : leaders(/*descending=*/true)) {
-            splice_decode(current, *f, handles);
-        }
-        return {current, handles};
-    }
-
-private:
-    std::vector<FieldSpec> fields_;
-    std::unique_ptr<Halide::Approximation> struct_pack_;
-
-    static std::vector<int> widths_of(const std::vector<FieldSpec> &fields) {
-        std::vector<int> w;
-        w.reserve(fields.size());
-        for (const FieldSpec &f : fields) {
-            w.push_back(f.width_bytes);
-        }
-        return w;
-    }
-    static std::vector<int> slots_of(const std::vector<FieldSpec> &fields) {
-        std::vector<int> s;
-        s.reserve(fields.size());
-        for (const FieldSpec &f : fields) {
-            s.push_back(f.slot);
-        }
-        return s;
-    }
-
-    // Every group's leader (the FieldSpec carrying its `pack`), sorted by
-    // slot -- ascending for encode(), descending for decode() (see the class
-    // comment for why each direction needs its own order).
-    std::vector<const FieldSpec *> leaders(bool descending) const {
-        std::vector<const FieldSpec *> v;
-        for (const FieldSpec &f : fields_) {
-            if (f.pack) {
-                v.push_back(&f);
-            }
-        }
-        std::sort(v.begin(), v.end(), [descending](const FieldSpec *a, const FieldSpec *b) {
-            return descending ? a->slot > b->slot : a->slot < b->slot;
-        });
-        return v;
-    }
-
-    // Exactly Apply::encode's slice/call/splice, inlined: encode_arity is
-    // always 1 for every grouped pack in this file (each takes one logical
-    // input and expands it into `arity` on-disk fields).
-    static void splice_encode(std::vector<Halide::Func> &inputs, const FieldSpec &f,
-                              std::vector<Halide::Func> &handles) {
-        std::vector<Halide::Func> target(inputs.begin() + f.slot, inputs.begin() + f.slot + 1);
-        Halide::EncodeResult r = f.pack->encode(std::move(target));
-        std::vector<Halide::Func> next(inputs.begin(), inputs.begin() + f.slot);
-        next.insert(next.end(), r.encoded.begin(), r.encoded.end());
-        next.insert(next.end(), inputs.begin() + f.slot + 1, inputs.end());
-        inputs = std::move(next);
-        handles.insert(handles.end(), r.handles.begin(), r.handles.end());
-    }
-
-    // Exactly Apply::decode's slice/call/splice, inlined.
-    static void splice_decode(std::vector<Halide::Func> &current, const FieldSpec &f,
-                              std::vector<Halide::Func> &handles) {
-        std::vector<Halide::Func> target(current.begin() + f.slot, current.begin() + f.slot + f.arity);
-        Halide::DecodeResult r = f.pack->decode(std::move(target));
-        std::vector<Halide::Func> next(current.begin(), current.begin() + f.slot);
-        next.insert(next.end(), r.decoded.begin(), r.decoded.end());
-        next.insert(next.end(), current.begin() + f.slot + f.arity, current.end());
-        current = std::move(next);
-        handles.insert(handles.end(), r.handles.begin(), r.handles.end());
-    }
-};
-
 // The plain overload, for the rare call site (make_codebook_scheme) that
 // must build its field list conditionally rather than write it out literally.
 inline BlockLayout make_block_layout(std::vector<FieldSpec> fields) {
+    using namespace Halide;
+
     int bytes = 0;
-    for (const FieldSpec &f : fields) {
+    std::vector<int> widths, permutation;
+    std::vector<FieldSpec *> leaders;
+    widths.reserve(fields.size());
+    permutation.reserve(fields.size());
+
+    for (FieldSpec &f : fields) {
+        permutation.push_back(f.slot);
+        widths.push_back(f.width_bytes);
         bytes += f.width_bytes;
+        if (f.pack) {
+            leaders.push_back(&f);
+        }
     }
-    return {std::make_unique<FieldLayout>(std::move(fields)), bytes};
+
+    std::sort(leaders.begin(), leaders.end(),
+              [](const FieldSpec *a, const FieldSpec *b) { return a->slot > b->slot; });
+
+    // StructPack first (outermost -- closest to the on-disk bytes), then
+    // Permute (byte order <-> slot order), then each group's Apply -- see
+    // StructPack's doc comment for why the Permute is needed at all.
+    ComposeBuilder packs;
+    packs.add(StructPack{widths});
+    packs.add(Permute{permutation});
+    for (FieldSpec *f : leaders) {
+        // encode_arity is always 1 (a group's pack consumes one already-
+        // combined logical Func and expands it into `arity` on-disk fields);
+        // decode_arity is `arity` (the mirror: collapse those `arity`
+        // on-disk fields back into the one logical Func).
+        packs.add(Apply{f->slot, /*encode_arity=*/1, /*decode_arity=*/f->arity, std::move(f->pack)});
+    }
+
+    return {packs.build(), bytes};
 }
 
 // Takes each field as its own argument (FieldSpec{...}, FieldSpec{...}, ...),
@@ -1660,8 +1569,6 @@ public:
     Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
         using namespace Halide;
         Func codes = inputs[0];  // codes(kk, blk), the combined (pre-split) value
-        Var kk("kk"), blk("blk");
-
         // `combined` is always >= 0 by construction (offset_ is exactly what
         // decode() subtracts after reconstructing low + high*weight), so the
         // %// below don't need to handle negative operands.
@@ -1676,7 +1583,6 @@ public:
     Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
         using namespace Halide;
         Func low = encoded[0], high = encoded[1];
-        Var kk("kk"), blk("blk");
         Func code("combine_bits_code");
         code(kk, blk) = cast<int8_t>((cast<int32_t>(low(kk, blk)) + high_weight_ * cast<int32_t>(high(kk, blk))) - offset_);
         return {{code}, {}};
@@ -1684,6 +1590,7 @@ public:
 
 private:
     int high_weight_, offset_;
+    Halide::Var kk{"kk"}, blk{"blk"};
 };
 
 // (Q2_K's per-sub-block nibble-pair scale/min -- low nibble = scale, high
@@ -1817,10 +1724,10 @@ public:
 
         Expr qs_l = bytes(kQsOffset + ib32 * 4 + l, blk);
         Expr qh_byte = cast<uint32_t>(bytes(kQhOffset + ib32, blk));
-        Expr extra_bits = select(l == 0, (qh_byte << 8) & 0x300,
-                                 l == 1, (qh_byte << 6) & 0x300,
-                                 l == 2, (qh_byte << 4) & 0x300,
-                                 (qh_byte << 2) & 0x300);
+        Expr extra_bits = mux(l, {(qh_byte << 8) & 0x300,
+                                  (qh_byte << 6) & 0x300,
+                                  (qh_byte << 4) & 0x300,
+                                  (qh_byte << 2) & 0x300});
         Expr grid_idx_raw = cast<uint32_t>(qs_l) + extra_bits;
         Expr grid_idx = clamp(cast<int32_t>(cast<uint16_t>(grid_idx_raw)), 0, 1023);
 
@@ -2141,7 +2048,7 @@ public:
         Expr delta = select((qh_byte & delta_mask) != 0, -kIQ1S_DELTA, kIQ1S_DELTA);
 
         Expr sc_idx = ib / 2;
-        Expr sc_word_val = select(sc_idx == 0, sc0, select(sc_idx == 1, sc1, select(sc_idx == 2, sc2, sc3)));
+        Expr sc_word_val = mux(sc_idx, {sc0, sc1, sc2, sc3});
         Expr shift = (ib % 2) * 6 + qh_half * 3;
         Expr scale3 = (sc_word_val >> cast<uint32_t>(shift)) & 7;
         Expr dl = d * cast<float>(2 * scale3 + 1);
@@ -2318,8 +2225,8 @@ inline std::unique_ptr<Halide::Approximation> make_q8_0x4_scheme(int blocklen) {
     using namespace Halide;
     return std::make_unique<Compose>(
         RepackInterleavePack{32, blocklen, /*delta_bytes=*/2},
-        Apply{0, 1, 1, BytePack{}},  // codes -> bytes
-        Apply{1, 1, 1, Fp16Pack{}},  // scale -> fp16 bytes
+        Apply{0, BytePack{}},  // codes -> bytes
+        Apply{1, Fp16Pack{}},  // scale -> fp16 bytes
         SymmetricAffineQuantize{32, 127, RoundingMode::Nearest, ScaleAnchor::AbsMax},
         RepackRowReshape{32, /*n_rows=*/4});
 }
@@ -2331,8 +2238,8 @@ inline std::unique_ptr<Halide::Approximation> make_q8_kx4_scheme(int blocklen) {
     using namespace Halide;
     return std::make_unique<Compose>(
         RepackInterleavePack{256, blocklen, /*delta_bytes=*/4, /*with_bsums=*/true},
-        Apply{0, 1, 1, BytePack{}},  // codes -> bytes
-        Apply{1, 1, 1, F32Pack{}},   // scale -> float32 bytes
+        Apply{0, BytePack{}},  // codes -> bytes
+        Apply{1, F32Pack{}},   // scale -> float32 bytes
         SymmetricAffineQuantize{256, 127, RoundingMode::NearestEvenClampedHigh,
                                 ScaleAnchor::ExtremeSignedValueTwoStep},
         RepackRowReshape{256, /*n_rows=*/4});
@@ -2412,20 +2319,15 @@ inline std::unique_ptr<Halide::Approximation> make_repack_weight_scheme(
     int n_cols, int blocklen, int block_bytes, RepackWeightCode code_kind, ScaleFormat scale_kind,
     Halide::Buffer<int8_t> table = {}, int block_size = 32) {
     using namespace Halide;
-    UnInterleaveWeight unpack{n_cols, blocklen, block_size, code_kind, scale_kind};
     // Interpret the scale-header bytes UnInterleaveWeight gathers with the same
     // packs the plain codecs use -- no per-kind scale decode duplicated here.
-    std::unique_ptr<Approximation> scale_pack = make_scale_pack(scale_kind);
-    LinearDequant dequant{/*sub_size=*/0, /*has_super_d=*/false, /*has_min=*/false};
-    if (code_kind == RepackWeightCode::RawNibble) {
-        return std::make_unique<TrustedInverse>(
-            SeveredEncode{block_bytes, 3},
-            Compose{std::move(unpack), Apply{0, 1, 1, Codebook{table}},
-                    Apply{1, 1, 1, std::move(scale_pack)}, std::move(dequant)});
-    }
     return std::make_unique<TrustedInverse>(
         SeveredEncode{block_bytes, 3},
-        Compose{std::move(unpack), Apply{1, 1, 1, std::move(scale_pack)}, std::move(dequant)});
+        Compose{UnInterleaveWeight{n_cols, blocklen, block_size, code_kind, scale_kind},
+                Choose{code_kind == RepackWeightCode::RawNibble,
+                       Apply{0, Codebook{table}}, Identity{}},
+                Apply{1, make_scale_pack(scale_kind)},
+                LinearDequant{/*sub_size=*/0, /*has_super_d=*/false, /*has_min=*/false}});
 }
 
 // K-quant repack weight decode (block_q{4,5,6,2}_Kx8, n_cols=8): a bespoke,
@@ -2582,15 +2484,12 @@ inline std::unique_ptr<Halide::Approximation> make_kquant_repack_weight_scheme(
     using namespace Halide;
     const bool has_min = family != KQuantWeightFamily::Q6_K;
     const int sub_size = family == KQuantWeightFamily::Q4_K || family == KQuantWeightFamily::Q5_K ? 32 : 16;
-    Compose decode =
-        has_min ? Compose{KQuantDeInterleave{family, blocklen},
-                          Apply{0, 1, 1, Fp16Pack{}},  // d_bytes -> d
-                          Apply{1, 1, 1, Fp16Pack{}},  // dmin_bytes -> dmin
-                          LinearDequant{sub_size, /*has_super_d=*/true, /*has_min=*/true}} :
-                  Compose{KQuantDeInterleave{family, blocklen},
-                          Apply{0, 1, 1, Fp16Pack{}},  // d_bytes -> d
-                          LinearDequant{sub_size, /*has_super_d=*/true, /*has_min=*/false}};
-    return std::make_unique<TrustedInverse>(SeveredEncode{block_bytes, 3}, std::move(decode));
+    return std::make_unique<TrustedInverse>(
+        SeveredEncode{block_bytes, 3},
+        Compose{KQuantDeInterleave{family, blocklen},
+                Apply{0, Fp16Pack{}},                               // d_bytes -> d
+                Choose{has_min, Apply{1, Fp16Pack{}}, Identity{}},  // dmin_bytes -> dmin
+                LinearDequant{sub_size, /*has_super_d=*/true, has_min}});
 }
 
 // The make_*() factories below each return one owned Halide::Approximation
@@ -2644,7 +2543,7 @@ inline CodePackField make_code_pack(int block_size, int code_bits, int qmax) {
         // qmax, since the parts here are raw, uncentered digits.
         return {make_combined_bit_codec(
                     16, qmax,
-                    FieldSpec{1, 4, le_bit_pack()},                    // qh -> high bit
+                    FieldSpec{1, 4, le_bit_pack()},                          // qh -> high bit
                     FieldSpec{0, block_size / 2, nibble_pack(block_size)}),  // qs -> low nibble
                 block_size / 2 + 4};
     }
@@ -2668,16 +2567,15 @@ inline SchemeAndBytes make_symmetric_block_scheme(
     int block_size, int qmax, RoundingMode rounding, ScaleAnchor anchor, int code_bits,
     Layout layout = Layout::FlatRow) {
     using namespace Halide;
-    CodePackField code = make_code_pack(block_size, code_bits, qmax);
-    int bytes = 2 + code.bytes;
+    auto [code_pack, code_bytes] = make_code_pack(block_size, code_bits, qmax);
     BlockLayout bl = make_block_layout(
-        FieldSpec{1, 2, std::make_unique<Fp16Pack>()},   // scale
-        FieldSpec{0, code.bytes, std::move(code.pack)});  // codes
+        FieldSpec{1, 2, std::make_unique<Fp16Pack>()},    // scale
+        FieldSpec{0, code_bytes, std::move(code_pack)});  // codes
     return {std::make_unique<Compose>(
                 std::move(bl.layout),
                 SymmetricAffineQuantize{block_size, qmax, rounding, anchor},
                 BlockReshape{block_size, layout == Layout::BlockIndexed}),
-            bytes};
+            bl.bytes};
 }
 
 // quantize -> pack codes -> pack scale -> pack min -> concatenate (scale, min,
@@ -2710,7 +2608,7 @@ inline SchemeAndBytes make_affine_block_scheme(
 // symmetric_quant_generators.cpp) so Q5_0/Q5_1's CMakeLists GENERATOR_ARGS
 // (kind=symmetric_5bit/affine_5bit) don't need to change in lockstep.
 inline SchemeAndBytes make_symmetric_5bit_block_scheme(int block_size, int qmax,
-                                                        Layout layout = Layout::FlatRow) {
+                                                       Layout layout = Layout::FlatRow) {
     return make_symmetric_block_scheme(block_size, qmax, RoundingMode::TruncateHalfUpWithOffset,
                                        ScaleAnchor::ExtremeSignedValue, /*code_bits=*/5, layout);
 }
@@ -2722,8 +2620,8 @@ inline SchemeAndBytes make_symmetric_5bit_block_scheme(int block_size, int qmax,
 // levels], not centered, so there's no offset to re-apply before splitting
 // into nibble+high-bit.
 inline SchemeAndBytes make_affine_5bit_block_scheme(int block_size, int levels,
-                                                     AffineRounding rounding,
-                                                     Layout layout = Layout::FlatRow) {
+                                                    AffineRounding rounding,
+                                                    Layout layout = Layout::FlatRow) {
     return make_affine_block_scheme(block_size, levels, rounding, /*code_bits=*/5, layout);
 }
 
@@ -2737,11 +2635,11 @@ inline SchemeAndBytes make_affine_5bit_block_scheme(int block_size, int levels,
 // consumes and produces the *whole* current list (like quantize itself),
 // not just one element of it.
 inline SchemeAndBytes make_symmetric_byte_sum_block_scheme(int block_size, int qmax,
-                                                            Layout layout = Layout::FlatRow) {
+                                                           Layout layout = Layout::FlatRow) {
     using namespace Halide;
     BlockLayout bl = make_block_layout(
-        FieldSpec{1, 2, std::make_unique<Fp16Pack>()},           // scale
-        FieldSpec{2, 2, std::make_unique<Fp16Pack>()},           // sum
+        FieldSpec{1, 2, std::make_unique<Fp16Pack>()},            // scale
+        FieldSpec{2, 2, std::make_unique<Fp16Pack>()},            // sum
         FieldSpec{0, block_size, std::make_unique<BytePack>()});  // codes
     return {std::make_unique<Compose>(
                 std::move(bl.layout),
@@ -2763,8 +2661,8 @@ inline SchemeAndBytes make_symmetric_byte_sum_block_scheme(int block_size, int q
 inline SchemeAndBytes make_q8_k_scheme(int block_size, int qmax, Layout layout = Layout::FlatRow) {
     using namespace Halide;
     BlockLayout bl = make_block_layout(
-        FieldSpec{1, 4, std::make_unique<F32Pack>()},                        // scale
-        FieldSpec{0, block_size, std::make_unique<BytePack>()},              // codes
+        FieldSpec{1, 4, std::make_unique<F32Pack>()},                         // scale
+        FieldSpec{0, block_size, std::make_unique<BytePack>()},               // codes
         FieldSpec{2, (block_size / 16) * 2, std::make_unique<Int16Pack>()});  // bsums
     return {std::make_unique<Compose>(
                 std::move(bl.layout),
@@ -2809,7 +2707,7 @@ inline SchemeAndBytes make_codebook_scheme(
                 ExternQuantize{std::move(extern_name)},
                 Compose{
                     std::move(bl.layout),
-                    Apply{0, 1, 1, Codebook{std::move(table)}},  // codes -> codebook values
+                    Apply{0, Codebook{std::move(table)}},  // codes -> codebook values
                     LinearDequant{num_scales == 1 ? 0 : block_size / num_scales,
                                   /*has_super_d=*/false, /*has_min=*/false},
                     BlockReshape{block_size, layout == Layout::BlockIndexed},
@@ -2831,11 +2729,11 @@ inline SchemeAndBytes make_k_quant_scheme(
     Fields &&...fields) {
     using namespace Halide;
     BlockLayout bl = make_block_layout(std::forward<Fields>(fields)...);
-    Compose decode{
-        std::move(bl.layout),
-        LinearDequant{sub_size, /*has_super_d=*/true, has_min},
-        BlockReshape{block_size, layout == Layout::BlockIndexed}};
-    return {std::make_unique<TrustedInverse>(ExternQuantize{std::move(extern_name)}, std::move(decode)),
+    return {std::make_unique<TrustedInverse>(
+                ExternQuantize{std::move(extern_name)},
+                Compose{std::move(bl.layout),
+                        LinearDequant{sub_size, /*has_super_d=*/true, has_min},
+                        BlockReshape{block_size, layout == Layout::BlockIndexed}}),
             bl.bytes};
 }
 
@@ -2945,8 +2843,8 @@ inline SchemeAndBytes make_q4_k_scheme(Layout layout = Layout::FlatRow) {
     using namespace Halide;
     return make_k_quant_scheme(
         "q4_k_quantize_via_ggml", 256, 32, /*has_min=*/true, layout,
-        FieldSpec{0, 2, std::make_unique<Fp16Pack>()},                    // d
-        FieldSpec{1, 2, std::make_unique<Fp16Pack>()},                    // dmin
+        FieldSpec{0, 2, std::make_unique<Fp16Pack>()},         // d
+        FieldSpec{1, 2, std::make_unique<Fp16Pack>()},         // dmin
         FieldSpec{2, 12, std::make_unique<K4ScaleMinPack>()},  // scale_min
         FieldSpec{3, 128, nibble_pack(64)});                   // codes
 }
@@ -3014,8 +2912,8 @@ inline SchemeAndBytes make_q3_k_scheme(Layout layout = Layout::FlatRow) {
                       4, 4,
                       FieldSpec{1, 32, rotating_bit_pack(32)},  // hmask -> high bit
                       FieldSpec{0, 64, crumb_pack(128)})},      // qs -> low 2 bits
-        FieldSpec{1, 12, std::make_unique<Q3KScalePack>()},  // scales
-        FieldSpec{0, 2, std::make_unique<Fp16Pack>()});      // d
+        FieldSpec{1, 12, std::make_unique<Q3KScalePack>()},     // scales
+        FieldSpec{0, 2, std::make_unique<Fp16Pack>()});         // d
 }
 
 // Q6_K: 256-element superblock, 16 sub-blocks of 16 elements each, no min --
@@ -3037,8 +2935,8 @@ inline SchemeAndBytes make_q6_k_scheme(Layout layout = Layout::FlatRow) {
                       16, 32,
                       FieldSpec{0, 128, nibble_pack(128)},  // ql -> low nibble
                       FieldSpec{1, 64, crumb_pack(128)})},  // qh -> high 2 bits
-        FieldSpec{1, 16, std::make_unique<BytePack>()},  // scales, 16 signed int8 values
-        FieldSpec{0, 2, std::make_unique<Fp16Pack>()});  // d
+        FieldSpec{1, 16, std::make_unique<BytePack>()},     // scales, 16 signed int8 values
+        FieldSpec{0, 2, std::make_unique<Fp16Pack>()});     // d
 }
 
 // IQ2_S/IQ3_XXS/IQ3_S: see IQ2SGridDequantize/IQ3XXSGridDequantize/
@@ -3095,15 +2993,15 @@ inline SchemeAndBytes make_iq4_xs_scheme(Layout layout = Layout::FlatRow) {
     // one `scale(sub)` field, the same grouped-field shape make_code_pack's
     // code_bits==5 combined codec uses for Q5_0/Q5_1's {nibble, qh} pair.
     BlockLayout bl = make_block_layout(
-        FieldSpec{0, 2, std::make_unique<Fp16Pack>()},                    // d
+        FieldSpec{0, 2, std::make_unique<Fp16Pack>()},                     // d
         FieldSpec{1, 2, std::make_unique<IQ4XSScalePack>(), /*arity=*/2},  // scales_h (leads the group)
-        FieldSpec{2, 4, nullptr},                                         // scales_l (part of the group above)
-        FieldSpec{3, 128, nibble_pack(32)});                              // qs -> nibbles
+        FieldSpec{2, 4, nullptr},                                          // scales_l (part of the group above)
+        FieldSpec{3, 128, nibble_pack(32)});                               // qs -> nibbles
     return {std::make_unique<TrustedInverse>(
                 ExternQuantize{"iq4_xs_quantize_via_ggml"},
                 Compose{
                     std::move(bl.layout),
-                    Apply{2, 1, 1, Codebook{table}},  // nibbles -> codebook values (slot2: {d, scale, qs})
+                    Apply{2, Codebook{table}},  // nibbles -> codebook values (slot2: {d, scale, qs})
                     LinearDequant{32, /*has_super_d=*/true, /*has_min=*/false},
                     BlockReshape{256, layout == Layout::BlockIndexed},
                 }),
