@@ -626,7 +626,9 @@ impl Trace {
                 EventCode::Produce => {
                     let idx = packets.len() as u32;
 
-                    produce_ranges_by_func
+                    // When we observe a Produce event for a Func A, this signals that A is
+                    // consuming some other Func B. Thus, we store this as A's consume range.
+                    consume_ranges_by_func
                         .entry(func_name.clone())
                         .or_default()
                         .push((idx, idx));
@@ -634,7 +636,7 @@ impl Trace {
                 EventCode::EndProduce => {
                     let idx = packets.len() as u32;
 
-                    if let Some(ranges) = produce_ranges_by_func.get_mut(func_name.as_str()) {
+                    if let Some(ranges) = consume_ranges_by_func.get_mut(func_name.as_str()) {
                         if let Some(last) = ranges.last_mut() {
                             last.1 = idx;
                         }
@@ -643,7 +645,10 @@ impl Trace {
                 EventCode::Consume => {
                     let idx = packets.len() as u32;
 
-                    consume_ranges_by_func
+                    // When we observe a Consume event for a Func A, this signals that A is
+                    // producing for (being consumed by) some other Func B. Thus, we store this as
+                    // A's produce range.
+                    produce_ranges_by_func
                         .entry(func_name.clone())
                         .or_default()
                         .push((idx, idx));
@@ -651,7 +656,7 @@ impl Trace {
                 EventCode::EndConsume => {
                     let idx = packets.len() as u32;
 
-                    if let Some(ranges) = consume_ranges_by_func.get_mut(func_name.as_str()) {
+                    if let Some(ranges) = produce_ranges_by_func.get_mut(func_name.as_str()) {
                         if let Some(last) = ranges.last_mut() {
                             last.1 = idx;
                         }

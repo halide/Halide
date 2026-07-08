@@ -18,3 +18,15 @@ export function isFuncProducing(func: FuncMeta, globalIndex: number) {
     (range) => range.start <= globalIndex && globalIndex <= range.end,
   );
 }
+
+export function isEdgeLive(
+  funcs: Record<string, FuncMeta>,
+  source: string,
+  target: string,
+  globalIndex: number,
+) {
+  return (
+    isFuncProducing(funcs[source], globalIndex) &&
+    isFuncConsuming(funcs[target], globalIndex)
+  );
+}
