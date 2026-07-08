@@ -238,6 +238,38 @@ private:
     std::unique_ptr<Approximation> encoder_, decoder_;
 };
 
+/** Picks one of two Approximations at construction time based on `cond` */
+class Choose : public Approximation {
+public:
+    template<typename True, typename False>
+    Choose(bool cond, True &&if_true, False &&if_false)
+        : chosen_(cond ? Internal::approximation_ptr(std::forward<True>(if_true)) :
+                         Internal::approximation_ptr(std::forward<False>(if_false))) {
+    }
+
+    EncodeResult encode(std::vector<Func> inputs) {
+        return chosen_->encode(std::move(inputs));
+    }
+
+    DecodeResult decode(std::vector<Func> encoded) {
+        return chosen_->decode(std::move(encoded));
+    }
+
+private:
+    std::unique_ptr<Approximation> chosen_;
+};
+
+class Identity : public Approximation {
+public:
+    EncodeResult encode(std::vector<Func> inputs) override {
+        return {inputs, {}};
+    }
+
+    DecodeResult decode(std::vector<Func> encoded) override {
+        return {encoded, {}};
+    }
+};
+
 }  // namespace Halide
 
 #endif
