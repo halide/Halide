@@ -1,6 +1,6 @@
 import { ReactFlowProvider } from "@xyflow/react";
 
-import Canvas from "@/components/shared/Canvas";
+import Canvas from "@/components/canvas/Canvas";
 import Timeline from "@/components/views/tracer/TracerTimeline";
 import { useTraceContext } from "@/hooks/trace";
 import ControlTabs from "@/components/controls/ControlTabs";
@@ -14,7 +14,7 @@ function Tracer() {
         {Object.keys(funcs).length > 0 ? (
           <>
             <ReactFlowProvider>
-              <Canvas funcs={funcs} dagEdges={dagEdges} type="funcCanvas" />
+              <Canvas funcs={funcs} dagEdges={dagEdges} />
             </ReactFlowProvider>
             <ControlTabs funcs={funcs} />
           </>
