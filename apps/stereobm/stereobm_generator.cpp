@@ -158,7 +158,7 @@ public:
 
         // disparities are only valid where the SAD window and the full disparity search both fit inside the image.
         Expr sw2 = winsize / 2;
-        Expr in_valid_roi = x >= (Expr(mindisp) + Expr(depth) - 1) + sw2 && x < W - mindisp - sw2 &&
+        Expr in_valid_roi = x >= (static_cast<int>(mindisp) + static_cast<int>(depth) - 1) + sw2 && x < W - mindisp - sw2 &&
                             y >= sw2 && y < H - sw2;
         output(x, y) = select(in_valid_roi, splitoutput(x % tilesize, y, x / tilesize), filtered);
 
