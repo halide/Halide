@@ -866,6 +866,7 @@ RUNTIME_CPP_COMPONENTS = \
   linux_riscv_thread_id \
   linux_x86_thread_id \
   linux_yield \
+  linux_x86_cpu_features \
   metal \
   metal_objc_arm \
   metal_objc_x86 \
