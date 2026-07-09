@@ -28,6 +28,7 @@ set(tests
     rdom.py
     realize_warnings.py
     serialization.py
+    struct_type.py
     target.py
     tuple_select.py
     type.py

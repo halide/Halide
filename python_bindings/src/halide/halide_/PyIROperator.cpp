@@ -2,6 +2,7 @@
 
 #include <utility>
 
+#include "PyBinaryOperators.h"
 #include "PyTuple.h"
 
 namespace Halide {
@@ -72,6 +73,19 @@ py::object py_select(const py::args &args) {
 }  // namespace
 
 void define_operators(py::module &m) {
+    auto field_ref_class =
+        py::class_<FieldRef>(m, "FieldRef")
+            .def("__getitem__", &FieldRef::operator[])
+            .def("size", &FieldRef::size)
+            .def("__len__", &FieldRef::size);
+    add_binary_operators(field_ref_class);
+
+    m.def("field", static_cast<FieldRef (*)(const Expr &, const std::string &)>(&field),
+          py::arg("struct_value"), py::arg("name"));
+    m.def("field", static_cast<FieldRef (*)(const Expr &, int)>(&field),
+          py::arg("struct_value"), py::arg("index"));
+    m.def("pack_struct", &pack_struct, py::arg("type"), py::arg("field_values"));
+
     m.def("max", [](const py::args &args) -> Expr {
         if (args.size() < 2) {
             throw py::value_error("max() must have at least 2 arguments");
