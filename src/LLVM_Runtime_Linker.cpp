@@ -295,6 +295,7 @@ DECLARE_NO_INITMOD(windows_vulkan)
 
 #ifdef WITH_X86
 // keep-sorted start by_regex=["INITMOD\\(.+"]
+DECLARE_CPP_INITMOD(linux_x86_cpu_features)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_amx)
 DECLARE_LL_INITMOD(x86_avx)
@@ -305,6 +306,7 @@ DECLARE_LL_INITMOD(x86_sse41)
 // keep-sorted end
 #else
 // keep-sorted start by_regex=["INITMOD\\(.+"]
+DECLARE_NO_INITMOD(linux_x86_cpu_features)
 DECLARE_NO_INITMOD(x86)
 DECLARE_NO_INITMOD(x86_amx)
 DECLARE_NO_INITMOD(x86_avx)
@@ -1273,7 +1275,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             // These modules are only used for AOT compilation
             modules.push_back(get_initmod_can_use_target(c, bits_64, debug));
             if (t.arch == Target::X86) {
-                modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
+                if (t.os == Target::Android || t.os == Target::Linux) {
+                    modules.push_back(get_initmod_linux_x86_cpu_features(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
+                }
             }
             if (t.arch == Target::ARM) {
                 if (t.bits == 64) {

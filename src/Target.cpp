@@ -33,6 +33,10 @@
 #include <sys/types.h>
 #endif
 
+#if defined(__linux__) && (defined(__x86_64__) || defined(__i386__))
+#include <unistd.h>  // for syscall()
+#endif
+
 #if defined(__linux__) && (defined(__arm__) || defined(__aarch64__))
 #include <asm/hwcap.h>
 #include <sys/auxv.h>
@@ -104,6 +108,25 @@ struct cpuid_result {
 #endif
 
 #if defined(__x86_64__) || defined(__i386__) || defined(_M_IX86) || defined(_M_AMD64)
+
+#ifdef __linux__
+// On Linux, the AMX XTILEDATA state component (XCR0 bit 18) is allocated
+// lazily: the kernel leaves it disabled in XCR0 for a thread until that
+// thread explicitly requests permission to use it via arch_prctl(2). Without
+// this call, xgetbv() would report AMX as OS-disabled even on hardware that
+// fully supports it. This is a no-op (and harmless) if already granted, and
+// only applies in 64-bit mode, since arch_prctl and AMX are both x86-64-only.
+constexpr long sys_arch_prctl = 158;  // x86-64 Linux syscall number
+constexpr long arch_req_xcomp_perm = 0x1023;
+constexpr long xfeature_xtiledata = 18;
+
+void request_amx_os_permission() {
+    syscall(sys_arch_prctl, arch_req_xcomp_perm, xfeature_xtiledata);
+}
+#else
+void request_amx_os_permission() {
+}
+#endif
 
 enum class VendorSignatures {
     Unknown,
@@ -377,11 +400,16 @@ Target calculate_host_target() {
     bool os_avx = false;
     bool os_avx512 = false;
     bool os_apx = false;
+    bool os_amx = false;
     if (have_osxsave) {
+        if (use_64_bits) {
+            request_amx_os_permission();
+        }
         uint64_t xcr0 = xgetbv(0);
         os_avx = (xcr0 & 0x6) == 0x6;                   // XMM (bit 1) + YMM (bit 2)
         os_avx512 = os_avx && ((xcr0 & 0xE0) == 0xE0);  // opmask (5) + ZMM_Hi256 (6) + Hi16_ZMM (7)
         os_apx = (xcr0 & 0x80000) == 0x80000;           // APX extended GPRs (bit 19)
+        os_amx = (xcr0 & 0x60000) == 0x60000;           // AMX XTILECFG (17) + XTILEDATA (18)
     }
 
     bool have_sse41 = (info.ecx & (1 << 19)) != 0;           // ECX[19]
@@ -490,12 +518,17 @@ Target calculate_host_target() {
             if ((info2.ebx & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
 
-                const uint32_t avxvnni = 1U << 4;     // avxvnni (note, not avx512vnni) result in eax
-                const uint32_t avx512bf16 = 1U << 5;  // bf16 result in eax, with cpuid(eax=7, ecx=1)
+                const uint32_t avxvnni = 1U << 4;    // avxvnni (note, not avx512vnni) result in eax
+                const uint32_t amx_bf16 = 1U << 22;  // amx_bf16 result in edx, with cpuid(eax=7, ecx=0)
+                const uint32_t amx_tile = 1U << 24;  // amx_tile result in edx, with cpuid(eax=7, ecx=0)
+                const uint32_t amx_int8 = 1U << 25;  // amx_int8 result in edx, with cpuid(eax=7, ecx=0)
+                const uint32_t amx = amx_bf16 | amx_tile | amx_int8;
                 // TODO: port to family/model -based detection.
                 if ((info3.eax & avxvnni) == avxvnni) {
                     initial_features.push_back(Target::AVXVNNI);
-                    if ((info3.eax & avx512bf16) == avx512bf16) {
+                    // avx512_sapphirerapids implies AMX instruction support, which
+                    // requires the OS to have enabled the AMX XCR0 state components.
+                    if ((info2.edx & amx) == amx && os_amx) {
                         initial_features.push_back(Target::AVX512_SapphireRapids);
                     }
                 }
