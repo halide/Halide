@@ -696,6 +696,7 @@ impl Trace {
             }
         }
 
+        // Compute the set of thread IDs used to compute each Func.
         for (thread_id, parent_id) in &pending_parallel_tasks {
             let mut current = *parent_id;
             loop {
@@ -722,14 +723,17 @@ impl Trace {
                 let mut counts = vec![0i32; w * h];
                 for &idx in indices {
                     let pkt = &packets[idx];
-                    let n_lanes = pkt.type_.lanes.max(1) as usize;
-                    let dims_per_lane = pkt.coordinates.len() / n_lanes;
-                    for l in 0..n_lanes {
-                        let (x, y) = pixel_xy(pkt, l, n_lanes, dims_per_lane, min_x, min_y);
-                        if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
-                            counts[y as usize * w + x as usize] += 1;
-                        }
-                    }
+                    for_each_lane_pixel(
+                        pkt,
+                        min_x,
+                        min_y,
+                        w,
+                        h,
+                        None,
+                        |_lane, pixel_idx, _val_idx| {
+                            counts[pixel_idx] += 1;
+                        },
+                    );
                 }
                 if let Some(stats) = funcs.get_mut(func_name.as_str()) {
                     let (max, hist) = count_histogram(&counts);
@@ -745,14 +749,17 @@ impl Trace {
                 let mut counts = vec![0i32; w * h];
                 for &idx in indices {
                     let pkt = &packets[idx];
-                    let n_lanes = pkt.type_.lanes.max(1) as usize;
-                    let dims_per_lane = pkt.coordinates.len() / n_lanes;
-                    for l in 0..n_lanes {
-                        let (x, y) = pixel_xy(pkt, l, n_lanes, dims_per_lane, min_x, min_y);
-                        if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
-                            counts[y as usize * w + x as usize] += 1;
-                        }
-                    }
+                    for_each_lane_pixel(
+                        pkt,
+                        min_x,
+                        min_y,
+                        w,
+                        h,
+                        None,
+                        |_lane, pixel_idx, _val_idx| {
+                            counts[pixel_idx] += 1;
+                        },
+                    );
                 }
                 if let Some(stats) = funcs.get_mut(func_name.as_str()) {
                     let (max, hist) = count_histogram(&counts);
@@ -764,8 +771,9 @@ impl Trace {
 
         // Compute max per-pixel redundant store counts: replay all stores for each Func, tracking
         // the last value written to each (x, y, channel). A store is redundant when the incoming
-        // value bit-matches the previously stored value at that location.
-        for (func_name, indices) in &store_indices_by_func {
+        // value bit-matches the previously stored value at that location and there have been no
+        // intervening loads from that location.
+        for (func_name, store_indices) in &store_indices_by_func {
             let extents = funcs.get(func_name.as_str()).and_then(func_extents);
             if let Some((w, h, min_x, min_y)) = extents {
                 let stats = funcs.get(func_name.as_str()).unwrap();
@@ -777,40 +785,66 @@ impl Trace {
                 } else {
                     (1, 0)
                 };
+
+                let load_indices = load_indices_by_func
+                    .get(func_name.as_str())
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]);
+
                 // None = no store has landed here yet; Some(bits) = last stored value as u64 bits.
                 let mut last_values = vec![None::<u64>; w * h * channels];
                 let mut redundant_counts = vec![0i32; w * h];
-                for &idx in indices {
-                    let pkt = &packets[idx];
-                    let n_lanes = pkt.type_.lanes.max(1) as usize;
-                    let dims_per_lane = pkt.coordinates.len() / n_lanes;
-                    for lane in 0..n_lanes {
-                        let Some(v) = pkt.decoded_value(lane) else {
-                            continue;
-                        };
-                        let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
-                        if x < 0 || y < 0 || x as usize >= w || y as usize >= h {
-                            continue;
-                        }
-                        let c = if dims_per_lane >= 3 {
-                            pkt.coordinates[2 * n_lanes + lane] - min_c
-                        } else {
-                            0
-                        };
-                        if c < 0 || c as usize >= channels {
-                            continue;
-                        }
-                        let val_idx = (y as usize * w + x as usize) * channels + c as usize;
-                        let pixel_idx = y as usize * w + x as usize;
-                        let v_bits = v.to_bits();
-                        if let Some(prev_bits) = last_values[val_idx] {
-                            if prev_bits == v_bits {
-                                redundant_counts[pixel_idx] += 1;
-                            }
-                        }
-                        last_values[val_idx] = Some(v_bits);
+                let mut si = 0;
+                let mut li = 0;
+
+                while si < store_indices.len() || li < load_indices.len() {
+                    let next_is_store = si < store_indices.len()
+                        && (li >= load_indices.len() || store_indices[si] < load_indices[li]);
+
+                    if next_is_store {
+                        let global_idx = store_indices[si];
+                        si += 1;
+
+                        let pkt = &packets[global_idx];
+                        for_each_lane_pixel(
+                            pkt,
+                            min_x,
+                            min_y,
+                            w,
+                            h,
+                            Some((min_c, channels)),
+                            |lane, pixel_idx, val_idx| {
+                                let Some(v) = pkt.decoded_value(lane) else {
+                                    return;
+                                };
+                                let v_bits = v.to_bits();
+                                if let Some(prev_bits) = last_values[val_idx] {
+                                    if prev_bits == v_bits {
+                                        redundant_counts[pixel_idx] += 1;
+                                    }
+                                }
+                                last_values[val_idx] = Some(v_bits);
+                            },
+                        );
+                    } else {
+                        // If we observe a Load, reset the last_values slot for that location to None.
+                        let global_idx = load_indices[li];
+                        li += 1;
+                        let pkt = &packets[global_idx];
+                        for_each_lane_pixel(
+                            pkt,
+                            min_x,
+                            min_y,
+                            w,
+                            h,
+                            Some((min_c, channels)),
+                            |_lane, _pixel_idx, val_idx| {
+                                last_values[val_idx] = None;
+                            },
+                        );
                     }
                 }
+
                 if let Some(stats) = funcs.get_mut(func_name.as_str()) {
                     let (max, hist) = count_histogram(&redundant_counts);
                     stats.max_redundant_count = max;
@@ -864,52 +898,37 @@ impl Trace {
                         let global_idx = store_indices[si];
                         si += 1;
                         let pkt = &packets[global_idx];
-                        let n_lanes = pkt.type_.lanes.max(1) as usize;
-                        let dims_per_lane = pkt.coordinates.len() / n_lanes;
-                        for lane in 0..n_lanes {
-                            let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
-                            if x < 0 || y < 0 || x as usize >= w || y as usize >= h {
-                                continue;
-                            }
-                            let c = if dims_per_lane >= 3 {
-                                pkt.coordinates[2 * n_lanes + lane] - min_c
-                            } else {
-                                0
-                            };
-                            if c < 0 || c as usize >= channels {
-                                continue;
-                            }
-                            let val_idx = (y as usize * w + x as usize) * channels + c as usize;
-                            last_store_at[val_idx] = global_idx;
-                        }
+                        for_each_lane_pixel(
+                            pkt,
+                            min_x,
+                            min_y,
+                            w,
+                            h,
+                            Some((min_c, channels)),
+                            |_lane, _pixel_idx, val_idx| {
+                                last_store_at[val_idx] = global_idx;
+                            },
+                        );
                     } else {
                         let global_idx = load_indices[li];
                         li += 1;
                         let pkt = &packets[global_idx];
-                        let n_lanes = pkt.type_.lanes.max(1) as usize;
-                        let dims_per_lane = pkt.coordinates.len() / n_lanes;
-                        for lane in 0..n_lanes {
-                            let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
-                            if x < 0 || y < 0 || x as usize >= w || y as usize >= h {
-                                continue;
-                            }
-                            let c = if dims_per_lane >= 3 {
-                                pkt.coordinates[2 * n_lanes + lane] - min_c
-                            } else {
-                                0
-                            };
-                            if c < 0 || c as usize >= channels {
-                                continue;
-                            }
-                            let val_idx = (y as usize * w + x as usize) * channels + c as usize;
-                            let pixel_idx = y as usize * w + x as usize;
-                            if last_store_at[val_idx] != usize::MAX {
-                                let dist = (global_idx - last_store_at[val_idx]) as i64;
-                                if dist > max_reuse_distances[pixel_idx] {
-                                    max_reuse_distances[pixel_idx] = dist;
+                        for_each_lane_pixel(
+                            pkt,
+                            min_x,
+                            min_y,
+                            w,
+                            h,
+                            Some((min_c, channels)),
+                            |_lane, pixel_idx, val_idx| {
+                                if last_store_at[val_idx] != usize::MAX {
+                                    let dist = (global_idx - last_store_at[val_idx]) as i64;
+                                    if dist > max_reuse_distances[pixel_idx] {
+                                        max_reuse_distances[pixel_idx] = dist;
+                                    }
                                 }
-                            }
-                        }
+                            },
+                        );
                     }
                 }
 
@@ -945,32 +964,24 @@ impl Trace {
 
                 for &global_idx in load_indices {
                     let pkt = &packets[global_idx];
-                    let n_lanes = pkt.type_.lanes.max(1) as usize;
-                    let dims_per_lane = pkt.coordinates.len() / n_lanes;
-                    for lane in 0..n_lanes {
-                        let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
-                        if x < 0 || y < 0 || x as usize >= w || y as usize >= h {
-                            continue;
-                        }
-                        let c = if dims_per_lane >= 3 {
-                            pkt.coordinates[2 * n_lanes + lane] - min_c
-                        } else {
-                            0
-                        };
-                        if c < 0 || c as usize >= channels {
-                            continue;
-                        }
-                        let val_idx = (y as usize * w + x as usize) * channels + c as usize;
-                        let pixel_idx = y as usize * w + x as usize;
-                        if first_load_at[val_idx] == usize::MAX {
-                            first_load_at[val_idx] = global_idx;
-                        } else {
-                            let dist = (global_idx - first_load_at[val_idx]) as i64;
-                            if dist > max_reuse_distances[pixel_idx] {
-                                max_reuse_distances[pixel_idx] = dist;
+                    for_each_lane_pixel(
+                        pkt,
+                        min_x,
+                        min_y,
+                        w,
+                        h,
+                        Some((min_c, channels)),
+                        |_lane, pixel_idx, val_idx| {
+                            if first_load_at[val_idx] == usize::MAX {
+                                first_load_at[val_idx] = global_idx;
+                            } else {
+                                let dist = (global_idx - first_load_at[val_idx]) as i64;
+                                if dist > max_reuse_distances[pixel_idx] {
+                                    max_reuse_distances[pixel_idx] = dist;
+                                }
                             }
-                        }
-                    }
+                        },
+                    );
                 }
 
                 if let Some(stats) = funcs.get_mut(func_name.as_str()) {
@@ -1136,4 +1147,48 @@ pub(crate) fn pixel_xy(
         -min_y
     };
     (x, y)
+}
+
+/// Iterates over each lane of `pkt` that falls within the Func's `w x h` extents, invoking
+/// `f(lane, pixel_idx, val_idx)`. `pixel_idx` is the flattened `y * w + x` location.
+///
+/// When `channel` is `Some((min_c, channels))`, lanes are additionally filtered to those whose
+/// channel coordinate falls within `0..channels`, and `val_idx` is the flattened
+/// `pixel_idx * channels + c` location; otherwise `val_idx` is just `pixel_idx`.
+fn for_each_lane_pixel(
+    pkt: &TracePacket,
+    min_x: i32,
+    min_y: i32,
+    w: usize,
+    h: usize,
+    channel: Option<(i32, usize)>,
+    mut f: impl FnMut(usize, usize, usize),
+) {
+    let n_lanes = pkt.type_.lanes.max(1) as usize;
+    let dims_per_lane = pkt.coordinates.len() / n_lanes;
+    for lane in 0..n_lanes {
+        let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
+        if x < 0 || y < 0 || x as usize >= w || y as usize >= h {
+            continue;
+        }
+
+        let pixel_idx = y as usize * w + x as usize;
+        let val_idx = if let Some((min_c, channels)) = channel {
+            let c = if dims_per_lane >= 3 {
+                pkt.coordinates[2 * n_lanes + lane] - min_c
+            } else {
+                0
+            };
+
+            if c < 0 || c as usize >= channels {
+                continue;
+            }
+
+            pixel_idx * channels + c as usize
+        } else {
+            pixel_idx
+        };
+
+        f(lane, pixel_idx, val_idx);
+    }
 }
