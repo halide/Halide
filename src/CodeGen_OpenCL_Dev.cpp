@@ -798,8 +798,21 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
-        stream << get_indent() << print_type(op->type) << " "
-               << print_name(op->name) << "[" << size << "];\n";
+        if (op->type.is_struct()) {
+            // A struct's storage type prints as a 1-byte primitive (its ABI
+            // tag is plain UInt(8) -- see Type::Struct), but `size` here is
+            // a count of *structs*, not bytes -- scale up by the struct's
+            // true packed size (Type::bytes()) so the declared array
+            // actually reserves enough memory. Every Load/Store addressing
+            // this allocation is already a byte-precise plain UInt(8) one
+            // by this point (LowerStructTypes.cpp), so a flat byte array of
+            // size*bytes() is exactly the right shape.
+            stream << get_indent() << print_type(UInt(8)) << " "
+                   << print_name(op->name) << "[" << (size * op->type.bytes()) << "];\n";
+        } else {
+            stream << get_indent() << print_type(op->type) << " "
+                   << print_name(op->name) << "[" << size << "];\n";
+        }
         stream << get_indent() << "#define " << get_memory_space(op->name) << " __private\n";
 
         Allocation alloc;

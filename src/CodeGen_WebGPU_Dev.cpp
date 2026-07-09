@@ -428,6 +428,21 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
+        if (op->type.is_struct()) {
+            // A struct's storage type prints the same as plain UInt(8) --
+            // its ABI tag is plain UInt(8), see Type::Struct -- but `size`
+            // here is a count of *structs*, not bytes; scale up by the
+            // struct's true packed size (Type::bytes()) so the declared
+            // array actually reserves enough storage, the same way an
+            // ordinary UInt(8) allocation already reserves one storage slot
+            // per byte (WGSL has no native 8-bit type -- see print_type
+            // above -- so that slot is a full u32, same as for any other
+            // UInt(8) allocation). Every Load/Store addressing this
+            // allocation is already a byte-precise plain UInt(8) one by
+            // this point (see LowerStructTypes.cpp).
+            size *= op->type.bytes();
+        }
+
         stream << get_indent() << "var " << print_name(op->name)
                << " : array<" << print_type(op->type) << ", " << size << ">;\n";
 

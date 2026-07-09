@@ -748,6 +748,15 @@ struct Call : public ExprNode<Call> {
         strict_sub,
         // Convert a list of Exprs to a string
         stringify,
+        // Read one field (by precomputed byte offset) out of a struct-typed
+        // value (see Type::Struct, IROperator.h's field()). args = {struct
+        // value, byte offset of the field as an IntImm}. The field's name is
+        // resolved to this offset at Expr-construction time and does not need
+        // to survive into the IR.
+        struct_field_read,
+        // Construct a value of a struct type from one Expr per field, in
+        // declaration order (see Type::Struct, IROperator.h's pack_struct()).
+        struct_pack,
         // Query properties of the compiled-for target (resolved at compile-time)
         target_arch_is,
         target_bits,

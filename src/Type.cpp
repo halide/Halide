@@ -24,6 +24,66 @@ int64_t min_int(int bits) {
 
 }  // namespace
 
+bool StructField::operator==(const StructField &other) const {
+    return name == other.name && type == other.type && array_extent == other.array_extent;
+}
+
+int StructTypeInfo::find_field(const std::string &name) const {
+    for (size_t i = 0; i < fields.size(); i++) {
+        if (fields[i].name == name) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+int Type::bytes() const {
+    if (is_struct()) {
+        return struct_type->total_bytes;
+    }
+    return (bits() + 7) / 8;
+}
+
+Type Type::Struct(const std::vector<StructField> &fields) {
+    user_assert(!fields.empty()) << "Type::Struct requires at least one field.\n";
+
+    // Deliberately leaked: like halide_handle_cplusplus_type, this side table
+    // must remain valid for the lifetime of the program, since Types
+    // (including this pointer) get freely copied and compared throughout
+    // compilation.
+    auto *info = new StructTypeInfo();
+    info->fields = fields;
+    info->offsets.reserve(fields.size());
+
+    int offset = 0;
+    for (const auto &f : fields) {
+        user_assert(!f.type.is_struct() || f.type.struct_type != nullptr)
+            << "Struct field \"" << f.name << "\" has an invalid nested struct type.\n";
+        user_assert(f.array_extent.value_or(1) > 0)
+            << "Struct field \"" << f.name << "\" has a non-positive array extent.\n";
+        info->offsets.push_back(offset);
+        offset += f.type.bytes() * f.array_extent.value_or(1);
+    }
+    info->total_bytes = offset;
+
+    Type t(Type::UInt, 8, 1);
+    t.struct_type = info;
+    return t;
+}
+
+bool Type::same_struct_type(const Type &other) const {
+    const StructTypeInfo *a = struct_type;
+    const StructTypeInfo *b = other.struct_type;
+
+    if (a == b) {
+        return true;
+    }
+    if (a == nullptr || b == nullptr) {
+        return false;
+    }
+    return a->fields == b->fields;
+}
+
 /** Return an expression which is the maximum value of this type */
 Halide::Expr Type::max() const {
     if (is_vector()) {

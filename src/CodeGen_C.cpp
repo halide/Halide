@@ -2311,6 +2311,15 @@ void CodeGen_C::visit(const Allocate *op) {
     string op_name = print_name(op->name);
     string op_type = print_type(op->type, AppendSpace);
 
+    // A struct's printed C type is always uint8_t (its ABI tag is plain
+    // UInt(8) -- see Type::Struct), so sizeof(op_type) is always 1
+    // regardless of the struct's true packed size. Every place below that
+    // multiplies by sizeof(op_type), or declares op_type name[size_id],
+    // implicitly assumes sizeof(op_type) == op->type.bytes(), which only
+    // holds for non-struct types -- use the literal byte count directly
+    // for structs instead.
+    string elem_size_expr = op->type.is_struct() ? std::to_string(op->type.bytes()) : ("sizeof(" + op_type + ")");
+
     // For sizes less than 8k, do a stack allocation
     bool on_stack = false;
     int32_t constant_size;
@@ -2364,8 +2373,8 @@ void CodeGen_C::visit(const Allocate *op) {
             }
             stream << get_indent() << "if (("
                    << size_id << " > ((int64_t(1) << 31) - 1)) || (("
-                   << size_id << " * sizeof("
-                   << op_type << ")) > ((int64_t(1) << 31) - 1)))\n";
+                   << size_id << " * "
+                   << elem_size_expr << ") > ((int64_t(1) << 31) - 1)))\n";
             open_scope();
             stream << get_indent();
             // TODO: call halide_error_buffer_allocation_too_large() here instead
@@ -2395,8 +2404,12 @@ void CodeGen_C::visit(const Allocate *op) {
         stream << get_indent() << op_type;
 
         if (on_stack) {
+            // For a struct, op_type ("uint8_t") is 1 byte, but size_id is a
+            // count of *structs* -- scale it up to a count of bytes so the
+            // declared array actually reserves op->type.bytes() per element.
+            string declared_size = op->type.is_struct() ? (size_id + " * " + std::to_string(op->type.bytes())) : size_id;
             stream << op_name
-                   << "[" << size_id << "];\n";
+                   << "[" << declared_size << "];\n";
         } else {
             // Shouldn't ever currently be possible to have !on_stack && size_id.empty(),
             // but reality-check in case things change in the future.
@@ -2405,9 +2418,9 @@ void CodeGen_C::visit(const Allocate *op) {
                    << op_name
                    << " = ("
                    << op_type
-                   << " *)halide_malloc(_ucon, sizeof("
-                   << op_type
-                   << ")*" << size_id << ");\n";
+                   << " *)halide_malloc(_ucon, "
+                   << elem_size_expr
+                   << "*" << size_id << ");\n";
             heap_allocations.push(op->name);
         }
     }

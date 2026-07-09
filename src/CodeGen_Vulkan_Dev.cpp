@@ -1888,12 +1888,34 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
         // static fixed size allocation
         if (op->extents.size() == 1 && is_const(op->extents[0])) {
             array_size = op->constant_allocation_size();
+            // A struct's declared SPIR-V element type (storage_type_id,
+            // declared above) is always a plain 8-bit int (its ABI tag is
+            // UInt(8) -- see Type::Struct), regardless of the struct's true
+            // packed byte size -- scale the array's element *count* up by
+            // that size so the declared array actually reserves enough
+            // storage. (Every Load/Store addressing this allocation is
+            // already a byte-precise plain UInt(8) one by this point --
+            // see LowerStructTypes.cpp -- so a flat array of
+            // array_size*bytes() such elements is exactly the right shape.)
+            if (op->type.is_struct()) {
+                array_size *= op->type.bytes();
+            }
             array_type_id = builder.declare_type(op->type, array_size);
             builder.add_symbol(variable_name + "_array_type", array_type_id, builder.current_module().id());
             debug(2) << "Vulkan: Allocate (fixed-size) " << op->name << " type=" << op->type << " array_size=" << array_size << " in shared memory on device in global scope\n";
 
         } else {
             // dynamic allocation with unknown size at compile time ...
+            //
+            // NOTE: this path does not scale its element count by
+            // op->type.bytes() for a struct type the way the two fixed-size
+            // branches (above and below) do (see those for why that scaling
+            // is needed). Not fixed here: no Vulkan device was available to
+            // verify a fix against, and the specialization-constant sizing
+            // machinery below is intricate enough that an unverified change
+            // seemed riskier than leaving a struct-typed *dynamically*-sized
+            // GPUShared allocation as a known-unsupported combination for
+            // now.
 
             // declare the array size as a specialization constant (which will get overridden at runtime)
             Type array_size_type = UInt(32);
@@ -1933,6 +1955,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
         user_assert(array_size > 0)
             << "Allocation " << op->name << " has a dynamic size. "
             << "Only fixed-size local allocations are supported with Vulkan.";
+
+        // See the analogous comment in the GPUShared branch above: a
+        // struct's declared element type is a plain 8-bit int regardless of
+        // its true packed byte size, so scale the element count up by that
+        // size to reserve enough storage.
+        if (op->type.is_struct()) {
+            array_size *= op->type.bytes();
+        }
 
         debug(2) << "Vulkan: Allocate " << op->name << " type=" << op->type << " size=" << array_size << " on device in function scope\n";
 

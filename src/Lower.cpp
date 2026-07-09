@@ -44,6 +44,7 @@
 #include "LICM.h"
 #include "LoopCarry.h"
 #include "LowerParallelTasks.h"
+#include "LowerStructTypes.h"
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "OffloadGPULoops.h"
@@ -297,6 +298,18 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
     log("Lowering after storage flattening:", s);
+
+    // Struct types (see Type::Struct) are treated as an ordinary, opaque,
+    // N-byte element type all the way through scheduling and storage
+    // flattening -- so bounds_inference, compute_at, storage_flattening,
+    // etc. never need to know struct types exist, and a struct-valued Func
+    // keeps exactly the dimensionality the user wrote. Only now, once every
+    // Provide/Call has become a concrete Store/Load with a real flat byte
+    // index, do we split struct-typed Stores into per-field byte stores and
+    // rewrite field() reads into byte-shifted loads.
+    debug(1) << "Lowering struct type field access...\n";
+    s = lower_struct_types(s);
+    log("Lowering after lowering struct type field access:", s);
 
     debug(1) << "Adding atomic mutex allocation...\n";
     s = add_atomic_mutex(s, outputs);

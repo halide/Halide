@@ -6,6 +6,9 @@
 #include "Util.h"
 #include "runtime/HalideRuntime.h"
 #include <cstdint>
+#include <optional>
+#include <string>
+#include <vector>
 
 /** \file
  * Defines halide types
@@ -273,6 +276,13 @@ struct ConstantInterval;
 
 struct Expr;
 
+// StructField/StructTypeInfo are defined just below the end of the `Type`
+// struct, since a `StructField` holds a `Type` by value and so needs `Type`
+// to be a complete type; `Type` itself only ever needs a pointer to
+// `StructTypeInfo`, so the forward declarations below are enough for it.
+struct StructField;
+struct StructTypeInfo;
+
 /** Types in the halide type system. They can be ints, unsigned ints,
  * or floats of various bit-widths (the 'bits' field). They can also
  * be vectors of the same (by setting the 'lanes' field to something
@@ -293,10 +303,31 @@ public:
     static constexpr halide_type_code_t Handle = halide_type_handle;
     // @}
 
-    /** The number of bytes required to store a single scalar value of this type. Ignores vector lanes. */
-    int bytes() const {
-        return (bits() + 7) / 8;
+    /** The number of bytes required to store a single scalar value of this
+     * type. Ignores vector lanes. For a struct type, this is the packed
+     * size of the whole struct (see `StructTypeInfo::total_bytes`). */
+    int bytes() const;
+
+    /** Construct a packed (no padding -- byte layout is exactly the
+     * concatenation of its fields' byte representations, in field order),
+     * named-field aggregate type, matching a C `struct { ... }` with no
+     * alignment padding. The runtime tag of the resulting Type is plain
+     * `UInt(8)` -- struct-ness is purely a compiler-side annotation, never
+     * visible at the ABI/runtime level (see doc/StructTypeDesign.md). */
+    static Type Struct(const std::vector<StructField> &fields);
+
+    /** Is this type a struct type, as constructed by `Type::Struct`? */
+    bool is_struct() const {
+        return struct_type != nullptr;
     }
+
+    /** If this is a struct type, its field list/offsets. Null otherwise. */
+    const StructTypeInfo *struct_type = nullptr;
+
+    /** Check that the struct layout of two struct types matches structurally
+     * (same field names, types, order, and array extents), not just by
+     * pointer identity of the `StructTypeInfo` side table. */
+    bool same_struct_type(const Type &other) const;
 
     // Default ctor initializes everything to predictable-but-unlikely values
     Type()
@@ -356,20 +387,32 @@ public:
 
     /** Return Type with same number of bits and lanes, but new_code for a type code. */
     Type with_code(halide_type_code_t new_code) const {
-        return Type(new_code, bits(), lanes(),
-                    (new_code == code()) ? handle_type : nullptr);
+        Type t(new_code, bits(), lanes(),
+               (new_code == code()) ? handle_type : nullptr);
+        if (new_code == code()) {
+            t.struct_type = struct_type;
+        }
+        return t;
     }
 
     /** Return Type with same type code and lanes, but new_bits for the number of bits. */
     Type with_bits(int new_bits) const {
-        return Type(code(), new_bits, lanes(),
-                    (new_bits == bits()) ? handle_type : nullptr);
+        Type t(code(), new_bits, lanes(),
+               (new_bits == bits()) ? handle_type : nullptr);
+        if (new_bits == bits()) {
+            t.struct_type = struct_type;
+        }
+        return t;
     }
 
     /** Return Type with same type code and number of bits,
      * but new_lanes for the number of vector lanes. */
     Type with_lanes(int new_lanes) const {
-        return Type(code(), bits(), new_lanes, handle_type);
+        Type t(code(), bits(), new_lanes, handle_type);
+        if (new_lanes == lanes()) {
+            t.struct_type = struct_type;
+        }
+        return t;
     }
 
     /** Return Type with the same type code and number of lanes, but with at least twice as many bits. */
@@ -469,12 +512,33 @@ public:
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
-        return type == other.type && (code() != Handle || same_handle_type(other));
+        return type == other.type &&
+               (code() != Handle || same_handle_type(other)) &&
+               (is_struct() == other.is_struct()) &&
+               (!is_struct() || same_struct_type(other));
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
-        return type != other.type || (code() == Handle && !same_handle_type(other));
+        return !(*this == other);
+    }
+
+    /** Is `buffer_type` an acceptable type for a `halide_buffer_t` bound to a
+     * Parameter/ImageParam declared with this Type? Ordinary types require
+     * exact equality. A struct type (see Type::Struct) additionally accepts
+     * a plain (non-struct) buffer type with the same runtime (code, bits,
+     * lanes) tag: a struct's runtime tag is deliberately indistinguishable
+     * from an ordinary byte buffer's (struct-ness is a compiler-only
+     * annotation, never visible at the ABI level), so a hand-built
+     * `Buffer<uint8_t>` of the right shape is the expected way to supply
+     * struct-typed data, not a type error. A buffer that itself claims a
+     * *different* struct type is still rejected. */
+    bool is_compatible_for_buffer_bind(const Type &buffer_type) const {
+        if (*this == buffer_type) {
+            return true;
+        }
+        return is_struct() && !buffer_type.is_struct() &&
+               (halide_type_t)(*this) == (halide_type_t)buffer_type;
     }
 
     /** Compare two types for equality */
@@ -494,6 +558,9 @@ public:
         }
         if (code() == Handle) {
             return handle_type < other.handle_type;
+        }
+        if (is_struct() || other.is_struct()) {
+            return struct_type < other.struct_type;
         }
         return false;
     }
@@ -533,6 +600,32 @@ public:
     /** Return an expression which is the minimum value of this type.
      * Returns -infinity for types which can represent it. */
     Expr min() const;
+};
+
+/** One field of a `Type::Struct`: a name, a type, and (for array fields) a
+ * number of elements. `array_extent` is deliberately `std::optional<int>`
+ * rather than defaulting a plain `int` to 1: a scalar field and a length-1
+ * array field are different things (e.g. `field(e, "qs")` should return a
+ * bare Expr for a scalar `qs`, but an array-indexable reference for an array
+ * `qs` even if that array happens to have exactly one element). */
+struct StructField {
+    std::string name;
+    Type type;
+    std::optional<int> array_extent = std::nullopt;
+
+    bool operator==(const StructField &other) const;
+};
+
+/** The out-of-band information a `Type::Struct` carries: its field list and
+ * the packed (no padding) byte offset of each field, computed once at
+ * construction. */
+struct StructTypeInfo {
+    std::vector<StructField> fields;
+    std::vector<int> offsets;  // one per field, in bytes
+    int total_bytes = 0;
+
+    /** Find a field by name. Returns -1 if not found. */
+    int find_field(const std::string &name) const;
 };
 
 /** Constructing a signed integer type */

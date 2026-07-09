@@ -2863,6 +2863,89 @@ Expr concat_bits(const std::vector<Expr> &e) {
     return Call::make(t.with_bits(t.bits() * (int)e.size()), Call::concat_bits, e, Call::Intrinsic);
 }
 
+Expr FieldRef::read(const Expr &elem_index) const {
+    // args = {struct value, field index (constant), element index (0 for a
+    // scalar field)}. The field's byte offset isn't included here -- it's
+    // recomputed from struct_value's Type (which carries the full
+    // StructTypeInfo) by LowerStructTypes.cpp, which is the only thing
+    // allowed to consume this intrinsic.
+    return Call::make(elem_type, Call::struct_field_read,
+                      {struct_value, make_const(Int(32), field_index), elem_index}, Call::PureIntrinsic);
+}
+
+FieldRef::FieldRef(Expr struct_value, int field_index, Type elem_type, std::optional<int> array_extent)
+    : struct_value(std::move(struct_value)), field_index(field_index), elem_type(elem_type), array_extent(array_extent) {
+}
+
+FieldRef::operator Expr() const {
+    user_assert(!array_extent.has_value())
+        << "This struct field is an array field; use operator[] to access an element of it, "
+        << "not an implicit conversion to Expr.\n";
+    return read(make_const(Int(32), 0));
+}
+
+Expr FieldRef::operator[](const Expr &i) const {
+    user_assert(array_extent.has_value())
+        << "This struct field is a scalar field; it can't be indexed with operator[].\n";
+    Expr idx = cast<int32_t>(i);
+    if (auto ci = as_const_int(idx)) {
+        user_assert(*ci >= 0 && *ci < *array_extent)
+            << "Struct array field index " << *ci << " is out of range [0, " << *array_extent << ").\n";
+    }
+    return read(idx);
+}
+
+namespace {
+FieldRef make_field_ref(const Expr &struct_value, int index) {
+    user_assert(struct_value.defined() && struct_value.type().is_struct())
+        << "field() requires an Expr of a struct type (see Type::Struct).\n";
+    const StructTypeInfo *info = struct_value.type().struct_type;
+    user_assert(index >= 0 && index < (int)info->fields.size())
+        << "Struct field index " << index << " is out of range; this struct has "
+        << info->fields.size() << " fields.\n";
+    const StructField &f = info->fields[index];
+    return FieldRef(struct_value, index, f.type, f.array_extent);
+}
+}  // namespace
+
+FieldRef field(const Expr &struct_value, const std::string &name) {
+    user_assert(struct_value.defined() && struct_value.type().is_struct())
+        << "field() requires an Expr of a struct type (see Type::Struct).\n";
+    int index = struct_value.type().struct_type->find_field(name);
+    user_assert(index >= 0) << "Struct type has no field named \"" << name << "\".\n";
+    return make_field_ref(struct_value, index);
+}
+
+FieldRef field(const Expr &struct_value, int index) {
+    return make_field_ref(struct_value, index);
+}
+
+Expr pack_struct(const Type &t, const std::vector<Expr> &field_values) {
+    user_assert(t.is_struct()) << "pack_struct() requires a struct type (see Type::Struct).\n";
+    const StructTypeInfo &info = *t.struct_type;
+
+    size_t expected = 0;
+    for (const auto &f : info.fields) {
+        expected += (size_t)f.array_extent.value_or(1);
+    }
+    user_assert(field_values.size() == expected)
+        << "pack_struct() for a " << expected << "-element struct (counting array fields "
+        << "element-by-element) was given " << field_values.size() << " values.\n";
+
+    size_t idx = 0;
+    for (const auto &f : info.fields) {
+        int n = f.array_extent.value_or(1);
+        for (int i = 0; i < n; i++) {
+            user_assert(field_values[idx].defined() && field_values[idx].type() == f.type)
+                << "pack_struct(): value " << idx << " has type " << field_values[idx].type()
+                << " but struct field \"" << f.name << "\" has type " << f.type << ".\n";
+            idx++;
+        }
+    }
+
+    return Call::make(t, Call::struct_pack, field_values, Call::PureIntrinsic);
+}
+
 Expr target_arch_is(Target::Arch arch) {
     return Call::make(Bool(), Call::target_arch_is, {Expr((int)arch)}, Call::PureIntrinsic);
 }
