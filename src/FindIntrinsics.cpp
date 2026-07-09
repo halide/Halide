@@ -29,19 +29,10 @@ Expr narrow(Expr a) {
     return Cast::make(result_type, std::move(a));
 }
 
-// Check a type to make sure it can be narrowed. find_intrinsics_for_type
-// attempts to prevent this code from narrowing in cases that do not work, but
-// it is incomplete for two reasons:
-//
-//     - Arguments can be narrowed and that guard is only on return type, which
-//     are different for widening operations.
-//
-//     - find_intrinsics_for_type does not cull out float16, and it probably
-//     should not as while it's ok to skip matching bool things, float16 things
-//     are useful.
+// Check a type to make sure we can narrow it losslessly. This
+// excludes bools and float16.
 bool can_narrow(const Type &t) {
-    return (t.is_float() && t.bits() >= 32) ||
-           t.bits() >= 8;
+    return t.bits() >= (t.is_float() ? 32 : 8);
 }
 
 Expr saturating_narrow(const Expr &a) {
