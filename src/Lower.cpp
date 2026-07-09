@@ -44,6 +44,7 @@
 #include "LICM.h"
 #include "LoopCarry.h"
 #include "LowerParallelTasks.h"
+#include "LowerStructTypes.h"
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "OffloadGPULoops.h"
@@ -297,6 +298,10 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
     log("Lowering after storage flattening:", s);
+
+    debug(1) << "Lowering struct type field access...\n";
+    s = lower_struct_types(s);
+    log("Lowering after lowering struct type field access:", s);
 
     debug(1) << "Adding atomic mutex allocation...\n";
     s = add_atomic_mutex(s, outputs);

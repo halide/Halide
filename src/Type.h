@@ -6,6 +6,9 @@
 #include "Util.h"
 #include "runtime/HalideRuntime.h"
 #include <cstdint>
+#include <optional>
+#include <string>
+#include <vector>
 
 /** \file
  * Defines halide types
@@ -273,6 +276,9 @@ struct ConstantInterval;
 
 struct Expr;
 
+struct StructField;
+struct StructTypeInfo;
+
 /** Types in the halide type system. They can be ints, unsigned ints,
  * or floats of various bit-widths (the 'bits' field). They can also
  * be vectors of the same (by setting the 'lanes' field to something
@@ -293,10 +299,28 @@ public:
     static constexpr halide_type_code_t Handle = halide_type_handle;
     // @}
 
-    /** The number of bytes required to store a single scalar value of this type. Ignores vector lanes. */
-    int bytes() const {
-        return (bits() + 7) / 8;
+    /** The number of bytes required to store a single scalar value of this
+     * type. Ignores vector lanes. For a struct type, this is the packed
+     * size of the whole struct. */
+    int bytes() const;
+
+    /** Construct a packed, named-field aggregate type, matching a C struct
+     * with no alignment padding. The runtime tag of the resulting Type is
+     * plain UInt(8) -- i.e., struct types are erased during compilation. */
+    static Type Struct(const std::vector<StructField> &fields);
+
+    /** Is this type a struct type, as constructed by `Type::Struct`? */
+    bool is_struct() const {
+        return struct_type != nullptr;
     }
+
+    /** If this is a struct type, its field list/offsets. Null otherwise. */
+    const StructTypeInfo *struct_type = nullptr;
+
+    /** Check that the struct layout of two struct types matches structurally
+     * (same field names, types, order, and array extents), not just by
+     * pointer identity of the `StructTypeInfo` side table. */
+    bool same_struct_type(const Type &other) const;
 
     // Default ctor initializes everything to predictable-but-unlikely values
     Type()
@@ -342,7 +366,10 @@ public:
         return (halide_type_code_t)type.code;
     }
 
-    /** Return the bit size of a single element of this type. */
+    /** Return the bit size of a single element of this type. For a struct
+     * type this deliberately returns 8 (the width of its erased ABI tag,
+     * see Type::Struct), not a meaningful bit-width of the aggregate --
+     * use bytes() for the struct's real size. */
     HALIDE_ALWAYS_INLINE
     int bits() const {
         return type.bits;
@@ -356,20 +383,32 @@ public:
 
     /** Return Type with same number of bits and lanes, but new_code for a type code. */
     Type with_code(halide_type_code_t new_code) const {
-        return Type(new_code, bits(), lanes(),
-                    (new_code == code()) ? handle_type : nullptr);
+        Type t(new_code, bits(), lanes(),
+               (new_code == code()) ? handle_type : nullptr);
+        if (new_code == code()) {
+            t.struct_type = struct_type;
+        }
+        return t;
     }
 
     /** Return Type with same type code and lanes, but new_bits for the number of bits. */
     Type with_bits(int new_bits) const {
-        return Type(code(), new_bits, lanes(),
-                    (new_bits == bits()) ? handle_type : nullptr);
+        Type t(code(), new_bits, lanes(),
+               (new_bits == bits()) ? handle_type : nullptr);
+        if (new_bits == bits()) {
+            t.struct_type = struct_type;
+        }
+        return t;
     }
 
     /** Return Type with same type code and number of bits,
      * but new_lanes for the number of vector lanes. */
     Type with_lanes(int new_lanes) const {
-        return Type(code(), bits(), new_lanes, handle_type);
+        Type t(code(), bits(), new_lanes, handle_type);
+        if (new_lanes == lanes()) {
+            t.struct_type = struct_type;
+        }
+        return t;
     }
 
     /** Return Type with the same type code and number of lanes, but with at least twice as many bits. */
@@ -434,7 +473,14 @@ public:
         return code() == Int;
     }
 
-    /** Is this type an unsigned integer type? */
+    /** Is this type an unsigned integer type? Note that a struct type's
+     * runtime tag is plain UInt(8) (see Type::Struct), so this deliberately
+     * still reports true for a struct type -- every codegen backend's type
+     * declaration logic (and the SPIR-V type builder) relies on that to
+     * treat a struct's erased storage as an ordinary byte. Code that needs
+     * to distinguish "genuinely numeric unsigned int" from "struct erased
+     * to look like one" should check is_struct() explicitly (see e.g.
+     * Type::min()/max()). */
     HALIDE_ALWAYS_INLINE
     bool is_uint() const {
         return code() == UInt;
@@ -469,12 +515,27 @@ public:
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
-        return type == other.type && (code() != Handle || same_handle_type(other));
+        return type == other.type &&
+               (code() != Handle || same_handle_type(other)) &&
+               (is_struct() == other.is_struct()) &&
+               (!is_struct() || same_struct_type(other));
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
-        return type != other.type || (code() == Handle && !same_handle_type(other));
+        return !(*this == other);
+    }
+
+    /** Is `buffer_type` an acceptable type for a `halide_buffer_t` bound to a
+     * Parameter/ImageParam declared with this Type? Ordinary types require
+     * exact equality. A struct type additionally accepts a type-erased
+     * (ABI-compatible) type. */
+    bool is_compatible_for_buffer_bind(const Type &buffer_type) const {
+        if (*this == buffer_type) {
+            return true;
+        }
+        return is_struct() && !buffer_type.is_struct() &&
+               halide_type_t(*this) == buffer_type;
     }
 
     /** Compare two types for equality */
@@ -487,16 +548,12 @@ public:
         return type != other;
     }
 
-    /** Compare ordering of two types so they can be used in certain containers and algorithms */
-    bool operator<(const Type &other) const {
-        if (type < other.type) {
-            return true;
-        }
-        if (code() == Handle) {
-            return handle_type < other.handle_type;
-        }
-        return false;
-    }
+    /** Compare ordering of two types so they can be used in certain
+     * containers and algorithms. Consistent with operator==: two struct
+     * types that compare equal (same field names/types/order/extents, per
+     * same_struct_type) always compare as neither-less-than-the-other,
+     * regardless of whether they share a StructTypeInfo pointer. */
+    bool operator<(const Type &other) const;
 
     /** Produce the scalar type (that of a single element) of this vector type */
     Type element_of() const {
@@ -533,6 +590,28 @@ public:
     /** Return an expression which is the minimum value of this type.
      * Returns -infinity for types which can represent it. */
     Expr min() const;
+};
+
+/** One field of a struct: a name, a type, and (for array fields)
+ * a number of elements. */
+struct StructField {
+    std::string name;
+    Type type;
+    std::optional<int> array_extent = std::nullopt;
+
+    bool operator==(const StructField &other) const;
+    bool operator<(const StructField &other) const;
+};
+
+/** The compile-time information a struct carries: its field list
+ * and the byte offset of each field */
+struct StructTypeInfo {
+    std::vector<StructField> fields;
+    std::vector<int> offsets;  // one per field, in bytes
+    int total_bytes = 0;
+
+    /** Find a field by name. Returns -1 if not found. */
+    int find_field(const std::string &name) const;
 };
 
 /** Constructing a signed integer type */

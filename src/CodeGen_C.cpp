@@ -2310,6 +2310,11 @@ void CodeGen_C::visit(const Allocate *op) {
 
     string op_name = print_name(op->name);
     string op_type = print_type(op->type, AppendSpace);
+    string op_bytes = std::to_string(op->type.bytes());
+
+    // Struct types are erased to UInt(8) raw buffers, so the size must
+    // be taken from the true type's byte count, rather than sizeof.
+    string elem_size_expr = op->type.is_struct() ? op_bytes : ("sizeof(" + op_type + ")");
 
     // For sizes less than 8k, do a stack allocation
     bool on_stack = false;
@@ -2364,8 +2369,8 @@ void CodeGen_C::visit(const Allocate *op) {
             }
             stream << get_indent() << "if (("
                    << size_id << " > ((int64_t(1) << 31) - 1)) || (("
-                   << size_id << " * sizeof("
-                   << op_type << ")) > ((int64_t(1) << 31) - 1)))\n";
+                   << size_id << " * "
+                   << elem_size_expr << ") > ((int64_t(1) << 31) - 1)))\n";
             open_scope();
             stream << get_indent();
             // TODO: call halide_error_buffer_allocation_too_large() here instead
@@ -2395,8 +2400,10 @@ void CodeGen_C::visit(const Allocate *op) {
         stream << get_indent() << op_type;
 
         if (on_stack) {
+            // For a struct, op_type is "uint8_t", so size_id is really an element count.
+            string declared_size = op->type.is_struct() ? (size_id + " * " + op_bytes) : size_id;
             stream << op_name
-                   << "[" << size_id << "];\n";
+                   << "[" << declared_size << "];\n";
         } else {
             // Shouldn't ever currently be possible to have !on_stack && size_id.empty(),
             // but reality-check in case things change in the future.
@@ -2405,9 +2412,9 @@ void CodeGen_C::visit(const Allocate *op) {
                    << op_name
                    << " = ("
                    << op_type
-                   << " *)halide_malloc(_ucon, sizeof("
-                   << op_type
-                   << ")*" << size_id << ");\n";
+                   << " *)halide_malloc(_ucon, "
+                   << elem_size_expr
+                   << "*" << size_id << ");\n";
             heap_allocations.push(op->name);
         }
     }

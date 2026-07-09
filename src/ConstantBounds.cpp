@@ -2,6 +2,7 @@
 #include "IR.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include <iostream>
 
 namespace Halide {
 namespace Internal {
@@ -167,6 +168,37 @@ ConstantInterval constant_integer_bounds(const Expr &e,
     Scope<ConstantInterval> sub_scope;
     sub_scope.set_containing_scope(&scope);
     return bounds_helper(e, sub_scope, cache);
+}
+
+void constant_bounds_test() {
+    // A struct's runtime tag is plain UInt(8) (see Type::Struct), but a
+    // struct is not itself a bounded integer. bounds_helper's generic
+    // fallback (for a node shape it doesn't specifically recognize, e.g. a
+    // struct-typed Select) computes ConstantInterval::bounds_of_type(e.type())
+    // and then asserts that result is representable by e.type() --
+    // Type::can_represent() correctly rejects a struct type outright, so
+    // bounds_of_type() must agree and report "no known bounds" for one too,
+    // rather than the [0, 255] a plain UInt(8) would get (which used to
+    // happen because is_uint() reports true for a struct's erased ABI tag).
+    // This exercises exactly the path that used to trip the internal_assert
+    // above.
+    Type block_t = Type::Struct({{"d", Float(32)}, {"qs", UInt(8), 4}});
+    Expr a = Call::make(block_t, Call::struct_pack,
+                        {make_zero(Float(32)), make_zero(UInt(8)), make_zero(UInt(8)), make_zero(UInt(8)), make_zero(UInt(8))},
+                        Call::PureIntrinsic);
+    Expr b = a;
+    Expr cond = Variable::make(Bool(), "c");
+    Expr sel = Select::make(cond, a, b);
+
+    ConstantInterval ci = constant_integer_bounds(sel);
+    internal_assert(!ci.min_defined && !ci.max_defined)
+        << "constant_integer_bounds() of a struct-typed Expr should be unbounded, got "
+        << "min_defined=" << ci.min_defined << " max_defined=" << ci.max_defined << "\n";
+
+    internal_assert(!block_t.can_represent((int64_t)0))
+        << "A struct type should not claim to represent any integer constant\n";
+
+    std::cout << "constant_bounds test passed\n";
 }
 
 }  // namespace Internal

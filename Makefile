@@ -543,6 +543,7 @@ SOURCE_FILES = \
   LoopCarry.cpp \
   Lower.cpp \
   LowerParallelTasks.cpp \
+  LowerStructTypes.cpp \
   LowerWarpShuffles.cpp \
   Memoization.cpp \
   Module.cpp \
@@ -748,6 +749,7 @@ HEADER_FILES = \
   LoopPartitioningDirective.h \
   Lower.h \
   LowerParallelTasks.h \
+  LowerStructTypes.h \
   LowerWarpShuffles.h \
   MainPage.h \
   Memoization.h \

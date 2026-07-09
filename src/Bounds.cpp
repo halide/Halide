@@ -253,9 +253,13 @@ protected:
 
     void bounds_of_type(Type t) {
         t = t.element_of();
-        if ((t.is_uint() || t.is_int()) && t.bits() <= 16) {
+        if (!t.is_struct() && (t.is_uint() || t.is_int()) && t.bits() <= 16) {
             interval = Interval(t.min(), t.max());
         } else {
+            // Struct types have no meaningful numeric range (a struct's
+            // runtime tag is plain UInt(8), but it isn't itself a bounded
+            // integer). Handles have their own tag and are also not numerically
+            // meaningful.
             interval = Interval::everything();
         }
     }

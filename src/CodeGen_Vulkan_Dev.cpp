@@ -1888,12 +1888,18 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
         // static fixed size allocation
         if (op->extents.size() == 1 && is_const(op->extents[0])) {
             array_size = op->constant_allocation_size();
+            // For a struct, op->type is UInt(8), so size is really an element count.
+            if (op->type.is_struct()) {
+                array_size *= op->type.bytes();
+            }
             array_type_id = builder.declare_type(op->type, array_size);
             builder.add_symbol(variable_name + "_array_type", array_type_id, builder.current_module().id());
             debug(2) << "Vulkan: Allocate (fixed-size) " << op->name << " type=" << op->type << " array_size=" << array_size << " in shared memory on device in global scope\n";
 
         } else {
             // dynamic allocation with unknown size at compile time ...
+
+            // TODO: what to do for struct types here? It doesn't seem to depend on op->type.
 
             // declare the array size as a specialization constant (which will get overridden at runtime)
             Type array_size_type = UInt(32);
@@ -1933,6 +1939,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
         user_assert(array_size > 0)
             << "Allocation " << op->name << " has a dynamic size. "
             << "Only fixed-size local allocations are supported with Vulkan.";
+
+        // For a struct, op->type is UInt(8), so size is really an element count.
+        if (op->type.is_struct()) {
+            array_size *= op->type.bytes();
+        }
 
         debug(2) << "Vulkan: Allocate " << op->name << " type=" << op->type << " size=" << array_size << " on device in function scope\n";
 

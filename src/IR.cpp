@@ -690,6 +690,8 @@ constexpr const char *intrinsic_op_names[] = {
     "strict_mul",
     "strict_sub",
     "stringify",
+    "struct_field_read",
+    "struct_pack",
     "target_arch_is",
     "target_bits",
     "target_has_feature",

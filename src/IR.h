@@ -748,6 +748,13 @@ struct Call : public ExprNode<Call> {
         strict_sub,
         // Convert a list of Exprs to a string
         stringify,
+        // Read one field (by precomputed byte offset) out of a struct-typed
+        // value. args = {struct value, byte offset of the field as an IntImm}.
+        // The field's name is resolved to this offset eagerly.
+        struct_field_read,
+        // Construct a value of a struct type from one Expr per field, in
+        // declaration order.
+        struct_pack,
         // Query properties of the compiled-for target (resolved at compile-time)
         target_arch_is,
         target_bits,

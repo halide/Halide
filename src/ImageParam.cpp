@@ -40,7 +40,7 @@ Func ImageParam::create_func() const {
 
 void ImageParam::set(const Buffer<> &b) {
     if (b.defined()) {
-        user_assert(b.type() == type())
+        user_assert(type().is_compatible_for_buffer_bind(b.type()))
             << "Can't bind ImageParam " << name()
             << " of type " << type()
             << " to Buffer " << b.name()

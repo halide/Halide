@@ -116,6 +116,8 @@ tests(
     split_non_innermost_predicated.cpp
     split_same_var_names.cpp
     store_at_without_compute_at.cpp
+    struct_nested_field_load.cpp
+    struct_nested_field_store.cpp
     thread_id_outside_block_id.cpp
     too_many_args.cpp
     treat_rvar_as_var.cpp

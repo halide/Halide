@@ -428,6 +428,11 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
+        // For a struct, op->type is UInt(8), so size is really an element count.
+        if (op->type.is_struct()) {
+            size *= op->type.bytes();
+        }
+
         stream << get_indent() << "var " << print_name(op->name)
                << " : array<" << print_type(op->type) << ", " << size << ">;\n";
 

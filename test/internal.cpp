@@ -4,6 +4,7 @@
 #include "CPlusPlusMangle.h"
 #include "CSE.h"
 #include "CodeGen_C.h"
+#include "ConstantBounds.h"
 #include "Deinterleave.h"
 #include "Func.h"
 #include "Generator.h"
@@ -36,6 +37,7 @@ int main(int argc, const char **argv) {
     is_monotonic_test();
     split_predicate_test();
     associativity_test();
+    constant_bounds_test();
     generator_test();
     propagate_estimate_test();
     uniquify_variable_names_test();

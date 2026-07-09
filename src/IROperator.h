@@ -1631,6 +1631,47 @@ f32.vectorize(x, 8);
  */
 Expr concat_bits(const std::vector<Expr> &e);
 
+/** A reference to one field of a struct-typed Expr, returned by field().
+ * Implicitly converts to Expr for a scalar field; supports operator[] for
+ * an array field. Using the wrong one of these for how the field was actually
+ * declared is a user_error.
+ */
+class FieldRef {
+    Expr struct_value;
+    int field_index;
+    Type elem_type;
+    std::optional<int> array_extent;
+
+    Expr read(const Expr &elem_index) const;
+
+public:
+    FieldRef(Expr struct_value, int field_index, Type elem_type, std::optional<int> array_extent);
+
+    /** Valid only for a scalar field. */
+    operator Expr() const;
+
+    /** Valid only for an array field. i may be a runtime Expr. */
+    Expr operator[](const Expr &i) const;
+
+    /** The number of elements, for an array field. 1 for a scalar field. */
+    int size() const {
+        return array_extent.value_or(1);
+    }
+};
+
+/** Extract field `name` (or `index`) from a struct-typed Expr. The field's
+ * offset and type are resolved eagerly.
+ */
+// @{
+FieldRef field(const Expr &struct_value, const std::string &name);
+FieldRef field(const Expr &struct_value, int index);
+// @}
+
+/** Construct a value of struct type `t` (see Type::Struct) from one Expr
+ * per field, in declaration order. All fields must be supplied; array
+ * fields take `array_extent` Exprs, flattened into the same list. */
+Expr pack_struct(const Type &t, const std::vector<Expr> &field_values);
+
 /** Below is a collection of intrinsics for fixed-point programming. Most of
  * them can be expressed via other means, but this is more natural for some, as
  * it avoids ghost widened intermediates that don't (or shouldn't) actually show
