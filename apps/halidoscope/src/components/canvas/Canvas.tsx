@@ -83,7 +83,7 @@ function Canvas({ funcs, dagEdges }: CanvasProps) {
               <div className="ring-realization/30 h-3 w-3 ring-2">
                 <div className="ring-realization h-full w-full ring-1" />
               </div>
-              <span>Func Buffer Live in Memory</span>
+              <span>Buffer Live in Memory</span>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -91,13 +91,13 @@ function Canvas({ funcs, dagEdges }: CanvasProps) {
                 <div className="ring-produce/30 h-3 w-3 ring-2">
                   <div className="ring-produce h-3 w-3 ring-1" />
                 </div>
-                <span>Func Producing</span>
+                <span>Producer</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="ring-consume/30 h-3 w-3 ring-2">
                   <div className="ring-consume h-3 w-3 ring-1" />
                 </div>
-                <span>Func Consuming</span>
+                <span>Consumer</span>
               </div>
             </div>
           )}
