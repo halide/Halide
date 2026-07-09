@@ -1,5 +1,6 @@
 #include "FindIntrinsics.h"
 #include "CSE.h"
+#include "CodeGen_Internal.h"
 #include "ConstantBounds.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -1651,6 +1652,12 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         return lower_sorted_avg(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::extract_bits)) {
+        internal_assert(op->args.size() == 2);
+        return lower_extract_bits(op);
+    } else if (op->is_intrinsic(Call::concat_bits)) {
+        internal_assert(!op->args.empty());
+        return lower_concat_bits(op);
     } else {
         return Expr();
     }
