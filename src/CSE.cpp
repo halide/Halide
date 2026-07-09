@@ -178,7 +178,8 @@ public:
         // which defeats the point of the branch and could execute an
         // operation the branch was there to guard against. The condition is
         // always evaluated, so recurse into it normally.
-        if (op->is_intrinsic(Call::if_then_else) && op->args.size() >= 2) {
+        if ((op->is_intrinsic(Call::if_then_else) || op->is_intrinsic(Call::branch)) &&
+            op->args.size() >= 2) {
             include(op->args[0]);
         } else {
             IRGraphVisitor::visit(op);
