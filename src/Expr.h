@@ -340,21 +340,6 @@ struct Expr : public Internal::IRHandle {
     Type type() const {
         return get()->type;
     }
-
-    /** If this Expr is the result of select(cond, a, b), return an
-     * equivalent expression that lowers to a real control-flow branch,
-     * evaluating only the taken side, instead of the branchless select
-     * that always evaluates both sides. This is useful when one side is
-     * much more expensive than the other. It is an error to call this on
-     * an Expr that is not directly a select().
-     *
-     * Selects that are directly the true or false value of the select are
-     * converted too, so the multi-way form select(c0, v0, c1, v1, ...)
-     * becomes a full if/else-if/else chain of branches. Note that a
-     * per-lane branch cannot be expressed under vectorization or on GPUs,
-     * so in those contexts the branch degrades back to a select (both
-     * sides evaluated). */
-    Expr branch() const;
 };
 
 /** This lets you use an Expr as a key in a map of the form

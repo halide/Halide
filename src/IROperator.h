@@ -851,6 +851,28 @@ inline Expr select(const Expr &c0, const FuncRef &v0, const Expr &c1, const Func
 }
 // @}
 
+/** An explicitly branched variant of select. branch(cond, a, b) means the
+ * same thing as select(cond, a, b), but is guaranteed to lower to a real
+ * control-flow branch that evaluates only the taken side, instead of the
+ * branchless select that always evaluates both sides. This is useful when one
+ * side is much more expensive than the other, and, more importantly, it lets
+ * bounds inference assume that only one side runs.
+ *
+ * The condition must be a scalar bool. Because a real branch can not be
+ * expressed per lane, it is a hard error (not a silent fallback to select) to
+ * use branch() with a lane-varying condition under vectorization, or inside a
+ * GPU kernel. */
+Expr branch(Expr condition, Expr true_value, Expr false_value);
+
+/** A multi-way variant of branch, mirroring the multi-way select. Each
+ * condition becomes its own real branch, forming an if / else-if / else
+ * chain. */
+template<typename... Args,
+         std::enable_if_t<Internal::all_are_convertible<Expr, Args...>::value> * = nullptr>
+inline Expr branch(Expr c0, Expr v0, Expr c1, Expr v1, Args &&...args) {
+    return branch(std::move(c0), std::move(v0), branch(std::move(c1), std::move(v1), std::forward<Args>(args)...));
+}
+
 /** Oftentimes we want to pack a list of expressions with the same type
  * into a channel dimension, e.g.,
  * img(x, y, c) = select(c == 0, 100, // Red

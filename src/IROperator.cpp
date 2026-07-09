@@ -1537,32 +1537,38 @@ Expr select(Expr condition, Expr true_value, Expr false_value) {
     return Select::make(std::move(condition), std::move(true_value), std::move(false_value));
 }
 
-namespace {
-// Recursively rewrite a select into the if_then_else intrinsic, which lowers
-// to a real control-flow branch that evaluates only one side. Selects that
-// are directly the true/false value of a select are rewritten too, so the
-// nested-select chain produced by the multi-way select(c0, v0, c1, v1, ...)
-// becomes a full chain of branches. Non-select values are left untouched.
-Expr rewrite_select_to_branch(const Expr &e) {
-    const Select *s = e.as<Select>();
-    if (s == nullptr) {
-        return e;
-    }
-    return Call::make(s->type,
-                      Call::if_then_else,
-                      {s->condition,
-                       rewrite_select_to_branch(s->true_value),
-                       rewrite_select_to_branch(s->false_value)},
-                      Call::PureIntrinsic);
-}
-}  // namespace
+Expr branch(Expr condition, Expr true_value, Expr false_value) {
+    user_assert(condition.defined()) << "branch() of undefined condition.\n";
+    user_assert(condition.type().is_bool())
+        << "The first argument to branch must be a boolean:\n"
+        << "  " << condition << " has type " << condition.type() << "\n";
+    user_assert(!condition.type().is_vector())
+        << "branch() requires a scalar condition, but its condition\n"
+        << "  " << condition << "\nhas type " << condition.type() << ".\n"
+        << "branch() generates a real control-flow branch that evaluates only "
+        << "one side, which cannot be done per lane. Use select() for a "
+        << "lane-varying condition.\n";
 
-Expr Expr::branch() const {
-    user_assert(as<Select>() != nullptr)
-        << "Expr::branch() may only be called on the result of select(...). "
-        << "This expression is not a select:\n  "
-        << *this << "\n";
-    return rewrite_select_to_branch(*this);
+    // Coerce int literals to the type of the other argument, like select().
+    if (as_const_int(true_value)) {
+        true_value = cast(false_value.type(), std::move(true_value));
+    }
+    if (as_const_int(false_value)) {
+        false_value = cast(true_value.type(), std::move(false_value));
+    }
+
+    user_assert(true_value.type() == false_value.type())
+        << "The second and third arguments to branch do not have a matching type:\n"
+        << "  " << true_value << " has type " << true_value.type() << "\n"
+        << "  " << false_value << " has type " << false_value.type() << "\n";
+
+    // Capture the type before moving the args (argument evaluation order is
+    // unspecified, so reading true_value.type() inline with std::move is UB).
+    Type result_type = true_value.type();
+    return Call::make(result_type,
+                      Call::branch,
+                      {std::move(condition), std::move(true_value), std::move(false_value)},
+                      Call::PureIntrinsic);
 }
 
 Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {

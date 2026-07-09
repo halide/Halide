@@ -91,6 +91,55 @@ using std::vector;
 
 namespace {
 
+// Lower branch() intrinsics into if_then_else, which codegen turns into a real
+// control-flow branch that evaluates only the taken side. This runs after
+// vectorization so we can tell whether the condition became lane-varying. We
+// deliberately do NOT silently fall back to a both-sides select when a real
+// branch is impossible (a lane-varying condition, or use inside a GPU kernel):
+// the whole point of branch() is the guarantee that only one side runs, so we
+// hard-error instead.
+class LowerStrictBranches : public IRMutator {
+    using IRMutator::visit;
+
+    int in_gpu_loop = 0;
+
+    Stmt visit(const For *op) override {
+        const bool gpu = op->for_type == ForType::GPUBlock ||
+                         op->for_type == ForType::GPUThread ||
+                         op->for_type == ForType::GPULane;
+        in_gpu_loop += gpu ? 1 : 0;
+        Stmt s = IRMutator::visit(op);
+        in_gpu_loop -= gpu ? 1 : 0;
+        return s;
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::branch)) {
+            internal_assert(op->args.size() == 3);
+            Expr cond = mutate(op->args[0]);
+            Expr true_value = mutate(op->args[1]);
+            Expr false_value = mutate(op->args[2]);
+            // A uniform (broadcast) condition is still a single real branch
+            // that picks between two whole vectors.
+            if (const Broadcast *b = cond.as<Broadcast>()) {
+                cond = b->value;
+            }
+            user_assert(!cond.type().is_vector())
+                << "branch() could not be lowered to a real control-flow branch "
+                << "because its condition became lane-varying (it depends on a "
+                << "vectorized dimension). Use select() for a per-lane condition, "
+                << "or schedule so the condition is not vectorized.\n";
+            user_assert(in_gpu_loop == 0)
+                << "branch() is not supported inside a GPU kernel, where a real "
+                << "control-flow branch can not guarantee that only one side is "
+                << "evaluated. Use select() instead.\n";
+            return Call::make(op->type, Call::if_then_else,
+                              {cond, true_value, false_value}, Call::PureIntrinsic);
+        }
+        return IRMutator::visit(op);
+    }
+};
+
 class LoweringLogger {
     Stmt last_written;
     std::chrono::time_point<std::chrono::high_resolution_clock> last_time;
@@ -353,6 +402,10 @@ void lower_impl(const vector<Function> &output_funcs,
     s = vectorize_loops(s, env);
     s = simplify(s);
     log("Lowering after vectorizing:", s);
+
+    debug(1) << "Lowering strict branches...\n";
+    s = LowerStrictBranches()(s);
+    log("Lowering after lowering strict branches:", s);
 
     if (t.has_gpu_feature() ||
         t.has_feature(Target::Vulkan)) {
