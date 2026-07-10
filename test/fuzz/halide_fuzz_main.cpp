@@ -2,6 +2,7 @@
 #include "fuzz_helpers.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -25,7 +26,7 @@ void print_usage(const char *argv0) {
         << "Options:\n"
         << "  -runs=N             Number of fuzz iterations (default: 10000)\n"
         << "  -timeout=N          (ignored, accepted for libFuzzer compatibility)\n"
-        << "  -max_total_time=N   (ignored, accepted for libFuzzer compatibility)\n"
+        << "  -max_total_time=N   Stop after N seconds (0 = unlimited)\n"
         << "  -help               Print this help message and exit\n"
         << "\n"
         << "If a single non-option argument is given, it is used as the RNG seed.\n"
@@ -71,6 +72,7 @@ namespace Halide {
 
 int fuzz_main(int argc, char **argv, FuzzFunction main_fn) {
     int runs = 10000;
+    int max_total_time = 0;
     FuzzingContext::SeedType explicit_seed = 0;
     bool has_explicit_seed = false;
 
@@ -94,8 +96,7 @@ int fuzz_main(int argc, char **argv, FuzzFunction main_fn) {
                 std::cerr << "Warning: -timeout is accepted but ignored.\n";
                 continue;
             }
-            if (parse_positive_int_flag(body, "max_total_time", &dummy)) {
-                std::cerr << "Warning: -max_total_time is accepted but ignored.\n";
+            if (parse_positive_int_flag(body, "max_total_time", &max_total_time)) {
                 continue;
             }
             std::cerr << "Error: unknown option '" << argv[i] << "'\n\n";
@@ -128,7 +129,17 @@ int fuzz_main(int argc, char **argv, FuzzFunction main_fn) {
 
     auto seed_generator = initialize_rng<FuzzingContext::RandomEngine>();
 
+    using Clock = std::chrono::steady_clock;
+    const auto start = Clock::now();
+
     for (int i = 0; i < runs; i++) {
+        if (max_total_time > 0) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(Clock::now() - start).count();
+            if (elapsed >= max_total_time) {
+                std::cerr << "Reached -max_total_time=" << max_total_time << "s after " << i << " iterations.\n";
+                break;
+            }
+        }
         auto seed = seed_generator();
         std::cerr << "Seed: " << seed << "\n"
                   << std::flush;

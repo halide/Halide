@@ -31,11 +31,7 @@ function(add_wasm_executable TARGET)
     #     target_link_libraries(${TARGET} PRIVATE ${args_DEPS})
     # endif ()
 
-    find_program(
-        EMCC emcc REQUIRED
-        PATH_SUFFIXES upstream/emscripten
-        HINTS ENV EMSDK
-    )
+    find_program(EMCC emcc REQUIRED PATH_SUFFIXES upstream/emscripten HINTS ENV EMSDK)
 
     # TODO: this is currently hardcoded to settings that are sensible for most of Halide's
     # internal purposes. Consider adding ways to customize this as appropriate.
@@ -52,10 +48,14 @@ function(add_wasm_executable TARGET)
         -Wno-unused-function
         -Wsign-compare
         -Wsuggest-override
-        -s ASSERTIONS=1
-        -s ALLOW_MEMORY_GROWTH=1
-        -s ENVIRONMENT=node
-        -s STACK_SIZE=98304
+        -s
+        ASSERTIONS=1
+        -s
+        ALLOW_MEMORY_GROWTH=1
+        -s
+        ENVIRONMENT=node
+        -s
+        STACK_SIZE=98304
         ${args_OPTIONS}
     )
 
@@ -83,13 +83,16 @@ function(add_wasm_executable TARGET)
         list(APPEND DEPS $<TARGET_FILE:${D}>)
     endforeach ()
 
-    add_custom_command(OUTPUT "${TARGET}.wasm" "${TARGET}.js"
-                       COMMAND ${EMCC} ${EMCC_FLAGS} ${INCLUDES} ${SRCS} ${DEPS} -o "${TARGET}.js"
-                       DEPENDS ${EMCC} ${SRCS} ${DEPS}
-                       VERBATIM)
+    add_custom_command(
+        OUTPUT
+            "${TARGET}.wasm"
+            "${TARGET}.js"
+        COMMAND ${EMCC} ${EMCC_FLAGS} ${INCLUDES} ${SRCS} ${DEPS} -o "${TARGET}.js"
+        DEPENDS ${EMCC} ${SRCS} ${DEPS}
+        VERBATIM
+    )
 
-    add_custom_target("${TARGET}" ALL
-                      DEPENDS "${TARGET}.wasm" "${TARGET}.js")
+    add_custom_target("${TARGET}" ALL DEPENDS "${TARGET}.wasm" "${TARGET}.js")
 
 endfunction()
 
@@ -107,7 +110,9 @@ function(add_wasm_halide_test TARGET)
     add_halide_test(
         "${TARGET}"
         GROUPS ${args_GROUPS}
-        COMMAND "${NodeJS_EXECUTABLE}" "${Halide_SOURCE_DIR}/tools/launch_wasm_test.js" "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.js" "${Halide_TARGET}"
+        COMMAND
+        "${NodeJS_EXECUTABLE}" "${Halide_SOURCE_DIR}/tools/launch_wasm_test.js"
+        "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.js" "${Halide_TARGET}"
     )
 endfunction()
 
@@ -138,8 +143,7 @@ function(_add_halide_libraries TARGET)
 
     # Fill in default values for some arguments, as needed
     if (NOT args_FROM)
-        add_halide_generator("${TARGET}.generator"
-                             SOURCES "${TARGET}_generator.cpp")
+        add_halide_generator("${TARGET}.generator" SOURCES "${TARGET}_generator.cpp")
         set(args_FROM "${TARGET}.generator")
     endif ()
     if (NOT args_GENERATOR_NAME)
@@ -151,19 +155,20 @@ function(_add_halide_libraries TARGET)
 
     set(TARGET_CPP "${TARGET}_cpp")
 
-    add_halide_library(${TARGET}
-                       ${GRADIENT_DESCENT_OPT}
-                       FROM "${args_FROM}"
-                       GENERATOR "${args_GENERATOR_NAME}"
-                       FUNCTION_NAME "${args_FUNCTION_NAME}"
-                       NAMESPACE "${args_NAMESPACE}"
-                       USE_RUNTIME "${args_USE_RUNTIME}"
-                       AUTOSCHEDULER "${args_AUTOSCHEDULER}"
-                       TARGETS "${args_TARGETS}"
-                       FEATURES "${args_FEATURES}"
-                       PARAMS "${args_PARAMS}"
-                       PLUGINS "${args_PLUGINS}"
-                       FUNCTION_INFO_HEADER function_info_header_out)
+    add_halide_library(
+        ${TARGET} ${GRADIENT_DESCENT_OPT}
+        FROM "${args_FROM}"
+        GENERATOR "${args_GENERATOR_NAME}"
+        FUNCTION_NAME "${args_FUNCTION_NAME}"
+        NAMESPACE "${args_NAMESPACE}"
+        USE_RUNTIME "${args_USE_RUNTIME}"
+        AUTOSCHEDULER "${args_AUTOSCHEDULER}"
+        TARGETS "${args_TARGETS}"
+        FEATURES "${args_FEATURES}"
+        PARAMS "${args_PARAMS}"
+        PLUGINS "${args_PLUGINS}"
+        FUNCTION_INFO_HEADER function_info_header_out
+    )
     if (args_EXTERNS)
         target_link_libraries(${TARGET} INTERFACE ${args_EXTERNS})
     endif ()
@@ -174,21 +179,22 @@ function(_add_halide_libraries TARGET)
         # if you specify multiple targets here, you'll fail in compile_multitarget() because
         # it wants object file to be generated. We'll just dodge all that by deliberately
         # omitting the TARGETS argument here entirely.
-        add_halide_library(${TARGET_CPP}
-                           C_BACKEND
-                           ${GRADIENT_DESCENT_OPT}
-                           FROM "${args_FROM}"
-                           GENERATOR "${args_GENERATOR_NAME}"
-                           FUNCTION_NAME "${args_FUNCTION_NAME}"
-                           NAMESPACE "${args_NAMESPACE}"
-                           AUTOSCHEDULER "${args_AUTOSCHEDULER}"
-                           USE_RUNTIME "${args_USE_RUNTIME}"
-                           # No: see comment above
-                           # TARGETS "${args_TARGETS}"
-                           FEATURES "${args_FEATURES}"
-                           PARAMS "${args_PARAMS}"
-                           PLUGINS "${args_PLUGINS}"
-                           FUNCTION_INFO_HEADER function_info_header_cpp_out)
+        add_halide_library(
+            ${TARGET_CPP} C_BACKEND
+            ${GRADIENT_DESCENT_OPT}
+            FROM "${args_FROM}"
+            GENERATOR "${args_GENERATOR_NAME}"
+            FUNCTION_NAME "${args_FUNCTION_NAME}"
+            NAMESPACE "${args_NAMESPACE}"
+            AUTOSCHEDULER "${args_AUTOSCHEDULER}"
+            USE_RUNTIME "${args_USE_RUNTIME}"
+            # No: see comment above
+            # TARGETS "${args_TARGETS}"
+            FEATURES "${args_FEATURES}"
+            PARAMS "${args_PARAMS}"
+            PLUGINS "${args_PLUGINS}"
+            FUNCTION_INFO_HEADER function_info_header_cpp_out
+        )
         if (args_EXTERNS)
             target_link_libraries(${TARGET_CPP} INTERFACE ${args_EXTERNS})
         endif ()
@@ -211,7 +217,13 @@ function(_add_one_aot_test TARGET)
 
     add_executable("${TARGET}" ${args_SRCS})
     target_compile_definitions("${TARGET}" PRIVATE ${args_DEFINES})
-    target_include_directories("${TARGET}" PRIVATE ${args_INCLUDES} "${Halide_SOURCE_DIR}/test/common" "${Halide_SOURCE_DIR}/tools")
+    target_include_directories(
+        "${TARGET}"
+        PRIVATE
+        ${args_INCLUDES}
+        "${Halide_SOURCE_DIR}/test/common"
+        "${Halide_SOURCE_DIR}/tools"
+    )
     target_link_libraries("${TARGET}" PRIVATE ${args_DEPS})
     # TODO(#4938): remove need for these definitions
     if ("${Halide_TARGET}" MATCHES "opencl")
@@ -223,12 +235,20 @@ function(_add_one_aot_test TARGET)
     if ("${Halide_TARGET}" MATCHES "cuda")
         target_compile_definitions("${TARGET}" PRIVATE TEST_CUDA)
     endif ()
+    if ("${Halide_TARGET}" MATCHES "d3d12compute")
+        target_compile_definitions("${TARGET}" PRIVATE TEST_D3D12COMPUTE)
+    endif ()
     if ("${Halide_TARGET}" MATCHES "vulkan")
         target_compile_definitions("${TARGET}" PRIVATE TEST_VULKAN)
     endif ()
     if ("${Halide_TARGET}" MATCHES "webgpu")
         target_compile_definitions("${TARGET}" PRIVATE TEST_WEBGPU)
-        target_include_directories("${TARGET}" PRIVATE ${args_INCLUDES} "${Halide_SOURCE_DIR}/src/runtime")
+        target_include_directories(
+            "${TARGET}"
+            PRIVATE
+            ${args_INCLUDES}
+            "${Halide_SOURCE_DIR}/src/runtime"
+        )
         if ("${Halide_TARGET}" MATCHES "wasmrt")
             # nothing
         else ()
@@ -294,35 +314,39 @@ function(_add_halide_aot_tests NAME)
         if ("${Halide_TARGET}" MATCHES "webgpu")
             set(OPTIONS "-DTEST_WEBGPU")
         endif ()
-        add_wasm_executable("${TARGET}"
-                            SRCS "${args_SRCS}"
-                            DEPS ${args_HALIDE_LIBRARIES} ${args_HALIDE_RUNTIME} ${args_DEPS}
-                            OPTIONS "${OPTIONS}"
-                            INCLUDES
-                            ${args_INCLUDES}
-                            "${Halide_BINARY_DIR}/include"
-                            "${Halide_SOURCE_DIR}/test/common"
-                            "${Halide_SOURCE_DIR}/tools"
-                            "${CMAKE_CURRENT_BINARY_DIR}")
+        add_wasm_executable(
+            "${TARGET}"
+            SRCS "${args_SRCS}"
+            DEPS ${args_HALIDE_LIBRARIES} ${args_HALIDE_RUNTIME} ${args_DEPS}
+            OPTIONS "${OPTIONS}"
+            INCLUDES
+            ${args_INCLUDES}
+            "${Halide_BINARY_DIR}/include"
+            "${Halide_SOURCE_DIR}/test/common"
+            "${Halide_SOURCE_DIR}/tools"
+            "${CMAKE_CURRENT_BINARY_DIR}"
+        )
         add_wasm_halide_test("${TARGET}" GROUPS generator "${args_GROUPS}")
     else ()
-        _add_one_aot_test("${TARGET}"
-                          SRCS "${args_SRCS}"
-                          DEPS ${args_HALIDE_LIBRARIES} ${args_HALIDE_RUNTIME} ${args_DEPS}
-                          INCLUDES ${args_INCLUDES}
-                          GROUPS ${args_GROUPS}
-                          ${_LINK_TO_GPU})
+        _add_one_aot_test(
+            "${TARGET}"
+            SRCS "${args_SRCS}"
+            DEPS ${args_HALIDE_LIBRARIES} ${args_HALIDE_RUNTIME} ${args_DEPS}
+            INCLUDES ${args_INCLUDES}
+            GROUPS ${args_GROUPS} ${_LINK_TO_GPU}
+        )
         if (NOT args_OMIT_C_BACKEND)
             set(HALIDE_LIBRARIES_CPP "")
             foreach (hl IN LISTS args_HALIDE_LIBRARIES)
                 list(APPEND HALIDE_LIBRARIES_CPP "${hl}_cpp")
             endforeach ()
-            _add_one_aot_test("${TARGET_CPP}"
-                              SRCS "${args_SRCS}"
-                              DEPS ${HALIDE_LIBRARIES_CPP} ${args_HALIDE_RUNTIME} ${args_DEPS}
-                              INCLUDES ${args_INCLUDES}
-                              GROUPS ${args_GROUPS}
-                              ${_LINK_TO_GPU})
+            _add_one_aot_test(
+                "${TARGET_CPP}"
+                SRCS "${args_SRCS}"
+                DEPS ${HALIDE_LIBRARIES_CPP} ${args_HALIDE_RUNTIME} ${args_DEPS}
+                INCLUDES ${args_INCLUDES}
+                GROUPS ${args_GROUPS} ${_LINK_TO_GPU}
+            )
         endif ()
     endif ()
 endfunction()
@@ -347,16 +371,20 @@ _add_halide_aot_tests(acquire_release LINK_TO_GPU)
 set(EXTRA_ALIAS_LIBS alias_with_offset_42 alias_Adams2019 alias_Li2018 alias_Mullapudi2016)
 _add_halide_libraries(alias)
 foreach (LIB IN LISTS EXTRA_ALIAS_LIBS)
-    _add_halide_libraries(${LIB}
-                          ENABLE_IF WITH_AUTOSCHEDULERS
-                          FROM alias.generator
-                          GENERATOR_NAME ${LIB}
-                          PLUGINS Halide::Adams2019 Halide::Li2018 Halide::Mullapudi2016)
+    _add_halide_libraries(
+        ${LIB}
+        ENABLE_IF WITH_AUTOSCHEDULERS
+        FROM alias.generator
+        GENERATOR_NAME ${LIB}
+        PLUGINS Halide::Adams2019 Halide::Li2018 Halide::Mullapudi2016
+    )
 endforeach ()
-_add_halide_aot_tests(alias
-                      ENABLE_IF WITH_AUTOSCHEDULERS
-                      HALIDE_LIBRARIES alias ${EXTRA_ALIAS_LIBS}
-                      GROUPS multithreaded)
+_add_halide_aot_tests(
+    alias
+    ENABLE_IF WITH_AUTOSCHEDULERS
+    HALIDE_LIBRARIES alias ${EXTRA_ALIAS_LIBS}
+    GROUPS multithreaded
+)
 
 # all_type_names_aottest.cpp
 # all_type_names_generator.cpp
@@ -371,26 +399,32 @@ _add_halide_aot_tests(argvcall)
 # async_parallel_aottest.cpp
 # async_parallel_generator.cpp
 _add_halide_libraries(async_parallel FEATURES user_context)
-_add_halide_aot_tests(async_parallel
-                      # Requires threading support, not yet available for wasm tests
-                      ENABLE_IF NOT ${_USING_WASM}
-                      GROUPS multithreaded)
+_add_halide_aot_tests(
+    async_parallel
+    # Requires threading support, not yet available for wasm tests
+    ENABLE_IF NOT ${_USING_WASM}
+    GROUPS multithreaded
+)
 
 # autograd_aottest.cpp
 # autograd_generator.cpp
 _add_halide_libraries(autograd)
-_add_halide_libraries(autograd_grad
-                      ENABLE_IF WITH_AUTOSCHEDULERS
-                      GRADIENT_DESCENT
-                      FROM autograd.generator
-                      GENERATOR_NAME autograd
-                      FUNCTION_NAME autograd_grad
-                      AUTOSCHEDULER Halide::Mullapudi2016
-                      PLUGINS Halide::Mullapudi2016)
-_add_halide_aot_tests(autograd
-                      ENABLE_IF WITH_AUTOSCHEDULERS AND NOT ${_USING_WASM}
-                      HALIDE_LIBRARIES autograd autograd_grad
-                      GROUPS multithreaded)
+_add_halide_libraries(
+    autograd_grad
+    ENABLE_IF WITH_AUTOSCHEDULERS
+    GRADIENT_DESCENT
+    FROM autograd.generator
+    GENERATOR_NAME autograd
+    FUNCTION_NAME autograd_grad
+    AUTOSCHEDULER Halide::Mullapudi2016
+    PLUGINS Halide::Mullapudi2016
+)
+_add_halide_aot_tests(
+    autograd
+    ENABLE_IF WITH_AUTOSCHEDULERS AND NOT ${_USING_WASM}
+    HALIDE_LIBRARIES autograd autograd_grad
+    GROUPS multithreaded
+)
 
 # abstractgeneratortest_aottest.cpp
 # abstractgeneratortest_generator.cpp
@@ -420,10 +454,12 @@ _add_halide_aot_tests(can_use_target)
 # cleanup_on_error_aottest.cpp
 # cleanup_on_error_generator.cpp
 _add_halide_libraries(cleanup_on_error)
-_add_halide_aot_tests(cleanup_on_error
-                      # Alas, this test requires direct access to
-                      # internal header runtime/device_interface.h
-                      INCLUDES "${Halide_SOURCE_DIR}/src/runtime")
+_add_halide_aot_tests(
+    cleanup_on_error
+    # Alas, this test requires direct access to
+    # internal header runtime/device_interface.h
+    INCLUDES "${Halide_SOURCE_DIR}/src/runtime"
+)
 
 # configure_aottest.cpp
 # configure_generator.cpp
@@ -437,17 +473,21 @@ if (NOT ${_USING_WASM})
 
     # cxx_mangling_aottest.cpp
     # cxx_mangling_generator.cpp
-    _add_halide_libraries(cxx_mangling
-                          FUNCTION_NAME HalideTest::AnotherNamespace::cxx_mangling
-                          FEATURES c_plus_plus_name_mangling
-                          EXTERNS cxx_mangling_externs)
+    _add_halide_libraries(
+        cxx_mangling
+        FUNCTION_NAME HalideTest::AnotherNamespace::cxx_mangling
+        FEATURES c_plus_plus_name_mangling
+        EXTERNS cxx_mangling_externs
+    )
     _add_halide_aot_tests(cxx_mangling)
     if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS AND Halide_TARGET MATCHES "cuda")
-        add_halide_library(cxx_mangling_gpu
-                           FROM cxx_mangling.generator
-                           GENERATOR cxx_mangling
-                           FUNCTION_NAME HalideTest::cxx_mangling_gpu
-                           FEATURES c_plus_plus_name_mangling cuda)
+        add_halide_library(
+            cxx_mangling_gpu
+            FROM cxx_mangling.generator
+            GENERATOR cxx_mangling
+            FUNCTION_NAME HalideTest::cxx_mangling_gpu
+            FEATURES c_plus_plus_name_mangling cuda
+        )
         target_link_libraries(generator_aot_cxx_mangling PRIVATE cxx_mangling_gpu)
         target_link_libraries(generator_aotcpp_cxx_mangling PRIVATE cxx_mangling_gpu)
     endif ()
@@ -460,12 +500,16 @@ if (NOT ${_USING_WASM})
 
     # cxx_mangling_define_extern_aottest.cpp
     # cxx_mangling_define_extern_generator.cpp
-    _add_halide_libraries(cxx_mangling_define_extern
-                          FUNCTION_NAME "HalideTest::cxx_mangling_define_extern"
-                          FEATURES c_plus_plus_name_mangling user_context
-                          EXTERNS cxx_mangling_define_extern_externs cxx_mangling)
-    _add_halide_aot_tests(cxx_mangling_define_extern
-                          HALIDE_LIBRARIES cxx_mangling_define_extern cxx_mangling)
+    _add_halide_libraries(
+        cxx_mangling_define_extern
+        FUNCTION_NAME "HalideTest::cxx_mangling_define_extern"
+        FEATURES c_plus_plus_name_mangling user_context
+        EXTERNS cxx_mangling_define_extern_externs cxx_mangling
+    )
+    _add_halide_aot_tests(
+        cxx_mangling_define_extern
+        HALIDE_LIBRARIES cxx_mangling_define_extern cxx_mangling
+    )
 endif ()  # (NOT ${_USING_WASM})
 
 # define_extern_opencl_aottest.cpp
@@ -503,18 +547,26 @@ _add_halide_aot_tests(float16_t)
 # (Doesn't build/link properly under wasm, and isn't useful there anyway)
 # (Vulkan doesn't build/link properly and adding custom context creation is too much effort)
 if ((NOT ${_USING_WASM}) AND (NOT Halide_TARGET MATCHES "vulkan"))
-    add_halide_generator(gpu_multi_context_threaded.generator
-                         SOURCES gpu_multi_context_threaded_generator.cpp)
-    _add_halide_libraries(gpu_multi_context_threaded_add
-                          FROM gpu_multi_context_threaded.generator
-                          FEATURES user_context)
-    _add_halide_libraries(gpu_multi_context_threaded_mul
-                          FROM gpu_multi_context_threaded.generator
-                          FEATURES user_context)
-    _add_halide_aot_tests(gpu_multi_context_threaded
-                          HALIDE_LIBRARIES gpu_multi_context_threaded_add gpu_multi_context_threaded_mul
-                          LINK_TO_GPU
-                          GROUPS multithreaded)
+    add_halide_generator(
+        gpu_multi_context_threaded.generator
+        SOURCES gpu_multi_context_threaded_generator.cpp
+    )
+    _add_halide_libraries(
+        gpu_multi_context_threaded_add
+        FROM gpu_multi_context_threaded.generator
+        FEATURES user_context
+    )
+    _add_halide_libraries(
+        gpu_multi_context_threaded_mul
+        FROM gpu_multi_context_threaded.generator
+        FEATURES user_context
+    )
+    _add_halide_aot_tests(
+        gpu_multi_context_threaded
+        HALIDE_LIBRARIES gpu_multi_context_threaded_add gpu_multi_context_threaded_mul
+        LINK_TO_GPU
+        GROUPS multithreaded
+    )
 endif ()
 
 # gpu_object_lifetime_aottest.cpp
@@ -546,48 +598,33 @@ _add_halide_aot_tests(mandelbrot GROUPS multithreaded)
 # memory_profiler_mandelbrot_generator.cpp
 # Requires profiler support (which requires threading), not yet available for wasm tests or the C backend
 # (https://github.com/halide/Halide/issues/7272)
-_add_halide_libraries(memory_profiler_mandelbrot
-                      ENABLE_IF NOT ${_USING_WASM}
-                      OMIT_C_BACKEND
-                      FEATURES profile)
-_add_halide_aot_tests(memory_profiler_mandelbrot
-                      ENABLE_IF NOT ${_USING_WASM}
-                      OMIT_C_BACKEND
-                      GROUPS multithreaded)
+_add_halide_libraries(
+    memory_profiler_mandelbrot
+    ENABLE_IF NOT ${_USING_WASM}
+    OMIT_C_BACKEND
+    FEATURES profile
+)
+_add_halide_aot_tests(
+    memory_profiler_mandelbrot
+    ENABLE_IF NOT ${_USING_WASM}
+    OMIT_C_BACKEND
+    GROUPS multithreaded
+)
 
 # metadata_tester_aottest.cpp
 # metadata_tester_generator.cpp
 set(metadata_tester_params
-    input.type=uint8 input.dim=3
-    dim_only_input_buffer.type=uint8
-    untyped_input_buffer.type=uint8 untyped_input_buffer.dim=3
-    output.type=float32,float32 output.dim=3
-    input_not_nod.type=uint8 input_not_nod.dim=3
-    input_nod.dim=3
-    input_not.type=uint8
-    array_input.size=2
-    array_i8.size=2
-    array_i16.size=2
-    array_i32.size=2
-    array_h.size=2
-    buffer_array_input2.dim=3
-    buffer_array_input3.type=float32
-    buffer_array_input4.dim=3
-    buffer_array_input4.type=float32
-    buffer_array_input5.size=2
-    buffer_array_input6.size=2
-    buffer_array_input6.dim=3
-    buffer_array_input7.size=2
-    buffer_array_input7.type=float32
-    buffer_array_input8.size=2
-    buffer_array_input8.dim=3
-    buffer_array_input8.type=float32
-    buffer_f16_untyped.type=float16
-    untyped_scalar_input.type=uint8
-    array_outputs.size=2
-    array_outputs7.size=2
-    array_outputs8.size=2
-    array_outputs9.size=2)
+    input.type=uint8 input.dim=3 dim_only_input_buffer.type=uint8 untyped_input_buffer.type=uint8
+    untyped_input_buffer.dim=3 output.type=float32,float32 output.dim=3 input_not_nod.type=uint8
+    input_not_nod.dim=3 input_nod.dim=3 input_not.type=uint8 array_input.size=2 array_i8.size=2
+    array_i16.size=2 array_i32.size=2 array_h.size=2 buffer_array_input2.dim=3
+    buffer_array_input3.type=float32 buffer_array_input4.dim=3 buffer_array_input4.type=float32
+    buffer_array_input5.size=2 buffer_array_input6.size=2 buffer_array_input6.dim=3
+    buffer_array_input7.size=2 buffer_array_input7.type=float32 buffer_array_input8.size=2
+    buffer_array_input8.dim=3 buffer_array_input8.type=float32 buffer_f16_untyped.type=float16
+    untyped_scalar_input.type=uint8 array_outputs.size=2 array_outputs7.size=2 array_outputs8.size=2
+    array_outputs9.size=2
+)
 
 # Note that metadata_tester (but not metadata_tester_ucon) is built as "multitarget" to verify that
 # the metadata names are correctly emitted.
@@ -602,16 +639,15 @@ else ()
     set(MDT_TARGETS cmake-no_bounds_query cmake)
 endif ()
 
-_add_halide_libraries(metadata_tester
-                      PARAMS ${metadata_tester_params}
-                      TARGETS ${MDT_TARGETS})
-_add_halide_libraries(metadata_tester_ucon
-                      FROM metadata_tester.generator
-                      GENERATOR_NAME metadata_tester
-                      FEATURES user_context
-                      PARAMS ${metadata_tester_params})
-_add_halide_aot_tests(metadata_tester
-                      HALIDE_LIBRARIES metadata_tester metadata_tester_ucon)
+_add_halide_libraries(metadata_tester PARAMS ${metadata_tester_params} TARGETS ${MDT_TARGETS})
+_add_halide_libraries(
+    metadata_tester_ucon
+    FROM metadata_tester.generator
+    GENERATOR_NAME metadata_tester
+    FEATURES user_context
+    PARAMS ${metadata_tester_params}
+)
+_add_halide_aot_tests(metadata_tester HALIDE_LIBRARIES metadata_tester metadata_tester_ucon)
 
 # metal_completion_handler_override_aottest.cpp
 # metal_completion_handler_override_generator.cpp
@@ -623,23 +659,29 @@ _add_halide_aot_tests(metal_completion_handler_override)
 if ("${Halide_TARGET}" MATCHES "webgpu")
     message(WARNING "Test generator_aot_msan is not supported under WebGPU")
 else ()
-    _add_halide_libraries(msan
-                          FEATURES msan
-                          # Broken for C++ backend (https://github.com/halide/Halide/issues/7273)
-                          OMIT_C_BACKEND)
-    _add_halide_aot_tests(msan
-                          OMIT_C_BACKEND
-                          GROUPS multithreaded)
+    _add_halide_libraries(
+        msan
+        FEATURES msan
+        # Broken for C++ backend (https://github.com/halide/Halide/issues/7273)
+        OMIT_C_BACKEND
+    )
+    _add_halide_aot_tests(msan OMIT_C_BACKEND GROUPS multithreaded)
 endif ()
 
 # (Doesn't build/link properly on windows / under wasm)
-if (NOT Halide_TARGET MATCHES "windows" AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows" AND NOT ${_USING_WASM})
+if (
+    NOT Halide_TARGET MATCHES "windows"
+    AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows"
+    AND NOT ${_USING_WASM}
+)
     # sanitizercoverage_aottest.cpp
     # sanitizercoverage_generator.cpp
-    _add_halide_libraries(sanitizercoverage
-                          # sanitizercoverage relies on LLVM-specific hooks, so it will never work with the C backend
-                          OMIT_C_BACKEND
-                          FEATURES sanitizer_coverage)
+    _add_halide_libraries(
+        sanitizercoverage
+        # sanitizercoverage relies on LLVM-specific hooks, so it will never work with the C backend
+        OMIT_C_BACKEND
+        FEATURES sanitizer_coverage
+    )
     _add_halide_aot_tests(sanitizercoverage OMIT_C_BACKEND)
 endif ()
 
@@ -647,38 +689,57 @@ endif ()
 if (NOT _USING_WASM AND NOT Halide_CMAKE_TARGET MATCHES ";")
     # multitarget_aottest.cpp
     # multitarget_generator.cpp
-    _add_halide_libraries(multitarget
-                          # ... or to the C backend
-                          OMIT_C_BACKEND
-                          TARGETS cmake-no_bounds_query cmake
-                          FEATURES c_plus_plus_name_mangling
-                          FUNCTION_NAME HalideTest::multitarget)
+    _add_halide_libraries(
+        multitarget
+        # ... or to the C backend
+        OMIT_C_BACKEND
+        TARGETS cmake-no_bounds_query cmake
+        FEATURES c_plus_plus_name_mangling
+        FUNCTION_NAME HalideTest::multitarget
+    )
 
     # Note that we make two tests here so that we can run it two ways,
     # to ensure that both target paths are taken.
-    _add_halide_aot_tests(multitarget_0
-                          SRCS multitarget_aottest.cpp
-                          HALIDE_LIBRARIES multitarget
-                          OMIT_C_BACKEND)
-    set_tests_properties(generator_aot_multitarget_0 PROPERTIES ENVIRONMENT "HL_MULTITARGET_TEST_USE_NOBOUNDSQUERY_FEATURE=0")
+    _add_halide_aot_tests(
+        multitarget_0
+        SRCS multitarget_aottest.cpp
+        HALIDE_LIBRARIES multitarget
+        OMIT_C_BACKEND
+    )
+    set_tests_properties(
+        generator_aot_multitarget_0
+        PROPERTIES
+        ENVIRONMENT "HL_MULTITARGET_TEST_USE_NOBOUNDSQUERY_FEATURE=0"
+    )
 
-    _add_halide_aot_tests(multitarget_1
-                          SRCS multitarget_aottest.cpp
-                          HALIDE_LIBRARIES multitarget
-                          OMIT_C_BACKEND)
-    set_tests_properties(generator_aot_multitarget_1 PROPERTIES ENVIRONMENT "HL_MULTITARGET_TEST_USE_NOBOUNDSQUERY_FEATURE=1")
+    _add_halide_aot_tests(
+        multitarget_1
+        SRCS multitarget_aottest.cpp
+        HALIDE_LIBRARIES multitarget
+        OMIT_C_BACKEND
+    )
+    set_tests_properties(
+        generator_aot_multitarget_1
+        PROPERTIES
+        ENVIRONMENT "HL_MULTITARGET_TEST_USE_NOBOUNDSQUERY_FEATURE=1"
+    )
 endif ()
 
 # nested_externs_aottest.cpp
 # nested_externs_generator.cpp
 add_halide_generator(nested_externs.generator SOURCES nested_externs_generator.cpp)
-set(NESTED_EXTERNS_LIBS nested_externs_root nested_externs_inner nested_externs_combine nested_externs_leaf)
+set(NESTED_EXTERNS_LIBS
+    nested_externs_root nested_externs_inner nested_externs_combine nested_externs_leaf
+)
 foreach (LIB IN LISTS NESTED_EXTERNS_LIBS)
-    _add_halide_libraries(${LIB} FROM nested_externs.generator GENERATOR_NAME ${LIB} FEATURES user_context c_plus_plus_name_mangling)
+    _add_halide_libraries(
+        ${LIB}
+        FROM nested_externs.generator
+        GENERATOR_NAME ${LIB}
+        FEATURES user_context c_plus_plus_name_mangling
+    )
 endforeach ()
-_add_halide_aot_tests(nested_externs
-                      HALIDE_LIBRARIES ${NESTED_EXTERNS_LIBS}
-                      GROUPS multithreaded)
+_add_halide_aot_tests(nested_externs HALIDE_LIBRARIES ${NESTED_EXTERNS_LIBS} GROUPS multithreaded)
 
 # opencl_runtime_aottest.cpp
 # opencl_runtime_generator.cpp
@@ -727,8 +788,7 @@ _add_halide_aot_tests(templated)
 # tiled_blur_aottest.cpp
 # tiled_blur_generator.cpp
 _add_halide_libraries(tiled_blur)
-_add_halide_aot_tests(tiled_blur
-                      HALIDE_LIBRARIES tiled_blur blur2x2)
+_add_halide_aot_tests(tiled_blur HALIDE_LIBRARIES tiled_blur blur2x2)
 
 # user_context_aottest.cpp
 # user_context_generator.cpp
@@ -742,10 +802,14 @@ _add_halide_aot_tests(user_context_insanity GROUPS multithreaded)
 
 # variable_num_threads_aottest.cpp
 # variable_num_threads_generator.cpp
-_add_halide_libraries(variable_num_threads
-                      # Requires threading support, not yet available for wasm tests
-                      ENABLE_IF NOT ${_USING_WASM})
-_add_halide_aot_tests(variable_num_threads
-                      # Requires threading support, not yet available for wasm tests
-                      ENABLE_IF NOT ${_USING_WASM}
-                      GROUPS multithreaded)
+_add_halide_libraries(
+    variable_num_threads
+    # Requires threading support, not yet available for wasm tests
+    ENABLE_IF NOT ${_USING_WASM}
+)
+_add_halide_aot_tests(
+    variable_num_threads
+    # Requires threading support, not yet available for wasm tests
+    ENABLE_IF NOT ${_USING_WASM}
+    GROUPS multithreaded
+)

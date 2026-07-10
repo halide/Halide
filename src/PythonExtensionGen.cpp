@@ -177,7 +177,7 @@ bool unpack_buffer(PyObject *py_obj,
     needs_device_free = false;
 
     memset(&py_buf, 0, sizeof(py_buf));
-    if (PyObject_GetBuffer(py_obj, &py_buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | PyBUF_ANY_CONTIGUOUS | py_getbuffer_flags) < 0) {
+    if (PyObject_GetBuffer(py_obj, &py_buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | py_getbuffer_flags) < 0) {
         PyErr_Format(PyExc_ValueError, "Invalid argument %s: Expected %d dimensions, got %d", name, dimensions, py_buf.ndim);
         return false;
     }
@@ -187,43 +187,21 @@ bool unpack_buffer(PyObject *py_obj,
         PyErr_Format(PyExc_ValueError, "Invalid argument %s: Expected %d dimensions, got %d", name, dimensions, py_buf.ndim);
         return false;
     }
-    /* We'll get a buffer that's either:
-     * C_CONTIGUOUS (last dimension varies the fastest, i.e., has stride=1) or
-     * F_CONTIGUOUS (first dimension varies the fastest, i.e., has stride=1).
-     * The latter is preferred, since it's already in the format that Halide
-     * needs. It can can be achieved in numpy by passing order='F' during array
-     * creation. However, if we do get a C_CONTIGUOUS buffer, flip the dimensions
-     * (transpose) so we can process it without having to reallocate.
-     */
-    int i, j, j_step;
-    if (PyBuffer_IsContiguous(&py_buf, 'F')) {
-        j = 0;
-        j_step = 1;
-    } else if (PyBuffer_IsContiguous(&py_buf, 'C')) {
-        j = py_buf.ndim - 1;
-        j_step = -1;
-    } else {
-        /* Python checks all dimensions and strides, so this typically indicates
-         * a bug in the array's buffer protocol. */
-        PyErr_Format(PyExc_ValueError, "Invalid buffer: neither C nor Fortran contiguous");
-        return false;
-    }
-    for (i = 0; i < py_buf.ndim; ++i, j += j_step) {
+    // Always reverse axes.
+    // TODO(jiawen): Can probably consolidate this with similar code in PyCallable.cpp and
+    // pybufferinfo_to_halidebuffer() in PyBuffer.h.
+    for (int i = 0; i < py_buf.ndim; ++i) {
+        const int j = py_buf.ndim - 1 - i;  // numpy axis j maps to Halide dim i
         halide_dim[i].min = 0;
-        halide_dim[i].stride = (int)(py_buf.strides[j] / py_buf.itemsize);  // strides is in bytes
+        halide_dim[i].stride = (int)(py_buf.strides[j] / py_buf.itemsize);  // Python strides are in bytes
         halide_dim[i].extent = (int)py_buf.shape[j];
         halide_dim[i].flags = 0;
-        if (py_buf.suboffsets && py_buf.suboffsets[i] >= 0) {
+        if (py_buf.suboffsets && py_buf.suboffsets[j] >= 0) {
             // Halide doesn't support arrays of pointers. But we should never see this
-            // anyway, since we specified PyBUF_STRIDED.
+            // anyway, since we did not specify PyBUF_INDIRECT.
             PyErr_Format(PyExc_ValueError, "Invalid buffer: suboffsets not supported");
             return false;
         }
-    }
-    if (halide_dim[py_buf.ndim - 1].extent * halide_dim[py_buf.ndim - 1].stride * py_buf.itemsize != py_buf.len) {
-        PyErr_Format(PyExc_ValueError, "Invalid buffer: length %ld, but computed length %ld",
-                     py_buf.len, py_buf.shape[0] * py_buf.strides[0]);
-        return false;
     }
 
     halide_buf = {};
