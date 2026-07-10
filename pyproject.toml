@@ -72,7 +72,7 @@ dev = [
 ]
 apps = [
   # for apps/onnx -- matches the vcpkg version
-  "onnx==1.19.0; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
+  "onnx==1.22.0; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
   # onnx 1.19.0 gencode requires protobuf 7.x runtime
   "protobuf>=7; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
   # unspecified onnx dependency
