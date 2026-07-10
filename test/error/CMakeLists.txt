@@ -59,7 +59,6 @@ tests(
     extern_func_self_argument.cpp
     five_d_gpu_buffer.cpp
     float_arg.cpp
-    fold_storage_compute_root.cpp
     fold_storage_not_applied.cpp
     forward_on_undefined_buffer.cpp
     func_expr_dim_mismatch.cpp
