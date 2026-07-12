@@ -371,7 +371,7 @@ public:
             std::vector<Argument> args(image_params.size() + 1);
             for (size_t i = 0; i < image_params.size(); i++) {
                 args[i] = image_params[i];
-                inputs[i] = Runtime::Buffer<>(args[i].type, nullptr, 0);
+                inputs[i] = Runtime::Buffer<>(args[i].type.to_abi(), nullptr, 0);
             }
             args.back() = rows;
 

@@ -36,8 +36,8 @@ std::string halide_type_to_string(const Type &type) {
             stream << "bfloat";
             break;
         case halide_type_handle:
-            if (type.handle_type) {
-                stream << type.handle_type->inner_name.name;
+            if (type.handle_type()) {
+                stream << type.handle_type()->inner_name.name;
             } else {
                 stream << "handle";
             }

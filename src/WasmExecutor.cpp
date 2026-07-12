@@ -388,11 +388,11 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
 template<template<typename> class Functor, typename... Args>
 auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
-#define HANDLE_CASE(CODE, BITS, TYPE)        \
-    case halide_type_t(CODE, BITS).as_u32(): \
+#define HANDLE_CASE(CODE, BITS, TYPE) \
+    case halide_type_t(CODE, BITS):   \
         return Functor<TYPE>()(std::forward<Args>(args)...);
 
-    switch (type.element_of().as_u32()) {
+    switch (type) {
         HANDLE_CASE(halide_type_bfloat, 16, bfloat16_t)
         HANDLE_CASE(halide_type_float, 16, float16_t)
         HANDLE_CASE(halide_type_float, 32, float)
@@ -458,7 +458,7 @@ bool build_extern_arg_types(const std::string &fn_name,
         const bool is_buffer = false;
         const bool is_ucon = false;
         // Specifying a type here with bits == 0 should trigger a proper 'void' return type
-        arg_types.emplace_back(ExternArgType{{halide_type_int, 0, 0}, is_void, is_buffer, is_ucon});
+        arg_types.emplace_back(ExternArgType{halide_type_t{halide_type_int, 0}, is_void, is_buffer, is_ucon});
     } else {
         const Type &t = sig.ret_type();
         const bool is_void = false;
@@ -472,7 +472,7 @@ bool build_extern_arg_types(const std::string &fn_name,
         user_assert(!(t.is_handle() && !is_buffer)) << "Halide Extern functions cannot return arbitrary pointers as arguments.";
         user_assert(!(t.is_int_or_uint() && t.bits() == 64)) << "Halide Extern functions cannot accept 64-bit values as arguments.";
 
-        arg_types.emplace_back(ExternArgType{t, is_void, is_buffer, is_ucon});
+        arg_types.emplace_back(ExternArgType{t.to_abi(), is_void, is_buffer, is_ucon});
     }
 
     for (size_t i = 0; i < arg_count; ++i) {
@@ -489,7 +489,7 @@ bool build_extern_arg_types(const std::string &fn_name,
         user_assert(!(t.is_handle() && !is_buffer)) << "Halide Extern functions cannot accept arbitrary pointers as arguments.";
         user_assert(!(t.is_int_or_uint() && t.bits() == 64)) << "Halide Extern functions cannot accept 64-bit values as arguments.";
 
-        arg_types.emplace_back(ExternArgType{t, is_void, is_buffer, is_ucon});
+        arg_types.emplace_back(ExternArgType{t.to_abi(), is_void, is_buffer, is_ucon});
     }
 
     arg_types_out = std::move(arg_types);
@@ -596,7 +596,7 @@ void dump_hostbuf(WabtContext &wabt_context, const halide_buffer_t *buf, const s
     }
     debug(1) << "  }\n";
     debug(1) << "  flags = " << buf->flags << "\n";
-    debug(1) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
+    debug(1) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "\n";
     debug(1) << "  dimensions = " << buf->dimensions << "\n";
     debug(1) << "  dim = " << (void *)buf->dim << " = {\n";
     for (int i = 0; i < buf->dimensions; i++) {
@@ -627,7 +627,7 @@ void dump_wasmbuf(WabtContext &wabt_context, wasm32_ptr_t buf_ptr, const std::st
     }
     debug(1) << "  }\n";
     debug(1) << "  flags = " << buf->flags << "\n";
-    debug(1) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
+    debug(1) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "\n";
     debug(1) << "  dimensions = " << buf->dimensions << "\n";
     debug(1) << "  dim = " << buf->dim << " -> " << (void *)dim << " = {\n";
     for (int i = 0; i < buf->dimensions; i++) {
@@ -836,7 +836,7 @@ inline wabt::interp::Value LoadValue<bfloat16_t>::operator()(const void *src) {
     return wabt::interp::Value::Make(val);
 }
 
-inline wabt::interp::Value load_value(const Type &t, const void *src) {
+inline wabt::interp::Value load_value(const halide_type_t &t, const void *src) {
     return dynamic_type_dispatch<LoadValue>(t, src);
 }
 
@@ -876,7 +876,7 @@ inline void StoreValue<bfloat16_t>::operator()(const wabt::interp::Value &src, v
     *(uint16_t *)dst = src.Get<uint16_t>();
 }
 
-inline void store_value(const Type &t, const wabt::interp::Value &src, void *dst) {
+inline void store_value(const halide_type_t &t, const wabt::interp::Value &src, void *dst) {
     dynamic_type_dispatch<StoreValue>(t, src, dst);
 }
 
@@ -1056,9 +1056,8 @@ WABT_HOST_CALLBACK(halide_trace_helper) {
     event.value = value_ptr ? ((void *)(base + value_ptr)) : nullptr;
     event.coordinates = coordinates_ptr ? ((int32_t *)(base + coordinates_ptr)) : nullptr;
     event.trace_tag = (const char *)(base + trace_tag_ptr);
-    event.type.code = (halide_type_code_t)type_code;
-    event.type.bits = (uint8_t)type_bits;
-    event.type.lanes = (uint16_t)type_lanes;
+    event.type = {(halide_type_code_t)type_code, (uint8_t)type_bits};
+    event.lanes = type_lanes;
     event.event = (halide_trace_event_code_t)trace_code;
     event.parent_id = parent_id;
     event.thread_id = thread_id;
@@ -1208,7 +1207,7 @@ wabt::Result extern_callback_wrapper(const std::vector<ExternArgType> &arg_types
             // int64 from a Value that is int32 will assert-fail. In JIT mode the value
             // doesn't even matter (except for guarding that it is our predicted constant).
             internal_assert(args[i].Get<int32_t>() == 0 || args[i].Get<int32_t>() == kMagicJitUserContextValue);
-            store_value(Int(32), args[i], &scalars[i]);
+            store_value(halide_type_of<int32_t>(), args[i], &scalars[i]);
             trampoline_args[i] = &scalars[i];
         } else if (a.is_buffer) {
             const wasm32_ptr_t buf_ptr = args[i].Get<int32_t>();
@@ -1523,7 +1522,7 @@ void dump_hostbuf(const Local<Context> &context, const halide_buffer_t *buf, con
     }
     debug(0) << "  }\n";
     debug(0) << "  flags = " << buf->flags << "\n";
-    debug(0) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
+    debug(0) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "\n";
     debug(0) << "  dimensions = " << buf->dimensions << "\n";
     debug(0) << "  dim = " << (void *)buf->dim << " = {\n";
     for (int i = 0; i < buf->dimensions; i++) {
@@ -1554,7 +1553,7 @@ void dump_wasmbuf(const Local<Context> &context, wasm32_ptr_t buf_ptr, const std
     }
     debug(0) << "  }\n";
     debug(0) << "  flags = " << buf->flags << "\n";
-    debug(0) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
+    debug(0) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "\n";
     debug(0) << "  dimensions = " << buf->dimensions << "\n";
     debug(0) << "  dim = " << buf->dim << " -> " << (void *)dim << " = {\n";
     for (int i = 0; i < buf->dimensions; i++) {
@@ -1814,9 +1813,8 @@ void wasm_jit_halide_trace_helper_callback(const v8::FunctionCallbackInfo<v8::Va
     event.value = value_ptr ? ((void *)(base + value_ptr)) : nullptr;
     event.coordinates = coordinates_ptr ? ((int32_t *)(base + coordinates_ptr)) : nullptr;
     event.trace_tag = (const char *)(base + trace_tag_ptr);
-    event.type.code = (halide_type_code_t)type_code;
-    event.type.bits = (uint8_t)type_bits;
-    event.type.lanes = (uint16_t)type_lanes;
+    event.type = {(halide_type_code_t)type_code, (uint8_t)type_bits};
+    event.lanes = type_lanes;
     event.event = (halide_trace_event_code_t)trace_code;
     event.parent_id = parent_id;
     event.thread_id = thread_id;
@@ -2589,7 +2587,7 @@ int WasmModuleContents::run(const void *const *args) {
             if (arg.name == "__user_context") {
                 wabt_args.push_back(wabt::interp::Value::Make(kMagicJitUserContextValue));
             } else {
-                wabt_args.push_back(load_value(arg.type, arg_ptr));
+                wabt_args.push_back(load_value(arg.type.to_abi(), arg_ptr));
             }
         }
     }

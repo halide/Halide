@@ -6,7 +6,7 @@ int num_vector_stores = 0;
 int num_scalar_stores = 0;
 int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     if (e->event == halide_trace_store) {
-        if (e->type.lanes > 1) {
+        if (e->lanes > 1) {
             num_vector_stores++;
         } else {
             num_scalar_stores++;

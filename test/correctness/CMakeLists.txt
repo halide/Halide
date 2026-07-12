@@ -199,6 +199,7 @@ tests(
     intrinsics.cpp
     invalid_gpu_loop_nests.cpp
     inverse.cpp
+    irmatch.cpp
     irprinter.cpp
     isnan.cpp
     issue_3926.cpp

@@ -169,15 +169,13 @@ struct Comparer {
 
     HALIDE_ALWAYS_INLINE
     void cmp(const Type &a, const Type &b) {
-        uint32_t ta = ((halide_type_t)a).as_u32();
-        uint32_t tb = ((halide_type_t)b).as_u32();
-        if (ta < tb) {
+        if (a < b) {
             result = Order::LessThan;
-        } else if (ta > tb) {
+        } else if (b < a) {
             result = Order::GreaterThan;
         } else {
-            if (a.handle_type || b.handle_type) {
-                cmp(a.handle_type, b.handle_type);
+            if (a.handle_type() || b.handle_type()) {
+                cmp(a.handle_type(), b.handle_type());
             }
         }
     }

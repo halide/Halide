@@ -150,13 +150,13 @@ struct QualsState {
 
         if (finished ||
             (!is_pointer && !last_is_pointer &&
-             type.handle_type->reference_type == halide_handle_cplusplus_type::NotReference)) {
+             type.handle_type()->reference_type == halide_handle_cplusplus_type::NotReference)) {
             finished = true;
             return;
         }
 
         result = one_qualifier_set(last_is_const, last_is_volatile, last_is_restrict, last_is_pointer, base_mode) + result;
-        if (last_is_pointer && (is_pointer || type.handle_type->reference_type != halide_handle_cplusplus_type::NotReference)) {
+        if (last_is_pointer && (is_pointer || type.handle_type()->reference_type != halide_handle_cplusplus_type::NotReference)) {
             result = one_qualifier_set(last_is_const, last_is_volatile, last_is_restrict, false, base_mode) + result;
         }
 
@@ -174,9 +174,9 @@ struct QualsState {
             result = one_qualifier_set(false, false, false, last_is_pointer, base_mode) + result;
         }
 
-        if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
+        if (type.handle_type()->reference_type == halide_handle_cplusplus_type::LValueReference) {
             result = "A" + base_mode + result;  // Or is it "R"?
-        } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::RValueReference) {
+        } else if (type.handle_type()->reference_type == halide_handle_cplusplus_type::RValueReference) {
             result = "$$Q" + base_mode + result;
         }
     }
@@ -188,7 +188,7 @@ struct QualsState {
 
 std::string mangle_indirection_and_cvr_quals(const Type &type, const Target &target) {
     QualsState state(type, (target.bits == 64) ? "E" : "");
-    for (uint8_t modifier : type.handle_type->cpp_type_modifiers) {
+    for (uint8_t modifier : type.handle_type()->cpp_type_modifiers) {
         state.handle_modifier(modifier);
     }
     state.final();
@@ -200,28 +200,28 @@ MangledNamePart mangle_inner_name(const Type &type, const Target &target, Previo
     MangledNamePart result("");
 
     std::string quals = mangle_indirection_and_cvr_quals(type, target);
-    if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
-        return quals + simple_type_to_mangle_char(type.handle_type->inner_name.name, target);
+    if (type.handle_type()->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
+        return quals + simple_type_to_mangle_char(type.handle_type()->inner_name.name, target);
     } else {
         std::string code;
-        if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Struct) {
+        if (type.handle_type()->inner_name.cpp_type_type == halide_cplusplus_type_name::Struct) {
             code = "U";
-        } else if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Class) {
+        } else if (type.handle_type()->inner_name.cpp_type_type == halide_cplusplus_type_name::Class) {
             code = "V";
-        } else if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Union) {
+        } else if (type.handle_type()->inner_name.cpp_type_type == halide_cplusplus_type_name::Union) {
             code = "T";
-        } else if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Enum) {
+        } else if (type.handle_type()->inner_name.cpp_type_type == halide_cplusplus_type_name::Enum) {
             code = "W4";
         }
-        result.full_name = quals + code + type.handle_type->inner_name.name + "@";
-        result.with_substitutions = quals + code + prev_decls.check_and_enter_name(type.handle_type->inner_name.name);
+        result.full_name = quals + code + type.handle_type()->inner_name.name + "@";
+        result.with_substitutions = quals + code + prev_decls.check_and_enter_name(type.handle_type()->inner_name.name);
 
-        for (const auto &enclosing_type : reverse_view(type.handle_type->enclosing_types)) {
+        for (const auto &enclosing_type : reverse_view(type.handle_type()->enclosing_types)) {
             result.full_name += enclosing_type.name + "@";
             result.with_substitutions += prev_decls.check_and_enter_name(enclosing_type.name);
         }
 
-        for (const auto &ns : reverse_view(type.handle_type->namespaces)) {
+        for (const auto &ns : reverse_view(type.handle_type()->namespaces)) {
             result.full_name += ns + "@";
             result.with_substitutions += prev_decls.check_and_enter_name(ns);
         }
@@ -273,7 +273,7 @@ MangledNamePart mangle_type(const Type &type, const Target &target, PreviousDecl
         internal_error << "Unexpected floating-point type size: " << type.bits() << ".\n";
         return "";
     } else if (type.is_handle()) {
-        return mangle_inner_name((type.handle_type != nullptr) ? type : non_null_void_star_type(),
+        return mangle_inner_name((type.handle_type() != nullptr) ? type : non_null_void_star_type(),
                                  target, prev_decls);
     }
     internal_error << "Unexpected kind of type. Code: " << type.code() << "\n";
@@ -427,11 +427,11 @@ struct PrevPrefixes {
 
 MangledNamePart apply_indirection_and_cvr_quals(const Type &type, MangledNamePart &name_part,
                                                 PrevPrefixes &prevs) {
-    for (uint8_t modifier : type.handle_type->cpp_type_modifiers) {
+    for (uint8_t modifier : type.handle_type()->cpp_type_modifiers) {
         // Qualifiers on a value type are simply not encoded.
         // E.g. "int f(const int)" mangles the same as "int f(int)".
         if (!(modifier & halide_handle_cplusplus_type::Pointer) &&
-            type.handle_type->reference_type == halide_handle_cplusplus_type::NotReference) {
+            type.handle_type()->reference_type == halide_handle_cplusplus_type::NotReference) {
             break;
         }
 
@@ -458,9 +458,9 @@ MangledNamePart apply_indirection_and_cvr_quals(const Type &type, MangledNamePar
         }
     }
 
-    if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
+    if (type.handle_type()->reference_type == halide_handle_cplusplus_type::LValueReference) {
         prevs.prepend_name_part("R", name_part);
-    } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::RValueReference) {
+    } else if (type.handle_type()->reference_type == halide_handle_cplusplus_type::RValueReference) {
         prevs.prepend_name_part("O", name_part);
     }
 
@@ -515,12 +515,12 @@ MangledNamePart mangle_qualified_name(const std::string &name, const std::vector
 }
 
 std::string mangle_inner_name(const Type &type, const Target &target, PrevPrefixes &prevs) {
-    if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
-        MangledNamePart result = simple_type_to_mangle_char(type.handle_type->inner_name.name, target);
+    if (type.handle_type()->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
+        MangledNamePart result = simple_type_to_mangle_char(type.handle_type()->inner_name.name, target);
         return apply_indirection_and_cvr_quals(type, result, prevs).full_name;
     } else {
-        MangledNamePart mangled = mangle_qualified_name(type.handle_type->inner_name.name, type.handle_type->namespaces,
-                                                        type.handle_type->enclosing_types, true, prevs);
+        MangledNamePart mangled = mangle_qualified_name(type.handle_type()->inner_name.name, type.handle_type()->namespaces,
+                                                        type.handle_type()->enclosing_types, true, prevs);
         return apply_indirection_and_cvr_quals(type, mangled, prevs).full_name;
     }
 }
@@ -585,7 +585,7 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
         internal_error << "Unexpected floating-point type size: " << type.bits() << ".\n";
         return "";
     } else if (type.is_handle()) {
-        return mangle_inner_name((type.handle_type != nullptr) ? type : non_null_void_star_type(),
+        return mangle_inner_name((type.handle_type() != nullptr) ? type : non_null_void_star_type(),
                                  target, prevs);
     }
     internal_error << "Unexpected kind of type. Code: " << type.code() << "\n";
