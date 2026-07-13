@@ -978,11 +978,16 @@ class StorageFolding : public IRMutator {
                                       [&](const AttemptStorageFoldingOfFunction::Fold &f) {
                                           return f.dim == d;
                                       });
+            // TODO: Root cause analysis for why folding failed
             user_assert(folded)
                 << "Explicit storage folding of Func " << op->name
                 << " along dimension " << sd.var << " with fold factor "
                 << sd.fold_factor << " was requested via fold_storage(), "
-                << "but storage folding did not attempt to fold that dimension.\n";
+                << "but storage folding did not attempt to fold that dimension.\n"
+                << "Some common causes include: the inner loop over " << sd.var << " may be nested "
+                << "inside a parallel loop or sliding-window loop, "
+                << "the bounds on the inner loop over " << sd.var << " may be constant, or "
+                << sd.var << " may not have a corresponding inner loop to fold over.";
         }
 
         if (body.same_as(op->body)) {
