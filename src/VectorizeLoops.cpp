@@ -550,10 +550,13 @@ protected:
         } else if (op->name == Call::trace) {
             auto event = as_const_int(op->args[6]);
             internal_assert(event);
-            if (*event == halide_trace_begin_realization || *event == halide_trace_end_realization) {
-                // Call::trace vectorizes uniquely for begin/end realization, because the coordinates
-                // for these are actually min/extent pairs; we need to maintain the proper dimensionality
-                // count and instead aggregate the widened values into a single pair.
+            if (*event == halide_trace_begin_realization ||
+                *event == halide_trace_end_realization ||
+                *event == halide_trace_begin_parallel_task ||
+                *event == halide_trace_end_parallel_task) {
+                // Call::trace vectorizes uniquely for begin/end scope events with min/extent pairs.
+                // We need to maintain the proper dimensionality count and instead aggregate the
+                // widened values into a single pair.
                 for (size_t i = 1; i <= 2; i++) {
                     const Call *make_struct = Call::as_intrinsic(new_args[i], {Call::make_struct});
                     internal_assert(make_struct);
@@ -603,7 +606,7 @@ protected:
                 // One of the arguments to the trace helper
                 // records the number entries in the coordinates (which we just widened)
                 if (max_lanes > 1) {
-                    new_args[9] = new_args[9] * max_lanes;
+                    new_args[10] = new_args[10] * max_lanes;
                 }
             }
             return Call::make(op->type, Call::trace, new_args, op->call_type);

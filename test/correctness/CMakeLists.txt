@@ -434,6 +434,7 @@ tests(
     ring_buffer.cpp
     stream_compaction.cpp
     thread_safety.cpp
+    tracing_thread_ids.cpp
     transitive_in.cpp
     truncated_pyramid.cpp
     tuple_vector_reduce.cpp
