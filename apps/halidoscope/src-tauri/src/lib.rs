@@ -27,7 +27,13 @@ pub fn run() {
             match app.cli().matches() {
                 Ok(matches) => match matches.subcommand {
                     Some(subcommand) => halidoscope_cli(subcommand),
-                    None => {}
+                    None => {
+                        tauri::WebviewWindowBuilder::from_config(
+                            app.handle(),
+                            &app.config().app.windows[0],
+                        )?
+                        .build()?;
+                    }
                 },
                 Err(e) => {
                     eprintln!("Error parsing CLI arguments: {}", e);
