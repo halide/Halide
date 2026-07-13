@@ -186,6 +186,7 @@ tests(
     in_place.cpp
     indexing_access_undef.cpp
     inductive.cpp
+    inductive_folding.cpp
     infer_arguments.cpp
     inline_reduction.cpp
     inlined_generator.cpp

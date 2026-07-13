@@ -103,21 +103,22 @@ public:
         Func zero_blur(uint16, "zero_blur");
         RDom rwin(0, winsize, "rwin");
         zero_blur(di, xi, xo) = sum(cast<uint16_t>(diff(di, xi, rwin, xo)));
-        vsum(di, xi, y, xo) = select(y <= 0, zero_blur(di, xi, xo), likely(vsum(di, xi, max(y - 1, 0), xo) + diff(di, xi, y + winsize - 1, xo) - diff(di, xi, max(y - 1, 0), xo)));
+        vsum(di, xi, y, xo) = select(y <= 0, zero_blur(di, xi, xo), likely(vsum(di, xi, y - 1, xo) + diff(di, xi, y + winsize - 1, xo) - diff(di, xi, y - 1, xo)));
         Func blur_y(uint16, "blur_y");
         RDom rx(0, tilesize, "rx");
         Func f1("f1");
         f1(di, y, xo) = sum(vsum(di, rwin, y, xo));
-        blur_y(di, xi, y, xo) = select(xi <= 0, f1(di, y, xo), likely(blur_y(di, max(xi - 1, 0), y, xo) + vsum(di, xi + winsize - 1, y, xo) - vsum(di, max(xi - 1, 0), y, xo)));
+        blur_y(di, xi, y, xo) = select(xi <= 0, f1(di, y, xo), likely(blur_y(di, xi - 1, y, xo) + vsum(di, xi + winsize - 1, y, xo) - vsum(di, xi - 1, y, xo)));
 
         // compute the texture value for each pixel, which is the sum of pixels in the surrounding block
-        Func text("text"), zerotext("zerotext"), textsum("textsum"), textf1("textf1");
+        Func text("text"), zerotext("zerotext"), textf1("textf1");
+        Func textsum(uint16, "textsum");      // explicit type required for inductive self-reference
         Func textblury(uint16, "textblury");  // explicit type required for inductive self-reference
         text(xi, y, xo) = cast<uint8_t>(abs(cast<int16_t>(xsobel0(xi + xo * tilesize, y)) - cast<int16_t>(filtercap)));
         zerotext(xi, xo) = sum(cast<uint16_t>(text(xi, rwin, xo)));
-        textsum(xi, y, xo) = select(y <= 0, zerotext(xi, xo), textsum(xi, y - 1, xo) + text(xi, y + winsize - 1, xo) - text(xi, y - 1, xo));
+        textsum(xi, y, xo) = select(y <= 0, zerotext(xi, xo), likely(textsum(xi, y - 1, xo) + text(xi, y + winsize - 1, xo) - text(xi, y - 1, xo)));
         textf1(y, xo) = sum(textsum(rwin, y, xo));
-        textblury(xi, y, xo) = select(xi <= 0, textf1(y, xo), likely(textblury(max(xi - 1, 0), y, xo) + textsum(xi + winsize - 1, y, xo) - textsum(max(xi - 1, 0), y, xo)));
+        textblury(xi, y, xo) = select(xi <= 0, textf1(y, xo), likely(textblury(xi - 1, y, xo) + textsum(xi + winsize - 1, y, xo) - textsum(xi - 1, y, xo)));
 
         // compute the best and second-best disparity for each pixel
         Func preout("preout");
@@ -177,18 +178,24 @@ public:
         blur_y.bound(di, 0, depth);
         vsum.bound(di, 0, depth);
 
-        blur_y.compute_at(splitoutput, y).store_at(splitoutput, y).vectorize(di, depth).fold_storage(xi, 2);
-        vsum.compute_at(splitoutput, y).store_at(splitoutput, xo).vectorize(di, depth).fold_storage(y, 2);
+        blur_y.compute_at(splitoutput, y).store_at(splitoutput, y).vectorize(di, depth).fold_storage(xi, 1);
+        vsum.compute_at(splitoutput, y).store_at(splitoutput, xo).vectorize(di, depth).fold_storage(y, 1);
 
         f1.compute_at(splitoutput, y).vectorize(di, depth);
         zero_blur.compute_at(splitoutput, xo).vectorize(di, depth);
 
         zerotext.compute_at(splitoutput, xo).vectorize(xi, native_lanes);
-        textsum.compute_at(splitoutput, y).store_at(splitoutput, xo).vectorize(xi, native_lanes).fold_storage(y, 2);
+        textsum.compute_at(splitoutput, y).store_at(splitoutput, xo).vectorize(xi).fold_storage(y, 1);
         textf1.compute_at(splitoutput, y);
-        // scalar O(1) running sum fused into blur_y's xi-scan loop (OpenCV-style)
-        textblury.compute_at(splitoutput, y).store_at(splitoutput, y).fold_storage(xi, 2);
+        textblury.compute_at(splitoutput, y).store_at(splitoutput, y).fold_storage(xi, 1);
         textblury.compute_with(blur_y, xi);
+
+        // Constrain the output origin to 0 so the base-case boundary terms
+        // (min(output.min.1, 0), select(output.min.1 <= y, ...)) fold to
+        // constants, letting the inductive fold analysis simplify the y
+        // footprint of textsum/vsum to a clean single-element step.
+        output.dim(0).set_min(0);
+        output.dim(1).set_min(0);
 
         output.vectorize(x, native_lanes);
     }

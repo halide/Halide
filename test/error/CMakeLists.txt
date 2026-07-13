@@ -80,12 +80,17 @@ tests(
     inductive_cond_nested.cpp
     inductive_cond_nested_select.cpp
     inductive_cond_self_reference.cpp
+    inductive_diagonal_fold.cpp
+    inductive_external_lag_fold.cpp
     inductive_loop_1.cpp
     inductive_loop_2.cpp
     inductive_loop_3.cpp
     inductive_nested_select.cpp
     inductive_no_select.cpp
+    inductive_redundant_z_fold.cpp
     inductive_reorder.cpp
+    inductive_small_fold.cpp
+    inductive_tuple_fold.cpp
     inductive_tuple_to_expr.cpp
     inductive_update.cpp
     inductive_var_swap.cpp

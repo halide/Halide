@@ -14,14 +14,16 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 int simple_inductive_test() {
-    Func g("g"), h("h");
+    Func g(Int(32), "g"), h("h");
     Var x("x"), y("y");
 
-    g(x, y) = select(x <= 0, 0, g(max(0, x - 1), y) + x + y);
+    g(x, y) = select(x <= 0, 0, likely(g(max(0, x - 1), y) + x + y));
 
     h(x, y) = g(x + 5, y) / 4;
 
     g.compute_at(h, x).store_at(h, y);
+
+    h.bound(x, 0, 600).bound(y, 0, 5);
 
     Buffer<int> im = h.realize({600, 5});
     auto func = [](int x, int y) {
@@ -149,11 +151,10 @@ int sum_1d_test() {
     Func f("f"), g("g"), h("h");
     Var x("x"), y("y");
     f(x, y) = x + y;
-    f(x, y) += x;  // select(x<=0, 0, x+f(x-1,y));
+    f(x, y) += x;
     g(x, y) = select(y <= 0, f(x, 0), f(x, y) + g(x, y - 1));
     h(x, y) = g(x, y);
     h.bound(x, 0, 80).bound(y, 0, 80);
-    // stress-testing bounds inference for dependent non-inlined funcs
     f.compute_at(h, x);
     Buffer<int> im = h.realize({80, 80});
     auto func = [](int x, int y) {
@@ -173,7 +174,7 @@ int multi_baseline_test() {
     Func f("f"), g("g"), h("h");
     Var x("x"), y("y");
     f(x, y) = x + y;
-    f(x, y) += x;  // select(x<=0, 0, x+f(x-1,y));
+    f(x, y) += x;
     g(x, y) = select(y <= 0, f(x, 0), f(x, y) + g(x, y - 1)) + select(y <= 3, f(x, 0), f(x, y) + g(x, y - 1));
     h(x, y) = g(x, y);
     h.bound(x, 0, 80).bound(y, 0, 20);
