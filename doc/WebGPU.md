@@ -28,8 +28,7 @@ device codegen may be required before it becomes profitable to use.
 ## Running with WebAssembly via Emscripten: `HL_TARGET=wasm-32-wasmrt-webgpu`
 
 > _Tested with Emscripten 5.0.0 (a7c5deabd7c88ba1c38ebe988112256775f944c6)_
-> _Tested with Node.js 25.5.0_
-> _Requires Node.js 25 or later_
+> _Tested with Node.js 25.5.0_ _Requires Node.js 25 or later_
 
 Halide can generate WebGPU code that can be integrated with WASM code using
 Emscripten.
@@ -40,13 +39,13 @@ When invoking `emcc` to link Halide-generated objects, include these flags:
 Tests that use AOT compilation require a WebGPU implementation with Node.js
 bindings. There are two options:
 
-- **`webgpu` npm package (recommended)**: Run `npm install` in the Halide
-  source root. The test runner will find and use the package automatically,
-  with no additional environment variables needed. See
+- **`webgpu` npm package (recommended)**: Run `npm install` in the Halide source
+  root. The test runner will find and use the package automatically, with no
+  additional environment variables needed. See
   [below](#webgpu-provider-webgpu-npm-package-recommended) for setup
   instructions.
-- **Custom `dawn.node`**: Set `HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node`.
-  See [Setting up Dawn](#setting-up-dawn) for build instructions.
+- **Custom `dawn.node`**: Set `HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node`. See
+  [Setting up Dawn](#setting-up-dawn) for build instructions.
 
 JIT compilation is not supported when using WebGPU with WASM.
 
@@ -60,7 +59,8 @@ For testing purposes, Halide can also target native WebGPU libraries, such as
 run the JIT correctness tests. See [below](#setting-up-dawn) for instructions on
 building Dawn.
 
-> Note that as of 2026-02-17, wgpu is not supported due to lack of WaitAny timeout support.
+> Note that as of 2026-02-17, wgpu is not supported due to lack of WaitAny
+> timeout support.
 
 When targeting WebGPU with a native target, Halide defaults to looking for a
 build of Dawn (with several common names and suffixes); you can override this by
@@ -75,25 +75,29 @@ will be selected based on the Halide target specified.
 
 ### Installing Node.js 25 via nvm
 
-Install [nvm](https://github.com/nvm-sh/nvm) (Node Version Manager), then use
-it to install and activate Node.js 25:
+Install [nvm](https://github.com/nvm-sh/nvm) (Node Version Manager), then use it
+to install and activate Node.js 25:
 
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-    nvm install 25
-    nvm use 25
+```
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+nvm install 25
+nvm use 25
+```
 
-To activate Node.js 25 automatically in future shell sessions, add
-`nvm use 25` (or `nvm alias default 25`) to your shell profile.
+To activate Node.js 25 automatically in future shell sessions, add `nvm use 25`
+(or `nvm alias default 25`) to your shell profile.
 
 ### Installing Emscripten via emsdk
 
 Install Emscripten using the [emsdk](https://github.com/emscripten-core/emsdk):
 
-    git clone https://github.com/emscripten-core/emsdk.git
-    cd emsdk
-    ./emsdk install latest
-    ./emsdk activate latest
-    source ./emsdk_env.sh
+```
+git clone https://github.com/emscripten-core/emsdk.git
+cd emsdk
+./emsdk install latest
+./emsdk activate latest
+source ./emsdk_env.sh
+```
 
 Add `source /path/to/emsdk/emsdk_env.sh` to your shell profile to activate
 Emscripten automatically in future sessions.
@@ -104,7 +108,9 @@ The simplest way to provide a WebGPU implementation for Node.js testing is to
 install the [`webgpu`](https://www.npmjs.com/package/webgpu) npm package, which
 bundles pre-built Dawn Node.js bindings. From the Halide source root, run:
 
-    npm install
+```
+npm install
+```
 
 The `package.json` in the Halide source root lists `webgpu` as a dependency.
 Once installed, the test runner (`tools/launch_wasm_test.js`) will find and use
@@ -116,7 +122,9 @@ As an alternative to the `webgpu` npm package, you can build the Dawn Node.js
 bindings from source. See [Setting up Dawn](#setting-up-dawn) for instructions.
 After building, point the test runner at your build by setting:
 
-    HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node
+```
+HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node
+```
 
 ## Setting up Dawn via vcpkg
 
@@ -135,42 +143,48 @@ see [Setting up Dawn](#setting-up-dawn) below.
 
 Clone and bootstrap vcpkg locally (no system-wide installation needed):
 
-    git clone https://github.com/microsoft/vcpkg <vcpkg_dir>
-    <vcpkg_dir>/bootstrap-vcpkg.sh -disableMetrics
+```
+git clone https://github.com/microsoft/vcpkg <vcpkg_dir>
+<vcpkg_dir>/bootstrap-vcpkg.sh -disableMetrics
+```
 
 ### Configure and build Halide
 
-Use the provided `arm64-osx-halide` (or `x64-osx-halide`) overlay triplet.
-These triplets use static linkage for all packages except Dawn, which must be
-a shared library so it can be loaded via `dlopen` at runtime:
+Use the provided `arm64-osx-halide` (or `x64-osx-halide`) overlay triplet. These
+triplets use static linkage for all packages except Dawn, which must be a shared
+library so it can be loaded via `dlopen` at runtime:
 
-    cmake <halide_root_dir> -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_TOOLCHAIN_FILE=<vcpkg_dir>/scripts/buildsystems/vcpkg.cmake \
-        -DVCPKG_TARGET_TRIPLET=arm64-osx-halide \
-        -DVCPKG_MANIFEST_FEATURES=webgpu-native \
-        -DLLVM_DIR=<llvm_dir>/lib/cmake/llvm \
-        -DClang_DIR=<llvm_dir>/lib/cmake/clang \
-        -DHalide_TARGET=host-webgpu
+```
+cmake <halide_root_dir> -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_TOOLCHAIN_FILE=<vcpkg_dir>/scripts/buildsystems/vcpkg.cmake \
+    -DVCPKG_TARGET_TRIPLET=arm64-osx-halide \
+    -DVCPKG_MANIFEST_FEATURES=webgpu-native \
+    -DLLVM_DIR=<llvm_dir>/lib/cmake/llvm \
+    -DClang_DIR=<llvm_dir>/lib/cmake/clang \
+    -DHalide_TARGET=host-webgpu
 
-    cmake --build <build_dir>
+cmake --build <build_dir>
+```
 
 vcpkg will download and build Dawn automatically during the configure step,
 installing it into `<build_dir>/vcpkg_installed/`.
 
-You may need to add `-DWITH_SERIALIZATION=OFF`, `-DWITH_PYTHON_BINDINGS=OFF`, and
-`-DHalide_WASM_BACKEND=OFF` flags because vcpkg disables FetchContent, and those 
-features depend on packages (`flatbuffers`, `pybind11`, `wabt`) that are not included 
-in the `webgpu-native` manifest feature.
+You may need to add `-DWITH_SERIALIZATION=OFF`, `-DWITH_PYTHON_BINDINGS=OFF`,
+and `-DHalide_WASM_BACKEND=OFF` flags because vcpkg disables FetchContent, and
+those features depend on packages (`flatbuffers`, `pybind11`, `wabt`) that are
+not included in the `webgpu-native` manifest feature.
 
 ### Run tests
 
 Set `HL_WEBGPU_NATIVE_LIB` to the vcpkg-installed Dawn library and run via
 CTest:
 
-    HL_JIT_TARGET=host-webgpu \
-    HL_WEBGPU_NATIVE_LIB=<build_dir>/vcpkg_installed/arm64-osx-halide/lib/libwebgpu_dawn.dylib \
-    ctest --test-dir <build_dir> -R correctness_gpu
+```
+HL_JIT_TARGET=host-webgpu \
+HL_WEBGPU_NATIVE_LIB=<build_dir>/vcpkg_installed/arm64-osx-halide/lib/libwebgpu_dawn.dylib \
+ctest --test-dir <build_dir> -R correctness_gpu
+```
 
 ## Setting up Dawn
 
@@ -227,7 +241,9 @@ The recommended method for updating `mini_webgpu.h` is to copy the
 
 - Restore the `// clang-format {off,on}` lines.
 - Comment out the `#include <std*>` lines.
-- Include the following block to define things that would normally be defined in system headers:
+- Include the following block to define things that would normally be defined in
+  system headers:
+
 ```
 // BEGIN Halide-specific changes
 //
