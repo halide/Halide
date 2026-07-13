@@ -503,13 +503,14 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
         deserialize_vector<flatbuffers::String, std::string>(function->trace_tags(),
                                                              &Deserializer::deserialize_string);
     const bool no_profiling = function->no_profiling();
+    const std::string profiler_display_name = deserialize_string(function->profiler_display_name());
     const bool frozen = function->frozen();
     hl_function.update_with_deserialization(name, origin_name, output_types, required_types,
                                             required_dim, args, func_schedule, init_def, updates,
                                             debug_file, output_buffers, extern_arguments, extern_function_name,
                                             name_mangling, extern_function_device_api, extern_proxy_expr,
                                             trace_loads, trace_stores, trace_realizations, trace_tags,
-                                            no_profiling, frozen);
+                                            no_profiling, profiler_display_name, frozen);
 }
 
 Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt) {

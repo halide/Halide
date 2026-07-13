@@ -1237,6 +1237,16 @@ int JITSharedRuntime::set_num_threads(int n) {
     return shared_runtimes(MainShared).set_num_threads(n);
 }
 
+void *JITSharedRuntime::find_symbol(const Target &target, const std::string &name) {
+    for (const JITModule &m : JITSharedRuntime::get(nullptr, target, false)) {
+        JITModule::Symbol sym = m.find_symbol_by_name(name);
+        if (sym.address) {
+            return sym.address;
+        }
+    }
+    return nullptr;
+}
+
 JITCache::JITCache(Target jit_target,
                    std::vector<Argument> arguments,
                    std::map<std::string, JITExtern> jit_externs,

@@ -1028,6 +1028,7 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
         trace_tags_serialized.push_back(serialize_string(builder, tag));
     }
     const bool no_profiling = function.should_not_profile();
+    const auto profiler_display_name_serialized = serialize_string(builder, function.profiler_display_name());
     const bool frozen = function.frozen();
     auto func = Serialize::CreateFunc(builder,
                                       name_serialized,
@@ -1051,6 +1052,7 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
                                       trace_realizations,
                                       builder.CreateVector(trace_tags_serialized),
                                       no_profiling,
+                                      profiler_display_name_serialized,
                                       frozen);
     return func;
 }
