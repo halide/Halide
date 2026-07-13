@@ -15,11 +15,6 @@ function App() {
   const [funcs, setFuncs] = React.useState<Record<string, FuncMeta>>({});
   const [dagEdges, setDagEdges] = React.useState<Record<string, string[]>>({});
   const [packetCount, setPacketCount] = React.useState<number>(0);
-  const [globalMaxStoreCount, setGlobalMaxStoreCount] =
-    React.useState<number>(0);
-  const [globalMaxLoadCount, setGlobalMaxLoadCount] = React.useState<number>(0);
-  const [globalMaxRedundantCount, setGlobalMaxRedundantCount] =
-    React.useState<number>(0);
   const [globalMaxReuseDistance, setGlobalMaxReuseDistance] =
     React.useState<number>(0);
 
@@ -39,15 +34,8 @@ function App() {
         : `${await invoke<string>("get_cwd")}/${tracePath}`;
 
       try {
-        const {
-          funcs,
-          total_packets,
-          dag_edges,
-          global_max_store_count,
-          global_max_load_count,
-          global_max_redundant_count,
-          global_max_reuse_distance,
-        } = await openTrace(resolved);
+        const { funcs, total_packets, dag_edges, global_max_reuse_distance } =
+          await openTrace(resolved);
 
         const byName: Record<string, FuncMeta> = {};
         for (const func of funcs) {
@@ -57,9 +45,6 @@ function App() {
         setFuncs(byName);
         setDagEdges(dag_edges);
         setPacketCount(total_packets);
-        setGlobalMaxStoreCount(global_max_store_count);
-        setGlobalMaxLoadCount(global_max_load_count);
-        setGlobalMaxRedundantCount(global_max_redundant_count);
         setGlobalMaxReuseDistance(global_max_reuse_distance);
         setActiveFunc(funcs[0]?.name ?? "");
       } catch (err) {
@@ -76,9 +61,6 @@ function App() {
         funcs,
         dagEdges,
         packetCount,
-        globalMaxStoreCount,
-        globalMaxLoadCount,
-        globalMaxRedundantCount,
         globalMaxReuseDistance,
       }}
     >

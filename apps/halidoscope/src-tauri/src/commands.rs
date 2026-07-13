@@ -10,8 +10,8 @@ use tauri::ipc::Response;
 use tauri::State;
 
 use crate::render::{
-    GrayscaleState, LoadFrequencyState, RedundantState, Renderer, ReuseDistanceState, RgbState,
-    StoreFrequencyState,
+    GrayscaleState, LoadFrequencyState, NormalizationMode, RedundantState, Renderer,
+    ReuseDistanceState, RgbState, StoreFrequencyState,
 };
 use crate::trace::Trace;
 
@@ -44,10 +44,6 @@ pub struct FuncMeta {
     pub max_load_count: i32,
     pub max_redundant_count: i32,
     pub max_reuse_distance: i64,
-    pub store_count_histogram: Vec<u32>,
-    pub load_count_histogram: Vec<u32>,
-    pub redundant_count_histogram: Vec<u32>,
-    pub reuse_distance_histogram: Vec<u32>,
     pub buffer_liveness: IndexRange,
     pub produce_ranges: Vec<IndexRange>,
     pub consume_ranges: Vec<IndexRange>,
@@ -60,9 +56,6 @@ pub struct TraceMeta {
     pub funcs: Vec<FuncMeta>,
     pub total_packets: u32,
     pub dag_edges: BTreeMap<String, Vec<String>>,
-    pub global_max_store_count: i32,
-    pub global_max_load_count: i32,
-    pub global_max_redundant_count: i32,
     pub global_max_reuse_distance: i64,
 }
 
@@ -71,9 +64,6 @@ impl TraceMeta {
     /// are still listed (with zero dimensions) so the UI can surface them; the renderer simply
     /// produces nothing for them.
     pub fn from_trace(trace: &Trace) -> Self {
-        let mut global_max_store_count = 0;
-        let mut global_max_load_count = 0;
-        let mut global_max_redundant_count = 0;
         let mut global_max_reuse_distance = 0i64;
 
         let funcs = trace
@@ -88,10 +78,6 @@ impl TraceMeta {
                 let stores = trace.func_store_indices(name);
                 let num_stores = stores.map(<[usize]>::len).unwrap_or(0) as u32;
 
-                global_max_store_count = stats.max_store_count.max(global_max_store_count);
-                global_max_load_count = stats.max_load_count.max(global_max_load_count);
-                global_max_redundant_count =
-                    stats.max_redundant_count.max(global_max_redundant_count);
                 global_max_reuse_distance = stats.max_reuse_distance.max(global_max_reuse_distance);
 
                 FuncMeta {
@@ -108,10 +94,6 @@ impl TraceMeta {
                     max_load_count: stats.max_load_count,
                     max_redundant_count: stats.max_redundant_count,
                     max_reuse_distance: stats.max_reuse_distance,
-                    store_count_histogram: stats.store_count_histogram.clone(),
-                    load_count_histogram: stats.load_count_histogram.clone(),
-                    redundant_count_histogram: stats.redundant_count_histogram.clone(),
-                    reuse_distance_histogram: stats.reuse_distance_histogram.clone(),
                     buffer_liveness: IndexRange::from_tuple(
                         trace
                             .func_buffer_liveness_range(name)
@@ -151,9 +133,6 @@ impl TraceMeta {
             funcs,
             total_packets: trace.packets.len() as u32,
             dag_edges,
-            global_max_store_count,
-            global_max_load_count,
-            global_max_redundant_count,
             global_max_reuse_distance,
         }
     }
@@ -178,6 +157,17 @@ struct Loaded {
 #[derive(Default)]
 pub struct AppState {
     inner: Mutex<Option<Loaded>>,
+}
+
+/// Appends `histogram`'s bins as little-endian `u32`s directly after `pixels`, so a single
+/// `Response` carries both. The frontend already knows the pixel-buffer length ahead of time
+/// (`width * height * 4`), so no length prefix is needed to split the two back apart.
+fn pack_pixels_and_histogram(mut pixels: Vec<u8>, histogram: Vec<u32>) -> Vec<u8> {
+    pixels.reserve(histogram.len() * 4);
+    for bin in histogram {
+        pixels.extend_from_slice(&bin.to_le_bytes());
+    }
+    pixels
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
@@ -208,6 +198,7 @@ pub fn open_trace(path: String, state: State<AppState>) -> Result<TraceMeta, Str
 pub fn render_grayscale(
     func: String,
     global_index: u32,
+    normalization_mode: NormalizationMode,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -229,7 +220,7 @@ pub fn render_grayscale(
     let k = store_indices.partition_point(|&p| p <= global_index as usize);
     renderer.seek(trace, store_indices, k);
 
-    Ok(Response::new(renderer.to_rgba()))
+    Ok(Response::new(renderer.to_rgba(normalization_mode)))
 }
 
 /// Renders `func` as an RGB image at `global_index` and returns raw RGBA8 bytes. Planes 0/1/2
@@ -238,6 +229,7 @@ pub fn render_grayscale(
 pub fn render_rgb(
     func: String,
     global_index: u32,
+    normalization_mode: NormalizationMode,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -259,7 +251,7 @@ pub fn render_rgb(
     let k = store_indices.partition_point(|&p| p <= global_index as usize);
     renderer.seek(trace, store_indices, k);
 
-    Ok(Response::new(renderer.to_rgba()))
+    Ok(Response::new(renderer.to_rgba(normalization_mode)))
 }
 
 /// Renders a heatmap of store counts for `func` up to `global_index` and returns raw RGBA8 bytes.
@@ -269,6 +261,7 @@ pub fn render_rgb(
 pub fn render_store_frequency(
     func: String,
     global_index: u32,
+    normalization_mode: NormalizationMode,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -292,7 +285,9 @@ pub fn render_store_frequency(
     let k = store_indices.partition_point(|&p| p <= global_index as usize);
     renderer.seek(trace, store_indices, k);
 
-    Ok(Response::new(renderer.to_rgba()))
+    let pixels = renderer.to_rgba(normalization_mode);
+    let histogram = renderer.to_histogram(normalization_mode);
+    Ok(Response::new(pack_pixels_and_histogram(pixels, histogram)))
 }
 
 /// Renders a heatmap of load counts for `func` up to `global_index` and returns raw RGBA8 bytes.
@@ -302,6 +297,7 @@ pub fn render_store_frequency(
 pub fn render_load_frequency(
     func: String,
     global_index: u32,
+    normalization_mode: NormalizationMode,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -325,7 +321,9 @@ pub fn render_load_frequency(
     let k = load_indices.partition_point(|&p| p <= global_index as usize);
     renderer.seek(trace, load_indices, k);
 
-    Ok(Response::new(renderer.to_rgba()))
+    let pixels = renderer.to_rgba(normalization_mode);
+    let histogram = renderer.to_histogram(normalization_mode);
+    Ok(Response::new(pack_pixels_and_histogram(pixels, histogram)))
 }
 
 /// Renders a heatmap of redundant store counts for `func` up to `global_index` and returns raw
@@ -336,6 +334,7 @@ pub fn render_load_frequency(
 pub fn render_redundant_stores(
     func: String,
     global_index: u32,
+    normalization_mode: NormalizationMode,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -357,7 +356,9 @@ pub fn render_redundant_stores(
     let k = store_indices.partition_point(|&p| p <= global_index as usize);
     renderer.seek(trace, store_indices, k);
 
-    Ok(Response::new(renderer.to_rgba()))
+    let pixels = renderer.to_rgba(normalization_mode);
+    let histogram = renderer.to_histogram(normalization_mode);
+    Ok(Response::new(pack_pixels_and_histogram(pixels, histogram)))
 }
 
 /// Renders a heatmap of maximum store-to-load reuse distances for `func` up to `global_index`
@@ -369,6 +370,7 @@ pub fn render_redundant_stores(
 pub fn render_reuse_distance(
     func: String,
     global_index: u32,
+    normalization_mode: NormalizationMode,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -394,5 +396,7 @@ pub fn render_reuse_distance(
     let load_k = load_indices.partition_point(|&p| p <= global_index as usize);
     renderer.seek(trace, store_indices, load_indices, store_k, load_k);
 
-    Ok(Response::new(renderer.to_rgba()))
+    let pixels = renderer.to_rgba(normalization_mode);
+    let histogram = renderer.to_histogram(normalization_mode);
+    Ok(Response::new(pack_pixels_and_histogram(pixels, histogram)))
 }

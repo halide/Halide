@@ -1,15 +1,17 @@
 import { Select } from "radix-ui";
 import { useAtom } from "jotai";
 
-import { renderModeAtom, RENDER_MODES, type RenderMode } from "@/state/render";
+import { renderAtom, RENDER_MODES, type RenderMode } from "@/state/render";
 
 function VisualizationSelect() {
-  const [renderMode, setVisualizationMode] = useAtom(renderModeAtom);
+  const [render, setRender] = useAtom(renderAtom);
 
   return (
     <Select.Root
-      value={renderMode}
-      onValueChange={(value) => setVisualizationMode(value as RenderMode)}
+      value={render.renderMode}
+      onValueChange={(value) =>
+        setRender({ ...render, renderMode: value as RenderMode })
+      }
     >
       <Select.Trigger
         id="visualization-select"

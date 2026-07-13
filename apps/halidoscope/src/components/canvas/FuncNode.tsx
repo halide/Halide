@@ -11,14 +11,16 @@ import {
   useViewport,
 } from "@xyflow/react";
 import { clsx } from "clsx";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import * as React from "react";
 
 import HandleCircle from "@/components/canvas/HandleCircle";
 import { useTraceContext } from "@/hooks/trace";
+import { funcAtom } from "@/state/func";
+import { histogramAtom } from "@/state/histogram";
 import { livenessAtom } from "@/state/liveness";
 import { packetAtom } from "@/state/packet";
-import { renderModeAtom } from "@/state/render";
+import { renderAtom } from "@/state/render";
 import type { FuncMeta } from "@/types";
 import {
   renderGrayscale,
@@ -27,6 +29,7 @@ import {
   renderLoadFrequency,
   renderRedundantStores,
   renderReuseDistance,
+  type RenderResult,
 } from "@/utils/api";
 import { isFuncBufferLive, isEdgeLive } from "@/utils/liveness";
 
@@ -37,7 +40,9 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   const { funcs } = useTraceContext();
   const liveness = useAtomValue(livenessAtom);
   const packetIndex = useAtomValue(packetAtom);
-  const renderMode = useAtomValue(renderModeAtom);
+  const render = useAtomValue(renderAtom);
+  const activeFunc = useAtomValue(funcAtom);
+  const setHistogramData = useSetAtom(histogramAtom);
 
   const nodes = useNodes();
   const edges = useEdges();
@@ -98,39 +103,72 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
       return;
     }
 
-    async function render() {
+    async function draw() {
       try {
         while (true) {
           const target = latestIndexRef.current;
 
-          let buffer: ArrayBuffer;
+          let result: RenderResult;
 
-          switch (renderMode) {
+          switch (render.renderMode) {
             case "Grayscale":
-              buffer = await renderGrayscale(name, target);
+              result = await renderGrayscale(
+                name,
+                target,
+                render.normalizationMode,
+              );
               break;
             case "RGB":
-              buffer = await renderRgb(name, target);
+              result = await renderRgb(name, target, render.normalizationMode);
               break;
             case "Store Frequency":
-              buffer = await renderStoreFrequency(name, target);
+              result = await renderStoreFrequency(
+                name,
+                target,
+                render.normalizationMode,
+                width,
+                height,
+              );
               break;
             case "Load Frequency":
-              buffer = await renderLoadFrequency(name, target);
+              result = await renderLoadFrequency(
+                name,
+                target,
+                render.normalizationMode,
+                width,
+                height,
+              );
               break;
             case "Redundant Stores":
-              buffer = await renderRedundantStores(name, target);
+              result = await renderRedundantStores(
+                name,
+                target,
+                render.normalizationMode,
+                width,
+                height,
+              );
               break;
             case "Reuse Distance":
-              buffer = await renderReuseDistance(name, target);
+              result = await renderReuseDistance(
+                name,
+                target,
+                render.normalizationMode,
+                width,
+                height,
+              );
               break;
           }
 
           const ctx = canvasRef.current?.getContext("2d");
 
+          // Update this Func's canvas with new pixel data.
           if (ctx) {
-            const pixels = new Uint8ClampedArray(buffer);
-            ctx.putImageData(new ImageData(pixels, width, height), 0, 0);
+            ctx.putImageData(new ImageData(result.pixels, width, height), 0, 0);
+          }
+
+          // Update the histogram data for the currently active Func.
+          if (name === activeFunc) {
+            setHistogramData((prev) => ({ ...prev, data: result.histogram }));
           }
 
           if (latestIndexRef.current === target) {
@@ -144,8 +182,8 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
       }
     }
 
-    render();
-  }, [packetIndex, name, width, height, renderMode]);
+    draw();
+  }, [packetIndex, name, width, height, render, activeFunc, setHistogramData]);
 
   return (
     <>

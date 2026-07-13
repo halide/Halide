@@ -5,14 +5,23 @@
 //! passed into `seek` so states can live in Tauri-managed storage alongside the parsed trace.
 
 use ::colorous;
+use serde::Deserialize;
 
 use crate::trace::{pixel_xy, FuncGeometry, Trace, TracePacket};
 
-// A trait that all rendering states implement.
+#[derive(Deserialize, Clone, Copy)]
+pub enum NormalizationMode {
+    #[serde(rename = "Across Funcs")]
+    AcrossFuncs,
+    #[serde(rename = "Per Func")]
+    PerFunc,
+}
+
+// A trait that all 2D rendering states implement.
 pub trait Renderer: Sized {
     fn register(trace: &Trace, func: &str) -> Option<Self>;
     fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize);
-    fn to_rgba(&self) -> Vec<u8>;
+    fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8>;
 }
 
 // ── Grayscale rendering ───────────────────────────────────────────────────────
@@ -102,7 +111,7 @@ impl Renderer for GrayscaleState {
     }
 
     /// Produces a `width * height * 4` RGBA8 buffer. Channel 0 is replicated across R/G/B.
-    fn to_rgba(&self) -> Vec<u8> {
+    fn to_rgba(&self, _normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry {
             width,
             height,
@@ -221,7 +230,7 @@ impl Renderer for RgbState {
 
     /// Produces a `width * height * 4` RGBA8 buffer. Planes 0/1/2 map to R/G/B;
     /// missing planes are 0. Alpha is always opaque.
-    fn to_rgba(&self) -> Vec<u8> {
+    fn to_rgba(&self, _normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry {
             width,
             height,
@@ -257,6 +266,7 @@ impl Renderer for RgbState {
 pub struct StoreFrequencyState {
     geom: FuncGeometry,
     counts: Vec<i32>,
+    local_max_store_count: i32,
     global_max_store_count: i32,
     applied_k: usize,
 }
@@ -265,15 +275,19 @@ impl StoreFrequencyState {
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
         let counts = vec![0i32; geom.width * geom.height];
+
+        let local_max_store_count = trace.funcs.get(func).map_or(0, |s| s.max_store_count);
         let global_max_store_count = trace
             .funcs
             .values()
             .map(|s| s.max_store_count)
             .max()
             .unwrap_or(0);
+
         Some(Self {
             geom,
             counts,
+            local_max_store_count,
             global_max_store_count,
             applied_k: 0,
         })
@@ -318,18 +332,27 @@ impl Renderer for StoreFrequencyState {
     /// Produces a `width × height × 4` RGBA8 buffer with the Inferno colormap applied. Counts
     /// are normalized against the global full-trace maximum so intensities are comparable across
     /// all Funcs.
-    fn to_rgba(&self) -> Vec<u8> {
+    fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
         let gradient = colorous::INFERNO;
         let lut: [[u8; 3]; 256] = std::array::from_fn(|i| {
             let c = gradient.eval_continuous(i as f64 / 255.0);
             [c.r, c.g, c.b]
         });
-        let scale = if self.global_max_store_count > 0 {
-            255.0 / self.global_max_store_count as f64
-        } else {
-            0.0
+
+        let scale = match (normalization_mode, self.global_max_store_count) {
+            (NormalizationMode::AcrossFuncs, 0) => 0.0,
+            (NormalizationMode::AcrossFuncs, max) => 255.0 / max as f64,
+            (NormalizationMode::PerFunc, _) => {
+                let local_max = *&self.local_max_store_count;
+                if local_max > 0 {
+                    255.0 / local_max as f64
+                } else {
+                    0.0
+                }
+            }
         };
+
         let mut out = vec![0u8; width * height * 4];
         for (chunk, &count) in out.chunks_exact_mut(4).zip(self.counts.iter()) {
             let ti = (count as f64 * scale) as usize;
@@ -343,6 +366,24 @@ impl Renderer for StoreFrequencyState {
     }
 }
 
+impl StoreFrequencyState {
+    /// Produces a frequency histogram of live per-pixel store counts at the current seek
+    /// position. `hist[k]` is the number of pixel locations currently stored exactly `k` times,
+    /// for `k` in `0..=chosen_max`, where `chosen_max` is this Func's own max (`PerFunc`) or the
+    /// trace-wide max (`AcrossFuncs`) — matching whichever max drives `to_rgba`'s color scale.
+    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
+        let chosen_max = match normalization_mode {
+            NormalizationMode::AcrossFuncs => self.global_max_store_count,
+            NormalizationMode::PerFunc => self.local_max_store_count,
+        };
+        let mut hist = vec![0u32; chosen_max as usize + 1];
+        for &c in &self.counts {
+            hist[c.clamp(0, chosen_max) as usize] += 1;
+        }
+        hist
+    }
+}
+
 // ── Load frequency rendering ──────────────────────────────────────────────────
 
 /// Mirrors `StoreFrequencyState` but tracks load events instead of store events. The global max
@@ -350,6 +391,7 @@ impl Renderer for StoreFrequencyState {
 pub struct LoadFrequencyState {
     geom: FuncGeometry,
     counts: Vec<i32>,
+    local_max_load_count: i32,
     global_max_load_count: i32,
     applied_k: usize,
 }
@@ -358,15 +400,19 @@ impl LoadFrequencyState {
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
         let counts = vec![0i32; geom.width * geom.height];
+
+        let local_max_load_count = trace.funcs.get(func).map_or(0, |s| s.max_load_count);
         let global_max_load_count = trace
             .funcs
             .values()
             .map(|s| s.max_load_count)
             .max()
             .unwrap_or(0);
+
         Some(Self {
             geom,
             counts,
+            local_max_load_count,
             global_max_load_count,
             applied_k: 0,
         })
@@ -411,18 +457,26 @@ impl Renderer for LoadFrequencyState {
     /// Produces a `width × height × 4` RGBA8 buffer with the Inferno colormap applied. Counts
     /// are normalized against the global full-trace maximum so intensities are comparable across
     /// all Funcs.
-    fn to_rgba(&self) -> Vec<u8> {
+    fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
         let gradient = colorous::INFERNO;
         let lut: [[u8; 3]; 256] = std::array::from_fn(|i| {
             let c = gradient.eval_continuous(i as f64 / 255.0);
             [c.r, c.g, c.b]
         });
-        let scale = if self.global_max_load_count > 0 {
-            255.0 / self.global_max_load_count as f64
-        } else {
-            0.0
+
+        let scale = match (normalization_mode, self.global_max_load_count) {
+            (NormalizationMode::AcrossFuncs, 0) => 0.0,
+            (NormalizationMode::AcrossFuncs, max) => 255.0 / max as f64,
+            (NormalizationMode::PerFunc, _) => {
+                if self.local_max_load_count > 0 {
+                    255.0 / self.local_max_load_count as f64
+                } else {
+                    0.0
+                }
+            }
         };
+
         let mut out = vec![0u8; width * height * 4];
         for (chunk, &count) in out.chunks_exact_mut(4).zip(self.counts.iter()) {
             let ti = (count as f64 * scale) as usize;
@@ -433,6 +487,24 @@ impl Renderer for LoadFrequencyState {
             chunk[3] = 255;
         }
         out
+    }
+}
+
+impl LoadFrequencyState {
+    /// Produces a frequency histogram of live per-pixel load counts at the current seek
+    /// position. `hist[k]` is the number of pixel locations currently loaded exactly `k` times,
+    /// for `k` in `0..=chosen_max`, where `chosen_max` is this Func's own max (`PerFunc`) or the
+    /// trace-wide max (`AcrossFuncs`) — matching whichever max drives `to_rgba`'s color scale.
+    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
+        let chosen_max = match normalization_mode {
+            NormalizationMode::AcrossFuncs => self.global_max_load_count,
+            NormalizationMode::PerFunc => self.local_max_load_count,
+        };
+        let mut hist = vec![0u32; chosen_max as usize + 1];
+        for &c in &self.counts {
+            hist[c.clamp(0, chosen_max) as usize] += 1;
+        }
+        hist
     }
 }
 
@@ -450,6 +522,7 @@ pub struct RedundantState {
     last_values: Vec<Option<u64>>,
     /// Redundant-store count per spatial pixel, indexed by `y * width + x`.
     redundant_counts: Vec<i32>,
+    local_max_redundant_count: i32,
     global_max_redundant_count: i32,
     applied_k: usize,
 }
@@ -459,16 +532,21 @@ impl RedundantState {
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
         let n_pixels = geom.width * geom.height;
+
+        let local_max_redundant_count =
+            trace.funcs.get(func).map_or(0, |s| s.max_redundant_count);
         let global_max_redundant_count = trace
             .funcs
             .values()
             .map(|s| s.max_redundant_count)
             .max()
             .unwrap_or(0);
+
         Some(Self {
             geom,
             last_values: vec![None; n_pixels * geom.channels],
             redundant_counts: vec![0i32; n_pixels],
+            local_max_redundant_count,
             global_max_redundant_count,
             applied_k: 0,
         })
@@ -543,7 +621,7 @@ impl Renderer for RedundantState {
     /// Produces a `width × height × 4` RGBA8 buffer. Pixels with zero redundant stores are black;
     /// pixels with one or more are mapped through the Inferno colormap, normalized against the
     /// global full-trace maximum so intensities are comparable across all Funcs.
-    fn to_rgba(&self) -> Vec<u8> {
+    fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
 
         let gradient = colorous::INFERNO;
@@ -551,10 +629,17 @@ impl Renderer for RedundantState {
             let c = gradient.eval_continuous(i as f64 / 255.0);
             [c.r, c.g, c.b]
         });
-        let scale = if self.global_max_redundant_count > 0 {
-            255.0 / self.global_max_redundant_count as f64
-        } else {
-            0.0
+
+        let scale = match (normalization_mode, self.global_max_redundant_count) {
+            (NormalizationMode::AcrossFuncs, 0) => 0.0,
+            (NormalizationMode::AcrossFuncs, max) => 255.0 / max as f64,
+            (NormalizationMode::PerFunc, _) => {
+                if self.local_max_redundant_count > 0 {
+                    255.0 / self.local_max_redundant_count as f64
+                } else {
+                    0.0
+                }
+            }
         };
 
         let mut out = vec![0u8; width * height * 4];
@@ -569,6 +654,25 @@ impl Renderer for RedundantState {
             chunk[3] = 255;
         }
         out
+    }
+}
+
+impl RedundantState {
+    /// Produces a frequency histogram of live per-pixel redundant-store counts at the current
+    /// seek position. `hist[k]` is the number of pixel locations with exactly `k` redundant
+    /// stores so far, for `k` in `0..=chosen_max`, where `chosen_max` is this Func's own max
+    /// (`PerFunc`) or the trace-wide max (`AcrossFuncs`) — matching whichever max drives
+    /// `to_rgba`'s color scale.
+    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
+        let chosen_max = match normalization_mode {
+            NormalizationMode::AcrossFuncs => self.global_max_redundant_count,
+            NormalizationMode::PerFunc => self.local_max_redundant_count,
+        };
+        let mut hist = vec![0u32; chosen_max as usize + 1];
+        for &c in &self.redundant_counts {
+            hist[c.clamp(0, chosen_max) as usize] += 1;
+        }
+        hist
     }
 }
 
@@ -595,6 +699,9 @@ pub struct ReuseDistanceState {
     anchor_at: Vec<usize>,
     /// Maximum observed reuse distance per spatial pixel, indexed by `y * width + x`.
     max_reuse_distance: Vec<i64>,
+    /// This Func's own maximum reuse distance, used to normalize the color scale against just
+    /// this Func's range.
+    local_max_reuse_distance: i64,
     /// Trace-wide maximum reuse distance, used to normalize the color scale consistently across
     /// all Funcs regardless of which one is being viewed.
     global_max_reuse_distance: i64,
@@ -613,17 +720,21 @@ impl ReuseDistanceState {
         let is_input = trace
             .func_store_indices(func)
             .map_or(true, |s| s.is_empty());
+
+        let local_max_reuse_distance = trace.funcs.get(func).map_or(0, |s| s.max_reuse_distance);
         let global_max_reuse_distance = trace
             .funcs
             .values()
             .map(|s| s.max_reuse_distance)
             .max()
             .unwrap_or(0);
+
         Some(Self {
             geom,
             is_input,
             anchor_at: vec![usize::MAX; n_cells],
             max_reuse_distance: vec![0i64; geom.width * geom.height],
+            local_max_reuse_distance,
             global_max_reuse_distance,
             applied_store_k: 0,
             applied_load_k: 0,
@@ -761,7 +872,7 @@ impl ReuseDistanceState {
     /// Produces a `width × height × 4` RGBA8 buffer. Pixels with no observed store→load pair are
     /// black; positive distances map through the Inferno colormap normalized against the per-Func
     /// full-trace maximum so the scale is stable while scrubbing.
-    pub fn to_rgba(&self) -> Vec<u8> {
+    pub fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
 
         let gradient = colorous::INFERNO;
@@ -769,10 +880,17 @@ impl ReuseDistanceState {
             let c = gradient.eval_continuous(i as f64 / 255.0);
             [c.r, c.g, c.b]
         });
-        let scale = if self.global_max_reuse_distance > 0 {
-            255.0 / self.global_max_reuse_distance as f64
-        } else {
-            0.0
+
+        let scale = match (normalization_mode, self.global_max_reuse_distance) {
+            (NormalizationMode::AcrossFuncs, 0) => 0.0,
+            (NormalizationMode::AcrossFuncs, max) => 255.0 / max as f64,
+            (NormalizationMode::PerFunc, _) => {
+                if self.local_max_reuse_distance > 0 {
+                    255.0 / self.local_max_reuse_distance as f64
+                } else {
+                    0.0
+                }
+            }
         };
 
         let mut out = vec![0u8; width * height * 4];
@@ -787,5 +905,29 @@ impl ReuseDistanceState {
             chunk[3] = 255;
         }
         out
+    }
+
+    /// Produces a fixed 64-bucket histogram of live per-pixel maximum reuse distances at the
+    /// current seek position. Bucket `k` covers distances in `[k/63 * chosen_max, (k+1)/63 *
+    /// chosen_max)`, with bucket 63 inclusive of `chosen_max`. Pixels with no observed
+    /// store→load pair (distance 0) are excluded. `chosen_max` is this Func's own max
+    /// (`PerFunc`) or the trace-wide max (`AcrossFuncs`) — matching whichever max drives
+    /// `to_rgba`'s color scale.
+    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
+        let chosen_max = match normalization_mode {
+            NormalizationMode::AcrossFuncs => self.global_max_reuse_distance,
+            NormalizationMode::PerFunc => self.local_max_reuse_distance,
+        };
+
+        let mut hist = vec![0u32; 64];
+        if chosen_max > 0 {
+            for &dist in &self.max_reuse_distance {
+                if dist > 0 {
+                    let bucket = ((dist as f64 / chosen_max as f64) * 63.0) as usize;
+                    hist[bucket.min(63)] += 1;
+                }
+            }
+        }
+        hist
     }
 }

@@ -181,23 +181,6 @@ pub struct FuncStats {
     /// Measured as thedifference in global packet indices between a store and the next load from
     /// the same coordination. 0 when no store→load pair was observed.
     pub max_reuse_distance: i64,
-    /// Frequency distribution of per-coordinate store counts. `hist[k]` is the number of pixel
-    /// locations stored exactly `k` times, for `k` in `0..=max_store_count`. The `0` bin is
-    /// included. Empty when the Func has no usable extent.
-    pub store_count_histogram: Vec<u32>,
-    /// Frequency distribution of per-coordinate load counts. `hist[k]` is the number of pixel
-    /// locations loaded exactly `k` times, for `k` in `0..=max_load_count`. The `0` bin is
-    /// included. Empty when the Func has no usable extent.
-    pub load_count_histogram: Vec<u32>,
-    /// Frequency distribution of per-coordinate redundant store counts. `hist[k]` is the number of
-    /// pixel locations with exactly `k` redundant stores, for `k` in `0..=max_redundant_count`.
-    /// The `0` bin is included. Empty when the Func has no usable extent.
-    pub redundant_count_histogram: Vec<u32>,
-    /// Fixed-width 64-bucket histogram of per-coordinate maximum reuse distances. Bucket `k` covers
-    /// distances in `[k/63 * max, (k+1)/63 * max)`, with bucket 63 inclusive of `max`. Pixels
-    /// with no observed store→load pair (distance 0) are excluded. Empty when
-    /// `max_reuse_distance == 0`.
-    pub reuse_distance_histogram: Vec<u32>,
 }
 
 impl Default for FuncStats {
@@ -212,10 +195,6 @@ impl Default for FuncStats {
             max_load_count: 0,
             max_redundant_count: 0,
             max_reuse_distance: 0,
-            store_count_histogram: vec![],
-            load_count_histogram: vec![],
-            redundant_count_histogram: vec![],
-            reuse_distance_histogram: vec![],
         }
     }
 }
@@ -736,9 +715,7 @@ impl Trace {
                     );
                 }
                 if let Some(stats) = funcs.get_mut(func_name.as_str()) {
-                    let (max, hist) = count_histogram(&counts);
-                    stats.max_store_count = max;
-                    stats.store_count_histogram = hist;
+                    stats.max_store_count = counts.iter().copied().max().unwrap_or(0);
                 }
             }
         }
@@ -762,9 +739,7 @@ impl Trace {
                     );
                 }
                 if let Some(stats) = funcs.get_mut(func_name.as_str()) {
-                    let (max, hist) = count_histogram(&counts);
-                    stats.max_load_count = max;
-                    stats.load_count_histogram = hist;
+                    stats.max_load_count = counts.iter().copied().max().unwrap_or(0);
                 }
             }
         }
@@ -846,9 +821,7 @@ impl Trace {
                 }
 
                 if let Some(stats) = funcs.get_mut(func_name.as_str()) {
-                    let (max, hist) = count_histogram(&redundant_counts);
-                    stats.max_redundant_count = max;
-                    stats.redundant_count_histogram = hist;
+                    stats.max_redundant_count = redundant_counts.iter().copied().max().unwrap_or(0);
                 }
             }
         }
@@ -864,9 +837,6 @@ impl Trace {
         //      and is "free". Subsequent loads to the same pixel measure distance from that first
         //      load. Black = only one load ever (no reuse).
         //
-        // Per-pixel distance vecs are collected here; histogram building is deferred until the
-        // global max is known so all Funcs share the same bucket scale.
-        let mut reuse_distances_by_func: BTreeMap<String, Vec<i64>> = BTreeMap::new();
         for (func_name, store_indices) in &store_indices_by_func {
             let extents = funcs.get(func_name.as_str()).and_then(func_extents);
             if let Some((w, h, min_x, min_y)) = extents {
@@ -936,7 +906,6 @@ impl Trace {
                     stats.max_reuse_distance =
                         max_reuse_distances.iter().copied().max().unwrap_or(0);
                 }
-                reuse_distances_by_func.insert(func_name.clone(), max_reuse_distances);
             }
         }
 
@@ -987,30 +956,6 @@ impl Trace {
                 if let Some(stats) = funcs.get_mut(func_name.as_str()) {
                     stats.max_reuse_distance =
                         max_reuse_distances.iter().copied().max().unwrap_or(0);
-                }
-                reuse_distances_by_func.insert(func_name.clone(), max_reuse_distances);
-            }
-        }
-
-        // Build globally-normalized 64-bucket histograms: bucket boundaries are identical across
-        // all Funcs so the x-axis is directly comparable.
-        let global_max_reuse_distance: i64 = funcs
-            .values()
-            .map(|s| s.max_reuse_distance)
-            .max()
-            .unwrap_or(0);
-        if global_max_reuse_distance > 0 {
-            for (func_name, distances) in &reuse_distances_by_func {
-                let mut hist = vec![0u32; 64];
-                for &dist in distances {
-                    if dist > 0 {
-                        let bucket =
-                            (dist as f64 / global_max_reuse_distance as f64 * 63.0) as usize;
-                        hist[bucket] += 1;
-                    }
-                }
-                if let Some(stats) = funcs.get_mut(func_name.as_str()) {
-                    stats.reuse_distance_histogram = hist;
                 }
             }
         }
@@ -1091,19 +1036,6 @@ impl Trace {
 }
 
 // ── Shared geometry helpers ───────────────────────────────────────────────────
-
-/// Builds a frequency histogram from per-pixel `counts`: `hist[k]` is the number of pixel
-/// locations whose count is exactly `k`, for `k` in `0..=max`. The `0` bin is included so the
-/// frontend can surface untouched locations. Counts are always non-negative. Returns
-/// `(max_count, hist)`.
-fn count_histogram(counts: &[i32]) -> (i32, Vec<u32>) {
-    let max = counts.iter().copied().max().unwrap_or(0);
-    let mut hist = vec![0u32; max as usize + 1];
-    for &c in counts {
-        hist[c as usize] += 1;
-    }
-    (max, hist)
-}
 
 /// Returns `(width, height, min_x, min_y)` for a Func, or `None` if the stats
 /// have no coordinate information or produce a zero-area extent.
