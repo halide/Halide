@@ -1537,7 +1537,7 @@ Expr select(Expr condition, Expr true_value, Expr false_value) {
     return Select::make(std::move(condition), std::move(true_value), std::move(false_value));
 }
 
-Expr branch(Expr condition, Expr true_value, Expr false_value) {
+Branch branch(Expr condition, Expr true_value, Expr false_value) {
     user_assert(condition.defined()) << "branch() of undefined condition.\n";
     user_assert(condition.type().is_bool())
         << "The first argument to branch must be a boolean:\n"
@@ -1565,10 +1565,11 @@ Expr branch(Expr condition, Expr true_value, Expr false_value) {
     // Capture the type before moving the args (argument evaluation order is
     // unspecified, so reading true_value.type() inline with std::move is UB).
     Type result_type = true_value.type();
-    return Call::make(result_type,
-                      Call::branch,
-                      {std::move(condition), std::move(true_value), std::move(false_value)},
-                      Call::PureIntrinsic);
+    Expr e = Call::make(result_type,
+                        Call::branch,
+                        {std::move(condition), std::move(true_value), std::move(false_value)},
+                        Call::PureIntrinsic);
+    return Branch{std::move(e)};
 }
 
 Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {

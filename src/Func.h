@@ -58,6 +58,7 @@ struct VarOrRVar {
 };
 
 class ImageParam;
+struct Branch;
 
 namespace Internal {
 struct AssociativeOp;
@@ -532,6 +533,11 @@ public:
     /** Use this as the left-hand-side of a definition or an update definition
      * for a Func with multiple outputs. */
     Stage operator=(const Tuple &);
+
+    /** Define this Func as an explicit branch (see \ref branch). The value arms
+     * are force-inlined so the branch gates real computation, not just a load;
+     * it is an error if a value arm calls a Func that can not be inlined. */
+    Stage operator=(const Branch &);
 
     /** Define a stage that adds the given expression to this Func. If the
      * expression refers to some RDom, this performs a sum reduction of the

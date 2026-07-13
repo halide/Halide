@@ -92,12 +92,16 @@ using std::vector;
 namespace {
 
 // Lower branch() intrinsics into if_then_else, which codegen turns into a real
-// control-flow branch that evaluates only the taken side. This runs after
-// vectorization so we can tell whether the condition became lane-varying. We
-// deliberately do NOT silently fall back to a both-sides select when a real
-// branch is impossible (a lane-varying condition, or use inside a GPU kernel):
-// the whole point of branch() is the guarantee that only one side runs, so we
-// hard-error instead.
+// control-flow branch that evaluates only the taken side (on CPU and GPU
+// alike). This runs after vectorization so we can tell whether the branch got
+// vectorized. A real branch is impossible in two cases, and there we
+// deliberately do NOT silently fall back to a both-sides select (the whole
+// point of branch() is the guarantee that only one side runs), so we
+// hard-error instead:
+//   - a lane-varying (vectorized) condition, since SIMD lanes can not branch
+//     independently (CPU or GPU); and
+//   - any vectorization inside a GPU kernel: on GPU only a per-thread or
+//     per-wave (non-vectorized) branch makes sense.
 class LowerStrictBranches : public IRMutator {
     using IRMutator::visit;
 
@@ -129,10 +133,10 @@ class LowerStrictBranches : public IRMutator {
                 << "because its condition became lane-varying (it depends on a "
                 << "vectorized dimension). Use select() for a per-lane condition, "
                 << "or schedule so the condition is not vectorized.\n";
-            user_assert(in_gpu_loop == 0)
-                << "branch() is not supported inside a GPU kernel, where a real "
-                << "control-flow branch can not guarantee that only one side is "
-                << "evaluated. Use select() instead.\n";
+            user_assert(!(in_gpu_loop > 0 && op->type.is_vector()))
+                << "branch() can not be combined with vectorization inside a GPU "
+                << "kernel. On GPU only a per-thread or per-wave (non-vectorized) "
+                << "branch is allowed. Use select() for the vectorized dimension.\n";
             return Call::make(op->type, Call::if_then_else,
                               {cond, true_value, false_value}, Call::PureIntrinsic);
         }
