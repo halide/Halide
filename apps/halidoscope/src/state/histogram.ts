@@ -2,4 +2,10 @@ import { atom } from "jotai";
 
 export type HistogramScale = "linear" | "log";
 
-export const histogramAtom = atom<HistogramScale>("linear");
+export const histogramAtom = atom<{
+  data: Uint32Array | null;
+  scale: HistogramScale;
+}>({
+  data: null,
+  scale: "linear",
+});

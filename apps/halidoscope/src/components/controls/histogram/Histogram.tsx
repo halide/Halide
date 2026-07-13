@@ -3,7 +3,7 @@ import * as d3 from "d3";
 import { useAtomValue } from "jotai";
 import * as React from "react";
 
-import { histogramAtom, HistogramScale } from "@/state/histogram";
+import { histogramAtom } from "@/state/histogram";
 
 interface HistogramProps {
   data: { x1: number; x2: number; y: number }[];
@@ -14,9 +14,9 @@ interface HistogramProps {
 }
 
 function Histogram({ data, domain, labels }: HistogramProps) {
-  console.log("Data: ", data);
   const ref = React.useRef<HTMLDivElement>(null);
-  const histogramScale = useAtomValue(histogramAtom) as HistogramScale;
+  const { scale } = useAtomValue(histogramAtom);
+
   // Build the data for the bottom colorbar.
   const colorbar = React.useMemo(() => {
     const range = domain[1] - domain[0];
@@ -53,7 +53,7 @@ function Histogram({ data, domain, labels }: HistogramProps) {
         tickFormat: (value) => d3.format(".2s")(value),
         tickPadding: 24,
         tickSize: 0,
-        type: histogramScale,
+        type: scale,
         interval: domain[1] <= 64 ? 1 : undefined,
       },
       color: {
@@ -81,7 +81,7 @@ function Histogram({ data, domain, labels }: HistogramProps) {
     return () => {
       plot.remove();
     };
-  }, [data, domain, labels, histogramScale, colorbar]);
+  }, [data, domain, labels, scale, colorbar]);
 
   return data.every((d) => d.y === 0) ? (
     <div className="flex h-full flex-col items-center justify-center gap-2">

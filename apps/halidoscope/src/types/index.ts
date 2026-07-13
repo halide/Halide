@@ -23,10 +23,6 @@ export interface FuncMeta extends Record<string, unknown> {
   max_load_count: number;
   max_redundant_count: number;
   max_reuse_distance: number;
-  store_count_histogram: number[];
-  load_count_histogram: number[];
-  redundant_count_histogram: number[];
-  reuse_distance_histogram: number[];
   buffer_liveness: IndexRange;
   produce_ranges: IndexRange[];
   consume_ranges: IndexRange[];
@@ -38,9 +34,6 @@ export interface TraceMeta {
   funcs: FuncMeta[];
   total_packets: number;
   dag_edges: Record<string, string[]>;
-  global_max_store_count: number;
-  global_max_load_count: number;
-  global_max_redundant_count: number;
   global_max_reuse_distance: number;
 }
 
