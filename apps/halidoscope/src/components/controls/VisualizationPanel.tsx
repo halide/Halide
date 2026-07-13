@@ -8,21 +8,18 @@ import LivenessControls from "@/components/controls/liveness/LivenessControls";
 import PlaybackRate from "@/components/controls/playback/PlaybackRate";
 import RenderMode from "@/components/controls/render/RenderMode";
 import Histogram from "@/components/controls/histogram/Histogram";
-import HistogramSelect from "@/components/controls/histogram/HistogramSelect";
+import HistogramSelect from "@/components/controls/histogram/HistogramParameters";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
-import { histogramAtom, type HistogramScale } from "@/state/histogram";
-import { type RenderMode as RM, renderModeAtom } from "@/state/render";
-import { FuncMeta } from "@/types";
+import { histogramAtom } from "@/state/histogram";
+import { type RenderMode as RM, renderAtom } from "@/state/render";
 
-const RENDER_MODE_TO_HISTOGRAM_DATA_KEY: Record<RM, keyof FuncMeta | ""> = {
-  Grayscale: "",
-  RGB: "",
-  "Store Frequency": "store_count_histogram",
-  "Load Frequency": "load_count_histogram",
-  "Redundant Stores": "redundant_count_histogram",
-  "Reuse Distance": "reuse_distance_histogram",
-};
+const HISTOGRAM_RENDER_MODES = new Set<RM>([
+  "Store Frequency",
+  "Load Frequency",
+  "Redundant Stores",
+  "Reuse Distance",
+]);
 
 const RENDER_MODE_TO_LABEL: Record<RM, string> = {
   Grayscale: "",
@@ -34,71 +31,64 @@ const RENDER_MODE_TO_LABEL: Record<RM, string> = {
 };
 
 function VisualizationPanel() {
-  const {
-    funcs,
-    globalMaxStoreCount,
-    globalMaxLoadCount,
-    globalMaxRedundantCount,
-    globalMaxReuseDistance,
-  } = useTraceContext();
-  const renderMode = useAtomValue(renderModeAtom);
+  const { funcs, globalMaxReuseDistance } = useTraceContext();
+  const render = useAtomValue(renderAtom);
   const activeFunc = useAtomValue(funcAtom);
-  const histogramScale = useAtomValue(histogramAtom) as HistogramScale;
+  const { data, scale } = useAtomValue(histogramAtom);
 
-  const dataKey = RENDER_MODE_TO_HISTOGRAM_DATA_KEY[renderMode];
-  const hasHistogram = dataKey && activeFunc && funcs[activeFunc];
-  const domainMin = histogramScale === "log" ? 1 : 0;
+  const hasHistogram =
+    HISTOGRAM_RENDER_MODES.has(render.renderMode) &&
+    activeFunc &&
+    funcs[activeFunc] &&
+    data !== null;
+  const domainMin = scale === "log" ? 1 : 0;
 
   const { data: histogramData, domain: histogramDomain } = React.useMemo((): {
     data: { x1: number; x2: number; y: number }[];
     domain: [number, number];
   } => {
-    if (!hasHistogram) {
+    if (!hasHistogram || !data) {
       return { data: [], domain: [domainMin, 1] };
     }
 
-    const data = funcs[activeFunc][dataKey as keyof FuncMeta] as number[];
-
-    switch (renderMode) {
+    switch (render.renderMode) {
       case "Store Frequency":
-        return {
-          data: data.map((pixels, i) => ({ x1: i, x2: i + 1, y: pixels })),
-          domain: [domainMin, globalMaxStoreCount + 1],
-        };
       case "Load Frequency":
-        return {
-          data: data.map((pixels, i) => ({ x1: i, x2: i + 1, y: pixels })),
-          domain: [domainMin, globalMaxLoadCount + 1],
-        };
       case "Redundant Stores":
         return {
-          data: data.map((pixels, i) => ({ x1: i, x2: i + 1, y: pixels })),
-          domain: [domainMin, globalMaxRedundantCount + 1],
-        };
-      // For Reuse Distance, scale x values to the global max reuse distance
-      // since the histogram is normalized to 64 bins.
-      case "Reuse Distance":
-        return {
-          data: data.map((pixels, i) => ({
-            x1: Math.round((i / 64) * globalMaxReuseDistance),
-            x2: Math.round(((i + 1) / 64) * globalMaxReuseDistance),
-            y: pixels,
+          data: Array.from(data).map((y, i) => ({
+            x1: i,
+            x2: i + 1,
+            y,
           })),
-          domain: [domainMin, globalMaxReuseDistance],
+          domain: [domainMin, data.length],
         };
+      case "Reuse Distance": {
+        // For Reuse Distance, scale x values based on the normalization mode.
+        const domainMax =
+          render.normalizationMode === "Per Func"
+            ? funcs[activeFunc].max_reuse_distance
+            : globalMaxReuseDistance;
+
+        return {
+          data: Array.from(data).map((y, i) => ({
+            x1: Math.round((i / 64) * domainMax),
+            x2: Math.round(((i + 1) / 64) * domainMax),
+            y,
+          })),
+          domain: [domainMin, domainMax],
+        };
+      }
       default:
         return { data: [], domain: [domainMin, 1] };
     }
   }, [
     hasHistogram,
+    data,
     activeFunc,
     funcs,
-    dataKey,
-    renderMode,
+    render,
     domainMin,
-    globalMaxStoreCount,
-    globalMaxLoadCount,
-    globalMaxRedundantCount,
     globalMaxReuseDistance,
   ]);
 
@@ -116,7 +106,7 @@ function VisualizationPanel() {
               <Histogram
                 data={histogramData}
                 domain={histogramDomain}
-                labels={{ x: RENDER_MODE_TO_LABEL[renderMode] }}
+                labels={{ x: RENDER_MODE_TO_LABEL[render.renderMode] }}
               />
             </div>
           </ControlSection>
