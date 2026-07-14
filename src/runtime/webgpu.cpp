@@ -375,13 +375,21 @@ WEAK int create_webgpu_context(void *user_context) {
     if (wgpuAdapterGetLimits(global_adapter, &supportedLimits) != WGPUStatus_Success) {
         debug(user_context) << "wgpuAdapterGetLimits failed\n";
     } else {
-        // Raise the limits on buffer size and workgroup storage size.
+        // Raise the limits on buffer size and workgroup storage/invocations.
         requestedLimits.maxBufferSize =
             supportedLimits.maxBufferSize;
         requestedLimits.maxStorageBufferBindingSize =
             supportedLimits.maxStorageBufferBindingSize;
         requestedLimits.maxComputeWorkgroupStorageSize =
             supportedLimits.maxComputeWorkgroupStorageSize;
+        requestedLimits.maxComputeInvocationsPerWorkgroup =
+            supportedLimits.maxComputeInvocationsPerWorkgroup;
+        requestedLimits.maxComputeWorkgroupSizeX =
+            supportedLimits.maxComputeWorkgroupSizeX;
+        requestedLimits.maxComputeWorkgroupSizeY =
+            supportedLimits.maxComputeWorkgroupSizeY;
+        requestedLimits.maxComputeWorkgroupSizeZ =
+            supportedLimits.maxComputeWorkgroupSizeZ;
     }
 
     WGPUDeviceDescriptor device_desc = WGPU_DEVICE_DESCRIPTOR_INIT;
@@ -1001,9 +1009,11 @@ WEAK int halide_webgpu_run(void *user_context,
     struct PipelineResult {
         volatile WGPUCreatePipelineAsyncStatus status;
         WGPUComputePipeline pipeline;
+        char message[512];
     };
     PipelineResult pipeline_result;
     pipeline_result.pipeline = nullptr;
+    pipeline_result.message[0] = '\0';
 
     WGPUCreateComputePipelineAsyncCallbackInfo pipeline_callback_info =
         WGPU_CREATE_COMPUTE_PIPELINE_ASYNC_CALLBACK_INFO_INIT;
@@ -1015,6 +1025,7 @@ WEAK int halide_webgpu_run(void *user_context,
         PipelineResult *result = (PipelineResult *)userdata1;
         result->status = status;
         result->pipeline = pipeline;
+        wgpu_sv_to_cstr(message, result->message, sizeof(result->message));
     };
     pipeline_callback_info.userdata1 = &pipeline_result;
 
@@ -1028,7 +1039,7 @@ WEAK int halide_webgpu_run(void *user_context,
 
     if (pipeline_result.status != WGPUCreatePipelineAsyncStatus_Success) {
         error(user_context) << "WGPU: wgpuDeviceCreateComputePipelineAsync failed ("
-                            << pipeline_result.status << ")\n";
+                            << pipeline_result.status << "): " << pipeline_result.message << "\n";
         return halide_error_code_generic_error;
     }
 
