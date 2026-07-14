@@ -2626,6 +2626,18 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
         align_bytes = gcd(align_bytes, (int)(((uintptr_t)image.data()) & std::numeric_limits<int>::max()));
     }
 
+    if (experimental_nontemporal_loads_enabled()) {
+        // x86 only selects a non-temporal load instruction (e.g. VMOVNTDQA)
+        // when the declared alignment is at least as large as the access
+        // size (see X86ISelDAGToDAG::useNonTemporalLoad); AArch64 has no such
+        // requirement for LDNP. Parameter alignment tracking is conservative
+        // by default (it assumes only element-size alignment unless told
+        // otherwise via set_host_alignment), which silently defeats the x86
+        // lowering. For this experiment we know the buffers are actually
+        // suitably aligned, so force it.
+        align_bytes = std::max(align_bytes, 256 / 8);
+    }
+
     // For dense vector loads wider than the native vector
     // width, bust them up into native vectors
     int load_lanes = type.lanes();
@@ -4116,6 +4128,18 @@ void CodeGen_LLVM::visit(const Store *op) {
             if (op->param.defined()) {
                 int host_alignment = op->param.host_alignment();
                 alignment = gcd(alignment, host_alignment);
+            }
+
+            if (experimental_nontemporal_stores_enabled()) {
+                // x86 only keeps a wide non-temporal store as a single
+                // vector MOVNTDQ; if the declared alignment is below the
+                // store size it gets split and eventually scalarized down
+                // to MOVNTI (see the "Split under-aligned vector
+                // non-temporal stores" logic in X86ISelLowering.cpp). As
+                // with the load side, force the alignment for this
+                // experiment since we know the buffers are actually
+                // suitably aligned.
+                alignment = std::max(alignment, 256 / 8);
             }
 
             // For dense vector stores wider than the native vector
