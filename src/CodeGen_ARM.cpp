@@ -1805,7 +1805,7 @@ void CodeGen_ARM::visit(const Store *op) {
             if (is_float16_and_has_feature(elt)) {
                 Type u16_type = op->value.type().with_code(halide_type_uint);
                 Expr v = reinterpret(u16_type, op->value);
-                codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment));
+                codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment, op->is_streaming));
                 return;
             }
 
@@ -1958,7 +1958,7 @@ void CodeGen_ARM::visit(const Load *op) {
             // Rewrite float16 case into load in uint16 and reinterpret, as it is unsupported in LLVM
             if (is_float16_and_has_feature(op->type)) {
                 Type u16_type = op->type.with_code(halide_type_uint);
-                Expr equiv = Load::make(u16_type, op->name, op->index, op->image, op->param, op->predicate, op->alignment);
+                Expr equiv = Load::make(u16_type, op->name, op->index, op->image, op->param, op->predicate, op->alignment, op->is_streaming);
                 equiv = reinterpret(op->type, equiv);
                 equiv = common_subexpression_elimination(equiv);
                 value = codegen(equiv);

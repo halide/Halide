@@ -118,7 +118,8 @@ protected:
                                             op->image,
                                             op->param,
                                             const_true(),
-                                            op->alignment + ln);
+                                            op->alignment + ln,
+                                            op->is_streaming);
                 lane_values.push_back(Call::make(load_expr.type(),
                                                  Call::if_then_else,
                                                  {extract_lane(op->predicate, ln),

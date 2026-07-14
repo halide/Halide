@@ -5,6 +5,7 @@
  * Subtypes for Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
  */
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -309,11 +310,15 @@ struct Load : public ExprNode<Load> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
+    // Whether this access should bypass the cache when supported by the target.
+    bool is_streaming;
+
     static Expr make(Type type, const std::string &name,
                      Expr index, Buffer<> image,
                      Parameter param,
                      Expr predicate,
-                     ModulusRemainder alignment);
+                     ModulusRemainder alignment,
+                     bool is_streaming = false);
 
     static const IRNodeType _node_type = IRNodeType::Load;
 };
@@ -427,8 +432,12 @@ struct Store : public StmtNode<Store> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
+    // Whether this access should bypass the cache when supported by the target.
+    bool is_streaming;
+
     static Stmt make(const std::string &name, Expr value, Expr index,
-                     Parameter param, Expr predicate, ModulusRemainder alignment);
+                     Parameter param, Expr predicate, ModulusRemainder alignment,
+                     bool is_streaming = false);
 
     static const IRNodeType _node_type = IRNodeType::Store;
 };
@@ -731,6 +740,9 @@ struct Call : public ExprNode<Call> {
         sliding_window_marker,
         // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         sorted_avg,
+        // Emits a target-specific memory fence after a Stage that
+        // contains non-temporal (streaming) stores.
+        stream_store_fence,
         // strict floating point ops. These are floating point ops that we would
         // like to optimize around (or let llvm optimize around) by treating
         // them as reals and ignoring the existence of nan and inf. Using these
@@ -1148,6 +1160,41 @@ struct Atomic : public StmtNode<Atomic> {
                      Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Atomic;
+};
+
+/** Marks the store(s) produced by the wrapped body as requesting
+ * non-temporal (streaming) stores, as scheduled via Stage::stream_stores.
+ * Created directly around a Provide node (or an Atomic node wrapping one)
+ * during scheduling, and consumed by storage flattening, which uses it to
+ * set Store::is_streaming on the resulting Store node(s) and then discards
+ * it -- it should not survive past that point. */
+struct StreamingStore : public StmtNode<StreamingStore> {
+    std::string producer_name;
+    Stmt body;
+
+    static Stmt make(const std::string &producer_name,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::StreamingStore;
+};
+
+/** Marks the Halide-Func loads made while evaluating the wrapped body as
+ * requesting non-temporal (streaming) loads, as scheduled via
+ * Stage::stream_loads. If `names` is nullopt, every direct load of another
+ * Func is streamed (except a self-load, which is never streamed);
+ * otherwise only loads of Funcs named in `*names` are streamed. Created
+ * directly around a Stage's body during scheduling, and consumed by
+ * storage flattening, which uses it to set Load::is_streaming on the
+ * resulting Load node(s) and then discards it -- it should not survive
+ * past that point. */
+struct StreamingLoads : public StmtNode<StreamingLoads> {
+    std::optional<std::vector<std::string>> names;
+    Stmt body;
+
+    static Stmt make(std::optional<std::vector<std::string>> names,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::StreamingLoads;
 };
 
 /** Horizontally reduce a vector to a scalar or narrower vector using
