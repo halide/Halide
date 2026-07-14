@@ -39,25 +39,15 @@ int main(int argc, char **argv) {
         memcpy(output.data(), input.data(), input.width());
     };
 
-    // Warm up
-    halide_copy();
-    system_copy();
+    BenchmarkConfig config;
+    config.comparison_rounds = 5;
+    auto [r_halide, r_memcpy] = benchmark_comparison(config, halide_copy, system_copy);
 
-    double t_halide = std::numeric_limits<double>::infinity();
-    double t_memcpy = std::numeric_limits<double>::infinity();
-    const int rounds = 5;
-    for (int i = 0; i < rounds; i++) {
-        // Alternate benchmarks to account for thermal / frequency drift
-        // and use best time for stability.
-        t_halide = std::min(t_halide, (double)benchmark(halide_copy));
-        t_memcpy = std::min(t_memcpy, (double)benchmark(system_copy));
-    }
-
-    printf("system memcpy: %.2f GB/s\n", (buffer_size / t_memcpy) / 1e9);
-    printf("halide memcpy: %.2f GB/s\n", (buffer_size / t_halide) / 1e9);
+    printf("system memcpy: %.2f GB/s\n", (buffer_size / r_memcpy.wall_time) / 1e9);
+    printf("halide memcpy: %.2f GB/s\n", (buffer_size / r_halide.wall_time) / 1e9);
 
     // memcpy will win by a little bit for large inputs because it uses streaming stores
-    if (t_halide > t_memcpy * 3) {
+    if (r_halide.wall_time > r_memcpy.wall_time * 3) {
         printf("Halide memcpy is slower than it should be.\n");
         return 1;
     }
