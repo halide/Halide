@@ -10,13 +10,18 @@ pub mod trace;
 
 #[tauri::command]
 fn get_cwd() -> Result<String, String> {
-    std::env::current_dir()
-        .map_err(|e| e.to_string())
-        .and_then(|p| {
-            p.parent()
-                .map(|parent| parent.to_string_lossy().into_owned())
-                .ok_or_else(|| "no parent directory".to_string())
-        })
+    let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
+
+    // In dev, `cargo run` is invoked with its cwd set to `src-tauri`, so walk
+    // up one level to match the directory the user launched `tauri dev` from.
+    // The bundled binary is launched directly, so its cwd needs no adjustment.
+    if cfg!(debug_assertions) {
+        cwd.parent()
+            .map(|parent| parent.to_string_lossy().into_owned())
+            .ok_or_else(|| "no parent directory".to_string())
+    } else {
+        Ok(cwd.to_string_lossy().into_owned())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
