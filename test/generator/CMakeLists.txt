@@ -121,7 +121,9 @@ endfunction()
 #
 function(_add_halide_libraries TARGET)
     set(options GRADIENT_DESCENT OMIT_C_BACKEND)
-    set(oneValueArgs FROM GENERATOR_NAME FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER)
+    set(oneValueArgs
+        FROM GENERATOR_NAME FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER REGISTRATION
+    )
     set(multiValueArgs ENABLE_IF TARGETS FEATURES PARAMS PLUGINS EXTERNS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -134,6 +136,15 @@ function(_add_halide_libraries TARGET)
         set(GRADIENT_DESCENT_OPT "GRADIENT_DESCENT")
     else ()
         set(GRADIENT_DESCENT_OPT "")
+    endif ()
+
+    # REGISTRATION is one of add_halide_library's "extra output" args, which warns if passed
+    # with an empty value (as opposed to NAMESPACE/USE_RUNTIME/AUTOSCHEDULER/etc., which are
+    # fine empty) -- so only pass it through when actually requested.
+    if (args_REGISTRATION)
+        set(REGISTRATION_OPT REGISTRATION "${args_REGISTRATION}")
+    else ()
+        set(REGISTRATION_OPT "")
     endif ()
 
     # Fill in default values for some arguments, as needed
@@ -163,7 +174,11 @@ function(_add_halide_libraries TARGET)
         PARAMS "${args_PARAMS}"
         PLUGINS "${args_PLUGINS}"
         FUNCTION_INFO_HEADER function_info_header_out
+        ${REGISTRATION_OPT}
     )
+    if (args_REGISTRATION)
+        set(${args_REGISTRATION} "${${args_REGISTRATION}}" PARENT_SCOPE)
+    endif ()
     if (args_EXTERNS)
         target_link_libraries(${TARGET} INTERFACE ${args_EXTERNS})
     endif ()
@@ -355,11 +370,13 @@ endfunction()
 _add_halide_libraries(acquire_release)
 _add_halide_aot_tests(acquire_release LINK_TO_GPU)
 
-# TODO: what are these?
 # configure_jittest.cpp
 # example_jittest.cpp
 # registration_test.cpp
 # rungen_test.cpp
+# These depend on generator/library targets (blur2x2, cxx_mangling, pyramid, example,
+# configure) that aren't defined until later in this file; see the bottom of this file,
+# just after the stubuser block, for where they're actually wired up.
 
 # alias_aottest.cpp
 # alias_generator.cpp
@@ -433,7 +450,7 @@ _add_halide_aot_tests(bit_operations)
 
 # blur2x2_aottest.cpp
 # blur2x2_generator.cpp
-_add_halide_libraries(blur2x2)
+_add_halide_libraries(blur2x2 REGISTRATION blur2x2_registration_cpp)
 _add_halide_aot_tests(blur2x2)
 
 # buffer_copy_aottest.cpp
@@ -460,6 +477,7 @@ _add_halide_aot_tests(
 # configure_generator.cpp
 _add_halide_libraries(configure)
 _add_halide_aot_tests(configure)
+add_halide_stub(configure.stub FROM configure.generator GENERATOR configure)
 
 # TODO: this could be made to work under wasm with some tweaking, it's just build-rule complexity
 if (NOT ${_USING_WASM})
@@ -473,6 +491,7 @@ if (NOT ${_USING_WASM})
         FUNCTION_NAME HalideTest::AnotherNamespace::cxx_mangling
         FEATURES c_plus_plus_name_mangling
         EXTERNS cxx_mangling_externs
+        REGISTRATION cxx_mangling_registration_cpp
     )
     _add_halide_aot_tests(cxx_mangling)
     if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS AND Halide_TARGET MATCHES "cuda")
@@ -524,7 +543,7 @@ _add_halide_aot_tests(error_codes)
 
 # example_aottest.cpp
 # example_generator.cpp
-_add_halide_libraries(example)
+_add_halide_libraries(example REGISTRATION example_registration_cpp)
 _add_halide_aot_tests(example GROUPS multithreaded)
 
 # extern_output_aottest.cpp
@@ -765,7 +784,7 @@ _add_halide_aot_tests(output_assign)
 
 # pyramid_aottest.cpp
 # pyramid_generator.cpp
-_add_halide_libraries(pyramid PARAMS levels=10)
+_add_halide_libraries(pyramid PARAMS levels=10 REGISTRATION pyramid_registration_cpp)
 _add_halide_aot_tests(pyramid GROUPS multithreaded)
 
 # rdom_input_aottest.cpp
@@ -781,11 +800,114 @@ _add_halide_aot_tests(string_param)
 # stubtest_aottest.cpp
 # stubtest_generator.cpp
 # stubtest_jittest.cpp
-# TODO: stubs not supported in CMake
+add_halide_generator(stubtest.generator SOURCES stubtest_generator.cpp)
+add_halide_stub(stubtest.stub FROM stubtest.generator GENERATOR stubtest)
+
+add_executable(generator_jit_stubtest stubtest_jittest.cpp stubtest_generator.cpp)
+target_link_libraries(generator_jit_stubtest PRIVATE Halide::Test stubtest.stub)
+add_halide_test(generator_jit_stubtest GROUPS generator)
+
+_add_halide_libraries(
+    stubtest
+    FROM stubtest.generator
+    PARAMS
+        untyped_buffer_input.type=uint8
+        untyped_buffer_input.dim=3
+        simple_input.type=float32
+        array_input.type=float32
+        array_input.size=2
+        int_arg.size=2
+        tuple_output.type=float32,float32
+        vectorize=true
+    OMIT_C_BACKEND
+)
+_add_halide_aot_tests(stubtest OMIT_C_BACKEND)
 
 # stubuser_aottest.cpp
 # stubuser_generator.cpp
-# TODO: stubs not supported in CMake
+add_halide_generator(
+    stubuser.generator
+    SOURCES
+        stubuser_generator.cpp
+        stubtest_generator.cpp
+        configure_generator.cpp
+    LINK_LIBRARIES configure.stub stubtest.stub
+)
+_add_halide_libraries(stubuser FROM stubuser.generator OMIT_C_BACKEND)
+_add_halide_libraries(
+    stubuser_auto
+    ENABLE_IF WITH_AUTOSCHEDULERS
+    FROM stubuser.generator
+    GENERATOR_NAME stubuser
+    FUNCTION_NAME stubuser_auto
+    AUTOSCHEDULER Halide::Mullapudi2016
+    PLUGINS Halide::Mullapudi2016
+    OMIT_C_BACKEND
+)
+_add_halide_aot_tests(
+    stubuser
+    ENABLE_IF WITH_AUTOSCHEDULERS AND NOT ${_USING_WASM}
+    HALIDE_LIBRARIES stubuser stubuser_auto
+    OMIT_C_BACKEND
+)
+
+# configure_jittest.cpp
+# (configure.stub was already created FROM configure.generator, above, for stubuser)
+add_executable(generator_jit_configure configure_jittest.cpp configure_generator.cpp)
+target_link_libraries(generator_jit_configure PRIVATE Halide::Test configure.stub)
+add_halide_test(generator_jit_configure GROUPS generator)
+
+# example_jittest.cpp
+add_halide_stub(example.stub FROM example.generator GENERATOR example)
+add_executable(generator_jit_example example_jittest.cpp example_generator.cpp)
+target_link_libraries(generator_jit_example PRIVATE Halide::Test example.stub)
+add_halide_test(generator_jit_example GROUPS generator)
+
+if (NOT ${_USING_WASM})
+    # rungen_test.cpp
+    #
+    # Exercises Halide::RunGen::RunGen directly (rather than via the RunGenMain driver), using
+    # the plain (non-extra-key-value) registration.cpp for "example" to verify that the argv/
+    # metadata registration hook fires with the expected function pointers.
+    add_executable(rungen_test rungen_test.cpp "${example_registration_cpp}")
+    target_link_libraries(rungen_test PRIVATE example example.runtime Halide::ImageIO Halide::Tools)
+    add_halide_test(rungen_test GROUPS generator)
+
+    # registration_test.cpp
+    #
+    # Tests the registration mechanism (independent of RunGen) by linking three filters'
+    # registration.cpp files, each compiled to call a per-filter
+    # halide_register_extra_key_value_pairs_<name>() hook (defined by the test itself), and
+    # checking that halide_register_argv_and_metadata() is invoked once per filter with the
+    # expected argv/metadata/key-value-pairs.
+    add_executable(
+        registration_test
+        registration_test.cpp
+        "${blur2x2_registration_cpp}"
+        "${cxx_mangling_registration_cpp}"
+        "${pyramid_registration_cpp}"
+    )
+    set_source_files_properties(
+        "${blur2x2_registration_cpp}"
+        PROPERTIES
+        COMPILE_DEFINITIONS
+            HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC=halide_register_extra_key_value_pairs_blur2x2
+    )
+    set_source_files_properties(
+        "${cxx_mangling_registration_cpp}"
+        PROPERTIES
+        COMPILE_DEFINITIONS
+            HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC=halide_register_extra_key_value_pairs_cxx_mangling
+    )
+    set_source_files_properties(
+        "${pyramid_registration_cpp}"
+        PROPERTIES
+        COMPILE_DEFINITIONS
+            HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC=halide_register_extra_key_value_pairs_pyramid
+    )
+    target_link_libraries(registration_test PRIVATE blur2x2 cxx_mangling pyramid blur2x2.runtime)
+    add_halide_test(registration_test GROUPS generator)
+endif ()
 
 # shuffler_aottest.cpp
 # shuffler_generator.cpp
