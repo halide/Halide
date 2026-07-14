@@ -60,12 +60,7 @@ function(add_wasm_executable TARGET)
     )
 
     if ("${Halide_TARGET}" MATCHES "webgpu")
-        set(EMCC_FLAGS
-            ${EMCC_FLAGS}
-            --use-port=emdawnwebgpu
-            -s JSPI
-            -Wno-experimental
-        )
+        set(EMCC_FLAGS ${EMCC_FLAGS} --use-port=emdawnwebgpu -s JSPI -Wno-experimental)
     endif ()
 
     set(SRCS)
