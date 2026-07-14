@@ -32,13 +32,26 @@ int main(int argc, char **argv) {
 
     src.set(input);
 
-    double t1 = benchmark([&]() {
+    auto halide_copy = [&]() {
         dst.realize(output);
-    });
-
-    double t2 = benchmark([&]() {
+    };
+    auto system_copy = [&]() {
         memcpy(output.data(), input.data(), input.width());
-    });
+    };
+
+    // Warm up
+    halide_copy();
+    system_copy();
+
+    double t1 = std::numeric_limits<double>::infinity();
+    double t2 = std::numeric_limits<double>::infinity();
+    const int rounds = 5;
+    for (int i = 0; i < rounds; i++) {
+        // Alternate benchmarks to account for thermal / frequency drift
+        // and use best time for stability.
+        t1 = std::min(t1, (double)benchmark(halide_copy));
+        t2 = std::min(t2, (double)benchmark(system_copy));
+    }
 
     printf("system memcpy: %.3e byte/s\n", buffer_size / t2);
     printf("halide memcpy: %.3e byte/s\n", buffer_size / t1);
