@@ -145,6 +145,10 @@ int main(int argc, char **argv) {
 
     auto resize_fn = variants[type_idx][upsample_idx][interpolation_idx];
 
+    // TODO: uses the legacy fixed-sample benchmark(samples, iterations, op)
+    // form (driven by the CLI -b benchmark_iters arg) rather than
+    // benchmark_comparison(), so the planar/packed comparison below isn't
+    // yet covered by interleaved/warm-up-aware measurement.
     double time = Halide::Tools::benchmark(benchmark_iters, benchmark_iters, [&]() { resize_fn(in, scale_factor, out); });
     printf("planar  %8s  %8s  %1.2f  time: %f ms\n",
            interpolation_type.c_str(), input_type.c_str(), scale_factor, time * 1000);

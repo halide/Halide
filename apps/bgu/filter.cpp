@@ -90,17 +90,18 @@ int main(int argc, char **argv) {
     // To view the low res output for debugging the algorithm above
     // convert_and_save_image(low_res_out, "test.png");
 
-    double best_manual = benchmark([&]() {
-        bgu(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out);
-        high_res_out.device_sync();
-    });
-    printf("Manually-tuned time: %gms\n", best_manual * 1e3);
-
-    double best_auto = benchmark([&]() {
-        bgu_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out);
-        high_res_out.device_sync();
-    });
-    printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
+    auto [manual, auto_scheduled] = benchmark_comparison(
+        BenchmarkConfig{},
+        [&]() {
+            bgu(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out);
+            high_res_out.device_sync();
+        },
+        [&]() {
+            bgu_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out);
+            high_res_out.device_sync();
+        });
+    printf("Manually-tuned time: %gms\n", manual.wall_time * 1e3);
+    printf("Auto-scheduled time: %gms\n", auto_scheduled.wall_time * 1e3);
 
     convert_and_save_image(high_res_out, argv[2]);
 

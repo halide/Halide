@@ -32,6 +32,10 @@ int main(int argc, char **argv) {
     printf("Input size: %d by %d, patch size: %d, search area: %d, sigma: %f\n",
            input.width(), input.height(), patch_size, search_area, sigma);
 
+    // TODO: uses the legacy fixed-sample benchmark(samples, iterations, op)
+    // form (driven by the CLI timing_iterations arg) rather than
+    // benchmark_comparison(), so it isn't yet covered by interleaved/
+    // warm-up-aware measurement.
     // Manually-tuned version
     double min_t_manual = benchmark(timing_iterations, 1, [&]() {
         nl_means(input, patch_size, search_area, sigma, output);

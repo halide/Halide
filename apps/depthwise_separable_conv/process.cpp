@@ -51,27 +51,26 @@ int main(int argc, char **argv) {
     Buffer<float, 4> output(CO, W, H, N);
     output.fill(0.0f);
 
-    // Manually-tuned version
-    double best_manual = benchmark([&]() {
-        depthwise_separable_conv(input,
-                                 depthwise_filter,
-                                 pointwise_filter,
-                                 bias,
-                                 output);
-        output.device_sync();
-    });
-    printf("Manually-tuned time: %gms\n", best_manual * 1e3);
-
-    // Auto-scheduled version
-    double best_auto = benchmark([&]() {
-        depthwise_separable_conv_auto_schedule(input,
-                                               depthwise_filter,
-                                               pointwise_filter,
-                                               bias,
-                                               output);
-        output.device_sync();
-    });
-    printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
+    auto [manual, auto_scheduled] = benchmark_comparison(
+        BenchmarkConfig{},
+        [&]() {
+            depthwise_separable_conv(input,
+                                     depthwise_filter,
+                                     pointwise_filter,
+                                     bias,
+                                     output);
+            output.device_sync();
+        },
+        [&]() {
+            depthwise_separable_conv_auto_schedule(input,
+                                                   depthwise_filter,
+                                                   pointwise_filter,
+                                                   bias,
+                                                   output);
+            output.device_sync();
+        });
+    printf("Manually-tuned time: %gms\n", manual.wall_time * 1e3);
+    printf("Auto-scheduled time: %gms\n", auto_scheduled.wall_time * 1e3);
 
     printf("Success!\n");
 

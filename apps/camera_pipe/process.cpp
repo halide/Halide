@@ -66,6 +66,10 @@ int main(int argc, char **argv) {
 
     double best;
 
+    // TODO: uses the legacy fixed-sample benchmark(samples, iterations, op)
+    // form (driven by the CLI timing_iterations arg) rather than
+    // benchmark_comparison(), so it isn't yet covered by interleaved/
+    // warm-up-aware measurement.
     best = benchmark(timing_iterations, 1, [&]() {
         camera_pipe(input, matrix_3200, matrix_7000,
                     color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,

@@ -56,6 +56,9 @@ int main(int argc, char **argv) {
 
     // Timing code
 
+    // TODO: uses the legacy fixed-sample benchmark(samples, iterations, op)
+    // form rather than benchmark_comparison(), so it isn't yet covered by
+    // interleaved/warm-up-aware measurement.
     // Manually-tuned version
     double min_t_manual = benchmark(10, 10, [&]() {
         conv_layer(input, filter, bias, output);

@@ -32,6 +32,9 @@ int main(int argc, char **argv) {
 
     // Timing code
 
+    // TODO: uses the legacy fixed-sample benchmark(samples, iterations, op)
+    // form (driven by the CLI timing arg) rather than benchmark_comparison(),
+    // so it isn't yet covered by interleaved/warm-up-aware measurement.
     // Manually-tuned version
     double best_manual = benchmark(timing, 1, [&]() {
         local_laplacian(input, levels, alpha / (levels - 1), beta, output);

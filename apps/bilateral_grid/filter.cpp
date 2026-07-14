@@ -32,6 +32,10 @@ int main(int argc, char **argv) {
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
 
+    // TODO: uses the legacy fixed-sample benchmark(samples, iterations, op)
+    // form (driven by the CLI timing_iterations arg) rather than
+    // benchmark_comparison(), so it isn't yet covered by interleaved/
+    // warm-up-aware measurement.
     // Manually-tuned version
     double min_t_manual = benchmark(timing_iterations, 10, [&]() {
         bilateral_grid(input, r_sigma, output);

@@ -22,17 +22,18 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<float, 3> input = load_and_convert_image(argv[1]);
     Halide::Runtime::Buffer<float, 3> output(input.width(), input.height(), 3);
 
-    double best_manual = benchmark([&]() {
-        max_filter(input, output);
-        output.device_sync();
-    });
-    printf("Manually-tuned time: %gms\n", best_manual * 1e3);
-
-    double best_auto = benchmark([&]() {
-        max_filter_auto_schedule(input, output);
-        output.device_sync();
-    });
-    printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
+    auto [manual, auto_scheduled] = benchmark_comparison(
+        BenchmarkConfig{},
+        [&]() {
+            max_filter(input, output);
+            output.device_sync();
+        },
+        [&]() {
+            max_filter_auto_schedule(input, output);
+            output.device_sync();
+        });
+    printf("Manually-tuned time: %gms\n", manual.wall_time * 1e3);
+    printf("Auto-scheduled time: %gms\n", auto_scheduled.wall_time * 1e3);
 
     convert_and_save_image(output, argv[2]);
 

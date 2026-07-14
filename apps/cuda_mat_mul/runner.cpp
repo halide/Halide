@@ -52,39 +52,50 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Benchmark it
+    // Benchmark it, comparing against cublas where available.
+#ifdef _MSC_VER
+    // https://github.com/halide/Halide/issues/5053
+    printf("Skipping cublas on Windows; see https://github.com/halide/Halide/issues/5053\n");
     {
         Buffer<float, 2> A(size, size), B(size, size), C(size, size);
-        double t = Halide::Tools::benchmark(5, 5, [&]() {
+        double t = Halide::Tools::benchmark([&]() {
             mat_mul(A, B, C);
             C.device_sync();
         });
         printf("Halide time: %f\n", t);
     }
-
-    // Benchmark cublas
-#ifdef _MSC_VER
-    // https://github.com/halide/Halide/issues/5053
-    printf("Skipping cublas on Windows; see https://github.com/halide/Halide/issues/5053\n");
 #else
     {
-        float *A, *B, *C;
-        cudaMalloc((void **)&A, size * size * 4);
-        cudaMalloc((void **)&B, size * size * 4);
-        cudaMalloc((void **)&C, size * size * 4);
+        Buffer<float, 2> A(size, size), B(size, size), C(size, size);
+
+        float *cublas_A, *cublas_B, *cublas_C;
+        cudaMalloc((void **)&cublas_A, size * size * 4);
+        cudaMalloc((void **)&cublas_B, size * size * 4);
+        cudaMalloc((void **)&cublas_C, size * size * 4);
         cublasHandle_t handle;
         cublasCreate(&handle);
         float alpha = 1.0f, beta = 1.0f;
-        double t = Halide::Tools::benchmark(5, 5, [&]() {
-            cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
-                        size, size, size, &alpha, A, size, B, size, &beta, C, size);
-            cudaDeviceSynchronize();
-        });
-        cudaFree(A);
-        cudaFree(B);
-        cudaFree(C);
+
+        // NOTE: this app requires CUDA to build/run, so this conversion has
+        // only been verified with a syntax-only compile, not an actual run.
+        auto [halide, cublas] = Halide::Tools::benchmark_comparison(
+            Halide::Tools::BenchmarkConfig{},
+            [&]() {
+                mat_mul(A, B, C);
+                C.device_sync();
+            },
+            [&]() {
+                cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+                            size, size, size, &alpha, cublas_A, size, cublas_B, size, &beta, cublas_C, size);
+                cudaDeviceSynchronize();
+            });
+        printf("Halide time: %f\n", halide.wall_time);
+        printf("cublas time: %f\n", cublas.wall_time);
+
+        cudaFree(cublas_A);
+        cudaFree(cublas_B);
+        cudaFree(cublas_C);
         cublasDestroy(handle);
-        printf("cublas time: %f\n", t);
     }
 #endif
 
