@@ -40,10 +40,10 @@ pub struct FuncMeta {
     pub max_coords: Vec<i32>,
     pub min_value: Option<f64>,
     pub max_value: Option<f64>,
-    pub max_store_count: i32,
-    pub max_load_count: i32,
-    pub max_redundant_count: i32,
-    pub max_reuse_distance: i64,
+    pub max_store_count: u32,
+    pub max_load_count: u32,
+    pub max_redundant_count: u32,
+    pub max_reuse_distance: u64,
     pub buffer_liveness: IndexRange,
     pub produce_ranges: Vec<IndexRange>,
     pub consume_ranges: Vec<IndexRange>,
@@ -56,7 +56,7 @@ pub struct TraceMeta {
     pub funcs: Vec<FuncMeta>,
     pub total_packets: u32,
     pub dag_edges: BTreeMap<String, Vec<String>>,
-    pub global_max_reuse_distance: i64,
+    pub global_max_reuse_distance: u64,
 }
 
 impl TraceMeta {
@@ -64,7 +64,7 @@ impl TraceMeta {
     /// are still listed (with zero dimensions) so the UI can surface them; the renderer simply
     /// produces nothing for them.
     pub fn from_trace(trace: &Trace) -> Self {
-        let mut global_max_reuse_distance = 0i64;
+        let mut global_max_reuse_distance = 0u64;
 
         let funcs = trace
             .funcs
