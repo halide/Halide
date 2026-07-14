@@ -153,6 +153,7 @@ WEAK void *halide_get_library_symbol(void *lib, const char *name);
 
 WEAK int halide_start_clock(void *user_context);
 WEAK int64_t halide_current_time_ns(void *user_context);
+WEAK int32_t halide_current_thread_id(void);
 WEAK void halide_sleep_us(void *user_context, int us);
 WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
 WEAK void halide_device_and_host_free_as_destructor(void *user_context, void *obj);
@@ -195,7 +196,7 @@ WEAK int halide_trace_helper(void *user_context,
                              void *value, int *coords,
                              int type_code, int type_bits, int type_lanes,
                              int code,
-                             int parent_id, int value_index, int dimensions,
+                             int parent_id, int thread_id, int value_index, int dimensions,
                              const char *trace_tag);
 
 struct halide_pseudostack_slot_t {

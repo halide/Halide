@@ -391,6 +391,12 @@ extern bool halide_default_semaphore_try_acquire(struct halide_semaphore_t *, in
 
 struct halide_thread;
 
+/** Return a compact platform-specific ID for the current thread. This
+ * is derived from the platform's current-thread API, or from a
+ * runtime-owned counter on platforms that do not provide one, and is
+ * represented as a signed 32-bit integer for tracing. */
+extern int32_t halide_current_thread_id(void);
+
 /** Spawn a thread. Returns a handle to the thread for the purposes of
  * joining it. The thread must be joined in order to clean up any
  * resources associated with it. */
@@ -593,7 +599,9 @@ enum halide_trace_event_code_t { halide_trace_load = 0,
                                  halide_trace_end_consume = 7,
                                  halide_trace_begin_pipeline = 8,
                                  halide_trace_end_pipeline = 9,
-                                 halide_trace_tag = 10 };
+                                 halide_trace_tag = 10,
+                                 halide_trace_begin_parallel_task = 11,
+                                 halide_trace_end_parallel_task = 12 };
 
 struct halide_trace_event_t {
     /** The name of the Func or Pipeline that this event refers to */
@@ -633,6 +641,11 @@ struct halide_trace_event_t {
      * event ancestry). */
     int32_t parent_id;
 
+    /** A compact platform-specific ID for the thread that emitted this
+     * trace event. This is only populated for events that need it, such
+     * as halide_trace_begin_parallel_task; other events use zero. */
+    int32_t thread_id;
+
     /** If this was a load or store of a Tuple-valued Func, this is
      * which tuple element was accessed. */
     int32_t value_index;
@@ -659,8 +672,11 @@ struct halide_trace_event_t {
  * ...
  * +--(begin_realization|produce|consume)
  * |  +-- ... recursively more realizations/produces/consumes ...
- * |      +-- load
- * |      +-- store
+ * |      +-- begin_parallel_task
+ * |      |   +-- load
+ * |      |   +-- store
+ * |      |   +-- ... recursively more realization/produce/consume events ...
+ * |      +-- end_parallel_task
  * |      +-- ... recursively more end events ...
  * |  +--(end_realization|end_produce|end_consume)
  * +--end_pipeline
@@ -668,8 +684,14 @@ struct halide_trace_event_t {
  * Threading means that ownership cannot be inferred from the ordering
  * of events. There can be many active realizations of a given
  * function, or many active productions for a single
- * realization. Within a single production, the ordering of events is
- * meaningful.
+ * realization. A load or store that occurs within a parallel task can
+ * be associated with the logical task that produced it by walking its
+ * parent chain to a halide_trace_begin_parallel_task event. The id of
+ * that event is a trace event id used for parent ancestry. The
+ * thread_id field of that begin_parallel_task event identifies the
+ * platform thread that executed the task. Load and store events do not
+ * repeat this ID. Within a single parallel task, the ordering of events
+ * is meaningful.
  *
  * Note that all tag events (if any) will occur just after the begin_pipeline
  * event, but before any begin_realization events. All tags for a given Func
@@ -682,22 +704,42 @@ typedef int32_t (*halide_trace_t)(void *user_context, const struct halide_trace_
 extern halide_trace_t halide_set_custom_trace(halide_trace_t trace);
 // @}
 
+// NOLINTBEGIN(cppcoreguidelines-use-default-member-init,modernize-use-default-member-init)
 /** The header of a packet in a binary trace. All fields are 32-bit. */
 struct halide_trace_packet_t {
+#ifdef __cplusplus
+    HALIDE_ALWAYS_INLINE halide_trace_packet_t()
+        : size(0), event(halide_trace_load), parent_id(0), id(0), type(), dimensions(0) {
+    }
+#endif
+
     /** The total size of this packet in bytes. Always a multiple of
      * four. Equivalently, the number of bytes until the next
      * packet. */
     uint32_t size;
 
-    /** The id of this packet (for the purpose of parent_id). */
-    int32_t id;
-
-    /** The remaining fields are equivalent to those in halide_trace_event_t */
+    /** The remaining fields are equivalent to those in halide_trace_event_t.
+     * Some fields share storage because they are meaningful for disjoint event
+     * types: load and store events are leaves, so they use the id field for
+     * value_index; type is meaningful only for loads and stores, while thread_id
+     * is meaningful only for halide_trace_begin_parallel_task. */
     // @{
-    struct halide_type_t type;
     enum halide_trace_event_code_t event;
     int32_t parent_id;
-    int32_t value_index;
+    union {
+        /** The id of this packet (for the purpose of parent_id). This field is
+         * meaningful for non-load/store events. Loads and stores are leaves, and
+         * use this storage for value_index instead. */
+        int32_t id;
+
+        /** If this was a load or store of a Tuple-valued Func, this is
+         * which tuple element was accessed. */
+        int32_t value_index;
+    };
+    union {
+        struct halide_type_t type;
+        int32_t thread_id;
+    };
     int32_t dimensions;
     // @}
 
@@ -724,14 +766,23 @@ struct halide_trace_packet_t {
         return (void *)(coordinates() + dimensions);
     }
 
+    /** Get the size of the value payload. Only load and store packets have a
+     * value, so type is ignored for all other event types. */
+    HALIDE_ALWAYS_INLINE uint32_t value_bytes() const {
+        if (event == halide_trace_load || event == halide_trace_store) {
+            return type.lanes * type.bytes();
+        }
+        return 0;
+    }
+
     /** Get the func name, assuming this packet is laid out in memory
      * as it was written. It comes after the value. */
     HALIDE_ALWAYS_INLINE const char *func() const {
-        return (const char *)value() + type.lanes * type.bytes();
+        return (const char *)value() + value_bytes();
     }
 
     HALIDE_ALWAYS_INLINE char *func() {
-        return (char *)value() + type.lanes * type.bytes();
+        return (char *)value() + value_bytes();
     }
 
     /** Get the trace_tag (if any), assuming this packet is laid out in memory
@@ -756,6 +807,11 @@ struct halide_trace_packet_t {
     }
 #endif
 };
+// NOLINTEND(cppcoreguidelines-use-default-member-init,modernize-use-default-member-init)
+
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
+static_assert(sizeof(halide_trace_packet_t) == 6 * sizeof(uint32_t), "size mismatch in halide_trace_packet_t");
+#endif
 
 /** Set the file descriptor that Halide should write binary trace
  * events to. If called with 0 as the argument, Halide outputs trace

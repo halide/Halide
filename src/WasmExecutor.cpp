@@ -1021,10 +1021,16 @@ WABT_HOST_CALLBACK(halide_print) {
     return wabt::Result::Ok;
 }
 
+WABT_HOST_CALLBACK(halide_current_thread_id) {
+    internal_assert(args.empty());
+    results[0] = wabt::interp::Value::Make(1);
+    return wabt::Result::Ok;
+}
+
 WABT_HOST_CALLBACK(halide_trace_helper) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
-    internal_assert(args.size() == 12);
+    internal_assert(args.size() == 13);
 
     uint8_t *base = get_wasm_memory_base(wabt_context);
 
@@ -1038,9 +1044,10 @@ WABT_HOST_CALLBACK(halide_trace_helper) {
     const int type_lanes = args[6].Get<int32_t>();
     const int trace_code = args[7].Get<int32_t>();
     const int parent_id = args[8].Get<int32_t>();
-    const int value_index = args[9].Get<int32_t>();
-    const int dimensions = args[10].Get<int32_t>();
-    const wasm32_ptr_t trace_tag_ptr = args[11].Get<int32_t>();
+    const int thread_id = args[9].Get<int32_t>();
+    const int value_index = args[10].Get<int32_t>();
+    const int dimensions = args[11].Get<int32_t>();
+    const wasm32_ptr_t trace_tag_ptr = args[12].Get<int32_t>();
 
     internal_assert(dimensions >= 0 && dimensions < 1024);  // not a hard limit, just a sanity check
 
@@ -1054,6 +1061,7 @@ WABT_HOST_CALLBACK(halide_trace_helper) {
     event.type.lanes = (uint16_t)type_lanes;
     event.event = (halide_trace_event_code_t)trace_code;
     event.parent_id = parent_id;
+    event.thread_id = thread_id;
     event.value_index = value_index;
     event.dimensions = dimensions;
 
@@ -1770,8 +1778,14 @@ void wasm_jit_halide_error_callback(const v8::FunctionCallbackInfo<v8::Value> &a
     }
 }
 
+void wasm_jit_halide_current_thread_id_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+    internal_assert(args.Length() == 0);
+    Isolate *isolate = args.GetIsolate();
+    args.GetReturnValue().Set(Integer::New(isolate, 1));
+}
+
 void wasm_jit_halide_trace_helper_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-    internal_assert(args.Length() == 12);
+    internal_assert(args.Length() == 13);
     Isolate *isolate = args.GetIsolate();
     Local<Context> context = isolate->GetCurrentContext();
     HandleScope scope(isolate);
@@ -1788,9 +1802,10 @@ void wasm_jit_halide_trace_helper_callback(const v8::FunctionCallbackInfo<v8::Va
     const int type_lanes = args[6]->Int32Value(context).ToChecked();
     const int trace_code = args[7]->Int32Value(context).ToChecked();
     const int parent_id = args[8]->Int32Value(context).ToChecked();
-    const int value_index = args[9]->Int32Value(context).ToChecked();
-    const int dimensions = args[10]->Int32Value(context).ToChecked();
-    const wasm32_ptr_t trace_tag_ptr = args[11]->Int32Value(context).ToChecked();
+    const int thread_id = args[9]->Int32Value(context).ToChecked();
+    const int value_index = args[10]->Int32Value(context).ToChecked();
+    const int dimensions = args[11]->Int32Value(context).ToChecked();
+    const wasm32_ptr_t trace_tag_ptr = args[12]->Int32Value(context).ToChecked();
 
     internal_assert(dimensions >= 0 && dimensions < 1024);  // not a hard limit, just a sanity check
 
@@ -1804,6 +1819,7 @@ void wasm_jit_halide_trace_helper_callback(const v8::FunctionCallbackInfo<v8::Va
     event.type.lanes = (uint16_t)type_lanes;
     event.event = (halide_trace_event_code_t)trace_code;
     event.parent_id = parent_id;
+    event.thread_id = thread_id;
     event.value_index = value_index;
     event.dimensions = dimensions;
 
@@ -2179,6 +2195,7 @@ const HostCallbackMap &get_host_callback_map() {
         DEFINE_CALLBACK(free),
         DEFINE_CALLBACK(fwrite),
         DEFINE_CALLBACK(getenv),
+        DEFINE_CALLBACK(halide_current_thread_id),
         DEFINE_CALLBACK(halide_error),
         DEFINE_CALLBACK(halide_print),
         DEFINE_CALLBACK(halide_trace_helper),

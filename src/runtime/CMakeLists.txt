@@ -27,6 +27,7 @@ set(RUNTIME_CPP
     force_include_types
     fuchsia_clock
     fuchsia_host_cpu_count
+    fuchsia_thread_id
     fuchsia_yield
     gpu_device_selection
     halide_buffer_t
@@ -38,8 +39,12 @@ set(RUNTIME_CPP
     ios_io
     linux_aarch64_cpu_features
     linux_arm_cpu_features
+    linux_arm_thread_id
     linux_clock
     linux_host_cpu_count
+    linux_powerpc_thread_id
+    linux_riscv_thread_id
+    linux_x86_thread_id
     linux_yield
     metal
     metal_objc_arm
@@ -54,6 +59,7 @@ set(RUNTIME_CPP
     osx_clock
     osx_get_symbol
     osx_host_cpu_count
+    osx_thread_id
     osx_yield
     posix_aligned_alloc
     posix_allocator
@@ -84,7 +90,8 @@ set(RUNTIME_CPP
     tracing
     vulkan
     wasm_cpu_features
-    # webgpu
+    wasm_thread_id
+    # webgpu # TODO(https://github.com/halide/Halide/issues/7248)
     webgpu_dawn_arm
     webgpu_dawn_x86
     webgpu_emscripten
