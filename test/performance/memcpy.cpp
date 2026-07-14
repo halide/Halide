@@ -43,21 +43,21 @@ int main(int argc, char **argv) {
     halide_copy();
     system_copy();
 
-    double t1 = std::numeric_limits<double>::infinity();
-    double t2 = std::numeric_limits<double>::infinity();
+    double t_halide = std::numeric_limits<double>::infinity();
+    double t_memcpy = std::numeric_limits<double>::infinity();
     const int rounds = 5;
     for (int i = 0; i < rounds; i++) {
         // Alternate benchmarks to account for thermal / frequency drift
         // and use best time for stability.
-        t1 = std::min(t1, (double)benchmark(halide_copy));
-        t2 = std::min(t2, (double)benchmark(system_copy));
+        t_halide = std::min(t_halide, (double)benchmark(halide_copy));
+        t_memcpy = std::min(t_memcpy, (double)benchmark(system_copy));
     }
 
-    printf("system memcpy: %.3e byte/s\n", buffer_size / t2);
-    printf("halide memcpy: %.3e byte/s\n", buffer_size / t1);
+    printf("system memcpy: %.2f GB/s\n", (buffer_size / t_memcpy) / 1e9);
+    printf("halide memcpy: %.2f GB/s\n", (buffer_size / t_halide) / 1e9);
 
     // memcpy will win by a little bit for large inputs because it uses streaming stores
-    if (t1 > t2 * 3) {
+    if (t_halide > t_memcpy * 3) {
         printf("Halide memcpy is slower than it should be.\n");
         return 1;
     }
