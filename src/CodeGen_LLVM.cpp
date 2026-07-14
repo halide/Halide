@@ -2063,6 +2063,17 @@ void CodeGen_LLVM::function_does_not_access_memory(llvm::Function *fn) {
     fn->addFnAttr("memory(none)");
 }
 
+namespace {
+bool experimental_nontemporal_stores_enabled() {
+    static const bool enabled = get_env_variable("HL_EXPERIMENTAL_NONTEMPORAL_STORES") == "1";
+    return enabled;
+}
+bool experimental_nontemporal_loads_enabled() {
+    static const bool enabled = get_env_variable("HL_EXPERIMENTAL_NONTEMPORAL_LOADS") == "1";
+    return enabled;
+}
+}  // namespace
+
 void CodeGen_LLVM::visit(const Load *op) {
     // If the type should be stored as some other type, insert a reinterpret cast.
     Type storage_type = upgrade_type_for_storage(op->type);
@@ -2619,6 +2630,10 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
     // width, bust them up into native vectors
     int load_lanes = type.lanes();
     int native_lanes = slice_to_native ? std::max(1, maximum_vector_bits() / type.bits()) : load_lanes;
+    if (slice_to_native && experimental_nontemporal_loads_enabled()) {
+        // LLVM is dumb and splits a 128B LDNP into two 64B stores. Widen to 256.
+        native_lanes = std::max(native_lanes, 256 / type.bits());
+    }
     vector<Value *> slices;
     for (int i = 0; i < load_lanes; i += native_lanes) {
         int slice_lanes = std::min(native_lanes, load_lanes - i);
@@ -2664,6 +2679,14 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
             }
         }
         add_tbaa_metadata(load_inst, name, slice_index);
+        if (experimental_nontemporal_loads_enabled()) {
+            if (auto *plain_load = llvm::dyn_cast<llvm::LoadInst>(load_inst);
+                plain_load && plain_load->getType()->isVectorTy()) {
+                llvm::MDNode *nontemporal_node = llvm::MDNode::get(
+                    *context, llvm::ConstantAsMetadata::get(ConstantInt::get(i32_t, 1)));
+                plain_load->setMetadata(llvm::LLVMContext::MD_nontemporal, nontemporal_node);
+            }
+        }
         slices.push_back(load_inst);
     }
     value = concat_vectors(slices);
@@ -4044,6 +4067,12 @@ void CodeGen_LLVM::visit(const Store *op) {
 
     auto annotate_store = [&](StoreInst *store, const Expr &index) {
         add_tbaa_metadata(store, op->name, index);
+        if (experimental_nontemporal_stores_enabled() &&
+            store->getValueOperand()->getType()->isVectorTy()) {
+            llvm::MDNode *nontemporal_node = llvm::MDNode::get(
+                *context, llvm::ConstantAsMetadata::get(ConstantInt::get(i32_t, 1)));
+            store->setMetadata(llvm::LLVMContext::MD_nontemporal, nontemporal_node);
+        }
         if (emit_atomic_stores) {
             store->setAtomic(AtomicOrdering::Monotonic);
         }
@@ -4093,6 +4122,10 @@ void CodeGen_LLVM::visit(const Store *op) {
             // width, bust them up into native vectors.
             int store_lanes = value_type.lanes();
             int native_lanes = maximum_vector_bits() / value_type.bits();
+            if (experimental_nontemporal_stores_enabled()) {
+                // LLVM is dumb and splits a 128B STNP into two 64B stores. Widen to 256.
+                native_lanes = std::max(native_lanes, 256 / value_type.bits());
+            }
 
             Expr base = ramp ? ramp->base : 0;
             Expr stride = ramp ? ramp->stride : 0;
