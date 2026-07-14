@@ -2,11 +2,14 @@
 #define BENCHMARK_H
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <chrono>
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <tuple>
+#include <utility>
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
@@ -115,6 +118,12 @@ inline double benchmark(uint64_t samples, uint64_t iterations, const std::functi
 constexpr uint64_t kBenchmarkMaxIterations = 1000000000;
 
 struct BenchmarkConfig {
+    // Run the operation, discarding the timing, for at least this long
+    // (in seconds) before any measured samples are taken. This gives the
+    // op a chance to fault in any memory it touches and gives the CPU a
+    // chance to leave any idle/low-clock state. Set to 0 to disable.
+    double warmup_time{0.01};
+
     // Attempt to use this much time (in seconds) for the meaningful samples
     // taken; initial iterations will be done to find an iterations-per-sample
     // count that puts the total runtime in this ballpark.
@@ -137,6 +146,15 @@ struct BenchmarkConfig {
     // this. Controls accuracy. The closer to zero this gets the more
     // reliable the answer, but the longer it may take to run.
     double accuracy{0.03};
+
+    // Only used by benchmark_comparison(). The number of times to interleave
+    // measurement across the operations being compared, keeping the best
+    // result seen for each. Interleaving means transient CPU frequency/thermal
+    // drift is shared roughly equally across all operations, instead of biasing
+    // whichever one happens to run first or last. The parameters above apply
+    // independently to each (operation, round) measurement, so the total
+    // wall-clock cost of a comparison scales with comparison_rounds * min_time.
+    uint64_t comparison_rounds{3};
 };
 
 struct BenchmarkResult {
@@ -164,6 +182,13 @@ struct BenchmarkResult {
 
 inline BenchmarkResult benchmark(const std::function<void()> &op, const BenchmarkConfig &config = {}) {
     BenchmarkResult result{0, 0, 0};
+
+    if (config.warmup_time > 0) {
+        auto start = benchmark_now();
+        do {
+            op();
+        } while (benchmark_duration_seconds(start, benchmark_now()) < config.warmup_time);
+    }
 
     const double min_time = std::max(10 * 1e-6, config.min_time);
     const double max_time = std::max(config.min_time, config.max_time);
@@ -233,6 +258,65 @@ inline BenchmarkResult benchmark(const std::function<void()> &op, const Benchmar
     result.accuracy = (times[kMinSamples - 1] / times[0]) - 1.0;
 
     return result;
+}
+
+namespace BenchmarkInternal {
+
+template<typename T, size_t N, size_t... Is>
+auto array_to_tuple(const std::array<T, N> &arr, std::index_sequence<Is...>) {
+    return std::make_tuple(arr[Is]...);
+}
+
+template<typename T, size_t N>
+auto array_to_tuple(const std::array<T, N> &arr) {
+    return array_to_tuple(arr, std::make_index_sequence<N>{});
+}
+
+}  // namespace BenchmarkInternal
+
+// Benchmark and compare several operations against each other, returning one
+// BenchmarkResult per operation (in argument order) as a tuple. Measurement
+// is interleaved across config.comparison_rounds rounds (instead of fully
+// benchmarking one operation and then the next), keeping the best result
+// seen for each operation.
+//
+// This matters because timing operations fully back-to-back is prone to
+// order-dependent bias: whichever one happens to run first pays the cost of
+// faulting in any memory it touches, and (typically more significantly)
+// whichever one runs after another inherits the CPU frequency/thermal state
+// left behind by it. Interleaving means that drift is shared roughly equally
+// across all operations being compared, rather than accumulating unevenly.
+//
+// NOTE: config.min_time/max_time/accuracy apply independently to each
+// (operation, round) measurement -- i.e., each individual measurement
+// re-targets the same convergence criteria as a standalone call to
+// benchmark() above. This keeps their meaning identical to the single-op
+// benchmark(), but means the total wall-clock cost of benchmark_comparison()
+// scales roughly as (number of operations) * config.comparison_rounds *
+// config.min_time.
+template<typename... Fns>
+auto benchmark_comparison(const BenchmarkConfig &config, Fns &&...fns) {
+    constexpr size_t N = sizeof...(Fns);
+    static_assert(N > 0, "benchmark_comparison() requires at least one operation to benchmark.");
+
+    std::array<std::function<void()>, N> ops{{std::function<void()>(std::forward<Fns>(fns))...}};
+
+    std::array<BenchmarkResult, N> best;
+    for (auto &r : best) {
+        r = BenchmarkResult{std::numeric_limits<double>::infinity(), 0, 0, 0};
+    }
+
+    const uint64_t rounds = std::max<uint64_t>(1, config.comparison_rounds);
+    for (uint64_t round = 0; round < rounds; round++) {
+        for (size_t i = 0; i < N; i++) {
+            BenchmarkResult r = benchmark(ops[i], config);
+            if (r.wall_time < best[i].wall_time) {
+                best[i] = r;
+            }
+        }
+    }
+
+    return BenchmarkInternal::array_to_tuple(best);
 }
 
 }  // namespace Tools
