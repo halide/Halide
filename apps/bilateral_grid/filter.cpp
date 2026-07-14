@@ -32,24 +32,30 @@ int main(int argc, char **argv) {
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
 
-    // TODO: uses the legacy fixed-sample benchmark(samples, iterations, op)
-    // form (driven by the CLI timing_iterations arg) rather than
-    // benchmark_comparison(), so it isn't yet covered by interleaved/
-    // warm-up-aware measurement.
-    // Manually-tuned version
-    double min_t_manual = benchmark(timing_iterations, 10, [&]() {
-        bilateral_grid(input, r_sigma, output);
-        output.device_sync();
-    });
-    printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
+    BenchmarkConfig config;
+    config.comparison_rounds = timing_iterations;
 
 #ifndef NO_AUTO_SCHEDULE
-    // Auto-scheduled version
-    double min_t_auto = benchmark(timing_iterations, 10, [&]() {
-        bilateral_grid_auto_schedule(input, r_sigma, output);
-        output.device_sync();
-    });
-    printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
+    auto [manual, auto_scheduled] = benchmark_comparison(
+        config,
+        [&]() {
+            bilateral_grid(input, r_sigma, output);
+            output.device_sync();
+        },
+        [&]() {
+            bilateral_grid_auto_schedule(input, r_sigma, output);
+            output.device_sync();
+        });
+    printf("Manually-tuned time: %gms\n", manual.wall_time * 1e3);
+    printf("Auto-scheduled time: %gms\n", auto_scheduled.wall_time * 1e3);
+#else
+    auto manual = benchmark(
+        [&]() {
+            bilateral_grid(input, r_sigma, output);
+            output.device_sync();
+        },
+        config);
+    printf("Manually-tuned time: %gms\n", manual.wall_time * 1e3);
 #endif
 
     convert_and_save_image(output, argv[2]);

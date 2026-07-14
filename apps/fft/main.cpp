@@ -135,7 +135,6 @@ int main(int argc, char **argv) {
 
     // Take the minimum time over many of iterations to minimize
     // noise.
-    const int samples = 100;
     const int reps = 1000;
 
     Var rep("rep");
@@ -163,13 +162,20 @@ int main(int argc, char **argv) {
     R_c2c[0].raw_buffer()->dim[2].stride = 0;
     R_c2c[1].raw_buffer()->dim[2].stride = 0;
 
-    double halide_t = benchmark(samples, 1, [&]() { bench_c2c.realize(R_c2c); }) * 1e6 / reps;
+    BenchmarkConfig config;
+
 #ifdef WITH_FFTW
     std::vector<std::pair<float, float>> fftw_c1(W * H);
     std::vector<std::pair<float, float>> fftw_c2(W * H);
     fftwf_plan c2c_plan = fftwf_plan_dft_2d(W, H, (fftwf_complex *)&fftw_c1[0], (fftwf_complex *)&fftw_c2[0], FFTW_FORWARD, FFTW_EXHAUSTIVE);
-    double fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(c2c_plan); }) * 1e6;
+    auto [c2c_halide_result, c2c_fftw_result] = benchmark_comparison(
+        config,
+        [&]() { bench_c2c.realize(R_c2c); },
+        [&]() { fftwf_execute(c2c_plan); });
+    double halide_t = c2c_halide_result.wall_time * 1e6 / reps;
+    double fftw_t = c2c_fftw_result.wall_time * 1e6;
 #else
+    double halide_t = benchmark([&]() { bench_c2c.realize(R_c2c); }, config).wall_time * 1e6 / reps;
     double fftw_t = 0;
 #endif
     printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n",
@@ -190,12 +196,17 @@ int main(int argc, char **argv) {
     R_r2c[0].raw_buffer()->dim[2].stride = 0;
     R_r2c[1].raw_buffer()->dim[2].stride = 0;
 
-    halide_t = benchmark(samples, 1, [&]() { bench_r2c.realize(R_r2c); }) * 1e6 / reps;
 #ifdef WITH_FFTW
     std::vector<float> fftw_r(W * H);
     fftwf_plan r2c_plan = fftwf_plan_dft_r2c_2d(W, H, &fftw_r[0], (fftwf_complex *)&fftw_c1[0], FFTW_EXHAUSTIVE);
-    fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(r2c_plan); }) * 1e6;
+    auto [r2c_halide_result, r2c_fftw_result] = benchmark_comparison(
+        config,
+        [&]() { bench_r2c.realize(R_r2c); },
+        [&]() { fftwf_execute(r2c_plan); });
+    halide_t = r2c_halide_result.wall_time * 1e6 / reps;
+    fftw_t = r2c_fftw_result.wall_time * 1e6;
 #else
+    halide_t = benchmark([&]() { bench_r2c.realize(R_r2c); }, config).wall_time * 1e6 / reps;
     fftw_t = 0;
 #endif
     printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n",
@@ -215,11 +226,16 @@ int main(int argc, char **argv) {
     // Write all reps to the same place in memory. See notes on R_c2c.
     R_c2r[0].raw_buffer()->dim[2].stride = 0;
 
-    halide_t = benchmark(samples, 1, [&]() { bench_c2r.realize(R_c2r); }) * 1e6 / reps;
 #ifdef WITH_FFTW
     fftwf_plan c2r_plan = fftwf_plan_dft_c2r_2d(W, H, (fftwf_complex *)&fftw_c1[0], &fftw_r[0], FFTW_EXHAUSTIVE);
-    fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(c2r_plan); }) * 1e6;
+    auto [c2r_halide_result, c2r_fftw_result] = benchmark_comparison(
+        config,
+        [&]() { bench_c2r.realize(R_c2r); },
+        [&]() { fftwf_execute(c2r_plan); });
+    halide_t = c2r_halide_result.wall_time * 1e6 / reps;
+    fftw_t = c2r_fftw_result.wall_time * 1e6;
 #else
+    halide_t = benchmark([&]() { bench_c2r.realize(R_c2r); }, config).wall_time * 1e6 / reps;
     fftw_t = 0;
 #endif
     printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n",

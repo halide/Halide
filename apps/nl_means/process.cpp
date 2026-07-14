@@ -32,23 +32,21 @@ int main(int argc, char **argv) {
     printf("Input size: %d by %d, patch size: %d, search area: %d, sigma: %f\n",
            input.width(), input.height(), patch_size, search_area, sigma);
 
-    // TODO: uses the legacy fixed-sample benchmark(samples, iterations, op)
-    // form (driven by the CLI timing_iterations arg) rather than
-    // benchmark_comparison(), so it isn't yet covered by interleaved/
-    // warm-up-aware measurement.
-    // Manually-tuned version
-    double min_t_manual = benchmark(timing_iterations, 1, [&]() {
-        nl_means(input, patch_size, search_area, sigma, output);
-        output.device_sync();
-    });
-    printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
+    BenchmarkConfig config;
+    config.comparison_rounds = timing_iterations;
 
-    // Auto-scheduled version
-    double min_t_auto = benchmark(timing_iterations, 1, [&]() {
-        nl_means_auto_schedule(input, patch_size, search_area, sigma, output);
-        output.device_sync();
-    });
-    printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
+    auto [manual, auto_scheduled] = benchmark_comparison(
+        config,
+        [&]() {
+            nl_means(input, patch_size, search_area, sigma, output);
+            output.device_sync();
+        },
+        [&]() {
+            nl_means_auto_schedule(input, patch_size, search_area, sigma, output);
+            output.device_sync();
+        });
+    printf("Manually-tuned time: %gms\n", manual.wall_time * 1e3);
+    printf("Auto-scheduled time: %gms\n", auto_scheduled.wall_time * 1e3);
 
     convert_and_save_image(output, argv[6]);
 

@@ -35,7 +35,7 @@ if (Halide_TARGET MATCHES "hvx")
 endif ()
 
 # Test that the app actually works!
-add_test(NAME hexagon_benchmarks COMMAND process -n 1)
+add_test(NAME hexagon_benchmarks COMMAND process)
 set_tests_properties(
     hexagon_benchmarks
     PROPERTIES

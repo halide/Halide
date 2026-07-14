@@ -49,17 +49,9 @@ inline void set_math_flags() {
 #endif  // ENABLE_FTZ_DAZ
 }
 
-#define time_it(code)                                                        \
-    set_math_flags();                                                        \
-    double elapsed = 0;                                                      \
-    for (int iters = 1;; iters *= 2) {                                       \
-        /* Best of 5 */                                                      \
-        elapsed = 1e6 * Halide::Tools::benchmark(5, iters, [&]() { code; }); \
-        /* spend at least 5x20ms benchmarking */                             \
-        if (elapsed * iters > 20000) {                                       \
-            break;                                                           \
-        }                                                                    \
-    }
+#define time_it(code) \
+    set_math_flags(); \
+    double elapsed = 1e6 * Halide::Tools::benchmark([&]() { code; }).wall_time;
 
 #define L1GFLOPS(N) 2.0 * N * 1e-3 / elapsed
 #define L1Benchmark(benchmark, type, code)              \

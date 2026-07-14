@@ -56,22 +56,18 @@ int main(int argc, char **argv) {
 
     // Timing code
 
-    // TODO: uses the legacy fixed-sample benchmark(samples, iterations, op)
-    // form rather than benchmark_comparison(), so it isn't yet covered by
-    // interleaved/warm-up-aware measurement.
-    // Manually-tuned version
-    double min_t_manual = benchmark(10, 10, [&]() {
-        conv_layer(input, filter, bias, output);
-        output.device_sync();
-    });
-    printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
-
-    // Auto-scheduled version
-    double min_t_auto = benchmark(10, 10, [&]() {
-        conv_layer_auto_schedule(input, filter, bias, output);
-        output.device_sync();
-    });
-    printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
+    auto [manual, auto_scheduled] = benchmark_comparison(
+        BenchmarkConfig{},
+        [&]() {
+            conv_layer(input, filter, bias, output);
+            output.device_sync();
+        },
+        [&]() {
+            conv_layer_auto_schedule(input, filter, bias, output);
+            output.device_sync();
+        });
+    printf("Manually-tuned time: %gms\n", manual.wall_time * 1e3);
+    printf("Auto-scheduled time: %gms\n", auto_scheduled.wall_time * 1e3);
 
     printf("Success!\n");
     return 0;

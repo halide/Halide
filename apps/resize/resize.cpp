@@ -145,15 +145,8 @@ int main(int argc, char **argv) {
 
     auto resize_fn = variants[type_idx][upsample_idx][interpolation_idx];
 
-    // TODO: uses the legacy fixed-sample benchmark(samples, iterations, op)
-    // form (driven by the CLI -b benchmark_iters arg) rather than
-    // benchmark_comparison(), so the planar/packed comparison below isn't
-    // yet covered by interleaved/warm-up-aware measurement.
-    double time = Halide::Tools::benchmark(benchmark_iters, benchmark_iters, [&]() { resize_fn(in, scale_factor, out); });
-    printf("planar  %8s  %8s  %1.2f  time: %f ms\n",
-           interpolation_type.c_str(), input_type.c_str(), scale_factor, time * 1000);
-
-    Halide::Tools::convert_and_save_image(out, outfile);
+    Halide::Tools::BenchmarkConfig config;
+    config.comparison_rounds = benchmark_iters;
 
     if (packed) {
         // Also benchmark a packed memory layout. Don't bother to copy the
@@ -163,10 +156,22 @@ int main(int argc, char **argv) {
             Halide::Runtime::Buffer<>::make_interleaved(in.type(), in.width(), in.height(), in.channels());
         auto out_packed =
             Halide::Runtime::Buffer<>::make_interleaved(out.type(), out.width(), out.height(), out.channels());
-        time = Halide::Tools::benchmark(benchmark_iters, benchmark_iters, [&]() { resize_fn(in_packed, scale_factor, out_packed); });
+
+        auto [planar, packed_result] = Halide::Tools::benchmark_comparison(
+            config,
+            [&]() { resize_fn(in, scale_factor, out); },
+            [&]() { resize_fn(in_packed, scale_factor, out_packed); });
+        printf("planar  %8s  %8s  %1.2f  time: %f ms\n",
+               interpolation_type.c_str(), input_type.c_str(), scale_factor, planar.wall_time * 1000);
         printf("packed  %8s  %8s  %1.2f  time: %f ms\n",
-               interpolation_type.c_str(), input_type.c_str(), scale_factor, time * 1000);
+               interpolation_type.c_str(), input_type.c_str(), scale_factor, packed_result.wall_time * 1000);
+    } else {
+        auto planar = Halide::Tools::benchmark([&]() { resize_fn(in, scale_factor, out); }, config);
+        printf("planar  %8s  %8s  %1.2f  time: %f ms\n",
+               interpolation_type.c_str(), input_type.c_str(), scale_factor, planar.wall_time * 1000);
     }
+
+    Halide::Tools::convert_and_save_image(out, outfile);
 
     printf("Success!\n");
     return 0;

@@ -12,7 +12,6 @@
 
 void usage(char *prg_name) {
     const char usage_string[] = " Run a bunch of small filters\n\n"
-                                "\t -n -> number of iterations\n"
                                 "\t -h -> print this help message\n";
     printf("%s - %s", prg_name, usage_string);
 }
@@ -21,7 +20,6 @@ int main(int argc, char **argv) {
     // Set some defaults first.
     const int W = 1024;
     const int H = 1024;
-    int iterations = 10;
 
     // Process command line args.
     for (int i = 1; i < argc; ++i) {
@@ -30,10 +28,6 @@ int main(int argc, char **argv) {
             case 'h':
                 usage(argv[0]);
                 return 0;
-                break;
-            case 'n':
-                iterations = atoi(argv[i + 1]);
-                i++;
                 break;
             }
         }
@@ -63,12 +57,12 @@ int main(int argc, char **argv) {
         halide_hexagon_power_hvx_on(NULL);
 #endif
 
-        double time = Halide::Tools::benchmark(iterations, 10, [&]() {
-            int result = p->run();
-            if (result != 0) {
-                printf("pipeline failed! %d\n", result);
-            }
-        });
+        double time = Halide::Tools::benchmark([&]() {
+                          int result = p->run();
+                          if (result != 0) {
+                              printf("pipeline failed! %d\n", result);
+                          }
+                      }).wall_time;
         printf("Done, time (%s): %g s\n", p->name(), time);
 
 #ifdef HALIDE_RUNTIME_HEXAGON

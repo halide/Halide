@@ -64,28 +64,36 @@ int main(int argc, char **argv) {
     int blackLevel = 25;
     int whiteLevel = 1023;
 
-    double best;
-
-    // TODO: uses the legacy fixed-sample benchmark(samples, iterations, op)
-    // form (driven by the CLI timing_iterations arg) rather than
-    // benchmark_comparison(), so it isn't yet covered by interleaved/
-    // warm-up-aware measurement.
-    best = benchmark(timing_iterations, 1, [&]() {
-        camera_pipe(input, matrix_3200, matrix_7000,
-                    color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
-                    output);
-        output.device_sync();
-    });
-    fprintf(stderr, "Halide (manual):\t%gus\n", best * 1e6);
+    BenchmarkConfig config;
+    config.comparison_rounds = timing_iterations;
 
 #ifndef NO_AUTO_SCHEDULE
-    best = benchmark(timing_iterations, 1, [&]() {
-        camera_pipe_auto_schedule(input, matrix_3200, matrix_7000,
-                                  color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
-                                  output);
-        output.device_sync();
-    });
-    fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);
+    auto [manual, auto_scheduled] = benchmark_comparison(
+        config,
+        [&]() {
+            camera_pipe(input, matrix_3200, matrix_7000,
+                        color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
+                        output);
+            output.device_sync();
+        },
+        [&]() {
+            camera_pipe_auto_schedule(input, matrix_3200, matrix_7000,
+                                      color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
+                                      output);
+            output.device_sync();
+        });
+    fprintf(stderr, "Halide (manual):\t%gus\n", manual.wall_time * 1e6);
+    fprintf(stderr, "Halide (auto):\t%gus\n", auto_scheduled.wall_time * 1e6);
+#else
+    auto manual = benchmark(
+        [&]() {
+            camera_pipe(input, matrix_3200, matrix_7000,
+                        color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
+                        output);
+            output.device_sync();
+        },
+        config);
+    fprintf(stderr, "Halide (manual):\t%gus\n", manual.wall_time * 1e6);
 #endif
 
     fprintf(stderr, "output: %s\n", argv[7]);

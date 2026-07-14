@@ -54,23 +54,30 @@ int main(int argc, char **argv) {
 
     // Timing code
 
-    // TODO: uses the legacy fixed-sample benchmark(samples, iterations, op)
-    // form (driven by the CLI timing arg) rather than benchmark_comparison(),
-    // so it isn't yet covered by interleaved/warm-up-aware measurement.
-    // Manually-tuned version
-    double best_manual = benchmark(timing, 1, [&]() {
-        compositing(input, blobs[0], blobs[1], blobs[2], blobs[3], blobs[4], ops, output);
-        output.device_sync();
-    });
-    printf("Manually-tuned time: %gms\n", best_manual * 1e3);
+    BenchmarkConfig config;
+    config.comparison_rounds = timing;
 
 #ifndef NO_AUTO_SCHEDULE
-    // Auto-scheduled version
-    double best_auto = benchmark(timing, 1, [&]() {
-        compositing_auto_schedule(input, blobs[0], blobs[1], blobs[2], blobs[3], blobs[4], ops, output);
-        output.device_sync();
-    });
-    printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
+    auto [manual, auto_scheduled] = benchmark_comparison(
+        config,
+        [&]() {
+            compositing(input, blobs[0], blobs[1], blobs[2], blobs[3], blobs[4], ops, output);
+            output.device_sync();
+        },
+        [&]() {
+            compositing_auto_schedule(input, blobs[0], blobs[1], blobs[2], blobs[3], blobs[4], ops, output);
+            output.device_sync();
+        });
+    printf("Manually-tuned time: %gms\n", manual.wall_time * 1e3);
+    printf("Auto-scheduled time: %gms\n", auto_scheduled.wall_time * 1e3);
+#else
+    auto manual = benchmark(
+        [&]() {
+            compositing(input, blobs[0], blobs[1], blobs[2], blobs[3], blobs[4], ops, output);
+            output.device_sync();
+        },
+        config);
+    printf("Manually-tuned time: %gms\n", manual.wall_time * 1e3);
 #endif
 
     convert_and_save_image(output, argv[3]);
