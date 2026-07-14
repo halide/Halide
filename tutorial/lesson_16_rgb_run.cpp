@@ -52,62 +52,66 @@ int main() {
     // We'll now call the various functions we compiled and check the
     // performance of each.
 
-    constexpr int samples = 1;
-    constexpr int iterations = 1000;
+    // Since we're about to compare the timings of six variants against each
+    // other pairwise, we measure them all together with
+    // Halide::Tools::benchmark_comparison() (see halide_benchmark.h). It
+    // interleaves measurement across all of the operations passed to it
+    // (instead of timing one fully and then the next), so that any
+    // measurement noise -- CPU frequency scaling, thermal throttling, and so
+    // on over the run -- is shared roughly equally across all six, rather
+    // than systematically favoring whichever one happens to run first or
+    // last. Each entry in the returned tuple is a BenchmarkResult; its
+    // wall_time is the best average-iteration time seen, in seconds.
+    auto [planar_result, interleaved_result,
+          either_planar_result, either_interleaved_result,
+          specialized_planar_result, specialized_interleaved_result] =
+        Halide::Tools::benchmark_comparison(
+            Halide::Tools::BenchmarkConfig{},
+            // Run the planar version of the code on the planar images and
+            // the interleaved version of the code on the interleaved images.
+            [&]() { brighten_planar(planar_input, 1, planar_output); },
+            [&]() { brighten_interleaved(interleaved_input, 1, interleaved_output); },
+            // Either of these next two commented-out calls would throw an
+            // error, because the stride is not what we promised it would be
+            // in the generator.
+            //
+            // brighten_planar(interleaved_input, 1, interleaved_output);
+            // Error: Constraint violated: brighter.stride.0 (3) == 1 (1)
+            //
+            // brighten_interleaved(planar_input, 1, planar_output);
+            // Error: Constraint violated: brighter.stride.0 (1) == 3 (3)
+            //
+            // Run the flexible version of the code. It should work, but
+            // it'll be slower than the versions above.
+            [&]() { brighten_either(planar_input, 1, planar_output); },
+            [&]() { brighten_either(interleaved_input, 1, interleaved_output); },
+            // Run the specialized version of the code on each layout. It
+            // should match the performance of the code compiled
+            // specifically for each case above by branching internally to
+            // equivalent code.
+            [&]() { brighten_specialized(planar_input, 1, planar_output); },
+            [&]() { brighten_specialized(interleaved_input, 1, interleaved_output); });
 
-    // Run the planar version of the code on the planar images and the
-    // interleaved version of the code on the interleaved
-    // images. We'll use Halide's benchmarking utility, which takes a function
-    // to run, the number of batches to run (1 in this case), and the number
-    // of iterations per batch (1000 in this case). It returns the best
-    // average-iteration time, in seconds. (See halide_benchmark.h for more
-    // information.)
+    double planar_time = planar_result.wall_time;
+    double interleaved_time = interleaved_result.wall_time;
+    double either_planar_time = either_planar_result.wall_time;
+    double either_interleaved_time = either_interleaved_result.wall_time;
+    double specialized_planar_time = specialized_planar_result.wall_time;
+    double specialized_interleaved_time = specialized_interleaved_result.wall_time;
 
-    double planar_time = Halide::Tools::benchmark(samples, iterations, [&]() {
-        brighten_planar(planar_input, 1, planar_output);
-    });
     printf("brighten_planar: %f msec\n", planar_time * 1000.f);
-
-    double interleaved_time = Halide::Tools::benchmark(samples, iterations, [&]() {
-        brighten_interleaved(interleaved_input, 1, interleaved_output);
-    });
     printf("brighten_interleaved: %f msec\n", interleaved_time * 1000.f);
 
     // Planar is generally faster than interleaved for most imaging
     // operations.
     check_timing(planar_time, interleaved_time);
 
-    // Either of these next two commented-out calls would throw an
-    // error, because the stride is not what we promised it would be
-    // in the generator.
-
-    // brighten_planar(interleaved_input, 1, interleaved_output);
-    // Error: Constraint violated: brighter.stride.0 (3) == 1 (1)
-
-    // brighten_interleaved(planar_input, 1, planar_output);
-    // Error: Constraint violated: brighter.stride.0 (1) == 3 (3)
-
-    // Run the flexible version of the code and check performance. It
-    // should work, but it'll be slower than the versions above.
-    double either_planar_time = Halide::Tools::benchmark(samples, iterations, [&]() {
-        brighten_either(planar_input, 1, planar_output);
-    });
     printf("brighten_either on planar images: %f msec\n", either_planar_time * 1000.f);
     check_timing(planar_time, either_planar_time);
 
-    double either_interleaved_time = Halide::Tools::benchmark(samples, iterations, [&]() {
-        brighten_either(interleaved_input, 1, interleaved_output);
-    });
     printf("brighten_either on interleaved images: %f msec\n", either_interleaved_time * 1000.f);
     check_timing(interleaved_time, either_interleaved_time);
 
-    // Run the specialized version of the code on each layout. It
-    // should match the performance of the code compiled specifically
-    // for each case above by branching internally to equivalent
-    // code.
-    double specialized_planar_time = Halide::Tools::benchmark(samples, iterations, [&]() {
-        brighten_specialized(planar_input, 1, planar_output);
-    });
     printf("brighten_specialized on planar images: %f msec\n", specialized_planar_time * 1000.f);
 
     // The cost of the if statement should be negligible, but we'll
@@ -115,9 +119,6 @@ int main() {
     // measurement noise.
     check_timing(specialized_planar_time, 1.5 * planar_time);
 
-    double specialized_interleaved_time = Halide::Tools::benchmark(samples, iterations, [&]() {
-        brighten_specialized(interleaved_input, 1, interleaved_output);
-    });
     printf("brighten_specialized on interleaved images: %f msec\n", specialized_interleaved_time * 1000.f);
     check_timing(specialized_interleaved_time, 2.0 * interleaved_time);
 

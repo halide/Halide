@@ -58,17 +58,20 @@ Pipeline make_pipeline() {
     return Pipeline(output);
 }
 
-int main() {
-    // Since we'll be using the same sample and iteration counts for our benchmarking,
-    // let's define them here in the outermost scope.
-    constexpr int samples = 100;
-    constexpr int iterations = 1;
+// benchmark() (see tools/halide_benchmark.h) times an operation adaptively:
+// it runs the op repeatedly, expanding the iteration count as needed, until
+// it has spent at least BenchmarkConfig::min_time (100ms by default)
+// collecting a stable measurement, and returns the best single-iteration
+// time it saw.
+double times_per_second(const std::function<void()> &op) {
+    BenchmarkResult result = benchmark(op);
+    return 1.0 / result.wall_time;
+}
 
+int main() {
     // Now, let's measure the performance of constructing and executing a simple pipeline from scratch...
     {
-        size_t count = 0;
-        double t = benchmark(samples, iterations, [&]() {
-
+        double rate = times_per_second([&]() {
             // First, create an output buffer to hold the results.
             Buffer<uint16_t> result(1024, 1024);
 
@@ -77,11 +80,10 @@ int main() {
 
             // And then call realize to execute the pipeline.
             pipeline.realize(result);
-            ++count;
         });
 
         // On a MacBook Pro M1, we should get around ~1800 times/sec.
-        std::cout << "Compile & Execute Pipeline (from scratch): " << int(count / t) << " times/sec\n";
+        std::cout << "Compile & Execute Pipeline (from scratch): " << int(rate) << " times/sec\n";
     }
 
     // This time, let's create the pipeline outside the timing loop and re-use it for each execution...
@@ -89,19 +91,16 @@ int main() {
         // Create our pipeline, and re-use it in the loop below
         Pipeline pipeline = make_pipeline();
 
-        size_t count = 0;
-        double t = benchmark(samples, iterations, [&]() {
-
+        double rate = times_per_second([&]() {
             // Create our output buffer
             Buffer<uint16_t> result(1024, 1024);
 
             // Now, call realize
             pipeline.realize(result);
-            ++count;
         });
 
         // On a MacBook Pro M1, we should get around ~175000 times/sec (almost 95-100x times faster!).
-        std::cout << "Compile & Execute Pipeline (re-use pipeline): " << int(count / t) << " times/sec\n";
+        std::cout << "Compile & Execute Pipeline (re-use pipeline): " << int(rate) << " times/sec\n";
     }
 
     // Let's do the same thing as before, but explicitly JIT compile before we realize...
@@ -112,11 +111,9 @@ int main() {
         const Target target = get_jit_target_from_environment();
         pipeline.compile_jit(target);
 
-        size_t count = 0;
-        double t = benchmark(samples, iterations, [&]() {
+        double rate = times_per_second([&]() {
             Buffer<uint16_t> result(1024, 1024);
             pipeline.realize(result);
-            ++count;
         });
 
         // On a MacBook Pro M1, this should be about the same as the previous run (about ~175000 times/sec)
@@ -126,34 +123,30 @@ int main() {
         // JIT-compile and cache the generated code associated with the Pipeline object, which is basically
         // what we've done here. Each subsequent call to realize uses the cached version of the native code,
         // so there's no additional overhead, and the cost is amortized as we re-use the pipeline.
-        std::cout << "Execute Pipeline (compile before realize): " << int(count / t) << " times/sec\n";
+        std::cout << "Execute Pipeline (compile before realize): " << int(rate) << " times/sec\n";
 
         // Another subtlety is the creation of the result buffer ... the declaration implicitly
         // allocates memory which will add overhead to each loop iteration. This time, let's try
         // using the realize({1024, 1024}) call which will use the buffer managed by the pipeline
         // object for the outputs...
-        count = 0;
-        t = benchmark(samples, iterations, [&]() {
+        rate = times_per_second([&]() {
             Buffer<uint16_t> result = pipeline.realize({1024, 1024});
-            ++count;
         });
 
         // On a MacBook Pro M1, this should be about the same as the previous run (about ~175000 times/sec).
-        std::cout << "Execute Pipeline (same but with realize({})): " << int(count / t) << " times/sec\n";
+        std::cout << "Execute Pipeline (same but with realize({})): " << int(rate) << " times/sec\n";
 
         // Or ... we could move the declaration of the result buffer outside the timing loop, and
         // re-use the allocation (with the caveat that we will be stomping over its contents on each
         // execution).
         Buffer<uint16_t> result(1024, 1024);
 
-        count = 0;
-        t = benchmark(samples, iterations, [&]() {
+        rate = times_per_second([&]() {
             pipeline.realize(result);
-            ++count;
         });
 
         // On a MacBook Pro M1, this should be much more efficient ... ~200000 times/sec (or 10-12% faster).
-        std::cout << "Execute Pipeline (re-use buffer with realize): " << int(count / t) << " times/sec\n";
+        std::cout << "Execute Pipeline (re-use buffer with realize): " << int(rate) << " times/sec\n";
     }
 
     // Alternatively, we could compile to a Callable object...
@@ -175,14 +168,12 @@ int main() {
         // Again, we'll pre-allocate and re-use the result buffer.
         Buffer<uint16_t> result(1024, 1024);
 
-        size_t count = 0;
-        double t = benchmark(samples, iterations, [&]() {
+        double rate = times_per_second([&]() {
             callable(result);
-            ++count;
         });
 
         // This should be about the same as the previous run (about ~200000 times/sec).
-        std::cout << "Execute Pipeline (compile to callable): " << int(count / t) << " times/sec\n";
+        std::cout << "Execute Pipeline (compile to callable): " << int(rate) << " times/sec\n";
 
         // Perhaps even more convenient, we can create a std::function object from the callable,
         // which allows cleaner type checking for the parameters, and slightly less overhead
@@ -193,14 +184,12 @@ int main() {
         // parameter list too.
         auto function = callable.make_std_function<Buffer<uint16_t>>();
 
-        count = 0;
-        t = benchmark(samples, iterations, [&]() {
+        rate = times_per_second([&]() {
             function(result);
-            ++count;
         });
 
         // On a MacBook Pro M1, this should be slightly more efficient than the callable (~1% faster).
-        std::cout << "Execute Pipeline (compile to std::function): " << int(count / t) << " times/sec\n";
+        std::cout << "Execute Pipeline (compile to std::function): " << int(rate) << " times/sec\n";
     }
 
     // Let's see how much time is spent on just compiling...
@@ -211,27 +200,31 @@ int main() {
         // it gets stored in a cache for later re-use, so repeatedly calling compile_jit has
         // very little overhead after its been cached.
 
-        size_t count = 0;
-        double t = benchmark(samples, iterations, [&]() {
+        double rate = times_per_second([&]() {
             pipeline.compile_jit();
-            ++count;
         });
 
         // Only the first call does any work and the rest are essentially free.
         // On a MacBook Pro M1, we should expect ~2 billion times/sec.
-        std::cout << "Compile JIT (using cache): " << int(count / t) << " times/sec\n";
+        std::cout << "Compile JIT (using cache): " << int(rate) << " times/sec\n";
 
         // You can invalidate the cache manually, which will destroy all the compiled state.
-        count = 0;
-        t = benchmark(samples, iterations, [&]() {
-            pipeline.invalidate_cache();
-            pipeline.compile_jit();
-            ++count;
-        });
+        // This is an intentionally expensive operation (it recompiles from scratch every
+        // time), so we use a lower min_time here to keep this lesson quick to run: the
+        // adaptive algorithm would otherwise run many more (equally slow) iterations trying
+        // to reach the default 100ms floor.
+        BenchmarkConfig config;
+        config.min_time = 0;
+        double slow_rate = 1.0 / benchmark([&]() {
+                                      pipeline.invalidate_cache();
+                                      pipeline.compile_jit();
+                                  },
+                                            config)
+                                     .wall_time;
 
         // This is an intentionally expensive loop, and very slow!
         // On a MacBook Pro M1, we should see only ~2000 times/sec.
-        std::cout << "Compile JIT (from scratch): " << int(count / t) << " times/sec\n";
+        std::cout << "Compile JIT (from scratch): " << int(slow_rate) << " times/sec\n";
     }
 
     // Alternatively we could compile to a Module...
@@ -244,14 +237,12 @@ int main() {
         // runnable, but it can be used to link/combine Modules and generate object files,
         // static libs, bitcode, etc.
 
-        size_t count = 0;
-        double t = benchmark(samples, iterations, [&]() {
+        double rate = times_per_second([&]() {
             Module m = pipeline.compile_to_module(args, "transpose");
-            ++count;
         });
 
         // On a MacBook Pro M1, this should be around ~10000 times/sec
-        std::cout << "Compile to Module: " << int(count / t) << " times/sec\n";
+        std::cout << "Compile to Module: " << int(rate) << " times/sec\n";
     }
 
     printf("DONE!\n");

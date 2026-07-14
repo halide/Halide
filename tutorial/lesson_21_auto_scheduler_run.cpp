@@ -39,16 +39,17 @@ int main() {
 
     Halide::Runtime::Buffer<float> output1(1024, 1024);
     Halide::Runtime::Buffer<float> output2(1024, 1024);
-    // Run each version of the codes (with no auto-schedule and with
-    // auto-schedule) multiple times for benchmarking.
-    double auto_schedule_off = Halide::Tools::benchmark(2, 5, [&]() {
-        auto_schedule_false(input, 2.0f, output1, output2);
-    });
+    Halide::Runtime::Buffer<float> auto_output1(1024, 1024);
+    Halide::Runtime::Buffer<float> auto_output2(1024, 1024);
+    // Run each version of the code (with no auto-schedule and with
+    // auto-schedule), interleaved, for benchmarking.
+    auto [manual_result, auto_result] = Halide::Tools::benchmark_comparison(
+        Halide::Tools::BenchmarkConfig{},
+        [&]() { auto_schedule_false(input, 2.0f, output1, output2); },
+        [&]() { auto_schedule_true(input, 2.0f, auto_output1, auto_output2); });
+    double auto_schedule_off = manual_result.wall_time;
+    double auto_schedule_on = auto_result.wall_time;
     printf("Manual schedule: %gms\n", auto_schedule_off * 1e3);
-
-    double auto_schedule_on = Halide::Tools::benchmark(2, 5, [&]() {
-        auto_schedule_true(input, 2.0f, output1, output2);
-    });
     printf("Auto schedule: %gms\n", auto_schedule_on * 1e3);
 
     // auto_schedule_on should be faster since in the auto_schedule_off version,
