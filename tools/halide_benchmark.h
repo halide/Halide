@@ -68,37 +68,6 @@ inline double benchmark_duration_seconds(double start, double end) {
 
 #endif
 
-// Benchmark the operation 'op'. The number of iterations refers to
-// how many times the operation is run for each time measurement, the
-// result is the minimum over a number of samples runs. The result is the
-// amount of time in seconds for one iteration.
-//
-// NOTE: it is usually simpler and more accurate to use the adaptive
-// version of benchmark() later in this file; this function is provided
-// for legacy code.
-//
-// IMPORTANT NOTE: Using this tool for timing GPU code may be misleading,
-// as it does not account for time needed to synchronize to/from the GPU;
-// if the callback doesn't include calls to device_sync(), the reported
-// time may only be that to queue the requests; if the callback *does*
-// include calls to device_sync(), it might exaggerate the sync overhead
-// for real-world use. For now, callers using this to benchmark GPU
-// code should measure with extreme caution.
-
-inline double benchmark(uint64_t samples, uint64_t iterations, const std::function<void()> &op) {
-    double best = std::numeric_limits<double>::infinity();
-    for (uint64_t i = 0; i < samples; i++) {
-        auto start = benchmark_now();
-        for (uint64_t j = 0; j < iterations; j++) {
-            op();
-        }
-        auto end = benchmark_now();
-        double elapsed_seconds = benchmark_duration_seconds(start, end);
-        best = std::min(best, elapsed_seconds);
-    }
-    return best / iterations;
-}
-
 // Benchmark the operation 'op': run the operation until at least min_time
 // has elapsed; the number of iterations is expanded as we
 // progress (based on initial runs of 'op') to minimize overhead. The time
@@ -116,6 +85,21 @@ inline double benchmark(uint64_t samples, uint64_t iterations, const std::functi
 // code should measure with extreme caution.
 
 constexpr uint64_t kBenchmarkMaxIterations = 1000000000;
+
+namespace BenchmarkInternal {
+
+// Run 'op' 'iterations' times back-to-back and return the average
+// per-iteration wall-clock time (in seconds).
+inline double time_iterations(const std::function<void()> &op, uint64_t iterations) {
+    auto start = benchmark_now();
+    for (uint64_t j = 0; j < iterations; j++) {
+        op();
+    }
+    auto end = benchmark_now();
+    return benchmark_duration_seconds(start, end) / iterations;
+}
+
+}  // namespace BenchmarkInternal
 
 struct BenchmarkConfig {
     // Run the operation, discarding the timing, for at least this long
@@ -208,7 +192,7 @@ inline BenchmarkResult benchmark(const std::function<void()> &op, const Benchmar
         result.iterations = 0;
         total_time = 0;
         for (int i = 0; i < kMinSamples; i++) {
-            times[i] = benchmark(1, iters_per_sample, op);
+            times[i] = BenchmarkInternal::time_iterations(op, iters_per_sample);
             result.samples++;
             result.iterations += iters_per_sample;
             total_time += times[i] * iters_per_sample;
@@ -248,7 +232,7 @@ inline BenchmarkResult benchmark(const std::function<void()> &op, const Benchmar
     // to throttled-down CPU state.
     while ((times[0] * accuracy < times[kMinSamples - 1] || total_time < min_time) &&
            total_time < max_time) {
-        times[kMinSamples] = benchmark(1, iters_per_sample, op);
+        times[kMinSamples] = BenchmarkInternal::time_iterations(op, iters_per_sample);
         result.samples++;
         result.iterations += iters_per_sample;
         total_time += times[kMinSamples] * iters_per_sample;
