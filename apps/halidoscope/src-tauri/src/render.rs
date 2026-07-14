@@ -19,9 +19,14 @@ pub enum NormalizationMode {
 
 // A trait that all 2D rendering states implement.
 pub trait Renderer: Sized {
+    /// The primitive type this state's `values` are stored and returned as (e.g. `f64` for
+    /// intensity-accumulating states, `u32`/`i32` for count-accumulating states).
+    type Value;
+
     fn register(trace: &Trace, func: &str) -> Option<Self>;
     fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize);
     fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8>;
+    fn to_values(&self) -> Vec<Self::Value>;
 }
 
 // ── Grayscale rendering ───────────────────────────────────────────────────────
@@ -35,6 +40,7 @@ pub struct GrayscaleState {
     /// Latest normalized intensity per (pixel, channel), row-major with channel as the minor axis.
     /// Length is `width * height * channels`. Unwritten cells stay 0.
     framebuffer: Vec<u8>,
+    values: Vec<f64>,
     applied_k: usize,
 }
 
@@ -45,11 +51,14 @@ impl GrayscaleState {
         let min_v = stats.min_value.unwrap_or(0.0);
         let max_v = stats.max_value.unwrap_or(255.0);
         let framebuffer = vec![0u8; geom.width * geom.height * geom.channels];
+        let values = vec![0f64; geom.width * geom.height * geom.channels];
+
         Some(Self {
             geom,
             min_v,
             max_v,
             framebuffer,
+            values,
             applied_k: 0,
         })
     }
@@ -84,6 +93,7 @@ impl GrayscaleState {
             }
             let idx = (y as usize * width + x as usize) * channels + c as usize;
             self.framebuffer[idx] = self.normalize(v);
+            self.values[idx] = v;
         }
     }
 
@@ -94,6 +104,8 @@ impl GrayscaleState {
 }
 
 impl Renderer for GrayscaleState {
+    type Value = f64;
+
     fn register(trace: &Trace, func: &str) -> Option<Self> {
         Self::new(trace, func)
     }
@@ -140,6 +152,10 @@ impl Renderer for GrayscaleState {
         }
         out
     }
+
+    fn to_values(&self) -> Vec<f64> {
+        self.values.clone()
+    }
 }
 
 // ── RGB rendering ─────────────────────────────────────────────────────────────
@@ -153,6 +169,7 @@ pub struct RgbState {
     /// Latest normalized intensity per (pixel, channel), row-major with channel as the minor axis.
     /// Length is `width * height * channels`. Unwritten cells stay 0.
     framebuffer: Vec<u8>,
+    values: Vec<f64>,
     applied_k: usize,
 }
 
@@ -163,11 +180,14 @@ impl RgbState {
         let min_v = stats.min_value.unwrap_or(0.0);
         let max_v = stats.max_value.unwrap_or(255.0);
         let framebuffer = vec![0u8; geom.width * geom.height * geom.channels];
+        let values = vec![0f64; geom.width * geom.height * geom.channels];
+
         Some(Self {
             geom,
             min_v,
             max_v,
             framebuffer,
+            values,
             applied_k: 0,
         })
     }
@@ -202,6 +222,7 @@ impl RgbState {
             }
             let idx = (y as usize * width + x as usize) * channels + c as usize;
             self.framebuffer[idx] = self.normalize(v);
+            self.values[idx] = v;
         }
     }
 
@@ -212,6 +233,8 @@ impl RgbState {
 }
 
 impl Renderer for RgbState {
+    type Value = f64;
+
     fn register(trace: &Trace, func: &str) -> Option<Self> {
         Self::new(trace, func)
     }
@@ -256,6 +279,10 @@ impl Renderer for RgbState {
         }
         out
     }
+
+    fn to_values(&self) -> Vec<f64> {
+        self.values.clone()
+    }
 }
 
 // ── Store frequency rendering ─────────────────────────────────────────────────
@@ -265,16 +292,16 @@ impl Renderer for RgbState {
 /// is used for normalization so the color scale is stable across the entire scrub range.
 pub struct StoreFrequencyState {
     geom: FuncGeometry,
-    counts: Vec<i32>,
-    local_max_store_count: i32,
-    global_max_store_count: i32,
+    counts: Vec<u32>,
+    local_max_store_count: u32,
+    global_max_store_count: u32,
     applied_k: usize,
 }
 
 impl StoreFrequencyState {
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
-        let counts = vec![0i32; geom.width * geom.height];
+        let counts = vec![0u32; geom.width * geom.height];
 
         let local_max_store_count = trace.funcs.get(func).map_or(0, |s| s.max_store_count);
         let global_max_store_count = trace
@@ -313,6 +340,8 @@ impl StoreFrequencyState {
 }
 
 impl Renderer for StoreFrequencyState {
+    type Value = u32;
+
     fn register(trace: &Trace, func: &str) -> Option<Self> {
         Self::new(trace, func)
     }
@@ -364,6 +393,10 @@ impl Renderer for StoreFrequencyState {
         }
         out
     }
+
+    fn to_values(&self) -> Vec<u32> {
+        self.counts.clone()
+    }
 }
 
 impl StoreFrequencyState {
@@ -390,16 +423,16 @@ impl StoreFrequencyState {
 /// load count is used for normalization so the color scale is stable across the entire scrub range.
 pub struct LoadFrequencyState {
     geom: FuncGeometry,
-    counts: Vec<i32>,
-    local_max_load_count: i32,
-    global_max_load_count: i32,
+    counts: Vec<u32>,
+    local_max_load_count: u32,
+    global_max_load_count: u32,
     applied_k: usize,
 }
 
 impl LoadFrequencyState {
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
-        let counts = vec![0i32; geom.width * geom.height];
+        let counts = vec![0u32; geom.width * geom.height];
 
         let local_max_load_count = trace.funcs.get(func).map_or(0, |s| s.max_load_count);
         let global_max_load_count = trace
@@ -438,6 +471,8 @@ impl LoadFrequencyState {
 }
 
 impl Renderer for LoadFrequencyState {
+    type Value = u32;
+
     fn register(trace: &Trace, func: &str) -> Option<Self> {
         Self::new(trace, func)
     }
@@ -488,6 +523,10 @@ impl Renderer for LoadFrequencyState {
         }
         out
     }
+
+    fn to_values(&self) -> Vec<u32> {
+        self.counts.clone()
+    }
 }
 
 impl LoadFrequencyState {
@@ -521,9 +560,9 @@ pub struct RedundantState {
     /// `None` = no store has landed here yet.
     last_values: Vec<Option<u64>>,
     /// Redundant-store count per spatial pixel, indexed by `y * width + x`.
-    redundant_counts: Vec<i32>,
-    local_max_redundant_count: i32,
-    global_max_redundant_count: i32,
+    redundant_counts: Vec<u32>,
+    local_max_redundant_count: u32,
+    global_max_redundant_count: u32,
     applied_k: usize,
 }
 
@@ -533,8 +572,7 @@ impl RedundantState {
         let geom = trace.func_geometry(func)?;
         let n_pixels = geom.width * geom.height;
 
-        let local_max_redundant_count =
-            trace.funcs.get(func).map_or(0, |s| s.max_redundant_count);
+        let local_max_redundant_count = trace.funcs.get(func).map_or(0, |s| s.max_redundant_count);
         let global_max_redundant_count = trace
             .funcs
             .values()
@@ -545,7 +583,7 @@ impl RedundantState {
         Some(Self {
             geom,
             last_values: vec![None; n_pixels * geom.channels],
-            redundant_counts: vec![0i32; n_pixels],
+            redundant_counts: vec![0u32; n_pixels],
             local_max_redundant_count,
             global_max_redundant_count,
             applied_k: 0,
@@ -601,6 +639,8 @@ impl RedundantState {
 }
 
 impl Renderer for RedundantState {
+    type Value = u32;
+
     fn register(trace: &Trace, func: &str) -> Option<Self> {
         Self::new(trace, func)
     }
@@ -655,6 +695,10 @@ impl Renderer for RedundantState {
         }
         out
     }
+
+    fn to_values(&self) -> Vec<u32> {
+        self.redundant_counts.clone()
+    }
 }
 
 impl RedundantState {
@@ -698,13 +742,13 @@ pub struct ReuseDistanceState {
     /// For inputs: global index of the first load (`usize::MAX` = none yet).
     anchor_at: Vec<usize>,
     /// Maximum observed reuse distance per spatial pixel, indexed by `y * width + x`.
-    max_reuse_distance: Vec<i64>,
+    max_reuse_distance: Vec<u64>,
     /// This Func's own maximum reuse distance, used to normalize the color scale against just
     /// this Func's range.
-    local_max_reuse_distance: i64,
+    local_max_reuse_distance: u64,
     /// Trace-wide maximum reuse distance, used to normalize the color scale consistently across
     /// all Funcs regardless of which one is being viewed.
-    global_max_reuse_distance: i64,
+    global_max_reuse_distance: u64,
     /// Number of this Func's store events processed.
     applied_store_k: usize,
     /// Number of this Func's load events processed.
@@ -733,7 +777,7 @@ impl ReuseDistanceState {
             geom,
             is_input,
             anchor_at: vec![usize::MAX; n_cells],
-            max_reuse_distance: vec![0i64; geom.width * geom.height],
+            max_reuse_distance: vec![0u64; geom.width * geom.height],
             local_max_reuse_distance,
             global_max_reuse_distance,
             applied_store_k: 0,
@@ -855,13 +899,13 @@ impl ReuseDistanceState {
                 if self.anchor_at[val_idx] == usize::MAX {
                     self.anchor_at[val_idx] = global_idx;
                 } else {
-                    let dist = (global_idx - self.anchor_at[val_idx]) as i64;
+                    let dist = (global_idx - self.anchor_at[val_idx]) as u64;
                     if dist > self.max_reuse_distance[pixel_idx] {
                         self.max_reuse_distance[pixel_idx] = dist;
                     }
                 }
             } else if self.anchor_at[val_idx] != usize::MAX {
-                let dist = (global_idx - self.anchor_at[val_idx]) as i64;
+                let dist = (global_idx - self.anchor_at[val_idx]) as u64;
                 if dist > self.max_reuse_distance[pixel_idx] {
                     self.max_reuse_distance[pixel_idx] = dist;
                 }
@@ -929,5 +973,11 @@ impl ReuseDistanceState {
             }
         }
         hist
+    }
+
+    /// Returns the per-pixel maximum reuse distance at the current seek position, in row-major
+    /// `(y * width + x)` order.
+    pub fn to_values(&self) -> Vec<u64> {
+        self.max_reuse_distance.clone()
     }
 }
