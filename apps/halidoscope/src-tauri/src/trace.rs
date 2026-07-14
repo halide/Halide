@@ -170,17 +170,17 @@ pub struct FuncStats {
     pub min_value: Option<f64>,
     pub max_value: Option<f64>,
     /// Maximum number of stores observed at any array / tensor coordinate for this Func.
-    pub max_store_count: i32,
+    pub max_store_count: u32,
     /// Maximum number of loads observed at any array / tensor coordinate for this Func.
-    pub max_load_count: i32,
+    pub max_load_count: u32,
     /// Maximum number of redundant stores observed at any array / tensor coordinate for this Func.
     /// A store is considered redundant when the incoming value bit-matches the previously stored
     /// value at that location.
-    pub max_redundant_count: i32,
+    pub max_redundant_count: u32,
     /// Maximum store-to-load distance observed across all array / tensor coordinates for this Func.
     /// Measured as thedifference in global packet indices between a store and the next load from
     /// the same coordination. 0 when no store→load pair was observed.
-    pub max_reuse_distance: i64,
+    pub max_reuse_distance: u64,
 }
 
 impl Default for FuncStats {
@@ -208,10 +208,10 @@ pub struct FuncGeometry {
     pub min_x: i32,
     pub min_y: i32,
     pub min_c: i32,
-    pub max_store_count: i32,
-    pub max_load_count: i32,
-    pub max_redundant_count: i32,
-    pub max_reuse_distance: i64,
+    pub max_store_count: u32,
+    pub max_load_count: u32,
+    pub max_redundant_count: u32,
+    pub max_reuse_distance: u64,
 }
 
 // ── Complete trace ────────────────────────────────────────────────────────────
@@ -699,7 +699,7 @@ impl Trace {
         for (func_name, indices) in &store_indices_by_func {
             let extents = funcs.get(func_name.as_str()).and_then(func_extents);
             if let Some((w, h, min_x, min_y)) = extents {
-                let mut counts = vec![0i32; w * h];
+                let mut counts = vec![0u32; w * h];
                 for &idx in indices {
                     let pkt = &packets[idx];
                     for_each_lane_pixel(
@@ -723,7 +723,7 @@ impl Trace {
         for (func_name, indices) in &load_indices_by_func {
             let extents = funcs.get(func_name.as_str()).and_then(func_extents);
             if let Some((w, h, min_x, min_y)) = extents {
-                let mut counts = vec![0i32; w * h];
+                let mut counts = vec![0u32; w * h];
                 for &idx in indices {
                     let pkt = &packets[idx];
                     for_each_lane_pixel(
@@ -768,7 +768,7 @@ impl Trace {
 
                 // None = no store has landed here yet; Some(bits) = last stored value as u64 bits.
                 let mut last_values = vec![None::<u64>; w * h * channels];
-                let mut redundant_counts = vec![0i32; w * h];
+                let mut redundant_counts = vec![0u32; w * h];
                 let mut si = 0;
                 let mut li = 0;
 
@@ -856,7 +856,7 @@ impl Trace {
 
                 // usize::MAX = no store has landed at this (x, y, channel) yet.
                 let mut last_store_at = vec![usize::MAX; w * h * channels];
-                let mut max_reuse_distances = vec![0i64; w * h];
+                let mut max_reuse_distances = vec![0u64; w * h];
                 let mut si = 0;
                 let mut li = 0;
 
@@ -892,7 +892,7 @@ impl Trace {
                             Some((min_c, channels)),
                             |_lane, pixel_idx, val_idx| {
                                 if last_store_at[val_idx] != usize::MAX {
-                                    let dist = (global_idx - last_store_at[val_idx]) as i64;
+                                    let dist = (global_idx - last_store_at[val_idx]) as u64;
                                     if dist > max_reuse_distances[pixel_idx] {
                                         max_reuse_distances[pixel_idx] = dist;
                                     }
@@ -929,7 +929,7 @@ impl Trace {
 
                 // usize::MAX = first load hasn't occurred at this (x, y, channel) yet.
                 let mut first_load_at = vec![usize::MAX; w * h * channels];
-                let mut max_reuse_distances = vec![0i64; w * h];
+                let mut max_reuse_distances = vec![0u64; w * h];
 
                 for &global_idx in load_indices {
                     let pkt = &packets[global_idx];
@@ -944,7 +944,7 @@ impl Trace {
                             if first_load_at[val_idx] == usize::MAX {
                                 first_load_at[val_idx] = global_idx;
                             } else {
-                                let dist = (global_idx - first_load_at[val_idx]) as i64;
+                                let dist = (global_idx - first_load_at[val_idx]) as u64;
                                 if dist > max_reuse_distances[pixel_idx] {
                                     max_reuse_distances[pixel_idx] = dist;
                                 }
