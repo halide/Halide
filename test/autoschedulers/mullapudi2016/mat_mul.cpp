@@ -5,7 +5,12 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-double run_test(bool auto_schedule) {
+struct Test {
+    Pipeline p;
+    Buffer<float> result;
+};
+
+Test build_test(bool auto_schedule) {
     int size = 1024;
     Buffer<float> A(size, size);
     Buffer<float> B(size, size);
@@ -114,13 +119,7 @@ double run_test(bool auto_schedule) {
     // Inspect the schedule (only for debugging))
     // out.print_loop_nest();
 
-    // Benchmark the schedule
-    Buffer<float> result(size, size);
-    double t = benchmark(3, 10, [&]() {
-        p.realize(result);
-    });
-
-    return t * 1000;
+    return Test{p, Buffer<float>(size, size)};
 }
 
 int main(int argc, char **argv) {
@@ -136,8 +135,15 @@ int main(int argc, char **argv) {
 
     load_plugin(argv[1]);
 
-    double manual_time = run_test(false);
-    double auto_time = run_test(true);
+    Test manual = build_test(false);
+    Test autosched = build_test(true);
+
+    auto [r_manual, r_auto] = benchmark_comparison(
+        BenchmarkConfig{},
+        [&]() { manual.p.realize(manual.result); },
+        [&]() { autosched.p.realize(autosched.result); });
+    double manual_time = r_manual.wall_time * 1000;
+    double auto_time = r_auto.wall_time * 1000;
 
     const double slowdown_factor = 8.0;
     if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {

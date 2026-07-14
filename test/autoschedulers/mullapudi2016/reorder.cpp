@@ -5,7 +5,12 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-double run_test_1(bool auto_schedule) {
+struct Test {
+    Pipeline p;
+    Buffer<int> out;
+};
+
+Test build_test_1(bool auto_schedule) {
     Var x("x"), y("y"), dx("dx"), dy("dy"), c("c");
 
     int W = 1024;
@@ -42,16 +47,15 @@ double run_test_1(bool auto_schedule) {
     // Inspect the schedule (only for debugging))
     // r.print_loop_nest();
 
-    // Run the schedule
-    Buffer<int> out(W, H, 3);
-    double t = benchmark(3, 10, [&]() {
-        p.realize(out);
-    });
-
-    return t * 1000;
+    return Test{p, Buffer<int>(W, H, 3)};
 }
 
-double run_test_2(bool auto_schedule) {
+struct Test2 {
+    Pipeline p;
+    Buffer<uint8_t> out;
+};
+
+Test2 build_test_2(bool auto_schedule) {
     Var x("x"), y("y"), z("z"), c("c");
 
     int W = 1024;
@@ -109,16 +113,10 @@ double run_test_2(bool auto_schedule) {
     // Inspect the schedule (only for debugging))
     // diff.print_loop_nest();
 
-    // Run the schedule
-    Buffer<uint8_t> out(left_im.width(), left_im.height(), 32, 3);
-    double t = benchmark(3, 10, [&]() {
-        p.realize(out);
-    });
-
-    return t * 1000;
+    return Test2{p, Buffer<uint8_t>(left_im.width(), left_im.height(), 32, 3)};
 }
 
-double run_test_3(bool auto_schedule) {
+Test build_test_3(bool auto_schedule) {
     Buffer<uint8_t> im(1024, 1028, 14, 14);
 
     Var x("x"), y("y"), dx("dx"), dy("dy"), c("c");
@@ -158,13 +156,7 @@ double run_test_3(bool auto_schedule) {
     // Inspect the schedule (only for debugging))
     // r.print_loop_nest();
 
-    // Run the schedule
-    Buffer<int> out(1024, 1024, 3);
-    double t = benchmark(3, 10, [&]() {
-        p.realize(out);
-    });
-
-    return t * 1000;
+    return Test{p, Buffer<int>(1024, 1024, 3)};
 }
 
 int main(int argc, char **argv) {
@@ -181,8 +173,15 @@ int main(int argc, char **argv) {
     load_plugin(argv[1]);
 
     {
-        double manual_time = run_test_1(false);
-        double auto_time = run_test_1(true);
+        Test manual = build_test_1(false);
+        Test autosched = build_test_1(true);
+
+        auto [r_manual, r_auto] = benchmark_comparison(
+            BenchmarkConfig{},
+            [&]() { manual.p.realize(manual.out); },
+            [&]() { autosched.p.realize(autosched.out); });
+        double manual_time = r_manual.wall_time * 1000;
+        double auto_time = r_auto.wall_time * 1000;
 
         const double slowdown_factor = 2.0;
         if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {
@@ -196,8 +195,15 @@ int main(int argc, char **argv) {
     }
 
     {
-        double manual_time = run_test_2(false);
-        double auto_time = run_test_2(true);
+        Test2 manual = build_test_2(false);
+        Test2 autosched = build_test_2(true);
+
+        auto [r_manual, r_auto] = benchmark_comparison(
+            BenchmarkConfig{},
+            [&]() { manual.p.realize(manual.out); },
+            [&]() { autosched.p.realize(autosched.out); });
+        double manual_time = r_manual.wall_time * 1000;
+        double auto_time = r_auto.wall_time * 1000;
 
         const double slowdown_factor = 2.0;
         if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {
@@ -211,8 +217,15 @@ int main(int argc, char **argv) {
     }
 
     {
-        double manual_time = run_test_3(false);
-        double auto_time = run_test_3(true);
+        Test manual = build_test_3(false);
+        Test autosched = build_test_3(true);
+
+        auto [r_manual, r_auto] = benchmark_comparison(
+            BenchmarkConfig{},
+            [&]() { manual.p.realize(manual.out); },
+            [&]() { autosched.p.realize(autosched.out); });
+        double manual_time = r_manual.wall_time * 1000;
+        double auto_time = r_auto.wall_time * 1000;
 
         const double slowdown_factor = 2.0;
         if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {

@@ -13,10 +13,12 @@ int main(int argc, char **argv) {
 
     // 8-bit mat-mul into 32-bit accumulator
     {
+        struct Variant {
+            Func result;
+            Buffer<int32_t> out;
+        };
 
-        double times[2];
-
-        for (int use_nested_vectorization = 0; use_nested_vectorization < 2; use_nested_vectorization++) {
+        auto build = [&](bool use_nested_vectorization) {
             Var x, y;
 
             ImageParam f(UInt(8), 2), g(UInt(8), 2);
@@ -103,19 +105,31 @@ int main(int argc, char **argv) {
             f_buf.fill(100);
             f.set(f_buf);
             g.set(g_buf);
-            Buffer<int32_t> out(1024, 1024);
 
-            Func result = prod.in();
+            Variant v;
+            v.out = Buffer<int32_t>(1024, 1024);
+            v.result = prod.in();
 
             // Uncomment to check the asm
-            // result.compile_to_assembly("/dev/stdout", {f, g}, target.with_feature(Target::NoAsserts).with_feature(Target::NoBoundsQuery));
+            // v.result.compile_to_assembly("/dev/stdout", {f, g}, target.with_feature(Target::NoAsserts).with_feature(Target::NoBoundsQuery));
 
-            times[use_nested_vectorization] =
-                Tools::benchmark(20, 20, [&]() {
-                    result.realize(out, target);
-                    out.device_sync();
-                });
-        }
+            return v;
+        };
+
+        Variant without_nested = build(false);
+        Variant with_nested = build(true);
+
+        auto [r_without, r_with] = Tools::benchmark_comparison(
+            Tools::BenchmarkConfig{},
+            [&]() {
+                without_nested.result.realize(without_nested.out, target);
+                without_nested.out.device_sync();
+            },
+            [&]() {
+                with_nested.result.realize(with_nested.out, target);
+                with_nested.out.device_sync();
+            });
+        double times[2] = {r_without.wall_time, r_with.wall_time};
 
         double speed_up = times[0] / times[1];
         printf("8-bit gemm\n"
@@ -133,10 +147,12 @@ int main(int argc, char **argv) {
 
     // 8-bit blur into 32-bit accumulator
     {
+        struct Variant {
+            Func result;
+            Buffer<uint8_t> out;
+        };
 
-        double times[2];
-
-        for (int use_nested_vectorization = 0; use_nested_vectorization < 2; use_nested_vectorization++) {
+        auto build = [&](bool use_nested_vectorization) {
             Var x, y;
 
             ImageParam f(UInt(8), 1), g(UInt(8), 1);
@@ -192,17 +208,31 @@ int main(int argc, char **argv) {
             f_buf.fill(100);
             f.set(f_buf);
             g.set(g_buf);
-            Buffer<uint8_t> out(f_buf.width() - g_buf.width() - 128);
+
+            Variant v;
+            v.out = Buffer<uint8_t>(f_buf.width() - g_buf.width() - 128);
+            v.result = result;
 
             // Uncomment to check the asm
-            // result.compile_to_assembly("/dev/stdout", {f, g}, target);
+            // v.result.compile_to_assembly("/dev/stdout", {f, g}, target);
 
-            times[use_nested_vectorization] =
-                Tools::benchmark(10, 10, [&]() {
-                    result.realize(out, target);
-                    out.device_sync();
-                });
-        }
+            return v;
+        };
+
+        Variant without_nested = build(false);
+        Variant with_nested = build(true);
+
+        auto [r_without, r_with] = Tools::benchmark_comparison(
+            Tools::BenchmarkConfig{},
+            [&]() {
+                without_nested.result.realize(without_nested.out, target);
+                without_nested.out.device_sync();
+            },
+            [&]() {
+                with_nested.result.realize(with_nested.out, target);
+                with_nested.out.device_sync();
+            });
+        double times[2] = {r_without.wall_time, r_with.wall_time};
 
         double speed_up = times[0] / times[1];
         printf("8-bit blur\n"
@@ -222,10 +252,12 @@ int main(int argc, char **argv) {
     // adjacent vector lanes at the same time as reduction over slices
     // of the vector. This is only a win on platforms with a pmaddwd-like instruction.
     if (target.arch == Target::X86) {
+        struct Variant {
+            Func result;
+            Buffer<int16_t> out;
+        };
 
-        double times[2];
-
-        for (int use_nested_vectorization = 0; use_nested_vectorization < 2; use_nested_vectorization++) {
+        auto build = [&](bool use_nested_vectorization) {
             Var x, y;
 
             ImageParam f(Int(16), 1), g(Int(16), 1);
@@ -275,17 +307,31 @@ int main(int argc, char **argv) {
             f_buf.fill(100);
             f.set(f_buf);
             g.set(g_buf);
-            Buffer<int16_t> out(f_buf.width() - g_buf.width() - 128);
+
+            Variant v;
+            v.out = Buffer<int16_t>(f_buf.width() - g_buf.width() - 128);
+            v.result = result;
 
             // Uncomment to check the asm
-            // result.compile_to_assembly("/dev/stdout", {f, g}, target);
+            // v.result.compile_to_assembly("/dev/stdout", {f, g}, target);
 
-            times[use_nested_vectorization] =
-                Tools::benchmark(10, 10, [&]() {
-                    result.realize(out, target);
-                    out.device_sync();
-                });
-        }
+            return v;
+        };
+
+        Variant without_nested = build(false);
+        Variant with_nested = build(true);
+
+        auto [r_without, r_with] = Tools::benchmark_comparison(
+            Tools::BenchmarkConfig{},
+            [&]() {
+                without_nested.result.realize(without_nested.out, target);
+                without_nested.out.device_sync();
+            },
+            [&]() {
+                with_nested.result.realize(with_nested.out, target);
+                with_nested.out.device_sync();
+            });
+        double times[2] = {r_without.wall_time, r_with.wall_time};
 
         double speed_up = times[0] / times[1];
         printf("16-bit blur with reduction dimension outermost vector dim\n"
@@ -304,10 +350,12 @@ int main(int argc, char **argv) {
 
     // 8-bit sparse blur into 32-bit accumulator
     {
+        struct Variant {
+            Func result;
+            Buffer<uint32_t> out;
+        };
 
-        double times[2];
-
-        for (int use_nested_vectorization = 0; use_nested_vectorization < 2; use_nested_vectorization++) {
+        auto build = [&](bool use_nested_vectorization) {
             Var x, y;
 
             ImageParam f(UInt(8), 1), g(UInt(8), 1);
@@ -368,17 +416,31 @@ int main(int argc, char **argv) {
                 taps_buf(i) = (i * i) & 127;
             }
             taps.set(taps_buf);
-            Buffer<uint32_t> out(f_buf.width() - g_buf.width() - 128);
+
+            Variant v;
+            v.out = Buffer<uint32_t>(f_buf.width() - g_buf.width() - 128);
+            v.result = result;
 
             // Uncomment to check the asm
-            // result.compile_to_assembly("/dev/stdout", {f, g, taps}, target);
+            // v.result.compile_to_assembly("/dev/stdout", {f, g, taps}, target);
 
-            times[use_nested_vectorization] =
-                Tools::benchmark(10, 10, [&]() {
-                    result.realize(out, target);
-                    out.device_sync();
-                });
-        }
+            return v;
+        };
+
+        Variant without_nested = build(false);
+        Variant with_nested = build(true);
+
+        auto [r_without, r_with] = Tools::benchmark_comparison(
+            Tools::BenchmarkConfig{},
+            [&]() {
+                without_nested.result.realize(without_nested.out, target);
+                without_nested.out.device_sync();
+            },
+            [&]() {
+                with_nested.result.realize(with_nested.out, target);
+                with_nested.out.device_sync();
+            });
+        double times[2] = {r_without.wall_time, r_with.wall_time};
 
         // We don't actually get any win from this on X86, as the
         // basic version also manages to use pmaddwd well.

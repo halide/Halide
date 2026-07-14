@@ -40,9 +40,17 @@ Result test_interleave(int factor, const Target &t) {
 
     output.realize(out);
 
-    double time = benchmark(20, 20, [&]() {
-        output.realize(out);
-    });
+    // Keep min_time and warmup_time low: this is called many times across a
+    // sweep of types and factors (each an independent measurement, not a
+    // paired comparison), and the op itself is fast.
+    BenchmarkConfig config;
+    config.warmup_time = 0;
+    config.min_time = 0.005;
+    double time = benchmark([&]() {
+                      output.realize(out);
+                  },
+                            config)
+                      .wall_time;
 
     for (int y = 0; y < factor; y++) {
         for (int x = 0; x < N; x++) {
@@ -89,9 +97,15 @@ Result test_deinterleave(int factor, const Target &t) {
 
     output.realize(out);
 
-    double time = benchmark(20, 20, [&]() {
-        output.realize(out);
-    });
+    // See comment on the matching benchmark() call in test_interleave.
+    BenchmarkConfig config;
+    config.warmup_time = 0;
+    config.min_time = 0.005;
+    double time = benchmark([&]() {
+                      output.realize(out);
+                  },
+                            config)
+                      .wall_time;
 
     for (int y = 0; y < factor; y++) {
         for (int x = 0; x < N; x++) {

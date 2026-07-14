@@ -51,9 +51,18 @@ Result test_transpose(int block_width, int block_height, const Target &t) {
 
     output.realize(out);
 
-    double time = benchmark(10, 10, [&]() {
-        output.realize(out);
-    });
+    // Keep min_time and warmup_time low: this is called many times across a
+    // sweep of types and tile sizes (each an independent measurement, not a
+    // paired comparison, so warm-up fairness between calls doesn't matter
+    // here), and the op itself is fast.
+    BenchmarkConfig config;
+    config.warmup_time = 0;
+    config.min_time = 0.005;
+    double time = benchmark([&]() {
+                      output.realize(out);
+                  },
+                            config)
+                      .wall_time;
 
     for (int y = 0; y < N; y++) {
         for (int x = 0; x < N; x++) {

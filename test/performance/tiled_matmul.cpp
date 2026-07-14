@@ -150,9 +150,10 @@ bool matmul(Halide::Target target) {
     // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A, B}, target);
     // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
 
-    auto time = Tools::benchmark(20, 20, [&]() {
-        result.realize(out);
-    });
+    auto time = Tools::benchmark([&]() {
+                    result.realize(out);
+                })
+                    .wall_time;
     std::cout << "Exec time: " << time << "\n";
     std::cout << "Success!\n";
     return true;
@@ -235,9 +236,10 @@ bool matmul_bf16(Halide::Target target) {
     // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
     // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
 
-    auto time = Tools::benchmark(20, 20, [&]() {
-        result.realize(out);
-    });
+    auto time = Tools::benchmark([&]() {
+                    result.realize(out);
+                })
+                    .wall_time;
 
     std::cout << "Exec time: " << time << "\n";
     std::cout << "Success!\n";

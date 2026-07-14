@@ -30,9 +30,12 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    double times[2];
-    uint32_t correct = 0;
-    for (int use_async = 0; use_async < 2; use_async++) {
+    struct Variant {
+        Func cpu;
+        Buffer<uint32_t> out;
+    };
+
+    auto build = [&](bool use_async) {
         Var x, y, t, xi, yi;
 
         ImageParam in(UInt(32), 3);
@@ -65,34 +68,39 @@ int main(int argc, char **argv) {
         Buffer<uint32_t> in_buf(800, 800, 16);
         in_buf.fill(17);
         in.set(in_buf);
-        Buffer<uint32_t> out(800, 800, 16);
 
+        Variant v;
+        v.out = Buffer<uint32_t>(800, 800, 16);
+        v.cpu = cpu;
         cpu.compile_jit();
+        return v;
+    };
 
-        times[use_async] = benchmark(10, 1, [&]() {
-            cpu.realize(out);
-        });
+    Variant without_async = build(false);
+    Variant with_async = build(true);
 
-        if (!use_async) {
-            correct = out(0, 0, 0);
-        } else {
-            for (int t = 0; t < out.dim(2).extent(); t++) {
-                for (int y = 0; y < out.dim(1).extent(); y++) {
-                    for (int x = 0; x < out.dim(0).extent(); x++) {
-                        if (out(x, y, t) != correct) {
-                            printf("Async output at (%d, %d, %d) is %u instead of %u\n",
-                                   x, y, t, out(x, y, t), correct);
-                            return 1;
-                        }
-                    }
+    auto [r_without, r_with] = benchmark_comparison(
+        BenchmarkConfig{},
+        [&]() { without_async.cpu.realize(without_async.out); },
+        [&]() { with_async.cpu.realize(with_async.out); });
+
+    double times[2] = {r_without.wall_time, r_with.wall_time};
+
+    uint32_t correct = without_async.out(0, 0, 0);
+    for (int t = 0; t < with_async.out.dim(2).extent(); t++) {
+        for (int y = 0; y < with_async.out.dim(1).extent(); y++) {
+            for (int x = 0; x < with_async.out.dim(0).extent(); x++) {
+                if (with_async.out(x, y, t) != correct) {
+                    printf("Async output at (%d, %d, %d) is %u instead of %u\n",
+                           x, y, t, with_async.out(x, y, t), correct);
+                    return 1;
                 }
             }
         }
-
-        printf("%s: %f\n",
-               use_async ? "with async" : "without async",
-               times[use_async]);
     }
+
+    printf("without async: %f\n", times[0]);
+    printf("with async: %f\n", times[1]);
 
     if (times[1] > 1.2 * times[0]) {
         printf("Using async should have been faster\n");

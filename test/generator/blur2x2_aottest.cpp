@@ -41,9 +41,10 @@ void test(Buffer<float, 3> (*factory)(int w, int h, int c)) {
     blur2x2(input, W, H, output);
 
 #if RUN_BENCHMARKS
-    double t = Halide::Tools::benchmark(10, 100, [&]() {
-        blur2x2(input, W, H, output);
-    });
+    double t = Halide::Tools::benchmark([&]() {
+                   blur2x2(input, W, H, output);
+               })
+                   .wall_time;
     const float megapixels = (W * H) / (1024.f * 1024.f);
     printf("Benchmark: %d %d -> %f mpix/s\n", W, H, megapixels / t);
 #endif

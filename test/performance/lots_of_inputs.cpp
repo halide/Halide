@@ -23,11 +23,15 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // Compilation is a one-shot, non-idempotent operation (a Func caches its
+    // own JIT/lowering state), so it can't be measured with benchmark()'s
+    // adaptive convergence (which calls the op several times by design).
+    // Time it directly with the same clock helpers benchmark() itself uses.
     for (int size = 1; size <= 128; size *= 2) {
         Func f = make_pipeline(size);
-        double t_f = benchmark(1, 1, [&]() {
-            f.compile_jit();
-        });
+        auto start = benchmark_now();
+        f.compile_jit();
+        double t_f = benchmark_duration_seconds(start, benchmark_now());
 
         printf("Total compile time with %d inputs = %f s \n", size, t_f);
 
@@ -41,9 +45,9 @@ int main(int argc, char **argv) {
     for (int size = 1; size <= 128; size *= 2) {
         Func f = make_pipeline(size);
 
-        double t_f = benchmark(1, 1, [&]() {
-            f.compile_to_module(f.infer_arguments());
-        });
+        auto start = benchmark_now();
+        f.compile_to_module(f.infer_arguments());
+        double t_f = benchmark_duration_seconds(start, benchmark_now());
 
         printf("Lowering time with %d inputs = %f s \n", size, t_f);
 

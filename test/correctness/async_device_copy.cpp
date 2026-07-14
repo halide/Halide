@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
         // sure how to tune the relative cost of the two stages to
         // make the async version reliably better than the non-async
         // version.
-        double t = Halide::Tools::benchmark(3, 3, [&]() {avg.realize(out); out.device_sync(); });
+        double t = Halide::Tools::benchmark([&]() { avg.realize(out); out.device_sync(); }).wall_time;
         printf("Case %d: %f\n", i, t);
     }
 

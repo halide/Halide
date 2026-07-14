@@ -12,27 +12,18 @@ int main(int argc, char **argv) {
 
     double times[3] = {0.f, 0.f, 0.f};
 
+    struct Variant {
+        Func g;
+        Param<int> task_size;
+        Buffer<float> out;
+    };
+
     for (int sz = 1; sz < 32; sz = sz * 2 + 1) {
 
-        for (int c = 0; c < 3; c++) {
-            MemoryType mem_type;
-            bool use_bound;
-            // Check three cases:
-
-            if (c == 0) {
-                // Allocation on the stack where size is known.
-                mem_type = MemoryType::Stack;
-                use_bound = true;
-            } else if (c == 1) {
-                // Allocation on the stack where the size is dynamic
-                mem_type = MemoryType::Stack;
-                use_bound = false;
-            } else {
-                // Allocation on the heap where the size is dynamic
-                mem_type = MemoryType::Heap;
-                use_bound = false;
-            }
-
+        // Check three cases: allocation on the stack where the size is
+        // known, allocation on the stack where the size is dynamic, and
+        // allocation on the heap where the size is dynamic.
+        auto build = [&](MemoryType mem_type, bool use_bound) {
             Var x, y;
 
             std::vector<Func> fs;
@@ -44,29 +35,39 @@ int main(int argc, char **argv) {
                 fs.push_back(f);
             }
 
-            Func g;
-            g(x, y) = e;
+            Variant v;
+            v.g(x, y) = e;
 
             Var yo, yi;
             // Place the y loop body in its own function with its own
             // stack frame by making a parallel loop of some size
             // which will be 1 in practice.
-            Param<int> task_size;
-            g.split(y, yo, yi, task_size).parallel(yi);
+            v.g.split(y, yo, yi, v.task_size).parallel(yi);
             for (auto f : fs) {
-                f.compute_at(g, yi).store_in(mem_type);
+                f.compute_at(v.g, yi).store_in(mem_type);
                 if (use_bound) {
                     f.bound_extent(x, sz);
                 }
             }
 
-            Buffer<float> out(sz, 1024);
-            task_size.set(1);
-            double t = 1e3 * Tools::benchmark(10, 1 + 100 / sz, [&]() {
-                           g.realize(out);
-                       });
-            times[c] += t;
-        }
+            v.out = Buffer<float>(sz, 1024);
+            v.task_size.set(1);
+            return v;
+        };
+
+        Variant stack_bound = build(MemoryType::Stack, true);
+        Variant stack_dynamic = build(MemoryType::Stack, false);
+        Variant heap_dynamic = build(MemoryType::Heap, false);
+
+        auto [r_stack_bound, r_stack_dynamic, r_heap_dynamic] = Tools::benchmark_comparison(
+            Tools::BenchmarkConfig{},
+            [&]() { stack_bound.g.realize(stack_bound.out); },
+            [&]() { stack_dynamic.g.realize(stack_dynamic.out); },
+            [&]() { heap_dynamic.g.realize(heap_dynamic.out); });
+
+        times[0] += r_stack_bound.wall_time * 1e3;
+        times[1] += r_stack_dynamic.wall_time * 1e3;
+        times[2] += r_heap_dynamic.wall_time * 1e3;
     }
 
     printf("Constant-sized stack allocation: %f\n"
