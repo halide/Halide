@@ -61,7 +61,8 @@ int main() {
     // on over the run -- is shared roughly equally across all six, rather
     // than systematically favoring whichever one happens to run first or
     // last. Each entry in the returned tuple is a BenchmarkResult; its
-    // wall_time is the best average-iteration time seen, in seconds.
+    // wall_time is a robust geometric mean of its average-iteration samples,
+    // in seconds.
     auto [planar_result, interleaved_result,
           either_planar_result, either_interleaved_result,
           specialized_planar_result, specialized_interleaved_result] =

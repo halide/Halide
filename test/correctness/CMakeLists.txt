@@ -10,6 +10,7 @@ tests(
     autodiff.cpp
     bad_likely.cpp
     bad_partition_always_throws.cpp
+    benchmark.cpp
     bit_counting.cpp
     bits_known.cpp
     bitwise_ops.cpp

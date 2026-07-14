@@ -7,9 +7,12 @@
 #include <chrono>
 #include <cmath>
 #include <functional>
+#include <iterator>
 #include <limits>
+#include <numeric>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
@@ -99,6 +102,16 @@ inline double time_iterations(const std::function<void()> &op, uint64_t iteratio
     return benchmark_duration_seconds(start, end) / iterations;
 }
 
+inline void warmup(const std::function<void()> &op, double warmup_time) {
+    if (warmup_time <= 0) {
+        return;
+    }
+    auto start = benchmark_now();
+    do {
+        op();
+    } while (benchmark_duration_seconds(start, benchmark_now()) < warmup_time);
+}
+
 }  // namespace BenchmarkInternal
 
 struct BenchmarkConfig {
@@ -125,24 +138,30 @@ struct BenchmarkConfig {
     // that client code needs to adjust this value.
     uint64_t max_iters_per_sample{1000000};
 
-    // Terminate when the relative difference between the best runtime
-    // seen and the third-best runtime seen is no more than
-    // this. Controls accuracy. The closer to zero this gets the more
-    // reliable the answer, but the longer it may take to run.
+    // Controls the stopping accuracy. benchmark() compares the best and
+    // third-best runtimes; benchmark_comparison() uses the multiplicative
+    // half-width of paired 95% confidence intervals. The closer to zero this
+    // gets the more reliable the answer, but the longer it may take to run.
     double accuracy{0.03};
 
-    // Only used by benchmark_comparison(). The number of times to interleave
-    // measurement across the operations being compared, keeping the best
-    // result seen for each. Interleaving means transient CPU frequency/thermal
-    // drift is shared roughly equally across all operations, instead of biasing
-    // whichever one happens to run first or last. The parameters above apply
-    // independently to each (operation, round) measurement, so the total
-    // wall-clock cost of a comparison scales with comparison_rounds * min_time.
-    uint64_t comparison_rounds{3};
+    // Only used by benchmark_comparison(). The minimum number of complete
+    // interleaved measurement blocks. More blocks may be taken, up to max_time,
+    // if the paired confidence intervals have not converged to accuracy.
+    uint64_t comparison_rounds{20};
+
+    // Target duration of one timed batch in benchmark_comparison(). Short
+    // batches allow frequency and thermal drift to cancel within each block.
+    // The actual target may be reduced to fit comparison_rounds into min_time.
+    double comparison_sample_time{0.005};
+
+    // Seed used to randomize the order of the rows in each balanced comparison
+    // design. A fixed default makes benchmark runs reproducible.
+    uint64_t comparison_seed{0x6a09e667f3bcc909ULL};
 };
 
 struct BenchmarkResult {
-    // Best elapsed wall-clock time per iteration (seconds).
+    // Elapsed wall-clock time per iteration (seconds). benchmark() reports the
+    // best sample; benchmark_comparison() reports a robust geometric mean.
     double wall_time;
 
     // Number of samples used for measurement.
@@ -156,8 +175,17 @@ struct BenchmarkResult {
     uint64_t iterations;
 
     // Measured accuracy between the best and third-best result.
-    // Will be <= config.accuracy unless max_time is exceeded.
+    // For benchmark_comparison(), this is instead the multiplicative half-width
+    // of relative_time's approximate 95% confidence interval. It will be <=
+    // config.accuracy unless max_time is exceeded.
     double accuracy;
+
+    // For benchmark_comparison(), the estimated time relative to the first
+    // operation, plus an approximate paired 95% confidence interval. These are
+    // all 1 for benchmark() and for the first operation in a comparison.
+    double relative_time{1.0};
+    double relative_time_ci95_low{1.0};
+    double relative_time_ci95_high{1.0};
 
     operator double() const {
         return wall_time;
@@ -167,12 +195,7 @@ struct BenchmarkResult {
 inline BenchmarkResult benchmark(const std::function<void()> &op, const BenchmarkConfig &config = {}) {
     BenchmarkResult result{0, 0, 0};
 
-    if (config.warmup_time > 0) {
-        auto start = benchmark_now();
-        do {
-            op();
-        } while (benchmark_duration_seconds(start, benchmark_now()) < config.warmup_time);
-    }
+    BenchmarkInternal::warmup(op, config.warmup_time);
 
     const double min_time = std::max(10 * 1e-6, config.min_time);
     const double max_time = std::max(config.min_time, config.max_time);
@@ -256,28 +279,199 @@ auto array_to_tuple(const std::array<T, N> &arr) {
     return array_to_tuple(arr, std::make_index_sequence<N>{});
 }
 
+// Return one row of a balanced Williams design. For even N, N rows balance
+// both position and first-order carryover. Odd N requires each row and its
+// reverse, for a total of 2N rows.
+template<size_t N>
+constexpr size_t comparison_design_rows() {
+    static_assert(N > 0, "A comparison design requires at least one operation.");
+    return N == 1 ? 1 : N * ((N & 1) ? 2 : 1);
+}
+
+template<size_t N>
+std::array<size_t, N> comparison_order(size_t design_row) {
+    static_assert(N > 0, "A comparison order requires at least one operation.");
+    std::array<size_t, N> order{};
+    if constexpr (N == 1) {
+        return order;
+    }
+
+    const bool reverse = (N & 1) && (design_row & 1);
+    const size_t shift = ((N & 1) ? design_row / 2 : design_row) % N;
+    for (size_t position = 0; position < N; position++) {
+        const size_t base = position == 0  ? 0 :
+                            (position & 1) ? (position + 1) / 2 :
+                                             N - position / 2;
+        const size_t output_position = reverse ? N - 1 - position : position;
+        order[output_position] = (base + shift) % N;
+    }
+    return order;
+}
+
+inline uint64_t comparison_random(uint64_t &state) {
+    // SplitMix64 is small, deterministic across standard-library versions,
+    // and more than adequate for randomizing experimental-design rows.
+    state += 0x9e3779b97f4a7c15ULL;
+    uint64_t z = state;
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+    return z ^ (z >> 31);
+}
+
+inline void shuffle_design_rows(std::vector<size_t> &rows, uint64_t seed, uint64_t cycle) {
+    std::iota(rows.begin(), rows.end(), 0);
+    uint64_t state = seed ^ (cycle * 0xd1b54a32d192ed03ULL);
+    for (size_t i = rows.size(); i > 1; i--) {
+        const size_t j = comparison_random(state) % i;
+        std::swap(rows[i - 1], rows[j]);
+    }
+}
+
+inline uint64_t calibrate_iterations(const std::function<void()> &op,
+                                     double target_time,
+                                     uint64_t max_iters_per_sample) {
+    const uint64_t max_iters = std::max<uint64_t>(1, max_iters_per_sample);
+    uint64_t iterations = 1;
+    for (;;) {
+        const double time_per_iteration = time_iterations(op, iterations);
+        const double elapsed = time_per_iteration * iterations;
+        if (elapsed >= target_time * 0.8 || iterations >= max_iters) {
+            return iterations;
+        }
+
+        long double scale = elapsed > 1e-9 ? target_time / elapsed : 10.0;
+        scale = std::max<long double>(2.0, std::min<long double>(scale, 100.0));
+        const long double predicted = std::ceil(iterations * scale);
+        iterations = predicted >= max_iters ? max_iters : static_cast<uint64_t>(predicted);
+    }
+}
+
+inline double t95_multiplier(size_t samples) {
+    // Two-sided 95% Student-t critical values for 1..30 degrees of freedom.
+    static constexpr double critical_values[] = {
+        12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306,
+        2.262, 2.228, 2.201, 2.179, 2.160, 2.145, 2.131, 2.120,
+        2.110, 2.101, 2.093, 2.086, 2.080, 2.074, 2.069, 2.064,
+        2.060, 2.056, 2.052, 2.048, 2.045, 2.042};
+    if (samples < 2) {
+        return std::numeric_limits<double>::infinity();
+    }
+    const size_t degrees_of_freedom = samples - 1;
+    if (degrees_of_freedom <= std::size(critical_values)) {
+        return critical_values[degrees_of_freedom - 1];
+    }
+    return 1.96;
+}
+
+struct RelativeStatistics {
+    double estimate;
+    double ci95_low;
+    double ci95_high;
+    double accuracy;
+};
+
+struct TrimmedStatistics {
+    double mean;
+    double standard_error;
+    size_t retained_samples;
+};
+
+inline TrimmedStatistics trimmed_statistics(std::vector<double> values) {
+    assert(!values.empty());
+    std::sort(values.begin(), values.end());
+    const size_t trim = values.size() / 10;
+    const size_t first = trim;
+    const size_t last = values.size() - trim;
+
+    double mean = 0;
+    for (size_t i = first; i < last; i++) {
+        mean += values[i];
+    }
+    mean /= last - first;
+
+    if (values.size() < 2) {
+        return {mean, std::numeric_limits<double>::infinity(), last - first};
+    }
+
+    // Estimate the trimmed mean's standard error from the corresponding
+    // Winsorized sample: discarded tails are replaced by their nearest kept
+    // value. The scale factor accounts for the reduced central interval.
+    double winsorized_mean = 0;
+    for (size_t i = 0; i < values.size(); i++) {
+        const double winsorized = values[std::min(last - 1, std::max(first, i))];
+        winsorized_mean += winsorized;
+    }
+    winsorized_mean /= values.size();
+
+    double squared_deviations = 0;
+    for (size_t i = 0; i < values.size(); i++) {
+        const double winsorized = values[std::min(last - 1, std::max(first, i))];
+        squared_deviations += (winsorized - winsorized_mean) * (winsorized - winsorized_mean);
+    }
+    const double winsorized_variance = squared_deviations / (values.size() - 1);
+    const double retained_fraction = static_cast<double>(last - first) / values.size();
+    const double standard_error = std::sqrt(winsorized_variance / values.size()) / retained_fraction;
+    return {mean, standard_error, last - first};
+}
+
+inline RelativeStatistics relative_statistics(const std::vector<double> &times,
+                                              const std::vector<double> &reference_times) {
+    assert(times.size() == reference_times.size());
+    if (times.empty()) {
+        return {1.0, 0.0, std::numeric_limits<double>::infinity(),
+                std::numeric_limits<double>::infinity()};
+    }
+
+    std::vector<double> log_ratios;
+    log_ratios.reserve(times.size());
+    for (size_t i = 0; i < times.size(); i++) {
+        const double time = std::max(times[i], std::numeric_limits<double>::min());
+        const double reference_time = std::max(reference_times[i], std::numeric_limits<double>::min());
+        log_ratios.push_back(std::log(time / reference_time));
+    }
+
+    const auto statistics = trimmed_statistics(std::move(log_ratios));
+    const double estimate = std::exp(statistics.mean);
+    if (times.size() < 2) {
+        return {estimate, 0.0, std::numeric_limits<double>::infinity(),
+                std::numeric_limits<double>::infinity()};
+    }
+    const double log_margin = t95_multiplier(statistics.retained_samples) * statistics.standard_error;
+    return {estimate,
+            std::exp(statistics.mean - log_margin),
+            std::exp(statistics.mean + log_margin),
+            std::exp(log_margin) - 1.0};
+}
+
+inline double robust_geometric_mean(const std::vector<double> &values) {
+    assert(!values.empty());
+    std::vector<double> log_values;
+    log_values.reserve(values.size());
+    for (double value : values) {
+        value = std::max(value, std::numeric_limits<double>::min());
+        log_values.push_back(std::log(value));
+    }
+    return std::exp(trimmed_statistics(std::move(log_values)).mean);
+}
+
 }  // namespace BenchmarkInternal
 
 // Benchmark and compare several operations against each other, returning one
-// BenchmarkResult per operation (in argument order) as a tuple. Measurement
-// is interleaved across config.comparison_rounds rounds (instead of fully
-// benchmarking one operation and then the next), keeping the best result
-// seen for each operation.
+// BenchmarkResult per operation (in argument order) as a tuple. Each operation
+// is warmed and calibrated once, then short timed batches are measured in
+// counterbalanced, randomized blocks. wall_time is a robust geometric mean of
+// the measured batches, rather than the minimum.
 //
-// This matters because timing operations fully back-to-back is prone to
-// order-dependent bias: whichever one happens to run first pays the cost of
-// faulting in any memory it touches, and (typically more significantly)
-// whichever one runs after another inherits the CPU frequency/thermal state
-// left behind by it. Interleaving means that drift is shared roughly equally
-// across all operations being compared, rather than accumulating unevenly.
+// Counterbalancing distributes position and predecessor effects equally across
+// operations. Short blocks make transient CPU frequency and thermal drift
+// common to the observations in a block. The relative fields in each result
+// use paired log-ratios against the first operation, so that common drift
+// cancels rather than adding noise to the comparison.
 //
-// NOTE: config.min_time/max_time/accuracy apply independently to each
-// (operation, round) measurement -- i.e., each individual measurement
-// re-targets the same convergence criteria as a standalone call to
-// benchmark() above. This keeps their meaning identical to the single-op
-// benchmark(), but means the total wall-clock cost of benchmark_comparison()
-// scales roughly as (number of operations) * config.comparison_rounds *
-// config.min_time.
+// min_time and max_time are total measured-time budgets per operation. After
+// comparison_rounds and min_time have both been satisfied, measurement stops
+// when every paired 95% interval is within config.accuracy, or when max_time is
+// reached. Stopping only happens at the end of a complete balanced design.
 template<typename... Fns>
 auto benchmark_comparison(const BenchmarkConfig &config, Fns &&...fns) {
     constexpr size_t N = sizeof...(Fns);
@@ -285,22 +479,92 @@ auto benchmark_comparison(const BenchmarkConfig &config, Fns &&...fns) {
 
     std::array<std::function<void()>, N> ops{{std::function<void()>(std::forward<Fns>(fns))...}};
 
-    std::array<BenchmarkResult, N> best;
-    for (auto &r : best) {
-        r = BenchmarkResult{std::numeric_limits<double>::infinity(), 0, 0, 0};
+    constexpr size_t design_size = BenchmarkInternal::comparison_design_rows<N>();
+    std::vector<size_t> design_rows(design_size);
+    uint64_t design_cycle = 0;
+    BenchmarkInternal::shuffle_design_rows(design_rows, config.comparison_seed, design_cycle);
+
+    // Warm and calibrate in a balanced row rather than argument order. These
+    // calls are discarded; calibration is reused for every measured block.
+    const auto setup_order = BenchmarkInternal::comparison_order<N>(design_rows[0]);
+    for (size_t i : setup_order) {
+        BenchmarkInternal::warmup(ops[i], config.warmup_time);
     }
 
-    const uint64_t rounds = std::max<uint64_t>(1, config.comparison_rounds);
-    for (uint64_t round = 0; round < rounds; round++) {
-        for (size_t i = 0; i < N; i++) {
-            BenchmarkResult r = benchmark(ops[i], config);
-            if (r.wall_time < best[i].wall_time) {
-                best[i] = r;
-            }
+    const double min_time = std::max(10 * 1e-6, config.min_time);
+    const double max_time = std::max(min_time, config.max_time);
+    const uint64_t requested_blocks = std::max<uint64_t>(1, config.comparison_rounds);
+    const uint64_t min_blocks = ((requested_blocks + design_size - 1) / design_size) * design_size;
+    const double configured_sample_time = config.comparison_sample_time > 0 ?
+                                              config.comparison_sample_time :
+                                              min_time;
+    const double sample_time = std::max(10 * 1e-6,
+                                        std::min(configured_sample_time,
+                                                 min_time / min_blocks));
+
+    std::array<uint64_t, N> iterations_per_sample{};
+    for (size_t i : setup_order) {
+        iterations_per_sample[i] = BenchmarkInternal::calibrate_iterations(
+            ops[i], sample_time, config.max_iters_per_sample);
+    }
+
+    std::array<std::vector<double>, N> times;
+    std::array<double, N> measured_time{};
+    uint64_t blocks = 0;
+    for (;;) {
+        if (blocks > 0 && blocks % design_size == 0) {
+            design_cycle++;
+            BenchmarkInternal::shuffle_design_rows(design_rows, config.comparison_seed, design_cycle);
+        }
+        const size_t row = design_rows[blocks % design_size];
+        const auto order = BenchmarkInternal::comparison_order<N>(row);
+        for (size_t i : order) {
+            const double time = BenchmarkInternal::time_iterations(ops[i], iterations_per_sample[i]);
+            times[i].push_back(time);
+            measured_time[i] += time * iterations_per_sample[i];
+        }
+        blocks++;
+
+        if (blocks % design_size != 0) {
+            continue;
+        }
+
+        bool reached_min_time = true;
+        bool reached_max_time = false;
+        for (double time : measured_time) {
+            reached_min_time &= time >= min_time;
+            reached_max_time |= time >= max_time;
+        }
+
+        bool accurate = true;
+        for (size_t i = 1; i < N; i++) {
+            accurate &= BenchmarkInternal::relative_statistics(times[i], times[0]).accuracy <=
+                        std::min(0.1, std::max(0.001, config.accuracy));
+        }
+        if ((blocks >= min_blocks && reached_min_time && accurate) || reached_max_time) {
+            break;
         }
     }
 
-    return BenchmarkInternal::array_to_tuple(best);
+    std::array<BenchmarkResult, N> results;
+    const double reference_wall_time = BenchmarkInternal::robust_geometric_mean(times[0]);
+    for (size_t i = 0; i < N; i++) {
+        const auto relative = i == 0 ? BenchmarkInternal::RelativeStatistics{1.0, 1.0, 1.0, 0.0} :
+                                       BenchmarkInternal::relative_statistics(times[i], times[0]);
+        const uint64_t iterations = iterations_per_sample[i] >
+                                            std::numeric_limits<uint64_t>::max() / blocks ?
+                                        std::numeric_limits<uint64_t>::max() :
+                                        iterations_per_sample[i] * blocks;
+        results[i] = BenchmarkResult{reference_wall_time * relative.estimate,
+                                     blocks,
+                                     iterations,
+                                     relative.accuracy,
+                                     relative.estimate,
+                                     relative.ci95_low,
+                                     relative.ci95_high};
+    }
+
+    return BenchmarkInternal::array_to_tuple(results);
 }
 
 }  // namespace Tools
