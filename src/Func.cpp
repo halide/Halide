@@ -3205,55 +3205,13 @@ Stage FuncRef::operator=(const Expr &e) {
     return (*this) = Tuple(e);
 }
 
-namespace {
-
-// Collect the Halide Funcs called in the value arms of a branch (the true and
-// false values, recursing through the nested branches of a multi-way branch).
-// Conditions are intentionally skipped: they are always evaluated, so they do
-// not need to be inlined for the branch to gate computation.
-class CollectValueArmFuncs : public IRGraphVisitor {
-    using IRGraphVisitor::visit;
-    using IRGraphVisitor::include;
-
-    void visit(const Call *op) override {
-        if (op->is_intrinsic(Call::branch) && op->args.size() == 3) {
-            // Recurse into the value arms (args 1 and 2) only; skip the
-            // condition (arg 0).
-            include(op->args[1]);
-            include(op->args[2]);
-            return;
-        }
-        if (op->call_type == Call::Halide && op->func.defined()) {
-            funcs.emplace_back(op->func);
-        }
-        IRGraphVisitor::visit(op);
-    }
-
-public:
-    std::vector<Function> funcs;
-};
-
-// Force-inline the value arms of a branch so that only the taken side is
-// actually computed (not just loaded). Hard-error if a value arm calls a Func
-// that can not be inlined.
-void force_inline_branch_arms(const Expr &branch_expr) {
-    CollectValueArmFuncs collector;
-    branch_expr.accept(&collector);
-    for (Function &fn : collector.funcs) {
-        user_assert(!fn.has_update_definition())
-            << "branch() value arm calls Func \"" << fn.name() << "\", which has an "
-            << "update definition and can not be inlined. branch() force-inlines its "
-            << "value arms so that only the taken side is computed; a Func with an "
-            << "update stage can not be inlined. Rewrite \"" << fn.name()
-            << "\" without an update stage, or use select() there instead.\n";
-        Func(fn).compute_inline();
-    }
-}
-
-}  // namespace
-
 Stage FuncRef::operator=(const Branch &b) {
-    force_inline_branch_arms(b.expr);
+    // The branch is kept as an intrinsic in the definition's value. It is turned
+    // into real control flow (a point-wise IfThenElse, hoisted to the loop level
+    // where its condition is invariant) in ScheduleFunctions, so that producers
+    // can be compute_at'd inside the branch and have their computation gated by
+    // it. We deliberately do NOT force-inline the arms: that would take away the
+    // user's ability to schedule them.
     return (*this) = b.expr;
 }
 

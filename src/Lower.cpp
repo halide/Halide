@@ -91,59 +91,6 @@ using std::vector;
 
 namespace {
 
-// Lower branch() intrinsics into if_then_else, which codegen turns into a real
-// control-flow branch that evaluates only the taken side (on CPU and GPU
-// alike). This runs after vectorization so we can tell whether the branch got
-// vectorized. A real branch is impossible in two cases, and there we
-// deliberately do NOT silently fall back to a both-sides select (the whole
-// point of branch() is the guarantee that only one side runs), so we
-// hard-error instead:
-//   - a lane-varying (vectorized) condition, since SIMD lanes can not branch
-//     independently (CPU or GPU); and
-//   - any vectorization inside a GPU kernel: on GPU only a per-thread or
-//     per-wave (non-vectorized) branch makes sense.
-class LowerStrictBranches : public IRMutator {
-    using IRMutator::visit;
-
-    int in_gpu_loop = 0;
-
-    Stmt visit(const For *op) override {
-        const bool gpu = op->for_type == ForType::GPUBlock ||
-                         op->for_type == ForType::GPUThread ||
-                         op->for_type == ForType::GPULane;
-        in_gpu_loop += gpu ? 1 : 0;
-        Stmt s = IRMutator::visit(op);
-        in_gpu_loop -= gpu ? 1 : 0;
-        return s;
-    }
-
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::branch)) {
-            internal_assert(op->args.size() == 3);
-            Expr cond = mutate(op->args[0]);
-            Expr true_value = mutate(op->args[1]);
-            Expr false_value = mutate(op->args[2]);
-            // A uniform (broadcast) condition is still a single real branch
-            // that picks between two whole vectors.
-            if (const Broadcast *b = cond.as<Broadcast>()) {
-                cond = b->value;
-            }
-            user_assert(!cond.type().is_vector())
-                << "branch() could not be lowered to a real control-flow branch "
-                << "because its condition became lane-varying (it depends on a "
-                << "vectorized dimension). Use select() for a per-lane condition, "
-                << "or schedule so the condition is not vectorized.\n";
-            user_assert(!(in_gpu_loop > 0 && op->type.is_vector()))
-                << "branch() can not be combined with vectorization inside a GPU "
-                << "kernel. On GPU only a per-thread or per-wave (non-vectorized) "
-                << "branch is allowed. Use select() for the vectorized dimension.\n";
-            return Call::make(op->type, Call::if_then_else,
-                              {cond, true_value, false_value}, Call::PureIntrinsic);
-        }
-        return IRMutator::visit(op);
-    }
-};
-
 class LoweringLogger {
     Stmt last_written;
     std::chrono::time_point<std::chrono::high_resolution_clock> last_time;
@@ -407,9 +354,6 @@ void lower_impl(const vector<Function> &output_funcs,
     s = simplify(s);
     log("Lowering after vectorizing:", s);
 
-    debug(1) << "Lowering strict branches...\n";
-    s = LowerStrictBranches()(s);
-    log("Lowering after lowering strict branches:", s);
 
     if (t.has_gpu_feature() ||
         t.has_feature(Target::Vulkan)) {
