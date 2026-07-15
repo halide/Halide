@@ -208,11 +208,12 @@
  *     };
  * \endcode
  *
- *  All Generators have two GeneratorParams that are implicitly provided
+ *  All Generators have three GeneratorParams that are implicitly provided
  *  by the base class:
  *
  *      GeneratorParam<Target> target{"target", Target()};
  *      GeneratorParam<AutoschedulerParams> autoscheduler{"autoscheduler", {}}
+ *      GeneratorParam<RuntimeNamespaceParams> namespaces{"namespace", {}}
  *
  *  - 'target' is the Halide::Target for which the Generator is producing code.
  *    It is read-only during the Generator's lifetime, and must not be modified;
@@ -229,7 +230,10 @@
  *      - Other keys may be specified in the params, on a per-autoscheduler
  *        basis, to optimize or enhance the automatically-generated schedule.
  *        See documentation for each autoscheduler for options.
- *
+ *  - 'namespace' param is a list of import, export and internal prefixes to use for all Halide runtime methods
+ *      - The "import" prefix corresponds to the method names called from within a generated kernel
+ *      - The "export" prefix corresponds to the method names externally visible in the runtime library
+ *      - The "internal" prefix corresponds to the method names called within the runtime library 
  * Generators are added to a global registry to simplify AOT build mechanics; this
  * is done by simply using the HALIDE_REGISTER_GENERATOR macro at global scope:
  *
@@ -428,6 +432,7 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(AutoschedulerParams)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(RuntimeNamespaceParams)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
 
@@ -542,6 +547,7 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(AutoschedulerParams)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(RuntimeNamespaceParams)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
 
@@ -636,6 +642,21 @@ public:
 class GeneratorParam_AutoSchedulerParams : public GeneratorParamImpl<AutoschedulerParams> {
 public:
     GeneratorParam_AutoSchedulerParams();
+
+    void set_from_string(const std::string &new_value_string) override;
+    std::string get_default_value() const override;
+    std::string call_to_string(const std::string &v) const override;
+    std::string get_c_type() const override;
+
+private:
+    friend class GeneratorBase;
+
+    bool try_set(const std::string &key, const std::string &value);
+};
+
+class GeneratorParam_RuntimeNamespaceParams : public GeneratorParamImpl<RuntimeNamespaceParams> {
+public:
+    GeneratorParam_RuntimeNamespaceParams();
 
     void set_from_string(const std::string &new_value_string) override;
     std::string get_default_value() const override;
@@ -3017,6 +3038,9 @@ public:
     explicit GeneratorContext(const Target &t);
     explicit GeneratorContext(const Target &t,
                               const AutoschedulerParams &autoscheduler_params);
+    explicit GeneratorContext(const Target &t,
+                              const AutoschedulerParams &autoscheduler_params,
+                              const RuntimeNamespaceParams &namespace_params);
 
     GeneratorContext() = default;
     GeneratorContext(const GeneratorContext &) = default;
@@ -3029,6 +3053,9 @@ public:
     }
     const AutoschedulerParams &autoscheduler_params() const {
         return autoscheduler_params_;
+    }
+    const RuntimeNamespaceParams &namespace_params() const {
+        return runtime_namespace_params_;
     }
 
     // Return a copy of this GeneratorContext that uses the given Target.
@@ -3050,6 +3077,7 @@ public:
 private:
     Target target_;
     AutoschedulerParams autoscheduler_params_;
+    RuntimeNamespaceParams runtime_namespace_params_;
 };
 
 class NamesInterface {
@@ -3533,10 +3561,14 @@ protected:
     bool using_autoscheduler() const {
         return !autoscheduler_.value().name.empty();
     }
+    bool using_namespace() const {
+        return !runtime_namespace_.value().prefixes.empty();
+    }
 
     // These must remain here for legacy code that access the fields directly.
     GeneratorParam<Target> target{"target", Target()};
     GeneratorParam_AutoSchedulerParams autoscheduler_;
+    GeneratorParam_RuntimeNamespaceParams runtime_namespace_;
 
 private:
     friend void ::Halide::Internal::generator_test();

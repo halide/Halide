@@ -60,6 +60,22 @@ struct AutoschedulerParams {
     std::string to_string() const;
 };
 
+/** Special directives for renaming Runtime API methods with explicit prefixes
+ * 
+ * The "import" prefix corresponds to the method names called from within a generated kernel
+ * The "export" prefix corresponds to the method names externally visible in the runtime library
+ * The "internal" prefix corresponds to the method names called within the runtime library
+ *
+ */
+struct RuntimeNamespaceParams {
+    std::map<RuntimeVisibility, std::string> prefixes;
+
+    RuntimeNamespaceParams() = default;
+    /*not-explicit*/ RuntimeNamespaceParams(const std::map<RuntimeVisibility, std::string>& m)
+        : prefixes(m) {
+    }
+};
+
 namespace Internal {
 class IRMutator;
 struct JITCache;
@@ -201,6 +217,10 @@ public:
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */
     static void add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler);
+
+    /** Apply any runtime namespace prefixes to allow custom runtime method names to be emitted */
+    void apply_runtime_namespace(const Target &target,
+                                 const RuntimeNamespaceParams &runtime_namespace_params) const;
 
     /** Return handle to the index-th Func within the pipeline based on the
      * topological order. */

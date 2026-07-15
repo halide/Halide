@@ -264,6 +264,12 @@ AutoSchedulerResults Pipeline::apply_autoscheduler(const Target &target, const A
     return results;
 }
 
+void Pipeline::apply_runtime_namespace(const Target &target, const RuntimeNamespaceParams &runtime_namespace_params) const {
+    user_assert(!runtime_namespace_params.prefixes.empty()) << "apply_runtime_namespace was called with no namespace prefixes specified.";
+    // XXX
+    return;
+}
+
 /* static */
 void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler) {
     auto &m = get_autoscheduler_map();

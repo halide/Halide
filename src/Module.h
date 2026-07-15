@@ -58,6 +58,13 @@ enum class LinkageType {
     Internal,              ///< Not visible externally, similar to 'static' linkage in C.
 };
 
+/** Type of visibility for customizing Halide runtime methods within a namespace. */
+enum class RuntimeVisibility {
+    Import,     ///< Method names called from within a generated kernel
+    Export,     ///< Method names externally visible in the runtime library
+    Internal,   ///< Method names called within the runtime library
+};
+
 namespace Internal {
 
 struct OutputInfo {
@@ -138,6 +145,7 @@ class CompilerLogger;
 struct AutoSchedulerResults;
 
 using MetadataNameMap = std::map<std::string, std::string>;
+using RuntimeNamespaceMap = std::map<RuntimeVisibility, std::string>;
 
 /** A halide module. This represents IR containing lowered function
  * definitions and buffers. */
@@ -145,7 +153,7 @@ class Module {
     Internal::IntrusivePtr<Internal::ModuleContents> contents;
 
 public:
-    Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map = {});
+    Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map = {}, const RuntimeNamespaceMap &runtime_namespace_map = {});
 
     /** Get the target this module has been lowered for. */
     const Target &target() const;
@@ -211,6 +219,9 @@ public:
     /** Retrieve the metadata name map. */
     MetadataNameMap get_metadata_name_map() const;
 
+    /** Retrieve the runtime namespace map. */
+    RuntimeNamespaceMap get_runtime_namespace_map() const;
+
     /** Set the AutoSchedulerResults for the Module. It is an error to call this
      * multiple times for a given Module. */
     void set_auto_scheduler_results(const AutoSchedulerResults &results);
@@ -231,7 +242,7 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
 /** Create an object file containing the Halide runtime for a given target. For
  * use with Target::NoRuntime. Standalone runtimes are only compatible with
  * pipelines compiled by the same build of Halide used to call this function. */
-void compile_standalone_runtime(const std::string &object_filename, const Target &t);
+void compile_standalone_runtime(const std::string &object_filename, const Target &t, const std::map<RuntimeVisibility, std::string> &runtime_namespace_map = {});
 
 /** Create an object and/or static library file containing the Halide runtime
  * for a given target. For use with Target::NoRuntime. Standalone runtimes are
@@ -239,7 +250,7 @@ void compile_standalone_runtime(const std::string &object_filename, const Target
  * call this function. Return a map with just the actual outputs filled in
  * (typically, OutputFileType::object and/or OutputFileType::static_library).
  */
-std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t);
+std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t, const std::map<RuntimeVisibility, std::string> &runtime_namespace_map = {});
 
 using ModuleFactory = std::function<Module(const std::string &fn_name, const Target &target)>;
 using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLogger>(const std::string &fn_name, const Target &target)>;
