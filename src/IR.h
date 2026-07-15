@@ -699,6 +699,18 @@ struct Call : public ExprNode<Call> {
         mod_round_to_zero,
         mul_shift_right,
         mux,
+
+        // A pointer into a sub-range of another allocation.
+        // offset_pointer(base, offset) returns the base pointer of the
+        // allocation named by the Variable `base`, advanced by `offset`
+        // elements (in units of the aliasing allocation's element type). Used
+        // as the new_expr of an Allocate node to express that it aliases a
+        // sub-range of a larger backing allocation. GPU allocation fusing emits
+        // these so that per-Func names survive lowering (for the profiler and
+        // for a readable conceptual stmt); they are folded into the indices of
+        // loads and stores by inject_gpu_offload before GPU codegen.
+        offset_pointer,
+
         popcount,
         prefetch,
 

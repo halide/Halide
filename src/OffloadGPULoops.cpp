@@ -14,7 +14,9 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "InjectHostDevBufferCopies.h"
+#include "ModulusRemainder.h"
 #include "OffloadGPULoops.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Util.h"
 
@@ -318,10 +320,73 @@ public:
     }
 };
 
+// Fold the aliasing allocations left behind by GPU allocation fusing back into
+// direct offset accesses of their backing allocation, and drop the aliasing
+// Allocate nodes. This reproduces the flat representation the device code
+// generators expect, and runs just before them so that everything upstream
+// (the profiler, the conceptual stmt) still sees per-Func allocation names.
+class FlattenAliasedAllocations : public IRMutator {
+    using IRMutator::visit;
+
+    struct Alias {
+        std::string backing;
+        Expr offset;
+    };
+    Scope<Alias> aliases;
+
+    Stmt visit(const Allocate *op) override {
+        // offset_pointer is a (non-pure) Intrinsic specifically so CSE/LICM
+        // won't lift it out of new_expr, so it's still a direct call here.
+        const Call *c = op->new_expr.defined() ? op->new_expr.as<Call>() : nullptr;
+        if (c && c->is_intrinsic(Call::offset_pointer)) {
+            const Variable *base = c->args[0].as<Variable>();
+            internal_assert(base) << "offset_pointer base must be a Variable\n";
+            ScopedBinding<Alias> bind(aliases, op->name, Alias{base->name, c->args[1]});
+            return mutate(op->body);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Free *op) override {
+        if (aliases.contains(op->name)) {
+            return Evaluate::make(0);
+        }
+        return IRMutator::visit(op);
+    }
+
+    // Adding the offset into the backing allocation shifts the index, so the
+    // load/store alignment relative to the backing base must be recomputed from
+    // the original alignment and the alignment of the offset.
+    ModulusRemainder shift_alignment(const ModulusRemainder &alignment, const Expr &offset) {
+        return alignment + modulus_remainder(offset);
+    }
+
+    Expr visit(const Load *op) override {
+        if (aliases.contains(op->name)) {
+            const Alias &a = aliases.get(op->name);
+            return Load::make(op->type, a.backing, mutate(op->index) + a.offset,
+                              op->image, op->param, mutate(op->predicate),
+                              shift_alignment(op->alignment, a.offset));
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Store *op) override {
+        if (aliases.contains(op->name)) {
+            const Alias &a = aliases.get(op->name);
+            return Store::make(a.backing, mutate(op->value), mutate(op->index) + a.offset,
+                               op->param, mutate(op->predicate),
+                               shift_alignment(op->alignment, a.offset));
+        }
+        return IRMutator::visit(op);
+    }
+};
+
 }  // namespace
 
 Stmt inject_gpu_offload(const Stmt &s, const Target &host_target, bool any_strict_float) {
-    return InjectGpuOffload(host_target, any_strict_float).inject(s);
+    Stmt flattened = FlattenAliasedAllocations()(s);
+    return InjectGpuOffload(host_target, any_strict_float).inject(flattened);
 }
 
 }  // namespace Internal

@@ -809,10 +809,19 @@ public:
             for (const auto &alloc : cluster) {
                 number_of_allocs += alloc.group.size();
             }
+
+            // A single shared allocation needs no offset math, so we can name
+            // the backing allocation after the Func directly and skip the
+            // aliasing wrappers entirely, keeping the common case uncluttered.
+            // Anything else (multiple fused allocations, or a heap allocation
+            // that is sliced per-block out of a larger device allocation) gets
+            // a distinct backing name plus one aliasing allocation per Func.
+            const bool simple = number_of_allocs == 1 && memory_type != MemoryType::Heap;
+
             for (const auto &alloc : cluster) {
                 if (name.empty()) {
                     widest_type = alloc.widest_type;
-                    if (number_of_allocs > 1) {
+                    if (!simple) {
                         name = "allocgroup__" + alloc.name;
                     } else {
                         name = alloc.name;
@@ -853,7 +862,36 @@ public:
             const string total_size_name = name + ".size";
             Expr total_size_var = Variable::make(Int(32), total_size_name);
 
-            // Make the allocation
+            // Wrap the body in one aliasing allocation per Func, each pointing
+            // at its offset within the backing allocation. Loads and stores
+            // keep their original per-Func names; the offsets get folded in
+            // later by inject_gpu_offload, just before GPU codegen. The offsets
+            // are in units of each allocation's own type; the group offsets
+            // they build on are in units of widest_type across the cluster.
+            if (!simple) {
+                for (int i = (int)(cluster.size()) - 1; i >= 0; i--) {
+                    Expr group_offset = Variable::make(Int(32), name + "." + std::to_string(i) + ".offset");
+                    for (const SharedAllocation &alloc : cluster[i].group) {
+                        Expr offset = group_offset;
+                        internal_assert(alloc.type.bytes() <= widest_type.bytes());
+                        if (alloc.type.bytes() < widest_type.bytes()) {
+                            offset *= (widest_type.bytes() / alloc.type.bytes());
+                        }
+                        offset = simplify(offset);
+                        Expr base = Variable::make(Handle(), name);
+                        // Intrinsic, not PureIntrinsic: this keeps CSE/LICM from
+                        // lifting it out of the aliasing Allocate's new_expr,
+                        // which would move the reference to the backing
+                        // allocation out of the backing allocation's own scope.
+                        Expr aliased = Call::make(Handle(), Call::offset_pointer,
+                                                  {base, offset}, Call::Intrinsic);
+                        s = Allocate::make(alloc.name, alloc.type, alloc.memory_type,
+                                           {alloc.size}, const_true(), s, aliased);
+                    }
+                }
+            }
+
+            // Make the backing allocation.
             if (memory_type == MemoryType::Heap) {
                 global_allocations.push_back(GlobalAllocation{name, total_size, alloc_type});
             } else {
@@ -861,78 +899,29 @@ public:
                                    {total_size_var}, const_true(), s);
             }
 
-            // Define a group offset for each group in the
-            // cluster. The group offsets are in elements of
-            // widest_type across the entire cluster. Using that,
-            // define an individual offset for each allocation in the
-            // group, using units of that allocation's type.
-            for (int i = (int)(cluster.size()) - 1; i >= 0; i--) {
-                Expr group_offset = Variable::make(Int(32), name + "." + std::to_string(i) + ".offset");
-
-                for (const SharedAllocation &alloc : cluster[i].group) {
-                    // Change units, as described above.
-                    Expr offset = group_offset;
-                    internal_assert(alloc.type.bytes() <= widest_type.bytes());
-                    if (alloc.type.bytes() < widest_type.bytes()) {
-                        offset *= (widest_type.bytes() / alloc.type.bytes());
-                    }
-                    offset = simplify(offset);
-
-                    // Rewrite all loads and stores to point to the allocation
-                    // cluster they belong to with the appropriate offset into it.
-                    class RewriteGroupAccess : public IRMutator {
-                        using IRMutator::visit;
-                        Expr visit(const Load *op) override {
-                            if (op->name == alloc_name) {
-                                return Load::make(op->type, cluster_name, mutate(op->index) + offset,
-                                                  op->image, op->param, mutate(op->predicate),
-                                                  op->alignment);
-                            } else {
-                                return IRMutator::visit(op);
-                            }
-                        }
-
-                        Stmt visit(const Store *op) override {
-                            if (op->name == alloc_name) {
-                                return Store::make(cluster_name, mutate(op->value), mutate(op->index) + offset,
-                                                   op->param, mutate(op->predicate), op->alignment);
-                            } else {
-                                return IRMutator::visit(op);
-                            }
-                        }
-                        const string &alloc_name;
-                        const string &cluster_name;
-                        const Expr &offset;
-
-                    public:
-                        RewriteGroupAccess(const string &alloc_name,
-                                           const string &cluster_name,
-                                           const Expr &offset)
-                            : alloc_name(alloc_name), cluster_name(cluster_name), offset(offset) {
-                        }
-                    } rewriter{alloc.name, name, offset};
-                    s = rewriter(s);
-                }
-
-                // Define the group offset in terms of the previous group in the cluster
-                Expr offset;
-                if (i > 0) {
-                    // Build off the last offset
-                    offset = Variable::make(Int(32), name + "." + std::to_string(i - 1) + ".offset");
-                    int ratio = (widest_type.bytes() / cluster[i - 1].widest_type.bytes());
-                    internal_assert(ratio != 0);
-                    offset += simplify((cluster[i - 1].max_size + ratio - 1) / ratio);
-                } else {
-                    if (memory_type == MemoryType::Heap) {
-                        // One slice of a larger global allocation
-                        offset = get_block_id(bs) * total_size_var;
+            // Define the group offsets, each in terms of the previous group in
+            // the cluster.
+            if (!simple) {
+                for (int i = (int)(cluster.size()) - 1; i >= 0; i--) {
+                    string group_offset_name = name + "." + std::to_string(i) + ".offset";
+                    Expr offset;
+                    if (i > 0) {
+                        // Build off the last offset
+                        offset = Variable::make(Int(32), name + "." + std::to_string(i - 1) + ".offset");
+                        int ratio = (widest_type.bytes() / cluster[i - 1].widest_type.bytes());
+                        internal_assert(ratio != 0);
+                        offset += simplify((cluster[i - 1].max_size + ratio - 1) / ratio);
                     } else {
-                        // Base address for shared memory is zero
-                        offset = 0;
+                        if (memory_type == MemoryType::Heap) {
+                            // One slice of a larger global allocation
+                            offset = get_block_id(bs) * total_size_var;
+                        } else {
+                            // Base address for shared memory is zero
+                            offset = 0;
+                        }
                     }
+                    s = LetStmt::make(group_offset_name, simplify(offset), s);
                 }
-
-                s = LetStmt::make(group_offset.as<Variable>()->name, simplify(offset), s);
             }
             s = LetStmt::make(total_size_name, total_size, s);
         }
