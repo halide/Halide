@@ -1337,7 +1337,12 @@ Buffer<> Deserializer::deserialize_buffer(const Serialize::Buffer *buffer) {
     // then create a (potential sparse) buffer with original dimension infos and copy from the dense buffer
     auto fake_dense_buffer = Buffer<>(type, nullptr, dimensions, dense_buffer_dimensions.data(), name + "_dense_fake");
     auto dense_buffer = Buffer<>::make_with_shape_of(fake_dense_buffer, nullptr, nullptr, name + "_dense_tmp");
-    memcpy(dense_buffer.data(), buffer->data()->data(), buffer->data()->size());
+    const auto *buffer_data = buffer->data();
+    user_assert(buffer_data != nullptr) << "deserialized buffer " << name << " has no data\n";
+    user_assert(buffer_data->size() == dense_buffer.size_in_bytes())
+        << "deserialized buffer " << name << " carries " << buffer_data->size()
+        << " bytes of data, but its dimensions require " << dense_buffer.size_in_bytes() << "\n";
+    memcpy(dense_buffer.data(), buffer_data->data(), buffer_data->size());
     auto fake_buffer = Buffer<>(type, nullptr, dimensions, hl_buffer_dimensions.data(), name + "_fake");
     auto hl_buffer = Buffer<>::make_with_shape_of(fake_buffer, nullptr, nullptr, name);
     hl_buffer.copy_from(dense_buffer);
