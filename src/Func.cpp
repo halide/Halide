@@ -2268,6 +2268,24 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
         }
         Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name) : create_in_wrapper(wrapped_fn, wrapper_name);
         Function wrapper_fn = wrapper.function();
+
+        // Build a profiler display name like "<wrapped>.in()" or
+        // "<wrapped>.in(<c1>, <c2>)" using the wrapped Func's display
+        // name and the consumers' display names (falling back to the
+        // IR-level name in each case). For .clone_in() use "clone_in".
+        auto display = [](const Function &f) {
+            return f.profiler_display_name().empty() ? f.name() : f.profiler_display_name();
+        };
+        std::string profiler_name = display(wrapped_fn) + (clone ? ".clone_in(" : ".in(");
+        for (size_t i = 0; i < fs.size(); i++) {
+            if (i > 0) {
+                profiler_name += ", ";
+            }
+            profiler_name += display(fs[i].function());
+        }
+        profiler_name += ")";
+        wrapper_fn.set_profiler_display_name(profiler_name);
+
         if (fs.empty()) {
             // Add global wrapper
             wrapped_fn.add_wrapper("", wrapper_fn);
@@ -2301,12 +2319,12 @@ Func Func::in(const vector<Func> &fs) {
         user_error << "Could not create a in wrapper for an empty list of Funcs\n";
     }
     invalidate_cache();
-    return get_wrapper(func, name() + "_wrapper", fs, false);
+    return get_wrapper(func, name() + "_in", fs, false);
 }
 
 Func Func::in() {
     invalidate_cache();
-    return get_wrapper(func, name() + "_global_wrapper", {}, false);
+    return get_wrapper(func, name() + "_in", {}, false);
 }
 
 Func Func::clone_in(const Func &f) {

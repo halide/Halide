@@ -545,7 +545,7 @@ protected:
             max_lanes = std::max(new_arg.type().lanes(), max_lanes);
         }
 
-        if (!changed) {
+        if (!changed && max_lanes <= 1) {
             return op;
         } else if (op->name == Call::trace) {
             auto event = as_const_int(op->args[6]);
@@ -627,7 +627,7 @@ protected:
         Type new_op_type = op->type.with_lanes(max_lanes);
 
         if (op->is_intrinsic(Call::prefetch)) {
-            // We don't want prefetch args to ve vectorized, but we can't just skip the mutation
+            // We don't want prefetch args to be vectorized, but we can't just skip the mutation
             // (otherwise we can end up with dead loop variables. Instead, use extract_lane() on each arg
             // to scalarize it again.
             for (auto &arg : new_args) {
