@@ -2570,13 +2570,22 @@ public:
     /** Fill a buffer by evaluating a callable at every site. The
      * callable should look much like a callable passed to
      * for_each_element, but it should return the value that should be
-     * stored to the coordinate corresponding to the arguments. */
+     * stored to the coordinate corresponding to the arguments. A callable
+     * that takes no arguments (for example a random number generator) is
+     * evaluated once per element, ignoring the coordinate. */
     template<typename Fn,
              typename = std::enable_if_t<!std::is_arithmetic_v<std::decay_t<Fn>>>>
     Buffer<T, Dims, InClassDimStorage> &fill(Fn &&f) {
-        // We'll go via for_each_element. We need a variadic wrapper lambda.
-        FillHelper<Fn> wrapper(std::forward<Fn>(f), this);
-        return for_each_element(wrapper);
+        if constexpr (std::is_invocable_v<Fn &>) {
+            // A callable that takes no coordinates has nothing to
+            // distinguish sites, so fill every value with its result.
+            for_each_value([&](T &v) { v = f(); });
+        } else {
+            // We'll go via for_each_element. We need a variadic wrapper lambda.
+            FillHelper<Fn> wrapper(std::forward<Fn>(f), this);
+            for_each_element(wrapper);
+        }
+        return *this;
     }
 
     /** Check if an input buffer passed extern stage is a querying
