@@ -910,6 +910,9 @@ bool load_png(const std::string &filename, ImageType *im) {
     const int height = png_get_image_height(png_ptr, info_ptr);
     const int channels = png_get_channels(png_ptr, info_ptr);
     const int bit_depth = png_get_bit_depth(png_ptr, info_ptr);
+    if (!check(bit_depth == 8 || bit_depth == 16, "Unsupported bit depth in PNG file")) {
+        return false;
+    }
 
     const halide_type_t im_type(halide_type_uint, bit_depth);
     std::vector<int> im_dimensions = {width, height};
