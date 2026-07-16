@@ -2463,7 +2463,10 @@ private:
     template<typename Fn>
     HALIDE_ALWAYS_INLINE static void for_each_element(double, int dims, const for_each_element_task_dim *t, Fn &&f) {
         int args = num_args(0, std::forward<Fn>(f));
-        assert(dims >= args);
+        assert(args == dims &&
+               "Callable passed to for_each_element (or fill) must accept either a "
+               "const int *, or a number of int arguments equal to the dimensionality "
+               "of the buffer.");
         for_each_element_variadic(0, args - 1, t, std::forward<Fn>(f));
     }
 
@@ -2481,19 +2484,14 @@ private:
 public:
     /** Call a function at each site in a buffer. This is likely to be
      * much slower than using Halide code to populate a buffer, but is
-     * convenient for tests. If the function has more arguments than the
-     * buffer has dimensions, the remaining arguments will be zero. If it
-     * has fewer arguments than the buffer has dimensions then the last
-     * few dimensions of the buffer are not iterated over. For example,
-     * the following code exploits this to set a floating point RGB image
-     * to red:
+     * convenient for tests. The function must take a number of int
+     * arguments equal to the dimensionality of the buffer. For example,
+     * the following code sets a floating point RGB image to red:
 
      \code
      Buffer<float, 3> im(100, 100, 3);
-     im.for_each_element([&](int x, int y) {
-         im(x, y, 0) = 1.0f;
-         im(x, y, 1) = 0.0f;
-         im(x, y, 2) = 0.0f:
+     im.for_each_element([&](int x, int y, int c) {
+         im(x, y, c) = (c == 0) ? 1.0f : 0.0f;
      });
      \endcode
 

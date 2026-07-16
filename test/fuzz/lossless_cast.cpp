@@ -264,8 +264,8 @@ bool might_have_ub(Expr e) {
 }  // namespace
 
 FUZZ_TEST(lossless_cast, FuzzingContext &fuzz) {
-    buf_u8.fill(fuzz);
-    buf_i8.fill(fuzz);
+    buf_u8.for_each_value([&](uint8_t &v) { v = (uint8_t)fuzz(); });
+    buf_i8.for_each_value([&](int8_t &v) { v = (int8_t)fuzz(); });
 
     Expr e1 = random_expr(fuzz);
     Expr simplified = simplify(e1);
