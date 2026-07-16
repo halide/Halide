@@ -802,9 +802,6 @@ public:
             // the cluster (in terms of the alloc_type), and the
             // widest type in the cluster (which may be wider than the
             // alloc_type).
-            string name;
-            Expr total_size = 0;
-            Type widest_type;
             int number_of_allocs = 0;
             for (const auto &alloc : cluster) {
                 number_of_allocs += alloc.group.size();
@@ -815,22 +812,25 @@ public:
             // aliasing wrappers entirely, keeping the common case uncluttered.
             // Anything else (multiple fused allocations, or a heap allocation
             // that is sliced per-block out of a larger device allocation) gets
-            // a distinct backing name plus one aliasing allocation per Func.
+            // a fresh backing name plus one aliasing allocation per Func. The
+            // per-Func names live on the aliasing allocations, so the backing
+            // itself just needs a unique name.
             const bool simple = number_of_allocs == 1 && memory_type != MemoryType::Heap;
 
+            string name;
+            if (simple) {
+                name = cluster[0].name;
+            } else if (memory_type == MemoryType::Heap) {
+                name = unique_name("global_alloc");
+            } else {
+                name = unique_name("shared_alloc");
+            }
+
+            Expr total_size = 0;
+            Type widest_type = cluster[0].widest_type;
             for (const auto &alloc : cluster) {
-                if (name.empty()) {
+                if (alloc.widest_type.bytes() > widest_type.bytes()) {
                     widest_type = alloc.widest_type;
-                    if (!simple) {
-                        name = "allocgroup__" + alloc.name;
-                    } else {
-                        name = alloc.name;
-                    }
-                } else {
-                    if (alloc.widest_type.bytes() > widest_type.bytes()) {
-                        widest_type = alloc.widest_type;
-                    }
-                    name += "__" + alloc.name;
                 }
                 int ratio = alloc.widest_type.bytes() / alloc_type.bytes();
                 internal_assert(ratio != 0)
