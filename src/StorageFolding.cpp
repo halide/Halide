@@ -57,7 +57,8 @@ Stmt scrub_self_reads(const Stmt &s, const string &func) {
     return mutate_with(s, [&](auto *self, const Provide *op) {
         debug(3) << "Scrubbing self reads in Provide: " << Stmt(op) << " func name: " << func << "\n";
         if (op->name == func) {
-            vector<Expr> values(op->values.size());
+            vector<Expr> values;
+            values.reserve(op->values.size());
             for (const Expr &v : op->values) {
                 values.push_back(mutate_with(v, [&](auto *self, const Call *op) {
                     if (op->name == func && op->call_type == Call::Halide) {
