@@ -274,6 +274,45 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Runtime test: a widening_mul whose operand is a narrowing cast
+    // (int32 -> int16) of a widening_add used to send FindIntrinsics into
+    // infinite recursion. strip_widening_cast could return an expression wider
+    // than its input, which the widening_mul narrowing rewrite would re-widen,
+    // ping-ponging the multiply between its int32 and int64 forms forever. This
+    // must simply compile, and the vectorized result must match a scalar
+    // reference.
+    {
+        Var x("x");
+        Buffer<int8_t> buf(64, "buf");
+        for (int i = 0; i < 64; i++) {
+            buf(i) = (int8_t)(i - 32);
+        }
+
+        Expr t = buf(x);
+        Expr inner = cast(Int(16), cast(UInt(8), t) + cast(UInt(8), 68));
+        Expr a = widen_right_add(inner, t);
+        Expr b = widen_right_mul(a, cast(Int(8), a) * cast(Int(8), 39));
+        Expr wide_add = widening_add(a, b);
+        Expr e = cast(Int(64), widening_mul(cast(Int(16), 73), cast(Int(16), wide_add)));
+
+        Func f_vec, f_ref;
+        f_vec(x) = e;
+        f_ref(x) = e;
+        f_vec.vectorize(x, 4, TailStrategy::RoundUp);
+
+        Buffer<int64_t> out_vec = f_vec.realize({64});
+        Buffer<int64_t> out_ref = f_ref.realize({64});
+
+        for (int i = 0; i < 64; i++) {
+            if (out_vec(i) != out_ref(i)) {
+                std::cerr << "Recursion regression test: mismatch at x=" << i
+                          << ": ref=" << out_ref(i) << " vectorized=" << out_vec(i) << "\n";
+                found_error = true;
+                break;
+            }
+        }
+    }
+
     if (found_error) {
         return 1;
     }
