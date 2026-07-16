@@ -57,7 +57,7 @@ Stmt scrub_self_reads(const Stmt &s, const string &func) {
     return mutate_with(s, [&](auto *self, const Provide *op) {
         debug(3) << "Scrubbing self reads in Provide: " << Stmt(op) << " func name: " << func << "\n";
         if (op->name == func) {
-            vector<Expr> values;
+            vector<Expr> values(op->values.size());
             for (const Expr &v : op->values) {
                 values.push_back(mutate_with(v, [&](auto *self, const Call *op) {
                     if (op->name == func && op->call_type == Call::Halide) {
@@ -112,7 +112,7 @@ bool inductive_only_in_dim(const Stmt &body, const string &func, int dim) {
 // Verify there is exactly one store to func in the loop body, and that within
 // a single iteration of the fold loop that store never writes the same location
 // twice.
-bool one_store_per_iteration(Stmt body, const string &func) {
+bool one_store_per_iteration(const Stmt &body, const string &func) {
     struct Store {
         vector<Expr> args;
         vector<std::pair<string, Interval>> loops;  // enclosing inner loops
