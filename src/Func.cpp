@@ -1677,10 +1677,7 @@ Stage &Stage::stream_loads() {
 }
 
 Stage &Stage::stream_loads(const std::vector<Func> &funcs) {
-    auto &names = definition.schedule().stream_loads_names();
-    if (!names) {
-        names = std::vector<std::string>{};
-    }
+    std::vector<string> names;
     for (const Func &f : funcs) {
         std::string target_name = f.name();
         if (const Call *call = f.function().is_wrapper(); call && call->param.defined()) {
@@ -1693,8 +1690,9 @@ Stage &Stage::stream_loads(const std::vector<Func> &funcs) {
         user_assert(target_name != function.name())
             << "Can't stream loads of \"" << target_name << "\" in " << name()
             << " because a Stage cannot stream its own self-loads.\n";
-        names->push_back(target_name);
+        names.push_back(target_name);
     }
+    definition.schedule().stream_loads_names() = std::move(names);
     definition.schedule().touched() = true;
     return *this;
 }

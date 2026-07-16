@@ -61,7 +61,6 @@ struct WarningCounter final : CompileTimeErrorReporter {
     int warnings_occurred = 0;
 
     void warning(const char *msg) override {
-        std::fprintf(stderr, "Warning: %s\n", msg);
         warnings_occurred++;
     }
 
