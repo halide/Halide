@@ -77,6 +77,8 @@ public:
     void visit(const VectorReduce *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
+    void visit(const StreamingStore *) override;
+    void visit(const StreamingLoads *) override;
     void visit(const HoistedStorage *) override;
 };
 
@@ -280,6 +282,14 @@ void ComputeModulusRemainder::visit(const Prefetch *) {
 }
 
 void ComputeModulusRemainder::visit(const Atomic *) {
+    internal_error << "modulus_remainder of statement\n";
+}
+
+void ComputeModulusRemainder::visit(const StreamingStore *) {
+    internal_error << "modulus_remainder of statement\n";
+}
+
+void ComputeModulusRemainder::visit(const StreamingLoads *) {
     internal_error << "modulus_remainder of statement\n";
 }
 
