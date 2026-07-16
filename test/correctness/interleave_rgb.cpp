@@ -81,7 +81,7 @@ bool test_deinterleave(int x_stride) {
         deinterleaved.vectorize(x, target.natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf).unroll(c);
     }
     Buffer<T> input_buf = Buffer<T>::make_interleaved(255, 128, x_stride);
-    input_buf.for_each_value([](T &v) { v = rand(); });
+    input_buf.fill([]() { return rand(); });
     input_buf.crop(2, 0, 3);
     input.set(input_buf);
 
