@@ -93,6 +93,7 @@ tests(
     no_default_device.cpp
     nonexistent_update_stage.cpp
     null_host_field.cpp
+    output_func_input_buffer_name_collision.cpp
     overflow_during_constant_folding.cpp
     pointer_arithmetic.cpp
     predicate_loads_used_in_inner_splits.cpp
