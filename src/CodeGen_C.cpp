@@ -1864,7 +1864,7 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
     } else if (op->is_intrinsic(Call::stream_store_fence)) {
-        // The C backend does not implement non-temporal loads/stores.
+        user_warning << "The C backend does not implement non-temporal loads/stores.";
         rhs << "0";
     } else if (op->is_intrinsic(Call::strict_fma)) {
         internal_assert(op->args.size() == 3)

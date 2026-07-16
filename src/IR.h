@@ -1164,10 +1164,10 @@ struct Atomic : public StmtNode<Atomic> {
 
 /** Marks the store(s) produced by the wrapped body as requesting
  * non-temporal (streaming) stores, as scheduled via Stage::stream_stores.
- * Created directly around a Provide node (or an Atomic node wrapping one)
- * during scheduling, and consumed by storage flattening, which uses it to
- * set Store::is_streaming on the resulting Store node(s) and then discards
- * it -- it should not survive past that point. */
+ * Created directly around a Provide node (or an Atomic node wrapping
+ * one) during scheduling and is never nested. Consumed by storage flattening,
+ * which uses it to set Store::is_streaming on the resulting Store node(s) and
+ * then discards it. */
 struct StreamingStore : public StmtNode<StreamingStore> {
     std::string producer_name;
     Stmt body;
@@ -1183,10 +1183,9 @@ struct StreamingStore : public StmtNode<StreamingStore> {
  * Stage::stream_loads. If `names` is nullopt, every direct load of another
  * Func is streamed (except a self-load, which is never streamed);
  * otherwise only loads of Funcs named in `*names` are streamed. Created
- * directly around a Stage's body during scheduling, and consumed by
- * storage flattening, which uses it to set Load::is_streaming on the
- * resulting Load node(s) and then discards it -- it should not survive
- * past that point. */
+ * directly around a Provide node during scheduling and is never nested.
+ * Consumed by storage flattening, which uses it to set Load::is_streaming
+ * on the resulting Load node(s) and then discards it. */
 struct StreamingLoads : public StmtNode<StreamingLoads> {
     std::optional<std::vector<std::string>> names;
     Stmt body;
