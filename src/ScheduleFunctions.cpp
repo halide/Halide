@@ -1200,12 +1200,38 @@ public:
         return _found_hoist_storage_levels_for_funcs.size() == funcs.size();
     }
 
+    Stmt operator()(const Stmt &stmt) {
+        return IRMutator::operator()(stmt);
+    }
+
 protected:
     bool _found_compute_level{};
     std::set<string> _found_store_levels_for_funcs;
     std::set<string> _found_hoist_storage_levels_for_funcs;
 
     using IRMutator::visit;
+
+    // Emit a (intrin, name_arg, min_0, max_0, min_1, max_1, ...) Call
+    // wrapping `stmt`. Used for declare_box_touched, which bounds
+    // inference uses to know which Realize node is being touched. Its
+    // first arg must be a Variable<Handle>(func.name()) — a reference
+    // to the Realize-named buffer in scope — because passes that
+    // substitute names of in-scope buffers (most notably box_touched
+    // analysis itself) follow that name.
+    Stmt declare_box(const Stmt &stmt, const Function &f, Call::IntrinsicOp intrin) {
+        Expr name_arg = Variable::make(Handle(), f.name());
+        std::vector<Expr> args;
+        args.reserve(2 * f.dimensions() + 1);
+        args.push_back(std::move(name_arg));
+        const std::vector<std::string> &var_names = f.args();
+        for (int i = 0; i < f.dimensions(); i++) {
+            std::string v = concat_strings(f.name(), ".s0.", var_names[i]);
+            args.emplace_back(Variable::make(Int(32), v + ".min"));
+            args.emplace_back(Variable::make(Int(32), v + ".max"));
+        }
+        Expr d = Call::make(Int(32), intrin, args, Call::Intrinsic);
+        return Block::make(Evaluate::make(d), stmt);
+    }
 
     Stmt visit(const For *for_loop) override {
         debug(3) << "Injecting " << funcs << " entering for-loop over " << for_loop->name << "\n";
@@ -1369,18 +1395,7 @@ private:
         if (func.has_extern_definition()) {
             // Add an annotation to let bounds inference know that
             // this will write to the entire bounds required.
-            vector<Expr> args;
-            args.emplace_back(Variable::make(Handle(), func.name()));
-            for (int i = 0; i < func.dimensions(); i++) {
-                string prefix = func.name() + ".s0." + func.args()[i];
-                string min_name = prefix + ".min";
-                string max_name = prefix + ".max";
-
-                args.emplace_back(Variable::make(Int(32), min_name));
-                args.emplace_back(Variable::make(Int(32), max_name));
-            }
-            Expr decl = Call::make(Int(32), Call::declare_box_touched, args, Call::Intrinsic);
-            s = Block::make(Evaluate::make(decl), s);
+            s = declare_box(s, func, Call::declare_box_touched);
         }
 
         if (!is_output) {
@@ -1802,8 +1817,8 @@ private:
             string def_prefix = f.name() + ".s" + std::to_string(func_stage.second) + ".";
             const auto &def = (func_stage.second == 0) ? f.definition() : f.updates()[func_stage.second - 1];
 
-            const Stmt &produce_def = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
-                                                               replacements, add_lets, aliases);
+            Stmt produce_def = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
+                                                        replacements, add_lets, aliases);
             producer = inject_stmt(producer, produce_def, def.schedule().fuse_level().level);
         }
 
@@ -2087,10 +2102,9 @@ public:
     }
 };
 
-// Check a schedule is legal, throwing an error if it is not. Returns
-// whether or not a realization of the Func should be injected. Unused
-// intermediate Funcs that somehow made it into the Func DAG can be
-// discarded.
+// Check a schedule is legal, throwing an error if it is not. Returns whether or
+// not a realization of the Func should be injected. Unused intermediate Funcs
+// that somehow made it into the Func DAG can be discarded.
 bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_output, const map<string, Function> &env) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
@@ -2656,18 +2670,26 @@ Stmt schedule_functions(const vector<Function> &outputs,
             continue;
         }
 
-        debug(1) << "Injecting realization of " << funcs << "\n";
-        InjectFunctionRealization injector(funcs, is_output_list, target, env);
-        s = injector(s);
-        internal_assert(injector.found_store_level() && injector.found_compute_level() && injector.found_hoist_storage_level());
+        if (group_should_be_inlined(funcs)) {
+            debug(1) << "Inlining " << funcs[0].name() << "\n";
+            s = inline_function(s, funcs[0]);
+        } else {
+            debug(1) << "Injecting realization of " << funcs << "\n";
+            InjectFunctionRealization injector(funcs, is_output_list, target, env);
+            s = injector(s);
+            internal_assert(injector.found_store_level() &&
+                            injector.found_compute_level() &&
+                            injector.found_hoist_storage_level());
+        }
+
         debug(2) << s << "\n";
     }
     flush_pending_inlines();
 
-    // We can remove the loop over root now
-    const For *root_loop = s.as<For>();
-    internal_assert(root_loop);
-    s = root_loop->body;
+    // We can remove the loop over root now. It's the outermost one.
+    s = mutate_with(s, [&](auto *self, const For *op) {
+        return op->body;
+    });
 
     // We can also remove all the loops over __outermost now.
     s = RemoveLoopsOverOutermost()(s);

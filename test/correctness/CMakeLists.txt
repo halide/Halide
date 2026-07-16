@@ -327,6 +327,7 @@ tests(
     target.cpp
     target_query.cpp
     tiled_matmul.cpp
+    tiled_matmul_errors.cpp
     tracing.cpp
     tracing_bounds.cpp
     tracing_broadcast.cpp
@@ -434,6 +435,7 @@ tests(
     ring_buffer.cpp
     stream_compaction.cpp
     thread_safety.cpp
+    tracing_thread_ids.cpp
     transitive_in.cpp
     truncated_pyramid.cpp
     tuple_vector_reduce.cpp
