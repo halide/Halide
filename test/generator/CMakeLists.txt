@@ -803,9 +803,11 @@ _add_halide_aot_tests(string_param)
 add_halide_generator(stubtest.generator SOURCES stubtest_generator.cpp)
 add_halide_stub(stubtest.stub FROM stubtest.generator GENERATOR stubtest)
 
-add_executable(generator_jit_stubtest stubtest_jittest.cpp stubtest_generator.cpp)
-target_link_libraries(generator_jit_stubtest PRIVATE Halide::Test stubtest.stub)
-add_halide_test(generator_jit_stubtest GROUPS generator)
+if (NOT ${_USING_WASM})
+    add_executable(generator_jit_stubtest stubtest_jittest.cpp stubtest_generator.cpp)
+    target_link_libraries(generator_jit_stubtest PRIVATE Halide::Test stubtest.stub)
+    add_halide_test(generator_jit_stubtest GROUPS generator)
+endif ()
 
 _add_halide_libraries(
     stubtest
@@ -853,15 +855,19 @@ _add_halide_aot_tests(
 
 # configure_jittest.cpp
 # (configure.stub was already created FROM configure.generator, above, for stubuser)
-add_executable(generator_jit_configure configure_jittest.cpp configure_generator.cpp)
-target_link_libraries(generator_jit_configure PRIVATE Halide::Test configure.stub)
-add_halide_test(generator_jit_configure GROUPS generator)
+if (NOT ${_USING_WASM})
+    add_executable(generator_jit_configure configure_jittest.cpp configure_generator.cpp)
+    target_link_libraries(generator_jit_configure PRIVATE Halide::Test configure.stub)
+    add_halide_test(generator_jit_configure GROUPS generator)
+endif ()
 
 # example_jittest.cpp
-add_halide_stub(example.stub FROM example.generator GENERATOR example)
-add_executable(generator_jit_example example_jittest.cpp example_generator.cpp)
-target_link_libraries(generator_jit_example PRIVATE Halide::Test example.stub)
-add_halide_test(generator_jit_example GROUPS generator)
+if (NOT ${_USING_WASM})
+    add_halide_stub(example.stub FROM example.generator GENERATOR example)
+    add_executable(generator_jit_example example_jittest.cpp example_generator.cpp)
+    target_link_libraries(generator_jit_example PRIVATE Halide::Test example.stub)
+    add_halide_test(generator_jit_example GROUPS generator)
+endif ()
 
 if (NOT ${_USING_WASM})
     # rungen_test.cpp
