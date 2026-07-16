@@ -1,6 +1,5 @@
 #include <tuple>
 
-#include "StageStridedLoads.h"
 #include "CSE.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
@@ -9,6 +8,7 @@
 #include "IRVisitor.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "StageStridedLoads.h"
 #include "Substitute.h"
 
 namespace Halide {
