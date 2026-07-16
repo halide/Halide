@@ -1,5 +1,6 @@
 #include "FindIntrinsics.h"
 #include "CSE.h"
+#include "CodeGen_Internal.h"
 #include "ConstantBounds.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -28,19 +29,10 @@ Expr narrow(Expr a) {
     return Cast::make(result_type, std::move(a));
 }
 
-// Check a type to make sure it can be narrowed. find_intrinsics_for_type
-// attempts to prevent this code from narrowing in cases that do not work, but
-// it is incomplete for two reasons:
-//
-//     - Arguments can be narrowed and that guard is only on return type, which
-//     are different for widening operations.
-//
-//     - find_intrinsics_for_type does not cull out float16, and it probably
-//     should not as while it's ok to skip matching bool things, float16 things
-//     are useful.
+// Check a type to make sure we can narrow it losslessly. This
+// excludes bools and float16.
 bool can_narrow(const Type &t) {
-    return (t.is_float() && t.bits() >= 32) ||
-           t.bits() >= 8;
+    return t.bits() >= (t.is_float() ? 32 : 8);
 }
 
 Expr saturating_narrow(const Expr &a) {
@@ -111,15 +103,32 @@ protected:
 
     // Remove a widening cast even if it changes the sign of the result.
     Expr strip_widening_cast(const Expr &x) {
-        if (can_narrow(x.type())) {
-            Expr narrow = lossless_narrow(x);
-            if (narrow.defined()) {
-                return narrow;
-            }
-            return lossless_cast(x.type().narrow().with_code(halide_type_uint), x);
-        } else {
+        if (!can_narrow(x.type())) {
             return Expr();
         }
+
+        Type inner_t = [](Expr e) {
+            while (const Cast *c = e.as<Cast>()) {
+                e = c->value;
+            }
+            return e.type();
+        }(x);
+
+        Expr best;
+        auto consider = [&](Type t) {
+            if (!best.defined() || t.bits() < best.type().bits()) {
+                Expr e = lossless_cast(t, x);
+                best = e.defined() ? e : best;
+            }
+        };
+
+        if (inner_t.is_int_or_uint() && inner_t != x.type()) {
+            consider(inner_t);
+        }
+        consider(x.type().narrow());
+        consider(x.type().narrow().with_code(halide_type_uint));
+
+        return best;
     }
 
     Expr to_rounding_shift(const Call *c) {
@@ -1634,6 +1643,12 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         return lower_sorted_avg(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::extract_bits)) {
+        internal_assert(op->args.size() == 2);
+        return lower_extract_bits(op);
+    } else if (op->is_intrinsic(Call::concat_bits)) {
+        internal_assert(!op->args.empty());
+        return lower_concat_bits(op);
     } else {
         return Expr();
     }
