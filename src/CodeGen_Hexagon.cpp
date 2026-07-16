@@ -1025,6 +1025,23 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
     int native_elements =
         native_vector_bits() / element_ty->getScalarSizeInBits();
     int result_elements = get_vector_num_elements(v_ty) * v.size();
+    if (element_bits == 1) {
+        // If this is a vector of booleans, convert it to a vector of bytes,
+        // interleave that, and convert back. This avoids routing predicate
+        // (mask) vectors through the vdelta-based byte shuffle network
+        // below, which assumes native-vector-sized byte data: small,
+        // sub-native-width concatenations of predicates (as produced here
+        // when the number of lanes is much smaller than a native HVX
+        // vector) can trip up LLVM's Hexagon backend during DAG combining.
+        vector<llvm::Value *> i8_v(v.size());
+        for (size_t i = 0; i < v.size(); i++) {
+            llvm::Type *i8_ty = get_vector_type(i8_t, get_vector_num_elements(v[i]->getType()));
+            i8_v[i] = builder->CreateIntCast(v[i], i8_ty, true);
+        }
+        Value *result = interleave_vectors(i8_v);
+        llvm::Type *result_ty = get_vector_type(element_ty, result_elements);
+        return builder->CreateIntCast(result, result_ty, true);
+    }
     if (v.size() == 2) {
         // Interleaving two vectors.
         Value *a = v[0];
