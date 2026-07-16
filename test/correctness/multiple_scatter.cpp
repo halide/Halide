@@ -33,7 +33,8 @@ int main(int argc, char **argv) {
 
     Buffer<int> input(128, 8);
 
-    input.fill(std::mt19937{0});
+    std::mt19937 rng{0};
+    input.for_each_value([&](int &v) { v = rng(); });
 
     Func sorted1;
     Var x, y;
