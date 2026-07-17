@@ -23,7 +23,10 @@ export async function renderGrayscale(
     normalizationMode,
   });
 
-  return { pixels: new Uint8ClampedArray(buffer), histogram: null };
+  return {
+    pixels: new Uint8ClampedArray(buffer),
+    histogram: null,
+  };
 }
 
 export async function renderRgb(
@@ -37,7 +40,10 @@ export async function renderRgb(
     normalizationMode,
   });
 
-  return { pixels: new Uint8ClampedArray(buffer), histogram: null };
+  return {
+    pixels: new Uint8ClampedArray(buffer),
+    histogram: null,
+  };
 }
 
 // The backend appends the histogram's bins as little-endian u32s directly after the pixel
@@ -117,4 +123,38 @@ export async function renderReuseDistance(
   });
 
   return splitPixelsAndHistogram(buffer, width, height);
+}
+
+export async function renderNaN(
+  func: string,
+  globalIndex: number,
+  normalizationMode: NormalizationMode,
+): Promise<RenderResult> {
+  const buffer = await invoke<ArrayBuffer>("render_nan", {
+    func,
+    globalIndex,
+    normalizationMode,
+  });
+
+  return {
+    pixels: new Uint8ClampedArray(buffer),
+    histogram: null,
+  };
+}
+
+export async function renderInf(
+  func: string,
+  globalIndex: number,
+  normalizationMode: NormalizationMode,
+): Promise<RenderResult> {
+  const buffer = await invoke<ArrayBuffer>("render_inf", {
+    func,
+    globalIndex,
+    normalizationMode,
+  });
+
+  return {
+    pixels: new Uint8ClampedArray(buffer),
+    histogram: null,
+  };
 }
