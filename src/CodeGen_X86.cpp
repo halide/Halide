@@ -825,6 +825,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         {VectorReduce::Add, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", Int(16)},
         {VectorReduce::SaturatingAdd, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "saturating_dot_product", {}, Pattern::CombineInit},
 
+        {VectorReduce::Add, 2, widening_mul(wild_bf16x_, wild_bf16x_), "dot_product", {}, Pattern::CombineInit},
         {VectorReduce::Add, 2, wild_f32x_ * wild_f32x_, "dot_product", BFloat(16), Pattern::CombineInit},
 
         // Horizontal widening addition using a dot_product against a vector of ones.
