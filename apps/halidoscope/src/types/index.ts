@@ -21,7 +21,7 @@ export interface FuncMeta extends Record<string, unknown> {
   max_value: number | null;
   max_store_count: number;
   max_load_count: number;
-  max_redundant_count: number;
+  max_redundant_store_count: number;
   max_reuse_distance: number;
   buffer_liveness: IndexRange;
   produce_ranges: IndexRange[];
@@ -39,3 +39,5 @@ export interface TraceMeta {
 
 export type NodeTypes = "funcNode";
 export type EdgeTypes = "funcEdge";
+
+export type AnimationMode = "Blink" | "Pulse" | "None";
