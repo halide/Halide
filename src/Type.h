@@ -374,6 +374,10 @@ public:
 
     /** Return Type with the same type code and number of lanes, but with at least twice as many bits. */
     Type widen() const {
+        if (is_bfloat()) {
+            // Widening a bfloat16 should produce a float32.
+            return with_code(Float).with_bits(32);
+        }
         if (bits() == 1) {
             // Widening a 1-bit type should produce an 8-bit type.
             return with_bits(8);

@@ -110,7 +110,10 @@ protected:
                     if (const Allocate *const *a_ptr = allocation_scope.find(op->name)) {
                         a = *a_ptr;
                     }
-                    found_loads[Key{op->name, base, stride, r->lanes, op->type, a, s}][offset].push_back(op);
+                    // Don't mess with loads from natively-2D tile memory.
+                    if (!a || !is_tile_memory_type(a->memory_type)) {
+                        found_loads[Key{op->name, base, stride, r->lanes, op->type, a, s}][offset].push_back(op);
+                    }
                 }
             }
         }
@@ -150,6 +153,16 @@ protected:
         // to.
         ScopedBinding<const Allocate *> bind(allocation_scope, op->name, op);
         IRVisitor::visit(op);
+    }
+
+    void visit(const Store *op) override {
+        // Don't mess with stores to natively-2D tile memory.
+        if (const auto *alloc = allocation_scope.find(op->name);
+            alloc && is_tile_memory_type((*alloc)->memory_type)) {
+            return;
+        } else {
+            IRVisitor::visit(op);
+        }
     }
 
     using IRVisitor::visit;

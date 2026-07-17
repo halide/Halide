@@ -186,7 +186,9 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
     int fd = halide_get_trace_file(user_context);
     if (fd > 0) {
         // Compute the total packet size
-        uint32_t value_bytes = (uint32_t)(e->type.lanes * e->type.bytes());
+        uint32_t value_bytes = (e->event == halide_trace_load || e->event == halide_trace_store) ?
+                                   (uint32_t)(e->type.lanes * e->type.bytes()) :
+                                   0;
         uint32_t header_bytes = (uint32_t)sizeof(halide_trace_packet_t);
         uint32_t coords_bytes = e->dimensions * (uint32_t)sizeof(int32_t);
         uint32_t name_bytes = strlen(e->func) + 1;
@@ -203,12 +205,16 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
 
         // Write a packet into it
         packet->size = total_size;
-        packet->id = my_id;
-        packet->type = e->type;
         packet->event = e->event;
         packet->parent_id = e->parent_id;
-        packet->value_index = e->value_index;
         packet->dimensions = e->dimensions;
+        if (e->event == halide_trace_load || e->event == halide_trace_store) {
+            packet->value_index = e->value_index;
+            packet->type = e->type;
+        } else {
+            packet->id = my_id;
+            packet->thread_id = (e->event == halide_trace_begin_parallel_task) ? e->thread_id : 0;
+        }
         if (e->coordinates) {
             memcpy((void *)packet->coordinates(), e->coordinates, coords_bytes);
         }
@@ -248,7 +254,9 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                                      "End consume",
                                      "Begin pipeline",
                                      "End pipeline",
-                                     "Tag"};
+                                     "Tag",
+                                     "Begin parallel task",
+                                     "End parallel task"};
 
         // Only print out the value on stores and loads.
         bool print_value = (e->event < 2);
@@ -323,6 +331,9 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
 
         if (e->trace_tag && *e->trace_tag) {
             ss << " tag = \"" << e->trace_tag << "\"";
+        }
+        if (e->thread_id != 0) {
+            ss << " thread_id = " << e->thread_id;
         }
 
         ss << "\n";

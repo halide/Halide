@@ -610,7 +610,19 @@ class Interleaver : public IRMutator {
         return expr;
     }
 
+    Scope<MemoryType> allocation_scope;
+    Stmt visit(const Allocate *op) override {
+        ScopedBinding<MemoryType> bind(allocation_scope, op->name, op->memory_type);
+        return IRMutator::visit(op);
+    }
+
     Stmt visit(const Store *op) override {
+        // Don't mess with stores to natively-2D tile memory.
+        if (const auto *alloc = allocation_scope.find(op->name);
+            alloc && is_tile_memory_type(*alloc)) {
+            return op;
+        }
+
         bool old_should_deinterleave = should_deinterleave;
         int old_num_lanes = num_lanes;
 
@@ -654,6 +666,12 @@ class Interleaver : public IRMutator {
 
         // There was no inner store.
         if (!store) {
+            return Stmt();
+        }
+
+        // Don't mess with stores to natively-2D tile memory.
+        if (const auto *alloc = allocation_scope.find(store->name);
+            alloc && is_tile_memory_type(*alloc)) {
             return Stmt();
         }
 

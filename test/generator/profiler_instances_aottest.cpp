@@ -253,6 +253,7 @@ int main(int argc, char **argv) {
     check_guardwithif_no_overstore(target);
     check_unrolled_pure_update(target);
     check_compute_with(target);
+
     // Only present when the pipeline was built with a GPU feature — the
     // generator gates the corresponding Funcs on get_target().has_gpu_feature().
     if (!entries_of(target, "xfer_out").empty()) {
@@ -261,6 +262,7 @@ int main(int argc, char **argv) {
     if (!entries_of(target, "mixed_sched").empty()) {
         check_mixed_host_device_update_defs(target);
     }
+
     check_points_required_at_root_canonical_only(target);
 
     printf("Success!\n");

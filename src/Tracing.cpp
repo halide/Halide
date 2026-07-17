@@ -26,7 +26,7 @@ struct TraceEventBuilder {
     vector<Expr> coordinates;
     Type type;
     halide_trace_event_code_t event;
-    Expr parent_id, value_index;
+    Expr parent_id, thread_id, value_index;
 
     Expr build() const {
         Expr values = Call::make(type_of<void *>(), Call::make_struct,
@@ -37,6 +37,10 @@ struct TraceEventBuilder {
         if (!idx.defined()) {
             idx = 0;
         }
+        Expr tid = thread_id;
+        if (!tid.defined()) {
+            tid = 0;
+        }
 
         // Note: if these arguments are changed in any meaningful way,
         // VectorizeLoops will likely need attention; it does nontrivial
@@ -45,7 +49,7 @@ struct TraceEventBuilder {
                              values, coords,
                              (int)type.code(), type.bits(), type.lanes(),
                              (int)event,
-                             parent_id, idx, (int)coordinates.size(),
+                             parent_id, tid, idx, (int)coordinates.size(),
                              trace_tag_expr};
         return Call::make(Int(32), Call::trace, args, Call::Extern);
     }
@@ -217,6 +221,57 @@ protected:
             }
         }
         return stmt;
+    }
+
+    Stmt trace_parallel_task(const string &task_name, Stmt body,
+                             const vector<Expr> &coordinates) {
+        const Stmt original = body;
+        const string task_stack = unique_name("parallel_task");
+        {
+            ScopedValue new_func{call_stack, task_stack};
+            body = mutate(body);
+        }
+        if (body.same_as(original)) {
+            return body;
+        }
+
+        TraceEventBuilder builder;
+        builder.func = task_name;
+        builder.coordinates = coordinates;
+        builder.parent_id = Variable::make(Int(32), call_stack + ".trace_id");
+        builder.thread_id = Call::make(Int(32), "halide_current_thread_id", {}, Call::Extern);
+        builder.event = halide_trace_begin_parallel_task;
+        Expr begin_task = builder.build();
+
+        builder.parent_id = Variable::make(Int(32), task_stack + ".trace_id");
+        builder.thread_id = Expr();
+        builder.event = halide_trace_end_parallel_task;
+        Expr end_task = builder.build();
+
+        return LetStmt::make(task_stack + ".trace_id", begin_task,
+                             Block::make(std::move(body), Evaluate::make(end_task)));
+    }
+
+    Stmt visit(const For *op) override {
+        Expr min = mutate(op->min);
+        Expr max = mutate(op->max);
+
+        Stmt body;
+        if (op->for_type == ForType::Parallel) {
+            const Expr extent = max - min + 1;
+            body = trace_parallel_task(op->name, op->body, {min, extent});
+        } else {
+            body = mutate(op->body);
+        }
+
+        if (min.same_as(op->min) &&
+            max.same_as(op->max) &&
+            body.same_as(op->body)) {
+            return op;
+        }
+        return For::make(op->name, std::move(min), std::move(max),
+                         op->for_type, op->partition_policy, op->device_api,
+                         std::move(body));
     }
 
     Stmt visit(const Realize *op) override {

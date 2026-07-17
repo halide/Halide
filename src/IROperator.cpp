@@ -441,7 +441,7 @@ Expr lossless_cast(Type t,
             return lossless_cast(t, c->value, scope, cache);
         }
     } else if (const Broadcast *b = e.as<Broadcast>()) {
-        Expr v = lossless_cast(t.element_of(), b->value, scope, cache);
+        Expr v = lossless_cast(t.with_lanes(b->value.type().lanes()), b->value, scope, cache);
         if (v.defined()) {
             return Broadcast::make(v, b->lanes);
         }

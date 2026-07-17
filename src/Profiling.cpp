@@ -147,6 +147,25 @@ struct Names {
                         display_name = f.profiler_display_name();
                     }
                 }
+            } else if (kind == halide_profiler_func_kind_allocation &&
+                       starts_with(ir_name, "allocgroup__")) {
+                // Render "allocgroup__f1$0.0__f2$0.1.buffer" as
+                // "f1$0.0,f2$0.1.buffer": split off the "allocgroup" tag,
+                // join the rest with commas.
+                //
+                // TODO(next PR): once the per-Func counter machinery is
+                // back, attribute the bytes to each participating Func
+                // instead of presenting one combined row. The right place
+                // to thread that data through is a "declare_allocation"
+                // intrinsic emitted by FuseGPUThreadLoops at the position
+                // where it strips the Allocate, carrying the Func name,
+                // size, and MemoryType — the profiler can then bill the
+                // size to each Func via a hoistable counter (the GPU
+                // runtime has no memory_allocate hook, so we can't track
+                // it as a live allocation).
+                std::vector<std::string> parts = split_string(ir_name, "__");
+                parts.erase(parts.begin());  // drop the "allocgroup" tag
+                display_name = join_strings(parts, ",");
             }
             entry_info.push_back({display_name, ir_name, parent_id, canon, kind, buffer_func_id});
         }
@@ -236,14 +255,20 @@ class PreAllocateEntries : public IRMutator {
     // halide_profiler_func_kind_allocation.
     std::set<int> produce_minted_ids;
 
+    bool is_profiled_func(const std::string &name) const {
+        auto it = env.find(name);
+        if (it == env.end()) {
+            it = env.find(names.prefix(name));
+        }
+        return it != env.end() && !it->second.should_not_profile();
+    }
+
     using IRMutator::visit;
 
     Stmt visit(const Allocate *op) override {
         int id = -1;
-        std::string fname = names.prefix(op->name);
-        auto it = env.find(fname);
-        if (it != env.end() && !it->second.should_not_profile()) {
-            id = names.id_for_entry(fname, producer_id);
+        if (is_profiled_func(op->name)) {
+            id = names.id_for_entry(op->name, producer_id);
         }
         Stmt result = IRMutator::visit(op);
         // If no Produce at this scope minted the same id, this is a
@@ -1132,7 +1157,7 @@ private:
         if (!is_const_zero(alloc.size)) {
             int idx = alloc.id;
             if (!alloc.on_stack) {
-                if (profiling_memory && idx >= 0) {
+                if (profiling_memory) {
                     debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << names.pipeline_name << "\n";
 
                     vector<Stmt> tasks{

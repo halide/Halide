@@ -405,6 +405,16 @@ enum class MemoryType {
     AMXTile,
 };
 
+/** Whether a MemoryType is backed by tile-shaped storage with native 2D
+ * loads and stores. Generic optimizations that rewrite the structure of
+ * loads or stores (deinterleaving, strided-load staging, etc.) should
+ * skip allocations of these types — the IR for them is consumed by a
+ * dedicated lowering pass that requires the original 2D-shaped loads
+ * and stores to remain intact. */
+inline bool is_tile_memory_type(MemoryType t) {
+    return t == MemoryType::AMXTile;
+}
+
 namespace Internal {
 
 /** An enum describing a type of loop traversal. Used in schedules,

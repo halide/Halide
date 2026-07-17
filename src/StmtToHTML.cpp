@@ -816,7 +816,7 @@ public:
         print_opening_tag("div", "code ptx");
 
         int current_id = -1;
-        bool in_braces = false;
+        int brace_depth = 0;  // Counting the inline asm braces.
         bool in_func_signature = false;
 
         std::string current_kernel;
@@ -841,6 +841,7 @@ public:
                 std::vector<std::string> parts = split_string(line, " ");
                 if (parts.size() == 3) {
                     in_func_signature = true;
+                    brace_depth = 0;
                     current_id = gen_unique_id();
                     print_show_hide_btn_begin(current_id);
                     std::string kernel_name = parts[2].substr(0, parts[2].length() - 1);
@@ -851,18 +852,20 @@ public:
             } else if (starts_with(line, ")") && in_func_signature) {
                 in_func_signature = false;
                 line = "<span class='matched'>)</span>" + line.substr(1);
-            } else if (starts_with(line, "{") && !in_braces) {
+            } else if (starts_with(line, "{") && brace_depth <= 0) {
                 print_opening_brace();
-                in_braces = true;
+                brace_depth = 1;
                 internal_assert(current_id != -1);
                 should_print_open_indent = true;
                 current_id = -1;
                 line = line.substr(1);
                 scope.push(current_kernel, gen_unique_id());
-            } else if (starts_with(line, "}") && in_braces) {
+            } else if (starts_with(line, "{") && brace_depth) {
+                brace_depth++;
+            } else if (starts_with(line, "}") && (--brace_depth <= 0)) {
                 print_closing_tag("div");
                 line = "<span class='matched'>}</span>" + line.substr(1);
-                in_braces = false;
+                brace_depth = 0;
                 scope.pop(current_kernel);
             }
 

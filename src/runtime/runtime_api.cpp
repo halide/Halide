@@ -37,6 +37,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_cuda_finalize_kernels,
     (void *)&halide_cuda_run,
     (void *)&halide_cuda_wrap_device_ptr,
+    (void *)&halide_current_thread_id,
     (void *)&halide_current_time_ns,
     (void *)&halide_debug_to_file,
     (void *)&halide_default_can_use_target_features,

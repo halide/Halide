@@ -43,6 +43,30 @@ struct MultiRamp {
     std::vector<Expr> strides;
     std::vector<int> lanes;
 
+    MultiRamp() = default;
+
+    /** Construct from explicit dim lists, applying the standard normalization
+     * — extent-1 dims are dropped (the invariants forbid them) and adjacent
+     * dims whose strides line up (`strides[i+1] == strides[i] · lanes[i]`)
+     * are merged. Strides and lanes must be the same length, and every lane
+     * count must be >= 1. */
+    MultiRamp(Expr base, std::vector<Expr> strides, std::vector<int> lanes);
+
+    /** Try to express this MultiRamp's lane sequence using a different
+     * dim shape. The target shape is given as a vector of lane counts
+     * (innermost first). On success, *out_strides is filled with one Expr
+     * per target dim — these are the strides such that a MultiRamp with
+     * `base = this->base`, `lanes = target_lanes`, `strides = *out_strides`
+     * enumerates the same lane values as `*this`. Slots in target_lanes of
+     * value 1 receive a zero stride.
+     *
+     * Returns false if target_lanes has a different total lane count than
+     * this MultiRamp, or if the dim factorizations can't be aligned (the
+     * gcd walk gets stuck on coprime factors, or merging adjacent dims
+     * requires their strides to align in a way that doesn't hold). */
+    bool strides_for_shape(const std::vector<int> &target_lanes,
+                           std::vector<Expr> *out_strides) const;
+
     /** Multiply by a scalar. Always a multiramp. */
     void mul(const Expr &e);
 

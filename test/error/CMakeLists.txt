@@ -68,6 +68,7 @@ tests(
     func_tuple_dim_mismatch.cpp
     func_tuple_types_mismatch.cpp
     func_tuple_update_types_mismatch.cpp
+    fuse_same_var.cpp
     fuse_vectorized_var_with_rvar.cpp
     hoist_storage_extern.cpp
     hoist_storage_without_compute_at.cpp
@@ -110,6 +111,7 @@ tests(
     rfactor_inner_dim_non_commutative.cpp
     round_up_and_blend_race.cpp
     run_with_large_stack_throws.cpp
+    rvar_fuse_reorder.cpp
     shift_inwards_and_blend_race.cpp
     specialize_fail.cpp
     split_inner_wrong_tail_strategy.cpp

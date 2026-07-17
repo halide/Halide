@@ -1268,14 +1268,21 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
 
         if (p.event == halide_trace_begin_realization ||
             p.event == halide_trace_produce ||
-            p.event == halide_trace_consume) {
+            p.event == halide_trace_consume ||
+            p.event == halide_trace_begin_parallel_task) {
             assert(!pipeline_info.count(p.id));
             pipeline_info[p.id] = pipeline;
         } else if (p.event == halide_trace_end_realization ||
                    p.event == halide_trace_end_produce ||
-                   p.event == halide_trace_end_consume) {
+                   p.event == halide_trace_end_consume ||
+                   p.event == halide_trace_end_parallel_task) {
             assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
+        }
+
+        if (p.event == halide_trace_begin_parallel_task ||
+            p.event == halide_trace_end_parallel_task) {
+            continue;
         }
 
         std::string qualified_name = pipeline.name + ":" + p.func();
@@ -1403,6 +1410,8 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         case halide_trace_end_produce:
         case halide_trace_consume:
         case halide_trace_end_consume:
+        case halide_trace_begin_parallel_task:
+        case halide_trace_end_parallel_task:
         // Note that you can get nested pipeline begin/end events when you trace
         // something that has extern stages that are also Halide-being-traced;
         // these should just be ignored.
