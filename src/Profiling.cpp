@@ -147,25 +147,6 @@ struct Names {
                         display_name = f.profiler_display_name();
                     }
                 }
-            } else if (kind == halide_profiler_func_kind_allocation &&
-                       starts_with(ir_name, "allocgroup__")) {
-                // Render "allocgroup__f1$0.0__f2$0.1.buffer" as
-                // "f1$0.0,f2$0.1.buffer": split off the "allocgroup" tag,
-                // join the rest with commas.
-                //
-                // TODO(next PR): once the per-Func counter machinery is
-                // back, attribute the bytes to each participating Func
-                // instead of presenting one combined row. The right place
-                // to thread that data through is a "declare_allocation"
-                // intrinsic emitted by FuseGPUThreadLoops at the position
-                // where it strips the Allocate, carrying the Func name,
-                // size, and MemoryType — the profiler can then bill the
-                // size to each Func via a hoistable counter (the GPU
-                // runtime has no memory_allocate hook, so we can't track
-                // it as a live allocation).
-                std::vector<std::string> parts = split_string(ir_name, "__");
-                parts.erase(parts.begin());  // drop the "allocgroup" tag
-                display_name = join_strings(parts, ",");
             }
             entry_info.push_back({display_name, ir_name, parent_id, canon, kind, buffer_func_id});
         }
@@ -711,11 +692,7 @@ protected:
             auto it = func_in_pure_stage.find(f);
             if (it != func_in_pure_stage.end() && it->second) {
                 size_t last_dot = op->name.rfind('.');
-                const char *tail = (last_dot == std::string::npos) ? op->name.c_str() : op->name.c_str() + last_dot + 1;
-                char *end = nullptr;
-                long idx = std::strtol(tail, &end, 10);
-                bool is_dup_tuple_element = (*end == '\0' && idx != 0);
-                if (!is_dup_tuple_element) {
+                if (last_dot == std::string::npos || ends_with(op->name, ".0")) {
                     c.count(PointsComputed, make_const(UInt(64), lanes));
                 }
             }
@@ -824,7 +801,11 @@ protected:
         if (op->is_unordered_parallel()) {
             // The parallel loop belongs to the currently-producing Func.
             int id = producer_id >= 0 ? producer_id : names.id_for_name(names.prefix(op->name));
-            counters[id].count(ParallelLoops);
+
+            if (!bind_gpu.old_value) {
+                // Unless this is an inner GPU loop, this counts as a parallel loop launch
+                counters[id].count(ParallelLoops);
+            }
             counters[id].count(ParallelTasks, cast(UInt(64), e));
         }
 
@@ -1157,7 +1138,7 @@ private:
         if (!is_const_zero(alloc.size)) {
             int idx = alloc.id;
             if (!alloc.on_stack) {
-                if (profiling_memory) {
+                if (profiling_memory && idx >= 0) {
                     debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << names.pipeline_name << "\n";
 
                     vector<Stmt> tasks{
