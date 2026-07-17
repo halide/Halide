@@ -607,7 +607,8 @@ Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx) {
 
 namespace {
 
-const char *const intrinsic_op_names[] = {
+constexpr const char *intrinsic_op_names[] = {
+    // keep-sorted start
     "abs",
     "absd",
     "add_image_checks_marker",
@@ -629,6 +630,7 @@ const char *const intrinsic_op_names[] = {
     "dynamic_shuffle",
     "extract_bits",
     "extract_mask_element",
+    "get_runtime_vscale",
     "get_user_context",
     "gpu_thread_barrier",
     "halving_add",
@@ -666,8 +668,8 @@ const char *const intrinsic_op_names[] = {
     "rounding_shift_left",
     "rounding_shift_right",
     "saturating_add",
-    "saturating_sub",
     "saturating_cast",
+    "saturating_sub",
     "scatter_gather",
     "select_mask",
     "shift_left",
@@ -705,10 +707,10 @@ const char *const intrinsic_op_names[] = {
     "widening_shift_left",
     "widening_shift_right",
     "widening_sub",
-    "get_runtime_vscale",
+    // keep-sorted end
 };
 
-static_assert(sizeof(intrinsic_op_names) / sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount,
+static_assert(std::size(intrinsic_op_names) == Call::IntrinsicOpCount,
               "intrinsic_op_names needs attention");
 
 }  // namespace

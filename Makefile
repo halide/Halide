@@ -847,6 +847,7 @@ RUNTIME_CPP_COMPONENTS = \
   force_include_types \
   fuchsia_clock \
   fuchsia_host_cpu_count \
+  fuchsia_thread_id \
   fuchsia_yield \
   gpu_device_selection \
   halide_buffer_t \
@@ -858,8 +859,12 @@ RUNTIME_CPP_COMPONENTS = \
   ios_io \
   linux_aarch64_cpu_features \
   linux_arm_cpu_features \
+  linux_arm_thread_id \
   linux_clock \
   linux_host_cpu_count \
+  linux_powerpc_thread_id \
+  linux_riscv_thread_id \
+  linux_x86_thread_id \
   linux_yield \
   metal \
   metal_objc_arm \
@@ -874,6 +879,7 @@ RUNTIME_CPP_COMPONENTS = \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \
+  osx_thread_id \
   osx_yield \
   posix_aligned_alloc \
   posix_allocator \
@@ -904,6 +910,7 @@ RUNTIME_CPP_COMPONENTS = \
   tracing \
   vulkan \
   wasm_cpu_features \
+  wasm_thread_id \
   webgpu_dawn \
   webgpu_emscripten \
   windows_aarch64_cpu_features_arm \
@@ -1338,6 +1345,7 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_msan,$(GENERATOR_AOTCPP_
 
 # https://github.com/halide/Halide/issues/7272
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbrot,$(GENERATOR_AOTCPP_TESTS))
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_profiler_instances,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/4916
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
@@ -1359,6 +1367,9 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/msan.rungen,$(GENERA
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/sanitizercoverage.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/multitarget.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+# profiler_instances declares a test_extern_stage callback in its
+# aottest, which rungen doesn't link.
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/profiler_instances.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/gpu_multi_context_threaded.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
@@ -1606,6 +1617,11 @@ $(FILTERS_DIR)/string_param.a: $(BIN_DIR)/string_param.generator
 $(FILTERS_DIR)/memory_profiler_mandelbrot.a: $(BIN_DIR)/memory_profiler_mandelbrot.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g memory_profiler_mandelbrot -f memory_profiler_mandelbrot $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-profile
+
+# profiler_instances needs profiler set; verifies the per-instance / canonical-id machinery.
+$(FILTERS_DIR)/profiler_instances.a: $(BIN_DIR)/profiler_instances.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g profiler_instances -f profiler_instances $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-profile
 
 $(FILTERS_DIR)/alias_with_offset_42.a: $(BIN_DIR)/alias.generator
 	@mkdir -p $(@D)

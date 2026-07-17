@@ -34,8 +34,10 @@ void print_event(const event &e) {
                                  "End consume",
                                  "Begin pipeline",
                                  "End pipeline",
-                                 "Tag"};
-    assert(e.event_type >= 0 && e.event_type <= 10);
+                                 "Tag",
+                                 "Begin parallel task",
+                                 "End parallel task"};
+    assert(e.event_type >= 0 && e.event_type <= 12);
     printf("%d %s ", e.event_type, event_types[e.event_type]);
 
     printf("%c.%d[", e.func, e.value_index);

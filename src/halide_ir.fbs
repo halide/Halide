@@ -713,6 +713,7 @@ table Func {
     trace_realizations: bool = false;
     trace_tags: [string];
     no_profiling: bool = false;
+    profiler_display_name: string;
     frozen: bool = false;
 }
 

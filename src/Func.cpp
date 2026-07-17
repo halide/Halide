@@ -1317,58 +1317,70 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
     debug(4) << "In schedule for " << name() << ", fuse " << outer.name()
              << " and " << inner.name() << " into " << fused.name() << "\n";
 
-    // Replace the old dimensions with the new dimension in the dims list
-    bool found_outer = false, found_inner = false;
-    string inner_name, outer_name, fused_name;
     vector<Dim> &dims = definition.schedule().dims();
-
-    DimType outer_type = DimType::PureRVar;
-    for (size_t i = 0; (!found_outer) && i < dims.size(); i++) {
-        if (dim_match(dims[i], outer)) {
-            found_outer = true;
-            outer_name = dims[i].var;
-            outer_type = dims[i].dim_type;
-            dims.erase(dims.begin() + i);
-        }
-    }
-    if (!found_outer) {
-        user_error << "In schedule for " << name()
-                   << ", could not find outer fuse dimension: "
-                   << outer.name()
-                   << "\n"
-                   << dump_argument_list();
-    }
-
-    for (size_t i = 0; (!found_inner) && i < dims.size(); i++) {
+    int inner_pos = -1, outer_pos = -1;
+    for (int i = 0; i < (int)dims.size(); i++) {
         if (dim_match(dims[i], inner)) {
-            found_inner = true;
-            inner_name = dims[i].var;
-            fused_name = inner_name + "." + fused.name();
-            dims[i].var = fused_name;
-
-            if (dims[i].dim_type == DimType::ImpureRVar ||
-                outer_type == DimType::ImpureRVar) {
-                dims[i].dim_type = DimType::ImpureRVar;
-            } else if (dims[i].dim_type == DimType::PureRVar ||
-                       outer_type == DimType::PureRVar) {
-                dims[i].dim_type = DimType::PureRVar;
-            } else {
-                dims[i].dim_type = DimType::PureVar;
-            }
-            // We just changed the dim_type without checking the
-            // for_type. Redundantly re-set the for type on the fused var just
-            // to trigger validation of the existing for_type.
-            set_dim_type(fused, dims[i].for_type);
+            inner_pos = i;
+        }
+        if (dim_match(dims[i], outer)) {
+            outer_pos = i;
         }
     }
+    user_assert(inner_pos >= 0) << "In schedule for " << name()
+                                << ", could not find inner fuse dimension: "
+                                << inner.name() << "\n"
+                                << dump_argument_list();
+    user_assert(outer_pos >= 0) << "In schedule for " << name()
+                                << ", could not find outer fuse dimension: "
+                                << outer.name() << "\n"
+                                << dump_argument_list();
+    user_assert(inner_pos != outer_pos) << "In schedule for " << name()
+                                        << ", inner and outer fuse dimensions must be distinct, both are: "
+                                        << inner.name() << "\n";
 
-    if (!found_inner) {
-        user_error << "In schedule for " << name()
-                   << ", could not find inner fuse dimension: "
-                   << inner.name()
-                   << "\n"
-                   << dump_argument_list();
+    // The dimensions need to be adjacent before fusing. Verify the reordering is safe.
+    if (outer_pos != inner_pos + 1) {
+        vector<VarOrRVar> order;
+        order.reserve(dims.size() - 1);
+        for (int i = 0; i < (int)dims.size() - 1; i++) {
+            if (i == outer_pos) {
+                continue;
+            }
+            order.emplace_back(split_string(dims[i].var, ".").back(), dims[i].is_rvar());
+            if (i == inner_pos) {
+                order.emplace_back(split_string(dims[outer_pos].var, ".").back(), dims[outer_pos].is_rvar());
+            }
+        }
+        reorder(order);
+        for (int i = 0; i < (int)dims.size(); i++) {
+            if (dim_match(dims[i], inner)) {
+                inner_pos = i;
+                break;
+            }
+        }
+        outer_pos = inner_pos + 1;
     }
+
+    string inner_name = dims[inner_pos].var;
+    string outer_name = dims[outer_pos].var;
+    string fused_name = inner_name + "." + fused.name();
+
+    DimType outer_type = dims[outer_pos].dim_type;
+    dims.erase(dims.begin() + outer_pos);
+
+    dims[inner_pos].var = fused_name;
+    if (dims[inner_pos].dim_type == DimType::ImpureRVar || outer_type == DimType::ImpureRVar) {
+        dims[inner_pos].dim_type = DimType::ImpureRVar;
+    } else if (dims[inner_pos].dim_type == DimType::PureRVar || outer_type == DimType::PureRVar) {
+        dims[inner_pos].dim_type = DimType::PureRVar;
+    } else {
+        dims[inner_pos].dim_type = DimType::PureVar;
+    }
+    // We just changed the dim_type without checking the for_type. Redundantly
+    // re-set the for type on the fused var just to trigger validation of the
+    // existing for_type.
+    set_dim_type(fused, dims[inner_pos].for_type);
 
     // Add the fuse to the splits list
     Split split = {fused_name, outer_name, inner_name, Expr(), true, TailStrategy::RoundUp, Split::FuseVars};
@@ -2256,6 +2268,24 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
         }
         Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name) : create_in_wrapper(wrapped_fn, wrapper_name);
         Function wrapper_fn = wrapper.function();
+
+        // Build a profiler display name like "<wrapped>.in()" or
+        // "<wrapped>.in(<c1>, <c2>)" using the wrapped Func's display
+        // name and the consumers' display names (falling back to the
+        // IR-level name in each case). For .clone_in() use "clone_in".
+        auto display = [](const Function &f) {
+            return f.profiler_display_name().empty() ? f.name() : f.profiler_display_name();
+        };
+        std::string profiler_name = display(wrapped_fn) + (clone ? ".clone_in(" : ".in(");
+        for (size_t i = 0; i < fs.size(); i++) {
+            if (i > 0) {
+                profiler_name += ", ";
+            }
+            profiler_name += display(fs[i].function());
+        }
+        profiler_name += ")";
+        wrapper_fn.set_profiler_display_name(profiler_name);
+
         if (fs.empty()) {
             // Add global wrapper
             wrapped_fn.add_wrapper("", wrapper_fn);
@@ -2289,12 +2319,12 @@ Func Func::in(const vector<Func> &fs) {
         user_error << "Could not create a in wrapper for an empty list of Funcs\n";
     }
     invalidate_cache();
-    return get_wrapper(func, name() + "_wrapper", fs, false);
+    return get_wrapper(func, name() + "_in", fs, false);
 }
 
 Func Func::in() {
     invalidate_cache();
-    return get_wrapper(func, name() + "_global_wrapper", {}, false);
+    return get_wrapper(func, name() + "_in", {}, false);
 }
 
 Func Func::clone_in(const Func &f) {
