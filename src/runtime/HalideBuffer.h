@@ -2579,6 +2579,9 @@ public:
         if constexpr (std::is_invocable_v<Fn &>) {
             // A callable that takes no coordinates has nothing to
             // distinguish sites, so fill every value with its result.
+            // for_each_value writes through raw references, so it does not
+            // mark the host buffer dirty the way operator() does.
+            set_host_dirty();
             for_each_value([&](T &v) { v = f(); });
         } else {
             // We'll go via for_each_element. We need a variadic wrapper lambda.
