@@ -329,7 +329,7 @@ BlockRegion *RegionAllocator::find_block_region(void *user_context, const Memory
             debug(user_context) << "RegionAllocator: found suitable region ( "
                                 << "user_context=" << (void *)(user_context) << " "
                                 << "block_resource=" << (void *)block << " "
-                                << "block_size=" << (uint32_t)block->memory.allocation.size << " "
+                                << "block_size=" << (uint32_t)block->memory.size << " "
                                 << "block_reserved=" << (uint32_t)block->reserved << " "
                                 << "requested_size=" << (uint32_t)request.size << " "
                                 << "requested_is_dedicated=" << (request.dedicated ? "true" : "false") << " "
