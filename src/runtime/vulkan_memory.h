@@ -641,12 +641,12 @@ int VulkanMemoryAllocator::allocate_block(void *instance_ptr, MemoryBlock *block
 
     void *user_context = instance->owner_context;
     if ((instance->device == nullptr) || (instance->physical_device == nullptr)) {
-        error(user_context) << "VulkanBlockAllocator: Unable to deallocate block! Invalid device handle!\n";
+        error(user_context) << "VulkanBlockAllocator: Unable to allocate block! Invalid device handle!\n";
         return halide_error_code_internal_error;
     }
 
     if (block == nullptr) {
-        error(user_context) << "VulkanBlockAllocator: Unable to deallocate block! Invalid pointer!\n";
+        error(user_context) << "VulkanBlockAllocator: Unable to allocate block! Invalid pointer!\n";
         return halide_error_code_internal_error;
     }
 
