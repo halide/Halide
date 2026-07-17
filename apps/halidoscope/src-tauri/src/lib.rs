@@ -57,7 +57,9 @@ pub fn run() {
             commands::render_store_frequency,
             commands::render_load_frequency,
             commands::render_redundant_stores,
-            commands::render_reuse_distance
+            commands::render_reuse_distance,
+            commands::render_nan,
+            commands::render_inf,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
