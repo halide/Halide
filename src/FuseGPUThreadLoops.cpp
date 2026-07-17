@@ -253,8 +253,7 @@ protected:
     struct AllocGroup {
         AllocGroup() = default;
         AllocGroup(const SharedAllocation &alloc)
-            : name(alloc.name),
-              widest_type(alloc.type),
+            : widest_type(alloc.type),
               max_size(alloc.size),
               memory_type(alloc.memory_type) {
             group.push_back(alloc);
@@ -274,7 +273,6 @@ protected:
                 max_size = max(max_size, alloc.size / size_ratio);
             }
             group.push_back(alloc);
-            name += "_" + alloc.name;
         }
 
         // Only need to check the back of the vector since we always insert
@@ -283,7 +281,6 @@ protected:
             return group.back().liveness.max < stage;
         }
 
-        string name;
         Type widest_type;
         Expr max_size;                   // In units of the widest type
         vector<SharedAllocation> group;  // Groups of allocs that should be coalesced together
@@ -457,8 +454,6 @@ protected:
         return IfThenElse::make(condition, then_case, else_case);
     }
 
-    int alloc_node_counter = 0;
-
     Stmt visit(const Allocate *op) override {
         user_assert(!op->new_expr.defined())
             << "Allocate node inside GPU kernel has custom new expression.\n"
@@ -484,7 +479,7 @@ protected:
             << "but is scheduled to live in " << op->memory_type << " memory.\n";
 
         SharedAllocation alloc;
-        alloc.name = op->name + "." + std::to_string(alloc_node_counter++);
+        alloc.name = op->name;
         alloc.type = op->type;
         alloc.liveness = IntInterval(barrier_stage, barrier_stage);
         alloc.size = 1;
@@ -533,13 +528,14 @@ protected:
         if (it != shared.end()) {
             SharedAllocation *alloc = it->second;
             alloc->liveness.max = barrier_stage;
-            Expr predicate = mutate(op->predicate);
-            Expr index = mutate_index(alloc, op->index);
-            return Load::make(op->type, alloc->name,
-                              index, op->image, op->param, predicate, op->alignment);
-        } else {
-            return IRMutator::visit(op);
+            // The allocation keeps its name, so we only need to rewrite the
+            // node when the storage is striped across threads.
+            if (alloc->striped_over_threads) {
+                return Load::make(op->type, op->name, mutate_index(alloc, op->index),
+                                  op->image, op->param, mutate(op->predicate), op->alignment);
+            }
         }
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const Store *op) override {
@@ -547,14 +543,12 @@ protected:
         if (it != shared.end()) {
             SharedAllocation *alloc = it->second;
             alloc->liveness.max = barrier_stage;
-            Expr predicate = mutate(op->predicate);
-            Expr index = mutate_index(alloc, op->index);
-            Expr value = mutate(op->value);
-            return Store::make(alloc->name, value, index,
-                               op->param, predicate, op->alignment);
-        } else {
-            return IRMutator::visit(op);
+            if (alloc->striped_over_threads) {
+                return Store::make(op->name, mutate(op->value), mutate_index(alloc, op->index),
+                                   op->param, mutate(op->predicate), op->alignment);
+            }
         }
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const LetStmt *op) override {
@@ -758,6 +752,51 @@ protected:
     vector<GlobalAllocation> global_allocations;
 
 public:
+    // A single Func can be realized at several sites at the block level with
+    // disjoint lifetimes (e.g. when a serial loop above the GPU threads is
+    // unrolled), producing multiple allocations that share a name. Collapse
+    // each such set into one allocation spanning the union of their lifetimes
+    // and sized to the largest, so the Func keeps its own name instead of one
+    // suffixed per copy. The loads and stores already all use that name, and
+    // the host-side size computation already accumulates a max across the
+    // copies, so nothing else needs rewriting.
+    void merge_repeated_allocations() {
+        vector<SharedAllocation> merged;
+        map<string, size_t> index;
+        for (SharedAllocation &s : allocations) {
+            auto it = index.find(s.name);
+            if (it == index.end()) {
+                index[s.name] = merged.size();
+                merged.push_back(s);
+                continue;
+            }
+            SharedAllocation &m = merged[it->second];
+            internal_assert(m.type == s.type &&
+                            m.memory_type == s.memory_type &&
+                            m.striped_over_threads == s.striped_over_threads &&
+                            m.size_computed_on_host == s.size_computed_on_host)
+                << "Mismatched allocations share the name " << s.name << "\n";
+            internal_assert(m.liveness.max < s.liveness.min ||
+                            s.liveness.max < m.liveness.min)
+                << "Allocations sharing the name " << s.name
+                << " have overlapping lifetimes and cannot be coalesced\n";
+            m.liveness.min = std::min(m.liveness.min, s.liveness.min);
+            m.liveness.max = std::max(m.liveness.max, s.liveness.max);
+            if (!m.size_computed_on_host) {
+                m.size = simplify(max(m.size, s.size));
+            }
+        }
+        allocations.swap(merged);
+    }
+
+    // Run the mutator, then coalesce repeated allocations so callers always
+    // see a finalized allocation list.
+    Stmt operator()(const Stmt &s) {
+        Stmt result = mutate(s);
+        merge_repeated_allocations();
+        return result;
+    }
+
     Stmt rewrap_block(Stmt s, const ExtractBlockSize &bs) {
 
         // Combine the allocations into groups that have disjoint
@@ -819,7 +858,7 @@ public:
 
             string name;
             if (simple) {
-                name = cluster[0].name;
+                name = cluster[0].group[0].name;
             } else if (memory_type == MemoryType::Heap) {
                 name = unique_name("global_alloc");
             } else {
@@ -1096,9 +1135,6 @@ protected:
         }
     }
 
-    int alloc_node_counter = 0;
-    Scope<string> alloc_renaming;
-
     Stmt visit(const Allocate *op) override {
         if (in_lane_loop) {
             return IRMutator::visit(op);
@@ -1112,10 +1148,8 @@ protected:
             << "it must live in stack memory, heap memory, or registers. "
             << "Shared allocations at this loop level are not yet supported.\n";
 
-        ScopedBinding<int> p(register_allocations, op->name, 0);
-
         RegisterAllocation alloc;
-        alloc.name = op->name + "." + std::to_string(alloc_node_counter++);
+        alloc.name = op->name;
         alloc.type = op->type;
         alloc.size = 1;
         alloc.loop_var = loop_var;
@@ -1126,36 +1160,12 @@ protected:
         alloc.memory_type = op->memory_type;
 
         allocations.push_back(alloc);
-        {
-            ScopedBinding<string> bind(alloc_renaming, op->name, alloc.name);
-            return mutate(op->body);
-        }
-    }
-
-    Expr visit(const Load *op) override {
-        const string *new_name = alloc_renaming.find(op->name);
-        if (!new_name) {
-            new_name = &(op->name);
-        }
-        return Load::make(op->type, *new_name, mutate(op->index),
-                          op->image, op->param, mutate(op->predicate),
-                          op->alignment);
-    }
-
-    Stmt visit(const Store *op) override {
-        const string *new_name = alloc_renaming.find(op->name);
-        if (!new_name) {
-            new_name = &(op->name);
-        }
-        return Store::make(*new_name, mutate(op->value), mutate(op->index),
-                           op->param, mutate(op->predicate), op->alignment);
+        return mutate(op->body);
     }
 
     template<typename LetOrLetStmt>
     auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
-        auto body = op->body;
-
-        body = mutate(op->body);
+        auto body = mutate(op->body);
         Expr value = mutate(op->value);
 
         for (RegisterAllocation &s : allocations) {
@@ -1179,11 +1189,44 @@ protected:
         return visit_let(op);
     }
 
-    Scope<int> register_allocations;
     string loop_var;
 
 public:
     vector<RegisterAllocation> allocations;
+
+    // Multiple realizations of the same Func inside the thread loops (e.g. from
+    // unrolling a loop that holds a register allocation) share a name with
+    // disjoint, sequential lifetimes. Coalesce them into one allocation sized
+    // to the largest, so the Func keeps its own name (needed for profiler
+    // attribution) and reuses the scarce register storage instead of getting
+    // one array per copy. The loads and stores already all use that name.
+    void merge_repeated_allocations() {
+        vector<RegisterAllocation> merged;
+        map<string, size_t> index;
+        for (RegisterAllocation &s : allocations) {
+            auto it = index.find(s.name);
+            if (it == index.end()) {
+                index[s.name] = merged.size();
+                merged.push_back(s);
+                continue;
+            }
+            RegisterAllocation &m = merged[it->second];
+            internal_assert(m.type == s.type &&
+                            m.memory_type == s.memory_type &&
+                            m.loop_var == s.loop_var)
+                << "Mismatched register allocations share the name " << s.name << "\n";
+            m.size = simplify(max(m.size, s.size));
+        }
+        allocations.swap(merged);
+    }
+
+    // Run the mutator, then coalesce repeated allocations so callers always
+    // see a finalized allocation list.
+    Stmt operator()(const Stmt &s) {
+        Stmt result = mutate(s);
+        merge_repeated_allocations();
+        return result;
+    }
 
     Stmt rewrap(Stmt body, const string &loop_var) {
         for (RegisterAllocation &alloc : allocations) {
