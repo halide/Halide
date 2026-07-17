@@ -225,6 +225,88 @@ void check_points_required_at_root_canonical_only(const halide_profiler_pipeline
     REQUIRE(total_multi_entry_funcs >= 1);
 }
 
+// GPU-only: block-level producers stored in GPU shared / global (heap)
+// memory. FuseGPUThreadLoops hoists their per-Func allocations out of the
+// thread loops and coalesces them into one backing allocation. Before
+// per-Func allocation naming this fused allocation showed up in the
+// profiler as an orphan allocate row owned by no Func, and the per-Func
+// allocation bytes were lost. Now each producer keeps its own name and is
+// billed its own allocation size, so shared_a, shared_b, and shared_heap_h
+// each get a single Func entry, parented under shared_out, reporting a
+// non-zero memory_total and num_allocs.
+void check_within_block_gpu_allocations_attributed(const halide_profiler_pipeline_stats *p) {
+    auto shared_out = entries_of(p, "shared_out");
+    REQUIRE(shared_out.size() == 1);
+    int shared_out_id = (int)(shared_out[0] - p->funcs);
+
+    auto descends_from = [&](int idx, int ancestor_id) {
+        while (idx >= 0) {
+            if (idx == ancestor_id) {
+                return true;
+            }
+            idx = p->funcs[idx].parent;
+        }
+        return false;
+    };
+
+    for (const char *name : {"shared_a", "shared_b", "shared_heap_h"}) {
+        auto fs = entries_of(p, name);
+        REQUIRE(fs.size() == 1);
+        // A real Func entry, not a synthetic allocation/copy row.
+        REQUIRE(fs[0]->kind == halide_profiler_func_kind_func);
+        // The within-block allocation was billed to this Func.
+        REQUIRE(fs[0]->num_allocs > 0);
+        REQUIRE(fs[0]->memory_total > 0);
+        // Sensible size: at least one byte per recorded allocation.
+        REQUIRE(fs[0]->memory_total >= fs[0]->num_allocs);
+        // Parented inside the shared_out producer tree, not orphaned at root.
+        int idx = (int)(fs[0] - p->funcs);
+        REQUIRE(descends_from(idx, shared_out_id));
+    }
+}
+
+// GPU points_computed for the within-block producers. Keeping per-Func
+// store names (the fix under test) is what lets the stage-0 store counter
+// reach each Func at all; before it, these stores hung off the fused
+// backing-allocation name and were mis- or un-attributed. On GPU the count
+// is a conservative upper bound rather than an exact tally: FuseGPUThreadLoops
+// fuses the block's producers into one thread loop sized to the largest
+// footprint and guards each producer's stores to its own footprint, but the
+// profiler can't flush counters mid-kernel, so it hoists each per-thread
+// contribution out by its loop-var upper bound (Profiling.cpp's
+// hoist_loop_var_upper_bound) and scales by the fused thread extent. That is
+// exact for the producer filling the thread extent and an over-estimate for
+// the narrower ones. What must always hold: the store attribution reaches
+// each Func (non-zero) and never under-counts its root footprint. (On CPU
+// these Funcs count exactly — points_computed == points_required_at_root
+// with no recompute — verified out of band.)
+void check_within_block_gpu_points_computed(const halide_profiler_pipeline_stats *p) {
+    for (const char *name : {"shared_a", "shared_b", "shared_heap_h"}) {
+        auto fs = entries_of(p, name);
+        REQUIRE(fs.size() == 1);
+        uint64_t at_root = p->funcs[fs[0]->canonical_id].points_required_at_root;
+        REQUIRE(at_root > 0);
+        REQUIRE(fs[0]->points_computed > 0);
+        REQUIRE(fs[0]->points_computed >= at_root);
+    }
+}
+
+// The fused backing allocation that FuseGPUThreadLoops emits for coalesced
+// within-block GPU allocations carries a synthetic name (unique_name of
+// "shared_alloc" / "global_alloc", historically "allocgroup__f1__f2..."
+// rendered with commas). Such a name corresponds to no Func, so if it ever
+// reaches the profiler as its own entry it is an orphan allocate row. Assert
+// that no entry carries one of these synthetic names.
+void check_no_orphan_allocation_entries(const halide_profiler_pipeline_stats *p) {
+    for (int i = 0; i < p->num_funcs; i++) {
+        const char *name = p->funcs[i].name;
+        REQUIRE(strncmp(name, "shared_alloc", strlen("shared_alloc")) != 0);
+        REQUIRE(strncmp(name, "global_alloc", strlen("global_alloc")) != 0);
+        REQUIRE(strstr(name, "allocgroup") == nullptr);
+        REQUIRE(strchr(name, ',') == nullptr);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -262,6 +344,14 @@ int main(int argc, char **argv) {
     if (!entries_of(target, "mixed_sched").empty()) {
         check_mixed_host_device_update_defs(target);
     }
+    if (!entries_of(target, "shared_out").empty()) {
+        check_within_block_gpu_allocations_attributed(target);
+        check_within_block_gpu_points_computed(target);
+    }
+
+    // Holds regardless of target: the fused-allocation backing name should
+    // never surface as its own profiler entry.
+    check_no_orphan_allocation_entries(target);
 
     check_points_required_at_root_canonical_only(target);
 

@@ -198,6 +198,33 @@ public:
             mixed_sched.update(1).gpu_tile(x, xi, 8);
         }
 
+        // GPU-only: within-block GPU allocations. A chain of stencil
+        // producers computed at the block level and stored in GPU shared
+        // and global memory. FuseGPUThreadLoops hoists their per-Func
+        // allocations out of the thread loops and coalesces them into a
+        // single backing allocation with a synthetic name. Before per-Func
+        // allocation naming, that fused allocation surfaced in the profiler
+        // as an orphan allocate row owned by no Func (and the per-Func bytes were
+        // lost). Now each producer keeps its own name and is billed its own
+        // allocation size, so its entry reports a non-zero memory_total and
+        // there is no orphan row for the backing allocation. shared_heap_h
+        // sits inside the thread loop and is dynamically sized, so it lands
+        // in per-block global (heap) memory rather than shared — the other
+        // half of the fused-allocation path.
+        Func shared_a("shared_a"), shared_b("shared_b"),
+            shared_heap_h("shared_heap_h"), shared_out("shared_out");
+        if (get_target().has_gpu_feature()) {
+            shared_a(x) = x + 1;
+            shared_b(x) = shared_a(x) + shared_a(x + 1);
+            shared_heap_h(x) = shared_b(x) + shared_b(x + 1);
+            shared_out(x) = shared_heap_h(x);
+            Var xo, xi;
+            shared_out.compute_root().gpu_tile(x, xo, xi, 16);
+            shared_a.compute_at(shared_out, xo).gpu_threads(x).store_in(MemoryType::GPUShared);
+            shared_b.compute_at(shared_out, xo).gpu_threads(x).store_in(MemoryType::GPUShared);
+            shared_heap_h.compute_at(shared_out, xi).store_in(MemoryType::Heap);
+        }
+
         // Extern stage.
         Func extern_stage_e("extern_stage_e");
         extern_stage_e.define_extern("test_extern_stage",
@@ -244,7 +271,8 @@ public:
                          slide_out(x) + slide_fail_f(x) + extern_stage_e(x) +
                          inwards_red_root(x) + inwards_red_at_y(x);
         if (get_target().has_gpu_feature()) {
-            out_value = out_value + approx_out(x) + xfer_out(x) + mixed_sched(x);
+            out_value = out_value + approx_out(x) + xfer_out(x) + mixed_sched(x) +
+                        shared_out(x);
         }
         out(x) = out_value;
 
