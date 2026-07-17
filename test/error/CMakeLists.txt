@@ -59,6 +59,7 @@ tests(
     extern_func_self_argument.cpp
     five_d_gpu_buffer.cpp
     float_arg.cpp
+    fold_storage_not_applied.cpp
     forward_on_undefined_buffer.cpp
     func_expr_dim_mismatch.cpp
     func_expr_type_mismatch.cpp
@@ -93,6 +94,7 @@ tests(
     no_default_device.cpp
     nonexistent_update_stage.cpp
     null_host_field.cpp
+    output_func_input_buffer_name_collision.cpp
     overflow_during_constant_folding.cpp
     pointer_arithmetic.cpp
     predicate_loads_used_in_inner_splits.cpp
