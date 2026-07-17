@@ -108,7 +108,7 @@ extern "C" {
 // Ideally there would be a better way to detect if the type
 // is supported, even in a compiler independent fashion, but
 // coming up with one has proven elusive.
-#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__) && !defined(__wasm__)
+#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__) && !defined(__wasm__) && defined(__FLT16_MANT_DIG__)
 #if defined(__is_identifier)
 #if !__is_identifier(_Float16)
 #undef HALIDE_CPP_COMPILER_HAS_FLOAT16
@@ -391,6 +391,12 @@ extern bool halide_default_semaphore_try_acquire(struct halide_semaphore_t *, in
 
 struct halide_thread;
 
+/** Return a compact platform-specific ID for the current thread. This
+ * is derived from the platform's current-thread API, or from a
+ * runtime-owned counter on platforms that do not provide one, and is
+ * represented as a signed 32-bit integer for tracing. */
+extern int32_t halide_current_thread_id(void);
+
 /** Spawn a thread. Returns a handle to the thread for the purposes of
  * joining it. The thread must be joined in order to clean up any
  * resources associated with it. */
@@ -593,7 +599,9 @@ enum halide_trace_event_code_t { halide_trace_load = 0,
                                  halide_trace_end_consume = 7,
                                  halide_trace_begin_pipeline = 8,
                                  halide_trace_end_pipeline = 9,
-                                 halide_trace_tag = 10 };
+                                 halide_trace_tag = 10,
+                                 halide_trace_begin_parallel_task = 11,
+                                 halide_trace_end_parallel_task = 12 };
 
 struct halide_trace_event_t {
     /** The name of the Func or Pipeline that this event refers to */
@@ -633,6 +641,11 @@ struct halide_trace_event_t {
      * event ancestry). */
     int32_t parent_id;
 
+    /** A compact platform-specific ID for the thread that emitted this
+     * trace event. This is only populated for events that need it, such
+     * as halide_trace_begin_parallel_task; other events use zero. */
+    int32_t thread_id;
+
     /** If this was a load or store of a Tuple-valued Func, this is
      * which tuple element was accessed. */
     int32_t value_index;
@@ -659,8 +672,11 @@ struct halide_trace_event_t {
  * ...
  * +--(begin_realization|produce|consume)
  * |  +-- ... recursively more realizations/produces/consumes ...
- * |      +-- load
- * |      +-- store
+ * |      +-- begin_parallel_task
+ * |      |   +-- load
+ * |      |   +-- store
+ * |      |   +-- ... recursively more realization/produce/consume events ...
+ * |      +-- end_parallel_task
  * |      +-- ... recursively more end events ...
  * |  +--(end_realization|end_produce|end_consume)
  * +--end_pipeline
@@ -668,8 +684,14 @@ struct halide_trace_event_t {
  * Threading means that ownership cannot be inferred from the ordering
  * of events. There can be many active realizations of a given
  * function, or many active productions for a single
- * realization. Within a single production, the ordering of events is
- * meaningful.
+ * realization. A load or store that occurs within a parallel task can
+ * be associated with the logical task that produced it by walking its
+ * parent chain to a halide_trace_begin_parallel_task event. The id of
+ * that event is a trace event id used for parent ancestry. The
+ * thread_id field of that begin_parallel_task event identifies the
+ * platform thread that executed the task. Load and store events do not
+ * repeat this ID. Within a single parallel task, the ordering of events
+ * is meaningful.
  *
  * Note that all tag events (if any) will occur just after the begin_pipeline
  * event, but before any begin_realization events. All tags for a given Func
@@ -682,22 +704,42 @@ typedef int32_t (*halide_trace_t)(void *user_context, const struct halide_trace_
 extern halide_trace_t halide_set_custom_trace(halide_trace_t trace);
 // @}
 
+// NOLINTBEGIN(cppcoreguidelines-use-default-member-init,modernize-use-default-member-init)
 /** The header of a packet in a binary trace. All fields are 32-bit. */
 struct halide_trace_packet_t {
+#ifdef __cplusplus
+    HALIDE_ALWAYS_INLINE halide_trace_packet_t()
+        : size(0), event(halide_trace_load), parent_id(0), id(0), type(), dimensions(0) {
+    }
+#endif
+
     /** The total size of this packet in bytes. Always a multiple of
      * four. Equivalently, the number of bytes until the next
      * packet. */
     uint32_t size;
 
-    /** The id of this packet (for the purpose of parent_id). */
-    int32_t id;
-
-    /** The remaining fields are equivalent to those in halide_trace_event_t */
+    /** The remaining fields are equivalent to those in halide_trace_event_t.
+     * Some fields share storage because they are meaningful for disjoint event
+     * types: load and store events are leaves, so they use the id field for
+     * value_index; type is meaningful only for loads and stores, while thread_id
+     * is meaningful only for halide_trace_begin_parallel_task. */
     // @{
-    struct halide_type_t type;
     enum halide_trace_event_code_t event;
     int32_t parent_id;
-    int32_t value_index;
+    union {
+        /** The id of this packet (for the purpose of parent_id). This field is
+         * meaningful for non-load/store events. Loads and stores are leaves, and
+         * use this storage for value_index instead. */
+        int32_t id;
+
+        /** If this was a load or store of a Tuple-valued Func, this is
+         * which tuple element was accessed. */
+        int32_t value_index;
+    };
+    union {
+        struct halide_type_t type;
+        int32_t thread_id;
+    };
     int32_t dimensions;
     // @}
 
@@ -724,14 +766,23 @@ struct halide_trace_packet_t {
         return (void *)(coordinates() + dimensions);
     }
 
+    /** Get the size of the value payload. Only load and store packets have a
+     * value, so type is ignored for all other event types. */
+    HALIDE_ALWAYS_INLINE uint32_t value_bytes() const {
+        if (event == halide_trace_load || event == halide_trace_store) {
+            return type.lanes * type.bytes();
+        }
+        return 0;
+    }
+
     /** Get the func name, assuming this packet is laid out in memory
      * as it was written. It comes after the value. */
     HALIDE_ALWAYS_INLINE const char *func() const {
-        return (const char *)value() + type.lanes * type.bytes();
+        return (const char *)value() + value_bytes();
     }
 
     HALIDE_ALWAYS_INLINE char *func() {
-        return (char *)value() + type.lanes * type.bytes();
+        return (char *)value() + value_bytes();
     }
 
     /** Get the trace_tag (if any), assuming this packet is laid out in memory
@@ -756,6 +807,11 @@ struct halide_trace_packet_t {
     }
 #endif
 };
+// NOLINTEND(cppcoreguidelines-use-default-member-init,modernize-use-default-member-init)
+
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
+static_assert(sizeof(halide_trace_packet_t) == 6 * sizeof(uint32_t), "size mismatch in halide_trace_packet_t");
+#endif
 
 /** Set the file descriptor that Halide should write binary trace
  * events to. If called with 0 as the argument, Halide outputs trace
@@ -1403,7 +1459,7 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_user_context,  ///< Generated code takes a user_context pointer as first argument
 
-    halide_target_feature_profile,     ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
+    halide_target_feature_profile,     ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func. Also injects a synchronous halide_device_sync after every GPU kernel launch so the profiler can attribute compute time correctly — see halide_profiler_func_stats for the trade-off.
     halide_target_feature_no_runtime,  ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
     halide_target_feature_metal,  ///< Enable the (Apple) Metal runtime.
@@ -1869,12 +1925,54 @@ void halide_register_argv_and_metadata(
 
 /** The functions below here are relevant for pipelines compiled with
  * the -profile target flag, which runs a sampling profiler thread
- * alongside the pipeline. */
+ * alongside the pipeline. -profile also forces a synchronous
+ * halide_device_sync after every GPU kernel launch so per-Func times
+ * reflect real compute time; this removes any overlap the schedule was
+ * getting, so absolute runtimes under -profile run slower than without. */
+
+/** Tag identifying what a halide_profiler_func_stats entry represents.
+ * Lets the reporter handle bookkeeping slots and synthetic entries by
+ * tag rather than by index or by parsing the name. */
+enum halide_profiler_func_kind {
+    halide_profiler_func_kind_func = 0,
+    halide_profiler_func_kind_overhead = 1,
+    halide_profiler_func_kind_thread_idle = 2,
+    halide_profiler_func_kind_malloc = 3,
+    halide_profiler_func_kind_free = 4,
+    /** A halide_copy_to_host call. The buffer_func_id field is the
+     * canonical id of the Func whose buffer is being copied. */
+    halide_profiler_func_kind_copy_to_host = 5,
+    halide_profiler_func_kind_copy_to_device = 6,
+    /** A hoist_storage Realize whose Produce sits deeper in the IR.
+     * Carries the memory columns for the buffer's lifetime; the
+     * time/compute columns belong to the separate production entry. */
+    halide_profiler_func_kind_allocation = 7,
+};
 
 /** Per-Func state tracked by the sampling profiler. */
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
+    /** The name of this Func. A global constant string. */
+    const char *name;
+
+    /** The id of the parent Func (the one which this is compute_at). -1 if the
+     * Func is compute_root. */
+    int parent;
+
+    /** Id of this Func's canonical entry. A Func can appear in this
+     * array more than once (e.g. an unscheduled Func with an update
+     * definition reached from multiple callers); canonical_id is the
+     * id of the first such appearance, the shared key for rolling
+     * instances back up to a Func. */
+    int canonical_id;
+
+    enum halide_profiler_func_kind kind;
+
+    /** For copy synthetics (kind == copy_to_host/copy_to_device), the
+     * canonical id of the Func whose buffer is being copied. -1 otherwise. */
+    int buffer_func_id;
+
     /** Total time taken evaluating this Func (in nanoseconds). */
-    uint64_t time;
+    uint64_t HALIDE_ATTRIBUTE_ALIGN(8) time;
 
     /** The current memory allocation of this Func. */
     uint64_t memory_current;
@@ -1882,20 +1980,18 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The peak memory allocation of this Func. */
     uint64_t memory_peak;
 
-    /** The total memory allocation of this Func. */
-    uint64_t memory_total;
-
     /** The peak stack allocation of this Func's threads. */
     uint64_t stack_peak;
 
-    /** The average number of thread pool worker threads active while computing this Func. */
+    /** The total memory allocation of this Func. */
+    uint64_t memory_total;
+
+    /** The average number of thread pool worker threads active while computing
+     * this Func. */
     uint64_t active_threads_numerator, active_threads_denominator;
 
-    /** The name of this Func. A global constant string. */
-    const char *name;
-
-    /** The total number of memory allocation of this Func. */
-    int num_allocs;
+    /** The total number of times heap storage for this Func was allocated. */
+    uint64_t num_allocs;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
@@ -1932,6 +2028,13 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
 
     /** The number of times this pipeline has been run. */
     int runs;
+
+    /** The number of pipeline runs that produced at least one profiler
+     * sample. Runs that completed in less than one sampler tick contribute
+     * to `runs` (and to the per-Func counters) but not to per-Func time
+     * accumulation, so this is the correct denominator for time
+     * averages. */
+    int billed_runs;
 
     /** The total number of samples taken inside of this pipeline. */
     int samples;

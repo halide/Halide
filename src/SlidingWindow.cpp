@@ -1,6 +1,7 @@
 #include "SlidingWindow.h"
 
 #include "Bounds.h"
+#include "CSE.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
@@ -86,7 +87,7 @@ public:
 // Perform all the substitutions in a scope
 Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
     ExpandExpr ee(scope);
-    Expr result = ee(e);
+    Expr result = common_subexpression_elimination(ee(e));
     debug(4) << "Expanded " << e << " into " << result << "\n";
     return result;
 }
@@ -223,11 +224,19 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Expr loop_min;
     set<int> &slid_dimensions;
     Scope<Expr> scope;
+    Scope<Interval> &bounds_scope;
 
-    // Loops between the loop being slid over and the produce node
+    // For loops strictly between the loop being slid over and the current
+    // node (not including the loop being slid over itself).
     Scope<> enclosing_loops;
 
     map<string, Expr> replacements;
+
+    // The immediately-enclosing For node, and the one enclosing the target
+    // producer. Replacements are only applied to LetStmts directly inside
+    // producer_for.
+    const For *current_for = nullptr;
+    Stmt producer_for;
 
     using IRMutator::visit;
 
@@ -275,8 +284,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 internal_assert(min_val && max_val);
                 Expr min_req = *min_val;
                 Expr max_req = *max_val;
-                min_req = expand_expr(min_req, scope);
-                max_req = expand_expr(max_req, scope);
+                min_req = simplify(expand_expr(min_req, scope), bounds_scope);
+                max_req = simplify(expand_expr(max_req, scope), bounds_scope);
 
                 debug(3) << func_args[i] << ":" << min_req << ", " << max_req << "\n";
                 if (expr_depends_on_var(min_req, loop_var) ||
@@ -500,6 +509,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 replacements[n + ".min"] = Variable::make(Int(32), prefix + dim + ".min");
                 replacements[n + ".max"] = Variable::make(Int(32), prefix + dim + ".max");
             }
+            producer_for = Stmt(current_for);
 
             // Ok, we have a new min/max required and we're going to
             // rewrite all the lets that define bounds required. Now
@@ -565,6 +575,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         Expr min = expand_expr(op->min, scope);
         Expr max = expand_expr(op->max, scope);
         ScopedBinding<> bind(enclosing_loops, op->name);
+        ScopedValue<const For *> bind_for(current_for, op);
         if (equal(min, max)) {
             // Just treat it like a let
             Stmt s = LetStmt::make(op->name, min, op->body);
@@ -585,13 +596,16 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope)));
+        ScopedBinding<Interval> bind_bounds(bounds_scope, op->name,
+                                            bounds_of_expr_in_scope(op->value, bounds_scope));
+        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope), bounds_scope));
+
         Stmt new_body = mutate(op->body);
 
         Expr value = op->value;
 
         map<string, Expr>::iterator iter = replacements.find(op->name);
-        if (iter != replacements.end()) {
+        if (iter != replacements.end() && current_for == producer_for.get()) {
             value = iter->second;
             replacements.erase(iter);
         }
@@ -604,8 +618,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
 public:
-    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions)
-        : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)), slid_dimensions(slid_dimensions) {
+    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions,
+                                   Scope<Interval> &bounds_scope)
+        : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)),
+          slid_dimensions(slid_dimensions), bounds_scope(bounds_scope) {
     }
 
     Expr new_loop_min;
@@ -746,8 +762,15 @@ class SlidingWindow : public IRMutator {
     // Keep track of realizations we want to slide, from innermost to
     // outermost.
     list<Function> sliding;
+    Scope<Interval> bounds_scope;
 
     using IRMutator::visit;
+
+    Stmt visit(const LetStmt *op) override {
+        ScopedBinding<Interval> bind(bounds_scope, op->name,
+                                     bounds_of_expr_in_scope(op->value, bounds_scope));
+        return IRMutator::visit(op);
+    }
 
     Stmt visit(const Realize *op) override {
         // Find the args for this function
@@ -818,7 +841,14 @@ class SlidingWindow : public IRMutator {
 
             set<int> &slid_dims = slid_dimensions[func.name()];
             size_t old_slid_dims_size = slid_dims.size();
-            SlidingWindowOnFunctionAndLoop slider(func, name, prev_loop_min, slid_dims);
+
+            Interval min_bounds = bounds_of_expr_in_scope(loop_min, bounds_scope);
+            Interval max_bounds = bounds_of_expr_in_scope(loop_max, bounds_scope);
+            ScopedBinding<Interval> bind_bounds(bounds_scope, op->name,
+                                                Interval(min_bounds.min, max_bounds.max));
+
+            SlidingWindowOnFunctionAndLoop slider(func, name, prev_loop_min, slid_dims, bounds_scope);
+
             body = slider(body);
 
             if (func.schedule().memory_type() == MemoryType::Register &&
@@ -901,7 +931,7 @@ public:
 };
 
 // It is convenient to be able to assume that loops have a .loop_min.orig
-// let in addition to .loop_min. Most of these will get simplified away.
+// let giving the original loop min. Most of these will get simplified away.
 class AddLoopMinOrig : public IRMutator {
     using IRMutator::visit;
 
@@ -916,7 +946,7 @@ class AddLoopMinOrig : public IRMutator {
         } else {
             result = For::make(op->name, min, max, op->for_type, op->partition_policy, op->device_api, body);
         }
-        return LetStmt::make(op->name + ".loop_min.orig", Variable::make(Int(32), op->name + ".loop_min"), result);
+        return LetStmt::make(op->name + ".loop_min.orig", op->min, result);
     }
 };
 

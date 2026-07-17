@@ -172,6 +172,8 @@ int main(int argc, char **argv) {
     check(i32(i8x) * i8y, i32(widening_mul(i8x, i8y)));
     check(u32(u8x) * u8y, u32(widening_mul(u8x, u8y)));
     check(f32(f16x) * f32(f16y), widening_mul(f16x, f16y));
+    check(f32(i8x) * f32(i8y), f32(widening_mul(i8x, i8y)));
+    check(f32(u8x) * f32(u8y), f32(widening_mul(u8x, u8y)));
 
     // Check mixed float/int promotion
     check(widening_mul(i8x, f16y), widening_mul(f16(i8x), f16y));
