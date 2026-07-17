@@ -1,5 +1,6 @@
 import { Tabs } from "radix-ui";
 
+import DebugPanel from "@/components/controls/DebugPanel";
 import FuncsPanel from "@/components/controls/FuncsPanel";
 import VisualizationPanel from "@/components/controls/VisualizationPanel";
 import { FuncMeta } from "@/types";
@@ -26,12 +27,21 @@ function ControlTabs({ funcs }: { funcs: Record<string, FuncMeta> }) {
           >
             Visualization
           </Tabs.Trigger>
+          <Tabs.Trigger
+            value="debug"
+            className="data-[state=active]:bg-ps-primary data-[state=inactive]:bg-ps-titlebar data-[state=active]:text-ps-text-primary data-[state=inactive]:text-ps-text-secondary border-ps-border-primary border-r px-3 py-1 font-semibold"
+          >
+            Debug
+          </Tabs.Trigger>
         </Tabs.List>
         <Tabs.Content value="funcs" className="flex-1 overflow-auto">
           <FuncsPanel funcs={funcs} />
         </Tabs.Content>
         <Tabs.Content value="visualization" className="flex-1">
           <VisualizationPanel />
+        </Tabs.Content>
+        <Tabs.Content value="debug" className="flex-1">
+          <DebugPanel />
         </Tabs.Content>
       </Tabs.Root>
     </div>

@@ -1,6 +1,7 @@
 import { Select } from "radix-ui";
 import { useAtom } from "jotai";
 
+import ArrowDownIcon from "@/components/icons/ArrowDownIcon";
 import { renderAtom, RENDER_MODES, type RenderMode } from "@/state/render";
 
 function VisualizationSelect() {
@@ -19,20 +20,7 @@ function VisualizationSelect() {
       >
         <Select.Value className="text-ps-text-primary" />
         <Select.Icon className="ml-auto">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-            className="h-3 w-3"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M19.5 8.25l-7.5 7.5-7.5-7.5"
-            />
-          </svg>
+          <ArrowDownIcon />
         </Select.Icon>
       </Select.Trigger>
       <Select.Content

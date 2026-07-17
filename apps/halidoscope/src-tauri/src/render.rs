@@ -1,13 +1,7 @@
-//! Framebuffer rendering for Halidoscope.
-//!
-//! Each rendering pathway has its own state type that accumulates pixel data from trace events
-//! and emits RGBA8 for `putImageData`. States are decoupled from `Trace`: event index slices are
-//! passed into `seek` so states can live in Tauri-managed storage alongside the parsed trace.
-
 use ::colorous;
 use serde::Deserialize;
 
-use crate::trace::{pixel_xy, FuncGeometry, Trace, TracePacket};
+use crate::trace::{for_each_lane_pixel, pixel_xy, FuncGeometry, Trace, TracePacket};
 
 #[derive(Deserialize, Clone, Copy)]
 pub enum NormalizationMode {
@@ -17,10 +11,8 @@ pub enum NormalizationMode {
     PerFunc,
 }
 
-// A trait that all 2D rendering states implement.
+// A trait that all 2D Canvas renderers implement.
 pub trait Renderer: Sized {
-    /// The primitive type this state's `values` are stored and returned as (e.g. `f64` for
-    /// intensity-accumulating states, `u32`/`i32` for count-accumulating states).
     type Value;
 
     fn register(trace: &Trace, func: &str) -> Option<Self>;
@@ -29,16 +21,12 @@ pub trait Renderer: Sized {
     fn to_values(&self) -> Vec<Self::Value>;
 }
 
-// ── Grayscale rendering ───────────────────────────────────────────────────────
+// ── Grayscale rendering ──────────────────────────────────────────────────────────────────────────
 
-/// Accumulated pixel state for a single Func. Channel 0 is normalized to [0, 255] and replicated
-/// across R/G/B in `to_rgba`. Forward seeks apply only the delta; backward seeks clear and replay.
 pub struct GrayscaleState {
     geom: FuncGeometry,
     min_v: f64,
     max_v: f64,
-    /// Latest normalized intensity per (pixel, channel), row-major with channel as the minor axis.
-    /// Length is `width * height * channels`. Unwritten cells stay 0.
     framebuffer: Vec<u8>,
     values: Vec<f64>,
     applied_k: usize,
@@ -64,8 +52,6 @@ impl GrayscaleState {
     }
 
     fn apply_store(&mut self, pkt: &TracePacket) {
-        let n_lanes = pkt.type_.lanes.max(1) as usize;
-        let dims_per_lane = pkt.coordinates.len() / n_lanes;
         let FuncGeometry {
             width,
             height,
@@ -75,26 +61,23 @@ impl GrayscaleState {
             min_c,
             ..
         } = self.geom;
-        for lane in 0..n_lanes {
-            let Some(v) = pkt.decoded_value(lane) else {
-                continue;
-            };
-            let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
-            if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
-                continue;
-            }
-            let c = if dims_per_lane >= 3 {
-                pkt.coordinates[2 * n_lanes + lane] - min_c
-            } else {
-                0
-            };
-            if c < 0 || c as usize >= channels {
-                continue;
-            }
-            let idx = (y as usize * width + x as usize) * channels + c as usize;
-            self.framebuffer[idx] = self.normalize(v);
-            self.values[idx] = v;
-        }
+
+        for_each_lane_pixel(
+            pkt,
+            min_x,
+            min_y,
+            width,
+            height,
+            Some((min_c, channels)),
+            |lane, _pixel_idx, val_idx, _x, _y| {
+                let Some(v) = pkt.decoded_value(lane) else {
+                    return;
+                };
+
+                self.framebuffer[val_idx] = self.normalize(v);
+                self.values[val_idx] = v;
+            },
+        );
     }
 
     #[inline]
@@ -122,7 +105,6 @@ impl Renderer for GrayscaleState {
         self.applied_k = target_k;
     }
 
-    /// Produces a `width * height * 4` RGBA8 buffer. Channel 0 is replicated across R/G/B.
     fn to_rgba(&self, _normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry {
             width,
@@ -158,16 +140,12 @@ impl Renderer for GrayscaleState {
     }
 }
 
-// ── RGB rendering ─────────────────────────────────────────────────────────────
+// ── RGB rendering ────────────────────────────────────────────────────────────────────────────────
 
-/// Same accumulation logic as `GrayscaleState`, but `to_rgba` maps planes 0/1/2 directly to
-/// R/G/B. Missing planes default to 0. Alpha is always opaque.
 pub struct RgbState {
     geom: FuncGeometry,
     min_v: f64,
     max_v: f64,
-    /// Latest normalized intensity per (pixel, channel), row-major with channel as the minor axis.
-    /// Length is `width * height * channels`. Unwritten cells stay 0.
     framebuffer: Vec<u8>,
     values: Vec<f64>,
     applied_k: usize,
@@ -193,8 +171,6 @@ impl RgbState {
     }
 
     fn apply_store(&mut self, pkt: &TracePacket) {
-        let n_lanes = pkt.type_.lanes.max(1) as usize;
-        let dims_per_lane = pkt.coordinates.len() / n_lanes;
         let FuncGeometry {
             width,
             height,
@@ -204,26 +180,23 @@ impl RgbState {
             min_c,
             ..
         } = self.geom;
-        for lane in 0..n_lanes {
-            let Some(v) = pkt.decoded_value(lane) else {
-                continue;
-            };
-            let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
-            if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
-                continue;
-            }
-            let c = if dims_per_lane >= 3 {
-                pkt.coordinates[2 * n_lanes + lane] - min_c
-            } else {
-                0
-            };
-            if c < 0 || c as usize >= channels {
-                continue;
-            }
-            let idx = (y as usize * width + x as usize) * channels + c as usize;
-            self.framebuffer[idx] = self.normalize(v);
-            self.values[idx] = v;
-        }
+
+        for_each_lane_pixel(
+            pkt,
+            min_x,
+            min_y,
+            width,
+            height,
+            Some((min_c, channels)),
+            |lane, _pixel_idx, val_idx, _x, _y| {
+                let Some(v) = pkt.decoded_value(lane) else {
+                    return;
+                };
+
+                self.framebuffer[val_idx] = self.normalize(v);
+                self.values[val_idx] = v;
+            },
+        );
     }
 
     #[inline]
@@ -251,8 +224,6 @@ impl Renderer for RgbState {
         self.applied_k = target_k;
     }
 
-    /// Produces a `width * height * 4` RGBA8 buffer. Planes 0/1/2 map to R/G/B;
-    /// missing planes are 0. Alpha is always opaque.
     fn to_rgba(&self, _normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry {
             width,
@@ -285,11 +256,8 @@ impl Renderer for RgbState {
     }
 }
 
-// ── Store frequency rendering ─────────────────────────────────────────────────
+// ── Store frequency rendering ────────────────────────────────────────────────────────────────────
 
-/// Accumulated per-pixel store counts for one Func, seekable along the global timeline. Forward
-/// seeks apply only the new events; backward seeks clear and replay. The global max store count
-/// is used for normalization so the color scale is stable across the entire scrub range.
 pub struct StoreFrequencyState {
     geom: FuncGeometry,
     counts: Vec<u32>,
@@ -332,10 +300,25 @@ impl StoreFrequencyState {
         let dims_per_lane = pkt.coordinates.len() / n_lanes;
         for l in 0..n_lanes {
             let (x, y) = pixel_xy(pkt, l, n_lanes, dims_per_lane, min_x, min_y);
+
             if x >= 0 && y >= 0 && (x as usize) < width && (y as usize) < height {
                 self.counts[y as usize * width + x as usize] += 1;
             }
         }
+    }
+
+    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
+        let max = match normalization_mode {
+            NormalizationMode::AcrossFuncs => self.global_max_store_count,
+            NormalizationMode::PerFunc => self.local_max_store_count,
+        };
+        let mut hist = vec![0u32; max as usize + 1];
+
+        for &c in &self.counts {
+            hist[c.clamp(0, max) as usize] += 1;
+        }
+
+        hist
     }
 }
 
@@ -358,9 +341,6 @@ impl Renderer for StoreFrequencyState {
         self.applied_k = target_k;
     }
 
-    /// Produces a `width × height × 4` RGBA8 buffer with the Inferno colormap applied. Counts
-    /// are normalized against the global full-trace maximum so intensities are comparable across
-    /// all Funcs.
     fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
         let gradient = colorous::INFERNO;
@@ -371,7 +351,7 @@ impl Renderer for StoreFrequencyState {
 
         let scale = match (normalization_mode, self.global_max_store_count) {
             (NormalizationMode::AcrossFuncs, 0) => 0.0,
-            (NormalizationMode::AcrossFuncs, max) => 255.0 / max as f64,
+            (NormalizationMode::AcrossFuncs, global_max) => 255.0 / global_max as f64,
             (NormalizationMode::PerFunc, _) => {
                 let local_max = *&self.local_max_store_count;
                 if local_max > 0 {
@@ -399,28 +379,8 @@ impl Renderer for StoreFrequencyState {
     }
 }
 
-impl StoreFrequencyState {
-    /// Produces a frequency histogram of live per-pixel store counts at the current seek
-    /// position. `hist[k]` is the number of pixel locations currently stored exactly `k` times,
-    /// for `k` in `0..=chosen_max`, where `chosen_max` is this Func's own max (`PerFunc`) or the
-    /// trace-wide max (`AcrossFuncs`) — matching whichever max drives `to_rgba`'s color scale.
-    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
-        let chosen_max = match normalization_mode {
-            NormalizationMode::AcrossFuncs => self.global_max_store_count,
-            NormalizationMode::PerFunc => self.local_max_store_count,
-        };
-        let mut hist = vec![0u32; chosen_max as usize + 1];
-        for &c in &self.counts {
-            hist[c.clamp(0, chosen_max) as usize] += 1;
-        }
-        hist
-    }
-}
+// ── Load frequency rendering ─────────────────────────────────────────────────────────────────────
 
-// ── Load frequency rendering ──────────────────────────────────────────────────
-
-/// Mirrors `StoreFrequencyState` but tracks load events instead of store events. The global max
-/// load count is used for normalization so the color scale is stable across the entire scrub range.
 pub struct LoadFrequencyState {
     geom: FuncGeometry,
     counts: Vec<u32>,
@@ -459,14 +419,32 @@ impl LoadFrequencyState {
             min_y,
             ..
         } = self.geom;
-        let n_lanes = pkt.type_.lanes.max(1) as usize;
-        let dims_per_lane = pkt.coordinates.len() / n_lanes;
-        for l in 0..n_lanes {
-            let (x, y) = pixel_xy(pkt, l, n_lanes, dims_per_lane, min_x, min_y);
-            if x >= 0 && y >= 0 && (x as usize) < width && (y as usize) < height {
-                self.counts[y as usize * width + x as usize] += 1;
-            }
+
+        for_each_lane_pixel(
+            pkt,
+            min_x,
+            min_y,
+            width,
+            height,
+            None,
+            |_lane, pixel_idx, _val_idx, _x, _y| {
+                self.counts[pixel_idx] += 1;
+            },
+        );
+    }
+
+    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
+        let max = match normalization_mode {
+            NormalizationMode::AcrossFuncs => self.global_max_load_count,
+            NormalizationMode::PerFunc => self.local_max_load_count,
+        };
+        let mut hist = vec![0u32; max as usize + 1];
+
+        for &c in &self.counts {
+            hist[c.clamp(0, max) as usize] += 1;
         }
+
+        hist
     }
 }
 
@@ -489,9 +467,6 @@ impl Renderer for LoadFrequencyState {
         self.applied_k = target_k;
     }
 
-    /// Produces a `width × height × 4` RGBA8 buffer with the Inferno colormap applied. Counts
-    /// are normalized against the global full-trace maximum so intensities are comparable across
-    /// all Funcs.
     fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
         let gradient = colorous::INFERNO;
@@ -502,7 +477,7 @@ impl Renderer for LoadFrequencyState {
 
         let scale = match (normalization_mode, self.global_max_load_count) {
             (NormalizationMode::AcrossFuncs, 0) => 0.0,
-            (NormalizationMode::AcrossFuncs, max) => 255.0 / max as f64,
+            (NormalizationMode::AcrossFuncs, global_max) => 255.0 / global_max as f64,
             (NormalizationMode::PerFunc, _) => {
                 if self.local_max_load_count > 0 {
                     255.0 / self.local_max_load_count as f64
@@ -529,40 +504,14 @@ impl Renderer for LoadFrequencyState {
     }
 }
 
-impl LoadFrequencyState {
-    /// Produces a frequency histogram of live per-pixel load counts at the current seek
-    /// position. `hist[k]` is the number of pixel locations currently loaded exactly `k` times,
-    /// for `k` in `0..=chosen_max`, where `chosen_max` is this Func's own max (`PerFunc`) or the
-    /// trace-wide max (`AcrossFuncs`) — matching whichever max drives `to_rgba`'s color scale.
-    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
-        let chosen_max = match normalization_mode {
-            NormalizationMode::AcrossFuncs => self.global_max_load_count,
-            NormalizationMode::PerFunc => self.local_max_load_count,
-        };
-        let mut hist = vec![0u32; chosen_max as usize + 1];
-        for &c in &self.counts {
-            hist[c.clamp(0, chosen_max) as usize] += 1;
-        }
-        hist
-    }
-}
+// ── Redundant store rendering ────────────────────────────────────────────────────────────────────
 
-// ── Redundant computation rendering ──────────────────────────────────────────
-
-/// Accumulated per-pixel redundant-store counts for one Func. A store to pixel (x, y, c) is
-/// redundant when it writes the same bit-pattern that was last stored there. The full-trace max
-/// redundant count (pre-computed at parse time) is used for normalization so the color scale is
-/// stable across the entire scrub range.
 pub struct RedundantState {
     geom: FuncGeometry,
-    /// Last value stored per (pixel × channel), flat row-major:
-    /// `last_values[(y * width + x) * channels + c]`.
-    /// `None` = no store has landed here yet.
     last_values: Vec<Option<u64>>,
-    /// Redundant-store count per spatial pixel, indexed by `y * width + x`.
-    redundant_counts: Vec<u32>,
-    local_max_redundant_count: u32,
-    global_max_redundant_count: u32,
+    redundant_store_counts: Vec<u32>,
+    local_max_redundant_store_count: u32,
+    global_max_redundant_store_count: u32,
     applied_k: usize,
 }
 
@@ -572,33 +521,31 @@ impl RedundantState {
         let geom = trace.func_geometry(func)?;
         let n_pixels = geom.width * geom.height;
 
-        let local_max_redundant_count = trace.funcs.get(func).map_or(0, |s| s.max_redundant_count);
-        let global_max_redundant_count = trace
+        let local_max_redundant_store_count =
+            trace.funcs.get(func).map(|s| s.max_redundant_store_count)?;
+        let global_max_redundant_store_count = trace
             .funcs
             .values()
-            .map(|s| s.max_redundant_count)
-            .max()
-            .unwrap_or(0);
+            .map(|s| s.max_redundant_store_count)
+            .max()?;
 
         Some(Self {
             geom,
             last_values: vec![None; n_pixels * geom.channels],
-            redundant_counts: vec![0u32; n_pixels],
-            local_max_redundant_count,
-            global_max_redundant_count,
+            redundant_store_counts: vec![0u32; n_pixels],
+            local_max_redundant_store_count,
+            global_max_redundant_store_count,
             applied_k: 0,
         })
     }
 
     fn reset(&mut self) {
         self.last_values.iter_mut().for_each(|v| *v = None);
-        self.redundant_counts.iter_mut().for_each(|c| *c = 0);
+        self.redundant_store_counts.iter_mut().for_each(|c| *c = 0);
         self.applied_k = 0;
     }
 
     fn apply_store(&mut self, pkt: &TracePacket) {
-        let n_lanes = pkt.type_.lanes.max(1) as usize;
-        let dims_per_lane = pkt.coordinates.len() / n_lanes;
         let FuncGeometry {
             width,
             height,
@@ -609,32 +556,39 @@ impl RedundantState {
             ..
         } = self.geom;
 
-        for lane in 0..n_lanes {
-            let Some(v) = pkt.decoded_value(lane) else {
-                continue;
-            };
-            let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
-            if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
-                continue;
-            }
-            let c = if dims_per_lane >= 3 {
-                pkt.coordinates[2 * n_lanes + lane] - min_c
-            } else {
-                0
-            };
-            if c < 0 || c as usize >= channels {
-                continue;
-            }
-            let val_idx = (y as usize * width + x as usize) * channels + c as usize;
-            let pixel_idx = y as usize * width + x as usize;
-            let v_bits = v.to_bits();
-            if let Some(prev_bits) = self.last_values[val_idx] {
-                if prev_bits == v_bits {
-                    self.redundant_counts[pixel_idx] += 1;
+        for_each_lane_pixel(
+            pkt,
+            min_x,
+            min_y,
+            width,
+            height,
+            Some((min_c, channels)),
+            |lane, pixel_idx: usize, val_idx: usize, _x, _y| {
+                let Some(v) = pkt.decoded_value(lane) else {
+                    return;
+                };
+
+                let v_bits = v.to_bits();
+                if let Some(prev_bits) = self.last_values[val_idx] {
+                    if prev_bits == v_bits {
+                        self.redundant_store_counts[pixel_idx] += 1;
+                    }
                 }
-            }
-            self.last_values[val_idx] = Some(v_bits);
+                self.last_values[val_idx] = Some(v_bits);
+            },
+        );
+    }
+
+    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
+        let max = match normalization_mode {
+            NormalizationMode::AcrossFuncs => self.global_max_redundant_store_count,
+            NormalizationMode::PerFunc => self.local_max_redundant_store_count,
+        };
+        let mut hist = vec![0u32; max as usize + 1];
+        for &c in &self.redundant_store_counts {
+            hist[c.clamp(0, max) as usize] += 1;
         }
+        hist
     }
 }
 
@@ -645,8 +599,6 @@ impl Renderer for RedundantState {
         Self::new(trace, func)
     }
 
-    /// Seeks to the state after the first `target_k` store events. Forward seeks apply only the
-    /// delta; backward seeks reset and replay from zero.
     fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
         let target_k = target_k.min(store_indices.len());
         if target_k < self.applied_k {
@@ -658,9 +610,6 @@ impl Renderer for RedundantState {
         self.applied_k = target_k;
     }
 
-    /// Produces a `width × height × 4` RGBA8 buffer. Pixels with zero redundant stores are black;
-    /// pixels with one or more are mapped through the Inferno colormap, normalized against the
-    /// global full-trace maximum so intensities are comparable across all Funcs.
     fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
 
@@ -670,12 +619,12 @@ impl Renderer for RedundantState {
             [c.r, c.g, c.b]
         });
 
-        let scale = match (normalization_mode, self.global_max_redundant_count) {
+        let scale = match (normalization_mode, self.global_max_redundant_store_count) {
             (NormalizationMode::AcrossFuncs, 0) => 0.0,
-            (NormalizationMode::AcrossFuncs, max) => 255.0 / max as f64,
+            (NormalizationMode::AcrossFuncs, global_max) => 255.0 / global_max as f64,
             (NormalizationMode::PerFunc, _) => {
-                if self.local_max_redundant_count > 0 {
-                    255.0 / self.local_max_redundant_count as f64
+                if self.local_max_redundant_store_count > 0 {
+                    255.0 / self.local_max_redundant_store_count as f64
                 } else {
                     0.0
                 }
@@ -683,7 +632,10 @@ impl Renderer for RedundantState {
         };
 
         let mut out = vec![0u8; width * height * 4];
-        for (chunk, &count) in out.chunks_exact_mut(4).zip(self.redundant_counts.iter()) {
+        for (chunk, &count) in out
+            .chunks_exact_mut(4)
+            .zip(self.redundant_store_counts.iter())
+        {
             if count > 0 {
                 let ti = (count as f64 * scale) as usize;
                 let [r, g, b] = lut[ti.min(255)];
@@ -697,30 +649,11 @@ impl Renderer for RedundantState {
     }
 
     fn to_values(&self) -> Vec<u32> {
-        self.redundant_counts.clone()
+        self.redundant_store_counts.clone()
     }
 }
 
-impl RedundantState {
-    /// Produces a frequency histogram of live per-pixel redundant-store counts at the current
-    /// seek position. `hist[k]` is the number of pixel locations with exactly `k` redundant
-    /// stores so far, for `k` in `0..=chosen_max`, where `chosen_max` is this Func's own max
-    /// (`PerFunc`) or the trace-wide max (`AcrossFuncs`) — matching whichever max drives
-    /// `to_rgba`'s color scale.
-    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
-        let chosen_max = match normalization_mode {
-            NormalizationMode::AcrossFuncs => self.global_max_redundant_count,
-            NormalizationMode::PerFunc => self.local_max_redundant_count,
-        };
-        let mut hist = vec![0u32; chosen_max as usize + 1];
-        for &c in &self.redundant_counts {
-            hist[c.clamp(0, chosen_max) as usize] += 1;
-        }
-        hist
-    }
-}
-
-// ── Reuse distance rendering ──────────────────────────────────────────────────
+// ── Reuse distance rendering ─────────────────────────────────────────────────────────────────────
 
 /// Per-pixel maximum reuse distance for one Func, seekable along the global timeline.
 ///
@@ -734,30 +667,20 @@ impl RedundantState {
 /// Backward seeks reset and replay from zero.
 pub struct ReuseDistanceState {
     geom: FuncGeometry,
-    /// Whether this Func is a pipeline input (no store events in the trace).
     is_input: bool,
-    /// Per `(x, y, channel)` anchor, flat row-major:
-    /// `anchor_at[(y * width + x) * channels + c]`.
+    /// Per `(x, y, channel)` anchor, flat row-major: `anchor_at[(y * width + x) * channels + c]`.
     /// For intermediate Funcs: global index of the most recent store (`usize::MAX` = none yet).
     /// For inputs: global index of the first load (`usize::MAX` = none yet).
     anchor_at: Vec<usize>,
     /// Maximum observed reuse distance per spatial pixel, indexed by `y * width + x`.
     max_reuse_distance: Vec<u64>,
-    /// This Func's own maximum reuse distance, used to normalize the color scale against just
-    /// this Func's range.
     local_max_reuse_distance: u64,
-    /// Trace-wide maximum reuse distance, used to normalize the color scale consistently across
-    /// all Funcs regardless of which one is being viewed.
     global_max_reuse_distance: u64,
-    /// Number of this Func's store events processed.
     applied_store_k: usize,
-    /// Number of this Func's load events processed.
     applied_load_k: usize,
 }
 
 impl ReuseDistanceState {
-    /// Builds an empty reuse distance state for `func`, or `None` if the Func has no usable
-    /// geometry.
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
         let n_cells = geom.width * geom.height * geom.channels;
@@ -765,13 +688,8 @@ impl ReuseDistanceState {
             .func_store_indices(func)
             .map_or(true, |s| s.is_empty());
 
-        let local_max_reuse_distance = trace.funcs.get(func).map_or(0, |s| s.max_reuse_distance);
-        let global_max_reuse_distance = trace
-            .funcs
-            .values()
-            .map(|s| s.max_reuse_distance)
-            .max()
-            .unwrap_or(0);
+        let local_max_reuse_distance = trace.funcs.get(func).map(|s| s.max_reuse_distance)?;
+        let global_max_reuse_distance = trace.funcs.values().map(|s| s.max_reuse_distance).max()?;
 
         Some(Self {
             geom,
@@ -837,6 +755,7 @@ impl ReuseDistanceState {
         if self.is_input {
             return;
         }
+
         let FuncGeometry {
             width,
             height,
@@ -846,24 +765,18 @@ impl ReuseDistanceState {
             min_c,
             ..
         } = self.geom;
-        let n_lanes = pkt.type_.lanes.max(1) as usize;
-        let dims_per_lane = pkt.coordinates.len() / n_lanes;
-        for lane in 0..n_lanes {
-            let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
-            if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
-                continue;
-            }
-            let c = if dims_per_lane >= 3 {
-                pkt.coordinates[2 * n_lanes + lane] - min_c
-            } else {
-                0
-            };
-            if c < 0 || c as usize >= channels {
-                continue;
-            }
-            let val_idx = (y as usize * width + x as usize) * channels + c as usize;
-            self.anchor_at[val_idx] = global_idx;
-        }
+
+        for_each_lane_pixel(
+            pkt,
+            min_x,
+            min_y,
+            width,
+            height,
+            Some((min_c, channels)),
+            |_lane, _pixel_idx, val_idx, _x, _y| {
+                self.anchor_at[val_idx] = global_idx;
+            },
+        );
     }
 
     fn apply_load(&mut self, pkt: &TracePacket, global_idx: usize) {
@@ -876,46 +789,34 @@ impl ReuseDistanceState {
             min_c,
             ..
         } = self.geom;
-        let n_lanes = pkt.type_.lanes.max(1) as usize;
-        let dims_per_lane = pkt.coordinates.len() / n_lanes;
-        for lane in 0..n_lanes {
-            let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
-            if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
-                continue;
-            }
-            let c = if dims_per_lane >= 3 {
-                pkt.coordinates[2 * n_lanes + lane] - min_c
-            } else {
-                0
-            };
-            if c < 0 || c as usize >= channels {
-                continue;
-            }
-            let val_idx = (y as usize * width + x as usize) * channels + c as usize;
-            let pixel_idx = y as usize * width + x as usize;
-            if self.is_input {
-                // First load is the free memcpy; establish the anchor and record no distance.
-                // Subsequent loads to the same location measure from that first load.
-                if self.anchor_at[val_idx] == usize::MAX {
-                    self.anchor_at[val_idx] = global_idx;
-                } else {
-                    let dist = (global_idx - self.anchor_at[val_idx]) as u64;
-                    if dist > self.max_reuse_distance[pixel_idx] {
-                        self.max_reuse_distance[pixel_idx] = dist;
+
+        for_each_lane_pixel(
+            pkt,
+            min_x,
+            min_y,
+            width,
+            height,
+            Some((min_c, channels)),
+            |_lane, pixel_idx, val_idx, _x, _y| {
+                if self.is_input {
+                    // First load is the free memcpy; establish the anchor and record no distance.
+                    // Subsequent loads to the same location measure from that first load.
+                    if self.anchor_at[val_idx] == usize::MAX {
+                        self.anchor_at[val_idx] = global_idx;
+                    } else {
+                        let dist = (global_idx - self.anchor_at[val_idx]) as u64;
+                        self.max_reuse_distance[pixel_idx] =
+                            self.max_reuse_distance[pixel_idx].max(dist);
                     }
+                } else if self.anchor_at[val_idx] != usize::MAX {
+                    let dist = (global_idx - self.anchor_at[val_idx]) as u64;
+                    self.max_reuse_distance[pixel_idx] =
+                        self.max_reuse_distance[pixel_idx].max(dist);
                 }
-            } else if self.anchor_at[val_idx] != usize::MAX {
-                let dist = (global_idx - self.anchor_at[val_idx]) as u64;
-                if dist > self.max_reuse_distance[pixel_idx] {
-                    self.max_reuse_distance[pixel_idx] = dist;
-                }
-            }
-        }
+            },
+        );
     }
 
-    /// Produces a `width × height × 4` RGBA8 buffer. Pixels with no observed store→load pair are
-    /// black; positive distances map through the Inferno colormap normalized against the per-Func
-    /// full-trace maximum so the scale is stable while scrubbing.
     pub fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
 
@@ -927,7 +828,7 @@ impl ReuseDistanceState {
 
         let scale = match (normalization_mode, self.global_max_reuse_distance) {
             (NormalizationMode::AcrossFuncs, 0) => 0.0,
-            (NormalizationMode::AcrossFuncs, max) => 255.0 / max as f64,
+            (NormalizationMode::AcrossFuncs, global_max) => 255.0 / global_max as f64,
             (NormalizationMode::PerFunc, _) => {
                 if self.local_max_reuse_distance > 0 {
                     255.0 / self.local_max_reuse_distance as f64
@@ -951,27 +852,22 @@ impl ReuseDistanceState {
         out
     }
 
-    /// Produces a fixed 64-bucket histogram of live per-pixel maximum reuse distances at the
-    /// current seek position. Bucket `k` covers distances in `[k/63 * chosen_max, (k+1)/63 *
-    /// chosen_max)`, with bucket 63 inclusive of `chosen_max`. Pixels with no observed
-    /// store→load pair (distance 0) are excluded. `chosen_max` is this Func's own max
-    /// (`PerFunc`) or the trace-wide max (`AcrossFuncs`) — matching whichever max drives
-    /// `to_rgba`'s color scale.
     pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
-        let chosen_max = match normalization_mode {
+        let max = match normalization_mode {
             NormalizationMode::AcrossFuncs => self.global_max_reuse_distance,
             NormalizationMode::PerFunc => self.local_max_reuse_distance,
         };
 
         let mut hist = vec![0u32; 64];
-        if chosen_max > 0 {
+        if max > 0 {
             for &dist in &self.max_reuse_distance {
                 if dist > 0 {
-                    let bucket = ((dist as f64 / chosen_max as f64) * 63.0) as usize;
+                    let bucket = ((dist as f64 / max as f64) * 63.0) as usize;
                     hist[bucket.min(63)] += 1;
                 }
             }
         }
+
         hist
     }
 
@@ -979,5 +875,251 @@ impl ReuseDistanceState {
     /// `(y * width + x)` order.
     pub fn to_values(&self) -> Vec<u64> {
         self.max_reuse_distance.clone()
+    }
+}
+
+// ── NaN Rendering ────────────────────────────────────────────────────────────────────────────────
+
+pub struct NaNState {
+    geom: FuncGeometry,
+    values: Vec<f64>,
+    nanbuffer: Vec<u8>,
+    applied_k: usize,
+}
+
+impl NaNState {
+    pub fn new(trace: &Trace, func: &str) -> Option<Self> {
+        let geom = trace.func_geometry(func)?;
+        let nanbuffer = vec![0u8; geom.width * geom.height * geom.channels];
+        let values = vec![0f64; geom.width * geom.height * geom.channels];
+
+        Some(Self {
+            geom,
+            values,
+            nanbuffer,
+            applied_k: 0,
+        })
+    }
+
+    fn apply_store(&mut self, pkt: &TracePacket) {
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            min_x,
+            min_y,
+            min_c,
+            ..
+        } = self.geom;
+
+        for_each_lane_pixel(
+            pkt,
+            min_x,
+            min_y,
+            width,
+            height,
+            Some((min_c, channels)),
+            |lane, _pixel_idx: usize, val_idx: usize, _x, _y| {
+                let Some(v) = pkt.decoded_value(lane) else {
+                    return;
+                };
+
+                self.nanbuffer[val_idx] = if v.is_nan() { 1 } else { 0 };
+                self.values[val_idx] = v;
+            },
+        );
+    }
+}
+
+impl Renderer for NaNState {
+    type Value = f64;
+
+    fn register(trace: &Trace, func: &str) -> Option<Self> {
+        Self::new(trace, func)
+    }
+
+    fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
+        let target_k = target_k.min(store_indices.len());
+        if target_k < self.applied_k {
+            self.values.iter_mut().for_each(|v| *v = 0.0);
+            self.nanbuffer.iter_mut().for_each(|b| *b = 0);
+            self.applied_k = 0;
+        }
+
+        for &idx in &store_indices[self.applied_k..target_k] {
+            self.apply_store(&trace.packets[idx]);
+        }
+
+        self.applied_k = target_k;
+    }
+
+    fn to_rgba(&self, _normalization_mode: NormalizationMode) -> Vec<u8> {
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            ..
+        } = self.geom;
+        let mut out = vec![0u8; width * height * 4];
+        let nb = &self.nanbuffer;
+        if channels >= 3 {
+            for (chunk, src) in out.chunks_exact_mut(4).zip(nb.chunks_exact(channels)) {
+                // If any channel is NaN, mark the pixel as cyan, otherwise transparent.
+                if src[0] == 1 || src[1] == 1 || src[2] == 1 {
+                    chunk[0] = 0;
+                    chunk[1] = 255;
+                    chunk[2] = 255;
+                    chunk[3] = 255;
+                } else {
+                    chunk[0] = 0;
+                    chunk[1] = 0;
+                    chunk[2] = 0;
+                    chunk[3] = 0;
+                }
+            }
+        } else {
+            for (chunk, src) in out.chunks_exact_mut(4).zip(nb.chunks_exact(channels)) {
+                // If the channel is NaN, mark the pixel as cyan, otherwise transparent.
+                if src[0] == 1 {
+                    chunk[0] = 0;
+                    chunk[1] = 255;
+                    chunk[2] = 255;
+                    chunk[3] = 255;
+                } else {
+                    chunk[0] = 0;
+                    chunk[1] = 0;
+                    chunk[2] = 0;
+                    chunk[3] = 0;
+                }
+            }
+        }
+        out
+    }
+
+    fn to_values(&self) -> Vec<Self::Value> {
+        self.values.clone()
+    }
+}
+
+// ── Inf Rendering ────────────────────────────────────────────────────────────────────────────────
+
+pub struct InfState {
+    geom: FuncGeometry,
+    values: Vec<f64>,
+    infbuffer: Vec<u8>,
+    applied_k: usize,
+}
+
+impl InfState {
+    pub fn new(trace: &Trace, func: &str) -> Option<Self> {
+        let geom = trace.func_geometry(func)?;
+        let infbuffer = vec![0u8; geom.width * geom.height * geom.channels];
+        let values = vec![0f64; geom.width * geom.height * geom.channels];
+
+        Some(Self {
+            geom,
+            values,
+            infbuffer,
+            applied_k: 0,
+        })
+    }
+
+    fn apply_store(&mut self, pkt: &TracePacket) {
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            min_x,
+            min_y,
+            min_c,
+            ..
+        } = self.geom;
+
+        for_each_lane_pixel(
+            pkt,
+            min_x,
+            min_y,
+            width,
+            height,
+            Some((min_c, channels)),
+            |lane, _pixel_idx: usize, val_idx: usize, _x, _y| {
+                let Some(v) = pkt.decoded_value(lane) else {
+                    return;
+                };
+
+                self.infbuffer[val_idx] = if v.is_infinite() { 1 } else { 0 };
+                self.values[val_idx] = v;
+            },
+        );
+    }
+}
+
+impl Renderer for InfState {
+    type Value = f64;
+
+    fn register(trace: &Trace, func: &str) -> Option<Self> {
+        Self::new(trace, func)
+    }
+
+    fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
+        let target_k = target_k.min(store_indices.len());
+        if target_k < self.applied_k {
+            self.values.iter_mut().for_each(|v| *v = 0.0);
+            self.infbuffer.iter_mut().for_each(|b| *b = 0);
+            self.applied_k = 0;
+        }
+
+        for &idx in &store_indices[self.applied_k..target_k] {
+            self.apply_store(&trace.packets[idx]);
+        }
+
+        self.applied_k = target_k;
+    }
+
+    fn to_rgba(&self, _normalization_mode: NormalizationMode) -> Vec<u8> {
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            ..
+        } = self.geom;
+        let mut out = vec![0u8; width * height * 4];
+        let ib = &self.infbuffer;
+        if channels >= 3 {
+            for (chunk, src) in out.chunks_exact_mut(4).zip(ib.chunks_exact(channels)) {
+                // If any channel is inf, mark the pixel as magenta, otherwise transparent.
+                if src[0] == 1 || src[1] == 1 || src[2] == 1 {
+                    chunk[0] = 255;
+                    chunk[1] = 255;
+                    chunk[2] = 0;
+                    chunk[3] = 255;
+                } else {
+                    chunk[0] = 0;
+                    chunk[1] = 0;
+                    chunk[2] = 0;
+                    chunk[3] = 0;
+                }
+            }
+        } else {
+            for (chunk, src) in out.chunks_exact_mut(4).zip(ib.chunks_exact(channels)) {
+                // If the channel is inf, mark the pixel as magenta, otherwise transparent.
+                if src[0] == 1 {
+                    chunk[0] = 255;
+                    chunk[1] = 255;
+                    chunk[2] = 0;
+                    chunk[3] = 255;
+                } else {
+                    chunk[0] = 0;
+                    chunk[1] = 0;
+                    chunk[2] = 0;
+                    chunk[3] = 0;
+                }
+            }
+        }
+        out
+    }
+
+    fn to_values(&self) -> Vec<Self::Value> {
+        self.values.clone()
     }
 }
