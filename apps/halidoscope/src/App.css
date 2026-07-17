@@ -46,6 +46,14 @@ input[type="number"] {
 
   --text-tiny: 0.625rem;
   --text-tiny--line-height: 1.5;
+
+  --animate-blink: blink 1s step-end infinite;
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
 }
 
 @layer components {

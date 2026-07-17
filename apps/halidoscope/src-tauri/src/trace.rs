@@ -175,11 +175,11 @@ pub struct FuncStats {
     pub max_load_count: u32,
     /// Maximum number of redundant stores observed at any array / tensor coordinate for this Func.
     /// A store is considered redundant when the incoming value bit-matches the previously stored
-    /// value at that location.
-    pub max_redundant_count: u32,
+    /// value at that location AND there are no intervening loads from that location.
+    pub max_redundant_store_count: u32,
     /// Maximum store-to-load distance observed across all array / tensor coordinates for this Func.
-    /// Measured as thedifference in global packet indices between a store and the next load from
-    /// the same coordination. 0 when no store→load pair was observed.
+    /// Measured as the difference in global packet indices between a store and the next load from
+    /// the same coordination.
     pub max_reuse_distance: u64,
 }
 
@@ -193,7 +193,7 @@ impl Default for FuncStats {
             max_value: None,
             max_store_count: 0,
             max_load_count: 0,
-            max_redundant_count: 0,
+            max_redundant_store_count: 0,
             max_reuse_distance: 0,
         }
     }
@@ -210,7 +210,7 @@ pub struct FuncGeometry {
     pub min_c: i32,
     pub max_store_count: u32,
     pub max_load_count: u32,
-    pub max_redundant_count: u32,
+    pub max_redundant_store_count: u32,
     pub max_reuse_distance: u64,
 }
 
@@ -324,14 +324,20 @@ fn update_value_range(pkt: &TracePacket, stats: &mut FuncStats) {
         if let Some(v) = pkt.decoded_value(i) {
             match (stats.min_value, stats.max_value) {
                 (None, _) => {
+                    // Ensure we do not initialize min/max with NaN or Inf.
+                    if v.is_nan() || v.is_infinite() {
+                        continue;
+                    }
+
                     stats.min_value = Some(v);
                     stats.max_value = Some(v);
                 }
                 (Some(mn), Some(mx)) => {
-                    if v < mn {
+                    if v < mn && v.is_finite() {
                         stats.min_value = Some(v);
                     }
-                    if v > mx {
+
+                    if v > mx && v.is_finite() {
                         stats.max_value = Some(v);
                     }
                 }
@@ -709,7 +715,7 @@ impl Trace {
                         w,
                         h,
                         None,
-                        |_lane, pixel_idx, _val_idx| {
+                        |_lane, pixel_idx, _val_idx, _x, _y| {
                             counts[pixel_idx] += 1;
                         },
                     );
@@ -733,7 +739,7 @@ impl Trace {
                         w,
                         h,
                         None,
-                        |_lane, pixel_idx, _val_idx| {
+                        |_lane, pixel_idx, _val_idx, _x, _y| {
                             counts[pixel_idx] += 1;
                         },
                     );
@@ -788,7 +794,7 @@ impl Trace {
                             w,
                             h,
                             Some((min_c, channels)),
-                            |lane, pixel_idx, val_idx| {
+                            |lane, pixel_idx, val_idx, _x, _y| {
                                 let Some(v) = pkt.decoded_value(lane) else {
                                     return;
                                 };
@@ -813,7 +819,7 @@ impl Trace {
                             w,
                             h,
                             Some((min_c, channels)),
-                            |_lane, _pixel_idx, val_idx| {
+                            |_lane, _pixel_idx, val_idx, _x, _y| {
                                 last_values[val_idx] = None;
                             },
                         );
@@ -821,7 +827,8 @@ impl Trace {
                 }
 
                 if let Some(stats) = funcs.get_mut(func_name.as_str()) {
-                    stats.max_redundant_count = redundant_counts.iter().copied().max().unwrap_or(0);
+                    stats.max_redundant_store_count =
+                        redundant_counts.iter().copied().max().unwrap_or(0);
                 }
             }
         }
@@ -875,7 +882,7 @@ impl Trace {
                             w,
                             h,
                             Some((min_c, channels)),
-                            |_lane, _pixel_idx, val_idx| {
+                            |_lane, _pixel_idx, val_idx, _x, _y| {
                                 last_store_at[val_idx] = global_idx;
                             },
                         );
@@ -890,7 +897,7 @@ impl Trace {
                             w,
                             h,
                             Some((min_c, channels)),
-                            |_lane, pixel_idx, val_idx| {
+                            |_lane, pixel_idx, val_idx, _x, _y| {
                                 if last_store_at[val_idx] != usize::MAX {
                                     let dist = (global_idx - last_store_at[val_idx]) as u64;
                                     if dist > max_reuse_distances[pixel_idx] {
@@ -940,7 +947,7 @@ impl Trace {
                         w,
                         h,
                         Some((min_c, channels)),
-                        |_lane, pixel_idx, val_idx| {
+                        |_lane, pixel_idx, val_idx, _x, _y| {
                             if first_load_at[val_idx] == usize::MAX {
                                 first_load_at[val_idx] = global_idx;
                             } else {
@@ -1029,7 +1036,7 @@ impl Trace {
             min_c,
             max_store_count: stats.max_store_count,
             max_load_count: stats.max_load_count,
-            max_redundant_count: stats.max_redundant_count,
+            max_redundant_store_count: stats.max_redundant_store_count,
             max_reuse_distance: stats.max_reuse_distance,
         })
     }
@@ -1087,14 +1094,14 @@ pub(crate) fn pixel_xy(
 /// When `channel` is `Some((min_c, channels))`, lanes are additionally filtered to those whose
 /// channel coordinate falls within `0..channels`, and `val_idx` is the flattened
 /// `pixel_idx * channels + c` location; otherwise `val_idx` is just `pixel_idx`.
-fn for_each_lane_pixel(
+pub fn for_each_lane_pixel(
     pkt: &TracePacket,
     min_x: i32,
     min_y: i32,
     w: usize,
     h: usize,
     channel: Option<(i32, usize)>,
-    mut f: impl FnMut(usize, usize, usize),
+    mut f: impl FnMut(usize, usize, usize, i32, i32),
 ) {
     let n_lanes = pkt.type_.lanes.max(1) as usize;
     let dims_per_lane = pkt.coordinates.len() / n_lanes;
@@ -1121,6 +1128,6 @@ fn for_each_lane_pixel(
             pixel_idx
         };
 
-        f(lane, pixel_idx, val_idx);
+        f(lane, pixel_idx, val_idx, x, y);
     }
 }

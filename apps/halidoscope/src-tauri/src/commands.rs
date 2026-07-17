@@ -10,8 +10,8 @@ use tauri::ipc::Response;
 use tauri::State;
 
 use crate::render::{
-    GrayscaleState, LoadFrequencyState, NormalizationMode, RedundantState, Renderer,
-    ReuseDistanceState, RgbState, StoreFrequencyState,
+    GrayscaleState, InfState, LoadFrequencyState, NaNState, NormalizationMode, RedundantState,
+    Renderer, ReuseDistanceState, RgbState, StoreFrequencyState,
 };
 use crate::trace::Trace;
 
@@ -42,7 +42,7 @@ pub struct FuncMeta {
     pub max_value: Option<f64>,
     pub max_store_count: u32,
     pub max_load_count: u32,
-    pub max_redundant_count: u32,
+    pub max_redundant_store_count: u32,
     pub max_reuse_distance: u64,
     pub buffer_liveness: IndexRange,
     pub produce_ranges: Vec<IndexRange>,
@@ -92,7 +92,7 @@ impl TraceMeta {
                     max_value: stats.max_value,
                     max_store_count: stats.max_store_count,
                     max_load_count: stats.max_load_count,
-                    max_redundant_count: stats.max_redundant_count,
+                    max_redundant_store_count: stats.max_redundant_store_count,
                     max_reuse_distance: stats.max_reuse_distance,
                     buffer_liveness: IndexRange::from_tuple(
                         trace
@@ -150,6 +150,8 @@ struct Loaded {
     load_frequency_renderers: HashMap<String, LoadFrequencyState>,
     redundant_renderers: HashMap<String, RedundantState>,
     reuse_distance_renderers: HashMap<String, ReuseDistanceState>,
+    nan_renderers: HashMap<String, NaNState>,
+    inf_renderers: HashMap<String, InfState>,
 }
 
 /// App-wide state managed by Tauri. A single trace is loaded at a time; opening a new one replaces
@@ -188,6 +190,8 @@ pub fn open_trace(path: String, state: State<AppState>) -> Result<TraceMeta, Str
         load_frequency_renderers: HashMap::new(),
         redundant_renderers: HashMap::new(),
         reuse_distance_renderers: HashMap::new(),
+        nan_renderers: HashMap::new(),
+        inf_renderers: HashMap::new(),
     });
     Ok(meta)
 }
@@ -255,8 +259,6 @@ pub fn render_rgb(
 }
 
 /// Renders a heatmap of store counts for `func` up to `global_index` and returns raw RGBA8 bytes.
-/// Counts are normalized against the global full-trace maximum so the color scale is stable while
-/// scrubbing.
 #[tauri::command]
 pub fn render_store_frequency(
     func: String,
@@ -291,8 +293,6 @@ pub fn render_store_frequency(
 }
 
 /// Renders a heatmap of load counts for `func` up to `global_index` and returns raw RGBA8 bytes.
-/// Counts are normalized against the global full-trace maximum so the color scale is stable while
-/// scrubbing.
 #[tauri::command]
 pub fn render_load_frequency(
     func: String,
@@ -328,8 +328,7 @@ pub fn render_load_frequency(
 
 /// Renders a heatmap of redundant store counts for `func` up to `global_index` and returns raw
 /// RGBA8 bytes. A store is redundant when it writes the same value to a location that already
-/// holds that value. Pixels with zero redundant stores are black; positive counts map through the
-/// Inferno colormap normalized against the global full-trace maximum.
+/// holds that value _and_ no intervening load has read that value.
 #[tauri::command]
 pub fn render_redundant_stores(
     func: String,
@@ -363,9 +362,7 @@ pub fn render_redundant_stores(
 
 /// Renders a heatmap of maximum store-to-load reuse distances for `func` up to `global_index`
 /// and returns raw RGBA8 bytes. Reuse distance is the number of packets elapsed between a store
-/// and the next load from the same (x, y, channel). Pixels with no observed store→load pair are
-/// black; positive distances map through the Inferno colormap normalized against the global
-/// full-trace maximum.
+/// and the next load from the same (x, y, channel).
 #[tauri::command]
 pub fn render_reuse_distance(
     func: String,
@@ -399,4 +396,62 @@ pub fn render_reuse_distance(
     let pixels = renderer.to_rgba(normalization_mode);
     let histogram = renderer.to_histogram(normalization_mode);
     Ok(Response::new(pack_pixels_and_histogram(pixels, histogram)))
+}
+
+#[tauri::command]
+pub fn render_nan(
+    func: String,
+    global_index: u32,
+    normalization_mode: NormalizationMode,
+    state: State<AppState>,
+) -> Result<Response, String> {
+    let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
+    let loaded = guard.as_mut().ok_or("no trace loaded")?;
+    let Loaded {
+        trace,
+        nan_renderers,
+        ..
+    } = loaded;
+
+    if !nan_renderers.contains_key(&func) {
+        let rs = NaNState::new(trace, &func)
+            .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
+        nan_renderers.insert(func.clone(), rs);
+    }
+    let renderer = nan_renderers.get_mut(&func).expect("just inserted");
+
+    let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
+    let k = store_indices.partition_point(|&p| p <= global_index as usize);
+    renderer.seek(trace, store_indices, k);
+
+    Ok(Response::new(renderer.to_rgba(normalization_mode)))
+}
+
+#[tauri::command]
+pub fn render_inf(
+    func: String,
+    global_index: u32,
+    normalization_mode: NormalizationMode,
+    state: State<AppState>,
+) -> Result<Response, String> {
+    let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
+    let loaded = guard.as_mut().ok_or("no trace loaded")?;
+    let Loaded {
+        trace,
+        inf_renderers,
+        ..
+    } = loaded;
+
+    if !inf_renderers.contains_key(&func) {
+        let rs = InfState::new(trace, &func)
+            .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
+        inf_renderers.insert(func.clone(), rs);
+    }
+    let renderer = inf_renderers.get_mut(&func).expect("just inserted");
+
+    let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
+    let k = store_indices.partition_point(|&p| p <= global_index as usize);
+    renderer.seek(trace, store_indices, k);
+
+    Ok(Response::new(renderer.to_rgba(normalization_mode)))
 }
