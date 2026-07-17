@@ -30,12 +30,18 @@ import {
   renderRedundantStores,
   renderReuseDistance,
   type RenderResult,
+  renderNaN,
+  renderInf,
 } from "@/utils/api";
 import { isFuncBufferLive, isEdgeLive } from "@/utils/liveness";
+import { nanAtom } from "@/state/nan";
+import { infAtom } from "@/state/inf";
 
 function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   const { name, width, height } = data;
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const nanOverlayRef = React.useRef<HTMLCanvasElement>(null);
+  const infOverlayRef = React.useRef<HTMLCanvasElement>(null);
 
   const { funcs } = useTraceContext();
   const liveness = useAtomValue(livenessAtom);
@@ -43,6 +49,8 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   const render = useAtomValue(renderAtom);
   const activeFunc = useAtomValue(funcAtom);
   const setHistogramData = useSetAtom(histogramAtom);
+  const nan = useAtomValue(nanAtom);
+  const inf = useAtomValue(infAtom);
 
   const nodes = useNodes();
   const edges = useEdges();
@@ -185,6 +193,82 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
     draw();
   }, [packetIndex, name, width, height, render, activeFunc, setHistogramData]);
 
+  React.useEffect(() => {
+    latestIndexRef.current = packetIndex;
+
+    if (renderingRef.current) {
+      return;
+    }
+
+    async function drawNaN() {
+      try {
+        while (true) {
+          const target = latestIndexRef.current;
+
+          const result = await renderNaN(
+            name,
+            packetIndex,
+            render.normalizationMode,
+          );
+
+          const ctx = nanOverlayRef.current?.getContext("2d");
+
+          if (ctx) {
+            ctx.putImageData(new ImageData(result.pixels, width, height), 0, 0);
+          }
+
+          if (latestIndexRef.current === target) {
+            break;
+          }
+        }
+      } catch {
+        console.error(
+          `Failed to render NaN overlay for ${name} at index ${latestIndexRef.current}`,
+        );
+      }
+    }
+
+    drawNaN();
+  }, [name, packetIndex, render.normalizationMode, width, height]);
+
+  React.useEffect(() => {
+    latestIndexRef.current = packetIndex;
+
+    if (renderingRef.current) {
+      return;
+    }
+
+    async function drawInf() {
+      try {
+        while (true) {
+          const target = latestIndexRef.current;
+
+          const result = await renderInf(
+            name,
+            packetIndex,
+            render.normalizationMode,
+          );
+
+          const ctx = infOverlayRef.current?.getContext("2d");
+
+          if (ctx) {
+            ctx.putImageData(new ImageData(result.pixels, width, height), 0, 0);
+          }
+
+          if (latestIndexRef.current === target) {
+            break;
+          }
+        }
+      } catch {
+        console.error(
+          `Failed to render Inf overlay for ${name} at index ${latestIndexRef.current}`,
+        );
+      }
+    }
+
+    drawInf();
+  }, [name, packetIndex, render.normalizationMode, width, height]);
+
   return (
     <>
       <NodeToolbar
@@ -208,7 +292,7 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
         </span>
       </NodeToolbar>
       <div
-        className={clsx("ring-transparent", {
+        className={clsx("relative ring-transparent", {
           "ring-realization/30!": bufferLive,
           "ring-produce/30!": producing,
           "ring-consume/30!": consuming,
@@ -226,6 +310,26 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
             "ring-consume!": consuming,
             "ring-2": zoom < 1,
             "ring-1": zoom >= 1,
+          })}
+        />
+        <canvas
+          ref={nanOverlayRef}
+          width={width}
+          height={height}
+          className={clsx("absolute top-0 left-0", {
+            hidden: !nan.active,
+            "animate-blink": nan.active && nan.animationMode === "Blink",
+            "animate-pulse": nan.active && nan.animationMode === "Pulse",
+          })}
+        />
+        <canvas
+          ref={infOverlayRef}
+          width={width}
+          height={height}
+          className={clsx("absolute top-0 left-0", {
+            hidden: !inf.active,
+            "animate-blink": inf.active && inf.animationMode === "Blink",
+            "animate-pulse": inf.active && inf.animationMode === "Pulse",
           })}
         />
       </div>
