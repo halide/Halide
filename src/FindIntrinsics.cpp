@@ -122,7 +122,13 @@ protected:
             }
         };
 
-        if (inner_t.is_int_or_uint() && inner_t != x.type()) {
+        // Only strip a genuine widening cast, i.e. one whose inner type is no
+        // wider than x. If the outer cast is a narrowing cast, inner_t is wider
+        // than x, and considering it would return an expression wider than x,
+        // which can send the surrounding narrowing rewrites into infinite
+        // recursion.
+        if (inner_t.is_int_or_uint() && inner_t != x.type() &&
+            inner_t.bits() <= x.type().bits()) {
             consider(inner_t);
         }
         consider(x.type().narrow());
