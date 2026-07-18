@@ -134,6 +134,13 @@ using std::vector;
 
 namespace {
 
+// AArch64's full-width non-temporal vector accesses are LDNP/STNP pairs of
+// 128-bit NEON registers. Keeping streaming slices at least this wide gives
+// LLVM a 256-bit access that it can select to those instructions instead of
+// splitting it into ordinary 128-bit loads or stores before instruction
+// selection. Other backends can still legalize this width as needed.
+constexpr int minimum_streaming_vector_bits = 256;
+
 llvm::Value *CreateConstGEP1_32(IRBuilderBase *builder, llvm::Type *gep_type,
                                 Value *ptr, unsigned index) {
     return builder->CreateConstGEP1_32(gep_type, ptr, index);
@@ -2064,13 +2071,22 @@ void CodeGen_LLVM::function_does_not_access_memory(llvm::Function *fn) {
     fn->addFnAttr("memory(none)");
 }
 
+void CodeGen_LLVM::emit_streaming_store_fence() {
+}
+
+void CodeGen_LLVM::add_streaming_metadata(llvm::Instruction *inst) {
+    llvm::MDNode *nontemporal_node = llvm::MDNode::get(
+        *context, llvm::ConstantAsMetadata::get(ConstantInt::get(i32_t, 1)));
+    inst->setMetadata(llvm::LLVMContext::MD_nontemporal, nontemporal_node);
+}
+
 void CodeGen_LLVM::visit(const Load *op) {
     // If the type should be stored as some other type, insert a reinterpret cast.
     Type storage_type = upgrade_type_for_storage(op->type);
     if (op->type != storage_type) {
         codegen(reinterpret(op->type, Load::make(storage_type, op->name,
                                                  op->index, op->image,
-                                                 op->param, op->predicate, op->alignment)));
+                                                 op->param, op->predicate, op->alignment, op->is_streaming)));
         return;
     }
 
@@ -2086,6 +2102,9 @@ void CodeGen_LLVM::visit(const Load *op) {
         Value *ptr = codegen_buffer_pointer(op->name, op->type, op->index);
         LoadInst *load = builder->CreateAlignedLoad(llvm_type_of(op->type), ptr, llvm::Align(op->type.bytes()));
         add_tbaa_metadata(load, op->name, op->index);
+        if (op->is_streaming) {
+            add_streaming_metadata(load);
+        }
         value = load;
     } else {
         const Ramp *ramp = op->index.as<Ramp>();
@@ -2102,7 +2121,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             ModulusRemainder align = op->alignment;
             // Switch to the alignment of the last lane
             align = align - (ramp->lanes - 1);
-            Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image, op->param, op->predicate, align);
+            Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image, op->param, op->predicate, align, op->is_streaming);
 
             Value *flipped = codegen(flipped_load);
 
@@ -2116,6 +2135,9 @@ void CodeGen_LLVM::visit(const Load *op) {
                 Value *lane = ConstantInt::get(i32_t, i);
                 LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
+                if (op->is_streaming) {
+                    add_streaming_metadata(val);
+                }
                 value = builder->CreateInsertElement(value, val, lane);
                 ptr = CreateInBoundsGEP(builder.get(), load_type, ptr, stride);
             }
@@ -2131,6 +2153,9 @@ void CodeGen_LLVM::visit(const Load *op) {
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
                 LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
+                if (op->is_streaming) {
+                    add_streaming_metadata(val);
+                }
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
             value = vec;
@@ -2143,6 +2168,9 @@ void CodeGen_LLVM::visit(const Load *op) {
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
                 LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
+                if (op->is_streaming) {
+                    add_streaming_metadata(val);
+                }
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
             value = vec;
@@ -2515,6 +2543,9 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
         // width, bust them up into native vectors.
         int store_lanes = value_type.lanes();
         int native_lanes = maximum_vector_bits() / value_type.bits();
+        if (op->is_streaming) {
+            native_lanes = std::max(native_lanes, minimum_streaming_vector_bits / value_type.bits());
+        }
 
         for (int i = 0; i < store_lanes; i += native_lanes) {
             int slice_lanes = std::min(native_lanes, store_lanes - i);
@@ -2539,6 +2570,9 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
                 store = builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
             }
             add_tbaa_metadata(store, op->name, slice_index);
+            if (op->is_streaming) {
+                add_streaming_metadata(store);
+            }
         }
     } else {  // It's not dense vector store, we need to scalarize it
         debug(4) << "Scalarize predicated vector store\n";
@@ -2573,6 +2607,8 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
             StoreInst *store = builder->CreateAlignedStore(v, ptr, llvm::Align(value_type.bytes()));
             if (emit_atomic_stores) {
                 store->setAtomic(AtomicOrdering::Monotonic);
+            } else if (op->is_streaming) {
+                add_streaming_metadata(store);
             }
 
             builder->CreateBr(after_bb);
@@ -2583,7 +2619,7 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
 
 llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::string &name, const Expr &base,
                                                const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
-                                               llvm::Value *vpred, bool slice_to_native, llvm::Value *stride) {
+                                               bool is_streaming, llvm::Value *vpred, bool slice_to_native, llvm::Value *stride) {
     debug(4) << "Vectorize predicated dense vector load:\n\t"
              << "(" << type << ")" << name << "[ramp(base, 1, " << type.lanes() << ")]\n";
     int align_bytes = type.bytes();  // The size of a single element
@@ -2620,6 +2656,9 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
     // width, bust them up into native vectors
     int load_lanes = type.lanes();
     int native_lanes = slice_to_native ? std::max(1, maximum_vector_bits() / type.bits()) : load_lanes;
+    if (slice_to_native && is_streaming) {
+        native_lanes = std::max(native_lanes, minimum_streaming_vector_bits / type.bits());
+    }
     vector<Value *> slices;
     for (int i = 0; i < load_lanes; i += native_lanes) {
         int slice_lanes = std::min(native_lanes, load_lanes - i);
@@ -2665,6 +2704,9 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
             }
         }
         add_tbaa_metadata(load_inst, name, slice_index);
+        if (is_streaming) {
+            add_streaming_metadata(load_inst);
+        }
         slices.push_back(load_inst);
     }
     value = concat_vectors(slices);
@@ -2676,7 +2718,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred, b
     internal_assert(ramp && is_const_one(ramp->stride)) << "Should be dense vector load\n";
 
     return codegen_vector_load(load->type, load->name, ramp->base, load->image, load->param,
-                               load->alignment, vpred, slice_to_native, nullptr);
+                               load->alignment, load->is_streaming, vpred, slice_to_native, nullptr);
 }
 
 void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
@@ -2690,7 +2732,7 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
         Value *vpred = codegen(op->predicate);
         Value *llvm_stride = codegen(stride);  // Not 1 (dense) as that was caught above.
         value = codegen_vector_load(op->type, op->name, ramp->base, op->image, op->param,
-                                    op->alignment, vpred, true, llvm_stride);
+                                    op->alignment, op->is_streaming, vpred, true, llvm_stride);
     } else if (ramp && stride && stride->value == -1) {
         debug(4) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
 
@@ -2706,13 +2748,13 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
         align = align - (ramp->lanes - 1);
 
         Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image,
-                                       op->param, const_true(op->type.lanes()), align);
+                                       op->param, const_true(op->type.lanes()), align, op->is_streaming);
 
         Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
         value = reverse_vector(flipped);
     } else {  // It's not dense vector load, we need to scalarize it
         Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
-                                    op->param, const_true(op->type.lanes()), op->alignment);
+                                    op->param, const_true(op->type.lanes()), op->alignment, op->is_streaming);
         debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
         Expr pred_load = Call::make(load_expr.type(),
                                     Call::if_then_else,
@@ -3520,6 +3562,9 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         const llvm::DataLayout &d = module->getDataLayout();
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(halide_buffer_t_type));
+    } else if (op->is_intrinsic(Call::stream_store_fence)) {
+        emit_streaming_store_fence();
+        value = ConstantInt::get(i32_t, 0);
     } else if (op->is_strict_float_intrinsic()) {
         // Evaluate the args first outside the strict scope, as they may use
         // non-strict operations.
@@ -4008,7 +4053,7 @@ void CodeGen_LLVM::visit(const Store *op) {
         // Peel lets off the index to make us more likely to pattern
         // match a ramp.
         if (const Let *let = op->index.as<Let>()) {
-            Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
+            Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment, op->is_streaming);
             codegen(LetStmt::make(let->name, let->value, s));
             return;
         }
@@ -4019,7 +4064,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     Halide::Type storage_type = upgrade_type_for_storage(value_type);
     if (value_type != storage_type) {
         Expr v = reinterpret(storage_type, op->value);
-        codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment));
+        codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment, op->is_streaming));
         return;
     }
 
@@ -4045,6 +4090,9 @@ void CodeGen_LLVM::visit(const Store *op) {
 
     auto annotate_store = [&](StoreInst *store, const Expr &index) {
         add_tbaa_metadata(store, op->name, index);
+        if (op->is_streaming && !emit_atomic_stores) {
+            add_streaming_metadata(store);
+        }
         if (emit_atomic_stores) {
             store->setAtomic(AtomicOrdering::Monotonic);
         }
@@ -4058,7 +4106,7 @@ void CodeGen_LLVM::visit(const Store *op) {
         StoreInst *store = builder->CreateAlignedStore(val, ptr, llvm::Align(value_type.bytes()));
         annotate_store(store, op->index);
     } else if (const Let *let = op->index.as<Let>()) {
-        Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
+        Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment, op->is_streaming);
         codegen(LetStmt::make(let->name, let->value, s));
     } else {
         int alignment = value_type.bytes();
@@ -4094,6 +4142,9 @@ void CodeGen_LLVM::visit(const Store *op) {
             // width, bust them up into native vectors.
             int store_lanes = value_type.lanes();
             int native_lanes = maximum_vector_bits() / value_type.bits();
+            if (op->is_streaming) {
+                native_lanes = std::max(native_lanes, minimum_streaming_vector_bits / value_type.bits());
+            }
 
             Expr base = ramp ? ramp->base : 0;
             Expr stride = ramp ? ramp->stride : 0;

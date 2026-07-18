@@ -6,6 +6,7 @@
 #include "halide_thread_pool.h"
 #include "test_sharding.h"
 
+#include <cctype>
 #include <fstream>
 #include <iostream>
 
@@ -213,12 +214,12 @@ public:
                     return true;
                 }
             } while (*str++);
-        } else if (*p == ' ') {  // ignore whitespace in pattern
+        } else if (std::isspace(static_cast<unsigned char>(*p))) {  // ignore whitespace in pattern
             p++;
             if (wildcard_match(p, str)) {
                 return true;
             }
-        } else if (*str == ' ') {  // ignore whitespace in string
+        } else if (std::isspace(static_cast<unsigned char>(*str))) {  // ignore whitespace in string
             str++;
             if (wildcard_match(p, str)) {
                 return true;

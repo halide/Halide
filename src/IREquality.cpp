@@ -380,6 +380,7 @@ struct Comparer {
             case IRNodeType::Load:
                 cmp(&Load::name);
                 cmp(&Load::alignment);
+                cmp(&Load::is_streaming);
                 cmp(&Load::index);
                 cmp(&Load::predicate);
                 break;
@@ -437,6 +438,7 @@ struct Comparer {
             case IRNodeType::Store:
                 cmp(&Store::name);
                 cmp(&Store::alignment);
+                cmp(&Store::is_streaming);
                 cmp(&Store::predicate);
                 cmp(&Store::value);
                 cmp(&Store::index);
@@ -493,6 +495,14 @@ struct Comparer {
                 cmp(&Atomic::producer_name);
                 cmp(&Atomic::mutex_name);
                 cmp(&Atomic::body);
+                break;
+            case IRNodeType::StreamingStore:
+                cmp(&StreamingStore::producer_name);
+                cmp(&StreamingStore::body);
+                break;
+            case IRNodeType::StreamingLoads:
+                cmp(&StreamingLoads::names);
+                cmp(&StreamingLoads::body);
                 break;
             case IRNodeType::HoistedStorage:
                 cmp(&HoistedStorage::name);

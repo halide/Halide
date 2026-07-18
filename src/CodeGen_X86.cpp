@@ -93,6 +93,7 @@ protected:
     using CodeGen_CPU::visit;
 
     void init_module() override;
+    void emit_streaming_store_fence() override;
 
     /** Nodes for which we want to emit specific sse/avx intrinsics */
     // @{
@@ -334,6 +335,11 @@ void CodeGen_X86::init_module() {
         }
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
+}
+
+void CodeGen_X86::emit_streaming_store_fence() {
+    llvm::Function *sfence = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::x86_sse_sfence);
+    builder->CreateCall(sfence);
 }
 
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by

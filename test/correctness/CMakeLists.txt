@@ -317,6 +317,9 @@ tests(
     stmt_to_html.cpp
     storage_folding.cpp
     store_in.cpp
+    streaming.cpp
+    streaming_in.cpp
+    streaming_specialize.cpp
     strict_float.cpp
     strict_float_bounds.cpp
     strict_fma.cpp
@@ -500,3 +503,7 @@ set_target_properties(
     PROPERTIES
     ENABLE_EXPORTS TRUE
 )
+
+if (WITH_SERIALIZATION)
+    target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
+endif ()

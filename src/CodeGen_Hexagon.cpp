@@ -275,7 +275,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
             }
 
             Expr load = Load::make(op->type, op->name, index, op->image, op->param,
-                                   const_true(op->type.lanes()), op->alignment);
+                                   const_true(op->type.lanes()), op->alignment, op->is_streaming);
 
             return Call::make(op->type, Call::if_then_else,
                               {condition, load}, Call::PureIntrinsic);
@@ -286,7 +286,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
             // introducing a set of runtime functions to do predicated
             // loads.
             Expr load = Load::make(op->type, op->name, index, op->image, op->param,
-                                   const_true(op->type.lanes()), op->alignment);
+                                   const_true(op->type.lanes()), op->alignment, op->is_streaming);
             return Call::make(op->type, Call::if_then_else,
                               {predicate, load}, Call::PureIntrinsic);
         }
@@ -304,14 +304,14 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
         int lanes = value.type().lanes();
 
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
-            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(lanes), op->alignment);
+            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(lanes), op->alignment, op->is_streaming);
             return IfThenElse::make(scalar_pred->value, unpredicated_store);
         }
 
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
+            return Store::make(op->name, value, index, op->param, predicate, op->alignment, op->is_streaming);
         }
     }
 };

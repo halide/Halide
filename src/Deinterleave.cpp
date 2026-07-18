@@ -246,7 +246,7 @@ private:
             if (starting_lane != 0) {
                 align = ModulusRemainder();
             }
-            return Load::make(t, op->name, mutate(op->index), op->image, op->param, mutate(op->predicate), align);
+            return Load::make(t, op->name, mutate(op->index), op->image, op->param, mutate(op->predicate), align, op->is_streaming);
         }
     }
 
@@ -587,20 +587,20 @@ class Interleaver : public IRMutator {
             // If we want to deinterleave both the index and predicate
             // (or the predicate is one), then deinterleave the
             // resulting load.
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment, op->is_streaming);
             expr = deinterleave_expr(expr);
         } else if (should_deinterleave_idx) {
             // If we only want to deinterleave the index and not the
             // predicate, deinterleave the index prior to the load.
             idx = deinterleave_expr(idx);
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment, op->is_streaming);
         } else if (should_deinterleave_predicate) {
             // Similarly, deinterleave the predicate prior to the load
             // if we don't want to deinterleave the index.
             predicate = deinterleave_expr(predicate);
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment, op->is_streaming);
         } else if (!idx.same_as(op->index) || !predicate.same_as(op->index)) {
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment, op->is_streaming);
         } else {
             expr = op;
         }
@@ -644,7 +644,7 @@ class Interleaver : public IRMutator {
             predicate = deinterleave_expr(predicate);
         }
 
-        Stmt stmt = Store::make(op->name, value, idx, op->param, predicate, op->alignment);
+        Stmt stmt = Store::make(op->name, value, idx, op->param, predicate, op->alignment, op->is_streaming);
 
         should_deinterleave = old_should_deinterleave;
         num_lanes = old_num_lanes;
@@ -779,7 +779,7 @@ class Interleaver : public IRMutator {
         Expr index = Ramp::make(base, make_one(base.type()), t.lanes());
         Expr value = Shuffle::make_interleave(args);
         Expr predicate = Shuffle::make_interleave(predicates);
-        Stmt new_store = Store::make(store->name, value, index, store->param, predicate, ModulusRemainder());
+        Stmt new_store = Store::make(store->name, value, index, store->param, predicate, ModulusRemainder(), store->is_streaming);
 
         // Rewrap the let statements we pulled off.
         while (!let_stmts.empty()) {

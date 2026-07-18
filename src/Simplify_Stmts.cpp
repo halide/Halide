@@ -368,7 +368,7 @@ Stmt Simplify::visit(const Store *op) {
         return Evaluate::make(0);
     } else if (scalar_pred && !is_const_one(scalar_pred->value)) {
         return IfThenElse::make(scalar_pred->value,
-                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes(), nullptr), align));
+                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes(), nullptr), align, op->is_streaming));
     } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
         // foo[x] = foo[x] or foo[x] = undef is a no-op
         return Evaluate::make(0);
@@ -387,7 +387,8 @@ Stmt Simplify::visit(const Store *op) {
                                          idx,
                                          op->param,
                                          Shuffle::make_slice(predicate, lanes, 1, idx.type().lanes()),
-                                         ModulusRemainder{}));
+                                         ModulusRemainder{},
+                                         op->is_streaming));
             lanes += idx.type().lanes();
         }
         Stmt s = Block::make(stores);
@@ -420,14 +421,14 @@ Stmt Simplify::visit(const Store *op) {
             permuted_predicate = Shuffle::make_transpose(predicate, A);
         }
         return mutate(Store::make(op->name, permuted_value, mr.to_expr(),
-                                  op->param, permuted_predicate, align));
+                                  op->param, permuted_predicate, align, op->is_streaming));
     } else if (predicate.same_as(op->predicate) &&
                value.same_as(op->value) &&
                index.same_as(op->index) &&
                align == op->alignment) {
         return op;
     } else {
-        return Store::make(op->name, value, index, op->param, predicate, align);
+        return Store::make(op->name, value, index, op->param, predicate, align, op->is_streaming);
     }
 }
 
@@ -760,6 +761,28 @@ Stmt Simplify::visit(const Atomic *op) {
         return Atomic::make(op->producer_name,
                             op->mutex_name,
                             std::move(body));
+    }
+}
+
+Stmt Simplify::visit(const StreamingStore *op) {
+    Stmt body = mutate(op->body);
+    if (is_no_op(body)) {
+        return Evaluate::make(0);
+    } else if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return StreamingStore::make(op->producer_name, std::move(body));
+    }
+}
+
+Stmt Simplify::visit(const StreamingLoads *op) {
+    Stmt body = mutate(op->body);
+    if (is_no_op(body)) {
+        return Evaluate::make(0);
+    } else if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return StreamingLoads::make(op->names, std::move(body));
     }
 }
 
