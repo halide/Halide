@@ -1336,7 +1336,7 @@ inline void StoreScalar<int64_t>::operator()(const Local<Context> &context, cons
 }
 
 void store_scalar(const Local<Context> &context, const Type &t, const Local<Value> &val, void *slot) {
-    return dynamic_type_dispatch<StoreScalar>(t, context, val, slot);
+    return dynamic_type_dispatch<StoreScalar>(t.to_abi(), context, val, slot);
 }
 
 template<typename T>
@@ -1426,7 +1426,7 @@ inline Local<Value> LoadScalar<int64_t>::operator()(const Local<Context> &contex
 // ------------------------------
 
 Local<Value> load_scalar(const Local<Context> &context, const Type &t, const void *val_ptr) {
-    return dynamic_type_dispatch<LoadScalar>(t, context, val_ptr);
+    return dynamic_type_dispatch<LoadScalar>(t.to_abi(), context, val_ptr);
 }
 
 template<typename T>
