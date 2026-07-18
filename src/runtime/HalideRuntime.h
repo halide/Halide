@@ -7,7 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <iostream>
+#include <ostream>
 #include <string_view>
 #else
 #include <stdbool.h>
