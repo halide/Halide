@@ -252,7 +252,7 @@ protected:
     // @{
     Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
     Expr wild_i32x_, wild_u32x_, wild_i64x_, wild_u64x_;
-    Expr wild_f32x_, wild_f64x_;
+    Expr wild_f32x_, wild_f64x_, wild_bf16x_;
 
     // Wildcards for scalars.
     Expr wild_u1_, wild_i8_, wild_u8_, wild_i16_, wild_u16_;

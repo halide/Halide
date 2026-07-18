@@ -179,6 +179,7 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
       wild_u64x_(Variable::make(UInt(64, 0), "*")),
       wild_f32x_(Variable::make(Float(32, 0), "*")),
       wild_f64x_(Variable::make(Float(64, 0), "*")),
+      wild_bf16x_(Variable::make(BFloat(16, 0), "*")),
 
       wild_u1_(Variable::make(UInt(1), "*")),
       wild_i8_(Variable::make(Int(8), "*")),
