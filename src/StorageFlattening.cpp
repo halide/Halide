@@ -264,18 +264,18 @@ public:
     }
 
     Stmt visit(const StreamingStore *op) override {
-        ScopedValue<bool> old_in_streaming_store(in_streaming_store, true);
+        ScopedValue old_in_streaming_store(in_streaming_store, true);
         return mutate(op->body);
     }
 
     Stmt visit(const StreamingLoads *op) override {
         std::optional<std::set<std::string>> requested;
         if (op->names) {
-            requested = std::set<std::string>(op->names->begin(), op->names->end());
+            requested = std::set(op->names->begin(), op->names->end());
         }
-        ScopedValue<std::optional<std::set<std::string>>> old_names(stream_loads_names, requested);
+        ScopedValue old_names(stream_loads_names, requested);
         std::set<std::string> matched;
-        ScopedValue<std::set<std::string> *> old_matched(stream_loads_matched, op->names ? &matched : nullptr);
+        ScopedValue old_matched(stream_loads_matched, op->names ? &matched : nullptr);
 
         Stmt result = mutate(op->body);
 
@@ -317,7 +317,7 @@ public:
             }
         }
 
-        ScopedValue<string> old_provide_name(current_provide_name, op->name);
+        ScopedValue old_provide_name(current_provide_name, op->name);
 
         Expr value = mutate(op->values[0]);
         Expr predicate = mutate(op->predicate);
@@ -470,7 +470,7 @@ public:
     }
 
     Stmt visit(const For *op) override {
-        ScopedValue<bool> old_in_gpu(in_gpu, in_gpu || is_gpu(op->for_type));
+        ScopedValue old_in_gpu(in_gpu, in_gpu || is_gpu(op->for_type));
         return IRMutator::visit(op);
     }
 };
