@@ -831,7 +831,7 @@ void read_big_endian_row(const uint8_t *src, int y, ImageType *im) {
         const int cmax = im_typed.dim(2).max();
         for (int x = xmin; x <= xmax; x++) {
             for (int c = cmin; c <= cmax; c++) {
-                im_typed(x, y, c + cmin) = read_big_endian<ElemType>(src);
+                im_typed(x, y, c) = read_big_endian<ElemType>(src);
                 src += sizeof(ElemType);
             }
         }
