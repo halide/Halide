@@ -40,7 +40,16 @@ try {
         return
     }
 
-    Copy-Item $src $dstDir
+    # Copy-Item directly to $dst would hold an exclusive (read-blocking) lock
+    # on the file for the whole duration. Move-Item is nearly instantaneous and
+    # atomic.
+    $tmp = Join-Path $dstDir ($name + "." + [System.Guid]::NewGuid().ToString("N") + ".tmp")
+    try {
+        Copy-Item $src $tmp
+        Move-Item -Force $tmp $dst
+    } finally {
+        Remove-Item $tmp -ErrorAction SilentlyContinue
+    }
 } finally {
     if ($acquired) {
         $m.ReleaseMutex() | Out-Null
