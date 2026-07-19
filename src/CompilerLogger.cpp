@@ -97,10 +97,6 @@ JSONCompilerLogger::JSONCompilerLogger(
       obfuscate_exprs(obfuscate_exprs) {
 }
 
-void JSONCompilerLogger::record_matched_simplifier_rule(const std::string &rulename, Expr expr) {
-    matched_simplifier_rules[rulename].emplace_back(std::move(expr));
-}
-
 void JSONCompilerLogger::record_non_monotonic_loop_var(const std::string &loop_var, Expr expr) {
     non_monotonic_loop_vars[loop_var].emplace_back(std::move(expr));
 }
@@ -117,17 +113,6 @@ void JSONCompilerLogger::record_compilation_time(Phase phase, double duration) {
 }
 
 void JSONCompilerLogger::obfuscate() {
-    {
-        std::map<std::string, std::vector<Expr>> n;
-        for (const auto &it : matched_simplifier_rules) {
-            std::string rule = it.first;
-            for (const auto &e : it.second) {
-                ObfuscateNames obfuscater;
-                n[rule].emplace_back(obfuscater(e));
-            }
-        }
-        matched_simplifier_rules = n;
-    }
     {
         std::vector<std::pair<Expr, Expr>> n;
         for (const auto &it : failed_to_prove_exprs) {
@@ -278,20 +263,6 @@ std::ostream &JSONCompilerLogger::emit_to_stream(std::ostream &o) {
     if (auto it = compilation_time.find(Phase::LLVM);
         it != compilation_time.end()) {
         emit_key_value(o, indent, "compilation_time_llvm", it->second);
-    }
-
-    if (!matched_simplifier_rules.empty()) {
-        emit_object_key_open(o, indent, "matched_simplifier_rules");
-
-        int commas_to_emit = (int)matched_simplifier_rules.size() - 1;
-        for (const auto &it : matched_simplifier_rules) {
-            const auto &loop_var = it.first;
-            emit_key(o, indent + 1, loop_var);
-            emit_eol(o, false);
-            emit_list(o, indent + 1, exprs_to_strings(it.second), (commas_to_emit-- > 0));
-        }
-
-        emit_object_key_close(o, indent);
     }
 
     if (!non_monotonic_loop_vars.empty()) {

@@ -33,10 +33,6 @@ public:
     CompilerLogger() = default;
     virtual ~CompilerLogger() = default;
 
-    /** Record when a particular simplifier rule matches.
-     */
-    virtual void record_matched_simplifier_rule(const std::string &rulename, Expr expr) = 0;
-
     /** Record when an expression is non-monotonic in a loop variable.
      */
     virtual void record_non_monotonic_loop_var(const std::string &loop_var, Expr expr) = 0;
@@ -85,7 +81,6 @@ public:
         const std::string &generator_args,
         bool obfuscate_exprs);
 
-    void record_matched_simplifier_rule(const std::string &rulename, Expr expr) override;
     void record_non_monotonic_loop_var(const std::string &loop_var, Expr expr) override;
     void record_failed_to_prove(Expr failed_to_prove, Expr original_expr) override;
     void record_object_code_size(uint64_t bytes) override;
@@ -100,9 +95,6 @@ protected:
     const Target target = Target();
     const std::string generator_args;
     const bool obfuscate_exprs{false};
-
-    // Maps from string representing rewrite rule -> list of Exprs that matched that rule
-    std::map<std::string, std::vector<Expr>> matched_simplifier_rules;
 
     // Maps loop_var -> list of Exprs that were nonmonotonic for that loop_var
     std::map<std::string, std::vector<Expr>> non_monotonic_loop_vars;
