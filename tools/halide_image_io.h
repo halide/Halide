@@ -1234,8 +1234,12 @@ struct NpyHeader {
         }
         while (true) {
             char endian;
-            int consumed;
-            if (std::sscanf(ptr, "'descr': '%c%c%d'%n", &endian, &type_code, &type_bytes, &consumed) == 3) {
+            int consumed = 0;
+            // %n is not counted in sscanf's return value and is only reached
+            // if the trailing quote matches, so a descr missing its closing
+            // quote returns 3 with consumed still 0. Requiring consumed > 0
+            // avoids advancing ptr by an indeterminate amount.
+            if (std::sscanf(ptr, "'descr': '%c%c%d'%n", &endian, &type_code, &type_bytes, &consumed) == 3 && consumed > 0) {
                 if (endian != '<' && endian != '|') {
                     return false;
                 }

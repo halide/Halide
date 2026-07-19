@@ -268,6 +268,38 @@ void test_mat_header() {
     }
 }
 
+// A .npy whose 'descr' is missing its closing quote used to walk the header
+// parser's cursor off the end of the buffer (sscanf matched %c%c%d and returned
+// 3, but the %n was never reached, leaving the byte count uninitialized). The
+// loader should just reject the file.
+void test_malformed_npy_header() {
+    std::ostringstream o;
+    o << Internal::get_test_tmp_dir() << "malformed_descr.npy";
+    std::string filename = o.str();
+
+    // v1 header: magic, version 1.0, 2-byte header length, then the dict.
+    // (6 + 2 + 2 + header_len) must be a multiple of 64.
+    std::string dict = "{'descr': '<f8";  // no closing quote after the type
+    const size_t header_len = 54;
+    dict.resize(header_len, ' ');
+
+    std::ofstream fs(filename.c_str(), std::ofstream::binary);
+    const char magic[8] = {'\x93', 'N', 'U', 'M', 'P', 'Y', '\x01', '\x00'};
+    fs.write(magic, 8);
+    const char len_le[2] = {(char)(header_len & 0xff), (char)((header_len >> 8) & 0xff)};
+    fs.write(len_le, 2);
+    fs.write(dict.data(), dict.size());
+    const std::vector<char> payload(64, 0);
+    fs.write(payload.data(), payload.size());
+    fs.close();
+
+    Buffer<> im;
+    if (Tools::load<Buffer<>>(filename, &im)) {
+        std::cout << "Malformed .npy header was accepted by the loader\n";
+        exit(1);
+    }
+}
+
 int main(int argc, char **argv) {
     do_test<int8_t>();
     do_test<int16_t>();
@@ -283,6 +315,7 @@ int main(int argc, char **argv) {
 #endif
     do_test<double>();
     test_mat_header();
+    test_malformed_npy_header();
     printf("Success!\n");
     return 0;
 }
