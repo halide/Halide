@@ -1,31 +1,49 @@
 param([string]$src, [string]$dstDir)
 
-try {
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($dstDir)
-    $hash = [System.Security.Cryptography.SHA512]::Create().ComputeHash($bytes)
-    $key = "Halide-" + ([Convert]::ToBase64String($hash) -replace ('/', '-'))
+$ErrorActionPreference = 'Stop'
 
-    $m = New-Object System.Threading.Mutex($false, $key)
-    if (!$m) {
-        throw "Failed to create mutex $key"
+function Test-UpToDate([string]$src, [string]$dst) {
+    if (!(Test-Path $dst)) {
+        return $false
+    }
+    return (Get-Item $dst).LastWriteTime -ge (Get-Item $src).LastWriteTime
+}
+
+$name = Split-Path $src -leaf
+$dst = Join-Path $dstDir $name
+
+if (Test-UpToDate $src $dst) {
+    return
+}
+
+$bytes = [System.Text.Encoding]::UTF8.GetBytes($dstDir)
+$hash = [System.Security.Cryptography.SHA512]::Create().ComputeHash($bytes)
+$key = "Halide-" + ([Convert]::ToBase64String($hash) -replace ('/', '-'))
+
+$m = New-Object System.Threading.Mutex($false, $key)
+$acquired = $false
+try {
+    try {
+        $acquired = $m.WaitOne(120000)
+    } catch [System.Threading.AbandonedMutexException] {
+        # A previous copy was killed/cancelled while holding the lock. We still
+        # got ownership; the destination may be left mid-copy from that run, but
+        # the recheck below re-copies if it's not known-good, so it's safe to
+        # just proceed rather than failing the build over it.
+        $acquired = $true
+    }
+    if (!$acquired) {
+        throw "Timed out waiting for lock on $dstDir"
     }
 
-    $m.WaitOne() | Out-Null
-
-    $name = Split-Path $src -leaf
-    $dst = Join-Path $dstDir $name
-    if (Test-Path $dst) {
-        $srcTime = (Get-Item $src).LastWriteTime
-        $dstTime = (Get-Item $dst).LastWriteTime
-        if ($dstTime -ge $srcTime) {
-            Return
-        }
+    if (Test-UpToDate $src $dst) {
+        return
     }
 
     Copy-Item $src $dstDir
 } finally {
-    if ($m) {
+    if ($acquired) {
         $m.ReleaseMutex() | Out-Null
-        $m.Dispose() | Out-Null
     }
+    $m.Dispose() | Out-Null
 }
