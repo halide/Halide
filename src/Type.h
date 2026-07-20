@@ -322,7 +322,7 @@ public:
 
     // Default ctor initializes everything to predictable-but-unlikely values
     constexpr Type()
-        : type_code(Unknown), type_bits(0), type_lanes(1) {
+        : type_code(Handle), type_bits(0), type_lanes(0) {
     }
 
     /** Construct a runtime representation of a Halide type from:
