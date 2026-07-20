@@ -61,7 +61,7 @@ add_app(HelloBaremetal)
 # add_app(HelloiOS)  # don't build HelloiOS here because it isn't universal.
 # add_app(HelloPyTorch)  # TODO(#5374): missing CMake build
 add_app(hexagon_benchmarks)
-# add_app(hexagon_dma)  # TODO(#5374): missing CMake build
+add_app(hexagon_dma)
 add_app(hist)
 add_app(iir_blur)
 add_app(interpolate)
