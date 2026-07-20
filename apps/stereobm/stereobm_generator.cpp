@@ -178,7 +178,7 @@ public:
         blur_y.bound(di, 0, depth);
         vsum.bound(di, 0, depth);
 
-        blur_y.compute_at(splitoutput, y).store_at(splitoutput, y).vectorize(di, depth);//.fold_storage(xi, 1);
+        blur_y.compute_at(splitoutput, y).store_at(splitoutput, y).vectorize(di, depth);
         vsum.compute_at(splitoutput, y).store_at(splitoutput, xo).vectorize(di, depth).fold_storage(y, 1);
 
         f1.compute_at(splitoutput, y).vectorize(di, depth);
@@ -187,7 +187,7 @@ public:
         zerotext.compute_at(splitoutput, xo).vectorize(xi, native_lanes);
         textsum.compute_at(splitoutput, y).store_at(splitoutput, xo).vectorize(xi).fold_storage(y, 1);
         textf1.compute_at(splitoutput, y);
-        textblury.compute_at(splitoutput, y).store_at(splitoutput, y);//.fold_storage(xi, 1);
+        textblury.compute_at(splitoutput, y).store_at(splitoutput, y);
         textblury.compute_with(blur_y, xi);
 
         // Constrain the output origin to 0 so the base-case boundary terms
