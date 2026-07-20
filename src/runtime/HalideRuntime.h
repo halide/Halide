@@ -2382,6 +2382,8 @@ inline std::ostream &operator<<(std::ostream &os, const halide_type_t &type) {
         return os << "(void*)";
     case halide_type_bfloat:
         return os << "bfloat" << (int)type.bits;
+    case halide_type_unknown:
+        return os << "unknown";
     }
     return os;
 }
