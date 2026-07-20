@@ -149,7 +149,6 @@ void validate_schedule_inlined_function(Function f) {
 
 Inliner::Inliner(const Function &f) {
     internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
-    validate_schedule_inlined_function(f);
     add(f);
 }
 
