@@ -43,8 +43,19 @@ int deallocate_block(void *user_context, MemoryBlock *block) {
     return halide_error_code_success;
 }
 
+void *encode_region_handle(size_t size) {
+    return (void *)(size + 1);
+}
+
+void check_region(void *user_context, MemoryRegion *region) {
+    HALIDE_CHECK(user_context, region != nullptr);
+    HALIDE_CHECK(user_context, region->handle == encode_region_handle(region->allocation.size));
+}
+
 int allocate_region(void *user_context, MemoryRegion *region) {
-    region->handle = (void *)1;
+    HALIDE_CHECK(user_context, region->handle == nullptr);
+
+    region->handle = encode_region_handle(region->allocation.size);
     allocated_region_memory += region->allocation.size;
 
     debug(user_context) << "Test : allocate_region ("
@@ -57,7 +68,8 @@ int allocate_region(void *user_context, MemoryRegion *region) {
 }
 
 int deallocate_region(void *user_context, MemoryRegion *region) {
-    region->handle = (void *)0;
+    HALIDE_CHECK(user_context, region->handle == encode_region_handle(region->allocation.size));
+    region->handle = nullptr;
     allocated_region_memory -= region->allocation.size;
 
     debug(user_context) << "Test : deallocate_region ("
@@ -120,12 +132,12 @@ int main(int argc, char **argv) {
         request.properties.usage = MemoryUsage::DefaultUsage;
 
         MemoryRegion *r1 = instance->reserve(user_context, request);
-        HALIDE_CHECK(user_context, r1 != nullptr);
+        check_region(user_context, r1);
         HALIDE_CHECK(user_context, allocated_block_memory == block_size);
         HALIDE_CHECK(user_context, allocated_region_memory == request.size);
 
         MemoryRegion *r2 = instance->reserve(user_context, request);
-        HALIDE_CHECK(user_context, r2 != nullptr);
+        check_region(user_context, r2);
         HALIDE_CHECK(user_context, allocated_block_memory == block_size);
         HALIDE_CHECK(user_context, allocated_region_memory == (2 * request.size));
 
@@ -133,7 +145,7 @@ int main(int argc, char **argv) {
         HALIDE_CHECK(user_context, allocated_region_memory == (1 * request.size));
 
         MemoryRegion *r3 = instance->reserve(user_context, request);
-        halide_abort_if_false(user_context, r3 != nullptr);
+        check_region(user_context, r3);
         halide_abort_if_false(user_context, allocated_block_memory == block_size);
         halide_abort_if_false(user_context, allocated_region_memory == (2 * request.size));
         instance->retain(user_context, r3);
@@ -152,9 +164,9 @@ int main(int argc, char **argv) {
 
         request.size = block_size / 2;  // request two half-size regions
         MemoryRegion *r4 = instance->reserve(user_context, request);
-        HALIDE_CHECK(user_context, r4 != nullptr);
+        check_region(user_context, r4);
         MemoryRegion *r5 = instance->reserve(user_context, request);
-        HALIDE_CHECK(user_context, r5 != nullptr);
+        check_region(user_context, r5);
         HALIDE_CHECK(user_context, nullptr == instance->reserve(user_context, request));  // requesting a third should fail
 
         HALIDE_CHECK(user_context, allocated_block_memory == block_size);
@@ -167,7 +179,7 @@ int main(int argc, char **argv) {
 
         request.size = block_size;
         MemoryRegion *r6 = instance->reserve(user_context, request);
-        HALIDE_CHECK(user_context, r6 != nullptr);
+        check_region(user_context, r6);
 
         instance->destroy(user_context);
         deallocate_block(user_context, memory_block);
@@ -308,12 +320,12 @@ int main(int argc, char **argv) {
         request.properties.usage = MemoryUsage::DefaultUsage;
 
         MemoryRegion *r1 = instance->reserve(user_context, request);
-        HALIDE_CHECK(user_context, r1 != nullptr);
+        check_region(user_context, r1);
         HALIDE_CHECK(user_context, allocated_block_memory == block_size);
         HALIDE_CHECK(user_context, allocated_region_memory == padded_size);
 
         MemoryRegion *r2 = instance->reserve(user_context, request);
-        HALIDE_CHECK(user_context, r2 != nullptr);
+        check_region(user_context, r2);
         HALIDE_CHECK(user_context, allocated_block_memory == block_size);
         HALIDE_CHECK(user_context, allocated_region_memory == (2 * padded_size));
 
@@ -324,9 +336,9 @@ int main(int argc, char **argv) {
 
         request.size = block_size / 2;  // request two half-size regions
         MemoryRegion *r4 = instance->reserve(user_context, request);
-        HALIDE_CHECK(user_context, r4 != nullptr);
+        check_region(user_context, r4);
         MemoryRegion *r5 = instance->reserve(user_context, request);
-        HALIDE_CHECK(user_context, r5 != nullptr);
+        check_region(user_context, r5);
         HALIDE_CHECK(user_context, nullptr == instance->reserve(user_context, request));  // requesting a third should fail
 
         HALIDE_CHECK(user_context, allocated_block_memory == block_size);
@@ -339,7 +351,7 @@ int main(int argc, char **argv) {
 
         request.size = block_size;
         MemoryRegion *r6 = instance->reserve(user_context, request);
-        HALIDE_CHECK(user_context, r6 != nullptr);
+        check_region(user_context, r6);
 
         instance->destroy(user_context);
         deallocate_block(user_context, memory_block);
@@ -380,12 +392,12 @@ int main(int argc, char **argv) {
         request.properties.usage = MemoryUsage::DefaultUsage;
 
         MemoryRegion *r1 = instance->reserve(user_context, request);
-        HALIDE_CHECK(user_context, r1 != nullptr);
+        check_region(user_context, r1);
         HALIDE_CHECK(user_context, allocated_block_memory == config.minimum_block_size);
         HALIDE_CHECK(user_context, allocated_region_memory == request.size);
 
         MemoryRegion *r2 = instance->reserve(user_context, request);
-        HALIDE_CHECK(user_context, r2 != nullptr);
+        check_region(user_context, r2);
         HALIDE_CHECK(user_context, allocated_block_memory == config.minimum_block_size);
         HALIDE_CHECK(user_context, allocated_region_memory == (2 * request.size));
 
@@ -393,7 +405,7 @@ int main(int argc, char **argv) {
         HALIDE_CHECK(user_context, allocated_region_memory == (1 * request.size));
 
         MemoryRegion *r3 = instance->reserve(user_context, request);
-        halide_abort_if_false(user_context, r3 != nullptr);
+        check_region(user_context, r3);
         halide_abort_if_false(user_context, allocated_block_memory == config.minimum_block_size);
         halide_abort_if_false(user_context, allocated_region_memory == (2 * request.size));
         instance->retain(user_context, r3);
@@ -489,6 +501,7 @@ int main(int argc, char **argv) {
             count = count > 1 ? count : 1;
             request.size = count * sizeof(int);
             MemoryRegion *region = instance->reserve(user_context, request);
+            check_region(user_context, region);
             pointers.append(user_context, region);
         }
 
@@ -533,6 +546,7 @@ int main(int argc, char **argv) {
             request.size = count * sizeof(int);
             total_allocation_size += request.size;
             MemoryRegion *region = instance->reserve(user_context, request);
+            check_region(user_context, region);
             pointers.append(user_context, region);
         }
 
@@ -549,6 +563,7 @@ int main(int argc, char **argv) {
             count = count > 1 ? count : 1;
             request.size = count * sizeof(int);
             MemoryRegion *region = instance->reserve(user_context, request);
+            check_region(user_context, region);
             pointers.append(user_context, region);
         }
 
