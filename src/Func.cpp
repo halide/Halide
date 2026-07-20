@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -12,8 +13,10 @@
 #include "ApplySplit.h"
 #include "Argument.h"
 #include "Associativity.h"
+#include "Bounds.h"
 #include "Callable.h"
 #include "CodeGen_LLVM.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
@@ -21,9 +24,11 @@
 #include "Function.h"
 #include "IR.h"
 #include "IREquality.h"
+#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 #include "ImageParam.h"
 #include "Inline.h"
 #include "LLVM_Output.h"
@@ -761,6 +766,24 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
         add_let(dim_projection, dims[i].var, RVar(new_rdom, i));
     }
     return {new_rdom, dim_projection};
+}
+
+// If `e` is a binary op of node type `op` and exactly one of its two operands
+// satisfies `is_selected`, returns {selected operand, other operand}. Returns
+// nullopt if `e` isn't a binary `op`, or if neither/both operands match.
+template<typename Predicate>
+optional<pair<Expr, Expr>> select_binary_operand(const Expr &e, IRNodeType op, Predicate &&is_selected) {
+    if (e.node_type() != op) {
+        return std::nullopt;
+    }
+    // `op` is always a binary op, so this is guaranteed to have a value.
+    auto [a, b] = *as_binary_operands(e);
+    const bool a_sel = is_selected(a);
+    const bool b_sel = is_selected(b);
+    if (a_sel == b_sel) {
+        return std::nullopt;
+    }
+    return a_sel ? std::make_pair(a, b) : std::make_pair(b, a);
 }
 
 }  // namespace
@@ -3272,6 +3295,363 @@ Func &Func::eager_inline(const std::vector<Func> &fs) {
     // shorthands; use f.update(n).eager_inline(...) to inline into an update.
     Stage(func, func.definition(), 0).eager_inline(fs);
     return *this;
+}
+
+// Helpers for change_type implementation
+namespace {
+
+// Does `e` contain a direct Halide call to `fname` (a self-reference)?
+bool contains_self_reference(const Expr &e, const string &fname) {
+    class Finder : public IRGraphVisitor {
+        using IRGraphVisitor::visit;
+        const string &fname;
+        void visit(const Call *c) override {
+            if (c->call_type == Call::Halide && c->name == fname) {
+                found = true;
+            }
+            IRGraphVisitor::visit(c);
+        }
+
+    public:
+        bool found = false;
+        explicit Finder(const string &f)
+            : fname(f) {
+        }
+    } finder(fname);
+    e.accept(&finder);
+    return finder.found;
+}
+
+/**
+ * Initialize a constant-bounds cache with the FuncValueBounds-derived range
+ * of every Func call in \p e. The bounds machinery keys its cache by pointer
+ * identity (\ref Halide::ExprCompare), so using the exact Call nodes that
+ * appear in \p e lets \ref constant_integer_bounds and \ref lossless_cast see
+ * a tighter range than just the type's bounds.
+ *
+ * @return An initialized constant-bounds cache for \p e
+ */
+auto cache_call_bounds(const Expr &e, const FuncValueBounds &fvb) {
+    std::map<Expr, ConstantInterval, ExprCompare> cache;
+    if (!fvb.empty()) {
+        visit_with(e, [&](auto *self, const Call *op) {
+            self->visit_base(op);  // Recurse into the call's arguments.
+            if (op->call_type != Call::Halide || !op->type.is_int_or_uint()) {
+                return;
+            }
+            auto it = fvb.find({op->name, op->value_index});
+            if (it == fvb.end()) {
+                return;
+            }
+            auto type_range = ConstantInterval::bounds_of_type(op->type);
+            auto value_range = covering_constant_interval(it->second);
+            cache.emplace(Expr(op), ConstantInterval::make_intersection(type_range, value_range));
+        });
+    }
+    return cache;
+}
+
+// Rewrite a factor-free leaf expression `e` to type `t`
+Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
+    if (e.type() == t) {
+        return e;
+    }
+
+    // Expose a single promotion cast for a sum, difference, or product of two
+    // integer operands that are exactly representable in the float result type,
+    // e.g. cast<f32>(a) * cast<f32>(b) == cast<f32>(widening_mul(a, b)). When a and
+    // b round-trip through the float losslessly, the float op rounds the true
+    // result identically to casting the exact widening op, so this is exact for
+    // any width and signedness the float can hold (int8/int16 under f32, up to
+    // int32 under f64, ...). Exposing the widening form lets lossless_cast() below
+    // carry it to the target integer type as an integer dot-product term.
+    Expr folded = e;
+    if (folded.type().is_float() &&
+        (folded.node_type() == IRNodeType::Add ||
+         folded.node_type() == IRNodeType::Sub ||
+         folded.node_type() == IRNodeType::Mul)) {
+        auto operands = as_binary_operands(folded);
+        const Cast *ca = operands->first.as<Cast>();
+        const Cast *cb = operands->second.as<Cast>();
+        if (ca && cb && ca->value.type() == cb->value.type() &&
+            ca->value.type().is_int_or_uint() &&
+            folded.type().can_represent(ca->value.type())) {
+            const Expr &x = ca->value, &y = cb->value;
+            folded = cast(folded.type(),
+                          folded.node_type() == IRNodeType::Add ? widening_add(x, y) :
+                          folded.node_type() == IRNodeType::Sub ? widening_sub(x, y) :
+                                                                  widening_mul(x, y));
+        }
+    }
+
+    // Peel an int->float promotion: we're accumulating at an integer type, so
+    // the float round-trip is dead weight. This also exposes an integer form
+    // (e.g. cast<f32>(widening_mul(a, b)) -> widening_mul(a, b)) that
+    // lossless_cast() can retype without a detour through float, which f32
+    // can't always undo. A strict_cast is a Call, not a Cast, and is left alone.
+    if (t.is_int_or_uint()) {
+        if (const Cast *c = folded.as<Cast>()) {
+            if (folded.type().is_float() && c->value.type().is_int_or_uint()) {
+                folded = c->value;
+            }
+        }
+    }
+
+    // Retype via lossless_cast() when it can prove the cast exact, pushing it down
+    // through widening intrinsics so integer forms survive to instruction
+    // selection. Seeding the cache with producer value ranges lets it succeed for
+    // casts that are only exact under those ranges (e.g. narrowing a clamped
+    // producer). This is a no-op-or-improvement for any target type: a float
+    // target just takes lossless_cast()'s representable-widening path, and
+    // anything it can't prove falls through to the plain cast below.
+    auto cache = cache_call_bounds(folded, fvb);
+    if (Expr r = lossless_cast(t, folded, Scope<ConstantInterval>::empty_scope(), &cache);
+        r.defined()) {
+        return r;
+    }
+
+    return cast(t, folded);
+}
+
+// Retype a whole definition value to type `t`, retargeting self-references from
+// `fname` to `dst` and pushing casts down to the increment leaves. Only reduction
+// updates shaped as a tree of binary combiners over a self-reference and an
+// increment are supported.
+Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type t,
+                  const FuncValueBounds &fvb) {
+    if (const Call *c = e.as<Call>()) {
+        if (c->call_type == Call::Halide && c->name == fname) {
+            return Call::make(dst, c->args, c->value_index);
+        }
+    }
+    if (contains_self_reference(e, fname)) {
+        optional<pair<Expr, Expr>> operands = as_binary_operands(e);
+        user_assert(operands)
+            << "change_type() only supports update definitions built from binary "
+            << "operators over the accumulator; " << fname << " has an unsupported shape.\n";
+        return make_binary_op(e.node_type(),
+                              retype_value(operands->first, fname, dst, t, fvb),
+                              retype_value(operands->second, fname, dst, t, fvb));
+    }
+    return retype_leaf(e, t, fvb);
+}
+
+// The top-level associative combiner of a (let-stripped) reduction update value,
+// i.e. the node type of the binary op whose operands are the self-reference and
+// the increment. Returns nullopt if `val` isn't such a shape.
+optional<IRNodeType> reduction_op(const Expr &val, const string &fname) {
+    optional<pair<Expr, Expr>> split = select_binary_operand(val, val.node_type(), [&](const Expr &e) {
+        return contains_self_reference(e, fname);
+    });
+    return split ? std::make_optional(val.node_type()) : std::nullopt;
+}
+
+// Prove that computing `typed`'s reduction at type `t` cannot overflow. Returns
+// true if it is safe; if safety can only be guaranteed under a runtime
+// precondition, that condition is returned in *condition. Returns an error
+// message if it cannot be proven.
+std::optional<std::string> change_type_prove_safe(
+    const Func &typed, Type t, const FuncValueBounds &fvb, Expr *condition  //
+) {
+    *condition = Expr();
+    const Function fn = typed.function();
+    const ConstantInterval limit = ConstantInterval::bounds_of_type(t);
+
+    // Bound `e` using constant integer bounds, refined by the proven value ranges
+    // of any producer Funcs it references (e.g. a clamp upstream). retype_leaf()
+    // wraps a leaf in a cast to t when it can't prove the cast lossless; we bound
+    // the pre-cast value so a truncating narrowing shows its true range instead of
+    // being hidden by the cast clamping to t. (lossless_cast() never introduces a
+    // narrowing outer cast, so stripping one here only ever exposes that fallback.)
+    auto bounds_of = [&](const Expr &e) {
+        Expr v = e;
+        if (const Cast *c = v.as<Cast>()) {
+            v = c->value;
+        }
+        auto cache = cache_call_bounds(v, fvb);
+        return constant_integer_bounds(v, Scope<ConstantInterval>::empty_scope(), &cache);
+    };
+
+    // Pure / identity values must be representable at the new type.
+    for (const Expr &v : fn.values()) {
+        if (!limit.contains(bounds_of(v))) {
+            return "the initial value may not be representable in the target type";
+        }
+    }
+
+    for (const Definition &def : fn.updates()) {
+        Expr val = substitute_in_all_lets(def.values()[0]);
+        optional<IRNodeType> op = reduction_op(val, fn.name());
+
+        // The increment is the non-self-reference operand of the combiner.
+        Expr increment = val;
+        if (op) {
+            optional<pair<Expr, Expr>> split = select_binary_operand(val, *op, [&](const Expr &e) {
+                return contains_self_reference(e, fn.name());
+            });
+            if (split) {
+                increment = split->second;
+            }
+        }
+        const ConstantInterval term = bounds_of(increment);
+
+        // Each term must itself be representable at the new type. Otherwise the
+        // cast retype_leaf() wrapped this leaf in truncates it, silently changing
+        // the result. This also rejects a term with unbounded magnitude, which no
+        // reduction extent could make safe.
+        if (!limit.contains(term)) {
+            return "a term may not be representable in the target type";
+        }
+
+        // min / max / and / or leave the accumulator within a single term's range,
+        // which we just proved fits, so they need nothing more.
+        if (op && (*op == IRNodeType::Min || *op == IRNodeType::Max ||
+                   *op == IRNodeType::And || *op == IRNodeType::Or)) {
+            continue;
+        }
+
+        // Sum and difference both grow the accumulator additively and are bounded
+        // below; every other combiner can grow it faster than a single term's
+        // range in a way we don't model -- a product reduction most importantly,
+        // or an unrecognized shape -- so reject it rather than silently overflow.
+        if (!op || (*op != IRNodeType::Add && *op != IRNodeType::Sub)) {
+            return "change_type() only supports sum, difference, min, max, and, "
+                   "and or reductions; this reduction's accumulator could overflow "
+                   "the target type";
+        }
+
+        // Each reduction step adds (Add) or subtracts (Sub) a term, so bound the
+        // accumulator by (number of terms) x (per-step contribution).
+        const ConstantInterval step = (*op == IRNodeType::Sub) ? -term : term;
+        int64_t n_max = 1;
+        bool symbolic = false;
+        Expr n_terms = make_const(Int(64), 1);
+        for (const auto &rv : def.schedule().rvars()) {
+            n_terms = simplify(n_terms * cast(Int(64), rv.extent));
+            // Only a literal extent is known at compile time; a symbolic extent
+            // (e.g. an ImageParam dimension) gets only type-based bounds, which we
+            // must not treat as a static bound.
+            if (optional<int64_t> ext = as_const_int(simplify(rv.extent)); ext && *ext >= 0) {
+                n_max *= *ext;
+            } else {
+                symbolic = true;
+            }
+        }
+        if (!symbolic) {
+            if (!limit.contains(step * ConstantInterval(0, n_max))) {
+                return "the accumulated sum may exceed the target type's range";
+            }
+            continue;
+        }
+        // Symbolic term count: emit a runtime precondition instead. step's
+        // endpoints are defined because term's are (checked above).
+        Expr cond = (make_const(Int(64), step.max) * n_terms <= make_const(Int(64), limit.max)) &&
+                    (make_const(Int(64), step.min) * n_terms >= make_const(Int(64), limit.min));
+        *condition = condition->defined() ? (*condition && cond) : cond;
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+Func Func::change_type(Type t, bool unsafe) {
+    user_assert(defined()) << "change_type() called on undefined Func.\n";
+    user_assert(!func.has_extern_definition())
+        << "change_type() cannot be applied to the extern Func " << name() << ".\n";
+    user_assert(outputs() == 1)
+        << "change_type() currently supports only single-output Funcs, but "
+        << name() << " has " << outputs() << " outputs.\n";
+
+    invalidate_cache();
+
+    const Type old_t = func.output_types()[0];
+    if (old_t == t) {
+        return *this;
+    }
+
+    const string fname = func.name();
+    const vector<Var> pure_vars = args();
+    const vector<Expr> pure_arg_exprs(pure_vars.begin(), pure_vars.end());
+
+    // Proven value ranges for this Func's producers. Retyping references the same
+    // producers (only self-references and casts are rewritten), so bounds keyed
+    // by the original Funcs line up with the calls in the retyped clone. This
+    // lets a clamped producer tighten both the cast rewrites and the overflow proof.
+    FuncValueBounds func_bounds = [&] {
+        const map<string, Function> env = find_transitive_calls(func);
+        return compute_function_value_bounds(topological_order({func}, env), env);
+    }();
+
+    // Determine the reduction op (if any), so min/max accumulations get the
+    // right identity at the new type rather than a lossy cast of e.g. +inf.
+    optional<IRNodeType> op;
+    if (func.has_update_definition()) {
+        op = reduction_op(substitute_in_all_lets(func.update(0).values()[0]), fname);
+    }
+    const bool is_min_max = op && (*op == IRNodeType::Min || *op == IRNodeType::Max);
+
+    // Build the retyped clone.
+    Func typed(fname + "_typed");
+
+    // Pure definition.
+    {
+        vector<Expr> retyped;
+        for (const Expr &v : func.values()) {
+            if (is_min_max) {
+                optional<Expr> id = get_associative_identity(t, *op);
+                user_assert(id) << "change_type() could not find an identity for "
+                                << IRNodeType_string(*op) << " at type " << t << ".\n";
+                retyped.push_back(*id);
+            } else {
+                retyped.push_back(retype_leaf(v, t, func_bounds));
+            }
+        }
+        // Single-output only (asserted above), so there is exactly one value.
+        typed(pure_vars) = retyped[0];
+    }
+
+    // Update definitions. The retyped values still reference the original
+    // reduction domain, so pass a default domain and let define_update discover
+    // it from the values (passing a freshly-built one would trip its identity
+    // check).
+    for (size_t u = 0; u < func.updates().size(); u++) {
+        const Definition &def = func.update(u);
+        vector<Expr> vals;
+        vals.reserve(def.values().size());
+        for (const Expr &v : def.values()) {
+            vals.push_back(retype_value(substitute_in_all_lets(v), fname, typed.function(), t, func_bounds));
+        }
+        typed.function().define_update(def.args(), vals, ReductionDomain{});
+        typed.function().update(u).schedule() = def.schedule().get_copy();
+    }
+
+    // Safety check.
+    if (!unsafe && t.is_int_or_uint()) {
+        Expr condition;
+        const auto err = change_type_prove_safe(typed, t, func_bounds, &condition);
+        user_assert(!err)
+            << "change_type(" << t << ") on " << fname << " may overflow: " << *err << ".\n"
+            << "Pass unsafe=true to change_type() to bypass this check.\n";
+        if (condition.defined()) {
+            std::ostringstream msg;
+            msg << "change_type(" << t << ") on " << fname
+                << " requires the reduction extent to be small enough not to overflow";
+            typed.function().schedule().type_change_checks().emplace_back(condition, msg.str());
+        }
+    }
+
+    // Rewrite this Func into an inline cast-back wrapper of the retyped clone, so
+    // that every existing consumer keeps seeing the original type.
+    const Expr wrapped = cast(old_t, Call::make(typed.function(), pure_arg_exprs, 0));
+    vector<string> arg_names;
+    arg_names.reserve(pure_vars.size());
+    for (const Var &v : pure_vars) {
+        arg_names.push_back(v.name());
+    }
+    func.clear_definition();
+    func.define(arg_names, {wrapped});
+
+    return typed;
 }
 
 Func &Func::trace_loads() {
