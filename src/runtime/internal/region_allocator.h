@@ -94,6 +94,9 @@ private:
     // Invokes the deallocation callback to free memory for the block region
     int free_block_region(void *user_context, BlockRegion *region);
 
+    // Deallocate only if the region is unused.
+    int deallocate_block_region_if_unused(void *user_context, BlockRegion *region);
+
     // Returns true if the given block region is the last region in the list
     bool is_last_block_region(void *user_context, const BlockRegion *region) const;
 
@@ -389,24 +392,11 @@ bool RegionAllocator::can_coalesce(const BlockRegion *block_region) const {
 }
 
 BlockRegion *RegionAllocator::coalesce_block_regions(void *user_context, BlockRegion *block_region) {
-
-    if ((block_region->usage_count == 0) && (block_region->memory.handle != nullptr)) {
-#ifdef DEBUG_RUNTIME_INTERNAL
-        debug(user_context) << "RegionAllocator: Freeing unused region to coalesce ("
-                            << "block_ptr=" << (void *)block_region->block_ptr << " "
-                            << "block_region=" << (void *)block_region << " "
-                            << "memory_size=" << (uint32_t)(block_region->memory.allocation.size) << " "
-                            << "block_reserved=" << (uint32_t)block->reserved << " "
-                            << ")";
-#endif
-        halide_abort_if_false(user_context, allocators.region.deallocate != nullptr);
-        MemoryRegion *memory_region = &(block_region->memory);
-        allocators.region.deallocate(user_context, memory_region);
-        block_region->memory.handle = nullptr;
-    }
+    deallocate_block_region_if_unused(user_context, block_region);
 
     BlockRegion *prev_region = block_region->prev_ptr;
     if (is_available(prev_region) && (prev_region != block_region)) {
+        deallocate_block_region_if_unused(user_context, prev_region);
 
 #ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "RegionAllocator: Coalescing "
@@ -451,20 +441,7 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
     const size_t original_size = block_region->memory.allocation.size;
     const size_t original_offset = block_region->memory.allocation.offset;
 
-    if ((block_region->usage_count == 0) && (block_region->memory.handle != nullptr)) {
-#ifdef DEBUG_RUNTIME_INTERNAL
-        debug(user_context) << "RegionAllocator: Split deallocate region ("
-                            << "block_ptr=" << (void *)block_region->block_ptr << " "
-                            << "block_region=" << (void *)block_region << " "
-                            << "memory_size=" << (uint32_t)(block_region->memory.allocation.size) << " "
-                            << "block_reserved=" << (uint32_t)block_region->block_ptr->reserved << " "
-                            << ")";
-#endif
-        halide_abort_if_false(user_context, allocators.region.deallocate != nullptr);
-        MemoryRegion *memory_region = &(block_region->memory);
-        allocators.region.deallocate(user_context, memory_region);
-        block_region->memory.handle = nullptr;
-    }
+    deallocate_block_region_if_unused(user_context, block_region);
 
     MemoryRequest split_request = request;
     split_request.size = original_size - request.size;
@@ -659,24 +636,29 @@ int RegionAllocator::free_block_region(void *user_context, BlockRegion *block_re
                         << "usage_count=" << (uint32_t)block_region->usage_count << " "
                         << "block_reserved=" << (uint32_t)block->reserved << ")";
 #endif
-    int error_code = 0;
-    if ((block_region->usage_count == 0) && (block_region->memory.handle != nullptr)) {
-#ifdef DEBUG_RUNTIME_INTERNAL
-        debug(user_context) << "    deallocating region ("
-                            << "block_ptr=" << (void *)block_region->block_ptr << " "
-                            << "block_region=" << (void *)block_region << " "
-                            << "memory_size=" << (uint32_t)(block_region->memory.allocation.size) << " "
-                            << "block_reserved=" << (uint32_t)block->reserved << " "
-                            << ")";
-#endif
-        // NOTE: Deallocate but leave memory size as is, so that coalesce can compute region merging sizes
-        halide_abort_if_false(user_context, allocators.region.deallocate != nullptr);
-        MemoryRegion *memory_region = &(block_region->memory);
-        error_code = allocators.region.deallocate(user_context, memory_region);
-        block_region->memory.handle = nullptr;
-    }
+    int error_code = deallocate_block_region_if_unused(user_context, block_region);
     block_region->usage_count = 0;
     block_region->status = AllocationStatus::Available;
+    return error_code;
+}
+
+int RegionAllocator::deallocate_block_region_if_unused(void *user_context, BlockRegion *region) {
+    if ((region->usage_count != 0) || (region->memory.handle == nullptr)) {
+        return 0;
+    }
+
+#ifdef DEBUG_RUNTIME_INTERNAL
+    debug(user_context) << "RegionAllocator: deallocating unused region ("
+                        << "block_ptr=" << (void *)region->block_ptr << " "
+                        << "block_region=" << (void *)region << " "
+                        << "memory_size=" << (uint32_t)(region->memory.allocation.size) << " "
+                        << "block_reserved=" << (uint32_t)block->reserved << " "
+                        << ")";
+#endif
+    halide_abort_if_false(user_context, allocators.region.deallocate != nullptr);
+    MemoryRegion *memory_region = &(region->memory);
+    int error_code = allocators.region.deallocate(user_context, memory_region);
+    region->memory.handle = nullptr;
     return error_code;
 }
 
