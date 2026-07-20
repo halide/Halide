@@ -41,7 +41,7 @@ if (Halide_TARGET MATCHES "wasm")
 endif ()
 
 # keep-sorted start case=no ignore_prefixes=#
-# add_app(auto_viz)  # TODO(#5374): missing CMake build
+add_app(auto_viz)
 add_app(bgu)
 add_app(bilateral_grid)
 add_app(blur)
