@@ -617,6 +617,16 @@ public:
     Expr &ring_buffer();
     Expr &ring_buffer() const;
 
+    /** Static preconditions injected by Func::change_type() that guarantee the
+     * retyped accumulation cannot overflow. Each entry is a (condition, message)
+     * pair; a lowering pass (add_type_change_checks) asserts them in the
+     * pipeline's initial assertion block, and they are removed by the no_asserts
+     * target feature. */
+    // @{
+    const std::vector<std::pair<Expr, std::string>> &type_change_checks() const;
+    std::vector<std::pair<Expr, std::string>> &type_change_checks();
+    // @}
+
     /** The list and order of dimensions used to store this
      * function. The first dimension in the vector corresponds to the
      * innermost dimension for storage (i.e. which dimension is

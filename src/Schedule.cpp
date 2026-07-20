@@ -244,6 +244,11 @@ struct FuncScheduleContents {
     // This is an extent of the ring buffer and expected to be a positive integer.
     Expr ring_buffer;
     Expr memoize_eviction_key;
+    // Static preconditions injected by change_type() that must hold for the
+    // retyped accumulation not to overflow. Each is a (condition, message) pair;
+    // a lowering pass turns them into assertions in the pipeline's initial
+    // assertion block (removed by the no_asserts target feature).
+    std::vector<std::pair<Expr, std::string>> type_change_checks;
 
     FuncScheduleContents()
         : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()), hoist_storage_level(LoopLevel::inlined()) {
@@ -277,6 +282,11 @@ struct FuncScheduleContents {
             }
             if (b.remainder.defined()) {
                 b.remainder = mutator(b.remainder);
+            }
+        }
+        for (auto &check : type_change_checks) {
+            if (check.first.defined()) {
+                check.first = mutator(check.first);
             }
         }
     }
@@ -369,6 +379,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
     copy.contents->ring_buffer = contents->ring_buffer;
+    copy.contents->type_change_checks = contents->type_change_checks;
 
     // Deep-copy wrapper functions.
     for (const auto &iter : contents->wrappers) {
@@ -418,6 +429,14 @@ Expr &FuncSchedule::ring_buffer() {
 
 Expr &FuncSchedule::ring_buffer() const {
     return contents->ring_buffer;
+}
+
+const std::vector<std::pair<Expr, std::string>> &FuncSchedule::type_change_checks() const {
+    return contents->type_change_checks;
+}
+
+std::vector<std::pair<Expr, std::string>> &FuncSchedule::type_change_checks() {
+    return contents->type_change_checks;
 }
 
 std::vector<StorageDim> &FuncSchedule::storage_dims() {

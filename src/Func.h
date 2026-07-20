@@ -2658,6 +2658,33 @@ public:
      */
     Func &compute_inline();
 
+    /** Change the type at which this Func computes and stores its values,
+     * subject to a reduction-aware safety check.
+     *
+     * This splits the Func in two: a new intermediate Func (returned) that
+     * copies this Func's definitions but accumulates at the requested type `t`
+     * (with the appropriate casts inserted, preferring integer forms such as
+     * widening_mul over float round-trips), and this Func, which is rewritten in
+     * place into an inline wrapper that casts the intermediate's result back to
+     * the original type. Every existing consumer therefore keeps seeing the
+     * original type, while the returned intermediate can be scheduled to exploit
+     * the new type (e.g. an Int(32) accumulator eligible for dot-product
+     * instructions). Schedule the returned Func to control the retyped
+     * computation.
+     *
+     * The change is validated with the bounds machinery: for an integer target,
+     * change_type() proves the accumulation cannot overflow by combining the
+     * per-term value range with the reduction extent. If it can only be
+     * guaranteed under a runtime precondition (e.g. the RDom extent isn't too
+     * wide), that precondition is injected into the pipeline's assertion block
+     * (and removed by the no_asserts target feature). If safety cannot be
+     * established, change_type() errors unless `unsafe` is true, which bypasses
+     * the check entirely.
+     *
+     * Currently supports single-output Funcs whose update definitions are built
+     * from binary operators over the accumulator. */
+    Func change_type(Type t, bool unsafe = false);
+
     /** Get a handle on an update step for the purposes of scheduling
      * it. */
     Stage update(int idx = 0);

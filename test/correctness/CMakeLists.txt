@@ -42,6 +42,7 @@ tests(
     cascaded_filters.cpp
     cast.cpp
     cast_handle.cpp
+    change_type.cpp
     chunk.cpp
     chunk_sharing.cpp
     circular_reference_leak.cpp
