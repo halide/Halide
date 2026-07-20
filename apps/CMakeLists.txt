@@ -74,7 +74,7 @@ add_app(nl_means)
 # add_app(nn_ops)  # TODO(#5374): missing CMake build
 add_app(onnx)
 add_app(resize)
-# add_app(resnet_50)  # TODO(#5374): missing CMake build
+add_app(resnet_50)
 add_app(stencil_chain)
 add_app(unsharp)
 add_app(wavelet)
