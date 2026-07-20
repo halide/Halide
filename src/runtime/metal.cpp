@@ -957,7 +957,7 @@ WEAK int halide_metal_run(void *user_context,
     set_compute_pipeline_state(encoder, pipeline_state);
 
     int num_kernel_args = 0;
-    for (int i = 0; arg_types[i].as_u32() != 0; i++) {
+    for (int i = 0; static_cast<uint32_t>(arg_types[i]) != 0; i++) {
         ++num_kernel_args;
     }
 

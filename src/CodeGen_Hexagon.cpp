@@ -543,23 +543,23 @@ struct HvxIntrinsic {
         v65OrLater = 1 << 1,
     };
     llvm::Intrinsic::ID id;
-    halide_type_t ret_type;
+    Type ret_type;
     const char *name;
-    halide_type_t arg_types[4];
+    Type arg_types[4];
     int flags;
 };
 
 // TODO: these should probably be declared constexpr, but that would
-// require marking various halide_type_t methods as constexpr, and an
+// require marking various Type methods as constexpr, and an
 // obscure bug in MSVC2017 can cause compilation failures for them.
 // The bug appears to be fixed in MSVC2019, so when we move to that
 // as a baseline for Windows, this should be revisited.
-halide_type_t i8 = halide_type_t(halide_type_int, 8);
-halide_type_t i16 = halide_type_t(halide_type_int, 16);
-halide_type_t i32 = halide_type_t(halide_type_int, 32);
-halide_type_t u8 = halide_type_t(halide_type_uint, 8);
-halide_type_t u16 = halide_type_t(halide_type_uint, 16);
-halide_type_t u32 = halide_type_t(halide_type_uint, 32);
+Type i8 = Int(8);
+Type i16 = Int(16);
+Type i32 = Int(32);
+Type u8 = UInt(8);
+Type u16 = UInt(16);
+Type u32 = UInt(32);
 
 // Define vectors that are 1x and 2x the Hexagon HVX width --
 // Note that we use placeholders here (which we fix up when processing
@@ -568,19 +568,19 @@ halide_type_t u32 = halide_type_t(halide_type_uint, 32);
 // data, rather than having to assemble it at runtime.
 constexpr int kOneX = 64 * 8;
 
-halide_type_t i8v1 = i8.with_lanes(kOneX / 8);
-halide_type_t i16v1 = i16.with_lanes(kOneX / 16);
-halide_type_t i32v1 = i32.with_lanes(kOneX / 32);
-halide_type_t u8v1 = u8.with_lanes(kOneX / 8);
-halide_type_t u16v1 = u16.with_lanes(kOneX / 16);
-halide_type_t u32v1 = u32.with_lanes(kOneX / 32);
+Type i8v1 = i8.with_lanes(kOneX / 8);
+Type i16v1 = i16.with_lanes(kOneX / 16);
+Type i32v1 = i32.with_lanes(kOneX / 32);
+Type u8v1 = u8.with_lanes(kOneX / 8);
+Type u16v1 = u16.with_lanes(kOneX / 16);
+Type u32v1 = u32.with_lanes(kOneX / 32);
 
-halide_type_t i8v2 = i8v1.with_lanes(i8v1.lanes * 2);
-halide_type_t i16v2 = i16v1.with_lanes(i16v1.lanes * 2);
-halide_type_t i32v2 = i32v1.with_lanes(i32v1.lanes * 2);
-halide_type_t u8v2 = u8v1.with_lanes(u8v1.lanes * 2);
-halide_type_t u16v2 = u16v1.with_lanes(u16v1.lanes * 2);
-halide_type_t u32v2 = u32v1.with_lanes(u32v1.lanes * 2);
+Type i8v2 = i8v1.with_lanes(i8v1.lanes() * 2);
+Type i16v2 = i16v1.with_lanes(i16v1.lanes() * 2);
+Type i32v2 = i32v1.with_lanes(i32v1.lanes() * 2);
+Type u8v2 = u8v1.with_lanes(u8v1.lanes() * 2);
+Type u16v2 = u16v1.with_lanes(u16v1.lanes() * 2);
+Type u32v2 = u32v1.with_lanes(u32v1.lanes() * 2);
 
 #define INTRINSIC_128B(id) llvm::Intrinsic::hexagon_V6_##id##_128B
 const HvxIntrinsic intrinsic_wrappers[] = {
@@ -853,11 +853,11 @@ void CodeGen_Hexagon::init_module() {
     // operands, they all operate on vectors of 32 bit integers. To make
     // it easier to generate code, we define wrapper intrinsics with
     // the correct type (plus the necessary bitcasts).
-    const auto fix_lanes = [&](const halide_type_t &t) -> halide_type_t {
-        if (t.lanes == 1) {
+    const auto fix_lanes = [&](const Type &t) -> Type {
+        if (t.lanes() == 1) {
             return t;
         }
-        const int lanes_actual = ((int)t.lanes * native_vector_bits()) / kOneX;
+        const int lanes_actual = ((int)t.lanes() * native_vector_bits()) / kOneX;
         return t.with_lanes(lanes_actual);
     };
 
@@ -867,10 +867,10 @@ void CodeGen_Hexagon::init_module() {
         internal_assert(id != llvm::Intrinsic::not_intrinsic);
         // Get the real intrinsic.
         llvm::Function *intrin = llvm::Intrinsic::getOrInsertDeclaration(module.get(), id);
-        halide_type_t ret_type = fix_lanes(i.ret_type);
+        Type ret_type = fix_lanes(i.ret_type);
         arg_types.clear();
         for (const auto &a : i.arg_types) {
-            if (a.bits == 0) {
+            if (a.bits() == 0) {
                 break;
             }
             arg_types.emplace_back(fix_lanes(a));
