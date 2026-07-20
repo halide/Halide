@@ -448,6 +448,8 @@ bool RegionAllocator::can_split(const BlockRegion *block_region, const MemoryReq
 }
 
 BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion *block_region, const MemoryRequest &request) {
+    const size_t original_size = block_region->memory.allocation.size;
+    const size_t original_offset = block_region->memory.allocation.offset;
 
     if ((block_region->usage_count == 0) && (block_region->memory.handle != nullptr)) {
 #ifdef DEBUG_RUNTIME_INTERNAL
@@ -465,12 +467,12 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
     }
 
     MemoryRequest split_request = request;
-    split_request.size = block_region->memory.allocation.size - request.size;
-    split_request.offset = block_region->memory.allocation.offset + request.size;
+    split_request.size = original_size - request.size;
+    split_request.offset = original_offset + request.size;
 
 #ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "RegionAllocator: Splitting "
-                        << "current region (offset=" << (int32_t)block_region->memory.allocation.offset << " size=" << (int32_t)(block_region->memory.allocation.size) << " bytes) "
+                        << "current region (offset=" << (int32_t)original_offset << " size=" << (int32_t)(original_size) << " bytes) "
                         << "to create empty region (offset=" << (int32_t)split_request.offset << " size=" << (int32_t)(split_request.size) << " bytes)";
 #endif
     BlockRegion *next_region = block_region->next_ptr;
@@ -483,7 +485,13 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
     }
     empty_region->prev_ptr = block_region;
     block_region->next_ptr = empty_region;
-    block_region->memory.allocation.size -= empty_region->memory.allocation.size;
+
+    // Derive the allocated region's size from the empty region's conformed offset;
+    // subtracting the empty region's size would shrink this region below the request
+    // whenever conforming the empty region adjusted its offset or size.
+    block_region->memory.allocation.size = empty_region->memory.allocation.offset - original_offset;
+    halide_abort_if_false(user_context, block_region->memory.allocation.size >= request.size);
+    halide_abort_if_false(user_context, empty_region->memory.allocation.offset + empty_region->memory.allocation.size <= original_offset + original_size);
     return empty_region;
 }
 
