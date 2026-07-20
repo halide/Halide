@@ -10,6 +10,7 @@
 #include <cmath>
 #include <map>
 #include <optional>
+#include <utility>
 
 #include "ConstantInterval.h"
 #include "Expr.h"
@@ -49,6 +50,14 @@ std::optional<int> is_const_power_of_two_integer(const Expr &e);
 std::optional<int> is_const_power_of_two_integer(uint64_t);
 std::optional<int> is_const_power_of_two_integer(int64_t);
 // @}
+
+/** If `e` is a binary operator, return its two operands; otherwise return std::nullopt. */
+std::optional<std::pair<Expr, Expr>> as_binary_operands(const Expr &e);
+
+/** Build a binary expression of node type `t` from operands `a` and `b`, using
+ * the corresponding operator overload (so the usual type matching and constant
+ * folding apply). `t` must be a binary operator; it is an internal error otherwise. */
+Expr make_binary_op(IRNodeType t, const Expr &a, const Expr &b);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly greater than zero (in all lanes, if a vector expression) */

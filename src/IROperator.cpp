@@ -246,6 +246,76 @@ std::optional<int> is_const_power_of_two_integer(int64_t val) {
     return val < 0 ? std::nullopt : is_const_power_of_two_integer((uint64_t)val);
 }
 
+std::optional<std::pair<Expr, Expr>> as_binary_operands(const Expr &e) {
+    // We switch on the actual node type, so we can downcast e.get() directly
+    // rather than going through Expr::as<>(), which would redundantly re-check
+    // the node type the switch case has already established.
+    switch (e.node_type()) {
+#define HANDLE_BINARY_OP(NodeType)                                   \
+    case IRNodeType::NodeType: {                                     \
+        const NodeType *op = static_cast<const NodeType *>(e.get()); \
+        return std::pair{op->a, op->b};                              \
+    }
+        HANDLE_BINARY_OP(Add)
+        HANDLE_BINARY_OP(Sub)
+        HANDLE_BINARY_OP(Mul)
+        HANDLE_BINARY_OP(Div)
+        HANDLE_BINARY_OP(Mod)
+        HANDLE_BINARY_OP(Min)
+        HANDLE_BINARY_OP(Max)
+        HANDLE_BINARY_OP(EQ)
+        HANDLE_BINARY_OP(NE)
+        HANDLE_BINARY_OP(LT)
+        HANDLE_BINARY_OP(LE)
+        HANDLE_BINARY_OP(GT)
+        HANDLE_BINARY_OP(GE)
+        HANDLE_BINARY_OP(And)
+        HANDLE_BINARY_OP(Or)
+#undef HANDLE_BINARY_OP
+    default:
+        return std::nullopt;
+    }
+}
+
+Expr make_binary_op(IRNodeType t, const Expr &a, const Expr &b) {
+    switch (t) {
+    case IRNodeType::Add:
+        return a + b;
+    case IRNodeType::Sub:
+        return a - b;
+    case IRNodeType::Mul:
+        return a * b;
+    case IRNodeType::Div:
+        return a / b;
+    case IRNodeType::Mod:
+        return a % b;
+    case IRNodeType::Min:
+        return min(a, b);
+    case IRNodeType::Max:
+        return max(a, b);
+    case IRNodeType::EQ:
+        return a == b;
+    case IRNodeType::NE:
+        return a != b;
+    case IRNodeType::LT:
+        return a < b;
+    case IRNodeType::LE:
+        return a <= b;
+    case IRNodeType::GT:
+        return a > b;
+    case IRNodeType::GE:
+        return a >= b;
+    case IRNodeType::And:
+        return a && b;
+    case IRNodeType::Or:
+        return a || b;
+    default:
+        internal_error << "make_binary_op: " << IRNodeType_string(t)
+                       << " is not a binary operator\n";
+        return Expr();
+    }
+}
+
 bool is_positive_const(const Expr &e) {
     if (const IntImm *i = e.as<IntImm>()) {
         return i->value > 0;

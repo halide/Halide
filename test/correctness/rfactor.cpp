@@ -1298,6 +1298,408 @@ int isnan_max_rfactor_test() {
     return 0;
 }
 
+// hoist_invariants() lifts a loop-invariant factor out of a sum reduction:
+//   sum_k(scale(i,j) * inner(i,j,k)) = scale(i,j) * sum_k(inner(i,j,k))
+// It does not change any types: the returned intermediate accumulates the
+// factor-free body at its natural type. (Retyping the accumulation for a
+// dot-product-friendly integer type is the job of change_type().)
+int hoist_invariants_test() {
+    ImageParam A{Int(8), 2, "A"};
+    ImageParam B{Int(8), 2, "B"};
+    ImageParam As{Float(16), 1, "As"};
+    ImageParam Bs{Float(16), 1, "Bs"};
+
+    Var i{"i"}, j{"j"};
+    RDom k({{0, A.dim(1).extent() / 4 * 4}}, "k");
+
+    Func C{"C"};
+    C(i, j) += widening_mul(As(i), Bs(j)) * cast(Int(32), widening_mul(A(i, k), B(j, k)));
+    C.bound(i, 0, A.dim(0).extent());
+    C.bound(j, 0, B.dim(0).extent());
+
+    // widening_mul(As(i), Bs(j)) is invariant in k, so hoisting moves it out of
+    // the reduction: the intermediate accumulates only the inner product and the
+    // scale is applied once during write-back. The body's type (Float(32)) is
+    // unchanged.
+    Func C_intm = C.update().hoist_invariants();
+
+    internal_assert(C_intm.types()[0] == Float(32))
+        << "hoist_invariants: expected C_intm to keep its natural Float(32) type, got "
+        << C_intm.types()[0] << "\n";
+
+    // Numerical correctness: result must match a reference that applies the full
+    // non-hoisted reduction.
+    const int M = 8, N = 8, K = 16;
+    Buffer<int8_t> a_buf(M, K), b_buf(N, K);
+    Buffer<float16_t> as_buf(M), bs_buf(N);
+    for (int m = 0; m < M; m++) {
+        for (int n_k = 0; n_k < K; n_k++) {
+            a_buf(m, n_k) = (int8_t)((m + n_k) % 7 - 3);
+        }
+        as_buf(m) = float16_t((float)(m + 1) * 0.5f);
+    }
+    for (int n = 0; n < N; n++) {
+        for (int n_k = 0; n_k < K; n_k++) {
+            b_buf(n, n_k) = (int8_t)((n + n_k + 1) % 5 - 2);
+        }
+        bs_buf(n) = float16_t((float)(n + 1) * 0.25f);
+    }
+    A.set(a_buf);
+    B.set(b_buf);
+    As.set(as_buf);
+    Bs.set(bs_buf);
+
+    Buffer<float> result = C.realize({M, N});
+
+    // Reference: plain reduction without hoisting.
+    Buffer<float> ref(M, N);
+    ref.fill(0.f);
+    for (int m = 0; m < M; m++) {
+        for (int n = 0; n < N; n++) {
+            for (int kk = 0; kk < K; kk++) {
+                ref(m, n) += (float)as_buf(m) * (float)bs_buf(n) *
+                             (float)((int32_t)(int16_t)((int16_t)a_buf(m, kk) * (int16_t)b_buf(n, kk)));
+            }
+        }
+    }
+
+    for (int m = 0; m < M; m++) {
+        for (int n = 0; n < N; n++) {
+            internal_assert(std::abs(result(m, n) - ref(m, n)) < 1e-6f)
+                << "hoist_invariants mismatch at (" << m << ", " << n << "): "
+                << result(m, n) << " vs ref " << ref(m, n) << "\n";
+        }
+    }
+
+    return 0;
+}
+
+// An invariant factor may be nested inside its own sub-product rather than
+// sitting as one of a Mul's two immediate operands:
+//   (scaleA(i) * castA) * (scaleB(i) * castB)
+// -- the way two independently-scaled operands naturally compose. Finding both
+// scales requires flattening the whole multiplicative chain into leaves and
+// partitioning each one by invariance, not just checking a binary node's two
+// immediate children.
+int hoist_invariants_scattered_factors_test() {
+    const int K = 64;
+    ImageParam A{Int(8), 1, "A"};
+    ImageParam B{Int(8), 1, "B"};
+    ImageParam ScaleA{Float(32), 1, "ScaleA"};
+    ImageParam ScaleB{Float(32), 1, "ScaleB"};
+
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Acc{"Acc"};
+    Acc(i) = 0.0f;
+    Acc(i) += (cast<float>(A(r)) * ScaleA(i)) * (cast<float>(B(r)) * ScaleB(i));
+
+    Func Acc_intm = Acc.update().hoist_invariants();
+    internal_assert(Acc_intm.types()[0] == Float(32))
+        << "hoist_invariants: expected the intermediate to keep Float(32), got "
+        << Acc_intm.types()[0] << "\n";
+    Acc_intm.compute_root();
+
+    Buffer<int8_t> a_buf(K), b_buf(K);
+    Buffer<float> scale_a_buf(1), scale_b_buf(1);
+    for (int k = 0; k < K; k++) {
+        a_buf(k) = 127;
+        b_buf(k) = 127;
+    }
+    scale_a_buf(0) = 2.0f;
+    scale_b_buf(0) = 3.0f;
+    A.set(a_buf);
+    B.set(b_buf);
+    ScaleA.set(scale_a_buf);
+    ScaleB.set(scale_b_buf);
+
+    Buffer<float> result = Acc.realize({1});
+    const float expected = 2.0f * 3.0f * (float)K * 127.0f * 127.0f;
+    internal_assert(result(0) == expected)
+        << "hoist_invariants scattered factors: got " << result(0) << ", expected " << expected << "\n";
+
+    return 0;
+}
+
+// Same shape as hoist_invariants_scattered_factors_test, but with UInt(8)
+// operands, to exercise the unsigned path.
+int hoist_invariants_scattered_factors_unsigned_test() {
+    const int K = 64;
+    ImageParam A{UInt(8), 1, "A"};
+    ImageParam B{UInt(8), 1, "B"};
+    ImageParam ScaleA{Float(32), 1, "ScaleA"};
+    ImageParam ScaleB{Float(32), 1, "ScaleB"};
+
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Acc{"Acc"};
+    Acc(i) = 0.0f;
+    Acc(i) += (cast<float>(A(r)) * ScaleA(i)) * (cast<float>(B(r)) * ScaleB(i));
+
+    Func Acc_intm = Acc.update().hoist_invariants();
+    internal_assert(Acc_intm.types()[0] == Float(32))
+        << "hoist_invariants: expected the intermediate to keep Float(32), got "
+        << Acc_intm.types()[0] << "\n";
+    Acc_intm.compute_root();
+
+    Buffer<uint8_t> a_buf(K), b_buf(K);
+    Buffer<float> scale_a_buf(1), scale_b_buf(1);
+    for (int k = 0; k < K; k++) {
+        a_buf(k) = 255;
+        b_buf(k) = 255;
+    }
+    scale_a_buf(0) = 2.0f;
+    scale_b_buf(0) = 3.0f;
+    A.set(a_buf);
+    B.set(b_buf);
+    ScaleA.set(scale_a_buf);
+    ScaleB.set(scale_b_buf);
+
+    Buffer<float> result = Acc.realize({1});
+    const float expected = 2.0f * 3.0f * (float)K * 255.0f * 255.0f;
+    internal_assert(result(0) == expected)
+        << "hoist_invariants scattered factors (unsigned): got " << result(0) << ", expected " << expected << "\n";
+
+    return 0;
+}
+
+// hoist_invariants() with outer Min and additive factor:
+//   min_k(offset(i) + body(i, k)) = offset(i) + min_k(body(i, k))
+// The intermediate accumulates min without the offset; write-back adds it once.
+int hoist_invariants_min_test() {
+    ImageParam offset_p{Float(32), 1, "offset_p"};
+    ImageParam data_p{Float(32), 2, "data_p"};
+
+    Var i{"i"};
+    const int K = 16;
+    RDom k(0, K, "k");
+
+    Func C{"C"};
+    C(i) = Float(32).max();
+    C(i) = min(C(i), offset_p(i) + data_p(i, k));
+
+    Func C_intm = C.update().hoist_invariants();
+    C_intm.compute_root();
+
+    const int M = 8;
+    Buffer<float> off(M), dat(M, K);
+    for (int m = 0; m < M; m++) {
+        off(m) = (float)(m + 1);
+        for (int kk = 0; kk < K; kk++) {
+            dat(m, kk) = (float)(((m * K + kk) % 7) - 3);
+        }
+    }
+    offset_p.set(off);
+    data_p.set(dat);
+
+    Buffer<float> result = C.realize({M});
+
+    Buffer<float> ref(M);
+    for (int m = 0; m < M; m++) {
+        float v = std::numeric_limits<float>::max();
+        for (int kk = 0; kk < K; kk++) {
+            v = std::min(v, off(m) + dat(m, kk));
+        }
+        ref(m) = v;
+    }
+
+    for (int m = 0; m < M; m++) {
+        internal_assert(result(m) == ref(m))
+            << "hoist_invariants min mismatch at " << m << ": "
+            << result(m) << " vs ref " << ref(m) << "\n";
+    }
+    return 0;
+}
+
+// hoist_invariants() with outer Or (bool) and And factor:
+//   or_k(mask(i) && check(i, k)) = mask(i) && or_k(check(i, k))
+// The intermediate accumulates or without the mask; write-back applies it once.
+int hoist_invariants_or_test() {
+    ImageParam mask_p{Bool(), 1, "mask_p"};
+    ImageParam check_p{Bool(), 2, "check_p"};
+
+    Var i{"i"};
+    const int K = 16;
+    RDom k(0, K, "k");
+
+    Func valid{"valid"};
+    valid(i) = cast<bool>(false);
+    valid(i) = valid(i) || (mask_p(i) && check_p(i, k));
+
+    Func valid_intm = valid.update().hoist_invariants();
+    valid_intm.compute_root();
+
+    const int M = 8;
+    Buffer<bool> mask(M), chk(M, K);
+    for (int m = 0; m < M; m++) {
+        mask(m) = (m % 2 == 0);
+        for (int kk = 0; kk < K; kk++) {
+            chk(m, kk) = ((m + kk) % 3 == 0);
+        }
+    }
+    mask_p.set(mask);
+    check_p.set(chk);
+
+    Buffer<bool> result = valid.realize({M});
+
+    for (int m = 0; m < M; m++) {
+        bool ref = false;
+        for (int kk = 0; kk < K; kk++) {
+            ref = ref || (mask(m) && chk(m, kk));
+        }
+        internal_assert(result(m) == ref)
+            << "hoist_invariants or mismatch at " << m << ": "
+            << (int)result(m) << " vs ref " << (int)ref << "\n";
+    }
+    return 0;
+}
+
+// hoist_invariants() must not disturb strict_float: the reduction below rounds
+// each term to float before summing, and both the reference and the hoisted
+// intermediate must observe that same rounding (giving exactly 0).
+int hoist_invariants_strict_float_test() {
+    Buffer<int32_t> data(2);
+    data(0) = 16777217;
+    data(1) = -16777216;
+
+    RDom k(0, 2, "k");
+
+    Func f{"f"};
+    f() = 0.0f;
+    f() += 1.5f * strict_float(cast<float>(data(k)));
+
+    Func intm = f.update().hoist_invariants();
+    intm.compute_root();
+
+    internal_assert(intm.types()[0] == Float(32))
+        << "hoist_invariants strict_float: expected intm to remain Float(32), got "
+        << intm.types()[0] << "\n";
+
+    Buffer<float> result = f.realize();
+    internal_assert(result() == 0.0f)
+        << "hoist_invariants strict_float mismatch: " << result()
+        << " vs ref 0\n";
+
+    return 0;
+}
+
+// hoist_invariants() composes with rfactor(): rfactor first preserves r.y as a
+// pure Var u, so scale(u) becomes invariant over the intermediate's remaining
+// reduction over r.x and can then be hoisted from that intermediate.
+int hoist_invariants_after_rfactor_test() {
+    ImageParam scale_p{Float(32), 1, "scale_p"};
+    ImageParam data_p{Int(32), 2, "data_p"};
+
+    Var u{"u"};
+    const int X = 8, Y = 4;
+    RDom r(0, X, 0, Y, "r");
+
+    Func f{"f"};
+    f() = 0.0f;
+    f() += scale_p(r.y) * data_p(r.x, r.y);
+
+    // Preserve r.y as u; the intermediate now reduces only over r.x, and
+    // scale_p(u) is invariant across that reduction.
+    Func intm = f.update().rfactor({{r.y, u}});
+    Func intm2 = intm.update().hoist_invariants();
+    intm.compute_root();
+    intm2.compute_root();
+
+    Buffer<float> scale(Y);
+    Buffer<int> data(X, Y);
+    for (int y = 0; y < Y; y++) {
+        scale(y) = (float)(y + 1);
+        for (int x = 0; x < X; x++) {
+            data(x, y) = (x + 2 * y) % 7 - 3;
+        }
+    }
+    scale_p.set(scale);
+    data_p.set(data);
+
+    Buffer<float> result = f.realize();
+
+    float ref = 0.0f;
+    for (int y = 0; y < Y; y++) {
+        int partial = 0;
+        for (int x = 0; x < X; x++) {
+            partial += data(x, y);
+        }
+        ref += scale(y) * (float)partial;
+    }
+
+    internal_assert(result() == ref)
+        << "hoist_invariants after rfactor mismatch: "
+        << result() << " vs ref " << ref << "\n";
+
+    return 0;
+}
+
+#if HALIDE_WITH_EXCEPTIONS
+// The min/max + add hoisting law is only valid for integer types where addition
+// has no defined wraparound behavior. For UInt(8), hoisting the invariant 250
+// would incorrectly turn min_k((250 + x_k) mod 256) into (250 + min_k(x_k)) mod
+// 256, so hoist_invariants() must refuse rather than silently miscompile.
+int hoist_invariants_invalid_law_rejected_test() {
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    Buffer<uint8_t> data(2);
+    data(0) = 1;
+    data(1) = 10;
+
+    RDom k(0, 2, "k");
+
+    Func f{"f"};
+    f() = UInt(8).max();
+    f() = min(f(), cast<uint8_t>(250) + data(k));
+
+    bool error = false;
+    try {
+        f.update().hoist_invariants();
+    } catch (const Halide::CompileError &e) {
+        error = true;
+        printf("Expected error (unsigned min not hoistable):\n%s\n", e.what());
+    }
+    if (!error) {
+        printf("hoist_invariants should have rejected the unsigned min law!\n");
+        return 1;
+    }
+    return 0;
+}
+
+// hoist_invariants() errors when there is no distributable invariant factor to
+// hoist, rather than silently behaving like a plain rfactor().
+int hoist_invariants_nothing_to_hoist_rejected_test() {
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    ImageParam data_p{Int(32), 2, "data_p"};
+    Var i{"i"};
+    RDom k(0, 8, "k");
+
+    Func f{"f"};
+    f(i) = 0;
+    f(i) += data_p(i, k);
+
+    bool error = false;
+    try {
+        f.update().hoist_invariants();
+    } catch (const Halide::CompileError &e) {
+        error = true;
+        printf("Expected error (nothing to hoist):\n%s\n", e.what());
+    }
+    if (!error) {
+        printf("hoist_invariants should have errored when there is nothing to hoist!\n");
+        return 1;
+    }
+    return 0;
+}
+#endif
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -1347,6 +1749,17 @@ int main(int argc, char **argv) {
         {"rfactor bounds tests", rfactor_precise_bounds_test},
         {"isnan max rfactor test (bitwise or)", isnan_max_rfactor_test<BitwiseOr>},
         {"isnan max rfactor test (logical or)", isnan_max_rfactor_test<LogicalOr>},
+        {"hoist_invariants test (add/mul)", hoist_invariants_test},
+        {"hoist_invariants test (add/mul, scattered factors)", hoist_invariants_scattered_factors_test},
+        {"hoist_invariants test (add/mul, scattered factors, unsigned)", hoist_invariants_scattered_factors_unsigned_test},
+        {"hoist_invariants test (min/add)", hoist_invariants_min_test},
+        {"hoist_invariants test (or/and)", hoist_invariants_or_test},
+        {"hoist_invariants test (strict_float preserved)", hoist_invariants_strict_float_test},
+        {"hoist_invariants test (after rfactor)", hoist_invariants_after_rfactor_test},
+#if HALIDE_WITH_EXCEPTIONS
+        {"hoist_invariants test (invalid law rejected)", hoist_invariants_invalid_law_rejected_test},
+        {"hoist_invariants test (nothing to hoist rejected)", hoist_invariants_nothing_to_hoist_rejected_test},
+#endif
     };
 
     using Sharder = Halide::Internal::Test::Sharder;

@@ -18,6 +18,7 @@
 #include "Var.h"
 
 #include <map>
+#include <type_traits>
 #include <utility>
 
 namespace Halide {
@@ -92,6 +93,11 @@ class Stage {
     std::pair<std::vector<Internal::Split>, std::vector<Internal::Split>>
     rfactor_validate_args(const std::vector<std::pair<RVar, Var>> &preserved, const Internal::AssociativeOp &prover_result);
 
+    /** Shared implementation of rfactor() and hoist_invariants(). When
+     * `hoist_invariant_factor` is set, a distributive loop-invariant factor is
+     * hoisted from the intermediate reduction to the write-back step. */
+    Func rfactor_impl(const std::vector<std::pair<RVar, Var>> &preserved, bool hoist_invariant_factor);
+
 public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
         : function(std::move(f)), definition(std::move(d)), stage_index(stage_index) {
@@ -143,53 +149,92 @@ public:
      * with the new pure Vars added to the outermost.
      *
      * For example, f.update(0).rfactor({{r.y, u}}) would rewrite a pipeline like this:
-     \code
-     f(x, y) = 0;
-     f(x, y) += g(r.x, r.y);
-     \endcode
+     * \code
+     * f(x, y) = 0;
+     * f(x, y) += g(r.x, r.y);
+     * \endcode
      * into a pipeline like this:
-     \code
-     f_intm(x, y, u) = 0;
-     f_intm(x, y, u) += g(r.x, u);
-
-     f(x, y) = 0;
-     f(x, y) += f_intm(x, y, r.y);
-     \endcode
+     * \code
+     * f_intm(x, y, u) = 0;
+     * f_intm(x, y, u) += g(r.x, u);
+     *
+     * f(x, y) = 0;
+     * f(x, y) += f_intm(x, y, r.y);
+     * \endcode
      *
      * This has a variety of uses. You can use it to split computation of an associative reduction:
-     \code
-     f(x, y) = 10;
-     RDom r(0, 96);
-     f(x, y) = max(f(x, y), g(x, y, r.x));
-     f.update(0).split(r.x, rxo, rxi, 8).reorder(y, x).parallel(x);
-     f.update(0).rfactor({{rxo, u}}).compute_root().parallel(u).update(0).parallel(u);
-     \endcode
+     * \code
+     * f(x, y) = 10;
+     * RDom r(0, 96);
+     * f(x, y) = max(f(x, y), g(x, y, r.x));
+     * f.update(0).split(r.x, rxo, rxi, 8).reorder(y, x).parallel(x);
+     * f.update(0).rfactor({{rxo, u}}).compute_root().parallel(u).update(0).parallel(u);
+     * \endcode
      *
      *, which is equivalent to:
-     \code
-     parallel for u = 0 to 11:
-       for y:
-         for x:
-           f_intm(x, y, u) = -inf
-     parallel for x:
-       for y:
-         parallel for u = 0 to 11:
-           for rxi = 0 to 7:
-             f_intm(x, y, u) = max(f_intm(x, y, u), g(8*u + rxi))
-     for y:
-       for x:
-         f(x, y) = 10
-     parallel for x:
-       for y:
-         for rxo = 0 to 11:
-           f(x, y) = max(f(x, y), f_intm(x, y, rxo))
-     \endcode
-     *
+     * \code
+     * parallel for u = 0 to 11:
+     *   for y:
+     *     for x:
+     *       f_intm(x, y, u) = -inf
+     * parallel for x:
+     *   for y:
+     *     parallel for u = 0 to 11:
+     *       for rxi = 0 to 7:
+     *         f_intm(x, y, u) = max(f_intm(x, y, u), g(8*u + rxi))
+     * for y:
+     *   for x:
+     *     f(x, y) = 10
+     * parallel for x:
+     *   for y:
+     *     for rxo = 0 to 11:
+     *       f(x, y) = max(f(x, y), f_intm(x, y, rxo))
+     * \endcode
      */
     // @{
     Func rfactor(const std::vector<std::pair<RVar, Var>> &preserved);
     Func rfactor(const RVar &r, const Var &v);
     // @}
+
+    /** Hoist a loop-invariant factor out of an associative reduction by applying
+     * the distributive law of a semiring. Like rfactor(), this must be called on
+     * an update definition; it splits the update into an intermediate that
+     * accumulates the factor-free reduction over all of the update's RVars and a
+     * write-back that applies the hoisted factor once. The intermediate Func is
+     * returned. Unlike rfactor(), hoist_invariants() does not take a list of
+     * preserved RVars (call rfactor() on the returned intermediate to split its
+     * reduction further) and it does not change any types (see change_type()).
+     *
+     * A factor is hoistable if it does not depend on any RVar being reduced. It
+     * may be nested at any depth of an associative/commutative chain. The valid
+     * hoistings are:
+     *
+     *   Outer op    Inner combine   Law
+     *   ---------   -------------   ---
+     *   + (sum)     *               sum_k(s * x_k) = s * sum_k(x_k)
+     *   min         +               min_k(c + x_k) = c + min_k(x_k)
+     *   max         +               max_k(c + x_k) = c + max_k(x_k)
+     *   || (bool)   &&              or_k(p && x_k) = p && or_k(x_k)
+     *   && (bool)   ||              and_k(p || x_k) = p || and_k(x_k)
+     *
+     * For example, hoist_invariants() rewrites a pipeline like this:
+     * \code
+     * f(x) = 0;
+     * f(x) += s(x) * g(x, r);
+     * \endcode
+     * into a pipeline like this:
+     * \code
+     * f_intm(x) = 0;
+     * f_intm(x) += g(x, r);
+     *
+     * f(x) = 0;
+     * f(x) += s(x) * f_intm(x);
+     * \endcode
+     *
+     * This reduces the number of factor applications from |R| to one per pure
+     * point. It is an error if no distributable invariant factor is found.
+     */
+    Func hoist_invariants();
 
     /** Schedule the iteration over this stage to be fused with another
      * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
