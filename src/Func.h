@@ -2685,6 +2685,25 @@ public:
      * from binary operators over the accumulator. */
     Func change_type(Type t, bool unsafe = false);
 
+    /** Immediately inline direct calls to each of the given Funcs into this
+     * Func's definitions, processed left to right so that inlining an earlier
+     * Func can expose direct calls to a later one (e.g. when an earlier Func's
+     * body itself calls a later one).
+     *
+     * Unlike compute_inline(), which merely marks a Func to be inlined during
+     * lowering, eager_inline() performs the substitution now, at schedule time,
+     * rewriting this Func's pure and update definitions in place. This is useful
+     * to surface structure that other schedule-time directives need to see --
+     * for example, exposing a loop-invariant factor buried inside a call, so that
+     * hoist_invariants() can then hoist it out of a reduction like
+     * h(x) += f(x) * g(x).
+     *
+     * Each inlined Func must be inlinable: a pure Func (no update or extern
+     * definition) with no specializations, and with a schedule compatible with
+     * inlining (as for compute_inline()). The inlined Funcs are otherwise
+     * unchanged; only this Func's calls to them are replaced. */
+    Func &eager_inline(const std::vector<Func> &fs);
+
     /** Get a handle on an update step for the purposes of scheduling
      * it. */
     Stage update(int idx = 0);

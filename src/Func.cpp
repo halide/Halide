@@ -29,6 +29,7 @@
 #include "IRPrinter.h"
 #include "IRVisitor.h"
 #include "ImageParam.h"
+#include "Inline.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Param.h"
@@ -3447,6 +3448,24 @@ Func &Func::hoist_storage_root() {
 
 Func &Func::compute_inline() {
     return compute_at(LoopLevel::inlined());
+}
+
+Func &Func::eager_inline(const std::vector<Func> &fs) {
+    invalidate_cache();
+    for (const Func &f : fs) {
+        user_assert(f.defined())
+            << "eager_inline() was passed an undefined Func.\n";
+        user_assert(f.function().can_be_inlined())
+            << "eager_inline() cannot inline " << f.name()
+            << ": it must be a pure Func with no update or extern definition and "
+            << "no specializations.\n";
+        // Rewrites this Func's pure and update definitions in place, replacing
+        // every direct call to f with f's body. Processing fs left to right means
+        // a body spliced in by an earlier inline exposes its own direct calls to
+        // later fs, which the next iteration then inlines.
+        Internal::inline_function(func, f.function());
+    }
+    return *this;
 }
 
 namespace {
