@@ -3287,6 +3287,23 @@ Func define_base_case(const Internal::Function &func, const vector<Expr> &a, con
     return f;
 }
 
+// Distribute `self <op> _` into the arms of a (possibly multi-way) branch, so
+// that f op= branch(cond, a, b) becomes f = branch(cond, self op a, self op b).
+// The result is a whole-value branch, i.e. real control flow that only computes
+// the taken arm.
+template<typename BinaryOp>
+Expr distribute_into_branch(const Expr &self, const Expr &e) {
+    if (const Call *c = Call::as_intrinsic(e, {Call::branch})) {
+        internal_assert(c->args.size() == 3);
+        return Call::make(c->type, Call::branch,
+                          {c->args[0],
+                           distribute_into_branch<BinaryOp>(self, c->args[1]),
+                           distribute_into_branch<BinaryOp>(self, c->args[2])},
+                          Call::PureIntrinsic);
+    }
+    return BinaryOp()(self, e);
+}
+
 }  // namespace
 
 template<typename BinaryOp>
@@ -3328,6 +3345,17 @@ Stage FuncRef::operator+=(const Tuple &e) {
     } else {
         return func_ref_update<std::plus<Expr>>(e, 0);
     }
+}
+
+Stage FuncRef::operator+=(const Branch &b) {
+    // f += branch(cond, a, b) distributes to f = branch(cond, f + a, f + b), so
+    // the whole update value is a branch (real control flow) and only the taken
+    // arm's contribution is actually computed.
+    const vector<Expr> rhs = {b.expr};
+    const vector<Expr> expanded_args = args_with_implicit_vars(rhs);
+    FuncRef self_ref = define_base_case(func, expanded_args, rhs, 0)(expanded_args);
+    Expr distributed = distribute_into_branch<std::plus<Expr>>(Expr(self_ref), b.expr);
+    return self_ref = Branch{distributed};
 }
 
 Stage FuncRef::operator+=(const FuncRef &e) {

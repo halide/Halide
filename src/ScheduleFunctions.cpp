@@ -615,6 +615,71 @@ public:
     }
 };
 
+// Find the condition of some branch() buried in an expression, or an undefined
+// Expr if there is none.
+class FindBranchCondition : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+    void visit(const Call *op) override {
+        if (!found.defined() && op->is_intrinsic(Call::branch)) {
+            found = op->args[0];
+        }
+        IRGraphVisitor::visit(op);
+    }
+
+public:
+    Expr found;
+};
+
+// Replace every branch() whose condition equals `cond` by one of its arms
+// (arg index 1 = true side, 2 = false side), collapsing that one condition.
+class PickBranchArm : public IRMutator {
+    using IRMutator::visit;
+    Expr cond;
+    int arm;
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::branch) && equal(op->args[0], cond)) {
+            return mutate(op->args[arm]);
+        }
+        return IRMutator::visit(op);
+    }
+
+public:
+    PickBranchArm(Expr c, int a)
+        : cond(std::move(c)), arm(a) {
+    }
+};
+
+// Lift every branch() in a point-wise value up to the top, producing a whole-
+// value (possibly nested / multi-way) branch. For a point-wise surrounding
+// expression E, E[branch(c, a, b)] == branch(c, E[a], E[b]), because branch has
+// the same value as select and pure point-wise ops distribute over select. This
+// undoes the burying that reverse-mode autodiff does when it multiplies a
+// branch-valued forward Func into a larger adjoint expression: the branch is
+// recovered as real control flow instead of being an illegal sub-expression.
+// Branches that share a condition are resolved together, so k distinct
+// conditions give at most 2^k arms (in practice one).
+Expr lift_branches(const Expr &value) {
+    if (const Call *c = Call::as_intrinsic(value, {Call::branch})) {
+        // Already a top-level branch; just lift any branches inside the arms.
+        return Call::make(c->type, Call::branch,
+                          {c->args[0],
+                           lift_branches(c->args[1]),
+                           lift_branches(c->args[2])},
+                          Call::PureIntrinsic);
+    }
+    FindBranchCondition f;
+    value.accept(&f);
+    if (!f.found.defined()) {
+        return value;
+    }
+    Expr cond = f.found;
+    Expr t = PickBranchArm(cond, 1)(value);
+    Expr e = PickBranchArm(cond, 2)(value);
+    return Call::make(value.type(), Call::branch,
+                      {cond, lift_branches(t), lift_branches(e)},
+                      Call::PureIntrinsic);
+}
+
 Stmt build_provide_loop_nest(const map<string, Function> &env,
                              const string &prefix,
                              const Function &func,
@@ -642,6 +707,18 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
         debug(3) << "Site " << i << " = " << s << "\n";
     }
 
+    // If a branch() got buried inside a larger point-wise value - typically
+    // because reverse-mode autodiff multiplied a branch-valued forward Func into
+    // an adjoint expression - lift it back to the top so it can become real
+    // control flow. E[branch(c, a, b)] == branch(c, E[a], E[b]) for point-wise E.
+    if (values.size() == 1 && expr_contains_branch(values[0]) &&
+        !Call::as_intrinsic(values[0], {Call::branch})) {
+        // Flatten Expr-level Lets first: lifting pulls the branch condition to
+        // the top, and it must not reference a Let variable whose binding lives
+        // inside the surrounding expression. CSE re-compresses later in lowering.
+        values[0] = lift_branches(substitute_in_all_lets(values[0]));
+    }
+
     // Make the (multi-dimensional multi-valued) store node. If the value is a
     // branch(), build real point-wise control flow instead of a single Provide.
     vector<Expr> branch_conds;
@@ -651,9 +728,9 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
         check_branch_schedule(func, def);
         body = build_branch_provide(func.name(), values[0], site);
     } else {
-        // A branch may only be the whole value of a definition. It can end up
-        // buried inside a value only if a branch-defined Func was inlined into a
-        // consumer, which we can not turn into control flow.
+        // A branch may only be the whole value of a definition. It can survive
+        // buried inside a multi-valued (Tuple) definition, which we can not turn
+        // into point-wise control flow.
         for (const Expr &v : values) {
             user_assert(!expr_contains_branch(v))
                 << "A Func defined with branch() was inlined into \"" << func.name()

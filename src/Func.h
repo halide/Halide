@@ -550,6 +550,12 @@ public:
     Stage operator+=(const FuncRef &);
     // @}
 
+    /** Accumulate a branch (see \ref branch) into this Func. This distributes
+     * the accumulation into the arms - f += branch(cond, a, b) becomes
+     * f = branch(cond, f + a, f + b) - so the whole update value is a branch
+     * (real control flow), and only the taken arm's contribution is computed. */
+    Stage operator+=(const Branch &);
+
     /** Define a stage that adds the negative of the given expression to this
      * Func. If the expression refers to some RDom, this performs a sum reduction
      * of the negative of the expression over the domain. If the function does
