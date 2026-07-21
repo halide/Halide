@@ -5,7 +5,7 @@ using namespace Halide;
 
 int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     if (e->event == halide_trace_store) {
-        for (int i = 0; i < e->type.lanes; ++i) {
+        for (int i = 0; i < e->lanes; ++i) {
             int val = ((const int *)(e->value))[i];
             if (val != 1234567890) {
                 printf("All values stored should have been 1234567890\n"

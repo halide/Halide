@@ -1,0 +1,20 @@
+diff --git a/tensorflow/lite/core/model_building.h b/tensorflow/lite/core/model_building.h
+--- a/tensorflow/lite/core/model_building.h
++++ b/tensorflow/lite/core/model_building.h
+@@ -88,6 +88,7 @@
+ 
+   Buffer(const Buffer&) = default;
+   Buffer& operator=(const Buffer&) = default;
++  InterpreterInfo* GetBuilder() const noexcept { return builder_; }
+ 
+  private:
+   Buffer(InterpreterInfo* builder, BufferIdx buffer_idx)
+@@ -136,7 +137,7 @@
+   Tensor(const Tensor&) = default;
+   Tensor& operator=(const Tensor&) = default;
+ 
+-  explicit Tensor(Buffer buffer) : builder_(buffer.builder_) {}
++  explicit Tensor(Buffer buffer) : builder_(buffer.GetBuilder()) {}
+ 
+  private:
+   Tensor() = default;

@@ -17,7 +17,7 @@ namespace Internal {
 
 /** Pull loops marked with GPU device APIs to a separate
  * module, and call them through the appropriate host runtime module. */
-Stmt inject_gpu_offload(const Stmt &s, const Target &host_target);
+Stmt inject_gpu_offload(const Stmt &s, const Target &host_target, bool any_strict_float);
 
 }  // namespace Internal
 }  // namespace Halide

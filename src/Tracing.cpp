@@ -26,9 +26,9 @@ struct TraceEventBuilder {
     vector<Expr> coordinates;
     Type type;
     halide_trace_event_code_t event;
-    Expr parent_id, value_index;
+    Expr parent_id, thread_id, value_index;
 
-    Expr build() {
+    Expr build() const {
         Expr values = Call::make(type_of<void *>(), Call::make_struct,
                                  value, Call::Intrinsic);
         Expr coords = Call::make(type_of<int32_t *>(), Call::make_struct,
@@ -36,6 +36,10 @@ struct TraceEventBuilder {
         Expr idx = value_index;
         if (!idx.defined()) {
             idx = 0;
+        }
+        Expr tid = thread_id;
+        if (!tid.defined()) {
+            tid = 0;
         }
 
         // Note: if these arguments are changed in any meaningful way,
@@ -45,7 +49,7 @@ struct TraceEventBuilder {
                              values, coords,
                              (int)type.code(), type.bits(), type.lanes(),
                              (int)event,
-                             parent_id, idx, (int)coordinates.size(),
+                             parent_id, tid, idx, (int)coordinates.size(),
                              trace_tag_expr};
         return Call::make(Int(32), Call::trace, args, Call::Extern);
     }
@@ -62,6 +66,8 @@ public:
     // and the Type(s) of their elements.
     map<string, vector<Type>> funcs_touched;
     map<string, vector<Type>> images_touched;
+
+    string call_stack = "pipeline";
 
     InjectTracing(const map<string, Function> &e, const Target &t)
         : env(e),
@@ -101,6 +107,7 @@ private:
         }
     }
 
+protected:
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
@@ -108,15 +115,13 @@ private:
         op = expr.as<Call>();
         internal_assert(op);
         bool trace_it = false;
-        Expr trace_parent;
         if (op->call_type == Call::Halide) {
             auto it = env.find(op->name);
             internal_assert(it != env.end()) << op->name << " not in environment\n";
-            Function f = it->second;
+            const Function &f = it->second;
             internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inlined());
 
             trace_it = trace_all_loads || f.is_tracing_loads();
-            trace_parent = Variable::make(Int(32), op->name + ".trace_id");
             if (trace_it) {
                 add_trace_tags(op->name, f.get_trace_tags());
                 touch(funcs_touched, op->name, op->value_index, op->type);
@@ -125,7 +130,6 @@ private:
             // op->param is defined when we're loading from an ImageParam, and undefined
             // when we're loading from an inlined Buffer.
             trace_it = trace_all_loads || (op->param.defined() && op->param.is_tracing_loads());
-            trace_parent = Variable::make(Int(32), "pipeline.trace_id");
             if (trace_it) {
                 if (op->param.defined()) {
                     add_trace_tags(op->name, op->param.get_trace_tags());
@@ -144,7 +148,7 @@ private:
             builder.coordinates = op->args;
             builder.type = op->type;
             builder.event = halide_trace_load;
-            builder.parent_id = trace_parent;
+            builder.parent_id = Variable::make(Int(32), call_stack + ".trace_id");
             builder.value_index = op->value_index;
             Expr trace = builder.build();
 
@@ -177,7 +181,7 @@ private:
             builder.func = f.name();
             builder.coordinates = op->args;
             builder.event = halide_trace_store;
-            builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
+            builder.parent_id = Variable::make(Int(32), call_stack + ".trace_id");
             for (size_t i = 0; i < values.size(); i++) {
                 Type t = values[i].type();
                 touch(funcs_touched, f.name(), (int)i, t);
@@ -219,112 +223,165 @@ private:
         return stmt;
     }
 
+    Stmt trace_parallel_task(const string &task_name, Stmt body,
+                             const vector<Expr> &coordinates) {
+        const Stmt original = body;
+        const string task_stack = unique_name("parallel_task");
+        {
+            ScopedValue new_func{call_stack, task_stack};
+            body = mutate(body);
+        }
+        if (body.same_as(original)) {
+            return body;
+        }
+
+        TraceEventBuilder builder;
+        builder.func = task_name;
+        builder.coordinates = coordinates;
+        builder.parent_id = Variable::make(Int(32), call_stack + ".trace_id");
+        builder.thread_id = Call::make(Int(32), "halide_current_thread_id", {}, Call::Extern);
+        builder.event = halide_trace_begin_parallel_task;
+        Expr begin_task = builder.build();
+
+        builder.parent_id = Variable::make(Int(32), task_stack + ".trace_id");
+        builder.thread_id = Expr();
+        builder.event = halide_trace_end_parallel_task;
+        Expr end_task = builder.build();
+
+        return LetStmt::make(task_stack + ".trace_id", begin_task,
+                             Block::make(std::move(body), Evaluate::make(end_task)));
+    }
+
+    Stmt visit(const For *op) override {
+        Expr min = mutate(op->min);
+        Expr max = mutate(op->max);
+
+        Stmt body;
+        if (op->for_type == ForType::Parallel) {
+            const Expr extent = max - min + 1;
+            body = trace_parallel_task(op->name, op->body, {min, extent});
+        } else {
+            body = mutate(op->body);
+        }
+
+        if (min.same_as(op->min) &&
+            max.same_as(op->max) &&
+            body.same_as(op->body)) {
+            return op;
+        }
+        return For::make(op->name, std::move(min), std::move(max),
+                         op->for_type, op->partition_policy, op->device_api,
+                         std::move(body));
+    }
+
     Stmt visit(const Realize *op) override {
-        Stmt stmt = IRMutator::visit(op);
-        op = stmt.as<Realize>();
+        auto iter = env.find(op->name);
+        if (iter == env.end()) {
+            return IRMutator::visit(op);
+        }
+
+        Function f = iter->second;
+
+        if (!(f.is_tracing_realizations() || trace_all_realizations)) {
+            if (f.is_tracing_stores() || f.is_tracing_loads()) {
+                // We need a trace id defined to pass to the loads and stores
+                ScopedValue new_func{call_stack, op->name};
+                Stmt _keep_alive = IRMutator::visit(op);
+                op = _keep_alive.as<Realize>();
+                internal_assert(op);
+                return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition,
+                                     LetStmt::make(op->name + ".trace_id", 0,
+                                                   op->body));
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+        // ReSharper disable once CppTooWideScope CppJoinDeclarationAndAssignment
+        Stmt _keep_alive;
+        {
+            ScopedValue new_func{call_stack, op->name};
+            _keep_alive = IRMutator::visit(op);
+            op = _keep_alive.as<Realize>();
+        }
         internal_assert(op);
 
-        map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) {
-            return stmt;
+        add_trace_tags(op->name, f.get_trace_tags());
+        for (size_t i = 0; i < op->types.size(); i++) {
+            touch(funcs_touched, op->name, i, op->types[i]);
         }
-        Function f = iter->second;
-        if (f.is_tracing_realizations() || trace_all_realizations) {
-            add_trace_tags(op->name, f.get_trace_tags());
-            for (size_t i = 0; i < op->types.size(); i++) {
-                touch(funcs_touched, op->name, i, op->types[i]);
-            }
 
-            // Throw a tracing call before and after the realize body
-            TraceEventBuilder builder;
-            builder.func = op->name;
-            builder.parent_id = Variable::make(Int(32), "pipeline.trace_id");
-            builder.event = halide_trace_begin_realization;
-            for (const auto &bound : op->bounds) {
-                builder.coordinates.push_back(bound.min);
-                builder.coordinates.push_back(bound.extent);
-            }
-
-            // Begin realization returns a unique token to pass to further trace calls affecting this buffer.
-            Expr call_before = builder.build();
-
-            builder.event = halide_trace_end_realization;
-            builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
-            Expr call_after = builder.build();
-
-            Stmt new_body = op->body;
-            new_body = Block::make(new_body, Evaluate::make(call_after));
-            new_body = LetStmt::make(op->name + ".trace_id", call_before, new_body);
-            stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
-            // Warning: 'op' may be invalid at this point
-        } else if (f.is_tracing_stores() || f.is_tracing_loads()) {
-            // We need a trace id defined to pass to the loads and stores
-            Stmt new_body = op->body;
-            new_body = LetStmt::make(op->name + ".trace_id", 0, new_body);
-            stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
+        // Throw a tracing call before and after the realize body
+        TraceEventBuilder builder;
+        builder.func = op->name;
+        builder.parent_id = Variable::make(Int(32), call_stack + ".trace_id");
+        builder.event = halide_trace_begin_realization;
+        for (const auto &bound : op->bounds) {
+            builder.coordinates.push_back(bound.min);
+            builder.coordinates.push_back(bound.extent);
         }
-        return stmt;
+
+        // Begin realization returns a unique token to pass to further trace calls affecting this buffer.
+        Expr call_before = builder.build();
+
+        builder.event = halide_trace_end_realization;
+        builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
+        Expr call_after = builder.build();
+
+        return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition,
+                             LetStmt::make(op->name + ".trace_id", call_before,
+                                           Block::make(op->body, Evaluate::make(call_after))));
     }
 
     Stmt visit(const ProducerConsumer *op) override {
-        Stmt stmt = IRMutator::visit(op);
-        op = stmt.as<ProducerConsumer>();
-        internal_assert(op);
-        map<string, Function>::const_iterator iter = env.find(op->name);
+        auto iter = env.find(op->name);
         if (iter == env.end()) {
-            return stmt;
+            return IRMutator::visit(op);
         }
-        Function f = iter->second;
-        if (f.is_tracing_realizations() || trace_all_realizations) {
-            // Throw a tracing call around each pipeline event
-            TraceEventBuilder builder;
-            builder.func = op->name;
-            builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
 
-            // Use the size of the pure step
-            const vector<string> &f_args = f.args();
-            for (int i = 0; i < f.dimensions(); i++) {
-                Expr min = Variable::make(Int(32), f.name() + ".s0." + f_args[i] + ".min");
-                Expr max = Variable::make(Int(32), f.name() + ".s0." + f_args[i] + ".max");
-                Expr extent = (max + 1) - min;
-                builder.coordinates.push_back(min);
-                builder.coordinates.push_back(extent);
-            }
+        const Function &f = iter->second;
 
-            builder.event = (op->is_producer ? halide_trace_produce : halide_trace_consume);
-            Expr begin_op_call = builder.build();
-
-            builder.event = (op->is_producer ? halide_trace_end_produce : halide_trace_end_consume);
-            Expr end_op_call = builder.build();
-
-            Stmt new_body = Block::make(op->body, Evaluate::make(end_op_call));
-
-            stmt = LetStmt::make(f.name() + ".trace_id", begin_op_call,
-                                 ProducerConsumer::make(op->name, op->is_producer, new_body));
+        if (!(f.is_tracing_realizations() || trace_all_realizations)) {
+            return IRMutator::visit(op);
         }
-        return stmt;
+
+        // ReSharper disable once CppTooWideScope CppJoinDeclarationAndAssignment
+        Stmt _keep_alive;
+        {
+            ScopedValue new_func{call_stack, op->name};
+            _keep_alive = IRMutator::visit(op);
+            op = _keep_alive.as<ProducerConsumer>();
+            internal_assert(op);
+        }
+
+        // Throw a tracing call around each pipeline event
+        TraceEventBuilder builder;
+        builder.func = op->name;
+
+        // Use the size of the pure step
+        for (const auto &arg : f.args()) {
+            Expr min = Variable::make(Int(32), op->name + ".s0." + arg + ".min");
+            Expr max = Variable::make(Int(32), op->name + ".s0." + arg + ".max");
+            Expr extent = (max + 1) - min;
+            builder.coordinates.push_back(min);
+            builder.coordinates.push_back(extent);
+        }
+
+        builder.parent_id = Variable::make(Int(32), call_stack + ".trace_id");
+        builder.event = (op->is_producer ? halide_trace_produce : halide_trace_consume);
+        Expr begin_op_call = builder.build();
+
+        builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
+        builder.event = (op->is_producer ? halide_trace_end_produce : halide_trace_end_consume);
+        Expr end_op_call = builder.build();
+
+        return LetStmt::make(op->name + ".trace_id", begin_op_call,
+                             ProducerConsumer::make(op->name, op->is_producer,
+                                                    Block::make(
+                                                        op->body,
+                                                        Evaluate::make(end_op_call))));
     }
 };
-
-class RemoveRealizeOverOutput : public IRMutator {
-    using IRMutator::visit;
-    const vector<Function> &outputs;
-
-    Stmt visit(const Realize *op) override {
-        for (const Function &f : outputs) {
-            if (op->name == f.name()) {
-                return mutate(op->body);
-            }
-        }
-        return IRMutator::visit(op);
-    }
-
-public:
-    RemoveRealizeOverOutput(const vector<Function> &o)
-        : outputs(o) {
-    }
-};
-
 }  // namespace
 
 Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
@@ -348,10 +405,17 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
     }
 
     // Inject tracing calls
-    s = tracing.mutate(s);
+    s = tracing(s);
 
     // Strip off the dummy realize blocks
-    s = RemoveRealizeOverOutput(outputs).mutate(s);
+    s = mutate_with(s, [&](auto *self, const Realize *op) {
+        for (const Function &f : outputs) {
+            if (op->name == f.name()) {
+                return self->mutate(op->body);
+            }
+        }
+        return self->visit_base(op);
+    });
 
     if (!s.same_as(original) || trace_pipeline || t.has_feature(Target::TracePipeline)) {
         // Add pipeline start and end events

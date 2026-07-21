@@ -95,6 +95,18 @@ void validate_schedule_inlined_function(Function f) {
                          << b.remainder << "] because the function is scheduled inline.\n";
         }
     }
+
+    if (stage_s.stream_stores()) {
+        user_warning << "It is meaningless to stream the stores of function "
+                     << f.name() << " because it is scheduled inline: there is "
+                                    "no separate Store left to mark non-temporal.\n";
+    }
+
+    if (const auto &names = stage_s.stream_loads_names(); !names || !names->empty()) {
+        user_warning << "It is meaningless to stream the loads made by function "
+                     << f.name() << " because it is scheduled inline: there is "
+                                    "no separate Load left to mark non-temporal.\n";
+    }
 }
 
 class Inliner : public IRMutator {
@@ -181,15 +193,13 @@ public:
     }
 };
 
-Stmt inline_function(Stmt s, const Function &f) {
-    Inliner i(f);
-    s = i.mutate(s);
-    return s;
+Stmt inline_function(const Stmt &s, const Function &f) {
+    return Inliner(f)(s);
 }
 
 Expr inline_function(Expr e, const Function &f) {
     Inliner i(f);
-    e = i.mutate(e);
+    e = i(e);
     // TODO: making this > 1 should be desirable,
     // but explodes compiletimes in some situations.
     if (i.found > 0) {

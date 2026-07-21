@@ -108,7 +108,8 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 #define DECLARE_LL_INITMOD(mod) \
     DECLARE_INITMOD(mod##_ll)
 
-// Universal CPP Initmods. Please keep sorted alphabetically.
+// Universal CPP Initmods.
+// keep-sorted start ignore_prefixes=//
 DECLARE_CPP_INITMOD(alignment_128)
 DECLARE_CPP_INITMOD(alignment_32)
 DECLARE_CPP_INITMOD(alignment_64)
@@ -130,6 +131,7 @@ DECLARE_CPP_INITMOD(fopen_lfs)
 DECLARE_CPP_INITMOD(force_include_types)
 DECLARE_CPP_INITMOD(fuchsia_clock)
 DECLARE_CPP_INITMOD(fuchsia_host_cpu_count)
+DECLARE_CPP_INITMOD(fuchsia_thread_id)
 DECLARE_CPP_INITMOD(fuchsia_yield)
 DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(halide_buffer_t)
@@ -138,8 +140,12 @@ DECLARE_CPP_INITMOD(hexagon_dma)
 DECLARE_CPP_INITMOD(hexagon_dma_pool)
 DECLARE_CPP_INITMOD(hexagon_host)
 DECLARE_CPP_INITMOD(ios_io)
+DECLARE_CPP_INITMOD(linux_arm_thread_id)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
+DECLARE_CPP_INITMOD(linux_powerpc_thread_id)
+DECLARE_CPP_INITMOD(linux_riscv_thread_id)
+DECLARE_CPP_INITMOD(linux_x86_thread_id)
 DECLARE_CPP_INITMOD(linux_yield)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
@@ -149,6 +155,7 @@ DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
+DECLARE_CPP_INITMOD(osx_thread_id)
 DECLARE_CPP_INITMOD(osx_yield)
 DECLARE_CPP_INITMOD(posix_aligned_alloc)
 DECLARE_CPP_INITMOD(posix_allocator)
@@ -175,8 +182,7 @@ DECLARE_CPP_INITMOD(timer_profiler)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
-// TODO(https://github.com/halide/Halide/issues/7248)
-// DECLARE_CPP_INITMOD(webgpu)
+// DECLARE_CPP_INITMOD(webgpu)  // TODO(https://github.com/halide/Halide/issues/7248)
 DECLARE_CPP_INITMOD(webgpu_dawn)
 DECLARE_CPP_INITMOD(webgpu_emscripten)
 DECLARE_CPP_INITMOD(windows_clock)
@@ -189,11 +195,14 @@ DECLARE_CPP_INITMOD(windows_threads)
 DECLARE_CPP_INITMOD(windows_threads_tsan)
 DECLARE_CPP_INITMOD(windows_yield)
 DECLARE_CPP_INITMOD(write_debug_image)
+// keep-sorted end
 
-// Universal LL Initmods. Please keep sorted alphabetically.
+// Universal LL Initmods
+// keep-sorted start
 DECLARE_LL_INITMOD(posix_math)
-DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
+DECLARE_LL_INITMOD(win32_math)
+// keep-sorted end
 
 // Various conditional initmods follow (both LL and CPP).
 #ifdef WITH_METAL
@@ -285,21 +294,25 @@ DECLARE_NO_INITMOD(windows_vulkan)
 #endif  // WITH_VULKAN
 
 #ifdef WITH_X86
-DECLARE_LL_INITMOD(x86_amx)
-DECLARE_LL_INITMOD(x86_avx512)
-DECLARE_LL_INITMOD(x86_avx2)
-DECLARE_LL_INITMOD(x86_avx)
+// keep-sorted start by_regex=["INITMOD\\(.+"]
 DECLARE_LL_INITMOD(x86)
-DECLARE_LL_INITMOD(x86_sse41)
+DECLARE_LL_INITMOD(x86_amx)
+DECLARE_LL_INITMOD(x86_avx)
+DECLARE_LL_INITMOD(x86_avx2)
+DECLARE_LL_INITMOD(x86_avx512)
 DECLARE_CPP_INITMOD(x86_cpu_features)
+DECLARE_LL_INITMOD(x86_sse41)
+// keep-sorted end
 #else
-DECLARE_NO_INITMOD(x86_amx)
-DECLARE_NO_INITMOD(x86_avx512)
-DECLARE_NO_INITMOD(x86_avx2)
-DECLARE_NO_INITMOD(x86_avx)
+// keep-sorted start by_regex=["INITMOD\\(.+"]
 DECLARE_NO_INITMOD(x86)
-DECLARE_NO_INITMOD(x86_sse41)
+DECLARE_NO_INITMOD(x86_amx)
+DECLARE_NO_INITMOD(x86_avx)
+DECLARE_NO_INITMOD(x86_avx2)
+DECLARE_NO_INITMOD(x86_avx512)
 DECLARE_NO_INITMOD(x86_cpu_features)
+DECLARE_NO_INITMOD(x86_sse41)
+// keep-sorted end
 #endif  // WITH_X86
 
 #ifdef WITH_POWERPC
@@ -321,9 +334,11 @@ DECLARE_NO_INITMOD(hexagon_cpu_features)
 #ifdef WITH_WEBASSEMBLY
 DECLARE_CPP_INITMOD(wasm_cpu_features)
 DECLARE_LL_INITMOD(wasm_math)
+DECLARE_CPP_INITMOD(wasm_thread_id)
 #else
 DECLARE_NO_INITMOD(wasm_cpu_features)
 DECLARE_NO_INITMOD(wasm_math)
+DECLARE_NO_INITMOD(wasm_thread_id)
 #endif  // WITH_WEBASSEMBLY
 
 #ifdef WITH_RISCV
@@ -630,11 +645,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
             }
         }
         module->setDataLayout(data_layout);
-#if LLVM_VERSION >= 210
         module->setTargetTriple(triple);
-#else
-        module->setTargetTriple(triple.str());
-#endif
     }
 
     // Link them all together
@@ -934,6 +945,46 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
     };
 
+    const auto add_posix_threads = [&] {
+        if (tsan) {
+            modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
+        } else {
+            modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+        }
+    };
+
+    const auto add_linux_thread_id = [&] {
+        if (t.arch == Target::X86) {
+            modules.push_back(get_initmod_linux_x86_thread_id(c, bits_64, debug));
+        } else if (t.arch == Target::ARM) {
+            modules.push_back(get_initmod_linux_arm_thread_id(c, bits_64, debug));
+        } else if (t.arch == Target::RISCV) {
+            modules.push_back(get_initmod_linux_riscv_thread_id(c, bits_64, debug));
+        } else if (t.arch == Target::POWERPC) {
+            modules.push_back(get_initmod_linux_powerpc_thread_id(c, bits_64, debug));
+        }
+    };
+
+    const auto add_linux_posix_threads = [&] {
+        add_linux_thread_id();
+        add_posix_threads();
+    };
+
+    const auto add_darwin_posix_threads = [&] {
+        modules.push_back(get_initmod_osx_thread_id(c, bits_64, debug));
+        add_posix_threads();
+    };
+
+    const auto add_fuchsia_posix_threads = [&] {
+        modules.push_back(get_initmod_fuchsia_thread_id(c, bits_64, debug));
+        add_posix_threads();
+    };
+
+    const auto add_wasm_posix_threads = [&] {
+        modules.push_back(get_initmod_wasm_thread_id(c, bits_64, debug));
+        add_posix_threads();
+    };
+
     if (module_type != ModuleGPU) {
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // OS-dependent modules
@@ -950,11 +1001,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_yield(c, bits_64, debug));
-                if (tsan) {
-                    modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
-                }
+                add_linux_posix_threads();
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::WebAssemblyRuntime) {
                 add_allocator();
@@ -966,7 +1013,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_linux_yield(c, bits_64, debug));
                 if (t.has_feature(Target::WasmThreads)) {
                     // Assume that the wasm libc will be providing pthreads
-                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+                    add_wasm_posix_threads();
                 } else {
                     modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
                 }
@@ -979,11 +1026,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_yield(c, bits_64, debug));
-                if (tsan) {
-                    modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
-                }
+                add_darwin_posix_threads();
                 modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
             } else if (t.os == Target::Android) {
@@ -998,11 +1041,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_android_io(c, bits_64, debug));
                 modules.push_back(get_initmod_android_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_yield(c, bits_64, debug));  // TODO: verify
-                if (tsan) {
-                    modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
-                }
+                add_linux_posix_threads();
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
@@ -1026,11 +1065,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_ios_io(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_yield(c, bits_64, debug));
-                if (tsan) {
-                    modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
-                }
+                add_darwin_posix_threads();
             } else if (t.os == Target::QuRT) {
                 modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
                 modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
@@ -1065,11 +1100,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_fuchsia_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_fuchsia_yield(c, bits_64, debug));
-                if (tsan) {
-                    modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
-                }
+                add_fuchsia_posix_threads();
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             }
         }
@@ -1118,7 +1149,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // multiple versions of a filter for different levels of x86 -- weak
                 // linking will pick one of the alignment modules unpredictably.
                 // Another way to go is to query the CPU features and align by
-                // 64 oonly if the procesor has AVX-512.
+                // 64 oonly if the processor has AVX-512.
                 // The choice to go 64 all the time is for simplicity and on the idea
                 // that it won't be a noticeable cost in the majority of x86 usage.
                 modules.push_back(get_initmod_alignment_64(c, bits_64, debug));
@@ -1331,7 +1362,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         }
         if (t.has_feature(Target::WebGPU)) {
             if (t.os == Target::Windows) {
-                // TOOD: Test on Windows and enable this.
+                // TODO: Test on Windows and enable this.
                 // See https://github.com/halide/Halide/issues/7249
                 user_error << "WebGPU runtime not yet supported on Windows.\n";
             } else {
@@ -1409,7 +1440,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
         // be inlined to be used.
         //
         // However libdevice has a few routines that are marked
-        // "noinline" which must either be changed to alow inlining or
+        // "noinline" which must either be changed to allow inlining or
         // preserved in generated code. This preserves the intent of
         // keeping these routines out-of-line and hence called by
         // not marking them AvailableExternally.
@@ -1420,11 +1451,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
     }
 
     llvm::Triple triple("nvptx64--");
-#if LLVM_VERSION >= 210
     modules[0]->setTargetTriple(triple);
-#else
-    modules[0]->setTargetTriple(triple.str());
-#endif
 
     llvm::DataLayout dl("e-i64:64-v16:16-v32:32-n16:32:64");
     modules[0]->setDataLayout(dl);

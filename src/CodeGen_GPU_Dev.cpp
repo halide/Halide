@@ -118,7 +118,8 @@ protected:
                                             op->image,
                                             op->param,
                                             const_true(),
-                                            op->alignment + ln);
+                                            op->alignment + ln,
+                                            op->is_streaming);
                 lane_values.push_back(Call::make(load_expr.type(),
                                                  Call::if_then_else,
                                                  {extract_lane(op->predicate, ln),
@@ -245,6 +246,20 @@ void CodeGen_GPU_C::visit(const Call *op) {
                 equiv.accept(this);
             }
         }
+    } else if (op->is_intrinsic(Call::strict_fma)) {
+        // All shader languages have fma
+        Expr equiv = Call::make(op->type, "fma", op->args, Call::PureExtern);
+        equiv.accept(this);
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GPU_C::visit(const Mod *op) {
+    if (op->type.is_float()) {
+        // All shader languages have fmod
+        Expr equiv = Call::make(op->type, "fmod", {op->a, op->b}, Call::PureExtern);
+        equiv.accept(this);
     } else {
         CodeGen_C::visit(op);
     }

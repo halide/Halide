@@ -247,7 +247,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     return node;
 }
 
-Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment) {
+Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment, bool is_streaming) {
     internal_assert(predicate.defined()) << "Load with undefined predicate\n";
     internal_assert(index.defined()) << "Load of undefined\n";
     internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
@@ -262,6 +262,7 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
     node->image = std::move(image);
     node->param = std::move(param);
     node->alignment = alignment;
+    node->is_streaming = is_streaming;
     return node;
 }
 
@@ -374,7 +375,7 @@ Stmt Acquire::make(Expr semaphore, Expr count, Stmt body) {
     return node;
 }
 
-Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment) {
+Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment, bool is_streaming) {
     internal_assert(predicate.defined()) << "Store with undefined predicate\n";
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
@@ -389,6 +390,7 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
     node->index = std::move(index);
     node->param = std::move(param);
     node->alignment = alignment;
+    node->is_streaming = is_streaming;
     return node;
 }
 
@@ -607,7 +609,8 @@ Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx) {
 
 namespace {
 
-const char *const intrinsic_op_names[] = {
+constexpr const char *intrinsic_op_names[] = {
+    // keep-sorted start
     "abs",
     "absd",
     "add_image_checks_marker",
@@ -641,6 +644,7 @@ const char *const intrinsic_op_names[] = {
     "fast_sin",
     "fast_tan",
     "fast_tanh",
+    "get_runtime_vscale",
     "get_user_context",
     "gpu_thread_barrier",
     "halving_add",
@@ -671,15 +675,14 @@ const char *const intrinsic_op_names[] = {
     "require",
     "require_mask",
     "return_second",
-    "rewrite_buffer",
     "round",
     "rounding_halving_add",
     "rounding_mul_shift_right",
     "rounding_shift_left",
     "rounding_shift_right",
     "saturating_add",
-    "saturating_sub",
     "saturating_cast",
+    "saturating_sub",
     "scatter_gather",
     "select_mask",
     "shift_left",
@@ -689,10 +692,12 @@ const char *const intrinsic_op_names[] = {
     "skip_stages_marker",
     "sliding_window_marker",
     "sorted_avg",
+    "stream_store_fence",
     "strict_add",
     "strict_cast",
     "strict_div",
     "strict_eq",
+    "strict_fma",
     "strict_le",
     "strict_lt",
     "strict_max",
@@ -716,10 +721,10 @@ const char *const intrinsic_op_names[] = {
     "widening_shift_left",
     "widening_shift_right",
     "widening_sub",
-    "get_runtime_vscale",
+    // keep-sorted end
 };
 
-static_assert(sizeof(intrinsic_op_names) / sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount,
+static_assert(std::size(intrinsic_op_names) == Call::IntrinsicOpCount,
               "intrinsic_op_names needs attention");
 
 }  // namespace
@@ -785,7 +790,7 @@ Expr Variable::make(Type type, const std::string &name, Buffer<> image, Paramete
 Expr Shuffle::make(const std::vector<Expr> &vectors,
                    const std::vector<int> &indices) {
     internal_assert(!vectors.empty()) << "Shuffle of zero vectors.\n";
-    internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
+    internal_assert(!indices.empty()) << "Shuffle with zero indices.\n";
     Type element_ty = vectors.front().type().element_of();
     int input_lanes = 0;
     for (const Expr &i : vectors) {
@@ -825,6 +830,21 @@ Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
     }
 
     return make(vectors, indices);
+}
+
+Expr Shuffle::make_transpose(Expr e, int cols) {
+    internal_assert(e.type().lanes() % cols == 0)
+        << "Transpose cols must divide the number of lanes.\n";
+    int rows = e.type().lanes() / cols;
+
+    std::vector<int> indices(e.type().lanes());
+    for (int j = 0; j < cols; j++) {
+        for (int i = 0; i < rows; i++) {
+            indices[j * rows + i] = i * cols + j;
+        }
+    }
+
+    return make({std::move(e)}, indices);
 }
 
 Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
@@ -967,6 +987,24 @@ Stmt Atomic::make(const std::string &producer_name,
     return node;
 }
 
+Stmt StreamingStore::make(const std::string &producer_name,
+                          Stmt body) {
+    internal_assert(body.defined()) << "StreamingStore must have a body statement.\n";
+    StreamingStore *node = new StreamingStore;
+    node->producer_name = producer_name;
+    node->body = std::move(body);
+    return node;
+}
+
+Stmt StreamingLoads::make(std::optional<std::vector<std::string>> names,
+                          Stmt body) {
+    internal_assert(body.defined()) << "StreamingLoads must have a body statement.\n";
+    StreamingLoads *node = new StreamingLoads;
+    node->names = std::move(names);
+    node->body = std::move(body);
+    return node;
+}
+
 Stmt HoistedStorage::make(const std::string &name,
                           Stmt body) {
     internal_assert(body.defined()) << "HoistedStorage must have a body statement.\n";
@@ -1022,6 +1060,33 @@ bool Shuffle::is_concat() const {
     // A concat is a ramp where the output has the same number of
     // lanes as the input.
     return indices.size() == input_lanes && is_ramp(indices);
+}
+
+bool Shuffle::is_transpose() const {
+    if (vectors.size() > 1 ||
+        (int)indices.size() != vectors[0].type().lanes() ||
+        indices.size() < 2 ||
+        indices[0] != 0 ||
+        indices[1] <= 0) {
+        return false;
+    }
+    int cols = indices[1];
+    int rows = vectors[0].type().lanes() / cols;
+    if ((int)indices.size() != rows * cols) {
+        return false;
+    }
+    for (int row = 0; row < rows; row++) {
+        for (int col = 0; col < cols; col++) {
+            if (indices[col * rows + row] != row * cols + col) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+int Shuffle::transpose_factor() const {
+    return indices[1] - indices[0];
 }
 
 bool Shuffle::is_slice() const {
@@ -1228,6 +1293,14 @@ void StmtNode<Atomic>::accept(IRVisitor *v) const {
     v->visit((const Atomic *)this);
 }
 template<>
+void StmtNode<StreamingStore>::accept(IRVisitor *v) const {
+    v->visit((const StreamingStore *)this);
+}
+template<>
+void StmtNode<StreamingLoads>::accept(IRVisitor *v) const {
+    v->visit((const StreamingLoads *)this);
+}
+template<>
 void StmtNode<HoistedStorage>::accept(IRVisitor *v) const {
     v->visit((const HoistedStorage *)this);
 }
@@ -1420,6 +1493,14 @@ Stmt StmtNode<Fork>::mutate_stmt(IRMutator *v) const {
 template<>
 Stmt StmtNode<Atomic>::mutate_stmt(IRMutator *v) const {
     return v->visit((const Atomic *)this);
+}
+template<>
+Stmt StmtNode<StreamingStore>::mutate_stmt(IRMutator *v) const {
+    return v->visit((const StreamingStore *)this);
+}
+template<>
+Stmt StmtNode<StreamingLoads>::mutate_stmt(IRMutator *v) const {
+    return v->visit((const StreamingLoads *)this);
 }
 template<>
 Stmt StmtNode<HoistedStorage>::mutate_stmt(IRMutator *v) const {

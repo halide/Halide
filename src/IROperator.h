@@ -226,7 +226,7 @@ void split_into_ands(const Expr &cond, std::vector<Expr> &result);
  * some stack memory for the buffer. If the shape_memory field is
  * undefined, it similarly uses stack memory for the shape. If the
  * shape_memory field is null, it uses the dim field already in the
- * buffer. Other unitialized fields will take on a value of zero in
+ * buffer. Other uninitialized fields will take on a value of zero in
  * the constructed buffer. */
 struct BufferBuilder {
     Expr buffer_memory, shape_memory;
@@ -244,7 +244,7 @@ Expr strided_ramp_base(const Expr &e, int stride = 1);
 
 /** Implementations of division and mod that are specific to Halide.
  * Use these implementations; do not use native C division or mod to
- * simplify Halide expressions. Halide division and modulo satisify
+ * simplify Halide expressions. Halide division and modulo satisfy
  * the Euclidean definition of division for integers a and b:
  *
  /code
@@ -671,7 +671,7 @@ inline Expr max(Expr a, float b) {
 }
 
 /** Returns an expression representing the greater of an expressions
- * vector, after doing any necessary type coersion using
+ * vector, after doing any necessary type coercion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4).
  * The expressions are folded from right ie. max(.., max(.., ..)).
@@ -706,7 +706,7 @@ inline Expr min(Expr a, float b) {
 }
 
 /** Returns an expression representing the lesser of an expressions
- * vector, after doing any necessary type coersion using
+ * vector, after doing any necessary type coercion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4).
  * The expressions are folded from right ie. min(.., min(.., ..)).
@@ -860,7 +860,7 @@ inline Expr select(const Expr &c0, const FuncRef &v0, const Expr &c1, const Func
  *                       c == 1, 50,  // Green
  *                               25); // Blue
  * This is tedious when the list is long. The following function
- * provide convinent syntax that allow one to write:
+ * provide convenient syntax that allow one to write:
  * img(x, y, c) = mux(c, {100, 50, 25});
  *
  * As with the select equivalent, if the first argument (the index) is
@@ -981,17 +981,24 @@ Expr pow(Expr x, Expr y);
  * mantissa. Vectorizes cleanly. */
 Expr erf(const Expr &x);
 
+/** Fused multiply-add. fma(a, b, c) is equivalent to a * b + c, but only
+ * rounded once at the end. For most targets, when not in a strict_float
+ * context, Halide will already generate fma instructions from a * b + c. This
+ * intrinsic's main purpose is to request a true fma inside a strict_float
+ * context. A true fma will be emulated on targets without one. */
+Expr fma(const Expr &, const Expr &, const Expr &);
+
 /** Struct that allows the user to specify precision requirements for functions
  * that are approximated. Several functions can be approximated using specialized
  * hardware instructions. If no hardware instructions are available, approximations
  * are implemented in Halide using polynomials or potentially Padé approximants.
  * Both the hardware instructions and the in-house approximations have a certain behavior
  * and precision. This struct allows you to specify which behavior and precision you
- * are interested in. Halide will select an appropriate implemenation that satisfies
+ * are interested in. Halide will select an appropriate implementation that satisfies
  * these requirements.
  *
  * There are two main aspects of specifying the precision:
- *  1. The objective for which the approximation is optimzed. This can be to reduce the
+ *  1. The objective for which the approximation is optimized. This can be to reduce the
  *     maximal absolute error (MAE), or to reduce the maximal error measured in
  *     units in last place (ULP). Some applications tend to naturally require low
  *     absolute error, whereas others might favor low relative error (for which maximal ULP
@@ -1319,7 +1326,7 @@ Expr operator>>(Expr x, int y);
  * Some examples:
  * \code
  *
- *     // Since Halide does not have direct type delcarations, casts
+ *     // Since Halide does not have direct type declarations, casts
  *     // below are used to indicate the types of the parameters.
  *     // Such casts not required or expected in actual code where types
  *     // are inferred.
@@ -1516,14 +1523,14 @@ inline Expr unreachable() {
  * computed value, or one or more other expressions in the cache key
  * instead of the parameter dependencies of the computation. The
  * single argument version is completely safe in that the cache key
- * will use the actual computed value -- it is difficult or imposible
+ * will use the actual computed value -- it is difficult or impossible
  * to produce erroneous caching this way. The more-than-one argument
  * version allows generating cache keys that do not uniquely identify
  * the computation and thus can result in caching errors.
  *
  * A potential use for the single argument version is to handle a
  * floating-point parameter that is quantized to a small
- * integer. Mutliple values of the float will produce the same integer
+ * integer. Multiple values of the float will produce the same integer
  * and moving the caching to using the integer for the key is more
  * efficient.
  *

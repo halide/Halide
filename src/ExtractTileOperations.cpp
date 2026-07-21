@@ -1,8 +1,11 @@
 #include "ExtractTileOperations.h"
 
-#include "IRMatch.h"
+#include "FindIntrinsics.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "MultiRamp.h"
+#include "Simplify.h"
 #include "Util.h"
 
 /** \file Support extraction of AMX instructions. */
@@ -24,7 +27,7 @@
  * striding over 4 byte areas.            │6 │
  * Normally the row of the LHS matrix,    │7 │
  * 123... would multiply with the column  │8 │
- * of the RHS matrix 123..., but with AMX └──┘
+ * of the RHS matrix 123..., but with AMX │8 │
  * this column is split up into a matrix of columns / 4 byte and rows * 4.
  * which then results in K/4 dot products per row.
  *
@@ -38,524 +41,376 @@ using std::vector;
 
 namespace {
 
-template<int Dim>
-struct Tile {
-    bool result;
-    Expr base;
-    Expr stride[Dim];
-    int extent[Dim];
-};
-
-enum class AMXOpType {
-    Int8,
-    Bfloat16,
-};
-
-/// returns the appropriate `Halide::Type` for the given operation type
-Type amx_op_type_result_type(AMXOpType op_ty) {
-    switch (op_ty) {
-    case AMXOpType::Int8:
-        return Int(32, 256);
-    case AMXOpType::Bfloat16:
-        return Float(32, 256);
-    default:
-        internal_error << "Unexpected";
-        return Type();
-    }
-}
-
-int amx_op_type_size(AMXOpType op_ty) {
-    switch (op_ty) {
-    case AMXOpType::Int8:
-        return 1;
-    case AMXOpType::Bfloat16:
-        return 2;
-    default:
-        internal_error << "Unexpected";
-        return -1;
-    }
-}
-
-const auto wild_i32 = Variable::make(Int(32), "*");
-const auto wild_i32x = Variable::make(Int(32, 0), "*");
-
-Tile<1> get_1d_tile_index(const Expr &e) {
-    if (const auto *r1 = e.as<Ramp>()) {
-
-        const auto stride_var = Variable::make(Int(32), "stride");
-        const auto v1 = Variable::make(Int(32), "v1");
-        const auto v2 = Variable::make(Int(32), "v2");
-        const auto v3 = Variable::make(Int(32), "v3");
-
-        Expr patterns[] = {
-            ((v1 * stride_var) + v2) * v3,
-            v3 * ((v1 * stride_var) + v2),
-            (v2 + (v1 * stride_var)) * v3,
-            v3 * (v2 + (v1 * stride_var)),
-        };
-
-        std::map<std::string, Expr> matches;
-        for (const auto &pattern : patterns) {
-            if (expr_match(pattern, r1->base, matches)) {
-                auto stride = std::move(matches["stride"]);
-                // stride must be a constant in order to not be confused with v1
-                if (stride.as<IntImm>()) {
-                    return {true, r1->base, {std::move(stride)}, {r1->lanes}};
-                }
-
-                // if stride wasn't a constant then v1 could possibly be the stride if constant
-                auto v1_expr = std::move(matches["v1"]);
-                if (v1_expr.as<IntImm>()) {
-                    return {true, r1->base, {std::move(v1_expr)}, {r1->lanes}};
-                }
-            }
-        }
-    }
-
-    return {};
-}
-
-Tile<2> get_2d_tile_index(const Expr &e) {
-    // ramp(ramp(base, 1, 4), x4(stride), 4)
-    vector<Expr> matches;
-    if (const auto *r1 = e.as<Ramp>()) {
-        if (const auto *r2 = r1->base.as<Ramp>()) {
-            auto ramp_2d_pattern = Ramp::make(Ramp::make(wild_i32, wild_i32, r2->lanes), Broadcast::make(wild_i32, r2->lanes), r1->lanes);
-            if (expr_match(ramp_2d_pattern, e, matches)) {
-                return {true, std::move(matches[0]), {std::move(matches[2]), std::move(matches[1])}, {r1->lanes, r2->lanes}};
-            }
-        }
-    }
-    return {};
-}
-
-Tile<3> get_3d_tile_index(const Expr &e) {
-    vector<Expr> matches;
-
-    // there could be a sub node
-    const Sub *sub = e.as<Sub>();
-    const Add *add = nullptr;
-
-    if (sub) {
-        add = sub->a.as<Add>();
-    } else {
-        add = e.as<Add>();
-    }
-
-    if (!add) {
-        return {};
-    }
-
-    const auto &first = add->a;
-    const auto &second = add->b;
-
-    // ramp(x[x*r](base), x[x*r](stride), x) + x[x*y](ramp(idx, 1, r))
-
-    const auto *r1 = first.as<Ramp>();
-    const auto *b2 = second.as<Broadcast>();
-    if (!r1 && !b2) {
-        // Try switching the order
-        r1 = second.as<Ramp>();
-        b2 = first.as<Broadcast>();
-    }
-    if (!r1 || !b2) {
-        return {};
-    }
-
-    const auto *b1 = r1->base.as<Broadcast>();
-    const auto *r2 = b2->value.as<Ramp>();
-
-    if (!b1 || !r2) {
-        return {};
-    }
-
-    int x_tile = r1->lanes;
-    int r_tile = r2->lanes;
-    int y_tile = b1->lanes / r_tile;
-    if (y_tile != b2->lanes / x_tile) {
-        return {};
-    }
-
-    auto pattern1 = Ramp::make(Broadcast::make(wild_i32, b1->lanes), Broadcast::make(wild_i32, b1->lanes), r1->lanes);
-    if (!expr_match(pattern1, first, matches)) {
-        return {};
-    }
-    Expr base = std::move(matches[0]);
-    Expr x_stride = std::move(matches[1]);
-
-    auto pattern2 = Broadcast::make(Ramp::make(wild_i32, wild_i32, r2->lanes), b2->lanes);
-    if (!expr_match(pattern2, second, matches)) {
-        return {};
-    }
-    base += std::move(matches[0]);
-    Expr r_stride = std::move(matches[1]);
-
-    if (sub) {
-        Expr adj = sub->b;
-        const Broadcast *bcast = adj.as<Broadcast>();
-
-        if (!bcast) {
-            return {};
-        }
-
-        if (bcast->lanes != b1->lanes * r1->lanes) {
-            return {};
-        }
-
-        base -= bcast->value;
-    }
-
-    return {true, base, {x_stride, 0, r_stride}, {x_tile, y_tile, r_tile}};
-}
-
-/**
- * \brief Get the 3d rhs tile index configuration
- *
- * \param e index expression
- * \param element_width the width of the elements, 1 for u8/i8, 2 for bf16
- * \return Tile<3> the tile configuration found
- *
- * The pattern which is getting matched looks roughly like
- * `broadcast(ramp(0, 1, r), x*y) / broadcast(4, x*y*r) + optional(broadcast(base, x*y*r)) * broadcast(8, x*y*r) +
- *  broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r) +
- *  broadcast(ramp(broadcast(_, r), broadcast(4, r), x) , y)`
- */
-Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
-    const auto *sub = e.as<Sub>();
-    const Add *add_lhs = nullptr;
-
-    // there's not always a sub pattern
-    // This depends on whether we have an ImageParam or a Buffer
-    if (!sub) {
-        add_lhs = e.as<Add>();
-    } else {
-        add_lhs = sub->a.as<Add>();
-    }
-
-    if (!add_lhs) {
-        return {};
-    }
-
-    // The right hand side of the add expression is used for retrieving the dimensions of the matrix.
-    // obtain the x, y, r dimensions
-    // this expr looks like below, the shape of `add_lhs->a` can be seen further down below
-    // broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r) + broadcast(ramp(broadcast(base, r), broadcast(4, r), x) , y)
-    const Add *dim_expr = add_lhs->b.as<Add>();
-
-    if (!dim_expr) {
-        return {};
-    }
-
-    // broadcast(ramp(broadcast(_, r), broadcast(4, r), x), y)
-    const Broadcast *base_stride_bc = dim_expr->b.as<Broadcast>();
-
-    if (!base_stride_bc) {
-        return {};
-    }
-
-    int tile_y = base_stride_bc->lanes;
-
-    // broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r)
-    const Mod *mod = dim_expr->a.as<Mod>();
-
-    if (!mod) {
-        return {};
-    }
-
-    // broadcast(ramp(0, 1, r), x*y)
-    const Broadcast *bc_ramp = mod->a.as<Broadcast>();
-
-    if (!bc_ramp) {
-        return {};
-    }
-
-    int tile_xy = bc_ramp->lanes;
-    int tile_x = tile_xy / tile_y;
-
-    // ramp(0, 1, r)
-    const Ramp *r_ramp = bc_ramp->value.as<Ramp>();
-
-    if (!r_ramp) {
-        return {};
-    }
-
-    int tile_r = r_ramp->lanes;
-
-    // get the base and stride
-    // ramp(broadcast(_, r), broadcast(4, r), x)
-    const Ramp *base_stride_ramp = base_stride_bc->value.as<Ramp>();
-
-    if (!base_stride_ramp) {
-        return {};
-    }
-
-    // broadcast(_, r)
-    const Broadcast *base_bc = base_stride_ramp->base.as<Broadcast>();
-
-    if (!base_bc) {
-        return {};
-    }
-
-    Expr base = base_bc->value;
-    Expr stride;
-
-    bool found_stride = false;
-
-    // the following pattern will match the following shape
-    // broadcast(ramp(0, 1, k), x*y) / broadcast(4, x*y*k) * broadcast(_, x*y*k)
-    // where the stride is marked by _.
-
-    // this stride pattern can occur if `tile_r` is the same size as `acc`
-    auto stride_pattern = Broadcast::make(Ramp::make(0, 1, tile_r), tile_x * tile_y) / Broadcast::make((4 / element_width), tile_x * tile_y * tile_r) * Broadcast::make(wild_i32, tile_x * tile_y * tile_r);
-
-    std::vector<Expr> results{};
-    if (expr_match(stride_pattern, add_lhs->a, results)) {
-        found_stride = true;
-        stride = std::move(results[0]);
-    }
-
-    // This pattern is similar to the above except with an additional offset to iterate over the tiles in the k dimension
-    // (broadcast(ramp(0, 1, k), m * n) / broadcast(4, m*n*k) + _) * broadcast(_, m*n*k)
-    // here the first _ marks the base and the second _ the stride.
-    if (!found_stride) {
-        stride_pattern = (Broadcast::make(Ramp::make(0, 1, tile_r), tile_x * tile_y) / Broadcast::make((4 / element_width), tile_x * tile_y * tile_r) + wild_i32) * Broadcast::make(wild_i32, tile_x * tile_y * tile_r);
-        if (expr_match(stride_pattern, add_lhs->a, results)) {
-            found_stride = true;
-            stride = std::move(results[1]);
-            base = std::move(results[0]) * stride + base;
-        }
-    }
-
-    if (!found_stride) {
-        return {};
-    }
-
-    return {true, base, {stride, 0, 0}, {tile_x, tile_y, tile_r}};
-}
-
-struct BaseStride {
-    bool result{false};
-    Expr base{};
-    Expr stride{};
-};
-
-BaseStride get_rhs_tile_index(const Expr &index, int element_width, int tile_x, int tile_y, int tile_r) {
-    const auto rhs_tile2 = get_2d_tile_index(index);
-
-    if (!rhs_tile2.result) {
-        const auto rhs_tile1 = get_1d_tile_index(index);
-
-        if (!rhs_tile1.result) {
-            auto rhs_tile3 = get_3d_rhs_tile_index(index, element_width);
-            if (rhs_tile3.extent[0] != tile_x || rhs_tile3.extent[1] != tile_y || rhs_tile3.extent[2] != tile_r) {
-                return {};
-            }
-
-            return {true, rhs_tile3.base, rhs_tile3.stride[0] * element_width};
-        } else {
-            if (rhs_tile1.extent[0] != tile_y * tile_r) {
-                return {};
-            }
-
-            // times 4 because of the rhs layout, each vector used by AMX is 4 bytes in size.
-            // For the 4 gets divided by the element width which means each vector has 4 elements in u8/i8 and
-            // 2 elements for bf16.
-            return {true, rhs_tile1.base, rhs_tile1.stride[0] * (4 / element_width)};
-        }
-    } else {
-        if (tile_y != rhs_tile2.extent[0] || tile_r != rhs_tile2.extent[1]) {
-            return {};
-        }
-
-        return {true, rhs_tile2.base, rhs_tile2.stride[0]};
-    }
-}
-
 struct Matmul {
     bool result = false;
     Stmt stmt;
-    int tile_x;
-    int tile_y;
-    int tile_r;
+    int I = 0;
+    int J = 0;
+    int K = 0;
 };
 
-Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_type) {
-    // m[ramp(0, 1, S)] = VectorAdd(lhs[{XYR tile}] * xX(rhs[{YR tile}])) + m[ramp(0, 1, S)]
-    const auto wild_i8x = Variable::make(Int(8, 0), "*");
-    const auto wild_u8x = Variable::make(UInt(8, 0), "*");
-    const auto wild_bf16x = Variable::make(BFloat(16, 0), "*");
-    const auto wild_f32x = Variable::make(Float(32, 0), "*");
+Matmul convert_to_matmul(const Store *op, const string &new_name) {
+    // We expect the pattern:
+    //
+    // out[idx] = reduce_add(widen(lhs[multiramp]) * widen(rhs[multiramp])) + out[idx]
+    //
+    // Though if the multiramp has an outer dimension of stride zero it may have
+    // been hoisted outwards to just a broadcast of the widened value.
 
-    vector<Expr> matches;
-    if (op_type == AMXOpType::Int8) {
-        const auto pattern1 = wild_i32x + wild_i32x;
-        if (!expr_match(pattern1, op->value, matches)) {
-            return {};
-        }
-    } else {  // AMXOpType::Bfloat16
-        const auto pattern1 = wild_f32x + wild_f32x;
-        if (!expr_match(pattern1, op->value, matches)) {
-            return {};
-        }
+    auto fail = [&](const char *reason) -> Matmul {
+        user_error << "Matrix multiply not recognized. Store to AMX allocation must be a "
+                   << "zero-initialization or a sum of a vector reduce op and a load from "
+                   << "the same allocation. In the following store, " << reason << ".\n"
+                   << Stmt(op);
+        return Matmul{};
+    };
+
+    // Peel lets
+    std::vector<std::pair<std::string, Expr>> peeled_lets;
+    Expr value = op->value;
+    while (const Let *let = value.as<Let>()) {
+        peeled_lets.emplace_back(let->name, let->value);
+        value = let->body;
     }
 
-    const auto *reduce = matches[0].as<VectorReduce>();
-    const auto *load = matches[1].as<Load>();
+    // The RHS must be an add
+    const auto *add = value.as<Add>();
+    if (!add) {
+        return fail("the right-hand-side is not an add");
+    }
+
+    // The add must be between a vector reduce and a load. The simplifier will
+    // have placed the vector reduce to the left, due to canonicalization of
+    // commutative ops.
+    Expr lhs = add->a;
+    const auto *reduce = lhs.as<VectorReduce>();
     if (!reduce || reduce->op != VectorReduce::Add) {
-        return {};
+        return fail("the right-hand-side is not a vector reduction plus a load");
     }
+
+    // The load must be to the same addresses as the store (i.e. this is a +=)
+    Expr rhs = add->b;
+    const auto *load = rhs.as<Load>();
     if (!load || load->name != op->name || !equal(load->index, op->index)) {
-        return {};
+        return fail("the right-hand-side load is not from the same address as the store");
     }
 
-    if (op_type == AMXOpType::Int8) {
-        auto pattern2 = cast(Int(32, 0), cast(Int(32, 0), wild_i8x) * wild_i32x);
-        auto pattern2_unsigned = cast(Int(32, 0), cast(Int(32, 0), wild_u8x) * wild_i32x);
+    // There must be no predicate on the load or store
+    if (!is_const_one(load->predicate) || !is_const_one(op->predicate)) {
+        return fail("the load or store is predicated");
+    }
 
-        if (!(expr_match(pattern2, reduce->value, matches) || expr_match(pattern2_unsigned, reduce->value, matches))) {
-            return {};
+    // The vector reduce must be of a multiply. Unpack it and rebind lhs and rhs
+    // to mean the lhs and rhs of the mul. For integers we normalize various
+    // ways of doing the widening multiply by running find_intrinsics. For
+    // floats we do the opposite and canonicalize away from intrinsics, because
+    // FindIntrinsics does not currently lift float widening_muls.
+    if (reduce->type.is_int_or_uint()) {
+        Expr reduce_value = find_intrinsics(reduce->value);
+
+        const auto *cast = reduce_value.as<Cast>();
+        if (!cast) {
+            return fail("the vector reduction operand or result types are not supported");
         }
-    } else {
-        auto pattern2 = cast(Float(32, 0), cast(Float(32, 0), wild_bf16x) * wild_f32x);
 
-        if (!expr_match(pattern2, reduce->value, matches)) {
-            return {};
+        if (const auto *call = Call::as_intrinsic(cast->value, {Call::widening_mul})) {
+            // Simplify to convert bit-math back to multiply, div, mod
+            lhs = simplify(lower_intrinsics(call->args[0]));
+            rhs = simplify(lower_intrinsics(call->args[1]));
+        } else {
+            return fail("the vector reduction is not of a widening multiply");
+        }
+
+        if (lhs.type().bits() != 8 ||
+            rhs.type().bits() != 8) {
+            return fail("the vector reduction operand or result types are not supported");
+        }
+
+    } else {
+        // Lower a widening_mul intrinsic, as they can be used but aren't lifted to for bf16.
+        Expr reduce_value = simplify(lower_intrinsics(reduce->value));
+        const auto *mul = reduce_value.as<Mul>();
+        if (!mul) {
+            return fail("the vector reduction is not of a widening multiply");
+        }
+        lhs = mul->a;
+        rhs = mul->b;
+    }
+
+    // There may be a broadcast next (it can get hoisted outside of other ops)
+    auto debroadcast = [](Expr &e) -> int {
+        if (const Broadcast *b = e.as<Broadcast>()) {
+            int lanes = b->lanes;
+            e = b->value;
+            return lanes;
+        } else {
+            return 1;
+        }
+    };
+    int lhs_broadcast = debroadcast(lhs);
+    int rhs_broadcast = debroadcast(rhs);
+
+    // Unpack the casts, if it was a direct multiply. This should only happen
+    // for floats (the integer branch above already extracted the cast inputs
+    // from the widening_mul intrinsic).
+    if (reduce->type.is_float()) {
+        const auto *lhs_cast = lhs.as<Cast>();
+        const auto *rhs_cast = rhs.as<Cast>();
+        if (!lhs_cast || !rhs_cast) {
+            return fail("the vector reduction is not of a widening multiply");
+        }
+        lhs = lhs_cast->value;
+        rhs = rhs_cast->value;
+        if (!lhs.type().is_bfloat() ||
+            rhs.type().element_of() != lhs.type().element_of()) {
+            return fail("the vector reduction operand or result types are not supported");
         }
     }
 
-    const auto *lhs_load = matches[0].as<Load>();
-    const auto *rhs_broadcast = matches[1].as<Broadcast>();
-
-    const Cast *rhs_cast = nullptr;
-
-    if (lhs_load && !rhs_broadcast) {
-        // now working on a larger k dimension
-        // with a K dimension of 4 (or 2) with bf16 all the elements in the right-hand matrix are
-        // layed out in a way that multiplying with a column can be done in a single dot product.
-        // Therefore the indexing can be reused with a broadcast,
-        // with higher K dimensions this can no longer be done and the broadcast won't exist.
-        // ┌──┐
-        // │1 │
-        // │2 │
-        // │3 │   ┌────────┐
-        // │4 │   │1234    │
-        // │5 │   │5678    │
-        // │6 │   └────────┘
-        // │7 │
-        // │8 │
-        // └──┘
-        rhs_cast = matches[1].as<Cast>();
-    } else {
-        rhs_cast = rhs_broadcast->value.as<Cast>();
+    // Underneath all of this must be a load
+    // TODO: What if we want to multiply by the same matrix multiple times? It might be a let binding.
+    const auto *lhs_load = lhs.as<Load>();
+    const auto *rhs_load = rhs.as<Load>();
+    if (!lhs_load || !rhs_load) {
+        return fail("the matrix multiply operands are not loads");
+    }
+    // The loads must be unpredicated
+    if (!is_const_one(lhs_load->predicate) || !is_const_one(rhs_load->predicate)) {
+        return fail("the matrix multiply operands are predicated loads");
     }
 
-    if (!lhs_load || !rhs_cast) {
-        return {};
+    // Now we analyze the load indices as multiramps
+    MultiRamp lhs_mr, rhs_mr;
+    Scope<Expr> empty_scope;
+    if (!is_multiramp(lhs_load->index, empty_scope, &lhs_mr) ||
+        !is_multiramp(rhs_load->index, empty_scope, &rhs_mr)) {
+        return fail("the matrix multiply loads indices are not affine");
     }
 
-    if (rhs_cast) {
-        bool is_i8_u8 = rhs_cast->value.type().element_of() == Int(8) || rhs_cast->value.type().element_of() == UInt(8);
-        bool is_bf16 = rhs_cast->value.type().element_of() == BFloat(16);
-
-        if ((op_type == AMXOpType::Int8 && !is_i8_u8) || (op_type == AMXOpType::Bfloat16 && !is_bf16)) {
-            user_error << "Expected rhs type of " << (op_type == AMXOpType::Int8 ? "i8/u8" : "bf16")
-                       << ", got " << rhs_cast->value.type() << " instead.\nIn Expression: " << Expr(rhs_cast);
+    // Add back on any broadcasts as a stride-0 outer dim.
+    auto add_broadcast = [](MultiRamp &mr, int extent) {
+        if (extent > 1) {
+            mr.strides.push_back(make_zero(mr.base.type()));
+            mr.lanes.push_back(extent);
         }
-    } else {
-        return {};
+    };
+    add_broadcast(lhs_mr, lhs_broadcast);
+    add_broadcast(rhs_mr, rhs_broadcast);
+
+    // In a matrix multiply with row-major inputs and outputs, the algorithm
+    // looks like:
+    //
+    // C(j, i) += A(k, i) * B(j, k)
+    //
+    // (Recall that for matrices where the rows are stored densely in memory, Halide
+    // is indexed col-major)
+    // The canonical loop nest order, from innermost out, is k, j, i. So you'd
+    // expect the following vector shape (again, from innermost out):
+    // [K, J, I]
+    // And the following strides for A and B respectively:
+    // [1, 0, ?] [?, 1, 0]
+    // Where the question marks are the strides in memory that separate rows the LHS and RHS.
+
+    // AMX however splits the storage of K into 32-bit chunks and reorders that
+    // innermost for both A and B. This changes the algorithm to:
+    // C(j, i) += A(ki, ko, i) * B(ki, j, ko)
+    // the shape to:
+    // [Ki, Ko, J, I]
+    // and the strides to:
+    // [1, Ki, 0, ?] [1, ?, Ki, 0]
+
+    // So next we need to:
+    // 1) Deduce what Ki, Ko, are.
+    // 2) Deduce which is the LHS and which is the RHS
+    // 3) Deduce what I, J are.
+    // 4) extract those two question marks, and validate the
+    // rest is as-expected.
+
+    // The reduction's K dimension will be split into inner and outer elements.
+    int element_width = lhs_load->type.bytes();
+    int K = reduce->value.type().lanes() / reduce->type.lanes();
+    int Ki = 4 / element_width;
+    int Ko = K / Ki;
+
+    // Now deduce LHS and RHS. First some helpers.
+    auto swap_sides = [&]() {
+        std::swap(lhs, rhs);
+        std::swap(lhs_mr, rhs_mr);
+        std::swap(lhs_load, rhs_load);
+    };
+
+    auto swizzled = [](const MultiRamp &mr) {
+        // Count the number of non-broadcast dimensions
+        int count = 0;
+        for (int i = 0; i < mr.dimensions(); i++) {
+            count += !is_const_zero(mr.strides[i]);
+        }
+        return count > 2;
+    };
+
+    auto has_trailing_zero = [](const MultiRamp &mr) {
+        return !mr.lanes.empty() && is_const_zero(mr.strides.back());
+    };
+
+    // The RHS is the one that's swizzled. The LHS should be stored densely in
+    // K. If both sides are stored densely either Ko is one (there's no outer
+    // dimension in the swizzle) or J is one (there's no dimension that would go
+    // between Ki and Ko). The RHS is the one that doesn't depend on I, so it
+    // should have a trailing zero stride. If neither side is swizzled and
+    // neither side has a trailing zero stride then it doesn't matter which side
+    // is which.
+    if (swizzled(lhs_mr) || (!swizzled(rhs_mr) && has_trailing_zero(lhs_mr))) {
+        swap_sides();
     }
 
-    const auto *rhs_load = rhs_cast->value.as<Load>();
-    if (!rhs_load) {
-        return {};
-    }
-
-    const auto lhs_tile = get_3d_tile_index(lhs_load->index);
-
-    if (!lhs_tile.result) {
-        return {};
-    }
-
-    const int tile_x = lhs_tile.extent[0];
-    const int tile_y = lhs_tile.extent[1];
-    const int tile_r = lhs_tile.extent[2];
-    const int factor = reduce->value.type().lanes() / reduce->type.lanes();
-
-    Expr rhs_base;
-    Expr rhs_stride;
-
-    auto opt_base_stride = get_rhs_tile_index(rhs_load->index, amx_op_type_size(op_type), tile_x, tile_y, tile_r);
-
-    if (!opt_base_stride.result) {
-        return {};
-    }
-
-    rhs_base = opt_base_stride.base;
-    rhs_stride = opt_base_stride.stride;
-
-    if (op->index.type().lanes() != tile_x * tile_y ||
-        factor != tile_r) {
-        return {};
-    }
-
-    // {rows, colbytes, var, index}
-    auto lhs_var = Variable::make(Handle(), lhs_load->name);
-    const auto &lhs_load_type = lhs_load->type;
-    int element_width = lhs_load_type.bytes();
-    auto lhs_type = lhs_load_type.with_lanes(1024 / element_width);
-    auto lhs = Call::make(lhs_type, "tile_load", {tile_x, tile_r * element_width, lhs_var, lhs_tile.base * element_width, lhs_tile.stride[0] * element_width}, Call::Intrinsic);
-
-    auto rhs_var = Variable::make(Handle(), rhs_load->name);
-    const auto &rhs_load_type = rhs_load->type;
-    auto rhs_type = rhs_load_type.with_lanes(1024 / element_width);
-
-    auto rhs = Call::make(rhs_type, "tile_load", {tile_r / (4 / element_width), tile_y * 4, rhs_var, rhs_base * element_width, rhs_stride}, Call::Intrinsic);
-    auto res_type = amx_op_type_result_type(op_type);
-
-    // {rows, colbytes, acc, out, lhs, rhs}
-    auto out = Load::make(res_type, new_name, Ramp::make(0, 1, 256), {}, {}, const_true(256), {});
-
-    // 4 bytes for i32, f32
-    auto colbytes = tile_y * 4;
-    auto matmul = Call::make(res_type, "tile_matmul", {tile_x, colbytes, tile_r, out, lhs, rhs}, Call::Intrinsic);
-    auto store = Store::make(new_name, matmul, Ramp::make(0, 1, 256), Parameter(), const_true(256), ModulusRemainder());
-    return {true, std::move(store), tile_x, tile_y, tile_r};
-}
-
-Stmt convert_to_zero(const Store *op, int tile_x, int tile_y, const string &new_name) {
-    if (const auto *ramp = op->index.as<Ramp>()) {
-        if (const auto *bcast = op->value.as<Broadcast>()) {
-            if (is_const_one(ramp->stride) &&
-                is_const_zero(bcast->value) &&
-                (bcast->lanes == tile_x * tile_y)) {
-                auto rows = Cast::make(Int(16), tile_x);
-                auto bytes = op->value.type().bytes();
-                auto colbytes = Cast::make(Int(16), tile_y * bytes);
-                const auto &store_type = op->value.type();
-                // will be f32 or i32
-                auto tile_zero_type = store_type.with_lanes(1024 / store_type.bytes());
-                auto val = Call::make(tile_zero_type, "tile_zero", {rows, colbytes}, Call::Intrinsic);
-                auto store = Store::make(new_name, std::move(val), Ramp::make(0, 1, 256), Parameter(), const_true(256), ModulusRemainder());
-                return store;
+    auto unique_lanes = [](const MultiRamp &mr) {
+        int u = 1;
+        for (int i = 0; i < mr.dimensions(); i++) {
+            if (!is_const_zero(mr.strides[i])) {
+                u *= mr.lanes[i];
             }
         }
+        return u;
+    };
+
+    // Now deduce I, J. The output has I * J lanes. The LHS has I * K unique
+    // addresses loaded, and the RHS has J * K unique addresses.
+    int IJ = reduce->type.lanes();
+    int IK = unique_lanes(lhs_mr);
+    int I = IK / K;
+    int J = IJ / I;
+
+    // Coerce both MRs into the canonical [Ki, Ko, J, I] shape (innermost
+    // first). When Ko == 1, the second slot is just an extent-1 dim and
+    // strides_for_shape will return a 0 stride there. The expected strides
+    // we'll then validate are:
+    //   lhs: [1, Ki, 0, ?]   (with `?` the LHS row stride)
+    //   rhs: [1, ?, Ki, 0]   (with `?` the RHS row stride between Ko chunks)
+    std::vector<int>
+        shape{Ki, Ko, J, I};
+    std::vector<Expr> lhs_strides, rhs_strides;
+    if (!lhs_mr.strides_for_shape(shape, &lhs_strides) ||
+        !rhs_mr.strides_for_shape(shape, &rhs_strides)) {
+        return fail("a matrix multiply operand has an unsupported access pattern");
     }
-    return {};
+
+    if (!is_const_one(lhs_strides[0]) ||
+        !is_const_one(rhs_strides[0]) ||
+        (Ko > 1 && !is_const(lhs_strides[1], Ki)) ||
+        (J > 1 && !is_const(rhs_strides[2], Ki)) ||
+        !is_const_zero(lhs_strides[2]) ||
+        !is_const_zero(rhs_strides[3])) {
+        return fail("the storage layout for a matrix multiply operand is unsupported by AMX");
+    }
+
+    // Both sides of the multiply must be things that fit in AMX registers. We
+    // could manually split up too-large matrices here into a collection of
+    // matrix multiply ops, but for now we just assert.
+    {
+        Type t = op->value.type();
+        bool result_ok = t.bytes() * I * J <= 1024;
+        bool lhs_ok = lhs.type().bytes() * I * K <= 1024;
+        bool rhs_ok = rhs.type().bytes() * K * J <= 1024;
+        if (!result_ok || !lhs_ok || !rhs_ok) {
+            return fail("one more more matrices are too large to fit in AMX registers (more than 1024 bytes)");
+        }
+        if (I > 16) {
+            return fail("the result matrix has more than 16 rows");
+        }
+        if (Ko > 16) {
+            return fail("the RHS matrix has more than 16 rows");
+        }
+    }
+
+    Expr rhs_stride_bytes = Ko > 1 ? rhs_strides[1] * element_width : make_zero(rhs_mr.base.type());
+    Expr lhs_stride_bytes = lhs_strides[3] * element_width;
+
+    // Build the AMX intrinsics.
+    auto lhs_var = Variable::make(Handle(), lhs_load->name);
+    auto lhs_type = lhs_load->type.with_lanes(1024 / element_width);
+    auto lhs_call = Call::make(lhs_type, "tile_load",
+                               {I, K * element_width, lhs_var,
+                                lhs_mr.base * element_width, lhs_stride_bytes},
+                               Call::Intrinsic);
+
+    auto rhs_var = Variable::make(Handle(), rhs_load->name);
+    auto rhs_type = rhs_load->type.with_lanes(1024 / element_width);
+    auto col_bytes = J * 4;  // 4 bytes per innermost K slice
+    auto rhs_call = Call::make(rhs_type, "tile_load",
+                               {Ko, col_bytes, rhs_var,
+                                rhs_mr.base * element_width, rhs_stride_bytes},
+                               Call::Intrinsic);
+
+    Type res_type = op->value.type().with_lanes(256);
+    Expr subtile_idx = Ramp::make(0, 1, 256);
+    auto out_load = Load::make(res_type, new_name, subtile_idx, {}, {}, const_true(256), {});
+
+    auto matmul = Call::make(res_type, "tile_matmul",
+                             {I, col_bytes, K, out_load, lhs_call, rhs_call},
+                             Call::Intrinsic);
+    auto store = Store::make(new_name, matmul, std::move(subtile_idx), Parameter(), const_true(256), ModulusRemainder());
+    for (auto &[name, value] : reverse_view(peeled_lets)) {
+        store = LetStmt::make(name, std::move(value), store);
+    }
+    return {true, std::move(store), I, J, K};
 }
 
-Stmt convert_to_tile_store(const Store *op, const string &amx_name, int tile_x, int tile_y) {
-    auto tile = get_2d_tile_index(op->index);
-    if (tile.result && tile.extent[0] == tile_x && tile.extent[1] == tile_y) {
-        auto out = Variable::make(Handle(), op->name);
-        auto tile_type = op->value.type().with_lanes(256);
-        auto tile_val = Load::make(tile_type, amx_name, Ramp::make(0, 1, 256), {}, {}, const_true(256), {});
-        auto bytes = op->value.type().bytes();
-        internal_assert(bytes == 4) << "AMX store only supported for int32 and float32 output, not for " << op->value.type() << "\n";
-        // {tile_x, tile_y, var, base, stride}
-        auto store = Call::make(Int(32), "tile_store", {tile_x, tile_y * bytes, std::move(out), tile.base * bytes, tile.stride[0] * bytes, std::move(tile_val)}, Call::Intrinsic);
-        return Evaluate::make(std::move(store));
+Stmt convert_to_zero(const Store *op, const string &new_name, int I, int J) {
+    auto rows = Cast::make(Int(16), I);
+    auto bytes = op->value.type().bytes();
+    auto colbytes = Cast::make(Int(16), J * bytes);
+    const auto &store_type = op->value.type();
+    auto tile_zero_type = store_type.with_lanes(1024 / store_type.bytes());
+    auto val = Call::make(tile_zero_type, "tile_zero", {rows, colbytes}, Call::Intrinsic);
+    Expr subtile_idx = Ramp::make(0, 1, 256);
+    return Store::make(new_name, std::move(val), std::move(subtile_idx), Parameter(), const_true(256), ModulusRemainder());
+}
+
+Stmt convert_to_tile_store(const Store *op, const string &amx_name, int I, int J) {
+    auto fail = [&](const char *reason) {
+        user_error << "Store of AMX register to memory not supported. "
+                   << reason << ".\n"
+                   << Stmt(op);
+        return Stmt{};
+    };
+
+    if (!is_const_one(op->predicate)) {
+        return fail("The store has a predicate");
     }
-    return {};
+    MultiRamp mr;
+    if (!is_multiramp(op->index, Scope<Expr>::empty_scope(), &mr)) {
+        return fail("The store index is not affine");
+    }
+    if (mr.total_lanes() != I * J) {
+        return fail("There are too many lanes for the deduced matrix shape");
+    }
+
+    // Coerce the index into the canonical 2D shape: stride-1 inner of
+    // lanes J, row-stride outer of lanes I. Either dim may be
+    // extent 1 — strides_for_shape returns a zero stride for those slots.
+    std::vector<Expr> mr_strides;
+    if (!mr.strides_for_shape({J, I}, &mr_strides)) {
+        return fail("The store index is incompatible with the deduced matrix shape");
+    }
+    if (J > 1 && !is_const_one(mr_strides[0])) {
+        return fail("The innermost stride of the store index is not one");
+    }
+    Expr x_stride = mr_strides[1];
+
+    auto out_var = Variable::make(Handle(), op->name);
+    auto tile_type = op->value.type().with_lanes(256);
+    Expr subtile_idx = Ramp::make(0, 1, 256);
+    auto tile_val = Load::make(tile_type, amx_name, std::move(subtile_idx), {}, {}, const_true(256), {});
+    auto bytes = op->value.type().bytes();
+    // This should have been caught earlier, so internal assert
+    internal_assert(bytes == 4)
+        << "AMX store only supported for int32 and float32 output, not for "
+        << op->value.type() << "\n";
+    auto store = Call::make(Int(32), "tile_store",
+                            {I, J * bytes, std::move(out_var),
+                             mr.base * bytes, x_stride * bytes, std::move(tile_val)},
+                            Call::Intrinsic);
+    return Evaluate::make(std::move(store));
 }
 
 class ExtractTileOperations : public IRMutator {
@@ -563,12 +418,89 @@ class ExtractTileOperations : public IRMutator {
 
     string tile_name;
     string amx_name;
-    vector<Stmt> pending_stores;
+    int pass = 0;
     bool in_allocate = false;
-    int found_tile_x = -1;
-    int found_tile_y = -1;
-    int found_tile_r = -1;
-    AMXOpType op_type;
+    int found_I = -1;
+    int found_J = -1;
+    int found_K = -1;
+
+    // An AMXTile allocation may represent multiple AMX accumulator
+    // registers as 2D sub-tiles. This map tracks those.
+    std::vector<MultiRamp> amx_subtiles;
+
+    // Returns a unique subtile index for a load or store index, or -1 if it
+    // overlaps with an existing subtile, or is otherwise poorly behaved.
+    int get_subtile(const Expr &index) {
+        MultiRamp mr;
+        if (!is_multiramp(index, Scope<Expr>::empty_scope(), &mr)) {
+            user_error << "Access to AMX tile not affine: " << index << "\n";
+        }
+        if (!can_prove(mr.alias_free())) {
+            // What are you doing?
+            user_error << "Access to AMX tile may have duplicated lanes: " << index << "\n";
+        }
+        if (amx_subtiles.empty()) {
+            amx_subtiles.push_back(std::move(mr));
+            return 0;
+        }
+
+        // All strides and lanes must match across all subtiles, or we give up.
+        const MultiRamp &first = amx_subtiles[0];
+        if (mr.dimensions() != first.dimensions()) {
+            user_error
+                << "Access to AMX tile does not have the same shape as other accesses to the same memory.";
+            return -1;
+        }
+        for (int i = 0; i < first.dimensions(); i++) {
+            if (!can_prove(mr.strides[i] == first.strides[i]) ||
+                mr.lanes[i] != first.lanes[i]) {
+                user_error
+                    << "Access to AMX tile has different size and strides to other "
+                    << "accesses to the same memory. All accesses must have the same "
+                    << "subtile size and strides: " << index;
+            }
+        }
+
+        // Now check for disjointedness
+        // Add a synthetic dimension, the purpose of which will become clear.
+        mr.strides.emplace_back();
+        mr.lanes.push_back(2);
+        for (int i = 0; i < (int)amx_subtiles.size(); i++) {
+            auto &other = amx_subtiles[i];
+            // One of two things must be true:
+            // 1) All of the lanes of mr equal the corresponding lane of
+            // other. We've already checked the strides and lanes, so it's just
+            // a matter of checking the base.
+            if (can_prove(mr.base == other.base)) {
+                return i;
+            }
+
+            // 2) None of the lanes or mr equal any of the lanes of other. To do
+            // this we'll construct a combined mr that can be either 'mr' or
+            // 'other', and ask if it's alias-free. This is what the synthetic
+            // dimension was for.
+            mr.strides.back() = mr.base - other.base;
+            if (!can_prove(mr.alias_free())) {
+                user_error
+                    << "Failed to prove access to AMX does not partially overlap "
+                    << "another distinct access: " << index;
+                return -1;
+            }
+        }
+
+        // Didn't already exist and didn't alias with anything.
+        mr.strides.pop_back();
+        mr.lanes.pop_back();
+        amx_subtiles.push_back(std::move(mr));
+        return (int)amx_subtiles.size() - 1;
+    }
+
+    // Returns an index expression for a given load or store index. user_asserts if impossible
+    std::string get_subtile_name(const Expr &index) {
+        int idx = get_subtile(index);
+        internal_assert(idx >= 0);  // errors handled already
+        return amx_name + std::to_string(idx);
+    }
 
     Stmt visit(const Allocate *op) override {
         if (op->memory_type == MemoryType::AMXTile) {
@@ -577,30 +509,29 @@ class ExtractTileOperations : public IRMutator {
                 (op->type.is_float() && op->type.bits() == 32))
                 << "scheduled tile operations must yield 32-bit integers or 32-bit floats";
 
-            if (op->type.is_int() && op->type.bits() == 32) {
-                op_type = AMXOpType::Int8;
-            } else {
-                op_type = AMXOpType::Bfloat16;
-            }
-
-            user_assert(!in_allocate) << "Already in AMX allocation: " << amx_name;
-            ScopedValue<string> old_amx_name(amx_name, op->name + ".amx");
+            // We only support one live AMX allocation at a time for now
+            user_assert(!in_allocate)
+                << "Already in AMX allocation at allocation for " << op->name
+                << ". We do not currently support multiple nested AMX matrix multiplies.";
+            ScopedValue<string> old_amx_name(amx_name, op->name + ".amx.");
             ScopedValue<string> old_tile_name(tile_name, op->name);
             ScopedValue<bool> old_in_alloc(in_allocate, true);
             Stmt body = op->body;
 
-            pending_stores.clear();
+            pass = 0;
             body = mutate(body);
-            if (found_tile_x < 0 || found_tile_y < 0 || found_tile_r < 0) {
-                return op;
-            }
-            if (!pending_stores.empty()) {
-                // Really only need to go over the pending stores
-                body = mutate(body);
-            }
+            user_assert(found_I >= 0 && found_J >= 0 && found_K >= 0)
+                << op->name << " is stored in AMXTile memory, but no matrix multiply "
+                << "operation was found that stores to it, so the shape of the tile "
+                << "was unable to be determined.\n";
+            pass = 1;
+            body = mutate(body);
 
-            auto alloc_type = amx_op_type_result_type(op_type);
-            return Allocate::make(amx_name, alloc_type, MemoryType::AMXTile, {1}, const_true(), body);
+            for (int i = 0; i < (int)amx_subtiles.size(); i++) {
+                body = Allocate::make(amx_name + std::to_string(i), op->type.element_of(),
+                                      MemoryType::AMXTile, {256}, const_true(), body);
+            }
+            return body;
         }
         return IRMutator::visit(op);
     }
@@ -609,70 +540,88 @@ class ExtractTileOperations : public IRMutator {
         if (op->name != tile_name) {
             return op;
         }
-        return Free::make(amx_name);
+        Stmt s;
+        for (int i = 0; i < (int)amx_subtiles.size(); i++) {
+            Stmt f = Free::make(amx_name + std::to_string(i));
+            if (s.defined()) {
+                s = Block::make(std::move(s), std::move(f));
+            } else {
+                s = std::move(f);
+            }
+        }
+        return s;
     }
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->name != tile_name) {
             return IRMutator::visit(op);
         }
-
         auto body = mutate(op->body);
         return ProducerConsumer::make(amx_name, op->is_producer, std::move(body));
     }
 
     Expr visit(const Load *op) override {
-        // Any tile load will be matched elsewhere, so a load here means that
-        // the AMX tile is used outside of a tile instruction.
         user_assert(op->name != tile_name) << "AMX tile allocation used outside a tile instruction";
         return IRMutator::visit(op);
     }
 
     Stmt visit(const Store *op) override {
+        // There are three operations on a tile register:
+        // 1) Zero-initialization
+        // 2) Matrix multiply
+        // 3) Stores to memory
+
+        // For the matrix multiply we can deduce the tile shape. The stores to
+        // memory and zero-intialization may be flat loads and stores, but to
+        // emit the code we need to know the shape. We do two passes - in the
+        // first we just recognize the matrix multiplies, and in the second we
+        // recognize the initializations and stores.
+
+        // All three convert ops either succeed, or do their own user_error internally.
+
         if (op->name != tile_name) {
             const auto *load = op->value.as<Load>();
             if (!load || load->name != tile_name) {
                 return op;
             }
-            auto store = convert_to_tile_store(op, amx_name, found_tile_x, found_tile_y);
-            user_assert(store.defined()) << "Store to AMX tile allocation of a non-tile value";
-            return store;
+            if (pass == 1) {
+                return convert_to_tile_store(op, get_subtile_name(load->index), found_I, found_J);
+            } else {
+                return op;
+            }
         }
 
-        auto matmul = convert_to_matmul(op, amx_name, op_type);
-        if (matmul.result) {
-            user_assert(
-                (found_tile_x < 0 || matmul.tile_x == found_tile_x) &&
-                (found_tile_y < 0 || matmul.tile_y == found_tile_y) &&
-                (found_tile_r < 0 || matmul.tile_r == found_tile_r))
-                << "Found different tile sizes for AMX tile allocation";
-            found_tile_x = matmul.tile_x;
-            found_tile_y = matmul.tile_y;
-            found_tile_r = matmul.tile_r;
+        std::string subtile_name = get_subtile_name(op->index);
 
+        if (is_const_zero(op->value)) {
+            if (pass == 1) {
+                return convert_to_zero(op, subtile_name, found_I, found_J);
+            } else {
+                return op;
+            }
+        }
+
+        if (pass == 0) {
+            auto matmul = convert_to_matmul(op, subtile_name);
+            user_assert((found_I < 0 || matmul.I == found_I) &&
+                        (found_J < 0 || matmul.J == found_J) &&
+                        (found_K < 0 || matmul.K == found_K))
+                << "Found inconsistent tile sizes for AMX tile allocation across multiple "
+                << "matrix multiplies that store to it.";
+            found_I = matmul.I;
+            found_J = matmul.J;
+            found_K = matmul.K;
             return matmul.stmt;
-        }
-
-        if (found_tile_x < 0 || found_tile_y < 0) {
-            pending_stores.emplace_back(op);
+        } else {
             return op;
         }
-
-        auto zero = convert_to_zero(op, found_tile_x, found_tile_y, amx_name);
-        if (zero.defined()) {
-            return zero;
-        }
-
-        // Otherwise there is some other operation using the allocation, so we cannot use the AMX instructions
-        user_error << "Found non-tile operations for AMX tile allocation";
-        return op;
     }
 };
 
 }  // namespace
 
 Stmt extract_tile_operations(const Stmt &s) {
-    return ExtractTileOperations().mutate(s);
+    return ExtractTileOperations()(s);
 }
 }  // namespace Internal
 }  // namespace Halide

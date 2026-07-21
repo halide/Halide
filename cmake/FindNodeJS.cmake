@@ -1,7 +1,4 @@
-find_program(
-    NodeJS_EXECUTABLE
-    NAMES node nodejs
-)
+find_program(NodeJS_EXECUTABLE NAMES node nodejs)
 
 set(NodeJS_VERSION "")
 if (NodeJS_EXECUTABLE)
@@ -23,7 +20,5 @@ find_package_handle_standard_args(
 
 if (NodeJS_FOUND AND NOT TARGET NodeJS::node)
     add_executable(NodeJS::node IMPORTED)
-    set_target_properties(
-        NodeJS::node PROPERTIES IMPORTED_LOCATION "${NodeJS_EXECUTABLE}"
-    )
+    set_target_properties(NodeJS::node PROPERTIES IMPORTED_LOCATION "${NodeJS_EXECUTABLE}")
 endif ()

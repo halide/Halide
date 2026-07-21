@@ -157,7 +157,7 @@ private:
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
+            return Store::make(op->name, value, index, op->param, predicate, op->alignment, op->is_streaming);
         }
     }
 
@@ -172,7 +172,7 @@ private:
         } else {
             return Load::make(op->type, op->name, std::move(index),
                               op->image, op->param, std::move(predicate),
-                              op->alignment);
+                              op->alignment, op->is_streaming);
         }
     }
 
@@ -322,11 +322,11 @@ private:
 }  // namespace
 
 Stmt eliminate_bool_vectors(const Stmt &s) {
-    return EliminateBoolVectors().mutate(s);
+    return EliminateBoolVectors()(s);
 }
 
 Expr eliminate_bool_vectors(const Expr &e) {
-    return EliminateBoolVectors().mutate(e);
+    return EliminateBoolVectors()(e);
 }
 
 }  // namespace Internal

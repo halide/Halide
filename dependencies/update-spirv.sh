@@ -6,15 +6,15 @@ cd -- "$(dirname -- "$0")" || exit 1
 
 GIT_BRANCH="$1"
 if [ -z "$GIT_BRANCH" ]; then
-  echo "error: usage: $0 <git-branch>"
-  echo "remark: the current <git-branch> is sdk-1.3.231"
-  exit 1
+    echo "error: usage: $0 <git-branch>"
+    echo "remark: the current <git-branch> is sdk-1.3.231"
+    exit 1
 fi
 
 mkdir -p spirv
 
-cleanup () {
-  rm -rf SPIRV-Headers
+cleanup() {
+    rm -rf SPIRV-Headers
 }
 
 trap cleanup SIGINT SIGTERM EXIT

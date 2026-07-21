@@ -1,7 +1,11 @@
 #include "Simplify_Internal.h"
 
+#include <algorithm>
+#include <numeric>
+
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
+#include "MultiRamp.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -101,7 +105,7 @@ Stmt Simplify::visit(const IfThenElse *op) {
         else_acquire &&
         equal(then_acquire->semaphore, else_acquire->semaphore) &&
         equal(then_acquire->count, else_acquire->count)) {
-        // TODO: This simplification sometimes prevents useful loop partioning/no-op
+        // TODO: This simplification sometimes prevents useful loop partitioning/no-op
         // trimming from happening, e.g. it rewrites:
         //
         //   for (x, min + -2, extent + 2) {
@@ -342,12 +346,14 @@ Stmt Simplify::visit(const Store *op) {
     }
 
     ExprInfo base_info;
-    if (const Ramp *r = index.as<Ramp>()) {
-        mutate(r->base, &base_info);
+    const Ramp *r_index = index.as<Ramp>();
+    if (r_index) {
+        mutate(r_index->base, &base_info);
     }
     base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
 
     const Load *load = value.as<Load>();
+    const Shuffle *shuf = index.as<Shuffle>();
     const Broadcast *scalar_pred = predicate.as<Broadcast>();
     if (scalar_pred && !scalar_pred->value.type().is_scalar()) {
         // Nested vectorization
@@ -355,20 +361,74 @@ Stmt Simplify::visit(const Store *op) {
     }
 
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
+    int A;
 
     if (is_const_zero(predicate)) {
         // Predicate is always false
         return Evaluate::make(0);
     } else if (scalar_pred && !is_const_one(scalar_pred->value)) {
         return IfThenElse::make(scalar_pred->value,
-                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes(), nullptr), align));
+                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes(), nullptr), align, op->is_streaming));
     } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
         // foo[x] = foo[x] or foo[x] = undef is a no-op
         return Evaluate::make(0);
-    } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index) && align == op->alignment) {
+    } else if (shuf && shuf->is_concat()) {
+        // Break a store of a concat of vector indices into separate stores. A
+        // concat index will result in a general scatter at codegen time. We
+        // should just break it up here, where there is a hope that the
+        // individual elements might be simplifiable to dense ramps.
+        std::string var_name = unique_name('t');
+        Expr var = Variable::make(value.type(), var_name);
+        std::vector<Stmt> stores;
+        int lanes = 0;
+        for (const Expr &idx : shuf->vectors) {
+            stores.push_back(Store::make(op->name,
+                                         Shuffle::make_slice(var, lanes, 1, idx.type().lanes()),
+                                         idx,
+                                         op->param,
+                                         Shuffle::make_slice(predicate, lanes, 1, idx.type().lanes()),
+                                         ModulusRemainder{},
+                                         op->is_streaming));
+            lanes += idx.type().lanes();
+        }
+        Stmt s = Block::make(stores);
+        s = LetStmt::make(var_name, value, s);
+        return mutate(s);
+    } else if (MultiRamp mr;
+               index.type().is_vector() &&
+               // Don't do expensive analysis in the common case of a load of a ramp of scalars.
+               !(r_index && r_index->base.type().is_scalar()) &&
+               // It's a multi-dimensional multiramp
+               is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
+               mr.dimensions() > 1 &&
+               // The innermost stride isn't already one
+               !is_const_one(mr.strides[0]) &&
+               // We can successfully rotate a stride one dimension innermost
+               (A = mr.rotate_stride_one_innermost()) > 0) {
+
+        // Rotating the stride one dimension innermost in the index made the
+        // resulting store dense. Now permute the value and predicate to match
+        // the new lane order using a single make_transpose. Later in lowering,
+        // after flattening the nested ramps, this turns into a concat of dense
+        // ramps and hits the case above.
+
+        Expr permuted_value = Shuffle::make_transpose(value, A);
+        Expr permuted_predicate;
+        const Broadcast *b_pred = predicate.as<Broadcast>();
+        if (b_pred && b_pred->value.type().is_scalar()) {
+            permuted_predicate = predicate;
+        } else {
+            permuted_predicate = Shuffle::make_transpose(predicate, A);
+        }
+        return mutate(Store::make(op->name, permuted_value, mr.to_expr(),
+                                  op->param, permuted_predicate, align, op->is_streaming));
+    } else if (predicate.same_as(op->predicate) &&
+               value.same_as(op->value) &&
+               index.same_as(op->index) &&
+               align == op->alignment) {
         return op;
     } else {
-        return Store::make(op->name, value, index, op->param, predicate, align);
+        return Store::make(op->name, value, index, op->param, predicate, align, op->is_streaming);
     }
 }
 
@@ -701,6 +761,28 @@ Stmt Simplify::visit(const Atomic *op) {
         return Atomic::make(op->producer_name,
                             op->mutex_name,
                             std::move(body));
+    }
+}
+
+Stmt Simplify::visit(const StreamingStore *op) {
+    Stmt body = mutate(op->body);
+    if (is_no_op(body)) {
+        return Evaluate::make(0);
+    } else if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return StreamingStore::make(op->producer_name, std::move(body));
+    }
+}
+
+Stmt Simplify::visit(const StreamingLoads *op) {
+    Stmt body = mutate(op->body);
+    if (is_no_op(body)) {
+        return Evaluate::make(0);
+    } else if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return StreamingLoads::make(op->names, std::move(body));
     }
 }
 

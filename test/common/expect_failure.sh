@@ -7,8 +7,8 @@
 echo Running "$1"
 
 if $1; then
-  echo "Expected Failure from '$1', but got Success"
-  exit 255
+    echo "Expected Failure from '$1', but got Success"
+    exit 255
 fi
 
 echo "Success"

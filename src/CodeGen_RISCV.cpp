@@ -1,6 +1,6 @@
 #include "CSE.h"
+#include "CodeGen_CPU.h"
 #include "CodeGen_Internal.h"
-#include "CodeGen_Posix.h"
 #include "Debug.h"
 #include "IREquality.h"
 #include "IRMatch.h"
@@ -62,6 +62,8 @@ struct RISCVIntrinsic {
 const RISCVIntrinsic signed_intrinsic_defs[] = {
     {"vaadd", Type::Int, "halving_add", {Type::Int, Type::Int}, AddVLArg | RoundDown | Commutes},
     {"vaadd", Type::Int, "rounding_halving_add", {Type::Int, Type::Int}, AddVLArg | RoundUp | Commutes},
+    {"vsadd", Type::Int, "saturating_add", {Type::Int, Type::Int}, AddVLArg | Commutes},
+    {"vssub", Type::Int, "saturating_sub", {Type::Int, Type::Int}, AddVLArg},
     {"vwadd", {Type::Int, 2}, "widening_add", {Type::Int, Type::Int}, AddVLArg | MangleReturnType | Commutes},
     {"vwsub", {Type::Int, 2}, "widening_sub", {Type::Int, Type::Int}, AddVLArg | MangleReturnType},
     {"vwmul", {Type::Int, 2}, "widening_mul", {Type::Int, Type::Int}, AddVLArg | MangleReturnType | Commutes},
@@ -70,6 +72,8 @@ const RISCVIntrinsic signed_intrinsic_defs[] = {
 const RISCVIntrinsic unsigned_intrinsic_defs[] = {
     {"vaaddu", {Type::UInt}, "halving_add", {Type::UInt, Type::UInt}, AddVLArg | RoundDown | Commutes},
     {"vaaddu", {Type::UInt}, "rounding_halving_add", {Type::UInt, Type::UInt}, AddVLArg | RoundUp | Commutes},
+    {"vsaddu", {Type::UInt}, "saturating_add", {Type::UInt, Type::UInt}, AddVLArg | Commutes},
+    {"vssubu", {Type::UInt}, "saturating_sub", {Type::UInt, Type::UInt}, AddVLArg},
     {"vwaddu", {Type::UInt, 2}, "widening_add", {Type::UInt, Type::UInt}, AddVLArg | MangleReturnType | Commutes},
     {"vwsubu", {Type::UInt, 2}, "widening_sub", {Type::UInt, Type::UInt}, AddVLArg | MangleReturnType},
     {"vwmulu", {Type::UInt, 2}, "widening_mul", {Type::UInt, Type::UInt}, AddVLArg | MangleReturnType | Commutes},
@@ -113,14 +117,14 @@ const RISCVIntrinsic *MatchRISCVIntrisic(const Call *op) {
 }
 
 /** A code generator that emits RISC-V code from a given Halide stmt. */
-class CodeGen_RISCV : public CodeGen_Posix {
+class CodeGen_RISCV : public CodeGen_CPU {
 public:
     /** Create a RISC-V code generator. Processor features can be
      * enabled using the appropriate flags in the target struct. */
     CodeGen_RISCV(const Target &);
 
 protected:
-    using CodeGen_Posix::visit;
+    using CodeGen_CPU::visit;
 
     string mcpu_target() const override;
     string mcpu_tune() const override;
@@ -138,7 +142,7 @@ private:
 };
 
 CodeGen_RISCV::CodeGen_RISCV(const Target &t)
-    : CodeGen_Posix(t) {
+    : CodeGen_CPU(t) {
     use_llvm_vp_intrinsics = true;
     user_assert(native_vector_bits() > 0) << "No vector_bits was specified for RISCV codegen; "
                                           << "this is almost certainly a mistake. You should add -rvv-vector_bits_N "
@@ -223,7 +227,7 @@ void CodeGen_RISCV::visit(const Call *op) {
     bool handled = (intrinsic_def != nullptr) &&
                    call_riscv_vector_intrinsic(*intrinsic_def, op);
     if (!handled) {
-        CodeGen_Posix::visit(op);
+        CodeGen_CPU::visit(op);
     }
 }
 
@@ -240,11 +244,11 @@ int vscale_lanes(int vscale, const Type &type) {
  *       flip arguments to ensure the scalar is second. (LLVM may handle this, don't know.)
  *     - Widening and narrowing are supported via the relative_scale field of
  *       the RISCVIntrinsic structure is used to indicate a difference in type
- *       bit wdith, not lanes, between the slot and the smallest size used in the call.
+ *       bit width, not lanes, between the slot and the smallest size used in the call.
  *       ("Slot" is either return type or an argument.
  *     - Currently this only handles two argument ops.
  *
- * TODO: Curently there are no floating-point intrinsics supported.
+ * TODO: Currently there are no floating-point intrinsics supported.
  *       Add masking support.
  *       Handle RISC V specific reductions.
  */
@@ -402,13 +406,13 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
 
 }  // anonymous namespace
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_RISCV(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_RISCV(const Target &target) {
     return std::make_unique<CodeGen_RISCV>(target);
 }
 
 #else  // WITH_RISCV
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_RISCV(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_RISCV(const Target &target) {
     user_error << "RISCV not enabled for this build of Halide.\n";
     return nullptr;
 }

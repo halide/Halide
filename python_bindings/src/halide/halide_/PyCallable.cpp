@@ -83,20 +83,28 @@ public:
 
         const auto define_one_arg = [&argv, &scalar_storage, &buffers, &cci](const Argument &c_arg, py::handle value, size_t slot) {
             if (c_arg.is_buffer()) {
-                // If the argument is already a Halide Buffer of some sort,
-                // skip pybuffer_to_halidebuffer entirely, since the latter requires
-                // a non-null host ptr, but we might want such a buffer for bounds inference,
-                // and we don't need the intermediate HalideBuffer wrapper anyway.
                 halide_buffer_t *raw_buffer;
                 if (py::isinstance<Halide::Buffer<>>(value)) {
+                    // If the argument is already a Halide Buffer of some sort,
+                    // skip pybuffer_to_halidebuffer entirely, since the latter requires
+                    // a non-null host ptr, but we might want such a buffer for bounds inference,
+                    // and we don't need the intermediate HalideBuffer wrapper anyway.
+                    //
+                    // Do not reverse axes.
                     auto b = cast_to<Halide::Buffer<>>(value);
                     raw_buffer = b.raw_buffer();
                 } else {
+                    // If it's a buffer-protocol object (e.g. a NumPy array), the convention
+                    // is to always reverse axes.
+                    constexpr bool reverse_axes = true;
+                    py::buffer py_buffer_value = cast_to<py::buffer>(value);
                     const bool writable = c_arg.is_output();
-                    const bool reverse_axes = true;
+
+                    const py::buffer_info value_buffer_info = py_buffer_value.request(writable);
+
                     buffers.buffers[slot] =
-                        pybuffer_to_halidebuffer<void, AnyDims, MaxFastDimensions>(
-                            cast_to<py::buffer>(value), writable, reverse_axes);
+                        pybufferinfo_to_halidebuffer<void, AnyDims, MaxFastDimensions>(
+                            value_buffer_info, reverse_axes);
                     raw_buffer = buffers.buffers[slot].raw_buffer();
                 }
                 // Mark all input buffers as having a dirty host, so that the Halide call will
@@ -110,12 +118,12 @@ public:
                 argv[slot] = &scalar_storage[slot];
 
 #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE, FIELD)               \
-    case halide_type_t(CODE, BITS).as_u32():                               \
+    case halide_type_t(CODE, BITS):                                        \
         scalar_storage[slot].u.FIELD = cast_to<TYPE>(value);               \
         cci[slot] = Callable::make_scalar_qcci(halide_type_t(CODE, BITS)); \
         break;
 
-                switch (((halide_type_t)c_arg.type).element_of().as_u32()) {
+                switch (c_arg.type.to_abi()) {
                     HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 32, float, f32)
                     HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 64, double, f64)
                     HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 8, int8_t, i8)
@@ -129,7 +137,7 @@ public:
                     HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 64, uint64_t, u64)
                     HALIDE_HANDLE_TYPE_DISPATCH(halide_type_handle, 64, uint64_t, u64)  // Handle types are always uint64, regardless of pointer size
                 default:
-                    _halide_user_assert(0) << "Unsupported type in Callable argument list: " << c_arg.type << "\n";
+                    _halide_user_error << "Unsupported type in Callable argument list: " << c_arg.type << "\n";
                 }
 
 #undef HALIDE_HANDLE_TYPE_DISPATCH

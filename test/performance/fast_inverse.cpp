@@ -20,6 +20,17 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // SVE2-capable cores (e.g. Neoverse V1/V2, Ampere Altra) have fast
+    // enough fdiv that the frecpe+frecps approximation used by fast_inverse
+    // is not reliably faster. Additionally, Halide generates wide scalable
+    // vectors (e.g. <vscale x 32 x float>) that LLVM (at time of writing)
+    // cannot optimize through llvm.vector.insert/extract, causing register
+    // spilling and overhead that does not occur with fixed NEON vectors.
+    if (target.has_feature(Target::SVE2)) {
+        printf("[SKIP] SVE2-capable cores typically have fast division; fast_inverse is not expected to win.\n");
+        return 0;
+    }
+
     Func slow, fast;
     Var x;
     Param<float> p(1.0f);

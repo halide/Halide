@@ -402,7 +402,7 @@ public:
             } select_to_if_then_else;
 
             for (auto &e : exprs) {
-                e.value = select_to_if_then_else.mutate(e.value);
+                e.value = select_to_if_then_else(e.value);
             }
         }
 
@@ -849,11 +849,15 @@ public:
         // Compute the intrinsic relationships between the stages of
         // the functions.
 
-        // Figure out which functions will be inlined away
+        // Figure out which functions will be inlined away. First sanity check
+        // that none of the outputs are inlined, or the code below would do the
+        // wrong thing with them.
+        for (const Function &o : outputs) {
+            internal_assert(!o.schedule().compute_level().is_inlined());
+        }
         vector<bool> inlined(f.size());
         for (size_t i = 0; i < inlined.size(); i++) {
-            if (i < f.size() - 1 &&
-                f[i].schedule().compute_level().is_inlined() &&
+            if (f[i].schedule().compute_level().is_inlined() &&
                 f[i].can_be_inlined()) {
                 inlined[i] = true;
                 inliner.to_inline.insert(f[i]);
@@ -896,16 +900,6 @@ public:
                 cond_val.value = inliner.do_inlining(cond_val.value);
             }
         }
-
-        // Remove the inlined stages
-        vector<Stage> new_stages;
-        for (const auto &stage : stages) {
-            if (!stage.func.schedule().compute_level().is_inlined() ||
-                !stage.func.can_be_inlined()) {
-                new_stages.push_back(stage);
-            }
-        }
-        new_stages.swap(stages);
 
         // Dump the stages post-inlining for debugging
         /*
@@ -1382,8 +1376,7 @@ Stmt bounds_inference(Stmt s,
     s = For::make("<outermost>", 0, 0, ForType::Serial, Partition::Never, DeviceAPI::None, s);
 
     s = BoundsInference(funcs, fused_func_groups, fused_pairs_in_groups,
-                        outputs, func_bounds, target)
-            .mutate(s);
+                        outputs, func_bounds, target)(s);
     return s.as<For>()->body;
 }
 

@@ -160,6 +160,24 @@ void add_tasks(const Target &target, std::vector<Task> &tasks) {
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
+    // LLVM 20 hangs and LLVM 21 asserts (getFixedValue on scalable TypeSize)
+    // in the AArch64 backend for SVE. Fixed in LLVM 22 by:
+    // https://github.com/llvm/llvm-project/commit/d1500d12be60 (PR #169764)
+    if (Internal::get_llvm_version() < 220 &&
+        target.has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
+               Internal::get_llvm_version());
+        return 0;
+    }
+
+    // TODO(https://github.com/halide/Halide/issues/8985): LLVM's JIT emits
+    // misaligned jump tables on arm-32 with arm_fp16, causing SIGILL.
+    if (target.arch == Target::ARM && target.bits == 32 &&
+        target.has_feature(Target::ARMFp16)) {
+        printf("[SKIP] arm-32 JIT with arm_fp16 hits LLVM jump table misalignment bug.\n");
+        return 0;
+    }
+
     std::vector<Task> tasks;
     add_tasks(target, tasks);
 

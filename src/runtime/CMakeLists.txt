@@ -1,11 +1,8 @@
-find_package(
-    VulkanHeaders 1.3.296 REQUIRED
-    HINTS "${Halide_SOURCE_DIR}/dependencies/vulkan"
-)
+find_package(VulkanHeaders 1.3.296 REQUIRED HINTS "${Halide_SOURCE_DIR}/dependencies/vulkan")
 get_target_property(VulkanHeaders_INCLUDE_DIR Vulkan::Headers INTERFACE_INCLUDE_DIRECTORIES)
 
-# Keep these lists in alphabetical order.
 set(RUNTIME_CPP
+    # keep-sorted start ignore_prefixes=#
     aarch64_cpu_features
     alignment_128
     alignment_32
@@ -29,6 +26,7 @@ set(RUNTIME_CPP
     force_include_types
     fuchsia_clock
     fuchsia_host_cpu_count
+    fuchsia_thread_id
     fuchsia_yield
     gpu_device_selection
     halide_buffer_t
@@ -40,8 +38,12 @@ set(RUNTIME_CPP
     ios_io
     linux_aarch64_cpu_features
     linux_arm_cpu_features
+    linux_arm_thread_id
     linux_clock
     linux_host_cpu_count
+    linux_powerpc_thread_id
+    linux_riscv_thread_id
+    linux_x86_thread_id
     linux_yield
     metal
     metal_objc_arm
@@ -56,6 +58,7 @@ set(RUNTIME_CPP
     osx_clock
     osx_get_symbol
     osx_host_cpu_count
+    osx_thread_id
     osx_yield
     posix_aligned_alloc
     posix_allocator
@@ -86,8 +89,8 @@ set(RUNTIME_CPP
     tracing
     vulkan
     wasm_cpu_features
-    # TODO(https://github.com/halide/Halide/issues/7248)
-    # webgpu
+    wasm_thread_id
+    # webgpu # TODO(https://github.com/halide/Halide/issues/7248)
     webgpu_dawn
     webgpu_emscripten
     windows_aarch64_cpu_features_arm
@@ -105,9 +108,11 @@ set(RUNTIME_CPP
     windows_yield
     write_debug_image
     x86_cpu_features
+    # keep-sorted end
 )
 
 set(RUNTIME_LL
+    # keep-sorted start
     aarch64
     arm
     arm_no_neon
@@ -123,15 +128,19 @@ set(RUNTIME_LL
     x86_avx2
     x86_avx512
     x86_sse41
+    # keep-sorted end
 )
 
 set(RUNTIME_BC
+    # keep-sorted start
     compute_20
     compute_30
     compute_35
+    # keep-sorted end
 )
 
 set(RUNTIME_HEADER_FILES
+    # keep-sorted start
     HalideBuffer.h
     HalidePyTorchCudaHelpers.h
     HalidePyTorchHelpers.h
@@ -145,6 +154,7 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeQurt.h
     HalideRuntimeVulkan.h
     HalideRuntimeWebGPU.h
+    # keep-sorted end
 )
 
 # Need to create an object library for this because CMake
@@ -186,7 +196,8 @@ set(RUNTIME_CXX_FLAGS
     -Wsign-compare
     -Wimplicit-fallthrough
     -Wno-sync-alignment
-    -isystem "${VulkanHeaders_INCLUDE_DIR}"
+    -isystem
+    "${VulkanHeaders_INCLUDE_DIR}"
 )
 
 foreach (i IN LISTS RUNTIME_CPP)
@@ -251,11 +262,12 @@ foreach (i IN LISTS RUNTIME_CPP)
 
         set(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${i}.cpp")
 
-        set(RUNTIME_DEFINES -DCOMPILING_HALIDE_RUNTIME -DBITS_${j}
-            -DHALIDE_VERSION=${Halide_VERSION}
+        set(RUNTIME_DEFINES
+            -DCOMPILING_HALIDE_RUNTIME -DBITS_${j} -DHALIDE_VERSION=${Halide_VERSION}
             -DHALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
             -DHALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
-            -DHALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
+            -DHALIDE_VERSION_PATCH=${Halide_VERSION_PATCH}
+        )
 
         set(RUNTIME_DEFINES_debug -g -DDEBUG_RUNTIME ${RUNTIME_DEFINES})
 
@@ -266,27 +278,38 @@ foreach (i IN LISTS RUNTIME_CPP)
             set(INITMOD "_initmod_${i}_${j}${SUFFIX}.cpp")
             set(SYMBOL "halide_internal_initmod_${i}_${j}${SUFFIX}")
 
-            set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S -MD -MF "${basename}.d")
+            set(clang_flags
+                ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${RUNTIME_DEFINES${SUFFIX}} -m${j}
+                -target ${TARGET} -emit-llvm -S -MD -MF "${basename}.d"
+            )
 
             if (CMAKE_EXPORT_COMPILE_COMMANDS)
                 list(PREPEND clang_flags -MJ "${basename}.json")
             endif ()
 
-            add_custom_command(OUTPUT "${LL}"
-                               COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
-                               DEPENDS $<TARGET_NAME:clang> "${SOURCE}"
-                               DEPFILE "${basename}.d"
-                               VERBATIM)
+            add_custom_command(
+                OUTPUT "${LL}"
+                COMMAND
+                    ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang>
+                    ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
+                DEPENDS $<TARGET_NAME:clang> "${SOURCE}"
+                DEPFILE "${basename}.d"
+                VERBATIM
+            )
 
-            add_custom_command(OUTPUT "${BC}"
-                               COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL}" -o "${BC}"
-                               DEPENDS $<TARGET_NAME:llvm-as> "${LL}"
-                               VERBATIM)
+            add_custom_command(
+                OUTPUT "${BC}"
+                COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL}" -o "${BC}"
+                DEPENDS $<TARGET_NAME:llvm-as> "${LL}"
+                VERBATIM
+            )
 
-            add_custom_command(OUTPUT "${INITMOD}"
-                               COMMAND binary2cpp ${SYMBOL} < "${BC}" > "${INITMOD}"
-                               DEPENDS "${BC}" binary2cpp
-                               VERBATIM)
+            add_custom_command(
+                OUTPUT "${INITMOD}"
+                COMMAND binary2cpp ${SYMBOL} < "${BC}" > "${INITMOD}"
+                DEPENDS "${BC}" binary2cpp
+                VERBATIM
+            )
 
             target_sources(Halide_initmod PRIVATE ${INITMOD})
         endforeach ()
@@ -300,19 +323,28 @@ foreach (i IN LISTS RUNTIME_LL)
     set(INITMOD "_initmod_${i}.cpp")
 
     set(LL_TRANSFORMED "${LL}.transformed.ll")
-    add_custom_command(OUTPUT "${LL_TRANSFORMED}"
-                       COMMAND ${CMAKE_COMMAND} -E copy "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" "${LL_TRANSFORMED}"
-                       DEPENDS "${LL}"
-                       VERBATIM)
+    add_custom_command(
+        OUTPUT "${LL_TRANSFORMED}"
+        COMMAND
+            ${CMAKE_COMMAND} -E copy "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>"
+            "${LL_TRANSFORMED}"
+        DEPENDS "${LL}"
+        VERBATIM
+    )
 
-    add_custom_command(OUTPUT "${BC}"
-                       COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL_TRANSFORMED}" -o "${BC}"
-                       DEPENDS $<TARGET_NAME:llvm-as> "${LL_TRANSFORMED}"
-                       VERBATIM)
-    add_custom_command(OUTPUT "${INITMOD}"
-                       COMMAND binary2cpp "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"
-                       DEPENDS "${BC}" binary2cpp
-                       VERBATIM)
+    add_custom_command(
+        OUTPUT "${BC}"
+        COMMAND
+            ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL_TRANSFORMED}" -o "${BC}"
+        DEPENDS $<TARGET_NAME:llvm-as> "${LL_TRANSFORMED}"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT "${INITMOD}"
+        COMMAND binary2cpp "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"
+        DEPENDS "${BC}" binary2cpp
+        VERBATIM
+    )
     target_sources(Halide_initmod PRIVATE ${INITMOD})
 endforeach ()
 
@@ -320,25 +352,36 @@ foreach (i IN LISTS RUNTIME_BC)
     set(INITMOD "_initmod_ptx_${i}.cpp")
     set(RT_BC "${CMAKE_CURRENT_SOURCE_DIR}/nvidia_libdevice_bitcode/libdevice.${i}.10.bc")
 
-    add_custom_command(OUTPUT "${INITMOD}"
-                       COMMAND binary2cpp "halide_internal_initmod_ptx_${i}_ll" < "$<SHELL_PATH:${RT_BC}>" > "${INITMOD}"
-                       DEPENDS binary2cpp "${RT_BC}"
-                       VERBATIM)
+    add_custom_command(
+        OUTPUT "${INITMOD}"
+        COMMAND
+            binary2cpp "halide_internal_initmod_ptx_${i}_ll" < "$<SHELL_PATH:${RT_BC}>" > "${INITMOD}"
+        DEPENDS binary2cpp "${RT_BC}"
+        VERBATIM
+    )
     target_sources(Halide_initmod PRIVATE ${INITMOD})
 endforeach ()
 
-add_custom_command(OUTPUT "_initmod_inlined_c.cpp"
-                   COMMAND binary2cpp "halide_internal_initmod_inlined_c" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/halide_buffer_t.cpp>" > "_initmod_inlined_c.cpp"
-                   DEPENDS "halide_buffer_t.cpp" binary2cpp
-                   VERBATIM)
+add_custom_command(
+    OUTPUT "_initmod_inlined_c.cpp"
+    COMMAND
+        binary2cpp "halide_internal_initmod_inlined_c" <
+        "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/halide_buffer_t.cpp>" > "_initmod_inlined_c.cpp"
+    DEPENDS "halide_buffer_t.cpp" binary2cpp
+    VERBATIM
+)
 target_sources(Halide_initmod PRIVATE "_initmod_inlined_c.cpp")
 
 foreach (i IN LISTS RUNTIME_HEADER_FILES)
     string(REPLACE "." "_" SYM_NAME "${i}")
-    add_custom_command(OUTPUT "_initmod_${SYM_NAME}.cpp"
-                       COMMAND binary2cpp "halide_internal_runtime_header_${SYM_NAME}" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${i}>" > "_initmod_${SYM_NAME}.cpp"
-                       DEPENDS "${i}" binary2cpp
-                       VERBATIM)
+    add_custom_command(
+        OUTPUT "_initmod_${SYM_NAME}.cpp"
+        COMMAND
+            binary2cpp "halide_internal_runtime_header_${SYM_NAME}" <
+            "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${i}>" > "_initmod_${SYM_NAME}.cpp"
+        DEPENDS "${i}" binary2cpp
+        VERBATIM
+    )
     target_sources(Halide_initmod PRIVATE "_initmod_${SYM_NAME}.cpp")
 endforeach ()
 
@@ -350,14 +393,11 @@ add_library(Halide_Runtime INTERFACE)
 add_library(Halide::Runtime ALIAS Halide_Runtime)
 set_target_properties(Halide_Runtime PROPERTIES EXPORT_NAME Runtime)
 
-target_sources(Halide_Runtime
-               INTERFACE
-               FILE_SET HEADERS
-               FILES ${RUNTIME_HEADER_FILES})
+target_sources(Halide_Runtime INTERFACE FILE_SET HEADERS FILES ${RUNTIME_HEADER_FILES})
 
 Halide_feature(
-    Halide_BUILD_HEXAGON_REMOTE_RUNTIME "Build the hexagon remote runtime for offloading to Hexagon (HVX)" OFF
-    ADVANCED
+    Halide_BUILD_HEXAGON_REMOTE_RUNTIME
+    "Build the hexagon remote runtime for offloading to Hexagon (HVX)" OFF ADVANCED
 )
 if (Halide_BUILD_HEXAGON_REMOTE_RUNTIME)
     add_subdirectory(hexagon_remote)

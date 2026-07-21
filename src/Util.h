@@ -84,7 +84,7 @@ namespace Halide {
  *
  * otherwise, it is assumed to be an appropriate pathname.
  *
- * Any error in loading will assert-fail. */
+ * Any error in loading will cause an assertion failure. */
 void load_plugin(const std::string &lib_name);
 
 namespace Internal {
@@ -182,6 +182,26 @@ bool ends_with(const std::string &str, const std::string &suffix);
  * This is useful when the original string does not contain the find-string, causing
  * this function to return the same string without any copies being made. */
 std::string replace_all(std::string str, const std::string &find, const std::string &replace);
+
+/** Invoke `f(coord)` for each integer coordinate in the box
+ * `[0, sizes[0]) x [0, sizes[1]) x ...`, in lex order with the first
+ * axis varying fastest. `coord` is a `const std::vector<int> &` of the
+ * same length as `sizes`. The empty-sizes case invokes `f` once with an
+ * empty coord (a 0-dim box has one point). */
+template<typename F>
+void for_each_coordinate(const std::vector<int> &sizes, F &&f) {
+    std::vector<int> coord(sizes.size(), 0);
+    while (true) {
+        f(coord);
+        size_t k = 0;
+        while (k < sizes.size() && ++coord[k] == sizes[k]) {
+            coord[k++] = 0;
+        }
+        if (k == sizes.size()) {
+            return;
+        }
+    }
+}
 
 /** Split the source string using 'delim' as the divider. */
 std::vector<std::string> split_string(const std::string &source, const std::string &delim);
@@ -371,6 +391,13 @@ public:
     TemporaryFile &operator=(TemporaryFile &&) = delete;
 };
 
+/** Run an executable with the given arguments without going through
+ * the shell. The first element of args should be the program name/path.
+ * If a name without a path-separator is given, it will be searched for
+ * in the PATH. Returns the exit code of the process, or -1 if the process
+ * could not be started. */
+int run_process(std::vector<std::string> args);
+
 /** Routines to test if math would overflow for signed integers with
  * the given number of bits. */
 // @{
@@ -433,7 +460,7 @@ void halide_toc_impl(const char *file, int line);
 
 // statically cast a value from one type to another: this is really just
 // some syntactic sugar around static_cast<>() to avoid compiler warnings
-// regarding 'bool' in some compliation configurations.
+// regarding 'bool' in some compilation configurations.
 template<typename TO>
 struct StaticCast {
     template<typename FROM>
@@ -539,9 +566,9 @@ void set_compiler_stack_size(size_t);
 constexpr size_t default_compiler_stack_size = 32 * 1024 * 1024;
 
 /** Return how much stack size the compiler should use for calls that
- * go through run_with_large_stack below. Currently that's lowering
- * and codegen. If no call to set_compiler_stack_size has been made,
- * this checks the value of the environment variable
+ * go through run_with_large_stack below. Currently that's lowering,
+ * codegen, and JIT compilation. If no call to set_compiler_stack_size
+ * has been made, this checks the value of the environment variable
  * HL_COMPILER_STACK_SIZE. If that's unset, it returns
  * default_compiler_stack_size, defined above. */
 size_t get_compiler_stack_size();
@@ -566,6 +593,16 @@ int ctz64(uint64_t x);
 /** Return an integer 2^n, for some n,  which is >= x. Argument x must be > 0. */
 inline int64_t next_power_of_two(int64_t x) {
     return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x)));
+}
+
+/** Returns the largest power of two which is a factor of the argument. */
+inline int64_t largest_power_of_two_factor(int64_t x) {
+    return x & -x;
+}
+
+/** Return whether or not an integer is a power of two. */
+inline bool is_power_of_two(int64_t x) {
+    return (x & (x - 1)) == 0;
 }
 
 template<typename T>

@@ -16,9 +16,9 @@ void reset_trace() {
 int my_trace(JITUserContext *user_context, const halide_trace_event_t *ev) {
 
     if (ev->event == halide_trace_store) {
-        if (ev->type.lanes > 1) {
+        if (ev->lanes > 1) {
             vector_store = true;
-            vector_store_lanes = ev->type.lanes;
+            vector_store_lanes = ev->lanes;
         } else {
             scalar_store = true;
         }
@@ -441,7 +441,7 @@ int main(int argc, char **argv) {
         if_then_else_count = 0;
         CountIfThenElse pass1;
         for (auto ff : out.compile_to_module(out.infer_arguments()).functions()) {
-            pass1.mutate(ff.body);
+            pass1(ff.body);
         }
 
         Buffer<int> input(3, 3), output(3, 3);
@@ -471,8 +471,8 @@ int main(int argc, char **argv) {
 
         if_then_else_count = 0;
         CountIfThenElse pass2;
-        for (auto ff : out.compile_to_module(out.infer_arguments()).functions()) {
-            pass2.mutate(ff.body);
+        for (const auto &ff : out.compile_to_module(out.infer_arguments()).functions()) {
+            pass2(ff.body);
         }
 
         Buffer<int> input(3, 3), output(3, 3);

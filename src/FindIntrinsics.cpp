@@ -1,20 +1,18 @@
 #include "FindIntrinsics.h"
 #include "CSE.h"
 #include "CodeGen_Internal.h"
-#include "ConciseCasts.h"
 #include "ConstantBounds.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
+#include "IRVisitor.h"
 #include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
 
-using namespace Halide::ConciseCasts;
-
 namespace {
 
-// This routine provides a guard on the return type of intrisics such that only
+// This routine provides a guard on the return type of intrinsics such that only
 // these types will ever be considered in the visiting that happens here.
 bool find_intrinsics_for_type(const Type &t) {
     // Currently, we only try to find and replace intrinsics for vector types that aren't bools.
@@ -31,19 +29,10 @@ Expr narrow(Expr a) {
     return Cast::make(result_type, std::move(a));
 }
 
-// Check a type to make sure it can be narrowed. find_intrinsics_for_type
-// attempts to prevent this code from narrowing in cases that do not work, but
-// it is incomplete for two reasons:
-//
-//     - Arguments can be narrowed and that guard is only on return type, which
-//     are different for widening operations.
-//
-//     - find_intrinsics_for_type does not cull out float16, and it probably
-//     should not as while it's ok to skip matching bool things, float16 things
-//     are useful.
+// Check a type to make sure we can narrow it losslessly. This
+// excludes bools and float16.
 bool can_narrow(const Type &t) {
-    return (t.is_float() && t.bits() >= 32) ||
-           t.bits() >= 8;
+    return t.bits() >= (t.is_float() ? 32 : 8);
 }
 
 Expr saturating_narrow(const Expr &a) {
@@ -79,7 +68,7 @@ Expr find_and_subtract(const Expr &e, const Expr &round) {
         if (a.defined()) {
             return Sub::make(a, sub->b);
         }
-        // We can't recurse into the negatve part of a subtract.
+        // We can't recurse into the negative part of a subtract.
     } else if (can_prove(e == round)) {
         return make_zero(e.type());
     }
@@ -114,15 +103,32 @@ protected:
 
     // Remove a widening cast even if it changes the sign of the result.
     Expr strip_widening_cast(const Expr &x) {
-        if (can_narrow(x.type())) {
-            Expr narrow = lossless_narrow(x);
-            if (narrow.defined()) {
-                return narrow;
-            }
-            return lossless_cast(x.type().narrow().with_code(halide_type_uint), x);
-        } else {
+        if (!can_narrow(x.type())) {
             return Expr();
         }
+
+        Type inner_t = [](Expr e) {
+            while (const Cast *c = e.as<Cast>()) {
+                e = c->value;
+            }
+            return e.type();
+        }(x);
+
+        Expr best = x;
+
+        auto consider = [&](Type t) {
+            if (t.bits() < best.type().bits()) {
+                Expr e = lossless_cast(t, x);
+                best = e.defined() ? e : best;
+            }
+        };
+
+        consider(inner_t);
+        consider(x.type().narrow());
+        consider(x.type().narrow().with_code(halide_type_uint));
+
+        // Only report success if we actually stripped a cast.
+        return best.same_as(x) ? Expr() : best;
     }
 
     Expr to_rounding_shift(const Call *c) {
@@ -130,6 +136,13 @@ protected:
             internal_assert(c->args.size() == 2);
             Expr a = c->args[0];
             Expr b = c->args[1];
+
+            if (Call::as_intrinsic(b, {Call::signed_integer_overflow})) {
+                // Letting signed integer overflow through here would result in
+                // infinite recursion when we try to construct the rounding
+                // terms.
+                return Expr{};
+            }
 
             // Helper to make the appropriate shift.
             auto rounding_shift = [&](const Expr &a, const Expr &b) {
@@ -206,7 +219,7 @@ protected:
             }
         }
 
-        return Expr();
+        return Expr{};
     }
 
     template<typename LetOrLetStmt>
@@ -1098,7 +1111,7 @@ protected:
         } else {
             return Load::make(op->type, op->name, std::move(index),
                               op->image, op->param, std::move(predicate),
-                              op->alignment);
+                              op->alignment, op->is_streaming);
         }
     }
 
@@ -1110,7 +1123,7 @@ protected:
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment);
+            return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment, op->is_streaming);
         }
     }
 };
@@ -1121,6 +1134,7 @@ protected:
 // because each let in a chain has a wider value than the
 // ones it refers to.
 class SubstituteInWideningLets : public IRMutator {
+protected:
     using IRMutator::visit;
 
     bool widens(const Expr &e) {
@@ -1220,7 +1234,7 @@ class SubstituteInWideningLets : public IRMutator {
 
             if (should_replace) {
                 size_t start_of_new_lets = frames.size();
-                value = extractor.mutate(value);
+                value = extractor(value);
                 // Mutate any subexpressions the extractor decided to
                 // leave behind, in case they in turn depend on lets
                 // we've decided to substitute in.
@@ -1266,16 +1280,16 @@ class SubstituteInWideningLets : public IRMutator {
 }  // namespace
 
 Stmt find_intrinsics(const Stmt &s) {
-    Stmt stmt = SubstituteInWideningLets().mutate(s);
-    stmt = FindIntrinsics().mutate(stmt);
+    Stmt stmt = SubstituteInWideningLets()(s);
+    stmt = FindIntrinsics()(stmt);
     // In case we want to hoist widening ops back out
     stmt = common_subexpression_elimination(stmt);
     return stmt;
 }
 
 Expr find_intrinsics(const Expr &e) {
-    Expr expr = SubstituteInWideningLets().mutate(e);
-    expr = FindIntrinsics().mutate(expr);
+    Expr expr = SubstituteInWideningLets()(e);
+    expr = FindIntrinsics()(expr);
     expr = common_subexpression_elimination(expr);
     return expr;
 }
@@ -1629,6 +1643,12 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         return lower_sorted_avg(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::extract_bits)) {
+        internal_assert(op->args.size() == 2);
+        return lower_extract_bits(op);
+    } else if (op->is_intrinsic(Call::concat_bits)) {
+        internal_assert(!op->args.empty());
+        return lower_concat_bits(op);
     } else {
         return Expr();
     }
@@ -1651,11 +1671,11 @@ class LowerIntrinsics : public IRMutator {
 }  // namespace
 
 Expr lower_intrinsics(const Expr &e) {
-    return LowerIntrinsics().mutate(e);
+    return LowerIntrinsics()(e);
 }
 
 Stmt lower_intrinsics(const Stmt &s) {
-    return LowerIntrinsics().mutate(s);
+    return LowerIntrinsics()(s);
 }
 
 }  // namespace Internal

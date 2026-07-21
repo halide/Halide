@@ -13,6 +13,7 @@ representation to an object file, or JIT-compile it and run it in the same
 process.
 
 ## Using Halide from C++
+
 Halide is also available as a C++ library. This package provides the development
 files necessary to use Halide from C++, including a CMake package. On Linux and
 macOS, CMake's `find_package` command should find Halide as long as you're in
@@ -20,5 +21,5 @@ the same virtual environment you installed it in. On Windows, you will need to
 add the virtual environment root directory to `CMAKE_PREFIX_PATH`. This can be
 done by running `set CMAKE_PREFIX_PATH=%VIRTUAL_ENV%` in `cmd`.
 
-Other build systems can find the Halide root path by running `python -c 
-"import halide; print(halide.install_dir())"`.
+Other build systems can find the Halide root path by running
+`python -c "import halide; print(halide.install_dir())"`.

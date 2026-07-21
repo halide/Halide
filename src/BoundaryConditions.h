@@ -34,7 +34,7 @@ namespace Halide {
  *  'Expr' for the min and extent of a dimension will keep that dimension
  *  unmodified.
  *
- *  Numerous options for specifing the outside area are provided,
+ *  Numerous options for specifying the outside area are provided,
  *  including replacement with an expression, repeating the edge
  *  samples, mirroring over the edge, and repeating or mirroring the
  *  entire image.
@@ -64,7 +64,7 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_region(Region &collected_args,
 
 template<typename T>
 Func func_like_to_func(T &&func_like) {
-    if constexpr (std::is_same_v<std::decay_t<T>, Func>) {
+    if constexpr (std::is_convertible_v<T, Func>) {
         return std::forward<T>(func_like);
     } else {
         return lambda(_, func_like(_));

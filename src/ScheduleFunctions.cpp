@@ -133,7 +133,7 @@ public:
 };
 
 Stmt substitute_in(const string &name, const Expr &value, bool calls, bool provides, const Stmt &s) {
-    return SubstituteIn(name, value, calls, provides).mutate(s);
+    return SubstituteIn(name, value, calls, provides)(s);
 }
 
 class AddPredicates : public IRGraphMutator {
@@ -177,7 +177,7 @@ public:
 };
 
 Stmt add_predicates(const Expr &cond, const Function &func, ApplySplitResult::Type type, const Stmt &s) {
-    return AddPredicates(cond, func, type).mutate(s);
+    return AddPredicates(cond, func, type)(s);
 }
 
 // Build a loop nest about a provide node using a schedule
@@ -466,6 +466,25 @@ Stmt build_loop_nest(
     return stmt;
 }
 
+// A Stage's Definition may be expanded, by build_provide_loop_nest below,
+// into several Provide nodes: one per (possibly recursively nested)
+// specialization, plus the base/default Definition. stream_stores() is set
+// independently on each of these, so return true if *any* of them (reachable
+// via a non-failing specialization) requests it. Used to decide whether a
+// fence is needed after this Stage's production; it's safe to over-fence a
+// branch that didn't ask for streaming, but not to under-fence one that did.
+bool any_specialization_requests_streaming(const Definition &def) {
+    if (def.schedule().stream_stores()) {
+        return true;
+    }
+    for (const Specialization &s : def.specializations()) {
+        if (s.failure_message.empty() && any_specialization_requests_streaming(s.definition)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest(const map<string, Function> &env,
                              const string &prefix,
@@ -513,6 +532,16 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
             // emitting VectorReduce ops or scalarizing.
             body = Atomic::make(func.name(), std::string{}, body);
         }
+    }
+    if (def.schedule().stream_stores()) {
+        // Wrapped outside any Atomic node (rather than inside it), so that
+        // passes between here and storage flattening which pattern-match an
+        // Atomic node's body as being directly a Provide node (e.g.
+        // SplitTuples) continue to see that exact shape.
+        body = StreamingStore::make(func.name(), body);
+    }
+    if (const auto &names = def.schedule().stream_loads_names(); !names || !names->empty()) {
+        body = StreamingLoads::make(names, body);
     }
 
     // Default schedule/values if there is no specialization
@@ -1004,7 +1033,7 @@ Stmt inject_stmt(Stmt root, Stmt injected, const LoopLevel &level) {
         return Block::make(root, injected);
     }
     InjectStmt injector(injected, level);
-    root = injector.mutate(root);
+    root = injector(root);
     internal_assert(injector.found_level);
     return root;
 }
@@ -1091,7 +1120,7 @@ Stmt substitute_fused_bounds(Stmt s, const map<string, Interval> &replacements) 
         }
     } subs(replacements);
 
-    return subs.mutate(s);
+    return subs(s);
 }
 
 // Add letstmts inside each parent loop that define the corresponding child loop
@@ -1128,7 +1157,7 @@ Stmt add_loop_var_aliases(Stmt s, const map<string, set<string>> &loop_var_alias
         }
     } add_aliases(loop_var_aliases);
 
-    return add_aliases.mutate(s);
+    return add_aliases(s);
 }
 
 // Shift the iteration domain of a loop nest by some factor.
@@ -1161,8 +1190,7 @@ public:
         if (shifts.empty()) {
             return node;
         }
-        ShiftLoopNest visitor(shifts);
-        return visitor.mutate(node);
+        return ShiftLoopNest(shifts)(node);
     }
 };
 
@@ -1201,12 +1229,38 @@ public:
         return _found_hoist_storage_levels_for_funcs.size() == funcs.size();
     }
 
+    Stmt operator()(const Stmt &stmt) {
+        return IRMutator::operator()(stmt);
+    }
+
 protected:
     bool _found_compute_level{};
     std::set<string> _found_store_levels_for_funcs;
     std::set<string> _found_hoist_storage_levels_for_funcs;
 
     using IRMutator::visit;
+
+    // Emit a (intrin, name_arg, min_0, max_0, min_1, max_1, ...) Call
+    // wrapping `stmt`. Used for declare_box_touched, which bounds
+    // inference uses to know which Realize node is being touched. Its
+    // first arg must be a Variable<Handle>(func.name()) — a reference
+    // to the Realize-named buffer in scope — because passes that
+    // substitute names of in-scope buffers (most notably box_touched
+    // analysis itself) follow that name.
+    Stmt declare_box(const Stmt &stmt, const Function &f, Call::IntrinsicOp intrin) {
+        Expr name_arg = Variable::make(Handle(), f.name());
+        std::vector<Expr> args;
+        args.reserve(2 * f.dimensions() + 1);
+        args.push_back(std::move(name_arg));
+        const std::vector<std::string> &var_names = f.args();
+        for (int i = 0; i < f.dimensions(); i++) {
+            std::string v = concat_strings(f.name(), ".s0.", var_names[i]);
+            args.emplace_back(Variable::make(Int(32), v + ".min"));
+            args.emplace_back(Variable::make(Int(32), v + ".max"));
+        }
+        Expr d = Call::make(Int(32), intrin, args, Call::Intrinsic);
+        return Block::make(Evaluate::make(d), stmt);
+    }
 
     Stmt visit(const For *for_loop) override {
         debug(3) << "Injecting " << funcs << " entering for-loop over " << for_loop->name << "\n";
@@ -1370,18 +1424,7 @@ private:
         if (func.has_extern_definition()) {
             // Add an annotation to let bounds inference know that
             // this will write to the entire bounds required.
-            vector<Expr> args;
-            args.emplace_back(Variable::make(Handle(), func.name()));
-            for (int i = 0; i < func.dimensions(); i++) {
-                string prefix = func.name() + ".s0." + func.args()[i];
-                string min_name = prefix + ".min";
-                string max_name = prefix + ".max";
-
-                args.emplace_back(Variable::make(Int(32), min_name));
-                args.emplace_back(Variable::make(Int(32), max_name));
-            }
-            Expr decl = Call::make(Int(32), Call::declare_box_touched, args, Call::Intrinsic);
-            s = Block::make(Evaluate::make(decl), s);
+            s = declare_box(s, func, Call::declare_box_touched);
         }
 
         if (!is_output) {
@@ -1547,6 +1590,15 @@ private:
             add_lets.emplace_back(let->name, let->value);
             produce = let->body;
         }
+
+        // Only one branch runs at a time, so a single trailing fence
+        // after the whole (specialized) production is equivalent to,
+        // and simpler than, fencing inside each branch individually.
+        if (any_specialization_requests_streaming(def)) {
+            Expr fence = Call::make(Int(32), Call::stream_store_fence, {}, Call::Intrinsic);
+            produce = Block::make(produce, Evaluate::make(fence));
+        }
+
         return produce;
     }
 
@@ -1803,8 +1855,8 @@ private:
             string def_prefix = f.name() + ".s" + std::to_string(func_stage.second) + ".";
             const auto &def = (func_stage.second == 0) ? f.definition() : f.updates()[func_stage.second - 1];
 
-            const Stmt &produce_def = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
-                                                               replacements, add_lets, aliases);
+            Stmt produce_def = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
+                                                        replacements, add_lets, aliases);
             producer = inject_stmt(producer, produce_def, def.schedule().fuse_level().level);
         }
 
@@ -2088,10 +2140,9 @@ public:
     }
 };
 
-// Check a schedule is legal, throwing an error if it is not. Returns
-// whether or not a realization of the Func should be injected. Unused
-// intermediate Funcs that somehow made it into the Func DAG can be
-// discarded.
+// Check a schedule is legal, throwing an error if it is not. Returns whether or
+// not a realization of the Func should be injected. Unused intermediate Funcs
+// that somehow made it into the Func DAG can be discarded.
 bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_output, const map<string, Function> &env) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
@@ -2264,20 +2315,14 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
+    if (is_output) {
+        // None of the checks below apply to outputs
+        return true;
+    }
+
     LoopLevel store_at = f.schedule().store_level();
     LoopLevel compute_at = f.schedule().compute_level();
     LoopLevel hoist_storage_at = f.schedule().hoist_storage_level();
-
-    // Outputs must be compute_root and store_root. They're really
-    // store_in_user_code, but store_root is close enough.
-    if (is_output) {
-        if (store_at.is_root() && compute_at.is_root()) {
-            return true;
-        } else {
-            user_error << "Func " << f.name() << " is an output, so must"
-                       << " be scheduled compute_root (which is the default).\n";
-        }
-    }
 
     // Otherwise inspect the uses to see what's ok.
     ComputeLegalSchedules legal(f, env);
@@ -2315,6 +2360,12 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
 
     if (f.schedule().ring_buffer().defined() && store_at == hoist_storage_at) {
         user_error << "Func \"" << f.name() << "\" is scheduled with ring_buffer(), but has matching store_at and hoist_storage levels. Add an explicit hoist_storage directive to the schedule to fix the issue.\n";
+    }
+
+    // Check if hoist_storage is used with an extern stage
+    if (f.has_extern_definition() && !hoist_storage_at.is_inlined() && hoist_storage_at != store_at) {
+        user_error << "Func \"" << f.name() << "\" is an extern function with storage hoisted to a different level than store_at. "
+                   << "Func::hoist_storage is not currently supported for extern functions.";
     }
 
     vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
@@ -2378,6 +2429,27 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     }
 
     return true;
+}
+
+void validate_output_schedules(const vector<Function> &outputs) {
+    for (Function f : outputs) {
+        // Treat unscheduled as root
+        FuncSchedule &sched = f.schedule();
+        for (LoopLevel *l : {&sched.compute_level(), &sched.store_level(), &sched.hoist_storage_level()}) {
+            if (l->is_inlined()) {
+                *l = LoopLevel::root();
+                l->lock();
+            } else if (!l->is_root()) {
+                user_error
+                    << "Func " << f.name() << " is an output, so must be scheduled"
+                    << " compute_root, store_root, and hoist_storage_root (which is the"
+                    << " default). The requested compute, store, and hoist_storage levels are "
+                    << sched.compute_level() << ", "
+                    << sched.store_level() << ", and "
+                    << sched.hoist_storage_level() << " respectively.\n";
+            }
+        }
+    }
 }
 
 void validate_fused_group_schedule_helper(const string &fn,
@@ -2552,6 +2624,8 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     any_memoized = false;
 
+    validate_output_schedules(outputs);
+
     validate_fused_groups_schedule(fused_groups, env);
 
     for (const auto &group : reverse_view(fused_groups)) {
@@ -2589,20 +2663,22 @@ Stmt schedule_functions(const vector<Function> &outputs,
         } else {
             debug(1) << "Injecting realization of " << funcs << "\n";
             InjectFunctionRealization injector(funcs, is_output_list, target, env);
-            s = injector.mutate(s);
-            internal_assert(injector.found_store_level() && injector.found_compute_level() && injector.found_hoist_storage_level());
+            s = injector(s);
+            internal_assert(injector.found_store_level() &&
+                            injector.found_compute_level() &&
+                            injector.found_hoist_storage_level());
         }
 
         debug(2) << s << "\n";
     }
 
-    // We can remove the loop over root now
-    const For *root_loop = s.as<For>();
-    internal_assert(root_loop);
-    s = root_loop->body;
+    // We can remove the loop over root now. It's the outermost one.
+    s = mutate_with(s, [&](auto *self, const For *op) {
+        return op->body;
+    });
 
     // We can also remove all the loops over __outermost now.
-    s = RemoveLoopsOverOutermost().mutate(s);
+    s = RemoveLoopsOverOutermost()(s);
 
     return s;
 }

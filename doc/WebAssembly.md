@@ -6,20 +6,20 @@ backend.
 As WebAssembly itself is still under active development, Halide's support has
 some limitations. Some of the most important:
 
--   Sign-extension operations are enabled by default (but can be avoided via
-    Target::WasmMvpOnly).
--   Non-trapping float-to-int conversions are enabled by default (but can be
-    avoided via Target::WasmMvpOnly).
--   Fixed-width SIMD (128 bit) can be enabled via Target::WasmSimd128.
--   Threads have very limited support via Target::WasmThreads; see
-    [below](#using-threads) for more details.
--   Halide's JIT for Wasm is extremely limited and really useful only for
-    internal testing purposes.
+- Sign-extension operations are enabled by default (but can be avoided via
+  Target::WasmMvpOnly).
+- Non-trapping float-to-int conversions are enabled by default (but can be
+  avoided via Target::WasmMvpOnly).
+- Fixed-width SIMD (128 bit) can be enabled via Target::WasmSimd128.
+- Threads have very limited support via Target::WasmThreads; see
+  [below](#using-threads) for more details.
+- Halide's JIT for Wasm is extremely limited and really useful only for internal
+  testing purposes.
 
 # Additional Tooling Requirements:
 
--   In additional to the usual install of LLVM and clang, you'll need lld.
--   Locally-installed version of Emscripten, 1.39.19+
+- In additional to the usual install of LLVM and clang, you'll need lld.
+- Locally-installed version of Emscripten, 1.39.19+
 
 Note that for all of the above, earlier versions might work, but have not been
 tested.
@@ -33,9 +33,9 @@ of `libc`; as a practical matter, this means using the Emscripten tool to do
 your linking, as it provides the most complete such implementation we're aware
 of at this time.
 
--   Halide ahead-of-time tests assume/require that you have Emscripten installed
-    and available on your system, with the `EMSDK` environment variable set
-    properly.
+- Halide ahead-of-time tests assume/require that you have Emscripten installed
+  and available on your system, with the `EMSDK` environment variable set
+  properly.
 
 # JIT Limitations
 
@@ -43,34 +43,34 @@ It's important to reiterate that the WebAssembly JIT mode is not (and will never
 be) appropriate for anything other than limited self tests, for a number of
 reasons:
 
--   It actually uses an interpreter (from the WABT toolkit
-    [https://github.com/WebAssembly/wabt]) to execute wasm bytecode; not
-    surprisingly, this can be *very* slow.
--   Wasm effectively runs in a private, 32-bit memory address space; while the
-    host has access to that entire space, the reverse is not true, and thus any
-    `define_extern` calls require copying all `halide_buffer_t` data across the
-    Wasm<->host boundary in both directions. This has severe implications for
-    existing benchmarks, which don't currently attempt to account for this extra
-    overhead. (This could possibly be improved by modeling the Wasm JIT's buffer
-    support as a `device` model that would allow lazy copy-on-demand.)
--   Host functions used via `define_extern` or `HalideExtern` cannot accept or
-    return values that are pointer types or 64-bit integer types; this includes
-    things like `const char *` and `user_context`. Fixing this is tractable, but
-    is currently omitted as the fix is nontrivial and the tests that are
-    affected are mostly non-critical. (Note that `halide_buffer_t*` is
-    explicitly supported as a special case, however.)
--   Threading isn't supported at all (yet); all `parallel()` schedules will be
-    run serially.
--   The `.async()` directive isn't supported at all, not even in
-    serial-emulation mode.
--   You can't use `Param<void *>` (or any other arbitrary pointer type) with the
-    Wasm jit.
--   You can't use `Func.debug_to_file()`, `Func.set_custom_do_par_for()`,
-    `Func.set_custom_do_task()`, or `Func.set_custom_allocator()`.
--   The implementation of `malloc()` used by the JIT is incredibly simpleminded
-    and unsuitable for anything other than the most basic of tests.
--   GPU usage (or any buffer usage that isn't 100% host-memory) isn't supported
-    at all yet. (This should be doable, just omitted for now.)
+- It actually uses an interpreter (from the WABT toolkit
+  [https://github.com/WebAssembly/wabt]) to execute wasm bytecode; not
+  surprisingly, this can be *very* slow.
+- Wasm effectively runs in a private, 32-bit memory address space; while the
+  host has access to that entire space, the reverse is not true, and thus any
+  `define_extern` calls require copying all `halide_buffer_t` data across the
+  Wasm\<->host boundary in both directions. This has severe implications for
+  existing benchmarks, which don't currently attempt to account for this extra
+  overhead. (This could possibly be improved by modeling the Wasm JIT's buffer
+  support as a `device` model that would allow lazy copy-on-demand.)
+- Host functions used via `define_extern` or `HalideExtern` cannot accept or
+  return values that are pointer types or 64-bit integer types; this includes
+  things like `const char *` and `user_context`. Fixing this is tractable, but
+  is currently omitted as the fix is nontrivial and the tests that are affected
+  are mostly non-critical. (Note that `halide_buffer_t*` is explicitly supported
+  as a special case, however.)
+- Threading isn't supported at all (yet); all `parallel()` schedules will be run
+  serially.
+- The `.async()` directive isn't supported at all, not even in serial-emulation
+  mode.
+- You can't use `Param<void *>` (or any other arbitrary pointer type) with the
+  Wasm jit.
+- You can't use `Func.debug_to_file()`, `Func.set_custom_do_par_for()`,
+  `Func.set_custom_do_task()`, or `Func.set_custom_allocator()`.
+- The implementation of `malloc()` used by the JIT is incredibly simpleminded
+  and unsuitable for anything other than the most basic of tests.
+- GPU usage (or any buffer usage that isn't 100% host-memory) isn't supported at
+  all yet. (This should be doable, just omitted for now.)
 
 Note that while some of these limitations may be improved in the future, some
 are effectively intrinsic to the nature of this problem. Realistically, this JIT
@@ -83,34 +83,40 @@ the Halide library itself.
 
 ## Using V8 as the interpreter
 
-There is experimental support for using V8 as the interpreter in JIT mode, rather than WABT.
-This is enabled by the CMake command line options `-DWITH_V8=ON -DWITH_WABT=OFF` (only one of them can be used at a time).
-You must build V8 locally V8, then specify the path to the library and headers as CMake options.
-This is currently only tested on x86-64-Linux and requires v8 version 9.8.177 as a minimum.
+There is experimental support for using V8 as the interpreter in JIT mode,
+rather than WABT. This is enabled by the CMake command line options
+`-DWITH_V8=ON -DWITH_WABT=OFF` (only one of them can be used at a time). You
+must build V8 locally V8, then specify the path to the library and headers as
+CMake options. This is currently only tested on x86-64-Linux and requires v8
+version 9.8.177 as a minimum.
 
 The canonical instructions to build V8 are at
-[v8.dev](https://v8.dev/docs/build), and [there are examples for embedding
-v8](https://v8.dev/docs/embed). The process for Halide is summarized below.
+[v8.dev](https://v8.dev/docs/build), and
+[there are examples for embedding v8](https://v8.dev/docs/embed). The process
+for Halide is summarized below.
 
 - Install
   [`depot_tools`](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up)
 - Fetch v8 source code (and install required dependencies):
-    ```
-    $ gclient
-    $ mkdir ~/v8 && cd ~/v8
-    $ fetch v8
-    $ cd ~/v8/v8
-    $ git checkout origin/9.8.177
-    ```
+  ```
+  $ gclient
+  $ mkdir ~/v8 && cd ~/v8
+  $ fetch v8
+  $ cd ~/v8/v8
+  $ git checkout origin/9.8.177
+  ```
 - Create a build configuration: `tools/dev/v8gen.py x64.release.sample`
-- Turn off pointer compression: `echo 'v8_enable_pointer_compression = false' >> out.gn/x64.release.sample/args.gn`
-- Disable the GDB-JIT interface (conflicts with LLVM): `echo 'v8_enable_gdbjit = false' >> out.gn/x64.release.sample/args.gn`
+- Turn off pointer compression:
+  `echo 'v8_enable_pointer_compression = false' >> out.gn/x64.release.sample/args.gn`
+- Disable the GDB-JIT interface (conflicts with LLVM):
+  `echo 'v8_enable_gdbjit = false' >> out.gn/x64.release.sample/args.gn`
 - Build the static library: `autoninja -C out.gn/x64.release.sample v8_monolith`
 
 With V8 built, we can pass the CMake options:
 
 - `V8_INCLUDE_DIR`, path to V8 includes, e.g. `$HOME/v8/v8/include`
-- `V8_LIBRARY`, path to V8 static library, e.g. `$HOME/v8/v8/out.gn/x64.release.sample/obj/libv8_monolith.a`
+- `V8_LIBRARY`, path to V8 static library, e.g.
+  `$HOME/v8/v8/out.gn/x64.release.sample/obj/libv8_monolith.a`
 
 An example to configure Halide with V8 support, build and run an example test:
 
@@ -130,11 +136,10 @@ $ cmake --build .
 $ ctest -L "correctness|generator" -j
 ```
 
-
 # To Use Halide For WebAssembly:
 
--   Ensure WebAssembly is in LLVM_TARGETS_TO_BUILD; if you use the default
-    (`"all"`) then it's already present, but otherwise, add it explicitly:
+- Ensure WebAssembly is in LLVM_TARGETS_TO_BUILD; if you use the default
+  (`"all"`) then it's already present, but otherwise, add it explicitly:
 
 ```
 -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;PowerPC;Hexagon;WebAssembly
@@ -146,27 +151,27 @@ If you want to run `test_correctness` and other interesting parts of the Halide
 test suite (and you almost certainly will), you'll need to ensure that LLVM is
 built with wasm-ld:
 
--   Ensure that you have lld in LVM_ENABLE_PROJECTS:
+- Ensure that you have lld in LVM_ENABLE_PROJECTS:
 
 ```
 cmake -DLLVM_ENABLE_PROJECTS="clang;lld" ...
 ```
 
--   To run the JIT tests, set `HL_JIT_TARGET=wasm-32-wasmrt` (possibly adding
-    `wasm_simd128`) and run CMake/CTest normally. Note that wasm testing is
-    only supported under CMake (not via Make).
+- To run the JIT tests, set `HL_JIT_TARGET=wasm-32-wasmrt` (possibly adding
+  `wasm_simd128`) and run CMake/CTest normally. Note that wasm testing is only
+  supported under CMake (not via Make).
 
 ## Enabling wasm AOT
 
 If you want to test ahead-of-time code generation (and you almost certainly
 will), you need to install Emscripten locally.
 
--   The simplest way to install is probably via the Emscripten emsdk
-    (https://emscripten.org/docs/getting_started/downloads.html).
+- The simplest way to install is probably via the Emscripten emsdk
+  (https://emscripten.org/docs/getting_started/downloads.html).
 
--   To run the AOT tests, set `HL_TARGET=wasm-32-wasmrt` (possibly adding
-    `wasm_simd128`) and run CMake/CTest normally. Note that wasm testing is
-    only supported under CMake (not via Make).
+- To run the AOT tests, set `HL_TARGET=wasm-32-wasmrt` (possibly adding
+  `wasm_simd128`) and run CMake/CTest normally. Note that wasm testing is only
+  supported under CMake (not via Make).
 
 # Running benchmarks
 
@@ -181,48 +186,47 @@ https://github.com/halide/Halide/issues/5047 to track progress.)
 You can use the `wasm_threads` feature to enable use of a normal pthread-based
 thread pool in Halide code, but with some careful caveats:
 
--   This requires that you use a wasm runtime environment that provides
-    pthread-compatible wrappers. At this time of this writing, the only
-    environment known to support this well is Emscripten (when using the
-    `-pthread` flag, and compiling for a Web environment). In this
-    configuration, Emscripten goes to great lengths to make WebWorkers available
-    via the pthreads API. (You can see an example of this usage in
-    apps/HelloWasm.) Note that not all wasm runtimes support WebWorkers;
-    generally, you need a full browser environment to make this work (though
-    some versions of some shell tools may also support this, e.g. nodejs).
--   There is currently no support for using threads in a WASI environment, due
-    to current limitations in the WASI specification. (We hope that this will
-    improve in the future.)
--   There is no support for using threads in the Halide JIT environment, and no
-    plans to add them anytime in the near-term future.
+- This requires that you use a wasm runtime environment that provides
+  pthread-compatible wrappers. At this time of this writing, the only
+  environment known to support this well is Emscripten (when using the
+  `-pthread` flag, and compiling for a Web environment). In this configuration,
+  Emscripten goes to great lengths to make WebWorkers available via the pthreads
+  API. (You can see an example of this usage in apps/HelloWasm.) Note that not
+  all wasm runtimes support WebWorkers; generally, you need a full browser
+  environment to make this work (though some versions of some shell tools may
+  also support this, e.g. nodejs).
+- There is currently no support for using threads in a WASI environment, due to
+  current limitations in the WASI specification. (We hope that this will improve
+  in the future.)
+- There is no support for using threads in the Halide JIT environment, and no
+  plans to add them anytime in the near-term future.
 
 # Known Limitations And Caveats
 
--   Current trunk LLVM (as of July 2020) doesn't reliably generate all of the
-    Wasm SIMD ops that are available; see
-    https://github.com/halide/Halide/issues/5130 for tracking information as
-    these are fixed.
--   Using the JIT requires that we link the `wasm-ld` tool into libHalide; with
-    some work this need could possibly be eliminated.
--   OSX and Linux-x64 have been tested. Windows hasn't; it should be supportable
-    with some work. (Patches welcome.)
--   None of the `apps/` folder has been investigated yet. Many of them should be
-    supportable with some work. (Patches welcome.)
--   We currently use v8/d8 as a test environment for AOT code; we may want to
-    consider using Node or (better yet) headless Chrome instead (which is
-    probably required to allow for using threads in AOT code).
+- Current trunk LLVM (as of July 2020) doesn't reliably generate all of the Wasm
+  SIMD ops that are available; see https://github.com/halide/Halide/issues/5130
+  for tracking information as these are fixed.
+- Using the JIT requires that we link the `wasm-ld` tool into libHalide; with
+  some work this need could possibly be eliminated.
+- OSX and Linux-x64 have been tested. Windows hasn't; it should be supportable
+  with some work. (Patches welcome.)
+- None of the `apps/` folder has been investigated yet. Many of them should be
+  supportable with some work. (Patches welcome.)
+- We currently use v8/d8 as a test environment for AOT code; we may want to
+  consider using Node or (better yet) headless Chrome instead (which is probably
+  required to allow for using threads in AOT code).
 
 # Known TODO:
 
--   There's some invasive hackiness in Codgen_LLVM to support the JIT
-    trampolines; this really should be refactored to be less hacky.
--   Can we rework JIT to avoid the need to link in wasm-ld? This might be
-    doable, as the wasm object files produced by the LLVM backend are close
-    enough to an executable form that we could likely make it work with some
-    massaging on our side, but it's not clear whether this would be a bad idea
-    or not (i.e., would it be unreasonably fragile).
--   Buffer-copying overhead in the JIT could possibly be dramatically improved
-    by modeling the copy as a "device" (i.e. `copy_to_device()` would copy from
-    host -> wasm); this would make the performance benchmarks much more useful.
--   Can we support threads in the JIT without an unreasonable amount of work?
-    Unknown at this point.
+- There's some invasive hackiness in Codgen_LLVM to support the JIT trampolines;
+  this really should be refactored to be less hacky.
+- Can we rework JIT to avoid the need to link in wasm-ld? This might be doable,
+  as the wasm object files produced by the LLVM backend are close enough to an
+  executable form that we could likely make it work with some massaging on our
+  side, but it's not clear whether this would be a bad idea or not (i.e., would
+  it be unreasonably fragile).
+- Buffer-copying overhead in the JIT could possibly be dramatically improved by
+  modeling the copy as a "device" (i.e. `copy_to_device()` would copy from host
+  -> wasm); this would make the performance benchmarks much more useful.
+- Can we support threads in the JIT without an unreasonable amount of work?
+  Unknown at this point.

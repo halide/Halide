@@ -13,7 +13,7 @@
 # This script provides an iterative approach to optimize these polynomials of given degree for a given
 # function. The key element of this approach is to solve the least-squared error problem, but by iteratively
 # adjusting the weights to approximate other loss functions instead of simply the MSE. If for example you
-# whish to create an approximation which reduces the Maximal Absolute Error (MAE) across the range,
+# wish to create an approximation which reduces the Maximal Absolute Error (MAE) across the range,
 # The loss function actually could be conceptually approximated by E[abs(x - X)^(100)]. The high power will
 # cause the biggest difference to be the one that "wins" because that error will be disproportionately
 # magnified (compared to the smaller errors).
@@ -25,6 +25,7 @@
 # The coefficients of other functions (fast_exp, fast_log, fast_sin, fast_cos) were all obtained by
 # some other tool or copied from some reference material.
 
+import collections
 import numpy as np
 import argparse
 import rich.console
@@ -37,39 +38,50 @@ np.set_printoptions(linewidth=3000)
 
 class SmartFormatter(argparse.HelpFormatter):
     def _split_lines(self, text, width):
-        if text.startswith('R|'):
+        if text.startswith("R|"):
             return text[2:].splitlines()
         return argparse.HelpFormatter._split_lines(self, text, width)
 
 
 parser = argparse.ArgumentParser(formatter_class=SmartFormatter)
 parser.add_argument("func")
-parser.add_argument("--order", type=int, nargs='+', required=True)
-parser.add_argument("--loss", nargs='+', required=True,
-                    choices=["mse", "mae", "mulpe", "mulpe_mae"],
-                    default="mulpe",
-                    help=("R|What to optimize for.\n"
-                          + " * mse: Mean Squared Error\n"
-                          + " * mae: Maximal Absolute Error\n"
-                          + " * mulpe: Maximal ULP Error  [default]\n"
-                          + " * mulpe_mae: 50%% mulpe + 50%% mae"))
-parser.add_argument("--gui", action='store_true', help="Do produce plots.")
-parser.add_argument("--with-max-error", action='store_true', help="Fill out the observed max abs/ulp error in the printed table.")
-parser.add_argument("--print", action='store_true', help="Print while optimizing.")
-parser.add_argument("--pbar", action='store_true', help="Create a progress bar while optimizing.")
+parser.add_argument("--order", type=int, nargs="+", required=True)
+parser.add_argument(
+    "--loss",
+    nargs="+",
+    required=True,
+    choices=["mse", "mae", "mulpe", "mulpe_mae"],
+    default="mulpe",
+    help=(
+        "R|What to optimize for.\n"
+        + " * mse: Mean Squared Error\n"
+        + " * mae: Maximal Absolute Error\n"
+        + " * mulpe: Maximal ULP Error  [default]\n"
+        + " * mulpe_mae: 50%% mulpe + 50%% mae"
+    ),
+)
+parser.add_argument("--gui", action="store_true", help="Do produce plots.")
+parser.add_argument(
+    "--with-max-error",
+    action="store_true",
+    help="Fill out the observed max abs/ulp error in the printed table.",
+)
+parser.add_argument("--print", action="store_true", help="Print while optimizing.")
+parser.add_argument(
+    "--pbar", action="store_true", help="Create a progress bar while optimizing."
+)
 args = parser.parse_args()
 
 loss_power = 1500
 
-import collections
-
-Metrics = collections.namedtuple("Metrics", ["mean_squared_error", "max_abs_error", "max_ulp_error"])
+Metrics = collections.namedtuple(
+    "Metrics", ["mean_squared_error", "max_abs_error", "max_ulp_error"]
+)
 
 
 def optimize_approximation(loss, order, progress):
     fixed_part_taylor = []
     X = None
-    will_invert = False
     if args.func == "atan":
         if hasattr(np, "atan"):
             func = np.atan
@@ -95,21 +107,27 @@ def optimize_approximation(loss, order, progress):
         lower, upper = 0.0, np.pi / 2
     elif args.func == "tan":
         func = np.tan
-        fixed_part_taylor = [0, 1, 0, 1 / 3]  # We want a very accurate approximation around zero, because we will need it to invert and compute the tan near the poles.
+        fixed_part_taylor = [
+            0,
+            1,
+            0,
+            1 / 3,
+        ]  # We want a very accurate approximation around zero, because we will need it to invert and compute the tan near the poles.
         if order == 2:
             fixed_part_taylor = [0]  # Let's optimize at least the ^1 term
         if order == 2:
             fixed_part_taylor = [0, 1]  # Let's optimize at least the ^3 term
         exponents = 1 + np.arange(order) * 2
         lower, upper = 0.0, np.pi / 4
-        X = np.concatenate([np.logspace(-5, 0, num=2048 * 17), np.linspace(0, 1, 9000)]) * (np.pi / 4)
+        X = np.concatenate(
+            [np.logspace(-5, 0, num=2048 * 17), np.linspace(0, 1, 9000)]
+        ) * (np.pi / 4)
         X = np.sort(X)
-        will_invert = True
     elif args.func == "exp":
         func = np.exp
-        #if loss == "mulpe":
+        # if loss == "mulpe":
         #    fixed_part_taylor = [1, 1]
-        #else:
+        # else:
         #    fixed_part_taylor = [1]
         exponents = np.arange(0, order)
         lower, upper = 0, np.log(2)
@@ -119,7 +137,10 @@ def optimize_approximation(loss, order, progress):
         exponents = np.arange(1, order + 1)
         lower, upper = -0.5 * np.log(2), 0.5 * np.log(2)
     elif args.func == "log":
-        def func(x): return np.log(x + 1.0)
+
+        def func(x):
+            return np.log(x + 1.0)
+
         exponents = np.arange(1, order + 1)
         lower, upper = -0.25, 0.5
     elif args.func == "tanh":
@@ -133,7 +154,10 @@ def optimize_approximation(loss, order, progress):
         exponents = 1 + 2 * np.arange(0, order)
         lower, upper = -1.0, 1.0
     elif args.func == "asin_invx":
-        def func(x): return np.arcsin(1/x)
+
+        def func(x):
+            return np.arcsin(1 / x)
+
         exponents = 1 + np.arange(order)
         lower, upper = 1.0, 2.0
     else:
@@ -159,7 +183,16 @@ def optimize_approximation(loss, order, progress):
             x2 = x * x
             x3 = x2 * x
             x4 = x2 * x2
-            return np.sum([xp * c for xp, c in zip([np.ones_like(x), x, x2, x3, x4], fixed_part_taylor)], axis=0)
+            return np.sum(
+                [
+                    xp * c
+                    for xp, c in zip(
+                        [np.ones_like(x), x, x2, x3, x4], fixed_part_taylor
+                    )
+                ],
+                axis=0,
+            )
+
         func_fixed_part = ffp
 
     if X is None:
@@ -168,7 +201,9 @@ def optimize_approximation(loss, order, progress):
     fixed_part = func_fixed_part(X)
     target_fitting_part = target - fixed_part
 
-    target_spacing = np.spacing(np.abs(target).astype(np.float32)).astype(np.float64)  # Precision (i.e., ULP)
+    target_spacing = np.spacing(np.abs(target).astype(np.float32)).astype(
+        np.float64
+    )  # Precision (i.e., ULP)
     # We will optimize everything using double precision, which means we will obtain more bits of
     # precision than the actual target values in float32, which means that our reconstruction and
     # ideal target value can be a non-integer number of float32-ULPs apart.
@@ -188,7 +223,9 @@ def optimize_approximation(loss, order, progress):
         lstsq_iterations = 1
     elif loss == "mulpe":
         lstsq_iterations = loss_power * 1
-        weight = 0.2 * np.ones_like(target) + 0.2 * np.mean(target_spacing) / target_spacing
+        weight = (
+            0.2 * np.ones_like(target) + 0.2 * np.mean(target_spacing) / target_spacing
+        )
 
     # if will_invert: weight += 1.0 / (np.abs(target) + target_spacing)
 
@@ -196,19 +233,23 @@ def optimize_approximation(loss, order, progress):
 
     try:
         if progress:
-            task = progress.add_task(f"{args.func} {loss} order={order}", total=lstsq_iterations)
+            task = progress.add_task(
+                f"{args.func} {loss} order={order}", total=lstsq_iterations
+            )
         elif args.print:
             print(f"Optimizing {args.func} {loss} order={order}...\n", end="")
         for i in range(lstsq_iterations):
             norm_weight = weight / np.mean(weight)
-            coeffs, residuals, rank, s = np.linalg.lstsq(powers * norm_weight[:, None], target_fitting_part * norm_weight, rcond=-1)
+            coeffs, _residuals, _rank, _s = np.linalg.lstsq(
+                powers * norm_weight[:, None],
+                target_fitting_part * norm_weight,
+                rcond=-1,
+            )
 
             y_hat = fixed_part + np.sum((powers * coeffs)[:, ::-1], axis=-1)
             diff = y_hat - target
             abs_diff = np.abs(diff)
 
-            # MSE metric
-            mean_squared_error = np.mean(np.square(diff))
             # MAE metric
             max_abs_error = np.amax(abs_diff)
             loss_history[i, 1] = max_abs_error
@@ -219,15 +260,20 @@ def optimize_approximation(loss, order, progress):
             loss_history[i, 2] = max_ulp_error
 
             if args.print and i % 10 == 0:
-                console.log(f"[{((i + 1) / lstsq_iterations * 100.0):3.0f}%] coefficients:", coeffs,
-                            f" MaxAE: {max_abs_error:20.17f} MaxULPs: {max_ulp_error:20.0f}  mean weight: {weight.mean():.4e}")
+                console.log(
+                    f"[{((i + 1) / lstsq_iterations * 100.0):3.0f}%] coefficients:",
+                    coeffs,
+                    f" MaxAE: {max_abs_error:20.17f} MaxULPs: {max_ulp_error:20.0f}  mean weight: {weight.mean():.4e}",
+                )
 
             if loss == "mae":
                 norm_error_metric = abs_diff / np.amax(abs_diff)
             elif loss == "mulpe":
                 norm_error_metric = abs_ulp_error / max_ulp_error
             elif loss == "mulpe_mae":
-                norm_error_metric = 0.5 * (abs_ulp_error / max_ulp_error + abs_diff / max_abs_error)
+                norm_error_metric = 0.5 * (
+                    abs_ulp_error / max_ulp_error + abs_diff / max_abs_error
+                )
             elif loss == "mse":
                 norm_error_metric = np.square(abs_diff)
 
@@ -278,28 +324,28 @@ def optimize_approximation(loss, order, progress):
     if args.gui:
         import matplotlib.pyplot as plt
 
-        fig, ax = plt.subplots(2, 4, figsize=(12, 6))
+        _fig, ax = plt.subplots(2, 4, figsize=(12, 6))
         ax = ax.flatten()
         ax[0].set_title("Comparison of exact\nand approximate " + args.func)
         ax[0].plot(X, target, label=args.func)
-        ax[0].plot(X, y_hat, label='approx')
+        ax[0].plot(X, y_hat, label="approx")
         ax[0].grid()
         ax[0].set_xlim(lower, upper)
         ax[0].legend()
 
         ax[1].set_title("Error")
-        ax[1].axhline(0, linestyle='-', c='k', linewidth=1)
-        ax[1].plot(X, init_y_hat - target, label='init')
-        ax[1].plot(X, y_hat - target, label='final')
+        ax[1].axhline(0, linestyle="-", c="k", linewidth=1)
+        ax[1].plot(X, init_y_hat - target, label="init")
+        ax[1].plot(X, y_hat - target, label="final")
         ax[1].grid()
         ax[1].set_xlim(lower, upper)
         ax[1].legend()
 
         ax[2].set_title("Absolute error\n(log-scale)")
-        ax[2].semilogy(X, init_abs_error, label='init')
-        ax[2].semilogy(X, abs_diff, label='final')
-        ax[2].axhline(np.amax(init_abs_error), linestyle=':', c='C0')
-        ax[2].axhline(np.amax(abs_diff), linestyle=':', c='C1')
+        ax[2].semilogy(X, init_abs_error, label="init")
+        ax[2].semilogy(X, abs_diff, label="final")
+        ax[2].axhline(np.amax(init_abs_error), linestyle=":", c="C0")
+        ax[2].axhline(np.amax(abs_diff), linestyle=":", c="C1")
         ax[2].grid()
         ax[2].set_xlim(lower, upper)
         ax[2].legend()
@@ -307,22 +353,22 @@ def optimize_approximation(loss, order, progress):
         ax[3].set_title("Maximal Absolute Error\nprogression during\noptimization")
         ax[3].semilogx(1 + np.arange(loss_history.shape[0]), loss_history[:, 1])
         ax[3].set_xlim(1, loss_history.shape[0] + 1)
-        ax[3].axhline(y=loss_history[0, 1], linestyle=':', color='k')
+        ax[3].axhline(y=loss_history[0, 1], linestyle=":", color="k")
         ax[3].grid()
 
         ax[5].set_title("ULP distance")
-        ax[5].axhline(0, linestyle='-', c='k', linewidth=1)
-        ax[5].plot(X, init_ulp_error, label='init')
-        ax[5].plot(X, ulp_error, label='final')
+        ax[5].axhline(0, linestyle="-", c="k", linewidth=1)
+        ax[5].plot(X, init_ulp_error, label="init")
+        ax[5].plot(X, ulp_error, label="final")
         ax[5].grid()
         ax[5].set_xlim(lower, upper)
         ax[5].legend()
 
         ax[6].set_title("Absolute ULP distance\n(log-scale)")
-        ax[6].semilogy(X, init_abs_ulp_error, label='init')
-        ax[6].semilogy(X, abs_ulp_error, label='final')
-        ax[6].axhline(np.amax(init_abs_ulp_error), linestyle=':', c='C0')
-        ax[6].axhline(np.amax(abs_ulp_error), linestyle=':', c='C1')
+        ax[6].semilogy(X, init_abs_ulp_error, label="init")
+        ax[6].semilogy(X, abs_ulp_error, label="final")
+        ax[6].axhline(np.amax(init_abs_ulp_error), linestyle=":", c="C0")
+        ax[6].axhline(np.amax(abs_ulp_error), linestyle=":", c="C1")
         ax[6].grid()
         ax[6].set_xlim(lower, upper)
         ax[6].legend()
@@ -330,11 +376,11 @@ def optimize_approximation(loss, order, progress):
         ax[7].set_title("Maximal ULP Error\nprogression during\noptimization")
         ax[7].loglog(1 + np.arange(loss_history.shape[0]), loss_history[:, 2])
         ax[7].set_xlim(1, loss_history.shape[0] + 1)
-        ax[7].axhline(y=loss_history[0, 2], linestyle=':', color='k')
+        ax[7].axhline(y=loss_history[0, 2], linestyle=":", color="k")
         ax[7].grid()
 
         ax[4].set_title("LstSq Weight\n(log-scale)")
-        ax[4].semilogy(X, norm_weight, label='weight')
+        ax[4].semilogy(X, norm_weight, label="weight")
         ax[4].grid()
         ax[4].set_xlim(lower, upper)
         ax[4].legend()
@@ -342,7 +388,16 @@ def optimize_approximation(loss, order, progress):
         plt.tight_layout()
         plt.show()
 
-    return exponents, fixed_part_taylor, init_coeffs, coeffs, float16_metrics, float32_metrics, float64_metrics, loss_history
+    return (
+        exponents,
+        fixed_part_taylor,
+        init_coeffs,
+        coeffs,
+        float16_metrics,
+        float32_metrics,
+        float64_metrics,
+        loss_history,
+    )
 
 
 def num_to_str(c):
@@ -367,11 +422,15 @@ def formula(coeffs, exponents=None):
     return " + ".join(terms)
 
 
-with concurrent.futures.ProcessPoolExecutor(8) as pool, rich.progress.Progress(console=console, disable=not args.pbar) as progress:
-    futures = []
-    for loss in args.loss:
-        for order in args.order:
-            futures.append((loss, order, pool.submit(optimize_approximation, loss, order, None)))
+with (
+    concurrent.futures.ProcessPoolExecutor(8) as pool,
+    rich.progress.Progress(console=console, disable=not args.pbar) as progress,
+):
+    futures = [
+        (loss, order, pool.submit(optimize_approximation, loss, order, None))
+        for loss in args.loss
+        for order in args.order
+    ]
 
     last_loss = None
     for loss, order, future in futures:
@@ -379,7 +438,16 @@ with concurrent.futures.ProcessPoolExecutor(8) as pool, rich.progress.Progress(c
             console.print(f"/* {loss.upper()} optimized */")
             last_loss = loss
 
-        exponents, fixed_part_taylor, init_coeffs, coeffs, float16_metrics, float32_metrics, float64_metrics, loss_history = future.result()
+        (
+            exponents,
+            fixed_part_taylor,
+            init_coeffs,
+            coeffs,
+            float16_metrics,
+            float32_metrics,
+            float64_metrics,
+            loss_history,
+        ) = future.result()
 
         degree = len(fixed_part_taylor) - 1
         if len(exponents) > 0:
@@ -391,7 +459,9 @@ with concurrent.futures.ProcessPoolExecutor(8) as pool, rich.progress.Progress(c
             all_coeffs[e] = c
 
         code = "{"
-        code += f" /* {loss.upper()} Polynomial degree {degree}: {formula(all_coeffs)} */\n"
+        code += (
+            f" /* {loss.upper()} Polynomial degree {degree}: {formula(all_coeffs)} */\n"
+        )
         if args.with_max_error:
             code += f"    /* f16 */ {{{float16_metrics.mean_squared_error:.6e}, {float16_metrics.max_abs_error:.6e}, {float16_metrics.max_ulp_error}u}},\n"
             code += f"    /* f32 */ {{{float32_metrics.mean_squared_error:.6e}, {float32_metrics.max_abs_error:.6e}, {float32_metrics.max_ulp_error}u}},\n"
@@ -400,7 +470,11 @@ with concurrent.futures.ProcessPoolExecutor(8) as pool, rich.progress.Progress(c
             code += f"    /* f16 */ {{{float16_metrics.mean_squared_error:.6e}}},\n"
             code += f"    /* f32 */ {{{float32_metrics.mean_squared_error:.6e}}},\n"
             code += f"    /* f64 */ {{{float64_metrics.mean_squared_error:.6e}}},\n"
-        code += "    /* p */ {" + ", ".join([f"{num_to_str(c)}" for c in all_coeffs]) + "}\n"
+        code += (
+            "    /* p */ {"
+            + ", ".join([f"{num_to_str(c)}" for c in all_coeffs])
+            + "}\n"
+        )
         code += "},"
         console.print(code)
 

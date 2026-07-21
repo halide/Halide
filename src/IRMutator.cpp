@@ -45,63 +45,59 @@ Expr IRMutator::visit(const Reinterpret *op) {
     return Reinterpret::make(op->type, std::move(value));
 }
 
-namespace {
-template<typename T>
-Expr mutate_binary_operator(IRMutator *mutator, const T *op) {
-    Expr a = mutator->mutate(op->a);
-    Expr b = mutator->mutate(op->b);
-    if (a.same_as(op->a) &&
-        b.same_as(op->b)) {
-        return op;
-    }
-    return T::make(std::move(a), std::move(b));
-}
-}  // namespace
+#define mutate_binary_operator \
+    Expr a = mutate(op->a);    \
+    Expr b = mutate(op->b);    \
+    if (a.same_as(op->a) &&    \
+        b.same_as(op->b)) {    \
+        return op;             \
+    }                          \
+    return std::decay_t<decltype(*op)>::make(std::move(a), std::move(b))
 
 Expr IRMutator::visit(const Add *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Sub *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Mul *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Div *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Mod *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Min *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Max *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const EQ *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const NE *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const LT *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const LE *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const GT *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const GE *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const And *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 Expr IRMutator::visit(const Or *op) {
-    return mutate_binary_operator(this, op);
+    mutate_binary_operator;
 }
 
 Expr IRMutator::visit(const Not *op) {
@@ -132,7 +128,7 @@ Expr IRMutator::visit(const Load *op) {
     }
     return Load::make(op->type, op->name, std::move(index),
                       op->image, op->param, std::move(predicate),
-                      op->alignment);
+                      op->alignment, op->is_streaming);
 }
 
 Expr IRMutator::visit(const Ramp *op) {
@@ -220,7 +216,7 @@ Stmt IRMutator::visit(const Store *op) {
     if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
         return op;
     }
-    return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment);
+    return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment, op->is_streaming);
 }
 
 Stmt IRMutator::visit(const Provide *op) {
@@ -367,6 +363,24 @@ Stmt IRMutator::visit(const Atomic *op) {
         return Atomic::make(op->producer_name,
                             op->mutex_name,
                             std::move(body));
+    }
+}
+
+Stmt IRMutator::visit(const StreamingStore *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return StreamingStore::make(op->producer_name, std::move(body));
+    }
+}
+
+Stmt IRMutator::visit(const StreamingLoads *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return StreamingLoads::make(op->names, std::move(body));
     }
 }
 

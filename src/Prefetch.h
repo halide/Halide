@@ -20,14 +20,14 @@ class Function;
 struct PrefetchDirective;
 struct Stmt;
 
-/** Inject placeholder prefetches to 's'. This placholder prefetch
+/** Inject placeholder prefetches to 's'. This placeholder prefetch
  * does not have explicit region to be prefetched yet. It will be computed
  * during call to \ref inject_prefetch. */
 Stmt inject_placeholder_prefetch(const Stmt &s, const std::map<std::string, Function> &env,
                                  const std::string &prefix,
                                  const std::vector<PrefetchDirective> &prefetches);
 /** Compute the actual region to be prefetched and place it to the
- * placholder prefetch. Wrap the prefetch call with condition when
+ * placeholder prefetch. Wrap the prefetch call with condition when
  * applicable. */
 Stmt inject_prefetch(const Stmt &s, const std::map<std::string, Function> &env);
 

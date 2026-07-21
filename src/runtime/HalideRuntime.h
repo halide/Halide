@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <ostream>
 #include <string_view>
 #else
 #include <stdbool.h>
@@ -98,6 +99,9 @@ extern "C" {
 #define HALIDE_RUNTIME_ASAN_DETECTED
 #endif
 
+#if !defined(HALIDE_CPP_COMPILER_HAS_FLOAT16)
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 0
+
 #if !defined(HALIDE_RUNTIME_ASAN_DETECTED)
 
 // clang had _Float16 added as a reserved name in clang 8, but
@@ -105,10 +109,11 @@ extern "C" {
 // Ideally there would be a better way to detect if the type
 // is supported, even in a compiler independent fashion, but
 // coming up with one has proven elusive.
-#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__)
+#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__) && !defined(__wasm__) && defined(__FLT16_MANT_DIG__)
 #if defined(__is_identifier)
 #if !__is_identifier(_Float16)
-#define HALIDE_CPP_COMPILER_HAS_FLOAT16
+#undef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 1
 #endif
 #endif
 #endif
@@ -117,12 +122,17 @@ extern "C" {
 // For now, we say that if >= v12, and compiling on x86 or arm,
 // we assume support. This may need revision.
 #if defined(__GNUC__) && (__GNUC__ >= 12)
-#if defined(__x86_64__) || (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) || ((defined(__arm__) || defined(__aarch64__)) && (__GNUC__ >= 13))
-#define HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if defined(__x86_64__) ||                                              \
+    (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) ||     \
+    (defined(__arm__) && (__GNUC__ >= 13) && __ARM_FP16_FORMAT_IEEE) || \
+    (defined(__aarch64__) && (__GNUC__ >= 13))
+#undef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16 1
 #endif
 #endif
 
 #endif  // !HALIDE_RUNTIME_ASAN_DETECTED
+#endif  // !defined(HALIDE_CPP_COMPILER_HAS_FLOAT16)
 
 #endif  // !COMPILING_HALIDE_RUNTIME
 
@@ -258,7 +268,7 @@ typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int)
 
 /** A task representing a serial for loop evaluated over some range.
  * Note that task_parent is a pass through argument that should be
- * passed to any dependent taks that are invoked using halide_do_parallel_tasks
+ * passed to any dependent tasks that are invoked using halide_do_parallel_tasks
  * underneath this call. */
 typedef int (*halide_loop_task_t)(void *user_context, int min, int extent,
                                   uint8_t *closure, void *task_parent);
@@ -382,6 +392,12 @@ extern bool halide_default_semaphore_try_acquire(struct halide_semaphore_t *, in
 
 struct halide_thread;
 
+/** Return a compact platform-specific ID for the current thread. This
+ * is derived from the platform's current-thread API, or from a
+ * runtime-owned counter on platforms that do not provide one, and is
+ * represented as a signed 32-bit integer for tracing. */
+extern int32_t halide_current_thread_id(void);
+
 /** Spawn a thread. Returns a handle to the thread for the purposes of
  * joining it. The thread must be joined in order to clean up any
  * resources associated with it. */
@@ -495,11 +511,13 @@ typedef enum halide_type_code_t
 #endif
 #endif
 
-/** A runtime tag for a type in the halide type system. Can be ints,
- * unsigned ints, or floats of various bit-widths (the 'bits'
- * field). Can also be vectors of the same (by setting the 'lanes'
- * field to something larger than one). This struct should be
- * exactly 32-bits in size. */
+/** A runtime tag for an element type in the halide type system. Can be
+ * ints, unsigned ints, or floats of various bit-widths (the 'bits' field),
+ * or an opaque handle.
+ *
+ * This is the ABI/wire type. Unlike the compiler-side Halide::Type, it does
+ * NOT carry a vector width ('lanes'): a value crossing the ABI boundary is
+ * always a single element. */
 struct halide_type_t {
     /** The basic type code: signed integer, unsigned integer, or floating point. */
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
@@ -514,35 +532,27 @@ struct halide_type_t {
     HALIDE_ATTRIBUTE_ALIGN(1)
     uint8_t bits;
 
-    /** How many elements in a vector. This is 1 for scalar types. */
+    /** Reserved for future element-kind payloads. */
     HALIDE_ATTRIBUTE_ALIGN(2)
-    uint16_t lanes;
+    uint16_t reserved;
 
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
-    /** Construct a runtime representation of a Halide type from:
+    /** Construct a runtime representation of a Halide element type from:
      * code: The fundamental type from an enum.
-     * bits: The bit size of one element.
-     * lanes: The number of vector elements in the type. */
-    HALIDE_ALWAYS_INLINE constexpr halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
-        : code(code), bits(bits), lanes(lanes) {
+     * bits: The bit size of one element. */
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t(halide_type_code_t code, uint8_t bits)
+        : code(code), bits(bits), reserved(0) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
     HALIDE_ALWAYS_INLINE constexpr halide_type_t()
-        : code((halide_type_code_t)0), bits(0), lanes(0) {
+        : code((halide_type_code_t)0), bits(0), reserved(0) {
     }
 
-    HALIDE_ALWAYS_INLINE constexpr halide_type_t with_lanes(uint16_t new_lanes) const {
-        return halide_type_t((halide_type_code_t)code, bits, new_lanes);
-    }
-
-    HALIDE_ALWAYS_INLINE constexpr halide_type_t element_of() const {
-        return with_lanes(1);
-    }
     /** Compare two types for equality. */
     HALIDE_ALWAYS_INLINE constexpr bool operator==(const halide_type_t &other) const {
-        return as_u32() == other.as_u32();
+        return static_cast<uint32_t>(*this) == static_cast<uint32_t>(other);
     }
 
     HALIDE_ALWAYS_INLINE constexpr bool operator!=(const halide_type_t &other) const {
@@ -550,22 +560,22 @@ struct halide_type_t {
     }
 
     HALIDE_ALWAYS_INLINE constexpr bool operator<(const halide_type_t &other) const {
-        return as_u32() < other.as_u32();
+        return static_cast<uint32_t>(*this) < static_cast<uint32_t>(other);
     }
 
-    /** Size in bytes for a single element, even if width is not 1, of this type. */
+    /** Size in bytes for a single element of this type. */
     HALIDE_ALWAYS_INLINE constexpr int bytes() const {
         return (bits + 7) / 8;
     }
 
-    HALIDE_ALWAYS_INLINE constexpr uint32_t as_u32() const {
+    HALIDE_ALWAYS_INLINE constexpr operator uint32_t() const {
         // Note that this produces a result that is identical to memcpy'ing 'this'
         // into a u32 (on a little-endian machine, anyway), and at -O1 or greater
         // on Clang, the compiler knows this and optimizes this into a single 32-bit move.
         // (At -O0 it will look awful.)
         return static_cast<uint8_t>(code) |
-               (static_cast<uint16_t>(bits) << 8) |
-               (static_cast<uint32_t>(lanes) << 16);
+               static_cast<uint16_t>(bits) << 8 |
+               static_cast<uint32_t>(reserved) << 16;
     }
 #endif
 };
@@ -584,7 +594,9 @@ enum halide_trace_event_code_t { halide_trace_load = 0,
                                  halide_trace_end_consume = 7,
                                  halide_trace_begin_pipeline = 8,
                                  halide_trace_end_pipeline = 9,
-                                 halide_trace_tag = 10 };
+                                 halide_trace_tag = 10,
+                                 halide_trace_begin_parallel_task = 11,
+                                 halide_trace_end_parallel_task = 12 };
 
 struct halide_trace_event_t {
     /** The name of the Func or Pipeline that this event refers to */
@@ -613,9 +625,14 @@ struct halide_trace_event_t {
      */
     const char *trace_tag;
 
-    /** If the event type is a load or a store, this is the type of
-     * the data. Otherwise, the value is meaningless. */
+    /** If the event type is a load or a store, this is the (scalar) element
+     * type of the data. Otherwise, the value is meaningless. */
     struct halide_type_t type;
+
+    /** For loads and stores, the number of vector lanes of the access (1 for a
+     * scalar access). The value pointed to by `value` is `lanes` elements of
+     * `type`. */
+    int32_t lanes;
 
     /** The type of event */
     enum halide_trace_event_code_t event;
@@ -623,6 +640,11 @@ struct halide_trace_event_t {
     /* The ID of the parent event (see below for an explanation of
      * event ancestry). */
     int32_t parent_id;
+
+    /** A compact platform-specific ID for the thread that emitted this
+     * trace event. This is only populated for events that need it, such
+     * as halide_trace_begin_parallel_task; other events use zero. */
+    int32_t thread_id;
 
     /** If this was a load or store of a Tuple-valued Func, this is
      * which tuple element was accessed. */
@@ -642,30 +664,37 @@ struct halide_trace_event_t {
  *
  * halide_trace returns a unique ID which will be passed to future
  * events that "belong" to the earlier event as the parent id. The
- * ownership hierarchy looks like:
+ * ownership hierarchy follows the realization stack.
  *
  * begin_pipeline
- * +--trace_tag (if any)
- * +--trace_tag (if any)
+ * +--tag (if any)
+ * +--tag (if any)
  * ...
- * +--begin_realization
- * |  +--produce
- * |  |  +--load/store
- * |  |  +--end_produce
- * |  +--consume
- * |  |  +--load
- * |  |  +--end_consume
- * |  +--end_realization
+ * +--(begin_realization|produce|consume)
+ * |  +-- ... recursively more realizations/produces/consumes ...
+ * |      +-- begin_parallel_task
+ * |      |   +-- load
+ * |      |   +-- store
+ * |      |   +-- ... recursively more realization/produce/consume events ...
+ * |      +-- end_parallel_task
+ * |      +-- ... recursively more end events ...
+ * |  +--(end_realization|end_produce|end_consume)
  * +--end_pipeline
  *
  * Threading means that ownership cannot be inferred from the ordering
  * of events. There can be many active realizations of a given
  * function, or many active productions for a single
- * realization. Within a single production, the ordering of events is
- * meaningful.
+ * realization. A load or store that occurs within a parallel task can
+ * be associated with the logical task that produced it by walking its
+ * parent chain to a halide_trace_begin_parallel_task event. The id of
+ * that event is a trace event id used for parent ancestry. The
+ * thread_id field of that begin_parallel_task event identifies the
+ * platform thread that executed the task. Load and store events do not
+ * repeat this ID. Within a single parallel task, the ordering of events
+ * is meaningful.
  *
- * Note that all trace_tag events (if any) will occur just after the begin_pipeline
- * event, but before any begin_realization events. All trace_tags for a given Func
+ * Note that all tag events (if any) will occur just after the begin_pipeline
+ * event, but before any begin_realization events. All tags for a given Func
  * will be emitted in the order added.
  */
 // @}
@@ -675,22 +704,51 @@ typedef int32_t (*halide_trace_t)(void *user_context, const struct halide_trace_
 extern halide_trace_t halide_set_custom_trace(halide_trace_t trace);
 // @}
 
+// NOLINTBEGIN(cppcoreguidelines-use-default-member-init,modernize-use-default-member-init)
 /** The header of a packet in a binary trace. All fields are 32-bit. */
 struct halide_trace_packet_t {
+#ifdef __cplusplus
+    HALIDE_ALWAYS_INLINE halide_trace_packet_t()
+        : size(0), event(halide_trace_load), parent_id(0), id(0), type_code((halide_type_code_t)0), type_bits(0), lanes(0), dimensions(0) {
+    }
+#endif
+
     /** The total size of this packet in bytes. Always a multiple of
      * four. Equivalently, the number of bytes until the next
      * packet. */
     uint32_t size;
 
-    /** The id of this packet (for the purpose of parent_id). */
-    int32_t id;
-
-    /** The remaining fields are equivalent to those in halide_trace_event_t */
+    /** The remaining fields are equivalent to those in halide_trace_event_t.
+     * Some fields share storage because they are meaningful for disjoint event
+     * types: load and store events are leaves, so they use the id field for
+     * value_index; type is meaningful only for loads and stores, while thread_id
+     * is meaningful only for halide_trace_begin_parallel_task. */
     // @{
-    struct halide_type_t type;
     enum halide_trace_event_code_t event;
     int32_t parent_id;
-    int32_t value_index;
+    union {
+        /** The id of this packet (for the purpose of parent_id). This field is
+         * meaningful for non-load/store events. Loads and stores are leaves, and
+         * use this storage for value_index instead. */
+        int32_t id;
+
+        /** If this was a load or store of a Tuple-valued Func, this is
+         * which tuple element was accessed. */
+        int32_t value_index;
+    };
+    union {
+        struct {
+            /** The (scalar) element type code of the access (see halide_trace_event_t).
+             * Unpacked from halide_type_t rather than storing it directly, since
+             * halide_type_t's `reserved` field carries no meaning here. */
+            uint8_t type_code;
+            /** The bit-width of the element type of the access. */
+            uint8_t type_bits;
+            /** The number of vector lanes of the access (see halide_trace_event_t). */
+            uint16_t lanes;
+        };
+        int32_t thread_id;
+    };
     int32_t dimensions;
     // @}
 
@@ -717,14 +775,29 @@ struct halide_trace_packet_t {
         return (void *)(coordinates() + dimensions);
     }
 
+    /** Reconstruct the (scalar) element type of the access from type_code and
+     * type_bits. Only meaningful for load and store events. */
+    HALIDE_ALWAYS_INLINE struct halide_type_t type() const {
+        return halide_type_t((halide_type_code_t)type_code, type_bits);
+    }
+
+    /** Get the size of the value payload. Only load and store packets have a
+     * value, so type is ignored for all other event types. */
+    HALIDE_ALWAYS_INLINE uint32_t value_bytes() const {
+        if (event == halide_trace_load || event == halide_trace_store) {
+            return lanes * type().bytes();
+        }
+        return 0;
+    }
+
     /** Get the func name, assuming this packet is laid out in memory
      * as it was written. It comes after the value. */
     HALIDE_ALWAYS_INLINE const char *func() const {
-        return (const char *)value() + type.lanes * type.bytes();
+        return (const char *)value() + value_bytes();
     }
 
     HALIDE_ALWAYS_INLINE char *func() {
-        return (char *)value() + type.lanes * type.bytes();
+        return (char *)value() + value_bytes();
     }
 
     /** Get the trace_tag (if any), assuming this packet is laid out in memory
@@ -749,6 +822,11 @@ struct halide_trace_packet_t {
     }
 #endif
 };
+// NOLINTEND(cppcoreguidelines-use-default-member-init,modernize-use-default-member-init)
+
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
+static_assert(sizeof(halide_trace_packet_t) == 6 * sizeof(uint32_t), "size mismatch in halide_trace_packet_t");
+#endif
 
 /** Set the file descriptor that Halide should write binary trace
  * events to. If called with 0 as the argument, Halide outputs trace
@@ -950,7 +1028,7 @@ extern int halide_get_gpu_device(void *user_context);
 /** Set the soft maximum amount of memory, in bytes, that the LRU
  *  cache will use to memoize Func results.  This is not a strict
  *  maximum in that concurrency and simultaneous use of memoized
- *  reults larger than the cache size can both cause it to
+ *  results larger than the cache size can both cause it to
  *  temporariliy be larger than the size specified here.
  */
 extern void halide_memoization_cache_set_size(int64_t size);
@@ -978,7 +1056,7 @@ extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *ca
 
 /** Given a cache key for a memoized result, currently constructed
  *  from the Func name and top-level Func name plus the arguments of
- *  the computation, store the result in the cache for futre access by
+ *  the computation, store the result in the cache for future access by
  *  halide_memoization_cache_lookup. (The internals of the cache key
  *  should be considered opaque by this function.) Data is copied out
  *  from the inputs and inputs are unmodified. The last argument is a
@@ -1396,7 +1474,7 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_user_context,  ///< Generated code takes a user_context pointer as first argument
 
-    halide_target_feature_profile,     ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
+    halide_target_feature_profile,     ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func. Also injects a synchronous halide_device_sync after every GPU kernel launch so the profiler can attribute compute time correctly — see halide_profiler_func_stats for the trade-off.
     halide_target_feature_no_runtime,  ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
     halide_target_feature_metal,  ///< Enable the (Apple) Metal runtime.
@@ -1471,6 +1549,16 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx10_1,                ///< Intel AVX10 version 1 support. vector_bits is used to indicate width.
     halide_target_feature_x86_apx,                ///< Intel x86 APX support. Covers initial set of features released as APX: egpr,push2pop2,ppx,ndd .
     halide_target_feature_simulator,              ///< Target is for a simulator environment. Currently only applies to iOS.
+    halide_target_feature_hlsl_sm60,              ///< Enable D3D12 Shader Model 6.0 (DXIL, 64-bit types, wave intrinsics). Requires d3d12compute. Uses DXC compiler.
+    halide_target_feature_hlsl_sm61,              ///< Enable D3D12 Shader Model 6.1
+    halide_target_feature_hlsl_sm62,              ///< Enable D3D12 Shader Model 6.2 (native 16-bit scalar types with -enable-16bit-types)
+    halide_target_feature_hlsl_sm63,              ///< Enable D3D12 Shader Model 6.3
+    halide_target_feature_hlsl_sm64,              ///< Enable D3D12 Shader Model 6.4
+    halide_target_feature_hlsl_sm65,              ///< Enable D3D12 Shader Model 6.5
+    halide_target_feature_hlsl_sm66,              ///< Enable D3D12 Shader Model 6.6 (64-bit atomics, packed 8-bit types)
+    halide_target_feature_hlsl_sm67,              ///< Enable D3D12 Shader Model 6.7
+    halide_target_feature_hlsl_sm68,              ///< Enable D3D12 Shader Model 6.8
+    halide_target_feature_hlsl_sm69,              ///< Enable D3D12 Shader Model 6.9 (long vectors 5-1024 lanes, native 16-bit/wave/int64 required)
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
@@ -1852,12 +1940,54 @@ void halide_register_argv_and_metadata(
 
 /** The functions below here are relevant for pipelines compiled with
  * the -profile target flag, which runs a sampling profiler thread
- * alongside the pipeline. */
+ * alongside the pipeline. -profile also forces a synchronous
+ * halide_device_sync after every GPU kernel launch so per-Func times
+ * reflect real compute time; this removes any overlap the schedule was
+ * getting, so absolute runtimes under -profile run slower than without. */
+
+/** Tag identifying what a halide_profiler_func_stats entry represents.
+ * Lets the reporter handle bookkeeping slots and synthetic entries by
+ * tag rather than by index or by parsing the name. */
+enum halide_profiler_func_kind {
+    halide_profiler_func_kind_func = 0,
+    halide_profiler_func_kind_overhead = 1,
+    halide_profiler_func_kind_thread_idle = 2,
+    halide_profiler_func_kind_malloc = 3,
+    halide_profiler_func_kind_free = 4,
+    /** A halide_copy_to_host call. The buffer_func_id field is the
+     * canonical id of the Func whose buffer is being copied. */
+    halide_profiler_func_kind_copy_to_host = 5,
+    halide_profiler_func_kind_copy_to_device = 6,
+    /** A hoist_storage Realize whose Produce sits deeper in the IR.
+     * Carries the memory columns for the buffer's lifetime; the
+     * time/compute columns belong to the separate production entry. */
+    halide_profiler_func_kind_allocation = 7,
+};
 
 /** Per-Func state tracked by the sampling profiler. */
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
+    /** The name of this Func. A global constant string. */
+    const char *name;
+
+    /** The id of the parent Func (the one which this is compute_at). -1 if the
+     * Func is compute_root. */
+    int parent;
+
+    /** Id of this Func's canonical entry. A Func can appear in this
+     * array more than once (e.g. an unscheduled Func with an update
+     * definition reached from multiple callers); canonical_id is the
+     * id of the first such appearance, the shared key for rolling
+     * instances back up to a Func. */
+    int canonical_id;
+
+    enum halide_profiler_func_kind kind;
+
+    /** For copy synthetics (kind == copy_to_host/copy_to_device), the
+     * canonical id of the Func whose buffer is being copied. -1 otherwise. */
+    int buffer_func_id;
+
     /** Total time taken evaluating this Func (in nanoseconds). */
-    uint64_t time;
+    uint64_t HALIDE_ATTRIBUTE_ALIGN(8) time;
 
     /** The current memory allocation of this Func. */
     uint64_t memory_current;
@@ -1865,20 +1995,18 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The peak memory allocation of this Func. */
     uint64_t memory_peak;
 
-    /** The total memory allocation of this Func. */
-    uint64_t memory_total;
-
     /** The peak stack allocation of this Func's threads. */
     uint64_t stack_peak;
 
-    /** The average number of thread pool worker threads active while computing this Func. */
+    /** The total memory allocation of this Func. */
+    uint64_t memory_total;
+
+    /** The average number of thread pool worker threads active while computing
+     * this Func. */
     uint64_t active_threads_numerator, active_threads_denominator;
 
-    /** The name of this Func. A global constant string. */
-    const char *name;
-
-    /** The total number of memory allocation of this Func. */
-    int num_allocs;
+    /** The total number of times heap storage for this Func was allocated. */
+    uint64_t num_allocs;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
@@ -1915,6 +2043,13 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
 
     /** The number of times this pipeline has been run. */
     int runs;
+
+    /** The number of pipeline runs that produced at least one profiler
+     * sample. Runs that completed in less than one sampler tick contribute
+     * to `runs` (and to the per-Func counters) but not to per-Func time
+     * accumulation, so this is the correct denominator for time
+     * averages. */
+    int billed_runs;
 
     /** The total number of samples taken inside of this pipeline. */
     int samples;
@@ -2002,7 +2137,7 @@ struct halide_profiler_state {
 
     /** If this callback is defined, the profiler asserts that there is a single
      * live instance, and then uses it to get the current func and number of
-     * active threads insted of reading the fields in the instance. This is used
+     * active threads instead of reading the fields in the instance. This is used
      * so that the profiler can follow along with execution that occurs
      * elsewhere (e.g. on an accelerator). */
     void (*get_remote_profiler_state)(int *func, int *active_workers);
@@ -2045,7 +2180,7 @@ extern void halide_profiler_shutdown(void);
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
 
-/** These routines are called to temporarily disable and then reenable
+/** These routines are called to temporarily disable and then re-enable
  * the profiler. */
 //@{
 extern void halide_profiler_lock(struct halide_profiler_state *);
@@ -2151,7 +2286,7 @@ HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of() {
     return halide_type_t(halide_type_handle, 64);
 }
 
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#if HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<_Float16>() {
     return halide_type_t(halide_type_float, 16);
@@ -2232,6 +2367,23 @@ struct ArgumentInfo {
 };
 
 }  // namespace HalideFunctionInfo
+
+inline std::ostream &operator<<(std::ostream &os, const halide_type_t &type) {
+    switch (type.code) {
+    case halide_type_int:
+        return os << "int" << (int)type.bits;
+    case halide_type_uint:
+        return type.bits ? os << "uint" << (int)type.bits :
+                           os << "bool";
+    case halide_type_float:
+        return os << "float" << (int)type.bits;
+    case halide_type_handle:
+        return os << "(void*)";
+    case halide_type_bfloat:
+        return os << "bfloat" << (int)type.bits;
+    }
+    return os;
+}
 
 #endif  // COMPILING_HALIDE_RUNTIME
 

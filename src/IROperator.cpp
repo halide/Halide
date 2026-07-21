@@ -442,7 +442,7 @@ Expr lossless_cast(Type t,
             return lossless_cast(t, c->value, scope, cache);
         }
     } else if (const Broadcast *b = e.as<Broadcast>()) {
-        Expr v = lossless_cast(t.element_of(), b->value, scope, cache);
+        Expr v = lossless_cast(t.with_lanes(b->value.type().lanes()), b->value, scope, cache);
         if (v.defined()) {
             return Broadcast::make(v, b->lanes);
         }
@@ -545,12 +545,20 @@ Expr lossless_cast(Type t,
                     }
                 }
             } else if (const VectorReduce *op = e.as<VectorReduce>()) {
-                if (op->op == VectorReduce::Add ||
+                if ((t.bits() > 1 && op->op == VectorReduce::Add) ||
                     op->op == VectorReduce::Min ||
                     op->op == VectorReduce::Max) {
                     Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value, scope, cache);
                     if (v.defined()) {
-                        return VectorReduce::make(op->op, v, op->type.lanes());
+                        auto reduce_op = op->op;
+                        if (t.bits() == 1) {
+                            // UInt(1) == Bool() is the only 1-bit type we expect to see
+                            internal_assert(t.is_uint()) << "Unexpected type: " << t << "\n";
+                            reduce_op = (op->op == VectorReduce::Min ?
+                                             VectorReduce::And :
+                                             VectorReduce::Or);
+                        }
+                        return VectorReduce::make(reduce_op, v, op->type.lanes());
                     }
                 }
             }
@@ -602,12 +610,23 @@ Expr lossless_negate(const Expr &x) {
     } else if (const FloatImm *f = x.as<FloatImm>()) {
         return FloatImm::make(f->type, -f->value);
     } else if (const Cast *c = x.as<Cast>()) {
-        Expr value = lossless_negate(c->value);
-        if (value.defined()) {
-            // This logic is only sound if we know the cast can't overflow.
-            value = lossless_cast(c->type, value);
+        // Unsigned inner types wrap modularly (-uint8(65) = 191), and signed
+        // integer inner types wrap at INT_TYPE_MIN (-int8(-128) = -128), so both
+        // make cast(outer, -inner) != -cast(outer, inner). Floats are exact.
+        // For signed integers, only proceed when bounds exclude INT_TYPE_MIN.
+        bool inner_negation_safe = c->value.type().is_float();
+        if (!inner_negation_safe && c->value.type().is_int()) {
+            ConstantInterval ci = constant_integer_bounds(c->value);
+            inner_negation_safe = ci.min_defined && !c->value.type().is_min(ci.min);
+        }
+        if (inner_negation_safe) {
+            Expr value = lossless_negate(c->value);
             if (value.defined()) {
-                return value;
+                // This logic is only sound if we know the cast can't overflow.
+                value = lossless_cast(c->type, value);
+                if (value.defined()) {
+                    return value;
+                }
             }
         }
     } else if (const Ramp *r = x.as<Ramp>()) {
@@ -657,11 +676,20 @@ void match_lanes(Expr &a, Expr &b) {
 // Cast to the wider type of the two. Already guaranteed to leave
 // signed/unsigned on number of lanes unchanged.
 void match_bits(Expr &x, Expr &y) {
+    // Widen the narrower operand to match the wider one's bit count. A bfloat
+    // has no wider counterpart (there is no bfloat32), so widening one yields a
+    // regular float, consistent with Type::widen().
+    auto widened = [](Type t, int bits) {
+        if (t.is_bfloat()) {
+            t = t.with_code(halide_type_float);
+        }
+        return t.with_bits(bits);
+    };
     // The signedness doesn't match, so just match the bits.
     if (x.type().bits() < y.type().bits()) {
-        x = cast(x.type().with_bits(y.type().bits()), x);
+        x = cast(widened(x.type(), y.type().bits()), x);
     } else if (y.type().bits() < x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
+        y = cast(widened(y.type(), x.type().bits()), y);
     }
 }
 }  // namespace
@@ -2249,6 +2277,19 @@ Expr erf(const Expr &x) {
     user_assert(x.defined()) << "erf of undefined Expr\n";
     user_assert(x.type() == Float(32)) << "erf only takes float arguments\n";
     return halide_erf(x);
+}
+
+Expr fma(const Expr &a, const Expr &b, const Expr &c) {
+    user_assert(a.type().is_float()) << "fma requires floating-point arguments.";
+    user_assert(a.type() == b.type() && a.type() == c.type())
+        << "All arguments to fma must have the same type.";
+
+    // TODO: Once we use LLVM's native bfloat type instead of treating them as
+    // ints, we should be able to remove this assert. Currently, it tries to
+    // codegen an integer fma.
+    user_assert(!a.type().is_bfloat()) << "fma does not yet support bfloat types.";
+
+    return Call::make(a.type(), Call::strict_fma, {a, b, c}, Call::PureIntrinsic);
 }
 
 Expr fast_inverse(Expr x) {

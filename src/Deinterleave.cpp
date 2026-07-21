@@ -172,8 +172,7 @@ private:
 Stmt collect_strided_stores(const Stmt &stmt, const std::string &name, int stride, int max_stores,
                             std::vector<Stmt> lets, std::vector<Stmt> &stores) {
 
-    StoreCollector collect(name, stride, max_stores, lets, stores);
-    return collect.mutate(stmt);
+    return StoreCollector(name, stride, max_stores, lets, stores)(stmt);
 }
 
 class Deinterleaver : public IRGraphMutator {
@@ -247,7 +246,7 @@ private:
             if (starting_lane != 0) {
                 align = ModulusRemainder();
             }
-            return Load::make(t, op->name, mutate(op->index), op->image, op->param, mutate(op->predicate), align);
+            return Load::make(t, op->name, mutate(op->index), op->image, op->param, mutate(op->predicate), align, op->is_streaming);
         }
     }
 
@@ -256,7 +255,7 @@ private:
         if (base_lanes > 1) {
             if (new_lanes == 1) {
                 int index = starting_lane / base_lanes;
-                Expr expr = op->base + cast(op->base.type(), index) * op->stride;
+                Expr expr = simplify(op->base + cast(op->base.type(), index) * op->stride);
                 ScopedValue<int> old_starting_lane(starting_lane, starting_lane % base_lanes);
                 ScopedValue<int> old_lane_stride(lane_stride, base_lanes);
                 expr = mutate(expr);
@@ -274,10 +273,10 @@ private:
                 return mutate(flatten_nested_ramps(op));
             }
         }
-        Expr expr = op->base + cast(op->base.type(), starting_lane) * op->stride;
+        Expr expr = simplify(op->base + cast(op->base.type(), starting_lane) * op->stride);
         internal_assert(expr.type() == op->base.type());
         if (new_lanes > 1) {
-            expr = Ramp::make(expr, op->stride * lane_stride, new_lanes);
+            expr = Ramp::make(expr, simplify(op->stride * lane_stride), new_lanes);
         }
         return expr;
     }
@@ -407,10 +406,9 @@ private:
 
 Expr deinterleave(Expr e, int starting_lane, int lane_stride, int new_lanes, const Scope<> &lets) {
     e = substitute_in_all_lets(e);
-    Deinterleaver d(starting_lane, lane_stride, new_lanes, lets);
-    e = d.mutate(e);
+    e = Deinterleaver(starting_lane, lane_stride, new_lanes, lets)(e);
     e = common_subexpression_elimination(e);
-    return simplify(e);
+    return e;
 }
 
 Expr extract_odd_lanes(const Expr &e, const Scope<> &lets) {
@@ -589,20 +587,20 @@ class Interleaver : public IRMutator {
             // If we want to deinterleave both the index and predicate
             // (or the predicate is one), then deinterleave the
             // resulting load.
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment, op->is_streaming);
             expr = deinterleave_expr(expr);
         } else if (should_deinterleave_idx) {
             // If we only want to deinterleave the index and not the
             // predicate, deinterleave the index prior to the load.
             idx = deinterleave_expr(idx);
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment, op->is_streaming);
         } else if (should_deinterleave_predicate) {
             // Similarly, deinterleave the predicate prior to the load
             // if we don't want to deinterleave the index.
             predicate = deinterleave_expr(predicate);
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment, op->is_streaming);
         } else if (!idx.same_as(op->index) || !predicate.same_as(op->index)) {
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment, op->is_streaming);
         } else {
             expr = op;
         }
@@ -612,7 +610,19 @@ class Interleaver : public IRMutator {
         return expr;
     }
 
+    Scope<MemoryType> allocation_scope;
+    Stmt visit(const Allocate *op) override {
+        ScopedBinding<MemoryType> bind(allocation_scope, op->name, op->memory_type);
+        return IRMutator::visit(op);
+    }
+
     Stmt visit(const Store *op) override {
+        // Don't mess with stores to natively-2D tile memory.
+        if (const auto *alloc = allocation_scope.find(op->name);
+            alloc && is_tile_memory_type(*alloc)) {
+            return op;
+        }
+
         bool old_should_deinterleave = should_deinterleave;
         int old_num_lanes = num_lanes;
 
@@ -634,7 +644,7 @@ class Interleaver : public IRMutator {
             predicate = deinterleave_expr(predicate);
         }
 
-        Stmt stmt = Store::make(op->name, value, idx, op->param, predicate, op->alignment);
+        Stmt stmt = Store::make(op->name, value, idx, op->param, predicate, op->alignment, op->is_streaming);
 
         should_deinterleave = old_should_deinterleave;
         num_lanes = old_num_lanes;
@@ -656,6 +666,12 @@ class Interleaver : public IRMutator {
 
         // There was no inner store.
         if (!store) {
+            return Stmt();
+        }
+
+        // Don't mess with stores to natively-2D tile memory.
+        if (const auto *alloc = allocation_scope.find(store->name);
+            alloc && is_tile_memory_type(*alloc)) {
             return Stmt();
         }
 
@@ -693,13 +709,10 @@ class Interleaver : public IRMutator {
             return Stmt();
         }
 
-        // Too many stores and lanes to represent in a single vector
-        // type.
-        int max_bits = sizeof(halide_type_t::lanes) * 8;
+        // Too many stores and lanes to represent in a single vector type.
         // mul_would_overflow is for signed types, but vector lanes
         // are unsigned, so add a bit.
-        max_bits++;
-        if (mul_would_overflow(max_bits, stores.size(), lanes)) {
+        if (mul_would_overflow(Type::kLanesBits + 1, stores.size(), lanes)) {
             return Stmt();
         }
 
@@ -763,7 +776,7 @@ class Interleaver : public IRMutator {
         Expr index = Ramp::make(base, make_one(base.type()), t.lanes());
         Expr value = Shuffle::make_interleave(args);
         Expr predicate = Shuffle::make_interleave(predicates);
-        Stmt new_store = Store::make(store->name, value, index, store->param, predicate, ModulusRemainder());
+        Stmt new_store = Store::make(store->name, value, index, store->param, predicate, ModulusRemainder(), store->is_streaming);
 
         // Rewrap the let statements we pulled off.
         while (!let_stmts.empty()) {
@@ -802,7 +815,7 @@ public:
 }  // namespace
 
 Stmt rewrite_interleavings(const Stmt &s) {
-    return Interleaver().mutate(s);
+    return Interleaver()(s);
 }
 
 namespace {

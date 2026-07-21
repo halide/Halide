@@ -65,7 +65,7 @@ class Closure;
 struct Interval;
 struct ConstantInterval;
 struct ModulusRemainder;
-enum class IRNodeType;
+enum class IRNodeType : uint8_t;
 
 /** Emit a halide node type on an output stream (such as std::cout) in
  * human-readable form */
@@ -288,6 +288,8 @@ protected:
     void visit(const VectorReduce *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
+    void visit(const StreamingStore *) override;
+    void visit(const StreamingLoads *) override;
     void visit(const HoistedStorage *) override;
 };
 

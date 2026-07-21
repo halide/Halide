@@ -46,14 +46,15 @@ function(_Halide_pkgdep PKG)
         string(APPEND code "find_dependency(${PKG} ${${PKG}_VERSION})")
     else ()
         string(APPEND code
-               "find_dependency(\n"
-               "    ${PKG} ${${PKG}_VERSION}\n"
-               "    COMPONENTS ${${PKG}_COMPONENTS}\n"
-               ")")
+            "find_dependency(\n"
+            "    ${PKG} ${${PKG}_VERSION}\n"
+            "    COMPONENTS ${${PKG}_COMPONENTS}\n"
+            ")"
+        )
     endif ()
 
-    set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" APPEND PROPERTY pkgdeps "${PKG}")
-    set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY "pkgdeps[${PKG}]" "${code}")
+    set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" APPEND PROPERTY pkgdeps "${PKG}")  # nolint
+    set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY "pkgdeps[${PKG}]" "${code}")  # nolint
 endfunction()
 
 ##
@@ -73,9 +74,7 @@ function(_Halide_install_code)
 endfunction()
 
 function(_Halide_install_pkgdeps)
-    cmake_parse_arguments(
-        PARSE_ARGV 0 ARG "" "COMPONENT;DESTINATION;FILE_NAME;EXPORT_FILE" ""
-    )
+    cmake_parse_arguments(PARSE_ARGV 0 ARG "" "COMPONENT;DESTINATION;FILE_NAME;EXPORT_FILE" "")
 
     set(depFile "${CMAKE_CURRENT_BINARY_DIR}/${ARG_FILE_NAME}")
     set(installPrefix "$<$<PATH:IS_RELATIVE,${ARG_DESTINATION}>:\${CMAKE_INSTALL_PREFIX}/>")
@@ -96,13 +95,7 @@ function(_Halide_install_pkgdeps)
         )
     endforeach ()
 
-    _Halide_install_code(
-        "configure_file(\"${depFile}.in\" \"${depFile}\" COPYONLY)"
-    )
+    _Halide_install_code("configure_file(\"${depFile}.in\" \"${depFile}\" COPYONLY)")
 
-    install(
-        FILES "${depFile}"
-        DESTINATION "${ARG_DESTINATION}"
-        COMPONENT "${ARG_COMPONENT}"
-    )
+    install(FILES "${depFile}" DESTINATION "${ARG_DESTINATION}" COMPONENT "${ARG_COMPONENT}")
 endfunction()

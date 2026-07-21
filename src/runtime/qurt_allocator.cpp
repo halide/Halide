@@ -22,7 +22,7 @@ ALWAYS_INLINE void aligned_free(void *ptr) {
 
 // We keep a small pool of small pre-allocated buffers for use by Halide
 // code; some kernels end up doing per-scanline allocations and frees,
-// which can cause a noticable performance impact on some workloads.
+// which can cause a noticeable performance impact on some workloads.
 // 'num_buffers' is the number of pre-allocated buffers and 'buffer_size' is
 // the size of each buffer. The pre-allocated buffers are shared among threads
 // and we use compare-and-swap primitives to synchronize the buffer

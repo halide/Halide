@@ -230,7 +230,7 @@ int main(int argc, char **argv) {
     // https://github.com/halide/Halide/issues/8054
     {
         ImageParam input(Float(32), 2, "input");
-        const float r_sigma = 0.1;
+        const float r_sigma = 0.1f;
         const int s_sigma = 8;
         Func bilateral_grid{"bilateral_grid"};
 

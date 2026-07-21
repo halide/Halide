@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
     Expr t1 = ((y * PRIME_1) % test_h) / float(test_h);
     // To make sure we time mostly the computation of the math function, and not
     // memory bandwidth, we will compute many evaluations of the function per output
-    // and sum them. In my testing, GPUs suffer more from bandwith with this test,
+    // and sum them. In my testing, GPUs suffer more from bandwidth with this test,
     // so we give it even more function evaluations to compute per output.
     const int test_d = target.has_gpu_feature() ? 2048 : 128;
     RDom rdom{0, test_d};
@@ -217,7 +217,7 @@ int main(int argc, char **argv) {
         double pipeline_time_ref = benchmark([&]() { ref_func.realize(buffer_out); buffer_out.device_sync(); }, bcfg);
 
         // Print results for this function
-        printf("      %s             : %9.5f ns per evaluation  [per invokation: %6.3f ms]\n",
+        printf("      %s             : %9.5f ns per evaluation  [per invocation: %6.3f ms]\n",
                ftt.name.c_str(),
                pipeline_time_ref * pipeline_time_to_ns_per_evaluation,
                pipeline_time_ref * 1e3);
@@ -237,7 +237,7 @@ int main(int argc, char **argv) {
             // clang-format on
 
             // Print results for this approximation.
-            printf(" %9.5f ns per evaluation  (per invokation: %6.3f ms)",
+            printf(" %9.5f ns per evaluation  (per invocation: %6.3f ms)",
                    approx_pipeline_time * pipeline_time_to_ns_per_evaluation,
                    approx_pipeline_time * 1e3);
 

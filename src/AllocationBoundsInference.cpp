@@ -46,7 +46,7 @@ class AllocationInference : public IRMutator {
         Stmt new_body = mutate(op->body);
         Stmt stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
 
-        // If the realization is dead and there's is no access to the
+        // If the realization is dead and there is no access to the
         // buffer (e.g. because we're in a specialization), then
         // b.size() may be zero. In this case just drop the realize
         // node.
@@ -169,8 +169,8 @@ class StripDeclareBoxTouched : public IRMutator {
 Stmt allocation_bounds_inference(Stmt s,
                                  const map<string, Function> &env,
                                  const FuncValueBounds &fb) {
-    s = AllocationInference(env, fb).mutate(s);
-    s = StripDeclareBoxTouched().mutate(s);
+    s = AllocationInference(env, fb)(s);
+    s = StripDeclareBoxTouched()(s);
     return s;
 }
 

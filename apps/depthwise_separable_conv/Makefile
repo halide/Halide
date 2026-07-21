@@ -24,4 +24,3 @@ test: $(BIN)/$(HL_TARGET)/process
 
 clean:
 	rm -rf $(BIN)
-

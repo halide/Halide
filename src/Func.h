@@ -461,6 +461,27 @@ public:
     Stage &allow_race_conditions();
     Stage &atomic(bool override_associativity_test = false);
 
+    /** Use non-temporal (streaming) stores for writes done by this Stage. On
+     * targets that require it, Halide emits a fence immediately after this
+     * Stage's production to ensure the streamed values are visible to
+     * whatever reads them next. Only legal on a Stage all of whose RVars (if
+     * any) are pure, i.e. already proven safe to parallelize: a Stage with a
+     * genuine loop-carried self-dependency could otherwise observe data it
+     * streamed earlier in the same Stage, before the fence. It is a user
+     * error to call this on a Stage that doesn't meet this condition. */
+    Stage &stream_stores();
+
+    /** Use non-temporal (streaming) loads for every direct read this Stage
+     * makes of another Func or external buffer (e.g. an ImageParam). This
+     * is a hint to keep data that is only read once from displacing reusable
+     * data from the cache. */
+    Stage &stream_loads();
+
+    /** Use non-temporal (streaming) loads for this Stage's direct reads of
+     * the named Funcs. It is a user error to name this Stage's own Func
+     * (a self-load can't be streamed). */
+    Stage &stream_loads(const std::vector<Func> &funcs);
+
     Stage &hexagon(const VarOrRVar &x = Var::outermost());
 
     Stage &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
@@ -1107,7 +1128,7 @@ public:
      * debugging.
      *
      * If filename ends in ".tif" or ".tiff" (case insensitive) the file
-     * is in TIFF format and can be read by standard tools. Oherwise, the
+     * is in TIFF format and can be read by standard tools. Otherwise, the
      * file format is as follows:
      *
      * All data is in the byte-order of the target platform.  First, a
@@ -1347,6 +1368,12 @@ public:
        for x:
          g(x, y) = f(x, y)
      \endcode
+     * If a Func passed to in() does not directly call this Func, in() acts
+     * transitively: the Func graph is searched downward from each argument,
+     * and every direct caller of this Func found along the way is wrapped.
+     * This is useful when intermediate Funcs are anonymous and not held by
+     * the user (e.g. a pyramid built via helper functions).
+     *
      * using Func::in(), we can write:
      \code
      f(x, y) = x + y;
@@ -1398,6 +1425,31 @@ public:
      h(x, y) = f(x, y) - 3;
      \endcode
      *
+     * As with Func::in(), clone_in() acts transitively: any Func in 'f'/'fs'
+     * that does not directly call this Func is replaced by the set of direct
+     * callers reachable from it along paths that lead to this Func. Only
+     * this Func is cloned; the intermediate Funcs along the path are not.
+     *
+     * For example, given a pipeline that uses sum() (which constructs an
+     * anonymous inner Func to perform the reduction):
+     \code
+     RDom r(0, 5);
+     f(x, y) = x + y;
+     g(x, y) = sum(f(x + r, y));    // g calls f via an anonymous Func from sum()
+     h(x, y) = f(x, y) - 1;         // h calls f directly
+     \endcode
+     * f.clone_in(g) clones f at the anonymous reduction Func inside g but does
+     * not clone the reduction Func itself. It is equivalent to this:
+     \code
+     RDom r(0, 5);
+     f(x, y) = x + y;
+     f_clone(x, y) = x + y;
+     g(x, y) = sum(f_clone(x + r, y)); // the summation calls the clone
+     h(x, y) = f(x, y) - 1;            // unrelated uses of f are untouched
+     \endcode
+     * If the anonymous reduction Func had other consumers besides g, they
+     * would also see the rewrite from f to f_clone — only this Func is
+     * cloned, not the intermediates.
      */
     //@{
     Func clone_in(const Func &f);
@@ -2570,6 +2622,25 @@ public:
      * in global vs shared vs local on the GPU. See the documentation
      * on MemoryType for more detail. */
     Func &store_in(MemoryType memory_type);
+
+    /** Use non-temporal (streaming) loads for every direct read this Func's
+     * pure (initial) definition makes of another Func. Equivalent to calling
+     * stream_loads() on Stage 0; see \ref Stage::stream_loads. To stream the
+     * loads of an update definition, call stream_loads() on the Stage returned
+     * by \ref Func::update instead. */
+    Func &stream_loads();
+
+    /** Use non-temporal (streaming) loads for this Func's pure (initial)
+     * definition's direct reads of the named Funcs. Equivalent to calling
+     * stream_loads(funcs) on Stage 0; see \ref Stage::stream_loads. */
+    Func &stream_loads(const std::vector<Func> &funcs);
+
+    /** Use non-temporal (streaming) stores for writes done by this Func's
+     * pure (initial) definition. Equivalent to calling stream_stores() on
+     * Stage 0; see \ref Stage::stream_stores. To stream the stores of an
+     * update definition, call stream_stores() on the Stage returned by
+     * \ref Func::update instead. */
+    Func &stream_stores();
 
     /** Trace all loads from this Func by emitting calls to
      * halide_trace. If the Func is inlined, this has no

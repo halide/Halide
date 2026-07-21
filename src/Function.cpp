@@ -1,7 +1,5 @@
 #include <atomic>
 #include <cstdlib>
-#include <memory>
-#include <set>
 #include <utility>
 
 #include "CSE.h"
@@ -112,6 +110,10 @@ struct FunctionContents {
 
     bool no_profiling = false;
 
+    // Optional override for the name shown in the profiler. The IR-level
+    // name is `name`; this is purely cosmetic.
+    std::string profiler_display_name;
+
     bool frozen = false;
 
     void accept(IRVisitor *visitor) const {
@@ -168,10 +170,10 @@ struct FunctionContents {
         if (!extern_function_name.empty()) {
             for (ExternFuncArgument &i : extern_arguments) {
                 if (i.is_expr()) {
-                    i.expr = mutator->mutate(i.expr);
+                    i.expr = (*mutator)(i.expr);
                 }
             }
-            extern_proxy_expr = mutator->mutate(extern_proxy_expr);
+            extern_proxy_expr = (*mutator)(extern_proxy_expr);
         }
     }
 };
@@ -355,6 +357,7 @@ void Function::update_with_deserialization(const std::string &name,
                                            bool trace_realizations,
                                            const std::vector<std::string> &trace_tags,
                                            bool no_profiling,
+                                           const std::string &profiler_display_name,
                                            bool frozen) {
     contents->name = name;
     contents->origin_name = origin_name;
@@ -377,6 +380,7 @@ void Function::update_with_deserialization(const std::string &name,
     contents->trace_realizations = trace_realizations;
     contents->trace_tags = trace_tags;
     contents->no_profiling = no_profiling;
+    contents->profiler_display_name = profiler_display_name;
     contents->frozen = frozen;
 }
 
@@ -516,6 +520,7 @@ void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const
     copy->trace_realizations = contents->trace_realizations;
     copy->trace_tags = contents->trace_tags;
     copy->no_profiling = contents->no_profiling;
+    copy->profiler_display_name = contents->profiler_display_name;
     copy->frozen = contents->frozen;
     copy->output_buffers = contents->output_buffers;
     copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
@@ -837,14 +842,14 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
     // memory leaks. We need to break these cycles.
     WeakenFunctionPtrs weakener(contents.get());
     for (auto &arg : args) {
-        arg = weakener.mutate(arg);
+        arg = weakener(arg);
     }
     for (auto &value : values) {
-        value = weakener.mutate(value);
+        value = weakener(value);
     }
     if (check.reduction_domain.defined()) {
         check.reduction_domain.set_predicate(
-            weakener.mutate(check.reduction_domain.predicate()));
+            weakener(check.reduction_domain.predicate()));
     }
 
     Definition r(args, values, check.reduction_domain, false);
@@ -1191,6 +1196,13 @@ void Function::do_not_profile() {
 }
 bool Function::should_not_profile() const {
     return contents->no_profiling;
+}
+
+void Function::set_profiler_display_name(const std::string &n) {
+    contents->profiler_display_name = n;
+}
+const std::string &Function::profiler_display_name() const {
+    return contents->profiler_display_name;
 }
 
 void Function::freeze() {

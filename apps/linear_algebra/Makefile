@@ -75,7 +75,7 @@ BENCHMARKS = \
 
 .PHONY: build clean run_benchmarks test
 all: build
-	make run_benchmarks 
+	make run_benchmarks
 
 # This is a hack: disable this test when compiling 32-bit systems, as it's hard to find the right 32-bit versions
 # of these libraries on 64-bit hosts. Can't rely on HL_TARGET because it might be 'host' even for cross-compiling.

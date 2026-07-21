@@ -6,6 +6,7 @@
 #include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Var.h"
 
 namespace Halide {
@@ -26,47 +27,47 @@ struct DefinitionContents {
         : predicate(const_true()) {
     }
 
-    void accept(IRVisitor *visitor) const {
+    void accept(IRVisitor &visitor) const {
         if (predicate.defined()) {
-            predicate.accept(visitor);
+            visitor(predicate);
         }
 
         for (const Expr &val : values) {
-            val.accept(visitor);
+            visitor(val);
         }
         for (const Expr &arg : args) {
-            arg.accept(visitor);
+            visitor(arg);
         }
 
-        stage_schedule.accept(visitor);
+        stage_schedule.accept(&visitor);
 
         for (const Specialization &s : specializations) {
             if (s.condition.defined()) {
-                s.condition.accept(visitor);
+                s.condition.accept(&visitor);
             }
-            s.definition.accept(visitor);
+            s.definition.accept(&visitor);
         }
     }
 
-    void mutate(IRMutator *mutator) {
+    void mutate(IRMutator &mutator) {
         if (predicate.defined()) {
-            predicate = mutator->mutate(predicate);
+            predicate = mutator(predicate);
         }
 
         for (auto &value : values) {
-            value = mutator->mutate(value);
+            value = mutator(value);
         }
         for (auto &arg : args) {
-            arg = mutator->mutate(arg);
+            arg = mutator(arg);
         }
 
-        stage_schedule.mutate(mutator);
+        stage_schedule.mutate(&mutator);
 
         for (Specialization &s : specializations) {
             if (s.condition.defined()) {
-                s.condition = mutator->mutate(s.condition);
+                s.condition = mutator(s.condition);
             }
-            s.definition.mutate(mutator);
+            s.definition.mutate(&mutator);
         }
     }
 };
@@ -146,11 +147,11 @@ bool Definition::is_init() const {
 }
 
 void Definition::accept(IRVisitor *visitor) const {
-    contents->accept(visitor);
+    contents->accept(*visitor);
 }
 
 void Definition::mutate(IRMutator *mutator) {
-    contents->mutate(mutator);
+    contents->mutate(*mutator);
 }
 
 std::vector<Expr> &Definition::args() {

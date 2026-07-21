@@ -11,6 +11,7 @@
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Util.h"
+#include <algorithm>
 #include <utility>
 
 namespace Halide {
@@ -691,8 +692,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                                               op->name,
                                               sema_var,
                                               dim,
-                                              storage_dim)
-                               .mutate(body);
+                                              storage_dim)(body);
 
                     if (storage_dim.fold_forward) {
                         can_fold_forwards = true;
@@ -791,7 +791,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 } else {
                     head = dynamic_footprint;
                 }
-                body = FoldStorageOfFunction(func.name(), (int)i - 1, factor, head).mutate(body);
+                body = FoldStorageOfFunction(func.name(), (int)i - 1, factor, head)(body);
             }
 
             // If the producer is async, it can run ahead by
@@ -961,7 +961,34 @@ class StorageFolding : public IRMutator {
         } else {
             debug(3) << "Attempting to fold " << op->name << " automatically or explicitly\n";
         }
-        body = folder.mutate(body);
+        body = folder(body);
+
+        // If the user explicitly requested storage folding via Func::fold_storage,
+        // storage folding may have bailed out before reaching the correct loop.
+        // Throw an error if the user's storage folding was not applied.
+        const std::vector<std::string> &args = func.args();
+        for (const StorageDim &sd : func.schedule().storage_dims()) {
+            if (!sd.fold_factor.defined()) {
+                continue;
+            }
+            auto arg_it = std::find(args.begin(), args.end(), sd.var);
+            internal_assert(arg_it != args.end());
+            int d = (int)(arg_it - args.begin());
+            bool folded = std::any_of(folder.dims_folded.begin(), folder.dims_folded.end(),
+                                      [&](const AttemptStorageFoldingOfFunction::Fold &f) {
+                                          return f.dim == d;
+                                      });
+            // TODO: Root cause analysis for why folding failed
+            user_assert(folded)
+                << "Explicit storage folding of Func " << op->name
+                << " along dimension " << sd.var << " with fold factor "
+                << sd.fold_factor << " was requested via fold_storage(), "
+                << "but storage folding did not attempt to fold that dimension.\n"
+                << "Some common causes include: the inner loop over " << sd.var << " may be nested "
+                << "inside a parallel loop or sliding-window loop, "
+                << "the bounds on the inner loop over " << sd.var << " may be constant, or "
+                << sd.var << " may not have a corresponding inner loop to fold over.";
+        }
 
         if (body.same_as(op->body)) {
             return op;
@@ -1034,8 +1061,8 @@ class RemoveSlidingWindowMarkers : public IRMutator {
 }  // namespace
 
 Stmt storage_folding(const Stmt &s, const std::map<std::string, Function> &env) {
-    Stmt stmt = StorageFolding(env).mutate(s);
-    stmt = RemoveSlidingWindowMarkers().mutate(stmt);
+    Stmt stmt = StorageFolding(env)(s);
+    stmt = RemoveSlidingWindowMarkers()(stmt);
     return stmt;
 }
 

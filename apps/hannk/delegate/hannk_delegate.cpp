@@ -271,7 +271,7 @@ public:
             HLOG(INFO) << "Delegate " << (void *)this << " Init nodes: " << node_indices << "\n";
         }
 
-        // Pre-emptively map *all* the TFLiteTensors into our Tensor type.
+        // Preemptively map *all* the TFLiteTensors into our Tensor type.
         for (size_t tensor_id = 0; tensor_id < context->tensors_size; tensor_id++) {
             const TfLiteTensor &tensor = context->tensors[tensor_id];
             if (tensor.dims == nullptr) {

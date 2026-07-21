@@ -18,11 +18,16 @@
 
 #ifdef _MSC_VER
 #include <io.h>
+#include <process.h>  // For _spawnvp
 #else
 #include <cstdlib>
+#include <spawn.h>
 #include <sys/mman.h>  // For mmap
+#include <sys/wait.h>
 #include <unistd.h>
+extern char **environ;
 #endif
+
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -31,9 +36,11 @@
 #include <linux/limits.h>  // For PATH_MAX
 #include <ucontext.h>      // For swapcontext
 #endif
+
 #if defined(_MSC_VER) && !defined(NOMINMAX)
 #define NOMINMAX
 #endif
+
 #ifdef _WIN32
 #include <Objbase.h>  // needed for CoCreateGuid
 #include <Shlobj.h>   // needed for SHGetFolderPath
@@ -41,6 +48,7 @@
 #else
 #include <dlfcn.h>
 #endif
+
 #ifdef __APPLE__
 #define CAN_GET_RUNNING_PROGRAM_NAME
 #include <mach-o/dyld.h>
@@ -495,6 +503,32 @@ void write_entire_file(const std::string &pathname, const void *source, size_t s
     f.flush();
     internal_assert(f.good()) << "Unable to write file: " << pathname;
     f.close();
+}
+
+int run_process(std::vector<std::string> args) {
+    internal_assert(!args.empty()) << "run_process called with empty args\n";
+
+    std::vector<char *> argv;
+    argv.reserve(args.size() + 1);
+    for (auto &a : args) {
+        argv.push_back(a.data());
+    }
+    argv.push_back(nullptr);
+
+    debug(2) << "Running process: " << PrintSpan(args) << "\n";
+
+#ifdef _WIN32
+    // Wait for completion; return the child's exit code.
+    int rc = _spawnvp(_P_WAIT, argv[0], argv.data());
+    return (rc >= 0) ? rc : -1;
+#else
+    pid_t pid = 0;
+    int status = posix_spawnp(&pid, argv[0], nullptr, nullptr, argv.data(), environ);
+    if (status != 0 || waitpid(pid, &status, 0) == -1) {
+        return -1;
+    }
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+#endif
 }
 
 bool add_would_overflow(int bits, int64_t a, int64_t b) {

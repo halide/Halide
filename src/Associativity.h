@@ -106,7 +106,7 @@ struct AssociativeOp {
 /**
  * Given an update definition of a Func 'f', determine its equivalent
  * associative binary/unary operator if there is any. 'is_associative'
- * indicates if the operation was successfuly proven as associative.
+ * indicates if the operation was successfully proven as associative.
  */
 AssociativeOp prove_associativity(
     const std::string &f, std::vector<Expr> args, std::vector<Expr> exprs);

@@ -70,7 +70,7 @@ class MarkClampedRampsAsLikely : public IRMutator {
         if (predicate.same_as(op->predicate) && index.same_as(op->index) && value.same_as(op->value)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
+            return Store::make(op->name, value, index, op->param, predicate, op->alignment, op->is_streaming);
         }
     }
 
@@ -1165,16 +1165,16 @@ bool has_likely_tag(const Expr &e, const Scope<> &scope) {
 }
 
 Stmt partition_loops(Stmt s) {
-    s = LowerLikelyIfInnermost().mutate(s);
+    s = LowerLikelyIfInnermost()(s);
 
     // Walk inwards to the first loop before doing any more work.
     s = mutate_with(s, [](auto *self, const For *op) {
         Stmt s = op;
-        s = MarkClampedRampsAsLikely().mutate(s);
-        s = ExpandSelects().mutate(s);
-        s = PartitionLoops().mutate(s);
-        s = RenormalizeGPULoops().mutate(s);
-        s = CollapseSelects().mutate(s);
+        s = MarkClampedRampsAsLikely()(s);
+        s = ExpandSelects()(s);
+        s = PartitionLoops()(s);
+        s = RenormalizeGPULoops()(s);
+        s = CollapseSelects()(s);
         return s;
     });
 

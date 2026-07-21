@@ -116,7 +116,7 @@ std::string buffer_type_name() {
  * template parameter is T = void.
  *
  * A Buffer<T, D1> can refer to a Buffer<T, D2> if D1 == D2,
- * or if D1 is AnyDims (meaning "dimensionality is checked at runtime, not compiletime").
+ * or if D1 is AnyDims (meaning "dimensionality is checked at runtime, not compile time").
  */
 template<typename T, int Dims>
 class Buffer {
@@ -128,7 +128,7 @@ class Buffer {
     template<typename T2, int D2>
     static void assert_can_convert_from(const Buffer<T2, D2> &other) {
         if (!other.defined()) {
-            // Avoid UB of deferencing offset of a null contents ptr
+            // Avoid UB of dereferencing offset of a null contents ptr
             static_assert(!std::is_const_v<T2> || std::is_const_v<T>,
                           "Can't convert from a Buffer<const T> to a Buffer<T>");
             static_assert(std::is_same_v<std::remove_const_t<T>, std::remove_const_t<T2>> ||
@@ -210,7 +210,7 @@ public:
              typename = std::enable_if_t<Internal::all_ints_and_optional_name<Args...>::value>>
     explicit Buffer(Type t,
                     int first, Args... rest)
-        : Buffer(Runtime::Buffer<T, Dims>(t, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
+        : Buffer(Runtime::Buffer<T, Dims>(t.to_abi(), Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                  Internal::get_name_from_end_of_parameter_pack(rest...)) {
     }
 
@@ -229,14 +229,14 @@ public:
     explicit Buffer(Type t,
                     const std::vector<int> &sizes,
                     const std::string &name = "")
-        : Buffer(Runtime::Buffer<T, Dims>(t, sizes), name) {
+        : Buffer(Runtime::Buffer<T, Dims>(t.to_abi(), sizes), name) {
     }
 
     explicit Buffer(Type t,
                     const std::vector<int> &sizes,
                     const std::vector<int> &storage_order,
                     const std::string &name = "")
-        : Buffer(Runtime::Buffer<T, Dims>(t, sizes, storage_order), name) {
+        : Buffer(Runtime::Buffer<T, Dims>(t.to_abi(), sizes, storage_order), name) {
     }
 
     explicit Buffer(const std::vector<int> &sizes,
@@ -261,7 +261,7 @@ public:
     explicit Buffer(Type t,
                     Internal::add_const_if_T_is_const<T, void> *data,
                     int first, Args &&...rest)
-        : Buffer(Runtime::Buffer<T, Dims>(t, data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
+        : Buffer(Runtime::Buffer<T, Dims>(t.to_abi(), data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                  Internal::get_name_from_end_of_parameter_pack(rest...)) {
     }
 
@@ -271,7 +271,7 @@ public:
                     Internal::add_const_if_T_is_const<T, void> *data,
                     const std::vector<int> &sizes,
                     const std::string &name = "")
-        : Buffer(Runtime::Buffer<T, Dims>(t, data, sizes, name)) {
+        : Buffer(Runtime::Buffer<T, Dims>(t.to_abi(), data, sizes, name)) {
     }
 
     template<typename... Args,
@@ -292,7 +292,7 @@ public:
                     Internal::add_const_if_T_is_const<T, void> *data,
                     const std::vector<int> &sizes,
                     const std::string &name = "")
-        : Buffer(Runtime::Buffer<T, Dims>(t, data, sizes), name) {
+        : Buffer(Runtime::Buffer<T, Dims>(t.to_abi(), data, sizes), name) {
     }
 
     explicit Buffer(Type t,
@@ -300,7 +300,7 @@ public:
                     int d,
                     const halide_dimension_t *shape,
                     const std::string &name = "")
-        : Buffer(Runtime::Buffer<T, Dims>(t, data, d, shape), name) {
+        : Buffer(Runtime::Buffer<T, Dims>(t.to_abi(), data, d, shape), name) {
     }
 
     explicit Buffer(T *data,
@@ -315,7 +315,7 @@ public:
     }
 
     static Buffer<> make_scalar(Type t, const std::string &name = "") {
-        return Buffer<>(Runtime::Buffer<>::make_scalar(t), name);
+        return Buffer<>(Runtime::Buffer<>::make_scalar(t.to_abi()), name);
     }
 
     static Buffer<T, Dims> make_scalar(T *data, const std::string &name = "") {
@@ -327,7 +327,7 @@ public:
     }
 
     static Buffer<> make_interleaved(Type t, int width, int height, int channels, const std::string &name = "") {
-        return Buffer<>(Runtime::Buffer<>::make_interleaved(t, width, height, channels), name);
+        return Buffer<>(Runtime::Buffer<>::make_interleaved(t.to_abi(), width, height, channels), name);
     }
 
     static Buffer<T, Dims> make_interleaved(T *data, int width, int height, int channels, const std::string &name = "") {
@@ -337,7 +337,7 @@ public:
     static Buffer<Internal::add_const_if_T_is_const<T, void>>
     make_interleaved(Type t, T *data, int width, int height, int channels, const std::string &name = "") {
         using T2 = Internal::add_const_if_T_is_const<T, void>;
-        return Buffer<T2, Dims>(Runtime::Buffer<T2, Dims>::make_interleaved(t, data, width, height, channels), name);
+        return Buffer<T2, Dims>(Runtime::Buffer<T2, Dims>::make_interleaved(t.to_abi(), data, width, height, channels), name);
     }
 
     template<typename T2, int D2>

@@ -16,6 +16,7 @@
 #include "CodeGen_LLVM.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
+#include "FindCalls.h"
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
@@ -614,7 +615,7 @@ vector<Expr> substitute_self_reference(const vector<Expr> &values, const string 
     vector<Expr> result;
     result.reserve(values.size());
     for (const auto &val : values) {
-        result.push_back(subs.mutate(val));
+        result.push_back(subs(val));
     }
     return result;
 }
@@ -1072,9 +1073,19 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     return intm;
 }
 
-void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor, bool exact, TailStrategy tail) {
+void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor_arg, bool exact, TailStrategy tail) {
     debug(4) << "In schedule for " << name() << ", split " << old << " into "
-             << outer << " and " << inner << " with factor of " << factor << "\n";
+             << outer << " and " << inner << " with factor of " << factor_arg << "\n";
+
+    user_assert(factor_arg.defined())
+        << "In schedule for " << name() << ", split factor for splitting "
+        << old << " is undefined.\n";
+    user_assert(Int(32).can_represent(factor_arg.type()))
+        << "In schedule for " << name() << ", split factor for splitting "
+        << old << " has type " << factor_arg.type()
+        << ", which is not representable as int32.\n";
+    Expr factor = cast<int32_t>(factor_arg);
+
     vector<Dim> &dims = definition.schedule().dims();
 
     definition.schedule().touched() = true;
@@ -1306,58 +1317,70 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
     debug(4) << "In schedule for " << name() << ", fuse " << outer.name()
              << " and " << inner.name() << " into " << fused.name() << "\n";
 
-    // Replace the old dimensions with the new dimension in the dims list
-    bool found_outer = false, found_inner = false;
-    string inner_name, outer_name, fused_name;
     vector<Dim> &dims = definition.schedule().dims();
-
-    DimType outer_type = DimType::PureRVar;
-    for (size_t i = 0; (!found_outer) && i < dims.size(); i++) {
-        if (dim_match(dims[i], outer)) {
-            found_outer = true;
-            outer_name = dims[i].var;
-            outer_type = dims[i].dim_type;
-            dims.erase(dims.begin() + i);
-        }
-    }
-    if (!found_outer) {
-        user_error << "In schedule for " << name()
-                   << ", could not find outer fuse dimension: "
-                   << outer.name()
-                   << "\n"
-                   << dump_argument_list();
-    }
-
-    for (size_t i = 0; (!found_inner) && i < dims.size(); i++) {
+    int inner_pos = -1, outer_pos = -1;
+    for (int i = 0; i < (int)dims.size(); i++) {
         if (dim_match(dims[i], inner)) {
-            found_inner = true;
-            inner_name = dims[i].var;
-            fused_name = inner_name + "." + fused.name();
-            dims[i].var = fused_name;
-
-            if (dims[i].dim_type == DimType::ImpureRVar ||
-                outer_type == DimType::ImpureRVar) {
-                dims[i].dim_type = DimType::ImpureRVar;
-            } else if (dims[i].dim_type == DimType::PureRVar ||
-                       outer_type == DimType::PureRVar) {
-                dims[i].dim_type = DimType::PureRVar;
-            } else {
-                dims[i].dim_type = DimType::PureVar;
-            }
-            // We just changed the dim_type without checking the
-            // for_type. Redundantly re-set the for type on the fused var just
-            // to trigger validation of the existing for_type.
-            set_dim_type(fused, dims[i].for_type);
+            inner_pos = i;
+        }
+        if (dim_match(dims[i], outer)) {
+            outer_pos = i;
         }
     }
+    user_assert(inner_pos >= 0) << "In schedule for " << name()
+                                << ", could not find inner fuse dimension: "
+                                << inner.name() << "\n"
+                                << dump_argument_list();
+    user_assert(outer_pos >= 0) << "In schedule for " << name()
+                                << ", could not find outer fuse dimension: "
+                                << outer.name() << "\n"
+                                << dump_argument_list();
+    user_assert(inner_pos != outer_pos) << "In schedule for " << name()
+                                        << ", inner and outer fuse dimensions must be distinct, both are: "
+                                        << inner.name() << "\n";
 
-    if (!found_inner) {
-        user_error << "In schedule for " << name()
-                   << ", could not find inner fuse dimension: "
-                   << inner.name()
-                   << "\n"
-                   << dump_argument_list();
+    // The dimensions need to be adjacent before fusing. Verify the reordering is safe.
+    if (outer_pos != inner_pos + 1) {
+        vector<VarOrRVar> order;
+        order.reserve(dims.size() - 1);
+        for (int i = 0; i < (int)dims.size() - 1; i++) {
+            if (i == outer_pos) {
+                continue;
+            }
+            order.emplace_back(split_string(dims[i].var, ".").back(), dims[i].is_rvar());
+            if (i == inner_pos) {
+                order.emplace_back(split_string(dims[outer_pos].var, ".").back(), dims[outer_pos].is_rvar());
+            }
+        }
+        reorder(order);
+        for (int i = 0; i < (int)dims.size(); i++) {
+            if (dim_match(dims[i], inner)) {
+                inner_pos = i;
+                break;
+            }
+        }
+        outer_pos = inner_pos + 1;
     }
+
+    string inner_name = dims[inner_pos].var;
+    string outer_name = dims[outer_pos].var;
+    string fused_name = inner_name + "." + fused.name();
+
+    DimType outer_type = dims[outer_pos].dim_type;
+    dims.erase(dims.begin() + outer_pos);
+
+    dims[inner_pos].var = fused_name;
+    if (dims[inner_pos].dim_type == DimType::ImpureRVar || outer_type == DimType::ImpureRVar) {
+        dims[inner_pos].dim_type = DimType::ImpureRVar;
+    } else if (dims[inner_pos].dim_type == DimType::PureRVar || outer_type == DimType::PureRVar) {
+        dims[inner_pos].dim_type = DimType::PureRVar;
+    } else {
+        dims[inner_pos].dim_type = DimType::PureVar;
+    }
+    // We just changed the dim_type without checking the for_type. Redundantly
+    // re-set the for type on the fused var just to trigger validation of the
+    // existing for_type.
+    set_dim_type(fused, dims[inner_pos].for_type);
 
     // Add the fuse to the splits list
     Split split = {fused_name, outer_name, inner_name, Expr(), true, TailStrategy::RoundUp, Split::FuseVars};
@@ -1628,6 +1651,49 @@ Stage &Stage::atomic(bool override_associativity_test) {
     definition.schedule().touched() = true;
     definition.schedule().atomic() = true;
     definition.schedule().override_atomic_associativity_test() = override_associativity_test;
+    return *this;
+}
+
+Stage &Stage::stream_stores() {
+    for (const Dim &d : definition.schedule().dims()) {
+        if (d.is_rvar() && !d.is_pure()) {
+            user_error << "Can't stream stores for " << name()
+                       << " because it has a reduction variable that Halide "
+                          "cannot prove is safe to parallelize. A self-load in "
+                          "this Stage could observe a value it streamed earlier "
+                          "in the same Stage, before the fence that makes "
+                          "streamed stores visible.\n";
+        }
+    }
+    definition.schedule().touched() = true;
+    definition.schedule().stream_stores() = true;
+    return *this;
+}
+
+Stage &Stage::stream_loads() {
+    definition.schedule().touched() = true;
+    definition.schedule().stream_loads_names() = std::nullopt;
+    return *this;
+}
+
+Stage &Stage::stream_loads(const std::vector<Func> &funcs) {
+    std::vector<string> names;
+    for (const Func &f : funcs) {
+        std::string target_name = f.name();
+        if (const Call *call = f.function().is_wrapper(); call && call->param.defined()) {
+            // A pure wrapper around an ImageParam/Buffer Parameter (e.g. as
+            // returned by ImageParam's implicit conversion to Func): the
+            // wrapper itself is inlined away before storage flattening
+            // ever runs, so match the underlying Parameter directly.
+            target_name = call->param.name();
+        }
+        user_assert(target_name != function.name())
+            << "Can't stream loads of \"" << target_name << "\" in " << name()
+            << " because a Stage cannot stream its own self-loads.\n";
+        names.push_back(target_name);
+    }
+    definition.schedule().stream_loads_names() = std::move(names);
+    definition.schedule().touched() = true;
     return *this;
 }
 
@@ -2176,7 +2242,60 @@ Func create_clone_wrapper(Function wrapped_fn, const string &wrapper_name) {
     return wrapper;
 }
 
-Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &fs, bool clone) {
+// Walk down the call graph from 'start'. Whenever we find a Func that directly
+// calls 'target', record it and stop descending that branch — we don't want to
+// pick up unrelated direct callers that happen to live deeper in the subtree.
+void collect_direct_callers_of(const Function &target,
+                               const Function &start,
+                               std::set<std::string> &visited,
+                               std::map<std::string, Function> &result) {
+    if (start.name() == target.name()) {
+        return;
+    }
+    if (!visited.insert(start.name()).second) {
+        return;
+    }
+    std::map<std::string, Function> direct = find_direct_calls(start);
+    if (direct.count(target.name())) {
+        result.emplace(start.name(), start);
+        return;
+    }
+    for (const auto &kv : direct) {
+        collect_direct_callers_of(target, kv.second, visited, result);
+    }
+}
+
+// Expand a user-supplied list of caller Funcs to the set of *direct* callers of
+// 'target' that lie on a path from any of those callers down to 'target'.
+// Funcs that already directly call 'target' pass through unchanged. If a Func
+// has no static path to 'target' at all, leave it alone: the IR may not yet
+// reflect a wrapper rewrite from a previous in()/clone_in(), and the existing
+// in()/clone_in() semantics permit registering a wrapper for such Funcs.
+vector<Func> resolve_transitive_callers(const Function &target, const vector<Func> &fs) {
+    vector<Func> out;
+    std::set<std::string> emitted;
+    auto emit = [&](const Function &g) {
+        if (emitted.insert(g.name()).second) {
+            out.emplace_back(g);
+        }
+    };
+    for (const Func &f : fs) {
+        std::map<std::string, Function> direct_callers;
+        std::set<std::string> visited;
+        collect_direct_callers_of(target, f.function(), visited, direct_callers);
+        if (direct_callers.empty()) {
+            emit(f.function());
+        } else {
+            for (const auto &kv : direct_callers) {
+                emit(kv.second);
+            }
+        }
+    }
+    return out;
+}
+
+Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &fs_in, bool clone) {
+    vector<Func> fs = fs_in.empty() ? fs_in : resolve_transitive_callers(wrapped_fn, fs_in);
     // Either all Funcs in 'fs' have the same wrapper or they don't already
     // have any wrappers. Otherwise, throw an error. If 'fs' is empty, then
     // it is a global wrapper.
@@ -2192,6 +2311,24 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
         }
         Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name) : create_in_wrapper(wrapped_fn, wrapper_name);
         Function wrapper_fn = wrapper.function();
+
+        // Build a profiler display name like "<wrapped>.in()" or
+        // "<wrapped>.in(<c1>, <c2>)" using the wrapped Func's display
+        // name and the consumers' display names (falling back to the
+        // IR-level name in each case). For .clone_in() use "clone_in".
+        auto display = [](const Function &f) {
+            return f.profiler_display_name().empty() ? f.name() : f.profiler_display_name();
+        };
+        std::string profiler_name = display(wrapped_fn) + (clone ? ".clone_in(" : ".in(");
+        for (size_t i = 0; i < fs.size(); i++) {
+            if (i > 0) {
+                profiler_name += ", ";
+            }
+            profiler_name += display(fs[i].function());
+        }
+        profiler_name += ")";
+        wrapper_fn.set_profiler_display_name(profiler_name);
+
         if (fs.empty()) {
             // Add global wrapper
             wrapped_fn.add_wrapper("", wrapper_fn);
@@ -2225,12 +2362,12 @@ Func Func::in(const vector<Func> &fs) {
         user_error << "Could not create a in wrapper for an empty list of Funcs\n";
     }
     invalidate_cache();
-    return get_wrapper(func, name() + "_wrapper", fs, false);
+    return get_wrapper(func, name() + "_in", fs, false);
 }
 
 Func Func::in() {
     invalidate_cache();
-    return get_wrapper(func, name() + "_global_wrapper", {}, false);
+    return get_wrapper(func, name() + "_in", {}, false);
 }
 
 Func Func::clone_in(const Func &f) {
@@ -2372,6 +2509,24 @@ Func &Func::memoize(const EvictionKey &eviction_key) {
 Func &Func::store_in(MemoryType t) {
     invalidate_cache();
     func.schedule().memory_type() = t;
+    return *this;
+}
+
+Func &Func::stream_loads() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).stream_loads();
+    return *this;
+}
+
+Func &Func::stream_loads(const std::vector<Func> &funcs) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).stream_loads(funcs);
+    return *this;
+}
+
+Func &Func::stream_stores() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).stream_stores();
     return *this;
 }
 
@@ -3190,7 +3345,7 @@ Func define_base_case(const Internal::Function &func, const vector<Expr> &a, con
     // Reuse names of existing pure args
     for (size_t i = 0; i < a.size(); i++) {
         if (const Variable *v = a[i].as<Variable>()) {
-            if (!v->param.defined()) {
+            if (!v->param.defined() && !v->reduction_domain.defined()) {
                 pure_args[i] = Var(v->name);
             }
         } else {

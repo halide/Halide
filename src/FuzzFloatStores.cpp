@@ -18,7 +18,7 @@ class FuzzFloatStores : public IRMutator {
             value = reinterpret(mask.type(), value);
             value = value & ~mask;
             value = reinterpret(t, value);
-            return Store::make(op->name, value, op->index, op->param, op->predicate, op->alignment);
+            return Store::make(op->name, value, op->index, op->param, op->predicate, op->alignment, op->is_streaming);
         } else {
             return IRMutator::visit(op);
         }
@@ -27,7 +27,7 @@ class FuzzFloatStores : public IRMutator {
 }  // namespace
 
 Stmt fuzz_float_stores(const Stmt &s) {
-    return FuzzFloatStores().mutate(s);
+    return FuzzFloatStores()(s);
 }
 
 }  // namespace Internal

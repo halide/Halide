@@ -42,7 +42,34 @@ public:
         // Queue up a bunch of tasks representing each test to run.
         if (target.arch == Target::X86) {
             check_sse_and_avx();
+            check_streaming_accesses();
         }
+    }
+
+    void check_streaming_accesses() {
+        if (!use_avx2) {
+            return;
+        }
+
+        auto streaming_copy = [&]() {
+            Func f{"f"}, reader{"reader"};
+
+            f(x, y) = in_u8(x);
+            f.compute_root()
+                .vectorize(x, 32)
+                .stream_stores();
+
+            reader(x, y) = f(x, y) + 1;
+            reader.compute_root()
+                .vectorize(x, 32)
+                .stream_loads();
+
+            return reader(x, y);
+        };
+
+        check("vmovntdqa (", 32, streaming_copy());
+        check("vmovntdq %ymm", 32, streaming_copy());
+        check("sfence", 32, streaming_copy());
     }
 
     void check_sse_and_avx() {
@@ -132,7 +159,7 @@ public:
             if (w > 1) {
                 // LLVM no longer generates division instructions with
                 // fast-math on (instead it uses the approximate
-                // reciprocal, a newtown rhapson step, and a
+                // reciprocal, a newtown raphson step, and a
                 // multiplication by the numerator).
                 // check("divps", 2*w, f32_1 / f32_2);
             }
@@ -411,23 +438,25 @@ public:
             check(use_avx512 ? "vrsqrt*ps" : "vrsqrtps*ymm", 8, fast_inverse_sqrt(f32_1));
             check(use_avx512 ? "vrcp*ps" : "vrcpps*ymm", 8, fast_inverse(f32_1));
 
-#if 0
-            // Not implemented in the front end.
-            check("vandnps", 8, bool1 & (!bool2));
-            check("vandps", 8, bool1 & bool2);
-            check("vorps", 8, bool1 | bool2);
-            check("vxorps", 8, bool1 ^ bool2);
-#endif
+            // Some llvm's don't use kandw, but instead predicate the computation of bool_2
+            // using the result of bool_1
+            // check(use_avx512 ? "kandw" : "vandps", 8, bool_1 & bool_2);
+            check(use_avx512 ? "korb" : "vorps", 8, bool_1 | bool_2);
+            check(use_avx512 ? "kxorb" : "vxorps", 8, bool_1 ^ bool_2);
 
             check("vaddps*ymm", 8, f32_1 + f32_2);
             check("vaddpd*ymm", 4, f64_1 + f64_2);
             check("vmulps*ymm", 8, f32_1 * f32_2);
             check("vmulpd*ymm", 4, f64_1 * f64_2);
+            check("vfmadd*ps*ymm", 8, f32_1 * f32_2 + f32_3);
+            check("vfmadd*pd*ymm", 4, f64_1 * f64_2 + f64_3);
+            check("vfmadd*ps*ymm", 8, fma(f32_1, f32_2, f32_3));
+            check("vfmadd*pd*ymm", 4, fma(f64_1, f64_2, f64_3));
             check("vsubps*ymm", 8, f32_1 - f32_2);
             check("vsubpd*ymm", 4, f64_1 - f64_2);
-            // LLVM no longer generates division instruction when fast-math is on
-            // check("vdivps", 8, f32_1 / f32_2);
-            // check("vdivpd", 4, f64_1 / f64_2);
+
+            check("vdivps", 8, strict_float(f32_1 / f32_2));
+            check("vdivpd", 4, strict_float(f64_1 / f64_2));
             check("vminps*ymm", 8, min(f32_1, f32_2));
             check("vminpd*ymm", 4, min(f64_1, f64_2));
             check("vmaxps*ymm", 8, max(f32_1, f32_2));

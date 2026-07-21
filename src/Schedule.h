@@ -6,6 +6,7 @@
  */
 
 #include <map>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -95,7 +96,7 @@ enum class TailStrategy {
      * branching. It increases code size slightly for inner loops
      * due to the epilogue handling, but not for outer loops
      * (e.g. loops over tiles). If used on a stage that reads from
-     * an input or writes to an output, this stategy only requires
+     * an input or writes to an output, this strategy only requires
      * that the input/output extent be at least the split factor,
      * instead of a multiple of the split factor as with RoundUp. */
     ShiftInwards,
@@ -236,6 +237,13 @@ public:
 
     /** Mutate our contents to match the contents of 'other'. */
     void set(const LoopLevel &other);
+
+    // Default copy and assignment. Unlike set(), which mutates the
+    // existing contents, assignment replaces the contents pointer.
+    LoopLevel(const LoopLevel &) = default;
+    LoopLevel &operator=(const LoopLevel &) = default;
+    LoopLevel(LoopLevel &&) = default;
+    LoopLevel &operator=(LoopLevel &&) = default;
 
     // All the public methods below this point are meant only for internal
     // use by Halide, rather than user code; hence, they are deliberately
@@ -689,7 +697,8 @@ public:
     StageSchedule(const std::vector<ReductionVariable> &rvars, const std::vector<Split> &splits,
                   const std::vector<Dim> &dims, const std::vector<PrefetchDirective> &prefetches,
                   const FuseLoopLevel &fuse_level, const std::vector<FusedPair> &fused_pairs,
-                  bool touched, bool allow_race_conditions, bool atomic, bool override_atomic_associativity_test);
+                  bool touched, bool allow_race_conditions, bool atomic, bool override_atomic_associativity_test,
+                  bool stream_stores, const std::optional<std::vector<std::string>> &stream_loads_names);
 
     /** Return a copy of this StageSchedule. */
     StageSchedule get_copy() const;
@@ -773,6 +782,27 @@ public:
     // @{
     bool override_atomic_associativity_test() const;
     bool &override_atomic_associativity_test();
+    // @}
+
+    /** True if stores to this Stage's backing storage should use
+     * non-temporal (streaming) stores. Only legal on a Stage all of whose
+     * RVars (if any) are pure, i.e. already proven safe to parallelize; see
+     * \ref Func::stream_stores. */
+    // @{
+    bool stream_stores() const;
+    bool &stream_stores();
+    // @}
+
+    /** The stream_loads() request (see \ref Func::stream_loads / \ref
+     * Stage::stream_loads) for this Stage: nullopt means stream every
+     * direct load of another Func (except a self-load), set by the
+     * zero-arg form; otherwise the vector names exactly the Funcs whose
+     * direct loads by this Stage should be streamed (non-temporal) -- an
+     * empty vector (the default, if stream_loads() was never called)
+     * means don't stream any of them. */
+    // @{
+    const std::optional<std::vector<std::string>> &stream_loads_names() const;
+    std::optional<std::vector<std::string>> &stream_loads_names();
     // @}
 
     /** Pass an IRVisitor through to all Exprs referenced in the

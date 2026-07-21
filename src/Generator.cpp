@@ -107,6 +107,7 @@ Func make_param_func(const Parameter &p, const std::string &name) {
         }
         f(args) = Internal::Call::make(p, args_expr);
     }
+    f.function().set_profiler_display_name(name + " (input)");
     return f;
 }
 
@@ -1369,7 +1370,7 @@ void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     target.set(context.target_);
     autoscheduler_.set(context.autoscheduler_params_);
 
-    // pre-emptively build our param_info now
+    // preemptively build our param_info now
     internal_assert(param_info_ptr == nullptr);
     param_info_ptr = std::make_unique<GeneratorParamInfo>(this, size);
 }
@@ -1806,7 +1807,7 @@ void GIOBase::verify_internals() {
         }
     } else {
         for (const Expr &e : exprs()) {
-            user_assert(e.defined()) << "Input/Ouput " << name() << " is not defined.\n";
+            user_assert(e.defined()) << "Input/Output " << name() << " is not defined.\n";
             user_assert(e.type() == gio_type())
                 << "Expected type " << gio_type()
                 << " but got " << e.type()
@@ -1919,6 +1920,8 @@ void GeneratorInputBase::init_internals() {
     funcs_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
         auto name = array_name(i);
+        // Discourage future Funcs from having the same name as this Input.
+        Internal::unique_name(name);
         parameters_.emplace_back(gio_type(), kind() != ArgInfoKind::Scalar, dims(), name);
         auto &p = parameters_[i];
         if (kind() != ArgInfoKind::Scalar) {
@@ -2167,7 +2170,7 @@ void generator_test() {
         const std::vector<uint64_t> a = {1, 2, 3, 4};
         Var x;
         Func fn_typed, fn_untyped;
-        fn_typed(x) = cast<int16_t>(38);
+        fn_typed(x) = make_const(Int(16), 38);
         fn_untyped(x) = 32.f;
         const std::vector<Func> fn_array = {fn_untyped, fn_untyped};
 

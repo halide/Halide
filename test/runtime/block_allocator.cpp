@@ -43,24 +43,13 @@ int deallocate_block(void *user_context, MemoryBlock *block) {
     return halide_error_code_success;
 }
 
-int conform_block(void *user_context, MemoryRequest *request) {
-
-    debug(user_context) << "Test : conform_block ("
-                        << "request_size=" << int32_t(request->size) << " "
-                        << "request_offset=" << int32_t(request->offset) << " "
-                        << "request_alignment=" << int32_t(request->alignment) << " "
-                        << ") ...";
-
-    return halide_error_code_success;
-}
-
 int allocate_region(void *user_context, MemoryRegion *region) {
     region->handle = (void *)1;
-    allocated_region_memory += region->size;
+    allocated_region_memory += region->allocation.size;
 
     debug(user_context) << "Test : allocate_region ("
                         << "region=" << (void *)(region) << " "
-                        << "region_size=" << int32_t(region->size) << " "
+                        << "region_size=" << int32_t(region->allocation.size) << " "
                         << "allocated_region_memory=" << int32_t(allocated_region_memory) << " "
                         << ") ...";
 
@@ -69,11 +58,11 @@ int allocate_region(void *user_context, MemoryRegion *region) {
 
 int deallocate_region(void *user_context, MemoryRegion *region) {
     region->handle = (void *)0;
-    allocated_region_memory -= region->size;
+    allocated_region_memory -= region->allocation.size;
 
     debug(user_context) << "Test : deallocate_region ("
                         << "region=" << (void *)(region) << " "
-                        << "region_size=" << int32_t(region->size) << " "
+                        << "region_size=" << int32_t(region->allocation.size) << " "
                         << "allocated_region_memory=" << int32_t(allocated_region_memory) << " "
                         << ") ...";
 

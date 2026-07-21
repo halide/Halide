@@ -60,7 +60,6 @@
 #include "DefaultCostModel.h"
 #include "Featurization.h"
 #include "FunctionDAG.h"
-#include "Halide.h"
 #include "LoopNest.h"
 #include "NetworkSize.h"
 #include "ParamParser.h"

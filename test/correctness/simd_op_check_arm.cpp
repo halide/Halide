@@ -22,7 +22,33 @@ public:
     void add_tests() override {
         if (target.arch == Target::ARM) {
             check_neon_all();
+            check_streaming_accesses();
         }
+    }
+
+    void check_streaming_accesses() {
+        if (target.bits != 64) {
+            return;
+        }
+
+        auto streaming_copy = [&]() {
+            Func f{"f"}, reader{"reader"};
+
+            f(x, y) = in_u8(x);
+            f.compute_root()
+                .vectorize(x, 32)
+                .stream_stores();
+
+            reader(x, y) = f(x, y) + 1;
+            reader.compute_root()
+                .vectorize(x, 32)
+                .stream_loads();
+
+            return reader(x, y);
+        };
+
+        check("ldnp q", 32, streaming_copy());
+        check("stnp q", 32, streaming_copy());
     }
 
     void check_neon_all() {
@@ -388,16 +414,13 @@ public:
             check(arm32 ? "vmla.i16" : "mla", 4 * w, u16_1 + u16_2 * u16_3);
             check(arm32 ? "vmla.i32" : "mla", 2 * w, i32_1 + i32_2 * i32_3);
             check(arm32 ? "vmla.i32" : "mla", 2 * w, u32_1 + u32_2 * u32_3);
-            if (w == 1 || w == 2) {
-                // Older llvms don't always fuse this at non-native widths
-                // TODO: Re-enable this after fixing https://github.com/halide/Halide/issues/3477
-                // check(arm32 ? "vmla.f32" : "fmla", 2*w, f32_1 + f32_2*f32_3);
-                if (!arm32)
-                    check(arm32 ? "vmla.f32" : "fmla", 2 * w, f32_1 + f32_2 * f32_3);
-            }
-            if (!arm32 && target.has_feature(Target::ARMFp16)) {
-                check("fmlal", 4 * w, f32_1 + widening_mul(f16_2, f16_3));
-                check("fmlal2", 8 * w, widening_mul(f16_1, f16_2) + f32_3);
+            if (!arm32) {
+                check("fmla", 2 * w, f32_1 * f32_2 + f32_3);
+                check("fmla", 2 * w, fma(f32_1, f32_2, f32_3));
+                if (target.has_feature(Target::ARMFp16)) {
+                    check("fmlal", 4 * w, f32_1 + widening_mul(f16_2, f16_3));
+                    check("fmlal2", 8 * w, widening_mul(f16_1, f16_2) + f32_3);
+                }
             }
 
             // VMLS     I, F    F, D    Multiply Subtract
@@ -407,12 +430,8 @@ public:
             check(arm32 ? "vmls.i16" : "mls", 4 * w, u16_1 - u16_2 * u16_3);
             check(arm32 ? "vmls.i32" : "mls", 2 * w, i32_1 - i32_2 * i32_3);
             check(arm32 ? "vmls.i32" : "mls", 2 * w, u32_1 - u32_2 * u32_3);
-            if (w == 1 || w == 2) {
-                // Older llvms don't always fuse this at non-native widths
-                // TODO: Re-enable this after fixing https://github.com/halide/Halide/issues/3477
-                // check(arm32 ? "vmls.f32" : "fmls", 2*w, f32_1 - f32_2*f32_3);
-                if (!arm32)
-                    check(arm32 ? "vmls.f32" : "fmls", 2 * w, f32_1 - f32_2 * f32_3);
+            if (!arm32) {
+                check("fmls", 2 * w, f32_1 - f32_2 * f32_3);
             }
 
             // VMLAL    I       -       Multiply Accumulate Long
@@ -515,7 +534,11 @@ public:
             check(arm32 ? "vneg.s16" : "neg", 4 * w, -i16_1);
             check(arm32 ? "vneg.s32" : "neg", 2 * w, -i32_1);
             check(arm32 ? "vneg.f32" : "fneg", 4 * w, -f32_1);
-            check(arm32 ? "vneg.f64" : "fneg", 2 * w, -f64_1);
+            if (Internal::get_llvm_version() < 230) {
+                check(arm32 ? "vneg.f64" : "fneg", 2 * w, -f64_1);
+            } else {
+                check(arm32 ? "veor" : "fneg", 2 * w, -f64_1);
+            }
 
             // VNMLA    -       F, D    Negative Multiply Accumulate
             // VNMLS    -       F, D    Negative Multiply Subtract

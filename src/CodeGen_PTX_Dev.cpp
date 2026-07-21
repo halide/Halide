@@ -83,7 +83,6 @@ protected:
     void codegen_vector_reduce(const VectorReduce *op, const Expr &init) override;
     // @}
 
-    std::string march() const;
     std::string mcpu_target() const override;
     std::string mcpu_tune() const override;
     std::string mattrs() const override;
@@ -220,6 +219,12 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 }
 
 void CodeGen_PTX_Dev::init_module() {
+    // This class uses multiple inheritance. It's a GPU device code generator,
+    // and also an llvm-based one. Both of these track strict_float presence,
+    // but OffloadGPULoops only sets the GPU device code generator flag, so here
+    // we set the CodeGen_LLVM flag to match.
+    CodeGen_LLVM::any_strict_float = CodeGen_GPU_Dev::any_strict_float;
+
     init_context();
 
     module = get_initial_module_for_ptx_device(target, context);
@@ -248,6 +253,13 @@ void CodeGen_PTX_Dev::init_module() {
         auto *fn = declare_intrin_overload(i.name, i.ret_type, i.intrin_name, std::move(i.arg_types));
         function_does_not_access_memory(fn);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
+    }
+
+    if (CodeGen_GPU_Dev::any_strict_float) {
+        set_strict_fp_math();
+        in_strict_float = target.has_feature(Target::StrictFloat);
+    } else {
+        set_fast_fp_math();
     }
 }
 
@@ -366,7 +378,7 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
             Expr equiv = Load::make(UInt(128), op->name, index,
-                                    op->image, op->param, const_true(), align / 4);
+                                    op->image, op->param, const_true(), align / 4, op->is_streaming);
             equiv = reinterpret(op->type, equiv);
             codegen(equiv);
             return;
@@ -391,7 +403,7 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
             Expr value = reinterpret(UInt(128), op->value);
-            Stmt equiv = Store::make(op->name, value, index, op->param, const_true(), align / 4);
+            Stmt equiv = Store::make(op->name, value, index, op->param, const_true(), align / 4, op->is_streaming);
             codegen(equiv);
             return;
         }
@@ -435,12 +447,12 @@ class RewriteLoadsAs32Bit : public IRMutator {
             if (op->type.lanes() > sub_lanes) {
                 new_idx = Ramp::make(new_idx, 1, load_lanes);
             }
-            Expr new_load = Load::make(Int(32, load_lanes), op->name, new_idx, op->image, op->param, const_true(load_lanes), op->alignment / sub_lanes);
+            Expr new_load = Load::make(Int(32, load_lanes), op->name, new_idx, op->image, op->param, const_true(load_lanes), op->alignment / sub_lanes, op->is_streaming);
             return reinterpret(op->type, new_load);
         } else if (index.same_as(op->index)) {
             return op;
         } else {
-            return Load::make(op->type, op->name, std::move(index), op->image, op->param, op->predicate, op->alignment);
+            return Load::make(op->type, op->name, std::move(index), op->image, op->param, op->predicate, op->alignment, op->is_streaming);
         }
     }
 };
@@ -525,7 +537,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                 Expr b_slice = Shuffle::make_slice(b, i + l * factor, 1, p.factor);
                 i_slice = Call::make(i_slice.type(), p.name, {a_slice, b_slice, i_slice}, Call::PureExtern);
             }
-            i_slice = RewriteLoadsAs32Bit().mutate(i_slice);
+            i_slice = RewriteLoadsAs32Bit()(i_slice);
             i_slice = simplify(i_slice);
             i_slice = common_subexpression_elimination(i_slice);
             result.push_back(i_slice);
@@ -536,10 +548,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         return;
     }
     CodeGen_LLVM::codegen_vector_reduce(op, init);
-}
-
-string CodeGen_PTX_Dev::march() const {
-    return "nvptx64";
 }
 
 string CodeGen_PTX_Dev::mcpu_target() const {
@@ -575,19 +583,22 @@ string CodeGen_PTX_Dev::mattrs() const {
         return "+ptx71";
     } else if (target.has_feature(Target::CUDACapability80)) {
         return "+ptx70";
-    } else if (target.has_feature(Target::CUDACapability70) ||
-               target.has_feature(Target::CUDACapability75)) {
+    } else if (target.has_feature(Target::CUDACapability75)) {
+        return "+ptx70";
+    } else if (target.has_feature(Target::CUDACapability70)) {
         return "+ptx70";
     } else if (target.has_feature(Target::CUDACapability61)) {
         return "+ptx50";
     } else if (target.features_any_of({Target::CUDACapability32,
                                        Target::CUDACapability50})) {
-        // Need ptx isa 4.0.
+        // sm_32 needs ptx isa 4.0 even though it seems to break the ordering
         return "+ptx40";
-    } else {
-        // Use the default. For llvm 3.5 it's ptx 3.2.
-        return "";
+    } else if (target.features_any_of({Target::CUDACapability35,
+                                       Target::CUDACapability30})) {
+        return "+ptx32";
     }
+    // Let LLVM pick
+    return "";
 }
 
 bool CodeGen_PTX_Dev::use_soft_float_abi() const {
@@ -611,23 +622,18 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     TargetOptions options;
-    options.AllowFPOpFusion = FPOpFusion::Fast;
-#if LLVM_VERSION < 210
-    options.UnsafeFPMath = true;
+    options.AllowFPOpFusion = CodeGen_GPU_Dev::any_strict_float ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
+#if LLVM_VERSION < 230
+    options.NoInfsFPMath = !CodeGen_GPU_Dev::any_strict_float;
+    options.NoNaNsFPMath = !CodeGen_GPU_Dev::any_strict_float;
 #endif
-    options.NoInfsFPMath = true;
-    options.NoNaNsFPMath = true;
-    options.HonorSignDependentRoundingFPMathOption = false;
+    options.HonorSignDependentRoundingFPMathOption = !CodeGen_GPU_Dev::any_strict_float;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
 
     std::unique_ptr<TargetMachine>
         target_machine(llvm_target->createTargetMachine(
-#if LLVM_VERSION >= 210
             triple,
-#else
-            triple.str(),
-#endif
             mcpu_target(), mattrs(), options,
             llvm::Reloc::PIC_,
             llvm::CodeModel::Small,
@@ -753,11 +759,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         f.write(buffer.data(), buffer.size());
         f.close();
 
-        string cmd = "ptxas --gpu-name " + mcpu_target() + " " + ptx.pathname() + " -o " + sass.pathname();
-        if (system(cmd.c_str()) == 0) {
-            cmd = "nvdisasm " + sass.pathname();
-            int ret = system(cmd.c_str());
-            (void)ret;  // Don't care if it fails
+        if (run_process({"ptxas", "--gpu-name", mcpu_target(), ptx.pathname(), "-o", sass.pathname()}) == 0) {
+            (void)run_process({"nvdisasm", sass.pathname()});  // Don't care if it fails
         }
 
         // Note: It works to embed the contents of the .sass file in

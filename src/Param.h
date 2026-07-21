@@ -37,6 +37,8 @@ class Param {
             << "is no longer used to control whether Halide functions take explicit "
             << "user_context arguments. Use set_custom_user_context() when jitting, "
             << "or add Target::UserContext to the Target feature set when compiling ahead of time.";
+        // Discourage future Funcs from having the same name as this Param.
+        Internal::unique_name(param.name());
     }
 
     // Allow all Param<> variants friend access to each other
@@ -179,18 +181,18 @@ public:
         } else {
 
             // Specialized version for when T = void (thus the type is only known at runtime,
-            // not compiletime). Note that this actually works fine for all Params; we specialize
+            // not compile time). Note that this actually works fine for all Params; we specialize
             // it just to reduce code size for the common case of T != void.
 
 #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
-    case halide_type_t(CODE, BITS).as_u32():                                              \
+    case halide_type_t(CODE, BITS):                                                       \
         user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
             << "The value " << val << " cannot be losslessly converted to type " << type; \
         param.set_scalar<TYPE>(Internal::StaticCast<TYPE>::value(val));                   \
         break;
 
-            const Type type = param.type();
-            switch (((halide_type_t)type).element_of().as_u32()) {
+            const halide_type_t type = param.type().to_abi();
+            switch (type) {
                 HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 32, float)
                 HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 64, double)
                 HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 8, int8_t)
@@ -256,18 +258,18 @@ public:
         } else {
 
             // Specialized version for when T = void (thus the type is only known at runtime,
-            // not compiletime). Note that this actually works fine for all Params; we specialize
+            // not compile time). Note that this actually works fine for all Params; we specialize
             // it just to reduce code size for the common case of T != void.
 
 #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
-    case halide_type_t(CODE, BITS).as_u32():                                              \
+    case halide_type_t(CODE, BITS):                                                       \
         user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
             << "The value " << val << " cannot be losslessly converted to type " << type; \
         param.set_estimate(Expr(Internal::StaticCast<TYPE>::value(val)));                 \
         break;
 
-            const Type type = param.type();
-            switch (((halide_type_t)type).element_of().as_u32()) {
+            const halide_type_t type = param.type().to_abi();
+            switch (type) {
                 HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 32, float)
                 HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 64, double)
                 HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 8, int8_t)

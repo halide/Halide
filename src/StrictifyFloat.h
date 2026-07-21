@@ -34,10 +34,10 @@ Expr unstrictify_float(const Call *op);
  * strictness). */
 bool strictify_float(std::map<std::string, Function> &env, const Target &t);
 
-/** Checks the passed Stmt for the precense of any strict_float ops. */
+/** Checks the passed Stmt for the presence of any strict_float ops. */
 bool any_strict_float(const Stmt &s);
 
-/** Checks the passed Expr for the precense of any strict_float ops. */
+/** Checks the passed Expr for the presence of any strict_float ops. */
 bool any_strict_float(const Expr &s);
 
 }  // namespace Internal

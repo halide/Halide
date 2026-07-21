@@ -1,4 +1,4 @@
-#include "CodeGen_Posix.h"
+#include "CodeGen_CPU.h"
 
 #include "LLVM_Headers.h"
 
@@ -13,7 +13,7 @@ using std::vector;
 namespace {
 
 /** A code generator that emits PowerPC code from a given Halide stmt. */
-class CodeGen_PowerPC : public CodeGen_Posix {
+class CodeGen_PowerPC : public CodeGen_CPU {
 public:
     /** Create a powerpc code generator. Processor features can be
      * enabled using the appropriate flags in the target struct. */
@@ -28,7 +28,7 @@ protected:
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
 
-    using CodeGen_Posix::visit;
+    using CodeGen_CPU::visit;
 
     /** Nodes for which we want to emit specific PowerPC intrinsics */
     // @{
@@ -38,16 +38,16 @@ protected:
 };
 
 CodeGen_PowerPC::CodeGen_PowerPC(const Target &t)
-    : CodeGen_Posix(t) {
+    : CodeGen_CPU(t) {
 }
 
 const int max_intrinsic_args = 4;
 
 struct PowerPCIntrinsic {
     const char *intrin_name;
-    halide_type_t ret_type;
+    Type ret_type;
     const char *name;
-    halide_type_t arg_types[max_intrinsic_args];
+    Type arg_types[max_intrinsic_args];
     Target::Feature feature = Target::FeatureEnd;
 };
 
@@ -97,7 +97,7 @@ const PowerPCIntrinsic intrinsic_defs[] = {
 };
 
 void CodeGen_PowerPC::init_module() {
-    CodeGen_Posix::init_module();
+    CodeGen_CPU::init_module();
 
     for (const PowerPCIntrinsic &i : intrinsic_defs) {
         if (i.feature != Target::FeatureEnd && !target.has_feature(i.feature)) {
@@ -107,8 +107,8 @@ void CodeGen_PowerPC::init_module() {
         Type ret_type = i.ret_type;
         vector<Type> arg_types;
         arg_types.reserve(max_intrinsic_args);
-        for (halide_type_t j : i.arg_types) {
-            if (j.bits == 0) {
+        for (const Type &j : i.arg_types) {
+            if (j.bits() == 0) {
                 break;
             }
             arg_types.emplace_back(j);
@@ -127,7 +127,7 @@ void CodeGen_PowerPC::visit(const Min *op) {
             return;
         }
     }
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_PowerPC::visit(const Max *op) {
@@ -137,7 +137,7 @@ void CodeGen_PowerPC::visit(const Max *op) {
             return;
         }
     }
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 string CodeGen_PowerPC::mcpu_target() const {
@@ -181,13 +181,13 @@ int CodeGen_PowerPC::native_vector_bits() const {
 
 }  // namespace
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_PowerPC(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_PowerPC(const Target &target) {
     return std::make_unique<CodeGen_PowerPC>(target);
 }
 
 #else  // WITH_POWERPC
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_PowerPC(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_PowerPC(const Target &target) {
     user_error << "PowerPC not enabled for this build of Halide.\n";
     return nullptr;
 }

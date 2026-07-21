@@ -471,7 +471,7 @@ Expr fast_tanh(const Expr &x, ApproximationPrecision prec) {
         // Positive arguments to exp() have preciser ULP.
         // So, we will rewrite the expression to always use exp(2*x)
         // instead of exp(-2*x) when we are close to zero.
-        // Rewriting it like this is slighlty more expensive, hence the branch
+        // Rewriting it like this is slightly more expensive, hence the branch
         // to only pay this extra cost in case we need MULPE-optimized approximations.
         Expr flip_exp = abs_x > make_const(type, 4);
         Expr arg_exp = select(flip_exp, -abs_x, abs_x);
@@ -480,7 +480,7 @@ Expr fast_tanh(const Expr &x, ApproximationPrecision prec) {
         tanh = select(flip_exp != flip_sign, -tanh, tanh);
         return common_subexpression_elimination(tanh, true);
 #else
-        // expm1 is devloped around 0 and is ULP accurate in [-ln(2)/2, ln(2)/2].
+        // expm1 is developed around 0 and is ULP accurate in [-ln(2)/2, ln(2)/2].
         Expr exp2xm1 = Halide::fast_expm1(-2 * abs_x, prec);
         Expr tanh = (exp2xm1) / (exp2xm1 + make_const(type, 2));
         tanh = select(flip_sign, tanh, -tanh);
@@ -1050,7 +1050,7 @@ public:
                 return append_type_suffix(op);
             }
 
-            // Expand using defintion in terms of exp(2x), and recurse.
+            // Expand using definition in terms of exp(2x), and recurse.
             // Note: no adjustment of precision, as the recursed mutation will take care of that!
             return mutate(ApproxImpl::fast_tanh(op->args[0], prec));
         } else if (op->is_intrinsic(Call::fast_pow)) {

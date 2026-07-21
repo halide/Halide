@@ -15,21 +15,7 @@ namespace {
 
 using namespace Halide::Runtime;
 
-const int kSize = 32;
-
-inline std::ostream &operator<<(std::ostream &o, const halide_type_t &type) {
-    if (type.code == halide_type_uint && type.bits == 1) {
-        o << "bool";
-    } else {
-        assert(type.code >= 0 && type.code <= 3);
-        static const char *const names[4] = {"int", "uint", "float", "handle"};
-        o << names[type.code] << (int)type.bits;
-    }
-    if (type.lanes > 1) {
-        o << "x" << (int)type.lanes;
-    }
-    return o;
-}
+constexpr int kSize = 32;
 
 struct typed_scalar {
     halide_type_t type;
@@ -44,30 +30,30 @@ struct typed_scalar {
             std::cerr << "Mismatched types\n";
             exit(1);
         }
-        switch (type.element_of().as_u32()) {
-        case halide_type_t(halide_type_float, 32).as_u32():
+        switch (type) {
+        case halide_type_t(halide_type_float, 32):
             return value.u.f32 == that.value.u.f32;
-        case halide_type_t(halide_type_float, 64).as_u32():
+        case halide_type_t(halide_type_float, 64):
             return value.u.f64 == that.value.u.f64;
-        case halide_type_t(halide_type_int, 8).as_u32():
+        case halide_type_t(halide_type_int, 8):
             return value.u.i8 == that.value.u.i8;
-        case halide_type_t(halide_type_int, 16).as_u32():
+        case halide_type_t(halide_type_int, 16):
             return value.u.i16 == that.value.u.i16;
-        case halide_type_t(halide_type_int, 32).as_u32():
+        case halide_type_t(halide_type_int, 32):
             return value.u.i32 == that.value.u.i32;
-        case halide_type_t(halide_type_int, 64).as_u32():
+        case halide_type_t(halide_type_int, 64):
             return value.u.i64 == that.value.u.i64;
-        case halide_type_t(halide_type_uint, 1).as_u32():
+        case halide_type_t(halide_type_uint, 1):
             return value.u.b == that.value.u.b;
-        case halide_type_t(halide_type_uint, 8).as_u32():
+        case halide_type_t(halide_type_uint, 8):
             return value.u.u8 == that.value.u.u8;
-        case halide_type_t(halide_type_uint, 16).as_u32():
+        case halide_type_t(halide_type_uint, 16):
             return value.u.u16 == that.value.u.u16;
-        case halide_type_t(halide_type_uint, 32).as_u32():
+        case halide_type_t(halide_type_uint, 32):
             return value.u.u32 == that.value.u.u32;
-        case halide_type_t(halide_type_uint, 64).as_u32():
+        case halide_type_t(halide_type_uint, 64):
             return value.u.u64 == that.value.u.u64;
-        case halide_type_t(halide_type_handle, 64).as_u32():
+        case halide_type_t(halide_type_handle, 64):
             return value.u.handle == that.value.u.handle;
         default:
             std::cerr << "Unsupported type\n";
@@ -81,41 +67,41 @@ struct typed_scalar {
     }
 
     friend std::ostream &operator<<(std::ostream &o, const typed_scalar &s) {
-        switch (s.type.element_of().as_u32()) {
-        case halide_type_t(halide_type_float, 32).as_u32():
+        switch (s.type) {
+        case halide_type_t(halide_type_float, 32):
             o << s.value.u.f32;
             break;
-        case halide_type_t(halide_type_float, 64).as_u32():
+        case halide_type_t(halide_type_float, 64):
             o << s.value.u.f64;
             break;
-        case halide_type_t(halide_type_int, 8).as_u32():
+        case halide_type_t(halide_type_int, 8):
             o << (int)s.value.u.i8;
             break;
-        case halide_type_t(halide_type_int, 16).as_u32():
+        case halide_type_t(halide_type_int, 16):
             o << s.value.u.i16;
             break;
-        case halide_type_t(halide_type_int, 32).as_u32():
+        case halide_type_t(halide_type_int, 32):
             o << s.value.u.i32;
             break;
-        case halide_type_t(halide_type_int, 64).as_u32():
+        case halide_type_t(halide_type_int, 64):
             o << s.value.u.i64;
             break;
-        case halide_type_t(halide_type_uint, 1).as_u32():
+        case halide_type_t(halide_type_uint, 1):
             o << (s.value.u.b ? "true" : "false");
             break;
-        case halide_type_t(halide_type_uint, 8).as_u32():
+        case halide_type_t(halide_type_uint, 8):
             o << (int)s.value.u.u8;
             break;
-        case halide_type_t(halide_type_uint, 16).as_u32():
+        case halide_type_t(halide_type_uint, 16):
             o << s.value.u.u16;
             break;
-        case halide_type_t(halide_type_uint, 32).as_u32():
+        case halide_type_t(halide_type_uint, 32):
             o << s.value.u.u32;
             break;
-        case halide_type_t(halide_type_uint, 64).as_u32():
+        case halide_type_t(halide_type_uint, 64):
             o << s.value.u.u64;
             break;
-        case halide_type_t(halide_type_handle, 64).as_u32():
+        case halide_type_t(halide_type_handle, 64):
             o << (uint64_t)s.value.u.handle;
             break;
         default:
@@ -336,13 +322,6 @@ template<>
 const halide_scalar_value_t *make_scalar(double v) {
     halide_scalar_value_t *s = new halide_scalar_value_t();
     s->u.f64 = v;
-    return s;
-}
-
-template<>
-const halide_scalar_value_t *make_scalar(void *v) {
-    halide_scalar_value_t *s = new halide_scalar_value_t();
-    s->u.handle = v;
     return s;
 }
 
@@ -1371,11 +1350,11 @@ constexpr char arginfo_to_sigchar(::HalideFunctionInfo::ArgumentInfo arg) {
         return '#';
     } else {
 
-#define HANDLE_CASE(CODE, BITS, CHAR)        \
-    case halide_type_t(CODE, BITS).as_u32(): \
+#define HANDLE_CASE(CODE, BITS, CHAR) \
+    case halide_type_t(CODE, BITS):   \
         return (CHAR);
 
-        switch (arg.type.as_u32()) {
+        switch (arg.type) {
             HANDLE_CASE(halide_type_bfloat, 16, '!')
             HANDLE_CASE(halide_type_float, 16, 'e')
             HANDLE_CASE(halide_type_float, 32, 'f')
@@ -1420,7 +1399,7 @@ int main(int argc, char **argv) {
     Buffer<uint8_t, 3> input = make_image<uint8_t>();
     Buffer<float, 3> input_array[2] = {make_image<float>(), make_image<float>()};
     // TODO: there is no runtime type for float16, so we'll declare this using a halide_type_t
-    const halide_type_t halide_type_float16 = halide_type_t(halide_type_float, 16, 1);
+    const halide_type_t halide_type_float16 = halide_type_t(halide_type_float, 16);
     Buffer<> input_f16 = Buffer<>(halide_type_float16, kSize);
 
     Buffer<float, 3> output0(kSize, kSize, 3);
@@ -1586,10 +1565,10 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    constexpr auto usig = compute_signature(metadata_tester_ucon_argument_info());
-    if (strcmp(&usig[0], "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+    constexpr auto ucon_sig = compute_signature(metadata_tester_ucon_argument_info());
+    if (strcmp(&ucon_sig[0], "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
         // NOLINTNEXTLINE(clang-diagnostic-unreachable-code)
-        std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &usig[0] << "\n";
+        std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &ucon_sig[0] << "\n";
         exit(1);
     }
 

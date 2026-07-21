@@ -9,6 +9,7 @@ namespace Internal {
 namespace {
 
 class RemoveDeadAllocations : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Scope<int> allocs;
@@ -88,7 +89,7 @@ class RemoveDeadAllocations : public IRMutator {
 }  // namespace
 
 Stmt remove_dead_allocations(const Stmt &s) {
-    return RemoveDeadAllocations().mutate(s);
+    return RemoveDeadAllocations()(s);
 }
 
 }  // namespace Internal

@@ -4,6 +4,7 @@ if (Halide_TARGET MATCHES "webgpu")
 endif ()
 
 set(tests
+    # keep-sorted start
     lesson_01_basics.py
     lesson_02_input_image.py
     lesson_03_debugging_1.py
@@ -19,6 +20,7 @@ set(tests
     lesson_12_using_the_gpu.py
     lesson_13_tuples.py
     lesson_14_types.py
+    # keep-sorted end
 )
 
 set(PYPATH_lesson_10_aot_compilation_run "$<TARGET_FILE_DIR:lesson_10_halide>")
@@ -35,11 +37,7 @@ foreach (test IN LISTS tests)
     endif ()
 
     cmake_path(GET test STEM test_name)
-    add_python_test(
-        FILE "${test}"
-        LABEL python_tutorial
-        PYTHONPATH "${PYPATH_${test_name}}"
-    )
+    add_python_test(FILE "${test}" LABEL python_tutorial PYTHONPATH "${PYPATH_${test_name}}")
 endforeach ()
 
 if (Halide_TARGET MATCHES "wasm")
@@ -58,15 +56,21 @@ else ()
 
     # This dummy command "generates" the files that the TEST python_tutorial_lesson_10_aot_compilation_generate will
     # actually generate as part of the fixture below.
-    add_custom_command(OUTPUT lesson_10_halide.py.cpp lesson_10_halide.o
-                       COMMAND "${CMAKE_COMMAND}" -E echo Dummy command for lesson 10 sources.
-                       VERBATIM)
+    add_custom_command(
+        OUTPUT
+            lesson_10_halide.py.cpp
+            lesson_10_halide.o
+        COMMAND "${CMAKE_COMMAND}" -E echo Dummy command for lesson 10 sources.
+        VERBATIM
+    )
 
     # This target allows CMake to build lesson_10_halide.so (or whatever the correct extension is) as part of the tests
     # later. It is excluded from ALL since it isn't valid to build outside of this context.
-    Python_add_library(lesson_10_halide MODULE EXCLUDE_FROM_ALL
-                       lesson_10_halide.py.cpp
-                       lesson_10_halide.o)
+    Python_add_library(
+        lesson_10_halide
+        MODULE
+        EXCLUDE_FROM_ALL lesson_10_halide.py.cpp lesson_10_halide.o
+    )
 
     # TODO: the EXCLUDE_FROM_ALL above is a bit of a hack - even a normal build won't
     #   prepare this file for linting. Disable export of compile commands for this target.
@@ -82,16 +86,29 @@ else ()
     # The fixture "py_lesson_10" orchestrates running the generator part of the lesson first, then the build for the
     # library, and finally runs python_tutorial_lesson_10_aot_compilation_run. The ..._compile test invokes CMake on
     # the current build for the above library.
-    add_test(NAME python_tutorial_lesson_10_compile
-             COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --config $<CONFIG> --target lesson_10_halide)
+    add_test(
+        NAME python_tutorial_lesson_10_compile
+        COMMAND
+            "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --config $<CONFIG>
+            --target lesson_10_halide
+    )
 
-    set_tests_properties(python_tutorial_lesson_10_aot_compilation_generate PROPERTIES
-                         FIXTURES_SETUP py_lesson_10)
+    set_tests_properties(
+        python_tutorial_lesson_10_aot_compilation_generate
+        PROPERTIES
+        FIXTURES_SETUP py_lesson_10
+    )
 
-    set_tests_properties(python_tutorial_lesson_10_compile PROPERTIES
-                         FIXTURES_SETUP py_lesson_10
-                         DEPENDS python_tutorial_lesson_10_aot_compilation_generate)
+    set_tests_properties(
+        python_tutorial_lesson_10_compile
+        PROPERTIES
+        FIXTURES_SETUP py_lesson_10
+        DEPENDS python_tutorial_lesson_10_aot_compilation_generate
+    )
 
-    set_tests_properties(python_tutorial_lesson_10_aot_compilation_run PROPERTIES
-                         FIXTURES_REQUIRED py_lesson_10)
+    set_tests_properties(
+        python_tutorial_lesson_10_aot_compilation_run
+        PROPERTIES
+        FIXTURES_REQUIRED py_lesson_10
+    )
 endif ()
