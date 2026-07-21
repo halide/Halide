@@ -43,6 +43,7 @@ set(RUNTIME_CPP
     linux_host_cpu_count
     linux_powerpc_thread_id
     linux_riscv_thread_id
+    linux_x86_cpu_features
     linux_x86_thread_id
     linux_yield
     metal
