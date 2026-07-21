@@ -40,6 +40,13 @@ add_executable(auto_viz_demo auto_viz_demo.cpp)
 target_link_libraries(auto_viz_demo PRIVATE Halide::ImageIO ${variants})
 
 # Test that the app actually works!
+
+if (WIN32)
+    set(_auto_viz_trace_sink "NUL")
+else ()
+    set(_auto_viz_trace_sink "/dev/null")
+endif ()
+
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb_small.png)
 if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgb_small.png COPYONLY)
@@ -48,6 +55,7 @@ if (EXISTS ${IMAGE})
         auto_viz_demo
         PROPERTIES
         LABELS auto_viz
+        ENVIRONMENT "HL_TRACE_FILE=${_auto_viz_trace_sink}"
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
     )
 endif ()
