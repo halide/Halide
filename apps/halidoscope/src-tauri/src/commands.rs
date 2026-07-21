@@ -2,7 +2,7 @@
 //!
 //! This module owns the types that cross the Tauri IPC boundary.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 
 use serde::Serialize;
@@ -11,7 +11,7 @@ use tauri::State;
 
 use crate::render::{
     GrayscaleState, InfState, LoadFrequencyState, NaNState, NormalizationMode, RedundantState,
-    Renderer, ReuseDistanceState, RgbState, StoreFrequencyState,
+    Renderer, ReuseDistanceState, RgbState, StoreFrequencyState, ThreadOpMode, ThreadState,
 };
 use crate::trace::Trace;
 
@@ -48,6 +48,7 @@ pub struct FuncMeta {
     pub produce_ranges: Vec<IndexRange>,
     pub consume_ranges: Vec<IndexRange>,
     pub thread_count: u32,
+    pub thread_ids: Vec<i32>,
 }
 
 /// Top-level payload returned by `open_trace`.
@@ -114,11 +115,16 @@ impl TraceMeta {
                         .copied()
                         .map(IndexRange::from_tuple)
                         .collect(),
-                    thread_count: (trace
+                    // A missing entry means `name` ran entirely serially (never inside a
+                    // `BeginParallelTask`), not that it has no threads; default to the implicit
+                    // serial thread `{0}` so `thread_ids` and `thread_count` agree.
+                    thread_count: trace
                         .func_thread_ids(name)
-                        .unwrap_or(&BTreeSet::new())
-                        .len() as u32)
-                        .max(1),
+                        .map_or(1, |ids| ids.len() as u32),
+                    thread_ids: trace
+                        .func_thread_ids(name)
+                        .map(|ids| ids.iter().copied().collect())
+                        .unwrap_or_else(|| vec![0]),
                 }
             })
             .collect();
@@ -152,6 +158,7 @@ struct Loaded {
     reuse_distance_renderers: HashMap<String, ReuseDistanceState>,
     nan_renderers: HashMap<String, NaNState>,
     inf_renderers: HashMap<String, InfState>,
+    thread_renderers: HashMap<String, ThreadState>,
 }
 
 /// App-wide state managed by Tauri. A single trace is loaded at a time; opening a new one replaces
@@ -168,6 +175,24 @@ fn pack_pixels_and_histogram(mut pixels: Vec<u8>, histogram: Vec<u32>) -> Vec<u8
     pixels.reserve(histogram.len() * 4);
     for bin in histogram {
         pixels.extend_from_slice(&bin.to_le_bytes());
+    }
+    pixels
+}
+
+/// Appends `store_counts` then `load_counts` as little-endian `u32`s directly after `pixels`.
+/// Both slices are the same length (the Func's thread-ID domain size, `FuncMeta::thread_ids`), so
+/// the frontend can split them back apart without a length prefix.
+fn pack_pixels_and_thread_counts(
+    mut pixels: Vec<u8>,
+    store_counts: &[u32],
+    load_counts: &[u32],
+) -> Vec<u8> {
+    pixels.reserve((store_counts.len() + load_counts.len()) * 4);
+    for &c in store_counts {
+        pixels.extend_from_slice(&c.to_le_bytes());
+    }
+    for &c in load_counts {
+        pixels.extend_from_slice(&c.to_le_bytes());
     }
     pixels
 }
@@ -192,6 +217,7 @@ pub fn open_trace(path: String, state: State<AppState>) -> Result<TraceMeta, Str
         reuse_distance_renderers: HashMap::new(),
         nan_renderers: HashMap::new(),
         inf_renderers: HashMap::new(),
+        thread_renderers: HashMap::new(),
     });
     Ok(meta)
 }
@@ -454,4 +480,41 @@ pub fn render_inf(
     renderer.seek(trace, store_indices, k);
 
     Ok(Response::new(renderer.to_rgba(normalization_mode)))
+}
+
+#[tauri::command]
+pub fn render_thread(
+    func: String,
+    global_index: u32,
+    normalization_mode: NormalizationMode,
+    op_mode: ThreadOpMode,
+    state: State<AppState>,
+) -> Result<Response, String> {
+    let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
+    let loaded = guard.as_mut().ok_or("no trace loaded")?;
+    let Loaded {
+        trace,
+        thread_renderers,
+        ..
+    } = loaded;
+
+    if !thread_renderers.contains_key(&func) {
+        let rs = ThreadState::new(trace, &func)
+            .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
+        thread_renderers.insert(func.clone(), rs);
+    }
+    let renderer = thread_renderers.get_mut(&func).expect("just inserted");
+    let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
+    let load_indices = trace.func_load_indices(&func).unwrap_or(&[]);
+    let store_k = store_indices.partition_point(|&p| p <= global_index as usize);
+    let load_k = load_indices.partition_point(|&p| p <= global_index as usize);
+    renderer.seek(trace, store_indices, load_indices, store_k, load_k, op_mode);
+
+    let pixels = renderer.to_rgba(normalization_mode);
+    let (store_counts, load_counts) = renderer.to_thread_counts();
+    Ok(Response::new(pack_pixels_and_thread_counts(
+        pixels,
+        store_counts,
+        load_counts,
+    )))
 }

@@ -1,3 +1,5 @@
+use std::vec;
+
 use ::colorous;
 use serde::Deserialize;
 
@@ -69,7 +71,7 @@ impl GrayscaleState {
             width,
             height,
             Some((min_c, channels)),
-            |lane, _pixel_idx, val_idx, _x, _y| {
+            |lane, _pixel_idx, val_idx| {
                 let Some(v) = pkt.decoded_value(lane) else {
                     return;
                 };
@@ -188,7 +190,7 @@ impl RgbState {
             width,
             height,
             Some((min_c, channels)),
-            |lane, _pixel_idx, val_idx, _x, _y| {
+            |lane, _pixel_idx, val_idx| {
                 let Some(v) = pkt.decoded_value(lane) else {
                     return;
                 };
@@ -427,7 +429,7 @@ impl LoadFrequencyState {
             width,
             height,
             None,
-            |_lane, pixel_idx, _val_idx, _x, _y| {
+            |_lane, pixel_idx, _val_idx| {
                 self.counts[pixel_idx] += 1;
             },
         );
@@ -563,7 +565,7 @@ impl RedundantState {
             width,
             height,
             Some((min_c, channels)),
-            |lane, pixel_idx: usize, val_idx: usize, _x, _y| {
+            |lane, pixel_idx: usize, val_idx: usize| {
                 let Some(v) = pkt.decoded_value(lane) else {
                     return;
                 };
@@ -773,7 +775,7 @@ impl ReuseDistanceState {
             width,
             height,
             Some((min_c, channels)),
-            |_lane, _pixel_idx, val_idx, _x, _y| {
+            |_lane, _pixel_idx, val_idx| {
                 self.anchor_at[val_idx] = global_idx;
             },
         );
@@ -797,7 +799,7 @@ impl ReuseDistanceState {
             width,
             height,
             Some((min_c, channels)),
-            |_lane, pixel_idx, val_idx, _x, _y| {
+            |_lane, pixel_idx, val_idx| {
                 if self.is_input {
                     // First load is the free memcpy; establish the anchor and record no distance.
                     // Subsequent loads to the same location measure from that first load.
@@ -919,7 +921,7 @@ impl NaNState {
             width,
             height,
             Some((min_c, channels)),
-            |lane, _pixel_idx: usize, val_idx: usize, _x, _y| {
+            |lane, _pixel_idx: usize, val_idx: usize| {
                 let Some(v) = pkt.decoded_value(lane) else {
                     return;
                 };
@@ -1042,7 +1044,7 @@ impl InfState {
             width,
             height,
             Some((min_c, channels)),
-            |lane, _pixel_idx: usize, val_idx: usize, _x, _y| {
+            |lane, _pixel_idx: usize, val_idx: usize| {
                 let Some(v) = pkt.decoded_value(lane) else {
                     return;
                 };
@@ -1121,5 +1123,222 @@ impl Renderer for InfState {
 
     fn to_values(&self) -> Vec<Self::Value> {
         self.values.clone()
+    }
+}
+
+// ── Thread Rendering ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize, Clone, Copy, PartialEq)]
+pub enum ThreadOpMode {
+    Store,
+    Load,
+    All,
+}
+
+pub struct ThreadState {
+    geom: FuncGeometry,
+    thread_ids: Vec<i32>,
+    thread_id_buffer: Vec<i32>,
+    store_counts: Vec<u32>,
+    load_counts: Vec<u32>,
+    applied_store_k: usize,
+    applied_load_k: usize,
+    applied_op_mode: Option<ThreadOpMode>,
+}
+
+impl ThreadState {
+    pub fn new(trace: &Trace, func: &str) -> Option<Self> {
+        let geom = trace.func_geometry(func)?;
+        // A missing entry means this Func was never realized inside a `BeginParallelTask` (i.e.
+        // it ran entirely serially) — every packet's `thread_id` defaults to 0 in that case.
+        let thread_ids = trace
+            .func_thread_ids(func)
+            .map(|ids| ids.iter().map(|&id| id as i32).collect::<Vec<i32>>())
+            .unwrap_or_else(|| vec![0]);
+        let n_threads = thread_ids.len();
+
+        // `i32::MIN` marks a pixel no store/load has touched yet. Plain `0` would collide with a
+        // real thread ID, making untouched pixels indistinguishable from ones actually written by
+        // thread 0.
+        let thread_id_buffer = vec![i32::MIN; geom.width * geom.height];
+
+        Some(Self {
+            geom,
+            thread_ids,
+            thread_id_buffer,
+            store_counts: vec![0u32; n_threads],
+            load_counts: vec![0u32; n_threads],
+            applied_store_k: 0,
+            applied_load_k: 0,
+            applied_op_mode: None,
+        })
+    }
+
+    fn reset(&mut self) {
+        self.thread_id_buffer.iter_mut().for_each(|v| *v = i32::MIN);
+        self.store_counts.iter_mut().for_each(|c| *c = 0);
+        self.load_counts.iter_mut().for_each(|c| *c = 0);
+        self.applied_store_k = 0;
+        self.applied_load_k = 0;
+    }
+
+    fn apply_store(&mut self, pkt: &TracePacket) {
+        let FuncGeometry {
+            width,
+            height,
+            min_x,
+            min_y,
+            ..
+        } = self.geom;
+        let thread_idx = self.thread_ids.binary_search(&pkt.thread_id).ok();
+
+        for_each_lane_pixel(
+            pkt,
+            min_x,
+            min_y,
+            width,
+            height,
+            None,
+            |lane, pixel_idx: usize, _val_idx: usize| {
+                let Some(_v) = pkt.decoded_value(lane) else {
+                    return;
+                };
+
+                self.thread_id_buffer[pixel_idx] = pkt.thread_id;
+                if let Some(i) = thread_idx {
+                    self.store_counts[i] += 1;
+                }
+            },
+        );
+    }
+
+    fn apply_load(&mut self, pkt: &TracePacket) {
+        let FuncGeometry {
+            width,
+            height,
+            min_x,
+            min_y,
+            ..
+        } = self.geom;
+        let thread_idx = self.thread_ids.binary_search(&pkt.thread_id).ok();
+
+        for_each_lane_pixel(
+            pkt,
+            min_x,
+            min_y,
+            width,
+            height,
+            None,
+            |lane, pixel_idx: usize, _val_idx: usize| {
+                let Some(_v) = pkt.decoded_value(lane) else {
+                    return;
+                };
+
+                self.thread_id_buffer[pixel_idx] = pkt.thread_id;
+                if let Some(i) = thread_idx {
+                    self.load_counts[i] += 1;
+                }
+            },
+        );
+    }
+
+    pub fn seek(
+        &mut self,
+        trace: &Trace,
+        store_indices: &[usize],
+        load_indices: &[usize],
+        target_store_k: usize,
+        target_load_k: usize,
+        op_mode: ThreadOpMode,
+    ) {
+        let target_store_k = target_store_k.min(store_indices.len());
+        let target_load_k = target_load_k.min(load_indices.len());
+
+        if target_store_k < self.applied_store_k
+            || target_load_k < self.applied_load_k
+            || self.applied_op_mode != Some(op_mode)
+        {
+            self.reset();
+        }
+
+        let store_slice = &store_indices[self.applied_store_k..target_store_k];
+        let load_slice = &load_indices[self.applied_load_k..target_load_k];
+        let mut si = 0;
+        let mut li = 0;
+
+        while si < store_slice.len() || li < load_slice.len() {
+            let next_is_store = si < store_slice.len()
+                && (li >= load_slice.len() || store_slice[si] < load_slice[li]);
+
+            match (&op_mode, next_is_store) {
+                // op_mode is Store and the next packet is a store.
+                (ThreadOpMode::Store, true) => {
+                    self.apply_store(&trace.packets[store_slice[si]]);
+                    si += 1;
+                }
+                // op_mode is Load and the next packet is a load.
+                (ThreadOpMode::Load, false) => {
+                    self.apply_load(&trace.packets[load_slice[li]]);
+                    li += 1;
+                }
+                // op_mode is All and the next packet is a store.
+                (ThreadOpMode::All, true) => {
+                    self.apply_store(&trace.packets[store_slice[si]]);
+                    si += 1;
+                }
+                // op_mode is All and the next packet is a load.
+                (ThreadOpMode::All, false) => {
+                    self.apply_load(&trace.packets[load_slice[li]]);
+                    li += 1;
+                }
+                (_, true) => {
+                    // Increment si even if we don't apply the store, to keep the merge moving forward.
+                    si += 1;
+                }
+                (_, false) => {
+                    // Increment li even if we don't apply the load, to keep the merge moving forward.
+                    li += 1;
+                }
+            }
+        }
+
+        self.applied_store_k = target_store_k;
+        self.applied_load_k = target_load_k;
+        self.applied_op_mode = Some(op_mode);
+    }
+
+    pub fn to_rgba(&self, _normalization_mode: NormalizationMode) -> Vec<u8> {
+        let FuncGeometry { width, height, .. } = self.geom;
+        let domain = &self.thread_ids;
+        let range = colorous::TABLEAU10;
+
+        let mut out = vec![0u8; width * height * 4];
+
+        for (chunk, &thread_id) in out.chunks_exact_mut(4).zip(self.thread_id_buffer.iter()) {
+            let idx = domain.binary_search(&thread_id);
+
+            if let Ok(i) = idx {
+                let color = range[i];
+                chunk[0] = color.r;
+                chunk[1] = color.g;
+                chunk[2] = color.b;
+                chunk[3] = 255;
+            } else {
+                chunk[0] = 0;
+                chunk[1] = 0;
+                chunk[2] = 0;
+                chunk[3] = 255;
+            }
+        }
+
+        out
+    }
+
+    pub fn to_values(&self) -> Vec<i32> {
+        self.thread_id_buffer.clone()
+    }
+
+    pub fn to_thread_counts(&self) -> (&[u32], &[u32]) {
+        (&self.store_counts, &self.load_counts)
     }
 }

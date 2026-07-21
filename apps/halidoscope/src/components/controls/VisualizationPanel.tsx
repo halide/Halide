@@ -3,16 +3,19 @@ import { Separator } from "radix-ui";
 import * as React from "react";
 
 import ControlSection from "@/components/controls/ControlSection";
+import BarChart from "@/components/controls/bar-chart/BarChart";
+import BarChartParameters from "@/components/controls/bar-chart/BarChartParameters";
 import GraphDisplay from "@/components/controls/graph/GraphDisplay";
+import Histogram from "@/components/controls/histogram/Histogram";
+import HistogramParameters from "@/components/controls/histogram/HistogramParameters";
 import LivenessControls from "@/components/controls/liveness/LivenessControls";
 import PlaybackRate from "@/components/controls/playback/PlaybackRate";
 import RenderMode from "@/components/controls/render/RenderMode";
-import Histogram from "@/components/controls/histogram/Histogram";
-import HistogramSelect from "@/components/controls/histogram/HistogramParameters";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
 import { histogramAtom } from "@/state/histogram";
 import { type RenderMode as RM, renderAtom } from "@/state/render";
+import { threadAtom } from "@/state/thread";
 
 const HISTOGRAM_RENDER_MODES = new Set<RM>([
   "Store Frequency",
@@ -21,6 +24,8 @@ const HISTOGRAM_RENDER_MODES = new Set<RM>([
   "Reuse Distance",
 ]);
 
+const BAR_CHART_RENDER_MODES = new Set<RM>(["Thread Coverage"]);
+
 const RENDER_MODE_TO_LABEL: Record<RM, string> = {
   Grayscale: "",
   RGB: "",
@@ -28,6 +33,7 @@ const RENDER_MODE_TO_LABEL: Record<RM, string> = {
   "Load Frequency": "Load Count",
   "Redundant Stores": "Redundant Store Count",
   "Reuse Distance": "Reuse Distance (Packets)",
+  "Thread Coverage": "Thread ID",
 };
 
 function VisualizationPanel() {
@@ -35,6 +41,7 @@ function VisualizationPanel() {
   const render = useAtomValue(renderAtom);
   const activeFunc = useAtomValue(funcAtom);
   const { data, scale } = useAtomValue(histogramAtom);
+  const thread = useAtomValue(threadAtom);
 
   const hasHistogram =
     HISTOGRAM_RENDER_MODES.has(render.renderMode) &&
@@ -92,6 +99,37 @@ function VisualizationPanel() {
     globalMaxReuseDistance,
   ]);
 
+  const hasBarChart =
+    BAR_CHART_RENDER_MODES.has(render.renderMode) &&
+    activeFunc &&
+    funcs[activeFunc] &&
+    data !== null;
+
+  const { data: barChartData } = React.useMemo((): {
+    data: { x: string; y: number }[];
+  } => {
+    if (!hasBarChart || !data) {
+      return { data: [] };
+    }
+
+    switch (render.renderMode) {
+      case "Thread Coverage": {
+        const threadIds = funcs[activeFunc].thread_ids;
+        const storeCounts = data.slice(0, threadIds.length);
+        const loadCounts = data.slice(threadIds.length, threadIds.length * 2);
+
+        return {
+          data: threadIds.map((threadId, i) => ({
+            x: `${threadId}`,
+            y: thread.op === "Store" ? storeCounts[i] : loadCounts[i],
+          })),
+        };
+      }
+      default:
+        return { data: [] };
+    }
+  }, [hasBarChart, data, activeFunc, funcs, render, thread.op]);
+
   return (
     <div className="flex flex-col gap-4 px-3 py-4">
       <ControlSection title="Render Mode">
@@ -100,13 +138,27 @@ function VisualizationPanel() {
       {hasHistogram ? (
         <>
           <Separator.Root className="bg-ps-border-tertiary h-px" />
-          <ControlSection title="Histogram">
+          <ControlSection title="Stats">
             <div className="flex flex-col gap-4">
-              <HistogramSelect />
+              <HistogramParameters />
               <Histogram
                 data={histogramData}
                 domain={histogramDomain}
                 labels={{ x: RENDER_MODE_TO_LABEL[render.renderMode] }}
+              />
+            </div>
+          </ControlSection>
+        </>
+      ) : null}
+      {hasBarChart ? (
+        <>
+          <Separator.Root className="bg-ps-border-tertiary h-px" />
+          <ControlSection title="Stats">
+            <div className="flex flex-col gap-4">
+              <BarChartParameters />
+              <BarChart
+                data={barChartData}
+                labels={{ x: "Thread ID", y: `${thread.op} Count` }}
               />
             </div>
           </ControlSection>
