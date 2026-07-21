@@ -27,6 +27,7 @@
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "ExtractTileOperations.h"
+#include "FastMathFunctions.h"
 #include "FindCalls.h"
 #include "FindIntrinsics.h"
 #include "FlattenNestedRamps.h"
@@ -152,8 +153,8 @@ void lower_impl(const vector<Function> &output_funcs,
 
     lower_target_query_ops(env, t);
 
-    bool any_strict_float = strictify_float(env, t);
-    result_module.set_any_strict_float(any_strict_float);
+    bool has_any_strict_float = strictify_float(env, t);
+    result_module.set_any_strict_float(has_any_strict_float);
 
     // Finalize all the LoopLevels
     for (auto &iter : env) {
@@ -328,6 +329,18 @@ void lower_impl(const vector<Function> &output_funcs,
         log("Lowering after selecting a GPU API for extern stages:", s);
     }
 
+    // Lowering of fast versions of math functions is target dependent: CPU arch or GPU/DeviceAPI.
+    debug(1) << "Selecting fast math function implementations...\n";
+    s = lower_fast_math_functions(s, t);
+    log("Lowering after selecting fast math functions:", s);
+    if (!has_any_strict_float) {
+        has_any_strict_float = any_strict_float(s);
+        if (has_any_strict_float) {
+            debug(2) << "Detected strict_float ops after selecting fast math functions.\n";
+            result_module.set_any_strict_float(has_any_strict_float);
+        }
+    }
+
     debug(1) << "Simplifying...\n";
     s = simplify(s);
     s = unify_duplicate_lets(s);
@@ -418,8 +431,9 @@ void lower_impl(const vector<Function> &output_funcs,
         log("Lowering after injecting warp shuffles:", s);
     }
 
-    debug(1) << "Simplifying...\n";
+    debug(1) << "Common Subexpression Elimination...\n";
     s = common_subexpression_elimination(s);
+    log("Lowering after CSE:", s);
 
     debug(1) << "Lowering unsafe promises...\n";
     s = lower_unsafe_promises(s, t);
@@ -484,7 +498,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_gpu_feature()) {
         debug(1) << "Offloading GPU loops...\n";
-        s = inject_gpu_offload(s, t, any_strict_float);
+        s = inject_gpu_offload(s, t, has_any_strict_float);
         debug(2) << "Lowering after splitting off GPU loops:\n"
                  << s << "\n\n";
     } else {

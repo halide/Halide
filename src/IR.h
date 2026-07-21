@@ -656,6 +656,21 @@ struct Call : public ExprNode<Call> {
         extract_bits,
         // Extracts a single element from a mask vector
         extract_mask_element,
+        // Some fast math functions.
+        // @{
+        fast_acos,
+        fast_asin,
+        fast_atan,
+        fast_atan2,
+        fast_cos,
+        fast_exp,
+        fast_expm1,
+        fast_log,
+        fast_pow,
+        fast_sin,
+        fast_tan,
+        fast_tanh,
+        // @}
         // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
         get_runtime_vscale,
         get_user_context,

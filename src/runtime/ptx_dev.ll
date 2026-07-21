@@ -61,7 +61,12 @@ define weak_odr double @sqrt_f64(double %x) nounwind uwtable readnone alwaysinli
 declare float @__nv_frcp_rn(float) nounwind readnone
 
 define weak_odr float @fast_inverse_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call float @__nv_frcp_rn(float %x) nounwind readnone
+       %y = call float asm "rcp.approx.f32     $0, $1;", "=f,f" (float %x)
+       ret float %y
+}
+
+define weak_odr float @fast_div_f32(float %a, float %b) nounwind uwtable readnone alwaysinline {
+       %y = call float asm "div.approx.f32     $0, $1, $2;", "=f,f,f" (float %a, float %b)
        ret float %y
 }
 
@@ -80,6 +85,11 @@ define weak_odr float @sin_f32(float %x) nounwind uwtable readnone alwaysinline 
        ret float %y
 }
 
+define weak_odr float @fast_sin_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = call float asm "sin.approx.f32     $0, $1;", "=f,f" (float %x)
+       ret float %y
+}
+
 define weak_odr double @sin_f64(double %x) nounwind uwtable readnone alwaysinline {
        %y = tail call double @__nv_sin(double %x) nounwind readnone
        ret double %y
@@ -90,6 +100,11 @@ declare double @__nv_cos(double) nounwind readnone
 
 define weak_odr float @cos_f32(float %x) nounwind uwtable readnone alwaysinline {
        %y = tail call float @__nv_cosf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr float @fast_cos_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = call float asm "cos.approx.f32     $0, $1;", "=f,f" (float %x)
        ret float %y
 }
 
@@ -111,6 +126,11 @@ define weak_odr double @exp_f64(double %x) nounwind uwtable readnone alwaysinlin
        ret double %y
 }
 
+define weak_odr float @fast_ex2_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = call float asm "ex2.approx.f32     $0, $1;", "=f,f" (float %x)
+       ret float %y
+}
+
 declare float @__nv_logf(float) nounwind readnone
 declare double @__nv_log(double) nounwind readnone
 
@@ -122,6 +142,11 @@ define weak_odr float @log_f32(float %x) nounwind uwtable readnone alwaysinline 
 define weak_odr double @log_f64(double %x) nounwind uwtable readnone alwaysinline {
        %y = tail call double @__nv_log(double %x) nounwind readnone
        ret double %y
+}
+
+define weak_odr float @fast_lg2_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = call float asm "lg2.approx.f32     $0, $1;", "=f,f" (float %x)
+       ret float %y
 }
 
 declare float @__nv_fabsf(float) nounwind readnone
@@ -311,6 +336,12 @@ declare double @__nv_tanh(double) nounwind readnone
 
 define weak_odr float @tanh_f32(float %x) nounwind uwtable readnone alwaysinline {
        %y = tail call float @__nv_tanhf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr float @fast_tanh_f32(float %x) nounwind uwtable readnone alwaysinline {
+       ; Requires SM75
+       %y = call float asm "tanh.approx.f32     $0, $1;", "=f,f" (float %x)
        ret float %y
 }
 

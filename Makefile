@@ -450,6 +450,7 @@ SOURCE_FILES = \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
+  ApproximationTables.cpp \
   Argument.cpp \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
@@ -509,6 +510,7 @@ SOURCE_FILES = \
   Expr.cpp \
   ExtractTileOperations.cpp \
   FastIntegerDivide.cpp \
+  FastMathFunctions.cpp \
   FindCalls.cpp \
   FindIntrinsics.cpp \
   FlattenNestedRamps.cpp \
@@ -652,6 +654,7 @@ HEADER_FILES = \
   AlignLoads.h \
   AllocationBoundsInference.h \
   ApplySplit.h \
+  ApproximationTables.h \
   Argument.h \
   AssociativeOpsTable.h \
   Associativity.h \
@@ -711,6 +714,7 @@ HEADER_FILES = \
   ExternFuncArgument.h \
   ExtractTileOperations.h \
   FastIntegerDivide.h \
+  FastMathFunctions.h \
   FindCalls.h \
   FindIntrinsics.h \
   FlattenNestedRamps.h \
@@ -927,7 +931,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_vulkan \
   windows_yield \
   write_debug_image \
-  x86_cpu_features \
+  x86_cpu_features
 # keep-sorted end
 
 # keep-sorted start skip_lines=1
