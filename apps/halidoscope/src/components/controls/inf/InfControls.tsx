@@ -27,7 +27,7 @@ function InfControls() {
         <label className="text-ps-text-primary/60">Highlight Inf Values</label>
       </div>
       {inf.active ? (
-        <div className="flex flex-col gap-1">
+        <div className="ml-4 flex flex-col gap-1">
           <Label.Root
             className="text-ps-text-primary/60"
             htmlFor="inf-animation-mode-select"
