@@ -736,6 +736,35 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Part AF: reverse-mode (VJP) autodiff, the default Halide autodiff. The
+    // gradient through a branch must match the gradient through the equivalent
+    // select.
+    {
+        Param<float> p("pv");
+        p.set(3.0f);
+        Var xx("xx");
+        Expr cond = xx < 5;
+        Expr a = p * cast<float>(xx);
+        Expr b = p * p;
+        Func fs("vjp_sel"), fb("vjp_br");
+        fs(xx) = select(cond, a, b);
+        fb(xx) = branch(cond, a, b);
+        fs.compute_root();
+        fb.compute_root();  // branch must be a real Func, not inlined into loss
+        RDom r(0, 10);
+        Func loss_s("loss_s"), loss_b("loss_b");
+        loss_s() = sum(fs(r));
+        loss_b() = sum(fb(r));
+        Func gs = propagate_adjoints(loss_s)(p);
+        Func gb = propagate_adjoints(loss_b)(p);
+        Buffer<float> bs = gs.realize();
+        Buffer<float> bb = gb.realize();
+        if (std::abs(bs() - bb()) > 1e-3f) {
+            printf("VJP gradient mismatch: select=%f branch=%f\n", bs(), bb());
+            return 1;
+        }
+    }
+
 #ifdef HALIDE_WITH_EXCEPTIONS
     // Part H: a lane-varying (vector) condition is rejected at construction.
     {

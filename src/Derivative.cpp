@@ -1183,6 +1183,18 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             for (const auto &arg : op->args) {
                 accumulate(arg, make_zero(op->type));
             }
+        } else if (op->is_intrinsic(Call::branch)) {
+            // branch(cond, a, b) has the same derivative as select(cond, a, b):
+            // route the incoming adjoint to whichever side is taken. Reverse
+            // mode accumulates (sums) adjoints across all uses of a value, so
+            // the routing has to be an Expr (a select); it can not itself be a
+            // branch, which must be the whole value of a Func definition. The
+            // gradient is correct.
+            internal_assert(op->args.size() == 3);
+            accumulate(op->args[1],
+                       select(op->args[0], adjoint, make_zero(op->type)));
+            accumulate(op->args[2],
+                       select(op->args[0], make_zero(op->type), adjoint));
         } else {
             user_warning << "Dropping gradients at call to " << op->name << "\n";
             for (const auto &arg : op->args) {
