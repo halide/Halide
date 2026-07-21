@@ -1113,7 +1113,7 @@ public:
 };
 
 Stmt lower_fast_math_functions(const Stmt &s, const Target &t) {
-    return LowerFastMathFunctions(t).mutate(s);
+    return LowerFastMathFunctions(t)(s);
 }
 
 }  // namespace Internal
