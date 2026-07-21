@@ -765,6 +765,81 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Part AH: f(x) += branch(cond, a, b) distributes the accumulation into the
+    // arms - f = branch(cond, f + a, f + b) - so the whole update value is a
+    // branch (real control flow), not a select. A producer used by one arm and
+    // compute_at'd inside the update is gated to that arm only.
+    {
+        Func p("acc_p"), f("acc_f");
+        p(x, y) = x + y;  // stand-in for an expensive producer
+        f(x, y) = 100;
+        f(x, y) += branch(y < 8, p(x, y), x - y);
+        p.compute_at(f, x);  // lands inside the branched update
+
+        Module m = f.compile_to_module({}, "acc_f");
+        if (count_real_branches(m) < 1) {
+            printf("f += branch did not lower to a real branch\n");
+            return 1;
+        }
+        BranchArmProduce pg = arm_produce(m, "acc_p");
+        if (!pg.found) {
+            printf("f += branch: no branch found around producer\n");
+            return 1;
+        }
+        if (pg.then_count < 1 || pg.else_count != 0) {
+            printf("f += branch: producer not gated to the taken arm (then=%d else=%d)\n",
+                   pg.then_count, pg.else_count);
+            return 1;
+        }
+
+        Buffer<int> r = f.realize({16, 16});
+        for (int j = 0; j < 16; j++) {
+            for (int i = 0; i < 16; i++) {
+                int correct = 100 + ((j < 8) ? (i + j) : (i - j));
+                if (r(i, j) != correct) {
+                    printf("f += branch mismatch at (%d,%d): got %d want %d\n",
+                           i, j, r(i, j), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    // Part AH2: reverse-mode (VJP) through a branch with a NONLINEAR loss. The
+    // backward pass needs the forward value of the branch-valued Func, which used
+    // to bury the branch inside an adjoint expression and fail lowering with
+    // "a branch-defined Func can not be inlined". It now lifts back to real
+    // control flow, and the gradient matches both select and the analytic value.
+    {
+        auto grad = [&](bool use_branch) -> float {
+            Param<float> p("pn");
+            p.set(3.0f);
+            Var xx("xx");
+            Expr cond = xx < 5;
+            Expr a = p * cast<float>(xx);  // da/dp = xx
+            Expr b = p * p;                // db/dp = 2p
+            Func fwd(use_branch ? "vjpn_b" : "vjpn_s");
+            if (use_branch) {
+                fwd(xx) = branch(cond, a, b);
+            } else {
+                fwd(xx) = select(cond, a, b);
+            }
+            fwd.compute_root();
+            RDom r(0, 10);
+            Func loss(use_branch ? "lossn_b" : "lossn_s");
+            loss() = sum(fwd(r) * fwd(r));  // nonlinear in fwd
+            loss.compute_root();
+            Buffer<float> g = propagate_adjoints(loss)(p).realize();
+            return g();
+        };
+        float gs = grad(false), gb = grad(true);
+        // sum_{xx<5} 2 p xx^2 + sum_{xx>=5} 4 p^3 = 180 + 540 = 720 at p=3.
+        if (std::abs(gs - 720.0f) > 1e-2f || std::abs(gb - gs) > 1e-2f) {
+            printf("nonlinear VJP mismatch: select=%f branch=%f analytic=720\n", gs, gb);
+            return 1;
+        }
+    }
+
 #ifdef HALIDE_WITH_EXCEPTIONS
     // Part H: a lane-varying (vector) condition is rejected at construction.
     {
