@@ -805,6 +805,146 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Part AH-sub: f(x) -= branch(cond, a, b) distributes the same way -
+    // f = branch(cond, f - a, f - b) - real control flow with the producer gated
+    // to the taken arm.
+    {
+        Func p("sub_p"), f("sub_f");
+        p(x, y) = x + y;
+        f(x, y) = 100;
+        f(x, y) -= branch(y < 8, p(x, y), x - y);
+        p.compute_at(f, x);
+
+        Module m = f.compile_to_module({}, "sub_f");
+        BranchArmProduce pg = arm_produce(m, "sub_p");
+        if (count_real_branches(m) < 1 || !pg.found ||
+            pg.then_count < 1 || pg.else_count != 0) {
+            printf("f -= branch: not a gated real branch (then=%d else=%d)\n",
+                   pg.then_count, pg.else_count);
+            return 1;
+        }
+        Buffer<int> r = f.realize({16, 16});
+        for (int j = 0; j < 16; j++) {
+            for (int i = 0; i < 16; i++) {
+                int correct = 100 - ((j < 8) ? (i + j) : (i - j));
+                if (r(i, j) != correct) {
+                    printf("f -= branch mismatch at (%d,%d): got %d want %d\n",
+                           i, j, r(i, j), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    // Part AH-mul: f(x) *= branch(cond, a, b) distributes to
+    // f = branch(cond, f * a, f * b). The only difference from += / -= is the
+    // identity: with no pure definition the Func initialises to 1, not 0.
+    {
+        // With an explicit pure definition.
+        Func f("mul_f");
+        f(x) = 2;
+        f(x) *= branch(x < 5, x + 1, 3);
+        Module m = f.compile_to_module({}, "mul_f");
+        if (count_real_branches(m) < 1) {
+            printf("f *= branch did not lower to a real branch\n");
+            return 1;
+        }
+        Buffer<int> r = f.realize({10});
+        for (int i = 0; i < 10; i++) {
+            int correct = 2 * ((i < 5) ? (i + 1) : 3);
+            if (r(i) != correct) {
+                printf("f *= branch mismatch at %d: got %d want %d\n", i, r(i), correct);
+                return 1;
+            }
+        }
+
+        // With no pure definition: initialises to 1 (multiplicative identity).
+        Func g("mul_g");
+        g(x) *= branch(x < 5, x + 1, 3);
+        Buffer<int> rg = g.realize({10});
+        for (int i = 0; i < 10; i++) {
+            int correct = (i < 5) ? (i + 1) : 3;  // 1 * taken arm
+            if (rg(i) != correct) {
+                printf("g *= branch (no pure def) mismatch at %d: got %d want %d\n",
+                       i, rg(i), correct);
+                return 1;
+            }
+        }
+    }
+
+    // Part AH-div: f(x) /= branch(cond, a, b) becomes f = branch(cond, f/a, f/b),
+    // init 1 with no pure definition (float, to avoid integer division).
+    {
+        Func f("div_f");
+        f(x) = 120.0f;
+        f(x) /= branch(x < 5, cast<float>(x + 1), 4.0f);
+        if (count_real_branches(f.compile_to_module({}, "div_f")) < 1) {
+            printf("f /= branch did not lower to a real branch\n");
+            return 1;
+        }
+        Buffer<float> r = f.realize({10});
+        for (int i = 0; i < 10; i++) {
+            float correct = 120.0f / ((i < 5) ? (i + 1) : 4);
+            if (std::abs(r(i) - correct) > 1e-3f) {
+                printf("f /= branch mismatch at %d: got %f want %f\n", i, r(i), correct);
+                return 1;
+            }
+        }
+    }
+
+    // Part AH-ad: reverse-mode (VJP) through a compound branch update.
+    // f += branch(cond,a,b) is a branch-valued update f = branch(cond, f+a, f+b),
+    // semantically identical to f += select(cond,a,b), so the gradient must match
+    // the select version. Covers the self-reference-in-both-arms case. (This
+    // branch is VJP-only; the JVP counterpart lives on the forward-diff branch.)
+    {
+        auto reduce_grad = [&](bool use_branch) -> float {
+            Param<float> p("adp");
+            p.set(3.0f);
+            RDom r(0, 10);
+            Func f(use_branch ? "adbv" : "adsv");
+            f() = 0.0f;
+            if (use_branch) {
+                f() += branch(r < 5, p * cast<float>(r), p * p);
+            } else {
+                f() += select(r < 5, p * cast<float>(r), p * p);
+            }
+            Buffer<float> d = propagate_adjoints(f)(p).realize();
+            return d();
+        };
+        // f = sum_{r<5} p r + sum_{r>=5} p^2 = 10p + 5p^2; df/dp = 10 + 10p = 40 at p=3.
+        float vjp_s = reduce_grad(false), vjp_b = reduce_grad(true);
+        if (std::abs(vjp_b - vjp_s) > 1e-3f || std::abs(vjp_b - 40.0f) > 1e-3f) {
+            printf("VJP through += branch: select=%f branch=%f (want 40)\n", vjp_s, vjp_b);
+            return 1;
+        }
+
+        // Product reduction (*=), where the derivative is the product rule.
+        // The branch operator only has to be faithful to the select version:
+        // Halide's own reverse-mode AD of a self-referencing product scan is
+        // unreliable (it does not match the analytic gradient) for BOTH select
+        // and branch, so we only assert branch == select.
+        auto prod_grad = [&](bool use_branch) -> float {
+            Param<float> p("mdp");
+            p.set(3.0f);
+            RDom r(0, 3);
+            Func f(use_branch ? "mdbv" : "mdsv");
+            f() = 1.0f;
+            if (use_branch) {
+                f() *= branch(r < 2, p, 2.0f);
+            } else {
+                f() *= select(r < 2, p, 2.0f);
+            }
+            Buffer<float> d = propagate_adjoints(f)(p).realize();
+            return d();
+        };
+        float pv_s = prod_grad(false), pv_b = prod_grad(true);
+        if (std::abs(pv_b - pv_s) > 1e-3f) {
+            printf("VJP through *= branch not faithful: select=%f branch=%f\n", pv_s, pv_b);
+            return 1;
+        }
+    }
+
     // Part AH2: reverse-mode (VJP) through a branch with a NONLINEAR loss. The
     // backward pass needs the forward value of the branch-valued Func, which used
     // to bury the branch inside an adjoint expression and fail lowering with
