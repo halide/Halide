@@ -60,6 +60,7 @@ pub fn run() {
             commands::render_reuse_distance,
             commands::render_nan,
             commands::render_inf,
+            commands::render_thread
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

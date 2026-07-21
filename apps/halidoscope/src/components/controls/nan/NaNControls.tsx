@@ -27,7 +27,7 @@ function NaNControls() {
         <label className="text-ps-text-primary/60">Highlight NaN Values</label>
       </div>
       {nan.active ? (
-        <div className="flex flex-col gap-1">
+        <div className="ml-4 flex flex-col gap-1">
           <Label.Root
             className="text-ps-text-primary/60"
             htmlFor="animation-mode-select"

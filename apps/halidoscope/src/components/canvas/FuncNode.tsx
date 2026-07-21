@@ -18,9 +18,12 @@ import HandleCircle from "@/components/canvas/HandleCircle";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
 import { histogramAtom } from "@/state/histogram";
+import { infAtom } from "@/state/inf";
 import { livenessAtom } from "@/state/liveness";
 import { packetAtom } from "@/state/packet";
+import { nanAtom } from "@/state/nan";
 import { renderAtom } from "@/state/render";
+import { threadAtom } from "@/state/thread";
 import type { FuncMeta } from "@/types";
 import {
   renderGrayscale,
@@ -32,10 +35,9 @@ import {
   type RenderResult,
   renderNaN,
   renderInf,
+  renderThread,
 } from "@/utils/api";
 import { isFuncBufferLive, isEdgeLive } from "@/utils/liveness";
-import { nanAtom } from "@/state/nan";
-import { infAtom } from "@/state/inf";
 
 function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   const { name, width, height } = data;
@@ -51,6 +53,7 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   const setHistogramData = useSetAtom(histogramAtom);
   const nan = useAtomValue(nanAtom);
   const inf = useAtomValue(infAtom);
+  const thread = useAtomValue(threadAtom);
 
   const nodes = useNodes();
   const edges = useEdges();
@@ -165,6 +168,17 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
                 height,
               );
               break;
+            case "Thread Coverage":
+              result = await renderThread(
+                name,
+                target,
+                render.normalizationMode,
+                thread.op,
+                width,
+                height,
+              );
+
+              break;
           }
 
           const ctx = canvasRef.current?.getContext("2d");
@@ -183,17 +197,30 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
             break;
           }
         }
-      } catch {
+      } catch (err) {
         console.error(
-          `Failed to render ${name} at index ${latestIndexRef.current}`,
+          `Failed to render ${name} at index ${latestIndexRef.current}: ${err}`,
         );
       }
     }
 
     draw();
-  }, [packetIndex, name, width, height, render, activeFunc, setHistogramData]);
+  }, [
+    packetIndex,
+    name,
+    width,
+    height,
+    render,
+    activeFunc,
+    setHistogramData,
+    thread.op,
+  ]);
 
   React.useEffect(() => {
+    if (!nan.active) {
+      return;
+    }
+
     latestIndexRef.current = packetIndex;
 
     if (renderingRef.current) {
@@ -229,9 +256,13 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
     }
 
     drawNaN();
-  }, [name, packetIndex, render.normalizationMode, width, height]);
+  }, [nan.active, name, packetIndex, render.normalizationMode, width, height]);
 
   React.useEffect(() => {
+    if (!inf.active) {
+      return;
+    }
+
     latestIndexRef.current = packetIndex;
 
     if (renderingRef.current) {
@@ -267,7 +298,7 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
     }
 
     drawInf();
-  }, [name, packetIndex, render.normalizationMode, width, height]);
+  }, [inf.active, name, packetIndex, render.normalizationMode, width, height]);
 
   return (
     <>
