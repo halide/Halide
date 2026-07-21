@@ -5,10 +5,6 @@ namespace PythonBindings {
 
 namespace {
 
-Type make_handle(int lanes) {
-    return Handle(lanes, nullptr);
-}
-
 std::string type_repr(const Type &t) {
     std::ostringstream o;
     o << "<halide.Type " << halide_type_to_string(t) << ">";
@@ -100,7 +96,7 @@ void define_type(py::module &m) {
     m.def("Float", Float, py::arg("bits"), py::arg("lanes") = 1);
     m.def("BFloat", BFloat, py::arg("bits"), py::arg("lanes") = 1);
     m.def("Bool", Bool, py::arg("lanes") = 1);
-    m.def("Handle", make_handle, py::arg("lanes") = 1);
+    m.def("Handle", []() -> Type { return Handle(); });
 
     // This is an expedient: a unique Handle type that we use as a placeholder
     // in Python generators. It should never be visible to the end user.

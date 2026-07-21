@@ -41,7 +41,7 @@ Type non_null_void_star_type() {
     static halide_handle_cplusplus_type t(halide_handle_cplusplus_type(
         halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"),
         {}, {}, {halide_handle_cplusplus_type::Pointer}));
-    return Handle(1, &t);
+    return Handle(&t);
 }
 
 namespace WindowsMangling {
@@ -848,7 +848,7 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
         {"test_namespace", "test_namespace"},
         {halide_cplusplus_type_name(halide_cplusplus_type_name::Class,
                                     "enclosing_class")}));
-    Type test_type(Handle(1, &enclosed_type_info));
+    Type test_type(Handle(&enclosed_type_info));
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", {"test_namespace", "test_namespace"}, Int(32),
                                                  {ExternFuncArgument(make_zero(test_type))}, target));
@@ -865,14 +865,14 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
             "test_namespace",
         },
         {}, {halide_handle_cplusplus_type::Pointer}));
-    Type qual1_type(Handle(1, &qual1));
+    Type qual1_type(Handle(&qual1));
     halide_handle_cplusplus_type qual2(halide_handle_cplusplus_type(
         halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "test_struct"),
         {
             "test_namespace",
         },
         {}, {halide_handle_cplusplus_type::Pointer | halide_handle_cplusplus_type::Const}));
-    Type qual2_type(Handle(1, &qual2));
+    Type qual2_type(Handle(&qual2));
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", {"test_namespace", "test_namespace"}, Int(32),
                                                  {ExternFuncArgument(make_zero(qual1_type)),
@@ -894,7 +894,7 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
     halide_handle_cplusplus_type std_enclosed_type_info(halide_handle_cplusplus_type(
         halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "test_struct"), {"std"},
         {halide_cplusplus_type_name(halide_cplusplus_type_name::Class, "enclosing_class")}));
-    Type std_test_type(Handle(1, &std_enclosed_type_info));
+    Type std_test_type(Handle(&std_enclosed_type_info));
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", {"std"}, Int(32),
                                                  {ExternFuncArgument(make_zero(std_test_type))}, target));
@@ -905,7 +905,7 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
             "test_namespace",
         },
         {}, {halide_handle_cplusplus_type::Pointer}));
-    Type class_type(Handle(1, &class_type_info));
+    Type class_type(Handle(&class_type_info));
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", {"test_namespace", "test_namespace"}, Int(32),
                                                  {
@@ -919,7 +919,7 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
             "test_namespace",
         },
         {}, {halide_handle_cplusplus_type::Pointer}));
-    Type union_type(Handle(1, &union_type_info));
+    Type union_type(Handle(&union_type_info));
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", {"test_namespace", "test_namespace"}, Int(32),
                                                  {
@@ -933,7 +933,7 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
             "test_namespace",
         },
         {}, {halide_handle_cplusplus_type::Pointer}));
-    Type enum_type(Handle(1, &enum_type_info));
+    Type enum_type(Handle(&enum_type_info));
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", {"test_namespace", "test_namespace"}, Int(32),
                                                  {
@@ -1004,7 +1004,7 @@ void cplusplus_mangle_test() {
         std::vector<ExternFuncArgument> args;
         args.reserve(200);
         for (int i = 0; i < 200; i++) {
-            args.emplace_back(make_zero(Handle(1, &type_info[i % 100])));
+            args.emplace_back(make_zero(Handle(&type_info[i % 100])));
         }
 
         size_t expecteds_index = 0;
@@ -1031,7 +1031,7 @@ void cplusplus_mangle_test() {
         std::vector<ExternFuncArgument> args;
         args.reserve(50);
         for (int i = 0; i < 50; i++) {
-            args.emplace_back(make_zero(Handle(1, &type_info[i % 25])));
+            args.emplace_back(make_zero(Handle(&type_info[i % 25])));
         }
 
         size_t expecteds_index = 0;
@@ -1059,7 +1059,7 @@ void cplusplus_mangle_test() {
         std::vector<ExternFuncArgument> args;
         args.reserve(type_info.size());
         for (const auto &ti : type_info) {
-            args.emplace_back(make_zero(Handle(1, &ti)));
+            args.emplace_back(make_zero(Handle(&ti)));
         }
         size_t expecteds_index = 0;
         for (const auto &target : targets) {
@@ -1080,9 +1080,9 @@ void cplusplus_mangle_test() {
                 halide_handle_cplusplus_type t3(halide_handle_cplusplus_type(
                     halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "s"), {}, {}, {mods}, halide_handle_cplusplus_type::RValueReference));
                 std::vector<ExternFuncArgument> args;
-                args.emplace_back(make_zero(Handle(1, &t1)));
-                args.emplace_back(make_zero(Handle(1, &t2)));
-                args.emplace_back(make_zero(Handle(1, &t3)));
+                args.emplace_back(make_zero(Handle(&t1)));
+                args.emplace_back(make_zero(Handle(&t2)));
+                args.emplace_back(make_zero(Handle(&t3)));
 
                 MangleResult *expecteds = (target.os == Target::Windows) ? (target.bits == 64 ? all_mods_win64 : all_mods_win32) : all_mods_itanium;
                 check_result(expecteds, expecteds_index, target,
@@ -1097,8 +1097,8 @@ void cplusplus_mangle_test() {
         for (const auto &target : targets) {
             size_t expecteds_index = 0;
             std::vector<ExternFuncArgument> args;
-            args.emplace_back(make_zero(Handle(1, nullptr)));
-            args.emplace_back(make_zero(Handle(1, nullptr)));
+            args.emplace_back(make_zero(Handle(nullptr)));
+            args.emplace_back(make_zero(Handle(nullptr)));
 
             MangleResult *expecteds = (target.os == Target::Windows) ? (target.bits == 64 ? two_void_stars_win64 : two_void_stars_win32) : two_void_stars_itanium;
             check_result(expecteds, expecteds_index, target,
