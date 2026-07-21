@@ -7,6 +7,7 @@ export const RENDER_MODES = [
   "Load Frequency",
   "Redundant Stores",
   "Reuse Distance",
+  "Thread Coverage",
 ] as const;
 export type RenderMode = (typeof RENDER_MODES)[number];
 export type NormalizationMode = "Across Funcs" | "Per Func";

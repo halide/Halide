@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type { NormalizationMode } from "@/state/render";
+import type { ThreadOpMode } from "@/state/thread";
 import type { TraceMeta } from "@/types";
 
 export interface RenderResult {
@@ -157,4 +158,35 @@ export async function renderInf(
     pixels: new Uint8ClampedArray(buffer),
     histogram: null,
   };
+}
+
+function splitPixelsAndThreadStoreLoadCounts(
+  buffer: ArrayBuffer,
+  width: number,
+  height: number,
+): RenderResult {
+  const pixelByteLength = width * height * 4;
+
+  return {
+    pixels: new Uint8ClampedArray(buffer, 0, pixelByteLength),
+    histogram: new Uint32Array(buffer, pixelByteLength),
+  };
+}
+
+export async function renderThread(
+  func: string,
+  globalIndex: number,
+  normalizationMode: NormalizationMode,
+  threadOpMode: ThreadOpMode,
+  width: number,
+  height: number,
+): Promise<RenderResult> {
+  const buffer = await invoke<ArrayBuffer>("render_thread", {
+    func,
+    globalIndex,
+    normalizationMode,
+    opMode: threadOpMode,
+  });
+
+  return splitPixelsAndThreadStoreLoadCounts(buffer, width, height);
 }

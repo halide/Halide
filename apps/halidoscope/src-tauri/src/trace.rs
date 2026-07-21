@@ -101,8 +101,11 @@ pub struct TracePacket {
     pub value_index: i32,
     /// Only meaningful for load/store events.
     pub type_: HalideType,
-    /// The Halide-internal thread that executed a parallel task. Only meaningful for
-    /// `BeginParallelTask`; zero for every other event.
+    /// The Halide-internal thread that executed this event. Parsed directly off
+    /// `BeginParallelTask` packets; for Load/Store packets (whose header reuses this byte offset
+    /// for `type_` in the raw binary format) it's resolved after parsing by walking the parent
+    /// chain up to the nearest enclosing `BeginParallelTask` (0 if there is none, i.e. serial
+    /// execution). Meaningless for every other event.
     pub thread_id: i32,
     /// Coordinates in dim-major / lane-minor order: [x₀..xₙ, y₀..yₙ, c₀..cₙ] where n = type_.lanes.
     pub coordinates: Vec<i32>,
@@ -434,6 +437,12 @@ impl Trace {
         // parsed.
         let mut id_to_info: HashMap<i32, (EventCode, String, i32)> = HashMap::new();
 
+        // BeginParallelTask's own id -> the thread_id it carries. Load/Store packets don't carry
+        // a real thread_id (see TracePacket::thread_id), so resolving the thread that executed a
+        // given load/store requires walking its parent chain up to the nearest BeginParallelTask
+        // and looking up its thread_id here.
+        let mut thread_id_by_task_id: HashMap<i32, i32> = HashMap::new();
+
         // Loads we deferred for DAG inference.
         let mut pending_loads: Vec<(String, i32)> = Vec::new();
 
@@ -649,6 +658,7 @@ impl Trace {
                 }
                 EventCode::BeginParallelTask => {
                     pending_parallel_tasks.push((thread_id, parent_id));
+                    thread_id_by_task_id.insert(id, thread_id);
                 }
                 _ => {}
             }
@@ -699,6 +709,26 @@ impl Trace {
             }
         }
 
+        // Resolve the executing thread for each load/store packet by walking its parent chain.
+        for pkt in packets.iter_mut() {
+            if !pkt.is_load_or_store() {
+                continue;
+            }
+
+            let mut current = pkt.parent_id;
+            loop {
+                if let Some(&tid) = thread_id_by_task_id.get(&current) {
+                    pkt.thread_id = tid;
+                    break;
+                }
+
+                match id_to_info.get(&current) {
+                    Some((_, _, next_parent)) => current = *next_parent,
+                    None => break,
+                }
+            }
+        }
+
         // Compute max per-pixel store/load counts for each Func using the index lists. We extract
         // extents first (shared borrow) then write back (mut borrow) to keep the two borrows of
         // `funcs` non-overlapping.
@@ -715,7 +745,7 @@ impl Trace {
                         w,
                         h,
                         None,
-                        |_lane, pixel_idx, _val_idx, _x, _y| {
+                        |_lane, pixel_idx, _val_idx| {
                             counts[pixel_idx] += 1;
                         },
                     );
@@ -739,7 +769,7 @@ impl Trace {
                         w,
                         h,
                         None,
-                        |_lane, pixel_idx, _val_idx, _x, _y| {
+                        |_lane, pixel_idx, _val_idx| {
                             counts[pixel_idx] += 1;
                         },
                     );
@@ -794,7 +824,7 @@ impl Trace {
                             w,
                             h,
                             Some((min_c, channels)),
-                            |lane, pixel_idx, val_idx, _x, _y| {
+                            |lane, pixel_idx, val_idx| {
                                 let Some(v) = pkt.decoded_value(lane) else {
                                     return;
                                 };
@@ -819,7 +849,7 @@ impl Trace {
                             w,
                             h,
                             Some((min_c, channels)),
-                            |_lane, _pixel_idx, val_idx, _x, _y| {
+                            |_lane, _pixel_idx, val_idx| {
                                 last_values[val_idx] = None;
                             },
                         );
@@ -882,7 +912,7 @@ impl Trace {
                             w,
                             h,
                             Some((min_c, channels)),
-                            |_lane, _pixel_idx, val_idx, _x, _y| {
+                            |_lane, _pixel_idx, val_idx| {
                                 last_store_at[val_idx] = global_idx;
                             },
                         );
@@ -897,7 +927,7 @@ impl Trace {
                             w,
                             h,
                             Some((min_c, channels)),
-                            |_lane, pixel_idx, val_idx, _x, _y| {
+                            |_lane, pixel_idx, val_idx| {
                                 if last_store_at[val_idx] != usize::MAX {
                                     let dist = (global_idx - last_store_at[val_idx]) as u64;
                                     if dist > max_reuse_distances[pixel_idx] {
@@ -947,7 +977,7 @@ impl Trace {
                         w,
                         h,
                         Some((min_c, channels)),
-                        |_lane, pixel_idx, val_idx, _x, _y| {
+                        |_lane, pixel_idx, val_idx| {
                             if first_load_at[val_idx] == usize::MAX {
                                 first_load_at[val_idx] = global_idx;
                             } else {
@@ -1101,7 +1131,7 @@ pub fn for_each_lane_pixel(
     w: usize,
     h: usize,
     channel: Option<(i32, usize)>,
-    mut f: impl FnMut(usize, usize, usize, i32, i32),
+    mut f: impl FnMut(usize, usize, usize),
 ) {
     let n_lanes = pkt.type_.lanes.max(1) as usize;
     let dims_per_lane = pkt.coordinates.len() / n_lanes;
@@ -1128,6 +1158,6 @@ pub fn for_each_lane_pixel(
             pixel_idx
         };
 
-        f(lane, pixel_idx, val_idx, x, y);
+        f(lane, pixel_idx, val_idx);
     }
 }
