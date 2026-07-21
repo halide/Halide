@@ -27,6 +27,7 @@ export interface FuncMeta extends Record<string, unknown> {
   produce_ranges: IndexRange[];
   consume_ranges: IndexRange[];
   thread_count: number;
+  thread_ids: number[];
 }
 
 /** Top-level payload returned by `open_trace`. Mirrors the Rust `TraceMeta`. */
