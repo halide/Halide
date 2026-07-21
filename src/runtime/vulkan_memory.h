@@ -136,8 +136,6 @@ private:
 
     int lookup_requirements(void *user_context, size_t size, uint32_t usage_flags, VkMemoryRequirements *memory_requirements);
 
-    int conform_request(MemoryRequest *request, VkMemoryRequirements *memory_requirements);
-
     size_t block_byte_count = 0;
     size_t block_count = 0;
     size_t region_byte_count = 0;
@@ -578,39 +576,6 @@ int VulkanMemoryAllocator::lookup_requirements(void *user_context, size_t size, 
     vkDestroyBuffer(this->device, buffer, this->alloc_callbacks);
     return halide_error_code_success;
 }
-int VulkanMemoryAllocator::conform_request(MemoryRequest *request, VkMemoryRequirements *memory_requirements) {
-    size_t actual_alignment = conform_alignment(request->alignment, memory_requirements->alignment);
-
-    // Ensure the request ends on an aligned address.
-    // NOTE: use the conformed alignment and not the input alignment. Otherwise, conform is not idempotent:
-    // A first pass that uses the original nearest_multiple writes a new alignment such that a subsequent pass
-    // sees a larger alignment and writes a larger nearest_multiple, which results in a larger size calculated
-    // in the second pass. The block allocator requires that conform is idempotent because it calls conform
-    // defensively several times at different layers.
-    if (actual_alignment > config.nearest_multiple) {
-        request->properties.nearest_multiple = actual_alignment;
-    }
-
-    size_t actual_offset = aligned_offset(request->offset, actual_alignment);
-    size_t actual_size = conform_size(actual_offset, memory_requirements->size, actual_alignment, request->properties.nearest_multiple);
-
-#if defined(HL_VK_DEBUG_MEM)
-    if ((request->size != actual_size) || (request->alignment != actual_alignment) || (request->offset != actual_offset)) {
-        debug(nullptr) << "VulkanMemoryAllocator: Adjusting request to match requirements (\n"
-                       << "  size = " << (uint64_t)request->size << " => " << (uint64_t)actual_size << ",\n"
-                       << "  alignment = " << (uint64_t)request->alignment << " => " << (uint64_t)actual_alignment << ",\n"
-                       << "  offset = " << (uint64_t)request->offset << " => " << (uint64_t)actual_offset << ",\n"
-                       << "  required.size = " << (uint64_t)memory_requirements->size << ",\n"
-                       << "  required.alignment = " << (uint64_t)memory_requirements->alignment << "\n)\n";
-    }
-#endif
-    request->size = actual_size;
-    request->alignment = actual_alignment;
-    request->offset = actual_offset;
-
-    return halide_error_code_success;
-}
-
 
 int VulkanMemoryAllocator::conform_block_request(void *instance_ptr, MemoryRequest *request) {
 
@@ -647,11 +612,25 @@ int VulkanMemoryAllocator::conform_block_request(void *instance_ptr, MemoryReque
                    << "uniform_buffer_offset_alignment=" << (uint32_t)instance->physical_device_limits.minUniformBufferOffsetAlignment << ", "
                    << "storage_buffer_offset_alignment=" << (uint32_t)instance->physical_device_limits.minStorageBufferOffsetAlignment << ", "
                    << "dedicated=" << (request->dedicated ? "true" : "false") << ")\n";
+
+    const MemoryRequest original_request = *request;
 #endif
 
     request->properties.alignment = memory_requirements.alignment;
+    conform_memory_request(request, memory_requirements.size, memory_requirements.alignment, instance->config.nearest_multiple);
 
-    return instance->conform_request(request, &memory_requirements);
+#if defined(HL_VK_DEBUG_MEM)
+    if ((request->size != original_request.size) || (request->alignment != original_request.alignment) || (request->offset != original_request.offset)) {
+        debug(nullptr) << "VulkanMemoryAllocator: Adjusting request to match requirements (\n"
+                       << "  size = " << (uint64_t)original_request.size << " => " << (uint64_t)request->size << ",\n"
+                       << "  alignment = " << (uint64_t)original_request.alignment << " => " << (uint64_t)request->alignment << ",\n"
+                       << "  offset = " << (uint64_t)original_request.offset << " => " << (uint64_t)request->offset << ",\n"
+                       << "  required.size = " << (uint64_t)memory_requirements.size << ",\n"
+                       << "  required.alignment = " << (uint64_t)memory_requirements.alignment << "\n)\n";
+    }
+#endif
+
+    return halide_error_code_success;
 }
 
 int VulkanMemoryAllocator::allocate_block(void *instance_ptr, MemoryBlock *block) {
@@ -1041,7 +1020,24 @@ int VulkanMemoryAllocator::conform(void *user_context, MemoryRequest *request) {
         }
     }
 
-    return conform_request(request, &memory_requirements);
+#if defined(HL_VK_DEBUG_MEM)
+    const MemoryRequest original_request = *request;
+#endif
+
+    conform_memory_request(request, memory_requirements.size, memory_requirements.alignment, config.nearest_multiple);
+
+#if defined(HL_VK_DEBUG_MEM)
+    if ((request->size != original_request.size) || (request->alignment != original_request.alignment) || (request->offset != original_request.offset)) {
+        debug(nullptr) << "VulkanMemoryAllocator: Adjusting request to match requirements (\n"
+                       << "  size = " << (uint64_t)original_request.size << " => " << (uint64_t)request->size << ",\n"
+                       << "  alignment = " << (uint64_t)original_request.alignment << " => " << (uint64_t)request->alignment << ",\n"
+                       << "  offset = " << (uint64_t)original_request.offset << " => " << (uint64_t)request->offset << ",\n"
+                       << "  required.size = " << (uint64_t)memory_requirements.size << ",\n"
+                       << "  required.alignment = " << (uint64_t)memory_requirements.alignment << "\n)\n";
+    }
+#endif
+
+    return halide_error_code_success;
 }
 
 int VulkanMemoryAllocator::conform_region_request(void *instance_ptr, MemoryRequest *request) {
