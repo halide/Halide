@@ -6,7 +6,31 @@ project(
     HOMEPAGE_URL "https://halide-lang.org"
 )
 
-enable_testing()
+##
+# Enable testing. When Halide_ENABLE_MEMCHECK is set (see the `valgrind` preset),
+# pull in the full CTest module so that `ctest -T memcheck` reruns the whole
+# registered test suite under valgrind in the build tree. Otherwise stick to the
+# lighter enable_testing().
+##
+
+option(Halide_ENABLE_MEMCHECK
+    "Configure the build tree so 'ctest -T memcheck' runs tests under valgrind" OFF
+)
+if (Halide_ENABLE_MEMCHECK)
+    # Deliberately no --leak-check=full: Halide's JIT triggers one-time LLVM
+    # ORC allocations that valgrind reports as "possibly lost", which are noise
+    # rather than Halide bugs. These options catch the errors that matter
+    # (invalid reads/writes, use of uninitialized values).
+    set(MEMORYCHECK_COMMAND_OPTIONS "--error-exitcode=1 --track-origins=yes"
+        CACHE STRING "Options passed to valgrind by 'ctest -T memcheck'"
+    )
+    set(MEMORYCHECK_SUPPRESSIONS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/test/valgrind.supp"
+        CACHE FILEPATH "Valgrind suppressions file for 'ctest -T memcheck'"
+    )
+    include(CTest)
+else ()
+    enable_testing()
+endif ()
 
 ##
 # Disable find_package(Halide) inside the build
