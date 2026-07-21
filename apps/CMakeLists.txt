@@ -71,7 +71,6 @@ add_app(linear_blur)
 add_app(local_laplacian)
 add_app(max_filter)
 add_app(nl_means)
-# add_app(nn_ops)  # TODO(#5374): missing CMake build
 add_app(onnx)
 add_app(resize)
 add_app(resnet_50)
