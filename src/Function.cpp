@@ -1128,11 +1128,14 @@ bool Function::is_inductive() const {
                 if (op->name == name() && op->call_type == Call::Halide) {
                     for (size_t i = 0; i < op->args.size() && i < def_args.size(); i++) {
                         const Variable *lhs_var = def_args[i].as<Variable>();
-                        if (lhs_var) {
+                        // Only treat as inductive when the LHS position is a pure
+                        // Var (not an RVar). A shift at such a position is a genuine
+                        // inductive self-reference; RVar positions are ordinary
+                        // reduction reads and must not be misclassified.
+                        if (lhs_var && !lhs_var->reduction_domain.defined()) {
                             const Variable *call_var = op->args[i].as<Variable>();
                             bool matches = call_var && call_var->name == lhs_var->name;
-                            bool is_rvar = call_var && call_var->reduction_domain.defined();
-                            if (!matches && !is_rvar) {
+                            if (!matches) {
                                 found = true;
                             }
                         }

@@ -10,11 +10,11 @@
 #include "Inductive.h"
 #include "Inline.h"
 #include "Qualify.h"
-#include "Scope.h"(
+#include "Scope.h"
 #include "Simplify.h"
 
 #include <algorithm>
-#include <iterator>)
+#include <iterator>
 #include <numeric>
 
 namespace Halide {
