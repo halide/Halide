@@ -17,12 +17,12 @@ import * as React from "react";
 import HandleCircle from "@/components/canvas/HandleCircle";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
-import { histogramAtom } from "@/state/histogram";
 import { infAtom } from "@/state/inf";
 import { livenessAtom } from "@/state/liveness";
 import { packetAtom } from "@/state/packet";
 import { nanAtom } from "@/state/nan";
 import { renderAtom } from "@/state/render";
+import { tabularDataAtom } from "@/state/tabularData";
 import { threadAtom } from "@/state/thread";
 import type { FuncMeta } from "@/types";
 import {
@@ -32,10 +32,11 @@ import {
   renderLoadFrequency,
   renderRedundantStores,
   renderReuseDistance,
-  type RenderResult,
   renderNaN,
   renderInf,
   renderThread,
+  type RenderFuncParams,
+  type RenderFuncResponse,
 } from "@/utils/api";
 import { isFuncBufferLive, isEdgeLive } from "@/utils/liveness";
 
@@ -50,7 +51,7 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   const packetIndex = useAtomValue(packetAtom);
   const render = useAtomValue(renderAtom);
   const activeFunc = useAtomValue(funcAtom);
-  const setHistogramData = useSetAtom(histogramAtom);
+  const setTabularData = useSetAtom(tabularDataAtom);
   const nan = useAtomValue(nanAtom);
   const inf = useAtomValue(infAtom);
   const thread = useAtomValue(threadAtom);
@@ -58,6 +59,7 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   const nodes = useNodes();
   const edges = useEdges();
 
+  const active = activeFunc === name;
   const bufferLive = React.useMemo(
     () =>
       liveness.active &&
@@ -65,7 +67,6 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
       isFuncBufferLive(data, packetIndex),
     [liveness, data, packetIndex],
   );
-
   const producing = React.useMemo(
     () =>
       liveness.active &&
@@ -77,7 +78,6 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
       ),
     [liveness, edges, funcs, name, packetIndex],
   );
-
   const consuming = React.useMemo(
     () =>
       liveness.active &&
@@ -98,18 +98,18 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
     () => getOutgoers({ id: name }, nodes, edges).length,
     [name, nodes, edges],
   );
+
   const { zoom } = useViewport();
 
-  // Latest playhead position requested, and whether a render loop is draining.
-  // Together these coalesce rapid scrub updates: while a frame is in flight,
-  // newer indices just overwrite `latestIndexRef`, and the loop renders only
-  // the most recent one rather than every intermediate position.
+  // Track the playhead position as a ref to avoid re-rendering on every scrub.
   const latestIndexRef = React.useRef(packetIndex);
+  // Track whether an active render is in progress.
   const renderingRef = React.useRef(false);
 
   React.useEffect(() => {
     latestIndexRef.current = packetIndex;
 
+    // Return early if we're actively writing a tensor.
     if (renderingRef.current) {
       return;
     }
@@ -119,78 +119,59 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
         while (true) {
           const target = latestIndexRef.current;
 
-          let result: RenderResult;
+          let result: RenderFuncResponse;
+          const params: RenderFuncParams = {
+            func: name,
+            globalIndex: target,
+            normalizationMode: render.normalizationMode,
+            width,
+            height,
+            includeTabularData: active,
+          };
 
           switch (render.renderMode) {
             case "Grayscale":
-              result = await renderGrayscale(
-                name,
-                target,
-                render.normalizationMode,
-              );
+              result = await renderGrayscale(params);
               break;
             case "RGB":
-              result = await renderRgb(name, target, render.normalizationMode);
+              result = await renderRgb(params);
               break;
             case "Store Frequency":
-              result = await renderStoreFrequency(
-                name,
-                target,
-                render.normalizationMode,
-                width,
-                height,
-              );
+              result = await renderStoreFrequency(params);
               break;
             case "Load Frequency":
-              result = await renderLoadFrequency(
-                name,
-                target,
-                render.normalizationMode,
-                width,
-                height,
-              );
+              result = await renderLoadFrequency(params);
               break;
             case "Redundant Stores":
-              result = await renderRedundantStores(
-                name,
-                target,
-                render.normalizationMode,
-                width,
-                height,
-              );
+              result = await renderRedundantStores(params);
               break;
             case "Reuse Distance":
-              result = await renderReuseDistance(
-                name,
-                target,
-                render.normalizationMode,
-                width,
-                height,
-              );
+              result = await renderReuseDistance(params);
               break;
             case "Thread Coverage":
-              result = await renderThread(
-                name,
-                target,
-                render.normalizationMode,
-                thread.op,
-                width,
-                height,
-              );
+              result = await renderThread({
+                ...params,
+                threadOpMode: thread.op,
+              });
 
               break;
           }
 
           const ctx = canvasRef.current?.getContext("2d");
-
-          // Update this Func's canvas with new pixel data.
           if (ctx) {
-            ctx.putImageData(new ImageData(result.pixels, width, height), 0, 0);
+            ctx.putImageData(
+              new ImageData(result.tensorData, width, height),
+              0,
+              0,
+            );
           }
 
           // Update the histogram data for the currently active Func.
-          if (name === activeFunc) {
-            setHistogramData((prev) => ({ ...prev, data: result.histogram }));
+          if (active) {
+            setTabularData((prev) => ({
+              ...prev,
+              tabularData: result.tabularData,
+            }));
           }
 
           if (latestIndexRef.current === target) {
@@ -206,24 +187,21 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
 
     draw();
   }, [
+    active,
     packetIndex,
     name,
     width,
     height,
     render,
     activeFunc,
-    setHistogramData,
+    setTabularData,
     thread.op,
   ]);
 
   React.useEffect(() => {
-    if (!nan.active) {
-      return;
-    }
-
     latestIndexRef.current = packetIndex;
 
-    if (renderingRef.current) {
+    if (!nan.active || renderingRef.current) {
       return;
     }
 
@@ -232,16 +210,23 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
         while (true) {
           const target = latestIndexRef.current;
 
-          const result = await renderNaN(
-            name,
-            packetIndex,
-            render.normalizationMode,
-          );
+          const result = await renderNaN({
+            func: name,
+            globalIndex: packetIndex,
+            normalizationMode: render.normalizationMode,
+            width,
+            height,
+            includeTabularData: false,
+          });
 
           const ctx = nanOverlayRef.current?.getContext("2d");
 
           if (ctx) {
-            ctx.putImageData(new ImageData(result.pixels, width, height), 0, 0);
+            ctx.putImageData(
+              new ImageData(result.tensorData, width, height),
+              0,
+              0,
+            );
           }
 
           if (latestIndexRef.current === target) {
@@ -259,13 +244,9 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   }, [nan.active, name, packetIndex, render.normalizationMode, width, height]);
 
   React.useEffect(() => {
-    if (!inf.active) {
-      return;
-    }
-
     latestIndexRef.current = packetIndex;
 
-    if (renderingRef.current) {
+    if (!inf.active || renderingRef.current) {
       return;
     }
 
@@ -274,16 +255,22 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
         while (true) {
           const target = latestIndexRef.current;
 
-          const result = await renderInf(
-            name,
-            packetIndex,
-            render.normalizationMode,
-          );
+          const result = await renderInf({
+            func: name,
+            globalIndex: packetIndex,
+            normalizationMode: render.normalizationMode,
+            width,
+            height,
+            includeTabularData: false,
+          });
 
           const ctx = infOverlayRef.current?.getContext("2d");
-
           if (ctx) {
-            ctx.putImageData(new ImageData(result.pixels, width, height), 0, 0);
+            ctx.putImageData(
+              new ImageData(result.tensorData, width, height),
+              0,
+              0,
+            );
           }
 
           if (latestIndexRef.current === target) {

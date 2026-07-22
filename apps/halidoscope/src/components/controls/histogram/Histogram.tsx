@@ -3,19 +3,20 @@ import * as d3 from "d3";
 import { useAtomValue } from "jotai";
 import * as React from "react";
 
-import { histogramAtom } from "@/state/histogram";
+import { tabularDataAtom } from "@/state/tabularData";
 
 interface HistogramProps {
   data: { x1: number; x2: number; y: number }[];
   domain: [number, number];
   labels: {
     x: string;
+    y: string;
   };
 }
 
 function Histogram({ data, domain, labels }: HistogramProps) {
   const ref = React.useRef<HTMLDivElement>(null);
-  const { scale } = useAtomValue(histogramAtom);
+  const { scale } = useAtomValue(tabularDataAtom);
 
   // Build the data for the bottom colorbar.
   const colorbar = React.useMemo(() => {
@@ -41,7 +42,7 @@ function Histogram({ data, domain, labels }: HistogramProps) {
       marginBottom: 60,
       y: {
         grid: true,
-        label: "Coordinate Count",
+        label: labels.y,
         tickFormat: (value) => d3.format(".2s")(value),
         ticks: 8,
       },

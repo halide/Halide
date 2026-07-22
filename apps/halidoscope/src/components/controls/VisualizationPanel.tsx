@@ -13,18 +13,9 @@ import PlaybackRate from "@/components/controls/playback/PlaybackRate";
 import RenderMode from "@/components/controls/render/RenderMode";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
-import { histogramAtom } from "@/state/histogram";
 import { type RenderMode as RM, renderAtom } from "@/state/render";
+import { tabularDataAtom } from "@/state/tabularData";
 import { threadAtom } from "@/state/thread";
-
-const HISTOGRAM_RENDER_MODES = new Set<RM>([
-  "Store Frequency",
-  "Load Frequency",
-  "Redundant Stores",
-  "Reuse Distance",
-]);
-
-const BAR_CHART_RENDER_MODES = new Set<RM>(["Thread Coverage"]);
 
 const RENDER_MODE_TO_LABEL: Record<RM, string> = {
   Grayscale: "",
@@ -36,134 +27,155 @@ const RENDER_MODE_TO_LABEL: Record<RM, string> = {
   "Thread Coverage": "Thread ID",
 };
 
+interface HistogramData {
+  type: "Histogram";
+  data: { x1: number; x2: number; y: number }[];
+  domain: [number, number];
+}
+
+interface BarChartData {
+  type: "Bar Chart";
+  data: { x: string; y: number }[];
+  domain: string[];
+}
+
+interface NoChartData {
+  type: "No Chart";
+  data: number[];
+  domain: [number, number];
+}
+
+type ChartData = HistogramData | BarChartData | NoChartData;
+
 function VisualizationPanel() {
-  const { funcs, globalMaxReuseDistance } = useTraceContext();
+  const { funcs, stats } = useTraceContext();
   const render = useAtomValue(renderAtom);
   const activeFunc = useAtomValue(funcAtom);
-  const { data, scale } = useAtomValue(histogramAtom);
+  const { tabularData, scale } = useAtomValue(tabularDataAtom);
   const thread = useAtomValue(threadAtom);
+  const min = scale === "log" ? 1 : 0;
 
-  const hasHistogram =
-    HISTOGRAM_RENDER_MODES.has(render.renderMode) &&
-    activeFunc &&
-    funcs[activeFunc] &&
-    data !== null;
-  const domainMin = scale === "log" ? 1 : 0;
+  const createHistogramData = React.useCallback(
+    (histogramData: Uint32Array, max: number): HistogramData => {
+      const buckets = histogramData.length;
 
-  const { data: histogramData, domain: histogramDomain } = React.useMemo((): {
-    data: { x1: number; x2: number; y: number }[];
-    domain: [number, number];
-  } => {
-    if (!hasHistogram || !data) {
-      return { data: [], domain: [domainMin, 1] };
-    }
+      return {
+        type: "Histogram",
+        data: new Array(buckets).fill(0).map((_, i) => ({
+          x1: max > 64 ? Math.round((i / 64) * max) : i,
+          x2: max > 64 ? Math.round(((i + 1) / 64) * max) : i + 1,
+          y: histogramData?.[i] ?? 0,
+        })),
+        domain: [min, max + 1],
+      };
+    },
+    [min],
+  );
 
+  const { type, data, domain } = React.useMemo((): ChartData => {
     switch (render.renderMode) {
-      case "Store Frequency":
-      case "Load Frequency":
-      case "Redundant Stores":
-        return {
-          data: Array.from(data).map((y, i) => ({
-            x1: i,
-            x2: i + 1,
-            y,
-          })),
-          domain: [domainMin, data.length],
-        };
+      case "Store Frequency": {
+        const max =
+          render.normalizationMode === "Per Func"
+            ? funcs[activeFunc].max_store_count
+            : stats.global_max_store_count;
+
+        return createHistogramData(tabularData ?? new Uint32Array(), max);
+      }
+      case "Load Frequency": {
+        const max =
+          render.normalizationMode === "Per Func"
+            ? funcs[activeFunc].max_load_count
+            : stats.global_max_load_count;
+
+        return createHistogramData(tabularData ?? new Uint32Array(), max);
+      }
+      case "Redundant Stores": {
+        const max =
+          render.normalizationMode === "Per Func"
+            ? funcs[activeFunc].max_redundant_store_count
+            : stats.global_max_redundant_store_count;
+
+        return createHistogramData(tabularData ?? new Uint32Array(), max);
+      }
       case "Reuse Distance": {
-        // For Reuse Distance, scale x values based on the normalization mode.
-        const domainMax =
+        const max =
           render.normalizationMode === "Per Func"
             ? funcs[activeFunc].max_reuse_distance
-            : globalMaxReuseDistance;
+            : stats.global_max_reuse_distance;
 
-        return {
-          data: Array.from(data).map((y, i) => ({
-            x1: Math.round((i / 64) * domainMax),
-            x2: Math.round(((i + 1) / 64) * domainMax),
-            y,
-          })),
-          domain: [domainMin, domainMax],
-        };
+        return createHistogramData(tabularData ?? new Uint32Array(), max);
       }
-      default:
-        return { data: [], domain: [domainMin, 1] };
-    }
-  }, [
-    hasHistogram,
-    data,
-    activeFunc,
-    funcs,
-    render,
-    domainMin,
-    globalMaxReuseDistance,
-  ]);
-
-  const hasBarChart =
-    BAR_CHART_RENDER_MODES.has(render.renderMode) &&
-    activeFunc &&
-    funcs[activeFunc] &&
-    data !== null;
-
-  const { data: barChartData } = React.useMemo((): {
-    data: { x: string; y: number }[];
-  } => {
-    if (!hasBarChart || !data) {
-      return { data: [] };
-    }
-
-    switch (render.renderMode) {
       case "Thread Coverage": {
         const threadIds = funcs[activeFunc].thread_ids;
-        const storeCounts = data.slice(0, threadIds.length);
-        const loadCounts = data.slice(threadIds.length, threadIds.length * 2);
+        const storeCounts = tabularData?.slice(0, threadIds.length) ?? [];
+        const loadCounts =
+          tabularData?.slice(threadIds.length, threadIds.length * 2) ?? [];
 
         return {
+          type: "Bar Chart",
           data: threadIds.map((threadId, i) => ({
             x: `${threadId}`,
             y: thread.op === "Store" ? storeCounts[i] : loadCounts[i],
           })),
+          domain: threadIds.map((tId) => `${tId}`),
         };
       }
-      default:
-        return { data: [] };
+      default: {
+        return { type: "No Chart", data: [], domain: [-1, -1] };
+      }
     }
-  }, [hasBarChart, data, activeFunc, funcs, render, thread.op]);
+  }, [
+    render,
+    tabularData,
+    funcs,
+    stats,
+    activeFunc,
+    thread.op,
+    createHistogramData,
+  ]);
+
+  const renderChart = React.useCallback(() => {
+    switch (type) {
+      case "Histogram":
+        return (
+          <>
+            <HistogramParameters />
+            <Histogram
+              data={data}
+              domain={domain}
+              labels={{
+                x: RENDER_MODE_TO_LABEL[render.renderMode],
+                y: "Coordinate Count",
+              }}
+            />
+          </>
+        );
+      case "Bar Chart":
+        return (
+          <>
+            <BarChartParameters />
+            <BarChart
+              data={data}
+              domain={domain}
+              labels={{
+                x: RENDER_MODE_TO_LABEL[render.renderMode],
+                y: `${thread.op} Count`,
+              }}
+            />
+          </>
+        );
+      case "No Chart":
+        return null;
+    }
+  }, [type, data, domain, render.renderMode, thread.op]);
 
   return (
     <div className="flex flex-col gap-4 px-3 py-4">
       <ControlSection title="Render Mode">
         <RenderMode />
       </ControlSection>
-      {hasHistogram ? (
-        <>
-          <Separator.Root className="bg-ps-border-tertiary h-px" />
-          <ControlSection title="Stats">
-            <div className="flex flex-col gap-4">
-              <HistogramParameters />
-              <Histogram
-                data={histogramData}
-                domain={histogramDomain}
-                labels={{ x: RENDER_MODE_TO_LABEL[render.renderMode] }}
-              />
-            </div>
-          </ControlSection>
-        </>
-      ) : null}
-      {hasBarChart ? (
-        <>
-          <Separator.Root className="bg-ps-border-tertiary h-px" />
-          <ControlSection title="Stats">
-            <div className="flex flex-col gap-4">
-              <BarChartParameters />
-              <BarChart
-                data={barChartData}
-                labels={{ x: "Thread ID", y: `${thread.op} Count` }}
-              />
-            </div>
-          </ControlSection>
-        </>
-      ) : null}
+      {renderChart()}
       <Separator.Root className="bg-ps-border-tertiary h-px" />
       <ControlSection title="Liveness">
         <LivenessControls />

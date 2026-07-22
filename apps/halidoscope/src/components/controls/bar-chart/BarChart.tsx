@@ -4,13 +4,14 @@ import * as React from "react";
 
 interface BarChartProps {
   data: { x: string; y: number }[];
+  domain: string[];
   labels: {
     x: string;
     y: string;
   };
 }
 
-function BarChart({ data, labels }: BarChartProps) {
+function BarChart({ data, domain, labels }: BarChartProps) {
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -31,6 +32,7 @@ function BarChart({ data, labels }: BarChartProps) {
         ticks: 8,
       },
       x: {
+        domain,
         label: labels.x,
         labelAnchor: "right",
         labelArrow: "right",
@@ -50,7 +52,7 @@ function BarChart({ data, labels }: BarChartProps) {
     return () => {
       plot.remove();
     };
-  }, [data, labels]);
+  }, [data, labels, domain]);
 
   return data.every((d) => d.y === 0) ? (
     <div className="flex h-full flex-col items-center justify-center gap-2">
