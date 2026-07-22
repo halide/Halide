@@ -1,6 +1,12 @@
 name: macOS
 
 on:
+  # Codecov needs a coverage run on main itself (not just PR branches) to
+  # compute diffs correctly under our squash-and-merge strategy -- otherwise
+  # it has no base-commit report to diff a PR's coverage against. Only the
+  # `coverage` job runs on push; `macos` stays pull_request-only.
+  push:
+    branches: [ main ]
   pull_request:
     types: [ opened, synchronize, reopened ]
     paths-ignore:
@@ -50,16 +56,21 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   macos:
-    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
+    if: "github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: ${{ matrix.arch }} / ${{ matrix.uv_group }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        # Disable extra cases until we have a fuller workflow
-        # For now, we're only testing HelloiOS
-        uv_group: [ "ci-llvm-main", ] # "ci-llvm-22", "ci-llvm-21"
-        runner: [ "macos-26", ] # "macos-26-intel"
+        # macOS is only tested against LLVM main (matches Buildbot's own
+        # choice -- macOS never gets the multi-LLVM matrix that Linux/Windows
+        # do, since that's a 3x cost multiplier on the most expensive
+        # runner tier).
+        uv_group: [ "ci-llvm-main" ]
+        # x86-64 (macos-26-intel) is a follow-up: needs the runner label's
+        # availability verified, plus the x86-64-osx/-sse41 correctness-only
+        # passes and ENABLE_APPS_HANNK=OFF (no tflite on x86 macOS).
+        runner: [ "macos-26" ]
         include:
           - runner: macos-26
             arch: arm-64
@@ -69,6 +80,9 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v7
+
+      - name: Install wasm toolchain
+        run: brew install emscripten wabt
 
       - name: Sync CI environment
         run: |
@@ -83,13 +97,48 @@ jobs:
         run: >-
           cmake --preset ci-macos-${{ matrix.arch }}
           -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
-          -DWITH_TESTS=NO
-          -DWITH_UTILS=NO
-          -DWITH_TUTORIALS=NO
-          -DWITH_PYTHON_BINDINGS=NO
 
       - name: Initial build
         run: cmake --build build --target install
+
+      # --- host: internal, correctness, generator, error, warning,
+      # tutorial, python, autoschedulers_cpu ---
+
+      - name: Test (host)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=host
+          cmake --build build --target install
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -LE "performance|autoschedulers" -j "$(sysctl -n hw.logicalcpu)" \
+            -E tutorial_lesson_19
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -L "performance|autoschedulers" --repeat until-pass:5
+
+      # --- apps/ (host): first time apps/ is exercised via ctest in any of
+      # the CMake-preset GHA workflows (only the legacy Make-based
+      # testing-make.yml does today), so keep this non-blocking until proven
+      # green. ---
+
+      - name: Configure apps (host)
+        continue-on-error: true
+        run: >-
+          cmake -S apps -B apps-build
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DHalide_TARGET=host
+          -DENABLE_APPS_HANNK=ON
+
+      - name: Build apps (host)
+        continue-on-error: true
+        run: cmake --build apps-build
+
+      - name: Test apps (host)
+        continue-on-error: true
+        run: >-
+          ctest --test-dir apps-build --build-config RelWithDebInfo
+          --output-on-failure -LE slow_tests --timeout 3600
 
       - name: Configure HelloiOS
         run: ./setup.sh
@@ -105,3 +154,56 @@ jobs:
           -destination 'generic/platform=iOS Simulator'
           build
         working-directory: apps/HelloiOS
+
+      # --- host-metal: real GPU testing on hosted Apple Silicon runners ---
+
+      - name: Test (host-metal)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=host-metal
+          cmake --build build --target install
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -L "correctness|generator" -j "$(sysctl -n hw.logicalcpu)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -L "performance|autoschedulers_gpu" --repeat until-pass:5
+
+      - name: Configure apps (host-metal)
+        continue-on-error: true
+        run: >-
+          cmake -S apps -B apps-build
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DHalide_TARGET=host-metal
+          -DENABLE_APPS_HANNK=ON
+
+      - name: Build apps (host-metal)
+        continue-on-error: true
+        run: cmake --build apps-build
+
+      - name: Test apps (host-metal)
+        continue-on-error: true
+        run: >-
+          ctest --test-dir apps-build --build-config RelWithDebInfo
+          --output-on-failure -LE slow_tests --timeout 3600
+
+      # --- wasm (wabt JIT) ---
+
+      - name: Test (wasm_simd128, wabt JIT)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -L "internal|correctness|generator|error|warning" -j "$(sysctl -n hw.logicalcpu)"
+
+      - name: Test (wasm_mvponly, wabt JIT)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_mvponly
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -L "internal|correctness|generator|error|warning" -j "$(sysctl -n hw.logicalcpu)"
+
+      - name: Build (wasm_simd128 + wasm_threads, generator only)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128-wasm_threads
+          cmake --build build --target build_generator
