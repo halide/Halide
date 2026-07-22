@@ -12,8 +12,7 @@ if (NOT DEFINED GEN_PACKAGE)
     set(GEN_PACKAGE "HelloBaremetal-add_generator")
 endif ()
 
-# Find Halide. Instead of the package Halide, HalideHelpers is enough as we don't use JIT mode.
-find_package(HalideHelpers REQUIRED)
+find_package(Halide REQUIRED)
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 

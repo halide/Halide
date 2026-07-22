@@ -6,8 +6,9 @@ on:
       - '**.h'
       - '**.c'
       - '**.cpp'
-      - 'CMakeLists.txt'
+      - '**/CMakeLists.txt'
       - '**.cmake'
+      - 'test/integration/**'
       - '.github/workflows/testing-ecosystem.yml'
 
 concurrency:
@@ -40,6 +41,8 @@ jobs:
             "clang-${LLVM_VERSION}" \
             curl \
             flatbuffers-compiler \
+            g++-aarch64-linux-gnu \
+            gcc-aarch64-linux-gnu \
             "libclang-${LLVM_VERSION}-dev" \
             libedit-dev \
             libflatbuffers-dev \
@@ -48,7 +51,47 @@ jobs:
             "liblld-${LLVM_VERSION}-dev" \
             "lld-${LLVM_VERSION}" \
             "llvm-${LLVM_VERSION}-dev" \
-            pybind11-dev
+            ninja-build \
+            pybind11-dev \
+            qemu-user
 
-      - name: Check CMake configures
-        run: cmake --preset ubuntu-release -DHalide_LLVM_ROOT="/usr/lib/llvm-${LLVM_VERSION}"
+      - name: Build and install Halide (shared)
+        run: |
+          cmake --preset ubuntu-release -G Ninja -B build-shared \
+            -DHalide_LLVM_ROOT="/usr/lib/llvm-${LLVM_VERSION}" \
+            -DWITH_TESTS=NO -DWITH_TUTORIALS=NO -DWITH_UTILS=NO
+          cmake --build build-shared -j "$(nproc)"
+          cmake --install build-shared --prefix "${{ github.workspace }}/pkg-install"
+
+      # A second, statically-linked build with serialization enabled (the
+      # default) is what actually exercises the FlatBuffers- and
+      # LLVM-dependency resolution paths in the installed HalideCompiler
+      # package: those dependencies only show up as PUBLIC/exported link
+      # requirements for a static Halide::Halide, not a shared one.
+      - name: Build and install Halide (static)
+        run: |
+          cmake --preset ubuntu-release -G Ninja -B build-static \
+            -DHalide_LLVM_ROOT="/usr/lib/llvm-${LLVM_VERSION}" \
+            -DWITH_TESTS=NO -DWITH_TUTORIALS=NO -DWITH_UTILS=NO \
+            -DBUILD_SHARED_LIBS=NO
+          cmake --build build-static -j "$(nproc)"
+          cmake --install build-static --prefix "${{ github.workspace }}/pkg-install"
+
+      # A prefix containing only the Halide (helpers) package, with no
+      # HalideCompiler at all, used to verify that forcing the JIT component
+      # while cross-compiling fails cleanly when no matching compiler package
+      # is available -- see cross_compile_aarch64_force_jit_fails_cleanly in
+      # test/integration/CMakeLists.txt.
+      - name: Prepare a Halide-helpers-only prefix
+        run: |
+          cp -R "${{ github.workspace }}/pkg-install" "${{ github.workspace }}/pkg-install-helpers-only"
+          rm -rf "${{ github.workspace }}/pkg-install-helpers-only/lib/cmake/HalideCompiler"
+
+      - name: Test the installed CMake package (test/integration)
+        env:
+          CMAKE_PREFIX_PATH: ${{ github.workspace }}/pkg-install
+        run: |
+          cmake -G Ninja -S test/integration -B build-integration \
+            -DCMAKE_CXX_COMPILER="clang++-${LLVM_VERSION}" \
+            "-Dxc_HELPERS_ONLY_PREFIX=${{ github.workspace }}/pkg-install-helpers-only"
+          ctest --test-dir build-integration --output-on-failure -j "$(nproc)"

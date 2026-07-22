@@ -19,8 +19,8 @@ file(CONFIGURE
 )
 
 file(CONFIGURE
-    OUTPUT "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/HalideHelpersConfig.cmake"
-    CONTENT "set(HalideHelpers_FOUND 1)\n"
+    OUTPUT "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/HalideCompilerConfig.cmake"
+    CONTENT "set(HalideCompiler_FOUND 1)\n"
 )
 
 ##
