@@ -174,10 +174,38 @@ struct PacketAndPayload : public halide_trace_packet_t {
             return false;  // EOF
         }
 
+        if (this->size < header_size) {
+            fail() << "Packet smaller than the header, of size " << this->size;
+        }
+
         const size_t payload_size = this->size - header_size;
         if (payload_size > sizeof(this->payload) || !read_or_die(this->payload, payload_size)) {
             // Shouldn't ever get EOF here
             fail() << "Unable to read packet payload of size " << payload_size;
+        }
+
+        // dimensions, lanes and the type all come from the stream, and together
+        // they say where the coordinates, the value, the func name and the
+        // trace tag live in the payload. Check that layout fits in the bytes we
+        // read before any of the accessors hand out a pointer into it.
+        if (this->dimensions < 0) {
+            fail() << "Packet with negative dimensions " << this->dimensions;
+        }
+        const size_t used = (size_t)this->dimensions * sizeof(int32_t) + this->value_bytes();
+        if (used > payload_size) {
+            fail() << "Packet payload of size " << payload_size << " too small for its contents";
+        }
+        // The func name and the trace tag follow the value, and both must be
+        // nul-terminated within the payload.
+        const uint8_t *p = this->payload + used;
+        size_t remaining = payload_size - used;
+        for (int i = 0; i < 2; i++) {
+            const uint8_t *nul = (const uint8_t *)memchr(p, 0, remaining);
+            if (!nul) {
+                fail() << "Packet with unterminated name in its payload";
+            }
+            remaining -= nul + 1 - p;
+            p = nul + 1;
         }
         return true;
     }

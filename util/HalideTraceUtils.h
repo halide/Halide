@@ -92,6 +92,10 @@ struct Packet : public halide_trace_packet_t {
 private:
     // Do a blocking read of some number of bytes from a unistd file descriptor.
     bool read(void *d, size_t size, FILE *fdesc);
+
+    // Check that the layout described by the header fits in the payload bytes
+    // that were actually read.
+    bool validate_payload(size_t payload_size) const;
 };
 
 }  // namespace Internal
