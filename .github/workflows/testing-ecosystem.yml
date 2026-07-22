@@ -90,6 +90,7 @@ jobs:
       - name: Test the installed CMake package (test/integration)
         env:
           CMAKE_PREFIX_PATH: ${{ github.workspace }}/pkg-install
+          Halide_LLVM_ROOT: /usr/lib/llvm-${{ env.LLVM_VERSION }}
         run: |
           cmake -G Ninja -S test/integration -B build-integration \
             -DCMAKE_CXX_COMPILER="clang++-${LLVM_VERSION}" \
