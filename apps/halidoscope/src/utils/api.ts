@@ -4,20 +4,29 @@ import type { NormalizationMode } from "@/state/render";
 import type { ThreadOpMode } from "@/state/thread";
 import type { TraceMeta } from "@/types";
 
-export interface RenderResult {
-  pixels: Uint8ClampedArray<ArrayBuffer>;
-  histogram: Uint32Array | null;
-}
-
 export async function openTrace(path: string): Promise<TraceMeta> {
   return invoke<TraceMeta>("open_trace", { path });
 }
 
-export async function renderGrayscale(
-  func: string,
-  globalIndex: number,
-  normalizationMode: NormalizationMode,
-): Promise<RenderResult> {
+export interface RenderFuncResponse {
+  tensorData: Uint8ClampedArray<ArrayBuffer>;
+  tabularData: Uint32Array | null;
+}
+
+export interface RenderFuncParams {
+  func: string;
+  globalIndex: number;
+  normalizationMode: NormalizationMode;
+  width: number;
+  height: number;
+  includeTabularData: boolean;
+}
+
+export async function renderGrayscale({
+  func,
+  globalIndex,
+  normalizationMode,
+}: RenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_grayscale", {
     func,
     globalIndex,
@@ -25,16 +34,16 @@ export async function renderGrayscale(
   });
 
   return {
-    pixels: new Uint8ClampedArray(buffer),
-    histogram: null,
+    tensorData: new Uint8ClampedArray(buffer),
+    tabularData: null,
   };
 }
 
-export async function renderRgb(
-  func: string,
-  globalIndex: number,
-  normalizationMode: NormalizationMode,
-): Promise<RenderResult> {
+export async function renderRgb({
+  func,
+  globalIndex,
+  normalizationMode,
+}: RenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_rgb", {
     func,
     globalIndex,
@@ -42,95 +51,141 @@ export async function renderRgb(
   });
 
   return {
-    pixels: new Uint8ClampedArray(buffer),
-    histogram: null,
+    tensorData: new Uint8ClampedArray(buffer),
+    tabularData: null,
   };
 }
 
-// The backend appends the histogram's bins as little-endian u32s directly after the pixel
-// bytes in a single response; split at the known pixel-buffer length to recover both.
-function splitPixelsAndHistogram(
-  buffer: ArrayBuffer,
-  width: number,
-  height: number,
-): RenderResult {
+/**
+ * Split the ArrayBuffer returned by {@link RenderFuncResponse} into the tensor
+ * data and the (optionally returned) tabular data. We only include tabular
+ * data for the actively selected Func.
+ *
+ * @param buffer The buffer containing tensor data.
+ * @param width The width of the buffer.
+ * @param height The height of the buffer.
+ * @param includeTabularData A flag indicating whether of not to expect tabular
+ * data in the buffer payload.
+ * @returns A {@link RenderFuncResponse}.
+ */
+function splitTensorDataAndTabularData({
+  buffer,
+  width,
+  height,
+  includeTabularData,
+}: {
+  buffer: ArrayBuffer;
+  width: number;
+  height: number;
+  includeTabularData: boolean;
+}): RenderFuncResponse {
   const pixelByteLength = width * height * 4;
 
   return {
-    pixels: new Uint8ClampedArray(buffer, 0, pixelByteLength),
-    histogram: new Uint32Array(buffer, pixelByteLength),
+    tensorData: new Uint8ClampedArray(buffer, 0, pixelByteLength),
+    tabularData: includeTabularData
+      ? new Uint32Array(buffer, pixelByteLength)
+      : null,
   };
 }
 
-export async function renderStoreFrequency(
-  func: string,
-  globalIndex: number,
-  normalizationMode: NormalizationMode,
-  width: number,
-  height: number,
-): Promise<RenderResult> {
+export async function renderStoreFrequency({
+  func,
+  globalIndex,
+  normalizationMode,
+  width,
+  height,
+  includeTabularData,
+}: RenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_store_frequency", {
     func,
     globalIndex,
     normalizationMode,
+    includeTabularData,
   });
 
-  return splitPixelsAndHistogram(buffer, width, height);
+  return splitTensorDataAndTabularData({
+    buffer,
+    width,
+    height,
+    includeTabularData,
+  });
 }
 
-export async function renderLoadFrequency(
-  func: string,
-  globalIndex: number,
-  normalizationMode: NormalizationMode,
-  width: number,
-  height: number,
-): Promise<RenderResult> {
+export async function renderLoadFrequency({
+  func,
+  globalIndex,
+  normalizationMode,
+  width,
+  height,
+  includeTabularData,
+}: RenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_load_frequency", {
     func,
     globalIndex,
     normalizationMode,
+    includeTabularData,
   });
 
-  return splitPixelsAndHistogram(buffer, width, height);
+  return splitTensorDataAndTabularData({
+    buffer,
+    width,
+    height,
+    includeTabularData,
+  });
 }
 
-export async function renderRedundantStores(
-  func: string,
-  globalIndex: number,
-  normalizationMode: NormalizationMode,
-  width: number,
-  height: number,
-): Promise<RenderResult> {
+export async function renderRedundantStores({
+  func,
+  globalIndex,
+  normalizationMode,
+  width,
+  height,
+  includeTabularData,
+}: RenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_redundant_stores", {
     func,
     globalIndex,
     normalizationMode,
+    includeTabularData,
   });
 
-  return splitPixelsAndHistogram(buffer, width, height);
+  return splitTensorDataAndTabularData({
+    buffer,
+    width,
+    height,
+    includeTabularData,
+  });
 }
 
-export async function renderReuseDistance(
-  func: string,
-  globalIndex: number,
-  normalizationMode: NormalizationMode,
-  width: number,
-  height: number,
-): Promise<RenderResult> {
+export async function renderReuseDistance({
+  func,
+  globalIndex,
+  normalizationMode,
+  width,
+  height,
+  includeTabularData,
+}: RenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_reuse_distance", {
     func,
     globalIndex,
     normalizationMode,
+    includeTabularData,
   });
 
-  return splitPixelsAndHistogram(buffer, width, height);
+  return splitTensorDataAndTabularData({
+    buffer,
+    width,
+    height,
+    includeTabularData,
+  });
 }
 
-export async function renderNaN(
-  func: string,
-  globalIndex: number,
-  normalizationMode: NormalizationMode,
-): Promise<RenderResult> {
+export async function renderNaN({
+  func,
+  globalIndex,
+  normalizationMode,
+}: RenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_nan", {
     func,
     globalIndex,
@@ -138,16 +193,16 @@ export async function renderNaN(
   });
 
   return {
-    pixels: new Uint8ClampedArray(buffer),
-    histogram: null,
+    tensorData: new Uint8ClampedArray(buffer),
+    tabularData: null,
   };
 }
 
-export async function renderInf(
-  func: string,
-  globalIndex: number,
-  normalizationMode: NormalizationMode,
-): Promise<RenderResult> {
+export async function renderInf({
+  func,
+  globalIndex,
+  normalizationMode,
+}: RenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_inf", {
     func,
     globalIndex,
@@ -155,32 +210,24 @@ export async function renderInf(
   });
 
   return {
-    pixels: new Uint8ClampedArray(buffer),
-    histogram: null,
+    tensorData: new Uint8ClampedArray(buffer),
+    tabularData: null,
   };
 }
 
-function splitPixelsAndThreadStoreLoadCounts(
-  buffer: ArrayBuffer,
-  width: number,
-  height: number,
-): RenderResult {
-  const pixelByteLength = width * height * 4;
-
-  return {
-    pixels: new Uint8ClampedArray(buffer, 0, pixelByteLength),
-    histogram: new Uint32Array(buffer, pixelByteLength),
-  };
+export interface RenderThreadFuncParams extends RenderFuncParams {
+  threadOpMode: ThreadOpMode;
 }
 
-export async function renderThread(
-  func: string,
-  globalIndex: number,
-  normalizationMode: NormalizationMode,
-  threadOpMode: ThreadOpMode,
-  width: number,
-  height: number,
-): Promise<RenderResult> {
+export async function renderThread({
+  func,
+  globalIndex,
+  normalizationMode,
+  threadOpMode,
+  width,
+  height,
+  includeTabularData,
+}: RenderThreadFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_thread", {
     func,
     globalIndex,
@@ -188,5 +235,10 @@ export async function renderThread(
     opMode: threadOpMode,
   });
 
-  return splitPixelsAndThreadStoreLoadCounts(buffer, width, height);
+  return splitTensorDataAndTabularData({
+    buffer,
+    width,
+    height,
+    includeTabularData,
+  });
 }

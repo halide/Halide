@@ -5,18 +5,22 @@ import * as React from "react";
 
 import Tracer from "@/components/views/tracer/Tracer";
 import { TraceContextProvider } from "@/hooks/trace";
-import type { FuncMeta } from "@/types";
+import { funcAtom } from "@/state/func";
+import type { FuncMeta, StatsMeta } from "@/types";
 import { openTrace } from "@/utils/api";
 
 import "./App.css";
-import { funcAtom } from "./state/func";
 
 function App() {
   const [funcs, setFuncs] = React.useState<Record<string, FuncMeta>>({});
   const [dagEdges, setDagEdges] = React.useState<Record<string, string[]>>({});
   const [packetCount, setPacketCount] = React.useState<number>(0);
-  const [globalMaxReuseDistance, setGlobalMaxReuseDistance] =
-    React.useState<number>(0);
+  const [stats, setStats] = React.useState<StatsMeta>({
+    global_max_store_count: 0,
+    global_max_load_count: 0,
+    global_max_redundant_store_count: 0,
+    global_max_reuse_distance: 0,
+  });
 
   const setActiveFunc = useSetAtom(funcAtom);
 
@@ -34,7 +38,7 @@ function App() {
         : `${await invoke<string>("get_cwd")}/${tracePath}`;
 
       try {
-        const { funcs, total_packets, dag_edges, global_max_reuse_distance } =
+        const { funcs, total_packets, dag_edges, stats } =
           await openTrace(resolved);
 
         const byName: Record<string, FuncMeta> = {};
@@ -45,7 +49,7 @@ function App() {
         setFuncs(byName);
         setDagEdges(dag_edges);
         setPacketCount(total_packets);
-        setGlobalMaxReuseDistance(global_max_reuse_distance);
+        setStats(stats);
         setActiveFunc(funcs[0]?.name ?? "");
       } catch (err) {
         console.error("Error loading trace from CLI: ", err);
@@ -61,7 +65,7 @@ function App() {
         funcs,
         dagEdges,
         packetCount,
-        globalMaxReuseDistance,
+        stats,
       }}
     >
       <main className="h-screen w-screen">
