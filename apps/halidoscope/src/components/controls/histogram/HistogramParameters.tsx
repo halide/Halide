@@ -4,13 +4,13 @@ import { useAtom } from "jotai";
 import ArrowDownIcon from "@/components/icons/ArrowDownIcon";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
-import { histogramAtom, type HistogramScale } from "@/state/histogram";
+import { tabularDataAtom, type Scale } from "@/state/tabularData";
 import { type NormalizationMode, renderAtom } from "@/state/render";
 
 function HistogramParameters() {
   const { funcs } = useTraceContext();
   const [activeFunc, setActiveFunc] = useAtom(funcAtom);
-  const [histogram, setHistogram] = useAtom(histogramAtom);
+  const [tabularData, setTabularData] = useAtom(tabularDataAtom);
   const [render, setRender] = useAtom(renderAtom);
 
   return (
@@ -23,7 +23,6 @@ function HistogramParameters() {
           value={activeFunc}
           onValueChange={(value) => {
             setActiveFunc(value);
-            setHistogram({ ...histogram, data: null });
           }}
         >
           <Select.Trigger
@@ -67,9 +66,9 @@ function HistogramParameters() {
             Scale
           </Label.Root>
           <Select.Root
-            value={histogram.scale}
+            value={tabularData.scale}
             onValueChange={(value) =>
-              setHistogram({ ...histogram, scale: value as HistogramScale })
+              setTabularData({ ...tabularData, scale: value as Scale })
             }
           >
             <Select.Trigger

@@ -309,18 +309,30 @@ impl StoreFrequencyState {
         }
     }
 
-    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
+    pub fn to_tabular_data(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
         let max = match normalization_mode {
             NormalizationMode::AcrossFuncs => self.global_max_store_count,
             NormalizationMode::PerFunc => self.local_max_store_count,
         };
-        let mut hist = vec![0u32; max as usize + 1];
+
+        let exceeds_max_bins = max > 64;
+        // Pre-allocate tabular_data, capping to 64 bins.
+        let mut tabular_data = vec![
+            0u32;
+            if exceeds_max_bins {
+                64
+            } else {
+                max as usize + 1
+            }
+        ];
 
         for &c in &self.counts {
-            hist[c.clamp(0, max) as usize] += 1;
+            let bucket = if exceeds_max_bins { c * 63 / max } else { c };
+
+            tabular_data[bucket.clamp(0, 63) as usize] += 1;
         }
 
-        hist
+        tabular_data
     }
 }
 
@@ -435,18 +447,30 @@ impl LoadFrequencyState {
         );
     }
 
-    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
+    pub fn to_tabular_data(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
         let max = match normalization_mode {
             NormalizationMode::AcrossFuncs => self.global_max_load_count,
             NormalizationMode::PerFunc => self.local_max_load_count,
         };
-        let mut hist = vec![0u32; max as usize + 1];
+
+        let exceeds_max_bins = max > 64;
+        // Pre-allocate tabular_data, capping to 64 bins.
+        let mut tabular_data = vec![
+            0u32;
+            if exceeds_max_bins {
+                64
+            } else {
+                max as usize + 1
+            }
+        ];
 
         for &c in &self.counts {
-            hist[c.clamp(0, max) as usize] += 1;
+            let bucket = if exceeds_max_bins { c * 63 / max } else { c };
+
+            tabular_data[bucket.clamp(0, 63) as usize] += 1;
         }
 
-        hist
+        tabular_data
     }
 }
 
@@ -581,16 +605,30 @@ impl RedundantState {
         );
     }
 
-    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
+    pub fn to_tabular_data(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
         let max = match normalization_mode {
             NormalizationMode::AcrossFuncs => self.global_max_redundant_store_count,
             NormalizationMode::PerFunc => self.local_max_redundant_store_count,
         };
-        let mut hist = vec![0u32; max as usize + 1];
+
+        let exceeds_max_bins = max > 64;
+        // Pre-allocate tabular_data, capping to 64 bins.
+        let mut tabular_data = vec![
+            0u32;
+            if exceeds_max_bins {
+                64
+            } else {
+                max as usize + 1
+            }
+        ];
+
         for &c in &self.redundant_store_counts {
-            hist[c.clamp(0, max) as usize] += 1;
+            let bucket = if exceeds_max_bins { c * 63 / max } else { c };
+
+            tabular_data[bucket.clamp(0, 63) as usize] += 1;
         }
-        hist
+
+        tabular_data
     }
 }
 
@@ -854,23 +892,23 @@ impl ReuseDistanceState {
         out
     }
 
-    pub fn to_histogram(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
+    pub fn to_tabular_data(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
         let max = match normalization_mode {
             NormalizationMode::AcrossFuncs => self.global_max_reuse_distance,
             NormalizationMode::PerFunc => self.local_max_reuse_distance,
         };
 
-        let mut hist = vec![0u32; 64];
+        let mut tabular_data = vec![0u32; 64];
         if max > 0 {
             for &dist in &self.max_reuse_distance {
                 if dist > 0 {
                     let bucket = ((dist as f64 / max as f64) * 63.0) as usize;
-                    hist[bucket.min(63)] += 1;
+                    tabular_data[bucket.min(63)] += 1;
                 }
             }
         }
 
-        hist
+        tabular_data
     }
 
     /// Returns the per-pixel maximum reuse distance at the current seek position, in row-major
@@ -1132,7 +1170,6 @@ impl Renderer for InfState {
 pub enum ThreadOpMode {
     Store,
     Load,
-    All,
 }
 
 pub struct ThreadState {
@@ -1271,23 +1308,11 @@ impl ThreadState {
                 && (li >= load_slice.len() || store_slice[si] < load_slice[li]);
 
             match (&op_mode, next_is_store) {
-                // op_mode is Store and the next packet is a store.
                 (ThreadOpMode::Store, true) => {
                     self.apply_store(&trace.packets[store_slice[si]]);
                     si += 1;
                 }
-                // op_mode is Load and the next packet is a load.
                 (ThreadOpMode::Load, false) => {
-                    self.apply_load(&trace.packets[load_slice[li]]);
-                    li += 1;
-                }
-                // op_mode is All and the next packet is a store.
-                (ThreadOpMode::All, true) => {
-                    self.apply_store(&trace.packets[store_slice[si]]);
-                    si += 1;
-                }
-                // op_mode is All and the next packet is a load.
-                (ThreadOpMode::All, false) => {
                     self.apply_load(&trace.packets[load_slice[li]]);
                     li += 1;
                 }
