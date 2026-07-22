@@ -54,8 +54,8 @@ public:
 
         // Do some common scheduling here.
         if (use_dma_for_output) {
-            output_y.copy_to_device();
-            output_uv.copy_to_device();
+            output_y.copy_to_device(DeviceAPI::HexagonDma);
+            output_uv.copy_to_device(DeviceAPI::HexagonDma);
         }
 
         output_y
