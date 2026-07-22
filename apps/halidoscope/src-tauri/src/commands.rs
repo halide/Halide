@@ -51,20 +51,28 @@ pub struct FuncMeta {
     pub thread_ids: Vec<i32>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct StatsMeta {
+    global_max_store_count: u32,
+    global_max_load_count: u32,
+    global_max_redundant_store_count: u32,
+    global_max_reuse_distance: u64,
+}
+
 /// Top-level payload returned by `open_trace`.
 #[derive(Debug, Clone, Serialize)]
 pub struct TraceMeta {
     pub funcs: Vec<FuncMeta>,
     pub total_packets: u32,
     pub dag_edges: BTreeMap<String, Vec<String>>,
-    pub global_max_reuse_distance: u64,
+    pub stats: StatsMeta,
 }
 
 impl TraceMeta {
-    /// Derives the frontend contract from a parsed trace. Funcs with no usable coordinate extent
-    /// are still listed (with zero dimensions) so the UI can surface them; the renderer simply
-    /// produces nothing for them.
     pub fn from_trace(trace: &Trace) -> Self {
+        let mut global_max_store_count = 0u32;
+        let mut global_max_load_count = 0u32;
+        let mut global_max_redundant_store_count = 0u32;
         let mut global_max_reuse_distance = 0u64;
 
         let funcs = trace
@@ -79,6 +87,11 @@ impl TraceMeta {
                 let stores = trace.func_store_indices(name);
                 let num_stores = stores.map(<[usize]>::len).unwrap_or(0) as u32;
 
+                global_max_store_count = stats.max_store_count.max(global_max_store_count);
+                global_max_load_count = stats.max_load_count.max(global_max_load_count);
+                global_max_redundant_store_count = stats
+                    .max_redundant_store_count
+                    .max(global_max_redundant_store_count);
                 global_max_reuse_distance = stats.max_reuse_distance.max(global_max_reuse_distance);
 
                 FuncMeta {
@@ -139,7 +152,12 @@ impl TraceMeta {
             funcs,
             total_packets: trace.packets.len() as u32,
             dag_edges,
-            global_max_reuse_distance,
+            stats: StatsMeta {
+                global_max_store_count,
+                global_max_load_count,
+                global_max_redundant_store_count,
+                global_max_reuse_distance,
+            },
         }
     }
 }
@@ -168,7 +186,7 @@ pub struct AppState {
     inner: Mutex<Option<Loaded>>,
 }
 
-/// Appends `histogram`'s bins as little-endian `u32`s directly after `pixels`, so a single
+/// Appends histogram data as little-endian `u32`s directly after `pixels`, so a single
 /// `Response` carries both. The frontend already knows the pixel-buffer length ahead of time
 /// (`width * height * 4`), so no length prefix is needed to split the two back apart.
 fn pack_pixels_and_histogram(mut pixels: Vec<u8>, histogram: Vec<u32>) -> Vec<u8> {
@@ -176,6 +194,7 @@ fn pack_pixels_and_histogram(mut pixels: Vec<u8>, histogram: Vec<u32>) -> Vec<u8
     for bin in histogram {
         pixels.extend_from_slice(&bin.to_le_bytes());
     }
+
     pixels
 }
 
@@ -194,6 +213,7 @@ fn pack_pixels_and_thread_counts(
     for &c in load_counts {
         pixels.extend_from_slice(&c.to_le_bytes());
     }
+
     pixels
 }
 
@@ -290,6 +310,7 @@ pub fn render_store_frequency(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    include_tabular_data: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -314,7 +335,11 @@ pub fn render_store_frequency(
     renderer.seek(trace, store_indices, k);
 
     let pixels = renderer.to_rgba(normalization_mode);
-    let histogram = renderer.to_histogram(normalization_mode);
+    let histogram = if include_tabular_data {
+        renderer.to_tabular_data(normalization_mode)
+    } else {
+        Vec::new()
+    };
     Ok(Response::new(pack_pixels_and_histogram(pixels, histogram)))
 }
 
@@ -324,6 +349,7 @@ pub fn render_load_frequency(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    include_tabular_data: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -348,7 +374,12 @@ pub fn render_load_frequency(
     renderer.seek(trace, load_indices, k);
 
     let pixels = renderer.to_rgba(normalization_mode);
-    let histogram = renderer.to_histogram(normalization_mode);
+    let histogram = if include_tabular_data {
+        renderer.to_tabular_data(normalization_mode)
+    } else {
+        Vec::new()
+    };
+
     Ok(Response::new(pack_pixels_and_histogram(pixels, histogram)))
 }
 
@@ -360,6 +391,7 @@ pub fn render_redundant_stores(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    include_tabular_data: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -382,7 +414,11 @@ pub fn render_redundant_stores(
     renderer.seek(trace, store_indices, k);
 
     let pixels = renderer.to_rgba(normalization_mode);
-    let histogram = renderer.to_histogram(normalization_mode);
+    let histogram = if include_tabular_data {
+        renderer.to_tabular_data(normalization_mode)
+    } else {
+        Vec::new()
+    };
     Ok(Response::new(pack_pixels_and_histogram(pixels, histogram)))
 }
 
@@ -394,6 +430,7 @@ pub fn render_reuse_distance(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    include_tabular_data: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -420,7 +457,11 @@ pub fn render_reuse_distance(
     renderer.seek(trace, store_indices, load_indices, store_k, load_k);
 
     let pixels = renderer.to_rgba(normalization_mode);
-    let histogram = renderer.to_histogram(normalization_mode);
+    let histogram = if include_tabular_data {
+        renderer.to_tabular_data(normalization_mode)
+    } else {
+        Vec::new()
+    };
     Ok(Response::new(pack_pixels_and_histogram(pixels, histogram)))
 }
 

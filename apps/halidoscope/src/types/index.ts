@@ -1,14 +1,8 @@
-/** A packet-index interval `[start, end]`. Mirrors the Rust `IndexRange`. */
 export interface IndexRange {
   start: number;
   end: number;
 }
 
-/**
- * Per-Func metadata returned by the `open_trace` command. Mirrors the Rust
- * `FuncMeta`. Carries everything the UI needs to size canvases, bound the
- * scrub timeline, and populate the inspector panel.
- */
 export interface FuncMeta extends Record<string, unknown> {
   name: string;
   width: number;
@@ -30,12 +24,18 @@ export interface FuncMeta extends Record<string, unknown> {
   thread_ids: number[];
 }
 
-/** Top-level payload returned by `open_trace`. Mirrors the Rust `TraceMeta`. */
+export interface StatsMeta {
+  global_max_store_count: number;
+  global_max_load_count: number;
+  global_max_redundant_store_count: number;
+  global_max_reuse_distance: number;
+}
+
 export interface TraceMeta {
   funcs: FuncMeta[];
   total_packets: number;
   dag_edges: Record<string, string[]>;
-  global_max_reuse_distance: number;
+  stats: StatsMeta;
 }
 
 export type NodeTypes = "funcNode";
