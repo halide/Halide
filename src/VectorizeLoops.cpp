@@ -225,12 +225,12 @@ protected:
 
     Expr visit(const Load *op) override {
         return Load::make(op->type, op->name, mutate_index(op->name, op->index),
-                          op->image, op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
+                          op->image, op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment), op->is_streaming);
     }
 
     Stmt visit(const Store *op) override {
         return Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
-                           op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
+                           op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment), op->is_streaming);
     }
 
 public:
@@ -304,7 +304,7 @@ protected:
             return op;
         }
         vectorized = true;
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment);
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment, op->is_streaming);
     }
 
     Stmt visit(const Store *op) override {
@@ -335,7 +335,7 @@ protected:
             return op;
         }
         vectorized = true;
-        return Store::make(op->name, value, index, op->param, predicate, op->alignment);
+        return Store::make(op->name, value, index, op->param, predicate, op->alignment, op->is_streaming);
     }
 
     Expr visit(const Call *op) override {
@@ -530,7 +530,7 @@ protected:
             int w = index.type().lanes();
             predicate = widen(predicate, w);
             return Load::make(op->type.with_lanes(w), op->name, index, op->image,
-                              op->param, predicate, op->alignment);
+                              op->param, predicate, op->alignment, op->is_streaming);
         }
     }
 
@@ -545,15 +545,18 @@ protected:
             max_lanes = std::max(new_arg.type().lanes(), max_lanes);
         }
 
-        if (!changed) {
+        if (!changed && max_lanes <= 1) {
             return op;
         } else if (op->name == Call::trace) {
             auto event = as_const_int(op->args[6]);
             internal_assert(event);
-            if (*event == halide_trace_begin_realization || *event == halide_trace_end_realization) {
-                // Call::trace vectorizes uniquely for begin/end realization, because the coordinates
-                // for these are actually min/extent pairs; we need to maintain the proper dimensionality
-                // count and instead aggregate the widened values into a single pair.
+            if (*event == halide_trace_begin_realization ||
+                *event == halide_trace_end_realization ||
+                *event == halide_trace_begin_parallel_task ||
+                *event == halide_trace_end_parallel_task) {
+                // Call::trace vectorizes uniquely for begin/end scope events with min/extent pairs.
+                // We need to maintain the proper dimensionality count and instead aggregate the
+                // widened values into a single pair.
                 for (size_t i = 1; i <= 2; i++) {
                     const Call *make_struct = Call::as_intrinsic(new_args[i], {Call::make_struct});
                     internal_assert(make_struct);
@@ -603,7 +606,7 @@ protected:
                 // One of the arguments to the trace helper
                 // records the number entries in the coordinates (which we just widened)
                 if (max_lanes > 1) {
-                    new_args[9] = new_args[9] * max_lanes;
+                    new_args[10] = new_args[10] * max_lanes;
                 }
             }
             return Call::make(op->type, Call::trace, new_args, op->call_type);
@@ -613,7 +616,7 @@ protected:
 
             const Load *load = true_value.as<Load>();
             if (load) {
-                return Load::make(op->type.with_lanes(max_lanes), load->name, load->index, load->image, load->param, cond, load->alignment);
+                return Load::make(op->type.with_lanes(max_lanes), load->name, load->index, load->image, load->param, cond, load->alignment, load->is_streaming);
             }
         }
 
@@ -624,7 +627,7 @@ protected:
         Type new_op_type = op->type.with_lanes(max_lanes);
 
         if (op->is_intrinsic(Call::prefetch)) {
-            // We don't want prefetch args to ve vectorized, but we can't just skip the mutation
+            // We don't want prefetch args to be vectorized, but we can't just skip the mutation
             // (otherwise we can end up with dead loop variables. Instead, use extract_lane() on each arg
             // to scalarize it again.
             for (auto &arg : new_args) {
@@ -702,7 +705,7 @@ protected:
                                   value.type().lanes(),
                                   index.type().lanes()});
             return Store::make(op->name, widen(value, lanes), widen(index, lanes),
-                               op->param, widen(predicate, lanes), op->alignment);
+                               op->param, widen(predicate, lanes), op->alignment, op->is_streaming);
         }
     }
 
@@ -1280,7 +1283,7 @@ protected:
             Expr new_load = Load::make(load_a->type.with_lanes(output_lanes),
                                        load_a->name, store_index, load_a->image,
                                        load_a->param, const_true(output_lanes),
-                                       ModulusRemainder{});
+                                       ModulusRemainder{}, load_a->is_streaming);
 
             Expr lhs = cast(b.type().with_lanes(output_lanes), new_load);
 
@@ -1289,7 +1292,7 @@ protected:
                 b = binop(lhs, b);
                 b = cast(new_load.type(), b);
                 s = Store::make(store->name, b, store_index, store->param,
-                                const_true(b.type().lanes()), store->alignment);
+                                const_true(b.type().lanes()), store->alignment, store->is_streaming);
             } else {
                 // Wrap any containing loops we still need (unrolled). We
                 // enumerate the cartesian product of loop iteration values
@@ -1300,7 +1303,7 @@ protected:
                 Stmt store_template =
                     Store::make(store->name, cast(new_load.type(), binop(lhs, b_var)),
                                 store_index, store->param,
-                                const_true(output_lanes), ModulusRemainder{});
+                                const_true(output_lanes), ModulusRemainder{}, store->is_streaming);
                 std::string full_b_var_name = unique_name('b');
                 Expr full_b_var = Variable::make(b.type(), full_b_var_name);
 

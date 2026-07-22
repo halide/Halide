@@ -1,6 +1,8 @@
 #include "HalideRuntime.h"
 #include "runtime_atomics.h"
 
+#include "printer.h"
+
 extern "C" {
 
 WEAK_INLINE int halide_profiler_set_current_func(halide_profiler_instance_state *instance, int func, int *sampling_token) {

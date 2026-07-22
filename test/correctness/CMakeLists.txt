@@ -199,6 +199,7 @@ tests(
     intrinsics.cpp
     invalid_gpu_loop_nests.cpp
     inverse.cpp
+    irmatch.cpp
     irprinter.cpp
     isnan.cpp
     issue_3926.cpp
@@ -318,6 +319,9 @@ tests(
     stmt_to_html.cpp
     storage_folding.cpp
     store_in.cpp
+    streaming.cpp
+    streaming_in.cpp
+    streaming_specialize.cpp
     strict_float.cpp
     strict_float_bounds.cpp
     strict_fma.cpp
@@ -327,6 +331,7 @@ tests(
     target.cpp
     target_query.cpp
     tiled_matmul.cpp
+    tiled_matmul_errors.cpp
     tracing.cpp
     tracing_bounds.cpp
     tracing_broadcast.cpp
@@ -434,6 +439,7 @@ tests(
     ring_buffer.cpp
     stream_compaction.cpp
     thread_safety.cpp
+    tracing_thread_ids.cpp
     transitive_in.cpp
     truncated_pyramid.cpp
     tuple_vector_reduce.cpp
@@ -499,3 +505,7 @@ set_target_properties(
     PROPERTIES
     ENABLE_EXPORTS TRUE
 )
+
+if (WITH_SERIALIZATION)
+    target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
+endif ()

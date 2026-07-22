@@ -16,9 +16,9 @@ void reset_trace() {
 int my_trace(JITUserContext *user_context, const halide_trace_event_t *ev) {
 
     if (ev->event == halide_trace_store) {
-        if (ev->type.lanes > 1) {
+        if (ev->lanes > 1) {
             vector_store = true;
-            vector_store_lanes = ev->type.lanes;
+            vector_store_lanes = ev->lanes;
         } else {
             scalar_store = true;
         }

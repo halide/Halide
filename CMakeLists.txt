@@ -57,7 +57,15 @@ if (CMAKE_SYSTEM_NAME MATCHES "Windows")
     set(CMAKE_OBJECT_PATH_MAX 260)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
 
-    message(STATUS "Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
+    if (VCPKG_APPLOCAL_DEPS)
+        # vcpkg's z-applocal deployment tool can crash the build if it loses a race
+        # against another process (e.g. an antivirus scanner) transiently holding a
+        # shared dependency DLL open (see https://github.com/microsoft/vcpkg-tool/issues/2076).
+        # This is more likely to happen with many targets linking in parallel, as here.
+        # Ask vcpkg to serialize its deployment step across targets to reduce how often
+        # this occurs.
+        set(X_VCPKG_APPLOCAL_DEPS_SERIALIZED ON)
+    endif ()
 endif ()
 
 # Export all symbols on Windows to match GCC/Clang behavior on Linux/macOS

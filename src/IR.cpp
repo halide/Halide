@@ -247,7 +247,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     return node;
 }
 
-Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment) {
+Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment, bool is_streaming) {
     internal_assert(predicate.defined()) << "Load with undefined predicate\n";
     internal_assert(index.defined()) << "Load of undefined\n";
     internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
@@ -262,6 +262,7 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
     node->image = std::move(image);
     node->param = std::move(param);
     node->alignment = alignment;
+    node->is_streaming = is_streaming;
     return node;
 }
 
@@ -374,7 +375,7 @@ Stmt Acquire::make(Expr semaphore, Expr count, Stmt body) {
     return node;
 }
 
-Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment) {
+Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment, bool is_streaming) {
     internal_assert(predicate.defined()) << "Store with undefined predicate\n";
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
@@ -389,6 +390,7 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
     node->index = std::move(index);
     node->param = std::move(param);
     node->alignment = alignment;
+    node->is_streaming = is_streaming;
     return node;
 }
 
@@ -679,6 +681,7 @@ constexpr const char *intrinsic_op_names[] = {
     "skip_stages_marker",
     "sliding_window_marker",
     "sorted_avg",
+    "stream_store_fence",
     "strict_add",
     "strict_cast",
     "strict_div",
@@ -973,6 +976,24 @@ Stmt Atomic::make(const std::string &producer_name,
     return node;
 }
 
+Stmt StreamingStore::make(const std::string &producer_name,
+                          Stmt body) {
+    internal_assert(body.defined()) << "StreamingStore must have a body statement.\n";
+    StreamingStore *node = new StreamingStore;
+    node->producer_name = producer_name;
+    node->body = std::move(body);
+    return node;
+}
+
+Stmt StreamingLoads::make(std::optional<std::vector<std::string>> names,
+                          Stmt body) {
+    internal_assert(body.defined()) << "StreamingLoads must have a body statement.\n";
+    StreamingLoads *node = new StreamingLoads;
+    node->names = std::move(names);
+    node->body = std::move(body);
+    return node;
+}
+
 Stmt HoistedStorage::make(const std::string &name,
                           Stmt body) {
     internal_assert(body.defined()) << "HoistedStorage must have a body statement.\n";
@@ -1261,6 +1282,14 @@ void StmtNode<Atomic>::accept(IRVisitor *v) const {
     v->visit((const Atomic *)this);
 }
 template<>
+void StmtNode<StreamingStore>::accept(IRVisitor *v) const {
+    v->visit((const StreamingStore *)this);
+}
+template<>
+void StmtNode<StreamingLoads>::accept(IRVisitor *v) const {
+    v->visit((const StreamingLoads *)this);
+}
+template<>
 void StmtNode<HoistedStorage>::accept(IRVisitor *v) const {
     v->visit((const HoistedStorage *)this);
 }
@@ -1453,6 +1482,14 @@ Stmt StmtNode<Fork>::mutate_stmt(IRMutator *v) const {
 template<>
 Stmt StmtNode<Atomic>::mutate_stmt(IRMutator *v) const {
     return v->visit((const Atomic *)this);
+}
+template<>
+Stmt StmtNode<StreamingStore>::mutate_stmt(IRMutator *v) const {
+    return v->visit((const StreamingStore *)this);
+}
+template<>
+Stmt StmtNode<StreamingLoads>::mutate_stmt(IRMutator *v) const {
+    return v->visit((const StreamingLoads *)this);
 }
 template<>
 Stmt StmtNode<HoistedStorage>::mutate_stmt(IRMutator *v) const {

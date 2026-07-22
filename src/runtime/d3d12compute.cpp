@@ -416,7 +416,6 @@ WEAK DXGI_FORMAT FindD3D12FormatForHalideType(void *user_context, halide_type_t 
         };
 
     halide_abort_if_false(user_context, (type.code >= 0) && (type.code <= 2));
-    halide_abort_if_false(user_context, (type.lanes > 0) && (type.lanes <= 4));
 
     int i = 0;
     switch (type.bytes()) {
@@ -435,7 +434,7 @@ WEAK DXGI_FORMAT FindD3D12FormatForHalideType(void *user_context, halide_type_t 
     }
 
     DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
-    format = FORMATS[(int)type.code][type.lanes - 1][i];
+    format = FORMATS[(int)type.code][0][i];
     return format;
 }
 
@@ -694,17 +693,16 @@ WEAK size_t number_of_elements(void *user_context, const halide_buffer_t *buffer
 
     size_t element_size = 1;
     element_size *= buffer->type.bytes();
-    element_size *= buffer->type.lanes;
     halide_abort_if_false(user_context, (element_size > 0));
 
     size_t elements = size_in_bytes / element_size;
     halide_abort_if_false(user_context, (size_in_bytes % element_size) == 0);
 
     // 64-bit types are represented as pairs of uint32 elements in the UAV
-    // (there is no DXGI format for 64-bit scalars).  Each 64-bit lane occupies
-    // two R32_UINT slots, so multi-lane 64-bit elements need 2 * lanes slots.
+    // (there is no DXGI format for 64-bit scalars).  Each 64-bit element
+    // occupies two R32_UINT slots.
     if (is_64bit_type(buffer->type)) {
-        elements *= 2 * (size_t)buffer->type.lanes;
+        elements *= 2;
     }
 
     return elements;
@@ -3308,10 +3306,9 @@ WEAK int halide_d3d12compute_image_device_malloc(void *user_context, halide_buff
         return halide_error_code_device_malloc_failed;
     }
 
-    // Only scalar (1-lane) element types are supported for textures
-    halide_type_t scalar_type = buf->type;
-    scalar_type.lanes = 1;
-    DXGI_FORMAT fmt = FindD3D12FormatForHalideType(user_context, scalar_type);
+    // Buffer element types are always scalar at the ABI (halide_type_t has no
+    // lanes), so the element type can be used directly.
+    DXGI_FORMAT fmt = FindD3D12FormatForHalideType(user_context, buf->type);
     if (fmt == DXGI_FORMAT_UNKNOWN) {
         error(user_context) << "D3D12Compute: unsupported element type for texture: " << buf->type;
         return halide_error_code_device_malloc_failed;
@@ -3852,7 +3849,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
                     halide_type_t arg_type = arg_types[i];
                     arg_sizes[i] = arg_type.bytes();
                     halide_abort_if_false(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
-                    halide_abort_if_false(user_context, arg_type.lanes == 1);
                     halide_abort_if_false(user_context, arg_sizes[i] > 0);
                     halide_abort_if_false(user_context, arg_sizes[i] <= 8);
                     // Sub-32-bit scalars are widened to 32-bit in the cbuffer layout;
@@ -4245,10 +4241,10 @@ WEAK int d3d12compute_device_crop_from_offset(void *user_context,
     // DXGI format already encodes the lane count, so the scale is 1.
     int64_t uav_offset = offset;
     if (is_64bit_type(dst->type)) {
-        uav_offset *= 2 * (int64_t)dst->type.lanes;
+        uav_offset *= 2;
     }
     new_handle->offset = old_handle->offset + uav_offset;
-    new_handle->offsetInBytes = (old_handle->offset + offset) * dst->type.bytes() * dst->type.lanes;
+    new_handle->offsetInBytes = (old_handle->offset + offset) * dst->type.bytes();
     // for some reason, 'dst->number_of_elements()' is always returning 1
     // later on when 'set_input()' is called...
     new_handle->elements = old_handle->elements - uav_offset;

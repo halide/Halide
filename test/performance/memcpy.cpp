@@ -2,8 +2,10 @@
 #include "halide_benchmark.h"
 #include "halide_test_dirs.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <limits>
 
 using namespace Halide;
 using namespace Halide::Tools;
@@ -20,7 +22,14 @@ int main(int argc, char **argv) {
     Var x;
     dst(x) = src(x);
 
-    dst.vectorize(x, 32, TailStrategy::GuardWithIf);
+    // LLVM requires vector-width alignment to select the native streaming
+    // instructions on some targets. Halide::Buffer allocations satisfy this.
+    src.set_host_alignment(32);
+    dst.output_buffer().set_host_alignment(32);
+
+    dst.vectorize(x, 32, TailStrategy::GuardWithIf)
+        .stream_loads({src})
+        .stream_stores();
 
     dst.compile_to_assembly(Internal::get_test_tmp_dir() + "halide_memcpy.s", {src}, "halide_memcpy");
     dst.compile_jit();
@@ -32,19 +41,31 @@ int main(int argc, char **argv) {
 
     src.set(input);
 
-    double t1 = benchmark([&]() {
+    auto halide_copy = [&]() {
         dst.realize(output);
-    });
-
-    double t2 = benchmark([&]() {
+    };
+    auto system_copy = [&]() {
         memcpy(output.data(), input.data(), input.width());
-    });
+    };
 
-    printf("system memcpy: %.3e byte/s\n", buffer_size / t2);
-    printf("halide memcpy: %.3e byte/s\n", buffer_size / t1);
+    // Warm up, then alternate the benchmarks to reduce the effect of thermal
+    // and frequency drift.
+    halide_copy();
+    system_copy();
 
-    // memcpy will win by a little bit for large inputs because it uses streaming stores
-    if (t1 > t2 * 3) {
+    double t_halide = std::numeric_limits<double>::infinity();
+    double t_memcpy = std::numeric_limits<double>::infinity();
+    for (int i = 0; i < 5; i++) {
+        t_halide = std::min(t_halide, (double)benchmark(halide_copy));
+        t_memcpy = std::min(t_memcpy, (double)benchmark(system_copy));
+    }
+
+    printf("system memcpy: %.2f GB/s\n", (buffer_size / t_memcpy) / 1e9);
+    printf("halide memcpy: %.2f GB/s\n", (buffer_size / t_halide) / 1e9);
+
+    // Streaming directives should bring the generated copy close to the
+    // platform memcpy implementation for a large contiguous transfer.
+    if (t_halide > t_memcpy * 1.2) {
         printf("Halide memcpy is slower than it should be.\n");
         return 1;
     }

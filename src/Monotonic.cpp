@@ -489,6 +489,14 @@ class DerivativeBounds : public IRVisitor {
         internal_error << "Monotonic of statement\n";
     }
 
+    void visit(const StreamingStore *op) override {
+        internal_error << "Monotonic of statement\n";
+    }
+
+    void visit(const StreamingLoads *op) override {
+        internal_error << "Monotonic of statement\n";
+    }
+
     void visit(const HoistedStorage *op) override {
         internal_error << "Monotonic of statement\n";
     }

@@ -505,13 +505,14 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
         deserialize_vector<flatbuffers::String, std::string>(function->trace_tags(),
                                                              &Deserializer::deserialize_string);
     const bool no_profiling = function->no_profiling();
+    const std::string profiler_display_name = deserialize_string(function->profiler_display_name());
     const bool frozen = function->frozen();
     hl_function.update_with_deserialization(name, origin_name, output_types, required_types,
                                             required_dim, args, func_schedule, init_def, updates,
                                             debug_file, output_buffers, extern_arguments, extern_function_name,
                                             name_mangling, extern_function_device_api, extern_proxy_expr,
                                             trace_loads, trace_stores, trace_realizations, trace_tags,
-                                            no_profiling, frozen);
+                                            no_profiling, profiler_display_name, frozen);
 }
 
 Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt) {
@@ -566,7 +567,7 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
             user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
         }
         const auto alignment = deserialize_modulus_remainder(store_stmt->alignment());
-        return Store::make(name, value, index, param, predicate, alignment);
+        return Store::make(name, value, index, param, predicate, alignment, store_stmt->is_streaming());
     }
     case Serialize::Stmt::Provide: {
         const auto *provide_stmt = (const Serialize::Provide *)stmt;
@@ -834,7 +835,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         }
         const auto alignment = deserialize_modulus_remainder(load_expr->alignment());
         const auto type = deserialize_type(load_expr->type());
-        return Load::make(type, name, index, image, param, predicate, alignment);
+        return Load::make(type, name, index, image, param, predicate, alignment, load_expr->is_streaming());
     }
     case Serialize::Expr::Ramp: {
         const auto *ramp_expr = (const Serialize::Ramp *)expr;
@@ -1201,8 +1202,16 @@ StageSchedule Deserializer::deserialize_stage_schedule(const Serialize::StageSch
     const bool allow_race_conditions = stage_schedule->allow_race_conditions();
     const bool atomic = stage_schedule->atomic();
     const bool override_atomic_associativity_test = stage_schedule->override_atomic_associativity_test();
+    const bool stream_stores = stage_schedule->stream_stores();
+    std::optional<std::vector<std::string>> stream_loads_names;
+    if (!stage_schedule->stream_loads_all()) {
+        stream_loads_names =
+            deserialize_vector<flatbuffers::String, std::string>(stage_schedule->stream_loads_names(),
+                                                                 &Deserializer::deserialize_string);
+    }
     return StageSchedule(rvars, splits, dims, prefetches, fuse_level, fused_pairs, touched,
-                         allow_race_conditions, atomic, override_atomic_associativity_test);
+                         allow_race_conditions, atomic, override_atomic_associativity_test,
+                         stream_stores, stream_loads_names);
 }
 
 BufferConstraint Deserializer::deserialize_buffer_constraint(const Serialize::BufferConstraint *buffer_constraint) {
@@ -1339,7 +1348,12 @@ Buffer<> Deserializer::deserialize_buffer(const Serialize::Buffer *buffer) {
     // then create a (potential sparse) buffer with original dimension infos and copy from the dense buffer
     auto fake_dense_buffer = Buffer<>(type, nullptr, dimensions, dense_buffer_dimensions.data(), name + "_dense_fake");
     auto dense_buffer = Buffer<>::make_with_shape_of(fake_dense_buffer, nullptr, nullptr, name + "_dense_tmp");
-    memcpy(dense_buffer.data(), buffer->data()->data(), buffer->data()->size());
+    const auto *buffer_data = buffer->data();
+    user_assert(buffer_data != nullptr) << "deserialized buffer " << name << " has no data\n";
+    user_assert(buffer_data->size() == dense_buffer.size_in_bytes())
+        << "deserialized buffer " << name << " carries " << buffer_data->size()
+        << " bytes of data, but its dimensions require " << dense_buffer.size_in_bytes() << "\n";
+    memcpy(dense_buffer.data(), buffer_data->data(), buffer_data->size());
     auto fake_buffer = Buffer<>(type, nullptr, dimensions, hl_buffer_dimensions.data(), name + "_fake");
     auto hl_buffer = Buffer<>::make_with_shape_of(fake_buffer, nullptr, nullptr, name);
     hl_buffer.copy_from(dense_buffer);

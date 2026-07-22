@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <map>
+#include <set>
 #include <string>
 
 #include "CodeGen_Internal.h"
@@ -21,83 +22,296 @@ using std::map;
 using std::string;
 using std::vector;
 
+// Profiling injection. Runs after bounds inference, before storage
+// flattening, when the "profile" target feature is on.
+//
+// Time is collected by sampling: a background thread periodically reads
+// a "current func" word that the generated code writes when the pipeline
+// transitions between Funcs. We additionally bill memory allocations,
+// stack peaks, active-thread counts, and host<->device copy times.
+//
+// Two sub-passes:
+//
+//  1) PreAllocateEntries — walks the IR and assigns each profiled
+//     producer (plus the synthetic copy-to-host/device sites and
+//     hoist_storage allocations) an entry id, matching its eventual slot
+//     in the runtime's halide_profiler_func_stats array. The walk order
+//     fixes the id order, which the reporter then walks as a tree.
+//
+//  2) InjectProfiling — emits the runtime calls
+//     (halide_profiler_set_current_func, _memory_allocate/_free,
+//     _incr/decr_active_threads, sampling-token plumbing,
+//     copy-to-host/device timing) and wraps the whole IR with
+//     halide_profiler_instance_start / _end.
+//
+// Entries (rows in the stats array):
+//
+// Most Funcs map to one entry. An unscheduled Func with an update def
+// reached from multiple callers gets a separate Realize/Produce per
+// caller, hence a separate entry per appearance — letting per-caller
+// time%, peak memory, etc. show separately rather than collapsing them.
+// `canonical_id` points each instance at the first id allocated for its
+// name so the reporter can roll them back up "by Func" if it chooses.
+
 namespace {
 
-// All names that need to be unique, just in case someone does something
-// perverse like naming a func "profiler_instance".
+// Unique names for the IR symbols this pass introduces, plus the entry
+// table (one EntryInfo per row in halide_profiler_func_stats).
 struct Names {
     const std::string &pipeline_name;
+    const std::map<std::string, Function> &env;
     std::string profiler_instance;
     std::string profiler_local_sampling_token;
     std::string profiler_shared_sampling_token;
     std::string hvx_profiler_instance;
     std::string profiler_func_names;
+    std::string profiler_func_parents;
+    std::string profiler_func_canonical_ids;
     std::string profiler_func_stack_peak_buf;
+    std::string profiler_func_kinds;
+    std::string profiler_func_buffer_func_ids;
     std::string profiler_start_error_code;
 
-    Names(const std::string &pipeline_name)
+    // IDs 0-3 are reserved for bookkeeping slots, in this order.
+    const int overhead_id = 0, thread_idle_id = 1, malloc_id = 2, free_id = 3;
+
+    Names(const std::string &pipeline_name, const std::map<std::string, Function> &env)
         : pipeline_name(pipeline_name),
+          env(env),
           profiler_instance(unique_name("profiler_instance")),
           profiler_local_sampling_token(unique_name("profiler_local_sampling_token")),
           profiler_shared_sampling_token(unique_name("profiler_shared_sampling_token")),
           hvx_profiler_instance(unique_name("hvx_profiler_instance")),
           profiler_func_names(unique_name("profiler_func_names")),
+          profiler_func_parents(unique_name("profiler_func_parents")),
+          profiler_func_canonical_ids(unique_name("profiler_func_canonical_ids")),
           profiler_func_stack_peak_buf(unique_name("profiler_func_stack_peak_buf")),
+          profiler_func_kinds(unique_name("profiler_func_kinds")),
+          profiler_func_buffer_func_ids(unique_name("profiler_func_buffer_func_ids")),
           profiler_start_error_code(unique_name("profiler_start_error_code")) {
+
+        // Reserve the bookkeeping slots first so their ids match the
+        // *_id constants above.
+        struct {
+            const char *name;
+            halide_profiler_func_kind kind;
+        } bookkeeping[] = {
+            {"overhead", halide_profiler_func_kind_overhead},
+            {"thread idle", halide_profiler_func_kind_thread_idle},
+            {"malloc", halide_profiler_func_kind_malloc},
+            {"free", halide_profiler_func_kind_free},
+        };
+        for (const auto &b : bookkeeping) {
+            id_for_entry(b.name, -1, b.kind);
+        }
+    }
+
+    struct EntryInfo {
+        // Display name shown in the report. Differs from ir_name only
+        // when a Function::profiler_display_name override is set.
+        std::string name;
+        // IR-level Func name, used to dedup entries.
+        std::string ir_name;
+        int parent_id;     // immediate parent entry, or -1 at root
+        int canonical_id;  // first entry id allocated for this ir_name
+        halide_profiler_func_kind kind;
+        // For copy synthetics, the canonical id of the Func whose
+        // buffer is being copied; -1 otherwise.
+        int buffer_func_id;
+    };
+    std::vector<EntryInfo> entry_info;
+    std::map<std::string, int> canonical_id_for_name;
+    // (parent_id, ir_name) -> id. Keyed on IR name so two appearances of
+    // a Func that share a profiler_display_name still dedup correctly.
+    std::map<std::pair<int, std::string>, int> entry_map;
+
+    // Get or allocate the id for (ir_name, parent_id). Same name under
+    // different parents gets different ids.
+    int id_for_entry(const std::string &ir_name, int parent_id,
+                     halide_profiler_func_kind kind = halide_profiler_func_kind_func,
+                     int buffer_func_id = -1) {
+        auto [it, inserted] = entry_map.try_emplace({parent_id, ir_name}, (int)entry_info.size());
+        if (inserted) {
+            int canon = canonical_id_for_name.try_emplace(ir_name, it->second).first->second;
+            std::string display_name = ir_name;
+            if (kind == halide_profiler_func_kind_func) {
+                auto eit = env.find(ir_name);
+                if (eit != env.end()) {
+                    const Function &f = eit->second;
+                    if (!f.profiler_display_name().empty()) {
+                        display_name = f.profiler_display_name();
+                    }
+                }
+            } else if (kind == halide_profiler_func_kind_allocation &&
+                       starts_with(ir_name, "allocgroup__")) {
+                // Render "allocgroup__f1$0.0__f2$0.1.buffer" as
+                // "f1$0.0,f2$0.1.buffer": split off the "allocgroup" tag,
+                // join the rest with commas.
+                //
+                // TODO(next PR): once the per-Func counter machinery is
+                // back, attribute the bytes to each participating Func
+                // instead of presenting one combined row. The right place
+                // to thread that data through is a "declare_allocation"
+                // intrinsic emitted by FuseGPUThreadLoops at the position
+                // where it strips the Allocate, carrying the Func name,
+                // size, and MemoryType — the profiler can then bill the
+                // size to each Func via a hoistable counter (the GPU
+                // runtime has no memory_allocate hook, so we can't track
+                // it as a live allocation).
+                std::vector<std::string> parts = split_string(ir_name, "__");
+                parts.erase(parts.begin());  // drop the "allocgroup" tag
+                display_name = join_strings(parts, ",");
+            }
+            entry_info.push_back({display_name, ir_name, parent_id, canon, kind, buffer_func_id});
+        }
+        return it->second;
+    }
+
+    // Shorthand for the root-level (parent = -1) entry for a name.
+    int id_for_name(const std::string &name) {
+        return id_for_entry(name, -1);
+    }
+
+    std::string prefix(const std::string &name) const {
+        size_t idx = name.find('.');
+        if (idx != std::string::npos) {
+            internal_assert(idx != 0) << name;
+            return name.substr(0, idx);
+        } else {
+            return name;
+        }
+    }
+
+    int num_ids() const {
+        return (int)entry_info.size();
     }
 };
 
-Stmt incr_active_threads(const Expr &profiler_instance) {
-    return Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
-                                     {profiler_instance}, Call::Extern));
-}
+// First pass: enumerate the entries (see file-level comment) and assign
+// each one an id. Walks every ProducerConsumer node (one entry per
+// producer, parented to the surrounding producer).
+class PreAllocateEntries : public IRMutator {
+    Names &names;
+    const std::map<std::string, Function> &env;
+    int producer_id = -1;
 
-Stmt decr_active_threads(const Expr &profiler_instance) {
-    return Evaluate::make(Call::make(Int(32), "halide_profiler_decr_active_threads",
-                                     {profiler_instance}, Call::Extern));
-}
+    // Entries minted by a Produce of a profiled Func. Used by visit
+    // (Allocate) to decide whether the Allocate had a matching Produce
+    // at the same scope — if not, the Allocate is a hoist_storage
+    // allocation site and the entry is marked with
+    // halide_profiler_func_kind_allocation.
+    std::set<int> produce_minted_ids;
 
-Stmt acquire_sampling_token(const Expr &shared_token, const Expr &local_token) {
-    return Evaluate::make(Call::make(Int(32), "halide_profiler_acquire_sampling_token",
-                                     {shared_token, local_token}, Call::Extern));
-}
+    bool is_profiled_func(const std::string &name) const {
+        auto it = env.find(name);
+        if (it == env.end()) {
+            it = env.find(names.prefix(name));
+        }
+        return it != env.end() && !it->second.should_not_profile();
+    }
 
-Stmt release_sampling_token(const Expr &shared_token, const Expr &local_token) {
-    return Evaluate::make(Call::make(Int(32), "halide_profiler_release_sampling_token",
-                                     {shared_token, local_token}, Call::Extern));
-}
+    using IRMutator::visit;
 
-Stmt claim_sampling_token(const Stmt &s, const Expr &shared_token, const Expr &local_token) {
-    return LetStmt::make(local_token.as<Variable>()->name,
-                         Call::make(Handle(), Call::alloca, {Int(32).bytes()}, Call::Intrinsic),
-                         Block::make({acquire_sampling_token(shared_token, local_token),
-                                      s,
-                                      release_sampling_token(shared_token, local_token)}));
-}
+    Stmt visit(const Allocate *op) override {
+        int id = -1;
+        if (is_profiled_func(op->name)) {
+            id = names.id_for_entry(op->name, producer_id);
+        }
+        Stmt result = IRMutator::visit(op);
+        // If no Produce at this scope minted the same id, this is a
+        // hoist_storage allocation site — give it the allocation kind.
+        if (id >= 0 && !produce_minted_ids.count(id)) {
+            names.entry_info[id].kind = halide_profiler_func_kind_allocation;
+        }
+        return result;
+    }
 
-class InjectProfiling : public IRMutator {
+    Stmt visit(const ProducerConsumer *op) override {
+        if (op->is_producer) {
+            int id = names.id_for_entry(op->name, producer_id);
+            produce_minted_ids.insert(id);
+            ScopedValue<int> old(producer_id, id);
+            return IRMutator::visit(op);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Call *op) override {
+        // Mint entries for copy-to-host/device sites so they get ids in
+        // IR order (the report renders by id).
+        if (op->name == "halide_copy_to_host" || op->name == "halide_copy_to_device") {
+            if (!op->args.empty()) {
+                if (const Variable *v = op->args.front().as<Variable>()) {
+                    if (ends_with(v->name, ".buffer")) {
+                        std::string buffer_name = v->name.substr(0, v->name.size() - 7);
+                        bool to_device = op->name == "halide_copy_to_device";
+                        const char *tag = to_device ? " (copy to device)" : " (copy to host)";
+                        halide_profiler_func_kind kind =
+                            to_device ? halide_profiler_func_kind_copy_to_device : halide_profiler_func_kind_copy_to_host;
+                        int buffer_func_id = -1;
+                        auto it = names.canonical_id_for_name.find(buffer_name);
+                        if (it != names.canonical_id_for_name.end()) {
+                            buffer_func_id = it->second;
+                        }
+                        names.id_for_entry(buffer_name + tag, producer_id, kind, buffer_func_id);
+                    }
+                }
+            }
+        }
+        return IRMutator::visit(op);
+    }
 
 public:
-    map<string, int> indices;  // maps from func name -> index in buffer.
+    PreAllocateEntries(Names &names, const std::map<std::string, Function> &env)
+        : names(names), env(env) {
+    }
+};
 
+class InjectProfiling : public IRMutator {
+    // Thread-activity tracking around parallel constructs and sampling-token
+    // plumbing for leaf parallel tasks.
+    static Stmt incr_active_threads(const Expr &profiler_instance) {
+        return Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
+                                         {profiler_instance}, Call::Extern));
+    }
+
+    static Stmt decr_active_threads(const Expr &profiler_instance) {
+        return Evaluate::make(Call::make(Int(32), "halide_profiler_decr_active_threads",
+                                         {profiler_instance}, Call::Extern));
+    }
+
+    static Stmt acquire_sampling_token(const Expr &shared_token, const Expr &local_token) {
+        return Evaluate::make(Call::make(Int(32), "halide_profiler_acquire_sampling_token",
+                                         {shared_token, local_token}, Call::Extern));
+    }
+
+    static Stmt release_sampling_token(const Expr &shared_token, const Expr &local_token) {
+        return Evaluate::make(Call::make(Int(32), "halide_profiler_release_sampling_token",
+                                         {shared_token, local_token}, Call::Extern));
+    }
+
+    static Stmt claim_sampling_token(const Stmt &s, const Expr &shared_token, const Expr &local_token) {
+        return LetStmt::make(local_token.as<Variable>()->name,
+                             Call::make(Handle(), Call::alloca, {Int(32).bytes()}, Call::Intrinsic),
+                             Block::make({acquire_sampling_token(shared_token, local_token),
+                                          s,
+                                          release_sampling_token(shared_token, local_token)}));
+    }
+
+public:
     vector<int> stack;  // What produce nodes are we currently inside of.
 
-    const Names &names;
+    Names &names;
     const map<string, Function> &env;
 
     bool in_fork = false;
     bool in_parallel = false;
     bool in_leaf_task = false;
 
-    InjectProfiling(const Names &names, const map<std::string, Function> &env)
+    InjectProfiling(Names &names, const map<std::string, Function> &env)
         : names(names), env(env) {
-        stack.push_back(get_func_id("overhead"));
-        // ID 0 is treated specially in the runtime as overhead
-        internal_assert(stack.back() == 0);
 
-        waiting_on_tasks_id = get_func_id("waiting for parallel tasks to finish");
-        malloc_id = get_func_id("halide_malloc");
-        free_id = get_func_id("halide_free");
+        stack.push_back(names.overhead_id);
 
         profiler_instance = Variable::make(Handle(), names.profiler_instance);
         profiler_local_sampling_token = Variable::make(Handle(), names.profiler_local_sampling_token);
@@ -108,7 +322,7 @@ public:
     map<int, uint64_t> func_stack_peak;     // map from func id -> peak stack allocation
 
     Stmt activate_thread(const Stmt &s) {
-        return activate_thread_helper(s, waiting_on_tasks_id);
+        return activate_thread_helper(s, names.thread_idle_id);
     }
 
     Stmt activate_main_thread(const Stmt &s) {
@@ -127,7 +341,7 @@ public:
 
     Stmt suspend_thread(const Stmt &s) {
         return Block::make({decr_active_threads(profiler_instance),
-                            unconditionally_set_current_func(waiting_on_tasks_id),
+                            unconditionally_set_current_func(names.thread_idle_id),
                             s,
                             incr_active_threads(profiler_instance),
                             unconditionally_set_current_func(stack.back())});
@@ -142,7 +356,6 @@ public:
 private:
     using IRMutator::visit;
 
-    int malloc_id, free_id, waiting_on_tasks_id;
     Expr profiler_instance;
     Expr profiler_local_sampling_token;
     Expr profiler_shared_sampling_token;
@@ -155,48 +368,44 @@ private:
     struct AllocSize {
         bool on_stack;
         Expr size;
+        // Entry id resolved at Allocate time; Free uses the cached value
+        // since the producer stack may differ at the two sites.
+        int id;
     };
 
     Scope<AllocSize> func_alloc_sizes;
 
     bool profiling_memory = true;
 
-    // Strip down the tuple name, e.g. f.0 into f
-    string normalize_name(const string &name) const {
-        size_t idx = name.find('.');
-        if (idx != std::string::npos) {
-            internal_assert(idx != 0);
-            return name.substr(0, idx);
-        } else {
-            return name;
-        }
-    }
+    enum class Kind { ProfiledFunc = 0,
+                      NonProfiledFunc,
+                      NotAFunc };
 
-    Function lookup_function(const string &name) const {
+    Kind classify(const std::string &name) const {
         auto it = env.find(name);
-        if (it != env.end()) {
-            return it->second;
+        if (it == env.end()) {
+            it = env.find(names.prefix(name));
         }
-        string norm_name = normalize_name(name);
-        it = env.find(norm_name);
         if (it != env.end()) {
-            return it->second;
+            if (it->second.should_not_profile()) {
+                return Kind::NonProfiledFunc;
+            } else {
+                return Kind::ProfiledFunc;
+            }
+        } else {
+            return Kind::NotAFunc;
         }
-        internal_error << "No function in the environment found for name '" << name << "'.\n";
-        return {};
     }
 
-    int get_func_id(const string &name) {
-        string norm_name = normalize_name(name);
-        int idx = -1;
-        map<string, int>::iterator iter = indices.find(norm_name);
-        if (iter == indices.end()) {
-            idx = (int)indices.size();
-            indices[norm_name] = idx;
-        } else {
-            idx = iter->second;
+    // Resolve a Func name to the entry id PreAllocateEntries minted for
+    // it under the currently-active producer chain.
+    int get_func_entry_id(const string &name) {
+        int parent = stack.back();
+        // overhead_id is a sentinel at stack bottom; treat it as "no parent".
+        if (parent == names.overhead_id) {
+            parent = -1;
         }
-        return idx;
+        return names.id_for_entry(names.prefix(name), parent);
     }
 
     Stmt unconditionally_set_current_func(int id) {
@@ -211,7 +420,7 @@ private:
         }
         most_recently_set_func = id;
         Expr last_arg = in_leaf_task ? profiler_local_sampling_token : reinterpret(Handle(), make_zero(UInt(64)));
-        // This call gets inlined and becomes a single store instruction.
+        // Inlined to a single store.
         Stmt s = Evaluate::make(Call::make(Int(32), "halide_profiler_set_current_func",
                                            {profiler_instance, id, last_arg}, Call::Extern));
 
@@ -253,8 +462,7 @@ private:
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::profiling_enable_instance_marker)) {
-            // We're out of the bounds query code. This instance should be
-            // tracked (including any samples taken before this point.
+            // End of the bounds-query prelude — start collecting samples.
             return Call::make(Int(32), "halide_profiler_enable_instance",
                               {profiler_instance}, Call::Extern);
         } else {
@@ -273,19 +481,34 @@ private:
 
         bool on_stack = can_fit_on_stack && !op->new_expr.defined();
 
-        func_alloc_sizes.push(op->name, {on_stack, size});
+        // Resolve and cache the entry id here so visit(Free) can use it;
+        // Allocate may have been hoisted out of the producer that
+        // surrounds Free.
+        int idx;
+        switch (classify(op->name)) {
+        case Kind::ProfiledFunc:
+            idx = get_func_entry_id(op->name);
+            break;
+        case Kind::NonProfiledFunc:
+            // Attribute the stack size contribution to the deepest _profiled_ func.
+            idx = stack.back();
+            break;
+        case Kind::NotAFunc:
+            // Allocations whose name doesn't match a Func (e.g. fused
+            // allocation-group buffers) still get tracked: mint an
+            // allocation-kind entry under the current producer so the
+            // bytes are attributed somewhere.
+            idx = names.id_for_entry(op->name, stack.back() == names.overhead_id ? -1 : stack.back(),
+                                     halide_profiler_func_kind_allocation);
+            break;
+        }
+
+        func_alloc_sizes.push(op->name, {on_stack, size, idx});
 
         // compute_allocation_size() might return a zero size, if the allocation is
         // always conditionally false. remove_dead_allocations() is called after
         // inject_profiling() so this is a possible scenario.
-        if (!is_const_zero(size) && on_stack) {
-            int idx;
-            Function func = lookup_function(op->name);
-            if (func.should_not_profile()) {
-                idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
-            } else {
-                idx = get_func_id(op->name);
-            }
+        if (!is_const_zero(size) && on_stack && idx >= 0) {
             auto int_size = as_const_uint(size);
             internal_assert(int_size);  // Stack size is always a const int
             func_stack_current[idx] += *int_size;
@@ -299,12 +522,11 @@ private:
         vector<Stmt> tasks;
         bool track_heap_allocation = !is_const_zero(size) && !on_stack && profiling_memory;
         if (track_heap_allocation) {
-            int idx = get_func_id(op->name);
             debug(3) << "  Allocation on heap: " << op->name
                      << "(" << size << ") in pipeline "
                      << names.pipeline_name << "\n";
 
-            tasks.push_back(set_current_func(malloc_id));
+            tasks.push_back(set_current_func(names.malloc_id));
             tasks.push_back(Evaluate::make(Call::make(Int(32), "halide_profiler_memory_allocate",
                                                       {profiler_instance, idx, size}, Call::Extern)));
         }
@@ -340,13 +562,13 @@ private:
         Stmt stmt = IRMutator::visit(op);
 
         if (!is_const_zero(alloc.size)) {
+            int idx = alloc.id;
             if (!alloc.on_stack) {
                 if (profiling_memory) {
-                    int idx = get_func_id(op->name);
                     debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << names.pipeline_name << "\n";
 
                     vector<Stmt> tasks{
-                        set_current_func(free_id),
+                        set_current_func(names.free_id),
                         Evaluate::make(Call::make(Int(32), "halide_profiler_memory_free",
                                                   {profiler_instance, idx, alloc.size}, Call::Extern)),
                         stmt,
@@ -358,48 +580,35 @@ private:
                 auto int_size = as_const_uint(alloc.size);
                 internal_assert(int_size);
 
-                int idx;
-                Function func = lookup_function(op->name);
-                if (func.should_not_profile()) {
-                    idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
-                } else {
-                    idx = get_func_id(op->name);
+                if (idx >= 0) {
+                    func_stack_current[idx] -= *int_size;
+                    debug(3) << "  Free on stack: " << op->name
+                             << "(" << alloc.size << ") in pipeline " << names.pipeline_name
+                             << "; current: " << func_stack_current[idx]
+                             << "; peak: " << func_stack_peak[idx] << "\n";
                 }
-                func_stack_current[idx] -= *int_size;
-                debug(3) << "  Free on stack: " << op->name
-                         << "(" << alloc.size << ") in pipeline " << names.pipeline_name
-                         << "; current: " << func_stack_current[idx]
-                         << "; peak: " << func_stack_peak[idx] << "\n";
             }
         }
         return stmt;
     }
 
     Stmt visit(const ProducerConsumer *op) override {
-        int idx;
         Stmt body;
-        if (op->is_producer) {
-            Function func = lookup_function(op->name);
-            if (func.should_not_profile()) {
-                body = mutate(op->body);
-                if (body.same_as(op->body)) {
-                    return op;
-                }
-            } else {
-                idx = get_func_id(op->name);
+        if (classify(op->name) == Kind::ProfiledFunc) {
+            if (op->is_producer) {
+                int idx = get_func_entry_id(op->name);
                 stack.push_back(idx);
                 Stmt set_current = set_current_func(idx);
                 body = Block::make(set_current, mutate(op->body));
                 stack.pop_back();
+            } else {
+                Stmt set_current = set_current_func(stack.back());
+                body = Block::make(set_current, mutate(op->body));
             }
+            return ProducerConsumer::make(op->name, op->is_producer, body);
         } else {
-            // At the beginning of the consume step, set the current task
-            // back to the outer one.
-            Stmt set_current = set_current_func(stack.back());
-            body = Block::make(set_current, mutate(op->body));
+            return IRMutator::visit(op);
         }
-
-        return ProducerConsumer::make(op->name, op->is_producer, body);
     }
 
     Stmt visit_parallel_task(Stmt s) {
@@ -431,10 +640,8 @@ private:
     Stmt visit(const For *op) override {
         Stmt body = op->body;
 
-        // The for loop indicates a device transition or a
-        // parallel job launch. Decrement the number of active
-        // threads outside the loop, and increment it inside the
-        // body.
+        // Device transitions and parallel launches need an active-thread
+        // bracket around the body (incremented inside, decremented out).
         bool update_active_threads = (op->device_api == DeviceAPI::Hexagon ||
                                       op->is_unordered_parallel());
 
@@ -485,9 +692,7 @@ private:
             body = mutate(body);
             profiling_memory = old_profiling_memory;
 
-            // Get the profiler state pointer from scratch inside the
-            // kernel. There will be a separate copy of the state on
-            // the DSP that the host side will periodically query.
+            // Use the DSP-side copy of the profiler state.
             Expr get_state = Call::make(Handle(), "halide_hexagon_remote_profiler_get_global_instance", {}, Call::Extern);
             body = substitute(names.profiler_instance, Variable::make(Handle(), names.hvx_profiler_instance), body);
             body = LetStmt::make(names.hvx_profiler_instance, get_state, body);
@@ -504,6 +709,18 @@ private:
         }
 
         Stmt stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
+
+        // Sync after each outermost GPU launch so kernel time is billed
+        // to the right row rather than to a later blocking host call.
+        // This costs any overlap the schedule was getting; see the
+        // -profile target-feature doc in HalideRuntime.h.
+        if (op->device_api != DeviceAPI::None &&
+            op->device_api != DeviceAPI::Host &&
+            op->device_api != DeviceAPI::Hexagon) {
+            Expr device_interface = make_device_interface_call(op->device_api);
+            Stmt sync = call_extern_and_assert("halide_device_sync_global", {device_interface});
+            stmt = Block::make(stmt, sync);
+        }
 
         if (update_active_threads) {
             if (Internal::is_gpu(op->for_type)) {
@@ -534,66 +751,60 @@ private:
         return IfThenElse::make(std::move(condition), std::move(then_case), std::move(else_case));
     }
 
+    // Bill a halide_copy_to_{host,device} call (and its trailing assert,
+    // plus a device sync for copy_to_device) as a synthetic Func so it
+    // gets its own row in the report. InjectHostDevBufferCopies emits it
+    // as `let err = halide_copy_to_*(buf, ...) in assert(err == 0); ...`.
+    Stmt inject_buffer_copy_timing(const LetStmt *op, const Call *call) {
+        const Variable *var = call->args.front().as<Variable>();
+        internal_assert(var)
+            << "Expected to find a variable as first argument of the function call " << call->name << ".\n";
+        std::string buffer_name = var->name;
+        internal_assert(ends_with(buffer_name, ".buffer"))
+            << "Expected to find a variable ending in .buffer as first argument to function call " << call->name << "\n";
+        buffer_name = buffer_name.substr(0, buffer_name.size() - 7);
+
+        bool to_device = call->name == "halide_copy_to_device";
+        const char *tag = to_device ? " (copy to device)" : " (copy to host)";
+        int parent_id = stack.back();
+        if (parent_id == names.overhead_id) {
+            parent_id = -1;
+        }
+        int copy_id = names.id_for_entry(buffer_name + tag, parent_id);
+        Stmt start_profiler = set_current_func(copy_id);
+
+        const AssertStmt *copy_assert = nullptr;
+        Stmt other;
+        if (const Block *block = op->body.as<Block>()) {
+            copy_assert = block->first.as<AssertStmt>();
+            if (copy_assert) {
+                other = block->rest;
+            }
+        } else {
+            copy_assert = op->body.as<AssertStmt>();
+        }
+        internal_assert(copy_assert) << "No assert found after buffer copy.";
+
+        std::vector<Stmt> steps;
+        steps.push_back(AssertStmt::make(copy_assert->condition, copy_assert->message));
+        if (to_device) {
+            // Last arg to copy_to_device is the device interface.
+            Expr device_interface = call->args.back();
+            steps.push_back(call_extern_and_assert("halide_device_sync_global", {device_interface}));
+        }
+        steps.push_back(set_current_func(stack.back()));
+        if (other.defined()) {
+            steps.push_back(mutate(other));
+        }
+        return Block::make(start_profiler,
+                           LetStmt::make(op->name, mutate(op->value),
+                                         Block::make(steps)));
+    }
+
     Stmt visit(const LetStmt *op) override {
         if (const Call *call = op->value.as<Call>()) {
-            Stmt start_profiler;
             if (call->name == "halide_copy_to_host" || call->name == "halide_copy_to_device") {
-                std::string buffer_name;
-                if (const Variable *var = call->args.front().as<Variable>()) {
-                    buffer_name = var->name;
-                    if (ends_with(buffer_name, ".buffer")) {
-                        buffer_name = buffer_name.substr(0, buffer_name.size() - 7);
-                    } else {
-                        internal_error << "Expected to find a variable ending in .buffer as first argument to function call " << call->name << "\n";
-                    }
-                } else {
-                    internal_error << "Expected to find a variable as first argument of the function call " << call->name << ".\n";
-                }
-                bool requires_sync = false;
-                if (call->name == "halide_copy_to_host") {
-                    int copy_to_host_id = get_func_id(buffer_name + " (copy to host)");
-                    start_profiler = set_current_func(copy_to_host_id);
-                    requires_sync = false;
-                } else if (call->name == "halide_copy_to_device") {
-                    int copy_to_device_id = get_func_id(buffer_name + " (copy to device)");
-                    start_profiler = set_current_func(copy_to_device_id);
-                    requires_sync = true;
-                } else {
-                    internal_error << "Unexpected function name.\n";
-                }
-                if (start_profiler.defined()) {
-                    // The copy functions are followed by an assert, which we will wrap in the timed body.
-                    const AssertStmt *copy_assert = nullptr;
-                    Stmt other;
-                    if (const Block *block = op->body.as<Block>()) {
-                        if (const AssertStmt *assert = block->first.as<AssertStmt>()) {
-                            copy_assert = assert;
-                            other = block->rest;
-                        }
-                    } else if (const AssertStmt *assert = op->body.as<AssertStmt>()) {
-                        copy_assert = assert;
-                    }
-                    if (copy_assert) {
-                        std::vector<Stmt> steps;
-                        steps.push_back(AssertStmt::make(copy_assert->condition, copy_assert->message));
-                        if (requires_sync) {
-                            internal_assert(call->name == "halide_copy_to_device");
-                            Expr device_interface = call->args.back();  // The last argument to the copy_to_device calls is the device_interface.
-                            Stmt sync_and_assert = call_extern_and_assert("halide_device_sync_global", {device_interface});
-                            steps.push_back(sync_and_assert);
-                        }
-                        steps.push_back(set_current_func(stack.back()));
-
-                        if (other.defined()) {
-                            steps.push_back(mutate(other));
-                        }
-                        return Block::make(start_profiler,
-                                           LetStmt::make(op->name, mutate(op->value),
-                                                         Block::make(steps)));
-                    } else {
-                        internal_error << "No assert found after buffer copy.\n";
-                    }
-                }
+                return inject_buffer_copy_timing(op, call);
             }
         }
 
@@ -609,21 +820,37 @@ private:
 }  // namespace
 
 Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env) {
-    Names names(pipeline_name);
+    Names names(pipeline_name, env);
 
+    // 1) Allocate an id for every entry. After this, names.entry_info
+    //    is the full set of entries we'll report on.
+    Stmt s = PreAllocateEntries(names, env)(stmt);
+
+    // 2) Inject the profiler scaffolding: thread activation, memory
+    //    tracking, current-func tracking, copy-to-host/device timing.
     InjectProfiling profiling(names, env);
-    Stmt s = profiling(stmt);
+    s = profiling(s);
 
-    int num_funcs = (int)(profiling.indices.size());
-
-    // TODO: unique_name all these strings
+    int num_funcs = names.num_ids();
 
     Expr instance = Variable::make(Handle(), names.profiler_instance);
 
     Expr func_names_buf = Variable::make(Handle(), names.profiler_func_names);
+    Expr func_parents_buf = Variable::make(Handle(), names.profiler_func_parents);
+    Expr func_canonical_ids_buf = Variable::make(Handle(), names.profiler_func_canonical_ids);
+    Expr func_kinds_buf = Variable::make(Handle(), names.profiler_func_kinds);
+    Expr func_buffer_func_ids_buf = Variable::make(Handle(), names.profiler_func_buffer_func_ids);
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_instance_start",
-                                     {pipeline_name, num_funcs, func_names_buf, instance}, Call::Extern);
+                                     {pipeline_name,
+                                      num_funcs,
+                                      func_names_buf,
+                                      func_parents_buf,
+                                      func_canonical_ids_buf,
+                                      func_kinds_buf,
+                                      func_buffer_func_ids_buf,
+                                      instance},
+                                     Call::Extern);
 
     Expr profiler_start_error_code = Variable::make(Int(32), names.profiler_start_error_code);
 
@@ -667,13 +894,25 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
                            MemoryType::Auto, {num_funcs}, const_true(), s);
     }
 
-    for (const auto &p : profiling.indices) {
-        s = Block::make(Store::make(names.profiler_func_names, p.first, p.second, Parameter(), const_true(), ModulusRemainder()), s);
+    std::vector<Expr> func_names(num_funcs);
+    std::vector<Expr> func_parents(num_funcs);
+    std::vector<Expr> func_canonical_ids(num_funcs);
+    std::vector<Expr> func_kinds(num_funcs);
+    std::vector<Expr> func_buffer_func_ids(num_funcs);
+    for (int i = 0; i < num_funcs; i++) {
+        const auto &info = names.entry_info[i];
+        func_names[i] = info.name;
+        func_parents[i] = info.parent_id;
+        func_canonical_ids[i] = info.canonical_id;
+        func_kinds[i] = make_const(Int(32), (int)info.kind);
+        func_buffer_func_ids[i] = info.buffer_func_id;
     }
 
-    s = Block::make(s, Free::make(names.profiler_func_names));
-    s = Allocate::make(names.profiler_func_names, Handle(),
-                       MemoryType::Auto, {num_funcs}, const_true(), s);
+    s = LetStmt::make(names.profiler_func_names, Call::make(Handle(), Call::make_struct, func_names, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_parents, Call::make(Handle(), Call::make_struct, func_parents, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_canonical_ids, Call::make(Handle(), Call::make_struct, func_canonical_ids, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_kinds, Call::make(Handle(), Call::make_struct, func_kinds, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_buffer_func_ids, Call::make(Handle(), Call::make_struct, func_buffer_func_ids, Call::Intrinsic), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 
     // Allocate memory for the profiler instance state
