@@ -11,6 +11,7 @@
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
 #include "AddSplitFactorChecks.h"
+#include "AddTypeChangeChecks.h"
 #include "AllocationBoundsInference.h"
 #include "AsyncProducers.h"
 #include "BoundConstantExtentLoops.h"
@@ -214,6 +215,10 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Asserting that all split factors are positive...\n";
     s = add_split_factor_checks(s, env);
     log("Lowering after asserting that all split factors are positive:", s);
+
+    debug(1) << "Asserting change_type() accumulations cannot overflow...\n";
+    s = add_type_change_checks(s, env);
+    log("Lowering after asserting change_type() accumulations cannot overflow:", s);
 
     debug(1) << "Removing extern loops...\n";
     s = remove_extern_loops(s);

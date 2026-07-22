@@ -23,6 +23,7 @@ void define_stage(py::module &m) {
                  py::arg("preserved"))
             .def("rfactor", static_cast<Func (Stage::*)(const RVar &, const Var &)>(&Stage::rfactor),
                  py::arg("r"), py::arg("v"))
+            .def("hoist_invariants", &Stage::hoist_invariants)
 
             .def("split_vars", [](const Stage &stage) -> py::list {
                 auto vars = stage.split_vars();

@@ -109,6 +109,11 @@ struct TableKey {
 
 map<TableKey, vector<AssociativePattern>> pattern_tables;
 
+std::mutex &ops_table_lock() {
+    static std::mutex lock;
+    return lock;
+}
+
 #define declare_vars(t, index)                                        \
     Expr x##index = Variable::make((t), "x" + std::to_string(index)); \
     Expr y##index = Variable::make((t), "y" + std::to_string(index)); \
@@ -362,8 +367,7 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     const vector<AssociativePattern> &table = [&]() -> decltype(auto) {
         // get_ops_table_helper() lazily initializes the table, so ensure
         // that multiple threads can't try to do so at the same time.
-        static std::mutex ops_table_lock;
-        std::scoped_lock lock_guard(ops_table_lock);
+        std::scoped_lock lock_guard(ops_table_lock());
 
         return get_ops_table_helper(types, exprs[0].node_type(), exprs.size());
     }();
@@ -374,6 +378,24 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     }
 
     return table;
+}
+
+std::optional<Expr> get_associative_identity(Type type, IRNodeType root) {
+    std::scoped_lock lock_guard(ops_table_lock());
+
+    const vector<AssociativePattern> &table = get_ops_table_helper({type}, root, 1);
+    if (table.empty()) {
+        return std::nullopt;
+    }
+
+    const Expr &identity = table.front().identities.front();
+    for (const AssociativePattern &pattern : table) {
+        internal_assert(pattern.size() == 1);
+        if (!equal(pattern.identities.front(), identity)) {
+            return std::nullopt;
+        }
+    }
+    return identity;
 }
 
 }  // namespace Internal

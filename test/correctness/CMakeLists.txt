@@ -42,6 +42,7 @@ tests(
     cascaded_filters.cpp
     cast.cpp
     cast_handle.cpp
+    change_type.cpp
     chunk.cpp
     chunk_sharing.cpp
     circular_reference_leak.cpp
@@ -94,6 +95,7 @@ tests(
     downsampling_reduce.cpp
     dynamic_allocation_in_gpu_kernel.cpp
     dynamic_reduction_bounds.cpp
+    eager_inline.cpp
     early_out.cpp
     embed_bitcode.cpp
     erf.cpp

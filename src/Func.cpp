@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -14,6 +15,7 @@
 #include "Associativity.h"
 #include "Callable.h"
 #include "CodeGen_LLVM.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
@@ -21,10 +23,13 @@
 #include "Function.h"
 #include "IR.h"
 #include "IREquality.h"
+#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 #include "ImageParam.h"
+#include "Inline.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Param.h"
@@ -573,55 +578,6 @@ std::string Stage::dump_argument_list() const {
     return dump_dim_list(definition.schedule().dims());
 }
 
-namespace {
-
-class SubstituteSelfReference : public IRMutator {
-    using IRMutator::visit;
-
-    const string func;
-    const Function substitute;
-    const vector<Var> new_args;
-
-    Expr visit(const Call *c) override {
-        Expr expr = IRMutator::visit(c);
-        c = expr.as<Call>();
-        internal_assert(c);
-
-        if ((c->call_type == Call::Halide) && (func == c->name)) {
-            debug(4) << "...Replace call to Func \"" << c->name << "\" with "
-                     << "\"" << substitute.name() << "\"\n";
-            vector<Expr> args;
-            args.insert(args.end(), c->args.begin(), c->args.end());
-            args.insert(args.end(), new_args.begin(), new_args.end());
-            expr = Call::make(substitute, args, c->value_index);
-        }
-        return expr;
-    }
-
-public:
-    SubstituteSelfReference(const string &func, const Function &substitute,
-                            const vector<Var> &new_args)
-        : func(func), substitute(substitute), new_args(new_args) {
-        internal_assert(substitute.get_contents().defined());
-    }
-};
-
-/** Substitute all self-reference calls to 'func' with 'substitute' which
- * args (LHS) is the old args (LHS) plus 'new_args' in that order.
- * Expect this method to be called on the value (RHS) of an update definition. */
-vector<Expr> substitute_self_reference(const vector<Expr> &values, const string &func,
-                                       const Function &substitute, const vector<Var> &new_args) {
-    SubstituteSelfReference subs(func, substitute, new_args);
-    vector<Expr> result;
-    result.reserve(values.size());
-    for (const auto &val : values) {
-        result.push_back(subs(val));
-    }
-    return result;
-}
-
-}  // anonymous namespace
-
 Func Stage::rfactor(const RVar &r, const Var &v) {
     definition.schedule().touched() = true;
     return rfactor({{r, v}});
@@ -629,6 +585,29 @@ Func Stage::rfactor(const RVar &r, const Var &v) {
 
 // Helpers for rfactor implementation
 namespace {
+
+// Replace self-references to `func_name` with calls to the intermediate `intm`,
+// appending the preserved vars to the call's args. Expected to be called on the
+// values (RHS) of an update definition.
+vector<Expr> substitute_self_reference(vector<Expr> values,
+                                       const string &func_name,
+                                       const Function &intm,
+                                       const vector<Var> &preserved_vars) {
+    for (Expr &v : values) {
+        v = mutate_with(v, [&](auto *self, const Call *c) -> Expr {
+            Expr expr = self->visit_base(c);
+            c = expr.as<Call>();
+            internal_assert(c);
+            if (c->call_type == Call::Halide && func_name == c->name) {
+                vector<Expr> args(c->args);
+                args.insert(args.end(), preserved_vars.begin(), preserved_vars.end());
+                expr = Call::make(intm, args, c->value_index);
+            }
+            return expr;
+        });
+    }
+    return values;
+}
 
 optional<Dim> find_dim(const vector<Dim> &items, const VarOrRVar &v) {
     const auto has_v = std::find_if(items.begin(), items.end(), [&](auto &x) {
@@ -682,17 +661,27 @@ string dequalify(string name) {
     return name;
 }
 
-vector<Dim> subst_dims(const SubstitutionMap &substitution_map, const vector<Dim> &dims) {
-    auto new_dims = dims;
-    for (auto &dim : new_dims) {
-        if (const auto it = substitution_map.find(dim.var); it != substitution_map.end()) {
-            const Variable *new_var = it->second.as<Variable>();
-            internal_assert(new_var);
-            dim.var = new_var->name;
-        }
+struct RFactorProjection {
+    const SubstitutionMap &rdom_promises;
+    const SubstitutionMap &vars;
+
+    template<typename T>
+    T operator()(const T &x) const {
+        return substitute(vars, substitute(rdom_promises, x));
     }
-    return new_dims;
-}
+
+    vector<Dim> operator()(const vector<Dim> &dims) const {
+        auto new_dims = dims;
+        for (auto &dim : new_dims) {
+            if (const auto it = vars.find(dim.var); it != vars.end()) {
+                const Variable *new_var = it->second.as<Variable>();
+                internal_assert(new_var);
+                dim.var = new_var->name;
+            }
+        }
+        return new_dims;
+    }
+};
 
 pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, const ReductionDomain &rdom, const vector<Split> &splits) {
     // The bounds projections maps expressions that reference the old RDom
@@ -756,6 +745,172 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
         add_let(dim_projection, dims[i].var, RVar(new_rdom, i));
     }
     return {new_rdom, dim_projection};
+}
+
+// A semiring distributive law used by hoist_invariants(): `inner` distributes
+// over the outer (reduction) op, so a loop-invariant operand of `inner` can be
+// hoisted out of the reduction.
+struct DistributiveLaw {
+    IRNodeType outer_op;
+    IRNodeType inner_op;
+};
+
+constexpr DistributiveLaw distributive_laws[] = {
+    {IRNodeType::Add, IRNodeType::Mul},  // sum_k(s * x_k) = s * sum_k(x_k)
+    {IRNodeType::Min, IRNodeType::Add},  // min_k(c + x_k) = c + min_k(x_k)
+    {IRNodeType::Max, IRNodeType::Add},  // max_k(c + x_k) = c + max_k(x_k)
+    {IRNodeType::Or, IRNodeType::And},   // or_k(p && x_k)  = p && or_k(x_k)
+    {IRNodeType::And, IRNodeType::Or},   // and_k(p || x_k) = p || and_k(x_k)
+};
+
+bool distributive_law_valid_for_type(const DistributiveLaw &law, Type t) {
+    if (law.outer_op == IRNodeType::Min || law.outer_op == IRNodeType::Max) {
+        // Hoisting min/max over addition relies on addition being order-preserving.
+        // This is not true for unsigned or narrow signed integer wraparound.
+        return !t.can_overflow();
+    }
+    return true;
+}
+
+// nullopt if no law's outer_op matches, or if the matching law is invalid for `op`'s type.
+optional<DistributiveLaw> distributive_law_for(const Expr &op) {
+    for (const DistributiveLaw &law : distributive_laws) {
+        if (law.outer_op == op.node_type()) {
+            return distributive_law_valid_for_type(law, op.type()) ? std::make_optional(law) : std::nullopt;
+        }
+    }
+    return std::nullopt;
+}
+
+// If `e` is a binary op of node type `op` and exactly one of its two operands
+// satisfies `is_selected`, returns {selected operand, other operand}. Returns
+// nullopt if `e` isn't a binary `op`, or if neither/both operands match.
+template<typename Predicate>
+optional<pair<Expr, Expr>> select_binary_operand(const Expr &e, IRNodeType op, Predicate &&is_selected) {
+    if (e.node_type() != op) {
+        return std::nullopt;
+    }
+    // `op` is always a binary op, so this is guaranteed to have a value.
+    auto [a, b] = *as_binary_operands(e);
+    const bool a_sel = is_selected(a);
+    const bool b_sel = is_selected(b);
+    if (a_sel == b_sel) {
+        return std::nullopt;
+    }
+    return a_sel ? std::make_pair(a, b) : std::make_pair(b, a);
+}
+
+// Collect the leaves of a chain of `op`-typed binary nodes.
+// E.g., flatten (a*b)*(c*d) into [a, b, c, d]
+void flatten_associative_chain(const Expr &e, IRNodeType op, vector<Expr> &leaves) {
+    if (e.node_type() == op) {
+        auto [a, b] = *as_binary_operands(e);
+        flatten_associative_chain(a, op, leaves);
+        flatten_associative_chain(b, op, leaves);
+    } else {
+        leaves.push_back(e);
+    }
+}
+
+struct HoistedFactor {
+    IRNodeType op;
+    Expr factor;      // The loop-invariant distributable factor, expressed in
+                      // the preserved update's coordinate system.
+    Expr inner_body;  // The remaining body after removing the factor. It keeps
+                      // its natural type; changing the accumulation type is the
+                      // job of the separate change_type() directive.
+};
+
+// Given the non-self-reference increment from an update body and the
+// distributive law of the outer associative op, extract a loop-invariant factor
+// that distributes over the outer op. `intermediate_vars` is the set of RVar
+// names the factor must NOT reference after projecting into the intermediate
+// update (the rvars the intermediate reduces over).
+optional<HoistedFactor> extract_factor(const Expr &increment,
+                                       const DistributiveLaw &law,
+                                       const Scope<> &intermediate_vars,
+                                       const RFactorProjection &to_intermediate,
+                                       const RFactorProjection &to_preserved) {
+    auto is_intermediate_rvar_free = [&](const Expr &e) {
+        return !expr_uses_vars(to_intermediate(e), intermediate_vars);
+    };
+
+    // An invariant factor may be nested arbitrarily deep in an
+    // associative/commutative chain, so flatten the whole chain
+    // into leaves and partition by invariance. This is just
+    // commutative-ring algebra: l1*l2*...*lN can always be regrouped
+    // as (product of invariant leaves) * (product of dependent leaves),
+    // regardless of how the multiplication was parenthesized.
+    vector<Expr> leaves;
+    flatten_associative_chain(increment, law.inner_op, leaves);
+
+    vector<Expr> invariant_leaves, dependent_leaves;
+    for (const Expr &leaf : leaves) {
+        if (is_intermediate_rvar_free(leaf)) {
+            invariant_leaves.push_back(to_preserved(leaf));
+        } else {
+            dependent_leaves.push_back(leaf);
+        }
+    }
+    if (invariant_leaves.empty() || dependent_leaves.empty()) {
+        // Nothing to hoist, or the entire increment is invariant (a
+        // degenerate case not worth special-casing here).
+        return std::nullopt;
+    }
+
+    Expr factor;
+    for (const Expr &leaf : invariant_leaves) {
+        factor = factor.defined() ? make_binary_op(law.inner_op, factor, leaf) : leaf;
+    }
+    Expr body;
+    for (const Expr &leaf : dependent_leaves) {
+        body = body.defined() ? make_binary_op(law.inner_op, body, leaf) : leaf;
+    }
+
+    return HoistedFactor{law.inner_op, factor, body};
+}
+
+vector<optional<HoistedFactor>> extract_hoisted_factors(const vector<Expr> &values,
+                                                        const AssociativeOp &prover_result,
+                                                        const string &func_name,
+                                                        const Scope<> &intermediate_vars,
+                                                        const RFactorProjection &to_intermediate,
+                                                        const RFactorProjection &to_preserved) {
+    vector<optional<HoistedFactor>> result(values.size());
+
+    auto is_orig_self_ref = [&](const Expr &e) {
+        const Call *c = e.as<Call>();
+        return c && c->name == func_name && c->call_type == Call::Halide;
+    };
+
+    auto extract_increment = [&](const Expr &val, const DistributiveLaw &law) -> optional<Expr> {
+        optional<pair<Expr, Expr>> split = select_binary_operand(val, law.outer_op, is_orig_self_ref);
+        return split ? std::make_optional(split->second) : std::nullopt;
+    };
+
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (optional<DistributiveLaw> law = distributive_law_for(prover_result.pattern.ops[i])) {
+            // The value may be wrapped in Let nodes (e.g. an rfactor of this same
+            // update introduced promise_clamped bindings for a preserved RVar).
+            // Inline them so the outer op is visible to the pattern match.
+            Expr value = substitute_in_all_lets(values[i]);
+            if (optional<Expr> increment = extract_increment(value, *law)) {
+                result[i] = extract_factor(*increment, *law, intermediate_vars,
+                                           to_intermediate, to_preserved);
+            }
+        }
+    }
+    return result;
+}
+
+// Re-apply the hoisted factor to the intermediate's result at the write-back
+// step. The intermediate accumulates the inner body at its natural type (the
+// same type as the outer op), so no cast is needed.
+Expr apply_hoisted_factor(const Expr &r, const optional<HoistedFactor> &factor) {
+    if (!factor) {
+        return r;
+    }
+    return make_binary_op(factor->op, factor->factor, r);
 }
 
 }  // namespace
@@ -854,7 +1009,7 @@ pair<vector<Split>, vector<Split>> Stage::rfactor_validate_args(const std::vecto
     return std::make_pair(std::move(var_splits), std::move(rvar_splits));
 }
 
-Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
+Func Stage::rfactor_impl(const vector<pair<RVar, Var>> &preserved, bool hoist_invariant_factor) {
     user_assert(!definition.is_init()) << "rfactor() must be called on an update definition\n";
 
     definition.schedule().touched() = true;
@@ -918,6 +1073,9 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     // Project the RDom into each side
     ReductionDomain intermediate_rdom, preserved_rdom;
     SubstitutionMap intermediate_map, preserved_map;
+    RFactorProjection to_intermediate{rdom_promises, intermediate_map};
+    RFactorProjection to_preserved{rdom_promises, preserved_map};
+
     {
         // Intermediate
         std::tie(intermediate_rdom, intermediate_map) = project_rdom(intermediate_rdims, rdom, rvar_splits);
@@ -926,9 +1084,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
 
         {
-            Expr pred = intermediate_rdom.predicate();
-            pred = substitute(rdom_promises, pred);
-            pred = substitute(intermediate_map, pred);
+            Expr pred = to_intermediate(intermediate_rdom.predicate());
             intermediate_rdom.set_predicate(simplify(pred));
         }
 
@@ -941,9 +1097,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
             intm_rdom.push(var, Interval{min, min + extent - 1});
         }
         {
-            Expr pred = preserved_rdom.predicate();
-            pred = substitute(rdom_promises, pred);
-            pred = substitute(preserved_map, pred);
+            Expr pred = to_preserved(preserved_rdom.predicate());
             pred = or_condition_over_domain(pred, intm_rdom);
             preserved_rdom.set_predicate(pred);
         }
@@ -951,6 +1105,29 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
 
     // Intermediate func
     Func intm(function.name() + "_intm");
+
+    // Must happen before intm(args)=Tuple(...) so that output_types is set correctly
+    // from the start. substitute_self_reference uses intm.types() to determine the
+    // Call type, and changing output_types afterward has no effect.
+    const size_t n_vals = definition.values().size();
+    vector<optional<HoistedFactor>> hoisted_factors(n_vals);
+    if (hoist_invariant_factor) {
+        // A factor is hoistable if, after projecting the original expression
+        // into the intermediate update, it does not depend on any RVar reduced
+        // by that intermediate update. It may depend on preserved RVars.
+        Scope<> intermediate_vars;
+        for (const auto &[var, min, extent] : intermediate_rdom.domain()) {
+            intermediate_vars.push(var);
+        }
+        hoisted_factors = extract_hoisted_factors(definition.values(), prover_result,
+                                                  function.name(), intermediate_vars,
+                                                  to_intermediate, to_preserved);
+        const bool any_hoisted = std::any_of(hoisted_factors.begin(), hoisted_factors.end(),
+                                             [](const auto &f) { return f.has_value(); });
+        user_assert(any_hoisted)
+            << "hoist_invariants() could not find a distributable loop-invariant "
+            << "factor in the update definition of " << function.name() << ".\n";
+    }
 
     // Intermediate pure definition
     {
@@ -963,13 +1140,24 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     {
         vector<Expr> args = definition.args();
         args.insert(args.end(), preserved_vars.begin(), preserved_vars.end());
-        args = substitute(rdom_promises, args);
-        args = substitute(intermediate_map, args);
+        args = to_intermediate(args);
 
+        // For a hoisted element, replace the value with the outer op applied to
+        // a self-reference and the inner body; the factor is re-applied later at
+        // write-back. substitute_self_reference then retargets the self-reference
+        // to the intermediate.
         vector<Expr> values = definition.values();
+        for (size_t i = 0; i < n_vals; ++i) {
+            if (hoisted_factors[i]) {
+                Expr self_ref = Call::make(hoisted_factors[i]->inner_body.type(), function.name(),
+                                           dim_vars_exprs, Call::Halide, FunctionPtr(), (int)i);
+                values[i] = make_binary_op(prover_result.pattern.ops[i].node_type(),
+                                           self_ref, hoisted_factors[i]->inner_body);
+            }
+        }
+
         values = substitute_self_reference(values, function.name(), intm.function(), preserved_vars);
-        values = substitute(rdom_promises, values);
-        values = substitute(intermediate_map, values);
+        values = to_intermediate(values);
         intm.function().define_update(args, values, intermediate_rdom);
 
         // Intermediate schedule
@@ -1003,7 +1191,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
 
         intm.function().update(0).schedule() = definition.schedule().get_copy();
-        intm.function().update(0).schedule().dims() = subst_dims(intermediate_map, intm_dims);
+        intm.function().update(0).schedule().dims() = to_intermediate(intm_dims);
         intm.function().update(0).schedule().rvars() = intermediate_rdom.domain();
         intm.function().update(0).schedule().splits() = var_splits;
     }
@@ -1019,11 +1207,12 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         for (size_t i = 0; i < definition.values().size(); ++i) {
             if (!prover_result.ys[i].var.empty()) {
                 Expr r = (definition.values().size() == 1) ? Expr(intm(f_load_args)) : Expr(intm(f_load_args)[i]);
+                r = apply_hoisted_factor(r, hoisted_factors[i]);
                 add_let(preserved_map, prover_result.ys[i].var, r);
             }
 
             if (!prover_result.xs[i].var.empty()) {
-                Expr prev_val = Call::make(intm.types()[i], function.name(),
+                Expr prev_val = Call::make(function.output_types()[i], function.name(),
                                            dim_vars_exprs, Call::CallType::Halide,
                                            FunctionPtr(), i);
                 add_let(preserved_map, prover_result.xs[i].var, prev_val);
@@ -1063,15 +1252,132 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
 
         definition.args() = dim_vars_exprs;
-        definition.values() = substitute(preserved_map, substitute(rdom_promises, prover_result.pattern.ops));
+        definition.values() = to_preserved(prover_result.pattern.ops);
         definition.predicate() = preserved_rdom.predicate();
-        definition.schedule().dims() = subst_dims(preserved_map, reducing_dims);
+        definition.schedule().dims() = to_preserved(reducing_dims);
         definition.schedule().rvars() = preserved_rdom.domain();
         definition.schedule().splits() = var_splits;
     }
 
     return intm;
 }
+
+Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
+    return rfactor_impl(preserved, /*hoist_invariant_factor=*/false);
+}
+
+Func Stage::hoist_invariants() {
+    definition.schedule().touched() = true;
+    return rfactor_impl({}, /*hoist_invariant_factor=*/true);
+}
+
+// Helpers for change_type implementation
+namespace {
+
+// Does `e` contain a direct Halide call to `fname` (a self-reference)?
+bool contains_self_reference(const Expr &e, const string &fname) {
+    class Finder : public IRGraphVisitor {
+        using IRGraphVisitor::visit;
+        const string &fname;
+        void visit(const Call *c) override {
+            if (c->call_type == Call::Halide && c->name == fname) {
+                found = true;
+            }
+            IRGraphVisitor::visit(c);
+        }
+
+    public:
+        bool found = false;
+        explicit Finder(const string &f)
+            : fname(f) {
+        }
+    } finder(fname);
+    e.accept(&finder);
+    return finder.found;
+}
+
+// Rewrite a factor-free leaf expression `e` to type `t`, preferring integer
+// forms over float round-trips so patterns like widening_mul survive to
+// instruction selection. This is the type-narrowing logic previously wired into
+// hoisted rfactor, now driven by an explicit target type.
+Expr retype_leaf(const Expr &e, Type t) {
+    if (e.type() == t) {
+        return e;
+    }
+
+    // Expose a single promotion cast for products/sums/diffs of two same-width
+    // integer operands, e.g. cast<f32>(a) * cast<f32>(b) == cast<f32>(widening_mul(a, b)).
+    Expr folded = e;
+    {
+        Expr a8i = Variable::make(Int(8), "a"), b8i = Variable::make(Int(8), "b");
+        Expr a8u = Variable::make(UInt(8), "a"), b8u = Variable::make(UInt(8), "b");
+        Expr a16i = Variable::make(Int(16), "a"), b16i = Variable::make(Int(16), "b");
+        Expr a16u = Variable::make(UInt(16), "a"), b16u = Variable::make(UInt(16), "b");
+        std::map<string, Expr> matches;
+        const std::pair<Expr, Expr> patterns[] = {
+            {cast(Float(32), a8i) * cast(Float(32), b8i), cast(Float(32), widening_mul(a8i, b8i))},
+            {cast(Float(32), a8u) * cast(Float(32), b8u), cast(Float(32), widening_mul(a8u, b8u))},
+            {cast(Float(32), a16i) * cast(Float(32), b16i), cast(Float(32), widening_mul(a16i, b16i))},
+            {cast(Float(32), a16u) * cast(Float(32), b16u), cast(Float(32), widening_mul(a16u, b16u))},
+            {cast(Float(32), a8i) + cast(Float(32), b8i), cast(Float(32), widening_add(a8i, b8i))},
+            {cast(Float(32), a8u) + cast(Float(32), b8u), cast(Float(32), widening_add(a8u, b8u))},
+            {cast(Float(32), a8i) - cast(Float(32), b8i), cast(Float(32), widening_sub(a8i, b8i))},
+            {cast(Float(32), a8u) - cast(Float(32), b8u), cast(Float(32), widening_sub(a8u, b8u))},
+        };
+        for (const auto &[pattern, result] : patterns) {
+            if (expr_match(pattern, folded, matches)) {
+                folded = substitute(matches, result);
+                break;
+            }
+        }
+    }
+
+    // Strip an outer int->float promotion cast, widening the integer to the
+    // target's width if needed (a strict_cast is a Call, not a Cast, and is left
+    // alone). This keeps the accumulation at an integer type.
+    if (const Cast *c = folded.as<Cast>()) {
+        if (folded.type().is_float() && c->value.type().is_int_or_uint() &&
+            t.is_int_or_uint() && t.bits() >= c->value.type().bits()) {
+            return (c->value.type() == t) ? c->value : cast(t, c->value);
+        }
+    }
+
+    return cast(t, folded);
+}
+
+// Retype a whole definition value to type `t`, retargeting self-references from
+// `fname` to `dst` and pushing casts down to the increment leaves. Only reduction
+// updates shaped as a tree of binary combiners over a self-reference and an
+// increment are supported.
+Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type t) {
+    if (const Call *c = e.as<Call>()) {
+        if (c->call_type == Call::Halide && c->name == fname) {
+            return Call::make(dst, c->args, c->value_index);
+        }
+    }
+    if (contains_self_reference(e, fname)) {
+        optional<pair<Expr, Expr>> operands = as_binary_operands(e);
+        user_assert(operands)
+            << "change_type() only supports update definitions built from binary "
+            << "operators over the accumulator; " << fname << " has an unsupported shape.\n";
+        return make_binary_op(e.node_type(),
+                              retype_value(operands->first, fname, dst, t),
+                              retype_value(operands->second, fname, dst, t));
+    }
+    return retype_leaf(e, t);
+}
+
+// The top-level associative combiner of a (let-stripped) reduction update value,
+// i.e. the node type of the binary op whose operands are the self-reference and
+// the increment. Returns nullopt if `val` isn't such a shape.
+optional<IRNodeType> reduction_op(const Expr &val, const string &fname) {
+    optional<pair<Expr, Expr>> split = select_binary_operand(val, val.node_type(), [&](const Expr &e) {
+        return contains_self_reference(e, fname);
+    });
+    return split ? std::make_optional(val.node_type()) : std::nullopt;
+}
+
+}  // namespace
 
 void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor_arg, bool exact, TailStrategy tail) {
     debug(4) << "In schedule for " << name() << ", split " << old << " into "
@@ -3142,6 +3448,202 @@ Func &Func::hoist_storage_root() {
 
 Func &Func::compute_inline() {
     return compute_at(LoopLevel::inlined());
+}
+
+Func &Func::eager_inline(const std::vector<Func> &fs) {
+    invalidate_cache();
+    for (const Func &f : fs) {
+        user_assert(f.defined())
+            << "eager_inline() was passed an undefined Func.\n";
+        user_assert(f.function().can_be_inlined())
+            << "eager_inline() cannot inline " << f.name()
+            << ": it must be a pure Func with no update or extern definition and "
+            << "no specializations.\n";
+        // Rewrites this Func's pure and update definitions in place, replacing
+        // every direct call to f with f's body. Processing fs left to right means
+        // a body spliced in by an earlier inline exposes its own direct calls to
+        // later fs, which the next iteration then inlines.
+        Internal::inline_function(func, f.function());
+    }
+    return *this;
+}
+
+namespace {
+
+// Prove that computing `typed`'s reduction at type `t` cannot overflow. Returns
+// true if it is safe; if safety can only be guaranteed under a runtime
+// precondition, that condition is returned in *condition. Returns false with an
+// explanation in *why if it cannot be proven.
+bool change_type_prove_safe(const Func &typed, Type t, Expr *condition, string *why) {
+    *condition = Expr();
+    const Function fn = typed.function();
+    const ConstantInterval limit = ConstantInterval::bounds_of_type(t);
+
+    auto fits = [&](const ConstantInterval &ci) {
+        return ci.min_defined && ci.max_defined && limit.min <= ci.min && ci.max <= limit.max;
+    };
+
+    // Pure / identity values must be representable at the new type.
+    for (const Expr &v : fn.values()) {
+        if (!fits(constant_integer_bounds(v))) {
+            *why = "the initial value may not be representable in the target type";
+            return false;
+        }
+    }
+
+    for (const Definition &def : fn.updates()) {
+        Expr val = substitute_in_all_lets(def.values()[0]);
+        optional<IRNodeType> op = reduction_op(val, fn.name());
+
+        // The increment is the non-self-reference operand of the combiner.
+        Expr increment = val;
+        if (op) {
+            optional<pair<Expr, Expr>> split = select_binary_operand(val, *op, [&](const Expr &e) {
+                return contains_self_reference(e, fn.name());
+            });
+            if (split) {
+                increment = split->second;
+            }
+        }
+        const ConstantInterval term = constant_integer_bounds(increment);
+
+        if (op && *op == IRNodeType::Add) {
+            // Bound the accumulator by (number of terms) x (per-term range).
+            int64_t n_max = 1;
+            bool symbolic = false;
+            Expr n_terms = make_const(Int(64), 1);
+            for (const auto &rv : def.schedule().rvars()) {
+                n_terms = simplify(n_terms * cast(Int(64), rv.extent));
+                // Only a literal extent is known at compile time; a symbolic
+                // extent (e.g. an ImageParam dimension) gets only type-based
+                // bounds, which we must not treat as a static bound.
+                if (optional<int64_t> ext = as_const_int(simplify(rv.extent)); ext && *ext >= 0) {
+                    n_max *= *ext;
+                } else {
+                    symbolic = true;
+                }
+            }
+            if (!symbolic) {
+                if (fits(term * ConstantInterval(0, n_max))) {
+                    continue;
+                }
+                *why = "the accumulated sum may exceed the target type's range";
+                return false;
+            }
+            // Symbolic term count: emit a runtime precondition instead.
+            if (!term.min_defined || !term.max_defined) {
+                *why = "the per-term magnitude is unbounded";
+                return false;
+            }
+            Expr cond = (make_const(Int(64), term.max) * n_terms <= make_const(Int(64), limit.max)) &&
+                        (make_const(Int(64), term.min) * n_terms >= make_const(Int(64), limit.min));
+            *condition = condition->defined() ? (*condition && cond) : cond;
+            continue;
+        }
+
+        // min / max / and / or (and unrecognized shapes): the result stays within
+        // a single term's range, so no accumulation overflow is possible.
+        if (fits(term)) {
+            continue;
+        }
+        *why = "a term may not be representable in the target type";
+        return false;
+    }
+    return true;
+}
+
+}  // namespace
+
+Func Func::change_type(Type t, bool unsafe) {
+    user_assert(defined()) << "change_type() called on undefined Func.\n";
+    user_assert(!func.has_extern_definition())
+        << "change_type() cannot be applied to the extern Func " << name() << ".\n";
+    user_assert(outputs() == 1)
+        << "change_type() currently supports only single-output Funcs, but "
+        << name() << " has " << outputs() << " outputs.\n";
+
+    invalidate_cache();
+
+    const Type old_t = func.output_types()[0];
+    if (old_t == t) {
+        return *this;
+    }
+
+    const string fname = func.name();
+    const vector<Var> pure_vars = args();
+    const vector<Expr> pure_arg_exprs(pure_vars.begin(), pure_vars.end());
+
+    // Determine the reduction op (if any), so min/max accumulations get the
+    // right identity at the new type rather than a lossy cast of e.g. +inf.
+    optional<IRNodeType> op;
+    if (func.has_update_definition()) {
+        op = reduction_op(substitute_in_all_lets(func.update(0).values()[0]), fname);
+    }
+    const bool is_min_max = op && (*op == IRNodeType::Min || *op == IRNodeType::Max);
+
+    // Build the retyped clone.
+    Func typed(fname + "_typed");
+
+    // Pure definition.
+    {
+        vector<Expr> retyped;
+        for (const Expr &v : func.values()) {
+            if (is_min_max) {
+                optional<Expr> id = get_associative_identity(t, *op);
+                user_assert(id) << "change_type() could not find an identity for "
+                                << IRNodeType_string(*op) << " at type " << t << ".\n";
+                retyped.push_back(*id);
+            } else {
+                retyped.push_back(retype_leaf(v, t));
+            }
+        }
+        // Single-output only (asserted above), so there is exactly one value.
+        typed(pure_vars) = retyped[0];
+    }
+
+    // Update definitions. The retyped values still reference the original
+    // reduction domain, so pass a default domain and let define_update discover
+    // it from the values (passing a freshly-built one would trip its identity
+    // check).
+    for (size_t u = 0; u < func.updates().size(); u++) {
+        const Definition &def = func.update(u);
+        vector<Expr> vals;
+        vals.reserve(def.values().size());
+        for (const Expr &v : def.values()) {
+            vals.push_back(retype_value(substitute_in_all_lets(v), fname, typed.function(), t));
+        }
+        typed.function().define_update(def.args(), vals, ReductionDomain{});
+        typed.function().update(u).schedule() = def.schedule().get_copy();
+    }
+
+    // Safety check.
+    if (!unsafe && t.is_int_or_uint()) {
+        Expr condition;
+        string why;
+        const bool ok = change_type_prove_safe(typed, t, &condition, &why);
+        user_assert(ok)
+            << "change_type(" << t << ") on " << fname << " may overflow: " << why << ".\n"
+            << "Pass unsafe=true to change_type() to bypass this check.\n";
+        if (condition.defined()) {
+            std::ostringstream msg;
+            msg << "change_type(" << t << ") on " << fname
+                << " requires the reduction extent to be small enough not to overflow";
+            typed.function().schedule().type_change_checks().emplace_back(condition, msg.str());
+        }
+    }
+
+    // Rewrite this Func into an inline cast-back wrapper of the retyped clone, so
+    // that every existing consumer keeps seeing the original type.
+    const Expr wrapped = cast(old_t, Call::make(typed.function(), pure_arg_exprs, 0));
+    vector<string> arg_names;
+    arg_names.reserve(pure_vars.size());
+    for (const Var &v : pure_vars) {
+        arg_names.push_back(v.name());
+    }
+    func.clear_definition();
+    func.define(arg_names, {wrapped});
+
+    return typed;
 }
 
 Func &Func::trace_loads() {

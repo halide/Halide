@@ -57,6 +57,7 @@ target_sources(
     AddImageChecks.h
     AddParameterChecks.h
     AddSplitFactorChecks.h
+    AddTypeChangeChecks.h
     AlignLoads.h
     AllocationBoundsInference.h
     ApplySplit.h
@@ -239,6 +240,7 @@ target_sources(
     AddImageChecks.cpp
     AddParameterChecks.cpp
     AddSplitFactorChecks.cpp
+    AddTypeChangeChecks.cpp
     AlignLoads.cpp
     AllocationBoundsInference.cpp
     ApplySplit.cpp

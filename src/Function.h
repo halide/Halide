@@ -119,6 +119,13 @@ public:
      * reduction domain */
     void define(const std::vector<std::string> &args, std::vector<Expr> values);
 
+    /** Reset this Function to an undefined state in place (clearing all pure,
+     * update, and extern definitions, output types/buffers, and schedule) while
+     * preserving the Function's object identity, so existing references to it
+     * remain valid and it can be given a fresh definition with define(). Used by
+     * Func::change_type() to turn the original Func into an inline wrapper. */
+    void clear_definition();
+
     /** Add an update definition to this function. It must already have a pure
      * definition but not an update definition, and the length of args must
      * match the length of args used in the pure definition. 'value' may depend

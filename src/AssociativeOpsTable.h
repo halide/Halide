@@ -8,6 +8,7 @@
 #include "IREquality.h"
 #include "IROperator.h"
 
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -70,6 +71,10 @@ struct AssociativePattern {
 };
 
 const std::vector<AssociativePattern> &get_ops_table(const std::vector<Expr> &exprs);
+
+/** Return the identity for a single-output associative op, if the table has one
+ * and all matching patterns agree on it. */
+std::optional<Expr> get_associative_identity(Type type, IRNodeType root);
 
 }  // namespace Internal
 }  // namespace Halide

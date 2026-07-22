@@ -219,6 +219,8 @@ void define_func(py::module &m) {
             .def("bound_storage", &Func::bound_storage)
             .def("memoize", &Func::memoize, py::arg("eviction_key") = EvictionKey())
             .def("compute_inline", &Func::compute_inline)
+            .def("eager_inline", &Func::eager_inline, py::arg("fs"))
+            .def("change_type", &Func::change_type, py::arg("type"), py::arg("unsafe") = false)
             .def("compute_root", &Func::compute_root)
             .def("store_root", &Func::store_root)
 

@@ -189,7 +189,10 @@ public:
     Inliner(const Function &f)
         : func(f) {
         internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
-        validate_schedule_inlined_function(f);
+        // Note: the inlined function's schedule is validated at lowering time in
+        // ScheduleFunctions (schedule_functions), where loop levels are locked.
+        // Validating here too is redundant and breaks schedule-time inlining
+        // (e.g. Func::eager_inline), where loop levels are not yet locked.
     }
 };
 
