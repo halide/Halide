@@ -2187,6 +2187,46 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
+    if (f.is_inductive()) {
+        // Check that any RDom used in an inductive Func's update (the
+        // undef<>() self-referencing-scan idiom) has its loop nested inside
+        // (i.e. innermost of) every inductive dimension. Recursive
+        // self-references along the inductive dimensions are only valid if
+        // they refer to values computed by prior, fully-completed
+        // iterations of the RDom's loop, which requires the RDom loop to be
+        // the innermost loop relative to the inductive dimensions.
+        for (const Definition &upd : f.updates()) {
+            const vector<Dim> &dims = upd.schedule().dims();
+            int innermost_rvar_pos = -1;
+            for (size_t i = 0; i < dims.size(); i++) {
+                if (dims[i].is_rvar()) {
+                    innermost_rvar_pos = std::max(innermost_rvar_pos, (int)i);
+                }
+            }
+            if (innermost_rvar_pos == -1) {
+                continue;
+            }
+            for (size_t i = 0; i < upd.args().size() && i < f.args().size(); i++) {
+                if (!f.is_inductive(f.args()[i])) {
+                    continue;
+                }
+                const Variable *v = upd.args()[i].as<Variable>();
+                if (!v) {
+                    continue;
+                }
+                for (size_t d = 0; d < dims.size(); d++) {
+                    if (dims[d].var == v->name) {
+                        user_assert(innermost_rvar_pos < (int)d)
+                            << "In the update definition of inductive Func " << f.name()
+                            << ", the RDom's loop must be nested inside all inductive "
+                            << "variable loops, but inductive variable " << v->name
+                            << " is nested inside the RDom's loop.\n";
+                    }
+                }
+            }
+        }
+    }
+
     // Emit a warning if only some of the steps have been scheduled.
     bool any_scheduled = f.has_pure_definition() && f.definition().schedule().touched();
     for (const Definition &r : f.updates()) {

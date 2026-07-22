@@ -10,11 +10,11 @@
 #include "Inductive.h"
 #include "Inline.h"
 #include "Qualify.h"
-#include "Scope.h"
+#include "Scope.h"(
 #include "Simplify.h"
 
 #include <algorithm>
-#include <iterator>
+#include <iterator>)
 #include <numeric>
 
 namespace Halide {
@@ -1007,14 +1007,20 @@ public:
         // For any inductively defined functions, make sure their
         // bounds include the base case.
         for (Stage &s : stages) {
-            if (!s.func.is_pure() || !s.func.is_inductive()) {
+            bool eligible = s.func.is_pure() || s.func.updates().size() == 1;
+            if (!eligible || !s.func.is_inductive()) {
                 continue;
             }
             debug(4) << "Expanding bounds for inductively defined function " << s.func.name() << "\n";
+            vector<bool> is_inductive_var;
+            is_inductive_var.reserve(s.func.args().size());
+            for (const auto &arg : s.func.args()) {
+                is_inductive_var.push_back(s.func.is_inductive(arg));
+            }
             for (const auto &b1 : s.bounds) {
                 // const Box &b = b1.second;
                 for (const auto &cval : s.exprs) {
-                    s.bounds[b1.first] = expand_to_include_base_case(s.func.args(), cval.value, s.func.name(), s.bounds[b1.first]);
+                    s.bounds[b1.first] = expand_to_include_base_case(s.func.args(), is_inductive_var, cval.value, s.func.name(), s.bounds[b1.first], s.stage != 0);
                 }
             }
         }

@@ -48,8 +48,12 @@ namespace Halide {
 namespace Internal {
 
 /** Given an initial box for an inductively defined function,
-    returns an expanded box that includes the function's non-inductive base case. */
-Box expand_to_include_base_case(const std::vector<std::string> &vars, const Expr &RHS, const std::string &func, const Box &box_required);
+    returns an expanded box that includes the function's non-inductive base case.
+    is_inductive_var[i] should be true iff vars[i] is a dimension in which the
+    function actually recurses. */
+Box expand_to_include_base_case(const std::vector<std::string> &vars, const std::vector<bool> &is_inductive_var,
+                                const Expr &RHS, const std::string &func, const Box &box_required,
+                                bool is_update = false);
 
 }  // namespace Internal
 }  // namespace Halide
