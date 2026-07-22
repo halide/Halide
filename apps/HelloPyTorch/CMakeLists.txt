@@ -95,64 +95,47 @@ set(add_grad_types_f64
     d_output.type=float64
 )
 
-# List of ops exposed by the extension; populated as libraries are added.
+# List of ops exposed by the extension, and the PyTorch wrapper headers they
+# generate; both are populated by add_pytorch_op() as libraries are added.
 set(op_libs "")
+set(op_wrapper_headers "")
+
+# add_halide_library()'s PYTORCH_WRAPPER argument names a variable to receive
+# the generated wrapper header's path, not a filename -- see add_halide_library's
+# docs. This wraps it so callers don't have to manage that variable (or
+# op_libs/op_wrapper_headers) by hand.
+function(add_pytorch_op TARGET)
+    add_halide_library(${TARGET} ${ARGN} PYTORCH_WRAPPER "${TARGET}_pytorch_wrapper")
+    list(APPEND op_libs "${TARGET}")
+    list(APPEND op_wrapper_headers "${${TARGET}_pytorch_wrapper}")
+    set(op_libs "${op_libs}" PARENT_SCOPE)
+    set(op_wrapper_headers "${op_wrapper_headers}" PARENT_SCOPE)
+endfunction()
 
 # CPU ops -------------------------------------------------------------------
 
 # Forward op (add) and hand-written gradient (add_grad).
-add_halide_library(
-    add_float32
-    FROM add.generator
-    GENERATOR add
-    PARAMS ${add_types_f32}
-    PYTORCH_WRAPPER add_float32.pytorch.h
-)
-add_halide_library(
-    add_float64
-    FROM add.generator
-    GENERATOR add
-    PARAMS ${add_types_f64}
-    PYTORCH_WRAPPER add_float64.pytorch.h
-)
-add_halide_library(
-    add_grad_float32
-    FROM add.generator
-    GENERATOR add_grad
-    PARAMS ${add_grad_types_f32}
-    PYTORCH_WRAPPER add_grad_float32.pytorch.h
-)
-add_halide_library(
-    add_grad_float64
-    FROM add.generator
-    GENERATOR add_grad
-    PARAMS ${add_grad_types_f64}
-    PYTORCH_WRAPPER add_grad_float64.pytorch.h
-)
+add_pytorch_op(add_float32 FROM add.generator GENERATOR add PARAMS ${add_types_f32})
+add_pytorch_op(add_float64 FROM add.generator GENERATOR add PARAMS ${add_types_f64})
+add_pytorch_op(add_grad_float32 FROM add.generator GENERATOR add_grad PARAMS ${add_grad_types_f32})
+add_pytorch_op(add_grad_float64 FROM add.generator GENERATOR add_grad PARAMS ${add_grad_types_f64})
 
 # Halide-autodifferentiated gradient (add with -d 1 + Li2018 autoscheduler).
-add_halide_library(
+add_pytorch_op(
     add_halidegrad_float32
     FROM add.generator
     GENERATOR add
     GRADIENT_DESCENT
     AUTOSCHEDULER Halide::Li2018
     PARAMS ${add_types_f32}
-    PYTORCH_WRAPPER add_halidegrad_float32.pytorch.h
 )
-add_halide_library(
+add_pytorch_op(
     add_halidegrad_float64
     FROM add.generator
     GENERATOR add
     GRADIENT_DESCENT
     AUTOSCHEDULER Halide::Li2018
     PARAMS ${add_types_f64}
-    PYTORCH_WRAPPER add_halidegrad_float64.pytorch.h
-)
-
-list(APPEND op_libs
-    add_float32 add_float64 add_grad_float32 add_grad_float64 add_halidegrad_float32
-    add_halidegrad_float64
 )
 
 # CUDA ops ------------------------------------------------------------------
@@ -162,39 +145,35 @@ if (HELLO_PYTORCH_CUDA)
     # PyTorch's GPU memory managers can talk to each other.
     set(cuda_features cuda cuda_capability_61 user_context)
 
-    add_halide_library(
+    add_pytorch_op(
         add_cuda_float32
         FROM add.generator
         GENERATOR add
         FEATURES ${cuda_features}
         PARAMS ${add_types_f32}
-        PYTORCH_WRAPPER add_cuda_float32.pytorch.h
     )
-    add_halide_library(
+    add_pytorch_op(
         add_cuda_float64
         FROM add.generator
         GENERATOR add
         FEATURES ${cuda_features}
         PARAMS ${add_types_f64}
-        PYTORCH_WRAPPER add_cuda_float64.pytorch.h
     )
-    add_halide_library(
+    add_pytorch_op(
         add_grad_cuda_float32
         FROM add.generator
         GENERATOR add_grad
         FEATURES ${cuda_features}
         PARAMS ${add_grad_types_f32}
-        PYTORCH_WRAPPER add_grad_cuda_float32.pytorch.h
     )
-    add_halide_library(
+    add_pytorch_op(
         add_grad_cuda_float64
         FROM add.generator
         GENERATOR add_grad
         FEATURES ${cuda_features}
         PARAMS ${add_grad_types_f64}
-        PYTORCH_WRAPPER add_grad_cuda_float64.pytorch.h
     )
-    add_halide_library(
+    add_pytorch_op(
         add_halidegrad_cuda_float32
         FROM add.generator
         GENERATOR add
@@ -202,9 +181,8 @@ if (HELLO_PYTORCH_CUDA)
         AUTOSCHEDULER Halide::Li2018
         FEATURES ${cuda_features}
         PARAMS ${add_types_f32}
-        PYTORCH_WRAPPER add_halidegrad_cuda_float32.pytorch.h
     )
-    add_halide_library(
+    add_pytorch_op(
         add_halidegrad_cuda_float64
         FROM add.generator
         GENERATOR add
@@ -212,12 +190,6 @@ if (HELLO_PYTORCH_CUDA)
         AUTOSCHEDULER Halide::Li2018
         FEATURES ${cuda_features}
         PARAMS ${add_types_f64}
-        PYTORCH_WRAPPER add_halidegrad_cuda_float64.pytorch.h
-    )
-
-    list(APPEND op_libs
-        add_cuda_float32 add_cuda_float64 add_grad_cuda_float32 add_grad_cuda_float64
-        add_halidegrad_cuda_float32 add_halidegrad_cuda_float64
     )
 endif ()
 
@@ -230,8 +202,9 @@ if (HELLO_PYTORCH_CUDA)
     string(APPEND wrapper "#include \"HalidePyTorchCudaHelpers.h\"\n")
 endif ()
 string(APPEND wrapper "#include \"HalidePyTorchHelpers.h\"\n")
-foreach (op IN LISTS op_libs)
-    string(APPEND wrapper "#include \"${op}.pytorch.h\"\n")
+foreach (header IN LISTS op_wrapper_headers)
+    cmake_path(GET header FILENAME header_filename)
+    string(APPEND wrapper "#include \"${header_filename}\"\n")
 endforeach ()
 string(APPEND wrapper "\nPYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {\n")
 foreach (op IN LISTS op_libs)

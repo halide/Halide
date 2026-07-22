@@ -334,7 +334,7 @@
       "name": "valgrind",
       "configurePreset": "valgrind",
       "displayName": "Valgrind (ctest -T memcheck)",
-      "description": "Excludes the intentional-OOB tracing_stack test; combine with '-T memcheck' to run under valgrind",
+      "description": "Selects the tests to run under valgrind; CTest presets can't select the '-T memcheck' action on their own, so pass it explicitly: 'ctest --preset valgrind -T memcheck'",
       "filter": {
         "exclude": {
           "label": "no_memcheck"

@@ -10,7 +10,10 @@ project(
 # Enable testing. When Halide_ENABLE_MEMCHECK is set (see the `valgrind` preset),
 # pull in the full CTest module so that `ctest -T memcheck` reruns the whole
 # registered test suite under valgrind in the build tree. Otherwise stick to the
-# lighter enable_testing().
+# lighter enable_testing(). We don't probe for a valgrind binary ourselves:
+# CTest's memcheck driver already locates (or complains about) MEMORYCHECK_COMMAND
+# on its own, and configuring still succeeds if it's missing -- `ctest -T memcheck`
+# simply fails at test time in that case.
 ##
 
 option(Halide_ENABLE_MEMCHECK
