@@ -50,8 +50,6 @@ endif ()
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb_small.png)
 if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgb_small.png COPYONLY)
-    # Exercise every (schedule, direction) combination so a wrong function
-    # pointer in one variant's dispatch table can't hide behind another.
     foreach (schedule IN ITEMS naive lessnaive complex)
         add_test(
             NAME auto_viz_demo_${schedule}_up
