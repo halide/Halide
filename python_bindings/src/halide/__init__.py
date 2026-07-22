@@ -16,7 +16,12 @@ def _preload_bundled_halide_library():
     if hasattr(os, "add_dll_directory") and bin_dir.is_dir():
         os.add_dll_directory(str(bin_dir))
 
-    for relpath in ("bin/Halide.dll", "lib/libHalide.dylib", "lib64/libHalide.so", "lib/libHalide.so"):
+    for relpath in (
+        "bin/Halide.dll",
+        "lib/libHalide.dylib",
+        "lib64/libHalide.so",
+        "lib/libHalide.so",
+    ):
         lib_path = root / relpath
         if lib_path.exists():
             ctypes.CDLL(str(lib_path))
