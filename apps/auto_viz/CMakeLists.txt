@@ -50,12 +50,23 @@ endif ()
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb_small.png)
 if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgb_small.png COPYONLY)
-    add_test(NAME auto_viz_demo COMMAND auto_viz_demo rgb_small.png out.png -s naive -f 4.0)
-    set_tests_properties(
-        auto_viz_demo
-        PROPERTIES
-        LABELS auto_viz
-        ENVIRONMENT "HL_TRACE_FILE=${_auto_viz_trace_sink}"
-        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
-    )
+    # Exercise every (schedule, direction) combination so a wrong function
+    # pointer in one variant's dispatch table can't hide behind another.
+    foreach (schedule IN ITEMS naive lessnaive complex)
+        add_test(
+            NAME auto_viz_demo_${schedule}_up
+            COMMAND auto_viz_demo rgb_small.png out_${schedule}_up.png -s ${schedule} -f 4.0
+        )
+        add_test(
+            NAME auto_viz_demo_${schedule}_down
+            COMMAND auto_viz_demo rgb_small.png out_${schedule}_down.png -s ${schedule} -f 0.25
+        )
+        set_tests_properties(
+            auto_viz_demo_${schedule}_up auto_viz_demo_${schedule}_down
+            PROPERTIES
+            LABELS auto_viz
+            ENVIRONMENT "HL_TRACE_FILE=${_auto_viz_trace_sink}"
+            SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+        )
+    endforeach ()
 endif ()
