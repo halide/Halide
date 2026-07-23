@@ -217,6 +217,7 @@ export async function renderInf({
 
 export interface RenderThreadFuncParams extends RenderFuncParams {
   threadOpMode: ThreadOpMode;
+  threadId: string;
 }
 
 export async function renderThread({
@@ -224,6 +225,7 @@ export async function renderThread({
   globalIndex,
   normalizationMode,
   threadOpMode,
+  threadId,
   width,
   height,
   includeTabularData,
@@ -233,6 +235,7 @@ export async function renderThread({
     globalIndex,
     normalizationMode,
     opMode: threadOpMode,
+    threadId: threadId,
   });
 
   return splitTensorDataAndTabularData({
