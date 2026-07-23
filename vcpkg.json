@@ -9,7 +9,8 @@
   "overrides": [
     {
       "name": "dawn",
-      "version": "20260714.215939"
+      "version": "20260624.223603",
+      "port-version": 1
     }
   ],
   "default-features": [
