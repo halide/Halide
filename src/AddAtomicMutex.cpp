@@ -266,7 +266,8 @@ protected:
                            var,
                            op->param,
                            std::move(predicate),
-                           op->alignment);
+                           op->alignment,
+                           op->is_streaming);
     }
 
     const std::string &producer_name;

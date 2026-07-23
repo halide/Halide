@@ -249,9 +249,7 @@ DECLARE_NO_INITMOD(windows_aarch64_cpu_features_arm)
 #endif  // WITH_AARCH64
 
 #ifdef WITH_NVPTX
-DECLARE_LL_INITMOD(ptx_compute_20)
-DECLARE_LL_INITMOD(ptx_compute_30)
-DECLARE_LL_INITMOD(ptx_compute_35)
+DECLARE_LL_INITMOD(ptx_libdevice)
 #endif  // WITH_NVPTX
 
 #if defined(WITH_D3D12) && defined(WITH_X86)
@@ -315,6 +313,7 @@ DECLARE_NO_INITMOD(webgpu_emscripten)
 
 #ifdef WITH_X86
 // keep-sorted start by_regex=["INITMOD\\(.+"]
+DECLARE_CPP_INITMOD(linux_x86_cpu_features)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_amx)
 DECLARE_LL_INITMOD(x86_avx)
@@ -325,6 +324,7 @@ DECLARE_LL_INITMOD(x86_sse41)
 // keep-sorted end
 #else
 // keep-sorted start by_regex=["INITMOD\\(.+"]
+DECLARE_NO_INITMOD(linux_x86_cpu_features)
 DECLARE_NO_INITMOD(x86)
 DECLARE_NO_INITMOD(x86_amx)
 DECLARE_NO_INITMOD(x86_avx)
@@ -1293,7 +1293,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             // These modules are only used for AOT compilation
             modules.push_back(get_initmod_can_use_target(c, bits_64, debug));
             if (t.arch == Target::X86) {
-                modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
+                if (t.os == Target::Android || t.os == Target::Linux) {
+                    modules.push_back(get_initmod_linux_x86_cpu_features(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
+                }
             }
             if (t.arch == Target::ARM) {
                 if (t.bits == 64) {
@@ -1439,22 +1443,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
     std::vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(get_initmod_ptx_dev_ll(c));
 
-    std::unique_ptr<llvm::Module> module;
-
-    // This table is based on the guidance at:
-    // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
-    if (target.has_feature(Target::CUDACapability35)) {
-        module = get_initmod_ptx_compute_35_ll(c);
-    } else if (target.features_any_of({Target::CUDACapability32,
-                                       Target::CUDACapability50})) {
-        // For some reason sm_32 and sm_50 use libdevice 20
-        module = get_initmod_ptx_compute_20_ll(c);
-    } else if (target.has_feature(Target::CUDACapability30)) {
-        module = get_initmod_ptx_compute_30_ll(c);
-    } else {
-        module = get_initmod_ptx_compute_20_ll(c);
-    }
-    modules.push_back(std::move(module));
+    modules.push_back(get_initmod_ptx_libdevice_ll(c));
 
     link_modules(modules, target);
 

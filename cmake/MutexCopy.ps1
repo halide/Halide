@@ -1,31 +1,58 @@
 param([string]$src, [string]$dstDir)
 
+$ErrorActionPreference = 'Stop'
+
+function Test-UpToDate([string]$src, [string]$dst) {
+    if (!(Test-Path $dst)) {
+        return $false
+    }
+    return (Get-Item $dst).LastWriteTime -ge (Get-Item $src).LastWriteTime
+}
+
+$name = Split-Path $src -leaf
+$dst = Join-Path $dstDir $name
+
+if (Test-UpToDate $src $dst) {
+    return
+}
+
+$bytes = [System.Text.Encoding]::UTF8.GetBytes($dstDir)
+$hash = [System.Security.Cryptography.SHA512]::Create().ComputeHash($bytes)
+$key = "Halide-" + ([Convert]::ToBase64String($hash) -replace ('/', '-'))
+
+$m = New-Object System.Threading.Mutex($false, $key)
+$acquired = $false
 try {
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($dstDir)
-    $hash = [System.Security.Cryptography.SHA512]::Create().ComputeHash($bytes)
-    $key = "Halide-" + ([Convert]::ToBase64String($hash) -replace ('/', '-'))
-
-    $m = New-Object System.Threading.Mutex($false, $key)
-    if (!$m) {
-        throw "Failed to create mutex $key"
+    try {
+        $acquired = $m.WaitOne(120000)
+    } catch [System.Threading.AbandonedMutexException] {
+        # A previous copy was killed/cancelled while holding the lock. We still
+        # got ownership; the destination may be left mid-copy from that run, but
+        # the recheck below re-copies if it's not known-good, so it's safe to
+        # just proceed rather than failing the build over it.
+        $acquired = $true
+    }
+    if (!$acquired) {
+        throw "Timed out waiting for lock on $dstDir"
     }
 
-    $m.WaitOne() | Out-Null
-
-    $name = Split-Path $src -leaf
-    $dst = Join-Path $dstDir $name
-    if (Test-Path $dst) {
-        $srcTime = (Get-Item $src).LastWriteTime
-        $dstTime = (Get-Item $dst).LastWriteTime
-        if ($dstTime -ge $srcTime) {
-            Return
-        }
+    if (Test-UpToDate $src $dst) {
+        return
     }
 
-    Copy-Item $src $dstDir
+    # Copy-Item directly to $dst would hold an exclusive (read-blocking) lock
+    # on the file for the whole duration. Move-Item is nearly instantaneous and
+    # atomic.
+    $tmp = Join-Path $dstDir ($name + "." + [System.Guid]::NewGuid().ToString("N") + ".tmp")
+    try {
+        Copy-Item $src $tmp
+        Move-Item -Force $tmp $dst
+    } finally {
+        Remove-Item $tmp -ErrorAction SilentlyContinue
+    }
 } finally {
-    if ($m) {
+    if ($acquired) {
         $m.ReleaseMutex() | Out-Null
-        $m.Dispose() | Out-Null
     }
+    $m.Dispose() | Out-Null
 }

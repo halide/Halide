@@ -1,16 +1,35 @@
-def patch_dll_dirs():
+def _preload_bundled_halide_library():
+    # Force-load our own copy of the Halide runtime library by absolute path before
+    # importing halide_, so that halide_'s implicit load of the same library (by
+    # soname/module name) resolves to this already-loaded instance instead of
+    # searching LD_LIBRARY_PATH / PATH / the default dynamic linker paths, where a
+    # foreign, incompatible libHalide could shadow ours.
+    # See: https://github.com/halide/Halide/issues/8866
+    import ctypes
     import os
 
-    if hasattr(os, "add_dll_directory"):
-        from pathlib import Path
+    from pathlib import Path
 
-        bin_dir = Path(__file__).parent / "bin"
-        if bin_dir.exists():
-            os.add_dll_directory(str(bin_dir))
+    root = Path(__file__).parent
+
+    bin_dir = root / "bin"
+    if hasattr(os, "add_dll_directory") and bin_dir.is_dir():
+        os.add_dll_directory(str(bin_dir))
+
+    for relpath in (
+        "bin/Halide.dll",
+        "lib/libHalide.dylib",
+        "lib64/libHalide.so",
+        "lib/libHalide.so",
+    ):
+        lib_path = root / relpath
+        if lib_path.exists():
+            ctypes.CDLL(str(lib_path))
+            return
 
 
-patch_dll_dirs()
-del patch_dll_dirs
+_preload_bundled_halide_library()
+del _preload_bundled_halide_library
 
 from .halide_ import *  # noqa: E402, F403
 

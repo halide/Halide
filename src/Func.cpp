@@ -1654,6 +1654,49 @@ Stage &Stage::atomic(bool override_associativity_test) {
     return *this;
 }
 
+Stage &Stage::stream_stores() {
+    for (const Dim &d : definition.schedule().dims()) {
+        if (d.is_rvar() && !d.is_pure()) {
+            user_error << "Can't stream stores for " << name()
+                       << " because it has a reduction variable that Halide "
+                          "cannot prove is safe to parallelize. A self-load in "
+                          "this Stage could observe a value it streamed earlier "
+                          "in the same Stage, before the fence that makes "
+                          "streamed stores visible.\n";
+        }
+    }
+    definition.schedule().touched() = true;
+    definition.schedule().stream_stores() = true;
+    return *this;
+}
+
+Stage &Stage::stream_loads() {
+    definition.schedule().touched() = true;
+    definition.schedule().stream_loads_names() = std::nullopt;
+    return *this;
+}
+
+Stage &Stage::stream_loads(const std::vector<Func> &funcs) {
+    std::vector<string> names;
+    for (const Func &f : funcs) {
+        std::string target_name = f.name();
+        if (const Call *call = f.function().is_wrapper(); call && call->param.defined()) {
+            // A pure wrapper around an ImageParam/Buffer Parameter (e.g. as
+            // returned by ImageParam's implicit conversion to Func): the
+            // wrapper itself is inlined away before storage flattening
+            // ever runs, so match the underlying Parameter directly.
+            target_name = call->param.name();
+        }
+        user_assert(target_name != function.name())
+            << "Can't stream loads of \"" << target_name << "\" in " << name()
+            << " because a Stage cannot stream its own self-loads.\n";
+        names.push_back(target_name);
+    }
+    definition.schedule().stream_loads_names() = std::move(names);
+    definition.schedule().touched() = true;
+    return *this;
+}
+
 Stage &Stage::serial(const VarOrRVar &var) {
     set_dim_type(var, ForType::Serial);
     return *this;
@@ -2268,6 +2311,24 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
         }
         Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name) : create_in_wrapper(wrapped_fn, wrapper_name);
         Function wrapper_fn = wrapper.function();
+
+        // Build a profiler display name like "<wrapped>.in()" or
+        // "<wrapped>.in(<c1>, <c2>)" using the wrapped Func's display
+        // name and the consumers' display names (falling back to the
+        // IR-level name in each case). For .clone_in() use "clone_in".
+        auto display = [](const Function &f) {
+            return f.profiler_display_name().empty() ? f.name() : f.profiler_display_name();
+        };
+        std::string profiler_name = display(wrapped_fn) + (clone ? ".clone_in(" : ".in(");
+        for (size_t i = 0; i < fs.size(); i++) {
+            if (i > 0) {
+                profiler_name += ", ";
+            }
+            profiler_name += display(fs[i].function());
+        }
+        profiler_name += ")";
+        wrapper_fn.set_profiler_display_name(profiler_name);
+
         if (fs.empty()) {
             // Add global wrapper
             wrapped_fn.add_wrapper("", wrapper_fn);
@@ -2301,12 +2362,12 @@ Func Func::in(const vector<Func> &fs) {
         user_error << "Could not create a in wrapper for an empty list of Funcs\n";
     }
     invalidate_cache();
-    return get_wrapper(func, name() + "_wrapper", fs, false);
+    return get_wrapper(func, name() + "_in", fs, false);
 }
 
 Func Func::in() {
     invalidate_cache();
-    return get_wrapper(func, name() + "_global_wrapper", {}, false);
+    return get_wrapper(func, name() + "_in", {}, false);
 }
 
 Func Func::clone_in(const Func &f) {
@@ -2448,6 +2509,24 @@ Func &Func::memoize(const EvictionKey &eviction_key) {
 Func &Func::store_in(MemoryType t) {
     invalidate_cache();
     func.schedule().memory_type() = t;
+    return *this;
+}
+
+Func &Func::stream_loads() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).stream_loads();
+    return *this;
+}
+
+Func &Func::stream_loads(const std::vector<Func> &funcs) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).stream_loads(funcs);
+    return *this;
+}
+
+Func &Func::stream_stores() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).stream_stores();
     return *this;
 }
 

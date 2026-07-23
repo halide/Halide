@@ -32,7 +32,7 @@ Halide::Runtime::Buffer<T, Dims, InClassDimStorage> pybufferinfo_to_halidebuffer
         const int dst_axis = reverse_axes ? (info.ndim - i - 1) : i;
         dims[dst_axis] = {0, (int32_t)info.shape[i], (int32_t)elem_stride};
     }
-    return Halide::Runtime::Buffer<T, Dims, InClassDimStorage>(t, info.ptr, (int)info.ndim, dims);
+    return Halide::Runtime::Buffer<T, Dims, InClassDimStorage>(t.to_abi(), info.ptr, (int)info.ndim, dims);
 }
 
 }  // namespace PythonBindings

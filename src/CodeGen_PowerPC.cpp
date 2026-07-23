@@ -45,9 +45,9 @@ const int max_intrinsic_args = 4;
 
 struct PowerPCIntrinsic {
     const char *intrin_name;
-    halide_type_t ret_type;
+    Type ret_type;
     const char *name;
-    halide_type_t arg_types[max_intrinsic_args];
+    Type arg_types[max_intrinsic_args];
     Target::Feature feature = Target::FeatureEnd;
 };
 
@@ -107,8 +107,8 @@ void CodeGen_PowerPC::init_module() {
         Type ret_type = i.ret_type;
         vector<Type> arg_types;
         arg_types.reserve(max_intrinsic_args);
-        for (halide_type_t j : i.arg_types) {
-            if (j.bits == 0) {
+        for (const Type &j : i.arg_types) {
+            if (j.bits() == 0) {
                 break;
             }
             arg_types.emplace_back(j);

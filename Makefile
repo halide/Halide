@@ -152,7 +152,7 @@ POWERPC_LLVM_CONFIG_LIB=$(if $(WITH_POWERPC), powerpc, )
 
 PTX_CXX_FLAGS=$(if $(WITH_NVPTX), -DWITH_NVPTX, )
 PTX_LLVM_CONFIG_LIB=$(if $(WITH_NVPTX), nvptx, )
-PTX_DEVICE_INITIAL_MODULES=$(if $(WITH_NVPTX), libdevice.compute_20.10.bc libdevice.compute_30.10.bc libdevice.compute_35.10.bc, )
+PTX_DEVICE_INITIAL_MODULES=$(if $(WITH_NVPTX), $(BUILD_DIR)/initmod_ptx.libdevice_ll.o, )
 
 OPENCL_CXX_FLAGS=$(if $(WITH_OPENCL), -DWITH_OPENCL, )
 OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
@@ -864,6 +864,7 @@ RUNTIME_CPP_COMPONENTS = \
   linux_host_cpu_count \
   linux_powerpc_thread_id \
   linux_riscv_thread_id \
+  linux_x86_cpu_features \
   linux_x86_thread_id \
   linux_yield \
   metal \
@@ -973,7 +974,7 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(HTML_TEMPLATE_FILES:%=$(BUILD_DIR)/html_template.%.o) \
                   $(BUILD_DIR)/initmod.inlined_c.o \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
-                  $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
+                  $(PTX_DEVICE_INITIAL_MODULES)
 
 TEST_DEPS = $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
 ifneq (,$(WITH_EXCEPTIONS))
@@ -1272,8 +1273,8 @@ $(BUILD_DIR)/initmod.%_h.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/%.h
 $(BUILD_DIR)/initmod.inlined_c.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/halide_buffer_t.cpp
 	./$(BIN_DIR)/binary2cpp halide_internal_initmod_inlined_c < $(SRC_DIR)/runtime/halide_buffer_t.cpp > $@
 
-$(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.%.bc
-	./$(BIN_DIR)/binary2cpp halide_internal_initmod_ptx_$(basename $*)_ll < $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.$*.bc > $@
+$(BUILD_DIR)/initmod_ptx.libdevice_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.10.bc
+	./$(BIN_DIR)/binary2cpp halide_internal_initmod_ptx_libdevice_ll < $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.10.bc > $@
 
 $(BUILD_DIR)/c_template.%.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/%.template.cpp
 	./$(BIN_DIR)/binary2cpp halide_c_template_$* < $(SRC_DIR)/$*.template.cpp > $@
@@ -1380,6 +1381,7 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_msan,$(GENERATOR_AOTCPP_
 
 # https://github.com/halide/Halide/issues/7272
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbrot,$(GENERATOR_AOTCPP_TESTS))
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_profiler_instances,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/4916
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
@@ -1401,6 +1403,9 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/msan.rungen,$(GENERA
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/sanitizercoverage.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/multitarget.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+# profiler_instances declares a test_extern_stage callback in its
+# aottest, which rungen doesn't link.
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/profiler_instances.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/gpu_multi_context_threaded.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
@@ -1648,6 +1653,11 @@ $(FILTERS_DIR)/string_param.a: $(BIN_DIR)/string_param.generator
 $(FILTERS_DIR)/memory_profiler_mandelbrot.a: $(BIN_DIR)/memory_profiler_mandelbrot.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g memory_profiler_mandelbrot -f memory_profiler_mandelbrot $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-profile
+
+# profiler_instances needs profiler set; verifies the per-instance / canonical-id machinery.
+$(FILTERS_DIR)/profiler_instances.a: $(BIN_DIR)/profiler_instances.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g profiler_instances -f profiler_instances $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-profile
 
 $(FILTERS_DIR)/alias_with_offset_42.a: $(BIN_DIR)/alias.generator
 	@mkdir -p $(@D)

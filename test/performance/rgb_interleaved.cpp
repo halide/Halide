@@ -33,7 +33,7 @@ void test_deinterleave() {
     // Setup dst to be planar, with no extra padding between channels or rows.
     Buffer<uint8_t> dst_image(1 << 12, 1 << 12, 3);
 
-    src_image.for_each_element([&](int x, int y) {
+    src_image.sliced(2, 0).for_each_element([&](int x, int y) {
         src_image(x, y, 0) = 0;
         src_image(x, y, 1) = 128;
         src_image(x, y, 2) = 255;
@@ -54,7 +54,7 @@ void test_deinterleave() {
     printf("Interleaved to planar bandwidth %.3e byte/s.\n",
            dst_image.number_of_elements() / t1);
 
-    dst_image.for_each_element([&](int x, int y) {
+    dst_image.sliced(2, 0).for_each_element([&](int x, int y) {
         assert(dst_image(x, y, 0) == 0);
         assert(dst_image(x, y, 1) == 128);
         assert(dst_image(x, y, 2) == 255);
@@ -69,7 +69,7 @@ void test_deinterleave() {
         dst.realize(dst_image);
     });
 
-    dst_image.for_each_element([&](int x, int y) {
+    dst_image.sliced(2, 0).for_each_element([&](int x, int y) {
         assert(dst_image(x, y, 0) == 0);
         assert(dst_image(x, y, 1) == 128);
         assert(dst_image(x, y, 2) == 255);
@@ -111,7 +111,7 @@ void test_interleave(bool fast) {
     // Setup dst to be interleaved
     Buffer<uint8_t> dst_image = Buffer<uint8_t>::make_interleaved(1 << 12, 1 << 12, 3);
 
-    src_image.for_each_element([&](int x, int y) {
+    src_image.sliced(2, 0).for_each_element([&](int x, int y) {
         src_image(x, y, 0) = 0;
         src_image(x, y, 1) = 128;
         src_image(x, y, 2) = 255;
@@ -136,7 +136,7 @@ void test_interleave(bool fast) {
     printf("Planar to interleaved bandwidth %.3e byte/s.\n",
            dst_image.number_of_elements() / t);
 
-    dst_image.for_each_element([&](int x, int y) {
+    dst_image.sliced(2, 0).for_each_element([&](int x, int y) {
         assert(dst_image(x, y, 0) == 0);
         assert(dst_image(x, y, 1) == 128);
         assert(dst_image(x, y, 2) == 255);

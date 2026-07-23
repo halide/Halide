@@ -49,7 +49,7 @@ class ObfuscateNames : public IRMutator {
         Expr index = mutate(op->index);
         Expr predicate = mutate(op->predicate);
         return Load::make(op->type, name, index, op->image, op->param,
-                          predicate, op->alignment);
+                          predicate, op->alignment, op->is_streaming);
     }
 
     Expr visit(const Variable *op) override {
