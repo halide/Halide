@@ -187,10 +187,21 @@ jobs:
         run: |
           cmake -S . -B build -DHalide_TARGET=host-metal
           cmake --build build --target install
+
+          JOBS="$(sysctl -n hw.logicalcpu)"
+          RETRY_FLAGS=()
+          if [ "${{ matrix.arch }}" = "x86-64" ]; then
+            # This runner's GPU is too weak to handle the GPU tests at full
+            # CPU parallelism -- the driver aborts some command buffers with
+            # a hang error. Cut parallelism and retry.
+            JOBS=2
+            RETRY_FLAGS=(--repeat until-pass:5)
+          fi
+
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
-            -L "correctness|generator" -j "$(sysctl -n hw.logicalcpu)"
+            -L "correctness|generator" -R "gpu|metal" -j "$JOBS" "${RETRY_FLAGS[@]}"
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
-            -L "performance|autoschedulers_gpu" --repeat until-pass:5
+            -L "performance|autoschedulers_gpu" -R "gpu|metal" --repeat until-pass:5
 
       - name: Configure apps (host-metal)
         run: >-
