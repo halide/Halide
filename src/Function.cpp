@@ -1121,6 +1121,19 @@ bool Function::is_inductive() const {
         return false;
     }
 
+    auto has_self_call = [&](const std::vector<Expr> &values) {
+        bool found = false;
+        for (const Expr &e : values) {
+            visit_with(e, [&](auto *self, const Call *op) {
+                if (op->name == name() && op->call_type == Call::Halide) {
+                    found = true;
+                }
+                self->visit_base(op);
+            });
+        }
+        return found;
+    };
+
     auto has_shifted_self_call = [&](const std::vector<Expr> &def_args, const std::vector<Expr> &values) {
         bool found = false;
         for (const Expr &e : values) {
@@ -1128,10 +1141,6 @@ bool Function::is_inductive() const {
                 if (op->name == name() && op->call_type == Call::Halide) {
                     for (size_t i = 0; i < op->args.size() && i < def_args.size(); i++) {
                         const Variable *lhs_var = def_args[i].as<Variable>();
-                        // Only treat as inductive when the LHS position is a pure
-                        // Var (not an RVar). A shift at such a position is a genuine
-                        // inductive self-reference; RVar positions are ordinary
-                        // reduction reads and must not be misclassified.
                         if (lhs_var && !lhs_var->reduction_domain.defined()) {
                             const Variable *call_var = op->args[i].as<Variable>();
                             bool matches = call_var && call_var->name == lhs_var->name;
@@ -1147,7 +1156,7 @@ bool Function::is_inductive() const {
         return found;
     };
 
-    bool recursive = has_shifted_self_call(definition().args(), definition().values());
+    bool recursive = has_self_call(definition().values());
     if (!recursive && !updates().empty()) {
         recursive = has_shifted_self_call(updates()[0].args(), updates()[0].values());
     }
@@ -1200,25 +1209,35 @@ bool Function::is_inductive(const string &var) const {
     }
 
     bool inductive_in_var = false;
-    auto check_values = [&](const std::vector<Expr> &values) {
-        for (const Expr &e : values) {
+
+    if (updates().empty()) {
+        for (const Expr &e : definition().values()) {
             visit_with(e, [&](auto *self, const Call *op) {
                 if (op->name == name()) {
-                    if (const auto &v = op->args[pos].as<Variable>()) {
-                        if (v->name != var && !v->reduction_domain.defined()) {
-                            inductive_in_var = true;
-                        }
-                    } else {
-                        inductive_in_var = true;
-                    }
+                    inductive_in_var = true;
                 }
                 self->visit_base(op);
             });
         }
-    };
+    } else {
+        auto check_values = [&](const std::vector<Expr> &values) {
+            for (const Expr &e : values) {
+                visit_with(e, [&](auto *self, const Call *op) {
+                    if (op->name == name()) {
+                        if (const auto &v = op->args[pos].as<Variable>()) {
+                            if (v->name != var && !v->reduction_domain.defined()) {
+                                inductive_in_var = true;
+                            }
+                        } else {
+                            inductive_in_var = true;
+                        }
+                    }
+                    self->visit_base(op);
+                });
+            }
+        };
 
-    check_values(definition().values());
-    if (!updates().empty()) {
+        check_values(definition().values());
         check_values(updates()[0].values());
     }
 
