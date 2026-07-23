@@ -294,32 +294,23 @@ DECLARE_NO_INITMOD(windows_vulkan)
 // TODO(https://github.com/halide/Halide/issues/7248)
 #ifdef WITH_X86
 DECLARE_CPP_INITMOD(webgpu_dawn_x86)
-DECLARE_CPP_INITMOD(webgpu_dawn_x86_debug)
 #else
 DECLARE_NO_INITMOD(webgpu_dawn_x86)
-DECLARE_NO_INITMOD(webgpu_dawn_x86_debug)
 #endif
 #ifdef WITH_ARM
 DECLARE_CPP_INITMOD(webgpu_dawn_arm)
-DECLARE_CPP_INITMOD(webgpu_dawn_arm_debug)
 #else
 DECLARE_NO_INITMOD(webgpu_dawn_arm)
-DECLARE_NO_INITMOD(webgpu_dawn_arm_debug)
 #endif
 #ifdef WITH_WEBASSEMBLY
 DECLARE_CPP_INITMOD(webgpu_emscripten)
-DECLARE_CPP_INITMOD(webgpu_emscripten_debug)
 #else
 DECLARE_NO_INITMOD(webgpu_emscripten)
-DECLARE_NO_INITMOD(webgpu_emscripten_debug)
 #endif
 #else
 DECLARE_NO_INITMOD(webgpu_dawn_x86)
 DECLARE_NO_INITMOD(webgpu_dawn_arm)
 DECLARE_NO_INITMOD(webgpu_emscripten)
-DECLARE_NO_INITMOD(webgpu_dawn_x86_debug)
-DECLARE_NO_INITMOD(webgpu_dawn_arm_debug)
-DECLARE_NO_INITMOD(webgpu_emscripten_debug)
 #endif  // WITH_WEBGPU
 
 #ifdef WITH_X86
