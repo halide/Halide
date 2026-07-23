@@ -1,0 +1,9 @@
+# Valgrind suppressions for `ctest -T memcheck` (see Halide_ENABLE_MEMCHECK and
+# the `valgrind` CMake preset), which reruns every correctness test under
+# valgrind.
+#
+# This file starts empty. The default memcheck options do not enable full leak
+# checking, so the one-time LLVM ORC-JIT allocations that Halide's JIT triggers
+# are not reported. Add entries here if you widen the options (e.g. add
+# `--leak-check=full`) and need to silence errors originating outside Halide's
+# own code (LLVM, the C++ runtime, or a GPU/driver stack).

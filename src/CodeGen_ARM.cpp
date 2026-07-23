@@ -432,9 +432,9 @@ constexpr int max_intrinsic_args = 4;
 struct ArmIntrinsic {
     const char *arm32;
     const char *arm64;
-    halide_type_t ret_type;
+    Type ret_type;
     const char *name;
-    halide_type_t arg_types[max_intrinsic_args];
+    Type arg_types[max_intrinsic_args];
     int flags;
     enum {
         AllowUnsignedOp1 = 1 << 0,   // Generate a second version of the instruction with the second operand unsigned.
@@ -1156,7 +1156,7 @@ void CodeGen_ARM::init_module() {
             }();
 
             int width_factor = 1;
-            if (!((intrin.ret_type.lanes <= 1) && (intrin.flags & ArmIntrinsic::NoMangle))) {
+            if (!((intrin.ret_type.lanes() <= 1) && (intrin.flags & ArmIntrinsic::NoMangle))) {
                 switch (flavor) {
                 case SIMDFlavors::NeonWidthX1:
                     width_factor = 1;
@@ -1181,8 +1181,8 @@ void CodeGen_ARM::init_module() {
             }
             vector<Type> arg_types;
             arg_types.reserve(4);
-            for (halide_type_t i : intrin.arg_types) {
-                if (i.bits == 0) {
+            for (const Type &i : intrin.arg_types) {
+                if (i.bits() == 0) {
                     break;
                 }
                 Type arg_type = i;

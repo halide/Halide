@@ -448,7 +448,21 @@ void compile_module_impl(
     dtorRunner->add(dtors);
 
     // Resolve system symbols (like pthread, dl and others)
+#if defined(__GNUC__) && !defined(__clang__)
+    // GCC's -Wuninitialized/-Wmaybe-uninitialized misfires on the move
+    // constructor of the default-constructed llvm::unique_function
+    // (AddAbsoluteSymbolsFn) that GetForCurrentProcess() takes by default
+    // argument, after LLVM's unique_function was refactored upstream
+    // (llvm/llvm-project#208251). Which of the two warnings fires depends
+    // on the GCC version, so both are silenced here.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wuninitialized"
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
     auto gen = llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(target_data_layout.getGlobalPrefix());
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
     internal_assert(gen) << llvm::toString(gen.takeError()) << "\n";
     JIT->getMainJITDylib().addGenerator(std::move(gen.get()));
 

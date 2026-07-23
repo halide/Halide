@@ -19,7 +19,7 @@ add_halide_generator(
 )
 
 # Filters
-add_halide_library(camera_pipe FROM camera_pipe.generator)
+add_halide_library(camera_pipe FROM camera_pipe.generator REGISTRATION camera_pipe_registration)
 add_halide_library(
     camera_pipe_auto_schedule
     FROM camera_pipe.generator
@@ -53,3 +53,13 @@ if (EXISTS ${IMAGE})
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
     )
 endif ()
+
+# RunGen-based benchmark. Run every app benchmark at once with
+# `ctest -L benchmark_apps`.
+add_executable(camera_pipe_rungen ${camera_pipe_registration})
+target_link_libraries(camera_pipe_rungen PRIVATE Halide::RunGenMain camera_pipe)
+add_test(
+    NAME camera_pipe_benchmark
+    COMMAND camera_pipe_rungen --benchmarks=all --estimate_all --parsable_output
+)
+set_tests_properties(camera_pipe_benchmark PROPERTIES LABELS "camera_pipe;benchmark_apps")

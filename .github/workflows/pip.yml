@@ -47,7 +47,7 @@ jobs:
           fetch-tags: true
 
       - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@v4.3.4
+      - uses: lukka/get-cmake@v4.4.0
         with:
           cmakeVersion: "~3.28.0"
 
@@ -139,6 +139,7 @@ jobs:
             CMAKE_GENERATOR=Ninja
             CMAKE_PREFIX_PATH='${{ github.workspace }}\opt'
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair --ignore-existing -w {dest_dir} {wheel}
           CIBW_BEFORE_TEST_LINUX: pip install cmake ninja
           CIBW_TEST_COMMAND: >
             cmake -G Ninja -S {project}/python_bindings/apps -B build -DCMAKE_BUILD_TYPE=Release &&

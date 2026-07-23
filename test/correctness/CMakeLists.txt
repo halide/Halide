@@ -199,6 +199,7 @@ tests(
     intrinsics.cpp
     invalid_gpu_loop_nests.cpp
     inverse.cpp
+    irmatch.cpp
     irprinter.cpp
     isnan.cpp
     issue_3926.cpp
@@ -446,6 +447,11 @@ tests(
     vector_reductions.cpp
     # keep-sorted end
 )
+
+# tracing_stack does an intentional out-of-bounds read, so exempt it from
+# valgrind. Runs under `ctest -T memcheck` should exclude the label with
+# `-LE no_memcheck` (the `valgrind` test preset already does this).
+set_property(TEST correctness_tracing_stack APPEND PROPERTY LABELS no_memcheck)
 
 # Make sure the test that needs Halide::ImageIO has it
 target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)

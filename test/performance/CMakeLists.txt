@@ -20,6 +20,7 @@ tests(
     fast_sine_cosine.cpp
     gpu_half_throughput.cpp
     interleave.cpp
+    irmatch_throughput.cpp
     jit_stress.cpp
     lots_of_inputs.cpp
     memcpy.cpp
