@@ -24,6 +24,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 #include "ImageParam.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
@@ -3295,6 +3296,16 @@ Stage FuncRef::operator=(const Expr &e) {
     return (*this) = Tuple(e);
 }
 
+Stage FuncRef::operator=(const Branch &b) {
+    // The branch is kept as an intrinsic in the definition's value. It is turned
+    // into real control flow (a point-wise IfThenElse, hoisted to the loop level
+    // where its condition is invariant) in ScheduleFunctions, so that producers
+    // can be compute_at'd inside the branch and have their computation gated by
+    // it. We deliberately do NOT force-inline the arms: that would take away the
+    // user's ability to schedule them.
+    return (*this) = b.expr;
+}
+
 Stage FuncRef::operator=(const Tuple &e) {
     if (!func.has_pure_definition()) {
         for (size_t i = 0; i < args.size(); ++i) {
@@ -3367,6 +3378,23 @@ Func define_base_case(const Internal::Function &func, const vector<Expr> &a, con
     return f;
 }
 
+// Distribute `self <op> _` into the arms of a (possibly multi-way) branch, so
+// that f op= branch(cond, a, b) becomes f = branch(cond, self op a, self op b).
+// The result is a whole-value branch, i.e. real control flow that only computes
+// the taken arm.
+template<typename BinaryOp>
+Expr distribute_into_branch(const Expr &self, const Expr &e) {
+    if (const Call *c = Call::as_intrinsic(e, {Call::branch})) {
+        internal_assert(c->args.size() == 3);
+        return Call::make(c->type, Call::branch,
+                          {c->args[0],
+                           distribute_into_branch<BinaryOp>(self, c->args[1]),
+                           distribute_into_branch<BinaryOp>(self, c->args[2])},
+                          Call::PureIntrinsic);
+    }
+    return BinaryOp()(self, e);
+}
+
 }  // namespace
 
 template<typename BinaryOp>
@@ -3398,6 +3426,21 @@ Stage FuncRef::func_ref_update(const Expr &e, int init_val) {
     return self_ref = BinaryOp()(Expr(self_ref), e);
 }
 
+template<typename BinaryOp>
+Stage FuncRef::func_ref_update(const Branch &b, int init_val) {
+    // f op= branch(cond, a, b) distributes to f = branch(cond, f op a, f op b), so
+    // the whole update value stays a branch (real control flow) and only the taken
+    // arm's contribution is actually computed. The distribution is valid for any op
+    // because branch has the same value as select: op(f, select(c, a, b)) ==
+    // select(c, op(f, a), op(f, b)). The only per-op difference is init_val (the
+    // identity: 0 for +/-, 1 for *).
+    const vector<Expr> rhs = {b.expr};
+    const vector<Expr> expanded_args = args_with_implicit_vars(rhs);
+    FuncRef self_ref = define_base_case(func, expanded_args, rhs, init_val)(expanded_args);
+    Expr distributed = distribute_into_branch<BinaryOp>(Expr(self_ref), b.expr);
+    return self_ref = Branch{distributed};
+}
+
 Stage FuncRef::operator+=(const Expr &e) {
     return func_ref_update<std::plus<Expr>>(e, 0);
 }
@@ -3410,6 +3453,10 @@ Stage FuncRef::operator+=(const Tuple &e) {
     }
 }
 
+Stage FuncRef::operator+=(const Branch &b) {
+    return func_ref_update<std::plus<Expr>>(b, 0);
+}
+
 Stage FuncRef::operator+=(const FuncRef &e) {
     if (e.size() == 1) {
         return (*this) += Expr(e);
@@ -3420,6 +3467,12 @@ Stage FuncRef::operator+=(const FuncRef &e) {
 
 Stage FuncRef::operator*=(const Expr &e) {
     return func_ref_update<std::multiplies<Expr>>(e, 1);
+}
+
+Stage FuncRef::operator*=(const Branch &b) {
+    // Same distribution as += and -=, but the identity is 1: if the Func has no
+    // pure definition it starts at 1 and each taken arm multiplies into it.
+    return func_ref_update<std::multiplies<Expr>>(b, 1);
 }
 
 Stage FuncRef::operator*=(const Tuple &e) {
@@ -3442,6 +3495,10 @@ Stage FuncRef::operator-=(const Expr &e) {
     return func_ref_update<std::minus<Expr>>(e, 0);
 }
 
+Stage FuncRef::operator-=(const Branch &b) {
+    return func_ref_update<std::minus<Expr>>(b, 0);
+}
+
 Stage FuncRef::operator-=(const Tuple &e) {
     if (e.size() == 1) {
         return (*this) -= e[0];
@@ -3460,6 +3517,10 @@ Stage FuncRef::operator-=(const FuncRef &e) {
 
 Stage FuncRef::operator/=(const Expr &e) {
     return func_ref_update<std::divides<Expr>>(e, 1);
+}
+
+Stage FuncRef::operator/=(const Branch &b) {
+    return func_ref_update<std::divides<Expr>>(b, 1);
 }
 
 Stage FuncRef::operator/=(const Tuple &e) {

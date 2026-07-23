@@ -1179,7 +1179,7 @@ protected:
                 return abs(op->args[0] - op->args[1]);
             } else if (op->is_intrinsic(Call::return_second)) {
                 return op->args[1];
-            } else if (op->is_intrinsic(Call::if_then_else)) {
+            } else if (op->is_intrinsic(Call::if_then_else) || op->is_intrinsic(Call::branch)) {
                 // Probably more conservative than necessary
                 return op->args[1];
             } else if (op->is_intrinsic(Call::rounding_shift_right)) {
@@ -1230,7 +1230,7 @@ protected:
                 }
             }
         } else if (op->args.size() == 3) {
-            if (op->is_intrinsic(Call::if_then_else)) {
+            if (op->is_intrinsic(Call::if_then_else) || op->is_intrinsic(Call::branch)) {
                 // Probably more conservative than necessary
                 return Select::make(op->args[0], op->args[1], op->args[2]);
             } else if (can_widen_all(op->args)) {

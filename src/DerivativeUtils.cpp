@@ -171,6 +171,15 @@ void ExpressionSorter::visit(const Call *op) {
         return;
     }
 
+    if (op->is_intrinsic(Call::branch)) {
+        // Like Select, ignore the condition (arg 0); its derivative is zero.
+        // Only the value arms carry gradients.
+        internal_assert(op->args.size() == 3);
+        include(op->args[1]);
+        include(op->args[2]);
+        return;
+    }
+
     for (const auto &arg : op->args) {
         include(arg);
     }

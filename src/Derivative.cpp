@@ -1189,6 +1189,23 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             for (const auto &arg : op->args) {
                 accumulate(arg, make_zero(op->type));
             }
+        } else if (op->is_intrinsic(Call::branch)) {
+            // branch(cond, a, b) has the same derivative as select(cond, a, b):
+            // route the incoming adjoint to whichever side is taken. The routing
+            // is a select rather than a branch on purpose. Reverse mode multiplies
+            // each node's local derivative by the incoming adjoint, so routing the
+            // adjoint through a branch does not gate the arm derivatives - both
+            // still get computed (dcoA * branch(cond, adj, 0) keeps dcoA on the
+            // zero side). It would only duplicate the adjoint IR (both arms in each
+            // side, since deriv*0 can not be simplified for floats) with no gain.
+            // True gating of an arm's adjoint needs the arm to be its own Func; the
+            // forward branch itself is still kept as control flow (its recompute
+            // for the backward pass is lifted in ScheduleFunctions).
+            internal_assert(op->args.size() == 3);
+            accumulate(op->args[1],
+                       select(op->args[0], adjoint, make_zero(op->type)));
+            accumulate(op->args[2],
+                       select(op->args[0], make_zero(op->type), adjoint));
         } else {
             user_warning << "Dropping gradients at call to " << op->name << "\n";
             for (const auto &arg : op->args) {

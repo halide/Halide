@@ -58,6 +58,7 @@ struct VarOrRVar {
 };
 
 class ImageParam;
+struct Branch;
 
 namespace Internal {
 struct AssociativeOp;
@@ -539,6 +540,15 @@ class FuncRef {
     template<typename BinaryOp>
     Stage func_ref_update(const Expr &e, int init_val);
 
+    /** Helper for function update by a branch (see \ref branch). Distributes the
+     * accumulation into the arms - f op= branch(cond, a, b) becomes
+     * f = branch(cond, f op a, f op b) - so the whole update value stays a branch
+     * (real control flow) and only the taken arm's contribution is computed. If
+     * the function does not already have a pure definition, init_val is used as
+     * the RHS of the initial definition. */
+    template<typename BinaryOp>
+    Stage func_ref_update(const Branch &b, int init_val);
+
 public:
     FuncRef(const Internal::Function &, const std::vector<Expr> &,
             int placeholder_pos = -1, int count = 0);
@@ -554,6 +564,11 @@ public:
      * for a Func with multiple outputs. */
     Stage operator=(const Tuple &);
 
+    /** Define this Func as an explicit branch (see \ref branch). The value arms
+     * are force-inlined so the branch gates real computation, not just a load;
+     * it is an error if a value arm calls a Func that can not be inlined. */
+    Stage operator=(const Branch &);
+
     /** Define a stage that adds the given expression to this Func. If the
      * expression refers to some RDom, this performs a sum reduction of the
      * expression over the domain. If the function does not already have a
@@ -564,6 +579,12 @@ public:
     Stage operator+=(const Tuple &);
     Stage operator+=(const FuncRef &);
     // @}
+
+    /** Accumulate a branch (see \ref branch) into this Func. This distributes
+     * the accumulation into the arms - f += branch(cond, a, b) becomes
+     * f = branch(cond, f + a, f + b) - so the whole update value is a branch
+     * (real control flow), and only the taken arm's contribution is computed. */
+    Stage operator+=(const Branch &);
 
     /** Define a stage that adds the negative of the given expression to this
      * Func. If the expression refers to some RDom, this performs a sum reduction
@@ -576,6 +597,12 @@ public:
     Stage operator-=(const FuncRef &);
     // @}
 
+    /** Subtract a branch (see \ref branch) from this Func. Distributes the
+     * accumulation into the arms - f -= branch(cond, a, b) becomes
+     * f = branch(cond, f - a, f - b) - so the whole update value is a branch
+     * (real control flow), and only the taken arm's contribution is computed. */
+    Stage operator-=(const Branch &);
+
     /** Define a stage that multiplies this Func by the given expression. If the
      * expression refers to some RDom, this performs a product reduction of the
      * expression over the domain. If the function does not already have a pure
@@ -587,6 +614,14 @@ public:
     Stage operator*=(const FuncRef &);
     // @}
 
+    /** Multiply this Func by a branch (see \ref branch). Distributes the
+     * accumulation into the arms - f *= branch(cond, a, b) becomes
+     * f = branch(cond, f * a, f * b) - so the whole update value is a branch
+     * (real control flow), and only the taken arm's contribution is computed.
+     * If the Func has no pure definition it is initialised to 1 (the
+     * multiplicative identity), matching \ref operator*=(const Expr &). */
+    Stage operator*=(const Branch &);
+
     /** Define a stage that divides this Func by the given expression.
      * If the expression refers to some RDom, this performs a product
      * reduction of the inverse of the expression over the domain. If the
@@ -597,6 +632,14 @@ public:
     Stage operator/=(const Tuple &);
     Stage operator/=(const FuncRef &);
     // @}
+
+    /** Divide this Func by a branch (see \ref branch). Distributes the
+     * accumulation into the arms - f /= branch(cond, a, b) becomes
+     * f = branch(cond, f / a, f / b) - so the whole update value is a branch
+     * (real control flow), and only the taken arm's contribution is computed.
+     * If the Func has no pure definition it is initialised to 1, matching
+     * \ref operator/=(const Expr &). */
+    Stage operator/=(const Branch &);
 
     /* Override the usual assignment operator, so that
      * f(x, y) = g(x, y) defines f.

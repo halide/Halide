@@ -629,6 +629,12 @@ struct Call : public ExprNode<Call> {
         // Converts a boolean to a mask. Scalar bools become -1 (all bits set) when true,
         // 0 when false. Vector bools are converted to proper vector masks.
         bool_to_mask,
+        // A user-facing strict select that lowers to a real control-flow
+        // branch and evaluates only the taken side (see branch() in
+        // IROperator.h). It is lowered to if_then_else late in lowering, or
+        // becomes an error if it can not be a real branch (a lane-varying
+        // condition under vectorization, or vectorization inside a GPU kernel).
+        branch,
         // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
         bundle,
         // Takes a sequence of (condition, function) pairs, and calls the first

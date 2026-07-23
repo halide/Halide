@@ -169,6 +169,22 @@ public:
         // Visit the children if we haven't been here before.
         IRGraphVisitor::include(e);
     }
+
+    void visit(const Call *op) override {
+        // The value arguments of if_then_else are evaluated lazily: only the
+        // taken side actually runs. Don't count uses inside them, so that a
+        // subexpression that occurs only within an arm is never lifted into a
+        // let outside the branch. Doing so would evaluate it unconditionally,
+        // which defeats the point of the branch and could execute an
+        // operation the branch was there to guard against. The condition is
+        // always evaluated, so recurse into it normally.
+        if ((op->is_intrinsic(Call::if_then_else) || op->is_intrinsic(Call::branch)) &&
+            op->args.size() >= 2) {
+            include(op->args[0]);
+        } else {
+            IRGraphVisitor::visit(op);
+        }
+    }
 };
 
 /** Rebuild an expression using a map of replacements. Works on graphs without exploding. */
