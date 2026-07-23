@@ -1,3 +1,18 @@
+def _halide_install_dir():
+    # `halide-bin` is only present when this package was built in split mode
+    # (see pyproject.toml's HALIDE_SPLIT_BUILD override); a plain, monolithic
+    # build has no such dependency and bundles everything under this package's
+    # own directory instead, exactly as before the split.
+    try:
+        import halide_bin
+    except ImportError:
+        import os
+
+        return os.path.dirname(__file__)
+    else:
+        return halide_bin.install_dir()
+
+
 def _preload_bundled_halide_library():
     # Force-load our own copy of the Halide runtime library by absolute path before
     # importing halide_, so that halide_'s implicit load of the same library (by
@@ -10,7 +25,7 @@ def _preload_bundled_halide_library():
 
     from pathlib import Path
 
-    root = Path(__file__).parent
+    root = Path(_halide_install_dir())
 
     bin_dir = root / "bin"
     if hasattr(os, "add_dll_directory") and bin_dir.is_dir():
@@ -38,9 +53,7 @@ from .halide_ import _, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9  # noqa: E402, F4
 
 
 def install_dir():
-    import os
-
-    return os.path.dirname(__file__)
+    return _halide_install_dir()
 
 
 from ._generator_helpers import (  # noqa: E402, F401
