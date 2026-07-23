@@ -22,6 +22,7 @@ add_halide_generator(
 add_halide_library(
     bilateral_grid
     FROM bilateral_grid.generator
+    REGISTRATION bilateral_grid_registration
     STMT bilateral_grid_STMT
     SCHEDULE bilateral_grid_SCHEDULE
 )
@@ -63,3 +64,13 @@ if (EXISTS ${IMAGE})
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
     )
 endif ()
+
+# RunGen-based benchmark. Run every app benchmark at once with
+# `ctest -L benchmark_apps`.
+add_executable(bilateral_grid_rungen ${bilateral_grid_registration})
+target_link_libraries(bilateral_grid_rungen PRIVATE Halide::RunGenMain bilateral_grid)
+add_test(
+    NAME bilateral_grid_benchmark
+    COMMAND bilateral_grid_rungen --benchmarks=all --estimate_all --parsable_output
+)
+set_tests_properties(bilateral_grid_benchmark PROPERTIES LABELS "bilateral_grid;benchmark_apps")

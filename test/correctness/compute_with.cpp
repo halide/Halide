@@ -70,7 +70,7 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
         const auto &iter = stores.find(fname);
         if (iter != stores.end()) {
             const Bound &b = iter->second;
-            if (!check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes, "store", fname)) {
+            if (!check_coordinates(b, e->coordinates, e->dimensions, e->lanes, "store", fname)) {
                 exit(1);
             }
         }
@@ -80,7 +80,7 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
         const auto &iter = loads.find(fname);
         if (iter != loads.end()) {
             const Bound &b = iter->second;
-            if (!check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes, "load", fname)) {
+            if (!check_coordinates(b, e->coordinates, e->dimensions, e->lanes, "load", fname)) {
                 exit(1);
             }
         }

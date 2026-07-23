@@ -76,6 +76,8 @@ class IRVisitor;
     X(Evaluate)                    \
     X(Prefetch)                    \
     X(Atomic)                      \
+    X(StreamingStore)              \
+    X(StreamingLoads)              \
     X(HoistedStorage)
 
 #define HALIDE_FOR_EACH_IR_NODE(X) \

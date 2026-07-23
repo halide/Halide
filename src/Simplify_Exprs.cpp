@@ -392,7 +392,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
         Expr new_index = b_index->value;
         int new_lanes = new_index.type().lanes();
         Expr load = Load::make(op->type.with_lanes(new_lanes), op->name, b_index->value,
-                               op->image, op->param, const_true(new_lanes, nullptr), align);
+                               op->image, op->param, const_true(new_lanes, nullptr), align, op->is_streaming);
         return Broadcast::make(load, b_index->lanes);
     } else if (s_index &&
                (s_index->is_concat() ||
@@ -410,7 +410,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
             predicate_slice = mutate(predicate_slice, nullptr);
 
             Expr load = Load::make(op->type.with_lanes(new_lanes), op->name, new_index,
-                                   op->image, op->param, predicate_slice, ModulusRemainder{});
+                                   op->image, op->param, predicate_slice, ModulusRemainder{}, op->is_streaming);
             loaded_vecs.emplace_back(std::move(load));
         }
         return Shuffle::make(loaded_vecs, s_index->indices);
@@ -439,13 +439,13 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
 
         Expr permuted_load =
             Load::make(op->type, op->name, mr.to_expr(), op->image,
-                       op->param, permuted_predicate, align);
+                       op->param, permuted_predicate, align, op->is_streaming);
         int B = op->type.lanes() / A;
         return mutate(Shuffle::make_transpose(permuted_load, B), info);
     } else if (predicate.same_as(op->predicate) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate, align);
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate, align, op->is_streaming);
     }
 }
 

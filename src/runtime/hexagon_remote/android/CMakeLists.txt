@@ -29,4 +29,11 @@ target_include_directories(
 )
 target_link_libraries(halide_hexagon_host PRIVATE fastrpc::cdsprpc log)
 
-install(TARGETS halide_hexagon_host DESTINATION bin)
+# Mirror the committed src/runtime/hexagon_remote/bin/arm-<bits>-android layout.
+# The bit width comes from the Android NDK toolchain's pointer size.
+math(EXPR _android_bits "8 * ${CMAKE_SIZEOF_VOID_P}")
+install(
+    TARGETS halide_hexagon_host
+    DESTINATION bin/arm-${_android_bits}-android
+    COMPONENT Halide_Hexagon
+)
