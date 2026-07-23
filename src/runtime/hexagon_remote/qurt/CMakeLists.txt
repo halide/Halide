@@ -31,4 +31,17 @@ add_library(
 target_include_directories(halide_hexagon_remote_skel PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 target_include_directories(halide_hexagon_remote_skel SYSTEM PRIVATE ${HALIDE_HEXAGON_REMOTE_IDL})
 
-install(TARGETS sim_qurt hexagon_sim_remote halide_hexagon_remote_skel DESTINATION bin)
+# HEXAGON_ARCH (e.g. v65/v66/v68) is set by the Hexagon SDK toolchain file.
+# Install into a per-arch subdirectory so the layout mirrors the committed
+# src/runtime/hexagon_remote/bin/<arch> tree.
+if (NOT HEXAGON_ARCH)
+    message(
+        FATAL_ERROR "HEXAGON_ARCH was not set by the Hexagon toolchain; "
+        "cannot determine the install subdirectory."
+    )
+endif ()
+install(
+    TARGETS sim_qurt hexagon_sim_remote halide_hexagon_remote_skel
+    DESTINATION bin/${HEXAGON_ARCH}
+    COMPONENT Halide_Hexagon
+)

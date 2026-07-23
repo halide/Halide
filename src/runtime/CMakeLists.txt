@@ -26,6 +26,7 @@ set(RUNTIME_CPP
     force_include_types
     fuchsia_clock
     fuchsia_host_cpu_count
+    fuchsia_thread_id
     fuchsia_yield
     gpu_device_selection
     halide_buffer_t
@@ -37,8 +38,13 @@ set(RUNTIME_CPP
     ios_io
     linux_aarch64_cpu_features
     linux_arm_cpu_features
+    linux_arm_thread_id
     linux_clock
     linux_host_cpu_count
+    linux_powerpc_thread_id
+    linux_riscv_thread_id
+    linux_x86_cpu_features
+    linux_x86_thread_id
     linux_yield
     metal
     metal_objc_arm
@@ -53,6 +59,7 @@ set(RUNTIME_CPP
     osx_clock
     osx_get_symbol
     osx_host_cpu_count
+    osx_thread_id
     osx_yield
     posix_aligned_alloc
     posix_allocator
@@ -83,6 +90,7 @@ set(RUNTIME_CPP
     tracing
     vulkan
     wasm_cpu_features
+    wasm_thread_id
     # webgpu # TODO(https://github.com/halide/Halide/issues/7248)
     webgpu_dawn
     webgpu_emscripten
@@ -121,14 +129,6 @@ set(RUNTIME_LL
     x86_avx2
     x86_avx512
     x86_sse41
-    # keep-sorted end
-)
-
-set(RUNTIME_BC
-    # keep-sorted start
-    compute_20
-    compute_30
-    compute_35
     # keep-sorted end
 )
 
@@ -341,19 +341,16 @@ foreach (i IN LISTS RUNTIME_LL)
     target_sources(Halide_initmod PRIVATE ${INITMOD})
 endforeach ()
 
-foreach (i IN LISTS RUNTIME_BC)
-    set(INITMOD "_initmod_ptx_${i}.cpp")
-    set(RT_BC "${CMAKE_CURRENT_SOURCE_DIR}/nvidia_libdevice_bitcode/libdevice.${i}.10.bc")
-
-    add_custom_command(
-        OUTPUT "${INITMOD}"
-        COMMAND
-            binary2cpp "halide_internal_initmod_ptx_${i}_ll" < "$<SHELL_PATH:${RT_BC}>" > "${INITMOD}"
-        DEPENDS binary2cpp "${RT_BC}"
-        VERBATIM
-    )
-    target_sources(Halide_initmod PRIVATE ${INITMOD})
-endforeach ()
+set(RT_BC "${CMAKE_CURRENT_SOURCE_DIR}/nvidia_libdevice_bitcode/libdevice.10.bc")
+add_custom_command(
+    OUTPUT "_initmod_ptx_libdevice.cpp"
+    COMMAND
+        binary2cpp "halide_internal_initmod_ptx_libdevice_ll" < "$<SHELL_PATH:${RT_BC}>" >
+        "_initmod_ptx_libdevice.cpp"
+    DEPENDS binary2cpp "${RT_BC}"
+    VERBATIM
+)
+target_sources(Halide_initmod PRIVATE "_initmod_ptx_libdevice.cpp")
 
 add_custom_command(
     OUTPUT "_initmod_inlined_c.cpp"

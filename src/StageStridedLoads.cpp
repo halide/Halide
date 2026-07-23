@@ -110,7 +110,10 @@ protected:
                     if (const Allocate *const *a_ptr = allocation_scope.find(op->name)) {
                         a = *a_ptr;
                     }
-                    found_loads[Key{op->name, base, stride, r->lanes, op->type, a, s}][offset].push_back(op);
+                    // Don't mess with loads from natively-2D tile memory.
+                    if (!a || !is_tile_memory_type(a->memory_type)) {
+                        found_loads[Key{op->name, base, stride, r->lanes, op->type, a, s}][offset].push_back(op);
+                    }
                 }
             }
         }
@@ -150,6 +153,16 @@ protected:
         // to.
         ScopedBinding<const Allocate *> bind(allocation_scope, op->name, op);
         IRVisitor::visit(op);
+    }
+
+    void visit(const Store *op) override {
+        // Don't mess with stores to natively-2D tile memory.
+        if (const auto *alloc = allocation_scope.find(op->name);
+            alloc && is_tile_memory_type((*alloc)->memory_type)) {
+            return;
+        } else {
+            IRVisitor::visit(op);
+        }
     }
 
     using IRVisitor::visit;
@@ -298,7 +311,7 @@ Stmt stage_strided_loads(const Stmt &stmt, const Target &target) {
         } else {
             // Might be a strided load after simplification
             return Load::make(l->type, l->name, self->mutate(l->index), l->image, l->param,
-                              self->mutate(l->predicate), l->alignment);
+                              self->mutate(l->predicate), l->alignment, l->is_streaming);
         }
     });
 
@@ -354,7 +367,7 @@ Stmt stage_strided_loads(const Stmt &stmt, const Target &target) {
             }
 
             Expr shared_load = Load::make(t, k.buf, idx, op->image, op->param,
-                                          const_true(lanes), op->alignment);
+                                          const_true(lanes), op->alignment, op->is_streaming);
 
             // We now need to pick a site to place our shared dense load. We
             // can't lift the shared load further out than k.scope, because that
@@ -419,7 +432,7 @@ Stmt stage_strided_loads(const Stmt &stmt, const Target &target) {
             Type t = k.type.with_lanes(lanes);
             const Load *op = loads[0];
             Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
-                                         const_true(lanes), op->alignment - delta);
+                                         const_true(lanes), op->alignment - delta, op->is_streaming);
             dense_load = common_subexpression_elimination(dense_load);
             Expr shuf = Shuffle::make_slice(dense_load, delta, k.stride, k.lanes);
             for (const Load *l : loads) {
@@ -457,7 +470,7 @@ Stmt stage_strided_loads(const Stmt &stmt, const Target &target) {
             Type t = k.type.with_lanes(lanes);
             const Load *op = loads[0];
             Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
-                                         const_true(lanes), op->alignment);
+                                         const_true(lanes), op->alignment, op->is_streaming);
             dense_load = common_subexpression_elimination(dense_load);
             Expr shuf = Shuffle::make_slice(dense_load, offset - final_offset, k.stride, k.lanes);
             for (const Load *l : loads) {
@@ -490,7 +503,7 @@ Stmt stage_strided_loads(const Stmt &stmt, const Target &target) {
                 Type t = k.type.with_lanes(lanes);
                 const Load *op = loads[0];
                 Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
-                                             const_true(lanes), op->alignment);
+                                             const_true(lanes), op->alignment, op->is_streaming);
                 dense_load = common_subexpression_elimination(dense_load);
                 Expr shuf = Shuffle::make_slice(dense_load, offset - first_offset, k.stride, k.lanes);
                 for (const Load *l : loads) {
@@ -508,9 +521,9 @@ Stmt stage_strided_loads(const Stmt &stmt, const Target &target) {
                 Type t = k.type.with_lanes(half_lanes);
                 const Load *op = loads[0];
                 Expr dense_load1 = Load::make(t, k.buf, idx1, op->image, op->param,
-                                              const_true(half_lanes), op->alignment);
+                                              const_true(half_lanes), op->alignment, op->is_streaming);
                 Expr dense_load2 = Load::make(t, k.buf, idx2, op->image, op->param,
-                                              const_true(half_lanes), op->alignment + half_lanes - delta);
+                                              const_true(half_lanes), op->alignment + half_lanes - delta, op->is_streaming);
                 dense_load1 = common_subexpression_elimination(dense_load1);
                 dense_load2 = common_subexpression_elimination(dense_load2);
                 Expr shuf1 = Shuffle::make_slice(dense_load1, 0, k.stride, k.lanes / 2);

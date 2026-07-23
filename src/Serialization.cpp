@@ -474,7 +474,8 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
                                                      predicate_serialized.first, predicate_serialized.second,
                                                      value_serialized.first, value_serialized.second,
                                                      index_serialized.first, index_serialized.second,
-                                                     param_name_serialized, alignment_serialized)
+                                                     param_name_serialized, alignment_serialized,
+                                                     store_stmt->is_streaming)
                                   .Union());
     }
     case IRNodeType::Provide: {
@@ -841,7 +842,8 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
                                                     predicate_serialized.first, predicate_serialized.second,
                                                     index_serialized.first, index_serialized.second,
                                                     image_name_serialized, param_name_serialized,
-                                                    alignment_serialized, type_serialized)
+                                                    alignment_serialized, type_serialized,
+                                                    load_expr->is_streaming)
                                   .Union());
     }
     case IRNodeType::Ramp: {
@@ -1028,6 +1030,7 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
         trace_tags_serialized.push_back(serialize_string(builder, tag));
     }
     const bool no_profiling = function.should_not_profile();
+    const auto profiler_display_name_serialized = serialize_string(builder, function.profiler_display_name());
     const bool frozen = function.frozen();
     auto func = Serialize::CreateFunc(builder,
                                       name_serialized,
@@ -1051,6 +1054,7 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
                                       trace_realizations,
                                       builder.CreateVector(trace_tags_serialized),
                                       no_profiling,
+                                      profiler_display_name_serialized,
                                       frozen);
     return func;
 }
@@ -1124,7 +1128,8 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
                                          builder.CreateVector(bounds_serialized),
                                          builder.CreateVector(estimates_serialized),
                                          builder.CreateVector(wrappers_serialized),
-                                         memory_type, memoized, async, ring_buffer.first, ring_buffer.second,
+                                         memory_type, memoized, async,
+                                         ring_buffer.first, ring_buffer.second,
                                          memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second);
 }
 
@@ -1292,6 +1297,16 @@ Offset<Serialize::StageSchedule> Serializer::serialize_stage_schedule(FlatBuffer
     const bool allow_race_conditions = stage_schedule.allow_race_conditions();
     const bool atomic = stage_schedule.atomic();
     const bool override_atomic_associativity_test = stage_schedule.override_atomic_associativity_test();
+    const bool stream_stores = stage_schedule.stream_stores();
+    const auto &stream_loads_names_opt = stage_schedule.stream_loads_names();
+    const bool stream_loads_all = !stream_loads_names_opt.has_value();
+    std::vector<Offset<String>> stream_loads_names_serialized;
+    if (stream_loads_names_opt) {
+        stream_loads_names_serialized.reserve(stream_loads_names_opt->size());
+        for (const auto &name : *stream_loads_names_opt) {
+            stream_loads_names_serialized.push_back(serialize_string(builder, name));
+        }
+    }
     return Serialize::CreateStageSchedule(builder,
                                           builder.CreateVector(rvars_serialized),
                                           builder.CreateVector(splits_serialized),
@@ -1300,7 +1315,9 @@ Offset<Serialize::StageSchedule> Serializer::serialize_stage_schedule(FlatBuffer
                                           fuse_level_serialized,
                                           builder.CreateVector(fused_pairs_serialized),
                                           touched, allow_race_conditions, atomic,
-                                          override_atomic_associativity_test);
+                                          override_atomic_associativity_test,
+                                          stream_stores, stream_loads_all,
+                                          builder.CreateVector(stream_loads_names_serialized));
 }
 
 Offset<Serialize::BufferConstraint> Serializer::serialize_buffer_constraint(FlatBufferBuilder &builder, const BufferConstraint &buffer_constraint) {
@@ -1338,7 +1355,9 @@ Offset<Serialize::Parameter> Serializer::serialize_parameter(FlatBufferBuilder &
         }
         const auto memory_type_serialized = serialize_memory_type(parameter.memory_type());
         return Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, host_alignment,
-                                          builder.CreateVector(buffer_constraints_serialized), memory_type_serialized);
+                                          builder.CreateVector(buffer_constraints_serialized), memory_type_serialized, std::nullopt,
+                                          Serialize::Expr::NONE, 0, Serialize::Expr::NONE, 0,
+                                          Serialize::Expr::NONE, 0, Serialize::Expr::NONE, 0);
     } else {
         static_assert(FLATBUFFERS_USE_STD_OPTIONAL);
         const auto make_optional_u64 = [](const std::optional<halide_scalar_value_t> &v) -> std::optional<uint64_t> {

@@ -41,13 +41,13 @@ jobs:
       MACOSX_DEPLOYMENT_TARGET: 11
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@v4.3.2
+      - uses: lukka/get-cmake@v4.4.0
         with:
           cmakeVersion: "~3.28.0"
 
@@ -70,7 +70,7 @@ jobs:
       #- uses: mxschmitt/action-tmate@v3
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.4.1
+        uses: pypa/cibuildwheel@v4.1.0
         env:
           CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
           CIBW_SKIP: "cp3{5,6,7,8,9}* cp314t-*"
@@ -139,6 +139,7 @@ jobs:
             CMAKE_GENERATOR=Ninja
             CMAKE_PREFIX_PATH='${{ github.workspace }}\opt'
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair --ignore-existing -w {dest_dir} {wheel}
           CIBW_BEFORE_TEST_LINUX: pip install cmake ninja
           CIBW_TEST_COMMAND: >
             cmake -G Ninja -S {project}/python_bindings/apps -B build -DCMAKE_BUILD_TYPE=Release &&

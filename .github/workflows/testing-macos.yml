@@ -34,7 +34,7 @@ jobs:
     runs-on: macos-26
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install coverage dependencies
         run: brew install llvm@21 lld@21 emscripten flatbuffers wabt
@@ -43,7 +43,7 @@ jobs:
         run: tools/run-coverage.sh
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: build/macOS-coverage/coverage.info
           fail_ci_if_error: true
@@ -66,7 +66,7 @@ jobs:
             python: cpython-3.10.20-macos-aarch64-none
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v7
 

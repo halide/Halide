@@ -4,20 +4,6 @@
 
 namespace hannk {
 
-std::ostream &operator<<(std::ostream &stream, const halide_type_t &type) {
-    if (type.code == halide_type_uint && type.bits == 1) {
-        stream << "bool";
-    } else {
-        static const char *const names[5] = {"int", "uint", "float", "handle", "bfloat"};
-        assert(type.code >= 0 && type.code < size(names));
-        stream << names[type.code] << (int)type.bits;
-    }
-    if (type.lanes > 1) {
-        stream << "x" << (int)type.lanes;
-    }
-    return stream;
-}
-
 std::ostream &operator<<(std::ostream &s, const halide_dimension_t &dim) {
     return s << "{" << dim.min << ", " << dim.extent << ", " << dim.stride << "}";
 }

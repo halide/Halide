@@ -16,7 +16,6 @@ constexpr size_t size(T (&)[N]) {
     return N;
 }
 
-std::ostream &operator<<(std::ostream &stream, const halide_type_t &type);
 std::ostream &operator<<(std::ostream &s, const halide_dimension_t &dim);
 
 template<typename T>

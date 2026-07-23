@@ -1,29 +1,16 @@
+#ifndef EXTENDED_DEBUG
 #define EXTENDED_DEBUG 0
+#endif
 
 #if EXTENDED_DEBUG
-// This code is currently setup for Linux debugging. Switch to using pthread_self on e.g. Mac OS X.
-extern "C" int syscall(int);
-
-namespace {
-int gettid() {
-#ifdef BITS_32
-    return syscall(224);
+#define log_message(stuff)                                                     \
+    do {                                                                       \
+        print(nullptr) << halide_current_thread_id() << ": " << stuff << "\n"; \
+    } while (0)
 #else
-    return syscall(186);
-#endif
-}
-}  // namespace
-
-// clang-format off
-#define log_message(stuff) do { print(nullptr) << gettid() << ": " << stuff << "\n"; } while (0)
-// clang-format on
-
-#else
-
-// clang-format off
-#define log_message(stuff) do { /*nothing*/ } while (0)
-// clang-format on
-
+#define log_message(stuff) \
+    do { /*nothing*/       \
+    } while (0)
 #endif
 
 namespace Halide {

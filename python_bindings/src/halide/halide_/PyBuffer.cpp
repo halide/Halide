@@ -311,7 +311,7 @@ public:
     ~PyBuffer() override = default;
 };
 
-py::buffer_info to_buffer_info(Buffer<> &b, bool reverse_axes = true) {
+py::buffer_info to_buffer_info(Buffer<> &b, bool reverse_axes) {
     if (b.data() == nullptr) {
         throw py::value_error("Cannot convert a Buffer<> with null host ptr to a Python buffer.");
     }
@@ -351,21 +351,44 @@ void define_buffer(py::module &m) {
         py::class_<Buffer<>, PyBuffer>(m, "Buffer", py::buffer_protocol())
 
             // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
-            // most notably, we can convert to an ndarray by calling numpy.array()
+            // most notably, we can convert to an ndarray by calling numpy.array(other_buffer). This
+            // always reverses the axes.
             .def_buffer([](Buffer<> &b) -> py::buffer_info {
                 return to_buffer_info(b, /*reverse_axes*/ true);
             })
 
-            // This allows us to use any buffer-like python entity to create a Buffer<>
-            // (most notably, an ndarray)
-            .def(py::init_alias<py::buffer, const std::string &, bool>(), py::arg("buffer"), py::arg("name") = "", py::arg("reverse_axes") = true)
+            // Returns a NumPy array that is a view of (shares storage with) this Buffer.
+            .def(
+                "numpy_view", [](Buffer<> &self, bool reverse_axes) -> py::array {
+                    // base = py::cast(self) ensures that `self` outlives the returned view.
+                    return py::array(to_buffer_info(self, reverse_axes), /*base*/ py::cast(self));
+                },
+                py::arg("reverse_axes") = true, "Returns a NumPy array that is a view of this Buffer. By default the axes are "
+                                                "reversed. Pass reverse_axes=False to preserve the original axis order.")
+
             .def(py::init_alias<>())
-            .def(py::init_alias<const Buffer<> &>())
+            // keep_alive</*Nurse*/ 1, /*Patient*/ 2>: this copy shares the source's data pointer
+            // without taking ownership (the source may itself wrap external memory, e.g. a numpy
+            // array kept alive only by the source Buffer).
+            //
+            // In keep_alive<1, 2>, 1 refers to `this`, 2 refers to the argument `Buffer<> &` arg.
+            .def(py::init_alias<const Buffer<> &>(), py::keep_alive<1, 2>())
+
+            // This py::init_alias allows us to use any buffer-like Python entity to create a
+            // Buffer<> (most notably, an ndarray). reverse_axes = True by default.
+            //
+            // ! Note that the copy/default constructors are registered *above, before* the
+            // py::buffer one before. This is because hl.Buffer also satisfies the buffer protocol,
+            // and we want hl.Buffer(other_buffer) to be a "direct" copy (no axis reversal) rather
+            // than routing through the axis-reversing buffer-protocol path.
+            .def(py::init_alias<py::buffer, const std::string &, bool>(), py::arg("buffer"), py::arg("name") = "", py::arg("reverse_axes") = true)
+
             .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
                      return Buffer<>(type, sizes, name);
                  }),
                  py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
+            // The default storage order is [0, 1, 2, ...], meaning store the first axis densest.
             .def(py::init([](Type type, const std::vector<int> &sizes, const std::vector<int> &storage_order, const std::string &name) -> Buffer<> {
                      return Buffer<>(type, sizes, storage_order, name);
                  }),
@@ -373,11 +396,7 @@ void define_buffer(py::module &m) {
 
             // Note that this exists solely to allow you to create a Buffer with a null host ptr;
             // this is necessary for some bounds-query operations (e.g. Func::infer_input_bounds).
-            .def_static(
-                "make_bounds_query", [](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
-                    return Buffer<>(type, nullptr, sizes, name);
-                },
-                py::arg("type"), py::arg("sizes"), py::arg("name") = "")
+            .def_static("make_bounds_query", [](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> { return Buffer<>(type, nullptr, sizes, name); }, py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
             .def_static("make_scalar", static_cast<Buffer<> (*)(Type, const std::string &)>(Buffer<>::make_scalar), py::arg("type"), py::arg("name") = "")
             .def_static("make_interleaved", static_cast<Buffer<> (*)(Type, int, int, int, const std::string &)>(Buffer<>::make_interleaved), py::arg("type"), py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("name") = "")

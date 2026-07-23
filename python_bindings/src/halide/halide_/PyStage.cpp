@@ -14,6 +14,11 @@ void define_stage(py::module &m) {
             .def("dump_argument_list", &Stage::dump_argument_list)
             .def("name", &Stage::name)
 
+            .def("stream_stores", &Stage::stream_stores)
+            .def("stream_loads", static_cast<Stage &(Stage::*)()>(&Stage::stream_loads))
+            .def("stream_loads", static_cast<Stage &(Stage::*)(const std::vector<Func> &)>(&Stage::stream_loads),
+                 py::arg("funcs"))
+
             .def("rfactor", static_cast<Func (Stage::*)(const std::vector<std::pair<RVar, Var>> &)>(&Stage::rfactor),
                  py::arg("preserved"))
             .def("rfactor", static_cast<Func (Stage::*)(const RVar &, const Var &)>(&Stage::rfactor),
