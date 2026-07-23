@@ -67,14 +67,15 @@ jobs:
         # do, since that's a 3x cost multiplier on the most expensive
         # runner tier).
         uv_group: [ "ci-llvm-main" ]
-        # x86-64 (macos-26-intel) is a follow-up: needs the runner label's
-        # availability verified, plus the x86-64-osx/-sse41 correctness-only
-        # passes and ENABLE_APPS_HANNK=OFF (no tflite on x86 macOS).
-        runner: [ "macos-26" ]
+        runner: [ "macos-26", "macos-26-intel" ]
         include:
           - runner: macos-26
             arch: arm-64
             python: cpython-3.10.20-macos-aarch64-none
+          - runner: macos-26-intel
+            arch: x86-64
+            # uv doesn't provide macos-x86_64 builds; use a preinstalled one.
+            python: "3.10"
 
     steps:
       - uses: actions/checkout@v7
@@ -109,18 +110,12 @@ jobs:
           cmake -S . -B build -DHalide_TARGET=host
           cmake --build build --target install
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
-            -LE "performance|autoschedulers" -j "$(sysctl -n hw.logicalcpu)" \
+            -LE "performance|autoschedulers|fuzz" -j "$(sysctl -n hw.logicalcpu)" \
             -E tutorial_lesson_19
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
             -L "performance|autoschedulers" --repeat until-pass:5
 
-      # --- apps/ (host): first time apps/ is exercised via ctest in any of
-      # the CMake-preset GHA workflows (only the legacy Make-based
-      # testing-make.yml does today), so keep this non-blocking until proven
-      # green. ---
-
       - name: Configure apps (host)
-        continue-on-error: true
         run: >-
           cmake -S apps -B apps-build
           -G Ninja
@@ -128,25 +123,25 @@ jobs:
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
           -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           -DHalide_TARGET=host
-          -DENABLE_APPS_HANNK=ON
+          -DENABLE_APPS_HANNK=${{ matrix.arch == 'arm-64' && 'ON' || 'OFF' }}
 
       - name: Build apps (host)
-        continue-on-error: true
         run: cmake --build apps-build
 
       - name: Test apps (host)
-        continue-on-error: true
         run: >-
           ctest --test-dir apps-build --build-config RelWithDebInfo
           --output-on-failure -LE slow_tests --timeout 3600
 
       - name: Configure HelloiOS
+        if: matrix.arch == 'arm-64'
         run: ./setup.sh
         working-directory: apps/HelloiOS
         env:
           Halide_ROOT: ${{ github.workspace }}/install
 
       - name: Build HelloiOS
+        if: matrix.arch == 'arm-64'
         run: >-
           xcodebuild -workspace HelloiOS.xcworkspace
           -scheme HelloiOS
@@ -154,6 +149,24 @@ jobs:
           -destination 'generic/platform=iOS Simulator'
           build
         working-directory: apps/HelloiOS
+
+      # --- x86-64-osx correctness, with and without SSE4.1  ---
+
+      - name: Test (x86-64-osx, no SSE4.1)
+        if: matrix.arch == 'x86-64'
+        run: |
+          cmake -S . -B build -DHalide_TARGET=x86-64-osx
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -L correctness -j "$(sysctl -n hw.logicalcpu)"
+
+      - name: Test (x86-64-osx, SSE4.1)
+        if: matrix.arch == 'x86-64'
+        run: |
+          cmake -S . -B build -DHalide_TARGET=x86-64-osx-sse41
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -L correctness -j "$(sysctl -n hw.logicalcpu)"
 
       # --- host-metal: real GPU testing on hosted Apple Silicon runners ---
 
@@ -167,7 +180,6 @@ jobs:
             -L "performance|autoschedulers_gpu" --repeat until-pass:5
 
       - name: Configure apps (host-metal)
-        continue-on-error: true
         run: >-
           cmake -S apps -B apps-build
           -G Ninja
@@ -175,14 +187,12 @@ jobs:
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
           -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           -DHalide_TARGET=host-metal
-          -DENABLE_APPS_HANNK=ON
+          -DENABLE_APPS_HANNK=${{ matrix.arch == 'arm-64' && 'ON' || 'OFF' }}
 
       - name: Build apps (host-metal)
-        continue-on-error: true
         run: cmake --build apps-build
 
       - name: Test apps (host-metal)
-        continue-on-error: true
         run: >-
           ctest --test-dir apps-build --build-config RelWithDebInfo
           --output-on-failure -LE slow_tests --timeout 3600
