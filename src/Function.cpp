@@ -1213,8 +1213,16 @@ bool Function::is_inductive(const string &var) const {
         for (const Expr &e : values) {
             visit_with(e, [&](auto *self, const Call *op) {
                 if (op->name == name()) {
+                    // var is already known not to be an RVar (checked above),
+                    // so the LHS position itself never has a reduction
+                    // domain; what matters is whether the call's argument at
+                    // this position differs from var -- regardless of
+                    // whether that argument happens to be an RVar (e.g. a
+                    // free reduction variable substituted in for this
+                    // position), it still means this position isn't simply
+                    // passed through unchanged.
                     if (const auto &v = op->args[pos].as<Variable>()) {
-                        if (v->name != var && !v->reduction_domain.defined()) {
+                        if (v->name != var) {
                             inductive_in_var = true;
                         }
                     } else {

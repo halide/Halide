@@ -89,10 +89,13 @@ tests(
     inductive_no_select.cpp
     inductive_redundant_z_fold.cpp
     inductive_reorder.cpp
+    inductive_rvar_rhs.cpp
     inductive_small_fold.cpp
     inductive_tuple_fold.cpp
     inductive_tuple_to_expr.cpp
+    inductive_two_defs.cpp
     inductive_update.cpp
+    inductive_update_reorder.cpp
     inductive_var_swap.cpp
     inductive_vectorize.cpp
     init_def_should_be_all_vars.cpp

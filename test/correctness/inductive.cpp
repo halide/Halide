@@ -2,8 +2,11 @@
 #include "check_call_graphs.h"
 #include "test_sharding.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <limits>
 #include <map>
+#include <vector>
 
 namespace {
 
@@ -221,6 +224,45 @@ int type_declare_test() {
     return 0;
 }
 
+int inductive_update_rdom_test() {
+    Func g(Int(32), "g"), h("h");
+    Var x("x"), y("y");
+
+    const int Y = 10;
+    RDom r(0, Y, 0, Y, "r");
+
+    g(x, y) = Expr(std::numeric_limits<int>::min());
+    g(x, r.x) = select(x <= 0, r.x, likely(max(g(x, r.x), g(x - 1, r.y) + x + r.y)));
+
+    h(x, y) = g(x, y);
+
+    h.bound(x, 0, 20).bound(y, 0, Y);
+    g.compute_at(h, x).store_root();
+
+    Buffer<int> im = h.realize({20, Y});
+
+    std::vector<std::vector<int>> rows(20, std::vector<int>(Y));
+    for (int yy = 0; yy < Y; yy++) {
+        rows[0][yy] = yy;
+    }
+    for (int xx = 1; xx < 20; xx++) {
+        int best = rows[xx - 1][0] + xx + 0;
+        for (int ry = 1; ry < Y; ry++) {
+            best = std::max(best, rows[xx - 1][ry] + xx + ry);
+        }
+        for (int yy = 0; yy < Y; yy++) {
+            rows[xx][yy] = best;
+        }
+    }
+    auto func = [&](int x, int y) {
+        return rows[x][y];
+    };
+    if (check_image(im, func)) {
+        return 1;
+    }
+    return 0;
+}
+
 int tuple_test() {
     Func g = Func(std::vector<Type>{Int(32), Int(32)}, "g");
     Func h("h");
@@ -278,6 +320,7 @@ int main(int argc, char **argv) {
         {"2d sum test", sum_2d_test},
         {"1d sum test", sum_1d_test},
         {"multi-baseline test", multi_baseline_test},
+        {"inductive update rdom test", inductive_update_rdom_test},
         {"type declaration test", type_declare_test},
         {"tuple test", tuple_test},
         {"tuple test 2", tuple_test_2},
