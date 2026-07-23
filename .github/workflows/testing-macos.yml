@@ -83,7 +83,20 @@ jobs:
       - uses: astral-sh/setup-uv@v7
 
       - name: Install wasm toolchain
-        run: brew install emscripten wabt
+        run: brew install emscripten
+
+      # AppleClang on Intel unconditionally injects /usr/local/include and
+      # /usr/local/lib into every compile/link, below CMake's control.
+      # Homebrew's jpeg-turbo (built with -DWITH_JPEG8=1, i.e. reports
+      # JPEG_LIB_VERSION 80) is preinstalled there on this runner image and
+      # collides with vcpkg's own libjpeg-turbo (version 62), producing
+      # "Wrong JPEG library version: library is 62, caller expects 80" at
+      # runtime. Remove it so vcpkg's copy is the only one AppleClang can see.
+      - name: Remove Homebrew libjpeg-turbo
+        if: matrix.arch == 'x86-64'
+        run: |
+          brew uninstall --ignore-dependencies --force jpeg-turbo || true
+          brew uninstall --ignore-dependencies --force jpeg || true
 
       - name: Sync CI environment
         run: |
