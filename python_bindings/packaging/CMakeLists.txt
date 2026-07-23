@@ -88,3 +88,11 @@ if (WITH_PYTHON_BINDINGS OR WITH_PYTHON_STUBS)
         COMPONENT Halide_Python
     )
 endif ()
+
+##
+# Pip overrides
+##
+
+if (SKBUILD)
+    add_subdirectory(pip)
+endif ()

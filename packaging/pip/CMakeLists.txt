@@ -29,7 +29,7 @@ install(
     # bin/, which CMake does not understand. These users can add %VIRTUAL_ENV%
     # to their CMAKE_PREFIX_PATH.
     DESTINATION "${SKBUILD_DATA_DIR}/share/cmake/Halide"
-    COMPONENT Halide_Python
+    COMPONENT Halide_Development
 )
 
 # Same thing for HalideCompiler
@@ -38,7 +38,7 @@ install(
         "${CMAKE_CURRENT_BINARY_DIR}/HalideCompilerConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/../HalideCompilerConfigVersion.cmake"
     DESTINATION "${SKBUILD_DATA_DIR}/share/cmake/HalideCompiler"
-    COMPONENT Halide_Python
+    COMPONENT Halide_Development
 )
 
 # Same thing for HalideAutoschedulers

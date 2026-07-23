@@ -16,12 +16,7 @@ description = "Halide is a programming language designed to make it easier to wr
 license = { file = "LICENSE.txt" }
 readme = "./packaging/pip/README.md"
 requires-python = ">=3.10"
-dependencies = [
-  "imageio>=2",
-  "pillow; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
-  "numpy>=1.26",
-]
-dynamic = ['version']
+dynamic = ['version', 'dependencies']
 keywords = [
   "array",
   "compiler",
@@ -116,6 +111,8 @@ Issues = "https://github.com/halide/Halide/issues"
 Repository = "https://github.com/halide/Halide.git"
 
 [tool.scikit-build]
+# Required for in-tree dynamic-metadata plugins (packaging/pip/_dynamic_metadata.py).
+experimental = true
 cmake.version = ">=3.28"
 ninja.version = ">=1.11,!=1.13.0"
 wheel.install-dir = "halide"
@@ -127,7 +124,14 @@ sdist.exclude = [
   "tutorial/",
   "dependencies/update-*.sh",
 ]
-metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
+
+[tool.scikit-build.metadata.version]
+provider = "_dynamic_metadata"
+provider-path = "packaging/pip"
+
+[tool.scikit-build.metadata.dependencies]
+provider = "_dynamic_metadata"
+provider-path = "packaging/pip"
 
 [tool.scikit-build.cmake.define]
 CMAKE_DISABLE_FIND_PACKAGE_JPEG = true
@@ -151,6 +155,17 @@ CMAKE_PLATFORM_NO_VERSIONED_SONAME = true
 if.platform-system = "^win32"
 inherit.cmake.define = "append"
 cmake.define.Halide_WASM_BACKEND = "OFF"
+
+##
+# Split-package build: build only the Python bindings, against an
+# already-installed `halide-bin` (found via CMAKE_PREFIX_PATH, which the
+# caller -- e.g. .github/workflows/pip.yml -- must set explicitly). Only
+# official release CI sets HALIDE_SPLIT_BUILD; a plain `pip install .`
+# from a source checkout is unaffected and keeps building everything from
+# scratch, as before.
+[[tool.scikit-build.overrides]]
+if.env.HALIDE_SPLIT_BUILD = true
+cmake.source-dir = "python_bindings"
 
 [tool.setuptools_scm]
 # Needs to exist for scikit-build-core to use setuptools_scm
