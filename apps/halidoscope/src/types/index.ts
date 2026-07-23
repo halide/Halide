@@ -21,7 +21,7 @@ export interface FuncMeta extends Record<string, unknown> {
   produce_ranges: IndexRange[];
   consume_ranges: IndexRange[];
   thread_count: number;
-  thread_ids: number[];
+  thread_ids: string[];
 }
 
 export interface StatsMeta {
@@ -29,6 +29,7 @@ export interface StatsMeta {
   global_max_load_count: number;
   global_max_redundant_store_count: number;
   global_max_reuse_distance: number;
+  global_thread_ids: string[];
 }
 
 export interface TraceMeta {
