@@ -8,6 +8,10 @@
   "builtin-baseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1",
   "overrides": [
     {
+      "name": "dawn",
+      "version": "20260714.215939"
+    },
+    {
       "name": "nanobind",
       "version": "2.11.0"
     }
