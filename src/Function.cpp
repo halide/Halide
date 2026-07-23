@@ -1209,35 +1209,25 @@ bool Function::is_inductive(const string &var) const {
     }
 
     bool inductive_in_var = false;
-
-    if (updates().empty()) {
-        for (const Expr &e : definition().values()) {
+    auto check_values = [&](const std::vector<Expr> &values) {
+        for (const Expr &e : values) {
             visit_with(e, [&](auto *self, const Call *op) {
                 if (op->name == name()) {
-                    inductive_in_var = true;
+                    if (const auto &v = op->args[pos].as<Variable>()) {
+                        if (v->name != var && !v->reduction_domain.defined()) {
+                            inductive_in_var = true;
+                        }
+                    } else {
+                        inductive_in_var = true;
+                    }
                 }
                 self->visit_base(op);
             });
         }
-    } else {
-        auto check_values = [&](const std::vector<Expr> &values) {
-            for (const Expr &e : values) {
-                visit_with(e, [&](auto *self, const Call *op) {
-                    if (op->name == name()) {
-                        if (const auto &v = op->args[pos].as<Variable>()) {
-                            if (v->name != var && !v->reduction_domain.defined()) {
-                                inductive_in_var = true;
-                            }
-                        } else {
-                            inductive_in_var = true;
-                        }
-                    }
-                    self->visit_base(op);
-                });
-            }
-        };
+    };
 
-        check_values(definition().values());
+    check_values(definition().values());
+    if (!updates().empty()) {
         check_values(updates()[0].values());
     }
 
