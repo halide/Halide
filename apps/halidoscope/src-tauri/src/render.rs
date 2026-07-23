@@ -1176,6 +1176,7 @@ pub struct ThreadState {
     geom: FuncGeometry,
     thread_ids: Vec<i32>,
     thread_id_buffer: Vec<i32>,
+    global_thread_ids: Vec<i32>,
     store_counts: Vec<u32>,
     load_counts: Vec<u32>,
     applied_store_k: usize,
@@ -1186,23 +1187,29 @@ pub struct ThreadState {
 impl ThreadState {
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
-        // A missing entry means this Func was never realized inside a `BeginParallelTask` (i.e.
-        // it ran entirely serially) — every packet's `thread_id` defaults to 0 in that case.
         let thread_ids = trace
             .func_thread_ids(func)
             .map(|ids| ids.iter().map(|&id| id as i32).collect::<Vec<i32>>())
             .unwrap_or_else(|| vec![0]);
         let n_threads = thread_ids.len();
 
-        // `i32::MIN` marks a pixel no store/load has touched yet. Plain `0` would collide with a
-        // real thread ID, making untouched pixels indistinguishable from ones actually written by
-        // thread 0.
-        let thread_id_buffer = vec![i32::MIN; geom.width * geom.height];
+        let global_thread_ids: Vec<i32> = trace
+            .thread_ids_by_func
+            .values()
+            .flatten()
+            .copied()
+            .collect::<std::collections::BTreeSet<i32>>()
+            .into_iter()
+            .collect();
+
+        // `-1` marks a pixel no store/load has touched yet.
+        let thread_id_buffer = vec![-1; geom.width * geom.height];
 
         Some(Self {
             geom,
             thread_ids,
             thread_id_buffer,
+            global_thread_ids,
             store_counts: vec![0u32; n_threads],
             load_counts: vec![0u32; n_threads],
             applied_store_k: 0,
@@ -1212,7 +1219,7 @@ impl ThreadState {
     }
 
     fn reset(&mut self) {
-        self.thread_id_buffer.iter_mut().for_each(|v| *v = i32::MIN);
+        self.thread_id_buffer.iter_mut().for_each(|v| *v = -1);
         self.store_counts.iter_mut().for_each(|c| *c = 0);
         self.load_counts.iter_mut().for_each(|c| *c = 0);
         self.applied_store_k = 0;
@@ -1332,22 +1339,28 @@ impl ThreadState {
         self.applied_op_mode = Some(op_mode);
     }
 
-    pub fn to_rgba(&self, _normalization_mode: NormalizationMode) -> Vec<u8> {
+    pub fn to_rgba(&self, thread_id_filter: String) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
-        let domain = &self.thread_ids;
-        let range = colorous::TABLEAU10;
-
         let mut out = vec![0u8; width * height * 4];
+        let filter_id: Option<i32> = thread_id_filter.parse::<i32>().ok();
 
         for (chunk, &thread_id) in out.chunks_exact_mut(4).zip(self.thread_id_buffer.iter()) {
-            let idx = domain.binary_search(&thread_id);
+            let color = self
+                .global_thread_ids
+                .binary_search(&thread_id)
+                .ok()
+                .filter(|&rank| rank < colorous::SET3.len())
+                .map(|rank| colorous::SET3[rank]);
 
-            if let Ok(i) = idx {
-                let color = range[i];
+            if let Some(color) = color {
                 chunk[0] = color.r;
                 chunk[1] = color.g;
                 chunk[2] = color.b;
-                chunk[3] = 255;
+                chunk[3] = if filter_id == Some(thread_id) || filter_id == Some(-1) {
+                    255
+                } else {
+                    64
+                };
             } else {
                 chunk[0] = 0;
                 chunk[1] = 0;

@@ -39,6 +39,7 @@ function Histogram({ data, domain, labels }: HistogramProps) {
       style: {
         fontSize: "12px",
       },
+      width: 480,
       marginBottom: 60,
       y: {
         grid: true,

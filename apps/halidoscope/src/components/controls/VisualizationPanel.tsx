@@ -1,3 +1,4 @@
+import * as d3 from "d3";
 import { useAtomValue } from "jotai";
 import { Separator } from "radix-ui";
 import * as React from "react";
@@ -15,7 +16,7 @@ import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
 import { type RenderMode as RM, renderAtom } from "@/state/render";
 import { tabularDataAtom } from "@/state/tabularData";
-import { threadAtom } from "@/state/thread";
+import { threadAtom, NO_THREAD_INFO_SENTINEL_ID } from "@/state/thread";
 
 const RENDER_MODE_TO_LABEL: Record<RM, string> = {
   Grayscale: "",
@@ -31,18 +32,21 @@ interface HistogramData {
   type: "Histogram";
   data: { x1: number; x2: number; y: number }[];
   domain: [number, number];
+  lut: Record<string, string>;
 }
 
 interface BarChartData {
   type: "Bar Chart";
   data: { x: string; y: number }[];
   domain: string[];
+  lut: Record<string, string>;
 }
 
 interface NoChartData {
   type: "No Chart";
   data: number[];
   domain: [number, number];
+  lut: Record<string, string>;
 }
 
 type ChartData = HistogramData | BarChartData | NoChartData;
@@ -67,12 +71,13 @@ function VisualizationPanel() {
           y: histogramData?.[i] ?? 0,
         })),
         domain: [min, max + 1],
+        lut: {},
       };
     },
     [min],
   );
 
-  const { type, data, domain } = React.useMemo((): ChartData => {
+  const { type, data, domain, lut } = React.useMemo((): ChartData => {
     switch (render.renderMode) {
       case "Store Frequency": {
         const max =
@@ -119,10 +124,18 @@ function VisualizationPanel() {
             y: thread.op === "Store" ? storeCounts[i] : loadCounts[i],
           })),
           domain: threadIds.map((tId) => `${tId}`),
+          lut: stats.global_thread_ids.reduce<Record<string, string>>(
+            (acc, el, i) => {
+              acc[el] = d3.schemeSet3[i];
+
+              return acc;
+            },
+            {},
+          ),
         };
       }
       default: {
-        return { type: "No Chart", data: [], domain: [-1, -1] };
+        return { type: "No Chart", data: [], domain: [-1, -1], lut: {} };
       }
     }
   }, [
@@ -140,35 +153,47 @@ function VisualizationPanel() {
       case "Histogram":
         return (
           <>
-            <HistogramParameters />
-            <Histogram
-              data={data}
-              domain={domain}
-              labels={{
-                x: RENDER_MODE_TO_LABEL[render.renderMode],
-                y: "Coordinate Count",
-              }}
-            />
+            <Separator.Root className="bg-ps-border-tertiary h-px" />
+            <ControlSection title="stats">
+              <HistogramParameters />
+              <Histogram
+                data={data}
+                domain={domain}
+                labels={{
+                  x: RENDER_MODE_TO_LABEL[render.renderMode],
+                  y: "Coordinate Count",
+                }}
+              />
+            </ControlSection>
+            <Separator.Root className="bg-ps-border-tertiary h-px" />
           </>
         );
       case "Bar Chart":
         return (
           <>
-            <BarChartParameters />
-            <BarChart
-              data={data}
-              domain={domain}
-              labels={{
-                x: RENDER_MODE_TO_LABEL[render.renderMode],
-                y: `${thread.op} Count`,
-              }}
-            />
+            <Separator.Root className="bg-ps-border-tertiary h-px" />
+            <ControlSection title="Stats">
+              <BarChartParameters />
+              <BarChart
+                data={data}
+                domain={domain}
+                labels={{
+                  x: RENDER_MODE_TO_LABEL[render.renderMode],
+                  y: `${thread.op} Count`,
+                }}
+                lut={lut}
+                highlight={(x: string) =>
+                  x === thread.id || thread.id === NO_THREAD_INFO_SENTINEL_ID
+                }
+              />
+            </ControlSection>
+            <Separator.Root className="bg-ps-border-tertiary h-px" />
           </>
         );
       case "No Chart":
-        return null;
+        return <Separator.Root className="bg-ps-border-tertiary h-px" />;
     }
-  }, [type, data, domain, render.renderMode, thread.op]);
+  }, [type, data, domain, lut, render.renderMode, thread]);
 
   return (
     <div className="flex flex-col gap-4 px-3 py-4">
@@ -176,7 +201,6 @@ function VisualizationPanel() {
         <RenderMode />
       </ControlSection>
       {renderChart()}
-      <Separator.Root className="bg-ps-border-tertiary h-px" />
       <ControlSection title="Liveness">
         <LivenessControls />
       </ControlSection>

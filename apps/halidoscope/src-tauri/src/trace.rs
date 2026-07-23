@@ -446,9 +446,6 @@ impl Trace {
         // Loads we deferred for DAG inference.
         let mut pending_loads: Vec<(String, i32)> = Vec::new();
 
-        // Parallel task starts we deferred for accumulating thread IDs by Func.
-        let mut pending_parallel_tasks: Vec<(i32, i32)> = Vec::new();
-
         // Packet parsing loop.
         while pos + HEADER_BYTES <= total {
             let size = u32_le(data, pos) as usize;
@@ -479,7 +476,9 @@ impl Trace {
                     bits: data[pos + 17],
                     lanes: u16_le(data, pos + 18),
                 };
-                (type_, 0)
+
+                // Initialize thread_ids as a sentinel value of -1.
+                (type_, -1)
             } else {
                 (
                     HalideType {
@@ -657,7 +656,6 @@ impl Trace {
                     }
                 }
                 EventCode::BeginParallelTask => {
-                    pending_parallel_tasks.push((thread_id, parent_id));
                     thread_id_by_task_id.insert(id, thread_id);
                 }
                 _ => {}
@@ -691,25 +689,9 @@ impl Trace {
             }
         }
 
-        // Compute the set of thread IDs used to compute each Func.
-        for (thread_id, parent_id) in &pending_parallel_tasks {
-            let mut current = *parent_id;
-            loop {
-                match id_to_info.get(&current) {
-                    Some((EventCode::Produce, producing_func, _)) => {
-                        thread_ids_by_func
-                            .entry(producing_func.clone())
-                            .or_default()
-                            .insert(*thread_id);
-                        break;
-                    }
-                    Some((_, _, next_parent)) => current = *next_parent,
-                    None => break,
-                }
-            }
-        }
-
-        // Resolve the executing thread for each load/store packet by walking its parent chain.
+        // Resolve the executing thread for each load/store packet by walking its parent chain up
+        // to the nearest enclosing `BeginParallelTask`. Exclude any stores / loads that do not
+        // have a meaningful thread_id (denoted by a sentinel value of -1).
         for pkt in packets.iter_mut() {
             if !pkt.is_load_or_store() {
                 continue;
@@ -726,6 +708,13 @@ impl Trace {
                     Some((_, _, next_parent)) => current = *next_parent,
                     None => break,
                 }
+            }
+
+            if pkt.thread_id != -1 {
+                thread_ids_by_func
+                    .entry(pkt.func.clone())
+                    .or_default()
+                    .insert(pkt.thread_id);
             }
         }
 

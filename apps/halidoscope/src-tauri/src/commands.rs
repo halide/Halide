@@ -2,7 +2,7 @@
 //!
 //! This module owns the types that cross the Tauri IPC boundary.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Mutex;
 
 use serde::Serialize;
@@ -48,7 +48,7 @@ pub struct FuncMeta {
     pub produce_ranges: Vec<IndexRange>,
     pub consume_ranges: Vec<IndexRange>,
     pub thread_count: u32,
-    pub thread_ids: Vec<i32>,
+    pub thread_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -57,6 +57,7 @@ pub struct StatsMeta {
     global_max_load_count: u32,
     global_max_redundant_store_count: u32,
     global_max_reuse_distance: u64,
+    global_thread_ids: Vec<String>,
 }
 
 /// Top-level payload returned by `open_trace`.
@@ -74,6 +75,7 @@ impl TraceMeta {
         let mut global_max_load_count = 0u32;
         let mut global_max_redundant_store_count = 0u32;
         let mut global_max_reuse_distance = 0u64;
+        let mut global_thread_ids: BTreeSet<i32> = BTreeSet::new();
 
         let funcs = trace
             .funcs
@@ -93,6 +95,10 @@ impl TraceMeta {
                     .max_redundant_store_count
                     .max(global_max_redundant_store_count);
                 global_max_reuse_distance = stats.max_reuse_distance.max(global_max_reuse_distance);
+
+                if let Some(thread_ids) = trace.func_thread_ids(name) {
+                    global_thread_ids.extend(thread_ids);
+                }
 
                 FuncMeta {
                     name: name.clone(),
@@ -136,8 +142,8 @@ impl TraceMeta {
                         .map_or(1, |ids| ids.len() as u32),
                     thread_ids: trace
                         .func_thread_ids(name)
-                        .map(|ids| ids.iter().copied().collect())
-                        .unwrap_or_else(|| vec![0]),
+                        .map(|ids| ids.into_iter().map(|x| x.to_string()).collect())
+                        .unwrap_or_else(|| vec![]),
                 }
             })
             .collect();
@@ -157,6 +163,10 @@ impl TraceMeta {
                 global_max_load_count,
                 global_max_redundant_store_count,
                 global_max_reuse_distance,
+                global_thread_ids: global_thread_ids
+                    .into_iter()
+                    .map(|id| id.to_string())
+                    .collect(),
             },
         }
     }
@@ -527,8 +537,8 @@ pub fn render_inf(
 pub fn render_thread(
     func: String,
     global_index: u32,
-    normalization_mode: NormalizationMode,
     op_mode: ThreadOpMode,
+    thread_id: String,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -551,7 +561,7 @@ pub fn render_thread(
     let load_k = load_indices.partition_point(|&p| p <= global_index as usize);
     renderer.seek(trace, store_indices, load_indices, store_k, load_k, op_mode);
 
-    let pixels = renderer.to_rgba(normalization_mode);
+    let pixels = renderer.to_rgba(thread_id);
     let (store_counts, load_counts) = renderer.to_thread_counts();
     Ok(Response::new(pack_pixels_and_thread_counts(
         pixels,

@@ -9,9 +9,11 @@ interface BarChartProps {
     x: string;
     y: string;
   };
+  lut: Record<string, string>;
+  highlight?: (x: string) => boolean;
 }
 
-function BarChart({ data, domain, labels }: BarChartProps) {
+function BarChart({ data, domain, labels, lut, highlight }: BarChartProps) {
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -40,11 +42,14 @@ function BarChart({ data, domain, labels }: BarChartProps) {
         tickRotate: -45,
         type: "band",
       },
-      color: {
-        scheme: "Tableau10",
-        type: "ordinal",
-      },
-      marks: [Plot.barY(data, { x: "x", y: "y", fill: "x" })],
+      marks: [
+        Plot.barY(data, {
+          x: "x",
+          y: "y",
+          fill: (d) => lut[d.x] ?? "#000000",
+          fillOpacity: (d) => (highlight?.(d.x) ? 1 : 0.25),
+        }),
+      ],
     });
 
     ref.current.append(plot);
@@ -52,7 +57,7 @@ function BarChart({ data, domain, labels }: BarChartProps) {
     return () => {
       plot.remove();
     };
-  }, [data, labels, domain]);
+  }, [data, labels, domain, lut, highlight]);
 
   return data.every((d) => d.y === 0) ? (
     <div className="flex h-full flex-col items-center justify-center gap-2">
