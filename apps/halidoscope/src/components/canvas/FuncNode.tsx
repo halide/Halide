@@ -152,6 +152,7 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
               result = await renderThread({
                 ...params,
                 threadOpMode: thread.op,
+                threadId: thread.id,
               });
 
               break;
@@ -195,7 +196,7 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
     render,
     activeFunc,
     setTabularData,
-    thread.op,
+    thread,
   ]);
 
   React.useEffect(() => {
