@@ -163,15 +163,9 @@ jobs:
           build
         working-directory: apps/HelloiOS
 
-      # --- x86-64-osx correctness, with and without SSE4.1  ---
-
-      - name: Test (x86-64-osx, no SSE4.1)
-        if: matrix.arch == 'x86-64'
-        run: |
-          cmake -S . -B build -DHalide_TARGET=x86-64-osx
-          cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
-            -L correctness -j "$(sysctl -n hw.logicalcpu)"
+      # --- x86-64-osx correctness. No no-SSE4.1 variant: no real Intel Mac
+      # lacks SSE4.1, and that hypothetical baseline is already exercised by
+      # Linux/Windows CI, where it's an actually reachable target. ---
 
       - name: Test (x86-64-osx, SSE4.1)
         if: matrix.arch == 'x86-64'
@@ -181,29 +175,24 @@ jobs:
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
             -L correctness -j "$(sysctl -n hw.logicalcpu)"
 
-      # --- host-metal: real GPU testing on hosted Apple Silicon runners ---
+      # --- host-metal: real GPU testing on hosted Apple Silicon runners.
+      # arm-64 only -- GitHub's Intel macOS runners have a GPU too weak to
+      # sustain this workload; once it hangs once, the driver cascades into
+      # rejecting further submissions for the rest of the job, so reduced
+      # concurrency and retries don't help. ---
 
       - name: Test (host-metal)
+        if: matrix.arch == 'arm-64'
         run: |
           cmake -S . -B build -DHalide_TARGET=host-metal
           cmake --build build --target install
-
-          JOBS="$(sysctl -n hw.logicalcpu)"
-          RETRY_FLAGS=()
-          if [ "${{ matrix.arch }}" = "x86-64" ]; then
-            # This runner's GPU is too weak to handle the GPU tests at full
-            # CPU parallelism -- the driver aborts some command buffers with
-            # a hang error. Cut parallelism and retry.
-            JOBS=2
-            RETRY_FLAGS=(--repeat until-pass:5)
-          fi
-
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
-            -L "correctness|generator" -R "gpu|metal" -j "$JOBS" "${RETRY_FLAGS[@]}"
+            -L "correctness|generator" -R "gpu|metal" -j "$(sysctl -n hw.logicalcpu)"
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
             -L "performance|autoschedulers_gpu" -R "gpu|metal" --repeat until-pass:5
 
       - name: Configure apps (host-metal)
+        if: matrix.arch == 'arm-64'
         run: >-
           cmake -S apps -B apps-build
           -G Ninja
@@ -211,12 +200,14 @@ jobs:
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
           -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           -DHalide_TARGET=host-metal
-          -DENABLE_APPS_HANNK=${{ matrix.arch == 'arm-64' && 'ON' || 'OFF' }}
+          -DENABLE_APPS_HANNK=ON
 
       - name: Build apps (host-metal)
+        if: matrix.arch == 'arm-64'
         run: cmake --build apps-build
 
       - name: Test apps (host-metal)
+        if: matrix.arch == 'arm-64'
         run: >-
           ctest --test-dir apps-build --build-config RelWithDebInfo
           --output-on-failure -LE slow_tests --timeout 3600
