@@ -141,6 +141,8 @@ int main(int argc, char **argv) {
     Expr i32y = make_leaf(Int(32, 4), "i32y");
     Expr f16x = make_leaf(Float(16, 4), "f16x");
     Expr f16y = make_leaf(Float(16, 4), "f16y");
+    Expr bf16x = make_leaf(BFloat(16, 4), "bf16x");
+    Expr bf16y = make_leaf(BFloat(16, 4), "bf16y");
     Expr f32x = make_leaf(Float(32, 4), "f32x");
     Expr f32y = make_leaf(Float(32, 4), "f32y");
 
@@ -172,6 +174,12 @@ int main(int argc, char **argv) {
     check(i32(i8x) * i8y, i32(widening_mul(i8x, i8y)));
     check(u32(u8x) * u8y, u32(widening_mul(u8x, u8y)));
     check(f32(f16x) * f32(f16y), widening_mul(f16x, f16y));
+    // bfloat16 widens to float32 (Type::widen special-cases it), so
+    // f32(bf16) * f32(bf16) is a genuine widening multiply, just like the
+    // float16 case above. This exercises match_bits with a bfloat operand:
+    // it must widen bfloat16 to a regular float, never to a (non-codegen-able)
+    // bfloat32. See test/fuzz/lossless_cast.cpp for the width-mismatched case.
+    check(f32(bf16x) * f32(bf16y), widening_mul(bf16x, bf16y));
     check(f32(i8x) * f32(i8y), f32(widening_mul(i8x, i8y)));
     check(f32(u8x) * f32(u8y), f32(widening_mul(u8x, u8y)));
 
@@ -407,6 +415,19 @@ int main(int argc, char **argv) {
         Func f, q, s;
         q(x) = cast<int8_t>(0);
         s(x) = cast(Float(16), 1.0f);
+        f(x) = widening_mul(q(x), s(x));
+
+        f.compile_jit();
+    }
+
+    // A widening op with a bfloat16 operand narrower than the other operand
+    // used to crash codegen: match_bits widened the bfloat16 with with_bits,
+    // producing a bfloat32 (there is no such type). It must widen to a regular
+    // float32 instead.
+    {
+        Func f, q, s;
+        q(x) = cast(BFloat(16), 1.0f);
+        s(x) = cast(Float(32), 1.0f);
         f(x) = widening_mul(q(x), s(x));
 
         f.compile_jit();

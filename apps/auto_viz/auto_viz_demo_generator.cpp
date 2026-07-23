@@ -65,7 +65,7 @@ public:
         Expr beginx = cast<int>(ceil(sourcex - kernel_radius));
         Expr beginy = cast<int>(ceil(sourcey - kernel_radius));
 
-        RDom r(0, kernel_taps);
+        RDom r(0, cast<int>(kernel_taps));
 
         auto kernel = [](Expr x) -> Expr {
             Expr xx = abs(x);

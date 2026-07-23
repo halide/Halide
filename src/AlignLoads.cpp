@@ -39,7 +39,7 @@ private:
         return mutate(Load::make(load->type.with_lanes(index.type().lanes()), load->name,
                                  index, load->image, load->param,
                                  const_true(index.type().lanes()),
-                                 alignment));
+                                 alignment, load->is_streaming));
     }
 
     Expr visit(const Load *op) override {

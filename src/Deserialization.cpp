@@ -565,7 +565,7 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
             user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
         }
         const auto alignment = deserialize_modulus_remainder(store_stmt->alignment());
-        return Store::make(name, value, index, param, predicate, alignment);
+        return Store::make(name, value, index, param, predicate, alignment, store_stmt->is_streaming());
     }
     case Serialize::Stmt::Provide: {
         const auto *provide_stmt = (const Serialize::Provide *)stmt;
@@ -833,7 +833,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         }
         const auto alignment = deserialize_modulus_remainder(load_expr->alignment());
         const auto type = deserialize_type(load_expr->type());
-        return Load::make(type, name, index, image, param, predicate, alignment);
+        return Load::make(type, name, index, image, param, predicate, alignment, load_expr->is_streaming());
     }
     case Serialize::Expr::Ramp: {
         const auto *ramp_expr = (const Serialize::Ramp *)expr;
@@ -1200,8 +1200,16 @@ StageSchedule Deserializer::deserialize_stage_schedule(const Serialize::StageSch
     const bool allow_race_conditions = stage_schedule->allow_race_conditions();
     const bool atomic = stage_schedule->atomic();
     const bool override_atomic_associativity_test = stage_schedule->override_atomic_associativity_test();
+    const bool stream_stores = stage_schedule->stream_stores();
+    std::optional<std::vector<std::string>> stream_loads_names;
+    if (!stage_schedule->stream_loads_all()) {
+        stream_loads_names =
+            deserialize_vector<flatbuffers::String, std::string>(stage_schedule->stream_loads_names(),
+                                                                 &Deserializer::deserialize_string);
+    }
     return StageSchedule(rvars, splits, dims, prefetches, fuse_level, fused_pairs, touched,
-                         allow_race_conditions, atomic, override_atomic_associativity_test);
+                         allow_race_conditions, atomic, override_atomic_associativity_test,
+                         stream_stores, stream_loads_names);
 }
 
 BufferConstraint Deserializer::deserialize_buffer_constraint(const Serialize::BufferConstraint *buffer_constraint) {

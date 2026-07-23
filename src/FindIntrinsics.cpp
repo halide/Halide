@@ -114,27 +114,21 @@ protected:
             return e.type();
         }(x);
 
-        Expr best;
+        Expr best = x;
+
         auto consider = [&](Type t) {
-            if (!best.defined() || t.bits() < best.type().bits()) {
+            if (t.bits() < best.type().bits()) {
                 Expr e = lossless_cast(t, x);
                 best = e.defined() ? e : best;
             }
         };
 
-        // Only strip a genuine widening cast, i.e. one whose inner type is no
-        // wider than x. If the outer cast is a narrowing cast, inner_t is wider
-        // than x, and considering it would return an expression wider than x,
-        // which can send the surrounding narrowing rewrites into infinite
-        // recursion.
-        if (inner_t.is_int_or_uint() && inner_t != x.type() &&
-            inner_t.bits() <= x.type().bits()) {
-            consider(inner_t);
-        }
+        consider(inner_t);
         consider(x.type().narrow());
         consider(x.type().narrow().with_code(halide_type_uint));
 
-        return best;
+        // Only report success if we actually stripped a cast.
+        return best.same_as(x) ? Expr() : best;
     }
 
     Expr to_rounding_shift(const Call *c) {
@@ -1117,7 +1111,7 @@ protected:
         } else {
             return Load::make(op->type, op->name, std::move(index),
                               op->image, op->param, std::move(predicate),
-                              op->alignment);
+                              op->alignment, op->is_streaming);
         }
     }
 
@@ -1129,7 +1123,7 @@ protected:
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment);
+            return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment, op->is_streaming);
         }
     }
 };

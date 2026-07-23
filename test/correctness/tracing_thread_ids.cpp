@@ -44,9 +44,9 @@ int my_trace(JITUserContext *, const halide_trace_event_t *ev) {
     if (ev->event == halide_trace_begin_parallel_task) {
         parallel_task_ids.insert(id);
     } else if (ev->event == halide_trace_store) {
-        if (ev->dimensions != 2 || ev->type.lanes != 1) {
+        if (ev->dimensions != 2 || ev->lanes != 1) {
             printf("Store trace event had %d dimensions and %d lanes.\n",
-                   ev->dimensions, ev->type.lanes);
+                   ev->dimensions, ev->lanes);
             trace_failed = true;
             return id;
         }

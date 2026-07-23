@@ -43,15 +43,15 @@ inline std::string unescape_spaces(const std::string &str) {
     return replace_all(str, "\\x20", " ");
 }
 
-inline std::ostream &operator<<(std::ostream &os, const halide_type_t &t) {
-    os << (int)t.code << " " << (int)t.bits << " " << t.lanes;
+inline std::ostream &write_halide_type(std::ostream &os, const halide_type_t &t) {
+    os << (int)t.code << " " << (int)t.bits;
     return os;
 }
 
-inline std::istream &operator>>(std::istream &is, halide_type_t &t) {
+inline std::istream &read_halide_type(std::istream &is, halide_type_t &t) {
     // type.code is an enum; type.bits is a uint8 and might be read as char.
     int type_code, type_bits;
-    is >> type_code >> type_bits >> t.lanes;
+    is >> type_code >> type_bits;
     t.code = (halide_type_code_t)type_code;
     t.bits = (uint8_t)type_bits;
     return is;
@@ -66,6 +66,14 @@ std::ostream &operator<<(std::ostream &os, const std::vector<T> &v) {
     return os;
 }
 
+inline std::ostream &operator<<(std::ostream &os, const std::vector<halide_type_t> &v) {
+    os << v.size() << " ";
+    for (const halide_type_t &t : v) {
+        write_halide_type(os, t) << " ";
+    }
+    return os;
+}
+
 template<typename T>
 std::istream &operator>>(std::istream &is, std::vector<T> &v) {
     v.clear();
@@ -74,6 +82,18 @@ std::istream &operator>>(std::istream &is, std::vector<T> &v) {
     for (size_t i = 0; i < size; ++i) {
         T tmp;
         is >> tmp;
+        v.push_back(tmp);
+    }
+    return is;
+}
+
+inline std::istream &operator>>(std::istream &is, std::vector<halide_type_t> &v) {
+    v.clear();
+    size_t size;
+    is >> size;
+    for (size_t i = 0; i < size; ++i) {
+        halide_type_t tmp;
+        read_halide_type(is, tmp);
         v.push_back(tmp);
     }
     return is;
@@ -512,9 +532,6 @@ struct FuncTypeAndDim {
         os << "  types:";
         for (const auto &type : types) {
             os << " " << type_name[type.code & 3] << (int)type.bits;
-            if (type.lanes > 1) {
-                os << "x" << type.lanes;
-            }
         }
         os << "\n";
         os << "  dims: " << dims << "\n";

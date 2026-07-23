@@ -532,7 +532,7 @@ protected:
             // node when the storage is striped across threads.
             if (alloc->striped_over_threads) {
                 return Load::make(op->type, op->name, mutate_index(alloc, op->index),
-                                  op->image, op->param, mutate(op->predicate), op->alignment);
+                                  op->image, op->param, mutate(op->predicate), op->alignment, op->is_streaming);
             }
         }
         return IRMutator::visit(op);
@@ -545,7 +545,7 @@ protected:
             alloc->liveness.max = barrier_stage;
             if (alloc->striped_over_threads) {
                 return Store::make(op->name, mutate(op->value), mutate_index(alloc, op->index),
-                                   op->param, mutate(op->predicate), op->alignment);
+                                   op->param, mutate(op->predicate), op->alignment, op->is_streaming);
             }
         }
         return IRMutator::visit(op);

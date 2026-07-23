@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <ostream>
 #include <string_view>
 #else
 #include <stdbool.h>
@@ -510,11 +511,13 @@ typedef enum halide_type_code_t
 #endif
 #endif
 
-/** A runtime tag for a type in the halide type system. Can be ints,
- * unsigned ints, or floats of various bit-widths (the 'bits'
- * field). Can also be vectors of the same (by setting the 'lanes'
- * field to something larger than one). This struct should be
- * exactly 32-bits in size. */
+/** A runtime tag for an element type in the halide type system. Can be
+ * ints, unsigned ints, or floats of various bit-widths (the 'bits' field),
+ * or an opaque handle.
+ *
+ * This is the ABI/wire type. Unlike the compiler-side Halide::Type, it does
+ * NOT carry a vector width ('lanes'): a value crossing the ABI boundary is
+ * always a single element. */
 struct halide_type_t {
     /** The basic type code: signed integer, unsigned integer, or floating point. */
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
@@ -529,35 +532,27 @@ struct halide_type_t {
     HALIDE_ATTRIBUTE_ALIGN(1)
     uint8_t bits;
 
-    /** How many elements in a vector. This is 1 for scalar types. */
+    /** Reserved for future element-kind payloads. */
     HALIDE_ATTRIBUTE_ALIGN(2)
-    uint16_t lanes;
+    uint16_t reserved;
 
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
-    /** Construct a runtime representation of a Halide type from:
+    /** Construct a runtime representation of a Halide element type from:
      * code: The fundamental type from an enum.
-     * bits: The bit size of one element.
-     * lanes: The number of vector elements in the type. */
-    HALIDE_ALWAYS_INLINE constexpr halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
-        : code(code), bits(bits), lanes(lanes) {
+     * bits: The bit size of one element. */
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t(halide_type_code_t code, uint8_t bits)
+        : code(code), bits(bits), reserved(0) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
     HALIDE_ALWAYS_INLINE constexpr halide_type_t()
-        : code((halide_type_code_t)0), bits(0), lanes(0) {
+        : code((halide_type_code_t)0), bits(0), reserved(0) {
     }
 
-    HALIDE_ALWAYS_INLINE constexpr halide_type_t with_lanes(uint16_t new_lanes) const {
-        return halide_type_t((halide_type_code_t)code, bits, new_lanes);
-    }
-
-    HALIDE_ALWAYS_INLINE constexpr halide_type_t element_of() const {
-        return with_lanes(1);
-    }
     /** Compare two types for equality. */
     HALIDE_ALWAYS_INLINE constexpr bool operator==(const halide_type_t &other) const {
-        return as_u32() == other.as_u32();
+        return static_cast<uint32_t>(*this) == static_cast<uint32_t>(other);
     }
 
     HALIDE_ALWAYS_INLINE constexpr bool operator!=(const halide_type_t &other) const {
@@ -565,22 +560,22 @@ struct halide_type_t {
     }
 
     HALIDE_ALWAYS_INLINE constexpr bool operator<(const halide_type_t &other) const {
-        return as_u32() < other.as_u32();
+        return static_cast<uint32_t>(*this) < static_cast<uint32_t>(other);
     }
 
-    /** Size in bytes for a single element, even if width is not 1, of this type. */
+    /** Size in bytes for a single element of this type. */
     HALIDE_ALWAYS_INLINE constexpr int bytes() const {
         return (bits + 7) / 8;
     }
 
-    HALIDE_ALWAYS_INLINE constexpr uint32_t as_u32() const {
+    HALIDE_ALWAYS_INLINE constexpr operator uint32_t() const {
         // Note that this produces a result that is identical to memcpy'ing 'this'
         // into a u32 (on a little-endian machine, anyway), and at -O1 or greater
         // on Clang, the compiler knows this and optimizes this into a single 32-bit move.
         // (At -O0 it will look awful.)
         return static_cast<uint8_t>(code) |
-               (static_cast<uint16_t>(bits) << 8) |
-               (static_cast<uint32_t>(lanes) << 16);
+               static_cast<uint16_t>(bits) << 8 |
+               static_cast<uint32_t>(reserved) << 16;
     }
 #endif
 };
@@ -630,9 +625,14 @@ struct halide_trace_event_t {
      */
     const char *trace_tag;
 
-    /** If the event type is a load or a store, this is the type of
-     * the data. Otherwise, the value is meaningless. */
+    /** If the event type is a load or a store, this is the (scalar) element
+     * type of the data. Otherwise, the value is meaningless. */
     struct halide_type_t type;
+
+    /** For loads and stores, the number of vector lanes of the access (1 for a
+     * scalar access). The value pointed to by `value` is `lanes` elements of
+     * `type`. */
+    int32_t lanes;
 
     /** The type of event */
     enum halide_trace_event_code_t event;
@@ -709,7 +709,7 @@ extern halide_trace_t halide_set_custom_trace(halide_trace_t trace);
 struct halide_trace_packet_t {
 #ifdef __cplusplus
     HALIDE_ALWAYS_INLINE halide_trace_packet_t()
-        : size(0), event(halide_trace_load), parent_id(0), id(0), type(), dimensions(0) {
+        : size(0), event(halide_trace_load), parent_id(0), id(0), type_code((halide_type_code_t)0), type_bits(0), lanes(0), dimensions(0) {
     }
 #endif
 
@@ -737,7 +737,16 @@ struct halide_trace_packet_t {
         int32_t value_index;
     };
     union {
-        struct halide_type_t type;
+        struct {
+            /** The (scalar) element type code of the access (see halide_trace_event_t).
+             * Unpacked from halide_type_t rather than storing it directly, since
+             * halide_type_t's `reserved` field carries no meaning here. */
+            uint8_t type_code;
+            /** The bit-width of the element type of the access. */
+            uint8_t type_bits;
+            /** The number of vector lanes of the access (see halide_trace_event_t). */
+            uint16_t lanes;
+        };
         int32_t thread_id;
     };
     int32_t dimensions;
@@ -766,11 +775,17 @@ struct halide_trace_packet_t {
         return (void *)(coordinates() + dimensions);
     }
 
+    /** Reconstruct the (scalar) element type of the access from type_code and
+     * type_bits. Only meaningful for load and store events. */
+    HALIDE_ALWAYS_INLINE struct halide_type_t type() const {
+        return halide_type_t((halide_type_code_t)type_code, type_bits);
+    }
+
     /** Get the size of the value payload. Only load and store packets have a
      * value, so type is ignored for all other event types. */
     HALIDE_ALWAYS_INLINE uint32_t value_bytes() const {
         if (event == halide_trace_load || event == halide_trace_store) {
-            return type.lanes * type.bytes();
+            return lanes * type().bytes();
         }
         return 0;
     }
@@ -2352,6 +2367,23 @@ struct ArgumentInfo {
 };
 
 }  // namespace HalideFunctionInfo
+
+inline std::ostream &operator<<(std::ostream &os, const halide_type_t &type) {
+    switch (type.code) {
+    case halide_type_int:
+        return os << "int" << (int)type.bits;
+    case halide_type_uint:
+        return type.bits ? os << "uint" << (int)type.bits :
+                           os << "bool";
+    case halide_type_float:
+        return os << "float" << (int)type.bits;
+    case halide_type_handle:
+        return os << "(void*)";
+    case halide_type_bfloat:
+        return os << "bfloat" << (int)type.bits;
+    }
+    return os;
+}
 
 #endif  // COMPILING_HALIDE_RUNTIME
 
