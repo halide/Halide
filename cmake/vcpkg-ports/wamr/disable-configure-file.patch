@@ -1,0 +1,14 @@
+diff --git a/build-scripts/version.cmake b/build-scripts/version.cmake
+--- a/build-scripts/version.cmake
++++ b/build-scripts/version.cmake
+@@ -13,10 +13,6 @@
+ message("-- WAMR version: ${WAMR_VERSION_MAJOR}.${WAMR_VERSION_MINOR}.${WAMR_VERSION_PATCH}")
+ 
+ # Configure the version header file
+-configure_file(
+-  ${WAMR_ROOT_DIR}/core/version.h.in
+-  ${WAMR_ROOT_DIR}/core/version.h
+-)
+ 
+ # Set the library version and SOVERSION
+ function(set_version_info target)
