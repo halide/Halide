@@ -33,7 +33,6 @@ target_sources(
     halide_/PySerialization.cpp
     halide_/PyStage.cpp
     halide_/PyTarget.cpp
-    halide_/PyTrace.cpp
     halide_/PyTuple.cpp
     halide_/PyType.cpp
     halide_/PyVar.cpp
