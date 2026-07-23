@@ -62,7 +62,8 @@
       "inherits": "ci-macos-arm-64",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "arm64-osx-halide",
-        "VCPKG_MANIFEST_FEATURES": "developer;webgpu-native"
+        "VCPKG_MANIFEST_FEATURES": "developer;webgpu-native",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchain.ci-macos-arm-64.cmake"
       }
     },
     {
