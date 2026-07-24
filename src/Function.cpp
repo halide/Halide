@@ -1157,8 +1157,11 @@ bool Function::is_inductive() const {
     };
 
     bool recursive = has_self_call(definition().values());
-    if (!recursive && !updates().empty()) {
-        recursive = has_shifted_self_call(updates()[0].args(), updates()[0].values());
+    for (const Definition &update : updates()) {
+        if (recursive) {
+            break;
+        }
+        recursive = has_shifted_self_call(update.args(), update.values());
     }
 
     return recursive;
@@ -1169,10 +1172,11 @@ bool Function::is_inductive(const string &var) const {
         return false;
     }
 
-    for (const Definition &def : {definition(), updates().empty() ? Definition() : updates()[0]}) {
-        if (!def.defined()) {
-            continue;
-        }
+    std::vector<Definition> defs = {definition()};
+    defs.insert(defs.end(), updates().begin(), updates().end());
+
+    // Only pure vars can be inductive
+    for (const Definition &def : defs) {
         for (const ReductionVariable &rv : def.schedule().rvars()) {
             if (rv.var == var) {
                 return false;
@@ -1180,63 +1184,37 @@ bool Function::is_inductive(const string &var) const {
         }
     }
 
-    int pos = -1;
-    for (size_t i = 0; i < definition().args().size(); i++) {
-        if (const auto &v = definition().args()[i].as<Variable>()) {
-            if (v->name == var) {
-                pos = i;
-            }
-        }
-    }
 
-    if (!updates().empty()) {
-        int update_pos = -1;
-        for (size_t i = 0; i < updates()[0].args().size(); i++) {
-            if (const auto &v = updates()[0].args()[i].as<Variable>()) {
+    bool inductive_in_var = false;
+    for (const Definition &def : defs) {
+        std::vector<int> positions;
+        for (size_t i = 0; i < def.args().size(); i++) {
+            if (const auto &v = def.args()[i].as<Variable>()) {
                 if (v->name == var) {
-                    update_pos = i;
+                    positions.push_back((int)i);
                 }
             }
         }
-        if (update_pos == -1) {
-            return false;
+        if (positions.empty()) {
+            continue;
         }
-        pos = update_pos;
-    }
 
-    if (pos == -1) {
-        return false;
-    }
-
-    bool inductive_in_var = false;
-    auto check_values = [&](const std::vector<Expr> &values) {
-        for (const Expr &e : values) {
+        for (const Expr &e : def.values()) {
             visit_with(e, [&](auto *self, const Call *op) {
                 if (op->name == name()) {
-                    // var is already known not to be an RVar (checked above),
-                    // so the LHS position itself never has a reduction
-                    // domain; what matters is whether the call's argument at
-                    // this position differs from var -- regardless of
-                    // whether that argument happens to be an RVar (e.g. a
-                    // free reduction variable substituted in for this
-                    // position), it still means this position isn't simply
-                    // passed through unchanged.
-                    if (const auto &v = op->args[pos].as<Variable>()) {
-                        if (v->name != var) {
+                    for (int pos : positions) {
+                        if (const auto &v = op->args[pos].as<Variable>()) {
+                            if (v->name != var) {
+                                inductive_in_var = true;
+                            }
+                        } else {
                             inductive_in_var = true;
                         }
-                    } else {
-                        inductive_in_var = true;
                     }
                 }
                 self->visit_base(op);
             });
         }
-    };
-
-    check_values(definition().values());
-    if (!updates().empty()) {
-        check_values(updates()[0].values());
     }
 
     return inductive_in_var;

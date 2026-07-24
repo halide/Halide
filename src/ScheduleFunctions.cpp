@@ -2188,13 +2188,8 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     }
 
     if (f.is_inductive()) {
-        // Check that any RDom used in an inductive Func's update (the
-        // undef<>() self-referencing-scan idiom) has its loop nested inside
-        // (i.e. innermost of) every inductive dimension. Recursive
-        // self-references along the inductive dimensions are only valid if
-        // they refer to values computed by prior, fully-completed
-        // iterations of the RDom's loop, which requires the RDom loop to be
-        // the innermost loop relative to the inductive dimensions.
+        // Check that any RDom used in an inductive Func's update
+        // has its loop nested inside every inductive dimension.
         for (const Definition &upd : f.updates()) {
             const vector<Dim> &dims = upd.schedule().dims();
             int innermost_rvar_pos = -1;
@@ -2218,9 +2213,9 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
                     if (dims[d].var == v->name) {
                         user_assert(innermost_rvar_pos < (int)d)
                             << "In the update definition of inductive Func " << f.name()
-                            << ", the RDom's loop must be nested inside all inductive "
+                            << ", all RVar iterations must be nested inside all inductive "
                             << "variable loops, but inductive variable " << v->name
-                            << " is nested inside the RDom's loop.\n";
+                            << " is nested inside an RVar's loop.\n";
                     }
                 }
             }

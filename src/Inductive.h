@@ -26,8 +26,13 @@
  * In inductive functions, any recursive references must be inside a select statement,
  * and cannot be inside nested select statements. The inductive arguments in the
  * recursive reference must be monotonically decreasing. Currently, only single-valued
- * functions are supported. Inductive functions cannot be inlined, and cannot have
- * update definitions.
+ * functions are supported. Inductive functions cannot be inlined.
+ *
+ * An inductive function is usually expressed as a single pure definition (as in the
+ * examples above), but this is not required. It is also possible to define an inductive
+ * function with a non-inductive pure definition plus exactly one update definition, where
+ * the update definition is the inductive one. In that case, all RVars appearing in the
+ * update definition must be nested inside all of the inductive variables.
  *
  * In some cases, the inductive function's type cannot be inferred and must be declared
  * explicitly. This occurs when constants appear in operations with a recursive reference.
