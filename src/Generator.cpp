@@ -1151,7 +1151,7 @@ void GeneratorParamBase::check_value_readable() const {
     // These are always readable.
     if (name() == "target" ||
         name() == "autoscheduler" ||
-        name() == "namespace") {
+        name() == "runtime_namespace") {
         return;
     }
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)

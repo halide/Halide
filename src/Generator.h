@@ -213,7 +213,7 @@
  *
  *      GeneratorParam<Target> target{"target", Target()};
  *      GeneratorParam<AutoschedulerParams> autoscheduler{"autoscheduler", {}}
- *      GeneratorParam<RuntimeNamespaceParams> namespaces{"namespace", {}}
+ *      GeneratorParam<RuntimeNamespaceParams> runtime_namespace{"runtime_namespace", {}}
  *
  *  - 'target' is the Halide::Target for which the Generator is producing code.
  *    It is read-only during the Generator's lifetime, and must not be modified;
