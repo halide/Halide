@@ -801,58 +801,77 @@ _add_halide_aot_tests(rdom_input)
 # custom allocator, thread count, and error handler) stays independent. The test
 # runs host objects directly, so it is skipped for wasm.
 if (NOT ${_USING_WASM})
-    add_halide_generator(runtime_namespace_iso.generator
-                         SOURCES runtime_namespace_iso_generator.cpp)
+    add_halide_generator(
+        runtime_namespace_iso.generator
+        SOURCES runtime_namespace_iso_generator.cpp
+    )
 
     # none: the stock halide_ runtime.
     add_halide_runtime(rniso_rt_none)
-    add_halide_library(rniso_none
-                       FROM runtime_namespace_iso.generator
-                       GENERATOR runtime_namespace_iso
-                       FUNCTION_NAME pipe_none
-                       USE_RUNTIME rniso_rt_none)
-    add_halide_library(rniso_none_c C_BACKEND
-                       FROM runtime_namespace_iso.generator
-                       GENERATOR runtime_namespace_iso
-                       FUNCTION_NAME pipe_none_c
-                       USE_RUNTIME rniso_rt_none)
+    add_halide_library(
+        rniso_none
+        FROM runtime_namespace_iso.generator
+        GENERATOR runtime_namespace_iso
+        FUNCTION_NAME pipe_none
+        USE_RUNTIME rniso_rt_none
+    )
+    add_halide_library(
+        rniso_none_c C_BACKEND
+        FROM runtime_namespace_iso.generator
+        GENERATOR runtime_namespace_iso
+        FUNCTION_NAME pipe_none_c
+        USE_RUNTIME rniso_rt_none
+    )
 
     # a: export/import prefix "runtime_a_", internal prefix "runtime_ai_".
-    add_halide_runtime(rniso_rt_a
-                       PARAMS runtime_namespace.export=runtime_a_ runtime_namespace.internal=runtime_ai_)
-    add_halide_library(rniso_a
-                       FROM runtime_namespace_iso.generator
-                       GENERATOR runtime_namespace_iso
-                       FUNCTION_NAME pipe_a
-                       USE_RUNTIME rniso_rt_a
-                       PARAMS runtime_namespace.import=runtime_a_ runtime_namespace.internal=runtime_ai_)
-    add_halide_library(rniso_a_c C_BACKEND
-                       FROM runtime_namespace_iso.generator
-                       GENERATOR runtime_namespace_iso
-                       FUNCTION_NAME pipe_a_c
-                       USE_RUNTIME rniso_rt_a
-                       PARAMS runtime_namespace.import=runtime_a_ runtime_namespace.internal=runtime_ai_)
+    add_halide_runtime(
+        rniso_rt_a
+        PARAMS runtime_namespace.export=runtime_a_ runtime_namespace.internal=runtime_ai_
+    )
+    add_halide_library(
+        rniso_a
+        FROM runtime_namespace_iso.generator
+        GENERATOR runtime_namespace_iso
+        FUNCTION_NAME pipe_a
+        USE_RUNTIME rniso_rt_a
+        PARAMS runtime_namespace.import=runtime_a_ runtime_namespace.internal=runtime_ai_
+    )
+    add_halide_library(
+        rniso_a_c C_BACKEND
+        FROM runtime_namespace_iso.generator
+        GENERATOR runtime_namespace_iso
+        FUNCTION_NAME pipe_a_c
+        USE_RUNTIME rniso_rt_a
+        PARAMS runtime_namespace.import=runtime_a_ runtime_namespace.internal=runtime_ai_
+    )
 
     # b: export/import prefix "runtime_b_", internal prefix "runtime_bi_".
-    add_halide_runtime(rniso_rt_b
-                       PARAMS runtime_namespace.export=runtime_b_ runtime_namespace.internal=runtime_bi_)
-    add_halide_library(rniso_b
-                       FROM runtime_namespace_iso.generator
-                       GENERATOR runtime_namespace_iso
-                       FUNCTION_NAME pipe_b
-                       USE_RUNTIME rniso_rt_b
-                       PARAMS runtime_namespace.import=runtime_b_ runtime_namespace.internal=runtime_bi_)
-    add_halide_library(rniso_b_c C_BACKEND
-                       FROM runtime_namespace_iso.generator
-                       GENERATOR runtime_namespace_iso
-                       FUNCTION_NAME pipe_b_c
-                       USE_RUNTIME rniso_rt_b
-                       PARAMS runtime_namespace.import=runtime_b_ runtime_namespace.internal=runtime_bi_)
+    add_halide_runtime(
+        rniso_rt_b
+        PARAMS runtime_namespace.export=runtime_b_ runtime_namespace.internal=runtime_bi_
+    )
+    add_halide_library(
+        rniso_b
+        FROM runtime_namespace_iso.generator
+        GENERATOR runtime_namespace_iso
+        FUNCTION_NAME pipe_b
+        USE_RUNTIME rniso_rt_b
+        PARAMS runtime_namespace.import=runtime_b_ runtime_namespace.internal=runtime_bi_
+    )
+    add_halide_library(
+        rniso_b_c C_BACKEND
+        FROM runtime_namespace_iso.generator
+        GENERATOR runtime_namespace_iso
+        FUNCTION_NAME pipe_b_c
+        USE_RUNTIME rniso_rt_b
+        PARAMS runtime_namespace.import=runtime_b_ runtime_namespace.internal=runtime_bi_
+    )
 
-    _add_one_aot_test(generator_aot_runtime_namespace_iso
-                      SRCS runtime_namespace_iso_aottest.cpp
-                      DEPS rniso_none rniso_a rniso_b
-                           rniso_none_c rniso_a_c rniso_b_c)
+    _add_one_aot_test(
+        generator_aot_runtime_namespace_iso
+        SRCS runtime_namespace_iso_aottest.cpp
+        DEPS rniso_none rniso_a rniso_b rniso_none_c rniso_a_c rniso_b_c
+    )
 endif ()
 
 # string_param_aottest.cpp

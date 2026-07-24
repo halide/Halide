@@ -79,15 +79,10 @@ void define_pipeline(py::module &m) {
                     p.apply_runtime_namespace(target, RuntimeNamespaceParams(namespace_map));
                 },
                 py::arg("target"), py::arg("namespace_map"))
-            .def("get_func", &Pipeline::get_func,
-                 py::arg("index"))
+            .def("get_func", &Pipeline::get_func, py::arg("index"))
             .def("print_loop_nest", &Pipeline::print_loop_nest)
 
-            .def(
-                "compile_to", [](Pipeline &p, const std::map<OutputFileType, std::string> &output_files, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
-                    p.compile_to(output_files, args, fn_name, to_aot_target(target));
-                },
-                py::arg("outputs"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
+            .def("compile_to", [](Pipeline &p, const std::map<OutputFileType, std::string> &output_files, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) { p.compile_to(output_files, args, fn_name, to_aot_target(target)); }, py::arg("outputs"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
 
             .def("compile_to_bitcode",  //
                  [](Pipeline &p, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {

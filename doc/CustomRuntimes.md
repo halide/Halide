@@ -1,19 +1,19 @@
 # Custom Runtime Namespaces
 
-Every Halide runtime exposes the same fixed set of C ABI symbols -- `halide_malloc`,
-`halide_free`, `halide_error`, `halide_do_par_for`, and so on -- and keeps a
-block of mutable process-global state behind them (the installed custom
-allocator, the thread pool, the memoization cache, the profiler, etc.). That is
-exactly what you want when a program contains a single Halide runtime, but it
-becomes a problem when a program must contain *more than one*.
+Every Halide runtime exposes the same fixed set of C ABI symbols --
+`halide_malloc`, `halide_free`, `halide_error`, `halide_do_par_for`, and so on
+-- and keeps a block of mutable process-global state behind them (the installed
+custom allocator, the thread pool, the memoization cache, the profiler, etc.).
+That is exactly what you want when a program contains a single Halide runtime,
+but it becomes a problem when a program must contain *more than one*.
 
 Two independently produced components -- say, two libraries that each embed
-their own AOT-compiled Halide pipelines and runtime -- both define `halide_malloc`
-and both carry the same runtime state globals. When they are linked into one
-process the linker collapses those duplicate (weak/`linkonce`) symbols into a
-single copy, so the two components silently *share* one runtime. Installing a
-custom allocator or error handler for one then affects the other, and the two
-cannot be given different runtime configurations at all.
+their own AOT-compiled Halide pipelines and runtime -- both define
+`halide_malloc` and both carry the same runtime state globals. When they are
+linked into one process the linker collapses those duplicate (weak/`linkonce`)
+symbols into a single copy, so the two components silently *share* one runtime.
+Installing a custom allocator or error handler for one then affects the other,
+and the two cannot be given different runtime configurations at all.
 
 Runtime namespaces solve this by letting you rename the runtime's symbols with a
 prefix of your choosing, so that each component carries its own, independent
@@ -63,7 +63,7 @@ Different components use *different* prefixes from one another; that is what
 keeps them isolated. A typical setup for two components `A` and `B` is:
 
 | Component | Runtime (`export`, `internal`) | Kernel (`import`, `internal`) |
-|-----------|--------------------------------|-------------------------------|
+| --------- | ------------------------------ | ----------------------------- |
 | A         | `A_`, `A_internal_`            | `A_`, `A_internal_`           |
 | B         | `B_`, `B_internal_`            | `B_`, `B_internal_`           |
 
@@ -170,10 +170,10 @@ To emit a matching **pipeline** with `no_runtime`:
 
 ## Usage from CMake
 
-`add_halide_runtime` accepts a `PARAMS` argument that is forwarded to the runtime
-generator, and `add_halide_library` already forwards `PARAMS` to the pipeline
-generator. Give a runtime its export/internal prefixes, and give each library
-its matching import/internal prefixes together with `USE_RUNTIME`:
+`add_halide_runtime` accepts a `PARAMS` argument that is forwarded to the
+runtime generator, and `add_halide_library` already forwards `PARAMS` to the
+pipeline generator. Give a runtime its export/internal prefixes, and give each
+library its matching import/internal prefixes together with `USE_RUNTIME`:
 
 ```cmake
 add_halide_generator(my_pipeline.generator SOURCES my_pipeline_generator.cpp)
