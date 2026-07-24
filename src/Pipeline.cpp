@@ -151,6 +151,10 @@ struct PipelineContents {
 
     bool trace_pipeline = false;
 
+    /** Optional prefixes used to rename halide_-prefixed runtime symbols.
+     * Empty unless set via Pipeline::apply_runtime_namespace(). */
+    RuntimeNamespaceParams runtime_namespace_params;
+
     PipelineContents()
         : module("", Target()) {
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void *>(), 0, ArgumentEstimates{});
@@ -262,6 +266,14 @@ AutoSchedulerResults Pipeline::apply_autoscheduler(const Target &target, const A
 
     autoscheduler_fn(*this, target, autoscheduler_params, &results);
     return results;
+}
+
+void Pipeline::apply_runtime_namespace(const Target &target, const RuntimeNamespaceParams &runtime_namespace_params) const {
+    user_assert(!runtime_namespace_params.prefixes.empty()) << "apply_runtime_namespace was called with no namespace prefixes specified.";
+    user_assert(!target.has_feature(Target::JIT))
+        << "Runtime namespace prefixes are not supported for JIT targets: the JIT resolves runtime "
+        << "calls against a process-global shared runtime that is not namespaced. Use an AOT target instead.";
+    contents->runtime_namespace_params = runtime_namespace_params;
 }
 
 /* static */
@@ -563,6 +575,17 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                  linkage_type, contents->requirements, contents->trace_pipeline,
                                  custom_passes);
     }
+
+    if (!contents->runtime_namespace_params.prefixes.empty()) {
+        // JIT cannot honor renamed runtime symbols (they'd be unresolved against
+        // the shared runtime), so reject it explicitly rather than silently
+        // producing a module that fails to link at run time.
+        user_assert(!target.has_feature(Target::JIT))
+            << "Runtime namespace prefixes are not supported when JIT-compiling a Pipeline.";
+    }
+    // Carry the (possibly empty) prefixes onto the Module so codegen can rename
+    // halide_-prefixed runtime symbols. Empty is a no-op.
+    contents->module.set_runtime_namespace_map(contents->runtime_namespace_params.prefixes);
 
     return contents->module;
 }

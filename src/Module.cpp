@@ -327,6 +327,7 @@ struct ModuleContents {
     std::vector<Internal::LoweredFunc> functions;
     std::vector<Module> submodules;
     MetadataNameMap metadata_name_map;
+    RuntimeNamespaceMap runtime_namespace_map;
     bool any_strict_float{false};
     std::unique_ptr<AutoSchedulerResults> auto_scheduler_results;
 
@@ -371,11 +372,12 @@ LoweredFunc::LoweredFunc(const std::string &name,
 
 using namespace Halide::Internal;
 
-Module::Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map)
+Module::Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map, const RuntimeNamespaceMap &runtime_namespace_map)
     : contents(new Internal::ModuleContents) {
     contents->name = name;
     contents->target = target;
     contents->metadata_name_map = metadata_name_map;
+    contents->runtime_namespace_map = runtime_namespace_map;
 }
 
 void Module::set_auto_scheduler_results(const AutoSchedulerResults &auto_scheduler_results) {
@@ -549,6 +551,14 @@ void Module::remap_metadata_name(const std::string &from, const std::string &to)
 
 MetadataNameMap Module::get_metadata_name_map() const {
     return contents->metadata_name_map;
+}
+
+RuntimeNamespaceMap Module::get_runtime_namespace_map() const {
+    return contents->runtime_namespace_map;
+}
+
+void Module::set_runtime_namespace_map(const RuntimeNamespaceMap &runtime_namespace_map) {
+    contents->runtime_namespace_map = runtime_namespace_map;
 }
 
 void Module::set_conceptual_code_stmt(const Internal::Stmt &stmt) {
@@ -785,10 +795,11 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     }
 }
 
-std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t) {
+std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t, const std::map<RuntimeVisibility, std::string> &runtime_namespace_map) {
     validate_outputs(output_files);
 
-    Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT));
+    MetadataNameMap metadata_name_map = {};  // empty metadata for a standalone runtime
+    Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT), metadata_name_map, runtime_namespace_map);
     // For runtime, it only makes sense to output object files or static_library, so ignore
     // everything else.
     std::map<OutputFileType, std::string> actual_outputs;
@@ -805,8 +816,8 @@ std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<
     return actual_outputs;
 }
 
-void compile_standalone_runtime(const std::string &object_filename, const Target &t) {
-    compile_standalone_runtime({{OutputFileType::object, object_filename}}, t);
+void compile_standalone_runtime(const std::string &object_filename, const Target &t, const std::map<RuntimeVisibility, std::string> &runtime_namespace_map) {
+    compile_standalone_runtime({{OutputFileType::object, object_filename}}, t, runtime_namespace_map);
 }
 
 namespace {

@@ -1,5 +1,6 @@
 #include <limits>
 #include <memory>
+#include <set>
 #include <sstream>
 
 #include "CPlusPlusMangle.h"
@@ -503,6 +504,101 @@ CodeGen_LLVM::ScopedFastMath::~ScopedFastMath() {
     }
 }
 
+namespace {
+
+// Rename the halide_-prefixed runtime symbols in the module according to the
+// user-supplied prefixes, replacing the leading "halide_" of each name.
+//
+// The three scopes map to a function's role in the final module:
+//   - Export:   a halide_-prefixed *definition* -- a runtime method that this
+//               module exports (externally visible in the runtime library).
+//   - Import:   a halide_-prefixed *declaration* whose call sites are in the
+//               generated kernel -- a runtime method the kernel imports from a
+//               separately-compiled runtime.
+//   - Internal: a halide_-prefixed *declaration* whose call sites are inside
+//               *other runtime methods* -- a runtime method that one runtime
+//               method calls but that is defined in a different compilation
+//               unit (a runtime-internal cross-reference).
+//
+// Import and Internal are distinguished purely by who calls the (external)
+// declaration: the pipeline's own entry functions (import) vs. any other
+// defined function, i.e. a runtime method (internal). `pipeline_functions`
+// lists the kernel entry-point symbol names so we can tell them apart.
+//
+// Only halide_-prefixed symbols are touched, so the pipeline's own entry
+// points and any libc symbols are left alone. Because LLVM call sites refer to
+// the llvm::Function object (not its name), renaming a function automatically
+// updates every in-module caller; no separate call-site rewriting is needed.
+void apply_runtime_namespace_prefixes(llvm::Module &module,
+                                      const RuntimeNamespaceMap &prefixes,
+                                      const std::set<std::string> &pipeline_functions) {
+    if (prefixes.empty()) {
+        return;
+    }
+
+    const std::string halide_prefix = "halide_";
+
+    auto find_prefix = [&prefixes](RuntimeVisibility v) -> const std::string * {
+        auto it = prefixes.find(v);
+        return (it != prefixes.end()) ? &it->second : nullptr;
+    };
+    const std::string *import_prefix = find_prefix(RuntimeVisibility::Import);
+    const std::string *export_prefix = find_prefix(RuntimeVisibility::Export);
+    const std::string *internal_prefix = find_prefix(RuntimeVisibility::Internal);
+
+    // Is `f` one of the generated kernel's own entry points?
+    auto is_kernel_function = [&pipeline_functions](const llvm::Function *f) {
+        return f != nullptr &&
+               pipeline_functions.count(get_llvm_function_name(*f)) != 0;
+    };
+
+    // Does any call site of `f` live inside a function matching `pred`?
+    auto called_from = [](llvm::Function &f, const auto &pred) {
+        for (llvm::User *u : f.users()) {
+            if (auto *inst = llvm::dyn_cast<llvm::Instruction>(u)) {
+                if (pred(inst->getFunction())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    for (llvm::Function &f : module.functions()) {
+        const std::string name = get_llvm_function_name(f);
+        if (!starts_with(name, halide_prefix)) {
+            continue;
+        }
+
+        const std::string *prefix = nullptr;
+        if (!f.isDeclaration()) {
+            // A runtime method defined (and thus exported) by this module.
+            prefix = export_prefix;
+        } else if (called_from(f, is_kernel_function)) {
+            // An external runtime method the generated kernel calls: the kernel
+            // "imports" it, and its name must match the runtime it links
+            // against, so kernel-import takes precedence over any in-module
+            // runtime helper that also happens to call it.
+            prefix = import_prefix;
+        } else if (called_from(f, [&is_kernel_function](const llvm::Function *c) {
+                       return c != nullptr && !c->isDeclaration() && !is_kernel_function(c);
+                   })) {
+            // An external runtime method called *only* from other runtime
+            // methods in this module (never from the kernel).
+            prefix = internal_prefix;
+        } else {
+            // An unused external declaration; treat it as a kernel import.
+            prefix = import_prefix;
+        }
+
+        if (prefix != nullptr) {
+            f.setName(*prefix + name.substr(halide_prefix.size()));
+        }
+    }
+}
+
+}  // namespace
+
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     any_strict_float = input.any_strict_float();
 
@@ -628,6 +724,20 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     }
 
     debug(2) << "llvm::Module pointer: " << module.get() << "\n";
+
+    // Rename halide_-prefixed runtime symbols if the user requested a runtime
+    // namespace. Done here (after all functions are declared/defined but before
+    // optimization) so that both linked-in runtime definitions and any external
+    // runtime declarations are covered in one pass. The set of pipeline entry
+    // points lets us tell "import" (kernel-called) from "internal"
+    // (runtime-called) declarations.
+    std::set<std::string> pipeline_functions;
+    for (const auto &names : function_names) {
+        pipeline_functions.insert(names.extern_name);
+        pipeline_functions.insert(names.argv_name);
+        pipeline_functions.insert(names.metadata_name);
+    }
+    apply_runtime_namespace_prefixes(*module, input.get_runtime_namespace_map(), pipeline_functions);
 
     return finish_codegen();
 }

@@ -21,17 +21,27 @@ namespace Halide {
 
 GeneratorContext::GeneratorContext(const Target &target)
     : target_(target),
-      autoscheduler_params_() {
+      autoscheduler_params_(),
+      runtime_namespace_params_() {
 }
 
 GeneratorContext::GeneratorContext(const Target &target,
                                    const AutoschedulerParams &autoscheduler_params)
     : target_(target),
-      autoscheduler_params_(autoscheduler_params) {
+      autoscheduler_params_(autoscheduler_params),
+      runtime_namespace_params_() {
+}
+
+GeneratorContext::GeneratorContext(const Target &target,
+                                   const AutoschedulerParams &autoscheduler_params,
+                                   const RuntimeNamespaceParams &runtime_namespace_params)
+    : target_(target),
+      autoscheduler_params_(autoscheduler_params),
+      runtime_namespace_params_(runtime_namespace_params) {
 }
 
 GeneratorContext GeneratorContext::with_target(const Target &t) const {
-    return GeneratorContext(t, autoscheduler_params_);
+    return GeneratorContext(t, autoscheduler_params_, runtime_namespace_params_);
 }
 
 namespace Internal {
@@ -166,8 +176,9 @@ private:
         std::vector<Internal::GeneratorParamBase *> out;
         for (auto *p : in) {
             // These are always propagated specially.
-            if (p->name() == "target" ||
-                p->name() == "autoscheduler") {
+            if ((p->name() == "target") ||
+                (p->name() == "autoscheduler") ||
+                (p->name() == "runtime_namespace")) {
                 continue;
             }
             if (p->is_synthetic_param()) {
@@ -210,7 +221,10 @@ void StubEmitter::emit_generator_params_struct() {
             std::string c_type = p->get_c_type();
             if (c_type == "AutoschedulerParams") {
                 c_type = "const AutoschedulerParams&";
+            } else if (c_type == "RuntimeNamespaceParams") {
+                c_type = "const RuntimeNamespaceParams&";
             }
+
             stream << get_indent() << comma << c_type << " " << p->name() << "\n";
             comma = ", ";
         }
@@ -1136,7 +1150,8 @@ GeneratorParamBase::~GeneratorParamBase() {
 void GeneratorParamBase::check_value_readable() const {
     // These are always readable.
     if (name() == "target" ||
-        name() == "autoscheduler") {
+        name() == "autoscheduler" ||
+        name() == "runtime_namespace") {
         return;
     }
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
@@ -1189,6 +1204,53 @@ bool GeneratorParam_AutoSchedulerParams::try_set(const std::string &key, const s
         const auto sub_key = key.substr(n.size() + 1);
         user_assert(this->value_.extra.count(sub_key) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
         this->value_.extra[sub_key] = value;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+GeneratorParam_RuntimeNamespaceParams::GeneratorParam_RuntimeNamespaceParams()
+    : GeneratorParamImpl<RuntimeNamespaceParams>("runtime_namespace", {}) {
+}
+
+void GeneratorParam_RuntimeNamespaceParams::set_from_string(const std::string &new_value_string) {
+    internal_error << "This method should never be called.";
+}
+
+std::string GeneratorParam_RuntimeNamespaceParams::get_default_value() const {
+    internal_error << "This method should never be called.";
+    return "";
+}
+
+std::string GeneratorParam_RuntimeNamespaceParams::call_to_string(const std::string &v) const {
+    internal_error << "This method should never be called.";
+    return "";
+}
+
+std::string GeneratorParam_RuntimeNamespaceParams::get_c_type() const {
+    internal_error << "This method should never be called.";
+    return "";
+}
+
+bool GeneratorParam_RuntimeNamespaceParams::try_set(const std::string &key, const std::string &value) {
+    const auto &n = this->name();
+    // Sub-keys arrive as "runtime_namespace.import" / ".export" / ".internal";
+    // there is no bare top-level string form for this GeneratorParam.
+    if (starts_with(key, n + ".")) {
+        const auto sub_key = key.substr(n.size() + 1);
+        if (sub_key == "internal") {
+            user_assert(this->value_.prefixes.count(RuntimeVisibility::Internal) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+            this->value_.prefixes.insert({RuntimeVisibility::Internal, value});
+        } else if (sub_key == "export") {
+            user_assert(this->value_.prefixes.count(RuntimeVisibility::Export) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+            this->value_.prefixes.insert({RuntimeVisibility::Export, value});
+        } else if (sub_key == "import") {
+            user_assert(this->value_.prefixes.count(RuntimeVisibility::Import) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+            this->value_.prefixes.insert({RuntimeVisibility::Import, value});
+        } else {
+            return false;
+        }
         return true;
     } else {
         return false;
@@ -1363,12 +1425,13 @@ GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name)
 }
 
 GeneratorContext GeneratorBase::context() const {
-    return GeneratorContext(target, autoscheduler_.value());
+    return GeneratorContext(target, autoscheduler_.value(), runtime_namespace_.value());
 }
 
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     target.set(context.target_);
     autoscheduler_.set(context.autoscheduler_params_);
+    runtime_namespace_.set(context.runtime_namespace_params_);
 
     // preemptively build our param_info now
     internal_assert(param_info_ptr == nullptr);
@@ -1527,6 +1590,9 @@ void GeneratorBase::check_input_kind(Internal::GeneratorInputBase *in, Internal:
 void GeneratorBase::set_generatorparam_value(const std::string &name, const std::string &value) {
     user_assert(name != "target") << "The GeneratorParam named " << name << " cannot be set by set_generatorparam_value().\n";
     if (autoscheduler_.try_set(name, value)) {
+        return;
+    }
+    if (runtime_namespace_.try_set(name, value)) {
         return;
     }
 
