@@ -1235,9 +1235,11 @@ std::string GeneratorParam_RuntimeNamespaceParams::get_c_type() const {
 
 bool GeneratorParam_RuntimeNamespaceParams::try_set(const std::string &key, const std::string &value) {
     const auto &n = this->name();
-    if ((key == n) && starts_with(key, n + ".")) {
+    // Sub-keys arrive as "runtime_namespace.import" / ".export" / ".internal";
+    // there is no bare top-level string form for this GeneratorParam.
+    if (starts_with(key, n + ".")) {
         const auto sub_key = key.substr(n.size() + 1);
-        if(sub_key == "internal") {
+        if (sub_key == "internal") {
             user_assert(this->value_.prefixes.count(RuntimeVisibility::Internal) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
             this->value_.prefixes.insert({RuntimeVisibility::Internal, value});
         } else if (sub_key == "export") {

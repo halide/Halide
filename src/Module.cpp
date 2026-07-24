@@ -557,6 +557,10 @@ RuntimeNamespaceMap Module::get_runtime_namespace_map() const {
     return contents->runtime_namespace_map;
 }
 
+void Module::set_runtime_namespace_map(const RuntimeNamespaceMap &runtime_namespace_map) {
+    contents->runtime_namespace_map = runtime_namespace_map;
+}
+
 void Module::set_conceptual_code_stmt(const Internal::Stmt &stmt) {
     contents->conceptual_code = stmt;
 }
@@ -794,7 +798,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
 std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t, const std::map<RuntimeVisibility, std::string> &runtime_namespace_map) {
     validate_outputs(output_files);
 
-    MetadataNameMap metadata_name_map = {}; // empty metadata for a standalone runtime
+    MetadataNameMap metadata_name_map = {};  // empty metadata for a standalone runtime
     Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT), metadata_name_map, runtime_namespace_map);
     // For runtime, it only makes sense to output object files or static_library, so ignore
     // everything else.
