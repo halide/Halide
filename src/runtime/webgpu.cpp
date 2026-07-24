@@ -278,6 +278,7 @@ void device_lost_callback(WGPUDevice const *device,
     char buf[512];
     error(user_context) << "WGPU device lost (" << reason << "): "
                         << wgpu_sv_to_cstr(message, buf, sizeof(buf)) << "\n";
+    device_was_lost = true;
 }
 
 void request_device_callback(WGPURequestDeviceStatus status,
