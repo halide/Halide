@@ -105,6 +105,21 @@ extern int halide_vulkan_release_context(void *user_context,
                                          VkDevice device,
                                          VkQueue queue,
                                          VkDebugUtilsMessengerEXT messenger);
+
+/** Wrap an externally-owned VkBuffer with a byte offset. */
+extern int halide_vulkan_wrap_vk_buffer(void *user_context,
+                                        struct halide_buffer_t *buf,
+                                        uint64_t vk_buffer,
+                                        uint64_t offset);
+
+/** Detach a wrapped VkBuffer without destroying it. */
+extern int halide_vulkan_detach_vk_buffer(void *user_context, halide_buffer_t *buf);
+
+/** Return the underlying VkBuffer for a halide_buffer_t. */
+extern uintptr_t halide_vulkan_get_vk_buffer(void *user_context, halide_buffer_t *buf);
+
+/** Return the total byte offset for a wrapped or cropped Vulkan buffer. */
+extern uint64_t halide_vulkan_get_vk_crop_offset(void *user_context, halide_buffer_t *buf);
 // --
 
 // Override the default allocation callbacks (default uses Vulkan runtime implementation)
