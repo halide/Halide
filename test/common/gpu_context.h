@@ -304,7 +304,9 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
 }
 
 inline void destroy_webgpu_context(WGPUInstance instance, WGPUAdapter adapter, WGPUDevice device, WGPUBuffer staging_buffer) {
-    wgpuBufferRelease(staging_buffer);
+    if (staging_buffer) {
+        wgpuBufferRelease(staging_buffer);
+    }
     if (device) {
         wgpuDeviceDestroy(device);  // Required for Dawn native to allow process to exit cleanly.
         wgpuDeviceRelease(device);
