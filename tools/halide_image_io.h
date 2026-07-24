@@ -1339,6 +1339,12 @@ bool load_npy(const std::string &filename, ImageType *im) {
         return false;
     }
 
+    for (const int extent : h.extents) {
+        if (!check(extent > 0, "Bad extent in .npy file")) {
+            return false;
+        }
+    }
+
     halide_type_t im_type((halide_type_code_t)0, 0);
     for (const auto &d : npy_dtypes) {
         if (h.type_code == d.second.type_code && h.type_bytes == d.second.type_bytes) {
@@ -1779,6 +1785,12 @@ bool load_mat(const std::string &filename, ImageType *im) {
     if (dims & 1) {
         uint32_t padding;
         if (!check(f.read_bytes(&padding, 4), "Could not read .mat header\n")) {
+            return false;
+        }
+    }
+
+    for (const int extent : extents) {
+        if (!check(extent > 0, "Bad extent in .mat file\n")) {
             return false;
         }
     }
