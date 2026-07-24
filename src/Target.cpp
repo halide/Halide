@@ -52,6 +52,18 @@
 #ifndef HWCAP2_SVE2
 #define HWCAP2_SVE2 0
 #endif
+#ifndef HWCAP2_SME2
+#define HWCAP2_SME2 0
+#endif
+#endif
+
+/* Detect SME target attribute support */
+#if defined(__aarch64__) && !defined(__arm__) &&                       \
+    ((defined(__GNUC__) && !defined(__clang__) && (__GNUC__ >= 14)) || \
+     (defined(__clang__) && (__clang_major__ >= 17)))
+#define HAS_ATTR_TARGET_SME 1
+#else
+#define HAS_ATTR_TARGET_SME 0
 #endif
 
 namespace Halide {
@@ -67,7 +79,20 @@ __attribute__((target("+sve"))) int get_sve_vector_length() {
     __asm__("cntb %x0, all, mul #8" : "=r"(result));
     return result;
 }
+
+#if HAS_ATTR_TARGET_SME
+__attribute__((target("+sme"))) int get_sme_streaming_vector_length() {  // codespell:ignore sme
+    register int result asm("w0");
+    __asm__("rdsvl %x0, #8" : "=r"(result));
+    return result;
+}
+#else
+int get_sme_streaming_vector_length() {
+    user_error << "Trying to get streaming_vector_length where SME is supposed to be unsupported\n";
+    return 0;
+}
 #endif
+#endif  // defined(__aarch64__)
 
 struct cpuid_result {
     int eax, ebx, ecx, edx;
@@ -282,6 +307,7 @@ Target calculate_host_target() {
     Target::Arch arch = Target::ARM;
 #if !defined(__arm__)
     bool has_scalable_vector = false;
+    bool has_streaming_scalable_vector = false;
 #endif
 
 #ifdef __APPLE__
@@ -296,7 +322,13 @@ Target calculate_host_target() {
     if (sysctl_is_set("hw.optional.arm.FEAT_FP16")) {
         initial_features.push_back(Target::ARMFp16);
     }
+#if HAS_ATTR_TARGET_SME
+    if (sysctl_is_set("hw.optional.arm.FEAT_SME2")) {
+        initial_features.push_back(Target::SME2);
+        has_streaming_scalable_vector = true;
+    }
 #endif
+#endif  // __APPLE__
 
 #ifdef __linux__
     unsigned long hwcaps = getauxval(AT_HWCAP);
@@ -322,6 +354,14 @@ Target calculate_host_target() {
         has_scalable_vector = true;
 #endif
     }
+
+#if HAS_ATTR_TARGET_SME
+    if (hwcaps2 & HWCAP2_SME2) {
+        initial_features.push_back(Target::SME2);
+        has_streaming_scalable_vector = true;
+    }
+#endif
+
 #endif
 
 #ifdef _MSC_VER
@@ -329,6 +369,7 @@ Target calculate_host_target() {
     // https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent
 #define PF_ARM_SVE_INSTRUCTIONS_AVAILABLE (46)
 #define PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE (47)
+#define PF_ARM_SME2_INSTRUCTIONS_AVAILABLE (71)
 
     // This is the strategy used by Google's cpuinfo library for
     // detecting fp16 arithmetic support on Windows.
@@ -354,11 +395,24 @@ Target calculate_host_target() {
 #endif
     }
 
+#if HAS_ATTR_TARGET_SME
+    if (IsProcessorFeaturePresent(PF_ARM_SME2_INSTRUCTIONS_AVAILABLE)) {
+        initial_features.push_back(Target::SME2);
+        has_streaming_scalable_vector = true;
+    }
+#endif
 #endif
 
 #if !defined(__arm__)
     if (has_scalable_vector) {
         vector_bits = get_sve_vector_length();
+    }
+    if (has_streaming_scalable_vector) {
+        const int streaming_vector_bits = get_sme_streaming_vector_length();
+        Target::Feature sme_svl = Target::sme_svl_feature_from_bits(streaming_vector_bits);
+        user_assert(sme_svl != Target::FeatureEnd)
+            << "Detected unsupported SME streaming vector length " << streaming_vector_bits << " bits.\n";
+        initial_features.push_back(sme_svl);
     }
 #endif
 
@@ -834,6 +888,12 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"webgpu", Target::WebGPU},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
+    {"sme2", Target::SME2},
+    {"sme_svl128", Target::SME_SVL128},
+    {"sme_svl256", Target::SME_SVL256},
+    {"sme_svl512", Target::SME_SVL512},
+    {"sme_svl1024", Target::SME_SVL1024},
+    {"sme_svl2048", Target::SME_SVL2048},
     {"arm_dot_prod", Target::ARMDotProd},
     {"arm_fp16", Target::ARMFp16},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
@@ -1113,6 +1173,12 @@ void Target::validate_features() const {
                                 NoNEON,
                                 POWER_ARCH_2_07,
                                 RVV,
+                                SME2,
+                                SME_SVL128,
+                                SME_SVL256,
+                                SME_SVL512,
+                                SME_SVL1024,
+                                SME_SVL2048,
                                 SVE,
                                 SVE2,
                                 VSX,
@@ -1174,6 +1240,12 @@ void Target::validate_features() const {
                                 POWER_ARCH_2_07,
                                 RVV,
                                 SSE41,
+                                SME_SVL128,
+                                SME_SVL256,
+                                SME_SVL512,
+                                SME_SVL1024,
+                                SME_SVL2048,
+                                SME2,
                                 SVE,
                                 SVE2,
                                 VSX,
@@ -1195,6 +1267,20 @@ void Target::validate_features() const {
                                 HLSL_SM69,
                             });
     }
+
+    const int num_sme_svl_features =
+        (int)has_feature(SME_SVL128) +
+        (int)has_feature(SME_SVL256) +
+        (int)has_feature(SME_SVL512) +
+        (int)has_feature(SME_SVL1024) +
+        (int)has_feature(SME_SVL2048);
+
+    user_assert(num_sme_svl_features <= 1)
+        << "Target may have at most one SME_SVL feature.\n";
+    user_assert(!has_feature(SME2) || num_sme_svl_features == 1)
+        << "Target feature sme2 requires exactly one SME_SVL feature.\n";
+    user_assert(has_feature(SME2) || num_sme_svl_features == 0)
+        << "Target features SME_SVL128, SME_SVL256, SME_SVL512, SME_SVL1024, and SME_SVL2048 require target feature sme2.\n";
 }
 
 Target::Target(const std::string &target) {
@@ -1236,6 +1322,23 @@ Target::Feature Target::feature_from_name(const std::string &name) {
         return feature;
     }
     return Target::FeatureEnd;
+}
+
+Target::Feature Target::sme_svl_feature_from_bits(int bits) {
+    switch (bits) {
+    case 128:
+        return Target::SME_SVL128;
+    case 256:
+        return Target::SME_SVL256;
+    case 512:
+        return Target::SME_SVL512;
+    case 1024:
+        return Target::SME_SVL1024;
+    case 2048:
+        return Target::SME_SVL2048;
+    default:
+        return Target::FeatureEnd;
+    }
 }
 
 std::string Target::to_string() const {
@@ -1639,9 +1742,36 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::Vulkan;
     case DeviceAPI::WebGPU:
         return Target::WebGPU;
+    case DeviceAPI::SMEStreaming:
+        return Target::SME2;
     default:
         return Target::FeatureEnd;
     }
+}
+
+int Target::sme_streaming_vector_bits() const {
+    int result = 0;
+    auto set_result = [&result](int bits) {
+        user_assert(result == 0)
+            << "Target may have at most one SME_SVL feature.\n";
+        result = bits;
+    };
+    if (has_feature(Target::SME_SVL128)) {
+        set_result(128);
+    }
+    if (has_feature(Target::SME_SVL256)) {
+        set_result(256);
+    }
+    if (has_feature(Target::SME_SVL512)) {
+        set_result(512);
+    }
+    if (has_feature(Target::SME_SVL1024)) {
+        set_result(1024);
+    }
+    if (has_feature(Target::SME_SVL2048)) {
+        set_result(2048);
+    }
+    return result;
 }
 
 int Target::natural_vector_size(const Halide::Type &t) const {
@@ -2050,11 +2180,19 @@ void target_test() {
         }
     }
 
+    // Tests for vector_bits
     internal_assert(Target().vector_bits == 0) << "Default Target vector_bits not 0.\n";
     internal_assert(Target("arm-64-linux-sve2-vector_bits_512").vector_bits == 512) << "Vector bits not parsed correctly.\n";
-    Target with_vector_bits(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE}, 512);
+    Target with_vector_bits(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE2}, 512);
     internal_assert(with_vector_bits.vector_bits == 512) << "Vector bits not populated in constructor.\n";
     internal_assert(Target(with_vector_bits.to_string()).vector_bits == 512) << "Vector bits not round tripped properly.\n";
+    internal_assert(with_vector_bits.natural_vector_size(Int(32)) == 16) << "Wrong natural_vector_size.\n";
+
+    // Tests for SME streaming vector length
+    internal_assert(Target().sme_streaming_vector_bits() == 0) << "Default Target SME SVL not 0.\n";
+    internal_assert(Target::sme_svl_feature_from_bits(1024) == Target::SME_SVL1024) << "SME SVL feature lookup failed.\n";
+    Target with_sme_svl(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE2, Target::SME2, Target::SME_SVL1024}, 512);
+    internal_assert(with_sme_svl.sme_streaming_vector_bits() == 1024) << "SME SVL not populated in constructor.\n";
 
     std::cout << "Target test passed\n";
 }

@@ -632,6 +632,7 @@ constexpr const char *intrinsic_op_names[] = {
     "dynamic_shuffle",
     "extract_bits",
     "extract_mask_element",
+    "get_runtime_streaming_vscale",
     "get_runtime_vscale",
     "get_user_context",
     "gpu_thread_barrier",

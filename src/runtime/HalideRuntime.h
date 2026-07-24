@@ -1350,6 +1350,10 @@ enum halide_error_code_t {
 
     /** Profiling failed for a pipeline invocation. */
     halide_error_code_cannot_profile_pipeline = -48,
+
+    /** "vscale" value of Streaming Scalable Vector detected in runtime does not
+     * match the streaming vscale value used in compilation. */
+    halide_error_code_streaming_vscale_invalid = -49,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1426,6 +1430,7 @@ extern int halide_error_storage_bound_too_small(void *user_context, const char *
 extern int halide_error_device_crop_failed(void *user_context);
 extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
 extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
+extern int halide_error_streaming_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
 // @}
 
 /** Optional features a compilation Target can have.
@@ -1518,6 +1523,12 @@ typedef enum halide_target_feature_t {
     halide_target_feature_webgpu,                 ///< Enable the WebGPU runtime.
     halide_target_feature_sve,                    ///< Enable ARM Scalable Vector Extensions
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
+    halide_target_feature_sme2,                   ///< Enable ARM Scalable Matrix Extensions v2
+    halide_target_feature_sme_svl128,             ///< Assume ARM SME streaming vector length is 128 bits.
+    halide_target_feature_sme_svl256,             ///< Assume ARM SME streaming vector length is 256 bits.
+    halide_target_feature_sme_svl512,             ///< Assume ARM SME streaming vector length is 512 bits.
+    halide_target_feature_sme_svl1024,            ///< Assume ARM SME streaming vector length is 1024 bits.
+    halide_target_feature_sme_svl2048,            ///< Assume ARM SME streaming vector length is 2048 bits.
     halide_target_feature_egl,                    ///< Force use of EGL support.
     halide_target_feature_arm_dot_prod,           ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
     halide_target_feature_arm_fp16,               ///< Enable ARMv8.2-a half-precision floating point data processing

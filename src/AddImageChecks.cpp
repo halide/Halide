@@ -39,7 +39,8 @@ public:
         op->max.accept(this);
         bool old = in_device_loop;
         if (op->device_api != DeviceAPI::None &&
-            op->device_api != DeviceAPI::Host) {
+            op->device_api != DeviceAPI::Host &&
+            op->device_api != DeviceAPI::SMEStreaming) {
             in_device_loop = true;
         }
         op->body.accept(this);

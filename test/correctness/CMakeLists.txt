@@ -301,6 +301,7 @@ tests(
     sliding_reduction.cpp
     sliding_window.cpp
     sliding_window_cascade.cpp
+    sme_streaming.cpp
     solve.cpp
     sort_exprs.cpp
     specialize.cpp

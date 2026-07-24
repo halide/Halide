@@ -154,6 +154,12 @@ struct Target {
         WebGPU = halide_target_feature_webgpu,
         SVE = halide_target_feature_sve,
         SVE2 = halide_target_feature_sve2,
+        SME2 = halide_target_feature_sme2,
+        SME_SVL128 = halide_target_feature_sme_svl128,
+        SME_SVL256 = halide_target_feature_sme_svl256,
+        SME_SVL512 = halide_target_feature_sme_svl512,
+        SME_SVL1024 = halide_target_feature_sme_svl1024,
+        SME_SVL2048 = halide_target_feature_sme_svl2048,
         ARMDotProd = halide_target_feature_arm_dot_prod,
         ARMFp16 = halide_target_feature_arm_fp16,
         LLVMLargeCodeModel = halide_llvm_large_code_model,
@@ -291,7 +297,8 @@ struct Target {
                arch == other.arch &&
                bits == other.bits &&
                processor_tune == other.processor_tune &&
-               features == other.features;
+               features == other.features &&
+               vector_bits == other.vector_bits;
     }
 
     bool operator!=(const Target &other) const {
@@ -325,6 +332,10 @@ struct Target {
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
     int natural_vector_size(const Halide::Type &t) const;
+
+    /** Return the fixed SME streaming vector length in bits selected by this target,
+     * or 0 if no SME_SVL feature is set. */
+    int sme_streaming_vector_bits() const;
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
@@ -386,6 +397,10 @@ struct Target {
      * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug").
      * If the string is not a known feature name, return FeatureEnd. */
     static Target::Feature feature_from_name(const std::string &name);
+
+    /** Return the SME_SVL feature corresponding to an SME streaming vector
+     * length in bits, or FeatureEnd if no exact SME_SVL feature exists. */
+    static Target::Feature sme_svl_feature_from_bits(int bits);
 
 private:
     /** A bitmask that stores the active features. */
