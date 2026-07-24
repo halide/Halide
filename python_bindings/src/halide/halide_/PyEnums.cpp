@@ -60,6 +60,11 @@ void define_enums(py::module &m) {
         .value("GuardWithIf", PrefetchBoundStrategy::GuardWithIf)
         .value("NonFaulting", PrefetchBoundStrategy::NonFaulting);
 
+    py::enum_<RuntimeVisibility>(m, "RuntimeVisibility")
+        .value("Import", RuntimeVisibility::Import)
+        .value("Export", RuntimeVisibility::Export)
+        .value("Internal", RuntimeVisibility::Internal);
+
     py::enum_<StmtOutputFormat>(m, "StmtOutputFormat")
         .value("Text", StmtOutputFormat::Text)
         .value("HTML", StmtOutputFormat::HTML);
