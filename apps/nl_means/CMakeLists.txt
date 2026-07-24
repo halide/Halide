@@ -15,7 +15,7 @@ find_package(Halide REQUIRED)
 add_halide_generator(nl_means.generator SOURCES nl_means_generator.cpp)
 
 # Filters
-add_halide_library(nl_means FROM nl_means.generator)
+add_halide_library(nl_means FROM nl_means.generator REGISTRATION nl_means_registration)
 add_halide_library(
     nl_means_auto_schedule
     FROM nl_means.generator
@@ -40,3 +40,13 @@ if (EXISTS ${IMAGE})
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
     )
 endif ()
+
+# RunGen-based benchmark. Run every app benchmark at once with
+# `ctest -L benchmark_apps`.
+add_executable(nl_means_rungen ${nl_means_registration})
+target_link_libraries(nl_means_rungen PRIVATE Halide::RunGenMain nl_means)
+add_test(
+    NAME nl_means_benchmark
+    COMMAND nl_means_rungen --benchmarks=all --estimate_all --parsable_output
+)
+set_tests_properties(nl_means_benchmark PROPERTIES LABELS "nl_means;benchmark_apps")

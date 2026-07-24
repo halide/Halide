@@ -15,7 +15,11 @@ find_package(Halide REQUIRED)
 add_halide_generator(stencil_chain.generator SOURCES stencil_chain_generator.cpp)
 
 # Filters
-add_halide_library(stencil_chain FROM stencil_chain.generator)
+add_halide_library(
+    stencil_chain
+    FROM stencil_chain.generator
+    REGISTRATION stencil_chain_registration
+)
 add_halide_library(
     stencil_chain_auto_schedule
     FROM stencil_chain.generator
@@ -46,3 +50,13 @@ if (EXISTS ${IMAGE})
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
     )
 endif ()
+
+# RunGen-based benchmark. Run every app benchmark at once with
+# `ctest -L benchmark_apps`.
+add_executable(stencil_chain_rungen ${stencil_chain_registration})
+target_link_libraries(stencil_chain_rungen PRIVATE Halide::RunGenMain stencil_chain)
+add_test(
+    NAME stencil_chain_benchmark
+    COMMAND stencil_chain_rungen --benchmarks=all --estimate_all --parsable_output
+)
+set_tests_properties(stencil_chain_benchmark PROPERTIES LABELS "stencil_chain;benchmark_apps")

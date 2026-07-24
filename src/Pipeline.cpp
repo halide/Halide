@@ -1132,8 +1132,8 @@ void Pipeline::infer_input_bounds(JITUserContext *context,
             internal_assert(ia.param.defined() && ia.param.is_buffer());
             // Make some empty Buffers of the right dimensionality
             vector<int> initial_shape(ia.param.dimensions(), 0);
-            tracked_buffers[i].query = Runtime::Buffer<>(ia.param.type(), nullptr, initial_shape);
-            tracked_buffers[i].orig = Runtime::Buffer<>(ia.param.type(), nullptr, initial_shape);
+            tracked_buffers[i].query = Runtime::Buffer<>(ia.param.type().to_abi(), nullptr, initial_shape);
+            tracked_buffers[i].orig = Runtime::Buffer<>(ia.param.type().to_abi(), nullptr, initial_shape);
             args.store[i] = tracked_buffers[i].query.raw_buffer();
         }
     }

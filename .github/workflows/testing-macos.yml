@@ -1,6 +1,12 @@
 name: macOS
 
 on:
+  # Codecov needs a coverage run on main itself (not just PR branches) to
+  # compute diffs correctly under our squash-and-merge strategy -- otherwise
+  # it has no base-commit report to diff a PR's coverage against. Only the
+  # `coverage` job runs on push; `macos` stays pull_request-only.
+  push:
+    branches: [ main ]
   pull_request:
     types: [ opened, synchronize, reopened ]
     paths-ignore:
@@ -34,7 +40,7 @@ jobs:
     runs-on: macos-26
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install coverage dependencies
         run: brew install llvm@21 lld@21 emscripten flatbuffers wabt
@@ -43,32 +49,54 @@ jobs:
         run: tools/run-coverage.sh
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: build/macOS-coverage/coverage.info
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
   macos:
-    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
+    if: "github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: ${{ matrix.arch }} / ${{ matrix.uv_group }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        # Disable extra cases until we have a fuller workflow
-        # For now, we're only testing HelloiOS
-        uv_group: [ "ci-llvm-main", ] # "ci-llvm-22", "ci-llvm-21"
-        runner: [ "macos-26", ] # "macos-26-intel"
+        # macOS is only tested against LLVM main (matches Buildbot's own
+        # choice -- macOS never gets the multi-LLVM matrix that Linux/Windows
+        # do, since that's a 3x cost multiplier on the most expensive
+        # runner tier).
+        uv_group: [ "ci-llvm-main" ]
+        runner: [ "macos-26", "macos-26-intel" ]
         include:
           - runner: macos-26
             arch: arm-64
             python: cpython-3.10.20-macos-aarch64-none
+          - runner: macos-26-intel
+            arch: x86-64
+            # uv doesn't provide macos-x86_64 builds; use a preinstalled one.
+            python: "3.10"
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v7
+
+      - name: Install wasm toolchain
+        run: brew install emscripten
+
+      # AppleClang on Intel unconditionally injects /usr/local/include and
+      # /usr/local/lib into every compile/link, below CMake's control.
+      # Homebrew's jpeg-turbo (built with -DWITH_JPEG8=1, i.e. reports
+      # JPEG_LIB_VERSION 80) is preinstalled there on this runner image and
+      # collides with vcpkg's own libjpeg-turbo (version 62), producing
+      # "Wrong JPEG library version: library is 62, caller expects 80" at
+      # runtime. Remove it so vcpkg's copy is the only one AppleClang can see.
+      - name: Remove Homebrew libjpeg-turbo
+        if: matrix.arch == 'x86-64'
+        run: |
+          brew uninstall --ignore-dependencies --force jpeg-turbo || true
+          brew uninstall --ignore-dependencies --force jpeg || true
 
       - name: Sync CI environment
         run: |
@@ -83,21 +111,50 @@ jobs:
         run: >-
           cmake --preset ci-macos-${{ matrix.arch }}
           -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
-          -DWITH_TESTS=NO
-          -DWITH_UTILS=NO
-          -DWITH_TUTORIALS=NO
-          -DWITH_PYTHON_BINDINGS=NO
 
       - name: Initial build
         run: cmake --build build --target install
 
+      # --- host: internal, correctness, generator, error, warning,
+      # tutorial, python, autoschedulers_cpu ---
+
+      - name: Test (host)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=host
+          cmake --build build --target install
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -LE "performance|autoschedulers|fuzz" -j "$(sysctl -n hw.logicalcpu)" \
+            -E tutorial_lesson_19
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -L "performance|autoschedulers" --repeat until-pass:5
+
+      - name: Configure apps (host)
+        run: >-
+          cmake -S apps -B apps-build
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DHalide_TARGET=host
+          -DENABLE_APPS_HANNK=${{ matrix.arch == 'arm-64' && 'ON' || 'OFF' }}
+
+      - name: Build apps (host)
+        run: cmake --build apps-build
+
+      - name: Test apps (host)
+        run: >-
+          ctest --test-dir apps-build --build-config RelWithDebInfo
+          --output-on-failure -LE slow_tests --timeout 3600
+
       - name: Configure HelloiOS
+        if: matrix.arch == 'arm-64'
         run: ./setup.sh
         working-directory: apps/HelloiOS
         env:
           Halide_ROOT: ${{ github.workspace }}/install
 
       - name: Build HelloiOS
+        if: matrix.arch == 'arm-64'
         run: >-
           xcodebuild -workspace HelloiOS.xcworkspace
           -scheme HelloiOS
@@ -105,3 +162,73 @@ jobs:
           -destination 'generic/platform=iOS Simulator'
           build
         working-directory: apps/HelloiOS
+
+      # --- x86-64-osx correctness. No no-SSE4.1 variant: no real Intel Mac
+      # lacks SSE4.1, and that hypothetical baseline is already exercised by
+      # Linux/Windows CI, where it's an actually reachable target. ---
+
+      - name: Test (x86-64-osx, SSE4.1)
+        if: matrix.arch == 'x86-64'
+        run: |
+          cmake -S . -B build -DHalide_TARGET=x86-64-osx-sse41
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -L correctness -j "$(sysctl -n hw.logicalcpu)"
+
+      # --- host-metal: real GPU testing on hosted Apple Silicon runners.
+      # arm-64 only -- GitHub's Intel macOS runners have a GPU too weak to
+      # sustain this workload; once it hangs once, the driver cascades into
+      # rejecting further submissions for the rest of the job, so reduced
+      # concurrency and retries don't help. ---
+
+      - name: Test (host-metal)
+        if: matrix.arch == 'arm-64'
+        run: |
+          cmake -S . -B build -DHalide_TARGET=host-metal
+          cmake --build build --target install
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -L "correctness|generator" -R "gpu|metal" -j "$(sysctl -n hw.logicalcpu)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -L "performance|autoschedulers_gpu" -R "gpu|metal" --repeat until-pass:5
+
+      - name: Configure apps (host-metal)
+        if: matrix.arch == 'arm-64'
+        run: >-
+          cmake -S apps -B apps-build
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DHalide_TARGET=host-metal
+          -DENABLE_APPS_HANNK=ON
+
+      - name: Build apps (host-metal)
+        if: matrix.arch == 'arm-64'
+        run: cmake --build apps-build
+
+      - name: Test apps (host-metal)
+        if: matrix.arch == 'arm-64'
+        run: >-
+          ctest --test-dir apps-build --build-config RelWithDebInfo
+          --output-on-failure -LE slow_tests --timeout 3600
+
+      # --- wasm (wabt JIT) ---
+
+      - name: Test (wasm_simd128, wabt JIT)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -L "internal|correctness|generator|error|warning" -j "$(sysctl -n hw.logicalcpu)"
+
+      - name: Test (wasm_mvponly, wabt JIT)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_mvponly
+          cmake --build build
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
+            -L "internal|correctness|generator|error|warning" -j "$(sysctl -n hw.logicalcpu)"
+
+      - name: Build (wasm_simd128 + wasm_threads, generator only)
+        run: |
+          cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128-wasm_threads
+          cmake --build build --target build_generator

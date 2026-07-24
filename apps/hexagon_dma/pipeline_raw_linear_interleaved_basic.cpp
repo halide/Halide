@@ -42,7 +42,7 @@ public:
 
         // Do some common scheduling here.
         if (use_dma_for_output) {
-            output.copy_to_device();
+            output.copy_to_device(DeviceAPI::HexagonDma);
         }
 
         output

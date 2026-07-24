@@ -62,6 +62,8 @@ struct RISCVIntrinsic {
 const RISCVIntrinsic signed_intrinsic_defs[] = {
     {"vaadd", Type::Int, "halving_add", {Type::Int, Type::Int}, AddVLArg | RoundDown | Commutes},
     {"vaadd", Type::Int, "rounding_halving_add", {Type::Int, Type::Int}, AddVLArg | RoundUp | Commutes},
+    {"vsadd", Type::Int, "saturating_add", {Type::Int, Type::Int}, AddVLArg | Commutes},
+    {"vssub", Type::Int, "saturating_sub", {Type::Int, Type::Int}, AddVLArg},
     {"vwadd", {Type::Int, 2}, "widening_add", {Type::Int, Type::Int}, AddVLArg | MangleReturnType | Commutes},
     {"vwsub", {Type::Int, 2}, "widening_sub", {Type::Int, Type::Int}, AddVLArg | MangleReturnType},
     {"vwmul", {Type::Int, 2}, "widening_mul", {Type::Int, Type::Int}, AddVLArg | MangleReturnType | Commutes},
@@ -70,6 +72,8 @@ const RISCVIntrinsic signed_intrinsic_defs[] = {
 const RISCVIntrinsic unsigned_intrinsic_defs[] = {
     {"vaaddu", {Type::UInt}, "halving_add", {Type::UInt, Type::UInt}, AddVLArg | RoundDown | Commutes},
     {"vaaddu", {Type::UInt}, "rounding_halving_add", {Type::UInt, Type::UInt}, AddVLArg | RoundUp | Commutes},
+    {"vsaddu", {Type::UInt}, "saturating_add", {Type::UInt, Type::UInt}, AddVLArg | Commutes},
+    {"vssubu", {Type::UInt}, "saturating_sub", {Type::UInt, Type::UInt}, AddVLArg},
     {"vwaddu", {Type::UInt, 2}, "widening_add", {Type::UInt, Type::UInt}, AddVLArg | MangleReturnType | Commutes},
     {"vwsubu", {Type::UInt, 2}, "widening_sub", {Type::UInt, Type::UInt}, AddVLArg | MangleReturnType},
     {"vwmulu", {Type::UInt, 2}, "widening_mul", {Type::UInt, Type::UInt}, AddVLArg | MangleReturnType | Commutes},

@@ -265,6 +265,14 @@ void IRVisitor::visit(const Atomic *op) {
     op->body.accept(this);
 }
 
+void IRVisitor::visit(const StreamingStore *op) {
+    op->body.accept(this);
+}
+
+void IRVisitor::visit(const StreamingLoads *op) {
+    op->body.accept(this);
+}
+
 void IRVisitor::visit(const HoistedStorage *op) {
     op->body.accept(this);
 }
@@ -533,6 +541,14 @@ void IRGraphVisitor::visit(const VectorReduce *op) {
 }
 
 void IRGraphVisitor::visit(const Atomic *op) {
+    include(op->body);
+}
+
+void IRGraphVisitor::visit(const StreamingStore *op) {
+    include(op->body);
+}
+
+void IRGraphVisitor::visit(const StreamingLoads *op) {
     include(op->body);
 }
 

@@ -199,6 +199,7 @@ tests(
     intrinsics.cpp
     invalid_gpu_loop_nests.cpp
     inverse.cpp
+    irmatch.cpp
     irprinter.cpp
     isnan.cpp
     issue_3926.cpp
@@ -317,6 +318,9 @@ tests(
     stmt_to_html.cpp
     storage_folding.cpp
     store_in.cpp
+    streaming.cpp
+    streaming_in.cpp
+    streaming_specialize.cpp
     strict_float.cpp
     strict_float_bounds.cpp
     strict_fma.cpp
@@ -326,6 +330,7 @@ tests(
     target.cpp
     target_query.cpp
     tiled_matmul.cpp
+    tiled_matmul_errors.cpp
     tracing.cpp
     tracing_bounds.cpp
     tracing_broadcast.cpp
@@ -433,6 +438,7 @@ tests(
     ring_buffer.cpp
     stream_compaction.cpp
     thread_safety.cpp
+    tracing_thread_ids.cpp
     transitive_in.cpp
     truncated_pyramid.cpp
     tuple_vector_reduce.cpp
@@ -441,6 +447,11 @@ tests(
     vector_reductions.cpp
     # keep-sorted end
 )
+
+# tracing_stack does an intentional out-of-bounds read, so exempt it from
+# valgrind. Runs under `ctest -T memcheck` should exclude the label with
+# `-LE no_memcheck` (the `valgrind` test preset already does this).
+set_property(TEST correctness_tracing_stack APPEND PROPERTY LABELS no_memcheck)
 
 # Make sure the test that needs Halide::ImageIO has it
 target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
@@ -498,3 +509,7 @@ set_target_properties(
     PROPERTIES
     ENABLE_EXPORTS TRUE
 )
+
+if (WITH_SERIALIZATION)
+    target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
+endif ()

@@ -2104,30 +2104,30 @@ void check_overflow() {
 
 template<typename T>
 void check_clz(uint64_t value, uint64_t result) {
-    Expr x = Variable::make(halide_type_of<T>(), "x");
+    Expr x = Variable::make(type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_leading_zeros(x)), cast<T>(Expr(result)));
 
-    Type vt = halide_type_of<T>().with_lanes(4);
+    Type vt = type_of<T>().with_lanes(4);
     Expr xv = Variable::make(vt, "x");
     check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_leading_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_ctz(uint64_t value, uint64_t result) {
-    Expr x = Variable::make(halide_type_of<T>(), "x");
+    Expr x = Variable::make(type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_trailing_zeros(x)), cast<T>(Expr(result)));
 
-    Type vt = halide_type_of<T>().with_lanes(4);
+    Type vt = type_of<T>().with_lanes(4);
     Expr xv = Variable::make(vt, "x");
     check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_trailing_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_popcount(uint64_t value, uint64_t result) {
-    Expr x = Variable::make(halide_type_of<T>(), "x");
+    Expr x = Variable::make(type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), popcount(x)), cast<T>(Expr(result)));
 
-    Type vt = halide_type_of<T>().with_lanes(4);
+    Type vt = type_of<T>().with_lanes(4);
     Expr xv = Variable::make(vt, "x");
     check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), popcount(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
