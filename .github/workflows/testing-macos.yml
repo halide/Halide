@@ -232,3 +232,42 @@ jobs:
         run: |
           cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128-wasm_threads
           cmake --build build --target build_generator
+
+  webgpu:
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
+    name: arm-64 / host-webgpu
+    runs-on: macos-26
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Sync CI environment
+        run: |
+          uv sync --python 'cpython-3.10.20-macos-aarch64-none' --group ci-llvm-main --no-install-project
+          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
+
+      - name: Configure LLVM paths
+        run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
+
+      - name: Cache vcpkg binary archives
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/vcpkg/archives
+          key: vcpkg-archives-macos-arm64-webgpu-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-triplets/arm64-osx-halide.cmake', 'cmake/vcpkg-ports/**') }}
+
+      - name: Configure CMake
+        run: cmake --preset ci-macos-arm-64-webgpu -DHalide_TARGET=host-webgpu
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test (host-webgpu)
+        run: ctest --test-dir build --output-on-failure -j "$(sysctl -n hw.ncpu)" -R correctness_gpu
+        env:
+          # CMake's find_package resolves Dawn fine at configure/build time, but the
+          # JIT's runtime dlopen (JITModule.cpp's load_webgpu) is a separate lookup
+          # that needs to be told explicitly where the vcpkg-installed dylib lives.
+          HL_WEBGPU_NATIVE_LIB: ${{ github.workspace }}/build/vcpkg_installed/arm64-osx-halide/lib/libwebgpu_dawn.dylib

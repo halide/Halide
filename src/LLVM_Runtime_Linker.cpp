@@ -182,9 +182,6 @@ DECLARE_CPP_INITMOD(timer_profiler)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
-// DECLARE_CPP_INITMOD(webgpu)  // TODO(https://github.com/halide/Halide/issues/7248)
-DECLARE_CPP_INITMOD(webgpu_dawn)
-DECLARE_CPP_INITMOD(webgpu_emscripten)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(windows_get_symbol)
@@ -290,6 +287,29 @@ DECLARE_CPP_INITMOD(windows_vulkan)
 DECLARE_NO_INITMOD(vulkan)
 DECLARE_NO_INITMOD(windows_vulkan)
 #endif  // WITH_VULKAN
+
+#ifdef WITH_WEBGPU
+// TODO(https://github.com/halide/Halide/issues/7248)
+#ifdef WITH_X86
+DECLARE_CPP_INITMOD(webgpu_dawn_x86)
+#else
+DECLARE_NO_INITMOD(webgpu_dawn_x86)
+#endif
+#ifdef WITH_ARM
+DECLARE_CPP_INITMOD(webgpu_dawn_arm)
+#else
+DECLARE_NO_INITMOD(webgpu_dawn_arm)
+#endif
+#ifdef WITH_WEBASSEMBLY
+DECLARE_CPP_INITMOD(webgpu_emscripten)
+#else
+DECLARE_NO_INITMOD(webgpu_emscripten)
+#endif
+#else
+DECLARE_NO_INITMOD(webgpu_dawn_x86)
+DECLARE_NO_INITMOD(webgpu_dawn_arm)
+DECLARE_NO_INITMOD(webgpu_emscripten)
+#endif  // WITH_WEBGPU
 
 #ifdef WITH_X86
 // keep-sorted start by_regex=["INITMOD\\(.+"]
@@ -1375,7 +1395,14 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 if (t.os == Target::WebAssemblyRuntime) {
                     modules.push_back(get_initmod_webgpu_emscripten(c, bits_64, debug));
                 } else {
-                    modules.push_back(get_initmod_webgpu_dawn(c, bits_64, debug));
+                    user_assert(bits_64) << "Native WebGPU target only available on 64-bit targets for now.\n";
+                    if (t.arch == Target::X86) {
+                        modules.push_back(get_initmod_webgpu_dawn_x86(c, bits_64, debug));
+                    } else if (t.arch == Target::ARM) {
+                        modules.push_back(get_initmod_webgpu_dawn_arm(c, bits_64, debug));
+                    } else {
+                        user_error << "WebGPU can only be used on X86 or ARM architectures.\n";
+                    }
                 }
             }
         }
