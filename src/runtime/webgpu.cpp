@@ -79,6 +79,7 @@ WEAK int halide_webgpu_acquire_context(void *user_context,
     }
 
     if (device_was_lost) {
+        __atomic_clear(&context_lock, __ATOMIC_RELEASE);
         return halide_error_code_generic_error;
     }
 
@@ -141,16 +142,23 @@ namespace {
 // returns sv.data directly. Otherwise copies up to buf_size-1 bytes into buf
 // and null-terminates it.
 const char *wgpu_sv_to_cstr(WGPUStringView sv, char *buf, size_t buf_size) {
-    if (sv.length == WGPU_STRLEN) {
-        return sv.data;
-    }
     // If sv.data is NULL, return an empty string to avoid dereferencing a
     // null pointer. This can happen if a WebGPU API returns a WGPUStringView
-    // with data == NULL (e.g. an empty or absent string).
+    // with data == NULL (e.g. an empty or absent string). This check must
+    // come before the WGPU_STRLEN fast-path so that a null data pointer is
+    // never returned directly.
     if (sv.data == nullptr) {
         if (buf_size > 0) {
             buf[0] = '\0';
         }
+        return buf;
+    }
+    if (sv.length == WGPU_STRLEN) {
+        return sv.data;
+    }
+    // Guard against buf_size == 0 to avoid unsigned underflow when computing
+    // buf_size - 1 below.
+    if (buf_size == 0) {
         return buf;
     }
     size_t len = sv.length < buf_size - 1 ? sv.length : buf_size - 1;
@@ -543,6 +551,10 @@ WEAK int halide_webgpu_device_sync(void *user_context, halide_buffer_t *) {
         volatile WGPUQueueWorkDoneStatus status;
     };
     WorkDoneResult result;
+    // Initialize status to a non-success sentinel so that if the callback
+    // never fires, we take the error path instead of reading uninitialized
+    // memory. See wgpuInstanceWaitAny below.
+    result.status = WGPUQueueWorkDoneStatus_Error;
 
     WGPUQueueWorkDoneCallbackInfo callbackInfo = WGPU_QUEUE_WORK_DONE_CALLBACK_INFO_INIT;
     callbackInfo.mode = WGPUCallbackMode_WaitAnyOnly;
@@ -663,6 +675,10 @@ int do_copy_to_host(void *user_context, WgpuContext *context, uint8_t *dst,
             volatile WGPUMapAsyncStatus map_status;
         };
         BufferMapResult result;
+        // Initialize map_status to a non-success sentinel so that if the
+        // callback never fires, we take the error path instead of reading
+        // uninitialized memory. See wgpuInstanceWaitAny below.
+        result.map_status = WGPUMapAsyncStatus_Error;
 
         // Map the staging buffer for reading.
         WGPUBufferMapCallbackInfo mapCallbackInfo = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
@@ -1025,6 +1041,10 @@ WEAK int halide_webgpu_run(void *user_context,
         char message[512];
     };
     PipelineResult pipeline_result;
+    // Initialize status to a non-success sentinel so that if the callback
+    // never fires, we take the error path instead of reading uninitialized
+    // memory. See wgpuInstanceWaitAny below.
+    pipeline_result.status = WGPUCreatePipelineAsyncStatus_CallbackCancelled;
     pipeline_result.pipeline = nullptr;
     pipeline_result.message[0] = '\0';
 
