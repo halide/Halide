@@ -175,18 +175,21 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
         bool success = true;
     } results;
 
-    // Check if TimedWaitAny feature is available before requesting it.
-    WGPUBool has_timed_wait = wgpuHasInstanceFeature(WGPUInstanceFeatureName_TimedWaitAny);
-
-    // Create instance with TimedWaitAny feature enabled so we can use
-    // wgpuInstanceWaitAny with non-zero timeouts.
+    // TimedWaitAny is required: all wgpuInstanceWaitAny calls below use
+    // UINT64_MAX as the timeout. Without this feature, those calls may
+    // block indefinitely on implementations that don't support timed waits.
     WGPUInstanceFeatureName required_features[] = {WGPUInstanceFeatureName_TimedWaitAny};
     WGPUInstanceDescriptor instance_desc = WGPU_INSTANCE_DESCRIPTOR_INIT;
-    if (has_timed_wait) {
-        instance_desc.requiredFeatureCount = 1;
-        instance_desc.requiredFeatures = required_features;
-    }
+    instance_desc.requiredFeatureCount = 1;
+    instance_desc.requiredFeatures = required_features;
     results.instance = wgpuCreateInstance(&instance_desc);
+    if (!results.instance) {
+        *instance_out = nullptr;
+        *adapter_out = nullptr;
+        *device_out = nullptr;
+        *staging_buffer_out = nullptr;
+        return false;
+    }
 
     // Request adapter and wait on the future (same API as webgpu.cpp).
     auto request_adapter_callback = [](WGPURequestAdapterStatus status, WGPUAdapter adapter, WGPUStringView message, void *userdata1, void *userdata2) {
