@@ -290,11 +290,11 @@ int main(int argc, char **argv) {
     }
 
     // Feature implications. Each entry is {input, set_implied_features result,
-    // normalize result}.
+    // set-then-unset (minimal) result}.
     struct ImpliedTest {
         const char *input;
         const char *set_implied;
-        const char *normalized;
+        const char *minimal;
     };
     const ImpliedTest implied_tests[] = {
         // x86 AVX family
@@ -343,10 +343,11 @@ int main(int argc, char **argv) {
             return 1;
         }
         Target norm_result(test.input);
-        norm_result.normalize();
-        if (norm_result.get_features_bitset() != Target(test.normalized).get_features_bitset()) {
-            printf("normalize(%s) gave %s but expected %s\n",
-                   test.input, norm_result.to_string().c_str(), test.normalized);
+        norm_result.set_implied_features();
+        norm_result.unset_implied_features();
+        if (norm_result.get_features_bitset() != Target(test.minimal).get_features_bitset()) {
+            printf("set then unset implied features on %s gave %s but expected %s\n",
+                   test.input, norm_result.to_string().c_str(), test.minimal);
             return 1;
         }
     }

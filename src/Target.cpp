@@ -1422,11 +1422,6 @@ void Target::unset_implied_features() {
     }
 }
 
-void Target::normalize() {
-    set_implied_features();
-    unset_implied_features();
-}
-
 Target Target::with_implied_features() const {
     Target copy = *this;
     copy.set_implied_features();

@@ -253,12 +253,6 @@ struct Target {
      * canonical form. */
     void unset_implied_features();
 
-    /** Canonicalize the feature flags by calling set_implied_features()
-     * followed by unset_implied_features(). This fills in any missing implied
-     * flags and then removes any that are redundant, leaving the minimal set
-     * of flags that captures the target. */
-    void normalize();
-
     /** Return a copy of the target with set_implied_features() applied. */
     Target with_implied_features() const;
 
