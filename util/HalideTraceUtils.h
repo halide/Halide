@@ -2,6 +2,7 @@
 #define HALIDE_TRACE_UTILS_H
 
 #include "HalideRuntime.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
@@ -78,8 +79,9 @@ struct Packet : public halide_trace_packet_t {
         // so that value_as<>() won't complain under sanitizers.
         halide_scalar_value_t aligned_value;
         // Only copy the number of bytes in the type: the stream isn't guaranteed
-        // to be padded to sizeof(halide_scalar_value_t).
-        memcpy(&aligned_value, val, type().bits / 8);
+        // to be padded to sizeof(halide_scalar_value_t). type().bits comes from
+        // the stream, so cap the copy so a bogus type can't overrun aligned_value.
+        memcpy(&aligned_value, val, std::min<size_t>(type().bits / 8, sizeof(aligned_value)));
         return value_as<T>(type(), aligned_value);
     }
 
