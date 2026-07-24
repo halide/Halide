@@ -1390,7 +1390,7 @@ protected:
         // none of the functions in a fused group can be inlined, so this will only
         // happen when we're lowering a single func.
         if (provide_name != funcs[0].name() &&
-            !funcs[0].is_pure() &&
+            (!funcs[0].is_pure() || funcs[0].is_inductive()) &&
             funcs[0].schedule().compute_level().is_inlined() &&
             function_is_used_in_stmt(funcs[0], provide_op)) {
 
@@ -2187,6 +2187,41 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
+    if (f.is_inductive()) {
+        // Check that any RDom used in an inductive Func's update
+        // has its loop nested inside every inductive dimension.
+        for (const Definition &upd : f.updates()) {
+            const vector<Dim> &dims = upd.schedule().dims();
+            int innermost_rvar_pos = -1;
+            for (size_t i = 0; i < dims.size(); i++) {
+                if (dims[i].is_rvar()) {
+                    innermost_rvar_pos = std::max(innermost_rvar_pos, (int)i);
+                }
+            }
+            if (innermost_rvar_pos == -1) {
+                continue;
+            }
+            for (size_t i = 0; i < upd.args().size() && i < f.args().size(); i++) {
+                if (!f.is_inductive(f.args()[i])) {
+                    continue;
+                }
+                const Variable *v = upd.args()[i].as<Variable>();
+                if (!v) {
+                    continue;
+                }
+                for (size_t d = 0; d < dims.size(); d++) {
+                    if (dims[d].var == v->name) {
+                        user_assert(innermost_rvar_pos < (int)d)
+                            << "In the update definition of inductive Func " << f.name()
+                            << ", all RVar iterations must be nested inside all inductive "
+                            << "variable loops, but inductive variable " << v->name
+                            << " is nested inside an RVar's loop.\n";
+                    }
+                }
+            }
+        }
+    }
+
     // Emit a warning if only some of the steps have been scheduled.
     bool any_scheduled = f.has_pure_definition() && f.definition().schedule().touched();
     for (const Definition &r : f.updates()) {
@@ -2352,7 +2387,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     // will get lowered into compute_at innermost and thus can be treated
     // similarly as a non-inlined Func.
     if (store_at.is_inlined() && compute_at.is_inlined() && hoist_storage_at.is_inlined()) {
-        if (f.is_pure()) {
+        if (f.is_pure() && !f.is_inductive()) {
             validate_schedule_inlined_function(f);
         }
         return true;
@@ -2619,6 +2654,9 @@ Stmt schedule_functions(const vector<Function> &outputs,
                         const map<string, Function> &env,
                         const Target &target,
                         bool &any_memoized) {
+    for (const Function &o : outputs) {
+        user_assert(!o.is_inductive()) << "Function" << o.name() << " is an inductively defined output buffer, which is unsupported.\n";
+    }
     string root_var = LoopLevel::root().lock().to_string();
     Stmt s = For::make(root_var, 0, 0, ForType::Serial, Partition::Never, DeviceAPI::Host, Evaluate::make(0));
 

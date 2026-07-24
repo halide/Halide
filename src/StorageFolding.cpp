@@ -4,10 +4,12 @@
 #include "CSE.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Monotonic.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Util.h"
@@ -49,6 +51,122 @@ int count_producers(const Stmt &in, const std::string &name) {
     CountProducers counter(name);
     in.accept(&counter);
     return counter.count;
+}
+
+Stmt scrub_self_reads(const Stmt &s, const string &func) {
+    return mutate_with(s, [&](auto *self, const Provide *op) {
+        debug(3) << "Scrubbing self reads in Provide: " << Stmt(op) << " func name: " << func << "\n";
+        if (op->name == func) {
+            vector<Expr> values;
+            values.reserve(op->values.size());
+            for (const Expr &v : op->values) {
+                values.push_back(mutate_with(v, [&](auto *self, const Call *op) {
+                    if (op->name == func && op->call_type == Call::Halide) {
+                        return make_zero(op->type);
+                    }
+                    return Call::make(op->type, op->name, self->mutate(op->args), op->call_type,
+                                      op->func, op->value_index, op->image, op->param);
+                }));
+            }
+            return Provide::make(op->name, values, op->args, op->predicate);
+        }
+        return Provide::make(op->name, self->mutate(op->values), self->mutate(op->args), self->mutate(op->predicate));
+    });
+}
+
+// True if every self-call of func (inside func's own Provide) matches the
+// store index in all dimensions except dim, and strictly differs from it in dim.
+bool inductive_only_in_dim(const Stmt &body, const string &func, int dim) {
+    bool single_dim = true;
+    vector<Expr> store_args;
+    bool in_own_provide = false;
+    visit_with(
+        body,
+        [&](auto *self, const Provide *op) {
+            if (op->name == func) {
+                store_args = op->args;
+                in_own_provide = true;
+                self->visit_base(op);
+                in_own_provide = false;
+            } else {
+                self->visit_base(op);
+            }
+        },
+        [&](auto *self, const Call *op) {
+            if (in_own_provide && op->name == func && op->call_type == Call::Halide) {
+                if ((int)op->args.size() != (int)store_args.size()) {
+                    single_dim = false;
+                } else {
+                    for (int d = 0; d < (int)op->args.size(); d++) {
+                        bool ok = (d == dim) ? can_prove(op->args[d] != store_args[d]) : can_prove(op->args[d] == store_args[d]);
+                        if (!ok) {
+                            single_dim = false;
+                        }
+                    }
+                }
+            }
+            self->visit_base(op);
+        });
+    return single_dim;
+}
+
+// Verify there is exactly one store to func in the loop body, and that within
+// a single iteration of the fold loop that store never writes the same location
+// twice.
+bool one_store_per_iteration(const Stmt &body, const string &func) {
+    struct Store {
+        vector<Expr> args;
+        vector<std::pair<string, Interval>> loops;  // enclosing inner loops
+    };
+    vector<std::pair<string, Interval>> loops;
+    vector<Store> stores;
+    visit_with(
+        body,
+        [&](auto *self, const For *op) {
+            loops.emplace_back(op->name, Interval(op->min, op->max));
+            op->body.accept(self);
+            loops.pop_back();
+        },
+        [&](auto *self, const Provide *op) {
+            if (op->name == func) {
+                Store s;
+                s.args = op->args;
+                s.loops = loops;
+                stores.push_back(std::move(s));
+            }
+            self->visit_base(op);
+        });
+
+    if (stores.size() != 1) {
+        return false;
+    }
+
+    const Store &s = stores[0];
+    if (s.loops.empty()) {
+        return true;
+    }
+
+    // Rename the inner loop vars to a different iteration and falsify a collision.
+    Scope<Interval> bounds;
+    Expr distinct = const_false();
+    vector<Expr> other = s.args;
+    for (const auto &lp : s.loops) {
+        string other_name = lp.first + "$_";
+        Expr v = Variable::make(Int(32), lp.first);
+        Expr ov = Variable::make(Int(32), other_name);
+        for (Expr &e : other) {
+            e = graph_substitute(lp.first, ov, e);
+        }
+        distinct = distinct || (v != ov);
+        bounds.push(lp.first, lp.second);
+        bounds.push(other_name, lp.second);
+    }
+    Expr hazard = distinct;
+    for (size_t d = 0; d < s.args.size(); d++) {
+        hazard = hazard && (s.args[d] == other[d]);
+    }
+    hazard = simplify(common_subexpression_elimination(hazard), bounds);
+    return is_const_zero(hazard);
 }
 
 // Fold the storage of a function in a particular dimension by a particular factor
@@ -161,6 +279,7 @@ class InjectFoldingCheck : public IRMutator {
     int dim;
     bool in_produce;
     const StorageDim &storage_dim;
+    bool allow_inplace;
     using IRMutator::visit;
 
     Stmt visit(const ProducerConsumer *op) override {
@@ -173,7 +292,23 @@ class InjectFoldingCheck : public IRMutator {
                     body = mutate(op->body);
                 } else {
                     // Update valid range based on bounds written to.
-                    Box b = box_provided(body, func.name());
+                    Box provided = box_provided(body, func.name());
+                    Box required = box_required(body, func.name());
+                    Stmt body_no_self = scrub_self_reads(body, func.name());
+                    Box external_required = box_required(body_no_self, func.name());
+                    Box external = box_union(provided, external_required);
+                    required.used = Expr();
+                    external.used = Expr();
+                    // In-place recurrence: the write aliases the just-read lagged
+                    // slot, so the required footprint can be one element tighter.
+                    if (allow_inplace && dim < (int)required.size() && required[dim].is_bounded()) {
+                        if (storage_dim.fold_forward) {
+                            required[dim].min += 1;
+                        } else {
+                            required[dim].max -= 1;
+                        }
+                    }
+                    Box b = box_union(required, external);
                     Expr old_leading_edge =
                         Load::make(Int(32), head + "_next", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
 
@@ -387,10 +522,11 @@ public:
     InjectFoldingCheck(Function func,
                        string head, string tail,
                        string loop_var, Expr sema_var,
-                       int dim, const StorageDim &storage_dim)
+                       int dim, const StorageDim &storage_dim,
+                       bool allow_inplace)
         : func(std::move(func)),
           head(std::move(head)), tail(std::move(tail)), loop_var(std::move(loop_var)), sema_var(std::move(sema_var)),
-          dim(dim), storage_dim(storage_dim) {
+          dim(dim), storage_dim(storage_dim), allow_inplace(allow_inplace) {
     }
 };
 
@@ -536,6 +672,13 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         required.used = Expr();
         Box box = box_union(provided, required);
 
+        // Footprint of func ignoring any recurrence self-read.
+        // Used to determine whether we can safely alias the write with the self-read slot.
+        Stmt body_no_self = scrub_self_reads(body, func.name());
+        Box external_required = box_required(body_no_self, func.name());
+        external_required.used = Expr();
+        Box box_external = box_union(provided, external_required);
+
         Expr loop_var = Variable::make(Int(32), op->name);
 
         string dynamic_footprint;
@@ -597,6 +740,68 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr extent_steady = simplify(max_steady - min_steady + 1, steady_bounds);
             Expr extent = Max::make(extent_initial, extent_steady);
             extent = simplify(common_subexpression_elimination(extent), bounds);
+
+            // Structural safety for aliasing the write with a self-read slot.
+            // Let the storage folding extent be k + 1. To alias the write,
+            // we need to ensure that, for each x, all reads and writes of f(x)
+            // occur after all reads and writes of f(x-k) in the same loop iteration.
+            // unit_advance checks that the footprint bounds only shift by 1 each iteration.
+            // The iteration where both f(x) and f(x-k) are accessed must be the
+            // first iteration where f(x) is within the
+            // storage-folded footprint, so f(x) must be written to before it is safely read.
+            // Thus, we only have to check for writes to f(x) instead of both reads and writes.
+            // can_prove(extent_no_self <= extent - 1, bounds) checks
+            // that computing the footprint without self-reads makes
+            // the min value strictly larger than x-k, which ensures that f(x-k) is
+            // not written to in the same iteration as f(x), and all reads of f(x-k)
+            // are self-reads used to compute values of f. It is thus sufficient to
+            // check that f(x-k) is only used to compute a single value of f(x), and
+            // no additional values of f are computed. We allow f to have additional
+            // dimensions other than x, so long as their arguments can be treated as pure variables
+            // (i.e. the store indices are identical to the recursive self-call indices).
+            //
+            // single_write checks that f(x) is the only value that is stored.
+            // inductive_only_in_dim(op->body, func.name(), dim) checks that the
+            // recurrence only recurses in the fold dimension, so all other arguments
+            // of f can be treated as pure variables.
+            // one_store_per_iteration(op->body, func.name())
+            // checks that f(x) is written exactly once per iteration.
+            // We also check that f is not tuple-valued and has no external definition.
+            // Storing a tuple value lowers down to multiple store operations, which could
+            // all use depend on same element of f(x-k).
+
+            bool single_inductive_store =
+                inductive_only_in_dim(op->body, func.name(), dim) &&
+                one_store_per_iteration(op->body, func.name());
+
+            bool can_inplace = false;
+            if (single_inductive_store && dim < (int)box_external.size() && box_external[dim].is_bounded() && func.outputs() == 1 && !func.has_extern_definition()) {
+                Expr min_e = simplify(common_subexpression_elimination(box_external[dim].min));
+                Expr max_e = simplify(common_subexpression_elimination(box_external[dim].max));
+                Expr min_e_steady = simplify(substitute(steady_state, const_true(), min_e), steady_bounds);
+                Expr max_e_steady = simplify(substitute(steady_state, const_true(), max_e), steady_bounds);
+                Expr min_e_initial = simplify(substitute(steady_state, const_false(), min_e), bounds);
+                Expr max_e_initial = simplify(substitute(steady_state, const_false(), max_e), bounds);
+                Expr extent_e_initial = simplify(substitute(loop_var, op->min, max_e_initial - min_e_initial + 1), bounds);
+                Expr extent_e_steady = simplify(max_e_steady - min_e_steady + 1, steady_bounds);
+                Expr extent_no_self = simplify(common_subexpression_elimination(Max::make(extent_e_initial, extent_e_steady)), bounds);
+
+                Expr max_step = simplify(substitute(op->name, loop_var + 1, max) - max, bounds);
+                Expr min_step = simplify(substitute(op->name, loop_var + 1, min) - min, bounds);
+                bool unit_advance =
+                    (can_prove(max_step == 1, bounds)) ||
+                    (can_prove(min_step == -1, bounds));
+                bool single_write =
+                    dim < (int)provided.size() && provided[dim].is_bounded() &&
+                    can_prove(provided[dim].max <= provided[dim].min, bounds) &&
+                    can_prove(provided[dim].max >= max_e, bounds);
+
+                bool extent_shrinks = can_prove(extent_no_self <= extent - 1, bounds);
+                can_inplace = unit_advance && single_write && extent_shrinks;
+            }
+            if (can_inplace) {
+                extent = simplify(extent - 1);
+            }
 
             // Find the StorageDim corresponding to dim.
             const std::vector<StorageDim> &storage_dims = func.schedule().storage_dims();
@@ -692,7 +897,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                                               op->name,
                                               sema_var,
                                               dim,
-                                              storage_dim)(body);
+                                              storage_dim,
+                                              can_inplace)(body);
 
                     if (storage_dim.fold_forward) {
                         can_fold_forwards = true;

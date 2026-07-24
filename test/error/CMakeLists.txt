@@ -76,6 +76,28 @@ tests(
     implicit_args.cpp
     impossible_constraints.cpp
     incomplete_target.cpp
+    inductive_2d_arbitrary.cpp
+    inductive_cond_nested.cpp
+    inductive_cond_nested_select.cpp
+    inductive_cond_self_reference.cpp
+    inductive_diagonal_fold.cpp
+    inductive_external_lag_fold.cpp
+    inductive_loop_1.cpp
+    inductive_loop_2.cpp
+    inductive_loop_3.cpp
+    inductive_nested_select.cpp
+    inductive_no_select.cpp
+    inductive_redundant_z_fold.cpp
+    inductive_reorder.cpp
+    inductive_rvar_rhs.cpp
+    inductive_small_fold.cpp
+    inductive_tuple_fold.cpp
+    inductive_tuple_to_expr.cpp
+    inductive_two_defs.cpp
+    inductive_update.cpp
+    inductive_update_reorder.cpp
+    inductive_var_swap.cpp
+    inductive_vectorize.cpp
     init_def_should_be_all_vars.cpp
     input_buffer_func_name_collision.cpp
     input_generator_buffer_func_name_collision.cpp

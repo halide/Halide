@@ -307,6 +307,7 @@ public:
     static constexpr halide_type_code_t Float = halide_type_float;
     static constexpr halide_type_code_t BFloat = halide_type_bfloat;
     static constexpr halide_type_code_t Handle = halide_type_handle;
+    static constexpr halide_type_code_t Unknown = halide_type_unknown;
     // @}
 
     /** Exposed so code that needs to reason about the maximum representable
@@ -503,6 +504,12 @@ public:
         return code() == Handle;
     }
 
+    /** Is this type a floating point type (float or double). */
+    HALIDE_ALWAYS_INLINE
+    bool is_unknown() const {
+        return code() == Unknown;
+    }
+
     // Returns true iff type is a signed integral type where overflow is defined.
     HALIDE_ALWAYS_INLINE
     bool can_overflow_int() const {
@@ -622,6 +629,11 @@ HALIDE_ALWAYS_INLINE Type Bool(int lanes = 1) {
 /** Construct a handle type */
 HALIDE_ALWAYS_INLINE Type Handle(const halide_handle_cplusplus_type *handle_type = nullptr) {
     return Type(Type::Handle, 64, 1, handle_type);
+}
+
+/** Construct an unknown type */
+inline Type Unknown() {
+    return Type(Type::Unknown, 0, 1);
 }
 
 /** Construct the halide equivalent of a C type */

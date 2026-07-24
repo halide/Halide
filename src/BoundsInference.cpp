@@ -7,6 +7,7 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Inductive.h"
 #include "Inline.h"
 #include "Qualify.h"
 #include "Scope.h"
@@ -386,6 +387,7 @@ public:
             // don't care what sites are loaded, just what sites need
             // to have the correct value in them. So remap all selects
             // to if_then_elses to get tighter bounds.
+            // The implementation of expand_to_base_case relies on this conversion.
             class SelectToIfThenElse : public IRMutator {
                 using IRMutator::visit;
                 Expr visit(const Select *op) override {
@@ -998,6 +1000,27 @@ public:
 
                     producer.bounds[{consumer.name, consumer.stage}] = b;
                     producer.consumers.push_back((int)i);
+                }
+            }
+        }
+
+        // For any inductively defined functions, make sure their
+        // bounds include the base case.
+        for (Stage &s : stages) {
+            bool eligible = s.func.is_pure() || s.func.updates().size() == 1;
+            if (!eligible || !s.func.is_inductive()) {
+                continue;
+            }
+            debug(4) << "Expanding bounds for inductively defined function " << s.func.name() << "\n";
+            vector<bool> is_inductive_var;
+            is_inductive_var.reserve(s.func.args().size());
+            for (const auto &arg : s.func.args()) {
+                is_inductive_var.push_back(s.func.is_inductive(arg));
+            }
+            for (const auto &b1 : s.bounds) {
+                // const Box &b = b1.second;
+                for (const auto &cval : s.exprs) {
+                    s.bounds[b1.first] = expand_to_include_base_case(s.func.args(), is_inductive_var, cval.value, s.func.name(), s.bounds[b1.first], s.stage != 0);
                 }
             }
         }
