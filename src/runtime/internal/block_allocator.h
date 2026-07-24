@@ -60,7 +60,6 @@ public:
     int reclaim(void *user_context, MemoryRegion *region);          //< free the region and consolidate
     int retain(void *user_context, MemoryRegion *region);           //< retain the region and increase the usage count
     bool collect(void *user_context);                               //< returns true if any blocks were removed
-    int release(void *user_context);
     int destroy(void *user_context);
 
     // Access methods
@@ -94,9 +93,6 @@ private:
 
     // Creates a new block entry and adds it tos the list
     BlockEntry *create_block_entry(void *user_context, const MemoryRequest &request);
-
-    // Releases the block entry from being used, and makes it available for further allocations
-    int release_block_entry(void *user_context, BlockEntry *block_entry);
 
     // Destroys the block entry and removes it from the list
     int destroy_block_entry(void *user_context, BlockEntry *block_entry);
@@ -263,16 +259,6 @@ bool BlockAllocator::collect(void *user_context) {
         block_entry = prev_entry;
     }
     return result;
-}
-
-int BlockAllocator::release(void *user_context) {
-    BlockEntry *block_entry = block_list.back();
-    while (block_entry != nullptr) {
-        BlockEntry *prev_entry = block_entry->prev_ptr;
-        release_block_entry(user_context, block_entry);
-        block_entry = prev_entry;
-    }
-    return 0;
 }
 
 int BlockAllocator::destroy(void *user_context) {
@@ -502,19 +488,6 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryRequest &requ
         return nullptr;
     }
     return block_entry;
-}
-
-int BlockAllocator::release_block_entry(void *user_context, BlockAllocator::BlockEntry *block_entry) {
-#ifdef DEBUG_RUNTIME_INTERNAL
-    debug(user_context) << "BlockAllocator: Releasing block entry ("
-                        << "block_entry=" << (void *)(block_entry) << " "
-                        << "block=" << (void *)(block_entry->value) << ")...";
-#endif
-    BlockResource *block = static_cast<BlockResource *>(block_entry->value);
-    if (block->allocator) {
-        return block->allocator->release(user_context);
-    }
-    return 0;
 }
 
 int BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::BlockEntry *block_entry) {
