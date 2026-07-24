@@ -217,6 +217,141 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // Every Target::Feature must have a name, and that name must map back to
+    // the same feature.
+    for (int i = 0; i < (int)Target::FeatureEnd; i++) {
+        Target::Feature f = (Target::Feature)i;
+        std::string name = Target::feature_to_name(f);
+        if (Target::feature_from_name(name) != f) {
+            printf("Feature %d does not round-trip through its name (%s)\n", i, name.c_str());
+            return 1;
+        }
+    }
+
+    // gcd(a, b) == c, computed via get_runtime_compatible_target. An empty c
+    // means the two targets have no compatible runtime.
+    struct GcdTest {
+        const char *a, *b, *c;
+    };
+    const GcdTest gcd_tests[] = {
+        {"x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"},
+        {"x86-64-linux-sse41-fma-no_asserts-no_runtime", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"},
+        {"x86-64-linux-avx2-sse41", "x86-64-linux-sse41-fma", "x86-64-linux-sse41"},
+        {"x86-64-linux-avx2-sse41", "x86-32-linux-sse41-fma", ""},
+        {"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"},
+        {"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"},
+        {"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"},
+        {"x86-64-linux-vulkan", "x86-64-linux", "x86-64-linux-vulkan"},
+        {"x86-64-linux-vulkan-vk_v13", "x86-64-linux-vulkan", "x86-64-linux-vulkan"},
+        {"x86-64-linux-vulkan-vk_v13", "x86-64-linux-vulkan-vk_v10", "x86-64-linux-vulkan-vk_v10"},
+        {"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"},
+        {"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"},
+        {"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt", ""},
+        {"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt-hvx", "hexagon-32-qurt-hvx"},
+        {"x86-64-windows-d3d12compute-hlsl_sm66", "x86-64-windows-d3d12compute", "x86-64-windows-d3d12compute"},
+        {"x86-64-windows-d3d12compute-hlsl_sm66", "x86-64-windows-d3d12compute-hlsl_sm60", "x86-64-windows-d3d12compute-hlsl_sm60"},
+        {"x86-64-windows-d3d12compute-hlsl_sm62", "x86-64-windows-d3d12compute-hlsl_sm62", "x86-64-windows-d3d12compute-hlsl_sm62"},
+        {"x86-64-windows-d3d12compute-hlsl_sm69", "x86-64-windows-d3d12compute", "x86-64-windows-d3d12compute"},
+        {"x86-64-windows-d3d12compute-hlsl_sm69", "x86-64-windows-d3d12compute-hlsl_sm60", "x86-64-windows-d3d12compute-hlsl_sm60"},
+    };
+    for (const auto &test : gcd_tests) {
+        Target result{};
+        Target a{test.a};
+        Target b{test.b};
+        if (a.get_runtime_compatible_target(b, result)) {
+            if (std::string(test.c).empty() || result != Target{test.c}) {
+                printf("Targets %s and %s were computed to have gcd %s but expected '%s'\n",
+                       a.to_string().c_str(), b.to_string().c_str(), result.to_string().c_str(), test.c);
+                return 1;
+            }
+        } else if (!std::string(test.c).empty()) {
+            printf("Targets %s and %s were computed to have no gcd but %s was expected\n",
+                   a.to_string().c_str(), b.to_string().c_str(), test.c);
+            return 1;
+        }
+    }
+
+    if (Target().vector_bits != 0) {
+        printf("Default Target vector_bits not 0.\n");
+        return 1;
+    }
+    if (Target("arm-64-linux-sve2-vector_bits_512").vector_bits != 512) {
+        printf("Vector bits not parsed correctly.\n");
+        return 1;
+    }
+    Target with_vector_bits(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE}, 512);
+    if (with_vector_bits.vector_bits != 512) {
+        printf("Vector bits not populated in constructor.\n");
+        return 1;
+    }
+    if (Target(with_vector_bits.to_string()).vector_bits != 512) {
+        printf("Vector bits not round tripped properly.\n");
+        return 1;
+    }
+
+    // Feature implications. Each entry is {input, set_implied_features result,
+    // set-then-unset (minimal) result}.
+    struct ImpliedTest {
+        const char *input;
+        const char *set_implied;
+        const char *minimal;
+    };
+    const ImpliedTest implied_tests[] = {
+        // x86 AVX family
+        {"x86-64-linux-avx2",
+         "x86-64-linux-sse41-avx-avx2-f16c-fma",
+         "x86-64-linux-avx2"},
+        {"x86-64-linux-avx512_skylake",
+         "x86-64-linux-sse41-avx-avx2-f16c-fma-avx512-avx512_skylake",
+         "x86-64-linux-avx512_skylake"},
+        {"x86-64-linux-avx512_sapphirerapids",
+         "x86-64-linux-sse41-avx-avx2-f16c-fma-avxvnni-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids",
+         "x86-64-linux-avx512_sapphirerapids"},
+        // Redundantly-specified features collapse to the minimal form.
+        {"x86-64-linux-sse41-avx-avx2-f16c-fma",
+         "x86-64-linux-sse41-avx-avx2-f16c-fma",
+         "x86-64-linux-avx2"},
+        // AVX10.1 implications depend on vector_bits.
+        {"x86-64-linux-avx10_1-vector_bits_512",
+         "x86-64-linux-sse41-avx-avx2-f16c-fma-avxvnni-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids-avx10_1-vector_bits_512",
+         "x86-64-linux-avx10_1-vector_bits_512"},
+        {"x86-64-linux-avx10_1",
+         "x86-64-linux-avx10_1",
+         "x86-64-linux-avx10_1"},
+        // ARM v8.x cascade, and SVE/SVE2 cascading through arm_fp16.
+        {"arm-64-linux-armv84a",
+         "arm-64-linux-armv8a-armv81a-armv82a-armv83a-armv84a",
+         "arm-64-linux-armv84a"},
+        {"arm-64-linux-sve2",
+         "arm-64-linux-armv8a-armv81a-armv82a-arm_fp16-arm_dot_prod-sve2",
+         "arm-64-linux-sve2"},
+        // Apple silicon implies at least ARM v8.4a.
+        {"arm-64-osx",
+         "arm-64-osx-armv8a-armv81a-armv82a-armv83a-armv84a",
+         "arm-64-osx"},
+        // Tracing loads/stores implies tracing realizations.
+        {"x86-64-linux-trace_loads",
+         "x86-64-linux-trace_loads-trace_realizations",
+         "x86-64-linux-trace_loads"},
+    };
+    for (const auto &test : implied_tests) {
+        Target set_result(test.input);
+        set_result.set_implied_features();
+        if (set_result.get_features_bitset() != Target(test.set_implied).get_features_bitset()) {
+            printf("set_implied_features(%s) gave %s but expected %s\n",
+                   test.input, set_result.to_string().c_str(), test.set_implied);
+            return 1;
+        }
+        Target norm_result(test.input);
+        norm_result.set_implied_features();
+        norm_result.unset_implied_features();
+        if (norm_result.get_features_bitset() != Target(test.minimal).get_features_bitset()) {
+            printf("set then unset implied features on %s gave %s but expected %s\n",
+                   test.input, norm_result.to_string().c_str(), test.minimal);
+            return 1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

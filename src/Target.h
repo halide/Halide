@@ -236,6 +236,29 @@ struct Target {
 
     void set_features(const std::vector<Feature> &features_to_set, bool value = true);
 
+    /** Set any feature flags that are implied by the flags currently set. For
+     * example, setting AVX2 implies AVX, so calling this on a target with the
+     * AVX2 feature will also set the AVX feature. The set of implications is a
+     * DAG, so this reaches a fixed point in a single pass. Call this before
+     * inspecting a target's features, so that (e.g.) a check for SSE41
+     * succeeds on an AVX2 target. */
+    void set_implied_features();
+
+    /** Unset any feature flags that are implied by other flags that remain
+     * set, producing the minimal set of feature flags that
+     * set_implied_features() would expand back to the same target. For
+     * example, on a target with both AVX2 and AVX set, this unsets AVX (since
+     * AVX2 implies it), but on a target with only AVX set it leaves AVX
+     * alone. Call this before emitting a target as a string, to get a compact
+     * canonical form. */
+    void unset_implied_features();
+
+    /** Return a copy of the target with set_implied_features() applied. */
+    Target with_implied_features() const;
+
+    /** Return a copy of the target with unset_implied_features() applied. */
+    Target without_implied_features() const;
+
     bool has_feature(Feature f) const;
 
     bool has_feature(halide_target_feature_t f) const {
@@ -415,11 +438,6 @@ Target get_jit_target_from_environment();
  * apis that do not correspond to any single target feature, returns
  * Target::FeatureEnd */
 Target::Feature target_feature_for_device_api(DeviceAPI api);
-
-namespace Internal {
-
-void target_test();
-}
 
 }  // namespace Halide
 

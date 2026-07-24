@@ -93,7 +93,8 @@ ostream &operator<<(ostream &stream, const Module &m) {
         stream << s << "\n";
     }
 
-    stream << "module name=" << m.name() << ", target=" << m.target().to_string() << "\n";
+    // The module retains implied features, but print it in minimal form.
+    stream << "module name=" << m.name() << ", target=" << m.target().without_implied_features().to_string() << "\n";
     for (const auto &b : m.buffers()) {
         stream << b << "\n";
     }
