@@ -1184,7 +1184,6 @@ bool Function::is_inductive(const string &var) const {
         }
     }
 
-
     bool inductive_in_var = false;
     for (const Definition &def : defs) {
         std::vector<int> positions;
