@@ -420,6 +420,54 @@ int main(int argc, char **argv) {
         HALIDE_CHECK(user_context, get_allocated_system_memory() == 0);
     }
 
+    // test retain/release
+    {
+        // Use custom conform allocation request callbacks
+        MemoryRegionAllocatorFns region_allocator = {allocate_region, deallocate_region, conform_region};
+
+        // Manually create a block resource and allocate memory
+        size_t block_size = 1024;
+        BlockResource block_resource = {};
+        MemoryBlock *memory_block = &(block_resource.memory);
+        memory_block->size = block_size;
+        allocate_block(user_context, memory_block);
+
+        // Create a region allocator to manage the block resource
+        RegionAllocator::MemoryAllocators allocators = {system_allocator, region_allocator};
+        RegionAllocator *instance = RegionAllocator::create(user_context, &block_resource, allocators);
+
+        MemoryRequest request = {0};
+        request.size = 512;
+        request.alignment = sizeof(int);
+        request.properties.visibility = MemoryVisibility::DefaultVisibility;
+        request.properties.caching = MemoryCaching::DefaultCaching;
+        request.properties.usage = MemoryUsage::DefaultUsage;
+
+        MemoryRegion *r1 = instance->reserve(user_context, request);
+        HALIDE_CHECK(user_context, r1 != nullptr);
+        HALIDE_CHECK(user_context, r1->allocation.offset == 0);
+
+        // Do one retain/release cycle. r1 should still be allocated after the release, since it was retained.
+        instance->retain(user_context, r1);
+        instance->release(user_context, r1);
+
+        MemoryRegion *r2 = instance->reserve(user_context, request);
+        HALIDE_CHECK(user_context, r2 != nullptr);
+        // r2 should be allocated after r1, since r1 should still be allocated.
+        HALIDE_CHECK(user_context, r2->allocation.offset == 512);
+
+        instance->release(user_context, r2);
+        instance->release(user_context, r1);
+
+        instance->destroy(user_context);
+        deallocate_block(user_context, memory_block);
+        HALIDE_CHECK(user_context, allocated_block_memory == 0);
+        HALIDE_CHECK(user_context, allocated_region_memory == 0);
+
+        RegionAllocator::destroy(user_context, instance);
+        HALIDE_CHECK(user_context, get_allocated_system_memory() == 0);
+    }
+
     // test conform request
     {
         uint32_t mbs = 1024;  // min block size

@@ -635,6 +635,7 @@ int RegionAllocator::alloc_block_region(void *user_context, BlockRegion *block_r
     }
     if (error_code == 0) {
         block_region->status = block_region->memory.dedicated ? AllocationStatus::Dedicated : AllocationStatus::InUse;
+        block_region->usage_count = 1;
         block->reserved += block_region->memory.allocation.size;
     }
     return error_code;
