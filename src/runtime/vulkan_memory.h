@@ -64,7 +64,6 @@ public:
     int reclaim(void *user_context, MemoryRegion *region);    //< free the region and consolidate
     int retain(void *user_context, MemoryRegion *region);     //< retain the region and increase its use count
     bool collect(void *user_context);                         //< returns true if any blocks were removed
-    int release(void *user_context);
     int destroy(void *user_context);
 
     void *map(void *user_context, MemoryRegion *region);
@@ -502,23 +501,6 @@ bool VulkanMemoryAllocator::collect(void *user_context) {
         return false;
     }
     return block_allocator->collect(this);
-}
-
-int VulkanMemoryAllocator::release(void *user_context) {
-#if defined(HL_VK_DEBUG_MEM)
-    debug(nullptr) << "VulkanMemoryAllocator: Releasing block allocator ("
-                   << "user_context=" << user_context << ") ... \n";
-#endif
-    if ((device == nullptr) || (physical_device == nullptr)) {
-        error(user_context) << "VulkanMemoryAllocator: Unable to release allocator! Invalid device handle!\n";
-        return halide_error_code_generic_error;
-    }
-    if (block_allocator == nullptr) {
-        error(user_context) << "VulkanMemoryAllocator: Unable to release allocator! Invalid block allocator!\n";
-        return halide_error_code_generic_error;
-    }
-
-    return block_allocator->release(this);
 }
 
 int VulkanMemoryAllocator::destroy(void *user_context) {
