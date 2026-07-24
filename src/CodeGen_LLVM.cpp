@@ -203,6 +203,11 @@ void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
 }
 
 std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target, llvm::LLVMContext &context) {
+    // Code generation inspects the target's features to decide which
+    // instructions are available, so it expects a target with all implied
+    // features already set (e.g. AVX2 implies AVX, SSE41, ...). This is
+    // guaranteed for the module produced by lower(), and for the host target
+    // used to compile JIT trampolines.
     std::unique_ptr<CodeGen_LLVM> result;
     if (target.arch == Target::X86) {
         result = new_CodeGen_X86(target);
