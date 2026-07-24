@@ -144,6 +144,15 @@ const char *wgpu_sv_to_cstr(WGPUStringView sv, char *buf, size_t buf_size) {
     if (sv.length == WGPU_STRLEN) {
         return sv.data;
     }
+    // If sv.data is NULL, return an empty string to avoid dereferencing a
+    // null pointer. This can happen if a WebGPU API returns a WGPUStringView
+    // with data == NULL (e.g. an empty or absent string).
+    if (sv.data == nullptr) {
+        if (buf_size > 0) {
+            buf[0] = '\0';
+        }
+        return buf;
+    }
     size_t len = sv.length < buf_size - 1 ? sv.length : buf_size - 1;
     for (size_t i = 0; i < len; i++) {
         buf[i] = sv.data[i];
