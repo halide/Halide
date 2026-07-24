@@ -33,6 +33,11 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
         debug(1) << "Applying autoscheduler (NONE) to Generator " << name() << " ...\n";
     }
 
+    const auto &nsp = context.namespace_params();
+    if (!nsp.prefixes.empty()) {
+        pipeline.apply_runtime_namespace(context.target(), nsp);
+    }
+
     std::vector<Argument> filter_arguments;
     const auto arg_infos = arginfos();
     for (const auto &a : arg_infos) {

@@ -1,6 +1,9 @@
 #include <array>
+#include <cctype>
+#include <cstring>
 #include <iostream>
 #include <limits>
+#include <set>
 
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
@@ -206,8 +209,43 @@ public:
 
 }  // namespace
 
-CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
-    : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind) {
+namespace {
+
+// Scan an embedded runtime header for the names of the halide_-prefixed C ABI
+// *functions* it declares. A token is treated as a function if it is
+// immediately followed (ignoring whitespace) by '('. This deliberately excludes
+// types (halide_buffer_t), function-pointer typedefs (halide_malloc_t), and
+// enum values (halide_type_uint), none of which are ever directly followed by
+// '(' in the header.
+void collect_runtime_function_names(const char *header, std::set<std::string> &names) {
+    if (header == nullptr) {
+        return;
+    }
+    const std::string s(header);
+    const std::string tok = "halide_";
+    size_t pos = 0;
+    while ((pos = s.find(tok, pos)) != std::string::npos) {
+        size_t end = pos;
+        while (end < s.size() && (std::isalnum((unsigned char)s[end]) || s[end] == '_')) {
+            end++;
+        }
+        size_t p = end;
+        while (p < s.size() && std::isspace((unsigned char)s[p])) {
+            p++;
+        }
+        if (p < s.size() && s[p] == '(') {
+            names.insert(s.substr(pos, end - pos));
+        }
+        pos = end;
+    }
+}
+
+}  // namespace
+
+CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard,
+                     const std::string &runtime_namespace_import_prefix)
+    : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
+      runtime_namespace_import_prefix(runtime_namespace_import_prefix) {
 
     if (output_kind == CPlusPlusFunctionInfoHeader) {
         // If it's a header, emit an include guard.
@@ -264,6 +302,25 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
         forward_declared.insert(type_of<halide_buffer_t *>().handle_type());
         forward_declared.insert(type_of<halide_filter_metadata_t *>().handle_type());
     } else {
+        // If a runtime namespace was requested, rename the runtime's C ABI
+        // functions via the preprocessor *before* emitting the runtime header
+        // below. Because these #defines are object-like macros matching whole
+        // tokens, they rewrite the function declarations in the embedded header,
+        // any prototypes emitted later, and every call site in the body -- all
+        // consistently -- while leaving types, typedefs, and enum values alone.
+        // (Emitted for implementation output only; headers must stay un-renamed
+        // so that several namespaced headers can be included together.)
+        if (!runtime_namespace_import_prefix.empty()) {
+            std::set<std::string> fns;
+            collect_runtime_function_names((const char *)halide_internal_runtime_header_HalideRuntime_h, fns);
+            stream << "// Halide runtime namespace: rename the runtime C ABI.\n";
+            for (const auto &name : fns) {
+                stream << "#define " << name << " "
+                       << runtime_namespace_import_prefix << name.substr(strlen("halide_")) << "\n";
+            }
+            stream << "\n";
+        }
+
         // Include declarations of everything generated C source might want
         stream
             << normalize_line_endings(halide_c_template_CodeGen_C_prologue) << "\n"

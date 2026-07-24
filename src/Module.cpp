@@ -557,6 +557,10 @@ RuntimeNamespaceMap Module::get_runtime_namespace_map() const {
     return contents->runtime_namespace_map;
 }
 
+void Module::set_runtime_namespace_map(const RuntimeNamespaceMap &runtime_namespace_map) {
+    contents->runtime_namespace_map = runtime_namespace_map;
+}
+
 void Module::set_conceptual_code_stmt(const Internal::Stmt &stmt) {
     contents->conceptual_code = stmt;
 }
@@ -731,9 +735,16 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     if (contains(output_files, OutputFileType::c_source)) {
         debug(1) << "Module.compile(): c_source " << output_files.at(OutputFileType::c_source) << "\n";
         std::ofstream file(output_files.at(OutputFileType::c_source));
+        // Forward any runtime namespace import prefix so the generated source
+        // calls a namespaced runtime rather than the stock halide_ one.
+        const auto &ns = contents->runtime_namespace_map;
+        const auto it = ns.find(RuntimeVisibility::Import);
+        const std::string import_prefix = (it != ns.end()) ? it->second : std::string{};
         Internal::CodeGen_C cg(file,
                                target(),
-                               target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
+                               target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation,
+                               /* include_guard */ "",
+                               import_prefix);
         cg.compile(*this);
     }
     if (contains(output_files, OutputFileType::python_extension)) {
@@ -794,7 +805,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
 std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t, const std::map<RuntimeVisibility, std::string> &runtime_namespace_map) {
     validate_outputs(output_files);
 
-    MetadataNameMap metadata_name_map = {}; // empty metadata for a standalone runtime
+    MetadataNameMap metadata_name_map = {};  // empty metadata for a standalone runtime
     Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT), metadata_name_map, runtime_namespace_map);
     // For runtime, it only makes sense to output object files or static_library, so ignore
     // everything else.

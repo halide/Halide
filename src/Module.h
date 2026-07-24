@@ -60,9 +60,9 @@ enum class LinkageType {
 
 /** Type of visibility for customizing Halide runtime methods within a namespace. */
 enum class RuntimeVisibility {
-    Import,     ///< Method names called from within a generated kernel
-    Export,     ///< Method names externally visible in the runtime library
-    Internal,   ///< Method names called within the runtime library
+    Import,    ///< Method names called from within a generated kernel
+    Export,    ///< Method names externally visible in the runtime library
+    Internal,  ///< Method names called within the runtime library
 };
 
 namespace Internal {
@@ -221,6 +221,10 @@ public:
 
     /** Retrieve the runtime namespace map. */
     RuntimeNamespaceMap get_runtime_namespace_map() const;
+
+    /** Set the runtime namespace map, used to rename halide_-prefixed runtime
+     * symbols during code generation. */
+    void set_runtime_namespace_map(const RuntimeNamespaceMap &runtime_namespace_map);
 
     /** Set the AutoSchedulerResults for the Module. It is an error to call this
      * multiple times for a given Module. */

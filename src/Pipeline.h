@@ -61,7 +61,7 @@ struct AutoschedulerParams {
 };
 
 /** Special directives for renaming Runtime API methods with explicit prefixes
- * 
+ *
  * The "import" prefix corresponds to the method names called from within a generated kernel
  * The "export" prefix corresponds to the method names externally visible in the runtime library
  * The "internal" prefix corresponds to the method names called within the runtime library
@@ -71,7 +71,7 @@ struct RuntimeNamespaceParams {
     std::map<RuntimeVisibility, std::string> prefixes;
 
     RuntimeNamespaceParams() = default;
-    /*not-explicit*/ RuntimeNamespaceParams(const std::map<RuntimeVisibility, std::string>& m)
+    /*not-explicit*/ RuntimeNamespaceParams(const std::map<RuntimeVisibility, std::string> &m)
         : prefixes(m) {
     }
 };

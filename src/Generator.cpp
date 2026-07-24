@@ -1073,9 +1073,24 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             debug(1) << "Building runtime for computed target: " << gcd_target << "\n";
         }
 
+        // Extract any runtime_namespace.{import,export,internal} generator
+        // params so a standalone runtime can be emitted with custom symbol
+        // prefixes (the kernel path handles these via the Generator, but the
+        // runtime has no Generator instance).
+        RuntimeNamespaceMap runtime_namespace_map;
+        for (const auto &kv : args.generator_params) {
+            if (kv.first == "runtime_namespace.import") {
+                runtime_namespace_map[RuntimeVisibility::Import] = kv.second;
+            } else if (kv.first == "runtime_namespace.export") {
+                runtime_namespace_map[RuntimeVisibility::Export] = kv.second;
+            } else if (kv.first == "runtime_namespace.internal") {
+                runtime_namespace_map[RuntimeVisibility::Internal] = kv.second;
+            }
+        }
+
         auto output_files = compute_output_files(gcd_target, base_path, args.output_types);
         // Runtime doesn't get to participate in the CompilerLogger party
-        compile_standalone_runtime(output_files, gcd_target);
+        compile_standalone_runtime(output_files, gcd_target, runtime_namespace_map);
     }
 
     if (!args.generator_name.empty()) {
@@ -1151,7 +1166,7 @@ void GeneratorParamBase::check_value_readable() const {
     // These are always readable.
     if (name() == "target" ||
         name() == "autoscheduler" ||
-        name() == "namespace") {
+        name() == "runtime_namespace") {
         return;
     }
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
@@ -1235,9 +1250,11 @@ std::string GeneratorParam_RuntimeNamespaceParams::get_c_type() const {
 
 bool GeneratorParam_RuntimeNamespaceParams::try_set(const std::string &key, const std::string &value) {
     const auto &n = this->name();
-    if ((key == n) && starts_with(key, n + ".")) {
+    // Sub-keys arrive as "runtime_namespace.import" / ".export" / ".internal";
+    // there is no bare top-level string form for this GeneratorParam.
+    if (starts_with(key, n + ".")) {
         const auto sub_key = key.substr(n.size() + 1);
-        if(sub_key == "internal") {
+        if (sub_key == "internal") {
             user_assert(this->value_.prefixes.count(RuntimeVisibility::Internal) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
             this->value_.prefixes.insert({RuntimeVisibility::Internal, value});
         } else if (sub_key == "export") {

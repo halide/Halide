@@ -43,7 +43,8 @@ public:
     CodeGen_C(std::ostream &dest,
               const Target &target,
               OutputKind output_kind = CImplementation,
-              const std::string &include_guard = "");
+              const std::string &include_guard = "",
+              const std::string &runtime_namespace_import_prefix = "");
     ~CodeGen_C() override;
 
     /** Emit the declarations contained in the module as C code. */
@@ -93,6 +94,12 @@ protected:
     /** Controls whether this instance is generating declarations or
      * definitions and whether the interface us extern "C" or C++. */
     OutputKind output_kind;
+
+    /** If non-empty, the runtime's halide_-prefixed C ABI functions are renamed
+     * with this prefix (replacing the leading "halide_"), so the generated
+     * source imports a namespaced runtime rather than the stock one. Applies to
+     * C/C++ *implementation* output only. */
+    std::string runtime_namespace_import_prefix;
 
     /** A cache of generated values in scope */
     std::map<std::string, std::string> cache;

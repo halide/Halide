@@ -1080,7 +1080,7 @@ endfunction()
 function(add_halide_runtime RT)
     set(options NO_DEFAULT_TARGETS)
     set(oneValueArgs FILE_BASE_NAME NO_THREADS NO_DL_LIBS OUTPUT_DIR)
-    set(multiValueArgs TARGETS)
+    set(multiValueArgs TARGETS PARAMS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (NOT ARG_FILE_BASE_NAME)
@@ -1135,6 +1135,7 @@ function(add_halide_runtime RT)
             COMMAND
                 Halide::GenRT -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}"
                 "target=$<JOIN:$<REMOVE_DUPLICATES:${target_list}>,$<COMMA>>"
+                ${ARG_PARAMS}
             DEPENDS Halide::GenRT
             VERBATIM
         )
@@ -1170,6 +1171,7 @@ function(add_halide_runtime RT)
                     COMMAND
                         Halide::GenRT -r "${this_rt}" -o "${ARG_OUTPUT_DIR}" -e object
                         "target=$<JOIN:$<REMOVE_DUPLICATES:${arch_target_list}>,$<COMMA>>"
+                        ${ARG_PARAMS}
                     DEPENDS Halide::GenRT
                     VERBATIM
                 )
@@ -1188,6 +1190,7 @@ function(add_halide_runtime RT)
                 COMMAND
                     Halide::GenRT -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}" -e object
                     "target=$<JOIN:$<REMOVE_DUPLICATES:${target_list}>,$<COMMA>>"
+                    ${ARG_PARAMS}
                 DEPENDS Halide::GenRT
                 VERBATIM
             )
