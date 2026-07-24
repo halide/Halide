@@ -332,21 +332,24 @@ WEAK int create_webgpu_context(void *user_context) {
     // context-release + re-create cycles.
     init_error_code = halide_error_code_success;
 
-    // Check if TimedWaitAny feature is available before requesting it.
-    WGPUBool has_timed_wait = wgpuHasInstanceFeature(WGPUInstanceFeatureName_TimedWaitAny);
-
-    // Create instance with TimedWaitAny feature enabled so we can use
-    // wgpuInstanceWaitAny with non-zero timeouts.
+    // TimedWaitAny is required: all wgpuInstanceWaitAny calls below use
+    // UINT64_MAX as the timeout. Without this feature, those calls may
+    // block indefinitely (or fail) on implementations that don't support
+    // timed waits. Requiring it here ensures we fail fast at instance
+    // creation if the backend doesn't support it.
     WGPUInstanceFeatureName required_features[] = {WGPUInstanceFeatureName_TimedWaitAny};
     WGPUInstanceDescriptor instance_desc = WGPU_INSTANCE_DESCRIPTOR_INIT;
-    if (has_timed_wait) {
-        instance_desc.requiredFeatureCount = 1;
-        instance_desc.requiredFeatures = required_features;
-    }
+    instance_desc.requiredFeatureCount = 1;
+    instance_desc.requiredFeatures = required_features;
     global_instance = wgpuCreateInstance(&instance_desc);
     debug(user_context)
         << "WGPU: wgpuCreateInstance produced: (" << global_instance
         << ")\n";
+    if (!global_instance) {
+        error(user_context)
+            << "WGPU: wgpuCreateInstance failed (TimedWaitAny not supported)\n";
+        return halide_error_code_generic_error;
+    }
 
     // Request adapter and wait on the future.
     WGPURequestAdapterCallbackInfo adapter_callback_info = WGPU_REQUEST_ADAPTER_CALLBACK_INFO_INIT;
