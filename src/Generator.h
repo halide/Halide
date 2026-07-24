@@ -233,7 +233,7 @@
  *  - 'namespace' param is a list of import, export and internal prefixes to use for all Halide runtime methods
  *      - The "import" prefix corresponds to the method names called from within a generated kernel
  *      - The "export" prefix corresponds to the method names externally visible in the runtime library
- *      - The "internal" prefix corresponds to the method names called within the runtime library 
+ *      - The "internal" prefix corresponds to the method names called within the runtime library
  * Generators are added to a global registry to simplify AOT build mechanics; this
  * is done by simply using the HALIDE_REGISTER_GENERATOR macro at global scope:
  *
