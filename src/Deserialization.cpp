@@ -942,6 +942,7 @@ std::vector<Expr> Deserializer::deserialize_expr_vector(const flatbuffers::Vecto
                                                         const flatbuffers::Vector<flatbuffers::Offset<void>> *exprs_serialized) {
     user_assert(exprs_types != nullptr);
     user_assert(exprs_serialized != nullptr);
+    user_assert(exprs_types->size() == exprs_serialized->size()) << "malformed pipeline: expression type and value counts do not match\n";
     std::vector<Expr> result;
     result.reserve(exprs_serialized->size());
     for (size_t i = 0; i < exprs_serialized->size(); ++i) {
@@ -1163,6 +1164,7 @@ FuseLoopLevel Deserializer::deserialize_fuse_loop_level(const Serialize::FuseLoo
     for (const auto &align_strategy : *fuse_loop_level->align_strategies()) {
         align_strategies.push_back(deserialize_loop_align_strategy((Serialize::LoopAlignStrategy)align_strategy));
     }
+    user_assert(align_dimension_names.size() == align_strategies.size()) << "malformed pipeline: fused loop level dimension and strategy counts do not match\n";
     std::map<std::string, LoopAlignStrategy> align;
     for (size_t i = 0; i < align_dimension_names.size(); ++i) {
         align[align_dimension_names[i]] = align_strategies[i];
@@ -1319,6 +1321,7 @@ Buffer<> Deserializer::deserialize_buffer(const Serialize::Buffer *buffer) {
     const std::string name = deserialize_string(buffer->name());
     const auto type = deserialize_type(buffer->type());
     const int32_t dimensions = buffer->dimensions();
+    user_assert(dimensions >= 0 && (size_t)dimensions <= buffer->dims()->size()) << "malformed pipeline: buffer dimension count does not match the serialized dimensions\n";
     std::vector<halide_dimension_t> hl_buffer_dimensions;
     std::vector<halide_dimension_t> dense_buffer_dimensions;
     hl_buffer_dimensions.reserve(dimensions);
@@ -1481,6 +1484,7 @@ Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
     }
 
     std::vector<Func> funcs;
+    user_assert(pipeline_obj->funcs()->size() == functions.size()) << "malformed pipeline: serialized function count does not match the number of function names\n";
     for (size_t i = 0; i < pipeline_obj->funcs()->size(); ++i) {
         deserialize_function(pipeline_obj->funcs()->Get(i), functions[i]);
         funcs.emplace_back(functions[i]);
@@ -1500,6 +1504,7 @@ Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
 
     const auto *requirements_objs = pipeline_obj->requirements();
     const auto *requirement_type_objs = pipeline_obj->requirements_type();
+    user_assert(requirements_objs->size() == requirement_type_objs->size()) << "malformed pipeline: requirement type and value counts do not match\n";
 
     std::vector<Stmt> requirements;
     requirements.reserve(requirements_objs->size());

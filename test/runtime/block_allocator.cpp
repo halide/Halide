@@ -460,6 +460,70 @@ int main(int argc, char **argv) {
             }
         }
 
+        // test conform_memory_request
+        {
+            // conform_memory_request must be idempotent: the block allocator conforms
+            // requests defensively at several layers, feeding an already-conformed
+            // request back in. Restrict the sweep to request alignments that do not
+            // exceed the required alignment (both powers of two) so the conformed
+            // alignment stays a power of two and aligned_offset does not abort.
+            for (size_t required_alignment = 1; required_alignment <= 128; required_alignment *= 2) {
+                for (size_t nearest_multiple = 0; nearest_multiple <= 64; nearest_multiple = nearest_multiple ? nearest_multiple * 2 : 1) {
+                    for (size_t request_alignment = 0; request_alignment <= required_alignment; request_alignment = request_alignment ? request_alignment * 2 : 1) {
+                        for (size_t required_size = 1; required_size <= 100; ++required_size) {
+                            for (size_t offset = 0; offset <= 64; offset += 16) {
+                                MemoryRequest request = {0};
+                                request.offset = offset;
+                                request.alignment = request_alignment;
+
+                                conform_memory_request(&request, required_size, required_alignment, nearest_multiple);
+                                MemoryRequest conformed = request;
+
+                                conform_memory_request(&request, required_size, required_alignment, nearest_multiple);
+
+                                halide_abort_if_false(user_context, request.size == conformed.size);
+                                halide_abort_if_false(user_context, request.alignment == conformed.alignment);
+                                halide_abort_if_false(user_context, request.offset == conformed.offset);
+                                halide_abort_if_false(user_context, request.properties.nearest_multiple == conformed.properties.nearest_multiple);
+
+                                halide_abort_if_false(user_context, conformed.size >= required_size);
+                                halide_abort_if_false(user_context, conformed.size >= conformed.alignment);
+                                halide_abort_if_false(user_context, conformed.alignment == conform_alignment(request_alignment, required_alignment));
+                                halide_abort_if_false(user_context, conformed.offset == aligned_offset(offset, conformed.alignment));
+                                halide_abort_if_false(user_context, (conformed.offset % conformed.alignment) == 0);
+                                if (conformed.properties.nearest_multiple > 0) {
+                                    halide_abort_if_false(user_context, (conformed.size % conformed.properties.nearest_multiple) == 0);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Regression scenarios from the vulkan allocator fixes (Mesa lavapipe/RADV
+            // reporting 64-byte buffer alignment): a buffer whose size is a multiple of
+            // the config nearest_multiple but not of the device alignment must round up
+            // to the device alignment and stay stable across repeated conforms.
+            size_t regression_required_size[2] = {96, 9338976};
+            size_t regression_required_alignment[2] = {64, 64};
+            size_t regression_nearest_multiple[2] = {32, 32};
+            for (int i = 0; i < 2; ++i) {
+                MemoryRequest request = {0};
+
+                conform_memory_request(&request, regression_required_size[i], regression_required_alignment[i], regression_nearest_multiple[i]);
+                MemoryRequest conformed = request;
+
+                conform_memory_request(&request, regression_required_size[i], regression_required_alignment[i], regression_nearest_multiple[i]);
+
+                halide_abort_if_false(user_context, conformed.size >= regression_required_size[i]);
+                halide_abort_if_false(user_context, (conformed.size % regression_required_alignment[i]) == 0);
+                halide_abort_if_false(user_context, request.size == conformed.size);
+                halide_abort_if_false(user_context, request.alignment == conformed.alignment);
+                halide_abort_if_false(user_context, request.offset == conformed.offset);
+                halide_abort_if_false(user_context, request.properties.nearest_multiple == conformed.properties.nearest_multiple);
+            }
+        }
+
         BlockAllocator::destroy(user_context, instance);
         HALIDE_CHECK(user_context, get_allocated_system_memory() == 0);
     }
