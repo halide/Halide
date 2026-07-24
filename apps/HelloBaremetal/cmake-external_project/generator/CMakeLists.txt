@@ -13,7 +13,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 
-find_package(Halide REQUIRED)  # We need Halide::Generator
+find_package(Halide REQUIRED)
 
 # Build generator
 add_halide_generator(${GEN_EXE} SOURCES ${SRC_DIR}/add_generator.cpp)

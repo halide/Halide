@@ -42,8 +42,8 @@ add_compile_definitions(HANNK_BUILD_TFLITE=$<BOOL:${HANNK_BUILD_TFLITE}>)  # nol
 
 # ----------------------------
 
-# Find HalideHelpers -- this is just the Runtime headers and CMake functions, but no libraries
-find_package(HalideHelpers REQUIRED)
+find_package(Halide REQUIRED)
+
 if (HANNK_BUILD_TFLITE)
     find_package(tensorflow-lite CONFIG REQUIRED)
 endif ()

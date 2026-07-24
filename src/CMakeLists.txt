@@ -533,7 +533,7 @@ endif ()
 # Build serialization, enabled by default
 if (WITH_SERIALIZATION)
     find_package(FlatBuffers REQUIRED)
-    _Halide_pkgdep(FlatBuffers)
+    _Halide_pkgdep(FlatBuffers NAMESPACE flatbuffers)
 
     target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
 

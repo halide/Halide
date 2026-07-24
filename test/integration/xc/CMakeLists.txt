@@ -4,7 +4,15 @@ project(xc)
 enable_testing()
 
 # Only need the platform-independent / source-only helpers.
-find_package(HalideHelpers REQUIRED)
+find_package(Halide REQUIRED)
+
+option(xc_FORCE_JIT
+    "Also require the JIT component, to test forcing HalideCompiler to load while cross-compiling"
+    OFF
+)
+if (xc_FORCE_JIT)
+    find_package(Halide REQUIRED COMPONENTS JIT)
+endif ()
 
 add_halide_generator(add_gen add.cpp)
 add_halide_library(add FROM xc::halide_generators::add_gen REGISTRATION add_reg_cpp)
