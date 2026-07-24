@@ -268,6 +268,45 @@ void test_mat_header() {
     }
 }
 
+#ifndef HALIDE_NO_PNG
+// PNG allows bit depths of 1, 2 and 4, but load_png() only knows how to read
+// 8- and 16-bit samples, so such a file must be rejected rather than decoded
+// with the wrong element size.
+void test_png_unsupported_bit_depth() {
+    std::ostringstream o;
+    o << Internal::get_test_tmp_dir() << "test_gray4.png";
+    std::string filename = o.str();
+
+    const int width = 64;
+    const int height = 8;
+
+    FILE *f = fopen(filename.c_str(), "wb");
+    if (!f) {
+        std::cout << "Cannot write " << filename << "\n";
+        exit(1);
+    }
+    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+    png_infop info_ptr = png_create_info_struct(png_ptr);
+    png_init_io(png_ptr, f);
+    png_set_IHDR(png_ptr, info_ptr, width, height, 4, PNG_COLOR_TYPE_GRAY,
+                 PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+    png_write_info(png_ptr, info_ptr);
+    std::vector<uint8_t> row(png_get_rowbytes(png_ptr, info_ptr), 0xab);
+    for (int y = 0; y < height; y++) {
+        png_write_row(png_ptr, row.data());
+    }
+    png_write_end(png_ptr, nullptr);
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+    fclose(f);
+
+    Buffer<> im;
+    if (Tools::load<Buffer<>>(filename, &im)) {
+        std::cout << "load() should have rejected " << filename << "\n";
+        exit(1);
+    }
+}
+#endif
+
 int main(int argc, char **argv) {
     do_test<int8_t>();
     do_test<int16_t>();
@@ -283,6 +322,9 @@ int main(int argc, char **argv) {
 #endif
     do_test<double>();
     test_mat_header();
+#ifndef HALIDE_NO_PNG
+    test_png_unsupported_bit_depth();
+#endif
     printf("Success!\n");
     return 0;
 }
