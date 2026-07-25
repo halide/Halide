@@ -3,7 +3,6 @@ get_target_property(VulkanHeaders_INCLUDE_DIR Vulkan::Headers INTERFACE_INCLUDE_
 
 set(RUNTIME_CPP
     # keep-sorted start ignore_prefixes=#
-    aarch64_cpu_features
     alignment_128
     alignment_32
     alignment_64
@@ -36,7 +35,6 @@ set(RUNTIME_CPP
     hexagon_dma_pool
     hexagon_host
     ios_io
-    linux_aarch64_cpu_features
     linux_arm_cpu_features
     linux_arm_thread_id
     linux_clock
@@ -54,7 +52,6 @@ set(RUNTIME_CPP
     msan
     msan_stubs
     opencl
-    osx_aarch64_cpu_features
     osx_arm_cpu_features
     osx_clock
     osx_get_symbol
