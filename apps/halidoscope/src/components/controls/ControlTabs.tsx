@@ -7,12 +7,12 @@ import { FuncMeta } from "@/types";
 
 function ControlTabs({ funcs }: { funcs: Record<string, FuncMeta> }) {
   return (
-    <div className="flex h-full min-w-80">
+    <div className="flex min-w-80">
       <div className="bg-ps-border-secondary h-full w-px" />
       <div className="bg-ps-border-primary h-full w-px" />
       <Tabs.Root
         defaultValue="funcs"
-        className="bg-ps-primary text-ps-text-primary border-l-ps-border-primary flex flex-1 flex-col border-l text-xs"
+        className="bg-ps-primary text-ps-text-primary border-l-ps-border-primary flex flex-1 flex-col overflow-auto border-l text-xs"
       >
         <Tabs.List className="bg-ps-titlebar border-ps-border-primary flex border-y">
           <Tabs.Trigger

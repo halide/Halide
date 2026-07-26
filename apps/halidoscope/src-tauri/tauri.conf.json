@@ -40,7 +40,14 @@
           "name": "trace",
           "short": "t",
           "takesValue": true,
-          "description": "Path to .hltrace file to load on startup."
+          "description": "Path to .hltrace file to load on startup.",
+          "required": true
+        },
+        {
+          "name": "profile",
+          "short": "p",
+          "takesValue": true,
+          "description": "Path to Halide profile JSON file to load on startup."
         }
       ],
       "subcommands": {

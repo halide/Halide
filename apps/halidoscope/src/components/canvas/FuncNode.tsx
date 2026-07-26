@@ -312,9 +312,9 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
       </NodeToolbar>
       <div
         className={clsx("relative ring-transparent", {
-          "ring-realization/30!": bufferLive,
-          "ring-produce/30!": producing,
-          "ring-consume/30!": consuming,
+          "ring-oxide-yellow/30!": bufferLive,
+          "ring-oxide-green/30!": producing,
+          "ring-oxide-purple/30!": consuming,
           "ring-4": zoom < 1,
           "ring-2": zoom >= 1,
         })}
@@ -324,9 +324,9 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
           width={width}
           height={height}
           className={clsx("ring-transparent", {
-            "ring-realization!": bufferLive,
-            "ring-produce!": producing,
-            "ring-consume!": consuming,
+            "ring-oxide-yellow!": bufferLive,
+            "ring-oxide-green!": producing,
+            "ring-oxide-purple!": consuming,
             "ring-2": zoom < 1,
             "ring-1": zoom >= 1,
           })}

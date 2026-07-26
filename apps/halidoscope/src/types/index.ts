@@ -43,3 +43,38 @@ export type NodeTypes = "funcNode";
 export type EdgeTypes = "funcEdge";
 
 export type AnimationMode = "Blink" | "Pulse" | "None";
+
+export interface ProfileFunc {
+  name: string;
+  parent: number;
+  canonical_id: number;
+  kind: number;
+  buffer_func_id: number;
+  time_ns: number;
+  memory_current: number;
+  memory_peak: number;
+  memory_total: number;
+  stack_peak: number;
+  active_threads_numerator: number;
+  active_threads_denominator: number;
+  num_allocs: number;
+}
+
+export interface ProfilePipeline {
+  name: string;
+  runs: number;
+  billed_runs: number;
+  samples: number;
+  num_allocs: number;
+  time_ns: number;
+  memory_current: number;
+  memory_peak: number;
+  memory_total: number;
+  active_threads_numerator: number;
+  active_threads_denominator: number;
+  funcs: ProfileFunc[];
+}
+
+export interface Profile {
+  pipelines: ProfilePipeline[];
+}
