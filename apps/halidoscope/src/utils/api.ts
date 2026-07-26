@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { NormalizationMode } from "@/state/render";
 import type { ThreadOpMode } from "@/state/thread";
-import type { TraceMeta } from "@/types";
+import type { TraceMeta, Profile } from "@/types";
 
 export async function openTrace(path: string): Promise<TraceMeta> {
   return invoke<TraceMeta>("open_trace", { path });
@@ -244,4 +244,8 @@ export async function renderThread({
     height,
     includeTabularData,
   });
+}
+
+export async function openProfile(path: string): Promise<Profile> {
+  return invoke<Profile>("open_profile", { path });
 }
