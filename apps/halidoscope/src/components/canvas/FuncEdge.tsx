@@ -53,8 +53,8 @@ function FuncEdge({
           x2={targetX}
           y2={targetY}
         >
-          <stop offset="0%" stopColor="var(--color-produce)" />
-          <stop offset="100%" stopColor="var(--color-consume)" />
+          <stop offset="0%" stopColor="var(--color-oxide-green)" />
+          <stop offset="100%" stopColor="var(--color-oxide-purple)" />
         </linearGradient>
       </defs>
       <BaseEdge
