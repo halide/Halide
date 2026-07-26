@@ -466,6 +466,25 @@ Stmt build_loop_nest(
     return stmt;
 }
 
+// A Stage's Definition may be expanded, by build_provide_loop_nest below,
+// into several Provide nodes: one per (possibly recursively nested)
+// specialization, plus the base/default Definition. stream_stores() is set
+// independently on each of these, so return true if *any* of them (reachable
+// via a non-failing specialization) requests it. Used to decide whether a
+// fence is needed after this Stage's production; it's safe to over-fence a
+// branch that didn't ask for streaming, but not to under-fence one that did.
+bool any_specialization_requests_streaming(const Definition &def) {
+    if (def.schedule().stream_stores()) {
+        return true;
+    }
+    for (const Specialization &s : def.specializations()) {
+        if (s.failure_message.empty() && any_specialization_requests_streaming(s.definition)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest(const map<string, Function> &env,
                              const string &prefix,
@@ -513,6 +532,16 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
             // emitting VectorReduce ops or scalarizing.
             body = Atomic::make(func.name(), std::string{}, body);
         }
+    }
+    if (def.schedule().stream_stores()) {
+        // Wrapped outside any Atomic node (rather than inside it), so that
+        // passes between here and storage flattening which pattern-match an
+        // Atomic node's body as being directly a Provide node (e.g.
+        // SplitTuples) continue to see that exact shape.
+        body = StreamingStore::make(func.name(), body);
+    }
+    if (const auto &names = def.schedule().stream_loads_names(); !names || !names->empty()) {
+        body = StreamingLoads::make(names, body);
     }
 
     // Default schedule/values if there is no specialization
@@ -1561,6 +1590,15 @@ private:
             add_lets.emplace_back(let->name, let->value);
             produce = let->body;
         }
+
+        // Only one branch runs at a time, so a single trailing fence
+        // after the whole (specialized) production is equivalent to,
+        // and simpler than, fencing inside each branch individually.
+        if (any_specialization_requests_streaming(def)) {
+            Expr fence = Call::make(Int(32), Call::stream_store_fence, {}, Call::Intrinsic);
+            produce = Block::make(produce, Evaluate::make(fence));
+        }
+
         return produce;
     }
 

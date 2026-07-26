@@ -432,9 +432,9 @@ constexpr int max_intrinsic_args = 4;
 struct ArmIntrinsic {
     const char *arm32;
     const char *arm64;
-    halide_type_t ret_type;
+    Type ret_type;
     const char *name;
-    halide_type_t arg_types[max_intrinsic_args];
+    Type arg_types[max_intrinsic_args];
     int flags;
     enum {
         AllowUnsignedOp1 = 1 << 0,   // Generate a second version of the instruction with the second operand unsigned.
@@ -1156,7 +1156,7 @@ void CodeGen_ARM::init_module() {
             }();
 
             int width_factor = 1;
-            if (!((intrin.ret_type.lanes <= 1) && (intrin.flags & ArmIntrinsic::NoMangle))) {
+            if (!((intrin.ret_type.lanes() <= 1) && (intrin.flags & ArmIntrinsic::NoMangle))) {
                 switch (flavor) {
                 case SIMDFlavors::NeonWidthX1:
                     width_factor = 1;
@@ -1181,8 +1181,8 @@ void CodeGen_ARM::init_module() {
             }
             vector<Type> arg_types;
             arg_types.reserve(4);
-            for (halide_type_t i : intrin.arg_types) {
-                if (i.bits == 0) {
+            for (const Type &i : intrin.arg_types) {
+                if (i.bits() == 0) {
                     break;
                 }
                 Type arg_type = i;
@@ -1805,7 +1805,7 @@ void CodeGen_ARM::visit(const Store *op) {
             if (is_float16_and_has_feature(elt)) {
                 Type u16_type = op->value.type().with_code(halide_type_uint);
                 Expr v = reinterpret(u16_type, op->value);
-                codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment));
+                codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment, op->is_streaming));
                 return;
             }
 
@@ -1958,7 +1958,7 @@ void CodeGen_ARM::visit(const Load *op) {
             // Rewrite float16 case into load in uint16 and reinterpret, as it is unsupported in LLVM
             if (is_float16_and_has_feature(op->type)) {
                 Type u16_type = op->type.with_code(halide_type_uint);
-                Expr equiv = Load::make(u16_type, op->name, op->index, op->image, op->param, op->predicate, op->alignment);
+                Expr equiv = Load::make(u16_type, op->name, op->index, op->image, op->param, op->predicate, op->alignment, op->is_streaming);
                 equiv = reinterpret(op->type, equiv);
                 equiv = common_subexpression_elimination(equiv);
                 value = codegen(equiv);

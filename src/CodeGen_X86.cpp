@@ -93,6 +93,7 @@ protected:
     using CodeGen_CPU::visit;
 
     void init_module() override;
+    void emit_streaming_store_fence() override;
 
     /** Nodes for which we want to emit specific sse/avx intrinsics */
     // @{
@@ -128,9 +129,9 @@ const int max_intrinsic_args = 6;
 
 struct x86Intrinsic {
     const char *intrin_name;
-    halide_type_t ret_type;
+    Type ret_type;
     const char *name;
-    halide_type_t arg_types[max_intrinsic_args];
+    Type arg_types[max_intrinsic_args];
     Target::Feature feature = Target::FeatureEnd;
     uint32_t flags = 0;
     enum Options {
@@ -321,8 +322,8 @@ void CodeGen_X86::init_module() {
         Type ret_type = i.ret_type;
         vector<Type> arg_types;
         arg_types.reserve(max_intrinsic_args);
-        for (halide_type_t j : i.arg_types) {
-            if (j.bits == 0) {
+        for (const Type &j : i.arg_types) {
+            if (j.bits() == 0) {
                 break;
             }
             arg_types.emplace_back(j);
@@ -334,6 +335,11 @@ void CodeGen_X86::init_module() {
         }
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
+}
+
+void CodeGen_X86::emit_streaming_store_fence() {
+    llvm::Function *sfence = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::x86_sse_sfence);
+    builder->CreateCall(sfence);
 }
 
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
@@ -825,6 +831,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         {VectorReduce::Add, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", Int(16)},
         {VectorReduce::SaturatingAdd, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "saturating_dot_product", {}, Pattern::CombineInit},
 
+        {VectorReduce::Add, 2, widening_mul(wild_bf16x_, wild_bf16x_), "dot_product", {}, Pattern::CombineInit},
         {VectorReduce::Add, 2, wild_f32x_ * wild_f32x_, "dot_product", BFloat(16), Pattern::CombineInit},
 
         // Horizontal widening addition using a dot_product against a vector of ones.

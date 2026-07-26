@@ -196,7 +196,7 @@ protected:
             args.emplace_back(val);
 
             if (runtime_run_takes_types) {
-                arg_types_or_sizes.emplace_back(((halide_type_t)i.type).as_u32());
+                arg_types_or_sizes.emplace_back(i.type.to_abi());
             } else {
                 arg_types_or_sizes.emplace_back(cast(target_size_t_type, i.is_buffer ? 8 : i.type.bytes()));
             }

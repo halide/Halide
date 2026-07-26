@@ -268,6 +268,32 @@ void test_mat_header() {
     }
 }
 
+// read_big_endian_row must honor a nonzero channel-dimension min. It used to
+// index channel (c + cmin), which writes past the channel bounds (and out of
+// the allocation) for any buffer whose channel min is nonzero.
+void test_read_big_endian_row_channel_offset() {
+    const int W = 4, H = 1, C = 3, CMIN = 2;
+    Halide::Runtime::Buffer<uint8_t> im(W, H, C);
+    im.translate(2, CMIN);  // channel dim: min = 2, max = 4
+    im.fill(0);
+    std::vector<uint8_t> src(W * C);
+    for (int i = 0; i < W * C; i++) {
+        src[i] = (uint8_t)(i + 1);
+    }
+    Tools::Internal::read_big_endian_row<uint8_t>(src.data(), im.dim(1).min(), &im);
+    int idx = 0;
+    for (int x = im.dim(0).min(); x <= im.dim(0).max(); x++) {
+        for (int c = im.dim(2).min(); c <= im.dim(2).max(); c++) {
+            if (im(x, im.dim(1).min(), c) != src[idx]) {
+                printf("read_big_endian_row wrote wrong value at (%d, %d): got %d expected %d\n",
+                       x, c, (int)im(x, im.dim(1).min(), c), (int)src[idx]);
+                exit(1);
+            }
+            idx++;
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     do_test<int8_t>();
     do_test<int16_t>();
@@ -283,6 +309,7 @@ int main(int argc, char **argv) {
 #endif
     do_test<double>();
     test_mat_header();
+    test_read_big_endian_row_channel_offset();
     printf("Success!\n");
     return 0;
 }

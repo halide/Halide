@@ -536,7 +536,7 @@ protected:
             Expr predicate = mutate(op->predicate);
             Expr index = mutate_index(alloc, op->index);
             return Load::make(op->type, alloc->name,
-                              index, op->image, op->param, predicate, op->alignment);
+                              index, op->image, op->param, predicate, op->alignment, op->is_streaming);
         } else {
             return IRMutator::visit(op);
         }
@@ -551,7 +551,7 @@ protected:
             Expr index = mutate_index(alloc, op->index);
             Expr value = mutate(op->value);
             return Store::make(alloc->name, value, index,
-                               op->param, predicate, op->alignment);
+                               op->param, predicate, op->alignment, op->is_streaming);
         } else {
             return IRMutator::visit(op);
         }
@@ -886,7 +886,7 @@ public:
                             if (op->name == alloc_name) {
                                 return Load::make(op->type, cluster_name, mutate(op->index) + offset,
                                                   op->image, op->param, mutate(op->predicate),
-                                                  op->alignment);
+                                                  op->alignment, op->is_streaming);
                             } else {
                                 return IRMutator::visit(op);
                             }
@@ -895,7 +895,7 @@ public:
                         Stmt visit(const Store *op) override {
                             if (op->name == alloc_name) {
                                 return Store::make(cluster_name, mutate(op->value), mutate(op->index) + offset,
-                                                   op->param, mutate(op->predicate), op->alignment);
+                                                   op->param, mutate(op->predicate), op->alignment, op->is_streaming);
                             } else {
                                 return IRMutator::visit(op);
                             }
@@ -1150,7 +1150,7 @@ protected:
         }
         return Load::make(op->type, *new_name, mutate(op->index),
                           op->image, op->param, mutate(op->predicate),
-                          op->alignment);
+                          op->alignment, op->is_streaming);
     }
 
     Stmt visit(const Store *op) override {
@@ -1159,7 +1159,7 @@ protected:
             new_name = &(op->name);
         }
         return Store::make(*new_name, mutate(op->value), mutate(op->index),
-                           op->param, mutate(op->predicate), op->alignment);
+                           op->param, mutate(op->predicate), op->alignment, op->is_streaming);
     }
 
     template<typename LetOrLetStmt>

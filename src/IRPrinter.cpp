@@ -339,6 +339,8 @@ std::ostream &operator<<(std::ostream &stream, IRNodeType type) {
         CASE(Evaluate)
         CASE(Prefetch)
         CASE(Atomic)
+        CASE(StreamingStore)
+        CASE(StreamingLoads)
         CASE(HoistedStorage)
     }
 #undef CASE
@@ -996,6 +998,9 @@ void IRPrinter::visit(const Load *op) {
     if (has_pred) {
         open();
     }
+    if (op->is_streaming) {
+        stream << kw("streaming ");
+    }
     if (!known_type.contains(op->name)) {
         stream << typep(op->type);
     }
@@ -1205,6 +1210,9 @@ void IRPrinter::visit(const Store *op) {
         stream << kw(")\n");
         indent++;
         stream << get_indent();
+    }
+    if (op->is_streaming) {
+        stream << kw("streaming ");
     }
     stream << buf(op->name) << paren("[");
     print_no_parens(op->index);
@@ -1502,6 +1510,29 @@ void IRPrinter::visit(const Atomic *op) {
         stream << kw("atomic (") << op->producer_name << kw(", ") << op->mutex_name << kw(") ");
     }
 
+    print_braced_stmt(op->body);
+}
+
+void IRPrinter::visit(const StreamingStore *op) {
+    stream << get_indent();
+    stream << kw("streaming_store (") << op->producer_name << kw(") ");
+    print_braced_stmt(op->body);
+}
+
+void IRPrinter::visit(const StreamingLoads *op) {
+    stream << get_indent();
+    if (!op->names) {
+        stream << kw("streaming_loads (") << kw("all") << kw(") ");
+    } else {
+        stream << kw("streaming_loads (");
+        for (size_t i = 0; i < op->names->size(); i++) {
+            if (i > 0) {
+                stream << kw(", ");
+            }
+            stream << (*op->names)[i];
+        }
+        stream << kw(") ");
+    }
     print_braced_stmt(op->body);
 }
 

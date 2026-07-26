@@ -225,12 +225,12 @@ protected:
 
     Expr visit(const Load *op) override {
         return Load::make(op->type, op->name, mutate_index(op->name, op->index),
-                          op->image, op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
+                          op->image, op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment), op->is_streaming);
     }
 
     Stmt visit(const Store *op) override {
         return Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
-                           op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
+                           op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment), op->is_streaming);
     }
 
 public:
@@ -304,7 +304,7 @@ protected:
             return op;
         }
         vectorized = true;
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment);
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment, op->is_streaming);
     }
 
     Stmt visit(const Store *op) override {
@@ -335,7 +335,7 @@ protected:
             return op;
         }
         vectorized = true;
-        return Store::make(op->name, value, index, op->param, predicate, op->alignment);
+        return Store::make(op->name, value, index, op->param, predicate, op->alignment, op->is_streaming);
     }
 
     Expr visit(const Call *op) override {
@@ -530,7 +530,7 @@ protected:
             int w = index.type().lanes();
             predicate = widen(predicate, w);
             return Load::make(op->type.with_lanes(w), op->name, index, op->image,
-                              op->param, predicate, op->alignment);
+                              op->param, predicate, op->alignment, op->is_streaming);
         }
     }
 
@@ -616,7 +616,7 @@ protected:
 
             const Load *load = true_value.as<Load>();
             if (load) {
-                return Load::make(op->type.with_lanes(max_lanes), load->name, load->index, load->image, load->param, cond, load->alignment);
+                return Load::make(op->type.with_lanes(max_lanes), load->name, load->index, load->image, load->param, cond, load->alignment, load->is_streaming);
             }
         }
 
@@ -705,7 +705,7 @@ protected:
                                   value.type().lanes(),
                                   index.type().lanes()});
             return Store::make(op->name, widen(value, lanes), widen(index, lanes),
-                               op->param, widen(predicate, lanes), op->alignment);
+                               op->param, widen(predicate, lanes), op->alignment, op->is_streaming);
         }
     }
 
@@ -1283,7 +1283,7 @@ protected:
             Expr new_load = Load::make(load_a->type.with_lanes(output_lanes),
                                        load_a->name, store_index, load_a->image,
                                        load_a->param, const_true(output_lanes),
-                                       ModulusRemainder{});
+                                       ModulusRemainder{}, load_a->is_streaming);
 
             Expr lhs = cast(b.type().with_lanes(output_lanes), new_load);
 
@@ -1292,7 +1292,7 @@ protected:
                 b = binop(lhs, b);
                 b = cast(new_load.type(), b);
                 s = Store::make(store->name, b, store_index, store->param,
-                                const_true(b.type().lanes()), store->alignment);
+                                const_true(b.type().lanes()), store->alignment, store->is_streaming);
             } else {
                 // Wrap any containing loops we still need (unrolled). We
                 // enumerate the cartesian product of loop iteration values
@@ -1303,7 +1303,7 @@ protected:
                 Stmt store_template =
                     Store::make(store->name, cast(new_load.type(), binop(lhs, b_var)),
                                 store_index, store->param,
-                                const_true(output_lanes), ModulusRemainder{});
+                                const_true(output_lanes), ModulusRemainder{}, store->is_streaming);
                 std::string full_b_var_name = unique_name('b');
                 Expr full_b_var = Variable::make(b.type(), full_b_var_name);
 

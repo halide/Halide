@@ -19,7 +19,11 @@ add_halide_generator(
 )
 
 # Filters
-add_halide_library(local_laplacian FROM local_laplacian.generator)
+add_halide_library(
+    local_laplacian
+    FROM local_laplacian.generator
+    REGISTRATION local_laplacian_registration
+)
 add_halide_library(
     local_laplacian_auto_schedule
     FROM local_laplacian.generator
@@ -55,3 +59,13 @@ if (EXISTS ${IMAGE})
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
     )
 endif ()
+
+# RunGen-based benchmark. Run every app benchmark at once with
+# `ctest -L benchmark_apps`.
+add_executable(local_laplacian_rungen ${local_laplacian_registration})
+target_link_libraries(local_laplacian_rungen PRIVATE Halide::RunGenMain local_laplacian)
+add_test(
+    NAME local_laplacian_benchmark
+    COMMAND local_laplacian_rungen --benchmarks=all --estimate_all --parsable_output
+)
+set_tests_properties(local_laplacian_benchmark PROPERTIES LABELS "local_laplacian;benchmark_apps")

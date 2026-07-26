@@ -1,6 +1,7 @@
 #include "ConstantBounds.h"
 #include "IR.h"
 #include <cfloat>
+#include <mutex>
 #include <sstream>
 
 namespace Halide {
@@ -222,9 +223,54 @@ bool Type::can_represent(double x) const {
     }
 }
 
+namespace Internal {
+namespace {
+std::mutex &handle_type_intern_mutex() {
+    static std::mutex m;
+    return m;
+}
+std::vector<const halide_handle_cplusplus_type *> &handle_type_intern_table() {
+    static std::vector<const halide_handle_cplusplus_type *> t;
+    return t;
+}
+}  // namespace
+
+uint32_t intern_handle_type(const halide_handle_cplusplus_type *handle_type) {
+    // The overwhelmingly common case: a non-handle type. Costs a null check,
+    // no lock.
+    if (handle_type == nullptr) {
+        return 0;
+    }
+    std::scoped_lock lock(handle_type_intern_mutex());
+    auto &table = handle_type_intern_table();
+    // Dedup by pointer identity. Handle types are rare and few, so a linear
+    // scan is cheap; the pointees are externally owned and stable, so pointer
+    // identity is a safe key. (Distinct pointers with equal content still
+    // compare equal via Type::same_handle_type's deep comparison.)
+    for (size_t i = 0; i < table.size(); i++) {
+        if (table[i] == handle_type) {
+            return (uint32_t)(i + 1);  // +1: index 0 is reserved for null
+        }
+    }
+    table.push_back(handle_type);
+    internal_assert(table.size() < (size_t)0xffffffffu) << "handle-type intern table overflow";
+    return (uint32_t)table.size();
+}
+
+const halide_handle_cplusplus_type *get_interned_handle_type(uint32_t index) {
+    if (index == 0) {
+        return nullptr;
+    }
+    std::scoped_lock lock(handle_type_intern_mutex());
+    auto &table = handle_type_intern_table();
+    internal_assert(index <= table.size()) << "invalid handle-type intern index";
+    return table[index - 1];
+}
+}  // namespace Internal
+
 bool Type::same_handle_type(const Type &other) const {
-    const halide_handle_cplusplus_type *first = handle_type;
-    const halide_handle_cplusplus_type *second = other.handle_type;
+    const halide_handle_cplusplus_type *first = handle_type();
+    const halide_handle_cplusplus_type *second = other.handle_type();
 
     if (first == second) {
         return true;
@@ -264,37 +310,40 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
     } else if (type.is_handle()) {
         needs_space = false;
 
+        // Resolve the interned handle metadata once rather than re-lookup per use.
+        const halide_handle_cplusplus_type *ht = type.handle_type();
+
         // If there is no type info or is generating C (not C++) and
         // the type is a class or in an inner scope, just use void *.
-        if (type.handle_type == nullptr ||
+        if (ht == nullptr ||
             (!c_plus_plus &&
-             (!type.handle_type->namespaces.empty() ||
-              !type.handle_type->enclosing_types.empty() ||
-              type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Class))) {
+             (!ht->namespaces.empty() ||
+              !ht->enclosing_types.empty() ||
+              ht->inner_name.cpp_type_type == halide_cplusplus_type_name::Class))) {
             oss << "void *";
         } else {
-            if (type.handle_type->inner_name.cpp_type_type ==
+            if (ht->inner_name.cpp_type_type ==
                 halide_cplusplus_type_name::Struct) {
                 oss << "struct ";
             }
 
-            if (!type.handle_type->namespaces.empty() ||
-                !type.handle_type->enclosing_types.empty()) {
+            if (!ht->namespaces.empty() ||
+                !ht->enclosing_types.empty()) {
                 oss << "::";
-                for (const auto &ns : type.handle_type->namespaces) {
+                for (const auto &ns : ht->namespaces) {
                     oss << ns << "::";
                 }
-                for (const auto &enclosing_type : type.handle_type->enclosing_types) {
+                for (const auto &enclosing_type : ht->enclosing_types) {
                     oss << enclosing_type.name << "::";
                 }
             }
-            oss << type.handle_type->inner_name.name;
-            if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
+            oss << ht->inner_name.name;
+            if (ht->reference_type == halide_handle_cplusplus_type::LValueReference) {
                 oss << " &";
-            } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::RValueReference) {
+            } else if (ht->reference_type == halide_handle_cplusplus_type::RValueReference) {
                 oss << " &&";
             }
-            for (auto modifier : type.handle_type->cpp_type_modifiers) {
+            for (auto modifier : ht->cpp_type_modifiers) {
                 if (modifier & halide_handle_cplusplus_type::Const) {
                     oss << " const";
                 }

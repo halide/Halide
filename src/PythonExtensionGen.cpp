@@ -239,7 +239,6 @@ bool unpack_buffer(PyObject *py_obj,
             return false;
         }
     }
-    halide_buf.type.lanes = 1;
     halide_buf.dimensions = py_buf.ndim;
     halide_buf.dim = halide_dim;
     halide_buf.host = (uint8_t *)py_buf.buf;

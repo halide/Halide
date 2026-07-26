@@ -179,6 +179,9 @@ protected:
     bool in_strict_float = false;
     bool any_strict_float = false;
 
+    /** Emit any target-specific fence required after non-temporal stores. */
+    virtual void emit_streaming_store_fence();
+
     /** Change floating-point math op emission to use fast flags. */
     void set_fast_fp_math();
 
@@ -252,7 +255,7 @@ protected:
     // @{
     Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
     Expr wild_i32x_, wild_u32x_, wild_i64x_, wild_u64x_;
-    Expr wild_f32x_, wild_f64x_;
+    Expr wild_f32x_, wild_f64x_, wild_bf16x_;
 
     // Wildcards for scalars.
     Expr wild_u1_, wild_i8_, wild_u8_, wild_i16_, wild_u16_;
@@ -708,6 +711,9 @@ protected:
      * vectors. Used by CodeGen_ARM to help with vld2/3/4 emission. */
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
 
+    /** Attach LLVM's non-temporal metadata to a memory instruction. */
+    void add_streaming_metadata(llvm::Instruction *inst);
+
     /** Warning messages which we want to avoid displaying number of times */
     enum class WarningKind {
         EmulatedFloat16,
@@ -764,7 +770,8 @@ private:
 
     llvm::Value *codegen_vector_load(const Type &type, const std::string &name, const Expr &base,
                                      const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
-                                     llvm::Value *vpred = nullptr, bool slice_to_native = true, llvm::Value *stride = nullptr);
+                                     bool is_streaming, llvm::Value *vpred = nullptr,
+                                     bool slice_to_native = true, llvm::Value *stride = nullptr);
 
     virtual void codegen_predicated_load(const Load *op);
     virtual void codegen_predicated_store(const Store *op);

@@ -15,7 +15,7 @@ find_package(Halide REQUIRED)
 add_halide_generator(lens_blur.generator SOURCES lens_blur_generator.cpp)
 
 # Filters
-add_halide_library(lens_blur FROM lens_blur.generator)
+add_halide_library(lens_blur FROM lens_blur.generator REGISTRATION lens_blur_registration)
 add_halide_library(
     lens_blur_auto_schedule
     FROM lens_blur.generator
@@ -59,3 +59,13 @@ if (EXISTS ${IMAGE})
         )
     endif ()
 endif ()
+
+# RunGen-based benchmark. Run every app benchmark at once with
+# `ctest -L benchmark_apps`.
+add_executable(lens_blur_rungen ${lens_blur_registration})
+target_link_libraries(lens_blur_rungen PRIVATE Halide::RunGenMain lens_blur)
+add_test(
+    NAME lens_blur_benchmark
+    COMMAND lens_blur_rungen --benchmarks=all --estimate_all --parsable_output
+)
+set_tests_properties(lens_blur_benchmark PROPERTIES LABELS "lens_blur;benchmark_apps")

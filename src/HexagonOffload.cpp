@@ -670,7 +670,7 @@ class ReplaceParams : public IRMutator {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
             return Load::make(op->type, op->name, mutate(op->index), op->image,
-                              i->second, mutate(op->predicate), op->alignment);
+                              i->second, mutate(op->predicate), op->alignment, op->is_streaming);
         } else {
             return IRMutator::visit(op);
         }
@@ -680,7 +680,7 @@ class ReplaceParams : public IRMutator {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
             return Store::make(op->name, mutate(op->value), mutate(op->index),
-                               i->second, mutate(op->predicate), op->alignment);
+                               i->second, mutate(op->predicate), op->alignment, op->is_streaming);
         } else {
             return IRMutator::visit(op);
         }
