@@ -151,6 +151,13 @@ bool one_store_per_iteration(const Stmt &body, const string &func) {
     Expr distinct = const_false();
     vector<Expr> other = s.args;
     for (const auto &lp : s.loops) {
+        // 1-iteration loops do not have to go in the hazard expression
+        Expr extent = simplify(lp.second.max - lp.second.min + 1, bounds);
+        if (can_prove(extent <= 1, bounds)) {
+            bounds.push(lp.first, lp.second);
+            continue;
+        }
+
         string other_name = lp.first + "$_";
         Expr v = Variable::make(Int(32), lp.first);
         Expr ov = Variable::make(Int(32), other_name);
