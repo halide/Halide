@@ -9,7 +9,7 @@ function Tracer() {
   const { funcs, dagEdges, packetCount } = useTraceContext();
 
   return (
-    <div className="bg-ps-secondary flex h-full w-full flex-col text-white">
+    <div className="bg-ps-secondary flex h-full flex-col text-white">
       <div className="relative flex flex-1 overflow-hidden">
         {Object.keys(funcs).length > 0 ? (
           <>
