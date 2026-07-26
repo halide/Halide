@@ -1,6 +1,5 @@
 #include "HalidePlugin.h"
 
-#include "Errors.h"
 #include "ParamParser.h"
 
 #include <algorithm>
@@ -1342,7 +1341,7 @@ struct Partitioner {
 
     // Estimate the benefit (arithmetic and memory) of 'new_grouping' over
     // 'old_grouping'. Positive values indicate that 'new_grouping' may be
-    // preferrable over 'old_grouping'. When 'ensure_parallelism' is set to
+    // preferable over 'old_grouping'. When 'ensure_parallelism' is set to
     // true, this will return an undefined cost if the estimated parallelism is
     // smaller than the machine parameters. If 'no_redundant_work' is set, we
     // only consider the arithmetic cost, i.e. if the arithmetic benefit is
@@ -2061,7 +2060,7 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
         }
 
         bool no_redundant_work = false;
-        // tood here Levell::INLINE K LEVEL::FASTMEM
+        // todo here Levell::INLINE K LEVEL::FASTMEM
         Expr overall_benefit = Expr();
 
         if (!illegal_config) {
@@ -3290,7 +3289,7 @@ Partitioner::analyze_group(const Group &g, bool show_analysis, bool to_inline) {
         Expr max_tile = 64 / bytes_per_ele;
 
         internal_assert(g.inlined.find(f_load.first) == g.inlined.end())
-            << "Intermediates of inlined pure fuction \"" << f_load.first
+            << "Intermediates of inlined pure function \"" << f_load.first
             << "\" should not have been in the group_load_costs\n";
 
         Expr footprint;
@@ -4751,9 +4750,9 @@ void Partitioner::generate_group_cpu_schedule(
      map<string,Expr> root_tile_sizes;
      const Expr &tile_size8 =make_const(Int(32),8);
      const Expr &tile_size32 =make_const(Int(32),32);
-     for(const auto &ptd:pure_tile_dims){
-      if(pure_tile_dims.size()<=2) root_tile_sizes.emplace(ptd,tile_size32);
-      else root_tile_sizes.emplace(ptd,tile_size8);
+     for(const auto &tile_dim:pure_tile_dims){
+      if(pure_tile_dims.size()<=2) root_tile_sizes.emplace(tile_dim,tile_size32);
+      else root_tile_sizes.emplace(tile_dim,tile_size8);
 
     }
     for (const auto &var : dim_vars) {
