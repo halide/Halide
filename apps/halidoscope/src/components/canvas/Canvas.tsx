@@ -80,22 +80,22 @@ function Canvas({ funcs, dagEdges }: CanvasProps) {
         <Overlay className="bottom-2 left-2">
           {liveness.mode === "realizations" ? (
             <div className="flex items-center gap-2">
-              <div className="ring-realization/30 h-3 w-3 ring-2">
-                <div className="ring-realization h-full w-full ring-1" />
+              <div className="ring-oxide-yellow/30 h-3 w-3 ring-2">
+                <div className="ring-oxide-yellow h-full w-full ring-1" />
               </div>
               <span>Buffer Live in Memory</span>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
-                <div className="ring-produce/30 h-3 w-3 ring-2">
-                  <div className="ring-produce h-3 w-3 ring-1" />
+                <div className="ring-oxide-green/30 h-3 w-3 ring-2">
+                  <div className="ring-oxide-green h-3 w-3 ring-1" />
                 </div>
                 <span>Producer</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="ring-consume/30 h-3 w-3 ring-2">
-                  <div className="ring-consume h-3 w-3 ring-1" />
+                <div className="ring-oxide-purple/30 h-3 w-3 ring-2">
+                  <div className="ring-oxide-purple h-3 w-3 ring-1" />
                 </div>
                 <span>Consumer</span>
               </div>

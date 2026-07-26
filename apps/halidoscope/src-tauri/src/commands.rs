@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Mutex;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::ipc::Response;
 use tauri::State;
 
@@ -568,4 +568,57 @@ pub fn render_thread(
         store_counts,
         load_counts,
     )))
+}
+
+// ── Profiler ─────────────────────────────────────────────────────────────────────────────────────
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ProfileFunc {
+    name: String,
+    parent: i32,
+    canonical_id: u32,
+    kind: u32,
+    buffer_func_id: i32,
+    time_ns: u64,
+    memory_current: u64,
+    memory_peak: u64,
+    memory_total: u64,
+    stack_peak: u64,
+    active_threads_numerator: u32,
+    active_threads_denominator: u32,
+    num_allocs: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ProfilePipeline {
+    name: String,
+    runs: u32,
+    billed_runs: u32,
+    samples: u32,
+    num_allocs: u32,
+    time_ns: u64,
+    memory_current: u64,
+    memory_peak: u64,
+    memory_total: u64,
+    active_threads_numerator: u32,
+    active_threads_denominator: u32,
+    funcs: Vec<ProfileFunc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Profile {
+    pipelines: Vec<ProfilePipeline>,
+}
+
+impl Profile {
+    fn from_profile(path: &str) -> Result<Profile, String> {
+        let data = std::fs::read(path).map_err(|e| e.to_string())?;
+        serde_json::from_slice(&data).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+pub fn open_profile(path: &str) -> Result<Profile, String> {
+    let profile = Profile::from_profile(path)?;
+
+    Ok(profile)
 }

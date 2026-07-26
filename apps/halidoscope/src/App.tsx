@@ -1,15 +1,24 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getMatches } from "@tauri-apps/plugin-cli";
 import { useSetAtom } from "jotai";
+import { Tabs } from "radix-ui";
 import * as React from "react";
 
+import Profiler from "@/components/views/profiler/Profiler";
 import Tracer from "@/components/views/tracer/Tracer";
+import { ProfileContextProvider } from "@/hooks/profile";
 import { TraceContextProvider } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
-import type { FuncMeta, StatsMeta } from "@/types";
-import { openTrace } from "@/utils/api";
+import { Profile, type FuncMeta, type StatsMeta } from "@/types";
+import { openProfile, openTrace } from "@/utils/api";
 
 import "./App.css";
+
+async function resolvePath(path: string) {
+  return path.startsWith("/")
+    ? path
+    : `${await invoke<string>("get_cwd")}/${path}`;
+}
 
 function App() {
   const [funcs, setFuncs] = React.useState<Record<string, FuncMeta>>({});
@@ -22,6 +31,7 @@ function App() {
     global_max_reuse_distance: 0,
     global_thread_ids: [],
   });
+  const [profile, setProfile] = React.useState<Profile | null>(null);
 
   const setActiveFunc = useSetAtom(funcAtom);
 
@@ -33,14 +43,11 @@ function App() {
       if (typeof tracePath !== "string") {
         return;
       }
-
-      const resolved = tracePath.startsWith("/")
-        ? tracePath
-        : `${await invoke<string>("get_cwd")}/${tracePath}`;
+      const resolvedTracePath = await resolvePath(tracePath);
 
       try {
         const { funcs, total_packets, dag_edges, stats } =
-          await openTrace(resolved);
+          await openTrace(resolvedTracePath);
 
         const byName: Record<string, FuncMeta> = {};
         for (const func of funcs) {
@@ -60,19 +67,69 @@ function App() {
     loadTraceFromCLI();
   }, [setActiveFunc]);
 
+  React.useEffect(() => {
+    async function loadProfileFromCLI() {
+      const matches = await getMatches();
+      const profilePath = matches.args.profile?.value;
+
+      if (typeof profilePath !== "string" || !profilePath) {
+        return;
+      }
+      const resolvedProfilePath = await resolvePath(profilePath);
+
+      try {
+        const { pipelines } = await openProfile(resolvedProfilePath);
+        setProfile({ pipelines });
+      } catch (err) {
+        console.error("Error loading profile from CLI: ", err);
+      }
+    }
+
+    loadProfileFromCLI();
+  }, []);
+
   return (
-    <TraceContextProvider
-      value={{
-        funcs,
-        dagEdges,
-        packetCount,
-        stats,
-      }}
-    >
-      <main className="h-screen w-screen">
-        <Tracer />
-      </main>
-    </TraceContextProvider>
+    <Tabs.Root className="flex h-screen w-screen flex-col" defaultValue="trace">
+      <Tabs.List className="bg-ps-titlebar border-ps-border-primary flex border-y">
+        <Tabs.Trigger
+          value="trace"
+          className="data-[state=active]:bg-ps-primary data-[state=inactive]:bg-ps-titlebar data-[state=active]:text-ps-text-primary data-[state=inactive]:text-ps-text-secondary border-ps-border-primary border-r px-3 py-1 text-base font-semibold"
+        >
+          Trace
+        </Tabs.Trigger>
+        {profile !== null ? (
+          <Tabs.Trigger
+            value="profile"
+            className="data-[state=active]:bg-ps-primary data-[state=inactive]:bg-ps-titlebar data-[state=active]:text-ps-text-primary data-[state=inactive]:text-ps-text-secondary border-ps-border-primary border-r px-3 py-1 text-base font-semibold"
+          >
+            Profile
+          </Tabs.Trigger>
+        ) : null}
+      </Tabs.List>
+      <Tabs.Content value="trace" className="flex-1 overflow-hidden">
+        <TraceContextProvider
+          value={{
+            funcs,
+            dagEdges,
+            packetCount,
+            stats,
+          }}
+        >
+          <main className="h-full w-full">
+            <Tracer />
+          </main>
+        </TraceContextProvider>
+      </Tabs.Content>
+      {profile !== null ? (
+        <Tabs.Content value="profile" className="flex-1 overflow-hidden">
+          <ProfileContextProvider value={profile}>
+            <main className="h-full w-full">
+              <Profiler />
+            </main>
+          </ProfileContextProvider>
+        </Tabs.Content>
+      ) : null}
+    </Tabs.Root>
   );
 }
 
