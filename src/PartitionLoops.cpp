@@ -931,12 +931,15 @@ class RenormalizeGPULoops : public IRMutator {
             return mutate(inner);
         } else if (a && in_gpu_loop && !in_thread_loop) {
             internal_assert(a->extents.size() == 1);
-            if (expr_uses_var(a->extents[0], op->name)) {
-                // This var depends on the block index, and is used to
-                // define the size of shared memory. Can't move it
-                // inwards or outwards. Codegen will have to deal with
-                // it when it deduces how much shared or warp-level
-                // memory to allocate.
+            if (expr_uses_var(a->extents[0], op->name) ||
+                expr_uses_var(a->condition, op->name) ||
+                (a->new_expr.defined() && expr_uses_var(a->new_expr, op->name))) {
+                // This var is used in the allocation's extent, condition, or
+                // new_expr, all of which are evaluated in the allocation's
+                // outer scope, so the let can't be moved inside its body. (The
+                // extent case also can't move outwards: it depends on the block
+                // index and codegen deals with it when deducing shared memory
+                // size.)
                 return IRMutator::visit(op);
             } else {
                 Stmt inner = LetStmt::make(op->name, op->value, a->body);
