@@ -38,6 +38,7 @@ enum class OutputFileType {
     function_info_header,
     hlpipe,
     llvm_assembly,
+    mlir,
     object,
     python_extension,
     pytorch_wrapper,
