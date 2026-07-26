@@ -77,10 +77,7 @@ int box_filter_chained_inductive_fold() {
                                sat(clamp(x, 0, W - 1), clamp(y, 0, H - 1)));
 
     Func box("box");
-    box(x, y) = sat_clamped(x + R, y + R)
-        - sat_clamped(x - R - 1, y + R)
-        - sat_clamped(x + R, y - R - 1)
-        + sat_clamped(x - R - 1, y - R - 1);
+    box(x, y) = sat_clamped(x + R, y + R) - sat_clamped(x - R - 1, y + R) - sat_clamped(x + R, y - R - 1) + sat_clamped(x - R - 1, y - R - 1);
 
     box.bound(x, 0, W).bound(y, 0, H);
 
