@@ -1868,31 +1868,33 @@ $(FILTERS_DIR)/rniso_rt_b.a: $(BIN_DIR)/runtime.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -r rniso_rt_b -e static_library -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET) runtime_namespace.export=runtime_b_ runtime_namespace.internal=runtime_bi_
 
-# LLVM-backend kernels (static_library + header).
+# LLVM-backend kernels (static_library + header). -n sets the output file base
+# name (which otherwise defaults to the -f function name) so the emitted files
+# match these targets.
 $(FILTERS_DIR)/rniso_none.a: $(BIN_DIR)/runtime_namespace_iso.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g runtime_namespace_iso -f pipe_none -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
+	$(CURDIR)/$< -g runtime_namespace_iso -f pipe_none -n rniso_none -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
 
 $(FILTERS_DIR)/rniso_a.a: $(BIN_DIR)/runtime_namespace_iso.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g runtime_namespace_iso -f pipe_a -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_namespace.import=runtime_a_ runtime_namespace.internal=runtime_ai_
+	$(CURDIR)/$< -g runtime_namespace_iso -f pipe_a -n rniso_a -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_namespace.import=runtime_a_ runtime_namespace.internal=runtime_ai_
 
 $(FILTERS_DIR)/rniso_b.a: $(BIN_DIR)/runtime_namespace_iso.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g runtime_namespace_iso -f pipe_b -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_namespace.import=runtime_b_ runtime_namespace.internal=runtime_bi_
+	$(CURDIR)/$< -g runtime_namespace_iso -f pipe_b -n rniso_b -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_namespace.import=runtime_b_ runtime_namespace.internal=runtime_bi_
 
 # C-backend kernels (c_source + header). The .h is produced by the same command.
 $(FILTERS_DIR)/rniso_none_c.halide_generated.cpp: $(BIN_DIR)/runtime_namespace_iso.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g runtime_namespace_iso -f pipe_none_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
+	$(CURDIR)/$< -g runtime_namespace_iso -f pipe_none_c -n rniso_none_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
 
 $(FILTERS_DIR)/rniso_a_c.halide_generated.cpp: $(BIN_DIR)/runtime_namespace_iso.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g runtime_namespace_iso -f pipe_a_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_namespace.import=runtime_a_ runtime_namespace.internal=runtime_ai_
+	$(CURDIR)/$< -g runtime_namespace_iso -f pipe_a_c -n rniso_a_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_namespace.import=runtime_a_ runtime_namespace.internal=runtime_ai_
 
 $(FILTERS_DIR)/rniso_b_c.halide_generated.cpp: $(BIN_DIR)/runtime_namespace_iso.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g runtime_namespace_iso -f pipe_b_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_namespace.import=runtime_b_ runtime_namespace.internal=runtime_bi_
+	$(CURDIR)/$< -g runtime_namespace_iso -f pipe_b_c -n rniso_b_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_namespace.import=runtime_b_ runtime_namespace.internal=runtime_bi_
 
 # The C-backend headers are emitted alongside the .cpp above (not from a .a).
 $(FILTERS_DIR)/rniso_none_c.h: $(FILTERS_DIR)/rniso_none_c.halide_generated.cpp
