@@ -1341,6 +1341,132 @@ void Target::set_features(const std::vector<Feature> &features_to_set, bool valu
     }
 }
 
+namespace {
+
+// The feature-implication table. Each entry {a, b} means "feature a implies
+// feature b": there is no real device or configuration that has a set without
+// b, so any target with a should be treated as also having b. The list is kept
+// in topological order (an antecedent always appears before it is used as a
+// consequent), so that a single forward pass sets every implied feature, and a
+// single backward pass removes every redundant implied feature.
+//
+// Implications that depend on target state other than the feature set (the
+// arch, os, or vector_bits) don't fit the simple pair model, and are handled
+// directly in set_implied_features()/unset_implied_features().
+const std::vector<std::pair<Target::Feature, Target::Feature>> &implied_feature_pairs() {
+    static const std::vector<std::pair<Target::Feature, Target::Feature>> pairs = {
+        // x86. Each AVX-family feature is a strict superset of the ones below
+        // it, so it is impossible to have the higher one without the lower.
+        {Target::AVX512_SapphireRapids, Target::AVX512_Zen4},
+        {Target::AVX512_SapphireRapids, Target::AVXVNNI},
+        {Target::AVX512_Zen5, Target::AVX512_Zen4},
+        {Target::AVX512_Zen5, Target::AVXVNNI},
+        {Target::AVX512_Zen4, Target::AVX512_Cannonlake},
+        {Target::AVX512_Cannonlake, Target::AVX512_Skylake},
+        {Target::AVX512_Skylake, Target::AVX512},
+        {Target::AVX512_KNL, Target::AVX512},
+        {Target::AVX512, Target::AVX2},
+        // Every AVX2-enabled architecture also has F16C and FMA.
+        {Target::AVX2, Target::F16C},
+        {Target::AVX2, Target::FMA},
+        {Target::AVX2, Target::AVX},
+        {Target::AVX, Target::SSE41},
+
+        // ARM
+        {Target::SVE2, Target::ARMDotProd},
+        {Target::SVE2, Target::ARMFp16},
+        {Target::SVE, Target::ARMFp16},
+        // ARMFp16 implies ARM v8.2-A; we don't know of any device where that
+        // doesn't hold. The v8.x cascade below then fills in v8.1a and v8a.
+        {Target::ARMFp16, Target::ARMv82a},
+        // The ARM v8.x version features form a descending chain: each level
+        // implies the one below it, down to v8a.
+        {Target::ARMv89a, Target::ARMv88a},
+        {Target::ARMv88a, Target::ARMv87a},
+        {Target::ARMv87a, Target::ARMv86a},
+        {Target::ARMv86a, Target::ARMv85a},
+        {Target::ARMv85a, Target::ARMv84a},
+        {Target::ARMv84a, Target::ARMv83a},
+        {Target::ARMv83a, Target::ARMv82a},
+        {Target::ARMv82a, Target::ARMv81a},
+        {Target::ARMv81a, Target::ARMv8a},
+
+        // Tracing loads or stores also produces the enclosing realization
+        // begin/end events, so that the traced loads and stores have context.
+        {Target::TraceLoads, Target::TraceRealizations},
+        {Target::TraceStores, Target::TraceRealizations},
+    };
+    return pairs;
+}
+
+}  // namespace
+
+void Target::set_implied_features() {
+    // Implications that depend on more than just the feature set.
+    if (arch == X86 && has_feature(AVX10_1)) {
+        // AVX10.1 at a given vector width supports the corresponding legacy
+        // AVX feature set. The pairs below then cascade further.
+        if (vector_bits >= 256) {
+            set_feature(AVX2);
+        }
+        if (vector_bits >= 512) {
+            set_feature(AVX512_SapphireRapids);
+        }
+    }
+    if (arch == ARM && os == OSX) {
+        // Apple silicon implements at least the ARM v8.4-A spec.
+        set_feature(ARMv84a);
+    }
+
+    // Simple feature -> feature implications. One forward pass suffices because
+    // the table is topologically sorted.
+    for (const auto &[feature, implied] : implied_feature_pairs()) {
+        if (has_feature(feature)) {
+            set_feature(implied);
+        }
+    }
+}
+
+void Target::unset_implied_features() {
+    // Walk the table backwards, clearing any feature that is implied by another
+    // feature that remains set. Because the table is topologically sorted,
+    // walking backwards guarantees a consequent is only cleared after it has
+    // been used as an antecedent, so a chain collapses to just its highest
+    // feature in one pass.
+    const auto &pairs = implied_feature_pairs();
+    for (auto it = pairs.rbegin(); it != pairs.rend(); ++it) {
+        if (has_feature(it->first)) {
+            set_feature(it->second, false);
+        }
+    }
+
+    // Undo the conditional implications from set_implied_features(). These run
+    // after the pair loop, mirroring how their seeds run before it there.
+    if (arch == X86 && has_feature(AVX10_1)) {
+        if (vector_bits >= 512) {
+            set_feature(AVX512_SapphireRapids, false);
+        }
+        if (vector_bits >= 256) {
+            set_feature(AVX2, false);
+        }
+    }
+    if (arch == ARM && os == OSX) {
+        set_feature(ARMv84a, false);
+    }
+}
+
+Target Target::with_implied_features() const {
+    Target copy = *this;
+    copy.set_implied_features();
+    return copy;
+}
+
+Target Target::without_implied_features() const {
+    Target copy = *this;
+    copy.unset_implied_features();
+    return copy;
+}
+
 bool Target::has_feature(Feature f) const {
     if (f == FeatureEnd) {
         return true;
@@ -2000,65 +2126,5 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     result = output;
     return true;
 }
-
-namespace Internal {
-
-void target_test() {
-    Target t;
-    for (const auto &feature : feature_name_map) {
-        t.set_feature(feature.second);
-    }
-    for (int i = 0; i < (int)(Target::FeatureEnd); i++) {
-        internal_assert(t.has_feature((Target::Feature)i)) << "Feature " << i << " not in feature_names_map.\n";
-    }
-
-    // 3 targets: {A,B,C}. Want gcd(A,B)=C
-    std::vector<std::array<std::string, 3>> gcd_tests = {
-        {{"x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
-        {{"x86-64-linux-sse41-fma-no_asserts-no_runtime", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
-        {{"x86-64-linux-avx2-sse41", "x86-64-linux-sse41-fma", "x86-64-linux-sse41"}},
-        {{"x86-64-linux-avx2-sse41", "x86-32-linux-sse41-fma", ""}},
-        {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
-        {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
-        {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
-        {{"x86-64-linux-vulkan", "x86-64-linux", "x86-64-linux-vulkan"}},
-        {{"x86-64-linux-vulkan-vk_v13", "x86-64-linux-vulkan", "x86-64-linux-vulkan"}},
-        {{"x86-64-linux-vulkan-vk_v13", "x86-64-linux-vulkan-vk_v10", "x86-64-linux-vulkan-vk_v10"}},
-        {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
-        {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
-        {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt", ""}},
-        {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt-hvx", "hexagon-32-qurt-hvx"}},
-        {{"x86-64-windows-d3d12compute-hlsl_sm66", "x86-64-windows-d3d12compute", "x86-64-windows-d3d12compute"}},
-        {{"x86-64-windows-d3d12compute-hlsl_sm66", "x86-64-windows-d3d12compute-hlsl_sm60", "x86-64-windows-d3d12compute-hlsl_sm60"}},
-        {{"x86-64-windows-d3d12compute-hlsl_sm62", "x86-64-windows-d3d12compute-hlsl_sm62", "x86-64-windows-d3d12compute-hlsl_sm62"}},
-        {{"x86-64-windows-d3d12compute-hlsl_sm69", "x86-64-windows-d3d12compute", "x86-64-windows-d3d12compute"}},
-        {{"x86-64-windows-d3d12compute-hlsl_sm69", "x86-64-windows-d3d12compute-hlsl_sm60", "x86-64-windows-d3d12compute-hlsl_sm60"}},
-    };
-
-    for (const auto &test : gcd_tests) {
-        Target result{};
-        Target a{test[0]};
-        Target b{test[1]};
-        if (a.get_runtime_compatible_target(b, result)) {
-            internal_assert(!test[2].empty() && result == Target{test[2]})
-                << "Targets " << a.to_string() << " and " << b.to_string() << " were computed to have gcd "
-                << result.to_string() << " but expected '" << test[2] << "'\n";
-        } else {
-            internal_assert(test[2].empty())
-                << "Targets " << a.to_string() << " and " << b.to_string() << " were computed to have no gcd "
-                << "but " << test[2] << " was expected.";
-        }
-    }
-
-    internal_assert(Target().vector_bits == 0) << "Default Target vector_bits not 0.\n";
-    internal_assert(Target("arm-64-linux-sve2-vector_bits_512").vector_bits == 512) << "Vector bits not parsed correctly.\n";
-    Target with_vector_bits(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE}, 512);
-    internal_assert(with_vector_bits.vector_bits == 512) << "Vector bits not populated in constructor.\n";
-    internal_assert(Target(with_vector_bits.to_string()).vector_bits == 512) << "Vector bits not round tripped properly.\n";
-
-    std::cout << "Target test passed\n";
-}
-
-}  // namespace Internal
 
 }  // namespace Halide

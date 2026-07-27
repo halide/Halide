@@ -165,6 +165,76 @@ int dynamic_shared_test(MemoryType memory_type) {
     return 0;
 }
 
+int repeated_realization_test(MemoryType memory_type) {
+    // A single Func realized several times at the block level, with
+    // non-overlapping lifetimes. Unrolling a serial loop that sits above the
+    // GPU thread loops duplicates the producer's allocation, so several
+    // allocations sharing a name reach the block level of one kernel and get
+    // coalesced into one reused backing allocation. The producer is
+    // tuple-valued so its components carry real names (p.0, p.1) that the
+    // coalescing must preserve.
+    Func p("p"), c("c");
+    Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi"), ky("ky");
+
+    p(x, y) = Tuple(x + y, x - y);
+    c(x, y) = p(x, y)[0] + p(x, y + 1)[1];
+
+    c.tile(x, y, xo, yo, xi, yi, 32, 32)
+        .split(yi, ky, yi, 8)
+        .gpu_blocks(xo, yo)
+        .reorder(xi, yi, ky, xo, yo)
+        .gpu_threads(xi, yi)
+        .unroll(ky);
+    p.compute_at(c, ky).store_in(memory_type);
+
+    Buffer<int> out = c.realize({64, 64});
+    for (int y = 0; y < out.height(); y++) {
+        for (int x = 0; x < out.width(); x++) {
+            int correct = (x + y) + (x - (y + 1));
+            if (out(x, y) != correct) {
+                printf("out(%d, %d) = %d instead of %d\n",
+                       x, y, out(x, y), correct);
+                return 1;
+            }
+        }
+    }
+
+    printf("OK\n");
+    return 0;
+}
+
+int repeated_register_realization_test() {
+    // The register-memory analogue of repeated_realization_test: a Func
+    // realized several times inside the thread loops (via an unrolled serial
+    // loop) with disjoint lifetimes. The copies share a name and get coalesced
+    // into one reused register allocation. The producer is tuple-valued so its
+    // components carry real names (p.0, p.1) that the coalescing must preserve.
+    Func p("p"), c("c");
+    Var x("x"), xo("xo"), xi("xi"), u("u");
+
+    p(x) = Tuple(x + 1, x - 1);
+    c(x) = p(x)[0] * 2 + p(x)[1];
+
+    c.split(x, xo, xi, 8)
+        .gpu_blocks(xo)
+        .split(xi, xi, u, 2)
+        .gpu_threads(xi)
+        .unroll(u);
+    p.compute_at(c, u).store_in(MemoryType::Register);
+
+    Buffer<int> out = c.realize({256});
+    for (int x = 0; x < out.width(); x++) {
+        int correct = (x + 1) * 2 + (x - 1);
+        if (out(x) != correct) {
+            printf("out(%d) = %d instead of %d\n", x, out(x), correct);
+            return 1;
+        }
+    }
+
+    printf("OK\n");
+    return 0;
+}
+
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
     if (!t.has_gpu_feature()) {
@@ -196,6 +266,16 @@ int main(int argc, char **argv) {
                 return 1;
             }
         }
+
+        printf("Running repeated realization test\n");
+        if (repeated_realization_test(memory_type) != 0) {
+            return 1;
+        }
+    }
+
+    printf("Running repeated register realization test\n");
+    if (repeated_register_realization_test() != 0) {
+        return 1;
     }
 
     printf("Success!\n");

@@ -30,8 +30,7 @@ ExternalProject_Add(
 # Build application with cross compiler,
 # where the generator executable built in Step 1 is imported and called
 
-# Import Halide. Instead of the package Halide, HalideHelpers is enough as we don't use JIT mode.
-find_package(HalideHelpers REQUIRED)
+find_package(Halide REQUIRED)
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 

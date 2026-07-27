@@ -12,8 +12,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
-# Import Halide. Instead of the package Halide, HalideHelpers is enough as we don't use JIT mode.
-find_package(HalideHelpers REQUIRED)
+find_package(Halide REQUIRED)
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 
