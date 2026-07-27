@@ -854,10 +854,9 @@ inline Expr select(const Expr &c0, const FuncRef &v0, const Expr &c1, const Func
 /** The result of branch(). It is deliberately NOT an Expr: a branch may only
  * appear as the entire right-hand side of a Func definition
  * (f(x) = branch(cond, a, b)), never as a sub-expression. That single
- * restriction is what makes the "evaluate only one side" guarantee tractable
- * (bounds inference and CSE never see a lazy sub-expression), and it lets the
- * value arms be force-inlined so the branch gates real computation, not just a
- * load. */
+ * restriction is what makes the "evaluate only one side" guarantee tractable:
+ * bounds inference and CSE never see a lazy sub-expression, and the definition
+ * can be lowered to real control flow with one store per arm. */
 struct Branch {
     /** Internal representation (an if_then_else-style intrinsic). Users never
      * touch this directly; assign the Branch to a Func instead. */
@@ -872,15 +871,31 @@ struct Branch {
  * Unlike select(), the result is a \ref Branch, not an Expr, so it can only be
  * used as the whole right-hand side of a Func definition:
  *     f(x) = branch(cond, a, b);
- * The value arms are force-inlined so that only the taken side is actually
- * computed (it is an error if a value arm calls a Func that can not be inlined,
- * e.g. one with an update stage - inline it or use select() there instead).
+ * A branch-defined Func can therefore not be inlined into a consumer; schedule
+ * it with compute_root() or compute_at() instead.
+ *
+ * The branch is hoisted to the outermost loop level at which its condition is
+ * loop-invariant, so a producer compute_at'd at a loop level inside the branch
+ * is only computed when that side is taken. That is how a branch gates real
+ * computation rather than just a load.
  *
  * The condition must be a scalar bool. It works on CPU and on GPU, where it
- * becomes a real per-thread or per-wave branch. Because a real branch can not
- * be expressed per lane, it is a hard error (not a silent fallback to select)
- * to use branch() with a lane-varying condition under vectorization, or to
- * combine branch() with vectorization inside a GPU kernel. */
+ * becomes a real per-thread or per-wave branch.
+ *
+ * If the condition varies across the lanes of a vectorized dimension, it can
+ * not be a scalar jump, so it instead becomes predication: the loads and stores
+ * of each arm are masked, and only the active lanes access memory (if an arm
+ * can not be predicated, the statement is scalarized instead). The untaken side
+ * still never loads, stores, or faults, which makes branch() a natural way to
+ * express a boundary condition:
+ *     f(x) = branch(x >= 0 && x < w, in(unsafe_promise_clamped(x, 0, w-1)), 0);
+ * compiles to a predicated vector load on targets that have one (e.g. AVX-512).
+ * The unsafe_promise_clamped is what tells bounds inference that the index
+ * stays in range, so `in` is not required outside its real extent.
+ *
+ * Combining branch() with vectorization inside a GPU kernel is a hard error
+ * (not a silent fallback to select): use select() for the vectorized
+ * dimension. */
 Branch branch(Expr condition, Expr true_value, Expr false_value);
 
 /** A multi-way variant of branch, mirroring the multi-way select. Each
