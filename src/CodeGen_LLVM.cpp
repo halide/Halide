@@ -559,22 +559,25 @@ namespace {
 // its name), renaming a symbol automatically updates every in-module reference;
 // no separate call-site rewriting is needed.
 
-// Rename a runtime symbol, keeping its COMDAT (if any) in sync. On Windows/COFF,
-// link_modules() puts each weak runtime function in a COMDAT named after the
-// function, and the COFF backend emits associative sections (e.g. exception
-// handling) that reference that COMDAT's leader by name. Renaming the symbol
-// without renaming the COMDAT leaves a dangling associative COMDAT leader
-// ("Associative COMDAT symbol '...' does not exist"). On targets where COMDATs
-// were stripped (Mac) getComdat() is null and this is just a setName().
+// Rename a runtime symbol, keeping its COMDAT (if any) in sync. On Windows/COFF
+// each weak runtime symbol lives in a COMDAT, and the COFF backend emits
+// associative sections (e.g. exception-handling data) and weak-external
+// fallbacks that reference the COMDAT's leader by name. Renaming a symbol
+// without fixing up its COMDAT leaves a dangling leader ("Associative COMDAT
+// symbol '...' does not exist") or, when symbols share a group, a leader that
+// no longer matches ("conflicting weak extern definition").
+//
+// Since every renamed symbol gets a unique name, give each its own fresh COMDAT
+// named after that new name; this keeps every leader well-defined and dissolves
+// any stale shared/associative grouping from before the rename. On targets that
+// strip COMDATs (Mac) getComdat() is null and this is just a setName().
 void rename_runtime_symbol(llvm::GlobalValue &g, const std::string &new_name) {
     auto *go = llvm::dyn_cast<llvm::GlobalObject>(&g);
     llvm::Comdat *old_comdat = go ? go->getComdat() : nullptr;
-    const bool comdat_keyed_by_symbol =
-        old_comdat != nullptr && old_comdat->getName() == g.getName();
 
     g.setName(new_name);
 
-    if (comdat_keyed_by_symbol) {
+    if (old_comdat != nullptr) {
         llvm::Comdat *new_comdat = g.getParent()->getOrInsertComdat(new_name);
         new_comdat->setSelectionKind(old_comdat->getSelectionKind());
         go->setComdat(new_comdat);
@@ -647,6 +650,24 @@ void apply_runtime_namespace_prefixes(llvm::Module &module,
 
         if (prefix != nullptr) {
             rename_runtime_symbol(f, *prefix + name.substr(halide_prefix.size()));
+        }
+    }
+
+    // (a2) halide_-prefixed *global variables*. Some runtime state is exposed
+    // with C linkage and a halide_ name (e.g. halide_reference_clock_inited in
+    // windows_clock.cpp), so it isn't a function and isn't in the
+    // Halide::Runtime::Internal namespace -- it would otherwise be missed by
+    // both (a) and (b) and collide across runtimes. Globals are not "called", so
+    // the import/internal caller distinction does not apply: a definition is
+    // exported; a (rare) external declaration is an import.
+    for (llvm::GlobalVariable &g : module.globals()) {
+        const std::string name = g.getName().str();
+        if (!starts_with(name, halide_prefix)) {
+            continue;
+        }
+        const std::string *prefix = g.isDeclaration() ? import_prefix : export_prefix;
+        if (prefix != nullptr) {
+            rename_runtime_symbol(g, *prefix + name.substr(halide_prefix.size()));
         }
     }
 
