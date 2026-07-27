@@ -655,6 +655,7 @@ constexpr const char *intrinsic_op_names[] = {
     "mod_round_to_zero",
     "mul_shift_right",
     "mux",
+    "offset_pointer",
     "popcount",
     "prefetch",
     "profiling_enable_instance_marker",

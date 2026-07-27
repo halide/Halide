@@ -16,6 +16,10 @@ bool Packet::read_from_filedesc(FILE *fdesc) {
     if (!Packet::read(this, header_size, fdesc)) {
         return false;
     }
+    if (size < header_size) {
+        fprintf(stderr, "Malformed trace packet: size (%d) smaller than header\n", (int)size);
+        return false;
+    }
     size_t payload_size = size - header_size;
     if (payload_size > sizeof(payload)) {
         fprintf(stderr, "Payload larger than %d bytes in trace stream (%d)\n", (int)sizeof(payload), (int)payload_size);
@@ -24,6 +28,31 @@ bool Packet::read_from_filedesc(FILE *fdesc) {
     }
     if (!Packet::read(payload, payload_size, fdesc)) {
         fprintf(stderr, "Unexpected EOF mid-packet");
+        return false;
+    }
+    // dimensions and type come straight from the untrusted header, and
+    // coordinates()/value()/func()/trace_tag() use them to index into payload.
+    // Reject any packet whose declared layout doesn't fit the bytes we read so
+    // those accessors stay in bounds.
+    if (dimensions < 0) {
+        fprintf(stderr, "Malformed trace packet: negative dimensions (%d)\n", (int)dimensions);
+        return false;
+    }
+    const size_t fixed_bytes = (size_t)dimensions * sizeof(int32_t) + value_bytes();
+    if (fixed_bytes > payload_size) {
+        fprintf(stderr, "Malformed trace packet: coordinates/value exceed payload\n");
+        return false;
+    }
+    // func() and trace_tag() are NUL-terminated strings following the value;
+    // both terminators must lie within the payload or the walks run past it.
+    int terminators = 0;
+    for (size_t i = fixed_bytes; i < payload_size; i++) {
+        if (payload[i] == 0 && ++terminators == 2) {
+            break;
+        }
+    }
+    if (terminators < 2) {
+        fprintf(stderr, "Malformed trace packet: func/trace_tag not terminated within payload\n");
         return false;
     }
     return true;

@@ -658,8 +658,12 @@ class LowerWarpShuffles : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
-        if (this_lane.defined() || op->memory_type == MemoryType::GPUShared) {
-            // Not a warp-level allocation
+        if (this_lane.defined() ||
+            op->memory_type == MemoryType::GPUShared ||
+            op->memory_type == MemoryType::Heap) {
+            // Not a warp-level allocation. Warp-level storage is per-lane
+            // register storage; shared and heap (global) memory are never
+            // striped across lanes.
             return IRMutator::visit(op);
         } else {
             // Pick up this allocation and deposit it inside the loop over lanes at reduced size.
