@@ -1573,9 +1573,10 @@ Branch branch(Expr condition, Expr true_value, Expr false_value) {
     user_assert(!condition.type().is_vector())
         << "branch() requires a scalar condition, but its condition\n"
         << "  " << condition << "\nhas type " << condition.type() << ".\n"
-        << "branch() generates a real control-flow branch that evaluates only "
-        << "one side, which cannot be done per lane. Use select() for a "
-        << "lane-varying condition.\n";
+        << "branch() generates a real control-flow branch, which can not be "
+        << "taken per lane. Use select() for an already-vector condition. (A "
+        << "scalar condition that merely varies across a vectorized dimension "
+        << "is fine: it becomes a predicated load/store.)\n";
 
     // Coerce int literals to the type of the other argument, like select().
     if (as_const_int(true_value)) {

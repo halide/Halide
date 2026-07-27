@@ -584,9 +584,9 @@ void collect_branch_conditions(const Expr &value, vector<Expr> &conds) {
     }
 }
 
-// A branch can only be real control flow if its condition is not lane-varying,
-// and (on GPU) if the kernel is not vectorized. We check this against the
-// schedule rather than silently falling back to a select.
+// On CPU a lane-varying condition is fine: it becomes predication (see below).
+// Inside a GPU kernel we do not have that fallback, so combining branch() with
+// vectorization there is a hard error rather than a silent fallback to select.
 void check_branch_schedule(const Function &func, const Definition &def) {
     bool any_vectorized = false, any_gpu = false;
     for (const Dim &d : def.schedule().dims()) {
@@ -602,40 +602,17 @@ void check_branch_schedule(const Function &func, const Definition &def) {
         << "dimension.\n";
 }
 
-// After hoisting, a branch that is still nested inside a vectorized loop must
-// have a lane-varying condition (otherwise it would have been hoisted out of
-// it). A real branch can not be taken per SIMD lane, and we deliberately do not
-// fall back to a select, so this is a hard error.
-class CheckBranchNotVectorized : public IRVisitor {
-    using IRVisitor::visit;
-
-    const Function &func;
-    int in_vectorized = 0;
-
-    void visit(const For *op) override {
-        const bool vec = (op->for_type == ForType::Vectorized);
-        in_vectorized += vec ? 1 : 0;
-        IRVisitor::visit(op);
-        in_vectorized -= vec ? 1 : 0;
-    }
-
-    void visit(const IfThenElse *op) override {
-        if (op->else_case.defined() && is_branch_stmt(Stmt(op), func.name())) {
-            user_assert(in_vectorized == 0)
-                << "branch() in Func \"" << func.name() << "\" has a condition that "
-                << "depends on a vectorized dimension, so it can not become a real "
-                << "control-flow branch (a branch can not be taken per SIMD lane). "
-                << "Use select() for a lane-varying condition, or do not vectorize "
-                << "that dimension.\n";
-        }
-        IRVisitor::visit(op);
-    }
-
-public:
-    explicit CheckBranchNotVectorized(const Function &f)
-        : func(f) {
-    }
-};
+// After hoisting, a branch that is still nested inside a vectorized loop has a
+// lane-varying condition (otherwise it would have been hoisted out of that
+// loop). We leave it as an IfThenElse and let VectorizeLoops handle it: it
+// pushes the vector condition down onto the loads and stores of each arm as a
+// predicate, so only the active lanes actually access memory. If some arm can
+// not be predicated, VectorizeLoops scalarizes the statement instead, which
+// restores true per-lane control flow. Both are faithful to branch(): the
+// untaken side never loads, stores, or faults. This is what makes branch()
+// useful for boundary conditions, e.g.
+//     f(x) = branch(x >= 0 && x < w, in(unsafe_promise_clamped(x, 0, w-1)), 0)
+// becomes a predicated (masked) vector load rather than a clamp plus a select.
 
 // Find the condition of some branch() buried in an expression, or an undefined
 // Expr if there is none.
@@ -799,9 +776,8 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
         // only run when that side is taken, which gates their computation.
         stmt = HoistBranchOutOfLoops(func.name())(stmt);
         // Anything still stuck inside a vectorized loop has a lane-varying
-        // condition and can not be a real branch.
-        CheckBranchNotVectorized check(func);
-        stmt.accept(&check);
+        // condition. It stays an IfThenElse and becomes predicated loads and
+        // stores (or a scalarized statement) in VectorizeLoops.
     }
     stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 

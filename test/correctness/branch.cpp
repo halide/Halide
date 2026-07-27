@@ -149,6 +149,21 @@ BranchArmProduce arm_produce(const Module &m, const std::string &name) {
     return v;
 }
 
+// True if some Load has a non-trivial predicate, i.e. it became a predicated
+// (masked) load rather than an unconditional one.
+class HasPredicatedLoad : public IRVisitor {
+    using IRVisitor::visit;
+    void visit(const Load *op) override {
+        if (!is_const_one(op->predicate)) {
+            found = true;
+        }
+        IRVisitor::visit(op);
+    }
+
+public:
+    bool found = false;
+};
+
 // True if a real branch appears nested inside any For loop.
 class BranchInsideAnyLoop : public IRVisitor {
     using IRVisitor::visit;
@@ -980,6 +995,64 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Part AI: a condition that varies across the lanes of a vectorized
+    // dimension can not be a scalar jump. Rather than erroring, it becomes
+    // predication: the loads and stores of each arm are masked. Only the values
+    // have to be right here; the masking itself is checked in Part AJ.
+    {
+        Func f("vec_branch");
+        f(x) = branch(x < 5, x * 2, x + 1);
+        f.vectorize(x, 8);
+
+        Buffer<int> r = f.realize({64});
+        for (int i = 0; i < r.width(); i++) {
+            int correct = i < 5 ? (i * 2) : (i + 1);
+            if (r(i) != correct) {
+                printf("vectorized branch mismatch at %d: got %d want %d\n",
+                       i, r(i), correct);
+                return 1;
+            }
+        }
+    }
+
+    // Part AJ: the boundary-condition case. A branch on a vectorized dimension
+    // whose arm loads from an input becomes a PREDICATED (masked) vector load,
+    // so the out-of-bounds lanes never touch memory. unsafe_promise_clamped is
+    // what tells bounds inference the index stays in range, so `in` is not
+    // required outside its real extent. On AVX-512 this is a single masked load
+    // instead of a clamp plus a select.
+    {
+        const int w = 100;
+        Buffer<int> in(w);
+        for (int i = 0; i < w; i++) {
+            in(i) = i * 3 + 1;
+        }
+
+        Func f("pred_bc");
+        f(x) = branch(x >= 0 && x < w,
+                      in(unsafe_promise_clamped(x, 0, w - 1)),
+                      0);
+        f.vectorize(x, 16);
+
+        Module m = f.compile_to_module({}, "pred_bc");
+        HasPredicatedLoad hpl;
+        if (!scan_module(m, hpl)) {
+            printf("vectorized branch did not produce a predicated load\n");
+            return 1;
+        }
+
+        // Realize past the end of `in`: the guarded lanes must not load.
+        Buffer<int> r = f.realize({128});
+        for (int i = 0; i < r.width(); i++) {
+            int correct = (i < w) ? (i * 3 + 1) : 0;
+            if (r(i) != correct) {
+                printf("predicated boundary mismatch at %d: got %d want %d\n",
+                       i, r(i), correct);
+                return 1;
+            }
+        }
+    }
+
 #ifdef HALIDE_WITH_EXCEPTIONS
     // Part H: a lane-varying (vector) condition is rejected at construction.
     {
@@ -991,23 +1064,6 @@ int main(int argc, char **argv) {
         }
         if (!threw) {
             printf("branch() with a vector condition should have thrown\n");
-            return 1;
-        }
-    }
-
-    // Part I: a condition that depends on a vectorized dimension is rejected.
-    {
-        Func f("vec_branch");
-        f(x) = branch(x < 5, x * 2, x + 1);
-        f.vectorize(x, 8);
-        bool threw = false;
-        try {
-            f.compile_to_module({}, "vec_branch");
-        } catch (const CompileError &) {
-            threw = true;
-        }
-        if (!threw) {
-            printf("branch() on a vectorized dimension should have thrown\n");
             return 1;
         }
     }

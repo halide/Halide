@@ -711,9 +711,12 @@ struct Call : public ExprNode<Call> {
         bool_to_mask,
         // A user-facing strict select that lowers to a real control-flow
         // branch and evaluates only the taken side (see branch() in
-        // IROperator.h). It is lowered to if_then_else late in lowering, or
-        // becomes an error if it can not be a real branch (a lane-varying
-        // condition under vectorization, or vectorization inside a GPU kernel).
+        // IROperator.h). It may only be the whole value of a definition, and is
+        // turned into a Stmt-level IfThenElse (one store per arm) in
+        // ScheduleFunctions, then hoisted to the loop level at which its
+        // condition is invariant. If its condition varies across the lanes of a
+        // vectorized loop it stays an IfThenElse and becomes predicated
+        // loads/stores in VectorizeLoops.
         branch,
         // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
         bundle,
