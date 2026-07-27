@@ -558,6 +558,29 @@ namespace {
 // LLVM call sites and initializers refer to the llvm::GlobalValue object (not
 // its name), renaming a symbol automatically updates every in-module reference;
 // no separate call-site rewriting is needed.
+
+// Rename a runtime symbol, keeping its COMDAT (if any) in sync. On Windows/COFF,
+// link_modules() puts each weak runtime function in a COMDAT named after the
+// function, and the COFF backend emits associative sections (e.g. exception
+// handling) that reference that COMDAT's leader by name. Renaming the symbol
+// without renaming the COMDAT leaves a dangling associative COMDAT leader
+// ("Associative COMDAT symbol '...' does not exist"). On targets where COMDATs
+// were stripped (Mac) getComdat() is null and this is just a setName().
+void rename_runtime_symbol(llvm::GlobalValue &g, const std::string &new_name) {
+    auto *go = llvm::dyn_cast<llvm::GlobalObject>(&g);
+    llvm::Comdat *old_comdat = go ? go->getComdat() : nullptr;
+    const bool comdat_keyed_by_symbol =
+        old_comdat != nullptr && old_comdat->getName() == g.getName();
+
+    g.setName(new_name);
+
+    if (comdat_keyed_by_symbol) {
+        llvm::Comdat *new_comdat = g.getParent()->getOrInsertComdat(new_name);
+        new_comdat->setSelectionKind(old_comdat->getSelectionKind());
+        go->setComdat(new_comdat);
+    }
+}
+
 void apply_runtime_namespace_prefixes(llvm::Module &module,
                                       const RuntimeNamespaceMap &prefixes,
                                       const std::set<std::string> &pipeline_functions,
@@ -623,7 +646,7 @@ void apply_runtime_namespace_prefixes(llvm::Module &module,
         }
 
         if (prefix != nullptr) {
-            f.setName(*prefix + name.substr(halide_prefix.size()));
+            rename_runtime_symbol(f, *prefix + name.substr(halide_prefix.size()));
         }
     }
 
@@ -644,7 +667,7 @@ void apply_runtime_namespace_prefixes(llvm::Module &module,
                 starts_with(name, "llvm.")) {
                 return;
             }
-            g.setName(*internal_prefix + name);
+            rename_runtime_symbol(g, *internal_prefix + name);
         };
         for (llvm::Function &f : module.functions()) {
             rename_internal(f);
