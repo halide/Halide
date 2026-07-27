@@ -1212,6 +1212,40 @@ const std::map<Target::Arch, std::set<Target::Processor>> &legal_processors_by_a
     return table;
 }
 
+// Sub-features that refine a "parent" feature but do not imply it (so they are
+// not in implied_feature_pairs()): a capability/version/extension is only
+// meaningful when its parent device feature is also set. validate_features()
+// rejects a sub-feature whose parent is absent, and
+// Target::without_device_features() clears sub-features alongside their parent.
+// New capability/version features belong here.
+const std::map<Target::Feature, std::vector<Target::Feature>> &sub_features_by_parent() {
+    static const std::map<Target::Feature, std::vector<Target::Feature>> table = {
+        {
+            Target::CUDA,
+            {Target::CUDACapability30, Target::CUDACapability32, Target::CUDACapability35,
+             Target::CUDACapability50, Target::CUDACapability61, Target::CUDACapability70,
+             Target::CUDACapability75, Target::CUDACapability80, Target::CUDACapability86},
+        },
+        {
+            Target::OpenCL,
+            {Target::CLDoubles, Target::CLHalf, Target::CLAtomics64},
+        },
+        {
+            Target::Vulkan,
+            {Target::VulkanInt8, Target::VulkanInt16, Target::VulkanInt64,
+             Target::VulkanFloat16, Target::VulkanFloat64,
+             Target::VulkanV10, Target::VulkanV12, Target::VulkanV13},
+        },
+        {
+            Target::D3D12Compute,
+            {Target::HLSL_SM60, Target::HLSL_SM61, Target::HLSL_SM62, Target::HLSL_SM63,
+             Target::HLSL_SM64, Target::HLSL_SM65, Target::HLSL_SM66, Target::HLSL_SM67,
+             Target::HLSL_SM68, Target::HLSL_SM69},
+        },
+    };
+    return table;
+}
+
 }  // namespace
 
 void Target::validate_features() const {
@@ -1322,20 +1356,16 @@ void Target::validate_features() const {
                             });
     }
 
-    // D3D12Compute SM version features require D3D12Compute to also be set.
-    if (!has_feature(D3D12Compute)) {
-        do_check_bad(*this, {
-                                HLSL_SM60,
-                                HLSL_SM61,
-                                HLSL_SM62,
-                                HLSL_SM63,
-                                HLSL_SM64,
-                                HLSL_SM65,
-                                HLSL_SM66,
-                                HLSL_SM67,
-                                HLSL_SM68,
-                                HLSL_SM69,
-                            });
+    // Sub-features (device capability/version/extension refinements) are only
+    // meaningful when their parent device feature is also set.
+    for (const auto &[parent, subs] : sub_features_by_parent()) {
+        if (!has_feature(parent)) {
+            for (Feature s : subs) {
+                user_assert(!has_feature(s))
+                    << "Target feature " << feature_to_name(s) << " requires "
+                    << feature_to_name(parent) << " to also be set. (" << *this << ")\n";
+            }
+        }
     }
 
     const int num_sme_svl_features =
@@ -1359,6 +1389,32 @@ void Target::validate_features() const {
         auto it = table.find(arch_);
         user_assert(it != table.end() && it->second.count(processor_tune_))
             << "The selected processor tuning is not valid for this architecture. (" << *this << ")\n";
+    }
+
+    // A vector_bits value only means something for scalable-vector targets;
+    // for everyone else the vector width is fixed by the ISA.
+    if (vector_bits_ != 0) {
+        user_assert(features_any_of({SVE, SVE2, RVV, AVX10_1}))
+            << "vector_bits is only meaningful for a target with a scalable vector "
+               "feature (SVE, SVE2, RVV, or AVX10_1). ("
+            << *this << ")\n";
+    }
+
+    // Large buffers are addressed with 64-bit indices, so they can't exist on a
+    // 32-bit target. (bits == 0 is left alone: the width is not yet known.)
+    if (has_feature(LargeBuffers)) {
+        user_assert(bits_ == 64 || bits_ == 0)
+            << "The large_buffers feature requires a 64-bit target. (" << *this << ")\n";
+    }
+
+    // profile and profile_by_timer are two implementations of the same feature.
+    user_assert(!(has_feature(Profile) && has_feature(ProfileByTimer)))
+        << "At most one of the profile and profile_by_timer features may be set. (" << *this << ")\n";
+
+    // The simulator feature selects the iOS simulator environment.
+    if (has_feature(Simulator)) {
+        user_assert(os_ == IOS || os_ == OSUnknown)
+            << "The simulator feature is only valid for the iOS operating system. (" << *this << ")\n";
     }
 }
 
@@ -1534,12 +1590,18 @@ void Target::set_os(OS o) {
 void Target::set_bits(int b) {
     user_assert(b == 0 || b == 32 || b == 64)
         << "Target bits must be 0, 32, or 64; got " << b << ".\n";
+    Target candidate = *this;
+    candidate.bits_ = b;
+    candidate.validate_features();
     bits_ = b;
 }
 
 void Target::set_vector_bits(int vb) {
     user_assert(vb >= 0)
         << "Target vector_bits must be non-negative; got " << vb << ".\n";
+    Target candidate = *this;
+    candidate.vector_bits_ = vb;
+    candidate.validate_features();
     vector_bits_ = vb;
 }
 
@@ -1736,6 +1798,33 @@ Target Target::with_feature(Feature f) const {
 Target Target::without_feature(Feature f) const {
     Target copy = *this;
     copy.set_feature(f, false);
+    return copy;
+}
+
+Target Target::without_device_features() const {
+    // Every feature that selects a device-offload runtime. Clearing one must
+    // also clear its dependent sub-features (via sub_features_by_parent),
+    // otherwise the result would be an internally-inconsistent Target.
+    static const Feature device_features[] = {
+        CUDA,
+        OpenCL,
+        Metal,
+        HVX,
+        D3D12Compute,
+        Vulkan,
+        WebGPU,
+    };
+    Target copy = *this;
+    const auto &subs = sub_features_by_parent();
+    for (Feature parent : device_features) {
+        copy.set_feature_raw(parent, false);
+        auto it = subs.find(parent);
+        if (it != subs.end()) {
+            for (Feature s : it->second) {
+                copy.set_feature_raw(s, false);
+            }
+        }
+    }
     return copy;
 }
 
