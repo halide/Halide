@@ -123,7 +123,7 @@ double run_test(bool auto_schedule) {
 }
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    if (get_jit_target_from_environment().arch() == Target::WebAssembly) {
         printf("[SKIP] Autoschedulers do not support WebAssembly.\n");
         return 0;
     }

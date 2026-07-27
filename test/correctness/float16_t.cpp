@@ -468,7 +468,7 @@ int main(int argc, char **argv) {
     // TODO(https://github.com/halide/Halide/issues/8985): LLVM's JIT emits
     // misaligned jump tables on arm-32 with arm_fp16, causing SIGILL.
     Target target = get_jit_target_from_environment();
-    if (target.arch == Target::ARM && target.bits == 32 &&
+    if (target.arch() == Target::ARM && target.bits() == 32 &&
         target.has_feature(Target::ARMFp16)) {
         printf("[SKIP] arm-32 JIT with arm_fp16 hits LLVM jump table misalignment bug.\n");
         return 0;

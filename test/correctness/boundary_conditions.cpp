@@ -391,7 +391,7 @@ int main(int argc, char **argv) {
     if (target.has_feature(Target::OpenCL)) {
         vector_width_max = 16;
     }
-    if (target.arch == Target::WebAssembly) {
+    if (target.arch() == Target::WebAssembly) {
         // The wasm jit is very slow, so shorten this test here.
         vector_width_max = 8;
     }

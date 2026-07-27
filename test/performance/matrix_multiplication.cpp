@@ -22,7 +22,7 @@ void simple_version(float *A, float *B, float *C, int width, int stride) {
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
-    if (target.arch == Target::WebAssembly) {
+    if (target.arch() == Target::WebAssembly) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     // ld1r post-increment serial dependency chain that occurs with 8 rows
     // (where only 2 temp registers cycle between rows), and produces balanced
     // load/compute throughput (4 cycles each at 4 FP units and 2 load ports).
-    const bool is_aarch64 = target.arch == Target::ARM && target.bits == 64;
+    const bool is_aarch64 = target.arch() == Target::ARM && target.bits() == 64;
     const bool is_avx512 = target.has_feature(Target::AVX512);
 
     // Size the inner loop tiles to fit into the number of registers available

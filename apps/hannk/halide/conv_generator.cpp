@@ -16,7 +16,7 @@ Var ci("ci"), co("co");
 // without widening 8-bit multiplication, it's faster to just subtract the
 // offsets and use 16-bit multiplications.
 bool use_8bit_multiply(const Target &target) {
-    return target.arch != Target::X86 || target.has_feature(Target::AVX512_SapphireRapids);
+    return target.arch() != Target::X86 || target.has_feature(Target::AVX512_SapphireRapids);
 }
 
 // How many registers to use as accumulators, as a function of the target.
@@ -254,7 +254,7 @@ public:
             convolved.update().specialize(filter_depth == vector_reduction);
         }
 
-        if (!use_8bit_multiply(target) && get_target().arch == Target::X86) {
+        if (!use_8bit_multiply(target) && get_target().arch() == Target::X86) {
             // On x86, widening subtracts eat up a lot of the already scarce
             // registers, so precomputing this outside the inner loop helps
             // a lot.

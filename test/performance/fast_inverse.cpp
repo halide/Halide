@@ -7,13 +7,13 @@ using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
-    if (target.arch == Target::WebAssembly) {
+    if (target.arch() == Target::WebAssembly) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
 
-    if (target.arch == Target::ARM &&
-        target.os == Target::OSX) {
+    if (target.arch() == Target::ARM &&
+        target.os() == Target::OSX) {
         // vrecpe, vrecps, fmul have inverse throughputs of 1, 0.25, 0.25
         // respectively, while fdiv has inverse throughput of 1.
         printf("[SKIP] Apple M1 chips have division performance roughly on par with the reciprocal instruction\n");

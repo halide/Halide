@@ -217,17 +217,17 @@ std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target,
     // guaranteed for the module produced by lower(), and for the host target
     // used to compile JIT trampolines.
     std::unique_ptr<CodeGen_LLVM> result;
-    if (target.arch == Target::X86) {
+    if (target.arch() == Target::X86) {
         result = new_CodeGen_X86(target);
-    } else if (target.arch == Target::ARM) {
+    } else if (target.arch() == Target::ARM) {
         result = new_CodeGen_ARM(target);
-    } else if (target.arch == Target::POWERPC) {
+    } else if (target.arch() == Target::POWERPC) {
         result = new_CodeGen_PowerPC(target);
-    } else if (target.arch == Target::Hexagon) {
+    } else if (target.arch() == Target::Hexagon) {
         result = new_CodeGen_Hexagon(target);
-    } else if (target.arch == Target::WebAssembly) {
+    } else if (target.arch() == Target::WebAssembly) {
         result = new_CodeGen_WebAssembly(target);
-    } else if (target.arch == Target::RISCV) {
+    } else if (target.arch() == Target::RISCV) {
         result = new_CodeGen_RISCV(target);
     }
     user_assert(result) << "Unknown target architecture: " << target.to_string() << "\n";
@@ -1217,7 +1217,7 @@ void CodeGen_LLVM::optimize_module() {
                 sanitizercoverage_options.Inline8bitCounters = true;
                 sanitizercoverage_options.PCTable = true;
                 // Due to TLS differences, stack depth tracking is only enabled on Linux
-                if (get_target().os == Target::OS::Linux) {
+                if (get_target().os() == Target::OS::Linux) {
                     sanitizercoverage_options.StackDepth = true;
                 }
                 mpm.addPass(SanitizerCoveragePass(sanitizercoverage_options));
@@ -2689,7 +2689,7 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
         // LLVM should codegen the same thing for a constant 1 strided load as
         // for a non-strided load.
         if (stride) {
-            if (get_target().bits == 64 && !stride->getType()->isIntegerTy(64)) {
+            if (get_target().bits() == 64 && !stride->getType()->isIntegerTy(64)) {
                 stride = builder->CreateIntCast(stride, i64_t, true);
             }
             if (try_vector_predication_intrinsic("llvm.experimental.vp.strided.load", VPResultType(slice_type, 0),
@@ -4176,7 +4176,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                         annotate_store(store, slice_index);
                     }
                 } else if (ramp) {
-                    if (get_target().bits == 64 && !stride_val->getType()->isIntegerTy(64)) {
+                    if (get_target().bits() == 64 && !stride_val->getType()->isIntegerTy(64)) {
                         stride_val = builder->CreateIntCast(stride_val, i64_t, true);
                     }
                     bool generated = try_vector_predication_intrinsic("llvm.experimental.vp.strided.store", void_t, slice_lanes, AllEnabledMask(),
@@ -5448,7 +5448,7 @@ bool CodeGen_LLVM::use_pic() const {
     // addressing which avoids ADDR32 relocations that are incompatible
     // with /LARGEADDRESSAWARE.
     // See: https://github.com/llvm/llvm-project/pull/137643
-    if (target.os == Target::Windows && target.bits == 32) {
+    if (target.os() == Target::Windows && target.bits() == 32) {
         return false;
     }
     return true;

@@ -187,7 +187,7 @@ struct QualsState {
 };
 
 std::string mangle_indirection_and_cvr_quals(const Type &type, const Target &target) {
-    QualsState state(type, (target.bits == 64) ? "E" : "");
+    QualsState state(type, (target.bits() == 64) ? "E" : "");
     for (uint8_t modifier : type.handle_type()->cpp_type_modifiers) {
         state.handle_modifier(modifier);
     }
@@ -346,17 +346,17 @@ std::string simple_type_to_mangle_char(const std::string &type_name, const Targe
     } else if (type_name == "uint32_t") {
         return "j";
     } else if (type_name == "int64_t") {
-        if (target.os == Target::OSX ||
-            target.os == Target::IOS ||
-            target.bits == 32) {
+        if (target.os() == Target::OSX ||
+            target.os() == Target::IOS ||
+            target.bits() == 32) {
             return "x";
         } else {
             return "l";
         }
     } else if (type_name == "uint64_t") {
-        if (target.os == Target::OSX ||
-            target.os == Target::IOS ||
-            target.bits == 32) {
+        if (target.os() == Target::OSX ||
+            target.os() == Target::IOS ||
+            target.bits() == 32) {
             return "y";
         } else {
             return "m";
@@ -533,15 +533,15 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
         case 16:
             return "s";
         case 32:
-            if (target.arch == Target::Hexagon) {
+            if (target.arch() == Target::Hexagon) {
                 return "l";
             } else {
                 return "i";
             }
         case 64:
-            if (target.os == Target::OSX ||
-                target.os == Target::IOS ||
-                target.bits == 32) {
+            if (target.os() == Target::OSX ||
+                target.os() == Target::IOS ||
+                target.bits() == 32) {
                 return "x";
             } else {
                 return "l";
@@ -559,15 +559,15 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
         case 16:
             return "t";
         case 32:
-            if (target.arch == Target::Hexagon) {
+            if (target.arch() == Target::Hexagon) {
                 return "m";
             } else {
                 return "j";
             }
         case 64:
-            if (target.os == Target::OSX ||
-                target.os == Target::IOS ||
-                target.bits == 32) {
+            if (target.os() == Target::OSX ||
+                target.os() == Target::IOS ||
+                target.bits() == 32) {
                 return "y";
             } else {
                 return "m";
@@ -618,7 +618,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
 std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
                                             Type return_type, const std::vector<ExternFuncArgument> &args,
                                             const Target &target) {
-    if (target.os == Target::Windows) {
+    if (target.os() == Target::Windows) {
         return WindowsMangling::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);
     } else {
         return ItaniumABIMangling::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);
@@ -1084,7 +1084,7 @@ void cplusplus_mangle_test() {
                 args.emplace_back(make_zero(Handle(&t2)));
                 args.emplace_back(make_zero(Handle(&t3)));
 
-                MangleResult *expecteds = (target.os == Target::Windows) ? (target.bits == 64 ? all_mods_win64 : all_mods_win32) : all_mods_itanium;
+                MangleResult *expecteds = (target.os() == Target::Windows) ? (target.bits() == 64 ? all_mods_win64 : all_mods_win32) : all_mods_itanium;
                 check_result(expecteds, expecteds_index, target,
                              cplusplus_function_mangled_name("test_function", {}, Int(32), args, target));
             }
@@ -1100,7 +1100,7 @@ void cplusplus_mangle_test() {
             args.emplace_back(make_zero(Handle(nullptr)));
             args.emplace_back(make_zero(Handle(nullptr)));
 
-            MangleResult *expecteds = (target.os == Target::Windows) ? (target.bits == 64 ? two_void_stars_win64 : two_void_stars_win32) : two_void_stars_itanium;
+            MangleResult *expecteds = (target.os() == Target::Windows) ? (target.bits() == 64 ? two_void_stars_win64 : two_void_stars_win32) : two_void_stars_itanium;
             check_result(expecteds, expecteds_index, target,
                          cplusplus_function_mangled_name("test_function", {}, Int(32), args, target));
         }

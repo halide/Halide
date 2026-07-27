@@ -43,17 +43,17 @@ inline std::string unescape_spaces(const std::string &str) {
     return replace_all(str, "\\x20", " ");
 }
 
-inline std::ostream &write_halide_type(std::ostream &os, const halide_type_t &t) {
-    os << (int)t.code << " " << (int)t.bits;
+inline std::ostream &write_halide_type(std::ostream &os, const halide_type_t &type) {
+    os << (int)type.code << " " << (int)type.bits;
     return os;
 }
 
-inline std::istream &read_halide_type(std::istream &is, halide_type_t &t) {
+inline std::istream &read_halide_type(std::istream &is, halide_type_t &type) {
     // type.code is an enum; type.bits is a uint8 and might be read as char.
     int type_code, type_bits;
     is >> type_code >> type_bits;
-    t.code = (halide_type_code_t)type_code;
-    t.bits = (uint8_t)type_bits;
+    type.code = (halide_type_code_t)type_code;
+    type.bits = (uint8_t)type_bits;
     return is;
 }
 

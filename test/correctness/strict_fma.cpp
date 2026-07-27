@@ -18,7 +18,7 @@ int test() {
         t.has_gpu_feature() &&
         // Metal on x86 does not seem to respect strict float despite setting
         // the appropriate pragma.
-        !(t.arch == Target::X86 && t.has_feature(Target::Metal)) &&
+        !(t.arch() == Target::X86 && t.has_feature(Target::Metal)) &&
         // TODO: Vulkan does not respect strict_float yet:
         // https://github.com/halide/Halide/issues/7239
         !t.has_feature(Target::Vulkan) &&

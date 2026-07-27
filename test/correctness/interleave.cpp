@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
     // culprit. Just disabling it for now.
     {
         Target t = get_host_target();
-        if (t.arch == Target::ARM && t.bits == 32) {
+        if (t.arch() == Target::ARM && t.bits() == 32) {
             printf("[SKIP] Test is known to segfault on ARM-32 (see the source for more detail) .\n");
             return 0;
         }
@@ -289,7 +289,7 @@ int main(int argc, char **argv) {
 
     for (int elements = 1; elements <= 5; elements++) {
         const Target t = get_jit_target_from_environment();
-        if (t.arch == Target::WebAssembly &&
+        if (t.arch() == Target::WebAssembly &&
             t.has_feature(Target::WasmSimd128) &&
             elements == 5) {
             // TODO: this bug is still active in v7.5; when it is fixed,

@@ -19,7 +19,7 @@ public:
     }
 
     void add_tests() override {
-        if (target.arch == Target::RISCV &&
+        if (target.arch() == Target::RISCV &&
             target.has_feature(Target::RVV)) {
             check_rvv_all();
         }
@@ -120,7 +120,7 @@ public:
     void check_rvv_all() {
         for (int i = 3; i < 7; i++) {
             int bit_width = (1 << i);
-            int natural_lanes = target.vector_bits / bit_width;
+            int natural_lanes = target.vector_bits() / bit_width;
             // TODO: This should work for all lanes from 2 to 8 * natural_lanes
             // but the vector predication paths require using vscale multiples.
             // This is using powers of two rather than vscale multiples for

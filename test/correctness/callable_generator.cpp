@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
 
     // Override Halide's malloc and free (except under wasm),
     // make sure that Callable freezes the values
-    if (t.arch != Target::WebAssembly) {
+    if (t.arch() != Target::WebAssembly) {
         custom_malloc_called = false;
         custom_free_called = false;
 
@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
     }
 
     // Check that Param<void*> works with Callables
-    if (t.arch != Target::WebAssembly) {
+    if (t.arch() != Target::WebAssembly) {
         class TestGen3 : public Generator<TestGen3> {
         public:
             GeneratorParam<bool> vectorize_{"vectorize", false};
@@ -197,7 +197,7 @@ int main(int argc, char **argv) {
     }
 
     // Check that JITExterns works with Callables
-    if (t.arch != Target::WebAssembly) {
+    if (t.arch() != Target::WebAssembly) {
         call_counter = 0;
 
         class TestGen4 : public Generator<TestGen4> {

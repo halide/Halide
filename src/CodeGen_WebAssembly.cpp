@@ -393,7 +393,7 @@ string CodeGen_WebAssembly::mcpu_tune() const {
 }
 
 string CodeGen_WebAssembly::mattrs() const {
-    user_assert(target.os == Target::WebAssemblyRuntime)
+    user_assert(target.os() == Target::WebAssemblyRuntime)
         << "wasmrt is the only supported 'os' for WebAssembly at this time.";
 
     std::vector<std::string_view> attrs;
@@ -447,7 +447,7 @@ int CodeGen_WebAssembly::native_vector_bits() const {
 }  // namespace
 
 std::unique_ptr<CodeGen_CPU> new_CodeGen_WebAssembly(const Target &target) {
-    user_assert(target.bits == 32) << "Only wasm32 is supported.";
+    user_assert(target.bits() == 32) << "Only wasm32 is supported.";
     return std::make_unique<CodeGen_WebAssembly>(target);
 }
 

@@ -17,7 +17,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int my_strlen(const char *c) {
 HalideExtern_1(int, my_strlen, const char *);
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    if (get_jit_target_from_environment().arch() == Target::WebAssembly) {
         printf("[SKIP] WebAssembly JIT does not support Param<> for pointer types.\n");
         return 0;
     }

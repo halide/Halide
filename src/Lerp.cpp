@@ -143,7 +143,7 @@ Expr lower_lerp(Type final_type, Expr zero_val, Expr one_val, const Expr &weight
                 // ((x + 128) / 256 + x + 128) / 256. Note that
                 // overflow is impossible here because the most our
                 // prod_sum can be is 255^2.
-                if (target.arch == Target::X86) {
+                if (target.arch() == Target::X86) {
                     // On x86 we have no rounding shifts but we do
                     // have a multiply-keep-high-half. So it's
                     // actually one instruction cheaper to do the

@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     // Apple Silicon GPUs do not enforce a per-command-buffer timeout, so this
     // test cannot trigger a GPU error on those devices. Restrict to Intel Macs
     // where the AMD/Intel GPU watchdog timer will fire.
-    if (t.arch == Target::ARM) {
+    if (t.arch() == Target::ARM) {
         printf("[SKIP] Apple Silicon does not enforce Metal GPU timeouts\n");
         return 0;
     }

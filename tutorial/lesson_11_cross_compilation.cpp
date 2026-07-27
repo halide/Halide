@@ -82,18 +82,18 @@ int main() {
 
     // Let's use this to compile a 32-bit arm android version of this code:
     Target target;
-    target.os = Target::Android;                // The operating system
-    target.arch = Target::ARM;                  // The CPU architecture
-    target.bits = 32;                           // The bit-width of the architecture
+    target.set_os(Target::Android);                // The operating system
+    target.set_arch(Target::ARM);                  // The CPU architecture
+    target.set_bits(32);                           // The bit-width of the architecture
     std::vector<Target::Feature> arm_features;  // A list of features to set
     target.set_features(arm_features);
     // We then pass the target as the last argument to compile_to_file.
     brighter.compile_to_file("lesson_11_arm_32_android", args, "brighter", target);
 
     // And now a Windows object file for 64-bit x86 with AVX and SSE 4.1:
-    target.os = Target::Windows;
-    target.arch = Target::X86;
-    target.bits = 64;
+    target.set_os(Target::Windows);
+    target.set_arch(Target::X86);
+    target.set_bits(64);
     std::vector<Target::Feature> x86_features;
     x86_features.push_back(Target::AVX);
     x86_features.push_back(Target::SSE41);
@@ -106,9 +106,9 @@ int main() {
     // this using the target features field.  Support for Apple's
     // 64-bit ARM processors is very new in llvm, and still somewhat
     // flaky.
-    target.os = Target::IOS;
-    target.arch = Target::ARM;
-    target.bits = 32;
+    target.set_os(Target::IOS);
+    target.set_arch(Target::ARM);
+    target.set_bits(32);
     std::vector<Target::Feature> armv7s_features;
     armv7s_features.push_back(Target::ARMv7s);
     target.set_features(armv7s_features);

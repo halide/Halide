@@ -5,7 +5,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
-    if (t.arch == Target::WebAssembly) {
+    if (t.arch() == Target::WebAssembly) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }

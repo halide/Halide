@@ -1185,12 +1185,12 @@ void test_async_tuple(const Backend &backend) {
 
 int main(int argc, char **argv) {
     const Target t = get_jit_target_from_environment();
-    if (t.arch == Target::WebAssembly) {
+    if (t.arch() == Target::WebAssembly) {
         printf("[SKIP] Skipping test for WebAssembly as it does not support atomics yet.\n");
         return 0;
     }
 
-    if (t.os == Target::Windows && t.has_feature(Target::CUDA)) {
+    if (t.os() == Target::Windows && t.has_feature(Target::CUDA)) {
         printf("[SKIP] Skipping test for Windows + CUDA because of unexplained sporadic failures (https://github.com/halide/Halide/issues/7423).\n");
         return 0;
     }

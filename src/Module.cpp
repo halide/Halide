@@ -30,7 +30,7 @@ namespace Internal {
 std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target) {
     constexpr bool IsMulti = true;
     constexpr bool IsSingle = false;
-    const bool is_windows_coff = target.os == Target::Windows;
+    const bool is_windows_coff = target.os() == Target::Windows;
     // Keep in sync with cmake/HalideGeneratorHelpers.cmake
     std::map<OutputFileType, const OutputInfo> ext = {
         {OutputFileType::assembly, {"assembly", ".s", IsMulti}},
@@ -104,7 +104,7 @@ public:
                                      const std::string &suffix,
                                      const Target &target,
                                      bool in_front = false) {
-        const char *ext = (target.os == Target::Windows) ? ".obj" : ".o";
+        const char *ext = (target.os() == Target::Windows) ? ".obj" : ".o";
         return add_temp_file(base_path_name, suffix + ext, target, in_front);
     }
 
@@ -491,7 +491,7 @@ Buffer<uint8_t> Module::compile_to_buffer() const {
     // TODO: This Hexagon specific code should be removed as soon as possible.
     // This may involve adding more general support for post-processing and
     // a way of specifying to use it.
-    if (target().arch == Target::Hexagon) {
+    if (target().arch() == Target::Hexagon) {
         return compile_module_to_hexagon_shared_object(*this);
     }
 
@@ -647,7 +647,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
                 }
             }
             debug(1) << "Module.compile(): static_library " << output_files.at(OutputFileType::static_library) << "\n";
-            Target base_target(target().os, target().arch, target().bits, target().processor_tune);
+            Target base_target(target().os(), target().arch(), target().bits(), target().processor_tune());
             create_static_library(temp_object_dir.files(), base_target, output_files.at(OutputFileType::static_library));
         }
         // Don't use contains() here, we might need assembly output for stmt_html
@@ -922,9 +922,9 @@ void compile_multitarget(const std::string &fn_name,
         const Target &target = targets[i];
 
         // arch-bits-os must be identical across all targets.
-        if (target.os != base_target.os ||
-            target.arch != base_target.arch ||
-            target.bits != base_target.bits) {
+        if (target.os() != base_target.os() ||
+            target.arch() != base_target.arch() ||
+            target.bits() != base_target.bits()) {
             user_error << "All Targets must have matching arch-bits-os for compile_multitarget.\n";
         }
         // Some features must match across all targets.
@@ -1015,7 +1015,7 @@ void compile_multitarget(const std::string &fn_name,
     // and add that to the result.
     if (!base_target.has_feature(Target::NoRuntime)) {
         // Start with a bare Target, set only the features we know are common to all.
-        Target runtime_target(base_target.os, base_target.arch, base_target.bits, base_target.processor_tune);
+        Target runtime_target(base_target.os(), base_target.arch(), base_target.bits(), base_target.processor_tune());
         for (int i = 0; i < Target::FeatureEnd; ++i) {
             // We never want NoRuntime set here.
             if (i == Target::NoRuntime) {
@@ -1118,7 +1118,7 @@ void compile_multitarget(const std::string &fn_name,
         // if code tries to somehow only autoschedule some subtargets,
         // this code may break, and that's ok.
         std::ostringstream body;
-        if (baseline_target.os == Target::OSUnknown && baseline_target.arch == Target::ArchUnknown) {
+        if (baseline_target.os() == Target::OSUnknown && baseline_target.arch() == Target::ArchUnknown) {
             body << "// No autoscheduler has been run for this Generator.";
         } else {
             for (size_t i = 0; i < auto_scheduler_results.size(); i++) {

@@ -288,14 +288,14 @@ Target find_gpu_target() {
     Target target = get_host_target();
 
     std::vector<Target::Feature> features_to_try;
-    if (target.os == Target::Windows) {
+    if (target.os() == Target::Windows) {
         // Try D3D12 first; if that fails, try OpenCL.
         if (sizeof(void*) == 8) {
             // D3D12Compute support is only available on 64-bit systems at present.
             features_to_try.push_back(Target::D3D12Compute);
         }
         features_to_try.push_back(Target::OpenCL);
-    } else if (target.os == Target::OSX) {
+    } else if (target.os() == Target::OSX) {
         // OS X doesn't update its OpenCL drivers, so they tend to be broken.
         // CUDA would also be a fine choice on machines with NVidia GPUs.
         features_to_try.push_back(Target::Metal);

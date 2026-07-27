@@ -789,7 +789,7 @@ Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t) {
     // here, as this implementation assumes we start from the host (which
     // isn't true for Hexagon), and that it's safe to inject calls to copy
     // and/or mark things dirty (which also isn't true for Hexagon).
-    if (t.arch == Target::Hexagon) {
+    if (t.arch() == Target::Hexagon) {
         return s;
     }
 

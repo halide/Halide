@@ -175,8 +175,8 @@ string CodeGen_RISCV::mattrs() const {
 
     if (target.has_feature(Target::RVV)) {
         attrs.emplace_back("+v");
-        if (target.vector_bits != 0) {
-            attrs.push_back("+zvl" + std::to_string(target.vector_bits) + "b");
+        if (target.vector_bits() != 0) {
+            attrs.push_back("+zvl" + std::to_string(target.vector_bits()) + "b");
         }
     }
     return join_strings(attrs, ",");
@@ -184,7 +184,7 @@ string CodeGen_RISCV::mattrs() const {
 
 string CodeGen_RISCV::mabi() const {
     string abi;
-    if (target.bits == 32) {
+    if (target.bits() == 32) {
         abi = "ilp32";
     } else {
         abi = "lp64";
@@ -200,9 +200,9 @@ bool CodeGen_RISCV::use_soft_float_abi() const {
 }
 
 int CodeGen_RISCV::native_vector_bits() const {
-    if (target.vector_bits != 0 &&
+    if (target.vector_bits() != 0 &&
         target.has_feature(Target::RVV)) {
-        return target.vector_bits;
+        return target.vector_bits();
     }
     return 0;
 }
@@ -212,10 +212,10 @@ int CodeGen_RISCV::maximum_vector_bits() const {
 }
 
 int CodeGen_RISCV::target_vscale() const {
-    if (target.vector_bits != 0 &&
+    if (target.vector_bits() != 0 &&
         target.has_feature(Target::RVV)) {
-        internal_assert((target.vector_bits % 64) == 0);
-        return target.vector_bits / 64;
+        internal_assert((target.vector_bits() % 64) == 0);
+        return target.vector_bits() / 64;
     }
 
     return 0;
@@ -281,7 +281,7 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
 
     Type ret_type = op->type.with_lanes(op_max_lanes);
 
-    llvm::Type *xlen_type = target.bits == 32 ? i32_t : i64_t;
+    llvm::Type *xlen_type = target.bits() == 32 ? i32_t : i64_t;
 
     // Produce intrinsic name and type mangling.
     llvm::Type *llvm_ret_type;
@@ -366,7 +366,7 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
     mangled_name += mangle_llvm_type(llvm_arg_types[1]);
     mangled_name += mangle_llvm_type(llvm_arg_types[2]);
     if (intrin.flags & AddVLArg) {
-        mangled_name += (target.bits == 64) ? ".i64" : ".i32";
+        mangled_name += (target.bits() == 64) ? ".i64" : ".i32";
     }
 
     llvm::Function *llvm_intrinsic = get_llvm_intrin(llvm_ret_type, mangled_name, llvm_arg_types);

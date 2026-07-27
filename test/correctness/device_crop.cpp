@@ -22,7 +22,7 @@ Halide::Runtime::Buffer<int32_t> make_gpu_buffer(bool hexagon_rpc) {
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
-    bool hexagon_rpc = (target.arch != Target::Hexagon) &&
+    bool hexagon_rpc = (target.arch() != Target::Hexagon) &&
                        target.has_feature(Target::HVX);
 
     if (!hexagon_rpc && !target.has_gpu_feature()) {

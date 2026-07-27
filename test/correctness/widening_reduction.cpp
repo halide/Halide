@@ -9,7 +9,7 @@ using namespace Halide::Internal;
 int main(int arch, char **argv) {
 
     Halide::Target target = get_jit_target_from_environment();
-    if (target.has_feature(Target::Vulkan) && ((target.os == Target::IOS) || target.os == Target::OSX)) {
+    if (target.has_feature(Target::Vulkan) && ((target.os() == Target::IOS) || target.os() == Target::OSX)) {
         printf("[SKIP] Skipping test for Vulkan on iOS/OSX (MoltenVK fails to convert max/min intrinsics correctly)!\n");
         return 0;
     }

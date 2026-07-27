@@ -291,7 +291,7 @@ int main() {
 
         // Select an appropriate GPU API, as we did in lesson 12
         Target target = get_host_target();
-        if (target.os == Target::OSX) {
+        if (target.os() == Target::OSX) {
             target.set_feature(Target::Metal);
         } else {
             target.set_feature(Target::OpenCL);

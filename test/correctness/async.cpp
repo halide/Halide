@@ -13,7 +13,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int expensive(int x) {
 HalideExtern_1(int, expensive, int);
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    if (get_jit_target_from_environment().arch() == Target::WebAssembly) {
         printf("[SKIP] WebAssembly does not support async() yet.\n");
         return 0;
     }

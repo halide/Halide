@@ -375,7 +375,7 @@ Stmt stage_strided_loads(const Stmt &stmt, const Target &target) {
                 // horizontal add pattern matching. On ARM it also interferes
                 // with LLVM's pattern matching for vld3 and vld4.
                 bool transpose_shared_load = k.stride > 2;
-                if (target.arch == Target::ARM || target.arch == Target::Hexagon) {
+                if (target.arch() == Target::ARM || target.arch() == Target::Hexagon) {
                     transpose_shared_load = k.stride > 4;
                 }
                 std::string name = unique_name('t');

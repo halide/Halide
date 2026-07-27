@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().os != Target::OSX) {
+    if (get_jit_target_from_environment().os() != Target::OSX) {
         printf("[SKIP] error/metal_threads_too_large ignored for non-OSX targets\n");
         _halide_user_assert(0);
     }

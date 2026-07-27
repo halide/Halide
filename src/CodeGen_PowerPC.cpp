@@ -141,7 +141,7 @@ void CodeGen_PowerPC::visit(const Max *op) {
 }
 
 string CodeGen_PowerPC::mcpu_target() const {
-    if (target.bits == 32) {
+    if (target.bits() == 32) {
         return "ppc32";
     } else {
         if (target.has_feature(Target::POWER_ARCH_2_07)) {

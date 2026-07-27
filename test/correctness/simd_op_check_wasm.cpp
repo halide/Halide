@@ -21,7 +21,7 @@ public:
     }
 
     void add_tests() override {
-        if (target.arch == Target::WebAssembly) {
+        if (target.arch() == Target::WebAssembly) {
             check_wasm_all();
         }
     }

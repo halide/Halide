@@ -348,8 +348,8 @@ public:
 
     /** Construct a (scalar) language Type from an ABI element type. */
     HALIDE_ALWAYS_INLINE
-    Type(halide_type_t that, const halide_handle_cplusplus_type *handle_type = nullptr)
-        : Type(that.code, that.bits, 1, handle_type) {
+    Type(halide_type_t type, const halide_handle_cplusplus_type *handle_type = nullptr)
+        : Type(type.code, type.bits, 1, handle_type) {
     }
 
     /** Erase this language Type to the ABI/runtime halide_type_t for use in
@@ -532,8 +532,8 @@ public:
 
     /** Compare a language type to an ABI element type. Equal iff this type is a
      * single element (not a vector) with the same code and bits. */
-    bool operator==(const halide_type_t &other) const {
-        return type_lanes < 2 && (uint8_t)type_code == (uint8_t)other.code && type_bits == other.bits;
+    bool operator==(const halide_type_t &abi_type) const {
+        return type_lanes < 2 && type_code == abi_type.code && type_bits == abi_type.bits;
     }
 
     /** Compare two types for inequality */

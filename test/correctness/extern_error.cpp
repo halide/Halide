@@ -16,7 +16,7 @@ extern "C" HALIDE_EXPORT_SYMBOL void my_halide_error(JITUserContext *user_contex
 }
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    if (get_jit_target_from_environment().arch() == Target::WebAssembly) {
         printf("[SKIP] WebAssembly JIT does not support passing arbitrary pointers to/from HalideExtern code.\n");
         return 0;
     }

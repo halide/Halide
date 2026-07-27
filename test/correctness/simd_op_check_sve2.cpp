@@ -34,8 +34,8 @@ public:
         auto is_runtime_compatible = [](const Target &t1, const Target &t2,
                                         const vector<Target::Feature> features = {Target::SVE2}) -> bool {
             bool yes = true;
-            yes &= (t1.arch == t2.arch && t1.bits == t2.bits && t1.os == t2.os);
-            yes &= (t1.vector_bits == t2.vector_bits);
+            yes &= (t1.arch() == t2.arch() && t1.bits() == t2.bits() && t1.os() == t2.os());
+            yes &= (t1.vector_bits() == t2.vector_bits());
 
             // A bunch of feature flags also need to match between the
             // compiled code and the host in order to run the code.
@@ -678,7 +678,7 @@ private:
                 add_arm64("finite", is_vector ? sel_op("", "fcmge", "fcmeq") : "", is_inf(f_1));
             }
 
-            if (bits == 16 && target.os != Target::IOS && target.os != Target::OSX) {
+            if (bits == 16 && target.os() != Target::IOS && target.os() != Target::OSX) {
                 // Actually, the following ops are not vectorized because SIMD instruction is unavailable.
                 // The purpose of the test is just to confirm no error.
                 // In case the target has FP16 feature, native type conversion between fp16 and fp32 should be generated
@@ -725,7 +725,7 @@ private:
             // which makes it prone to false-positive detection as we only search strings line-by-line.
 
             // LDn       -       Structured Load strided elements
-            if (target.os != Target::IOS && target.os != Target::OSX &&
+            if (target.os() != Target::IOS && target.os() != Target::OSX &&
                 Halide::Internal::get_llvm_version() >= 220) {
                 for (int stride = 2; stride <= 4; ++stride) {
 
@@ -1100,7 +1100,7 @@ private:
         }
 
         string generate_pattern(const Target &target) const {
-            bool is_arm32 = target.bits == 32;
+            bool is_arm32 = target.bits() == 32;
 
             string opcode_pattern;
             string operand_pattern;
@@ -1124,7 +1124,7 @@ private:
         }
 
         static int natural_lanes(int bits, const Target &t) {
-            const int base_vector_bits = std::max(t.vector_bits, 128);
+            const int base_vector_bits = std::max(t.vector_bits(), 128);
             return base_vector_bits / bits;
         }
 
@@ -1440,7 +1440,7 @@ private:
     }
 
     inline bool is_arm32() const {
-        return target.bits == 32;
+        return target.bits() == 32;
     };
     inline bool has_neon() const {
         return !target.has_feature(Target::NoNEON);
@@ -1465,7 +1465,7 @@ private:
     }
 
     bool is_float16_supported() const {
-        return (target.bits == 64) &&
+        return (target.bits() == 64) &&
                target.features_any_of({Target::ARMFp16, Target::SVE, Target::SVE2, Target::SME2});
     }
 
@@ -1504,7 +1504,7 @@ int main(int argc, char **argv) {
             std::cerr << "Unsupported SME SVL " << svb << "\n";
             return 1;
         }
-        auto sme_target = Target(host_target.os, Target::ARM, 64, Target::ProcessorGeneric, {Target::SME2, sme_svl});
+        auto sme_target = Target(host_target.os(), Target::ARM, 64, Target::ProcessorGeneric, {Target::SME2, sme_svl});
         targets.emplace_back(sme_target);
     }
 

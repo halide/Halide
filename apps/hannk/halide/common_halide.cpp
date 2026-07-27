@@ -6,11 +6,11 @@ using namespace Halide::ConciseCasts;
 namespace hannk {
 
 int get_register_count(const Target &target) {
-    switch (target.arch) {
+    switch (target.arch()) {
     case Target::X86:
         return target.features_any_of({Target::AVX512_Skylake, Target::AVX512_Cannonlake, Target::AVX512_SapphireRapids}) ? 32 : 16;
     case Target::ARM:
-        return target.bits == 64 ? 32 : 16;
+        return target.bits() == 64 ? 32 : 16;
     case Target::Hexagon:
         return 32;
     default:
@@ -19,7 +19,7 @@ int get_register_count(const Target &target) {
 }
 
 int get_vector_reduction_factor(const Target &target, Type t) {
-    if (target.arch == Target::Hexagon ||
+    if (target.arch() == Target::Hexagon ||
         target.has_feature(Target::ARMDotProd) ||
         target.has_feature(Target::AVX512_SapphireRapids)) {
         return 32 / t.bits();
@@ -233,7 +233,7 @@ Expr quantize_i16(const Expr &x, const Expr &multiplier, const Expr &shift, cons
 Expr quantize_and_relu_u8(const Expr &x, const Expr &multiplier, const Expr &shift, const Expr &zero,
                           const Expr &min, const Expr &max, const Target &target) {
     Expr result = quantize_i16(x, multiplier, shift, target);
-    if (target.arch == Target::ARM || target.arch == Target::Hexagon || target.arch == Target::X86) {
+    if (target.arch() == Target::ARM || target.arch() == Target::Hexagon || target.arch() == Target::X86) {
         // These targets have saturating narrow instructions, so it's best to clamp
         // after narrowing for more vector throughput.
         result = u8_sat(saturating_add(result, zero));

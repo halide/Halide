@@ -972,8 +972,8 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
     // In the former we have true QuRT available, while on the
     // latter we simulate the Hexagon side code with a barebones
     // Shim layer, ie. NO QURT!
-    if (host_target.arch == Target::ARM) {
-        target.os = Target::QuRT;
+    if (host_target.arch() == Target::ARM) {
+        target.set_os(Target::QuRT);
     }
 
     // These feature flags are propagated from the host target to the

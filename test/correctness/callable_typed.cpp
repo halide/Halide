@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
 
     // Override Halide's malloc and free (except under wasm),
     // make sure that Callable freezes the values
-    if (t.arch != Target::WebAssembly) {
+    if (t.arch() != Target::WebAssembly) {
         custom_malloc_called = false;
         custom_free_called = false;
 
@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
     }
 
     // Check that Param<void*> works with Callables
-    if (t.arch != Target::WebAssembly) {
+    if (t.arch() != Target::WebAssembly) {
         Func f("f"), g("g");
         Var x("x");
         Param<void *> handle("handle");
@@ -186,7 +186,7 @@ int main(int argc, char **argv) {
     }
 
     // Check that JITExterns works with Callables
-    if (t.arch != Target::WebAssembly) {
+    if (t.arch() != Target::WebAssembly) {
         call_counter = 0;
 
         std::vector<ExternFuncArgument> args;

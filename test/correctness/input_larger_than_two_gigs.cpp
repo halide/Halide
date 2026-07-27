@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
 
     Buffer<uint64_t> result;
-    if (t.bits != 32) {
+    if (t.bits() != 32) {
         grand_total.compile_jit(t.with_feature(Target::LargeBuffers));
         result = grand_total.realize();
         assert(!error_occurred);

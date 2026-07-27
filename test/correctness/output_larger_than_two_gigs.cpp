@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
 
     Target t = get_jit_target_from_environment();
 
-    if (t.bits != 32) {
+    if (t.bits() != 32) {
         identity_uint8.compile_jit(t.with_feature(Target::LargeBuffers));
         identity_uint8.realize(output);
         assert(!error_occurred);

@@ -379,7 +379,7 @@ void compile_module_impl(
     llvm::orc::JITTargetMachineBuilder tm_builder(llvm::Triple(m->getTargetTriple()));
     tm_builder.setOptions(options);
     tm_builder.setCodeGenOptLevel(CodeGenOptLevel::Aggressive);
-    if (target.arch == Target::Arch::RISCV) {
+    if (target.arch() == Target::Arch::RISCV) {
         tm_builder.setCodeModel(llvm::CodeModel::Medium);
     }
 
@@ -401,9 +401,9 @@ void compile_module_impl(
     };
 
     llvm::orc::LLJITBuilderState::ObjectLinkingLayerCreator linkerBuilder;
-    if ((target.arch == Target::Arch::X86 && target.bits == 32) ||
-        (target.arch == Target::Arch::ARM && target.bits == 32) ||
-        target.os == Target::Windows) {
+    if ((target.arch() == Target::Arch::X86 && target.bits() == 32) ||
+        (target.arch() == Target::Arch::ARM && target.bits() == 32) ||
+        target.os() == Target::Windows) {
         // Fallback to RTDyld-based linking to workaround errors:
         // i386: "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
         // ARM 32bit: Unsupported target machine architecture in ELF object shared runtime-jitted-objectbuffer
@@ -1279,7 +1279,7 @@ Target JITCache::get_compiled_jit_target() const {
     // match what we expect.
     const bool has_wasm = wasm_module.contents.defined();
     const bool has_native = jit_module.compiled();
-    if (jit_target.arch == Target::WebAssembly) {
+    if (jit_target.arch() == Target::WebAssembly) {
         internal_assert(has_wasm && !has_native);
     } else if (!jit_target.has_unknowns()) {
         internal_assert(!has_wasm && has_native);
@@ -1298,7 +1298,7 @@ int JITCache::call_jit_code(const void *const *args) {
                     "compilation for Halide code.";
 #endif
 #endif
-    if (get_compiled_jit_target().arch == Target::WebAssembly) {
+    if (get_compiled_jit_target().arch() == Target::WebAssembly) {
         internal_assert(wasm_module.contents.defined());
         return wasm_module.run(args);
     } else {
