@@ -48,7 +48,7 @@ struct FuncInfo {
 
     FuncInfo() = default;
     FuncInfo(Packet *p) {
-        int real_dims = p->dimensions / p->type.lanes;
+        int real_dims = p->dimensions / p->lanes;
         if (real_dims > 16) {
             fprintf(stderr, "Error: found trace packet with dimensionality > 16. Aborting.\n");
             exit(1);
@@ -58,16 +58,14 @@ struct FuncInfo {
             max_coords[i] = INT32_MIN;
         }
         dimensions = real_dims;
-        type = p->type;
-        type.lanes = 1;
+        type = p->type();
     }
 
     void add_preprocess(Packet *p) {
-        int real_dims = p->dimensions / p->type.lanes;
-        int lanes = p->type.lanes;
+        int real_dims = p->dimensions / p->lanes;
+        int lanes = p->lanes;
 
-        halide_type_t scalar_type = p->type;
-        scalar_type.lanes = 1;
+        halide_type_t scalar_type = p->type();
 
         if (scalar_type != type) {
             fprintf(stderr, "Error: packet type doesn't match previous packets of same Func. Aborting.\n");
@@ -101,8 +99,7 @@ struct FuncInfo {
     }
 
     void add(Packet *p) {
-        halide_type_t scalar_type = p->type;
-        scalar_type.lanes = 1;
+        halide_type_t scalar_type = p->type();
         if (scalar_type == halide_type_of<float>()) {
             add_typed<float>(p);
         } else if (scalar_type == halide_type_of<double>()) {
@@ -134,7 +131,7 @@ struct FuncInfo {
     template<typename T>
     void add_typed(Packet *p) {
         Buffer<T> &buf = values.as<T>();
-        int lanes = p->type.lanes;
+        int lanes = p->lanes;
 
         if (!allocated()) {
             fprintf(stderr, "Packet storage not allocated. Aborting.\n");

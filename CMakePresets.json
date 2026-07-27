@@ -268,9 +268,57 @@
         "WITH_TEST_FUZZ": "YES",
         "BUILD_SHARED_LIBS": "NO"
       }
+    },
+    {
+      "name": "valgrind",
+      "inherits": "debug",
+      "displayName": "Valgrind (ctest -T memcheck)",
+      "description": "Debug build wired up so 'ctest -T memcheck' reruns the test suite under valgrind",
+      "cacheVariables": {
+        "Halide_ENABLE_MEMCHECK": "ON"
+      }
+    },
+    {
+      "name": "sde",
+      "hidden": true,
+      "inherits": "release",
+      "description": "Base preset for running the test suite under Intel SDE emulation"
+    },
+    {
+      "name": "avx512-cannonlake",
+      "inherits": "sde",
+      "displayName": "AVX-512 (Intel SDE, Cannon Lake)",
+      "description": "Run every registered test under 'sde -cnl --' to emulate a Cannon Lake AVX-512 CPU",
+      "cacheVariables": {
+        "CMAKE_CROSSCOMPILING_EMULATOR": "sde;-cnl;--"
+      }
+    },
+    {
+      "name": "avx512-knights-landing",
+      "inherits": "sde",
+      "displayName": "AVX-512 (Intel SDE, Knights Landing)",
+      "description": "Run every registered test under 'sde -knl --' to emulate a Knights Landing AVX-512 CPU",
+      "cacheVariables": {
+        "CMAKE_CROSSCOMPILING_EMULATOR": "sde;-knl;--"
+      }
     }
   ],
   "buildPresets": [
+    {
+      "name": "valgrind",
+      "configurePreset": "valgrind",
+      "displayName": "Valgrind (ctest -T memcheck)"
+    },
+    {
+      "name": "avx512-cannonlake",
+      "configurePreset": "avx512-cannonlake",
+      "displayName": "AVX-512 (Intel SDE, Cannon Lake)"
+    },
+    {
+      "name": "avx512-knights-landing",
+      "configurePreset": "avx512-knights-landing",
+      "displayName": "AVX-512 (Intel SDE, Knights Landing)"
+    },
     {
       "name": "macOS-coverage",
       "configurePreset": "macOS-coverage",
@@ -282,6 +330,36 @@
     }
   ],
   "testPresets": [
+    {
+      "name": "valgrind",
+      "configurePreset": "valgrind",
+      "displayName": "Valgrind (ctest -T memcheck)",
+      "description": "Selects the tests to run under valgrind; CTest presets can't select the '-T memcheck' action on their own, so pass it explicitly: 'ctest --preset valgrind -T memcheck'",
+      "filter": {
+        "exclude": {
+          "label": "no_memcheck"
+        }
+      },
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "avx512-cannonlake",
+      "configurePreset": "avx512-cannonlake",
+      "displayName": "AVX-512 (Intel SDE, Cannon Lake)",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "avx512-knights-landing",
+      "configurePreset": "avx512-knights-landing",
+      "displayName": "AVX-512 (Intel SDE, Knights Landing)",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
     {
       "name": "macOS-coverage",
       "configurePreset": "macOS-coverage",

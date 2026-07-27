@@ -118,12 +118,12 @@ public:
                 argv[slot] = &scalar_storage[slot];
 
 #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE, FIELD)               \
-    case halide_type_t(CODE, BITS).as_u32():                               \
+    case halide_type_t(CODE, BITS):                                        \
         scalar_storage[slot].u.FIELD = cast_to<TYPE>(value);               \
         cci[slot] = Callable::make_scalar_qcci(halide_type_t(CODE, BITS)); \
         break;
 
-                switch (((halide_type_t)c_arg.type).element_of().as_u32()) {
+                switch (c_arg.type.to_abi()) {
                     HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 32, float, f32)
                     HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 64, double, f64)
                     HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 8, int8_t, i8)
@@ -137,7 +137,7 @@ public:
                     HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 64, uint64_t, u64)
                     HALIDE_HANDLE_TYPE_DISPATCH(halide_type_handle, 64, uint64_t, u64)  // Handle types are always uint64, regardless of pointer size
                 default:
-                    _halide_user_assert(0) << "Unsupported type in Callable argument list: " << c_arg.type << "\n";
+                    _halide_user_error << "Unsupported type in Callable argument list: " << c_arg.type << "\n";
                 }
 
 #undef HALIDE_HANDLE_TYPE_DISPATCH

@@ -288,6 +288,8 @@ protected:
     void visit(const VectorReduce *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
+    void visit(const StreamingStore *) override;
+    void visit(const StreamingLoads *) override;
     void visit(const HoistedStorage *) override;
 };
 

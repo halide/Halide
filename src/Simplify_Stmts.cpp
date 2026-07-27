@@ -752,6 +752,28 @@ Stmt Simplify::visit(const Atomic *op) {
     }
 }
 
+Stmt Simplify::visit(const StreamingStore *op) {
+    Stmt body = mutate(op->body);
+    if (is_no_op(body)) {
+        return Evaluate::make(0);
+    } else if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return StreamingStore::make(op->producer_name, std::move(body));
+    }
+}
+
+Stmt Simplify::visit(const StreamingLoads *op) {
+    Stmt body = mutate(op->body);
+    if (is_no_op(body)) {
+        return Evaluate::make(0);
+    } else if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return StreamingLoads::make(op->names, std::move(body));
+    }
+}
+
 Stmt Simplify::visit(const HoistedStorage *op) {
     Stmt body = mutate(op->body);
     return op->remake(body);

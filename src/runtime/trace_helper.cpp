@@ -16,9 +16,8 @@ WEAK int halide_trace_helper(void *user_context,
     event.value = value;
     event.coordinates = coords;
     event.trace_tag = trace_tag;
-    event.type.code = (halide_type_code_t)type_code;
-    event.type.bits = (uint8_t)type_bits;
-    event.type.lanes = (uint16_t)type_lanes;
+    event.type = {(halide_type_code_t)type_code, (uint8_t)type_bits};
+    event.lanes = type_lanes;
     event.event = (halide_trace_event_code_t)code;
     event.parent_id = parent_id;
     event.thread_id = thread_id;

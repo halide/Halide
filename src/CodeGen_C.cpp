@@ -252,8 +252,8 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
                << "struct halide_filter_metadata_t;\n"
                << "\n";
         // We just forward declared the following types:
-        forward_declared.insert(type_of<halide_buffer_t *>().handle_type);
-        forward_declared.insert(type_of<halide_filter_metadata_t *>().handle_type);
+        forward_declared.insert(type_of<halide_buffer_t *>().handle_type());
+        forward_declared.insert(type_of<halide_filter_metadata_t *>().handle_type());
     } else if (is_extern_decl()) {
         // Extern decls to be wrapped inside other code (eg python extensions);
         // emit the forward decls with a minimum of noise. Note that we never
@@ -261,8 +261,8 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
         stream << "struct halide_buffer_t;\n"
                << "struct halide_filter_metadata_t;\n"
                << "\n";
-        forward_declared.insert(type_of<halide_buffer_t *>().handle_type);
-        forward_declared.insert(type_of<halide_filter_metadata_t *>().handle_type);
+        forward_declared.insert(type_of<halide_buffer_t *>().handle_type());
+        forward_declared.insert(type_of<halide_filter_metadata_t *>().handle_type());
     } else {
         // Include declarations of everything generated C source might want
         stream
@@ -569,37 +569,37 @@ public:
 }  // namespace
 
 void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
-    if (!t.handle_type ||
-        forward_declared.count(t.handle_type) ||
-        t.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
+    if (!t.handle_type() ||
+        forward_declared.count(t.handle_type()) ||
+        t.handle_type()->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
         return;
     }
-    for (const auto &ns : t.handle_type->namespaces) {
+    for (const auto &ns : t.handle_type()->namespaces) {
         stream << "namespace " << ns << " { ";
     }
-    switch (t.handle_type->inner_name.cpp_type_type) {
+    switch (t.handle_type()->inner_name.cpp_type_type) {
     case halide_cplusplus_type_name::Simple:
         // nothing
         break;
     case halide_cplusplus_type_name::Struct:
-        stream << "struct " << t.handle_type->inner_name.name << ";";
+        stream << "struct " << t.handle_type()->inner_name.name << ";";
         break;
     case halide_cplusplus_type_name::Class:
-        stream << "class " << t.handle_type->inner_name.name << ";";
+        stream << "class " << t.handle_type()->inner_name.name << ";";
         break;
     case halide_cplusplus_type_name::Union:
-        stream << "union " << t.handle_type->inner_name.name << ";";
+        stream << "union " << t.handle_type()->inner_name.name << ";";
         break;
     case halide_cplusplus_type_name::Enum:
         internal_error << "Passing pointers to enums is unsupported\n";
         break;
     }
-    for (const auto &ns : t.handle_type->namespaces) {
+    for (const auto &ns : t.handle_type()->namespaces) {
         (void)ns;
         stream << " }";
     }
     stream << "\n";
-    forward_declared.insert(t.handle_type);
+    forward_declared.insert(t.handle_type());
 }
 
 void CodeGen_C::emit_argv_wrapper(const std::string &function_name,
@@ -811,7 +811,7 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
         stream << get_indent() << kind_names[arg.kind] << ",\n";
         stream << get_indent() << (int)arg.dimensions << ",\n";
         internal_assert(arg.type.code() < sizeof(type_code_names) / sizeof(type_code_names[0]));
-        stream << get_indent() << "{" << type_code_names[arg.type.code()] << ", " << arg.type.bits() << ", " << arg.type.lanes() << "},\n";
+        stream << get_indent() << "{" << type_code_names[arg.type.code()] << ", " << arg.type.bits() << "},\n";
         stream << get_indent() << "scalar_def_" << legalized_name << ",\n";
         stream << get_indent() << "scalar_min_" << legalized_name << ",\n";
         stream << get_indent() << "scalar_max_" << legalized_name << ",\n";
@@ -888,7 +888,7 @@ void CodeGen_C::emit_constexpr_function_info(const std::string &function_name,
 
         stream << get_indent() << "{\"" << name << "\", " << kind_names[arg.kind] << ", " << (int)arg.dimensions
                << ", halide_type_t{" << type_code_names[arg.type.code()] << ", " << arg.type.bits()
-               << ", " << arg.type.lanes() << "}},\n";
+               << "}},\n";
     }
     indent -= 1;
     stream << get_indent() << "}};\n";
@@ -1230,11 +1230,11 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // case the buffer objects need to be non-const, because the constness
     // (from the POV of the extern stage) is a runtime property.
     stream << "static halide_buffer_t " << name << "_buffer_ = {"
-           << "0, "                                              // device
-           << "nullptr, "                                        // device_interface
-           << "const_cast<uint8_t*>(&" << name << "_data[0]), "  // host
-           << "0, "                                              // flags
-           << "halide_type_t((halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "), "
+           << "0, "                                                                                 // device
+           << "nullptr, "                                                                           // device_interface
+           << "const_cast<uint8_t*>(&" << name << "_data[0]), "                                     // host
+           << "0, "                                                                                 // flags
+           << "halide_type_t((halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << "), "  // scalar element type
            << buffer.dimensions() << ", "
            << buffer_shape << "};\n";
 
@@ -1660,7 +1660,7 @@ void CodeGen_C::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->args.empty()) {
-            internal_assert(op->type.handle_type);
+            internal_assert(op->type.handle_type());
             // Add explicit cast so that different structs can't cache to the same value
             rhs << "(" << print_type(op->type) << ")(nullptr)";
         } else if (op->type == type_of<halide_dimension_t *>()) {
@@ -1736,7 +1736,7 @@ void CodeGen_C::visit(const Call *op) {
                 // TODO: This is dubious type-punning. We really need to
                 // find a better way to do this. We dodge the problem for
                 // the specific case of buffer shapes in the case above.
-                if (op->type.handle_type) {
+                if (op->type.handle_type()) {
                     rhs << "(" << print_type(op->type) << ")";
                 }
                 rhs << struct_name;
@@ -1759,7 +1759,7 @@ void CodeGen_C::visit(const Call *op) {
                 // TODO: This is dubious type-punning. We really need to
                 // find a better way to do this. We dodge the problem for
                 // the specific case of buffer shapes in the case above.
-                if (op->type.handle_type) {
+                if (op->type.handle_type()) {
                     rhs << "(" << print_type(op->type) << ")";
                 }
                 rhs << "(&" << struct_name << ")";
@@ -1863,6 +1863,9 @@ void CodeGen_C::visit(const Call *op) {
             << " + " << print_expr(base_offset) << "), /*rw*/0, /*locality*/0), 0)";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
+    } else if (op->is_intrinsic(Call::stream_store_fence)) {
+        user_warning << "The C backend does not implement non-temporal loads/stores.";
+        rhs << "0";
     } else if (op->is_intrinsic(Call::strict_fma)) {
         internal_assert(op->args.size() == 3)
             << "Wrong number of args for strict_fma: " << op->args.size();
@@ -2730,10 +2733,10 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
 
 inline constexpr std::array<::HalideFunctionInfo::ArgumentInfo, 4> test1_argument_info() {
  return {{
-  {"buf", ::HalideFunctionInfo::OutputBuffer, 3, halide_type_t{halide_type_int, 32, 1}},
-  {"alpha", ::HalideFunctionInfo::InputScalar, 0, halide_type_t{halide_type_float, 32, 1}},
-  {"beta", ::HalideFunctionInfo::InputScalar, 0, halide_type_t{halide_type_int, 32, 1}},
-  {"__user_context", ::HalideFunctionInfo::InputScalar, 0, halide_type_t{halide_type_handle, 64, 1}},
+  {"buf", ::HalideFunctionInfo::OutputBuffer, 3, halide_type_t{halide_type_int, 32}},
+  {"alpha", ::HalideFunctionInfo::InputScalar, 0, halide_type_t{halide_type_float, 32}},
+  {"beta", ::HalideFunctionInfo::InputScalar, 0, halide_type_t{halide_type_int, 32}},
+  {"__user_context", ::HalideFunctionInfo::InputScalar, 0, halide_type_t{halide_type_handle, 64}},
  }};
 }
 #endif

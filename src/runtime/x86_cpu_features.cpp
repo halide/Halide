@@ -34,6 +34,27 @@ struct cpuid_result {
     return (uint32_t)xcr_info[0];
 }
 
+#if LINUX
+// On Linux, the AMX XTILEDATA state component (XCR0 bit 18) is allocated
+// lazily: the kernel leaves it disabled in XCR0 for a thread until that
+// thread explicitly requests permission to use it via arch_prctl(2). Without
+// this call, xgetbv() would report AMX as OS-disabled even on hardware that
+// fully supports it. This is a no-op (and harmless) if already granted, and
+// only applies in 64-bit mode, since arch_prctl and AMX are both x86-64-only.
+extern "C" long syscall(long number, ...);
+
+constexpr long sys_arch_prctl = 158;  // x86-64 Linux syscall number
+constexpr long arch_req_xcomp_perm = 0x1023;
+constexpr long xfeature_xtiledata = 18;
+
+ALWAYS_INLINE void request_amx_os_permission() {
+    syscall(sys_arch_prctl, arch_req_xcomp_perm, xfeature_xtiledata);
+}
+#else
+ALWAYS_INLINE void request_amx_os_permission() {
+}
+#endif
+
 }  // namespace
 
 extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
@@ -65,11 +86,16 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
     bool os_avx = false;
     bool os_avx512 = false;
     bool os_apx = false;
+    bool os_amx = false;
     if (have_osxsave) {
+        if (use_64_bits) {
+            request_amx_os_permission();
+        }
         uint32_t xcr0 = xgetbv(0);
         os_avx = (xcr0 & 0x6) == 0x6;                   // XMM (bit 1) + YMM (bit 2)
         os_avx512 = os_avx && ((xcr0 & 0xE0) == 0xE0);  // opmask (5) + ZMM_Hi256 (6) + Hi16_ZMM (7)
         os_apx = (xcr0 & 0x80000) == 0x80000;           // APX extended GPRs (bit 19)
+        os_amx = (xcr0 & 0x60000) == 0x60000;           // AMX XTILECFG (17) + XTILEDATA (18)
     }
 
     uint32_t family = (info.eax >> 8) & 0xF;  // Bits 8..11
@@ -166,7 +192,10 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
         constexpr uint32_t avx512vl = 1U << 31;
         constexpr uint32_t avx512ifma = 1U << 21;
         constexpr uint32_t avxvnni = 1U << 4;
-        constexpr uint32_t avx512bf16 = 1U << 5;  // bf16 result in eax, cpuid(eax=7, ecx=1)
+        constexpr uint32_t amx_bf16 = 1U << 22;  // amx_bf16 result in edx, cpuid(eax=7, ecx=0)
+        constexpr uint32_t amx_tile = 1U << 24;  // amx_tile result in edx, cpuid(eax=7, ecx=0)
+        constexpr uint32_t amx_int8 = 1U << 25;  // amx_int8 result in edx, cpuid(eax=7, ecx=0)
+        constexpr uint32_t amx = amx_bf16 | amx_tile | amx_int8;
         constexpr uint32_t avx512 = avx512f | avx512cd;
         constexpr uint32_t avx512_knl = avx512 | avx512pf | avx512er;
         constexpr uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
@@ -187,7 +216,7 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
 
                 if ((info3.eax & avxvnni) == avxvnni) {
                     halide_set_available_cpu_feature(features, halide_target_feature_avxvnni);
-                    if ((info3.eax & avx512bf16) == avx512bf16) {
+                    if ((info2.edx & amx) == amx && os_amx) {
                         halide_set_available_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
                     }
                 }

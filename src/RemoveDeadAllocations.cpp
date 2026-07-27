@@ -57,11 +57,19 @@ protected:
         allocs.push(op->name, 1);
         Stmt body = mutate(op->body);
 
+        // An aliasing allocation's new_expr may reference the backing
+        // allocation (e.g. offset_pointer(backing, offset)). Mutating it marks
+        // that backing as used, so it isn't mistaken for dead.
+        Expr new_expr = op->new_expr;
+        if (new_expr.defined()) {
+            new_expr = mutate(new_expr);
+        }
+
         if (allocs.contains(op->name) && op->free_function.empty()) {
             allocs.pop(op->name);
             return body;
         } else {
-            return op->remake(op->extents, op->condition, body);
+            return op->remake(op->extents, op->condition, body, new_expr);
         }
     }
 

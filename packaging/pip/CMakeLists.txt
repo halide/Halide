@@ -10,7 +10,7 @@ function(configure_trampoline PACKAGE INSTALL_DIR)
 endfunction()
 
 configure_trampoline(Halide "${Halide_INSTALL_CMAKEDIR}")
-configure_trampoline(HalideHelpers "${Halide_INSTALL_HELPERSDIR}")
+configure_trampoline(HalideCompiler "${Halide_INSTALL_COMPILERDIR}")
 
 install(
     FILES
@@ -29,12 +29,12 @@ install(
     COMPONENT Halide_Python
 )
 
-# Same thing for HalideHelpers
+# Same thing for HalideCompiler
 install(
     FILES
-        "${CMAKE_CURRENT_BINARY_DIR}/HalideHelpersConfig.cmake"
-        "${CMAKE_CURRENT_BINARY_DIR}/../HalideHelpersConfigVersion.cmake"
-    DESTINATION "${SKBUILD_DATA_DIR}/share/cmake/HalideHelpers"
+        "${CMAKE_CURRENT_BINARY_DIR}/HalideCompilerConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/../HalideCompilerConfigVersion.cmake"
+    DESTINATION "${SKBUILD_DATA_DIR}/share/cmake/HalideCompiler"
     COMPONENT Halide_Python
 )
 

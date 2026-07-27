@@ -285,6 +285,24 @@ Stmt IRMutator::visit(const Atomic *op) {
     return op->remake(body);
 }
 
+Stmt IRMutator::visit(const StreamingStore *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return StreamingStore::make(op->producer_name, std::move(body));
+    }
+}
+
+Stmt IRMutator::visit(const StreamingLoads *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return StreamingLoads::make(op->names, std::move(body));
+    }
+}
+
 Stmt IRMutator::visit(const HoistedStorage *op) {
     Stmt body = mutate(op->body);
     return op->remake(body);

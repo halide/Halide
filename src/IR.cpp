@@ -275,7 +275,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     return node;
 }
 
-Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment) {
+Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment, bool is_streaming) {
     internal_assert(predicate.defined()) << "Load with undefined predicate\n";
     internal_assert(index.defined()) << "Load of undefined\n";
     internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
@@ -290,6 +290,7 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
     node->image = std::move(image);
     node->param = std::move(param);
     node->alignment = alignment;
+    node->is_streaming = is_streaming;
     return node;
 }
 
@@ -301,7 +302,7 @@ Expr Load::remake(const Expr &index, const Expr &predicate, ModulusRemainder ali
     }
     // The element type is inherited, but the lane count comes from the index.
     Type t = type.with_lanes(index.type().lanes());
-    return make(t, name, index, image, param, predicate, alignment);
+    return make(t, name, index, image, param, predicate, alignment, is_streaming);
 }
 
 Expr Ramp::make(Expr base, Expr stride, int lanes) {
@@ -460,7 +461,7 @@ Stmt Acquire::remake(const Expr &semaphore, const Expr &count, const Stmt &body)
     return make(semaphore, count, body);
 }
 
-Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment) {
+Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment, bool is_streaming) {
     internal_assert(predicate.defined()) << "Store with undefined predicate\n";
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
@@ -475,6 +476,7 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
     node->index = std::move(index);
     node->param = std::move(param);
     node->alignment = alignment;
+    node->is_streaming = is_streaming;
     return node;
 }
 
@@ -486,7 +488,7 @@ Stmt Store::remake(const Expr &value, const Expr &index, const Expr &predicate, 
         return this;
     }
     return make(name, value, index, param,
-                predicate, alignment);
+                predicate, alignment, is_streaming);
 }
 
 Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate) {
@@ -829,6 +831,7 @@ constexpr const char *intrinsic_op_names[] = {
     "mod_round_to_zero",
     "mul_shift_right",
     "mux",
+    "offset_pointer",
     "popcount",
     "prefetch",
     "profiling_enable_instance_marker",
@@ -855,6 +858,7 @@ constexpr const char *intrinsic_op_names[] = {
     "skip_stages_marker",
     "sliding_window_marker",
     "sorted_avg",
+    "stream_store_fence",
     "strict_add",
     "strict_cast",
     "strict_div",
@@ -1152,6 +1156,24 @@ Stmt Atomic::make(const std::string &producer_name,
     node->producer_name = producer_name;
     node->mutex_name = mutex_name;
     internal_assert(body.defined()) << "Atomic must have a body statement.\n";
+    node->body = std::move(body);
+    return node;
+}
+
+Stmt StreamingStore::make(const std::string &producer_name,
+                          Stmt body) {
+    internal_assert(body.defined()) << "StreamingStore must have a body statement.\n";
+    StreamingStore *node = new StreamingStore;
+    node->producer_name = producer_name;
+    node->body = std::move(body);
+    return node;
+}
+
+Stmt StreamingLoads::make(std::optional<std::vector<std::string>> names,
+                          Stmt body) {
+    internal_assert(body.defined()) << "StreamingLoads must have a body statement.\n";
+    StreamingLoads *node = new StreamingLoads;
+    node->names = std::move(names);
     node->body = std::move(body);
     return node;
 }
@@ -1458,6 +1480,14 @@ void StmtNode<Atomic>::accept(IRVisitor *v) const {
     v->visit((const Atomic *)this);
 }
 template<>
+void StmtNode<StreamingStore>::accept(IRVisitor *v) const {
+    v->visit((const StreamingStore *)this);
+}
+template<>
+void StmtNode<StreamingLoads>::accept(IRVisitor *v) const {
+    v->visit((const StreamingLoads *)this);
+}
+template<>
 void StmtNode<HoistedStorage>::accept(IRVisitor *v) const {
     v->visit((const HoistedStorage *)this);
 }
@@ -1650,6 +1680,14 @@ Stmt StmtNode<Fork>::mutate_stmt(IRMutator *v) const {
 template<>
 Stmt StmtNode<Atomic>::mutate_stmt(IRMutator *v) const {
     return v->visit((const Atomic *)this);
+}
+template<>
+Stmt StmtNode<StreamingStore>::mutate_stmt(IRMutator *v) const {
+    return v->visit((const StreamingStore *)this);
+}
+template<>
+Stmt StmtNode<StreamingLoads>::mutate_stmt(IRMutator *v) const {
+    return v->visit((const StreamingLoads *)this);
 }
 template<>
 Stmt StmtNode<HoistedStorage>::mutate_stmt(IRMutator *v) const {

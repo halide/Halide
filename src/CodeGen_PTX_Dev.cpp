@@ -378,7 +378,7 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
             Expr equiv = Load::make(UInt(128), op->name, index,
-                                    op->image, op->param, const_true(), align / 4);
+                                    op->image, op->param, const_true(), align / 4, op->is_streaming);
             equiv = reinterpret(op->type, equiv);
             codegen(equiv);
             return;
@@ -447,7 +447,7 @@ class RewriteLoadsAs32Bit : public IRMutator {
             if (op->type.lanes() > sub_lanes) {
                 new_idx = Ramp::make(new_idx, 1, load_lanes);
             }
-            Expr new_load = Load::make(Int(32, load_lanes), op->name, new_idx, op->image, op->param, const_true(load_lanes), op->alignment / sub_lanes);
+            Expr new_load = Load::make(Int(32, load_lanes), op->name, new_idx, op->image, op->param, const_true(load_lanes), op->alignment / sub_lanes, op->is_streaming);
             return reinterpret(op->type, new_load);
         } else {
             return op->remake(index, op->predicate, op->alignment);

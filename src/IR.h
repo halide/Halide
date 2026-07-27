@@ -5,6 +5,7 @@
  * Subtypes for Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
  */
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -309,11 +310,15 @@ struct Load : public ExprNode<Load> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
+    // Whether this access should bypass the cache when supported by the target.
+    bool is_streaming;
+
     static Expr make(Type type, const std::string &name,
                      Expr index, Buffer<> image,
                      Parameter param,
                      Expr predicate,
-                     ModulusRemainder alignment);
+                     ModulusRemainder alignment,
+                     bool is_streaming = false);
 
     /** Make a Load that loads from the same buffer as this one, but with new
      * children. The type is the element type of this Load, with the lane count
@@ -452,8 +457,12 @@ struct Store : public StmtNode<Store> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
+    // Whether this access should bypass the cache when supported by the target.
+    bool is_streaming;
+
     static Stmt make(const std::string &name, Expr value, Expr index,
-                     Parameter param, Expr predicate, ModulusRemainder alignment);
+                     Parameter param, Expr predicate, ModulusRemainder alignment,
+                     bool is_streaming = false);
 
     /** Make a Store to the same buffer as this one, but with new children.
      * Returns this Store unchanged if the new children are the same as the
@@ -677,6 +686,7 @@ struct Call : public ExprNode<Call> {
     // are *not* guaranteed to be stable across time.
     enum IntrinsicOp {
         // keep-sorted start sticky_comments=yes
+
         abs,
         // Absolute difference between two values. absd(a, b) = abs(a - b), but
         // without overflow issues for integer types.
@@ -751,6 +761,16 @@ struct Call : public ExprNode<Call> {
         mod_round_to_zero,
         mul_shift_right,
         mux,
+        // A pointer into a sub-range of another allocation.
+        // offset_pointer(base, offset) returns the base pointer of the
+        // allocation named by the Variable `base`, advanced by `offset`
+        // elements (in units of the aliasing allocation's element type). Used
+        // as the new_expr of an Allocate node to express that it aliases a
+        // sub-range of a larger backing allocation. GPU allocation fusing emits
+        // these so that per-Func names survive lowering (for the profiler and
+        // for a readable conceptual stmt); they are folded into the indices of
+        // loads and stores by inject_gpu_offload before GPU codegen.
+        offset_pointer,
         popcount,
         prefetch,
         // Marks the point where profiling should start counting pipeline instances
@@ -802,6 +822,9 @@ struct Call : public ExprNode<Call> {
         sliding_window_marker,
         // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         sorted_avg,
+        // Emits a target-specific memory fence after a Stage that
+        // contains non-temporal (streaming) stores.
+        stream_store_fence,
         // strict floating point ops. These are floating point ops that we would
         // like to optimize around (or let llvm optimize around) by treating
         // them as reals and ignoring the existence of nan and inf. Using these
@@ -1247,6 +1270,40 @@ struct Atomic : public StmtNode<Atomic> {
     Stmt remake(const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::Atomic;
+};
+
+/** Marks the store(s) produced by the wrapped body as requesting
+ * non-temporal (streaming) stores, as scheduled via Stage::stream_stores.
+ * Created directly around a Provide node (or an Atomic node wrapping
+ * one) during scheduling and is never nested. Consumed by storage flattening,
+ * which uses it to set Store::is_streaming on the resulting Store node(s) and
+ * then discards it. */
+struct StreamingStore : public StmtNode<StreamingStore> {
+    std::string producer_name;
+    Stmt body;
+
+    static Stmt make(const std::string &producer_name,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::StreamingStore;
+};
+
+/** Marks the Halide-Func loads made while evaluating the wrapped body as
+ * requesting non-temporal (streaming) loads, as scheduled via
+ * Stage::stream_loads. If `names` is nullopt, every direct load of another
+ * Func is streamed (except a self-load, which is never streamed);
+ * otherwise only loads of Funcs named in `*names` are streamed. Created
+ * directly around a Provide node during scheduling and is never nested.
+ * Consumed by storage flattening, which uses it to set Load::is_streaming
+ * on the resulting Load node(s) and then discards it. */
+struct StreamingLoads : public StmtNode<StreamingLoads> {
+    std::optional<std::vector<std::string>> names;
+    Stmt body;
+
+    static Stmt make(std::optional<std::vector<std::string>> names,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::StreamingLoads;
 };
 
 /** Horizontally reduce a vector to a scalar or narrower vector using

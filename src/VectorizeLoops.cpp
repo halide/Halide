@@ -618,7 +618,7 @@ protected:
 
             const Load *load = true_value.as<Load>();
             if (load) {
-                return Load::make(op->type.with_lanes(max_lanes), load->name, load->index, load->image, load->param, cond, load->alignment);
+                return Load::make(op->type.with_lanes(max_lanes), load->name, load->index, load->image, load->param, cond, load->alignment, load->is_streaming);
             }
         }
 

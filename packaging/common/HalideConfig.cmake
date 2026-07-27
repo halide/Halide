@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.28)
 @PACKAGE_INIT@
 
-macro(Halide_fail message)  # nolint -- required for find_package scoping
-    set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE "${message}")
+macro(Halide_fail)  # nolint -- required for find_package scoping
+    string(JOIN " " ${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE ${ARGN})
     set(${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)
     return()
 endmacro()
@@ -22,8 +22,8 @@ macro(Halide_find_component_dependency comp dep)  # nolint
     endif ()
 endmacro()
 
-set(Halide_known_components Halide Python PNG JPEG static shared)
-set(Halide_components Halide PNG JPEG)
+set(Halide_known_components JIT Python PNG JPEG static shared)
+set(Halide_components PNG JPEG)
 
 foreach (Halide_comp IN LISTS Halide_known_components)
     set(Halide_comp_${Halide_comp} NO)
@@ -33,7 +33,11 @@ if (${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS)
     set(Halide_components ${${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS})
 endif ()
 
-# Parse components for static/shared preference.
+# Parse components. `JIT` and `Python` force the compiled HalideCompiler package
+# to be loaded below, even while cross-compiling. `PNG`/`JPEG` are resolved
+# locally (Halide::ImageIO is header-only and lives in this package). `static`/
+# `shared` merely record a preference for whichever package eventually loads
+# the compiled compiler -- see below.
 foreach (Halide_comp IN LISTS Halide_components)
     if (Halide_comp IN_LIST Halide_known_components)
         set(Halide_comp_${Halide_comp} YES)
@@ -46,21 +50,20 @@ if (Halide_comp_static AND Halide_comp_shared)
     Halide_fail("Halide `static` and `shared` components are mutually exclusive.")
 endif ()
 
-# Inform downstreams of potential compatibility issues. For instance, exceptions
-# and RTTI must both be enabled to build Python bindings and ASAN builds should
-# not be mixed with non-ASAN builds.
-set(WITH_AUTOSCHEDULERS "@WITH_AUTOSCHEDULERS@")
-set(Halide_ENABLE_EXCEPTIONS "@Halide_ENABLE_EXCEPTIONS@")
-set(Halide_ENABLE_RTTI "@Halide_ENABLE_RTTI@")
-set(Halide_ASAN_ENABLED "@Halide_ASAN_ENABLED@")
-
 ##
-## Find dependencies based on components
+# Load the platform-independent helpers: CMake authoring functions and
+# header-only/interface targets. This never touches a compiled binary.
 ##
 
-include(CMakeFindDependencyMacro)
+set(Halide_HOST_TARGET @Halide_HOST_TARGET@)
 
-find_dependency(HalideHelpers "@Halide_VERSION@" EXACT HINTS "@PACKAGE_Halide_INSTALL_HELPERSDIR@")
+include(${CMAKE_CURRENT_LIST_DIR}/Halide-targets.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/HalideGeneratorHelpers.cmake)
+
+##
+# Image format components -- resolved locally, never forwarded to HalideCompiler.
+##
 
 if (Halide_comp_PNG)
     Halide_find_component_dependency(PNG PNG)
@@ -71,69 +74,76 @@ if (Halide_comp_JPEG)
 endif ()
 
 ##
-## Select static or shared and load CMake scripts
+# Record a static/shared preference for whichever package eventually loads the
+# compiled compiler, without forcing that load to happen now. This is a plain
+# (not CACHE, not GLOBAL PROPERTY) variable, so it is naturally scoped to this
+# directory and any subdirectories added after this point -- independent
+# find_package(Halide ...) calls in unrelated directories of the same project
+# can each record their own preference without conflicting. It is
+# intentionally NOT unset below with the rest of our internal state, since its
+# entire purpose is to still be visible when HalideCompiler is eventually
+# loaded, possibly much later (e.g. lazily, from add_halide_generator).
 ##
 
-set(Halide_static_targets "${CMAKE_CURRENT_LIST_DIR}/Halide-static-targets.cmake")
-set(Halide_shared_targets "${CMAKE_CURRENT_LIST_DIR}/Halide-shared-targets.cmake")
-
-set(Halide_static_deps "${CMAKE_CURRENT_LIST_DIR}/Halide-static-deps.cmake")
-set(Halide_shared_deps "${CMAKE_CURRENT_LIST_DIR}/Halide-shared-deps.cmake")
-
-macro(Halide_load_targets type)  # nolint
-    if (NOT EXISTS "${Halide_${type}_targets}")
-        Halide_fail("Halide `${type}` libraries were requested but not found.")
-    endif ()
-
-    include("${Halide_${type}_targets}")
-    include("${Halide_${type}_deps}" OPTIONAL)
-endmacro()
-
 if (Halide_comp_static)
-    Halide_load_targets(static)
+    set(_Halide_SHARED_LIBS_preference NO)
 elseif (Halide_comp_shared)
-    Halide_load_targets(shared)
-elseif (DEFINED Halide_SHARED_LIBS AND Halide_SHARED_LIBS)
-    Halide_load_targets(shared)
-elseif (DEFINED Halide_SHARED_LIBS AND NOT Halide_SHARED_LIBS)
-    Halide_load_targets(static)
-elseif (BUILD_SHARED_LIBS OR NOT DEFINED BUILD_SHARED_LIBS)
-    if (EXISTS "${Halide_shared_targets}")
-        Halide_load_targets(shared)
-    else ()
-        Halide_load_targets(static)
-    endif ()
-else ()
-    if (EXISTS "${Halide_static_targets}")
-        Halide_load_targets(static)
-    else ()
-        Halide_load_targets(shared)
-    endif ()
+    set(_Halide_SHARED_LIBS_preference YES)
 endif ()
 
-## Load Python component
-if (Halide_comp_Python OR "@WITH_PYTHON_BINDINGS@")
-    Halide_find_component_dependency(
-        Python Halide_Python
-        HINTS "@PACKAGE_Halide_Python_INSTALL_CMAKEDIR@"
-    )
+##
+# Optionally load the compiled compiler/JIT package. This always happens for a
+# native (non-cross-compiling) build, to preserve historical behavior for the
+# common case. While cross-compiling, it only happens if explicitly requested
+# via the `JIT` or `Python` components, since the point of this package is to
+# be usable without ever touching a platform-specific binary.
+##
+
+include(CMakeFindDependencyMacro)
+
+if (Halide_comp_JIT OR Halide_comp_Python OR NOT CMAKE_CROSSCOMPILING)
+    set(Halide_compiler_components "")
+    if (Halide_comp_Python)
+        list(APPEND Halide_compiler_components Python)
+    endif ()
+
+    # Forward an explicit static/shared request as a real component here,
+    # rather than relying solely on the `_Halide_SHARED_LIBS_preference`
+    # variable above. find_dependency() skips its underlying find_package()
+    # call when called with arguments identical to a previous call in this
+    # directory (or a descendant) -- since that preference variable isn't
+    # part of those arguments, two calls that differ only by preference
+    # would otherwise collide and silently reuse whichever flavor loaded
+    # first, defeating HalideCompilerConfig.cmake's own conflict detection.
+    # Forwarding the component keeps this common case (an explicit
+    # `static`/`shared` request) correctly distinguished.
+    if (Halide_comp_static)
+        list(APPEND Halide_compiler_components static)
+    elseif (Halide_comp_shared)
+        list(APPEND Halide_compiler_components shared)
+    endif ()
+
+    if (Halide_compiler_components)
+        find_dependency(
+            HalideCompiler "@Halide_VERSION@" EXACT HINTS "@PACKAGE_Halide_INSTALL_COMPILERDIR@"
+            COMPONENTS ${Halide_compiler_components}
+        )
+    else ()
+        find_dependency(
+            HalideCompiler "@Halide_VERSION@" EXACT HINTS "@PACKAGE_Halide_INSTALL_COMPILERDIR@"
+        )
+    endif ()
 endif ()
 
 ## Hide variables and helper macros that are not part of our API.
 
-# Delete internal component tracking
 foreach (comp IN LISTS Halide_known_components)
     unset(Halide_comp_${comp})
 endforeach ()
 
 unset(Halide_components)
 unset(Halide_known_components)
-
-# Delete paths to generated CMake files
-unset(Halide_shared_deps)
-unset(Halide_shared_targets)
-unset(Halide_static_deps)
-unset(Halide_static_targets)
+unset(Halide_compiler_components)
 
 # Delete internal macros -- CMake saves redefined macros and functions with a
 # single underscore prefixed so, for example, Halide_fail is still available as
@@ -146,9 +156,5 @@ foreach (i RANGE 0 1)
 
     macro(Halide_find_component_dependency)  # nolint
         message(FATAL_ERROR "Cannot call internal API: Halide_find_component_dependency")
-    endmacro()
-
-    macro(Halide_load_targets)  # nolint
-        message(FATAL_ERROR "Cannot call internal API: Halide_load_targets")
     endmacro()
 endforeach ()

@@ -168,7 +168,7 @@ class FlattenRamps : public IRMutator {
                     Expr p = slice_per_inner_ramp(predicate, (int)n, inner_lanes);
                     ModulusRemainder align = (n == 0) ? op->alignment : ModulusRemainder{};
                     loads.push_back(Load::make(elem_type, op->name, sub_indices[n],
-                                               op->image, op->param, p, align));
+                                               op->image, op->param, p, align, op->is_streaming));
                 }
                 return Shuffle::make_concat(loads);
             }
