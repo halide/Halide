@@ -405,14 +405,11 @@ struct Target {
     }
 
     /** Return the maximum buffer size in bytes supported on this
-     * Target. This is 2^31 - 1 except on 64-bit targets when the LargeBuffers
-     * feature is enabled, which expands the maximum to 2^63 - 1. */
+     * Target. This is (signed) INT32_MAX except on 64-bit targets
+     * when the LargeBuffers feature is enabled, which expands the
+     * maximum to (signed) INT64_MAX. */
     int64_t maximum_buffer_size() const {
-        if (has_large_buffers()) {
-            return (((uint64_t)1) << 63) - 1;
-        } else {
-            return (((uint64_t)1) << 31) - 1;
-        }
+        return has_large_buffers() ? INT64_MAX : INT32_MAX;
     }
 
     /** Get the minimum cuda capability found as an integer. Returns
