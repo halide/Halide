@@ -32,8 +32,6 @@ import {
   renderLoadFrequency,
   renderRedundantStores,
   renderReuseDistance,
-  renderNaN,
-  renderInf,
   renderThread,
   type RenderFuncParams,
   type RenderFuncResponse,
@@ -127,6 +125,8 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
             width,
             height,
             includeTabularData: active,
+            includeNan: nan.active,
+            includeInf: inf.active,
           };
 
           switch (render.renderMode) {
@@ -167,6 +167,24 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
             );
           }
 
+          const nanCtx = nanOverlayRef.current?.getContext("2d");
+          if (nanCtx) {
+            nanCtx.putImageData(
+              new ImageData(result.nanOverlayData, width, height),
+              0,
+              0,
+            );
+          }
+
+          const infCtx = infOverlayRef.current?.getContext("2d");
+          if (infCtx) {
+            infCtx.putImageData(
+              new ImageData(result.infOverlayData, width, height),
+              0,
+              0,
+            );
+          }
+
           // Update the histogram data for the currently active Func.
           if (active) {
             setTabularData((prev) => ({
@@ -197,96 +215,9 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
     activeFunc,
     setTabularData,
     thread,
+    nan.active,
+    inf.active,
   ]);
-
-  React.useEffect(() => {
-    latestIndexRef.current = packetIndex;
-
-    if (!nan.active || renderingRef.current) {
-      return;
-    }
-
-    async function drawNaN() {
-      try {
-        while (true) {
-          const target = latestIndexRef.current;
-
-          const result = await renderNaN({
-            func: name,
-            globalIndex: packetIndex,
-            normalizationMode: render.normalizationMode,
-            width,
-            height,
-            includeTabularData: false,
-          });
-
-          const ctx = nanOverlayRef.current?.getContext("2d");
-
-          if (ctx) {
-            ctx.putImageData(
-              new ImageData(result.tensorData, width, height),
-              0,
-              0,
-            );
-          }
-
-          if (latestIndexRef.current === target) {
-            break;
-          }
-        }
-      } catch {
-        console.error(
-          `Failed to render NaN overlay for ${name} at index ${latestIndexRef.current}`,
-        );
-      }
-    }
-
-    drawNaN();
-  }, [nan.active, name, packetIndex, render.normalizationMode, width, height]);
-
-  React.useEffect(() => {
-    latestIndexRef.current = packetIndex;
-
-    if (!inf.active || renderingRef.current) {
-      return;
-    }
-
-    async function drawInf() {
-      try {
-        while (true) {
-          const target = latestIndexRef.current;
-
-          const result = await renderInf({
-            func: name,
-            globalIndex: packetIndex,
-            normalizationMode: render.normalizationMode,
-            width,
-            height,
-            includeTabularData: false,
-          });
-
-          const ctx = infOverlayRef.current?.getContext("2d");
-          if (ctx) {
-            ctx.putImageData(
-              new ImageData(result.tensorData, width, height),
-              0,
-              0,
-            );
-          }
-
-          if (latestIndexRef.current === target) {
-            break;
-          }
-        }
-      } catch {
-        console.error(
-          `Failed to render Inf overlay for ${name} at index ${latestIndexRef.current}`,
-        );
-      }
-    }
-
-    drawInf();
-  }, [inf.active, name, packetIndex, render.normalizationMode, width, height]);
 
   return (
     <>
