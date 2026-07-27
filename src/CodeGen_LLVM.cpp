@@ -314,6 +314,17 @@ void CodeGen_LLVM::init_module() {
 
     // Start with a module containing the initial module for this target.
     module = get_initial_module_for_target(target, context);
+
+    // Record the runtime's symbols now, before any pipeline functions are
+    // emitted, so that runtime-namespace renaming can identify runtime-internal
+    // symbols precisely (see apply_runtime_namespace_prefixes).
+    runtime_symbols.clear();
+    for (const llvm::Function &f : module->functions()) {
+        runtime_symbols.insert(f.getName().str());
+    }
+    for (const llvm::GlobalVariable &g : module->globals()) {
+        runtime_symbols.insert(g.getName().str());
+    }
 }
 
 namespace {
@@ -506,14 +517,6 @@ CodeGen_LLVM::ScopedFastMath::~ScopedFastMath() {
 
 namespace {
 
-// Itanium mangling of the C++ namespace `Halide::Runtime::Internal`, where the
-// runtime keeps its own functions, vtables, and -- crucially -- its mutable
-// state globals (custom handler pointers, the memoization cache, the thread
-// pool's work queue, profiler state, cpu-feature cache, ...). These are emitted
-// with linkonce linkage, so two separately-namespaced runtimes linked into one
-// process would otherwise have them merged into a single shared copy.
-constexpr char runtime_internal_ns[] = "6Halide7Runtime8Internal";
-
 // Rename the halide runtime symbols in the module according to the
 // user-supplied prefixes.
 //
@@ -534,10 +537,14 @@ constexpr char runtime_internal_ns[] = "6Halide7Runtime8Internal";
 //     function, i.e. a runtime method (internal). `pipeline_functions` lists the
 //     kernel entry-point symbol names so we can tell them apart.
 //
-// (b) The runtime's internal C++ symbols in the Halide::Runtime::Internal
-//     namespace -- functions *and* global variables -- which carry no "halide_"
-//     to replace, so the Internal prefix is *prepended*. This is what keeps two
-//     differently-namespaced runtimes from sharing runtime state: renaming e.g.
+// (b) The runtime's *other* internal symbols -- functions and global variables
+//     that carry no "halide_" to replace (the Halide::Runtime::Internal C++
+//     symbols, and non-namespaced device-runtime helpers such as
+//     `is_compiled_metallib`). These are exactly the symbols present in the
+//     runtime-only module (`runtime_symbols`), minus the halide_ C ABI handled
+//     in (a). The Internal prefix is *prepended*. This is what keeps two
+//     differently-namespaced runtimes from sharing runtime state (and from
+//     colliding on externally-linked device-runtime symbols): renaming e.g.
 //     `Halide::Runtime::Internal::custom_malloc` gives each runtime its own
 //     copy, so their renamed halide_set_*/halide_get_* methods operate on
 //     independent state.
@@ -548,7 +555,8 @@ constexpr char runtime_internal_ns[] = "6Halide7Runtime8Internal";
 // no separate call-site rewriting is needed.
 void apply_runtime_namespace_prefixes(llvm::Module &module,
                                       const RuntimeNamespaceMap &prefixes,
-                                      const std::set<std::string> &pipeline_functions) {
+                                      const std::set<std::string> &pipeline_functions,
+                                      const std::set<std::string> &runtime_symbols) {
     if (prefixes.empty()) {
         return;
     }
@@ -614,15 +622,24 @@ void apply_runtime_namespace_prefixes(llvm::Module &module,
         }
     }
 
-    // (b) The runtime's internal C++ symbols (functions + state globals) in the
-    // Halide::Runtime::Internal namespace. Prepend the Internal prefix so each
-    // namespaced runtime keeps its own state.
+    // (b) The runtime's other internal symbols: everything that was in the
+    // runtime-only module except the halide_ C ABI handled above. Prepend the
+    // Internal prefix so each namespaced runtime keeps its own state and does
+    // not collide on externally-linked runtime helpers.
     if (internal_prefix != nullptr) {
         auto rename_internal = [&](llvm::GlobalValue &g) {
             const std::string name = g.getName().str();
-            if (name.find(runtime_internal_ns) != std::string::npos) {
-                g.setName(*internal_prefix + name);
+            // Only rename symbols *defined* by the runtime. Declarations are
+            // things the runtime imports from libc etc. (strstr, write, ...) and
+            // must keep their real names. Never rename the halide_ C ABI (handled
+            // in (a)) or LLVM's own reserved globals.
+            if (g.isDeclaration() ||
+                runtime_symbols.count(name) == 0 ||
+                starts_with(name, halide_prefix) ||
+                starts_with(name, "llvm.")) {
+                return;
             }
+            g.setName(*internal_prefix + name);
         };
         for (llvm::Function &f : module.functions()) {
             rename_internal(f);
@@ -773,7 +790,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         pipeline_functions.insert(names.argv_name);
         pipeline_functions.insert(names.metadata_name);
     }
-    apply_runtime_namespace_prefixes(*module, input.get_runtime_namespace_map(), pipeline_functions);
+    apply_runtime_namespace_prefixes(*module, input.get_runtime_namespace_map(), pipeline_functions, runtime_symbols);
 
     return finish_codegen();
 }
