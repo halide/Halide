@@ -736,7 +736,7 @@ class SubstitutePrefetchVar : public IRMutator {
             }
             return Prefetch::make(op->name, op->types, op->bounds, p, op->condition, std::move(new_body));
         } else {
-            return op->remake(op->bounds, op->condition, std::move(new_body));
+            return op->remake(op->bounds, op->condition, new_body);
         }
     }
 

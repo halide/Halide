@@ -163,7 +163,7 @@ private:
             predicate = mutate(predicate);
         }
         Expr index = mutate(op->index);
-        return op->remake(std::move(index), std::move(predicate), op->alignment);
+        return op->remake(index, predicate, op->alignment);
     }
 
     // Assuming that a and b should have the same scalar type and they might have

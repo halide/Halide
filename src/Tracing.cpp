@@ -269,7 +269,7 @@ protected:
             body.same_as(op->body)) {
             return op;
         }
-        return op->remake(std::move(min), std::move(max), std::move(body));
+        return op->remake(min, max, body);
     }
 
     Stmt visit(const Realize *op) override {

@@ -709,7 +709,7 @@ protected:
             body = IfThenElse::make(used, body);
             inner_unbound_use_of_used_or_loaded_vars = true;
 
-            return op->remake(std::move(body));
+            return op->remake(body);
         } else {
             ScopedBinding<> bind_if(!unconditionally_used &&
                                         in_realize.contains(op->name),
@@ -750,7 +750,7 @@ protected:
 
         // We don't need to visit the bounds, because there can't be call nodes
         // in them.
-        return op->remake(op->bounds, std::move(condition), std::move(body));
+        return op->remake(op->bounds, condition, body);
     }
 
     bool in_vector_loop = false;
@@ -807,7 +807,7 @@ protected:
         merge_func_info(&old, func_info);
         old.swap(func_info);
 
-        return op->remake(op->min, op->max, std::move(body));
+        return op->remake(op->min, op->max, body);
     }
 };
 

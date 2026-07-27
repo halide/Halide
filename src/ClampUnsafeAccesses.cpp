@@ -88,7 +88,7 @@ private:
         ScopedValue<bool> s(is_inside_indexing, is_inside_indexing || let_var_inside_indexing.get(op->name));
         Expr value = mutate(op->value);
 
-        return op->remake(std::move(value), std::move(body));
+        return op->remake(value, body);
     }
 
     bool bounds_smaller_than_type(const Interval &bounds, Type type) {

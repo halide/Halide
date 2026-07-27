@@ -685,7 +685,7 @@ Stmt Simplify::visit(const Realize *op) {
         condition.same_as(op->condition)) {
         return op;
     }
-    return op->remake(new_bounds, std::move(condition), std::move(body));
+    return op->remake(new_bounds, condition, body);
 }
 
 Stmt Simplify::visit(const Prefetch *op) {
@@ -705,7 +705,7 @@ Stmt Simplify::visit(const Prefetch *op) {
         condition.same_as(op->condition)) {
         return op;
     } else {
-        return op->remake(new_bounds, std::move(condition), std::move(body));
+        return op->remake(new_bounds, condition, body);
     }
 }
 
@@ -748,7 +748,7 @@ Stmt Simplify::visit(const Atomic *op) {
     } else if (body.same_as(op->body)) {
         return op;
     } else {
-        return op->remake(std::move(body));
+        return op->remake(body);
     }
 }
 

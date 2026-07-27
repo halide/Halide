@@ -1112,7 +1112,7 @@ Stmt add_loop_var_aliases(Stmt s, const map<string, set<string>> &loop_var_alias
                 body = LetStmt::make(alias, var, body);
             }
 
-            return op->remake(op->min, op->max, std::move(body));
+            return op->remake(op->min, op->max, body);
         }
 
     public:

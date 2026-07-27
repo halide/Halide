@@ -293,15 +293,15 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
     return node;
 }
 
-Expr Load::remake(Expr index, Expr predicate, ModulusRemainder alignment) const {
+Expr Load::remake(const Expr &index, const Expr &predicate, ModulusRemainder alignment) const {
     if (index.same_as(this->index) &&
         predicate.same_as(this->predicate) &&
         alignment == this->alignment) {
         return this;
     }
-    // Compute the new type before moving out of index.
+    // The element type is inherited, but the lane count comes from the index.
     Type t = type.with_lanes(index.type().lanes());
-    return make(t, name, std::move(index), image, param, std::move(predicate), alignment);
+    return make(t, name, index, image, param, predicate, alignment);
 }
 
 Expr Ramp::make(Expr base, Expr stride, int lanes) {
@@ -341,11 +341,11 @@ Expr Let::make(const std::string &name, Expr value, Expr body) {
     return node;
 }
 
-Expr Let::remake(Expr value, Expr body) const {
+Expr Let::remake(const Expr &value, const Expr &body) const {
     if (value.same_as(this->value) && body.same_as(this->body)) {
         return this;
     }
-    return make(name, std::move(value), std::move(body));
+    return make(name, value, body);
 }
 
 Stmt LetStmt::make(const std::string &name, Expr value, Stmt body) {
@@ -359,11 +359,11 @@ Stmt LetStmt::make(const std::string &name, Expr value, Stmt body) {
     return node;
 }
 
-Stmt LetStmt::remake(Expr value, Stmt body) const {
+Stmt LetStmt::remake(const Expr &value, const Stmt &body) const {
     if (value.same_as(this->value) && body.same_as(this->body)) {
         return this;
     }
-    return make(name, std::move(value), std::move(body));
+    return make(name, value, body);
 }
 
 Stmt AssertStmt::make(Expr condition, Expr message) {
@@ -376,11 +376,11 @@ Stmt AssertStmt::make(Expr condition, Expr message) {
     return node;
 }
 
-Stmt AssertStmt::remake(Expr condition, Expr message) const {
+Stmt AssertStmt::remake(const Expr &condition, const Expr &message) const {
     if (condition.same_as(this->condition) && message.same_as(this->message)) {
         return this;
     }
-    return make(std::move(condition), std::move(message));
+    return make(condition, message);
 }
 
 Stmt ProducerConsumer::make(const std::string &name, bool is_producer, Stmt body) {
@@ -393,11 +393,11 @@ Stmt ProducerConsumer::make(const std::string &name, bool is_producer, Stmt body
     return node;
 }
 
-Stmt ProducerConsumer::remake(Stmt body) const {
+Stmt ProducerConsumer::remake(const Stmt &body) const {
     if (body.same_as(this->body)) {
         return this;
     }
-    return make(name, is_producer, std::move(body));
+    return make(name, is_producer, body);
 }
 
 Stmt ProducerConsumer::make_produce(const std::string &name, Stmt body) {
@@ -430,14 +430,14 @@ Stmt For::make(const std::string &name,
     return node;
 }
 
-Stmt For::remake(Expr min, Expr max, Stmt body) const {
+Stmt For::remake(const Expr &min, const Expr &max, const Stmt &body) const {
     if (min.same_as(this->min) &&
         max.same_as(this->max) &&
         body.same_as(this->body)) {
         return this;
     }
-    return make(name, std::move(min), std::move(max), for_type, partition_policy,
-                device_api, std::move(body));
+    return make(name, min, max, for_type, partition_policy,
+                device_api, body);
 }
 
 Stmt Acquire::make(Expr semaphore, Expr count, Stmt body) {
@@ -451,13 +451,13 @@ Stmt Acquire::make(Expr semaphore, Expr count, Stmt body) {
     return node;
 }
 
-Stmt Acquire::remake(Expr semaphore, Expr count, Stmt body) const {
+Stmt Acquire::remake(const Expr &semaphore, const Expr &count, const Stmt &body) const {
     if (semaphore.same_as(this->semaphore) &&
         count.same_as(this->count) &&
         body.same_as(this->body)) {
         return this;
     }
-    return make(std::move(semaphore), std::move(count), std::move(body));
+    return make(semaphore, count, body);
 }
 
 Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment) {
@@ -478,15 +478,15 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
     return node;
 }
 
-Stmt Store::remake(Expr value, Expr index, Expr predicate, ModulusRemainder alignment) const {
+Stmt Store::remake(const Expr &value, const Expr &index, const Expr &predicate, ModulusRemainder alignment) const {
     if (value.same_as(this->value) &&
         index.same_as(this->index) &&
         predicate.same_as(this->predicate) &&
         alignment == this->alignment) {
         return this;
     }
-    return make(name, std::move(value), std::move(index), param,
-                std::move(predicate), alignment);
+    return make(name, value, index, param,
+                predicate, alignment);
 }
 
 Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate) {
@@ -544,26 +544,26 @@ Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
     return node;
 }
 
-Stmt Allocate::remake(const std::vector<Expr> &extents, Expr condition, Stmt body,
-                      Expr new_expr) const {
+Stmt Allocate::remake(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body,
+                      const Expr &new_expr) const {
     if (all_same_as(extents, this->extents) &&
         condition.same_as(this->condition) &&
         body.same_as(this->body) &&
         new_expr.same_as(this->new_expr)) {
         return this;
     }
-    return make(name, type, memory_type, extents, std::move(condition),
-                std::move(body), std::move(new_expr), free_function, padding);
+    return make(name, type, memory_type, extents, condition,
+                body, new_expr, free_function, padding);
 }
 
-Stmt Allocate::remake(const std::vector<Expr> &extents, Expr condition, Stmt body) const {
+Stmt Allocate::remake(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body) const {
     if (all_same_as(extents, this->extents) &&
         condition.same_as(this->condition) &&
         body.same_as(this->body)) {
         return this;
     }
-    return make(name, type, memory_type, extents, std::move(condition),
-                std::move(body), new_expr, free_function, padding);
+    return make(name, type, memory_type, extents, condition,
+                body, new_expr, free_function, padding);
 }
 
 int32_t Allocate::constant_allocation_size(const std::vector<Expr> &extents, const std::string &name) {
@@ -629,13 +629,13 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, Memo
     return node;
 }
 
-Stmt Realize::remake(const Region &bounds, Expr condition, Stmt body) const {
+Stmt Realize::remake(const Region &bounds, const Expr &condition, const Stmt &body) const {
     if (all_same_as(bounds, this->bounds) &&
         condition.same_as(this->condition) &&
         body.same_as(this->body)) {
         return this;
     }
-    return make(name, types, memory_type, bounds, std::move(condition), std::move(body));
+    return make(name, types, memory_type, bounds, condition, body);
 }
 
 Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
@@ -665,13 +665,13 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
     return node;
 }
 
-Stmt Prefetch::remake(const Region &bounds, Expr condition, Stmt body) const {
+Stmt Prefetch::remake(const Region &bounds, const Expr &condition, const Stmt &body) const {
     if (all_same_as(bounds, this->bounds) &&
         condition.same_as(this->condition) &&
         body.same_as(this->body)) {
         return this;
     }
-    return make(name, types, bounds, prefetch, std::move(condition), std::move(body));
+    return make(name, types, bounds, prefetch, condition, body);
 }
 
 Stmt Block::make(Stmt first, Stmt rest) {
@@ -703,11 +703,11 @@ Stmt Block::make(const std::vector<Stmt> &stmts) {
     return result;
 }
 
-Stmt Block::remake(Stmt first, Stmt rest) const {
+Stmt Block::remake(const Stmt &first, const Stmt &rest) const {
     if (first.same_as(this->first) && rest.same_as(this->rest)) {
         return this;
     }
-    return make(std::move(first), std::move(rest));
+    return make(first, rest);
 }
 
 Stmt Fork::make(Stmt first, Stmt rest) {
@@ -728,11 +728,11 @@ Stmt Fork::make(Stmt first, Stmt rest) {
     return node;
 }
 
-Stmt Fork::remake(Stmt first, Stmt rest) const {
+Stmt Fork::remake(const Stmt &first, const Stmt &rest) const {
     if (first.same_as(this->first) && rest.same_as(this->rest)) {
         return this;
     }
-    return make(std::move(first), std::move(rest));
+    return make(first, rest);
 }
 
 Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
@@ -748,13 +748,13 @@ Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
     return node;
 }
 
-Stmt IfThenElse::remake(Expr condition, Stmt then_case, Stmt else_case) const {
+Stmt IfThenElse::remake(const Expr &condition, const Stmt &then_case, const Stmt &else_case) const {
     if (condition.same_as(this->condition) &&
         then_case.same_as(this->then_case) &&
         else_case.same_as(this->else_case)) {
         return this;
     }
-    return make(std::move(condition), std::move(then_case), std::move(else_case));
+    return make(condition, then_case, else_case);
 }
 
 Stmt Evaluate::make(Expr v) {
@@ -765,11 +765,11 @@ Stmt Evaluate::make(Expr v) {
     return node;
 }
 
-Stmt Evaluate::remake(Expr value) const {
+Stmt Evaluate::remake(const Expr &value) const {
     if (value.same_as(this->value)) {
         return this;
     }
-    return make(std::move(value));
+    return make(value);
 }
 
 Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx) {
@@ -1165,18 +1165,18 @@ Stmt HoistedStorage::make(const std::string &name,
     return node;
 }
 
-Stmt Atomic::remake(Stmt body) const {
+Stmt Atomic::remake(const Stmt &body) const {
     if (body.same_as(this->body)) {
         return this;
     }
-    return make(producer_name, mutex_name, std::move(body));
+    return make(producer_name, mutex_name, body);
 }
 
-Stmt HoistedStorage::remake(Stmt body) const {
+Stmt HoistedStorage::remake(const Stmt &body) const {
     if (body.same_as(this->body)) {
         return this;
     }
-    return make(name, std::move(body));
+    return make(name, body);
 }
 
 Expr VectorReduce::make(VectorReduce::Operator op,

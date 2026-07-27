@@ -450,7 +450,7 @@ class RewriteLoadsAs32Bit : public IRMutator {
             Expr new_load = Load::make(Int(32, load_lanes), op->name, new_idx, op->image, op->param, const_true(load_lanes), op->alignment / sub_lanes);
             return reinterpret(op->type, new_load);
         } else {
-            return op->remake(std::move(index), op->predicate, op->alignment);
+            return op->remake(index, op->predicate, op->alignment);
         }
     }
 };

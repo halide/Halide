@@ -1112,7 +1112,7 @@ protected:
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
         predicate = narrow_predicate(predicate, op->type);
-        return op->remake(std::move(index), std::move(predicate), op->alignment);
+        return op->remake(index, predicate, op->alignment);
     }
 
     Stmt visit(const Store *op) override {
@@ -1120,7 +1120,7 @@ protected:
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
         predicate = narrow_predicate(predicate, value.type());
-        return op->remake(std::move(value), std::move(index), std::move(predicate), op->alignment);
+        return op->remake(value, index, predicate, op->alignment);
     }
 };
 

@@ -105,7 +105,7 @@ protected:
         if (is_no_op(body)) {
             return body;
         } else {
-            return op->remake(std::move(body));
+            return op->remake(body);
         }
     }
 };
@@ -522,7 +522,7 @@ protected:
                 Expr sema_allocate = Call::make(sema_type, Call::alloca,
                                                 {(int)sizeof(halide_semaphore_t)}, Call::Intrinsic);
                 body = Block::make(Evaluate::make(sema_init), std::move(body));
-                body = op->remake(std::move(sema_allocate), std::move(body));
+                body = op->remake(sema_allocate, body);
 
                 // Re-wrap any other lets
                 for (const auto &[var, value] : reverse_view(lets)) {
@@ -538,7 +538,7 @@ protected:
             if (value.same_as(frame->value) && body.same_as(frame->body)) {
                 body = frame;
             } else {
-                body = frame->remake(std::move(value), std::move(body));
+                body = frame->remake(value, body);
             }
         }
         return body;

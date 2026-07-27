@@ -319,7 +319,7 @@ struct Load : public ExprNode<Load> {
      * children. The type is the element type of this Load, with the lane count
      * taken from the new index. Returns this Load unchanged if the new children
      * are the same as the existing ones. */
-    Expr remake(Expr index, Expr predicate, ModulusRemainder alignment) const;
+    Expr remake(const Expr &index, const Expr &predicate, ModulusRemainder alignment) const;
 
     static const IRNodeType _node_type = IRNodeType::Load;
 };
@@ -365,7 +365,7 @@ struct Let : public ExprNode<Let> {
     /** Make a Let with the same name as this one, but with new children.
      * Returns this Let unchanged if the new children are the same as the
      * existing ones. */
-    Expr remake(Expr value, Expr body) const;
+    Expr remake(const Expr &value, const Expr &body) const;
 
     static const IRNodeType _node_type = IRNodeType::Let;
 };
@@ -382,7 +382,7 @@ struct LetStmt : public StmtNode<LetStmt> {
     /** Make a LetStmt with the same name as this one, but with new children.
      * Returns this LetStmt unchanged if the new children are the same as the
      * existing ones. */
-    Stmt remake(Expr value, Stmt body) const;
+    Stmt remake(const Expr &value, const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::LetStmt;
 };
@@ -399,7 +399,7 @@ struct AssertStmt : public StmtNode<AssertStmt> {
 
     /** Make an AssertStmt with new children. Returns this AssertStmt unchanged
      * if the new children are the same as the existing ones. */
-    Stmt remake(Expr condition, Expr message) const;
+    Stmt remake(const Expr &condition, const Expr &message) const;
 
     static const IRNodeType _node_type = IRNodeType::AssertStmt;
 };
@@ -428,7 +428,7 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
     /** Make a ProducerConsumer with the same name and producer/consumer flag as
      * this one, but with a new body. Returns this ProducerConsumer unchanged if
      * the new body is the same as the existing one. */
-    Stmt remake(Stmt body) const;
+    Stmt remake(const Stmt &body) const;
 
     static Stmt make_produce(const std::string &name, Stmt body);
     static Stmt make_consume(const std::string &name, Stmt body);
@@ -458,7 +458,7 @@ struct Store : public StmtNode<Store> {
     /** Make a Store to the same buffer as this one, but with new children.
      * Returns this Store unchanged if the new children are the same as the
      * existing ones. */
-    Stmt remake(Expr value, Expr index, Expr predicate, ModulusRemainder alignment) const;
+    Stmt remake(const Expr &value, const Expr &index, const Expr &predicate, ModulusRemainder alignment) const;
 
     static const IRNodeType _node_type = IRNodeType::Store;
 };
@@ -527,13 +527,13 @@ struct Allocate : public StmtNode<Allocate> {
      * new/free, and padding as this one, but with new children. Returns this
      * Allocate unchanged if the new children are the same as the existing
      * ones. */
-    Stmt remake(const std::vector<Expr> &extents, Expr condition, Stmt body) const;
+    Stmt remake(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body) const;
 
     /** As above, but also replacing the custom new expression. There is no
      * default for new_expr, because an undefined new_expr means "use the
      * default allocator" rather than "leave it alone". */
-    Stmt remake(const std::vector<Expr> &extents, Expr condition, Stmt body,
-                Expr new_expr) const;
+    Stmt remake(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body,
+                const Expr &new_expr) const;
 
     /** A routine to check if the extents are all constants, and if so verify
      * the total size is less than 2^31 - 1. If the result is constant, but
@@ -574,7 +574,7 @@ struct Realize : public StmtNode<Realize> {
     /** Make a Realize with the same name, types, and memory type as this one,
      * but with new children. Returns this Realize unchanged if the new children
      * are the same as the existing ones. */
-    Stmt remake(const Region &bounds, Expr condition, Stmt body) const;
+    Stmt remake(const Region &bounds, const Expr &condition, const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::Realize;
 };
@@ -588,7 +588,7 @@ struct Block : public StmtNode<Block> {
 
     /** Make a Block with new children. Returns this Block unchanged if the new
      * children are the same as the existing ones. */
-    Stmt remake(Stmt first, Stmt rest) const;
+    Stmt remake(const Stmt &first, const Stmt &rest) const;
 
     /** Construct zero or more Blocks to invoke a list of statements in order.
      * This method may not return a Block statement if stmts.size() <= 1. */
@@ -607,7 +607,7 @@ struct Fork : public StmtNode<Fork> {
 
     /** Make a Fork with new children. Returns this Fork unchanged if the new
      * children are the same as the existing ones. */
-    Stmt remake(Stmt first, Stmt rest) const;
+    Stmt remake(const Stmt &first, const Stmt &rest) const;
 
     static const IRNodeType _node_type = IRNodeType::Fork;
 };
@@ -623,7 +623,7 @@ struct IfThenElse : public StmtNode<IfThenElse> {
      * here, because an undefined else_case means "no else clause" rather than
      * "leave it alone". Returns this IfThenElse unchanged if the new children
      * are the same as the existing ones. */
-    Stmt remake(Expr condition, Stmt then_case, Stmt else_case) const;
+    Stmt remake(const Expr &condition, const Stmt &then_case, const Stmt &else_case) const;
 
     static const IRNodeType _node_type = IRNodeType::IfThenElse;
 };
@@ -636,7 +636,7 @@ struct Evaluate : public StmtNode<Evaluate> {
 
     /** Make an Evaluate of a new value. Returns this Evaluate unchanged if the
      * new value is the same as the existing one. */
-    Stmt remake(Expr value) const;
+    Stmt remake(const Expr &value) const;
 
     static const IRNodeType _node_type = IRNodeType::Evaluate;
 };
@@ -1062,7 +1062,7 @@ struct For : public StmtNode<For> {
     /** Make a For loop with the same name, for type, partition policy, and
      * device API as this one, but with new children. Returns this For unchanged
      * if the new children are the same as the existing ones. */
-    Stmt remake(Expr min, Expr max, Stmt body) const;
+    Stmt remake(const Expr &min, const Expr &max, const Stmt &body) const;
 
     bool is_unordered_parallel() const {
         return Halide::Internal::is_unordered_parallel(for_type);
@@ -1088,7 +1088,7 @@ struct Acquire : public StmtNode<Acquire> {
 
     /** Make an Acquire with new children. Returns this Acquire unchanged if the
      * new children are the same as the existing ones. */
-    Stmt remake(Expr semaphore, Expr count, Stmt body) const;
+    Stmt remake(const Expr &semaphore, const Expr &count, const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::Acquire;
 };
@@ -1198,7 +1198,7 @@ struct Prefetch : public StmtNode<Prefetch> {
     /** Make a Prefetch of the same Func with the same directive as this one,
      * but with new children. Returns this Prefetch unchanged if the new
      * children are the same as the existing ones. */
-    Stmt remake(const Region &bounds, Expr condition, Stmt body) const;
+    Stmt remake(const Region &bounds, const Expr &condition, const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::Prefetch;
 };
@@ -1218,7 +1218,7 @@ struct HoistedStorage : public StmtNode<HoistedStorage> {
     /** Make a HoistedStorage with the same name as this one, but with a new
      * body. Returns this HoistedStorage unchanged if the new body is the same
      * as the existing one. */
-    Stmt remake(Stmt body) const;
+    Stmt remake(const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::HoistedStorage;
 };
@@ -1244,7 +1244,7 @@ struct Atomic : public StmtNode<Atomic> {
     /** Make an Atomic over the same producer and mutex as this one, but with a
      * new body. Returns this Atomic unchanged if the new body is the same as
      * the existing one. */
-    Stmt remake(Stmt body) const;
+    Stmt remake(const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::Atomic;
 };
