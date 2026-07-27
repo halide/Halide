@@ -35,77 +35,6 @@ using namespace llvm;
 
 namespace {
 
-// Populate feature flags in a target according to those implied by
-// existing flags, so that instruction patterns can just check for the
-// oldest feature flag that supports an instruction.
-//
-// According to LLVM, ARM architectures have the following is-a-superset-of
-// relationships:
-//
-//   v9.5a > v9.4a > v9.3a > v9.2a > v9.1a > v9a;
-//             v       v       v       v       v
-//           v8.9a > v8.8a > v8.7a > v8.6a > v8.5a > v8.4a > ... > v8a;
-//
-// v8r has no relation to anything.
-Target complete_arm_target(Target t) {
-    if (t.os == Target::OSX) {
-        // The Apple M1 implements the full ARM v8.4a spec.
-        t.set_feature(Target::ARMv84a);
-    }
-
-    auto add_implied_feature_if_supported = [](Target &t, Target::Feature super, Target::Feature implied) {
-        if (t.has_feature(super)) {
-            t.set_feature(implied);
-        }
-    };
-
-    // ARMFp16 implies ARMv8.2-A; we don't know of any devices where
-    // that doesn't hold. The cascade loop below will set ARMv81a and ARMv8a.
-    add_implied_feature_if_supported(t, Target::ARMFp16, Target::ARMv82a);
-
-    constexpr int num_arm_v8_features = 10;
-    static const Target::Feature arm_v8_features[num_arm_v8_features] = {
-        // The following loop depends on this array being sorted correctly.
-        // keep-sorted start numeric=yes order=desc
-        Target::ARMv89a,
-        Target::ARMv88a,
-        Target::ARMv87a,
-        Target::ARMv86a,
-        Target::ARMv85a,
-        Target::ARMv84a,
-        Target::ARMv83a,
-        Target::ARMv82a,
-        Target::ARMv81a,
-        Target::ARMv8a,
-        // keep-sorted end
-    };
-
-    for (int i = 0; i < num_arm_v8_features - 1; i++) {
-        add_implied_feature_if_supported(t,
-                                         arm_v8_features[i],
-                                         arm_v8_features[i + 1]);
-    }
-
-    static const Target::Feature features_with_fp16[] = {
-        Target::SVE,
-        Target::SVE2,
-    };
-
-    for (const auto &f : features_with_fp16) {
-        add_implied_feature_if_supported(t, f, Target::ARMFp16);
-    }
-
-    static const Target::Feature features_with_dotprod[] = {
-        Target::SVE2,
-    };
-
-    for (const auto &f : features_with_dotprod) {
-        add_implied_feature_if_supported(t, f, Target::ARMDotProd);
-    }
-
-    return t;
-}
-
 // Substitute in loads that feed into slicing shuffles, to help with vld2/3/4
 // emission. These are commonly lifted as lets because they get used by multiple
 // interleaved slices of the same load.
@@ -301,7 +230,7 @@ protected:
 };
 
 CodeGen_ARM::CodeGen_ARM(const Target &target)
-    : CodeGen_CPU(complete_arm_target(target)) {
+    : CodeGen_CPU(target) {
 
     // TODO(https://github.com/halide/Halide/issues/8088): See if
     // use_llvm_vp_intrinsics can replace architecture specific code in this
