@@ -1121,8 +1121,7 @@ protected:
             // If the index is const and it is not a predicated load,
             // we can return the load of that index
             Expr load_min =
-                Load::make(op->type.element_of(), op->name, interval.min,
-                           op->image, op->param, const_true(), ModulusRemainder());
+                op->remake(interval.min, const_true(), ModulusRemainder());
             interval = Interval::single_point(load_min);
         } else {
             // Otherwise use the bounds of the type
@@ -2074,7 +2073,7 @@ protected:
         } else {
             for (const auto *frame : reverse_view(frames)) {
                 pop_var(frame->name);
-                s = LetStmt::make(frame->name, frame->value, s);
+                s = frame->remake(frame->value, s);
             }
             return s;
         }
@@ -2985,7 +2984,7 @@ protected:
                 if (!is_const_one(op->predicate)) {
                     // Don't visit the RHS inside the if. This is handled below instead.
                     ScopedValue<bool> save_consider_calls(consider_calls, false);
-                    Stmt equiv = IfThenElse::make(op->predicate, Provide::make(op->name, op->values, op->args, const_true()));
+                    Stmt equiv = IfThenElse::make(op->predicate, op->remake(op->values, op->args, const_true()));
                     equiv.accept(this);
                 } else {
                     Box b(op->args.size());
@@ -3086,7 +3085,7 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
                 } else {
                     // Rewrap the lets around the mutated body
                     for (const auto *frame : reverse_view(frames)) {
-                        s = LetStmt::make(frame->name, frame->value, s);
+                        s = frame->remake(frame->value, s);
                     }
                     return s;
                 }

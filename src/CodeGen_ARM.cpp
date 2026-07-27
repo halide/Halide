@@ -1805,7 +1805,7 @@ void CodeGen_ARM::visit(const Store *op) {
             if (is_float16_and_has_feature(elt)) {
                 Type u16_type = op->value.type().with_code(halide_type_uint);
                 Expr v = reinterpret(u16_type, op->value);
-                codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment));
+                codegen(op->remake(v, op->index, op->predicate, op->alignment));
                 return;
             }
 

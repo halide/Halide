@@ -44,7 +44,7 @@ class AllocationInference : public IRMutator {
         Box b = box_touched(op->body, op->name, empty_scope, func_bounds);
 
         Stmt new_body = mutate(op->body);
-        Stmt stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
+        Stmt stmt = op->remake(op->bounds, op->condition, new_body);
 
         // If the realization is dead and there is no access to the
         // buffer (e.g. because we're in a specialization), then

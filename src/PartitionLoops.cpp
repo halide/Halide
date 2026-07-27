@@ -67,11 +67,7 @@ class MarkClampedRampsAsLikely : public IRMutator {
         in_index = old_in_index;
         Expr value = mutate(op->value);
         Expr predicate = mutate(op->predicate);
-        if (predicate.same_as(op->predicate) && index.same_as(op->index) && value.same_as(op->value)) {
-            return op;
-        } else {
-            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
-        }
+        return op->remake(value, index, predicate, op->alignment);
     }
 
     bool in_index = false;
@@ -761,18 +757,15 @@ class PartitionLoops : public IRMutator {
         Stmt stmt;
         // Bust simple serial for loops up into three.
         if (op->for_type == ForType::Serial && !op->body.as<Acquire>()) {
-            stmt = For::make(op->name, min_steady, max_steady - 1,
-                             op->for_type, op->partition_policy, op->device_api, simpler_body);
+            stmt = op->remake(min_steady, max_steady - 1, simpler_body);
 
             if (make_prologue) {
-                prologue = For::make(op->name, op->min, min_steady - 1,
-                                     op->for_type, op->partition_policy, op->device_api, prologue);
+                prologue = op->remake(op->min, min_steady - 1, prologue);
                 stmt = Block::make(prologue, stmt);
                 mutated = true;
             }
             if (make_epilogue) {
-                epilogue = For::make(op->name, max_steady, op->max,
-                                     op->for_type, op->partition_policy, op->device_api, epilogue);
+                epilogue = op->remake(max_steady, op->max, epilogue);
                 stmt = Block::make(stmt, epilogue);
                 mutated = true;
             }
@@ -804,7 +797,7 @@ class PartitionLoops : public IRMutator {
                     mutated = true;
                 }
             }
-            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, stmt);
+            stmt = op->remake(op->min, op->max, stmt);
         }
 
         if (make_epilogue) {
@@ -926,8 +919,8 @@ class RenormalizeGPULoops : public IRMutator {
         if (f && in_gpu_loop && !in_thread_loop) {
             internal_assert(!expr_uses_var(f->min, op->name) &&
                             !expr_uses_var(f->max, op->name));
-            Stmt inner = LetStmt::make(op->name, op->value, f->body);
-            inner = For::make(f->name, f->min, f->max, f->for_type, f->partition_policy, f->device_api, inner);
+            Stmt inner = op->remake(op->value, f->body);
+            inner = f->remake(f->min, f->max, inner);
             return mutate(inner);
         } else if (a && in_gpu_loop && !in_thread_loop) {
             internal_assert(a->extents.size() == 1);
@@ -939,9 +932,8 @@ class RenormalizeGPULoops : public IRMutator {
                 // memory to allocate.
                 return IRMutator::visit(op);
             } else {
-                Stmt inner = LetStmt::make(op->name, op->value, a->body);
-                inner = Allocate::make(a->name, a->type, a->memory_type, a->extents, a->condition, inner,
-                                       a->new_expr, a->free_function, a->padding);
+                Stmt inner = op->remake(op->value, a->body);
+                inner = a->remake(a->extents, a->condition, inner);
                 return mutate(inner);
             }
         } else {
@@ -974,16 +966,13 @@ class RenormalizeGPULoops : public IRMutator {
         const LetStmt *let_b = else_case.as<LetStmt>();
         if (allocate_a && allocate_b) {
             Stmt inner = IfThenElse::make(op->condition, allocate_a->body, allocate_b->body);
-            inner = Allocate::make(allocate_a->name, allocate_a->type,
-                                   allocate_a->memory_type, allocate_a->extents,
-                                   allocate_a->condition, inner, allocate_a->new_expr,
-                                   allocate_a->free_function, allocate_a->padding);
+            inner = allocate_a->remake(allocate_a->extents, allocate_a->condition, inner);
             return mutate(inner);
         } else if (let_a && let_b && let_a->name == let_b->name) {
             string condition_name = unique_name('t');
             Expr condition = Variable::make(op->condition.type(), condition_name);
             Stmt inner = IfThenElse::make(condition, let_a->body, let_b->body);
-            inner = LetStmt::make(let_a->name, select(condition, let_a->value, let_b->value), inner);
+            inner = let_a->remake(select(condition, let_a->value, let_b->value), inner);
             inner = LetStmt::make(condition_name, op->condition, inner);
             return mutate(inner);
         } else if (let_a) {
@@ -1005,7 +994,7 @@ class RenormalizeGPULoops : public IRMutator {
                    for_a->min.same_as(for_b->min) &&
                    for_a->max.same_as(for_b->max)) {
             Stmt inner = IfThenElse::make(op->condition, for_a->body, for_b->body);
-            inner = For::make(for_a->name, for_a->min, for_a->max, for_a->for_type, for_a->partition_policy, for_a->device_api, inner);
+            inner = for_a->remake(for_a->min, for_a->max, inner);
             return mutate(inner);
         } else {
             internal_error << "Unexpected construct inside if statement: " << Stmt(op) << "\n";

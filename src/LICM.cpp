@@ -317,8 +317,7 @@ protected:
             const For *loop = new_stmt.as<For>();
             internal_assert(loop);
 
-            new_stmt = For::make(loop->name, loop->min, loop->max,
-                                 loop->for_type, loop->partition_policy, loop->device_api, mutate(loop->body));
+            new_stmt = loop->remake(loop->min, loop->max, mutate(loop->body));
 
             // Wrap lets for the lifted invariants
             for (size_t i = 0; i < exprs.size(); i++) {
@@ -547,15 +546,11 @@ protected:
                 is_pure(op->value) &&
                 is_pure(i->condition) &&
                 !expr_uses_var(i->condition, op->name)) {
-                Stmt s = LetStmt::make(op->name, op->value, i->then_case);
+                Stmt s = op->remake(op->value, i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
         }
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return LetStmt::make(op->name, op->value, body);
-        }
+        return op->remake(op->value, body);
     }
 
     Stmt visit(const For *op) override {
@@ -564,17 +559,11 @@ protected:
             if (!i->else_case.defined() &&
                 is_pure(i->condition) &&
                 !expr_uses_var(i->condition, op->name)) {
-                Stmt s = For::make(op->name, op->min, op->max,
-                                   op->for_type, op->partition_policy, op->device_api, i->then_case);
+                Stmt s = op->remake(op->min, op->max, i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
         }
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return For::make(op->name, op->min, op->max,
-                             op->for_type, op->partition_policy, op->device_api, body);
-        }
+        return op->remake(op->min, op->max, body);
     }
 
     Stmt visit(const ProducerConsumer *op) override {
@@ -582,15 +571,11 @@ protected:
         if (const IfThenElse *i = body.as<IfThenElse>()) {
             if (!i->else_case.defined() &&
                 is_pure(i->condition)) {
-                Stmt s = ProducerConsumer::make(op->name, op->is_producer, i->then_case);
+                Stmt s = op->remake(i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
         }
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return ProducerConsumer::make(op->name, op->is_producer, body);
-        }
+        return op->remake(body);
     }
 
     Stmt visit(const IfThenElse *op) override {
@@ -617,19 +602,11 @@ protected:
         if (const IfThenElse *i = body.as<IfThenElse>()) {
             if (!i->else_case.defined() &&
                 is_pure(i->condition)) {
-                Stmt s = Allocate::make(op->name, op->type, op->memory_type,
-                                        op->extents, op->condition, i->then_case,
-                                        op->new_expr, op->free_function, op->padding);
+                Stmt s = op->remake(op->extents, op->condition, i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
         }
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return Allocate::make(op->name, op->type, op->memory_type,
-                                  op->extents, op->condition, body,
-                                  op->new_expr, op->free_function, op->padding);
-        }
+        return op->remake(op->extents, op->condition, body);
     }
 
     Stmt visit(const Block *op) override {

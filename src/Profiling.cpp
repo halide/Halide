@@ -605,7 +605,7 @@ private:
                 Stmt set_current = set_current_func(stack.back());
                 body = Block::make(set_current, mutate(op->body));
             }
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            return op->remake(body);
         } else {
             return IRMutator::visit(op);
         }
@@ -707,7 +707,7 @@ private:
             most_recently_set_func = -1;
         }
 
-        Stmt stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
+        Stmt stmt = op->remake(op->min, op->max, body);
 
         // Sync after each outermost GPU launch so kernel time is billed
         // to the right row rather than to a later blocking host call.
@@ -796,8 +796,7 @@ private:
             steps.push_back(mutate(other));
         }
         return Block::make(start_profiler,
-                           LetStmt::make(op->name, mutate(op->value),
-                                         Block::make(steps)));
+                           op->remake(mutate(op->value), Block::make(steps)));
     }
 
     Stmt visit(const LetStmt *op) override {
@@ -812,7 +811,7 @@ private:
         if (body.same_as(op->body) && value.same_as(op->value)) {
             return op;
         }
-        return LetStmt::make(op->name, value, body);
+        return op->remake(value, body);
     }
 };
 

@@ -166,11 +166,11 @@ protected:
                 condition = simplify(prefetch_box.used && condition);
             }
             internal_assert(!new_bounds.empty());
-            return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, std::move(condition), std::move(body));
+            return op->remake(new_bounds, std::move(condition), std::move(body));
         }
 
         if (!body.same_as(op->body)) {
-            return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, std::move(body));
+            return op->remake(op->bounds, op->condition, std::move(body));
         } else if (op->bounds.empty()) {
             // Remove the Prefetch IR since it is prefetching an empty region
             user_warning << "Removing prefetch of " << p.name
@@ -249,12 +249,7 @@ protected:
             }
         }
 
-        Stmt stmt;
-        if (!body.same_as(op->body)) {
-            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, std::move(body));
-        } else {
-            stmt = op;
-        }
+        Stmt stmt = op->remake(op->min, op->max, std::move(body));
 
         internal_assert(loop_nest.back() == op->name);
         loop_nest.pop_back();

@@ -173,10 +173,10 @@ Interval bounds_of_lanes(const Expr &e) {
         Interval ia = bounds_of_lanes(let->value);
         Interval ib = bounds_of_lanes(let->body);
         if (expr_uses_var(ib.min, let->name)) {
-            ib.min = Let::make(let->name, let->value, ib.min);
+            ib.min = let->remake(let->value, ib.min);
         }
         if (expr_uses_var(ib.max, let->name)) {
-            ib.max = Let::make(let->name, let->value, ib.max);
+            ib.max = let->remake(let->value, ib.max);
         }
         return ib;
     }
@@ -224,13 +224,16 @@ protected:
     }
 
     Expr visit(const Load *op) override {
-        return Load::make(op->type, op->name, mutate_index(op->name, op->index),
-                          op->image, op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
+        return op->remake(mutate_index(op->name, op->index),
+                          mutate(op->predicate),
+                          mutate_alignment(op->name, op->alignment));
     }
 
     Stmt visit(const Store *op) override {
-        return Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
-                           op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
+        return op->remake(mutate(op->value),
+                          mutate_index(op->name, op->index),
+                          mutate(op->predicate),
+                          mutate_alignment(op->name, op->alignment));
     }
 
 public:
@@ -304,7 +307,7 @@ protected:
             return op;
         }
         vectorized = true;
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment);
+        return op->remake(index, predicate, op->alignment);
     }
 
     Stmt visit(const Store *op) override {
@@ -335,7 +338,7 @@ protected:
             return op;
         }
         vectorized = true;
-        return Store::make(op->name, value, index, op->param, predicate, op->alignment);
+        return op->remake(value, index, predicate, op->alignment);
     }
 
     Expr visit(const Call *op) override {
@@ -529,8 +532,7 @@ protected:
         } else {
             int w = index.type().lanes();
             predicate = widen(predicate, w);
-            return Load::make(op->type.with_lanes(w), op->name, index, op->image,
-                              op->param, predicate, op->alignment);
+            return op->remake(index, predicate, op->alignment);
         }
     }
 
@@ -704,8 +706,10 @@ protected:
             int lanes = std::max({predicate.type().lanes(),
                                   value.type().lanes(),
                                   index.type().lanes()});
-            return Store::make(op->name, widen(value, lanes), widen(index, lanes),
-                               op->param, widen(predicate, lanes), op->alignment);
+            return op->remake(widen(value, lanes),
+                              widen(index, lanes),
+                              widen(predicate, lanes),
+                              op->alignment);
         }
     }
 
@@ -1002,7 +1006,7 @@ protected:
 
                 // We may still need the atomic node, if there was more
                 // parallelism than just the vectorization.
-                s = Atomic::make(op->producer_name, op->mutex_name, s);
+                s = op->remake(s);
                 return s;
             }
 
@@ -1280,10 +1284,7 @@ protected:
                 store_index = store_mr.to_expr();
             }
 
-            Expr new_load = Load::make(load_a->type.with_lanes(output_lanes),
-                                       load_a->name, store_index, load_a->image,
-                                       load_a->param, const_true(output_lanes),
-                                       ModulusRemainder{});
+            Expr new_load = load_a->remake(store_index, const_true(output_lanes), ModulusRemainder{});
 
             Expr lhs = cast(b.type().with_lanes(output_lanes), new_load);
 
@@ -1291,8 +1292,7 @@ protected:
             if (unrolled_loops.empty()) {
                 b = binop(lhs, b);
                 b = cast(new_load.type(), b);
-                s = Store::make(store->name, b, store_index, store->param,
-                                const_true(b.type().lanes()), store->alignment);
+                s = store->remake(b, store_index, const_true(b.type().lanes()), store->alignment);
             } else {
                 // Wrap any containing loops we still need (unrolled). We
                 // enumerate the cartesian product of loop iteration values
@@ -1301,9 +1301,10 @@ protected:
                 std::string b_var_name = unique_name('b');
                 Expr b_var = Variable::make(b.type().with_lanes(output_lanes), b_var_name);
                 Stmt store_template =
-                    Store::make(store->name, cast(new_load.type(), binop(lhs, b_var)),
-                                store_index, store->param,
-                                const_true(output_lanes), ModulusRemainder{});
+                    store->remake(cast(new_load.type(), binop(lhs, b_var)),
+                                  store_index,
+                                  const_true(output_lanes),
+                                  ModulusRemainder{});
                 std::string full_b_var_name = unique_name('b');
                 Expr full_b_var = Variable::make(b.type(), full_b_var_name);
 
@@ -1340,7 +1341,7 @@ protected:
 
             // We may still need the atomic node, if there was more
             // parallelism than just the vectorization.
-            s = Atomic::make(op->producer_name, op->mutex_name, s);
+            s = op->remake(s);
 
             return s;
         } while (false);
@@ -1606,7 +1607,7 @@ protected:
         finder.mutate(op->body);
         LiftVectorizableExprsOutOfSingleAtomicNode lifter(finder.liftable);
         Stmt new_body = lifter.mutate(op->body);
-        new_body = Atomic::make(op->producer_name, op->mutex_name, new_body);
+        new_body = op->remake(new_body);
         while (!lifter.lifted.empty()) {
             auto p = lifter.lifted.back();
             new_body = LetStmt::make(p.first, p.second, new_body);

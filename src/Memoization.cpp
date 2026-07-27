@@ -412,7 +412,7 @@ private:
                 Allocate::make(cache_key_name, UInt(8), MemoryType::Stack, {key_info.key_size()},
                                const_true(), generate_key);
 
-            return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, cache_key_alloc);
+            return op->remake(op->bounds, op->condition, cache_key_alloc);
         } else {
             return IRMutator::visit(op);
         }
@@ -450,7 +450,7 @@ private:
                 body = Block::make(body, cache_store_back);
                 body = IfThenElse::make(cache_miss, body);
             }
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            return op->remake(body);
         } else {
             return IRMutator::visit(op);
         }
@@ -552,7 +552,7 @@ private:
 
             pending_memoized_allocations.erase(innermost_realization_name);
 
-            return LetStmt::make(let->name, value, body);
+            return let->remake(value, body);
         } else {
             return IRMutator::visit(let);
         }

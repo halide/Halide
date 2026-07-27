@@ -267,8 +267,7 @@ protected:
             }
         }
 
-        Stmt s = Store::make(op->name, value, index,
-                             op->param, mutate(op->predicate), op->alignment);
+        Stmt s = op->remake(value, index, mutate(op->predicate), op->alignment);
 
         for (const auto &[var, val] : deferred) {
             s = LetStmt::make(var, val, s);

@@ -55,7 +55,7 @@ class DebugToFile : public IRMutator {
             body = LetStmt::make(call_result_name, call, body);
             body = Block::make(mutate(op->body), body);
 
-            return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, body);
+            return op->remake(op->bounds, op->condition, body);
         } else {
             return IRMutator::visit(op);
         }

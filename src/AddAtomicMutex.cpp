@@ -53,7 +53,7 @@ protected:
         IRVisitor::visit(op);  // Make sure we visit the Store first.
         if (index.defined()) {
             if (expr_uses_var(index, op->name)) {
-                index = Let::make(op->name, op->value, index);
+                index = op->remake(op->value, index);
             }
         }
     }
@@ -261,12 +261,7 @@ protected:
     Stmt visit(const Store *op) override {
         Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
-        return Store::make(op->name,
-                           std::move(value),
-                           var,
-                           op->param,
-                           std::move(predicate),
-                           op->alignment);
+        return op->remake(std::move(value), var, std::move(predicate), op->alignment);
     }
 
     const std::string &producer_name;
@@ -340,19 +335,7 @@ protected:
             needs_mutex_allocation.pop(producer_name);
         }
 
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return Allocate::make(op->name,
-                                  op->type,
-                                  op->memory_type,
-                                  op->extents,
-                                  op->condition,
-                                  std::move(body),
-                                  op->new_expr,
-                                  op->free_function,
-                                  op->padding);
-        }
+        return op->remake(op->extents, op->condition, std::move(body));
     }
 
     Stmt visit(const ProducerConsumer *op) override {
@@ -385,11 +368,7 @@ protected:
             body = allocate_mutex(*mutex_name, extent, body);
         }
 
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return ProducerConsumer::make(op->name, op->is_producer, std::move(body));
-        }
+        return op->remake(std::move(body));
     }
 
     Stmt visit(const Atomic *op) override {
@@ -433,9 +412,7 @@ protected:
                                                   "halide_mutex_array_unlock",
                                                   {mutex_array, index},
                                                   Call::CallType::Extern))));
-        Stmt ret = Atomic::make(op->producer_name,
-                                op->mutex_name,
-                                std::move(body));
+        Stmt ret = op->remake(std::move(body));
 
         if (index_let.defined()) {
             // Attach the let binding outside of the atomic node.

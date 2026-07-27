@@ -2101,7 +2101,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             ModulusRemainder align = op->alignment;
             // Switch to the alignment of the last lane
             align = align - (ramp->lanes - 1);
-            Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image, op->param, op->predicate, align);
+            Expr flipped_load = op->remake(flipped_index, op->predicate, align);
 
             Value *flipped = codegen(flipped_load);
 
@@ -2704,14 +2704,12 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
         ModulusRemainder align = op->alignment;
         align = align - (ramp->lanes - 1);
 
-        Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image,
-                                       op->param, const_true(op->type.lanes()), align);
+        Expr flipped_load = op->remake(flipped_index, const_true(op->type.lanes()), align);
 
         Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
         value = reverse_vector(flipped);
     } else {  // It's not dense vector load, we need to scalarize it
-        Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
-                                    op->param, const_true(op->type.lanes()), op->alignment);
+        Expr load_expr = op->remake(op->index, const_true(op->type.lanes()), op->alignment);
         debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
         Expr pred_load = Call::make(load_expr.type(),
                                     Call::if_then_else,
@@ -4007,7 +4005,7 @@ void CodeGen_LLVM::visit(const Store *op) {
         // Peel lets off the index to make us more likely to pattern
         // match a ramp.
         if (const Let *let = op->index.as<Let>()) {
-            Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
+            Stmt s = op->remake(op->value, let->body, op->predicate, op->alignment);
             codegen(LetStmt::make(let->name, let->value, s));
             return;
         }
@@ -4018,7 +4016,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     Halide::Type storage_type = upgrade_type_for_storage(value_type);
     if (value_type != storage_type) {
         Expr v = reinterpret(storage_type, op->value);
-        codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment));
+        codegen(op->remake(v, op->index, op->predicate, op->alignment));
         return;
     }
 
@@ -4057,7 +4055,7 @@ void CodeGen_LLVM::visit(const Store *op) {
         StoreInst *store = builder->CreateAlignedStore(val, ptr, llvm::Align(value_type.bytes()));
         annotate_store(store, op->index);
     } else if (const Let *let = op->index.as<Let>()) {
-        Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
+        Stmt s = op->remake(op->value, let->body, op->predicate, op->alignment);
         codegen(LetStmt::make(let->name, let->value, s));
     } else {
         int alignment = value_type.bytes();
