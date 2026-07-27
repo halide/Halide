@@ -10,8 +10,8 @@ use tauri::ipc::Response;
 use tauri::State;
 
 use crate::render::{
-    GrayscaleState, InfState, LoadFrequencyState, NaNState, NormalizationMode, RedundantState,
-    Renderer, ReuseDistanceState, RgbState, StoreFrequencyState, ThreadOpMode, ThreadState,
+    GrayscaleState, LoadFrequencyState, NormalizationMode, RedundantState, Renderer,
+    ReuseDistanceState, RgbState, StoreFrequencyState, ThreadOpMode, ThreadState,
 };
 use crate::trace::Trace;
 
@@ -184,8 +184,6 @@ struct Loaded {
     load_frequency_renderers: HashMap<String, LoadFrequencyState>,
     redundant_renderers: HashMap<String, RedundantState>,
     reuse_distance_renderers: HashMap<String, ReuseDistanceState>,
-    nan_renderers: HashMap<String, NaNState>,
-    inf_renderers: HashMap<String, InfState>,
     thread_renderers: HashMap<String, ThreadState>,
 }
 
@@ -196,32 +194,18 @@ pub struct AppState {
     inner: Mutex<Option<Loaded>>,
 }
 
-/// Appends histogram data as little-endian `u32`s directly after `pixels`, so a single
-/// `Response` carries both. The frontend already knows the pixel-buffer length ahead of time
-/// (`width * height * 4`), so no length prefix is needed to split the two back apart.
-fn pack_pixels_and_histogram(mut pixels: Vec<u8>, histogram: Vec<u32>) -> Vec<u8> {
-    pixels.reserve(histogram.len() * 4);
-    for bin in histogram {
-        pixels.extend_from_slice(&bin.to_le_bytes());
-    }
-
-    pixels
-}
-
-/// Appends `store_counts` then `load_counts` as little-endian `u32`s directly after `pixels`.
-/// Both slices are the same length (the Func's thread-ID domain size, `FuncMeta::thread_ids`), so
-/// the frontend can split them back apart without a length prefix.
-fn pack_pixels_and_thread_counts(
+/// Packs tensor data, tabular data, and NaN / Inf data in a single IPC response.
+fn pack_render_response(
     mut pixels: Vec<u8>,
-    store_counts: &[u32],
-    load_counts: &[u32],
+    nan_inf_overlays: Vec<u8>,
+    tabular_data: &[u32],
 ) -> Vec<u8> {
-    pixels.reserve((store_counts.len() + load_counts.len()) * 4);
-    for &c in store_counts {
-        pixels.extend_from_slice(&c.to_le_bytes());
-    }
-    for &c in load_counts {
-        pixels.extend_from_slice(&c.to_le_bytes());
+    pixels.reserve(nan_inf_overlays.len() + tabular_data.len() * 4);
+
+    pixels.extend_from_slice(&nan_inf_overlays);
+
+    for &v in tabular_data {
+        pixels.extend_from_slice(&v.to_le_bytes());
     }
 
     pixels
@@ -245,8 +229,6 @@ pub fn open_trace(path: String, state: State<AppState>) -> Result<TraceMeta, Str
         load_frequency_renderers: HashMap::new(),
         redundant_renderers: HashMap::new(),
         reuse_distance_renderers: HashMap::new(),
-        nan_renderers: HashMap::new(),
-        inf_renderers: HashMap::new(),
         thread_renderers: HashMap::new(),
     });
     Ok(meta)
@@ -259,6 +241,8 @@ pub fn render_grayscale(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -280,7 +264,13 @@ pub fn render_grayscale(
     let k = store_indices.partition_point(|&p| p <= global_index as usize);
     renderer.seek(trace, store_indices, k);
 
-    Ok(Response::new(renderer.to_rgba(normalization_mode)))
+    let pixels = renderer.to_rgba(normalization_mode);
+    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
+    Ok(Response::new(pack_render_response(
+        pixels,
+        nan_inf_overlays,
+        &[],
+    )))
 }
 
 /// Renders `func` as an RGB image at `global_index` and returns raw RGBA8 bytes. Planes 0/1/2
@@ -290,6 +280,8 @@ pub fn render_rgb(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -311,7 +303,13 @@ pub fn render_rgb(
     let k = store_indices.partition_point(|&p| p <= global_index as usize);
     renderer.seek(trace, store_indices, k);
 
-    Ok(Response::new(renderer.to_rgba(normalization_mode)))
+    let pixels = renderer.to_rgba(normalization_mode);
+    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
+    Ok(Response::new(pack_render_response(
+        pixels,
+        nan_inf_overlays,
+        &[],
+    )))
 }
 
 /// Renders a heatmap of store counts for `func` up to `global_index` and returns raw RGBA8 bytes.
@@ -321,6 +319,8 @@ pub fn render_store_frequency(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -350,7 +350,12 @@ pub fn render_store_frequency(
     } else {
         Vec::new()
     };
-    Ok(Response::new(pack_pixels_and_histogram(pixels, histogram)))
+    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
+    Ok(Response::new(pack_render_response(
+        pixels,
+        nan_inf_overlays,
+        &histogram,
+    )))
 }
 
 /// Renders a heatmap of load counts for `func` up to `global_index` and returns raw RGBA8 bytes.
@@ -360,6 +365,8 @@ pub fn render_load_frequency(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -389,8 +396,13 @@ pub fn render_load_frequency(
     } else {
         Vec::new()
     };
+    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
 
-    Ok(Response::new(pack_pixels_and_histogram(pixels, histogram)))
+    Ok(Response::new(pack_render_response(
+        pixels,
+        nan_inf_overlays,
+        &histogram,
+    )))
 }
 
 /// Renders a heatmap of redundant store counts for `func` up to `global_index` and returns raw
@@ -402,6 +414,8 @@ pub fn render_redundant_stores(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -429,7 +443,12 @@ pub fn render_redundant_stores(
     } else {
         Vec::new()
     };
-    Ok(Response::new(pack_pixels_and_histogram(pixels, histogram)))
+    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
+    Ok(Response::new(pack_render_response(
+        pixels,
+        nan_inf_overlays,
+        &histogram,
+    )))
 }
 
 /// Renders a heatmap of maximum store-to-load reuse distances for `func` up to `global_index`
@@ -441,6 +460,8 @@ pub fn render_reuse_distance(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -472,65 +493,12 @@ pub fn render_reuse_distance(
     } else {
         Vec::new()
     };
-    Ok(Response::new(pack_pixels_and_histogram(pixels, histogram)))
-}
-
-#[tauri::command]
-pub fn render_nan(
-    func: String,
-    global_index: u32,
-    normalization_mode: NormalizationMode,
-    state: State<AppState>,
-) -> Result<Response, String> {
-    let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
-    let loaded = guard.as_mut().ok_or("no trace loaded")?;
-    let Loaded {
-        trace,
-        nan_renderers,
-        ..
-    } = loaded;
-
-    if !nan_renderers.contains_key(&func) {
-        let rs = NaNState::new(trace, &func)
-            .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
-        nan_renderers.insert(func.clone(), rs);
-    }
-    let renderer = nan_renderers.get_mut(&func).expect("just inserted");
-
-    let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
-    let k = store_indices.partition_point(|&p| p <= global_index as usize);
-    renderer.seek(trace, store_indices, k);
-
-    Ok(Response::new(renderer.to_rgba(normalization_mode)))
-}
-
-#[tauri::command]
-pub fn render_inf(
-    func: String,
-    global_index: u32,
-    normalization_mode: NormalizationMode,
-    state: State<AppState>,
-) -> Result<Response, String> {
-    let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
-    let loaded = guard.as_mut().ok_or("no trace loaded")?;
-    let Loaded {
-        trace,
-        inf_renderers,
-        ..
-    } = loaded;
-
-    if !inf_renderers.contains_key(&func) {
-        let rs = InfState::new(trace, &func)
-            .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
-        inf_renderers.insert(func.clone(), rs);
-    }
-    let renderer = inf_renderers.get_mut(&func).expect("just inserted");
-
-    let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
-    let k = store_indices.partition_point(|&p| p <= global_index as usize);
-    renderer.seek(trace, store_indices, k);
-
-    Ok(Response::new(renderer.to_rgba(normalization_mode)))
+    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
+    Ok(Response::new(pack_render_response(
+        pixels,
+        nan_inf_overlays,
+        &histogram,
+    )))
 }
 
 #[tauri::command]
@@ -539,6 +507,8 @@ pub fn render_thread(
     global_index: u32,
     op_mode: ThreadOpMode,
     thread_id: String,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -563,10 +533,12 @@ pub fn render_thread(
 
     let pixels = renderer.to_rgba(thread_id);
     let (store_counts, load_counts) = renderer.to_thread_counts();
-    Ok(Response::new(pack_pixels_and_thread_counts(
+    let thread_counts: Vec<u32> = store_counts.iter().chain(load_counts).copied().collect();
+    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
+    Ok(Response::new(pack_render_response(
         pixels,
-        store_counts,
-        load_counts,
+        nan_inf_overlays,
+        &thread_counts,
     )))
 }
 
