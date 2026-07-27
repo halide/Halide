@@ -108,7 +108,6 @@ struct Target {
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
         CLAtomics64 = halide_target_feature_cl_atomic64,
-        EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
         Profile = halide_target_feature_profile,
         NoRuntime = halide_target_feature_no_runtime,

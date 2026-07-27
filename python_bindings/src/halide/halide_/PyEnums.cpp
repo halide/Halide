@@ -149,7 +149,6 @@ void define_enums(py::module &m) {
         .value("CLDoubles", Target::Feature::CLDoubles)
         .value("CLHalf", Target::Feature::CLHalf)
         .value("CLAtomics64", Target::Feature::CLAtomics64)
-        .value("EGL", Target::Feature::EGL)
         .value("UserContext", Target::Feature::UserContext)
         .value("Profile", Target::Feature::Profile)
         .value("NoRuntime", Target::Feature::NoRuntime)

@@ -850,7 +850,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
     {"cl_atomics64", Target::CLAtomics64},
-    {"egl", Target::EGL},
     {"user_context", Target::UserContext},
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
