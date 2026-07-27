@@ -35,77 +35,6 @@ using namespace llvm;
 
 namespace {
 
-// Populate feature flags in a target according to those implied by
-// existing flags, so that instruction patterns can just check for the
-// oldest feature flag that supports an instruction.
-//
-// According to LLVM, ARM architectures have the following is-a-superset-of
-// relationships:
-//
-//   v9.5a > v9.4a > v9.3a > v9.2a > v9.1a > v9a;
-//             v       v       v       v       v
-//           v8.9a > v8.8a > v8.7a > v8.6a > v8.5a > v8.4a > ... > v8a;
-//
-// v8r has no relation to anything.
-Target complete_arm_target(Target t) {
-    if (t.os == Target::OSX) {
-        // The Apple M1 implements the full ARM v8.4a spec.
-        t.set_feature(Target::ARMv84a);
-    }
-
-    auto add_implied_feature_if_supported = [](Target &t, Target::Feature super, Target::Feature implied) {
-        if (t.has_feature(super)) {
-            t.set_feature(implied);
-        }
-    };
-
-    // ARMFp16 implies ARMv8.2-A; we don't know of any devices where
-    // that doesn't hold. The cascade loop below will set ARMv81a and ARMv8a.
-    add_implied_feature_if_supported(t, Target::ARMFp16, Target::ARMv82a);
-
-    constexpr int num_arm_v8_features = 10;
-    static const Target::Feature arm_v8_features[num_arm_v8_features] = {
-        // The following loop depends on this array being sorted correctly.
-        // keep-sorted start numeric=yes order=desc
-        Target::ARMv89a,
-        Target::ARMv88a,
-        Target::ARMv87a,
-        Target::ARMv86a,
-        Target::ARMv85a,
-        Target::ARMv84a,
-        Target::ARMv83a,
-        Target::ARMv82a,
-        Target::ARMv81a,
-        Target::ARMv8a,
-        // keep-sorted end
-    };
-
-    for (int i = 0; i < num_arm_v8_features - 1; i++) {
-        add_implied_feature_if_supported(t,
-                                         arm_v8_features[i],
-                                         arm_v8_features[i + 1]);
-    }
-
-    static const Target::Feature features_with_fp16[] = {
-        Target::SVE,
-        Target::SVE2,
-    };
-
-    for (const auto &f : features_with_fp16) {
-        add_implied_feature_if_supported(t, f, Target::ARMFp16);
-    }
-
-    static const Target::Feature features_with_dotprod[] = {
-        Target::SVE2,
-    };
-
-    for (const auto &f : features_with_dotprod) {
-        add_implied_feature_if_supported(t, f, Target::ARMDotProd);
-    }
-
-    return t;
-}
-
 // Substitute in loads that feed into slicing shuffles, to help with vld2/3/4
 // emission. These are commonly lifted as lets because they get used by multiple
 // interleaved slices of the same load.
@@ -301,7 +230,7 @@ protected:
 };
 
 CodeGen_ARM::CodeGen_ARM(const Target &target)
-    : CodeGen_CPU(complete_arm_target(target)) {
+    : CodeGen_CPU(target) {
 
     // TODO(https://github.com/halide/Halide/issues/8088): See if
     // use_llvm_vp_intrinsics can replace architecture specific code in this
@@ -432,9 +361,9 @@ constexpr int max_intrinsic_args = 4;
 struct ArmIntrinsic {
     const char *arm32;
     const char *arm64;
-    halide_type_t ret_type;
+    Type ret_type;
     const char *name;
-    halide_type_t arg_types[max_intrinsic_args];
+    Type arg_types[max_intrinsic_args];
     int flags;
     enum {
         AllowUnsignedOp1 = 1 << 0,   // Generate a second version of the instruction with the second operand unsigned.
@@ -1156,7 +1085,7 @@ void CodeGen_ARM::init_module() {
             }();
 
             int width_factor = 1;
-            if (!((intrin.ret_type.lanes <= 1) && (intrin.flags & ArmIntrinsic::NoMangle))) {
+            if (!((intrin.ret_type.lanes() <= 1) && (intrin.flags & ArmIntrinsic::NoMangle))) {
                 switch (flavor) {
                 case SIMDFlavors::NeonWidthX1:
                     width_factor = 1;
@@ -1181,8 +1110,8 @@ void CodeGen_ARM::init_module() {
             }
             vector<Type> arg_types;
             arg_types.reserve(4);
-            for (halide_type_t i : intrin.arg_types) {
-                if (i.bits == 0) {
+            for (const Type &i : intrin.arg_types) {
+                if (i.bits() == 0) {
                     break;
                 }
                 Type arg_type = i;
@@ -1805,7 +1734,7 @@ void CodeGen_ARM::visit(const Store *op) {
             if (is_float16_and_has_feature(elt)) {
                 Type u16_type = op->value.type().with_code(halide_type_uint);
                 Expr v = reinterpret(u16_type, op->value);
-                codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment));
+                codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment, op->is_streaming));
                 return;
             }
 
@@ -1958,7 +1887,7 @@ void CodeGen_ARM::visit(const Load *op) {
             // Rewrite float16 case into load in uint16 and reinterpret, as it is unsupported in LLVM
             if (is_float16_and_has_feature(op->type)) {
                 Type u16_type = op->type.with_code(halide_type_uint);
-                Expr equiv = Load::make(u16_type, op->name, op->index, op->image, op->param, op->predicate, op->alignment);
+                Expr equiv = Load::make(u16_type, op->name, op->index, op->image, op->param, op->predicate, op->alignment, op->is_streaming);
                 equiv = reinterpret(op->type, equiv);
                 equiv = common_subexpression_elimination(equiv);
                 value = codegen(equiv);

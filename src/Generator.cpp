@@ -640,7 +640,7 @@ std::string halide_type_to_c_type(const Type &t) {
         {encode(Float(16)), "uint16_t"},   // TODO: see Issues #3709, #3967
         {encode(Float(32)), "float"},
         {encode(Float(64)), "double"},
-        {encode(Handle(64)), "void*"}};
+        {encode(Handle()), "void*"}};
     internal_assert(m.count(encode(t))) << t << " " << encode(t);
     return m.at(encode(t));
 }

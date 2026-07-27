@@ -95,6 +95,18 @@ void validate_schedule_inlined_function(Function f) {
                          << b.remainder << "] because the function is scheduled inline.\n";
         }
     }
+
+    if (stage_s.stream_stores()) {
+        user_warning << "It is meaningless to stream the stores of function "
+                     << f.name() << " because it is scheduled inline: there is "
+                                    "no separate Store left to mark non-temporal.\n";
+    }
+
+    if (const auto &names = stage_s.stream_loads_names(); !names || !names->empty()) {
+        user_warning << "It is meaningless to stream the loads made by function "
+                     << f.name() << " because it is scheduled inline: there is "
+                                    "no separate Load left to mark non-temporal.\n";
+    }
 }
 
 class Inliner : public IRMutator {

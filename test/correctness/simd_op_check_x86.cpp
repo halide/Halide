@@ -42,7 +42,34 @@ public:
         // Queue up a bunch of tasks representing each test to run.
         if (target.arch == Target::X86) {
             check_sse_and_avx();
+            check_streaming_accesses();
         }
+    }
+
+    void check_streaming_accesses() {
+        if (!use_avx2) {
+            return;
+        }
+
+        auto streaming_copy = [&]() {
+            Func f{"f"}, reader{"reader"};
+
+            f(x, y) = in_u8(x);
+            f.compute_root()
+                .vectorize(x, 32)
+                .stream_stores();
+
+            reader(x, y) = f(x, y) + 1;
+            reader.compute_root()
+                .vectorize(x, 32)
+                .stream_loads();
+
+            return reader(x, y);
+        };
+
+        check("vmovntdqa (", 32, streaming_copy());
+        check("vmovntdq %ymm", 32, streaming_copy());
+        check("sfence", 32, streaming_copy());
     }
 
     void check_sse_and_avx() {

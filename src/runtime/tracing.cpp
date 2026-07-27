@@ -187,7 +187,7 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
     if (fd > 0) {
         // Compute the total packet size
         uint32_t value_bytes = (e->event == halide_trace_load || e->event == halide_trace_store) ?
-                                   (uint32_t)(e->type.lanes * e->type.bytes()) :
+                                   (uint32_t)(e->lanes * e->type.bytes()) :
                                    0;
         uint32_t header_bytes = (uint32_t)sizeof(halide_trace_packet_t);
         uint32_t coords_bytes = e->dimensions * (uint32_t)sizeof(int32_t);
@@ -210,7 +210,9 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
         packet->dimensions = e->dimensions;
         if (e->event == halide_trace_load || e->event == halide_trace_store) {
             packet->value_index = e->value_index;
-            packet->type = e->type;
+            packet->type_code = (uint8_t)e->type.code;
+            packet->type_bits = e->type.bits;
+            packet->lanes = (uint16_t)e->lanes;
         } else {
             packet->id = my_id;
             packet->thread_id = (e->event == halide_trace_begin_parallel_task) ? e->thread_id : 0;
@@ -262,12 +264,12 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
         bool print_value = (e->event < 2);
 
         ss << event_types[e->event] << " " << e->func << "." << e->value_index << "(";
-        if (e->type.lanes > 1) {
+        if (e->lanes > 1) {
             ss << "<";
         }
         for (int i = 0; i < e->dimensions; i++) {
             if (i > 0) {
-                if ((e->type.lanes > 1) && (i % e->type.lanes) == 0) {
+                if ((e->lanes > 1) && (i % e->lanes) == 0) {
                     ss << ">, <";
                 } else {
                     ss << ", ";
@@ -275,19 +277,19 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
             }
             ss << e->coordinates[i];
         }
-        if (e->type.lanes > 1) {
+        if (e->lanes > 1) {
             ss << ">)";
         } else {
             ss << ")";
         }
 
         if (print_value) {
-            if (e->type.lanes > 1) {
+            if (e->lanes > 1) {
                 ss << " = <";
             } else {
                 ss << " = ";
             }
-            for (int i = 0; i < e->type.lanes; i++) {
+            for (int i = 0; i < e->lanes; i++) {
                 if (i > 0) {
                     ss << ", ";
                 }
@@ -324,7 +326,7 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                     ss << ((void **)(e->value))[i];
                 }
             }
-            if (e->type.lanes > 1) {
+            if (e->lanes > 1) {
                 ss << ">";
             }
         }

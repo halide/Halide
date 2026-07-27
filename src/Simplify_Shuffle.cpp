@@ -86,7 +86,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
                 t = first_load->type;
                 t = t.with_lanes(op->indices.size());
                 return Load::make(t, first_load->name, shuffled_index, first_load->image,
-                                  first_load->param, shuffled_predicate, alignment);
+                                  first_load->param, shuffled_predicate, alignment, first_load->is_streaming);
             }
         }
     }

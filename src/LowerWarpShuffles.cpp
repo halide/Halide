@@ -512,7 +512,7 @@ class LowerWarpShuffles : public IRMutator {
             // them. Reassembling the result into a flat address gives
             // the expression below.
             Expr in_warp_idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), bounds);
-            return Store::make(op->name, value, in_warp_idx, op->param, op->predicate, ModulusRemainder());
+            return Store::make(op->name, value, in_warp_idx, op->param, op->predicate, ModulusRemainder(), op->is_streaming);
         } else {
             return IRMutator::visit(op);
         }

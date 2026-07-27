@@ -7,6 +7,16 @@ project(Halide_apps)
 
 enable_testing()
 
+if (CMAKE_SYSTEM_NAME MATCHES "Windows" AND VCPKG_APPLOCAL_DEPS)
+    # vcpkg's z-applocal deployment tool can crash the build if it loses a race
+    # against another process (e.g. an antivirus scanner) transiently holding a
+    # shared dependency DLL open (see https://github.com/microsoft/vcpkg-tool/issues/2076).
+    # This is more likely to happen with many targets linking in parallel, as here.
+    # Ask vcpkg to serialize its deployment step across targets to reduce how often
+    # this occurs.
+    set(X_VCPKG_APPLOCAL_DEPS_SERIALIZED ON)
+endif ()
+
 if (WIN32)
     option(ENABLE_APPS_HANNK "Build apps/hannk" OFF)
 else ()
@@ -31,7 +41,7 @@ if (Halide_TARGET MATCHES "wasm")
 endif ()
 
 # keep-sorted start case=no ignore_prefixes=#
-# add_app(auto_viz)  # TODO(#5374): missing CMake build
+add_app(auto_viz)
 add_app(bgu)
 add_app(bilateral_grid)
 add_app(blur)
@@ -49,9 +59,9 @@ add_app(harris)
 # add_app(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
 add_app(HelloBaremetal)
 # add_app(HelloiOS)  # don't build HelloiOS here because it isn't universal.
-# add_app(HelloPyTorch)  # TODO(#5374): missing CMake build
+add_app(HelloPyTorch)
 add_app(hexagon_benchmarks)
-# add_app(hexagon_dma)  # TODO(#5374): missing CMake build
+add_app(hexagon_dma)
 add_app(hist)
 add_app(iir_blur)
 add_app(interpolate)
@@ -61,11 +71,9 @@ add_app(linear_blur)
 add_app(local_laplacian)
 add_app(max_filter)
 add_app(nl_means)
-# add_app(nn_ops)  # TODO(#5374): missing CMake build
 add_app(onnx)
 add_app(resize)
-# add_app(resnet_50)  # TODO(#5374): missing CMake build
-# add_app(simd_op_check)  # TODO(#5374): missing CMake build
+add_app(resnet_50)
 add_app(stencil_chain)
 add_app(unsharp)
 add_app(wavelet)

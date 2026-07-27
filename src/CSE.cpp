@@ -268,7 +268,7 @@ protected:
         }
 
         Stmt s = Store::make(op->name, value, index,
-                             op->param, mutate(op->predicate), op->alignment);
+                             op->param, mutate(op->predicate), op->alignment, op->is_streaming);
 
         for (const auto &[var, val] : deferred) {
             s = LetStmt::make(var, val, s);

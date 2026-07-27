@@ -718,7 +718,8 @@ public:
         // -- print text
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword", "module");
-        print_text(" name=" + m.name() + ", target=" + m.target().to_string());
+        // The module retains implied features, but print it in minimal form.
+        print_text(" name=" + m.name() + ", target=" + m.target().without_implied_features().to_string());
         print_closing_tag("span");
 
         // Open code block to hold module body
@@ -767,7 +768,8 @@ public:
         // -- print text
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword", "module");
-        print_text(" name=" + m.name() + ", target=" + m.target().to_string());
+        // The module retains implied features, but print it in minimal form.
+        print_text(" name=" + m.name() + ", target=" + m.target().without_implied_features().to_string());
         print_closing_tag("span");
 
         // Open code block to hold module body
@@ -2237,6 +2239,89 @@ private:
         print_html_element("span", "matched ClosingBrace cb-" + std::to_string(id), "}");
 
         // Close div holding this atomic
+        print_closing_tag("div");
+        print_ln();
+    }
+
+    void visit(const StreamingStore *op) override {
+        // Give this node a unique id
+        int id = gen_unique_id();
+
+        // Start a dive to hold code for this streaming store
+        print_opening_tag("div", "StreamingStore");
+
+        // Generate the show hide icon/text buttons
+        print_show_hide_btn_begin(id);
+
+        // -- print text
+        print_html_element("span", "matched keyword", "streaming_store");
+        print_html_element("span", "matched", "(");
+        print_html_element("span", "Symbol", op->producer_name);
+        print_html_element("span", "matched", ")");
+
+        // Open code block to hold streaming store body
+        print_opening_brace();
+        print_show_hide_btn_end(op);
+
+        // Open indented div to hold streaming store code
+        print_opening_tag("div", "indent StreamingStoreBody", "", id);
+
+        // Print streaming store body
+        print(op->body);
+
+        // Close indented div holding body code
+        print_closing_tag("div");
+
+        // Close code block holding fork body
+        print_html_element("span", "matched ClosingBrace cb-" + std::to_string(id), "}");
+
+        // Close div holding this streaming store
+        print_closing_tag("div");
+        print_ln();
+    }
+
+    void visit(const StreamingLoads *op) override {
+        // Give this node a unique id
+        int id = gen_unique_id();
+
+        // Start a dive to hold code for this streaming loads
+        print_opening_tag("div", "StreamingLoads");
+
+        // Generate the show hide icon/text buttons
+        print_show_hide_btn_begin(id);
+
+        // -- print text
+        print_html_element("span", "matched keyword", "streaming_loads");
+        print_html_element("span", "matched", "(");
+        if (!op->names) {
+            print_html_element("span", "Symbol", "all");
+        } else {
+            for (size_t i = 0; i < op->names->size(); i++) {
+                if (i > 0) {
+                    print_html_element("span", "matched", ", ");
+                }
+                print_html_element("span", "Symbol", (*op->names)[i]);
+            }
+        }
+        print_html_element("span", "matched", ")");
+
+        // Open code block to hold streaming loads body
+        print_opening_brace();
+        print_show_hide_btn_end(op);
+
+        // Open indented div to hold streaming loads code
+        print_opening_tag("div", "indent StreamingLoadsBody", "", id);
+
+        // Print streaming loads body
+        print(op->body);
+
+        // Close indented div holding body code
+        print_closing_tag("div");
+
+        // Close code block holding fork body
+        print_html_element("span", "matched ClosingBrace cb-" + std::to_string(id), "}");
+
+        // Close div holding this streaming loads
         print_closing_tag("div");
         print_ln();
     }

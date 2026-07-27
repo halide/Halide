@@ -132,7 +132,7 @@ class FlattenRamps : public IRMutator {
                         // It's a load of a broadcast. Convert it to a broadcast of a load
                         Expr load = Load::make(op->type.element_of(), op->name, min_lane,
                                                op->image, op->param,
-                                               const_true(), ModulusRemainder{});
+                                               const_true(), ModulusRemainder{}, op->is_streaming);
                         return Broadcast::make(load, lanes);
                     } else {
                         // Turn it into a dense load and a shuffle
@@ -141,7 +141,7 @@ class FlattenRamps : public IRMutator {
                         Expr dense_load =
                             Load::make(op->type.with_lanes(extent), op->name, dense_index,
                                        op->image, op->param,
-                                       const_true(extent), ModulusRemainder{});
+                                       const_true(extent), ModulusRemainder{}, op->is_streaming);
                         return Shuffle::make({dense_load}, const_indices);
                     }
                 }
@@ -172,7 +172,7 @@ class FlattenRamps : public IRMutator {
                     Expr p = slice_per_inner_ramp(predicate, (int)n, inner_lanes);
                     ModulusRemainder align = (n == 0) ? op->alignment : ModulusRemainder{};
                     loads.push_back(Load::make(elem_type, op->name, sub_indices[n],
-                                               op->image, op->param, p, align));
+                                               op->image, op->param, p, align, op->is_streaming));
                 }
                 return Shuffle::make_concat(loads);
             }
@@ -221,7 +221,7 @@ class FlattenRamps : public IRMutator {
                     Expr v = slice_per_inner_ramp(value_ref, (int)n, inner_lanes);
                     ModulusRemainder align = (n == 0) ? op->alignment : ModulusRemainder{};
                     stores.push_back(Store::make(op->name, v, sub_indices[n],
-                                                 op->param, p, align));
+                                                 op->param, p, align, op->is_streaming));
                 }
                 Stmt result = Block::make(stores);
                 if (!predicate_name.empty()) {
