@@ -225,6 +225,24 @@ public:
             shared_heap_h.compute_at(shared_out, xi).store_in(MemoryType::Heap);
         }
 
+        // GPU-only: a compute_root Func consumed only on the device.
+        // dev_only_mid is produced on the device and read only by
+        // dev_only_out, also on the device, so InjectHostDevBufferCopies
+        // sees it touched on a single device and nulls its host allocation
+        // (the data lives in device global memory). The profiler tracks
+        // memory at the host Allocate, which then carries no size — so
+        // without a device-allocation marker dev_only_mid would report zero
+        // memory. IHDBC emits a declare_allocation at the null-out site; we
+        // assert dev_only_mid's device buffer is billed a non-zero size.
+        Func dev_only_mid("dev_only_mid"), dev_only_out("dev_only_out");
+        if (get_target().has_gpu_feature()) {
+            dev_only_mid(x) = x * 2;
+            dev_only_out(x) = dev_only_mid(x) + dev_only_mid(x + 1);
+            Var xi;
+            dev_only_mid.compute_root().gpu_tile(x, xi, 32);
+            dev_only_out.compute_root().gpu_tile(x, xi, 32);
+        }
+
         // Extern stage.
         Func extern_stage_e("extern_stage_e");
         extern_stage_e.define_extern("test_extern_stage",
@@ -272,7 +290,7 @@ public:
                          inwards_red_root(x) + inwards_red_at_y(x);
         if (get_target().has_gpu_feature()) {
             out_value = out_value + approx_out(x) + xfer_out(x) + mixed_sched(x) +
-                        shared_out(x);
+                        shared_out(x) + dev_only_out(x);
         }
         out(x) = out_value;
 

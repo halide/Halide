@@ -291,6 +291,29 @@ void check_within_block_gpu_points_computed(const halide_profiler_pipeline_stats
     }
 }
 
+// GPU-only: a compute_root Func (dev_only_mid) consumed only on the device.
+// InjectHostDevBufferCopies nulls its host allocation because the buffer
+// lives solely in device global memory, so the profiler — which tracks
+// memory at the host Allocate — would see a zero-sized allocation and bill
+// nothing. IHDBC emits a declare_allocation marker carrying the device
+// buffer's byte size at the null-out site. InjectCounters bills it to
+// num_allocs/memory_total, and InjectProfiling turns it into a matched
+// memory_allocate/memory_free pair (the host Free node still brackets the
+// device lifetime) so memory_peak/current are tracked too. Assert
+// dev_only_mid gets a single Func entry with non-zero num_allocs,
+// memory_total, and memory_peak.
+void check_device_only_compute_root_allocation(const halide_profiler_pipeline_stats *p) {
+    auto fs = entries_of(p, "dev_only_mid");
+    REQUIRE(fs.size() == 1);
+    REQUIRE(fs[0]->kind == halide_profiler_func_kind_func);
+    REQUIRE(fs[0]->num_allocs > 0);
+    REQUIRE(fs[0]->memory_total > 0);
+    REQUIRE(fs[0]->memory_total >= fs[0]->num_allocs);
+    // The device allocation's lifetime is tracked (matched allocate/free),
+    // so its peak is billed.
+    REQUIRE(fs[0]->memory_peak > 0);
+}
+
 // The fused backing allocation that FuseGPUThreadLoops emits for coalesced
 // within-block GPU allocations carries a synthetic name (unique_name of
 // "shared_alloc" / "global_alloc", historically "allocgroup__f1__f2..."
@@ -347,6 +370,9 @@ int main(int argc, char **argv) {
     if (!entries_of(target, "shared_out").empty()) {
         check_within_block_gpu_allocations_attributed(target);
         check_within_block_gpu_points_computed(target);
+    }
+    if (!entries_of(target, "dev_only_mid").empty()) {
+        check_device_only_compute_root_allocation(target);
     }
 
     // Holds regardless of target: the fused-allocation backing name should

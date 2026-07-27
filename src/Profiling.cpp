@@ -646,7 +646,11 @@ protected:
                 counters[id].count(NumAllocs);
                 counters[id].count(MemoryTotal, cast(UInt(64), op->args[1]));
             }
-            return make_zero(op->type);
+            // Leave the marker in the IR (rather than stripping it) so
+            // InjectProfiling can also emit the memory_current/peak
+            // tracking calls for it — those aren't counters and can't be
+            // handled here.
+            return op;
         } else if (op->is_intrinsic(Call::declare_stage)) {
             // Marker from ScheduleFunctions saying "we're starting stage N
             // of Func F here". Update our per-Func pure-def flag and strip
@@ -1025,6 +1029,16 @@ private:
         return s;
     }
 
+    // Bill a heap allocation of `size` bytes to entry `idx`, bumping its
+    // memory_current/peak. Shared by the Allocate visitor and the
+    // declare_allocation marker (device-only buffers whose host Allocate
+    // was nulled out). num_allocs/memory_total are handled separately via
+    // the counter path.
+    Expr memory_allocate_call(int idx, const Expr &size) {
+        return Call::make(Int(32), "halide_profiler_memory_allocate",
+                          {profiler_instance, idx, size}, Call::Extern);
+    }
+
     Stmt set_current_func(int id) {
         if (most_recently_set_func == id) {
             return Evaluate::make(0);
@@ -1043,6 +1057,28 @@ private:
             // End of the bounds-query prelude — start collecting samples.
             return Call::make(Int(32), "halide_profiler_enable_instance",
                               {profiler_instance}, Call::Extern);
+        } else if (op->is_intrinsic(Call::declare_allocation)) {
+            // A device-only buffer: InjectHostDevBufferCopies nulled its
+            // host Allocate (condition false), so visit(Allocate) pushed a
+            // zero-size func_alloc_sizes entry and emitted no tracking. The
+            // device storage is real, and its Free node still brackets the
+            // lifetime, so rewrite the entry to the device size — the
+            // matching Free then emits a memory_free — and emit the
+            // memory_allocate here. (num_allocs/memory_total are billed via
+            // the counter path.)
+            internal_assert(op->args.size() == 3);
+            std::string name = handle_name(op->args[0]);
+            Expr size = simplify(cast<uint64_t>(op->args[1]));
+            int idx = -1;
+            if (func_alloc_sizes.contains(name)) {
+                idx = func_alloc_sizes.get(name).id;
+                func_alloc_sizes.pop(name);
+            }
+            func_alloc_sizes.push(name, {/*on_stack=*/false, size, idx});
+            if (profiling_memory && idx >= 0 && !is_const_zero(size)) {
+                return memory_allocate_call(idx, size);
+            }
+            return make_zero(op->type);
         } else {
             return IRMutator::visit(op);
         }
@@ -1101,8 +1137,7 @@ private:
                      << names.pipeline_name << "\n";
 
             tasks.push_back(set_current_func(names.malloc_id));
-            tasks.push_back(Evaluate::make(Call::make(Int(32), "halide_profiler_memory_allocate",
-                                                      {profiler_instance, idx, size}, Call::Extern)));
+            tasks.push_back(Evaluate::make(memory_allocate_call(idx, size)));
         }
 
         Stmt body = mutate(op->body);

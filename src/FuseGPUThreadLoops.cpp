@@ -513,17 +513,7 @@ protected:
         allocations.push_back(alloc);
         shared.erase(op->name);
 
-        Stmt body = op->body;
-        if (target.has_feature(Target::Profile) || target.has_feature(Target::ProfileByTimer)) {
-            Expr size_bytes = cast<uint64_t>(simplify(alloc.size * op->type.bytes()));
-            Expr marker = Call::make(Int(32), Call::declare_allocation,
-                                     {Expr(op->name),
-                                      size_bytes,
-                                      make_const(Int(32), (int)alloc.memory_type)},
-                                     Call::Intrinsic);
-            body = Block::make(Evaluate::make(marker), body);
-        }
-        return body;
+        return op->body;
     }
 
     Expr mutate_index(SharedAllocation *alloc, const Expr &index) {
@@ -1074,13 +1064,10 @@ public:
         return result;
     }
 
-    const Target &target;
-
-    ExtractSharedAndHeapAllocations(DeviceAPI d, const Target &t)
+    ExtractSharedAndHeapAllocations(DeviceAPI d)
         : device_api(d),
           thread_id_var_name(unique_name('t')),
-          num_threads_var_name(unique_name('t')),
-          target(t) {
+          num_threads_var_name(unique_name('t')) {
     }
 };  // namespace Internal
 
@@ -1502,13 +1489,7 @@ public:
 };
 
 class FuseGPUThreadLoops : public IRMutator {
-public:
-    FuseGPUThreadLoops(const Target &t)
-        : target(t) {
-    }
-
 protected:
-    const Target &target;
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
@@ -1527,7 +1508,7 @@ protected:
             block_size(op);
             Stmt loop(op);
 
-            ExtractSharedAndHeapAllocations block_allocations(op->device_api, target);
+            ExtractSharedAndHeapAllocations block_allocations(op->device_api);
             loop = block_allocations(loop);
 
             debug(3) << "Pulled out shared allocations:\n"
@@ -1655,12 +1636,12 @@ protected:
 
 }  // namespace
 
-Stmt fuse_gpu_thread_loops(Stmt s, const Target &target) {
+Stmt fuse_gpu_thread_loops(Stmt s) {
     // NormalizeIfStatements pushes the predicates between GPU blocks
     // into the innermost GPU block. FuseGPUThreadLoops would then
     // merge the predicate into the merged GPU thread.
     s = NormalizeIfStatements()(s);
-    s = FuseGPUThreadLoops(target)(s);
+    s = FuseGPUThreadLoops()(s);
     s = ZeroGPULoopMins()(s);
     return s;
 }
