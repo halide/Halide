@@ -1,5 +1,7 @@
 #include <array>
 #include <iostream>
+#include <map>
+#include <set>
 #include <string>
 
 #include "Target.h"
@@ -1182,6 +1184,34 @@ void do_check_bad(const Target &t, const std::initializer_list<Target::Feature> 
     }
 }
 
+// The processor-tuning values that are legal for each architecture, beyond the
+// universally-legal Target::ProcessorGeneric (which is omitted here and checked
+// as a fast path in validate_features()). Today only x86 defines specific CPU
+// tunings; per-CPU tunings for ARM or other arches would be added here. Any
+// Processor added to the enum should be listed for exactly one arch below.
+const std::map<Target::Arch, std::set<Target::Processor>> &legal_processors_by_arch() {
+    static const std::map<Target::Arch, std::set<Target::Processor>> table = {
+        {Target::X86,
+         {
+             Target::K8,
+             Target::K8_SSE3,
+             Target::AMDFam10,
+             Target::BtVer1,
+             Target::BdVer1,
+             Target::BdVer2,
+             Target::BdVer3,
+             Target::BdVer4,
+             Target::BtVer2,
+             Target::ZnVer1,
+             Target::ZnVer2,
+             Target::ZnVer3,
+             Target::ZnVer4,
+             Target::ZnVer5,
+         }},
+    };
+    return table;
+}
+
 }  // namespace
 
 void Target::validate_features() const {
@@ -1321,6 +1351,15 @@ void Target::validate_features() const {
         << "Target feature sme2 requires exactly one SME_SVL feature.\n";
     user_assert(has_feature(SME2) || num_sme_svl_features == 0)
         << "Target features SME_SVL128, SME_SVL256, SME_SVL512, SME_SVL1024, and SME_SVL2048 require target feature sme2.\n";
+
+    // Processor tuning must be legal for the architecture. ProcessorGeneric is
+    // always legal, so check it first as a fast path that skips the table.
+    if (processor_tune_ != ProcessorGeneric) {
+        const auto &table = legal_processors_by_arch();
+        auto it = table.find(arch_);
+        user_assert(it != table.end() && it->second.count(processor_tune_))
+            << "The selected processor tuning is not valid for this architecture. (" << *this << ")\n";
+    }
 }
 
 Target::Target(const std::string &target) {
@@ -1505,6 +1544,9 @@ void Target::set_vector_bits(int vb) {
 }
 
 void Target::set_processor_tune(Processor pt) {
+    Target candidate = *this;
+    candidate.processor_tune_ = pt;
+    candidate.validate_features();
     processor_tune_ = pt;
 }
 
