@@ -288,7 +288,8 @@ int main(int argc, char **argv) {
         printf("Vector bits not round tripped properly.\n");
         return 1;
     }
-    if (with_vector_bits.natural_vector_size(Int(32)) != 16) {
+    Target with_vector_bits_sve2(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE2}, 512);
+    if (with_vector_bits_sve2.natural_vector_size(Int(32)) != 16) {
         printf("Wrong natural_vector_size.\n");
         return 1;
     }

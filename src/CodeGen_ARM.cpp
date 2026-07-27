@@ -1794,8 +1794,6 @@ void CodeGen_ARM::visit(const Store *op) {
         } else if (op->index.type().is_vector()) {
             // Scatter
             if (in_streaming) {
-                user_warning << "Scatter store is not vectorized in streaming mode."
-                             << " It will result in slow performance due to scalarization.\n";
                 CodeGen_CPU::visit(op);
                 return;
             }
@@ -1956,8 +1954,6 @@ void CodeGen_ARM::visit(const Load *op) {
         } else if (op->index.type().is_vector()) {
             // General Gather Load
             if (in_streaming) {
-                user_warning << "Gather load is not vectorized in streaming mode."
-                             << " It will result in slow performance due to scalarization.\n";
                 CodeGen_CPU::visit(op);
                 return;
             }

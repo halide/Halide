@@ -11,7 +11,6 @@ namespace Halide {
 namespace Internal {
 
 namespace {
-constexpr int DBG = 2;
 
 LoweredArgument make_scalar_arg(const std::string &name, const Type &type) {
     return LoweredArgument(name, Argument::Kind::InputScalar, type, 0, ArgumentEstimates());
@@ -32,9 +31,9 @@ struct LowerSMEStreamingTasks : public IRMutator {
             // 1. Any(except for SMEStreaming) -> SMEStreaming
             // 2. SMEStreaming -> Host
             if (in_streaming != next_is_streaming) {
-                debug(DBG) << "Switching to " << to_streaming_str(next_is_streaming)
-                           << " from " << to_streaming_str(in_streaming)
-                           << " in loop " << loop->name << "\n";
+                debug(2) << "Switching to " << to_streaming_str(next_is_streaming)
+                         << " from " << to_streaming_str(in_streaming)
+                         << " in loop " << loop->name << "\n";
 
                 // After this mutation, it doesn't need to be marked as SMEStreaming anymore
                 Stmt body;
@@ -62,8 +61,8 @@ struct LowerSMEStreamingTasks : public IRMutator {
         auto task_name = unique_name(concat_strings(name, ".", to_streaming_str(in_streaming), ".task"));
 
         Closure closure;
-        debug(DBG) << "Closure include for " << task_name << "\n"
-                   << body << "\n";
+        debug(2) << "Closure include for " << task_name << "\n"
+                 << body << "\n";
         closure.include(body);
 
         // The same name can appear as a var and a buffer. Remove the var name in this case.
