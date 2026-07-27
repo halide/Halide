@@ -58,8 +58,6 @@ pub fn run() {
             commands::render_load_frequency,
             commands::render_redundant_stores,
             commands::render_reuse_distance,
-            commands::render_nan,
-            commands::render_inf,
             commands::render_thread,
             commands::open_profile,
         ])

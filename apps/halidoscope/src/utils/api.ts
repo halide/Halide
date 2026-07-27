@@ -10,6 +10,8 @@ export async function openTrace(path: string): Promise<TraceMeta> {
 
 export interface RenderFuncResponse {
   tensorData: Uint8ClampedArray<ArrayBuffer>;
+  nanOverlayData: Uint8ClampedArray<ArrayBuffer>;
+  infOverlayData: Uint8ClampedArray<ArrayBuffer>;
   tabularData: Uint32Array | null;
 }
 
@@ -20,55 +22,22 @@ export interface RenderFuncParams {
   width: number;
   height: number;
   includeTabularData: boolean;
-}
-
-export async function renderGrayscale({
-  func,
-  globalIndex,
-  normalizationMode,
-}: RenderFuncParams): Promise<RenderFuncResponse> {
-  const buffer = await invoke<ArrayBuffer>("render_grayscale", {
-    func,
-    globalIndex,
-    normalizationMode,
-  });
-
-  return {
-    tensorData: new Uint8ClampedArray(buffer),
-    tabularData: null,
-  };
-}
-
-export async function renderRgb({
-  func,
-  globalIndex,
-  normalizationMode,
-}: RenderFuncParams): Promise<RenderFuncResponse> {
-  const buffer = await invoke<ArrayBuffer>("render_rgb", {
-    func,
-    globalIndex,
-    normalizationMode,
-  });
-
-  return {
-    tensorData: new Uint8ClampedArray(buffer),
-    tabularData: null,
-  };
+  includeNan: boolean;
+  includeInf: boolean;
 }
 
 /**
- * Split the ArrayBuffer returned by {@link RenderFuncResponse} into the tensor
- * data and the (optionally returned) tabular data. We only include tabular
- * data for the actively selected Func.
+ * Splits the ArrayBuffer returned by a render command into the tensor data,
+ * NaN/Inf overlays, and the (optionally returned) tabular data.
  *
- * @param buffer The buffer containing tensor data.
+ * @param buffer The buffer containing tensor, tabular, and overlay data.
  * @param width The width of the buffer.
  * @param height The height of the buffer.
- * @param includeTabularData A flag indicating whether of not to expect tabular
+ * @param includeTabularData A flag indicating whether or not to expect tabular
  * data in the buffer payload.
  * @returns A {@link RenderFuncResponse}.
  */
-function splitTensorDataAndTabularData({
+function splitRenderBuffer({
   buffer,
   width,
   height,
@@ -80,13 +49,80 @@ function splitTensorDataAndTabularData({
   includeTabularData: boolean;
 }): RenderFuncResponse {
   const pixelByteLength = width * height * 4;
+  const overlayPlaneByteLength = width * height * 4;
+  const tabularByteLength =
+    buffer.byteLength - pixelByteLength - overlayPlaneByteLength * 2;
 
   return {
     tensorData: new Uint8ClampedArray(buffer, 0, pixelByteLength),
+    nanOverlayData: new Uint8ClampedArray(
+      buffer,
+      pixelByteLength,
+      overlayPlaneByteLength,
+    ),
+    infOverlayData: new Uint8ClampedArray(
+      buffer,
+      pixelByteLength + overlayPlaneByteLength,
+      overlayPlaneByteLength,
+    ),
     tabularData: includeTabularData
-      ? new Uint32Array(buffer, pixelByteLength)
+      ? new Uint32Array(
+          buffer,
+          pixelByteLength + 2 * overlayPlaneByteLength,
+          tabularByteLength / 4,
+        )
       : null,
   };
+}
+
+export async function renderGrayscale({
+  func,
+  globalIndex,
+  normalizationMode,
+  width,
+  height,
+  includeNan,
+  includeInf,
+}: RenderFuncParams): Promise<RenderFuncResponse> {
+  const buffer = await invoke<ArrayBuffer>("render_grayscale", {
+    func,
+    globalIndex,
+    normalizationMode,
+    includeNan,
+    includeInf,
+  });
+
+  return splitRenderBuffer({
+    buffer,
+    width,
+    height,
+    includeTabularData: false,
+  });
+}
+
+export async function renderRgb({
+  func,
+  globalIndex,
+  normalizationMode,
+  width,
+  height,
+  includeNan,
+  includeInf,
+}: RenderFuncParams): Promise<RenderFuncResponse> {
+  const buffer = await invoke<ArrayBuffer>("render_rgb", {
+    func,
+    globalIndex,
+    normalizationMode,
+    includeNan,
+    includeInf,
+  });
+
+  return splitRenderBuffer({
+    buffer,
+    width,
+    height,
+    includeTabularData: false,
+  });
 }
 
 export async function renderStoreFrequency({
@@ -96,15 +132,19 @@ export async function renderStoreFrequency({
   width,
   height,
   includeTabularData,
+  includeNan,
+  includeInf,
 }: RenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_store_frequency", {
     func,
     globalIndex,
     normalizationMode,
     includeTabularData,
+    includeNan,
+    includeInf,
   });
 
-  return splitTensorDataAndTabularData({
+  return splitRenderBuffer({
     buffer,
     width,
     height,
@@ -119,15 +159,19 @@ export async function renderLoadFrequency({
   width,
   height,
   includeTabularData,
+  includeNan,
+  includeInf,
 }: RenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_load_frequency", {
     func,
     globalIndex,
     normalizationMode,
     includeTabularData,
+    includeNan,
+    includeInf,
   });
 
-  return splitTensorDataAndTabularData({
+  return splitRenderBuffer({
     buffer,
     width,
     height,
@@ -142,15 +186,19 @@ export async function renderRedundantStores({
   width,
   height,
   includeTabularData,
+  includeNan,
+  includeInf,
 }: RenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_redundant_stores", {
     func,
     globalIndex,
     normalizationMode,
     includeTabularData,
+    includeNan,
+    includeInf,
   });
 
-  return splitTensorDataAndTabularData({
+  return splitRenderBuffer({
     buffer,
     width,
     height,
@@ -165,54 +213,24 @@ export async function renderReuseDistance({
   width,
   height,
   includeTabularData,
+  includeNan,
+  includeInf,
 }: RenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_reuse_distance", {
     func,
     globalIndex,
     normalizationMode,
     includeTabularData,
+    includeNan,
+    includeInf,
   });
 
-  return splitTensorDataAndTabularData({
+  return splitRenderBuffer({
     buffer,
     width,
     height,
     includeTabularData,
   });
-}
-
-export async function renderNaN({
-  func,
-  globalIndex,
-  normalizationMode,
-}: RenderFuncParams): Promise<RenderFuncResponse> {
-  const buffer = await invoke<ArrayBuffer>("render_nan", {
-    func,
-    globalIndex,
-    normalizationMode,
-  });
-
-  return {
-    tensorData: new Uint8ClampedArray(buffer),
-    tabularData: null,
-  };
-}
-
-export async function renderInf({
-  func,
-  globalIndex,
-  normalizationMode,
-}: RenderFuncParams): Promise<RenderFuncResponse> {
-  const buffer = await invoke<ArrayBuffer>("render_inf", {
-    func,
-    globalIndex,
-    normalizationMode,
-  });
-
-  return {
-    tensorData: new Uint8ClampedArray(buffer),
-    tabularData: null,
-  };
 }
 
 export interface RenderThreadFuncParams extends RenderFuncParams {
@@ -229,6 +247,8 @@ export async function renderThread({
   width,
   height,
   includeTabularData,
+  includeNan,
+  includeInf,
 }: RenderThreadFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_thread", {
     func,
@@ -236,9 +256,11 @@ export async function renderThread({
     normalizationMode,
     opMode: threadOpMode,
     threadId: threadId,
+    includeNan,
+    includeInf,
   });
 
-  return splitTensorDataAndTabularData({
+  return splitRenderBuffer({
     buffer,
     width,
     height,
