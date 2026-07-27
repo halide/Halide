@@ -16,6 +16,7 @@
 #include "Profiling.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Solve.h"
 #include "Substitute.h"
 #include "UniquifyVariableNames.h"
 #include "Util.h"
@@ -511,27 +512,38 @@ protected:
         }
     }
 
-    // GPU hoisting: if `var` (a closing-out loop var) appears in a counter
-    // contribution, substitute an upper bound for it so the contribution
-    // becomes hoistable. Mark the entry as approximated since the result
-    // is an over-estimate. If no finite upper bound can be found, drop the
-    // contribution entirely (still mark approximated).
-    void hoist_loop_var_upper_bound(const For *op) {
+    // GPU can't flush counters mid-kernel, so sum each counter over a
+    // closing-out loop symbolically (in place of the mul-by-extent used for
+    // CPU loops). We bound the per-iteration value by its max, and the
+    // number of contributing iterations by the loop-clipped range where the
+    // value can be non-zero (0 < counter, since counters are non-negative).
+    // solve_for_outer_interval over-approximates that range, so the result
+    // stays a conservative upper bound — far tighter than max-value ×
+    // full-extent for a footprint-guarded contribution like
+    // select(guard, k, 0), which the simplifier reduces to the bare guard.
+    // A counter that doesn't depend on the loop var falls out as its value ×
+    // the full extent. If no finite value bound exists we drop it (an
+    // under-estimate we accept over a bogus huge number).
+    void sum_counters_over_gpu_loop(const For *op, const Expr &extent) {
+        const std::string &var = op->name;
+        Interval loop_bounds(op->min, simplify(op->min + extent - 1));
         Scope<Interval> scope;
-        scope.push(op->name, Interval(op->min, op->max));
+        scope.push(var, loop_bounds);
         for (auto &[id, c] : counters) {
-            if (!c.free_vars.count(op->name)) {
-                continue;
-            }
             for (auto &counter : c.counters) {
-                if (counter.defined() && expr_uses_var(counter, op->name)) {
-                    Interval iv = bounds_of_expr_in_scope(counter, scope);
-                    if (iv.has_upper_bound()) {
-                        counter = simplify(iv.max);
-                    } else {
-                        counter = Expr();
-                    }
+                if (!counter.defined()) {
+                    continue;
                 }
+                Interval val = bounds_of_expr_in_scope(counter, scope);
+                if (!val.has_upper_bound()) {
+                    counter = Expr();
+                    continue;
+                }
+                Interval support = solve_for_outer_interval(
+                    simplify(make_zero(counter.type()) < counter), var);
+                support = Interval::make_intersection(support, loop_bounds);
+                Expr width = clamp(simplify(support.max - support.min + 1), 0, extent);
+                counter = simplify(val.max * cast(UInt(64), width));
             }
             recompute_free_vars(c);
         }
@@ -789,15 +801,15 @@ protected:
         Expr e = simplify(op->extent());
 
         if (in_gpu) {
-            // Don't try to flush in the middle of a GPU kernel — hoist
-            // depending contributions out via upper-bound substitution.
-            hoist_loop_var_upper_bound(op);
+            // Can't flush in the middle of a GPU kernel — sum each counter
+            // over the loop symbolically (this subsumes the mul-by-extent
+            // done for CPU loops below).
+            sum_counters_over_gpu_loop(op, e);
         } else {
             body = flush_all_that_depend_on_var(body, op->name);
-        }
-
-        for (auto &[_, c] : counters) {
-            c.mul(e);
+            for (auto &[_, c] : counters) {
+                c.mul(e);
+            }
         }
 
         merge(old);

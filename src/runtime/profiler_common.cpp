@@ -734,19 +734,40 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         __builtin_memset(visited, 0, p->num_funcs * sizeof(bool));
         int tree_count = 0;
         auto dfs = [&](auto &self, int parent_idx, int depth) -> void {
+            // Emit hoist_storage allocation entries (always leaves) before
+            // the producer entries at this level. In the IR a Func's
+            // Allocate precedes its Produce, so this keeps the allocation
+            // row ahead of the computation it feeds — which compute_with
+            // otherwise inverts, since it nests one Func's production inside
+            // a sibling's loop while its storage stays a sibling here.
+            auto is_alloc = [&](int i) {
+                return p->funcs[i].kind == halide_profiler_func_kind_allocation;
+            };
+            // The last emitted child (drives └ vs ├): the last producer if
+            // any, else the last allocation.
             int last = -1;
             for (int i = 0; i < p->num_funcs; i++) {
-                if (p->funcs[i].parent == parent_idx && !visited[i]) {
+                if (p->funcs[i].parent == parent_idx && !visited[i] && !is_alloc(i)) {
                     last = i;
                 }
             }
-            for (int i = 0; i < p->num_funcs; i++) {
-                if (p->funcs[i].parent == parent_idx && !visited[i]) {
-                    visited[i] = true;
-                    func_depth[i] = depth;
-                    is_last_sibling[i] = (i == last);
-                    tree_order[tree_count++] = i;
-                    self(self, i, depth + 1);
+            if (last == -1) {
+                for (int i = 0; i < p->num_funcs; i++) {
+                    if (p->funcs[i].parent == parent_idx && !visited[i]) {
+                        last = i;
+                    }
+                }
+            }
+            for (int pass = 0; pass < 2; pass++) {
+                for (int i = 0; i < p->num_funcs; i++) {
+                    if (p->funcs[i].parent == parent_idx && !visited[i] &&
+                        is_alloc(i) == (pass == 0)) {
+                        visited[i] = true;
+                        func_depth[i] = depth;
+                        is_last_sibling[i] = (i == last);
+                        tree_order[tree_count++] = i;
+                        self(self, i, depth + 1);
+                    }
                 }
             }
         };

@@ -665,11 +665,13 @@ protected:
                     // host Allocate size the profiler can't see it. Emit a
                     // declare_allocation marker carrying the device
                     // allocation's byte size so it gets billed to this Func.
-                    Expr size_bytes = cast<uint64_t>(op->extents[0]);
-                    for (size_t i = 1; i < op->extents.size(); i++) {
-                        size_bytes *= cast<uint64_t>(op->extents[i]);
+                    // A 0-dimensional allocation (empty extents) holds one
+                    // element, so start the product at the element size.
+                    Expr size_bytes = make_const(UInt(64), op->type.bytes());
+                    for (const Expr &extent : op->extents) {
+                        size_bytes *= cast<uint64_t>(extent);
                     }
-                    size_bytes = simplify(size_bytes * op->type.bytes());
+                    size_bytes = simplify(size_bytes);
                     Expr marker = Call::make(Int(32), Call::declare_allocation,
                                              {Expr(op->name),
                                               size_bytes,
