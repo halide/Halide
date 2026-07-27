@@ -1009,8 +1009,7 @@ Target get_jit_target_from_environment() {
     }
 }
 
-namespace {
-bool merge_string(Target &t, const std::string &target) {
+bool Target::merge_string(Target &t, const std::string &target) {
     string rest = target;
     vector<string> tokens;
     size_t first_dash;
@@ -1041,33 +1040,35 @@ bool merge_string(Target &t, const std::string &target) {
                 return false;
             }
             bits_specified = true;
-            t.set_bits(std::stoi(tok));
+            t.bits_ = std::stoi(tok);
         } else if (Target::Arch arch; lookup_arch(tok, arch)) {
             if (arch_specified) {
                 return false;
             }
             arch_specified = true;
-            t.set_arch(arch);
+            t.arch_ = arch;
         } else if (Target::OS os; lookup_os(tok, os)) {
             if (os_specified) {
                 return false;
             }
             os_specified = true;
-            t.set_os(os);
+            t.os_ = os;
         } else if (Target::Processor processor_tune; lookup_processor(tok, processor_tune)) {
             if (processor_specified) {
                 return false;
             }
             processor_specified = true;
-            t.set_processor_tune(processor_tune);
+            t.processor_tune_ = processor_tune;
         } else if (lookup_feature(tok, feature)) {
-            t.set_feature(feature);
+            t.set_feature_raw(feature);
             features_specified = true;
         } else if (tok == "trace_all") {
-            t.set_features({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations});
+            t.set_feature_raw(Target::TraceLoads);
+            t.set_feature_raw(Target::TraceStores);
+            t.set_feature_raw(Target::TraceRealizations);
             features_specified = true;
         } else if ((vector_bits = parse_vector_bits(tok)) >= 0) {
-            t.set_vector_bits(vector_bits);
+            t.vector_bits_ = vector_bits;
         } else {
             return false;
         }
@@ -1089,7 +1090,7 @@ bool merge_string(Target &t, const std::string &target) {
         !t.has_feature(Target::CUDACapability100) &&
         !t.has_feature(Target::CUDACapability120)) {
         // Detect host cuda capability
-        t.set_feature(get_host_cuda_capability(t));
+        t.set_feature_raw(get_host_cuda_capability(t));
     }
 
     if (is_host &&
@@ -1098,7 +1099,7 @@ bool merge_string(Target &t, const std::string &target) {
         !t.has_feature(Target::VulkanV12) &&
         !t.has_feature(Target::VulkanV13)) {
         // Detect host vulkan capability
-        t.set_feature(get_host_vulkan_capability(t));
+        t.set_feature_raw(get_host_vulkan_capability(t));
     }
 
     if (arch_specified && !bits_specified) {
@@ -1117,6 +1118,8 @@ bool merge_string(Target &t, const std::string &target) {
 
     return true;
 }
+
+namespace {
 
 void bad_target_string(const std::string &target) {
     const char *separator = "";
@@ -1188,7 +1191,16 @@ void Target::validate_features() const {
                                 ARMDotProd,
                                 ARMFp16,
                                 ARMv7s,
+                                ARMv8a,
                                 ARMv81a,
+                                ARMv82a,
+                                ARMv83a,
+                                ARMv84a,
+                                ARMv85a,
+                                ARMv86a,
+                                ARMv87a,
+                                ARMv88a,
+                                ARMv89a,
                                 NoNEON,
                                 POWER_ARCH_2_07,
                                 RVV,
@@ -1235,7 +1247,16 @@ void Target::validate_features() const {
                                 ARMDotProd,
                                 ARMFp16,
                                 ARMv7s,
+                                ARMv8a,
                                 ARMv81a,
+                                ARMv82a,
+                                ARMv83a,
+                                ARMv84a,
+                                ARMv85a,
+                                ARMv86a,
+                                ARMv87a,
+                                ARMv88a,
+                                ARMv89a,
                                 AVX,
                                 AVX2,
                                 AVXVNNI,
@@ -1449,7 +1470,7 @@ bool Target::has_unknowns() const {
     return os_ == OSUnknown || arch_ == ArchUnknown || bits_ == 0;
 }
 
-void Target::set_feature(Feature f, bool value) {
+void Target::set_feature_raw(Feature f, bool value) {
     if (f == FeatureEnd) {
         return;
     }
@@ -1457,10 +1478,57 @@ void Target::set_feature(Feature f, bool value) {
     features.set(f, value);
 }
 
-void Target::set_features(const std::vector<Feature> &features_to_set, bool value) {
-    for (Feature f : features_to_set) {
-        set_feature(f, value);
+void Target::set_arch(Arch a) {
+    Target candidate = *this;
+    candidate.arch_ = a;
+    candidate.validate_features();
+    arch_ = a;
+}
+
+void Target::set_os(OS o) {
+    Target candidate = *this;
+    candidate.os_ = o;
+    candidate.validate_features();
+    os_ = o;
+}
+
+void Target::set_bits(int b) {
+    user_assert(b == 0 || b == 32 || b == 64)
+        << "Target bits must be 0, 32, or 64; got " << b << ".\n";
+    bits_ = b;
+}
+
+void Target::set_vector_bits(int vb) {
+    user_assert(vb >= 0)
+        << "Target vector_bits must be non-negative; got " << vb << ".\n";
+    vector_bits_ = vb;
+}
+
+void Target::set_processor_tune(Processor pt) {
+    processor_tune_ = pt;
+}
+
+void Target::set_feature(Feature f, bool value) {
+    if (f == FeatureEnd) {
+        return;
     }
+    user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
+    Target candidate = *this;
+    candidate.features.set(f, value);
+    candidate.validate_features();
+    features.set(f, value);
+}
+
+void Target::set_features(const std::vector<Feature> &features_to_set, bool value) {
+    // Set every feature into a candidate copy and validate once, so that a
+    // batch that is only valid as a whole (e.g. an HLSL shader-model feature
+    // together with d3d12compute) is accepted regardless of order.
+    Target candidate = *this;
+    for (Feature f : features_to_set) {
+        candidate.set_feature_raw(f, value);
+    }
+    candidate.validate_features();
+    features = candidate.features;
 }
 
 namespace {
