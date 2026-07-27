@@ -72,6 +72,7 @@ tests(
     fuse_same_var.cpp
     fuse_vectorized_var_with_rvar.cpp
     hoist_storage_extern.cpp
+    hoist_storage_root_without_compute_root.cpp
     hoist_storage_without_compute_at.cpp
     implicit_args.cpp
     impossible_constraints.cpp
@@ -120,6 +121,7 @@ tests(
     split_non_innermost_predicated.cpp
     split_same_var_names.cpp
     store_at_without_compute_at.cpp
+    store_root_without_compute_root.cpp
     stream_loads_illegal_self.cpp
     stream_stores_illegal_rvar.cpp
     thread_id_outside_block_id.cpp
