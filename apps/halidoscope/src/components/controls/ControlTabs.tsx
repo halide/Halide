@@ -37,7 +37,7 @@ function ControlTabs({ funcs }: { funcs: Record<string, FuncMeta> }) {
         <Tabs.Content value="funcs" className="flex-1 overflow-auto">
           <FuncsPanel funcs={funcs} />
         </Tabs.Content>
-        <Tabs.Content value="visualization" className="flex-1">
+        <Tabs.Content value="visualization" className="flex-1 overflow-auto">
           <VisualizationPanel />
         </Tabs.Content>
         <Tabs.Content value="debug" className="flex-1">

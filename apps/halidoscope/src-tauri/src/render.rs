@@ -3,7 +3,7 @@ use std::vec;
 use ::colorous;
 use serde::Deserialize;
 
-use crate::trace::{for_each_lane_pixel, pixel_xy, FuncGeometry, Trace, TracePacket};
+use crate::trace::{for_each_lane_pixel, FuncGeometry, Trace, TracePacket};
 
 #[derive(Deserialize, Clone, Copy)]
 pub enum NormalizationMode {
@@ -17,10 +17,55 @@ pub enum NormalizationMode {
 pub trait Renderer: Sized {
     type Value;
 
-    fn register(trace: &Trace, func: &str) -> Option<Self>;
     fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize);
     fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8>;
+    fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8>;
     fn to_values(&self) -> Vec<Self::Value>;
+}
+
+/// Packs a NaN overlay (cyan) followed by an Inf overlay (yellow) into one RGBA8 buffer,
+/// `width * height * 4` bytes each, from a renderer's per-`(pixel, channel)` decoded values.
+fn nan_inf_overlay(
+    values: &[f64],
+    width: usize,
+    height: usize,
+    channels: usize,
+    include_nan: bool,
+    include_inf: bool,
+) -> Vec<u8> {
+    let overlay_len = width * height * 4;
+    let mut out = vec![0u8; overlay_len * 2];
+    let (nan_out, inf_out) = out.split_at_mut(overlay_len);
+
+    if include_nan {
+        for (chunk, src) in nan_out
+            .chunks_exact_mut(4)
+            .zip(values.chunks_exact(channels))
+        {
+            if src.iter().any(|v| v.is_nan()) {
+                chunk[0] = 0;
+                chunk[1] = 255;
+                chunk[2] = 255;
+                chunk[3] = 255;
+            }
+        }
+    }
+
+    if include_inf {
+        for (chunk, src) in inf_out
+            .chunks_exact_mut(4)
+            .zip(values.chunks_exact(channels))
+        {
+            if src.iter().any(|v| v.is_infinite()) {
+                chunk[0] = 255;
+                chunk[1] = 255;
+                chunk[2] = 0;
+                chunk[3] = 255;
+            }
+        }
+    }
+
+    out
 }
 
 // ── Grayscale rendering ──────────────────────────────────────────────────────────────────────────
@@ -72,12 +117,10 @@ impl GrayscaleState {
             height,
             Some((min_c, channels)),
             |lane, _pixel_idx, val_idx| {
-                let Some(v) = pkt.decoded_value(lane) else {
-                    return;
+                if let Some(v) = pkt.decoded_value(lane) {
+                    self.framebuffer[val_idx] = self.normalize(v);
+                    self.values[val_idx] = v;
                 };
-
-                self.framebuffer[val_idx] = self.normalize(v);
-                self.values[val_idx] = v;
             },
         );
     }
@@ -91,19 +134,18 @@ impl GrayscaleState {
 impl Renderer for GrayscaleState {
     type Value = f64;
 
-    fn register(trace: &Trace, func: &str) -> Option<Self> {
-        Self::new(trace, func)
-    }
-
     fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
         let target_k = target_k.min(store_indices.len());
         if target_k < self.applied_k {
             self.framebuffer.iter_mut().for_each(|b| *b = 0);
+            self.values.iter_mut().for_each(|v| *v = 0.0);
             self.applied_k = 0;
         }
+
         for &global_idx in &store_indices[self.applied_k..target_k] {
             self.apply_store(&trace.packets[global_idx]);
         }
+
         self.applied_k = target_k;
     }
 
@@ -134,11 +176,30 @@ impl Renderer for GrayscaleState {
                 chunk[3] = 255;
             }
         }
+
         out
     }
 
     fn to_values(&self) -> Vec<f64> {
         self.values.clone()
+    }
+
+    fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            ..
+        } = self.geom;
+
+        nan_inf_overlay(
+            &self.values,
+            width,
+            height,
+            channels,
+            include_nan,
+            include_inf,
+        )
     }
 }
 
@@ -191,12 +252,10 @@ impl RgbState {
             height,
             Some((min_c, channels)),
             |lane, _pixel_idx, val_idx| {
-                let Some(v) = pkt.decoded_value(lane) else {
-                    return;
+                if let Some(v) = pkt.decoded_value(lane) {
+                    self.framebuffer[val_idx] = self.normalize(v);
+                    self.values[val_idx] = v;
                 };
-
-                self.framebuffer[val_idx] = self.normalize(v);
-                self.values[val_idx] = v;
             },
         );
     }
@@ -210,19 +269,18 @@ impl RgbState {
 impl Renderer for RgbState {
     type Value = f64;
 
-    fn register(trace: &Trace, func: &str) -> Option<Self> {
-        Self::new(trace, func)
-    }
-
     fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
         let target_k = target_k.min(store_indices.len());
         if target_k < self.applied_k {
             self.framebuffer.iter_mut().for_each(|b| *b = 0);
+            self.values.iter_mut().for_each(|v| *v = 0.0);
             self.applied_k = 0;
         }
+
         for &global_idx in &store_indices[self.applied_k..target_k] {
             self.apply_store(&trace.packets[global_idx]);
         }
+
         self.applied_k = target_k;
     }
 
@@ -250,11 +308,30 @@ impl Renderer for RgbState {
                 chunk[3] = 255;
             }
         }
+
         out
     }
 
     fn to_values(&self) -> Vec<f64> {
         self.values.clone()
+    }
+
+    fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            ..
+        } = self.geom;
+
+        nan_inf_overlay(
+            &self.values,
+            width,
+            height,
+            channels,
+            include_nan,
+            include_inf,
+        )
     }
 }
 
@@ -263,6 +340,7 @@ impl Renderer for RgbState {
 pub struct StoreFrequencyState {
     geom: FuncGeometry,
     counts: Vec<u32>,
+    values: Vec<f64>,
     local_max_store_count: u32,
     global_max_store_count: u32,
     applied_k: usize,
@@ -272,6 +350,7 @@ impl StoreFrequencyState {
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
         let counts = vec![0u32; geom.width * geom.height];
+        let values = vec![0f64; geom.width * geom.height * geom.channels];
 
         let local_max_store_count = trace.funcs.get(func).map_or(0, |s| s.max_store_count);
         let global_max_store_count = trace
@@ -284,6 +363,7 @@ impl StoreFrequencyState {
         Some(Self {
             geom,
             counts,
+            values,
             local_max_store_count,
             global_max_store_count,
             applied_k: 0,
@@ -294,19 +374,28 @@ impl StoreFrequencyState {
         let FuncGeometry {
             width,
             height,
+            channels,
             min_x,
             min_y,
+            min_c,
             ..
         } = self.geom;
-        let n_lanes = pkt.type_.lanes.max(1) as usize;
-        let dims_per_lane = pkt.coordinates.len() / n_lanes;
-        for l in 0..n_lanes {
-            let (x, y) = pixel_xy(pkt, l, n_lanes, dims_per_lane, min_x, min_y);
 
-            if x >= 0 && y >= 0 && (x as usize) < width && (y as usize) < height {
-                self.counts[y as usize * width + x as usize] += 1;
-            }
-        }
+        for_each_lane_pixel(
+            pkt,
+            min_x,
+            min_y,
+            width,
+            height,
+            Some((min_c, channels)),
+            |lane, pixel_idx, val_idx| {
+                self.counts[pixel_idx] += 1;
+
+                if let Some(v) = pkt.decoded_value(lane) {
+                    self.values[val_idx] = v;
+                }
+            },
+        );
     }
 
     pub fn to_tabular_data(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
@@ -339,14 +428,11 @@ impl StoreFrequencyState {
 impl Renderer for StoreFrequencyState {
     type Value = u32;
 
-    fn register(trace: &Trace, func: &str) -> Option<Self> {
-        Self::new(trace, func)
-    }
-
     fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
         let target_k = target_k.min(store_indices.len());
         if target_k < self.applied_k {
             self.counts.iter_mut().for_each(|c| *c = 0);
+            self.values.iter_mut().for_each(|v| *v = 0.0);
             self.applied_k = 0;
         }
         for &idx in &store_indices[self.applied_k..target_k] {
@@ -391,6 +477,24 @@ impl Renderer for StoreFrequencyState {
     fn to_values(&self) -> Vec<u32> {
         self.counts.clone()
     }
+
+    fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            ..
+        } = self.geom;
+
+        nan_inf_overlay(
+            &self.values,
+            width,
+            height,
+            channels,
+            include_nan,
+            include_inf,
+        )
+    }
 }
 
 // ── Load frequency rendering ─────────────────────────────────────────────────────────────────────
@@ -398,6 +502,7 @@ impl Renderer for StoreFrequencyState {
 pub struct LoadFrequencyState {
     geom: FuncGeometry,
     counts: Vec<u32>,
+    values: Vec<f64>,
     local_max_load_count: u32,
     global_max_load_count: u32,
     applied_k: usize,
@@ -407,6 +512,7 @@ impl LoadFrequencyState {
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
         let counts = vec![0u32; geom.width * geom.height];
+        let values = vec![0f64; geom.width * geom.height * geom.channels];
 
         let local_max_load_count = trace.funcs.get(func).map_or(0, |s| s.max_load_count);
         let global_max_load_count = trace
@@ -419,6 +525,7 @@ impl LoadFrequencyState {
         Some(Self {
             geom,
             counts,
+            values,
             local_max_load_count,
             global_max_load_count,
             applied_k: 0,
@@ -429,8 +536,10 @@ impl LoadFrequencyState {
         let FuncGeometry {
             width,
             height,
+            channels,
             min_x,
             min_y,
+            min_c,
             ..
         } = self.geom;
 
@@ -440,9 +549,13 @@ impl LoadFrequencyState {
             min_y,
             width,
             height,
-            None,
-            |_lane, pixel_idx, _val_idx| {
+            Some((min_c, channels)),
+            |lane, pixel_idx, val_idx| {
                 self.counts[pixel_idx] += 1;
+
+                if let Some(v) = pkt.decoded_value(lane) {
+                    self.values[val_idx] = v;
+                }
             },
         );
     }
@@ -477,14 +590,11 @@ impl LoadFrequencyState {
 impl Renderer for LoadFrequencyState {
     type Value = u32;
 
-    fn register(trace: &Trace, func: &str) -> Option<Self> {
-        Self::new(trace, func)
-    }
-
     fn seek(&mut self, trace: &Trace, load_indices: &[usize], target_k: usize) {
         let target_k = target_k.min(load_indices.len());
         if target_k < self.applied_k {
             self.counts.iter_mut().for_each(|c| *c = 0);
+            self.values.iter_mut().for_each(|v| *v = 0.0);
             self.applied_k = 0;
         }
         for &idx in &load_indices[self.applied_k..target_k] {
@@ -527,6 +637,24 @@ impl Renderer for LoadFrequencyState {
 
     fn to_values(&self) -> Vec<u32> {
         self.counts.clone()
+    }
+
+    fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            ..
+        } = self.geom;
+
+        nan_inf_overlay(
+            &self.values,
+            width,
+            height,
+            channels,
+            include_nan,
+            include_inf,
+        )
     }
 }
 
@@ -635,10 +763,6 @@ impl RedundantState {
 impl Renderer for RedundantState {
     type Value = u32;
 
-    fn register(trace: &Trace, func: &str) -> Option<Self> {
-        Self::new(trace, func)
-    }
-
     fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
         let target_k = target_k.min(store_indices.len());
         if target_k < self.applied_k {
@@ -691,6 +815,22 @@ impl Renderer for RedundantState {
     fn to_values(&self) -> Vec<u32> {
         self.redundant_store_counts.clone()
     }
+
+    fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            ..
+        } = self.geom;
+        let values: Vec<f64> = self
+            .last_values
+            .iter()
+            .map(|v| v.map_or(0.0, f64::from_bits))
+            .collect();
+
+        nan_inf_overlay(&values, width, height, channels, include_nan, include_inf)
+    }
 }
 
 // ── Reuse distance rendering ─────────────────────────────────────────────────────────────────────
@@ -718,6 +858,7 @@ pub struct ReuseDistanceState {
     global_max_reuse_distance: u64,
     applied_store_k: usize,
     applied_load_k: usize,
+    values: Vec<f64>,
 }
 
 impl ReuseDistanceState {
@@ -740,12 +881,14 @@ impl ReuseDistanceState {
             global_max_reuse_distance,
             applied_store_k: 0,
             applied_load_k: 0,
+            values: vec![0f64; n_cells],
         })
     }
 
     fn reset(&mut self) {
         self.anchor_at.iter_mut().for_each(|v| *v = usize::MAX);
         self.max_reuse_distance.iter_mut().for_each(|d| *d = 0);
+        self.values.iter_mut().for_each(|v| *v = 0.0);
         self.applied_store_k = 0;
         self.applied_load_k = 0;
     }
@@ -813,8 +956,12 @@ impl ReuseDistanceState {
             width,
             height,
             Some((min_c, channels)),
-            |_lane, _pixel_idx, val_idx| {
+            |lane, _pixel_idx, val_idx| {
                 self.anchor_at[val_idx] = global_idx;
+
+                if let Some(v) = pkt.decoded_value(lane) {
+                    self.values[val_idx] = v;
+                }
             },
         );
     }
@@ -911,256 +1058,26 @@ impl ReuseDistanceState {
         tabular_data
     }
 
-    /// Returns the per-pixel maximum reuse distance at the current seek position, in row-major
-    /// `(y * width + x)` order.
     pub fn to_values(&self) -> Vec<u64> {
         self.max_reuse_distance.clone()
     }
-}
 
-// ── NaN Rendering ────────────────────────────────────────────────────────────────────────────────
-
-pub struct NaNState {
-    geom: FuncGeometry,
-    values: Vec<f64>,
-    nanbuffer: Vec<u8>,
-    applied_k: usize,
-}
-
-impl NaNState {
-    pub fn new(trace: &Trace, func: &str) -> Option<Self> {
-        let geom = trace.func_geometry(func)?;
-        let nanbuffer = vec![0u8; geom.width * geom.height * geom.channels];
-        let values = vec![0f64; geom.width * geom.height * geom.channels];
-
-        Some(Self {
-            geom,
-            values,
-            nanbuffer,
-            applied_k: 0,
-        })
-    }
-
-    fn apply_store(&mut self, pkt: &TracePacket) {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            min_x,
-            min_y,
-            min_c,
-            ..
-        } = self.geom;
-
-        for_each_lane_pixel(
-            pkt,
-            min_x,
-            min_y,
-            width,
-            height,
-            Some((min_c, channels)),
-            |lane, _pixel_idx: usize, val_idx: usize| {
-                let Some(v) = pkt.decoded_value(lane) else {
-                    return;
-                };
-
-                self.nanbuffer[val_idx] = if v.is_nan() { 1 } else { 0 };
-                self.values[val_idx] = v;
-            },
-        );
-    }
-}
-
-impl Renderer for NaNState {
-    type Value = f64;
-
-    fn register(trace: &Trace, func: &str) -> Option<Self> {
-        Self::new(trace, func)
-    }
-
-    fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
-        let target_k = target_k.min(store_indices.len());
-        if target_k < self.applied_k {
-            self.values.iter_mut().for_each(|v| *v = 0.0);
-            self.nanbuffer.iter_mut().for_each(|b| *b = 0);
-            self.applied_k = 0;
-        }
-
-        for &idx in &store_indices[self.applied_k..target_k] {
-            self.apply_store(&trace.packets[idx]);
-        }
-
-        self.applied_k = target_k;
-    }
-
-    fn to_rgba(&self, _normalization_mode: NormalizationMode) -> Vec<u8> {
+    pub fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
         let FuncGeometry {
             width,
             height,
             channels,
             ..
         } = self.geom;
-        let mut out = vec![0u8; width * height * 4];
-        let nb = &self.nanbuffer;
-        if channels >= 3 {
-            for (chunk, src) in out.chunks_exact_mut(4).zip(nb.chunks_exact(channels)) {
-                // If any channel is NaN, mark the pixel as cyan, otherwise transparent.
-                if src[0] == 1 || src[1] == 1 || src[2] == 1 {
-                    chunk[0] = 0;
-                    chunk[1] = 255;
-                    chunk[2] = 255;
-                    chunk[3] = 255;
-                } else {
-                    chunk[0] = 0;
-                    chunk[1] = 0;
-                    chunk[2] = 0;
-                    chunk[3] = 0;
-                }
-            }
-        } else {
-            for (chunk, src) in out.chunks_exact_mut(4).zip(nb.chunks_exact(channels)) {
-                // If the channel is NaN, mark the pixel as cyan, otherwise transparent.
-                if src[0] == 1 {
-                    chunk[0] = 0;
-                    chunk[1] = 255;
-                    chunk[2] = 255;
-                    chunk[3] = 255;
-                } else {
-                    chunk[0] = 0;
-                    chunk[1] = 0;
-                    chunk[2] = 0;
-                    chunk[3] = 0;
-                }
-            }
-        }
-        out
-    }
 
-    fn to_values(&self) -> Vec<Self::Value> {
-        self.values.clone()
-    }
-}
-
-// ── Inf Rendering ────────────────────────────────────────────────────────────────────────────────
-
-pub struct InfState {
-    geom: FuncGeometry,
-    values: Vec<f64>,
-    infbuffer: Vec<u8>,
-    applied_k: usize,
-}
-
-impl InfState {
-    pub fn new(trace: &Trace, func: &str) -> Option<Self> {
-        let geom = trace.func_geometry(func)?;
-        let infbuffer = vec![0u8; geom.width * geom.height * geom.channels];
-        let values = vec![0f64; geom.width * geom.height * geom.channels];
-
-        Some(Self {
-            geom,
-            values,
-            infbuffer,
-            applied_k: 0,
-        })
-    }
-
-    fn apply_store(&mut self, pkt: &TracePacket) {
-        let FuncGeometry {
+        nan_inf_overlay(
+            &self.values,
             width,
             height,
             channels,
-            min_x,
-            min_y,
-            min_c,
-            ..
-        } = self.geom;
-
-        for_each_lane_pixel(
-            pkt,
-            min_x,
-            min_y,
-            width,
-            height,
-            Some((min_c, channels)),
-            |lane, _pixel_idx: usize, val_idx: usize| {
-                let Some(v) = pkt.decoded_value(lane) else {
-                    return;
-                };
-
-                self.infbuffer[val_idx] = if v.is_infinite() { 1 } else { 0 };
-                self.values[val_idx] = v;
-            },
-        );
-    }
-}
-
-impl Renderer for InfState {
-    type Value = f64;
-
-    fn register(trace: &Trace, func: &str) -> Option<Self> {
-        Self::new(trace, func)
-    }
-
-    fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
-        let target_k = target_k.min(store_indices.len());
-        if target_k < self.applied_k {
-            self.values.iter_mut().for_each(|v| *v = 0.0);
-            self.infbuffer.iter_mut().for_each(|b| *b = 0);
-            self.applied_k = 0;
-        }
-
-        for &idx in &store_indices[self.applied_k..target_k] {
-            self.apply_store(&trace.packets[idx]);
-        }
-
-        self.applied_k = target_k;
-    }
-
-    fn to_rgba(&self, _normalization_mode: NormalizationMode) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-        let mut out = vec![0u8; width * height * 4];
-        let ib = &self.infbuffer;
-        if channels >= 3 {
-            for (chunk, src) in out.chunks_exact_mut(4).zip(ib.chunks_exact(channels)) {
-                // If any channel is inf, mark the pixel as magenta, otherwise transparent.
-                if src[0] == 1 || src[1] == 1 || src[2] == 1 {
-                    chunk[0] = 255;
-                    chunk[1] = 255;
-                    chunk[2] = 0;
-                    chunk[3] = 255;
-                } else {
-                    chunk[0] = 0;
-                    chunk[1] = 0;
-                    chunk[2] = 0;
-                    chunk[3] = 0;
-                }
-            }
-        } else {
-            for (chunk, src) in out.chunks_exact_mut(4).zip(ib.chunks_exact(channels)) {
-                // If the channel is inf, mark the pixel as magenta, otherwise transparent.
-                if src[0] == 1 {
-                    chunk[0] = 255;
-                    chunk[1] = 255;
-                    chunk[2] = 0;
-                    chunk[3] = 255;
-                } else {
-                    chunk[0] = 0;
-                    chunk[1] = 0;
-                    chunk[2] = 0;
-                    chunk[3] = 0;
-                }
-            }
-        }
-        out
-    }
-
-    fn to_values(&self) -> Vec<Self::Value> {
-        self.values.clone()
+            include_nan,
+            include_inf,
+        )
     }
 }
 
@@ -1182,6 +1099,7 @@ pub struct ThreadState {
     applied_store_k: usize,
     applied_load_k: usize,
     applied_op_mode: Option<ThreadOpMode>,
+    values: Vec<f64>,
 }
 
 impl ThreadState {
@@ -1215,6 +1133,7 @@ impl ThreadState {
             applied_store_k: 0,
             applied_load_k: 0,
             applied_op_mode: None,
+            values: vec![0f64; geom.width * geom.height * geom.channels],
         })
     }
 
@@ -1222,6 +1141,7 @@ impl ThreadState {
         self.thread_id_buffer.iter_mut().for_each(|v| *v = -1);
         self.store_counts.iter_mut().for_each(|c| *c = 0);
         self.load_counts.iter_mut().for_each(|c| *c = 0);
+        self.values.iter_mut().for_each(|v| *v = 0.0);
         self.applied_store_k = 0;
         self.applied_load_k = 0;
     }
@@ -1230,8 +1150,10 @@ impl ThreadState {
         let FuncGeometry {
             width,
             height,
+            channels,
             min_x,
             min_y,
+            min_c,
             ..
         } = self.geom;
         let thread_idx = self.thread_ids.binary_search(&pkt.thread_id).ok();
@@ -1242,10 +1164,10 @@ impl ThreadState {
             min_y,
             width,
             height,
-            None,
-            |lane, pixel_idx: usize, _val_idx: usize| {
-                let Some(_v) = pkt.decoded_value(lane) else {
-                    return;
+            Some((min_c, channels)),
+            |lane, pixel_idx: usize, val_idx: usize| {
+                if let Some(v) = pkt.decoded_value(lane) {
+                    self.values[val_idx] = v;
                 };
 
                 self.thread_id_buffer[pixel_idx] = pkt.thread_id;
@@ -1260,8 +1182,10 @@ impl ThreadState {
         let FuncGeometry {
             width,
             height,
+            channels,
             min_x,
             min_y,
+            min_c,
             ..
         } = self.geom;
         let thread_idx = self.thread_ids.binary_search(&pkt.thread_id).ok();
@@ -1272,10 +1196,10 @@ impl ThreadState {
             min_y,
             width,
             height,
-            None,
-            |lane, pixel_idx: usize, _val_idx: usize| {
-                let Some(_v) = pkt.decoded_value(lane) else {
-                    return;
+            Some((min_c, channels)),
+            |lane, pixel_idx: usize, val_idx: usize| {
+                if let Some(v) = pkt.decoded_value(lane) {
+                    self.values[val_idx] = v;
                 };
 
                 self.thread_id_buffer[pixel_idx] = pkt.thread_id;
@@ -1316,11 +1240,13 @@ impl ThreadState {
 
             match (&op_mode, next_is_store) {
                 (ThreadOpMode::Store, true) => {
-                    self.apply_store(&trace.packets[store_slice[si]]);
+                    let pkt = &trace.packets[store_slice[si]];
+                    self.apply_store(pkt);
                     si += 1;
                 }
                 (ThreadOpMode::Load, false) => {
-                    self.apply_load(&trace.packets[load_slice[li]]);
+                    let pkt = &trace.packets[load_slice[li]];
+                    self.apply_load(pkt);
                     li += 1;
                 }
                 (_, true) => {
@@ -1378,5 +1304,22 @@ impl ThreadState {
 
     pub fn to_thread_counts(&self) -> (&[u32], &[u32]) {
         (&self.store_counts, &self.load_counts)
+    }
+
+    pub fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            ..
+        } = self.geom;
+        nan_inf_overlay(
+            &self.values,
+            width,
+            height,
+            channels,
+            include_nan,
+            include_inf,
+        )
     }
 }
