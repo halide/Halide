@@ -19,18 +19,6 @@
   --zoom-level: 1;
 }
 
-/* Chrome, Safari, Edge, Opera */
-input::-webkit-outer-spin-button,
-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-/* Firefox */
-input[type="number"] {
-  -moz-appearance: textfield;
-}
-
 @theme {
   --color-ps-primary: oklch(0.4423 0 0);
   --color-ps-secondary: oklch(0.2768 0 0);
@@ -55,6 +43,42 @@ input[type="number"] {
     50% {
       opacity: 0;
     }
+  }
+}
+
+@layer base {
+  /* Color Picker */
+  ::-webkit-color-swatch-wrapper {
+    @apply p-0;
+  }
+
+  ::-webkit-color-swatch {
+    @apply rounded-sm border-0;
+  }
+
+  ::-moz-color-swatch {
+    @apply border-0;
+  }
+
+  ::-moz-focus-inner {
+    @apply border-0;
+  }
+
+  ::-moz-focus-inner {
+    @apply p-0;
+  }
+
+  /* Number Input */
+  /* Chrome, Safari, Edge, Opera */
+  input::-webkit-outer-spin-button,
+  input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  /* Firefox */
+  input[type="number"] {
+    -moz-appearance: textfield;
   }
 }
 

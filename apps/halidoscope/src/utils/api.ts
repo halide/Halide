@@ -22,8 +22,20 @@ export interface RenderFuncParams {
   width: number;
   height: number;
   includeTabularData: boolean;
-  includeNan: boolean;
-  includeInf: boolean;
+  includeNan: {
+    active: boolean;
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+  };
+  includeInf: {
+    active: boolean;
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+  };
 }
 
 /**

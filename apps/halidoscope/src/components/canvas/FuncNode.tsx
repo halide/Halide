@@ -125,8 +125,14 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
             width,
             height,
             includeTabularData: active,
-            includeNan: nan.active,
-            includeInf: inf.active,
+            includeNan: {
+              active: nan.active,
+              ...nan.color,
+            },
+            includeInf: {
+              active: inf.active,
+              ...inf.color,
+            },
           };
 
           switch (render.renderMode) {
@@ -215,8 +221,8 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
     activeFunc,
     setTabularData,
     thread,
-    nan.active,
-    inf.active,
+    nan,
+    inf,
   ]);
 
   return (
