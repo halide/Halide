@@ -40,6 +40,7 @@ void define_target(py::module &m) {
             .def("__repr__", &target_repr)
             .def("__str__", &Target::to_string)
             .def("to_string", &Target::to_string)
+            .def("to_complete_string", &Target::to_complete_string)
 
             .def("has_feature", static_cast<bool (Target::*)(Target::Feature) const>(&Target::has_feature))
             .def("features_any_of", &Target::features_any_of, py::arg("features"))

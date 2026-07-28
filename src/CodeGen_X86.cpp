@@ -1694,8 +1694,8 @@ string CodeGen_X86::mcpu_target() const {
     } else if (target.has_feature(Target::AVX2)) {
         // x86-64-v3: SSE4.2, POPCNT, AVX, AVX2, BMI1/2, F16C, FMA,
         // LZCNT, MOVBE. Also covers AVX512 / AVX512_KNL, since both
-        // imply AVX2 (via set_implied_features), but neither requires
-        // BW/DQ/VL which would come for free with v4.
+        // imply AVX2, but neither requires BW/DQ/VL which would come
+        // for free with v4.
         return "x86-64-v3";
     } else if (target.has_feature(Target::AVX)) {
         // x86-64-v2: SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT. AVX is
@@ -1816,12 +1816,10 @@ string CodeGen_X86::mattrs() const {
         attrs.emplace_back("+f16c");
     }
 
-    // AVX512 features. Any AVX512 variant implies AVX2 (via
-    // set_implied_features), so the mcpu baseline is at least
-    // x86-64-v3. Skylake-and-above selects x86-64-v4, which already
-    // includes F/CD/BW/DQ/VL, but we still add those features
-    // explicitly so the bare AVX512 / AVX512_KNL paths (which use
-    // x86-64-v3) also get them.
+    // AVX512 features. Any AVX512 variant implies AVX2, so the mcpu baseline
+    // is at least x86-64-v3. Skylake-and-above selects x86-64-v4, which already
+    // includes F/CD/BW/DQ/VL, but we still add those features explicitly so the
+    // bare AVX512 / AVX512_KNL paths (which use x86-64-v3) also get them.
     if (target.has_feature(Target::AVX512)) {
         attrs.emplace_back("+avx512f");
         attrs.emplace_back("+avx512cd");

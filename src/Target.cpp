@@ -632,35 +632,6 @@ Target calculate_host_target() {
     return {os, arch, bits, processor, initial_features, vector_bits};
 }
 
-bool is_using_hexagon(const Target &t) {
-    return (t.has_feature(Target::HVX) ||
-            t.has_feature(Target::HVX_v62) ||
-            t.has_feature(Target::HVX_v65) ||
-            t.has_feature(Target::HVX_v66) ||
-            t.has_feature(Target::HVX_v68) ||
-            t.has_feature(Target::HexagonDma) ||
-            t.arch() == Target::Hexagon);
-}
-
-int get_hvx_lower_bound(const Target &t) {
-    if (!is_using_hexagon(t)) {
-        return -1;
-    }
-    if (t.has_feature(Target::HVX_v62)) {
-        return 62;
-    }
-    if (t.has_feature(Target::HVX_v65)) {
-        return 65;
-    }
-    if (t.has_feature(Target::HVX_v66)) {
-        return 66;
-    }
-    if (t.has_feature(Target::HVX_v68)) {
-        return 68;
-    }
-    return 60;
-}
-
 }  // namespace
 
 Target get_host_target() {
@@ -1118,6 +1089,7 @@ bool Target::merge_string(Target &t, const std::string &target) {
         }
     }
 
+    t.set_implied_features();
     return true;
 }
 
@@ -1341,6 +1313,36 @@ const std::vector<FeatureRule> &feature_rules() {
         implies(Target::AVX2, Target::AVX),
         implies(Target::AVX, Target::SSE41),
 
+        // CUDA compute capabilities.
+        implies(Target::CUDACapability86, Target::CUDACapability80),
+        implies(Target::CUDACapability80, Target::CUDACapability75),
+        implies(Target::CUDACapability75, Target::CUDACapability70),
+        implies(Target::CUDACapability70, Target::CUDACapability61),
+        implies(Target::CUDACapability61, Target::CUDACapability50),
+        implies(Target::CUDACapability50, Target::CUDACapability35),
+        implies(Target::CUDACapability35, Target::CUDACapability32),
+        implies(Target::CUDACapability32, Target::CUDACapability30),
+
+        // Hexagon ISA versions.
+        implies(Target::HVX_v68, Target::HVX_v66),
+        implies(Target::HVX_v66, Target::HVX_v65),
+        implies(Target::HVX_v65, Target::HVX_v62),
+
+        // Vulkan versions.
+        implies(Target::VulkanV13, Target::VulkanV12),
+        implies(Target::VulkanV12, Target::VulkanV10),
+
+        // D3D12 shader-model versions.
+        implies(Target::HLSL_SM69, Target::HLSL_SM68),
+        implies(Target::HLSL_SM68, Target::HLSL_SM67),
+        implies(Target::HLSL_SM67, Target::HLSL_SM66),
+        implies(Target::HLSL_SM66, Target::HLSL_SM65),
+        implies(Target::HLSL_SM65, Target::HLSL_SM64),
+        implies(Target::HLSL_SM64, Target::HLSL_SM63),
+        implies(Target::HLSL_SM63, Target::HLSL_SM62),
+        implies(Target::HLSL_SM62, Target::HLSL_SM61),
+        implies(Target::HLSL_SM61, Target::HLSL_SM60),
+
         // ARM implications.
         implies(Target::SVE2, Target::ARMDotProd),
         implies(Target::SVE2, Target::ARMFp16),
@@ -1381,15 +1383,20 @@ constexpr std::pair<Target::Arch, Target::Processor> legal_processor_pairs[] = {
     {Target::X86, Target::ZnVer5},
 };
 
-template<typename T, typename Validate>
-void assign_validated(T &field, T value, Validate &&validate) {
+}  // namespace
+
+template<typename T>
+void Target::assign_validated(T &field, T value) {
     if (field == value) {
         return;
     }
-    T old_value = field;
+
+    Target old = *this;
+    unset_implied_features();
     field = std::move(value);
-    if (const auto error = validate()) {
-        field = std::move(old_value);
+    set_implied_features();
+    if (const auto error = validate_features()) {
+        *this = std::move(old);
         user_error << *error;
     }
 }
@@ -1510,14 +1517,15 @@ std::optional<std::string> Target::validate_features() const {
 }
 
 Target::Target(OS o, Arch a, int b, Processor pt, const std::vector<Feature> &initial_features, int vb)
-    : os_(o), arch_(a), processor_tune_(pt) {
-    set_bits(b);
+    : os_(o), arch_(a), bits_(b), vector_bits_(vb), processor_tune_(pt) {
+    user_assert(b == 0 || b == 32 || b == 64)
+        << "Target bits must be 0, 32, or 64; got " << b << ".\n";
+    user_assert(vb >= 0)
+        << "Target vector_bits must be non-negative; got " << vb << ".\n";
     for (Feature f : initial_features) {
         set_feature_raw(f);
     }
-    // Set vector_bits after the features, since its validity depends on them
-    // (a scalable-vector feature must be present).
-    set_vector_bits(vb);
+    set_implied_features();
     if (const auto error = validate_features()) {
         user_error << *error;
     }
@@ -1586,7 +1594,8 @@ Target::Feature Target::sme_svl_feature_from_bits(int bits) {
     }
 }
 
-std::string Target::to_string() const {
+std::string Target::to_string_impl(const std::bitset<FeatureEnd> &features_to_print,
+                                   bool use_feature_aliases) const {
     string result;
     for (const auto &arch_entry : arch_name_map) {
         if (arch_entry.second == arch_) {
@@ -1610,20 +1619,30 @@ std::string Target::to_string() const {
         }
     }
     for (const auto &feature_entry : feature_name_map) {
-        if (has_feature(feature_entry.second)) {
+        if (features_to_print[feature_entry.second]) {
             result += "-" + feature_entry.first;
         }
     }
-    // Use has_feature() multiple times (rather than features_any_of())
-    // to avoid constructing a temporary vector for this rather-common call.
-    if (has_feature(Target::TraceLoads) && has_feature(Target::TraceStores) && has_feature(Target::TraceRealizations)) {
-        result = Internal::replace_all(std::move(result), "trace_loads-trace_realizations-trace_stores", "trace_all");
+    if (use_feature_aliases &&
+        features_to_print[Target::TraceLoads] &&
+        features_to_print[Target::TraceStores]) {
+        result = Internal::replace_all(std::move(result), "trace_loads-trace_stores", "trace_all");
     }
     if (vector_bits_ != 0) {
         result += "-vector_bits_" + std::to_string(vector_bits_);
     }
 
     return result;
+}
+
+std::string Target::to_string() const {
+    Target minimal = *this;
+    minimal.unset_implied_features();
+    return to_string_impl(minimal.features, true);
+}
+
+std::string Target::to_complete_string() const {
+    return to_string_impl(features, false);
 }
 
 /** Was libHalide compiled with support for this target? */
@@ -1688,6 +1707,7 @@ void Target::set_arch(Arch a) {
         return;
     }
     Target old = *this;
+    unset_implied_features();
     arch_ = a;
     // A processor tuning is architecture-specific; changing the arch can orphan
     // it, just as removing a feature orphans the features it implied. Drop it
@@ -1696,6 +1716,7 @@ void Target::set_arch(Arch a) {
     if (!processor_tune_valid_for_arch(processor_tune_, arch_)) {
         processor_tune_ = Processor::ProcessorGeneric;
     }
+    set_implied_features();
     if (const auto error = validate_features()) {
         *this = old;
         user_error << *error;
@@ -1703,23 +1724,23 @@ void Target::set_arch(Arch a) {
 }
 
 void Target::set_os(OS o) {
-    assign_validated(os_, o, [this] { return validate_features(); });
+    assign_validated(os_, o);
 }
 
 void Target::set_bits(int b) {
     user_assert(b == 0 || b == 32 || b == 64)
         << "Target bits must be 0, 32, or 64; got " << b << ".\n";
-    assign_validated(bits_, b, [this] { return validate_features(); });
+    assign_validated(bits_, b);
 }
 
 void Target::set_vector_bits(int vb) {
     user_assert(vb >= 0)
         << "Target vector_bits must be non-negative; got " << vb << ".\n";
-    assign_validated(vector_bits_, vb, [this] { return validate_features(); });
+    assign_validated(vector_bits_, vb);
 }
 
 void Target::set_processor_tune(Processor pt) {
-    assign_validated(processor_tune_, pt, [this] { return validate_features(); });
+    assign_validated(processor_tune_, pt);
 }
 
 void Target::set_feature(Feature f, bool value) {
@@ -1727,19 +1748,35 @@ void Target::set_feature(Feature f, bool value) {
         return;
     }
     user_assert(f >= 0 && f < FeatureEnd) << "Invalid Target feature.\n";
-    const bool old_value = features[f];
-    if (old_value == value) {
+    if (features[f] == value) {
         return;
     }
-    features.set(f, value);
-    // vector_bits is meaningless without a scalable-vector feature; drop it if
-    // this change removed the last one (e.g. deriving a non-SVE target).
+
+    const auto old_features = features;
     const int old_vector_bits = vector_bits_;
-    if (vector_bits_ != 0 && !has_scalable_vector_feature(*this)) {
-        vector_bits_ = 0;
+    set_feature_raw(f, value);
+    if (!value) {
+        // A down-closed set cannot contain a feature while omitting one of its
+        // consequences. Clear the upward closure of the requested feature.
+        for (const FeatureRule &rule : Internal::reverse_view(feature_rules())) {
+            if (rule.kind == FeatureRuleKind::Implies && !has_feature(rule.other)) {
+                set_feature_raw(rule.feature, false);
+            }
+        }
+        if (arch_ == X86 && has_feature(AVX10_1) &&
+            ((vector_bits_ >= 256 && !has_feature(AVX2)) ||
+             (vector_bits_ >= 512 && !has_feature(AVX512_SapphireRapids)))) {
+            set_feature_raw(AVX10_1, false);
+        }
+        // vector_bits is meaningless without a scalable-vector feature; drop it
+        // if this removal cleared the last one.
+        if (vector_bits_ != 0 && !has_scalable_vector_feature(*this)) {
+            vector_bits_ = 0;
+        }
     }
+    set_implied_features();
     if (const auto error = validate_features()) {
-        features.set(f, old_value);
+        features = old_features;
         vector_bits_ = old_vector_bits;
         user_error << *error;
     }
@@ -1760,6 +1797,19 @@ void Target::set_features(const std::vector<Feature> &features_to_set, bool valu
     for (Feature f : features_to_set) {
         set_feature_raw(f, value);
     }
+    if (!value) {
+        for (const FeatureRule &rule : Internal::reverse_view(feature_rules())) {
+            if (rule.kind == FeatureRuleKind::Implies && !has_feature(rule.other)) {
+                set_feature_raw(rule.feature, false);
+            }
+        }
+        if (arch_ == X86 && has_feature(AVX10_1) &&
+            ((vector_bits_ >= 256 && !has_feature(AVX2)) ||
+             (vector_bits_ >= 512 && !has_feature(AVX512_SapphireRapids)))) {
+            set_feature_raw(AVX10_1, false);
+        }
+    }
+    set_implied_features();
     if (features == old_features) {
         return;
     }
@@ -1782,22 +1832,22 @@ void Target::set_implied_features() {
         // AVX10.1 at a given vector width supports the corresponding legacy
         // AVX feature set. The pairs below then cascade further.
         if (vector_bits_ >= 256) {
-            set_feature(AVX2);
+            set_feature_raw(AVX2);
         }
         if (vector_bits_ >= 512) {
-            set_feature(AVX512_SapphireRapids);
+            set_feature_raw(AVX512_SapphireRapids);
         }
     }
     if (arch_ == ARM && os_ == OSX) {
         // Apple silicon implements at least the ARM v8.4-A spec.
-        set_feature(ARMv84a);
+        set_feature_raw(ARMv84a);
     }
 
     // Simple feature -> feature implications. One forward pass suffices because
     // the table is topologically sorted.
     for (const FeatureRule &rule : feature_rules()) {
         if (rule.kind == FeatureRuleKind::Implies && has_feature(rule.feature)) {
-            set_feature(rule.other);
+            set_feature_raw(rule.other);
         }
     }
 }
@@ -1810,7 +1860,7 @@ void Target::unset_implied_features() {
     // feature in one pass.
     for (const FeatureRule &rule : Internal::reverse_view(feature_rules())) {
         if (rule.kind == FeatureRuleKind::Implies && has_feature(rule.feature)) {
-            set_feature(rule.other, false);
+            set_feature_raw(rule.other, false);
         }
     }
 
@@ -1818,27 +1868,15 @@ void Target::unset_implied_features() {
     // after the pair loop, mirroring how their seeds run before it there.
     if (arch_ == X86 && has_feature(AVX10_1)) {
         if (vector_bits_ >= 512) {
-            set_feature(AVX512_SapphireRapids, false);
+            set_feature_raw(AVX512_SapphireRapids, false);
         }
         if (vector_bits_ >= 256) {
-            set_feature(AVX2, false);
+            set_feature_raw(AVX2, false);
         }
     }
     if (arch_ == ARM && os_ == OSX) {
-        set_feature(ARMv84a, false);
+        set_feature_raw(ARMv84a, false);
     }
-}
-
-Target Target::with_implied_features() const {
-    Target copy = *this;
-    copy.set_implied_features();
-    return copy;
-}
-
-Target Target::without_implied_features() const {
-    Target copy = *this;
-    copy.unset_implied_features();
-    return copy;
 }
 
 bool Target::has_feature(Feature f) const {
@@ -1917,32 +1955,32 @@ int Target::get_cuda_capability_lower_bound() const {
     if (!has_feature(Target::CUDA)) {
         return -1;
     }
-    if (has_feature(Target::CUDACapability30)) {
-        return 30;
-    }
-    if (has_feature(Target::CUDACapability32)) {
-        return 32;
-    }
-    if (has_feature(Target::CUDACapability35)) {
-        return 35;
-    }
-    if (has_feature(Target::CUDACapability50)) {
-        return 50;
-    }
-    if (has_feature(Target::CUDACapability61)) {
-        return 61;
-    }
-    if (has_feature(Target::CUDACapability70)) {
-        return 70;
-    }
-    if (has_feature(Target::CUDACapability75)) {
-        return 75;
+    if (has_feature(Target::CUDACapability86)) {
+        return 86;
     }
     if (has_feature(Target::CUDACapability80)) {
         return 80;
     }
-    if (has_feature(Target::CUDACapability86)) {
-        return 86;
+    if (has_feature(Target::CUDACapability75)) {
+        return 75;
+    }
+    if (has_feature(Target::CUDACapability70)) {
+        return 70;
+    }
+    if (has_feature(Target::CUDACapability61)) {
+        return 61;
+    }
+    if (has_feature(Target::CUDACapability50)) {
+        return 50;
+    }
+    if (has_feature(Target::CUDACapability35)) {
+        return 35;
+    }
+    if (has_feature(Target::CUDACapability32)) {
+        return 32;
+    }
+    if (has_feature(Target::CUDACapability30)) {
+        return 30;
     }
     if (has_feature(Target::CUDACapability89)) {
         return 89;
@@ -1963,14 +2001,14 @@ int Target::get_vulkan_capability_lower_bound() const {
     if (!has_feature(Target::Vulkan)) {
         return -1;
     }
-    if (has_feature(Target::VulkanV10)) {
-        return 10;
+    if (has_feature(Target::VulkanV13)) {
+        return 13;
     }
     if (has_feature(Target::VulkanV12)) {
         return 12;
     }
-    if (has_feature(Target::VulkanV13)) {
-        return 13;
+    if (has_feature(Target::VulkanV10)) {
+        return 10;
     }
     return 10;
 }
@@ -1979,69 +2017,69 @@ int Target::get_d3d12compute_capability_lower_bound() const {
     if (!has_feature(Target::D3D12Compute)) {
         return -1;
     }
-    if (has_feature(Target::HLSL_SM60)) {
-        return 60;
-    }
-    if (has_feature(Target::HLSL_SM61)) {
-        return 61;
-    }
-    if (has_feature(Target::HLSL_SM62)) {
-        return 62;
-    }
-    if (has_feature(Target::HLSL_SM63)) {
-        return 63;
-    }
-    if (has_feature(Target::HLSL_SM64)) {
-        return 64;
-    }
-    if (has_feature(Target::HLSL_SM65)) {
-        return 65;
-    }
-    if (has_feature(Target::HLSL_SM66)) {
-        return 66;
-    }
-    if (has_feature(Target::HLSL_SM67)) {
-        return 67;
+    if (has_feature(Target::HLSL_SM69)) {
+        return 69;
     }
     if (has_feature(Target::HLSL_SM68)) {
         return 68;
     }
-    if (has_feature(Target::HLSL_SM69)) {
-        return 69;
+    if (has_feature(Target::HLSL_SM67)) {
+        return 67;
+    }
+    if (has_feature(Target::HLSL_SM66)) {
+        return 66;
+    }
+    if (has_feature(Target::HLSL_SM65)) {
+        return 65;
+    }
+    if (has_feature(Target::HLSL_SM64)) {
+        return 64;
+    }
+    if (has_feature(Target::HLSL_SM63)) {
+        return 63;
+    }
+    if (has_feature(Target::HLSL_SM62)) {
+        return 62;
+    }
+    if (has_feature(Target::HLSL_SM61)) {
+        return 61;
+    }
+    if (has_feature(Target::HLSL_SM60)) {
+        return 60;
     }
     return 51;  // default: SM 5.1 (FXC)
 }
 
 int Target::get_arm_v8_lower_bound() const {
-    if (has_feature(Target::ARMv8a)) {
-        return 80;
-    }
-    if (has_feature(Target::ARMv81a)) {
-        return 81;
-    }
-    if (has_feature(Target::ARMv82a)) {
-        return 82;
-    }
-    if (has_feature(Target::ARMv83a)) {
-        return 83;
-    }
-    if (has_feature(Target::ARMv84a)) {
-        return 84;
-    }
-    if (has_feature(Target::ARMv85a)) {
-        return 85;
-    }
-    if (has_feature(Target::ARMv86a)) {
-        return 86;
-    }
-    if (has_feature(Target::ARMv87a)) {
-        return 87;
+    if (has_feature(Target::ARMv89a)) {
+        return 89;
     }
     if (has_feature(Target::ARMv88a)) {
         return 88;
     }
-    if (has_feature(Target::ARMv89a)) {
-        return 89;
+    if (has_feature(Target::ARMv87a)) {
+        return 87;
+    }
+    if (has_feature(Target::ARMv86a)) {
+        return 86;
+    }
+    if (has_feature(Target::ARMv85a)) {
+        return 85;
+    }
+    if (has_feature(Target::ARMv84a)) {
+        return 84;
+    }
+    if (has_feature(Target::ARMv83a)) {
+        return 83;
+    }
+    if (has_feature(Target::ARMv82a)) {
+        return 82;
+    }
+    if (has_feature(Target::ARMv81a)) {
+        return 81;
+    }
+    if (has_feature(Target::ARMv8a)) {
+        return 80;
     }
     return -1;
 }
@@ -2287,7 +2325,7 @@ int Target::natural_vector_size(const Halide::Type &t) const {
 }
 
 bool Target::get_runtime_compatible_target(const Target &other, Target &result) {
-    // Create mask to select features that:
+    // Create masks to select features that:
     // (a) must be included if either target has the feature (union)
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
@@ -2301,9 +2339,26 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         OpenCL,
         Vulkan,
         WebGPU,
+    }};
 
-        // These features are actually intersection-y, but because targets only record the _highest_,
-        // we have to put their union in the result and then take a lower bound.
+    const std::vector<Feature> intersection_features = {{
+        ARMv7s,
+        AVX,
+        AVX2,
+        AVXVNNI,
+        AVX512,
+        AVX512_Cannonlake,
+        AVX512_KNL,
+        AVX512_SapphireRapids,
+        AVX512_Skylake,
+        AVX512_Zen4,
+        AVX512_Zen5,
+        F16C,
+        FMA,
+        FMA4,
+        SSE41,
+        VSX,
+
         CUDACapability30,
         CUDACapability32,
         CUDACapability35,
@@ -2348,25 +2403,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         ARMv87a,
         ARMv88a,
         ARMv89a,
-    }};
-
-    const std::vector<Feature> intersection_features = {{
-        ARMv7s,
-        AVX,
-        AVX2,
-        AVXVNNI,
-        AVX512,
-        AVX512_Cannonlake,
-        AVX512_KNL,
-        AVX512_SapphireRapids,
-        AVX512_Skylake,
-        AVX512_Zen4,
-        AVX512_Zen5,
-        F16C,
-        FMA,
-        FMA4,
-        SSE41,
-        VSX,
     }};
 
     const std::vector<Feature> matching_features = {{
@@ -2419,163 +2455,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // We merge the bits via bitwise or.
     Target output = Target{os_, arch_, bits_, processor_tune_};
     output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
-
-    // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
-    int cuda_a = get_cuda_capability_lower_bound();
-    int cuda_b = other.get_cuda_capability_lower_bound();
-
-    // get_cuda_capability_lower_bound returns -1 when unused. Casting to unsigned makes this
-    // large, so min selects the true lower bound when one target doesn't specify a capability,
-    // and the other doesn't use CUDA at all.
-    int cuda_capability = std::min((unsigned)cuda_a, (unsigned)cuda_b);
-    if (cuda_capability < 30) {
-        output.features.reset(CUDACapability30);
-    }
-    if (cuda_capability < 32) {
-        output.features.reset(CUDACapability32);
-    }
-    if (cuda_capability < 35) {
-        output.features.reset(CUDACapability35);
-    }
-    if (cuda_capability < 50) {
-        output.features.reset(CUDACapability50);
-    }
-    if (cuda_capability < 61) {
-        output.features.reset(CUDACapability61);
-    }
-    if (cuda_capability < 70) {
-        output.features.reset(CUDACapability70);
-    }
-    if (cuda_capability < 75) {
-        output.features.reset(CUDACapability75);
-    }
-    if (cuda_capability < 80) {
-        output.features.reset(CUDACapability80);
-    }
-    if (cuda_capability < 86) {
-        output.features.reset(CUDACapability86);
-    }
-    if (cuda_capability < 89) {
-        output.features.reset(CUDACapability89);
-    }
-    if (cuda_capability < 90) {
-        output.features.reset(CUDACapability90);
-    }
-    if (cuda_capability < 100) {
-        output.features.reset(CUDACapability100);
-    }
-    if (cuda_capability < 120) {
-        output.features.reset(CUDACapability120);
-    }
-
-    // Pick tight lower bound for Vulkan capability. Use fall-through to clear redundant features
-    int vulkan_a = get_vulkan_capability_lower_bound();
-    int vulkan_b = other.get_vulkan_capability_lower_bound();
-
-    // Same trick as above for CUDA
-    int vulkan_capability = std::min((unsigned)vulkan_a, (unsigned)vulkan_b);
-    if (vulkan_capability < 10) {
-        output.features.reset(VulkanV10);
-    }
-    if (vulkan_capability < 12) {
-        output.features.reset(VulkanV12);
-    }
-    if (vulkan_capability < 13) {
-        output.features.reset(VulkanV13);
-    }
-
-    // Pick tight lower bound for D3D12Compute SM version. Use fall-through to clear redundant features
-    int d3d12_sm_a = get_d3d12compute_capability_lower_bound();
-    int d3d12_sm_b = other.get_d3d12compute_capability_lower_bound();
-
-    // Same trick as CUDA: -1 (unused) becomes large when cast to unsigned, so min gives the true lower bound.
-    int d3d12_sm = std::min((unsigned)d3d12_sm_a, (unsigned)d3d12_sm_b);
-    if (d3d12_sm < 60) {
-        output.features.reset(HLSL_SM60);
-    }
-    if (d3d12_sm < 61) {
-        output.features.reset(HLSL_SM61);
-    }
-    if (d3d12_sm < 62) {
-        output.features.reset(HLSL_SM62);
-    }
-    if (d3d12_sm < 63) {
-        output.features.reset(HLSL_SM63);
-    }
-    if (d3d12_sm < 64) {
-        output.features.reset(HLSL_SM64);
-    }
-    if (d3d12_sm < 65) {
-        output.features.reset(HLSL_SM65);
-    }
-    if (d3d12_sm < 66) {
-        output.features.reset(HLSL_SM66);
-    }
-    if (d3d12_sm < 67) {
-        output.features.reset(HLSL_SM67);
-    }
-    if (d3d12_sm < 68) {
-        output.features.reset(HLSL_SM68);
-    }
-    if (d3d12_sm < 69) {
-        output.features.reset(HLSL_SM69);
-    }
-
-    // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
-    int hvx_a = get_hvx_lower_bound(*this);
-    int hvx_b = get_hvx_lower_bound(other);
-
-    // Same trick as above for CUDA
-    int hvx_version = std::min((unsigned)hvx_a, (unsigned)hvx_b);
-    if (hvx_version < 62) {
-        output.features.reset(HVX_v62);
-    }
-    if (hvx_version < 65) {
-        output.features.reset(HVX_v65);
-    }
-    if (hvx_version < 66) {
-        output.features.reset(HVX_v66);
-    }
-    if (hvx_version < 68) {
-        output.features.reset(HVX_v68);
-    }
-
-    // Pick tight lower bound for ARM capability. Use fall-through to clear redundant features
-    int arm_v8_a = get_arm_v8_lower_bound();
-    int arm_v8_b = other.get_arm_v8_lower_bound();
-
-    // Same trick as above for CUDA
-    int arm_v8_capability = (int)std::min((unsigned)arm_v8_a, (unsigned)arm_v8_b);
-    if (arm_v8_capability < 80) {
-        output.features.reset(ARMv8a);
-    }
-    if (arm_v8_capability < 81) {
-        output.features.reset(ARMv81a);
-    }
-    if (arm_v8_capability < 82) {
-        output.features.reset(ARMv82a);
-    }
-    if (arm_v8_capability < 83) {
-        output.features.reset(ARMv83a);
-    }
-    if (arm_v8_capability < 84) {
-        output.features.reset(ARMv84a);
-    }
-    if (arm_v8_capability < 85) {
-        output.features.reset(ARMv85a);
-    }
-    if (arm_v8_capability < 86) {
-        output.features.reset(ARMv86a);
-    }
-    if (arm_v8_capability < 87) {
-        output.features.reset(ARMv87a);
-    }
-    if (arm_v8_capability < 88) {
-        output.features.reset(ARMv88a);
-    }
-    if (arm_v8_capability < 89) {
-        output.features.reset(ARMv89a);
-    }
+    output.set_implied_features();
 
     result = output;
     return true;

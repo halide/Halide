@@ -233,29 +233,6 @@ struct Target {
 
     void set_features(const std::vector<Feature> &features_to_set, bool value = true);
 
-    /** Set any feature flags that are implied by the flags currently set. For
-     * example, setting AVX2 implies AVX, so calling this on a target with the
-     * AVX2 feature will also set the AVX feature. The set of implications is a
-     * DAG, so this reaches a fixed point in a single pass. Call this before
-     * inspecting a target's features, so that (e.g.) a check for SSE41
-     * succeeds on an AVX2 target. */
-    void set_implied_features();
-
-    /** Unset any feature flags that are implied by other flags that remain
-     * set, producing the minimal set of feature flags that
-     * set_implied_features() would expand back to the same target. For
-     * example, on a target with both AVX2 and AVX set, this unsets AVX (since
-     * AVX2 implies it), but on a target with only AVX set it leaves AVX
-     * alone. Call this before emitting a target as a string, to get a compact
-     * canonical form. */
-    void unset_implied_features();
-
-    /** Return a copy of the target with set_implied_features() applied. */
-    Target with_implied_features() const;
-
-    /** Return a copy of the target with unset_implied_features() applied. */
-    Target without_implied_features() const;
-
     bool has_feature(Feature f) const;
 
     bool has_feature(halide_target_feature_t f) const {
@@ -366,18 +343,23 @@ struct Target {
      */
     bool get_runtime_compatible_target(const Target &other, Target &result);
 
-    /** Convert the Target into a string form that can be reconstituted
-     * by merge_string(), which will always be of the form
+    /** Convert the Target into a minimal string form that can be reconstituted
+     * by merge_string(). Features implied by other features (or by the base
+     * Target) are omitted. The result will always be of the form
      *
      *   arch-bits-os-processor-feature1-feature2...featureN.
      *
-     * Note that is guaranteed that Target(t1.to_string()) == t1,
-     * but not that Target(s).to_string() == s (since there can be
-     * multiple strings that parse to the same Target)...
-     * *unless* t1 contains 'unknown' fields (in which case you'll get a string
-     * that can't be parsed, which is intentional).
+     * Note that it is guaranteed that Target(t1.to_string()) == t1, but not that
+     * Target(s).to_string() == s (since there can be multiple strings that parse
+     * to the same Target), *unless* t1 contains 'unknown' fields (in which case
+     * you'll get a string that can't be parsed, which is intentional).
      */
     std::string to_string() const;
+
+    /** Convert the Target into a string that includes every implied feature.
+     * This is primarily intended for debugging and testing the internal,
+     * implication-complete representation. */
+    std::string to_complete_string() const;
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
@@ -429,9 +411,8 @@ struct Target {
     /** Was libHalide compiled with support for this target? */
     bool supported() const;
 
-    /** Return a bitset of the Featuress set in this Target (set = 1).
-     * Note that while this happens to be the current internal representation,
-     * that might not always be the case. */
+    /** Return a bitset of the Features set in this Target (set = 1).
+     * The returned set includes all implied features. */
     const std::bitset<FeatureEnd> &get_features_bitset() const {
         return features;
     }
@@ -466,6 +447,22 @@ private:
 
     /** Set (or clear) a feature bit without running validation. */
     void set_feature_raw(Feature f, bool value = true);
+
+    /** Assign a Target property while maintaining implied-feature closure.
+     * The assignment is transactional: if validation fails, restore the
+     * entire Target before reporting the error. */
+    template<typename T>
+    void assign_validated(T &field, T value);
+
+    /** Restore the invariant that every implied feature is set. */
+    void set_implied_features();
+
+    /** Remove features implied by other features or by the base Target. */
+    void unset_implied_features();
+
+    /** Format the supplied feature representation. */
+    std::string to_string_impl(const std::bitset<FeatureEnd> &features_to_print,
+                               bool use_feature_aliases) const;
 
     /** Parse a target string into \p t, without validating that the resulting
      * feature set is sensible for the arch. Returns false if the string is not

@@ -84,7 +84,8 @@ def test_target():
     assert not t1.has_feature(hl.TargetFeature.AVX)
     t1.set_feature(hl.TargetFeature.AVX)
     t1.set_feature(hl.TargetFeature.SSE41, False)
-    assert t1.has_feature(hl.TargetFeature.AVX)
+    # Clearing an implied feature also clears features that imply it.
+    assert not t1.has_feature(hl.TargetFeature.AVX)
     assert not t1.has_feature(hl.TargetFeature.SSE41)
 
     # set_features
@@ -95,7 +96,9 @@ def test_target():
     t1.set_features([hl.TargetFeature.AVX, hl.TargetFeature.AVX2], True)
     assert t1.has_feature(hl.TargetFeature.AVX)
     assert t1.has_feature(hl.TargetFeature.AVX2)
-    assert not t1.has_feature(hl.TargetFeature.SSE41)
+    assert t1.has_feature(hl.TargetFeature.SSE41)
+    assert t1.to_string() == "x86-32-linux-avx2"
+    assert t1.to_complete_string() == "x86-32-linux-avx-avx2-f16c-fma-sse41"
 
     # with_feature
     t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [hl.TargetFeature.SSE41])
