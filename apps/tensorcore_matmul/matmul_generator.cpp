@@ -23,7 +23,10 @@ public:
     // warps there are per block.
     GeneratorParam<int> tiles_x{"tiles_x", 5};
     GeneratorParam<int> tiles_y{"tiles_y", 4};
-    GeneratorParam<int> warps{"warps", 4};
+    GeneratorParam<int> warps{"warps", 2};
+    // How many reduction steps to unroll, which puts more operand loads in
+    // flight at once.
+    GeneratorParam<int> k_unroll{"k_unroll", 2};
 
     Input<Buffer<float16_t, 2>> matA{"matA"};  // K x M
     Input<Buffer<float16_t, 2>> matB{"matB"};  // N x K
@@ -80,7 +83,7 @@ public:
 
             Var xi("xi"), yi("yi"), xt("xt"), mmxi("mmxi"), mmyi("mmyi");
             Var rxi("rxi"), ryi("ryi");
-            RVar rro("rro"), rri("rri");
+            RVar rro("rro"), rri("rri"), rru("rru");
 
             output.bound(x, 0, N)
                 .bound(y, 0, M)
@@ -112,9 +115,11 @@ public:
                 .split(x, x, rxi, tile_x)
                 .split(y, y, ryi, tile_y)
                 .split(k, rro, rri, tile_k)
-                .reorder(rri, rxi, ryi, x, y, rro)
+                .split(rro, rro, rru, k_unroll)
+                .reorder(rri, rxi, ryi, x, y, rru, rro)
                 .unroll(x)
                 .unroll(y)
+                .unroll(rru)
                 .atomic()
                 .vectorize(rri)
                 .vectorize(rxi)

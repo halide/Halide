@@ -7,6 +7,7 @@
 #include "IROperator.h"
 #include "MultiRamp.h"
 #include "Simplify.h"
+#include "Substitute.h"
 #include "Util.h"
 
 /** \file Support extraction of NVIDIA tensor core (wmma) instructions.
@@ -429,10 +430,36 @@ class ExtractWMMAOperations : public IRMutator {
     // 2D sub-tiles. This tracks them.
     vector<MultiRamp> subtiles;
 
+    // The loops over GPU blocks, threads, and lanes we're inside of.
+    vector<string> gpu_loop_vars;
+
+    // An accumulator allocation may sit outside the loops over GPU threads, in
+    // which case each thread gets its own copy of it and only ever touches its
+    // own slice. Any dependence of the index on the thread is selecting between
+    // those copies, not between subtiles within one, so drop it.
+    Expr index_within_thread(const Expr &index) {
+        Expr idx = index;
+        for (const string &v : gpu_loop_vars) {
+            idx = substitute(v, 0, idx);
+        }
+        return simplify(idx);
+    }
+
     string get_subtile_name(const Expr &index) {
-        int idx = Halide::Internal::get_subtile(index, "tensor core accumulator", &subtiles);
+        int idx = Halide::Internal::get_subtile(index_within_thread(index),
+                                                "tensor core accumulator", &subtiles);
         internal_assert(idx >= 0);  // errors handled already
         return wmma_name + std::to_string(idx);
+    }
+
+    Stmt visit(const For *op) override {
+        if (!is_gpu(op->for_type)) {
+            return IRMutator::visit(op);
+        }
+        gpu_loop_vars.push_back(op->name);
+        Stmt s = IRMutator::visit(op);
+        gpu_loop_vars.pop_back();
+        return s;
     }
 
     Stmt visit(const Allocate *op) override {
@@ -476,6 +503,20 @@ class ExtractWMMAOperations : public IRMutator {
                                   const_true(), body);
         }
         return body;
+    }
+
+    Stmt visit(const Atomic *op) override {
+        if (op->producer_name == tile_name) {
+            // A tensor core accumulator is per-thread register storage, so
+            // there's nothing for another thread to race with. The atomic is
+            // there because the accumulator is scheduled outside the loops over
+            // threads, which makes it look shared.
+            user_assert(op->mutex_name.empty())
+                << "Accumulating into a tensor core accumulator should not need a "
+                << "mutex.\n";
+            return mutate(op->body);
+        }
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const Free *op) override {
