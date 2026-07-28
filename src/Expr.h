@@ -405,6 +405,13 @@ enum class MemoryType {
     /** AMX Tile register for X86. Any data that would be used in an AMX matrix
      * multiplication must first be loaded into an AMX tile register. */
     AMXTile,
+
+    /** An NVIDIA tensor core accumulator fragment. The storage is striped
+     * across the registers of the 32 lanes of a warp in a layout that is not
+     * architecturally specified, so the only legal accesses are the ones
+     * recognized by the WMMA lowering pass: zero-initialization, accumulation
+     * of a matrix multiply, and copying the tile out to memory. */
+    WMMAAccumulator,
 };
 
 /** Whether a MemoryType is backed by tile-shaped storage with native 2D
@@ -414,7 +421,7 @@ enum class MemoryType {
  * dedicated lowering pass that requires the original 2D-shaped loads
  * and stores to remain intact. */
 inline bool is_tile_memory_type(MemoryType t) {
-    return t == MemoryType::AMXTile;
+    return t == MemoryType::AMXTile || t == MemoryType::WMMAAccumulator;
 }
 
 namespace Internal {

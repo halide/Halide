@@ -466,7 +466,8 @@ protected:
              op->memory_type != MemoryType::GPUShared &&
              op->memory_type != MemoryType::GPUTexture) ||
             op->memory_type == MemoryType::Register ||
-            op->memory_type == MemoryType::Stack) {
+            op->memory_type == MemoryType::Stack ||
+            op->memory_type == MemoryType::WMMAAccumulator) {
             // These allocations go in register or local memory
             return IRMutator::visit(op);
         }
@@ -1143,7 +1144,8 @@ protected:
         user_assert(op->memory_type == MemoryType::Stack ||
                     op->memory_type == MemoryType::Register ||
                     op->memory_type == MemoryType::Heap ||
-                    op->memory_type == MemoryType::Auto)
+                    op->memory_type == MemoryType::Auto ||
+                    op->memory_type == MemoryType::WMMAAccumulator)
             << "Allocation " << op->name << " is scheduled inside a loop over GPU threads, so "
             << "it must live in stack memory, heap memory, or registers. "
             << "Shared allocations at this loop level are not yet supported.\n";
@@ -1322,6 +1324,7 @@ protected:
         case MemoryType::LockedCache:
         case MemoryType::VTCM:
         case MemoryType::AMXTile:
+        case MemoryType::WMMAAccumulator:
             break;
         }
 
@@ -1347,6 +1350,7 @@ protected:
         case MemoryType::LockedCache:
         case MemoryType::VTCM:
         case MemoryType::AMXTile:
+        case MemoryType::WMMAAccumulator:
             break;
         }
 

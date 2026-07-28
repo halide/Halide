@@ -2,6 +2,7 @@
 #include "Bounds.h"
 #include "CSE.h"
 #include "Deinterleave.h"
+#include "ExtractWMMAOperations.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "MultiRamp.h"
@@ -61,6 +62,20 @@ class FlattenRamps : public IRMutator {
             }
         }
         return Shuffle::make_slice(v, n * inner_lanes, 1, inner_lanes);
+    }
+
+    Expr visit(const Call *op) override {
+        if (wmma_matrix_arg(op) >= 0) {
+            // This pass turns a load of a nested ramp into a concatenation of
+            // dense loads, which is several load nodes rather than one, so
+            // unlike a reshaping shuffle it can't be undone by the backend. The
+            // matrix a wmma instruction takes a fragment out of is never
+            // actually loaded - only its address is used - so there's nothing
+            // to gain by rewriting it anyway. The other arguments are scalar
+            // constants, so there's nothing to do to them either.
+            return op;
+        }
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Load *op) override {
@@ -182,6 +197,14 @@ class FlattenRamps : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
+        if (is_wmma_matrix_store(op)) {
+            // One wmma store instruction writes the whole matrix for the whole
+            // warp, so it must not be broken into a store per row. Unlike the
+            // load side, this can't be undone afterwards, because it would have
+            // become several statements.
+            return op;
+        }
+
         // If the index is a multiramp, unroll into a sequence of per-inner-ramp
         // stores, for the same reason as the Load visitor above.
         if (op->index.type().is_vector()) {

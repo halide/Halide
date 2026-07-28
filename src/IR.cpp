@@ -710,6 +710,12 @@ constexpr const char *intrinsic_op_names[] = {
     "widening_shift_left",
     "widening_shift_right",
     "widening_sub",
+    "wmma_fragment_to_matrix_d",
+    "wmma_lane_owns",
+    "wmma_matrix_to_fragment_a",
+    "wmma_matrix_to_fragment_b",
+    "wmma_matrix_to_fragment_c",
+    "wmma_mma",
     // keep-sorted end
 };
 
