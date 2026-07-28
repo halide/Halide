@@ -10,8 +10,8 @@ use tauri::ipc::Response;
 use tauri::State;
 
 use crate::render::{
-    GrayscaleState, LoadFrequencyState, NormalizationMode, RedundantState, Renderer,
-    ReuseDistanceState, RgbState, StoreFrequencyState, ThreadOpMode, ThreadState,
+    GrayscaleState, IncludeInf, IncludeNan, LoadFrequencyState, NormalizationMode, RedundantState,
+    Renderer, ReuseDistanceState, RgbState, StoreFrequencyState, ThreadOpMode, ThreadState,
 };
 use crate::trace::Trace;
 
@@ -241,8 +241,8 @@ pub fn render_grayscale(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
-    include_nan: bool,
-    include_inf: bool,
+    include_nan: IncludeNan,
+    include_inf: IncludeInf,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -280,8 +280,8 @@ pub fn render_rgb(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
-    include_nan: bool,
-    include_inf: bool,
+    include_nan: IncludeNan,
+    include_inf: IncludeInf,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -319,8 +319,8 @@ pub fn render_store_frequency(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: bool,
-    include_inf: bool,
+    include_nan: IncludeNan,
+    include_inf: IncludeInf,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -365,8 +365,8 @@ pub fn render_load_frequency(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: bool,
-    include_inf: bool,
+    include_nan: IncludeNan,
+    include_inf: IncludeInf,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -414,8 +414,8 @@ pub fn render_redundant_stores(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: bool,
-    include_inf: bool,
+    include_nan: IncludeNan,
+    include_inf: IncludeInf,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -460,8 +460,8 @@ pub fn render_reuse_distance(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: bool,
-    include_inf: bool,
+    include_nan: IncludeNan,
+    include_inf: IncludeInf,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -507,8 +507,8 @@ pub fn render_thread(
     global_index: u32,
     op_mode: ThreadOpMode,
     thread_id: String,
-    include_nan: bool,
-    include_inf: bool,
+    include_nan: IncludeNan,
+    include_inf: IncludeInf,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
