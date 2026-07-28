@@ -32,6 +32,7 @@ struct Target {
         NoOS,
         Fuchsia,
         WebAssemblyRuntime,
+        OSEnd,
     };
 
     /** The architecture used by the target. Determines the
@@ -69,6 +70,7 @@ struct Target {
         ZnVer3,    /// Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
         ZnVer4,    /// Tune for AMD Zen 4 CPU (AMD Family 19h, launched 2022).
         ZnVer5,    /// Tune for AMD Zen 5 CPU (AMD Family 1Ah, launched 2024).
+        ProcessorEnd,
     };
 
     /** Optional features a target can have.
@@ -459,6 +461,11 @@ private:
 
     /** Remove features implied by other features or by the base Target. */
     void unset_implied_features();
+
+    /** After a feature has been cleared, clear any remaining feature whose
+     * implied consequences are no longer all present, keeping the feature set
+     * down-closed. */
+    void clear_orphaned_features();
 
     /** Format the supplied feature representation. */
     std::string to_string_impl(const std::bitset<FeatureEnd> &features_to_print,

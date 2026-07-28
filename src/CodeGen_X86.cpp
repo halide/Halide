@@ -1772,6 +1772,8 @@ string CodeGen_X86::mcpu_tune() const {
 
     case Target::Processor::ProcessorGeneric:
         break;
+    case Target::Processor::ProcessorEnd:
+        internal_error << "ProcessorEnd is not a valid processor tuning.\n";
     }
     internal_assert(target.processor_tune() == Target::Processor::ProcessorGeneric && "The switch should be exhaustive.");
     return mcpu_target();  // Detect "best" CPU from the enabled ISA's.

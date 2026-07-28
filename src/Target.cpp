@@ -1383,24 +1383,6 @@ constexpr std::pair<Target::Arch, Target::Processor> legal_processor_pairs[] = {
     {Target::X86, Target::ZnVer5},
 };
 
-}  // namespace
-
-template<typename T>
-void Target::assign_validated(T &field, T value) {
-    if (field == value) {
-        return;
-    }
-
-    Target old = *this;
-    unset_implied_features();
-    field = std::move(value);
-    set_implied_features();
-    if (const auto error = validate_features()) {
-        *this = std::move(old);
-        user_error << *error;
-    }
-}
-
 // A processor tuning is specific to an architecture. ProcessorGeneric is always
 // legal; every other tuning is legal only for the architecture that defines it.
 bool processor_tune_valid_for_arch(Target::Processor p, Target::Arch a) {
@@ -1424,14 +1406,30 @@ bool has_scalable_vector_feature(const Target &t) {
 
 }  // namespace
 
+template<typename T>
+void Target::assign_validated(T &field, T value) {
+    if (field == value) {
+        return;
+    }
+
+    Target old = *this;
+    unset_implied_features();
+    field = std::move(value);
+    set_implied_features();
+    if (const auto error = validate_features()) {
+        *this = old;
+        user_error << *error;
+    }
+}
+
 std::optional<std::string> Target::validate_features() const {
     if (arch_ < ArchUnknown || arch_ >= ArchEnd) {
         return "Invalid Target architecture.\n";
     }
-    if (os_ < OSUnknown || os_ > WebAssemblyRuntime) {
+    if (os_ < OSUnknown || os_ >= OSEnd) {
         return "Invalid Target operating system.\n";
     }
-    if (processor_tune_ < ProcessorGeneric || processor_tune_ > ZnVer5) {
+    if (processor_tune_ < ProcessorGeneric || processor_tune_ >= ProcessorEnd) {
         return "Invalid Target processor tuning.\n";
     }
 
@@ -1626,7 +1624,11 @@ std::string Target::to_string_impl(const std::bitset<FeatureEnd> &features_to_pr
     if (use_feature_aliases &&
         features_to_print[Target::TraceLoads] &&
         features_to_print[Target::TraceStores]) {
-        result = Internal::replace_all(std::move(result), "trace_loads-trace_stores", "trace_all");
+        // Collapse the loads+stores pair into the trace_all alias. Replacing the
+        // tokens independently keeps this correct even when another trace_*
+        // feature sorts between them, so they aren't adjacent in the string.
+        result = Internal::replace_all(std::move(result), "-trace_loads", "-trace_all");
+        result = Internal::replace_all(std::move(result), "-trace_stores", "");
     }
     if (vector_bits_ != 0) {
         result += "-vector_bits_" + std::to_string(vector_bits_);
@@ -1743,6 +1745,32 @@ void Target::set_processor_tune(Processor pt) {
     assign_validated(processor_tune_, pt);
 }
 
+void Target::clear_orphaned_features() {
+    // A down-closed set cannot contain a feature while omitting one of its
+    // consequences. Walking the implication rules in reverse clears the upward
+    // closure of any already-removed feature in a single pass, because the rule
+    // table is topologically sorted.
+    for (const FeatureRule &rule : Internal::reverse_view(feature_rules())) {
+        if (rule.kind == FeatureRuleKind::Implies && !has_feature(rule.other)) {
+            set_feature_raw(rule.feature, false);
+        }
+    }
+    // AVX10.1's implied features are keyed off vector_bits rather than another
+    // feature, so its removal isn't captured by the rule table above.
+    if (arch_ == X86 && has_feature(AVX10_1) &&
+        ((vector_bits_ >= 256 && !has_feature(AVX2)) ||
+         (vector_bits_ >= 512 && !has_feature(AVX512_SapphireRapids)))) {
+        set_feature_raw(AVX10_1, false);
+    }
+
+    // vector_bits only means something alongside a scalable-vector feature.
+    // Once the last such feature is removed (e.g. deriving a non-SVE target
+    // from an SVE host), the leftover width is orphaned, so clear it too.
+    if (vector_bits_ != 0 && !has_scalable_vector_feature(*this)) {
+        vector_bits_ = 0;
+    }
+}
+
 void Target::set_feature(Feature f, bool value) {
     if (f == FeatureEnd) {
         return;
@@ -1756,23 +1784,7 @@ void Target::set_feature(Feature f, bool value) {
     const int old_vector_bits = vector_bits_;
     set_feature_raw(f, value);
     if (!value) {
-        // A down-closed set cannot contain a feature while omitting one of its
-        // consequences. Clear the upward closure of the requested feature.
-        for (const FeatureRule &rule : Internal::reverse_view(feature_rules())) {
-            if (rule.kind == FeatureRuleKind::Implies && !has_feature(rule.other)) {
-                set_feature_raw(rule.feature, false);
-            }
-        }
-        if (arch_ == X86 && has_feature(AVX10_1) &&
-            ((vector_bits_ >= 256 && !has_feature(AVX2)) ||
-             (vector_bits_ >= 512 && !has_feature(AVX512_SapphireRapids)))) {
-            set_feature_raw(AVX10_1, false);
-        }
-        // vector_bits is meaningless without a scalable-vector feature; drop it
-        // if this removal cleared the last one.
-        if (vector_bits_ != 0 && !has_scalable_vector_feature(*this)) {
-            vector_bits_ = 0;
-        }
+        clear_orphaned_features();
     }
     set_implied_features();
     if (const auto error = validate_features()) {
@@ -1794,30 +1806,16 @@ void Target::set_features(const std::vector<Feature> &features_to_set, bool valu
     }
 
     const auto old_features = features;
+    const int old_vector_bits = vector_bits_;
     for (Feature f : features_to_set) {
         set_feature_raw(f, value);
     }
     if (!value) {
-        for (const FeatureRule &rule : Internal::reverse_view(feature_rules())) {
-            if (rule.kind == FeatureRuleKind::Implies && !has_feature(rule.other)) {
-                set_feature_raw(rule.feature, false);
-            }
-        }
-        if (arch_ == X86 && has_feature(AVX10_1) &&
-            ((vector_bits_ >= 256 && !has_feature(AVX2)) ||
-             (vector_bits_ >= 512 && !has_feature(AVX512_SapphireRapids)))) {
-            set_feature_raw(AVX10_1, false);
-        }
+        clear_orphaned_features();
     }
     set_implied_features();
     if (features == old_features) {
         return;
-    }
-    // vector_bits is meaningless without a scalable-vector feature; drop it if
-    // this batch removed the last one (e.g. deriving a non-SVE target).
-    const int old_vector_bits = vector_bits_;
-    if (vector_bits_ != 0 && !has_scalable_vector_feature(*this)) {
-        vector_bits_ = 0;
     }
     if (const auto error = validate_features()) {
         features = old_features;
