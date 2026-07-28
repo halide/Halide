@@ -884,7 +884,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
         for (int i = num_funcs - 1; i >= 0; --i) {
             s = Block::make(Store::make(names.profiler_func_stack_peak_buf,
                                         make_const(UInt(64), profiling.func_stack_peak[i]),
-                                        i, Parameter(), const_true(), ModulusRemainder()),
+                                        i),
                             s);
         }
         s = Block::make(s, Free::make(names.profiler_func_stack_peak_buf));

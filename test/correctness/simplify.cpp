@@ -707,9 +707,9 @@ void check_vectors() {
 
     // Now check that an interleave of some collapsible loads collapses into a single dense load
     {
-        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x + 1, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
-        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter(), const_true(8), ModulusRemainder());
+        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4));
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x + 1, 2, 4));
+        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8));
         check(interleave_vectors({load1, load2}), load12);
 
         // They don't collapse in the other order
@@ -717,7 +717,7 @@ void check_vectors() {
         check(e, e);
 
         // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x + 1, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x + 1, 2, 4));
         e = interleave_vectors({load1, load3});
         check(e, e);
     }
@@ -727,10 +727,10 @@ void check_vectors() {
         int lanes = 4;
         std::vector<Expr> loads;
         for (int i = 0; i < lanes; i++) {
-            loads.push_back(Load::make(Float(32), "buf", 4 * x + i, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
+            loads.push_back(Load::make(Float(32), "buf", 4 * x + i));
         }
 
-        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x * 4, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x * 4, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0), false));
     }
 
     // Check that concatenated loads of adjacent vectors collapse into a vector load, with appropriate alignment.
@@ -739,10 +739,10 @@ void check_vectors() {
         int vectors = 4;
         std::vector<Expr> loads;
         for (int i = 0; i < vectors; i++) {
-            loads.push_back(Load::make(Float(32, lanes), "buf", ramp(i * lanes, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+            loads.push_back(Load::make(Float(32, lanes), "buf", ramp(i * lanes, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0), false));
         }
 
-        check(concat_vectors(loads), Load::make(Float(32, lanes * vectors), "buf", ramp(0, 1, lanes * vectors), Buffer<>(), Parameter(), const_true(vectors * lanes), ModulusRemainder(0, 0)));
+        check(concat_vectors(loads), Load::make(Float(32, lanes * vectors), "buf", ramp(0, 1, lanes * vectors), Buffer<>(), Parameter(), const_true(vectors * lanes), ModulusRemainder(0, 0), false));
     }
 
     {
@@ -766,8 +766,8 @@ void check_vectors() {
         // A predicated store with a provably-false predicate.
         Expr pred = ramp(x * y + x * z, 2, 8) > 2;
         Expr index = ramp(x + y, 1, 8);
-        Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()), ModulusRemainder());
-        Stmt stmt = Store::make("f", value, index, Parameter(), pred, ModulusRemainder());
+        Expr value = Load::make(index.type(), "f", index);
+        Stmt stmt = Store::make("f", value, index, Parameter(), pred, ModulusRemainder(), false);
         check(stmt, Evaluate::make(0));
     }
 
@@ -779,7 +779,7 @@ void check_vectors() {
         // A store completely out of bounds.
         Expr index = ramp(-8, 1, 8);
         Expr value = Broadcast::make(0, 8);
-        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0));
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0), false);
         stmt = make_allocation("f", value.type(), stmt);
         check(stmt, Evaluate::make(unreachable()));
     }
@@ -788,7 +788,7 @@ void check_vectors() {
         // A store with one lane in bounds at the min.
         Expr index = ramp(-7, 1, 8);
         Expr value = Broadcast::make(0, 8);
-        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, -7));
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, -7), false);
         stmt = make_allocation("f", value.type(), stmt);
         check(stmt, stmt);
     }
@@ -797,7 +797,7 @@ void check_vectors() {
         // A store with one lane in bounds at the max.
         Expr index = ramp(7, 1, 8);
         Expr value = Broadcast::make(0, 8);
-        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, 7));
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, 7), false);
         stmt = make_allocation("f", value.type(), stmt);
         check(stmt, stmt);
     }
@@ -806,7 +806,7 @@ void check_vectors() {
         // A store completely out of bounds.
         Expr index = ramp(8, 1, 8);
         Expr value = Broadcast::make(0, 8);
-        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0));
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0), false);
         stmt = make_allocation("f", value.type(), stmt);
         check(stmt, Evaluate::make(unreachable()));
     }

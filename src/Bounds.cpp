@@ -3468,7 +3468,7 @@ void constant_bound_test() {
         check_constant_bound(i16(absd(cr, cl)), Expr((int16_t)0), Expr((int16_t)509));
     }
 
-    check_constant_bound(Load::make(Int(32), "buf", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder()) * 20,
+    check_constant_bound(Load::make(Int(32), "buf", 0) * 20,
                          Interval::neg_inf(), Interval::pos_inf());
 
     {
@@ -3565,7 +3565,7 @@ void bounds_test() {
     check(scope, x * y, min(y, 0) * 10, max(y, 0) * 10);
     check(scope, x / (x + y), -10, 10);
     check(scope, 11 / (x + 1), 1, 11);
-    check(scope, Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true(), ModulusRemainder()),
+    check(scope, Load::make(Int(8), "buf", x),
           i8(-128), i8(127));
     check(scope, y + (Let::make("y", x + 3, y - x + 10)), y + 3, y + 23);  // Once again, we don't know that y is correlated with x
     check(scope, clamp(1000 / (x - 2), x - 10, x + 10), -10, 20);
@@ -3727,8 +3727,8 @@ void bounds_test() {
           cast<uint8_t>(clamp(cast<uint16_t>(x ^ y), make_zero(UInt(16)), make_const(UInt(16), 128))),
           u8(0), u8(128));
 
-    Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
-    Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
+    Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x));
+    Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17));
     check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
           u16(0), u16(255 * 2));
 
@@ -3850,7 +3850,7 @@ void bounds_test() {
     // Test case from https://github.com/halide/Halide/pull/7377
     {
         Var x;
-        Expr e = Load::make(Int(32), "buf", max(x, -x), Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+        Expr e = Load::make(Int(32), "buf", max(x, -x), Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{}, false);
         e = Let::make(x.name(), 37, e);
         Scope<Interval> scope;
         scope.push("y", {0, 100});
@@ -3861,7 +3861,7 @@ void bounds_test() {
     // Test case from https://github.com/halide/Halide/pull/7379
     {
         Var x;
-        Expr e = Load::make(Int(32), "buf", -x / x, Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+        Expr e = Load::make(Int(32), "buf", -x / x, Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{}, false);
         e = Let::make(x.name(), 37, e);
         Scope<Interval> scope;
         scope.push("y", {0, 100});
