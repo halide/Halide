@@ -7,6 +7,7 @@
 
 #include <bitset>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "DeviceAPI.h"
@@ -44,6 +45,7 @@ struct Target {
         POWERPC,
         WebAssembly,
         RISCV,
+        ArchEnd,
     };
 
     /** The specific processor to be targeted, tuned for.
@@ -199,17 +201,7 @@ struct Target {
     };
     Target() = default;
     Target(OS o, Arch a, int b, Processor pt, const std::vector<Feature> &initial_features = std::vector<Feature>(),
-           int vb = 0)
-        : os_(o), arch_(a), processor_tune_(pt) {
-        set_bits(b);
-        for (const auto &f : initial_features) {
-            set_feature_raw(f);
-        }
-        // Set vector_bits after the features, since its validity depends on
-        // them (a scalable-vector feature must be present).
-        set_vector_bits(vb);
-        validate_features();
-    }
+           int vb = 0);
 
     Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
         : Target(o, a, b, ProcessorGeneric, initial_features) {
@@ -470,7 +462,7 @@ private:
     /** Attempt to validate that all features set are sensible for the base Target.
      * This is *not* guaranteed to get all invalid combinations, but is intended
      * to catch at least the most common (e.g., setting arm-specific features on x86). */
-    void validate_features() const;
+    std::optional<std::string> validate_features() const;
 
     /** Set (or clear) a feature bit without running validation. */
     void set_feature_raw(Feature f, bool value = true);

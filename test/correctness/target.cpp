@@ -76,6 +76,18 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // Syntactically well-formed targets must also satisfy the feature algebra.
+    ts = "x86-64-linux-sve2";
+    if (Target::validate_target_string(ts)) {
+        printf("validate_target_string accepted inconsistent target: %s\n", ts.c_str());
+        return 1;
+    }
+    ts = "powerpc-64-linux-arm_fp16";
+    if (Target::validate_target_string(ts)) {
+        printf("validate_target_string accepted inconsistent target: %s\n", ts.c_str());
+        return 1;
+    }
+
     // bits == 0 is allowed only if arch_unknown and os_unknown are specified,
     // and no features are set
     ts = "x86-0";
