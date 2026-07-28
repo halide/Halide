@@ -6,6 +6,7 @@
 #include "IR.h"
 #include "IRMutator.h"
 #include "Substitute.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -38,12 +39,19 @@ class CountGPUBlocksThreads : public IRVisitor {
     // we're inside of, respectively. Lanes loops also count as threads loops.
     int nb = 0, nt = 0, nl = 0;
 
+    // Whether we're already inside a lane dimension. Every lane dimension maps
+    // to the innermost thread dimension, so one nested inside another is the
+    // same dimension, not a new one.
+    bool in_lanes = false;
+
     void visit(const For *op) override {
         // Figure out how much to increment each counter by based on the loop
         // type.
         int db = op->for_type == ForType::GPUBlock;
-        int dl = op->for_type == ForType::GPULane;
+        int dl = (op->for_type == ForType::GPULane) && !in_lanes;
         int dt = op->for_type == ForType::GPUThread;
+        ScopedValue<bool> old_in_lanes(in_lanes,
+                                       in_lanes || op->for_type == ForType::GPULane);
 
         // The threads counter includes lanes loops
         dt += dl;
@@ -65,6 +73,22 @@ class CountGPUBlocksThreads : public IRVisitor {
         nb -= db;
         nl -= dl;
         nt -= dt;
+    }
+
+    void visit(const Realize *op) override {
+        // extract_wmma_operations will wrap the statements that touch this
+        // allocation in loops over the lanes of a warp, so count it as a lane
+        // dimension.
+        const bool wmma = op->memory_type == MemoryType::WMMAAccumulator;
+        int dl = wmma && !in_lanes;
+        ScopedValue<bool> old_in_lanes(in_lanes, in_lanes || wmma);
+        nl += dl;
+        nt += dl;
+        nlanes = std::max(nl, nlanes);
+        nthreads = std::max(nt, nthreads);
+        IRVisitor::visit(op);
+        nl -= dl;
+        nt -= dl;
     }
 
 public:

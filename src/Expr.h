@@ -413,6 +413,13 @@ enum class MemoryType {
      * global buffer, because that is all the hardware can do. On GPU APIs with
      * no such instruction this is ordinary shared memory. */
     GPUSharedAsync,
+
+    /** An NVIDIA tensor core accumulator fragment. The storage is striped
+     * across the registers of the 32 lanes of a warp in a layout that is not
+     * architecturally specified, so the only legal accesses are the ones
+     * recognized by the WMMA lowering pass: zero-initialization, accumulation
+     * of a matrix multiply, and copying the tile out to memory. */
+    WMMAAccumulator,
 };
 
 /** Whether a MemoryType places an allocation in GPU shared memory. */
@@ -427,7 +434,7 @@ inline bool is_gpu_shared(MemoryType t) {
  * dedicated lowering pass that requires the original 2D-shaped loads
  * and stores to remain intact. */
 inline bool is_tile_memory_type(MemoryType t) {
-    return t == MemoryType::AMXTile;
+    return t == MemoryType::AMXTile || t == MemoryType::WMMAAccumulator;
 }
 
 namespace Internal {
