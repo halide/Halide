@@ -67,7 +67,7 @@ class MarkClampedRampsAsLikely : public IRMutator {
         in_index = old_in_index;
         Expr value = mutate(op->value);
         Expr predicate = mutate(op->predicate);
-        return op->remake(value, index, predicate, op->alignment);
+        return op->with(value, index, predicate, op->alignment);
     }
 
     bool in_index = false;
@@ -757,15 +757,15 @@ class PartitionLoops : public IRMutator {
         Stmt stmt;
         // Bust simple serial for loops up into three.
         if (op->for_type == ForType::Serial && !op->body.as<Acquire>()) {
-            stmt = op->remake(min_steady, max_steady - 1, simpler_body);
+            stmt = op->with(min_steady, max_steady - 1, simpler_body);
 
             if (make_prologue) {
-                prologue = op->remake(op->min, min_steady - 1, prologue);
+                prologue = op->with(op->min, min_steady - 1, prologue);
                 stmt = Block::make(prologue, stmt);
                 mutated = true;
             }
             if (make_epilogue) {
-                epilogue = op->remake(max_steady, op->max, epilogue);
+                epilogue = op->with(max_steady, op->max, epilogue);
                 stmt = Block::make(stmt, epilogue);
                 mutated = true;
             }
@@ -797,7 +797,7 @@ class PartitionLoops : public IRMutator {
                     mutated = true;
                 }
             }
-            stmt = op->remake(op->min, op->max, stmt);
+            stmt = op->with(op->min, op->max, stmt);
         }
 
         if (make_epilogue) {
@@ -919,8 +919,8 @@ class RenormalizeGPULoops : public IRMutator {
         if (f && in_gpu_loop && !in_thread_loop) {
             internal_assert(!expr_uses_var(f->min, op->name) &&
                             !expr_uses_var(f->max, op->name));
-            Stmt inner = op->remake(op->value, f->body);
-            inner = f->remake(f->min, f->max, inner);
+            Stmt inner = op->with(op->value, f->body);
+            inner = f->with(f->min, f->max, inner);
             return mutate(inner);
         } else if (a && in_gpu_loop && !in_thread_loop) {
             internal_assert(a->extents.size() == 1);
@@ -935,8 +935,8 @@ class RenormalizeGPULoops : public IRMutator {
                 // size.)
                 return IRMutator::visit(op);
             } else {
-                Stmt inner = op->remake(op->value, a->body);
-                inner = a->remake(a->extents, a->condition, inner);
+                Stmt inner = op->with(op->value, a->body);
+                inner = a->with(a->extents, a->condition, inner);
                 return mutate(inner);
             }
         } else {
@@ -969,13 +969,13 @@ class RenormalizeGPULoops : public IRMutator {
         const LetStmt *let_b = else_case.as<LetStmt>();
         if (allocate_a && allocate_b) {
             Stmt inner = IfThenElse::make(op->condition, allocate_a->body, allocate_b->body);
-            inner = allocate_a->remake(allocate_a->extents, allocate_a->condition, inner);
+            inner = allocate_a->with(allocate_a->extents, allocate_a->condition, inner);
             return mutate(inner);
         } else if (let_a && let_b && let_a->name == let_b->name) {
             string condition_name = unique_name('t');
             Expr condition = Variable::make(op->condition.type(), condition_name);
             Stmt inner = IfThenElse::make(condition, let_a->body, let_b->body);
-            inner = let_a->remake(select(condition, let_a->value, let_b->value), inner);
+            inner = let_a->with(select(condition, let_a->value, let_b->value), inner);
             inner = LetStmt::make(condition_name, op->condition, inner);
             return mutate(inner);
         } else if (let_a) {
@@ -997,7 +997,7 @@ class RenormalizeGPULoops : public IRMutator {
                    for_a->min.same_as(for_b->min) &&
                    for_a->max.same_as(for_b->max)) {
             Stmt inner = IfThenElse::make(op->condition, for_a->body, for_b->body);
-            inner = for_a->remake(for_a->min, for_a->max, inner);
+            inner = for_a->with(for_a->min, for_a->max, inner);
             return mutate(inner);
         } else {
             internal_error << "Unexpected construct inside if statement: " << Stmt(op) << "\n";

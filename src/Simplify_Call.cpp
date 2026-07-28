@@ -866,7 +866,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         if (!changed) {
             return op;
         } else {
-            return op->remake(new_args);
+            return op->with(new_args);
         }
     }
 }

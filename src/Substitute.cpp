@@ -89,7 +89,7 @@ public:
         Stmt new_body = mutate(op->body);
         hidden.pop(op->name);
 
-        return op->remake(new_min, new_max, new_body);
+        return op->with(new_min, new_max, new_body);
     }
 };
 
@@ -162,9 +162,9 @@ protected:
     Expr visit(const Let *op) override {
         Expr new_value = mutate(op->value);
         if (op->name == var) {
-            return op->remake(new_value, op->body);
+            return op->with(new_value, op->body);
         } else {
-            return op->remake(new_value, mutate(op->body));
+            return op->with(new_value, mutate(op->body));
         }
     }
 

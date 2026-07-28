@@ -296,11 +296,12 @@ Stmt stage_strided_loads(const Stmt &stmt, const Target &target) {
             return self->visit_base(l);
         } else {
             // Might be a strided load after simplification. Note that this
-            // deliberately calls Load::make rather than Load::remake, because
-            // remake returns the original node when nothing has changed, and
-            // here we want a distinct node even in that case.
+            // deliberately calls Load::make rather than Load::with, because
+            // Load::with returns the original node when nothing has changed,
+            // and here we want a distinct node even in that case.
             return Load::make(l->type, l->name, self->mutate(l->index), l->image,
-                              l->param, self->mutate(l->predicate), l->alignment);
+                              l->param, self->mutate(l->predicate), l->alignment,
+                              l->is_streaming);
         }
     });
 

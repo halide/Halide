@@ -1253,7 +1253,7 @@ const Call *Function::is_wrapper() const {
         expected_args.push_back(Variable::make(Int(32), v));
     }
     Expr expected_rhs =
-        call->remake(expected_args);
+        call->with(expected_args);
     if (equal(rhs[0], expected_rhs)) {
         return call;
     } else {

@@ -173,10 +173,10 @@ Interval bounds_of_lanes(const Expr &e) {
         Interval ia = bounds_of_lanes(let->value);
         Interval ib = bounds_of_lanes(let->body);
         if (expr_uses_var(ib.min, let->name)) {
-            ib.min = let->remake(let->value, ib.min);
+            ib.min = let->with(let->value, ib.min);
         }
         if (expr_uses_var(ib.max, let->name)) {
-            ib.max = let->remake(let->value, ib.max);
+            ib.max = let->with(let->value, ib.max);
         }
         return ib;
     }
@@ -224,16 +224,16 @@ protected:
     }
 
     Expr visit(const Load *op) override {
-        return op->remake(mutate_index(op->name, op->index),
-                          mutate(op->predicate),
-                          mutate_alignment(op->name, op->alignment));
+        return op->with(mutate_index(op->name, op->index),
+                        mutate(op->predicate),
+                        mutate_alignment(op->name, op->alignment));
     }
 
     Stmt visit(const Store *op) override {
-        return op->remake(mutate(op->value),
-                          mutate_index(op->name, op->index),
-                          mutate(op->predicate),
-                          mutate_alignment(op->name, op->alignment));
+        return op->with(mutate(op->value),
+                        mutate_index(op->name, op->index),
+                        mutate(op->predicate),
+                        mutate_alignment(op->name, op->alignment));
     }
 
 public:
@@ -307,7 +307,7 @@ protected:
             return op;
         }
         vectorized = true;
-        return op->remake(index, predicate, op->alignment);
+        return op->with(index, predicate, op->alignment);
     }
 
     Stmt visit(const Store *op) override {
@@ -338,7 +338,7 @@ protected:
             return op;
         }
         vectorized = true;
-        return op->remake(value, index, predicate, op->alignment);
+        return op->with(value, index, predicate, op->alignment);
     }
 
     Expr visit(const Call *op) override {
@@ -532,7 +532,7 @@ protected:
         } else {
             int w = index.type().lanes();
             predicate = widen(predicate, w);
-            return op->remake(index, predicate, op->alignment);
+            return op->with(index, predicate, op->alignment);
         }
     }
 
@@ -706,10 +706,10 @@ protected:
             int lanes = std::max({predicate.type().lanes(),
                                   value.type().lanes(),
                                   index.type().lanes()});
-            return op->remake(widen(value, lanes),
-                              widen(index, lanes),
-                              widen(predicate, lanes),
-                              op->alignment);
+            return op->with(widen(value, lanes),
+                            widen(index, lanes),
+                            widen(predicate, lanes),
+                            op->alignment);
         }
     }
 
@@ -1006,7 +1006,7 @@ protected:
 
                 // We may still need the atomic node, if there was more
                 // parallelism than just the vectorization.
-                s = op->remake(s);
+                s = op->with(s);
                 return s;
             }
 
@@ -1284,7 +1284,7 @@ protected:
                 store_index = store_mr.to_expr();
             }
 
-            Expr new_load = load_a->remake(store_index, const_true(output_lanes), ModulusRemainder{});
+            Expr new_load = load_a->with(store_index, const_true(output_lanes), ModulusRemainder{});
 
             Expr lhs = cast(b.type().with_lanes(output_lanes), new_load);
 
@@ -1292,7 +1292,7 @@ protected:
             if (unrolled_loops.empty()) {
                 b = binop(lhs, b);
                 b = cast(new_load.type(), b);
-                s = store->remake(b, store_index, const_true(b.type().lanes()), store->alignment);
+                s = store->with(b, store_index, const_true(b.type().lanes()), store->alignment);
             } else {
                 // Wrap any containing loops we still need (unrolled). We
                 // enumerate the cartesian product of loop iteration values
@@ -1301,10 +1301,10 @@ protected:
                 std::string b_var_name = unique_name('b');
                 Expr b_var = Variable::make(b.type().with_lanes(output_lanes), b_var_name);
                 Stmt store_template =
-                    store->remake(cast(new_load.type(), binop(lhs, b_var)),
-                                  store_index,
-                                  const_true(output_lanes),
-                                  ModulusRemainder{});
+                    store->with(cast(new_load.type(), binop(lhs, b_var)),
+                                store_index,
+                                const_true(output_lanes),
+                                ModulusRemainder{});
                 std::string full_b_var_name = unique_name('b');
                 Expr full_b_var = Variable::make(b.type(), full_b_var_name);
 
@@ -1341,7 +1341,7 @@ protected:
 
             // We may still need the atomic node, if there was more
             // parallelism than just the vectorization.
-            s = op->remake(s);
+            s = op->with(s);
 
             return s;
         } while (false);
@@ -1607,7 +1607,7 @@ protected:
         finder.mutate(op->body);
         LiftVectorizableExprsOutOfSingleAtomicNode lifter(finder.liftable);
         Stmt new_body = lifter.mutate(op->body);
-        new_body = op->remake(new_body);
+        new_body = op->with(new_body);
         while (!lifter.lifted.empty()) {
             auto p = lifter.lifted.back();
             new_body = LetStmt::make(p.first, p.second, new_body);

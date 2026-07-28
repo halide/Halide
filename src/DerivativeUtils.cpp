@@ -580,7 +580,7 @@ protected:
         if (op->name == f.name()) {
             vector<Expr> args = op->args;
             args[variable_id] = f.args()[variable_id];
-            return op->remake(args);
+            return op->with(args);
         } else {
             return IRMutator::visit(op);
         }

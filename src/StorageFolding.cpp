@@ -68,7 +68,7 @@ class FoldStorageOfFunction : public IRMutator {
             vector<Expr> args = op->args;
             internal_assert(dim < (int)args.size());
             args[dim] = is_const_one(factor) ? 0 : (args[dim] % factor);
-            expr = op->remake(args);
+            expr = op->with(args);
         } else if (op->name == Call::buffer_crop) {
             Expr source = op->args[2];
             const Variable *buf_var = source.as<Variable>();
@@ -141,7 +141,7 @@ class FoldStorageOfFunction : public IRMutator {
         if (op->name == func) {
             vector<Expr> args = op->args;
             args[dim] = is_const_one(factor) ? 0 : (args[dim] % factor);
-            stmt = op->remake(op->values, args, op->predicate);
+            stmt = op->with(op->values, args, op->predicate);
         }
         return stmt;
     }
@@ -295,7 +295,7 @@ class InjectFoldingCheck : public IRMutator {
                 }
             }
 
-            return op->remake(body);
+            return op->with(body);
         } else {
             return IRMutator::visit(op);
         }
@@ -376,9 +376,9 @@ class InjectFoldingCheck : public IRMutator {
                 }
             }
 
-            return op->remake(op->value, body);
+            return op->with(op->value, body);
         } else {
-            return op->remake(op->value, mutate(op->body));
+            return op->with(op->value, mutate(op->body));
         }
     }
 
@@ -878,7 +878,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 // for further folding opportunities
                 // recursively.
             } else if (!body.same_as(op->body)) {
-                stmt = op->remake(op->min, op->max, body);
+                stmt = op->with(op->min, op->max, body);
                 break;
             } else {
                 stmt = op;
@@ -894,7 +894,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         // marker.
         body = mutate(body);
 
-        stmt = op->remake(op->min, op->max, body);
+        stmt = op->with(op->min, op->max, body);
 
         if (func.schedule().async() && !dynamic_footprint.empty()) {
             // Step the counters backwards over the entire extent of
@@ -988,7 +988,7 @@ class StorageFolding : public IRMutator {
         if (body.same_as(op->body)) {
             return op;
         } else if (folder.dims_folded.empty()) {
-            return op->remake(op->bounds, op->condition, body);
+            return op->with(op->bounds, op->condition, body);
         } else {
             Region bounds = op->bounds;
 
@@ -1001,7 +1001,7 @@ class StorageFolding : public IRMutator {
                 bounds[d] = Range(0, f);
             }
 
-            Stmt stmt = op->remake(bounds, op->condition, body);
+            Stmt stmt = op->with(bounds, op->condition, body);
 
             // Each fold may have an associated semaphore that needs initialization, along with some counters
             for (const auto &fold : folder.dims_folded) {

@@ -112,7 +112,7 @@ class SubstituteIn : public IRGraphMutator {
             changed = changed || !args.back().same_as(i);
         }
         if (changed) {
-            return p->remake(p->values, args, p->predicate);
+            return p->with(p->values, args, p->predicate);
         } else {
             return p;
         }
@@ -152,11 +152,11 @@ class AddPredicates : public IRGraphMutator {
             for (Expr &v : values) {
                 v = select(cond, v, Call::make(func, args, idx++));
             }
-            return p->remake(values, args, predicate);
+            return p->with(values, args, predicate);
         } else if (type == ApplySplitResult::PredicateProvides) {
-            return p->remake(values, args, predicate && cond);
+            return p->with(values, args, predicate && cond);
         } else if (changed_args || changed_values || !predicate.same_as(p->predicate)) {
-            return p->remake(values, args, predicate);
+            return p->with(values, args, predicate);
         } else {
             return p;
         }
@@ -1010,7 +1010,7 @@ private:
         if (body.same_as(for_loop->body)) {
             return for_loop;
         } else {
-            return for_loop->remake(for_loop->min, for_loop->max, body);
+            return for_loop->with(for_loop->min, for_loop->max, body);
         }
     }
 };
@@ -1141,7 +1141,7 @@ Stmt add_loop_var_aliases(Stmt s, const map<string, set<string>> &loop_var_alias
                 body = LetStmt::make(alias, var, body);
             }
 
-            return op->remake(op->min, op->max, body);
+            return op->with(op->min, op->max, body);
         }
 
     public:
@@ -1168,7 +1168,7 @@ class ShiftLoopNest : public IRMutator {
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + iter->second;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = op->remake(op->min, op->max, body);
+            stmt = op->with(op->min, op->max, body);
         }
         return stmt;
     }
@@ -1367,7 +1367,7 @@ protected:
         if (body.same_as(for_loop->body)) {
             return for_loop;
         } else {
-            return for_loop->remake(for_loop->min, for_loop->max, body);
+            return for_loop->with(for_loop->min, for_loop->max, body);
         }
     }
 

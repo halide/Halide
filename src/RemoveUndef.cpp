@@ -208,7 +208,7 @@ private:
         if (!index.defined()) {
             return Expr();
         }
-        return op->remake(index, pred, op->alignment);
+        return op->with(index, pred, op->alignment);
     }
 
     Expr visit(const Ramp *op) override {
@@ -264,7 +264,7 @@ private:
         if (!changed) {
             return op;
         } else {
-            return op->remake(new_args);
+            return op->with(new_args);
         }
     }
 
@@ -338,7 +338,7 @@ private:
         if (!body.defined()) {
             return Stmt();
         }
-        return op->remake(body);
+        return op->with(body);
     }
 
     Stmt visit(const For *op) override {
@@ -354,7 +354,7 @@ private:
         if (!body.defined()) {
             return Stmt();
         }
-        return op->remake(min, max, body);
+        return op->with(min, max, body);
     }
 
     Stmt visit(const Store *op) override {
@@ -373,7 +373,7 @@ private:
 
         if (predicate.defined()) {
             // This becomes a conditional store
-            Stmt stmt = IfThenElse::make(predicate, op->remake(value, index, pred, op->alignment));
+            Stmt stmt = IfThenElse::make(predicate, op->with(value, index, pred, op->alignment));
             predicate = Expr();
             return stmt;
         } else if (pred.same_as(op->predicate) &&
@@ -381,7 +381,7 @@ private:
                    index.same_as(op->index)) {
             return op;
         } else {
-            return op->remake(value, index, pred, op->alignment);
+            return op->with(value, index, pred, op->alignment);
         }
     }
 
@@ -447,13 +447,13 @@ private:
         Expr new_pred = mutate(op->predicate);
 
         if (predicate.defined()) {
-            Stmt stmt = IfThenElse::make(predicate, op->remake(new_values, new_args, new_pred));
+            Stmt stmt = IfThenElse::make(predicate, op->with(new_values, new_args, new_pred));
             predicate = Expr();
             return stmt;
         } else if (!changed && new_pred.same_as(op->predicate)) {
             return op;
         } else {
-            return op->remake(new_values, new_args, new_pred);
+            return op->with(new_values, new_args, new_pred);
         }
     }
 
@@ -526,7 +526,7 @@ private:
             return Stmt();
         }
 
-        return op->remake(new_bounds, condition, body);
+        return op->with(new_bounds, condition, body);
     }
 
     Stmt visit(const Block *op) override {

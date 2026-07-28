@@ -391,7 +391,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
         // Load of a broadcast should be broadcast of the load
         Expr new_index = b_index->value;
         int new_lanes = new_index.type().lanes();
-        Expr load = op->remake(b_index->value, const_true(new_lanes, nullptr), align);
+        Expr load = op->with(b_index->value, const_true(new_lanes, nullptr), align);
         return Broadcast::make(load, b_index->lanes);
     } else if (s_index &&
                (s_index->is_concat() ||
@@ -408,7 +408,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
                                           Shuffle::make_slice(predicate, (int)loaded_vecs.size(), op->type.lanes() / new_lanes, new_lanes);
             predicate_slice = mutate(predicate_slice, nullptr);
 
-            Expr load = op->remake(new_index, predicate_slice, ModulusRemainder{});
+            Expr load = op->with(new_index, predicate_slice, ModulusRemainder{});
             loaded_vecs.emplace_back(std::move(load));
         }
         return Shuffle::make(loaded_vecs, s_index->indices);
@@ -436,11 +436,11 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
         }
 
         Expr permuted_load =
-            op->remake(mr.to_expr(), permuted_predicate, align);
+            op->with(mr.to_expr(), permuted_predicate, align);
         int B = op->type.lanes() / A;
         return mutate(Shuffle::make_transpose(permuted_load, B), info);
     } else {
-        return op->remake(index, predicate, align);
+        return op->with(index, predicate, align);
     }
 }
 

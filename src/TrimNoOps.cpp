@@ -338,7 +338,7 @@ class SimplifyUsingBounds : public IRMutator {
         containing_loops.push_back({op->name, {min, max}});
         Stmt body = mutate(op->body);
         containing_loops.pop_back();
-        return op->remake(min, max, body);
+        return op->with(min, max, body);
     }
 
 public:
@@ -377,7 +377,7 @@ class TrimNoOps : public IRMutator {
             return Evaluate::make(0);
         } else if (is_const_zero(is_no_op.condition)) {
             // This loop is definitely needed
-            return op->remake(op->min, op->max, body);
+            return op->with(op->min, op->max, body);
         }
 
         // The condition is something interesting. Try to see if we
@@ -389,7 +389,7 @@ class TrimNoOps : public IRMutator {
 
         if (i.is_everything()) {
             // Nope.
-            return op->remake(op->min, op->max, body);
+            return op->with(op->min, op->max, body);
         }
 
         if (i.is_empty()) {
@@ -425,7 +425,7 @@ class TrimNoOps : public IRMutator {
             new_max = old_max;
         }
 
-        Stmt stmt = op->remake(new_min_var, new_max_var, body);
+        Stmt stmt = op->with(new_min_var, new_max_var, body);
         stmt = LetStmt::make(new_max_name, new_max, stmt);
         stmt = LetStmt::make(new_min_name, new_min, stmt);
         stmt = LetStmt::make(old_max_name, old_max, stmt);

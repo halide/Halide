@@ -69,7 +69,7 @@ protected:
             allocs.pop(op->name);
             return body;
         } else {
-            return op->remake(op->extents, op->condition, body, new_expr);
+            return op->with(op->extents, op->condition, body, new_expr);
         }
     }
 

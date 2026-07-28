@@ -26,7 +26,7 @@ protected:
         if (is_no_op(body)) {
             return body;
         } else {
-            return op->remake(op->value, body);
+            return op->with(op->value, body);
         }
     }
 
@@ -35,7 +35,7 @@ protected:
         if (is_no_op(body)) {
             return body;
         } else {
-            return op->remake(op->min, op->max, body);
+            return op->with(op->min, op->max, body);
         }
     }
 
@@ -68,7 +68,7 @@ protected:
         if (is_no_op(body)) {
             return body;
         } else {
-            return op->remake(op->bounds, op->condition, body);
+            return op->with(op->bounds, op->condition, body);
         }
     }
 
@@ -77,7 +77,7 @@ protected:
         if (is_no_op(body)) {
             return body;
         } else {
-            return op->remake(body);
+            return op->with(body);
         }
     }
 
@@ -86,7 +86,7 @@ protected:
         if (is_no_op(body)) {
             return body;
         } else {
-            return op->remake(op->extents, op->condition, body);
+            return op->with(op->extents, op->condition, body);
         }
     }
 
@@ -105,7 +105,7 @@ protected:
         if (is_no_op(body)) {
             return body;
         } else {
-            return op->remake(body);
+            return op->with(body);
         }
     }
 };
@@ -171,7 +171,7 @@ protected:
             if (is_no_op(body) || op->is_producer) {
                 return body;
             } else {
-                return op->remake(body);
+                return op->with(body);
             }
         }
     }
@@ -242,7 +242,7 @@ protected:
         if (is_no_op(body)) {
             return body;
         } else {
-            return op->remake(op->extents, op->condition, body);
+            return op->with(op->extents, op->condition, body);
         }
     }
 
@@ -252,7 +252,7 @@ protected:
             return body;
         } else {
             inner_realizes.insert(op->name);
-            return op->remake(op->bounds, op->condition, body);
+            return op->with(op->bounds, op->condition, body);
         }
     }
 
@@ -263,7 +263,7 @@ protected:
         } else if (inner_realizes.count(op->name) == 0) {
             return body;
         } else {
-            return op->remake(body);
+            return op->with(body);
         }
     }
 
@@ -453,7 +453,7 @@ protected:
             body = mutate(body);
         }
         hoisted_storages.erase(op->name);
-        return op->remake(body);
+        return op->with(body);
     }
 
     Stmt visit(const Realize *op) override {
@@ -463,7 +463,7 @@ protected:
         if (f.schedule().async() && hoisted_storages.count(op->name) == 0) {
             Stmt body = op->body;
             body = process_body(op->name, body);
-            return op->remake(op->bounds, op->condition, body);
+            return op->with(op->bounds, op->condition, body);
         } else {
             return IRMutator::visit(op);
         }
@@ -522,7 +522,7 @@ protected:
                 Expr sema_allocate = Call::make(sema_type, Call::alloca,
                                                 {(int)sizeof(halide_semaphore_t)}, Call::Intrinsic);
                 body = Block::make(Evaluate::make(sema_init), std::move(body));
-                body = op->remake(sema_allocate, body);
+                body = op->with(sema_allocate, body);
 
                 // Re-wrap any other lets
                 for (const auto &[var, value] : reverse_view(lets)) {
@@ -538,7 +538,7 @@ protected:
             if (value.same_as(frame->value) && body.same_as(frame->body)) {
                 body = frame;
             } else {
-                body = frame->remake(value, body);
+                body = frame->with(value, body);
             }
         }
         return body;
@@ -639,7 +639,7 @@ protected:
             }
 
             for (const auto *container : reverse_view(containing_lets)) {
-                body = container->remake(container->value, body);
+                body = container->with(container->value, body);
             }
 
             return body;
@@ -665,9 +665,9 @@ protected:
 
             return Block::make(sub_stmts);
         } else if (const ProducerConsumer *pc = body.as<ProducerConsumer>()) {
-            return pc->remake(make_producer_consumer(name, is_producer, pc->body, scope, uses_vars));
+            return pc->with(make_producer_consumer(name, is_producer, pc->body, scope, uses_vars));
         } else if (const Realize *r = body.as<Realize>()) {
-            return r->remake(r->bounds, r->condition, make_producer_consumer(name, is_producer, r->body, scope, uses_vars));
+            return r->with(r->bounds, r->condition, make_producer_consumer(name, is_producer, r->body, scope, uses_vars));
         } else {
             return ProducerConsumer::make(name, is_producer, body);
         }
@@ -706,7 +706,7 @@ protected:
         if (op->name == func_name) {
             std::vector<Expr> args = op->args;
             args.push_back(ring_buffer_index);
-            return op->remake(op->values, args, op->predicate);
+            return op->with(op->values, args, op->predicate);
         }
         return IRMutator::visit(op);
     }
@@ -715,7 +715,7 @@ protected:
         if (op->call_type == Call::Halide && op->name == func_name) {
             std::vector<Expr> args = op->args;
             args.push_back(ring_buffer_index);
-            return op->remake(args);
+            return op->with(args);
         }
         return IRMutator::visit(op);
     }
@@ -777,7 +777,7 @@ protected:
             }
         }
 
-        return op->remake(bounds, op->condition, body);
+        return op->with(bounds, op->condition, body);
     }
 
     Stmt visit(const HoistedStorage *op) override {
@@ -786,7 +786,7 @@ protected:
         Function f = env.find(op->name)->second;
 
         Stmt mutated = mutate(op->body);
-        mutated = op->remake(mutated);
+        mutated = op->with(mutated);
 
         if (f.schedule().async() && f.schedule().ring_buffer().defined()) {
             // Make a semaphore on the stack
@@ -850,9 +850,9 @@ protected:
             // Don't do the allocation until we have the
             // semaphore. Reduces peak memory use.
             return Acquire::make(a->semaphore, a->count,
-                                 mutate(op->remake(op->bounds, op->condition, a->body)));
+                                 mutate(op->with(op->bounds, op->condition, a->body)));
         } else {
-            return op->remake(op->bounds, op->condition, body);
+            return op->with(op->bounds, op->condition, body);
         }
     }
 
@@ -862,9 +862,9 @@ protected:
             // Don't do the allocation until we have the
             // semaphore. Reduces peak memory use.
             return Acquire::make(a->semaphore, a->count,
-                                 mutate(op->remake(a->body)));
+                                 mutate(op->with(a->body)));
         } else {
-            return op->remake(body);
+            return op->with(body);
         }
     }
 
@@ -897,7 +897,7 @@ protected:
 
         // Rewrap the rest of the lets
         for (const auto *let : reverse_view(frames)) {
-            s = let->remake(let->value, s);
+            s = let->with(let->value, s);
         }
 
         return s;
@@ -907,9 +907,9 @@ protected:
         Stmt body = mutate(op->body);
         if (const Acquire *a = body.as<Acquire>()) {
             return Acquire::make(a->semaphore, a->count,
-                                 mutate(op->remake(a->body)));
+                                 mutate(op->with(a->body)));
         } else {
-            return op->remake(body);
+            return op->with(body);
         }
     }
 };
@@ -929,19 +929,19 @@ protected:
         if (lf && lr &&
             lf->name == lr->name &&
             equal(lf->value, lr->value)) {
-            return lf->remake(lf->value, make_fork(lf->body, lr->body));
+            return lf->with(lf->value, make_fork(lf->body, lr->body));
         } else if (lf && !stmt_uses_var(rest, lf->name)) {
-            return lf->remake(lf->value, make_fork(lf->body, rest));
+            return lf->with(lf->value, make_fork(lf->body, rest));
         } else if (lr && !stmt_uses_var(first, lr->name)) {
-            return lr->remake(lr->value, make_fork(first, lr->body));
+            return lr->with(lr->value, make_fork(first, lr->body));
         } else if (rf && !stmt_uses_var(rest, rf->name)) {
-            return rf->remake(rf->bounds, rf->condition, make_fork(rf->body, rest));
+            return rf->with(rf->bounds, rf->condition, make_fork(rf->body, rest));
         } else if (rr && !stmt_uses_var(first, rr->name)) {
-            return rr->remake(rr->bounds, rr->condition, make_fork(first, rr->body));
+            return rr->with(rr->bounds, rr->condition, make_fork(first, rr->body));
         } else if (hf && !stmt_uses_var(rest, hf->name)) {
-            return hf->remake(make_fork(rf->body, rest));
+            return hf->with(make_fork(rf->body, rest));
         } else if (hr && !stmt_uses_var(first, hr->name)) {
-            return hr->remake(make_fork(first, hr->body));
+            return hr->with(make_fork(first, hr->body));
         } else {
             return Fork::make(first, rest);
         }
@@ -970,7 +970,7 @@ protected:
         if (in_fork && !stmt_uses_var(body, op->name) && !stmt_uses_var(body, op->name + ".buffer")) {
             return body;
         } else {
-            return op->remake(op->bounds, op->condition, body);
+            return op->with(op->bounds, op->condition, body);
         }
     }
 
@@ -979,7 +979,7 @@ protected:
         if (in_fork && !stmt_uses_var(body, op->name)) {
             return body;
         } else {
-            return op->remake(body);
+            return op->with(body);
         }
     }
 
@@ -988,7 +988,7 @@ protected:
         if (in_fork && !stmt_uses_var(body, op->name)) {
             return body;
         } else {
-            return op->remake(op->value, body);
+            return op->with(op->value, body);
         }
     }
 

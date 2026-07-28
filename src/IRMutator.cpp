@@ -123,7 +123,7 @@ Expr IRMutator::visit(const Select *op) {
 Expr IRMutator::visit(const Load *op) {
     Expr predicate = mutate(op->predicate);
     Expr index = mutate(op->index);
-    return op->remake(index, predicate, op->alignment);
+    return op->with(index, predicate, op->alignment);
 }
 
 Expr IRMutator::visit(const Ramp *op) {
@@ -145,44 +145,44 @@ Expr IRMutator::visit(const Broadcast *op) {
 }
 
 Expr IRMutator::visit(const Call *op) {
-    return op->remake(mutate_with_changes(op->args).first);
+    return op->with(mutate_with_changes(op->args).first);
 }
 
 Expr IRMutator::visit(const Let *op) {
     Expr value = mutate(op->value);
     Expr body = mutate(op->body);
-    return op->remake(value, body);
+    return op->with(value, body);
 }
 
 Stmt IRMutator::visit(const LetStmt *op) {
     Expr value = mutate(op->value);
     Stmt body = mutate(op->body);
-    return op->remake(value, body);
+    return op->with(value, body);
 }
 
 Stmt IRMutator::visit(const AssertStmt *op) {
     Expr condition = mutate(op->condition);
     Expr message = mutate(op->message);
-    return op->remake(condition, message);
+    return op->with(condition, message);
 }
 
 Stmt IRMutator::visit(const ProducerConsumer *op) {
     Stmt body = mutate(op->body);
-    return op->remake(body);
+    return op->with(body);
 }
 
 Stmt IRMutator::visit(const For *op) {
     Expr min = mutate(op->min);
     Expr max = mutate(op->max);
     Stmt body = mutate(op->body);
-    return op->remake(min, max, body);
+    return op->with(min, max, body);
 }
 
 Stmt IRMutator::visit(const Store *op) {
     Expr predicate = mutate(op->predicate);
     Expr value = mutate(op->value);
     Expr index = mutate(op->index);
-    return op->remake(value, index, predicate, op->alignment);
+    return op->with(value, index, predicate, op->alignment);
 }
 
 Stmt IRMutator::visit(const Provide *op) {
@@ -190,7 +190,7 @@ Stmt IRMutator::visit(const Provide *op) {
     std::vector<Expr> new_args = mutate_with_changes(op->args).first;
     std::vector<Expr> new_values = mutate_with_changes(op->values).first;
     Expr new_predicate = mutate(op->predicate);
-    return op->remake(new_values, new_args, new_predicate);
+    return op->with(new_values, new_args, new_predicate);
 }
 
 Stmt IRMutator::visit(const Allocate *op) {
@@ -222,7 +222,7 @@ Stmt IRMutator::visit(const Realize *op) {
 
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition);
-    return op->remake(new_bounds, condition, body);
+    return op->with(new_bounds, condition, body);
 }
 
 Stmt IRMutator::visit(const Prefetch *op) {
@@ -231,24 +231,24 @@ Stmt IRMutator::visit(const Prefetch *op) {
 
     // Mutate the bounds
     Region new_bounds = mutate_region(this, op->bounds).first;
-    return op->remake(new_bounds, condition, body);
+    return op->with(new_bounds, condition, body);
 }
 
 Stmt IRMutator::visit(const Block *op) {
     Stmt first = mutate(op->first);
     Stmt rest = mutate(op->rest);
-    return op->remake(first, rest);
+    return op->with(first, rest);
 }
 
 Stmt IRMutator::visit(const IfThenElse *op) {
     Expr condition = mutate(op->condition);
     Stmt then_case = mutate(op->then_case);
     Stmt else_case = mutate(op->else_case);
-    return op->remake(condition, then_case, else_case);
+    return op->with(condition, then_case, else_case);
 }
 
 Stmt IRMutator::visit(const Evaluate *op) {
-    return op->remake(mutate(op->value));
+    return op->with(mutate(op->value));
 }
 
 Expr IRMutator::visit(const Shuffle *op) {
@@ -270,19 +270,19 @@ Expr IRMutator::visit(const VectorReduce *op) {
 Stmt IRMutator::visit(const Fork *op) {
     Stmt first = mutate(op->first);
     Stmt rest = mutate(op->rest);
-    return op->remake(first, rest);
+    return op->with(first, rest);
 }
 
 Stmt IRMutator::visit(const Acquire *op) {
     Expr sema = mutate(op->semaphore);
     Expr count = mutate(op->count);
     Stmt body = mutate(op->body);
-    return op->remake(sema, count, body);
+    return op->with(sema, count, body);
 }
 
 Stmt IRMutator::visit(const Atomic *op) {
     Stmt body = mutate(op->body);
-    return op->remake(body);
+    return op->with(body);
 }
 
 Stmt IRMutator::visit(const StreamingStore *op) {
@@ -305,7 +305,7 @@ Stmt IRMutator::visit(const StreamingLoads *op) {
 
 Stmt IRMutator::visit(const HoistedStorage *op) {
     Stmt body = mutate(op->body);
-    return op->remake(body);
+    return op->with(body);
 }
 
 Stmt IRGraphMutator::mutate(const Stmt &s) {

@@ -499,7 +499,7 @@ protected:
                     Evaluate::make(Call::make(Handle(), Call::register_destructor,
                                               {Expr("halide_device_free_as_destructor"), buf}, Call::Intrinsic));
                 Stmt body = Block::make(destructor, op->body);
-                return op->remake(op->value, body);
+                return op->with(op->value, body);
             } else {
                 return IRMutator::visit(op);
             }
@@ -550,7 +550,7 @@ protected:
                 Expr value = substitute(buffer, reinterpret(Handle(), make_zero(UInt(64))), op->value);
 
                 // Rewrap the letstmt
-                return op->remake(value, body);
+                return op->with(value, body);
             } else {
                 return IRMutator::visit(op);
             }
@@ -655,7 +655,7 @@ protected:
                 body = substitute(op->name, reinterpret(Handle(), make_zero(UInt(64))), body);
             }
 
-            return op->remake(op->extents, condition, body);
+            return op->with(op->extents, condition, body);
         }
     }
 

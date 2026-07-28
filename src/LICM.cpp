@@ -317,7 +317,7 @@ protected:
             const For *loop = new_stmt.as<For>();
             internal_assert(loop);
 
-            new_stmt = loop->remake(loop->min, loop->max, mutate(loop->body));
+            new_stmt = loop->with(loop->min, loop->max, mutate(loop->body));
 
             // Wrap lets for the lifted invariants
             for (size_t i = 0; i < exprs.size(); i++) {
@@ -546,11 +546,11 @@ protected:
                 is_pure(op->value) &&
                 is_pure(i->condition) &&
                 !expr_uses_var(i->condition, op->name)) {
-                Stmt s = op->remake(op->value, i->then_case);
+                Stmt s = op->with(op->value, i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
         }
-        return op->remake(op->value, body);
+        return op->with(op->value, body);
     }
 
     Stmt visit(const For *op) override {
@@ -559,11 +559,11 @@ protected:
             if (!i->else_case.defined() &&
                 is_pure(i->condition) &&
                 !expr_uses_var(i->condition, op->name)) {
-                Stmt s = op->remake(op->min, op->max, i->then_case);
+                Stmt s = op->with(op->min, op->max, i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
         }
-        return op->remake(op->min, op->max, body);
+        return op->with(op->min, op->max, body);
     }
 
     Stmt visit(const ProducerConsumer *op) override {
@@ -571,11 +571,11 @@ protected:
         if (const IfThenElse *i = body.as<IfThenElse>()) {
             if (!i->else_case.defined() &&
                 is_pure(i->condition)) {
-                Stmt s = op->remake(i->then_case);
+                Stmt s = op->with(i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
         }
-        return op->remake(body);
+        return op->with(body);
     }
 
     Stmt visit(const IfThenElse *op) override {
@@ -602,11 +602,11 @@ protected:
         if (const IfThenElse *i = body.as<IfThenElse>()) {
             if (!i->else_case.defined() &&
                 is_pure(i->condition)) {
-                Stmt s = op->remake(op->extents, op->condition, i->then_case);
+                Stmt s = op->with(op->extents, op->condition, i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
         }
-        return op->remake(op->extents, op->condition, body);
+        return op->with(op->extents, op->condition, body);
     }
 
     Stmt visit(const Block *op) override {

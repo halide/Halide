@@ -154,7 +154,7 @@ private:
         value = mutate(value);
         Expr index = mutate(op->index);
 
-        return op->remake(value, index, predicate, op->alignment);
+        return op->with(value, index, predicate, op->alignment);
     }
 
     Expr visit(const Load *op) override {
@@ -163,7 +163,7 @@ private:
             predicate = mutate(predicate);
         }
         Expr index = mutate(op->index);
-        return op->remake(index, predicate, op->alignment);
+        return op->with(index, predicate, op->alignment);
     }
 
     // Assuming that a and b should have the same scalar type and they might have

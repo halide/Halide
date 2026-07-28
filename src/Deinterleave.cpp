@@ -490,7 +490,7 @@ class Interleaver : public IRMutator {
         for (const auto &frame : reverse_view(frames)) {
             Expr value = std::move(frame.new_value);
 
-            result = frame.op->remake(value, result);
+            result = frame.op->with(value, result);
 
             // For vector lets, we may additionally need a let defining the even and odd lanes only
             if (value.type().is_vector()) {
@@ -587,7 +587,7 @@ class Interleaver : public IRMutator {
             // If we want to deinterleave both the index and predicate
             // (or the predicate is one), then deinterleave the
             // resulting load.
-            expr = deinterleave_expr(op->remake(idx, predicate, op->alignment));
+            expr = deinterleave_expr(op->with(idx, predicate, op->alignment));
         } else {
             // Otherwise deinterleave whichever child wants it prior to the
             // load, leaving the load itself interleaved.
@@ -596,7 +596,7 @@ class Interleaver : public IRMutator {
             } else if (should_deinterleave_predicate) {
                 predicate = deinterleave_expr(predicate);
             }
-            expr = op->remake(idx, predicate, op->alignment);
+            expr = op->with(idx, predicate, op->alignment);
         }
 
         should_deinterleave = old_should_deinterleave;
@@ -638,7 +638,7 @@ class Interleaver : public IRMutator {
             predicate = deinterleave_expr(predicate);
         }
 
-        Stmt stmt = op->remake(value, idx, predicate, op->alignment);
+        Stmt stmt = op->with(value, idx, predicate, op->alignment);
 
         should_deinterleave = old_should_deinterleave;
         num_lanes = old_num_lanes;
@@ -770,12 +770,12 @@ class Interleaver : public IRMutator {
         Expr index = Ramp::make(base, make_one(base.type()), t.lanes());
         Expr value = Shuffle::make_interleave(args);
         Expr predicate = Shuffle::make_interleave(predicates);
-        Stmt new_store = store->remake(value, index, predicate, ModulusRemainder());
+        Stmt new_store = store->with(value, index, predicate, ModulusRemainder());
 
         // Rewrap the let statements we pulled off.
         while (!let_stmts.empty()) {
             const LetStmt *let = let_stmts.back().as<LetStmt>();
-            new_store = let->remake(let->value, new_store);
+            new_store = let->with(let->value, new_store);
             let_stmts.pop_back();
         }
 

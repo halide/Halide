@@ -1511,7 +1511,7 @@ class EliminateInterleaves : public IRMutator {
         if (const Let *let = x.as<Let>()) {
             Expr body = remove_interleave(let->body);
             if (!body.same_as(let->body)) {
-                return let->remake(let->value, body);
+                return let->with(let->value, body);
             } else {
                 return x;
             }
@@ -1672,7 +1672,7 @@ class EliminateInterleaves : public IRMutator {
         // Lift interleaves out of Let expression bodies.
         const Let *let = expr.as<Let>();
         if (let && yields_removable_interleave(let->body)) {
-            expr = native_interleave(let->remake(let->value, remove_interleave(let->body)));
+            expr = native_interleave(let->with(let->value, remove_interleave(let->body)));
         }
         return expr;
     }
@@ -1807,7 +1807,7 @@ class EliminateInterleaves : public IRMutator {
             for (Expr &i : args) {
                 i = remove_interleave(i);
             }
-            Expr expr = op->remake(args);
+            Expr expr = op->with(args);
             // Add the interleave back to the result of the call.
             return native_interleave(expr);
         } else if (auto it = deinterleaving_alts.find(op->name);
@@ -1833,7 +1833,7 @@ class EliminateInterleaves : public IRMutator {
             return Call::make(op->type, it->second.second, {arg}, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         } else if (changed) {
-            return op->remake(args);
+            return op->with(args);
         } else {
             return op;
         }
@@ -1878,7 +1878,7 @@ class EliminateInterleaves : public IRMutator {
 
         aligned_buffer_access.pop(op->name);
 
-        return op->remake(op->extents, condition, body);
+        return op->with(op->extents, condition, body);
     }
 
     Stmt visit(const Store *op) override {
@@ -1921,7 +1921,7 @@ class EliminateInterleaves : public IRMutator {
             value = remove_interleave(value);
         }
 
-        return op->remake(value, index, predicate, op->alignment);
+        return op->with(value, index, predicate, op->alignment);
     }
 
     Expr visit(const Load *op) override {

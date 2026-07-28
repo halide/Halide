@@ -158,7 +158,7 @@ class InjectEarlyFrees : public IRMutator {
             inject_marker.last_use = last_use.last_use;
             stmt = inject_marker(stmt);
         } else {
-            stmt = alloc->remake(alloc->extents, alloc->condition, Block::make(alloc->body, Free::make(alloc->name)));
+            stmt = alloc->with(alloc->extents, alloc->condition, Block::make(alloc->body, Free::make(alloc->name)));
         }
         return stmt;
     }

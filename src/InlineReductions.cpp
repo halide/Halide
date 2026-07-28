@@ -40,7 +40,7 @@ private:
         internal.push(op->name);
         Expr body = mutate(op->body);
         internal.pop(op->name);
-        return op->remake(value, body);
+        return op->with(value, body);
     }
 
     Expr visit(const Variable *v) override {

@@ -103,7 +103,7 @@ protected:
                 << "Loop over " << op->name << " has extent " << extent << ".\n";
             body = mutate(body);
 
-            return op->remake(op->min, (op->min + e) - 1, body);
+            return op->with(op->min, (op->min + e) - 1, body);
         } else {
             return IRMutator::visit(op);
         }

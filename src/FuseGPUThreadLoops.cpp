@@ -409,7 +409,7 @@ protected:
             host_side_preamble = old_preamble;
         }
 
-        return op->remake(new_min, new_max, body);
+        return op->with(new_min, new_max, body);
     }
 
     Stmt visit(const Block *op) override {
@@ -570,7 +570,7 @@ protected:
 
         if (host_side_preamble.defined() &&
             stmt_uses_var(host_side_preamble, op->name)) {
-            host_side_preamble = op->remake(op->value, host_side_preamble);
+            host_side_preamble = op->with(op->value, host_side_preamble);
         }
 
         if (old_preamble.defined()) {
@@ -591,7 +591,7 @@ protected:
         if (op->body.same_as(body) && value.same_as(op->value)) {
             return op;
         } else {
-            return op->remake(value, body);
+            return op->with(value, body);
         }
     }
 
@@ -1129,7 +1129,7 @@ protected:
                 allocations.swap(old);
             }
 
-            return op->remake(mutate(op->min), mutate(op->max), body);
+            return op->with(mutate(op->min), mutate(op->max), body);
         }
     }
 
@@ -1294,7 +1294,7 @@ protected:
                 // synchronizations within the block
                 body = Block::make(body, make_barrier(0));
             }
-            return op->remake(op->min, op->max, body);
+            return op->with(op->min, op->max, body);
         } else {
             return IRMutator::visit(op);
         }
@@ -1466,7 +1466,7 @@ protected:
             debug(3) << "Add back in shared allocations:\n"
                      << body << "\n\n";
 
-            return op->remake(op->min, op->max, body);
+            return op->with(op->min, op->max, body);
         } else {
             return IRMutator::visit(op);
         }
@@ -1537,7 +1537,7 @@ protected:
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + op->min;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = op->remake(0, simplify(op->max - op->min), body);
+            stmt = op->with(0, simplify(op->max - op->min), body);
         }
         return stmt;
     }
@@ -1583,7 +1583,7 @@ protected:
             return IRMutator::visit(op);
         }
 
-        return op->remake(op->min, op->max, IfThenElse::make(condition, op->body, Stmt()));
+        return op->with(op->min, op->max, IfThenElse::make(condition, op->body, Stmt()));
     }
 
 public:

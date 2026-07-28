@@ -403,7 +403,7 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
             Expr value = reinterpret(UInt(128), op->value);
-            Stmt equiv = op->remake(value, index, const_true(), align / 4);
+            Stmt equiv = op->with(value, index, const_true(), align / 4);
             codegen(equiv);
             return;
         }
@@ -450,7 +450,7 @@ class RewriteLoadsAs32Bit : public IRMutator {
             Expr new_load = Load::make(Int(32, load_lanes), op->name, new_idx, op->image, op->param, const_true(load_lanes), op->alignment / sub_lanes, op->is_streaming);
             return reinterpret(op->type, new_load);
         } else {
-            return op->remake(index, op->predicate, op->alignment);
+            return op->with(index, op->predicate, op->alignment);
         }
     }
 };

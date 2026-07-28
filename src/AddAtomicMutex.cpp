@@ -53,7 +53,7 @@ protected:
         IRVisitor::visit(op);  // Make sure we visit the Store first.
         if (index.defined()) {
             if (expr_uses_var(index, op->name)) {
-                index = op->remake(op->value, index);
+                index = op->with(op->value, index);
             }
         }
     }
@@ -261,7 +261,7 @@ protected:
     Stmt visit(const Store *op) override {
         Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
-        return op->remake(value, var, predicate, op->alignment);
+        return op->with(value, var, predicate, op->alignment);
     }
 
     const std::string &producer_name;
@@ -335,7 +335,7 @@ protected:
             needs_mutex_allocation.pop(producer_name);
         }
 
-        return op->remake(op->extents, op->condition, body);
+        return op->with(op->extents, op->condition, body);
     }
 
     Stmt visit(const ProducerConsumer *op) override {
@@ -368,7 +368,7 @@ protected:
             body = allocate_mutex(*mutex_name, extent, body);
         }
 
-        return op->remake(body);
+        return op->with(body);
     }
 
     Stmt visit(const Atomic *op) override {
@@ -412,7 +412,7 @@ protected:
                                                   "halide_mutex_array_unlock",
                                                   {mutex_array, index},
                                                   Call::CallType::Extern))));
-        Stmt ret = op->remake(body);
+        Stmt ret = op->with(body);
 
         if (index_let.defined()) {
             // Attach the let binding outside of the atomic node.

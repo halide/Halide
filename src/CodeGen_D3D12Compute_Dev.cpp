@@ -1973,7 +1973,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                             for (size_t i = 1; i < new_args.size(); ++i) {
                                 new_args[i] = mutate(new_args[i]);
                             }
-                            return op->remake(new_args);
+                            return op->with(new_args);
                         }
                     }
                 }

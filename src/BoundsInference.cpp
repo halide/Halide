@@ -1289,7 +1289,7 @@ public:
             }
         }
 
-        return op->remake(op->min, op->max, body);
+        return op->with(op->min, op->max, body);
     }
 
     Scope<> let_vars_in_scope;

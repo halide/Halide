@@ -274,7 +274,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                 condition = simplify(condition);
             }
 
-            Expr load = op->remake(index, const_true(op->type.lanes()), op->alignment);
+            Expr load = op->with(index, const_true(op->type.lanes()), op->alignment);
 
             return Call::make(op->type, Call::if_then_else,
                               {condition, load}, Call::PureIntrinsic);
@@ -284,7 +284,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
             // some sort of loop Expr. Another option would be
             // introducing a set of runtime functions to do predicated
             // loads.
-            Expr load = op->remake(index, const_true(op->type.lanes()), op->alignment);
+            Expr load = op->with(index, const_true(op->type.lanes()), op->alignment);
             return Call::make(op->type, Call::if_then_else,
                               {predicate, load}, Call::PureIntrinsic);
         }
@@ -302,11 +302,11 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
         int lanes = value.type().lanes();
 
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
-            Stmt unpredicated_store = op->remake(value, index, const_true(lanes), op->alignment);
+            Stmt unpredicated_store = op->with(value, index, const_true(lanes), op->alignment);
             return IfThenElse::make(scalar_pred->value, unpredicated_store);
         }
 
-        return op->remake(value, index, predicate, op->alignment);
+        return op->with(value, index, predicate, op->alignment);
     }
 };
 
@@ -358,7 +358,7 @@ private:
             if (uses_hvx) {
                 body = acquire_hvx_context(body, target);
                 body = substitute("uses_hvx", true, body);
-                Stmt new_for = op->remake(op->min, op->max, body);
+                Stmt new_for = op->with(op->min, op->max, body);
                 Stmt prolog =
                     IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_unlock());
                 Stmt epilog =
@@ -402,7 +402,7 @@ private:
                 //   vector code
                 //   halide_qurt_unlock
                 // }
-                s = op->remake(op->min, op->max, body);
+                s = op->with(op->min, op->max, body);
             }
 
             uses_hvx = old_uses_hvx;

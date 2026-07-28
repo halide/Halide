@@ -267,7 +267,7 @@ protected:
             }
         }
 
-        Stmt s = op->remake(value, index, mutate(op->predicate), op->alignment);
+        Stmt s = op->with(value, index, mutate(op->predicate), op->alignment);
 
         for (const auto &[var, val] : deferred) {
             s = LetStmt::make(var, val, s);

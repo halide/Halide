@@ -583,7 +583,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // Unpack it back into the for
             const LetStmt *l = s.as<LetStmt>();
             internal_assert(l);
-            return op->remake(op->min, op->max, l->body);
+            return op->with(op->min, op->max, l->body);
         } else if (is_monotonic(min, loop_var) != Monotonic::Constant ||
                    is_monotonic(max, loop_var) != Monotonic::Constant) {
             debug(3) << "Not entering loop over " << op->name
@@ -610,7 +610,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             replacements.erase(iter);
         }
 
-        return op->remake(value, new_body);
+        return op->with(value, new_body);
     }
 
 public:
@@ -736,7 +736,7 @@ class SubstitutePrefetchVar : public IRMutator {
             }
             return Prefetch::make(op->name, op->types, op->bounds, p, op->condition, std::move(new_body));
         } else {
-            return op->remake(op->bounds, op->condition, new_body);
+            return op->with(op->bounds, op->condition, new_body);
         }
     }
 
@@ -795,7 +795,7 @@ class SlidingWindow : public IRMutator {
             slid_dimensions.erase(slid_it);
         }
 
-        return op->remake(op->bounds, op->condition, new_body);
+        return op->with(op->bounds, op->condition, new_body);
     }
 
     Stmt visit(const For *op) override {
@@ -929,7 +929,7 @@ class AddLoopMinOrig : public IRMutator {
         Expr min = mutate(op->min);
         Expr max = mutate(op->max);
 
-        Stmt result = op->remake(min, max, body);
+        Stmt result = op->with(min, max, body);
         return LetStmt::make(op->name + ".loop_min.orig", op->min, result);
     }
 };

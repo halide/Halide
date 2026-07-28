@@ -130,14 +130,14 @@ class FlattenRamps : public IRMutator {
                 if (extent < max_unused_lane_factor * lanes) {
                     if (max_constant_offset == 0) {
                         // It's a load of a broadcast. Convert it to a broadcast of a load
-                        Expr load = op->remake(min_lane, const_true(), ModulusRemainder{});
+                        Expr load = op->with(min_lane, const_true(), ModulusRemainder{});
                         return Broadcast::make(load, lanes);
                     } else {
                         // Turn it into a dense load and a shuffle
                         Expr dense_index =
                             Ramp::make(min_lane, make_const(min_lane.type(), stride), extent);
                         Expr dense_load =
-                            op->remake(dense_index, const_true(extent), ModulusRemainder{});
+                            op->with(dense_index, const_true(extent), ModulusRemainder{});
                         return Shuffle::make({dense_load}, const_indices);
                     }
                 }
@@ -216,7 +216,7 @@ class FlattenRamps : public IRMutator {
                     Expr p = slice_per_inner_ramp(predicate_ref, (int)n, inner_lanes);
                     Expr v = slice_per_inner_ramp(value_ref, (int)n, inner_lanes);
                     ModulusRemainder align = (n == 0) ? op->alignment : ModulusRemainder{};
-                    stores.push_back(op->remake(v, sub_indices[n], p, align));
+                    stores.push_back(op->with(v, sub_indices[n], p, align));
                 }
                 Stmt result = Block::make(stores);
                 if (!predicate_name.empty()) {

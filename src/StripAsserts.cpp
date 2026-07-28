@@ -87,7 +87,7 @@ class StripAsserts : public IRMutator {
             return body;
         } else {
             mutate(op->value);
-            return op->remake(op->value, body);
+            return op->with(op->value, body);
         }
     }
 

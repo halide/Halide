@@ -39,7 +39,7 @@ class BoundSmallAllocations : public IRMutator {
         result = mutate(result);
 
         for (const auto &frame : reverse_view(frames)) {
-            result = frame.op->remake(frame.op->value, result);
+            result = frame.op->with(frame.op->value, result);
         }
 
         return result;
@@ -102,7 +102,7 @@ class BoundSmallAllocations : public IRMutator {
 
             Stmt body = mutate(op->body);
             if (changed || !body.same_as(op->body)) {
-                return op->remake(region, op->condition, body);
+                return op->with(region, op->condition, body);
             } else {
                 return op;
             }
@@ -130,7 +130,7 @@ class BoundSmallAllocations : public IRMutator {
 
         if (size_ptr && size == 0 && !op->new_expr.defined()) {
             // This allocation is dead
-            return op->remake({0}, const_false(), mutate(op->body));
+            return op->with({0}, const_false(), mutate(op->body));
         }
 
         // 128 bytes is a typical minimum allocation size in
@@ -144,7 +144,7 @@ class BoundSmallAllocations : public IRMutator {
              (op->memory_type == MemoryType::Auto && size <= malloc_overhead))) {
             user_assert(size >= 0 && size < (int64_t)1 << 31)
                 << "Allocation " << op->name << " has a size greater than 2^31: " << bound << "\n";
-            return op->remake({(int32_t)size}, op->condition, mutate(op->body));
+            return op->with({(int32_t)size}, op->condition, mutate(op->body));
         } else {
             return IRMutator::visit(op);
         }

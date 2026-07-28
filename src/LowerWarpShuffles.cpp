@@ -435,7 +435,7 @@ class LowerWarpShuffles : public IRMutator {
                 internal_assert(alloc && alloc->extents.size() == 1);
                 int new_size = allocation_info.get(alloc->name).size;
                 allocation_info.pop(alloc->name);
-                body = alloc->remake({new_size}, alloc->condition, body);
+                body = alloc->with({new_size}, alloc->condition, body);
             }
             allocations.clear();
 
@@ -449,11 +449,11 @@ class LowerWarpShuffles : public IRMutator {
             // Rewrap any hoisted allocations that weren't placed outside some inner loop
             for (const Stmt &s : allocations) {
                 const Allocate *alloc = s.as<Allocate>();
-                body = alloc->remake(alloc->extents, alloc->condition, body);
+                body = alloc->with(alloc->extents, alloc->condition, body);
             }
             allocations.clear();
 
-            return op->remake(op->min, op->min + warp_size - 1, body);
+            return op->with(op->min, op->min + warp_size - 1, body);
         } else {
             return IRMutator::visit(op);
         }
@@ -507,7 +507,7 @@ class LowerWarpShuffles : public IRMutator {
             // them. Reassembling the result into a flat address gives
             // the expression below.
             Expr in_warp_idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), bounds);
-            return op->remake(value, in_warp_idx, op->predicate, ModulusRemainder());
+            return op->with(value, in_warp_idx, op->predicate, ModulusRemainder());
         } else {
             return IRMutator::visit(op);
         }
@@ -733,7 +733,7 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
         } else {
             debug(3) << "Successfully hoisted shuffle out of for loop\n";
         }
-        return op->remake(op->min, op->max, body);
+        return op->with(op->min, op->max, body);
     }
 
     Stmt visit(const Store *op) override {

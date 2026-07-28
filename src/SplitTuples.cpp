@@ -51,7 +51,7 @@ class SplitTuples : public IRMutator {
             }
             return body;
         } else {
-            return op->remake(body);
+            return op->with(body);
         }
     }
 
@@ -291,7 +291,7 @@ class SplitTuples : public IRMutator {
             }
 
             if (atomic && separate_atomic_nodes_per_store) {
-                s = atomic->remake(s);
+                s = atomic->with(s);
             }
 
             internal_assert(s.defined());
@@ -301,7 +301,7 @@ class SplitTuples : public IRMutator {
         {
             Stmt s = Block::make(result);
             if (atomic && !separate_atomic_nodes_per_store) {
-                s = atomic->remake(s);
+                s = atomic->with(s);
             }
             return s;
         }
@@ -489,7 +489,7 @@ class SplitScatterGather : public IRMutator {
                 names.push_back(name);
                 v = Variable::make(v.type(), name);
             }
-            provides.push_back(op->remake(values, args, op->predicate));
+            provides.push_back(op->with(values, args, op->predicate));
         }
 
         Stmt s = Block::make(provides);
