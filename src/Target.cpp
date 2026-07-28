@@ -1211,6 +1211,17 @@ const std::map<Target::Arch, std::set<Target::Processor>> &legal_processors_by_a
     return table;
 }
 
+// A processor tuning is specific to an architecture. ProcessorGeneric is always
+// legal; every other tuning is legal only for the architecture that defines it.
+bool processor_tune_valid_for_arch(Target::Processor p, Target::Arch a) {
+    if (p == Target::Processor::ProcessorGeneric) {
+        return true;
+    }
+    const auto &table = legal_processors_by_arch();
+    auto it = table.find(a);
+    return it != table.end() && it->second.count(p);
+}
+
 // Sub-features that refine a "parent" feature but do not imply it (so they are
 // not in implied_feature_pairs()): a capability/version/extension is only
 // meaningful when its parent device feature is also set. validate_features()
@@ -1243,6 +1254,13 @@ const std::map<Target::Feature, std::vector<Target::Feature>> &sub_features_by_p
         },
     };
     return table;
+}
+
+// The scalable-vector features: ones whose vector width isn't fixed by the ISA
+// but is instead carried in the Target's vector_bits. vector_bits is only
+// meaningful when one of these is present.
+bool has_scalable_vector_feature(const Target &t) {
+    return t.features_any_of({Target::SVE, Target::SVE2, Target::RVV, Target::AVX10_1});
 }
 
 }  // namespace
@@ -1381,19 +1399,14 @@ void Target::validate_features() const {
     user_assert(has_feature(SME2) || num_sme_svl_features == 0)
         << "Target features SME_SVL128, SME_SVL256, SME_SVL512, SME_SVL1024, and SME_SVL2048 require target feature sme2.\n";
 
-    // Processor tuning must be legal for the architecture. ProcessorGeneric is
-    // always legal, so check it first as a fast path that skips the table.
-    if (processor_tune_ != ProcessorGeneric) {
-        const auto &table = legal_processors_by_arch();
-        auto it = table.find(arch_);
-        user_assert(it != table.end() && it->second.count(processor_tune_))
-            << "The selected processor tuning is not valid for this architecture. (" << *this << ")\n";
-    }
+    // Processor tuning must be legal for the architecture.
+    user_assert(processor_tune_valid_for_arch(processor_tune_, arch_))
+        << "The selected processor tuning is not valid for this architecture. (" << *this << ")\n";
 
     // A vector_bits value only means something for scalable-vector targets;
     // for everyone else the vector width is fixed by the ISA.
     if (vector_bits_ != 0) {
-        user_assert(features_any_of({SVE, SVE2, RVV, AVX10_1}))
+        user_assert(has_scalable_vector_feature(*this))
             << "vector_bits is only meaningful for a target with a scalable vector "
                "feature (SVE, SVE2, RVV, or AVX10_1). ("
             << *this << ")\n";
@@ -1575,8 +1588,15 @@ void Target::set_feature_raw(Feature f, bool value) {
 void Target::set_arch(Arch a) {
     Target candidate = *this;
     candidate.arch_ = a;
+    // A processor tuning is architecture-specific; changing the arch can orphan
+    // it, just as removing a feature orphans the features it implied. Drop it
+    // rather than reject the new arch. (Setting an invalid tuning directly via
+    // set_processor_tune still errors.)
+    if (!processor_tune_valid_for_arch(candidate.processor_tune_, candidate.arch_)) {
+        candidate.processor_tune_ = Processor::ProcessorGeneric;
+    }
     candidate.validate_features();
-    arch_ = a;
+    *this = candidate;
 }
 
 void Target::set_os(OS o) {
@@ -1618,8 +1638,13 @@ void Target::set_feature(Feature f, bool value) {
     user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
     Target candidate = *this;
     candidate.features.set(f, value);
+    // vector_bits is meaningless without a scalable-vector feature; drop it if
+    // this change removed the last one (e.g. deriving a non-SVE target).
+    if (candidate.vector_bits_ != 0 && !has_scalable_vector_feature(candidate)) {
+        candidate.vector_bits_ = 0;
+    }
     candidate.validate_features();
-    features.set(f, value);
+    *this = candidate;
 }
 
 void Target::set_features(const std::vector<Feature> &features_to_set, bool value) {
@@ -1630,8 +1655,13 @@ void Target::set_features(const std::vector<Feature> &features_to_set, bool valu
     for (Feature f : features_to_set) {
         candidate.set_feature_raw(f, value);
     }
+    // vector_bits is meaningless without a scalable-vector feature; drop it if
+    // this batch removed the last one (e.g. deriving a non-SVE target).
+    if (candidate.vector_bits_ != 0 && !has_scalable_vector_feature(candidate)) {
+        candidate.vector_bits_ = 0;
+    }
     candidate.validate_features();
-    features = candidate.features;
+    *this = candidate;
 }
 
 namespace {

@@ -11,6 +11,14 @@ void halide_error(JITUserContext *ctx, const char *msg) {
 }
 
 int main(int argc, char **argv) {
+    Target t = get_jit_target_from_environment();
+    if (t.bits() != 64) {
+        // This test exercises the large_buffers feature and allocations larger
+        // than 2^31; neither is representable on a 32-bit target.
+        printf("[SKIP] large_buffers requires a 64-bit target.\n");
+        return 0;
+    }
+
     Param<int> extent;
     Var x, y, z, w;
     RDom r(0, extent, 0, extent, 0, extent, 0, extent / 2 + 1);
@@ -22,7 +30,6 @@ int main(int argc, char **argv) {
     grand_total() = cast<uint8_t>(sum(big(r.x, r.y, r.z, r.w)));
     grand_total.jit_handlers().custom_error = halide_error;
 
-    Target t = get_jit_target_from_environment();
     t.set_feature(Target::LargeBuffers);
     grand_total.compile_jit(t);
 
