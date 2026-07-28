@@ -6,11 +6,8 @@ import * as React from "react";
 import ControlSection from "@/components/controls/ControlSection";
 import BarChart from "@/components/controls/bar-chart/BarChart";
 import BarChartParameters from "@/components/controls/bar-chart/BarChartParameters";
-import GraphDisplay from "@/components/controls/graph/GraphDisplay";
 import Histogram from "@/components/controls/histogram/Histogram";
 import HistogramParameters from "@/components/controls/histogram/HistogramParameters";
-import LivenessControls from "@/components/controls/liveness/LivenessControls";
-import PlaybackRate from "@/components/controls/playback/PlaybackRate";
 import RenderMode from "@/components/controls/render/RenderMode";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
@@ -201,17 +198,6 @@ function VisualizationPanel() {
         <RenderMode />
       </ControlSection>
       {renderChart()}
-      <ControlSection title="Liveness">
-        <LivenessControls />
-      </ControlSection>
-      <Separator.Root className="bg-ps-border-tertiary h-px" />
-      <ControlSection title="Graph Display">
-        <GraphDisplay />
-      </ControlSection>
-      <Separator.Root className="bg-ps-border-tertiary h-px" />
-      <ControlSection title="Playback">
-        <PlaybackRate />
-      </ControlSection>
     </div>
   );
 }

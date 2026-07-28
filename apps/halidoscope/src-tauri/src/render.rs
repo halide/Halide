@@ -13,54 +13,79 @@ pub enum NormalizationMode {
     PerFunc,
 }
 
+#[derive(Deserialize, Clone, Copy)]
+pub struct IncludeNan {
+    pub active: bool,
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: f64,
+}
+
+/// The frontend's Inf overlay toggle and color, `infAtom` in `state/inf.ts`. `r`/`g`/`b` are
+/// 8-bit channels; `a` is a [0, 1] fraction converted to an 8-bit alpha when painting the overlay.
+#[derive(Deserialize, Clone, Copy)]
+pub struct IncludeInf {
+    pub active: bool,
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: f64,
+}
+
 // A trait that all 2D Canvas renderers implement.
 pub trait Renderer: Sized {
     type Value;
 
     fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize);
     fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8>;
-    fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8>;
+    fn to_nan_inf_overlay(&self, include_nan: IncludeNan, include_inf: IncludeInf) -> Vec<u8>;
     fn to_values(&self) -> Vec<Self::Value>;
 }
 
-/// Packs a NaN overlay (cyan) followed by an Inf overlay (yellow) into one RGBA8 buffer,
-/// `width * height * 4` bytes each, from a renderer's per-`(pixel, channel)` decoded values.
+/// Packs a NaN overlay (colored per `include_nan`) followed by an Inf overlay (colored per
+/// `include_inf`) into one RGBA8 buffer, `width * height * 4` bytes each, from a renderer's
+/// per-`(pixel, channel)` decoded values.
 fn nan_inf_overlay(
     values: &[f64],
     width: usize,
     height: usize,
     channels: usize,
-    include_nan: bool,
-    include_inf: bool,
+    include_nan: IncludeNan,
+    include_inf: IncludeInf,
 ) -> Vec<u8> {
     let overlay_len = width * height * 4;
     let mut out = vec![0u8; overlay_len * 2];
     let (nan_out, inf_out) = out.split_at_mut(overlay_len);
 
-    if include_nan {
+    if include_nan.active {
+        let alpha = (include_nan.a * 255.0).clamp(0.0, 255.0) as u8;
+
         for (chunk, src) in nan_out
             .chunks_exact_mut(4)
             .zip(values.chunks_exact(channels))
         {
             if src.iter().any(|v| v.is_nan()) {
-                chunk[0] = 0;
-                chunk[1] = 255;
-                chunk[2] = 255;
-                chunk[3] = 255;
+                chunk[0] = include_nan.r;
+                chunk[1] = include_nan.g;
+                chunk[2] = include_nan.b;
+                chunk[3] = alpha;
             }
         }
     }
 
-    if include_inf {
+    if include_inf.active {
+        let alpha = (include_inf.a * 255.0).clamp(0.0, 255.0) as u8;
+
         for (chunk, src) in inf_out
             .chunks_exact_mut(4)
             .zip(values.chunks_exact(channels))
         {
             if src.iter().any(|v| v.is_infinite()) {
-                chunk[0] = 255;
-                chunk[1] = 255;
-                chunk[2] = 0;
-                chunk[3] = 255;
+                chunk[0] = include_inf.r;
+                chunk[1] = include_inf.g;
+                chunk[2] = include_inf.b;
+                chunk[3] = alpha;
             }
         }
     }
@@ -184,7 +209,7 @@ impl Renderer for GrayscaleState {
         self.values.clone()
     }
 
-    fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
+    fn to_nan_inf_overlay(&self, include_nan: IncludeNan, include_inf: IncludeInf) -> Vec<u8> {
         let FuncGeometry {
             width,
             height,
@@ -316,7 +341,7 @@ impl Renderer for RgbState {
         self.values.clone()
     }
 
-    fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
+    fn to_nan_inf_overlay(&self, include_nan: IncludeNan, include_inf: IncludeInf) -> Vec<u8> {
         let FuncGeometry {
             width,
             height,
@@ -478,7 +503,7 @@ impl Renderer for StoreFrequencyState {
         self.counts.clone()
     }
 
-    fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
+    fn to_nan_inf_overlay(&self, include_nan: IncludeNan, include_inf: IncludeInf) -> Vec<u8> {
         let FuncGeometry {
             width,
             height,
@@ -639,7 +664,7 @@ impl Renderer for LoadFrequencyState {
         self.counts.clone()
     }
 
-    fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
+    fn to_nan_inf_overlay(&self, include_nan: IncludeNan, include_inf: IncludeInf) -> Vec<u8> {
         let FuncGeometry {
             width,
             height,
@@ -816,7 +841,7 @@ impl Renderer for RedundantState {
         self.redundant_store_counts.clone()
     }
 
-    fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
+    fn to_nan_inf_overlay(&self, include_nan: IncludeNan, include_inf: IncludeInf) -> Vec<u8> {
         let FuncGeometry {
             width,
             height,
@@ -1062,7 +1087,7 @@ impl ReuseDistanceState {
         self.max_reuse_distance.clone()
     }
 
-    pub fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
+    pub fn to_nan_inf_overlay(&self, include_nan: IncludeNan, include_inf: IncludeInf) -> Vec<u8> {
         let FuncGeometry {
             width,
             height,
@@ -1306,7 +1331,7 @@ impl ThreadState {
         (&self.store_counts, &self.load_counts)
     }
 
-    pub fn to_nan_inf_overlay(&self, include_nan: bool, include_inf: bool) -> Vec<u8> {
+    pub fn to_nan_inf_overlay(&self, include_nan: IncludeNan, include_inf: IncludeInf) -> Vec<u8> {
         let FuncGeometry {
             width,
             height,
