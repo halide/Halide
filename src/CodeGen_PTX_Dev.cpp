@@ -320,14 +320,16 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
 
 namespace {
 
-WMMAMatrixLayout matrix_in_memory(const string &name, const MultiRamp &mr, int rows, int cols) {
+WMMAMatrixLayout matrix_in_memory(const string &name, const MultiRamp &mr, int rows, int cols, const Expr &access = Expr()) {
     WMMAMatrixLayout result;
     user_assert(wmma_matrix_layout(mr, rows, cols, &result))
-        << "The memory a tensor core instruction moves a matrix of " << name
-        << " to or from is not a dense tile by the time it reaches the backend. "
-        << "This happens when the allocation is striped across threads, which "
-        << "occurs for a shared memory allocation made inside the loop over GPU "
-        << "threads. Compute it at a loop outside the threads instead.\n";
+        << "The memory a tensor core instruction moves a " << rows << "x" << cols
+        << " matrix of " << name << " to or from is not a dense tile by the time it "
+        << "reaches the backend. One cause is a shared memory allocation made inside "
+        << "the loop over GPU threads, which gets striped across them; compute it at "
+        << "a loop outside the threads instead. The addresses accessed are:\n"
+        << mr.to_expr() << "\nThe access is:\n"
+        << access << "\n";
     return result;
 }
 
@@ -397,7 +399,7 @@ void CodeGen_PTX_Dev::codegen_wmma(const Call *op) {
             << "The matrix a tensor core instruction takes a fragment out of is not a "
             << "load with an affine index by the time it reaches the backend.\n";
         WMMAMatrixLayout mem = matrix_in_memory(matrix->name, mr,
-                                                is_b ? K : M, is_a ? K : N);
+                                                is_b ? K : M, is_a ? K : N, arg);
         // The a and b operands are always 16-bit; an accumulator may be either.
         const char *type_suffix =
             is_a || is_b ? "f16" : (op->type.bits() == 32 ? "f32" : "f16");

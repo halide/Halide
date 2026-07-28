@@ -187,6 +187,115 @@ bool test(const Params &p) {
     return true;
 }
 
+// The accumulators can also live outside the loop over warps, which is what
+// lets the reduction loop sit above it, so that the operand panels can be
+// staged into shared memory once per block and reused by every warp.
+bool test_block_level_accumulator() {
+    const int M = 128, N = 128, K = 128;
+    const int tile = 16, tiles_x = 2, tiles_y = 2, warps = 2, bk = 32;
+    const int block_x = tile * tiles_x * warps, block_y = tile * tiles_y;
+
+    Buffer<float16_t> A(K, M), B(N, K);
+    fill(A);
+    fill(B);
+
+    Var x("x"), y("y"), kk("kk"), yy("yy"), xx("xx");
+    RDom k(0, K, "k");
+    Func prod("prod"), out("out"), As("As"), Bs("Bs");
+
+    As(kk, yy) = A(kk, yy);
+    Bs(xx, kk) = B(xx, kk);
+    prod(x, y) = 0.f;
+    prod(x, y) += cast<float>(As(k, y)) * cast<float>(Bs(x, k));
+    out(x, y) = prod(x, y);
+
+    Var xi("xi"), xt("xt"), yi("yi"), mmxi("mmxi"), mmyi("mmyi");
+    Var rxi("rxi"), ryi("ryi"), xw("xw"), t("t"), ti("ti"), tw("tw"), to("to");
+    Var kko("kko"), kki("kki"), xxo("xxo"), xxi("xxi");
+    RVar ko("ko"), ki("ki"), rri("rri");
+
+    out.bound(x, 0, N).bound(y, 0, M)
+        .split(x, x, xi, block_x)
+        .split(xi, xt, xi, tile * tiles_x)
+        .split(xi, xi, mmxi, tile)
+        .split(y, y, yi, block_y)
+        .split(yi, yi, mmyi, tile)
+        .gpu_blocks(x, y)
+        .gpu_threads(xt)
+        .reorder(mmxi, mmyi, xi, yi, xt, x, y)
+        .unroll(xi)
+        .unroll(yi)
+        .vectorize(mmxi)
+        .vectorize(mmyi);
+
+    prod.compute_at(out, x)
+        .store_in(MemoryType::WMMAAccumulator)
+        .split(x, xw, xi, tile * tiles_x)
+        .split(xi, xi, rxi, tile)
+        .split(y, y, ryi, tile)
+        .reorder(rxi, ryi, xi, y, xw)
+        .gpu_threads(xw)
+        .vectorize(rxi)
+        .vectorize(ryi)
+        .unroll(xi)
+        .unroll(y);
+
+    prod.update()
+        .split(k, ko, ki, bk)
+        .split(x, xw, xi, tile * tiles_x)
+        .split(xi, xi, rxi, tile)
+        .split(y, y, ryi, tile)
+        .split(ki, ki, rri, tile)
+        .reorder(rri, rxi, ryi, xi, y, ki, xw, ko)
+        .gpu_threads(xw)
+        .unroll(xi)
+        .unroll(y)
+        .unroll(ki)
+        .atomic()
+        .vectorize(rri)
+        .vectorize(rxi)
+        .vectorize(ryi);
+
+    As.compute_at(prod, ko)
+        .store_in(MemoryType::GPUShared)
+        .split(kk, kko, kki, 8)
+        .fuse(kko, yy, t)
+        .split(t, t, ti, 32)
+        .split(t, to, tw, warps)
+        .gpu_lanes(ti)
+        .gpu_threads(tw)
+        .vectorize(kki);
+    Bs.compute_at(prod, ko)
+        .store_in(MemoryType::GPUShared)
+        .split(xx, xxo, xxi, 8)
+        .fuse(xxo, kk, t)
+        .split(t, t, ti, 32)
+        .split(t, to, tw, warps)
+        .gpu_lanes(ti)
+        .gpu_threads(tw)
+        .vectorize(xxi);
+
+    Buffer<float> result(N, M);
+    out.realize(result);
+    result.copy_to_host();
+
+    for (int j = 0; j < M; j++) {
+        for (int i = 0; i < N; i++) {
+            float ref = 0.f;
+            for (int l = 0; l < K; l++) {
+                ref += (float)A(l, j) * (float)B(i, l);
+            }
+            if (std::abs(result(i, j) - ref) > 1e-2f * std::max(1.f, std::abs(ref))) {
+                std::cerr << "Mismatch at " << i << ", " << j << ": "
+                          << result(i, j) << " != " << ref << "\n"
+                          << "For a block-level accumulator staged through shared memory\n";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -255,6 +364,11 @@ int main(int argc, char **argv) {
             printf("Failed!\n");
             return 1;
         }
+    }
+
+    if (!test_block_level_accumulator()) {
+        printf("Failed!\n");
+        return 1;
     }
 
     printf("Success!\n");
