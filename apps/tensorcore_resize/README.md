@@ -13,22 +13,9 @@ This is the algorithmic difference between this generator and the one in
 
 ## Status
 
-The `cudaonly` schedule works. The `tensorcore` schedule currently only works
-for the first of the two stages (the resample in y). The resample in x fails
-with:
+Both schedules work. On an RTX 5060 Ti, downsampling a 3840x2160 image by 4x
+with a Lanczos kernel takes 0.359 ms with the `cudaonly` schedule and 0.246 ms
+with the `tensorcore` one, a 1.46x speed-up.
 
-```
-Matrix multiply not recognized. [...] the matrix multiply operands are not
-loads with affine indices.
-```
-
-The load index for that stage contains `begin_of((x / 16) * 16)`, i.e. the
-starting column of this block of 16 rows of the matrix. That subexpression is
-uniform across the 16 lanes of a tile, but the simplifier leaves it as
-`ceil_f32` applied to `(ramp(block * 16, 1, 16) / 16) * 16` rather than folding
-the divide and multiply away into a broadcast, so `is_multiramp` can't see that
-it is uniform and the index isn't recognized as affine.
-
-Fixing this needs the simplifier to fold `ramp(a * k, 1, k) / k` down to
-`broadcast(a, k)` when the ramp is nested inside another vector, after which the
-lane-uniform recognition in `is_multiramp` handles the rest.
+Both schedules round the output size up to a multiple of 16, so the runner
+gives them an output buffer of that size.
