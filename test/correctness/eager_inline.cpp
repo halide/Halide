@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
 
     // Inline b then a into c. Inlining b splices in its call to a, which the
     // subsequent inline of a then also folds.
-    c.eager_inline({b, a});
+    c.eager_inline(b, a);
 
     Expr c_body = c.function().definition().values()[0];
     Expr c_expected = x * 3 + 3;

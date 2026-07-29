@@ -2645,7 +2645,16 @@ public:
      * definition) with no specializations, and with a schedule compatible with
      * inlining (as for compute_inline()). The inlined Funcs are otherwise
      * unchanged; only this Func's calls to them are replaced. */
+    // @{
     Func &eager_inline(const std::vector<Func> &fs);
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Func &>
+    eager_inline(const Func &first, Args &&...args) {
+        std::vector<Func> collected_args{first, std::forward<Args>(args)...};
+        return eager_inline(collected_args);
+    }
+    // @}
 
     /** Get a handle on an update step for the purposes of scheduling
      * it. */
