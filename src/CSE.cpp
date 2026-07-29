@@ -33,6 +33,12 @@ bool should_extract(const Expr &e, bool lift_all) {
         return false;
     }
 
+    if (const Call *c = e.as<Call>()) {
+        if (c->type == type_of<ApproximationPrecision *>()) {
+            return false;
+        }
+    }
+
     if (lift_all) {
         return true;
     }

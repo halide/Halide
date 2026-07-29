@@ -584,9 +584,9 @@ string CodeGen_PTX_Dev::mattrs() const {
     } else if (target.has_feature(Target::CUDACapability80)) {
         return "+ptx70";
     } else if (target.has_feature(Target::CUDACapability75)) {
-        return "+ptx63";
+        return "+ptx70";
     } else if (target.has_feature(Target::CUDACapability70)) {
-        return "+ptx60";
+        return "+ptx70";
     } else if (target.has_feature(Target::CUDACapability61)) {
         return "+ptx50";
     } else if (target.features_any_of({Target::CUDACapability32,
