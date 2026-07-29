@@ -606,6 +606,16 @@ void check_vectors() {
     check(ramp(ramp(cast<uint8_t>(x), cast<uint8_t>(-1), 4), cast(UInt(8, 4), -4), 3),
           ramp(cast<uint8_t>(x), cast<uint8_t>(-1), 12));
 
+    // Dividing a nested vector by a broadcast should give the same answer as
+    // dividing the equivalent flat one, even though the lanes are laid out
+    // differently.
+    check(ramp(broadcast(x * 16, 16), broadcast(1, 16), 16) / broadcast(16, 256),
+          broadcast(x, 256));
+    check(broadcast(ramp(broadcast(x * 16, 16), broadcast(1, 16), 16), 16) / broadcast(16, 4096),
+          broadcast(x, 4096));
+    check(broadcast(ramp(x, 1, 4), 2) / broadcast(y, 8),
+          broadcast(ramp(x, 1, 4) / broadcast(y, 4), 2));
+
     // Any linear combination of simple ramps and broadcasts should
     // reduce to a single ramp or broadcast.
     std::mt19937 rng(0);

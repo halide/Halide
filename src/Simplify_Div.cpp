@@ -221,6 +221,38 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
         return mutate(rewrite.result, info);
     }
 
+    // The rules above require the numerator and the denominator to be
+    // vectorized the same way, which they aren't when the numerator is a
+    // nested vector.
+    if (const Broadcast *denom = b.as<Broadcast>()) {
+        if (denom->value.type().is_scalar()) {
+            if (const Broadcast *num = a.as<Broadcast>()) {
+                if (num->lanes != denom->lanes) {
+                    // Divide each copy of the numerator instead.
+                    int inner_lanes = num->value.type().lanes();
+                    Expr inner = Div::make(num->value, Broadcast::make(denom->value, inner_lanes));
+                    return mutate(Broadcast::make(inner, num->lanes), info);
+                }
+            } else if (const Ramp *num = a.as<Ramp>()) {
+                const Broadcast *base = num->base.as<Broadcast>();
+                const Broadcast *stride = num->stride.as<Broadcast>();
+                if (base && stride && base->value.type().is_scalar() &&
+                    stride->value.type().is_scalar()) {
+                    // The lanes of this ramp take the same set of values as
+                    // the lanes of the equivalent flat one, so if dividing
+                    // that gives the same result in every lane, the answer
+                    // holds here too regardless of how the lanes are laid out.
+                    Expr flat = mutate(Div::make(Ramp::make(base->value, stride->value, num->lanes),
+                                                 Broadcast::make(denom->value, num->lanes)),
+                                       nullptr);
+                    if (const Broadcast *result = flat.as<Broadcast>()) {
+                        return mutate(Broadcast::make(result->value, op->type.lanes()), info);
+                    }
+                }
+            }
+        }
+    }
+
     if (a.same_as(op->a) && b.same_as(op->b)) {
         return op;
     } else {
