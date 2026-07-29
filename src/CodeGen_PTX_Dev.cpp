@@ -175,6 +175,35 @@ Type CodeGen_PTX_Dev::upgrade_type_for_storage(const Type &t) const {
     return CodeGen_LLVM::upgrade_type_for_storage(t);
 }
 
+
+namespace {
+
+// The size of the thread block a kernel will be launched with. ptxas allocates
+// registers on the assumption that a block may be as large as the hardware
+// allows unless we tell it otherwise, which costs occupancy.
+class BlockSize : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const For *op) override {
+        for (int i = 0; i < 3; i++) {
+            if (ends_with(op->name, gpu_thread_name(i))) {
+                if (auto e = as_const_int(simplify(op->extent()))) {
+                    extent[i] = std::max(extent[i], (int)*e);
+                } else {
+                    known = false;
+                }
+            }
+        }
+        IRVisitor::visit(op);
+    }
+
+public:
+    int extent[3] = {1, 1, 1};
+    bool known = true;
+};
+
+}  // namespace
+
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<DeviceArgument> &args) {
@@ -252,6 +281,26 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     MDNode *md_node = MDNode::get(*context, md_args);
 
     module->getOrInsertNamedMetadata("nvvm.annotations")->addOperand(md_node);
+
+    // Tell ptxas how large the thread block is. Without this it has to assume
+    // the largest block the hardware supports, and allocates registers for that
+    // rather than for the block we actually launch.
+    BlockSize block_size;
+    stmt.accept(&block_size);
+    if (block_size.known) {
+        const char *annotation[] = {"maxntidx", "maxntidy", "maxntidz"};
+        for (int i = 0; i < 3; i++) {
+            llvm::Metadata *args[] = {
+                llvm::ValueAsMetadata::get(function),
+                MDString::get(*context, annotation[i]),
+                llvm::ValueAsMetadata::get(ConstantInt::get(i32_t, block_size.extent[i]))};
+            module->getOrInsertNamedMetadata("nvvm.annotations")
+                ->addOperand(MDNode::get(*context, args));
+        }
+        debug(2) << "Kernel " << name << " has block size "
+                 << block_size.extent[0] << "x" << block_size.extent[1]
+                 << "x" << block_size.extent[2] << "\n";
+    }
 
     // Now verify the function is ok
     verifyFunction(*function);
