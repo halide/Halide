@@ -116,7 +116,7 @@ enum MemoryType: byte {
     LockedCache,
     VTCM,
     AMXTile,
-    WMMAAccumulator,
+    WMMAFragment,
 }
 
 table Range {

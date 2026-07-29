@@ -119,7 +119,7 @@ public:
             // sit at block level so that the reduction loop can be above the
             // loop over warps, which lets every warp share one staged panel.
             prod.compute_at(output, x)
-                .store_in(MemoryType::WMMAAccumulator)
+                .store_in(MemoryType::WMMAFragment)
                 .split(x, xw, xi, tile * tiles_x)
                 .split(xi, xi, rxi, tile)
                 .split(y, yw, yi, tile * tiles_y)

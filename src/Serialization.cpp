@@ -158,8 +158,8 @@ Serialize::MemoryType Serializer::serialize_memory_type(const MemoryType &memory
         return Serialize::MemoryType::VTCM;
     case MemoryType::AMXTile:
         return Serialize::MemoryType::AMXTile;
-    case MemoryType::WMMAAccumulator:
-        return Serialize::MemoryType::WMMAAccumulator;
+    case MemoryType::WMMAFragment:
+        return Serialize::MemoryType::WMMAFragment;
     default:
         user_error << "Unsupported memory type\n";
         return Serialize::MemoryType::Auto;

@@ -15,7 +15,7 @@ namespace Internal {
 struct Call;
 struct Store;
 
-/** Rewrite matrix multiplies that accumulate into WMMAAccumulator memory as
+/** Rewrite matrix multiplies that accumulate into WMMAFragment memory as
  * calls to the wmma intrinsics understood by the PTX backend, and wrap them in
  * a loop over the 32 lanes of a warp. */
 Stmt extract_wmma_operations(const Stmt &s);

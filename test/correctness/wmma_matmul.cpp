@@ -105,7 +105,7 @@ bool test(const Params &p) {
     }
 
     prod.compute_at(out, xt)
-        .store_in(MemoryType::WMMAAccumulator)
+        .store_in(MemoryType::WMMAFragment)
         .split(x, x, rxi, p.tile_n)
         .split(y, y, ryi, p.tile_m)
         .vectorize(rxi)
@@ -229,7 +229,7 @@ bool test_block_level_accumulator() {
         .vectorize(mmyi);
 
     prod.compute_at(out, x)
-        .store_in(MemoryType::WMMAAccumulator)
+        .store_in(MemoryType::WMMAFragment)
         .split(x, xw, xi, tile * tiles_x)
         .split(xi, xi, rxi, tile)
         .split(y, y, ryi, tile)
@@ -290,6 +290,204 @@ bool test_block_level_accumulator() {
                           << result(i, j) << " != " << ref << "\n"
                           << "For a block-level accumulator staged through shared memory\n";
                 return false;
+            }
+        }
+    }
+    return true;
+}
+
+// Stage the operand tiles into fragment registers, so that each fragment
+// loaded feeds several multiplies. Where each staging happens says how much
+// reuse we get out of it.
+bool test_staged_operands() {
+    const int M = 128, N = 128, K = 64;
+    const int tile = 16, tiles_x = 2, tiles_y = 2, bk = 32;
+
+    Buffer<float16_t> A(K, M), B(N, K);
+    fill(A);
+    fill(B);
+
+    Var x("x"), y("y"), kk("kk"), yy("yy"), xx("xx");
+    RDom k(0, K, "k");
+    Func prod("prod"), out("out"), Am("Am"), Bm("Bm");
+
+    Am(kk, yy) = A(kk, yy);
+    Bm(xx, kk) = B(xx, kk);
+    prod(x, y) = 0.f;
+    prod(x, y) += cast<float>(Am(k, y)) * cast<float>(Bm(x, k));
+    out(x, y) = prod(x, y);
+
+    Var xi("xi"), yi("yi"), mmxi("mmxi"), mmyi("mmyi"), rxi("rxi"), ryi("ryi");
+    Var kko("kko"), kki("kki"), yyo("yyo"), yyi("yyi"), xxo("xxo"), xxi("xxi");
+    RVar ko("ko"), ki("ki"), rri("rri");
+
+    out.bound(x, 0, N)
+        .bound(y, 0, M)
+        .split(x, x, xi, tile * tiles_x)
+        .split(xi, xi, mmxi, tile)
+        .split(y, y, yi, tile * tiles_y)
+        .split(yi, yi, mmyi, tile)
+        .gpu_blocks(x, y)
+        .reorder(mmxi, mmyi, xi, yi, x, y)
+        .unroll(xi)
+        .unroll(yi)
+        .vectorize(mmxi)
+        .vectorize(mmyi);
+
+    prod.compute_at(out, x)
+        .store_in(MemoryType::WMMAFragment)
+        .split(x, x, rxi, tile)
+        .split(y, y, ryi, tile)
+        .vectorize(rxi)
+        .vectorize(ryi)
+        .unroll(x)
+        .unroll(y);
+
+    // Loop nest of the update, outermost first: ko, ki, y, x.
+    prod.update()
+        .split(k, ko, ki, bk)
+        .split(x, x, rxi, tile)
+        .split(y, y, ryi, tile)
+        .split(ki, ki, rri, tile)
+        .reorder(rri, rxi, ryi, x, y, ki, ko)
+        .unroll(x)
+        .unroll(y)
+        .unroll(ki)
+        .atomic()
+        .vectorize(rri)
+        .vectorize(rxi)
+        .vectorize(ryi);
+
+    // One a fragment per row of tiles, live across the loop over columns.
+    Am.compute_at(prod, y)
+        .store_in(MemoryType::WMMAFragment)
+        .split(kk, kko, kki, tile)
+        .split(yy, yyo, yyi, tile)
+        .reorder(kki, yyi, kko, yyo)
+        .unroll(kko)
+        .unroll(yyo)
+        .vectorize(kki)
+        .vectorize(yyi);
+
+    // All the b fragments at once, live across the loops over both.
+    Bm.compute_at(prod, ki)
+        .store_in(MemoryType::WMMAFragment)
+        .split(xx, xxo, xxi, tile)
+        .split(kk, kko, kki, tile)
+        .reorder(xxi, kki, xxo, kko)
+        .unroll(xxo)
+        .unroll(kko)
+        .vectorize(xxi)
+        .vectorize(kki);
+
+    Buffer<float> result(N, M);
+    out.realize(result);
+    result.copy_to_host();
+
+    for (int j = 0; j < M; j++) {
+        for (int i = 0; i < N; i++) {
+            float ref = 0.f;
+            for (int l = 0; l < K; l++) {
+                ref += (float)A(l, j) * (float)B(i, l);
+            }
+            if (std::abs(result(i, j) - ref) > 1e-2f * std::max(1.f, std::abs(ref))) {
+                std::cerr << "Mismatch at " << i << ", " << j << ": "
+                          << result(i, j) << " != " << ref << "\n"
+                          << "For operands staged in fragment registers\n";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// A batch of matrix multiplies that all share the same left-hand side. Its
+// fragments only need loading once for the whole batch, which is what staging
+// them outside the loop over the batch does. The loop isn't unrolled, so
+// nothing downstream of here could hoist them out of it.
+bool test_operand_hoisted_out_of_loop() {
+    const int M = 32, N = 32, K = 16, batch = 4;
+    const int tile = 16;
+
+    Buffer<float16_t> A(K, M), B(N, K, batch);
+    fill(A);
+    fill(B);
+
+    Var x("x"), y("y"), n("n"), kk("kk"), yy("yy");
+    RDom k(0, K, "k");
+    Func prod("prod"), out("out"), Am("Am");
+
+    Am(kk, yy) = A(kk, yy);
+    prod(x, y, n) = 0.f;
+    prod(x, y, n) += cast<float>(Am(k, y)) * cast<float>(B(x, k, n));
+    out(x, y, n) = prod(x, y, n);
+
+    Var xi("xi"), yi("yi"), mmxi("mmxi"), mmyi("mmyi"), rxi("rxi"), ryi("ryi");
+    Var kko("kko"), kki("kki"), yyo("yyo"), yyi("yyi");
+    RVar rro("rro"), rri("rri");
+
+    out.bound(x, 0, N)
+        .bound(y, 0, M)
+        .bound(n, 0, batch)
+        .split(x, x, xi, N)
+        .split(xi, xi, mmxi, tile)
+        .split(y, y, yi, M)
+        .split(yi, yi, mmyi, tile)
+        .gpu_blocks(x, y)
+        .reorder(mmxi, mmyi, xi, yi, n, x, y)
+        .unroll(xi)
+        .unroll(yi)
+        .vectorize(mmxi)
+        .vectorize(mmyi);
+
+    prod.compute_at(out, n)
+        .store_in(MemoryType::WMMAFragment)
+        .split(x, x, rxi, tile)
+        .split(y, y, ryi, tile)
+        .vectorize(rxi)
+        .vectorize(ryi)
+        .unroll(x)
+        .unroll(y);
+
+    prod.update()
+        .split(x, x, rxi, tile)
+        .split(y, y, ryi, tile)
+        .split(k, rro, rri, tile)
+        .reorder(rri, rxi, ryi, x, y, rro)
+        .unroll(x)
+        .unroll(y)
+        .atomic()
+        .vectorize(rri)
+        .vectorize(rxi)
+        .vectorize(ryi);
+
+    Am.compute_at(out, x)
+        .store_in(MemoryType::WMMAFragment)
+        .split(kk, kko, kki, tile)
+        .split(yy, yyo, yyi, tile)
+        .reorder(kki, yyi, kko, yyo)
+        .unroll(kko)
+        .unroll(yyo)
+        .vectorize(kki)
+        .vectorize(yyi);
+
+    Buffer<float> result(N, M, batch);
+    out.realize(result);
+    result.copy_to_host();
+
+    for (int b = 0; b < batch; b++) {
+        for (int j = 0; j < M; j++) {
+            for (int i = 0; i < N; i++) {
+                float ref = 0.f;
+                for (int l = 0; l < K; l++) {
+                    ref += (float)A(l, j) * (float)B(i, l, b);
+                }
+                if (std::abs(result(i, j, b) - ref) > 1e-2f * std::max(1.f, std::abs(ref))) {
+                    std::cerr << "Mismatch at " << i << ", " << j << ", " << b << ": "
+                              << result(i, j, b) << " != " << ref << "\n"
+                              << "For an operand staged outside a loop over a batch\n";
+                    return false;
+                }
             }
         }
     }
@@ -366,7 +564,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (!test_block_level_accumulator()) {
+    if (!test_block_level_accumulator() ||
+        !test_staged_operands() ||
+        !test_operand_hoisted_out_of_loop()) {
         printf("Failed!\n");
         return 1;
     }
