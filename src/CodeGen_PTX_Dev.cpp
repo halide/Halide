@@ -82,6 +82,7 @@ protected:
     void visit(const Load *) override;
     void visit(const Store *) override;
     void visit(const Atomic *) override;
+    void visit(const ProducerConsumer *) override;
     void codegen_vector_reduce(const VectorReduce *op, const Expr &init) override;
     // @}
 
@@ -102,6 +103,21 @@ protected:
     /** Map from simt variable names (e.g. foo.block_id_x) to the llvm ptx
      * intrinsic functions to call to get them. */
     std::string simt_intrinsic(const std::string &name);
+
+    /** The memory type of each allocation made inside the kernel, so that
+     * copies into shared memory can be recognized. */
+    Scope<MemoryType> alloc_memory_type;
+
+    /** Whether we're inside a producer node, which is where the wait for any
+     * asynchronous copies gets emitted, and whether any have been issued in
+     * it. */
+    bool in_producer = false;
+    bool issued_async_copy = false;
+
+    /** Try to emit a store into shared memory as an asynchronous copy, which
+     * moves the data straight from global memory without routing it through
+     * registers. Returns false if this store isn't one we can do that for. */
+    bool codegen_async_copy(const Store *op);
 
     /** Emit calls to the nvvm warp-level matrix multiply-accumulate
      * intrinsics that drive the tensor cores. */
@@ -513,6 +529,7 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
     user_assert(!alloc->new_expr.defined()) << "Allocate node inside PTX kernel has custom new expression.\n"
                                             << "(Memoization is not supported inside GPU kernels at present.)\n";
+    ScopedBinding<MemoryType> bind(alloc_memory_type, alloc->name, alloc->memory_type);
     if (alloc->memory_type == MemoryType::GPUShared) {
         // PTX uses zero in address space 3 as the base address for shared memory
         Value *shared_base = Constant::getNullValue(PointerType::get(*context, 3));
@@ -573,6 +590,99 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
     CodeGen_LLVM::visit(op);
 }
 
+// A copy from global memory into shared memory can be done by the hardware
+// without going through registers, which saves the load, the store, and the
+// registers in between. The copy is asynchronous, so it has to be waited for
+// before the data is used; that happens at the end of the producer.
+bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op) {
+    // Asynchronous copies need something to wait for them, which only happens
+    // at the end of a producer.
+    if (!in_producer || emit_atomic_stores ||
+        target.get_cuda_capability_lower_bound() < 80) {
+        return false;
+    }
+
+    // The destination must be shared memory, and the source must be a plain
+    // load from something we didn't allocate in here, which is to say global
+    // memory.
+    const MemoryType *dst_memory_type = alloc_memory_type.find(op->name);
+    if (!dst_memory_type || *dst_memory_type != MemoryType::GPUShared) {
+        return false;
+    }
+    const Load *src = op->value.as<Load>();
+    if (!src || alloc_memory_type.contains(src->name)) {
+        return false;
+    }
+    if (!is_const_one(op->predicate) || !is_const_one(src->predicate)) {
+        return false;
+    }
+
+    // The hardware copies 4, 8 or 16 bytes at a time, from and to consecutive
+    // addresses.
+    const Type t = op->value.type();
+    const int bytes = t.bytes() * t.lanes();
+    if (!(bytes == 4 || bytes == 8 || bytes == 16)) {
+        return false;
+    }
+    Expr dst_base = op->index, src_base = src->index;
+    if (t.lanes() > 1) {
+        // Shared allocations are given an offset into one big block after the
+        // last simplification pass, so the indices need simplifying here.
+        dst_base = strided_ramp_base(simplify(op->index));
+        src_base = strided_ramp_base(simplify(src->index));
+        if (!dst_base.defined() || !src_base.defined()) {
+            return false;
+        }
+    }
+    Value *dst = codegen_buffer_pointer(op->name, t.element_of(), dst_base);
+    Value *src_ptr = codegen_buffer_pointer(src->name, t.element_of(), src_base);
+
+    // Shared allocations are already in the shared address space. The source is
+    // a kernel argument, so it's global, but it comes in as a generic pointer.
+    llvm::Type *shared_ptr_t = PointerType::get(*context, 3);
+    llvm::Type *global_ptr_t = PointerType::get(*context, 1);
+    if (dst->getType() != shared_ptr_t) {
+        return false;
+    }
+    src_ptr = builder->CreateAddrSpaceCast(src_ptr, global_ptr_t);
+
+    std::ostringstream name;
+    name << "llvm.nvvm.cp.async.ca.shared.global." << bytes;
+    llvm::Intrinsic::ID id = llvm::Intrinsic::lookupIntrinsicID(name.str());
+    internal_assert(id != llvm::Intrinsic::not_intrinsic)
+        << "Could not find the nvvm intrinsic " << name.str() << "\n";
+    llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), id);
+    builder->CreateCall(fn, {dst, src_ptr});
+    issued_async_copy = true;
+    return true;
+}
+
+void CodeGen_PTX_Dev::visit(const ProducerConsumer *op) {
+    if (!op->is_producer) {
+        CodeGen_LLVM::visit(op);
+        return;
+    }
+
+    ScopedValue<bool> old_issued(issued_async_copy, false);
+    ScopedValue<bool> old_in(in_producer, true);
+    codegen(op->body);
+    if (issued_async_copy) {
+        // Everything issued in here has to have landed before the values are
+        // used, which is after this producer.
+        for (const char *intrin : {"llvm.nvvm.cp.async.commit.group",
+                                   "llvm.nvvm.cp.async.wait.group"}) {
+            llvm::Intrinsic::ID id = llvm::Intrinsic::lookupIntrinsicID(intrin);
+            internal_assert(id != llvm::Intrinsic::not_intrinsic);
+            llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), id);
+            vector<Value *> args;
+            if (fn->getFunctionType()->getNumParams() == 1) {
+                args.push_back(ConstantInt::get(i32_t, 0));
+            }
+            builder->CreateCall(fn, args);
+        }
+    }
+}
+
 void CodeGen_PTX_Dev::visit(const Store *op) {
     if (is_wmma_matrix_store(op)) {
         codegen_wmma_store(op);
@@ -583,6 +693,10 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
     if (emit_atomic_stores) {
         user_assert(is_const_one(op->predicate)) << "Atomic update does not support predicated store.\n";
         user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
+    }
+
+    if (codegen_async_copy(op)) {
+        return;
     }
 
     // Do aligned 4-wide 32-bit stores as a single i128 store.
