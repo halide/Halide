@@ -100,7 +100,24 @@ jobs:
 
       - name: Sync CI environment
         run: |
-          uv sync --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-project
+          # halide-llvm comes from pypi.halide-lang.org, whose upstream network
+          # path intermittently blackholes a source IP for ~tens of seconds
+          # (root-caused in halide/build_bot#362). uv's own retries only span a
+          # single blackhole (~47s), so wrap the fetch in an outer retry that
+          # waits one out before trying again.
+          retry() {
+            local i n=3
+            for ((i = 1; i <= n; i++)); do
+              if "$@"; then return 0; fi
+              if [ "$i" -lt "$n" ]; then
+                echo "::warning::CI env sync attempt $i/$n failed; retrying in $((i * 60))s"
+                sleep $((i * 60))
+              fi
+            done
+            return 1
+          }
+
+          retry uv sync --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-project
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 

@@ -64,11 +64,27 @@ jobs:
           # Python, so on Windows it would download x86_64 halide-llvm (~250MB) even for
           # a 32-bit build. Instead: read the pinned version from the lockfile (no download),
           # sync only ci-base (no LLVM), then fetch the correct win32 wheel directly.
+          # pypi.halide-lang.org's upstream network path intermittently
+          # blackholes a source IP for ~tens of seconds (root-caused in
+          # halide/build_bot#362); uv's own retries only span a single
+          # blackhole (~47s), so wrap the halide-llvm fetch in an outer retry.
+          retry() {
+            local i n=3
+            for ((i = 1; i <= n; i++)); do
+              if "$@"; then return 0; fi
+              if [ "$i" -lt "$n" ]; then
+                echo "::warning::CI env sync attempt $i/$n failed; retrying in $((i * 60))s"
+                sleep $((i * 60))
+              fi
+            done
+            return 1
+          }
+
           LLVM_VER=$(uv export --group '${{ matrix.uv_group }}' --no-emit-project \
             | awk -F'==' '/^halide-llvm==/ { gsub(/ .*/, "", $2); print $2 }')
 
           uv sync --python '${{ matrix.python }}' --group ci-base --no-install-project
-          uv pip install --python-platform i686-pc-windows-msvc --only-binary :all: \
+          retry uv pip install --python-platform i686-pc-windows-msvc --only-binary :all: \
             --extra-index-url https://pypi.halide-lang.org/simple/ \
             "halide-llvm==${LLVM_VER}"
 
