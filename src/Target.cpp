@@ -642,8 +642,16 @@ Target::Feature calculate_host_cuda_capability(Target t) {
         return Target::CUDACapability75;
     } else if (ver < 86) {
         return Target::CUDACapability80;
-    } else {
+    } else if (ver < 89) {
         return Target::CUDACapability86;
+    } else if (ver < 90) {
+        return Target::CUDACapability89;
+    } else if (ver < 100) {
+        return Target::CUDACapability90;
+    } else if (ver < 120) {
+        return Target::CUDACapability100;
+    } else {
+        return Target::CUDACapability120;
     }
 }
 
@@ -778,6 +786,10 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cuda_capability_75", Target::CUDACapability75},
     {"cuda_capability_80", Target::CUDACapability80},
     {"cuda_capability_86", Target::CUDACapability86},
+    {"cuda_capability_89", Target::CUDACapability89},
+    {"cuda_capability_90", Target::CUDACapability90},
+    {"cuda_capability_100", Target::CUDACapability100},
+    {"cuda_capability_120", Target::CUDACapability120},
     {"opencl", Target::OpenCL},
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
@@ -1008,7 +1020,11 @@ bool merge_string(Target &t, const std::string &target) {
         !t.has_feature(Target::CUDACapability70) &&
         !t.has_feature(Target::CUDACapability75) &&
         !t.has_feature(Target::CUDACapability80) &&
-        !t.has_feature(Target::CUDACapability86)) {
+        !t.has_feature(Target::CUDACapability86) &&
+        !t.has_feature(Target::CUDACapability89) &&
+        !t.has_feature(Target::CUDACapability90) &&
+        !t.has_feature(Target::CUDACapability100) &&
+        !t.has_feature(Target::CUDACapability120)) {
         // Detect host cuda capability
         t.set_feature(get_host_cuda_capability(t));
     }
@@ -1545,6 +1561,18 @@ int Target::get_cuda_capability_lower_bound() const {
     if (has_feature(Target::CUDACapability86)) {
         return 86;
     }
+    if (has_feature(Target::CUDACapability89)) {
+        return 89;
+    }
+    if (has_feature(Target::CUDACapability90)) {
+        return 90;
+    }
+    if (has_feature(Target::CUDACapability100)) {
+        return 100;
+    }
+    if (has_feature(Target::CUDACapability120)) {
+        return 120;
+    }
     return 20;
 }
 
@@ -1875,6 +1903,10 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         CUDACapability75,
         CUDACapability80,
         CUDACapability86,
+        CUDACapability89,
+        CUDACapability90,
+        CUDACapability100,
+        CUDACapability120,
 
         HVX_v62,
         HVX_v65,
@@ -2012,6 +2044,18 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
     if (cuda_capability < 86) {
         output.features.reset(CUDACapability86);
+    }
+    if (cuda_capability < 89) {
+        output.features.reset(CUDACapability89);
+    }
+    if (cuda_capability < 90) {
+        output.features.reset(CUDACapability90);
+    }
+    if (cuda_capability < 100) {
+        output.features.reset(CUDACapability100);
+    }
+    if (cuda_capability < 120) {
+        output.features.reset(CUDACapability120);
     }
 
     // Pick tight lower bound for Vulkan capability. Use fall-through to clear redundant features
