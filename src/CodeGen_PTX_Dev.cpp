@@ -1,3 +1,5 @@
+#include <set>
+
 #include "CodeGen_PTX_Dev.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
@@ -109,11 +111,12 @@ protected:
      * copies into shared memory can be recognized. */
     Scope<MemoryType> alloc_memory_type;
 
-    /** Whether we're inside a producer node, which is where the wait for any
-     * asynchronous copies gets emitted, and whether any have been issued in
-     * it. */
+    /** Whether we're inside a producer node, and the destinations of any
+     * asynchronous copies issued but not yet waited for. Waiting is deferred to
+     * the point where the data is actually needed, so that copies to several
+     * destinations can all be in flight at once. */
     bool in_producer = false;
-    bool issued_async_copy = false;
+    std::set<std::string> pending_async_copies;
 
     /** Try to emit a store into shared memory as an asynchronous copy, which
      * moves the data straight from global memory without routing it through
@@ -127,8 +130,22 @@ protected:
      * intrinsics that drive the tensor cores. */
     // @{
     void codegen_wmma(const Call *op);
+    llvm::Value *codegen_wmma_raw(const Call *op);
     void codegen_wmma_store(const Store *op);
     void split_fragment(const Expr &e, std::vector<llvm::Value *> &args);
+    // @}
+
+    /** A fragment is a fixed number of 32-bit registers per lane. Keeping it in
+     * that form all the way to and from its allocation matters, because NVPTX
+     * holds a wide float vector in pairs of registers, and packing and
+     * unpacking one around every tensor core instruction costs more
+     * instructions than the instructions themselves.
+     */
+    // @{
+    bool is_fragment_alloc(const std::string &name);
+    llvm::Type *fragment_reg_type(Type t);
+    llvm::Value *fragment_reg_ptr(const std::string &name, Type t, int i);
+    void codegen_fragment_store(const Store *op);
     llvm::Value *call_wmma_intrinsic(const std::string &name,
                                      const std::vector<llvm::Value *> &args,
                                      const std::vector<llvm::Type *> &overloads);
@@ -361,6 +378,17 @@ WMMAMatrixLayout matrix_in_memory(const string &name, const MultiRamp &mr, int r
 
 void CodeGen_PTX_Dev::split_fragment(const Expr &e, vector<Value *> &args) {
     // One llvm value per 32-bit register.
+    const int num_regs = e.type().bits() * e.type().lanes() / 32;
+    if (const Load *load = e.as<Load>()) {
+        if (is_fragment_alloc(load->name)) {
+            llvm::Type *reg_type = fragment_reg_type(e.type());
+            for (int i = 0; i < num_regs; i++) {
+                args.push_back(builder->CreateAlignedLoad(
+                    reg_type, fragment_reg_ptr(load->name, e.type(), i), llvm::Align(4)));
+            }
+            return;
+        }
+    }
     Value *v = codegen(e);
     const int lanes_per_reg = 32 / e.type().bits();
     for (int i = 0; i < e.type().lanes() / lanes_per_reg; i++) {
@@ -381,6 +409,74 @@ Value *CodeGen_PTX_Dev::call_wmma_intrinsic(const std::string &name,
 }
 
 void CodeGen_PTX_Dev::codegen_wmma(const Call *op) {
+    Value *result = codegen_wmma_raw(op);
+
+    // Reassemble the returned struct into a Halide vector.
+    llvm::Type *result_type = llvm_type_of(op->type);
+    const int num_regs = op->type.bits() * op->type.lanes() / 32;
+    if (op->type.bits() == 32) {
+        value = UndefValue::get(result_type);
+        for (int i = 0; i < num_regs; i++) {
+            value = builder->CreateInsertElement(value, builder->CreateExtractValue(result, i), i);
+        }
+    } else {
+        vector<Value *> regs;
+        regs.reserve(num_regs);
+        for (int i = 0; i < num_regs; i++) {
+            regs.push_back(builder->CreateExtractValue(result, i));
+        }
+        value = concat_vectors(regs);
+    }
+    internal_assert(value->getType() == result_type)
+        << "Unexpected result type from a tensor core instruction\n";
+}
+
+bool CodeGen_PTX_Dev::is_fragment_alloc(const std::string &name) {
+    const MemoryType *t = alloc_memory_type.find(name);
+    return t && *t == MemoryType::WMMAFragment;
+}
+
+llvm::Type *CodeGen_PTX_Dev::fragment_reg_type(Type t) {
+    return t.bits() == 32 ? llvm_type_of(t.element_of()) :
+                            get_vector_type(llvm_type_of(t.element_of()), 32 / t.bits());
+}
+
+llvm::Value *CodeGen_PTX_Dev::fragment_reg_ptr(const std::string &name, Type t, int i) {
+    return codegen_buffer_pointer(name, t.element_of(), Expr(i * (32 / t.bits())));
+}
+
+void CodeGen_PTX_Dev::codegen_fragment_store(const Store *op) {
+    const Type t = op->value.type();
+    const int num_regs = t.bits() * t.lanes() / 32;
+    llvm::Type *reg_type = fragment_reg_type(t);
+
+    const Call *call = op->value.as<Call>();
+    if (call && is_wmma_intrinsic(call)) {
+        // Take the registers straight out of the struct the instruction
+        // returns, without ever making a vector of them.
+        Value *result = codegen_wmma_raw(call);
+        for (int i = 0; i < num_regs; i++) {
+            builder->CreateAlignedStore(builder->CreateExtractValue(result, i),
+                                        fragment_reg_ptr(op->name, t, i), llvm::Align(4));
+        }
+        return;
+    }
+
+    // Anything else (a zero-initialization, say) does become a vector, but it
+    // is still written a register at a time so that the allocation only ever
+    // sees register-sized accesses.
+    Value *v = codegen(op->value);
+    const int lanes_per_reg = 32 / t.bits();
+    for (int i = 0; i < num_regs; i++) {
+        Value *reg = lanes_per_reg == 1 ?
+                         builder->CreateExtractElement(v, i) :
+                         slice_vector(v, i * lanes_per_reg, lanes_per_reg);
+        internal_assert(reg->getType() == reg_type);
+        builder->CreateAlignedStore(reg, fragment_reg_ptr(op->name, t, i), llvm::Align(4));
+    }
+}
+
+llvm::Value *CodeGen_PTX_Dev::codegen_wmma_raw(const Call *op) {
     // The nvvm wmma intrinsics take and return fragments as a flat list of
     // 32-bit registers, packaged up as a literal struct. We represent them in
     // Halide IR as vectors, so most of the work here is repacking.
@@ -437,26 +533,7 @@ void CodeGen_PTX_Dev::codegen_wmma(const Call *op) {
         args.push_back(codegen(cast(Int(32), mem.stride)));
     }
 
-    Value *result = call_wmma_intrinsic(name.str(), args, overloads);
-
-    // Reassemble the returned struct into a Halide vector.
-    llvm::Type *result_type = llvm_type_of(op->type);
-    const int num_regs = op->type.bits() * op->type.lanes() / 32;
-    if (op->type.bits() == 32) {
-        value = UndefValue::get(result_type);
-        for (int i = 0; i < num_regs; i++) {
-            value = builder->CreateInsertElement(value, builder->CreateExtractValue(result, i), i);
-        }
-    } else {
-        vector<Value *> regs;
-        regs.reserve(num_regs);
-        for (int i = 0; i < num_regs; i++) {
-            regs.push_back(builder->CreateExtractValue(result, i));
-        }
-        value = concat_vectors(regs);
-    }
-    internal_assert(value->getType() == result_type)
-        << "Unexpected result type from " << name.str() << "\n";
+    return call_wmma_intrinsic(name.str(), args, overloads);
 }
 
 void CodeGen_PTX_Dev::codegen_wmma_store(const Store *op) {
@@ -579,6 +656,10 @@ void CodeGen_PTX_Dev::visit(const AssertStmt *op) {
 }
 
 void CodeGen_PTX_Dev::visit(const Load *op) {
+    if (pending_async_copies.count(op->name)) {
+        // This thread is about to read something it copied asynchronously.
+        wait_for_async_copies();
+    }
 
     // Do aligned 4-wide 32-bit loads as a single i128 load.
     const Ramp *r = op->index.as<Ramp>();
@@ -725,7 +806,7 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
         << "Could not find the nvvm intrinsic " << name.str() << "\n";
     llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), id);
     builder->CreateCall(fn, {dst, src_ptr});
-    issued_async_copy = true;
+    pending_async_copies.insert(op->name);
     return true;
 }
 
@@ -735,16 +816,12 @@ void CodeGen_PTX_Dev::visit(const ProducerConsumer *op) {
         return;
     }
 
-    ScopedValue<bool> old_issued(issued_async_copy, false);
     ScopedValue<bool> old_in(in_producer, true);
     codegen(op->body);
-    // Everything issued in here has to have landed before the values are used,
-    // which is after this producer.
-    wait_for_async_copies();
 }
 
 void CodeGen_PTX_Dev::wait_for_async_copies() {
-    if (!issued_async_copy) {
+    if (pending_async_copies.empty()) {
         return;
     }
     for (const char *intrin : {"llvm.nvvm.cp.async.commit.group",
@@ -758,7 +835,7 @@ void CodeGen_PTX_Dev::wait_for_async_copies() {
         }
         builder->CreateCall(fn, args);
     }
-    issued_async_copy = false;
+    pending_async_copies.clear();
 }
 
 void CodeGen_PTX_Dev::visit(const Store *op) {
@@ -771,6 +848,11 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
     if (emit_atomic_stores) {
         user_assert(is_const_one(op->predicate)) << "Atomic update does not support predicated store.\n";
         user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
+    }
+
+    if (is_fragment_alloc(op->name)) {
+        codegen_fragment_store(op);
+        return;
     }
 
     {
