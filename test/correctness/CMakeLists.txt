@@ -197,6 +197,7 @@ tests(
     hexagon_scatter.cpp
     histogram.cpp
     histogram_equalize.cpp
+    hoist_invariants.cpp
     hoist_loop_invariant_if_statements.cpp
     hoist_storage.cpp
     host_alignment.cpp
