@@ -414,12 +414,17 @@ enum class MemoryType {
      * no such instruction this is ordinary shared memory. */
     GPUSharedAsync,
 
-    /** An NVIDIA tensor core accumulator fragment. The storage is striped
-     * across the registers of the 32 lanes of a warp in a layout that is not
+    /** An NVIDIA tensor core matrix fragment. The storage is striped across
+     * the registers of the 32 lanes of a warp in a layout that is not
      * architecturally specified, so the only legal accesses are the ones
-     * recognized by the WMMA lowering pass: zero-initialization, accumulation
-     * of a matrix multiply, and copying the tile out to memory. */
-    WMMAAccumulator,
+     * recognized by the WMMA lowering pass. Which of the three roles a
+     * fragment plays - the accumulator, or either operand of the multiply -
+     * follows from how it is used, and determines what those accesses are.
+     * An accumulator can be zero-initialized, initialized from a matrix in
+     * memory, accumulated into by a matrix multiply, and copied back out to
+     * memory. An operand can be filled from a matrix in memory and read by a
+     * matrix multiply. */
+    WMMAFragment,
 };
 
 /** Whether a MemoryType places an allocation in GPU shared memory. */
@@ -434,7 +439,7 @@ inline bool is_gpu_shared(MemoryType t) {
  * dedicated lowering pass that requires the original 2D-shaped loads
  * and stores to remain intact. */
 inline bool is_tile_memory_type(MemoryType t) {
-    return t == MemoryType::AMXTile || t == MemoryType::WMMAAccumulator;
+    return t == MemoryType::AMXTile || t == MemoryType::WMMAFragment;
 }
 
 namespace Internal {

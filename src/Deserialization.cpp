@@ -190,8 +190,8 @@ MemoryType Deserializer::deserialize_memory_type(Serialize::MemoryType memory_ty
         return MemoryType::VTCM;
     case Serialize::MemoryType::AMXTile:
         return MemoryType::AMXTile;
-    case Serialize::MemoryType::WMMAAccumulator:
-        return MemoryType::WMMAAccumulator;
+    case Serialize::MemoryType::WMMAFragment:
+        return MemoryType::WMMAFragment;
     default:
         user_error << "unknown memory type " << (int)memory_type << "\n";
         return MemoryType::Auto;

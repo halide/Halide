@@ -117,7 +117,7 @@ enum MemoryType: byte {
     VTCM,
     AMXTile,
     GPUSharedAsync,
-    WMMAAccumulator,
+    WMMAFragment,
 }
 
 table Range {

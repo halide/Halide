@@ -1,5 +1,7 @@
 #include "ExtractWMMAOperations.h"
 
+#include <map>
+
 #include "CanonicalizeGPUVars.h"
 #include "FindIntrinsics.h"
 #include "IREquality.h"
@@ -19,18 +21,24 @@
  * with the wmma load and store instructions, which move a tile between the
  * registers of a warp and a 2D array in memory.
  *
- * Accordingly this pass recognizes exactly three operations on a
- * WMMAAccumulator allocation:
+ * A WMMAFragment allocation holds one of the three matrices of a multiply, and
+ * which one follows from how it is used. An allocation accumulated into by a
+ * matrix multiply is the accumulator; one read as an operand of a multiply is
+ * that operand. The role determines which accesses are legal:
  *
- * 1) Zero-initialization. This one is layout-independent, so it stays a plain
- *    store of zero to the (shrunken) allocation.
- * 2) Accumulation of a matrix multiply, which becomes a pair of wmma loads
- *    feeding a wmma mma.
- * 3) Copying a tile out to memory, which becomes a wmma store.
+ * - An accumulator may be zero-initialized, filled from a matrix in memory,
+ *   accumulated into by a matrix multiply, and copied back out to memory.
+ * - An operand may be filled from a matrix in memory and read by a matrix
+ *   multiply.
  *
- * Anything else is an error. Each of those operations is wrapped in a loop over
- * the 32 lanes of a warp, because nothing in the schedule says the tile is
+ * Anything else is an error. Every one of those operations is wrapped in a loop
+ * over the 32 lanes of a warp, because nothing in the schedule says the tile is
  * spread over a warp - that's a consequence of asking for tensor core storage.
+ *
+ * Operands don't have to be staged in fragments. If a multiply reads its
+ * operand straight out of shared or global memory, the load into registers is
+ * synthesized at the multiply instead. Staging one explicitly is how a schedule
+ * says to load it once and reuse it across several multiplies.
  */
 
 namespace Halide {
@@ -54,22 +62,48 @@ enum class Layout {
     Col,
 };
 
-// Every warp is 32 lanes, and every tile shape we support holds 256 elements,
-// so each lane holds 8 of them.
-constexpr int warp_lanes = 32;
-constexpr int fragment_elements = 8;
+// Which of the three matrices of the multiply a fragment holds.
+enum class Role {
+    Unknown,
+    A,
+    B,
+    Accumulator,
+};
 
-// The Halide type we use to represent an a or b fragment. Every operand
-// fragment is 8 32-bit registers per lane, which is more matrix elements than
-// there are for some shapes, because the hardware replicates elements across
-// lanes for those.
-Type fragment_type(Type element_type) {
-    return element_type.with_lanes(16);
+Call::IntrinsicOp intrinsic_for_role(Role role) {
+    switch (role) {
+    case Role::A:
+        return Call::wmma_matrix_to_fragment_a;
+    case Role::B:
+        return Call::wmma_matrix_to_fragment_b;
+    default:
+        return Call::wmma_matrix_to_fragment_c;
+    }
 }
 
-// The Halide type we use to represent an accumulator fragment.
-Type accumulator_fragment_type(Type element_type) {
-    return element_type.with_lanes(fragment_elements);
+const char *role_name(Role role) {
+    switch (role) {
+    case Role::A:
+        return "the first operand";
+    case Role::B:
+        return "the second operand";
+    case Role::Accumulator:
+        return "the accumulator";
+    default:
+        return "no part";
+    }
+}
+
+// Every warp is 32 lanes. An accumulator tile holds 256 elements, so each lane
+// holds 8 of them. The hardware hands back operand fragments as 8 32-bit
+// registers per lane whatever the shape, replicating elements across lanes for
+// the shapes that hold fewer, so those are 16 16-bit elements per lane.
+constexpr int warp_lanes = 32;
+constexpr int accumulator_elements = 8;
+constexpr int operand_elements = 16;
+
+int elements_per_lane(Role role) {
+    return role == Role::Accumulator ? accumulator_elements : operand_elements;
 }
 
 // One operand of a matrix multiply, described in the canonical [K, N, M]
@@ -151,31 +185,35 @@ Expr make_matrix_address(const string &name, Type element_type, const Expr &base
 }
 
 // The shape of the matrix each fragment is taken out of.
-void fragment_matrix_shape(Call::IntrinsicOp intrin, const Shape &shape,
-                           int *rows, int *cols) {
-    *rows = intrin == Call::wmma_matrix_to_fragment_b ? shape.K : shape.M;
-    *cols = intrin == Call::wmma_matrix_to_fragment_a ? shape.K : shape.N;
+void fragment_matrix_shape(Role role, const Shape &shape, int *rows, int *cols) {
+    *rows = role == Role::B ? shape.K : shape.M;
+    *cols = role == Role::A ? shape.K : shape.N;
 }
 
-Expr make_matrix_to_fragment(Call::IntrinsicOp intrin, const Shape &shape, Layout layout,
+Expr make_matrix_to_fragment(Role role, const Shape &shape, Layout layout,
                              const Load *load, const Expr &base, const Expr &stride) {
     int rows, cols;
-    fragment_matrix_shape(intrin, shape, &rows, &cols);
+    fragment_matrix_shape(role, shape, &rows, &cols);
     Expr address = make_matrix_address(load->name, load->type.element_of(), base,
                                        rows, cols, layout, stride, load->image, load->param);
-    Type type = intrin == Call::wmma_matrix_to_fragment_c ?
-                    accumulator_fragment_type(load->type.element_of()) :
-                    fragment_type(load->type.element_of());
-    return Call::make(type, intrin, {shape.M, shape.N, shape.K, std::move(address)},
+    Type type = load->type.element_of().with_lanes(elements_per_lane(role));
+    return Call::make(type, intrinsic_for_role(role),
+                      {shape.M, shape.N, shape.K, std::move(address)},
                       Call::Intrinsic);
 }
 
-struct Matmul {
-    Stmt stmt;
+// A store to a fragment recognized as the accumulation of a matrix multiply,
+// broken down into the pieces the multiply is built from.
+struct MatmulInfo {
     Shape shape;
+    Operand lhs, rhs;
+    Layout lhs_layout = Layout::Row, rhs_layout = Layout::Row;
+    Expr lda, ldb;
+    Type accumulator_type;
+    vector<std::pair<string, Expr>> peeled_lets;
 };
 
-Matmul convert_to_matmul(const Store *op, const string &new_name) {
+MatmulInfo analyze_matmul(const Store *op) {
     // We expect the pattern:
     //
     // out[idx] = reduce_add(widen(lhs[multiramp]) * widen(rhs[multiramp])) + out[idx]
@@ -183,20 +221,21 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     // Though either operand may have been hoisted out to a broadcast or had a
     // lane permutation left on it by vectorization.
 
-    auto fail = [&](const char *reason) -> Matmul {
-        user_error << "Matrix multiply not recognized. Store to a WMMAAccumulator "
-                   << "allocation must be a zero-initialization or a sum of a vector "
-                   << "reduce op and a load from the same allocation. In the following "
-                   << "store, " << reason << ".\n"
+    auto fail = [&](const char *reason) -> MatmulInfo {
+        user_error << "Matrix multiply not recognized. Store to a WMMAFragment "
+                   << "allocation must be a zero-initialization, a fill from a matrix "
+                   << "in memory, or a sum of a vector reduce op and a load from the "
+                   << "same allocation. In the following store, " << reason << ".\n"
                    << Stmt(op);
-        return Matmul{};
+        return MatmulInfo{};
     };
 
+    MatmulInfo info;
+
     // Peel lets
-    vector<std::pair<string, Expr>> peeled_lets;
     Expr value = op->value;
     while (const Let *let = value.as<Let>()) {
-        peeled_lets.emplace_back(let->name, let->value);
+        info.peeled_lets.emplace_back(let->name, let->value);
         value = let->body;
     }
 
@@ -229,6 +268,7 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
         !(reduce->type.bits() == 32 || reduce->type.bits() == 16)) {
         return fail("the accumulator type is not 32-bit or 16-bit float");
     }
+    info.accumulator_type = reduce->type.element_of();
 
     // The vector reduce must be of a widening multiply. FindIntrinsics does
     // not lift float widening muls, so we just expect a multiply of two casts.
@@ -240,17 +280,16 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     // Under the casts, broadcasts and lane permutations that vectorization may
     // have left on each operand there must be a load.
     Scope<Expr> empty_scope;
-    Operand lhs_op, rhs_op;
-    lhs_op.load = is_load_of_multiramp(mul->a, empty_scope, &lhs_op.mr);
-    rhs_op.load = is_load_of_multiramp(mul->b, empty_scope, &rhs_op.mr);
-    if (!lhs_op.load || !rhs_op.load) {
+    info.lhs.load = is_load_of_multiramp(mul->a, empty_scope, &info.lhs.mr);
+    info.rhs.load = is_load_of_multiramp(mul->b, empty_scope, &info.rhs.mr);
+    if (!info.lhs.load || !info.rhs.load) {
         return fail("the matrix multiply operands are not loads with affine indices");
     }
-    if (!is_const_one(lhs_op.load->predicate) || !is_const_one(rhs_op.load->predicate)) {
+    if (!is_const_one(info.lhs.load->predicate) || !is_const_one(info.rhs.load->predicate)) {
         return fail("the matrix multiply operands are predicated loads");
     }
-    if (lhs_op.load->type.element_of() != Float(16) ||
-        rhs_op.load->type.element_of() != Float(16)) {
+    if (info.lhs.load->type.element_of() != Float(16) ||
+        info.rhs.load->type.element_of() != Float(16)) {
         return fail("the matrix multiply operands are not both float16");
     }
 
@@ -270,23 +309,23 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     // Deduce which operand is which and what tile shape this is by trying each
     // supported shape and seeing which one the access patterns fit.
     const Shape *shape = nullptr;
-    Layout lhs_layout = Layout::Row, rhs_layout = Layout::Row;
-    Expr lda, ldb;
     for (const Shape &candidate : supported_shapes) {
         if (candidate.M * candidate.N != MN || candidate.K != K) {
             continue;
         }
         vector<int> canonical_shape{candidate.K, candidate.N, candidate.M};
-        if (!lhs_op.mr.strides_for_shape(canonical_shape, &lhs_op.strides) ||
-            !rhs_op.mr.strides_for_shape(canonical_shape, &rhs_op.strides)) {
+        if (!info.lhs.mr.strides_for_shape(canonical_shape, &info.lhs.strides) ||
+            !info.rhs.mr.strides_for_shape(canonical_shape, &info.rhs.strides)) {
             continue;
         }
-        if (is_lhs(lhs_op, &lhs_layout, &lda) && is_rhs(rhs_op, &rhs_layout, &ldb)) {
+        if (is_lhs(info.lhs, &info.lhs_layout, &info.lda) &&
+            is_rhs(info.rhs, &info.rhs_layout, &info.ldb)) {
             shape = &candidate;
             break;
         }
-        if (is_lhs(rhs_op, &lhs_layout, &lda) && is_rhs(lhs_op, &rhs_layout, &ldb)) {
-            std::swap(lhs_op, rhs_op);
+        if (is_lhs(info.rhs, &info.lhs_layout, &info.lda) &&
+            is_rhs(info.lhs, &info.rhs_layout, &info.ldb)) {
+            std::swap(info.lhs, info.rhs);
             shape = &candidate;
             break;
         }
@@ -297,82 +336,19 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
                     "multiply of a tile shape the tensor cores support (16x16x16, "
                     "32x8x16, or 8x32x16)");
     }
-
-    // Build the wmma intrinsics.
-    Expr a = make_matrix_to_fragment(Call::wmma_matrix_to_fragment_a, *shape, lhs_layout,
-                                     lhs_op.load, lhs_op.mr.base, lda);
-    Expr b = make_matrix_to_fragment(Call::wmma_matrix_to_fragment_b, *shape, rhs_layout,
-                                     rhs_op.load, rhs_op.mr.base, ldb);
-
-    Type acc_type = accumulator_fragment_type(reduce->type.element_of());
-    Expr frag_idx = Ramp::make(0, 1, fragment_elements);
-    Expr c = Load::make(acc_type, new_name, frag_idx, {}, {},
-                        const_true(fragment_elements), {});
-
-    Expr mma = Call::make(acc_type, Call::wmma_mma,
-                          {shape->M, shape->N, shape->K,
-                           (int)lhs_layout, (int)rhs_layout,
-                           std::move(a), std::move(b), std::move(c)},
-                          Call::Intrinsic);
-
-    Stmt store = in_lane_loop(
-        Store::make(new_name, std::move(mma), frag_idx, Parameter(),
-                    const_true(fragment_elements), ModulusRemainder()));
-    for (auto &[name, v] : reverse_view(peeled_lets)) {
-        store = LetStmt::make(name, std::move(v), store);
-    }
-    return {std::move(store), *shape};
+    info.shape = *shape;
+    return info;
 }
 
-// Whether a store to an accumulator is its initialization, as opposed to a
-// matrix multiply accumulating into it.
-bool is_initialization(const Store *op, const string &tile_name) {
+// Whether a store to a fragment fills it, as opposed to a matrix multiply
+// accumulating into it.
+bool is_fill(const Store *op) {
     if (is_const_zero(op->value)) {
         return true;
     }
     MultiRamp mr;
     const Load *load = is_load_of_multiramp(op->value, Scope<Expr>::empty_scope(), &mr);
-    return load && load->name != tile_name;
-}
-
-Stmt convert_to_init(const Store *op, const string &new_name, const Shape &shape) {
-    Type element_type = op->value.type().element_of();
-    Expr value;
-    if (is_const_zero(op->value)) {
-        // Zeroing an accumulator is layout-independent, so it doesn't need an
-        // instruction - the registers just get set to zero.
-        value = make_zero(accumulator_fragment_type(element_type));
-    } else {
-        auto fail = [&](const char *reason) {
-            user_error << "Initialization of a tensor core accumulator not supported. "
-                       << reason << ".\n"
-                       << Stmt(op);
-            return Expr{};
-        };
-
-        MultiRamp mr;
-        const Load *matrix = is_load_of_multiramp(op->value, Scope<Expr>::empty_scope(), &mr);
-        internal_assert(matrix);  // is_initialization checked this
-        if (matrix->type.element_of() != element_type) {
-            value = fail("An accumulator can only be initialized from a matrix of the "
-                         "same type, because the hardware does not convert on the way in");
-        } else if (!is_const_one(matrix->predicate)) {
-            value = fail("The load is predicated");
-        } else {
-            WMMAMatrixLayout mem;
-            if (!wmma_matrix_layout(mr, shape.M, shape.N, &mem)) {
-                value = fail("The matrix loaded from is not a dense tile of the right shape");
-            } else {
-                value = make_matrix_to_fragment(
-                    Call::wmma_matrix_to_fragment_c, shape,
-                    mem.row_major ? Layout::Row : Layout::Col, matrix, mem.base, mem.stride);
-            }
-        }
-    }
-    Expr frag_idx = Ramp::make(0, 1, fragment_elements);
-    return in_lane_loop(
-        Store::make(new_name, std::move(value), frag_idx, Parameter(),
-                    const_true(fragment_elements), ModulusRemainder()));
+    return load && load->name != op->name;
 }
 
 Stmt convert_to_tile_store(const Store *op, const Expr &store_index,
@@ -402,9 +378,9 @@ Stmt convert_to_tile_store(const Store *op, const Expr &store_index,
     // accumulator.
     Expr index = make_matrix_index(mem.base, shape.M, shape.N, layout, mem.stride);
     Type element_type = op->value.type().element_of();
-    Expr frag = Load::make(accumulator_fragment_type(element_type), new_name,
-                           Ramp::make(0, 1, fragment_elements), {}, {},
-                           const_true(fragment_elements), {});
+    Expr frag = Load::make(element_type.with_lanes(accumulator_elements), new_name,
+                           Ramp::make(0, 1, accumulator_elements), {}, {},
+                           const_true(accumulator_elements), {});
     const int lanes = shape.M * shape.N;
     Expr matrix = Call::make(element_type.with_lanes(lanes), Call::wmma_fragment_to_matrix_d,
                              {shape.M, shape.N, shape.K, std::move(frag)},
@@ -416,24 +392,53 @@ Stmt convert_to_tile_store(const Store *op, const Expr &store_index,
                                     op->is_streaming));
 }
 
+// Everything we learn about one WMMAFragment allocation from the way it is
+// used. The role and the shape come from the matrix multiplies it takes part
+// in, so neither is known until those have been found.
+struct Fragment {
+    string name;
+    // The prefix of the names of the per-fragment allocations this one becomes.
+    string fragment_name;
+    Type element_type;
+    Role role = Role::Unknown;
+    Shape shape{};
+    bool found_shape = false;
+    // An allocation may hold several fragments as disjoint sub-tiles, each of
+    // which becomes its own allocation.
+    vector<MultiRamp> subtiles;
+
+    Type value_type() const {
+        return element_type.with_lanes(elements_per_lane(role));
+    }
+};
+
 class ExtractWMMAOperations : public IRMutator {
     using IRMutator::visit;
 
-    string tile_name;
-    string wmma_name;
-    int pass = 0;
-    bool in_allocate = false;
-    bool found_shape = false;
-    Shape shape{};
+    // Everything we've learned about each fragment allocation, and the names of
+    // the ones we're currently inside of. The records outlive the first pass so
+    // that the second one can use them.
+    std::map<string, Fragment> fragments;
+    vector<string> in_scope;
 
-    // A WMMAAccumulator allocation may hold several accumulator fragments as
-    // 2D sub-tiles. This tracks them.
-    vector<MultiRamp> subtiles;
+    // In the first pass we recognize the matrix multiplies, which is what tells
+    // us what role each fragment plays and what shape it is. In the second we
+    // rewrite everything, which needs to know both.
+    int pass = 0;
 
     // The loops over GPU blocks, threads, and lanes we're inside of.
     vector<string> gpu_loop_vars;
 
-    // An accumulator allocation may sit outside the loops over GPU threads, in
+    Fragment *find_fragment(const string &name) {
+        for (const string &n : in_scope) {
+            if (n == name) {
+                return &fragments[name];
+            }
+        }
+        return nullptr;
+    }
+
+    // A fragment allocation may sit outside the loops over GPU threads, in
     // which case each thread gets its own copy of it and only ever touches its
     // own slice. Any dependence of the index on the thread is selecting between
     // those copies, not between subtiles within one, so drop it.
@@ -445,11 +450,155 @@ class ExtractWMMAOperations : public IRMutator {
         return simplify(idx);
     }
 
-    string get_subtile_name(const Expr &index) {
-        int idx = Halide::Internal::get_subtile(index_within_thread(index),
-                                                "tensor core accumulator", &subtiles);
+    string subtile_name(Fragment *f, const Expr &index) {
+        int idx = get_subtile(index_within_thread(index),
+                              "tensor core fragment", &f->subtiles);
         internal_assert(idx >= 0);  // errors handled already
-        return wmma_name + std::to_string(idx);
+        return f->fragment_name + std::to_string(idx);
+    }
+
+    void set_role(Fragment *f, Role role) {
+        user_assert(f->role == Role::Unknown || f->role == role)
+            << "The tensor core fragment " << f->name << " is used as both "
+            << role_name(f->role) << " and " << role_name(role) << " of a matrix "
+            << "multiply. Those are held in registers in different layouts, so a "
+            << "fragment can only play one of those roles. Stage it through memory "
+            << "in between.\n";
+        f->role = role;
+    }
+
+    void set_shape(Fragment *f, const Shape &shape) {
+        user_assert(!f->found_shape ||
+                    (shape.M == f->shape.M && shape.N == f->shape.N &&
+                     shape.K == f->shape.K))
+            << "Found inconsistent tile shapes for the tensor core fragment "
+            << f->name << " across the matrix multiplies that use it: "
+            << f->shape.M << "x" << f->shape.N << "x" << f->shape.K << " vs "
+            << shape.M << "x" << shape.N << "x" << shape.K << ".";
+        f->shape = shape;
+        f->found_shape = true;
+    }
+
+    // Which subtile of a fragment an access refers to, as an index over just
+    // the tile. An operand is read by the multiply at the shape of the whole
+    // reduction, with one axis broadcast, so its index has to be projected back
+    // down to the tile before it can be compared against the fill that wrote
+    // it.
+    string operand_subtile_name(Fragment *f, const Expr &base, Role role,
+                                const Shape &shape, Layout layout, const Expr &stride) {
+        int rows, cols;
+        fragment_matrix_shape(role, shape, &rows, &cols);
+        return subtile_name(f, make_matrix_index(base, rows, cols, layout, stride));
+    }
+
+    // Note what a matrix multiply tells us about an operand staged in a
+    // fragment. An operand read straight out of memory tells us nothing,
+    // because its load gets synthesized at the multiply.
+    void record_operand(const Operand &operand, Role role, const Shape &shape,
+                        Layout layout, const Expr &stride) {
+        if (Fragment *f = find_fragment(operand.load->name)) {
+            set_role(f, role);
+            set_shape(f, shape);
+            operand_subtile_name(f, operand.mr.base, role, shape, layout, stride);
+        }
+    }
+
+    // The value a matrix multiply uses for one of its operands: the fragment it
+    // was staged in, or a load synthesized here if it wasn't staged.
+    Expr operand_value(const Operand &operand, Role role, const Shape &shape,
+                       Layout layout, const Expr &stride) {
+        if (Fragment *f = find_fragment(operand.load->name)) {
+            const int lanes = elements_per_lane(role);
+            const string name =
+                operand_subtile_name(f, operand.mr.base, role, shape, layout, stride);
+            return Load::make(f->value_type(), name, Ramp::make(0, 1, lanes), {}, {},
+                              const_true(lanes), {});
+        }
+        return make_matrix_to_fragment(role, shape, layout, operand.load,
+                                       operand.mr.base, stride);
+    }
+
+    Stmt convert_to_fill(const Store *op, Fragment *f) {
+        int rows, cols;
+        fragment_matrix_shape(f->role, f->shape, &rows, &cols);
+        MultiRamp dest_mr;
+        WMMAMatrixLayout dest;
+        user_assert(is_multiramp(op->index, Scope<Expr>::empty_scope(), &dest_mr) &&
+                    wmma_matrix_layout(dest_mr, rows, cols, &dest))
+            << "A tensor core fragment must be filled a whole tile at a time, but "
+            << "this fill is not to a dense " << rows << "x" << cols << " tile of "
+            << f->name << ".\n"
+            << Stmt(op);
+        const string name = subtile_name(
+            f, make_matrix_index(dest.base, rows, cols,
+                                 dest.row_major ? Layout::Row : Layout::Col, dest.stride));
+        const int lanes = elements_per_lane(f->role);
+        Expr value;
+        if (is_const_zero(op->value)) {
+            // Zeroing a fragment is layout-independent, so it doesn't need an
+            // instruction - the registers just get set to zero.
+            value = make_zero(f->value_type());
+        } else {
+            auto fail = [&](const char *reason) {
+                user_error << "Fill of a tensor core fragment not supported. "
+                           << reason << ".\n"
+                           << Stmt(op);
+                return Expr{};
+            };
+
+            MultiRamp mr;
+            const Load *matrix =
+                is_load_of_multiramp(op->value, Scope<Expr>::empty_scope(), &mr);
+            internal_assert(matrix);  // is_fill checked this
+            int rows, cols;
+            fragment_matrix_shape(f->role, f->shape, &rows, &cols);
+            WMMAMatrixLayout mem;
+            if (find_fragment(matrix->name)) {
+                value = fail("A fragment can only be filled from a matrix in memory, "
+                             "not from another fragment, because the layout in "
+                             "registers is not known");
+            } else if (matrix->type.element_of() != f->element_type) {
+                value = fail("A fragment can only be filled from a matrix of the same "
+                             "type, because the hardware does not convert on the way in");
+            } else if (!is_const_one(matrix->predicate)) {
+                value = fail("The load is predicated");
+            } else if (!wmma_matrix_layout(mr, rows, cols, &mem)) {
+                value = fail("The matrix loaded from is not a dense tile of the right "
+                             "shape");
+            } else {
+                value = make_matrix_to_fragment(
+                    f->role, f->shape, mem.row_major ? Layout::Row : Layout::Col,
+                    matrix, mem.base, mem.stride);
+            }
+        }
+        return in_lane_loop(
+            Store::make(name, std::move(value), Ramp::make(0, 1, lanes), Parameter(),
+                        const_true(lanes), ModulusRemainder()));
+    }
+
+    Stmt convert_to_matmul(const Store *op, Fragment *f, const MatmulInfo &info) {
+        Expr a = operand_value(info.lhs, Role::A, info.shape, info.lhs_layout, info.lda);
+        Expr b = operand_value(info.rhs, Role::B, info.shape, info.rhs_layout, info.ldb);
+
+        Type acc_type = info.accumulator_type.with_lanes(accumulator_elements);
+        Expr frag_idx = Ramp::make(0, 1, accumulator_elements);
+        const string name = subtile_name(f, op->index);
+        Expr c = Load::make(acc_type, name, frag_idx, {}, {},
+                            const_true(accumulator_elements), {});
+
+        Expr mma = Call::make(acc_type, Call::wmma_mma,
+                              {info.shape.M, info.shape.N, info.shape.K,
+                               (int)info.lhs_layout, (int)info.rhs_layout,
+                               std::move(a), std::move(b), std::move(c)},
+                              Call::Intrinsic);
+
+        Stmt store = in_lane_loop(
+            Store::make(name, std::move(mma), frag_idx, Parameter(),
+                        const_true(accumulator_elements), ModulusRemainder()));
+        for (const auto &[let_name, v] : reverse_view(info.peeled_lets)) {
+            store = LetStmt::make(let_name, v, store);
+        }
+        return store;
     }
 
     Stmt visit(const For *op) override {
@@ -463,62 +612,53 @@ class ExtractWMMAOperations : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
-        if (op->memory_type != MemoryType::WMMAAccumulator) {
+        if (op->memory_type != MemoryType::WMMAFragment) {
             return IRMutator::visit(op);
         }
 
         user_assert(op->type == Float(32) || op->type == Float(16))
-            << "Tensor core accumulators must hold 32-bit or 16-bit floats, but "
+            << "Tensor core fragments must hold 32-bit or 16-bit floats, but "
             << op->name << " holds " << op->type << ".\n";
 
-        user_assert(!in_allocate)
-            << "Already in a tensor core accumulator allocation at the allocation for "
-            << op->name << ". We do not currently support multiple nested tensor core "
-            << "matrix multiplies.";
+        Fragment &f = fragments[op->name];
+        if (pass == 0) {
+            f.name = op->name;
+            f.fragment_name = op->name + ".wmma.";
+            f.element_type = op->type;
+        }
 
-        ScopedValue<string> old_wmma_name(wmma_name, op->name + ".wmma.");
-        ScopedValue<string> old_tile_name(tile_name, op->name);
-        ScopedValue<bool> old_in_alloc(in_allocate, true);
-
-        // Each accumulator allocation has its own shape and its own set of
-        // sub-tiles.
-        ScopedValue<bool> old_found_shape(found_shape, false);
-        ScopedValue<Shape> old_shape(shape, Shape{});
-        ScopedValue<vector<MultiRamp>> old_subtiles(subtiles, {});
-
-        // In the first pass we recognize the matrix multiplies, which is what
-        // tells us the tile shape. In the second we recognize the
-        // zero-initializations and the stores out to memory, both of which
-        // need to know the shape.
-        pass = 0;
+        in_scope.push_back(op->name);
         Stmt body = mutate(op->body);
-        user_assert(found_shape)
-            << op->name << " is stored in WMMAAccumulator memory, but no matrix "
-            << "multiply operation was found that stores to it, so the shape of the "
-            << "tile was unable to be determined.\n";
-        pass = 1;
-        body = mutate(body);
+        in_scope.pop_back();
 
-        // Each fragment is one accumulator's worth of storage per lane. The
-        // allocations stay outside the loops over lanes, because a loop over
-        // lanes is a loop over threads, and register allocations outside a
-        // thread loop already get replicated per thread.
-        for (int i = 0; i < (int)subtiles.size(); i++) {
-            body = Allocate::make(wmma_name + std::to_string(i), op->type,
-                                  MemoryType::WMMAAccumulator, {fragment_elements},
+        if (pass == 0) {
+            user_assert(f.role != Role::Unknown)
+                << op->name << " is stored in WMMAFragment memory, but no matrix "
+                << "multiply was found that accumulates into it or reads it as an "
+                << "operand, so we can't tell what layout it should have.\n";
+            return op;
+        }
+
+        // Each fragment is one tile's worth of storage per lane. The allocations
+        // stay outside the loops over lanes, because a loop over lanes is a loop
+        // over threads, and register allocations outside a thread loop already
+        // get replicated per thread.
+        for (int i = 0; i < (int)f.subtiles.size(); i++) {
+            body = Allocate::make(f.fragment_name + std::to_string(i), f.element_type,
+                                  MemoryType::WMMAFragment, {elements_per_lane(f.role)},
                                   const_true(), body);
         }
         return body;
     }
 
     Stmt visit(const Atomic *op) override {
-        if (op->producer_name == tile_name) {
-            // A tensor core accumulator is per-thread register storage, so
-            // there's nothing for another thread to race with. The atomic is
-            // there because the accumulator is scheduled outside the loops over
-            // threads, which makes it look shared.
+        if (find_fragment(op->producer_name)) {
+            // A tensor core fragment is per-thread register storage, so there's
+            // nothing for another thread to race with. The atomic is there
+            // because the fragment is scheduled outside the loops over threads,
+            // which makes it look shared.
             user_assert(op->mutex_name.empty())
-                << "Accumulating into a tensor core accumulator should not need a "
+                << "Accumulating into a tensor core fragment should not need a "
                 << "mutex.\n";
             return mutate(op->body);
         }
@@ -526,84 +666,93 @@ class ExtractWMMAOperations : public IRMutator {
     }
 
     Stmt visit(const Free *op) override {
-        if (op->name != tile_name) {
+        Fragment *f = find_fragment(op->name);
+        if (!f || pass == 0) {
             return op;
         }
         Stmt s;
-        for (int i = 0; i < (int)subtiles.size(); i++) {
-            Stmt f = Free::make(wmma_name + std::to_string(i));
-            s = s.defined() ? Block::make(std::move(s), std::move(f)) : std::move(f);
+        for (int i = 0; i < (int)f->subtiles.size(); i++) {
+            Stmt free = Free::make(f->fragment_name + std::to_string(i));
+            s = s.defined() ? Block::make(std::move(s), std::move(free)) : std::move(free);
         }
         return s;
     }
 
     Stmt visit(const ProducerConsumer *op) override {
-        if (op->name != tile_name) {
+        Fragment *f = find_fragment(op->name);
+        if (!f) {
             return IRMutator::visit(op);
         }
-        return ProducerConsumer::make(wmma_name, op->is_producer, mutate(op->body));
+        return ProducerConsumer::make(f->fragment_name, op->is_producer, mutate(op->body));
     }
 
     Expr visit(const Load *op) override {
-        user_assert(op->name != tile_name)
-            << "Tensor core accumulator " << tile_name
-            << " used outside a tensor core instruction";
+        user_assert(!find_fragment(op->name))
+            << "The tensor core fragment " << op->name
+            << " is used outside a tensor core instruction.\n";
         return IRMutator::visit(op);
     }
 
     Stmt visit(const Store *op) override {
-        // There are three operations on an accumulator:
-        // 1) Zero-initialization
-        // 2) Matrix multiply
-        // 3) Stores to memory
-        //
-        // The matrix multiply is what tells us the tile shape, so we recognize
-        // those in the first pass and the other two in the second.
+        Fragment *f = find_fragment(op->name);
 
-        if (op->name != tile_name) {
+        if (!f) {
+            // A store to memory of a load from a fragment copies a tile out.
             Expr store_index;
             const Load *load = peel_store_permutations(op, &store_index).as<Load>();
-            if (load && load->name == tile_name) {
-                return pass == 1 ?
-                           convert_to_tile_store(op, store_index,
-                                                 get_subtile_name(load->index), shape) :
-                           Stmt(op);
+            Fragment *src = load ? find_fragment(load->name) : nullptr;
+            if (src) {
+                if (pass == 0) {
+                    subtile_name(src, load->index);
+                    return op;
+                }
+                user_assert(src->role == Role::Accumulator)
+                    << "The tensor core fragment " << src->name << " is copied out to "
+                    << "memory, but it holds " << role_name(src->role) << " of a matrix "
+                    << "multiply. Only an accumulator can be copied out.\n";
+                return convert_to_tile_store(op, store_index,
+                                             subtile_name(src, load->index), src->shape);
             }
-            // Not a copy of a tile out to memory. Recurse, so that any use of
-            // the accumulator buried in here gets reported as an error.
+            // Not a copy of a tile out to memory. Recurse, so that any use of a
+            // fragment buried in here gets reported as an error.
             return IRMutator::visit(op);
         }
 
-        string subtile_name = get_subtile_name(op->index);
-
-        if (is_initialization(op, tile_name)) {
-            return pass == 1 ? convert_to_init(op, subtile_name, shape) : Stmt(op);
+        if (is_fill(op)) {
+            // A fill needs to know the role and the shape, so it waits for the
+            // second pass. It tells us neither, so there's nothing to record in
+            // the first.
+            return pass == 0 ? Stmt(op) : convert_to_fill(op, f);
         }
 
-        if (pass == 1) {
+        MatmulInfo info = analyze_matmul(op);
+        if (pass == 0) {
+            set_role(f, Role::Accumulator);
+            set_shape(f, info.shape);
+            subtile_name(f, op->index);
+            record_operand(info.lhs, Role::A, info.shape, info.lhs_layout, info.lda);
+            record_operand(info.rhs, Role::B, info.shape, info.rhs_layout, info.ldb);
             return op;
         }
+        return convert_to_matmul(op, f, info);
+    }
 
-        Matmul matmul = convert_to_matmul(op, subtile_name);
-        user_assert(!found_shape ||
-                    (matmul.shape.M == shape.M &&
-                     matmul.shape.N == shape.N &&
-                     matmul.shape.K == shape.K))
-            << "Found inconsistent tile shapes for a WMMAAccumulator allocation across "
-            << "multiple matrix multiplies that store to it: "
-            << shape.M << "x" << shape.N << "x" << shape.K << " vs "
-            << matmul.shape.M << "x" << matmul.shape.N << "x" << matmul.shape.K
-            << ".";
-        shape = matmul.shape;
-        found_shape = true;
-        return matmul.stmt;
+public:
+    void next_pass() {
+        pass = 1;
     }
 };
 
 }  // namespace
 
 Stmt extract_wmma_operations(const Stmt &s) {
-    return ExtractWMMAOperations()(s);
+    ExtractWMMAOperations mutator;
+    // The first pass only looks. What it learns about a fragment from one use
+    // of it is needed at all the others, including the ones it has already
+    // walked past.
+    mutator(s);
+    mutator.next_pass();
+    return mutator(s);
 }
 
 bool is_wmma_intrinsic(const Call *op) {

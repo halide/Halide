@@ -656,7 +656,7 @@ class LowerWarpShuffles : public IRMutator {
         if (this_lane.defined() ||
             is_gpu_shared(op->memory_type) ||
             op->memory_type == MemoryType::Heap ||
-            op->memory_type == MemoryType::WMMAAccumulator) {
+            op->memory_type == MemoryType::WMMAFragment) {
             // Not an allocation for us to stripe. Warp-level storage is
             // per-lane register storage; shared and heap (global) memory are
             // never striped across lanes, and tensor core accumulators are

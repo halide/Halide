@@ -252,7 +252,7 @@ public:
 
             // An 8x32 tile of accumulator, reducing 16 taps at a time.
             resized_y.compute_at(resized_y.in(), xio)
-                .store_in(MemoryType::WMMAAccumulator)
+                .store_in(MemoryType::WMMAFragment)
                 .unroll(c)
                 .vectorize(x, 32)
                 .unroll(x)
@@ -284,7 +284,7 @@ public:
 
             RVar ri("ri"), ro("ro");
             resized_x
-                .store_in(MemoryType::WMMAAccumulator)
+                .store_in(MemoryType::WMMAFragment)
                 .compute_at(resized_x.in(), c)
                 .vectorize(x)
                 .vectorize(y)
