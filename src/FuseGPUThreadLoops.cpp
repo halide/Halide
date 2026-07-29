@@ -1638,7 +1638,244 @@ protected:
 
 }  // namespace
 
+bool is_thread_loop(ForType t) {
+    return t == ForType::GPUThread || t == ForType::GPULane;
+}
+
+bool is_folding_semaphore(const Expr &sema) {
+    const Variable *var = sema.as<Variable>();
+    return var && var->name.find(".folding_semaphore.") != std::string::npos;
+}
+
+// Once the branches of a fork are running on different threads of the same
+// block, the semaphores that sequence them become barriers.
+//
+// There are two semaphores per async producer. One counts buffers the producer
+// has filled, which the consumer waits on; that becomes a barrier, which is
+// what makes the consumer wait for the producer. The other counts buffers the
+// consumer has finished with, which the producer waits on; a barrier is already
+// enough to bound how far ahead the producer can get, so it becomes nothing.
+//
+// The result is that the producer fills the next buffer while the consumer
+// reads the previous one, and neither can get more than one buffer ahead of the
+// other, which is what a ring buffer of two asks for. A deeper ring buffer is
+// handled correctly but no more deeply than that.
+class SemaphoresToBarriers : public IRMutator {
+    using IRMutator::visit;
+
+    bool in_device = false;
+    // Whether an enclosing acquire has already put a barrier here. Every group
+    // of threads has to reach the same number of barriers, so a nest of
+    // acquires waiting on several producers is one rendezvous, not several.
+    bool barrier_emitted = false;
+
+    static Stmt barrier() {
+        return Evaluate::make(Call::make(Int(32), Call::gpu_thread_barrier,
+                                         {IntImm::make(Int(32), CodeGen_GPU_Dev::MemoryFenceType::Shared)},
+                                         Call::Intrinsic));
+    }
+
+    Stmt visit(const For *op) override {
+        ScopedValue<bool> old(in_device, in_device || op->for_type == ForType::GPUBlock);
+        ScopedValue<bool> old_barrier(barrier_emitted, false);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Acquire *op) override {
+        if (!in_device) {
+            return IRMutator::visit(op);
+        }
+        if (is_folding_semaphore(op->semaphore)) {
+            return mutate(op->body);
+        }
+        const bool already = barrier_emitted;
+        ScopedValue<bool> old(barrier_emitted, true);
+        Stmt body = mutate(op->body);
+        return already ? body : Block::make(barrier(), body);
+    }
+
+    Stmt visit(const Evaluate *op) override {
+        if (!in_device) {
+            return IRMutator::visit(op);
+        }
+        if (const Call *call = op->value.as<Call>()) {
+            if (call->name == "halide_semaphore_release") {
+                return is_folding_semaphore(call->args[0]) ? Evaluate::make(0) : barrier();
+            } else if (call->name == "halide_semaphore_init") {
+                return Evaluate::make(0);
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        // The semaphores themselves are gone, so their definitions are dead.
+        if (in_device && op->name.find("semaphore") != std::string::npos) {
+            return mutate(op->body);
+        }
+        return IRMutator::visit(op);
+    }
+};
+
+// A fork in device code means warp specialization: the branches run at the same
+// time on different threads of the block, rather than on different host
+// threads. The outermost loop over GPU threads in each branch is concatenated
+// into one loop, and an if-then-else picks which branch each thread runs. So a
+// branch with a loop over 3 threads forked with one over 4 threads becomes a
+// single loop over 7 threads, the first 3 of which run the first branch.
+class WarpSpecializeForks : public IRMutator {
+    using IRMutator::visit;
+
+    bool in_device = false;
+
+    // The outermost loops over GPU threads within a fork branch. There may be
+    // several in sequence - a producer, an update, a copy-out - and they all get
+    // their iterations from the one fused loop, so they have to agree on how
+    // many there are and which dimension they're in.
+    struct ThreadLoop {
+        std::string dim;
+        int extent = 0;
+        bool found = false;
+        bool consistent = true;
+    };
+
+    class FindThreadLoop : public IRVisitor {
+        using IRVisitor::visit;
+        bool inside = false;
+
+        void visit(const For *op) override {
+            if (!is_thread_loop(op->for_type) || inside) {
+                IRVisitor::visit(op);
+                return;
+            }
+            std::string dim;
+            for (int i = 0; i < 3; i++) {
+                if (ends_with(op->name, gpu_thread_name(i))) {
+                    dim = gpu_thread_name(i);
+                }
+            }
+            auto e = as_const_int(simplify(op->extent()));
+            if (!e || dim.empty()) {
+                result.consistent = false;
+            } else if (!result.found) {
+                result.found = true;
+                result.dim = dim;
+                result.extent = (int)*e;
+            } else if (result.extent != (int)*e || result.dim != dim) {
+                result.consistent = false;
+            }
+            ScopedValue<bool> old(inside, true);
+            IRVisitor::visit(op);
+        }
+
+    public:
+        ThreadLoop result;
+    };
+
+    // Replace each of the outermost thread loops with its body, with its loop
+    // variable taking its value from the fused loop instead.
+    class UseFusedThreadLoop : public IRMutator {
+        using IRMutator::visit;
+        bool inside = false;
+        const Expr &index;
+
+        Stmt visit(const For *op) override {
+            if (!is_thread_loop(op->for_type) || inside) {
+                return IRMutator::visit(op);
+            }
+            ScopedValue<bool> old(inside, true);
+            return substitute(op->name, index + op->min, mutate(op->body));
+        }
+
+    public:
+        UseFusedThreadLoop(const Expr &index)
+            : index(index) {
+        }
+    };
+
+    static void flatten_fork(const Stmt &s, std::vector<Stmt> *branches) {
+        if (const Fork *f = s.as<Fork>()) {
+            flatten_fork(f->first, branches);
+            flatten_fork(f->rest, branches);
+        } else {
+            branches->push_back(s);
+        }
+    }
+
+    Stmt visit(const For *op) override {
+        ScopedValue<bool> old(in_device, in_device || op->for_type == ForType::GPUBlock);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Fork *op) override {
+        if (!in_device) {
+            return IRMutator::visit(op);
+        }
+
+        std::vector<Stmt> branches;
+        flatten_fork(op, &branches);
+
+        std::vector<ThreadLoop> loops;
+        int total = 0;
+        for (const Stmt &b : branches) {
+            FindThreadLoop finder;
+            b.accept(&finder);
+            user_assert(finder.result.found && finder.result.consistent)
+                << "Each branch of an async producer inside a GPU block must contain "
+                << "loops over GPU threads that all have the same constant extent, so "
+                << "that the branches can be given different threads of the block.\n";
+            loops.push_back(finder.result);
+            total += finder.result.extent;
+        }
+
+        for (const ThreadLoop &l : loops) {
+            user_assert(l.dim == loops[0].dim)
+                << "The branches of an async producer inside a GPU block must use the "
+                << "same GPU thread dimension, since that's the one whose threads get "
+                << "shared out between them.\n";
+        }
+
+        // Hand out the fused loop's iterations to the branches in order.
+        const std::string name = unique_name("fork") + loops[0].dim;
+        Expr fused = Variable::make(Int(32), name);
+        Stmt body;
+        int offset = total;
+        for (size_t i = branches.size(); i-- > 0;) {
+            offset -= loops[i].extent;
+            Stmt b = UseFusedThreadLoop(fused - offset)(mutate(branches[i]));
+            if (body.defined()) {
+                body = IfThenElse::make(fused < offset + loops[i].extent, b, body);
+            } else {
+                body = b;
+            }
+        }
+
+        return For::make(name, 0, total - 1, ForType::GPUThread, Partition::Never,
+                         device_api_for_fork(op), std::move(body));
+    }
+
+    static DeviceAPI device_api_for_fork(const Fork *op) {
+        // Any thread loop in the fork will do; they're all on the same device.
+        class FindDeviceAPI : public IRVisitor {
+            using IRVisitor::visit;
+            void visit(const For *op) override {
+                if (is_thread_loop(op->for_type) && api == DeviceAPI::None) {
+                    api = op->device_api;
+                }
+                IRVisitor::visit(op);
+            }
+
+        public:
+            DeviceAPI api = DeviceAPI::None;
+        } finder;
+        op->accept(&finder);
+        return finder.api;
+    }
+};
+
 Stmt fuse_gpu_thread_loops(Stmt s) {
+    s = WarpSpecializeForks()(s);
+    s = SemaphoresToBarriers()(s);
     // NormalizeIfStatements pushes the predicates between GPU blocks
     // into the innermost GPU block. FuseGPUThreadLoops would then
     // merge the predicate into the merged GPU thread.
