@@ -119,6 +119,9 @@ protected:
      * registers. Returns false if this store isn't one we can do that for. */
     bool codegen_async_copy(const Store *op);
 
+    /** Wait for any asynchronous copies issued so far to have landed. */
+    void wait_for_async_copies();
+
     /** Emit calls to the nvvm warp-level matrix multiply-accumulate
      * intrinsics that drive the tensor cores. */
     // @{
@@ -299,6 +302,10 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         // check to make sure the intrinsic has the right number of
         // arguments
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
+
+        // A barrier tells other threads the shared memory this thread wrote is
+        // ready, so any asynchronous copies must have landed by now.
+        wait_for_async_copies();
 
         auto fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
@@ -666,21 +673,27 @@ void CodeGen_PTX_Dev::visit(const ProducerConsumer *op) {
     ScopedValue<bool> old_issued(issued_async_copy, false);
     ScopedValue<bool> old_in(in_producer, true);
     codegen(op->body);
-    if (issued_async_copy) {
-        // Everything issued in here has to have landed before the values are
-        // used, which is after this producer.
-        for (const char *intrin : {"llvm.nvvm.cp.async.commit.group",
-                                   "llvm.nvvm.cp.async.wait.group"}) {
-            llvm::Intrinsic::ID id = llvm::Intrinsic::lookupIntrinsicID(intrin);
-            internal_assert(id != llvm::Intrinsic::not_intrinsic);
-            llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), id);
-            vector<Value *> args;
-            if (fn->getFunctionType()->getNumParams() == 1) {
-                args.push_back(ConstantInt::get(i32_t, 0));
-            }
-            builder->CreateCall(fn, args);
-        }
+    // Everything issued in here has to have landed before the values are used,
+    // which is after this producer.
+    wait_for_async_copies();
+}
+
+void CodeGen_PTX_Dev::wait_for_async_copies() {
+    if (!issued_async_copy) {
+        return;
     }
+    for (const char *intrin : {"llvm.nvvm.cp.async.commit.group",
+                               "llvm.nvvm.cp.async.wait.group"}) {
+        llvm::Intrinsic::ID id = llvm::Intrinsic::lookupIntrinsicID(intrin);
+        internal_assert(id != llvm::Intrinsic::not_intrinsic);
+        llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), id);
+        vector<Value *> args;
+        if (fn->getFunctionType()->getNumParams() == 1) {
+            args.push_back(ConstantInt::get(i32_t, 0));
+        }
+        builder->CreateCall(fn, args);
+    }
+    issued_async_copy = false;
 }
 
 void CodeGen_PTX_Dev::visit(const Store *op) {
