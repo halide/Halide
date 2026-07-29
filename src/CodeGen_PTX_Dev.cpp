@@ -551,7 +551,15 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
 }
 
 string CodeGen_PTX_Dev::mcpu_target() const {
-    if (target.has_feature(Target::CUDACapability86)) {
+    if (target.has_feature(Target::CUDACapability120)) {
+        return "sm_120";
+    } else if (target.has_feature(Target::CUDACapability100)) {
+        return "sm_100";
+    } else if (target.has_feature(Target::CUDACapability90)) {
+        return "sm_90";
+    } else if (target.has_feature(Target::CUDACapability89)) {
+        return "sm_89";
+    } else if (target.has_feature(Target::CUDACapability86)) {
         return "sm_86";
     } else if (target.has_feature(Target::CUDACapability80)) {
         return "sm_80";
@@ -579,7 +587,15 @@ string CodeGen_PTX_Dev::mcpu_tune() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.has_feature(Target::CUDACapability86)) {
+    if (target.has_feature(Target::CUDACapability120)) {
+        return "+ptx87";
+    } else if (target.has_feature(Target::CUDACapability100)) {
+        return "+ptx86";
+    } else if (target.has_feature(Target::CUDACapability90)) {
+        return "+ptx78";
+    } else if (target.has_feature(Target::CUDACapability89)) {
+        return "+ptx78";
+    } else if (target.has_feature(Target::CUDACapability86)) {
         return "+ptx71";
     } else if (target.has_feature(Target::CUDACapability80)) {
         return "+ptx70";

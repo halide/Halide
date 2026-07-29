@@ -1466,7 +1466,11 @@ typedef enum halide_target_feature_t {
     halide_target_feature_cuda_capability70,  ///< Enable CUDA compute capability 7.0 (Volta)
     halide_target_feature_cuda_capability75,  ///< Enable CUDA compute capability 7.5 (Turing)
     halide_target_feature_cuda_capability80,  ///< Enable CUDA compute capability 8.0 (Ampere)
-    halide_target_feature_cuda_capability86,  ///< Enable CUDA compute capability 8.6 (Ampere)
+    halide_target_feature_cuda_capability86,   ///< Enable CUDA compute capability 8.6 (Ampere)
+    halide_target_feature_cuda_capability89,   ///< Enable CUDA compute capability 8.9 (Ada)
+    halide_target_feature_cuda_capability90,   ///< Enable CUDA compute capability 9.0 (Hopper)
+    halide_target_feature_cuda_capability100,  ///< Enable CUDA compute capability 10.0 (Blackwell)
+    halide_target_feature_cuda_capability120,  ///< Enable CUDA compute capability 12.0 (Blackwell)
 
     halide_target_feature_opencl,       ///< Enable the OpenCL runtime.
     halide_target_feature_cl_doubles,   ///< Enable double support on OpenCL targets
