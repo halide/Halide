@@ -294,6 +294,79 @@ void test_read_big_endian_row_channel_offset() {
     }
 }
 
+void write_file(const std::string &filename, const std::string &contents) {
+    std::ofstream fs(filename.c_str(), std::ofstream::binary);
+    if (!fs) {
+        std::cout << "Cannot write " << filename << "\n";
+        exit(1);
+    }
+    fs.write(contents.data(), contents.size());
+}
+
+void expect_load_fails(const std::string &filename, const char *what) {
+    Halide::Runtime::Buffer<> img;
+    bool loaded = Tools::load<Halide::Runtime::Buffer<>, Tools::Internal::CheckReturn>(filename, &img);
+    if (loaded) {
+        std::cout << "Expected loading " << what << " to fail, but it succeeded\n";
+        exit(1);
+    }
+}
+
+template<typename T>
+void append_scalar(std::string *s, T value) {
+    s->append((const char *)&value, sizeof(value));
+}
+
+// A negative extent in a file header used to reach Buffer's shape arithmetic
+// unchecked. size_in_bytes() then wraps to just under SIZE_MAX, allocate()
+// rounds that up to zero and hands back a single alignment block, and the
+// payload read runs off the end of it. Every loader that takes its extents
+// from the file should reject the header instead.
+void test_negative_extents() {
+    const std::string payload(4096, '\xab');
+
+    std::ostringstream npy_name;
+    npy_name << Internal::get_test_tmp_dir() << "test_negative_extents.npy";
+    std::string dict = "{'descr': '|u1', 'fortran_order': False, 'shape': (4, -1), }";
+    while ((6 + 2 + 2 + dict.size()) % 64 != 0) {
+        dict.push_back(' ');
+    }
+    std::string npy("\x93NUMPY", 6);
+    append_scalar<uint8_t>(&npy, 1);  // major version
+    append_scalar<uint8_t>(&npy, 0);  // minor version
+    append_scalar<uint16_t>(&npy, (uint16_t)dict.size());
+    npy += dict;
+    npy += payload;
+    write_file(npy_name.str(), npy);
+    expect_load_fails(npy_name.str(), "a .npy with a negative extent");
+
+    std::ostringstream mat_name;
+    mat_name << Internal::get_test_tmp_dir() << "test_negative_extents.mat";
+    std::string mat(128, '\0');           // descriptive header, unread
+    append_scalar<uint32_t>(&mat, 14);    // miMATRIX
+    append_scalar<uint32_t>(&mat, 1024);  // size of the rest, unread
+    append_scalar<uint32_t>(&mat, 6);     // miUINT32
+    append_scalar<uint32_t>(&mat, 8);     // array flags size
+    append_scalar<uint32_t>(&mat, 9);     // mxUINT8_CLASS
+    append_scalar<uint32_t>(&mat, 0);
+    append_scalar<uint32_t>(&mat, 5);  // miINT32
+    append_scalar<uint32_t>(&mat, 8);  // two extents
+    append_scalar<int32_t>(&mat, 4);
+    append_scalar<int32_t>(&mat, -1);
+    append_scalar<uint32_t>(&mat, 1);  // miINT8 name, ...
+    append_scalar<uint32_t>(&mat, 0);  // ... of length zero
+    append_scalar<uint32_t>(&mat, 2);  // miUINT8 payload
+    append_scalar<uint32_t>(&mat, (uint32_t)payload.size());
+    mat += payload;
+    write_file(mat_name.str(), mat);
+    expect_load_fails(mat_name.str(), "a .mat with a negative extent");
+
+    std::ostringstream pgm_name;
+    pgm_name << Internal::get_test_tmp_dir() << "test_negative_extents.pgm";
+    write_file(pgm_name.str(), "P5\n4 -1\n255\n" + payload);
+    expect_load_fails(pgm_name.str(), "a .pgm with a negative height");
+}
+
 #ifndef HALIDE_NO_PNG
 void test_png_unsupported_bit_depth() {
     // A 1-bit grayscale PNG is a valid file, but load_png only supports 8- and
@@ -352,6 +425,7 @@ int main(int argc, char **argv) {
     do_test<double>();
     test_mat_header();
     test_read_big_endian_row_channel_offset();
+    test_negative_extents();
 #ifndef HALIDE_NO_PNG
     test_png_unsupported_bit_depth();
 #endif
