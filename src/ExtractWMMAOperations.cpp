@@ -480,6 +480,12 @@ class ExtractWMMAOperations : public IRMutator {
         ScopedValue<string> old_tile_name(tile_name, op->name);
         ScopedValue<bool> old_in_alloc(in_allocate, true);
 
+        // Each accumulator allocation has its own shape and its own set of
+        // sub-tiles.
+        ScopedValue<bool> old_found_shape(found_shape, false);
+        ScopedValue<Shape> old_shape(shape, Shape{});
+        ScopedValue<vector<MultiRamp>> old_subtiles(subtiles, {});
+
         // In the first pass we recognize the matrix multiplies, which is what
         // tells us the tile shape. In the second we recognize the
         // zero-initializations and the stores out to memory, both of which
@@ -584,7 +590,10 @@ class ExtractWMMAOperations : public IRMutator {
                      matmul.shape.N == shape.N &&
                      matmul.shape.K == shape.K))
             << "Found inconsistent tile shapes for a WMMAAccumulator allocation across "
-            << "multiple matrix multiplies that store to it.";
+            << "multiple matrix multiplies that store to it: "
+            << shape.M << "x" << shape.N << "x" << shape.K << " vs "
+            << matmul.shape.M << "x" << matmul.shape.N << "x" << matmul.shape.K
+            << ".";
         shape = matmul.shape;
         found_shape = true;
         return matmul.stmt;

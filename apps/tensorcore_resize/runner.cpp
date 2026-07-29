@@ -27,7 +27,13 @@ int main(int argc, char **argv) {
     Buffer<float16_t, 3> input(in_w, in_h, 3);
     input.fill([]() { return float16_t((float)rand() / RAND_MAX); });
 
-    Buffer<float16_t, 3> out_cuda(out_w, out_h, 3), out_tensorcore(out_w, out_h, 3);
+    // Both schedules work on whole 16x16 tiles of the output, so round the
+    // output size up to a multiple of that.
+    const int tile = 16;
+    const int buf_w = ((out_w + tile - 1) / tile) * tile;
+    const int buf_h = ((out_h + tile - 1) / tile) * tile;
+
+    Buffer<float16_t, 3> out_cuda(buf_w, buf_h, 3), out_tensorcore(buf_w, buf_h, 3);
 
     resize_cudaonly(input, scale_factor, out_cuda);
     resize_tensorcore(input, scale_factor, out_tensorcore);
