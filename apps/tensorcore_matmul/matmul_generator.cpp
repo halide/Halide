@@ -21,8 +21,8 @@ public:
 
     // How many tensor core tiles of accumulator each warp holds, and how many
     // warps there are per block in each dimension.
-    GeneratorParam<int> tiles_x{"tiles_x", 4};
-    GeneratorParam<int> tiles_y{"tiles_y", 5};
+    GeneratorParam<int> tiles_x{"tiles_x", 5};
+    GeneratorParam<int> tiles_y{"tiles_y", 4};
     GeneratorParam<int> warps_x{"warps_x", 2};
     GeneratorParam<int> warps_y{"warps_y", 1};
     // How much of the reduction is staged in shared memory at a time.
@@ -31,7 +31,7 @@ public:
     // rows across different banks. A multiple of eight keeps the rows aligned
     // enough for the widest asynchronous copy.
     GeneratorParam<int> pad_a{"pad_a", 8};
-    GeneratorParam<int> pad_b{"pad_b", 8};
+    GeneratorParam<int> pad_b{"pad_b", 16};
 
     Input<Buffer<float16_t, 2>> matA{"matA"};  // K x M
     Input<Buffer<float16_t, 2>> matB{"matB"};  // N x K
