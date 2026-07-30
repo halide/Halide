@@ -60,6 +60,46 @@ int change_type_symbolic_extent_test() {
     return 0;
 }
 
+// A reduction with a runtime extent can be split into fixed-size blocks and
+// factored so that only the bounded partial reductions use a narrow accumulator.
+// The final reduction retains the original wider type and combines an unknown
+// number of partial results.
+int change_type_rfactor_symbolic_extent_blocks_test() {
+    constexpr int block_size = 128;
+    ImageParam A{Int(8), 1, "A_rfactor_blocks"};
+
+    RDom r(0, A.dim(0).extent(), "r");
+    Func Acc{"Acc_rfactor_blocks"};
+    Acc() = 0.0f;
+    Acc() += cast<float>(A(r));
+
+    RVar ro{"ro"}, ri{"ri"};
+    Var block{"block"};
+    Func partial = Acc.update(0)
+                       .split(r, ro, ri, block_size, TailStrategy::GuardWithIf)
+                       .rfactor(ro, block);
+
+    // Every partial reduction contains at most 128 Int(8) terms, which
+    // fits Int(16). The final reduction over `block` remains Float(32),
+    // since its runtime extent is unbounded.
+    Func partial_i16 = partial.change_type(Int(16));
+    internal_assert(partial_i16.types()[0] == Int(16));
+    partial_i16.compute_root();
+
+    // Make the total exceed Int(16) while each partial remains safe.
+    constexpr int K = 1000;
+    Buffer<int8_t> a(K);
+    a.fill(127);
+    A.set(a);
+
+    Buffer<float> result = Acc.realize();
+    const int32_t expected = K * 127;
+    internal_assert(result() == (float)expected)
+        << "change_type after rfactor produced " << result()
+        << " instead of " << expected << "\n";
+    return 0;
+}
+
 // change_type() can be applied more than once, retyping the intermediate
 // returned by a previous change_type(). Each step must remain safe and correct.
 int change_type_twice_test() {
@@ -919,6 +959,10 @@ int change_type_static_extent_count_does_not_overflow_test() {
 int main(int argc, char **argv) {
     printf("Running change_type_symbolic_extent_test\n");
     if (change_type_symbolic_extent_test()) {
+        return 1;
+    }
+    printf("Running change_type_rfactor_symbolic_extent_blocks_test\n");
+    if (change_type_rfactor_symbolic_extent_blocks_test()) {
         return 1;
     }
     printf("Running change_type_twice_test\n");
