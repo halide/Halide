@@ -16,7 +16,7 @@ import { tabularDataAtom } from "@/state/tabularData";
 import { threadAtom, NO_THREAD_INFO_SENTINEL_ID } from "@/state/thread";
 
 const RENDER_MODE_TO_LABEL: Record<RM, string> = {
-  Grayscale: "",
+  Grayscale: "Value",
   RGB: "",
   "Store Frequency": "Store Count",
   "Load Frequency": "Load Count",
@@ -25,25 +25,38 @@ const RENDER_MODE_TO_LABEL: Record<RM, string> = {
   "Thread Coverage": "Thread ID",
 };
 
+const METRIC_PALETTE = [
+  "#0078D1",
+  "#1695F3",
+  "#3DACFF",
+  "#70C2FF",
+  "#D6EEFF",
+  "#FFE2D6",
+  "#FFBFA3",
+  "#FF773D",
+  "#FA6400",
+  "#D64000",
+];
+
 interface HistogramData {
   type: "Histogram";
   data: { x1: number; x2: number; y: number }[];
   domain: [number, number];
-  lut: Record<string, string>;
+  range: string[];
 }
 
 interface BarChartData {
   type: "Bar Chart";
   data: { x: string; y: number }[];
   domain: string[];
-  lut: Record<string, string>;
+  range: string[];
 }
 
 interface NoChartData {
   type: "No Chart";
   data: number[];
   domain: [number, number];
-  lut: Record<string, string>;
+  range: string[];
 }
 
 type ChartData = HistogramData | BarChartData | NoChartData;
@@ -54,59 +67,95 @@ function VisualizationPanel() {
   const activeFunc = useAtomValue(funcAtom);
   const { tabularData, scale } = useAtomValue(tabularDataAtom);
   const thread = useAtomValue(threadAtom);
-  const min = scale === "log" ? 1 : 0;
 
   const createHistogramData = React.useCallback(
-    (histogramData: Uint32Array, max: number): HistogramData => {
+    (
+      histogramData: Uint32Array,
+      domain: [number, number],
+      range: string[],
+    ): HistogramData => {
       const buckets = histogramData.length;
+      const extent = domain[1] - domain[0];
+      const step =
+        domain.every(Number.isInteger) && extent <= 64 ? 1 : extent / buckets;
 
       return {
         type: "Histogram",
         data: new Array(buckets).fill(0).map((_, i) => ({
-          x1: max > 64 ? Math.round((i / 64) * max) : i,
-          x2: max > 64 ? Math.round(((i + 1) / 64) * max) : i + 1,
+          x1: domain[0] + i * step,
+          x2: domain[0] + (i + 1) * step,
           y: histogramData?.[i] ?? 0,
         })),
-        domain: [min, max + 1],
-        lut: {},
+        domain,
+        range,
       };
     },
-    [min],
+    [],
   );
 
-  const { type, data, domain, lut } = React.useMemo((): ChartData => {
+  const { type, data, domain, range } = React.useMemo((): ChartData => {
     switch (render.renderMode) {
+      case "Grayscale": {
+        const min = funcs[activeFunc].min_value ?? 0;
+        const max = funcs[activeFunc].max_value ?? 255;
+
+        return createHistogramData(
+          tabularData ?? new Uint32Array(),
+          [min, max],
+          ["#000000", "#ffffff"],
+        );
+      }
       case "Store Frequency": {
+        const min = scale === "log" ? 1 : 0;
         const max =
           render.normalizationMode === "Per Func"
             ? funcs[activeFunc].max_store_count
             : stats.global_max_store_count;
 
-        return createHistogramData(tabularData ?? new Uint32Array(), max);
+        return createHistogramData(
+          tabularData ?? new Uint32Array(),
+          [min, max],
+          METRIC_PALETTE,
+        );
       }
       case "Load Frequency": {
+        const min = scale === "log" ? 1 : 0;
         const max =
           render.normalizationMode === "Per Func"
             ? funcs[activeFunc].max_load_count
             : stats.global_max_load_count;
 
-        return createHistogramData(tabularData ?? new Uint32Array(), max);
+        return createHistogramData(
+          tabularData ?? new Uint32Array(),
+          [min, max],
+          METRIC_PALETTE,
+        );
       }
       case "Redundant Stores": {
+        const min = scale === "log" ? 1 : 0;
         const max =
           render.normalizationMode === "Per Func"
             ? funcs[activeFunc].max_redundant_store_count
             : stats.global_max_redundant_store_count;
 
-        return createHistogramData(tabularData ?? new Uint32Array(), max);
+        return createHistogramData(
+          tabularData ?? new Uint32Array(),
+          [min, max],
+          METRIC_PALETTE,
+        );
       }
       case "Reuse Distance": {
+        const min = scale === "log" ? 1 : 0;
         const max =
           render.normalizationMode === "Per Func"
             ? funcs[activeFunc].max_reuse_distance
             : stats.global_max_reuse_distance;
 
-        return createHistogramData(tabularData ?? new Uint32Array(), max);
+        return createHistogramData(
+          tabularData ?? new Uint32Array(),
+          [min, max],
+          METRIC_PALETTE,
+        );
       }
       case "Thread Coverage": {
         const threadIds = funcs[activeFunc].thread_ids;
@@ -121,18 +170,17 @@ function VisualizationPanel() {
             y: thread.op === "Store" ? storeCounts[i] : loadCounts[i],
           })),
           domain: threadIds.map((tId) => `${tId}`),
-          lut: stats.global_thread_ids.reduce<Record<string, string>>(
-            (acc, el, i) => {
-              acc[el] = d3.schemeSet3[i];
+          range: stats.global_thread_ids.reduce<string[]>((acc, el, i) => {
+            if (threadIds.includes(el)) {
+              return acc.concat(d3.schemeSet3[i]);
+            }
 
-              return acc;
-            },
-            {},
-          ),
+            return acc;
+          }, []),
         };
       }
       default: {
-        return { type: "No Chart", data: [], domain: [-1, -1], lut: {} };
+        return { type: "No Chart", data: [], domain: [-1, -1], range: [] };
       }
     }
   }, [
@@ -141,6 +189,7 @@ function VisualizationPanel() {
     funcs,
     stats,
     activeFunc,
+    scale,
     thread.op,
     createHistogramData,
   ]);
@@ -156,6 +205,8 @@ function VisualizationPanel() {
               <Histogram
                 data={data}
                 domain={domain}
+                range={range}
+                scale={scale}
                 labels={{
                   x: RENDER_MODE_TO_LABEL[render.renderMode],
                   y: "Coordinate Count",
@@ -174,11 +225,11 @@ function VisualizationPanel() {
               <BarChart
                 data={data}
                 domain={domain}
+                range={range}
                 labels={{
                   x: RENDER_MODE_TO_LABEL[render.renderMode],
                   y: `${thread.op} Count`,
                 }}
-                lut={lut}
                 highlight={(x: string) =>
                   x === thread.id || thread.id === NO_THREAD_INFO_SENTINEL_ID
                 }
@@ -190,7 +241,7 @@ function VisualizationPanel() {
       case "No Chart":
         return <Separator.Root className="bg-ps-border-tertiary h-px" />;
     }
-  }, [type, data, domain, lut, render.renderMode, thread]);
+  }, [type, data, domain, range, scale, render.renderMode, thread]);
 
   return (
     <div className="flex flex-col gap-4 px-3 py-4">

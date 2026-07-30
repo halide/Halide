@@ -314,7 +314,7 @@ fn snapshot(subcommand: Box<SubcommandMatches>) -> Option<()> {
                         std::process::exit(1);
                     };
 
-                    rs.seek(&trace, store_indices, k);
+                    rs.seek(&trace, store_indices, load_indices, k, k);
                     serde_json::to_string_pretty(&rs.to_values()).unwrap_or_else(|e| {
                         eprintln!("Error serializing values to JSON: {}", e);
                         std::process::exit(1);

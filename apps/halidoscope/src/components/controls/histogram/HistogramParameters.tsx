@@ -57,103 +57,105 @@ function HistogramParameters() {
           </Select.Content>
         </Select.Root>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="flex flex-col gap-1">
-          <Label.Root
-            className="text-ps-text-primary/60"
-            htmlFor="scale-select"
-          >
-            Scale
-          </Label.Root>
-          <Select.Root
-            value={tabularData.scale}
-            onValueChange={(value) =>
-              setTabularData({ ...tabularData, scale: value as Scale })
-            }
-          >
-            <Select.Trigger
-              id="scale-select"
-              className="bg-ps-border-primary text-ps-text-primary border-ps-border-tertiary inline-flex h-8 w-full items-center justify-center rounded border px-2 focus:outline-none"
+      {render.renderMode !== "Grayscale" ? (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-col gap-1">
+            <Label.Root
+              className="text-ps-text-primary/60"
+              htmlFor="scale-select"
             >
-              <Select.Value />
-              <Select.Icon className="ml-auto">
-                <ArrowDownIcon />
-              </Select.Icon>
-            </Select.Trigger>
-            <Select.Content
-              position="popper"
-              sideOffset={4}
-              className="bg-ps-border-primary text-ps-text-primary border-ps-border-tertiary z-10 max-h-(--radix-select-content-available-height) w-(--radix-select-trigger-width) rounded border"
+              Scale
+            </Label.Root>
+            <Select.Root
+              value={tabularData.scale}
+              onValueChange={(value) =>
+                setTabularData({ ...tabularData, scale: value as Scale })
+              }
             >
-              <Select.Viewport>
-                <Select.Item
-                  key="linear"
-                  value="linear"
-                  className="hover:bg-ps-border-tertiary cursor-pointer p-2 transition-colors"
-                >
-                  <Select.ItemText>Linear</Select.ItemText>
-                </Select.Item>
-                <Select.Item
-                  key="log"
-                  value="log"
-                  className="hover:bg-ps-border-tertiary cursor-pointer p-2 transition-colors"
-                >
-                  <Select.ItemText>Log</Select.ItemText>
-                </Select.Item>
-              </Select.Viewport>
-            </Select.Content>
-          </Select.Root>
+              <Select.Trigger
+                id="scale-select"
+                className="bg-ps-border-primary text-ps-text-primary border-ps-border-tertiary inline-flex h-8 w-full items-center justify-center rounded border px-2 focus:outline-none"
+              >
+                <Select.Value />
+                <Select.Icon className="ml-auto">
+                  <ArrowDownIcon />
+                </Select.Icon>
+              </Select.Trigger>
+              <Select.Content
+                position="popper"
+                sideOffset={4}
+                className="bg-ps-border-primary text-ps-text-primary border-ps-border-tertiary z-10 max-h-(--radix-select-content-available-height) w-(--radix-select-trigger-width) rounded border"
+              >
+                <Select.Viewport>
+                  <Select.Item
+                    key="linear"
+                    value="linear"
+                    className="hover:bg-ps-border-tertiary cursor-pointer p-2 transition-colors"
+                  >
+                    <Select.ItemText>Linear</Select.ItemText>
+                  </Select.Item>
+                  <Select.Item
+                    key="log"
+                    value="log"
+                    className="hover:bg-ps-border-tertiary cursor-pointer p-2 transition-colors"
+                  >
+                    <Select.ItemText>Log</Select.ItemText>
+                  </Select.Item>
+                </Select.Viewport>
+              </Select.Content>
+            </Select.Root>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label.Root
+              className="text-ps-text-primary/60"
+              htmlFor="normalization-select"
+            >
+              Normalize Display
+            </Label.Root>
+            <Select.Root
+              value={render.normalizationMode}
+              onValueChange={(value) =>
+                setRender({
+                  ...render,
+                  normalizationMode: value as NormalizationMode,
+                })
+              }
+            >
+              <Select.Trigger
+                id="normalization-select"
+                className="bg-ps-border-primary text-ps-text-primary border-ps-border-tertiary inline-flex h-8 w-full items-center justify-center rounded border px-2 focus:outline-none"
+              >
+                <Select.Value />
+                <Select.Icon className="ml-auto">
+                  <ArrowDownIcon />
+                </Select.Icon>
+              </Select.Trigger>
+              <Select.Content
+                position="popper"
+                sideOffset={4}
+                className="bg-ps-border-primary text-ps-text-primary border-ps-border-tertiary z-10 max-h-(--radix-select-content-available-height) w-(--radix-select-trigger-width) rounded border"
+              >
+                <Select.Viewport>
+                  <Select.Item
+                    key="across-funcs"
+                    value="Across Funcs"
+                    className="hover:bg-ps-border-tertiary cursor-pointer p-2 transition-colors"
+                  >
+                    <Select.ItemText>Across Funcs</Select.ItemText>
+                  </Select.Item>
+                  <Select.Item
+                    key="per-func"
+                    value="Per Func"
+                    className="hover:bg-ps-border-tertiary cursor-pointer p-2 transition-colors"
+                  >
+                    <Select.ItemText>Per Func</Select.ItemText>
+                  </Select.Item>
+                </Select.Viewport>
+              </Select.Content>
+            </Select.Root>
+          </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <Label.Root
-            className="text-ps-text-primary/60"
-            htmlFor="normalization-select"
-          >
-            Normalize Display
-          </Label.Root>
-          <Select.Root
-            value={render.normalizationMode}
-            onValueChange={(value) =>
-              setRender({
-                ...render,
-                normalizationMode: value as NormalizationMode,
-              })
-            }
-          >
-            <Select.Trigger
-              id="normalization-select"
-              className="bg-ps-border-primary text-ps-text-primary border-ps-border-tertiary inline-flex h-8 w-full items-center justify-center rounded border px-2 focus:outline-none"
-            >
-              <Select.Value />
-              <Select.Icon className="ml-auto">
-                <ArrowDownIcon />
-              </Select.Icon>
-            </Select.Trigger>
-            <Select.Content
-              position="popper"
-              sideOffset={4}
-              className="bg-ps-border-primary text-ps-text-primary border-ps-border-tertiary z-10 max-h-(--radix-select-content-available-height) w-(--radix-select-trigger-width) rounded border"
-            >
-              <Select.Viewport>
-                <Select.Item
-                  key="across-funcs"
-                  value="Across Funcs"
-                  className="hover:bg-ps-border-tertiary cursor-pointer p-2 transition-colors"
-                >
-                  <Select.ItemText>Across Funcs</Select.ItemText>
-                </Select.Item>
-                <Select.Item
-                  key="per-func"
-                  value="Per Func"
-                  className="hover:bg-ps-border-tertiary cursor-pointer p-2 transition-colors"
-                >
-                  <Select.ItemText>Per Func</Select.ItemText>
-                </Select.Item>
-              </Select.Viewport>
-            </Select.Content>
-          </Select.Root>
-        </div>
-      </div>
+      ) : null}
     </div>
   );
 }
