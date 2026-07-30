@@ -252,10 +252,10 @@ std::optional<std::pair<Expr, Expr>> as_binary_operands(const Expr &e) {
     // rather than going through Expr::as<>(), which would redundantly re-check
     // the node type the switch case has already established.
     switch (e.node_type()) {
-#define HANDLE_BINARY_OP(NodeType)                                   \
-    case IRNodeType::NodeType: {                                     \
-        const NodeType *op = static_cast<const NodeType *>(e.get()); \
-        return std::pair{op->a, op->b};                              \
+#define HANDLE_BINARY_OP(NodeType)                        \
+    case IRNodeType::NodeType: {                          \
+        const NodeType *op = (const NodeType *)(e.get()); \
+        return std::pair{op->a, op->b};                   \
     }
         HANDLE_BINARY_OP(Add)
         HANDLE_BINARY_OP(Sub)
