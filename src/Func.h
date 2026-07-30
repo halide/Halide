@@ -2679,8 +2679,15 @@ public:
      * established, change_type() errors unless `unsafe` is true, which bypasses
      * the check entirely.
      *
-     * Currently supports single-output Funcs whose update definitions are built
-     * from binary operators over the accumulator. */
+     * Translating a min/max identity that does not round-trip through `t`
+     * additionally requires the first update to be dense and unpredicated. Its
+     * reduction extents must be statically positive or satisfy an injected
+     * runtime precondition that they are positive.
+     *
+     * Currently supports single-output Funcs whose update definitions use a
+     * binary operator with one operand that is a direct call to the accumulator
+     * and one self-reference-free term. Difference reductions must have the
+     * accumulator as the left operand. */
     Func change_type(Type t, bool unsafe = false);
 
     /** Immediately inline direct calls to each of the given Funcs into this
