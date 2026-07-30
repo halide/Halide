@@ -476,14 +476,12 @@ bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *resul
         result->lanes.push_back(b->lanes);
         return true;
     } else if (const Shuffle *s = e.as<Shuffle>(); s && s->vectors.size() == 1) {
-        if (s->is_transpose() && is_multiramp(s->vectors[0], scope, result)) {
-            return result->transpose(s->transpose_factor());
-        }
-        // Any other shuffle of a single vector is a reshaping of it if the lane
-        // indices are themselves a multiramp, but we can only say what the
-        // result is if the values being shuffled are an affine function of the
-        // lane index, i.e. the input is one-dimensional. This is the shape that
-        // flatten_nested_ramps leaves a strided load in.
+        // A shuffle of a single vector is a reshaping of it, rather than a
+        // gather, if the lane indices are themselves a multiramp. That covers
+        // transposes, whose masks are multiramps of constants. But we can only
+        // say what the result is if the values being shuffled are an affine
+        // function of the lane index, i.e. the input is one-dimensional. This
+        // is the shape that flatten_nested_ramps leaves a strided load in.
         MultiRamp inner, perm;
         if (is_multiramp(s->vectors[0], scope, &inner) &&
             inner.dimensions() == 1 &&
@@ -756,50 +754,6 @@ std::vector<MultiRamp::PeeledDim> MultiRamp::alias_free_slice() {
     }
     *this = std::move(remaining);
     return peeled;
-}
-
-bool MultiRamp::transpose(int cols) {
-    // Refine the dims so that some prefix of them accounts for exactly `cols`
-    // lanes, then move that prefix outwards.
-    std::vector<int> shape;
-    size_t prefix = 0;
-    int prefix_lanes = 1;
-    for (int l : lanes) {
-        if (prefix_lanes == cols) {
-            shape.push_back(l);
-            continue;
-        }
-        if (cols % prefix_lanes) {
-            return false;
-        }
-        int remaining = cols / prefix_lanes;
-        if (l <= remaining) {
-            if (remaining % l) {
-                return false;
-            }
-            shape.push_back(l);
-            prefix_lanes *= l;
-        } else {
-            if (l % remaining) {
-                return false;
-            }
-            // This dim spans the split, so break it in two.
-            shape.push_back(remaining);
-            shape.push_back(l / remaining);
-            prefix_lanes = cols;
-        }
-        prefix++;
-    }
-
-    std::vector<Expr> new_strides;
-    if (prefix_lanes != cols || !strides_for_shape(shape, &new_strides)) {
-        return false;
-    }
-
-    std::rotate(shape.begin(), shape.begin() + prefix, shape.end());
-    std::rotate(new_strides.begin(), new_strides.begin() + prefix, new_strides.end());
-    *this = MultiRamp(base, new_strides, shape);
-    return true;
 }
 
 int MultiRamp::rotate_stride_one_innermost() {

@@ -584,7 +584,7 @@ void check_reject_non_multiramp_sum() {
     CHECK(!is_multiramp(sum, scope, &m), "reject coprime-shape add");
 }
 
-// ---- MultiRamp::transpose ------------------------------------------------
+// ---- Shuffles ------------------------------------------------------------
 
 // Mirror Shuffle::make_transpose: view v as a row-major matrix with `cols`
 // columns and transpose it.
@@ -598,38 +598,6 @@ std::vector<int> transpose_vec(const std::vector<int> &v, int cols) {
     }
     return result;
 }
-
-void check_transpose_on_dim_boundary() {
-    // cols matches the innermost dim exactly, so no dim needs splitting.
-    MultiRamp A{0, {1, 100}, {4, 3}};
-    auto want = transpose_vec(expand(A), 4);
-    CHECK(A.transpose(4), "transpose on a dim boundary");
-    CHECK_SEQ(expand(A), want, "transpose on a dim boundary values");
-}
-
-void check_transpose_splits_a_dim() {
-    // cols lands in the middle of the only dim, which must be broken in two.
-    MultiRamp A{0, {1}, {8}};
-    auto want = transpose_vec(expand(A), 4);
-    CHECK(A.transpose(4), "transpose splitting a dim");
-    CHECK_SEQ(expand(A), want, "transpose splitting a dim values");
-}
-
-void check_transpose_spans_dims() {
-    // cols covers the two innermost dims together.
-    MultiRamp A{0, {1, 10, 100}, {2, 2, 3}};
-    auto want = transpose_vec(expand(A), 4);
-    CHECK(A.transpose(4), "transpose spanning dims");
-    CHECK_SEQ(expand(A), want, "transpose spanning dims values");
-}
-
-void check_transpose_rejects_indivisible() {
-    // The innermost dim of 3 can't be cut to leave a prefix of exactly 2 lanes.
-    MultiRamp A{0, {1, 100}, {3, 4}};
-    CHECK(!A.transpose(2), "transpose with an indivisible split rejected");
-}
-
-// ---- Shuffles ------------------------------------------------------------
 
 void check_recognize_transpose_shuffle() {
     Expr e = Shuffle::make_transpose(Ramp::make(Expr(0), Expr(1), 12), 4);
@@ -749,11 +717,6 @@ int main(int argc, char **argv) {
     check_rotate_stride_one_innermost_noop();
     check_roundtrips();
     check_reject_non_multiramp_sum();
-
-    check_transpose_on_dim_boundary();
-    check_transpose_splits_a_dim();
-    check_transpose_spans_dims();
-    check_transpose_rejects_indivisible();
 
     check_recognize_transpose_shuffle();
     check_recognize_reshaping_shuffle();

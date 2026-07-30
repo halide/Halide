@@ -152,13 +152,6 @@ struct MultiRamp {
      * a vector in the old lane order from one in the new order. */
     int rotate_stride_one_innermost();
 
-    /** Rearrange the lanes the way Shuffle::make_transpose(e, cols) does:
-     * view them as a row-major matrix with `cols` columns and transpose it,
-     * which moves the innermost `cols` lanes to the outside. Returns false,
-     * leaving *this undefined, if the dims can't be refactored to split off a
-     * prefix of exactly `cols` lanes. */
-    bool transpose(int cols);
-
     /** The dimensionality. May be lower than you expected, because this
      * gets flattened when possible by the operations above. */
     int dimensions() const;
