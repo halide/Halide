@@ -5,15 +5,15 @@ import * as React from "react";
 interface BarChartProps {
   data: { x: string; y: number }[];
   domain: string[];
+  range: string[];
   labels: {
     x: string;
     y: string;
   };
-  lut: Record<string, string>;
   highlight?: (x: string) => boolean;
 }
 
-function BarChart({ data, domain, labels, lut, highlight }: BarChartProps) {
+function BarChart({ data, domain, range, labels, highlight }: BarChartProps) {
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -42,11 +42,15 @@ function BarChart({ data, domain, labels, lut, highlight }: BarChartProps) {
         tickRotate: -45,
         type: "band",
       },
+      color: {
+        domain,
+        range,
+      },
       marks: [
         Plot.barY(data, {
           x: "x",
           y: "y",
-          fill: (d) => lut[d.x] ?? "#000000",
+          fill: "x",
           fillOpacity: (d) => (highlight?.(d.x) ? 1 : 0.25),
         }),
       ],
@@ -57,7 +61,7 @@ function BarChart({ data, domain, labels, lut, highlight }: BarChartProps) {
     return () => {
       plot.remove();
     };
-  }, [data, labels, domain, lut, highlight]);
+  }, [data, labels, domain, range, highlight]);
 
   return data.every((d) => d.y === 0) ? (
     <div className="flex h-full flex-col items-center justify-center gap-2">
