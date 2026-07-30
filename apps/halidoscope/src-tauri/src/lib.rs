@@ -3,6 +3,7 @@ use tauri_plugin_cli::CliExt;
 use crate::cli::halidoscope_cli;
 
 pub mod cli;
+pub mod colormap;
 pub mod commands;
 pub mod graph;
 pub mod render;

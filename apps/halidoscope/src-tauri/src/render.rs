@@ -3,6 +3,7 @@ use std::vec;
 use ::colorous;
 use serde::Deserialize;
 
+use crate::colormap::{Colormap, METRIC_PALETTE};
 use crate::trace::{for_each_lane_pixel, FuncGeometry, Trace, TracePacket};
 
 #[derive(Deserialize, Clone, Copy)]
@@ -153,6 +154,33 @@ impl GrayscaleState {
     #[inline]
     fn normalize(&self, v: f64) -> u8 {
         (255.0 * (v - self.min_v) / (self.max_v - self.min_v)).clamp(0.0, 255.0) as u8
+    }
+
+    /// Bins the raw (pre-normalization) intensity displayed per pixel — the same luma blend
+    /// `to_rgba` uses for channels >= 3, or the raw channel-0 value otherwise — into 256
+    /// fixed-width buckets (one per displayable 8-bit gray level) spanning `[min_v, max_v]`.
+    pub fn to_histogram(&self) -> Vec<u32> {
+        const NUM_BINS: usize = 256;
+        let channels = self.geom.channels;
+        let range = self.max_v - self.min_v;
+
+        let mut bins = vec![0u32; NUM_BINS];
+        for src in self.values.chunks_exact(channels) {
+            let v = if channels >= 3 {
+                src[0] * 0.2125 + src[1] * 0.7154 + src[2] * 0.0721
+            } else {
+                src[0]
+            };
+
+            let bucket = if range > 0.0 {
+                (((v - self.min_v) / range) * NUM_BINS as f64) as usize
+            } else {
+                0
+            };
+            bins[bucket.min(NUM_BINS - 1)] += 1;
+        }
+
+        bins
     }
 }
 
@@ -468,11 +496,7 @@ impl Renderer for StoreFrequencyState {
 
     fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
-        let gradient = colorous::INFERNO;
-        let lut: [[u8; 3]; 256] = std::array::from_fn(|i| {
-            let c = gradient.eval_continuous(i as f64 / 255.0);
-            [c.r, c.g, c.b]
-        });
+        let lut = Colormap::from_hex(&METRIC_PALETTE).to_lut();
 
         let scale = match (normalization_mode, self.global_max_store_count) {
             (NormalizationMode::AcrossFuncs, 0) => 0.0,
@@ -630,11 +654,7 @@ impl Renderer for LoadFrequencyState {
 
     fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
-        let gradient = colorous::INFERNO;
-        let lut: [[u8; 3]; 256] = std::array::from_fn(|i| {
-            let c = gradient.eval_continuous(i as f64 / 255.0);
-            [c.r, c.g, c.b]
-        });
+        let lut = Colormap::from_hex(&METRIC_PALETTE).to_lut();
 
         let scale = match (normalization_mode, self.global_max_load_count) {
             (NormalizationMode::AcrossFuncs, 0) => 0.0,
@@ -691,7 +711,8 @@ pub struct RedundantState {
     redundant_store_counts: Vec<u32>,
     local_max_redundant_store_count: u32,
     global_max_redundant_store_count: u32,
-    applied_k: usize,
+    applied_store_k: usize,
+    applied_load_k: usize,
 }
 
 impl RedundantState {
@@ -714,14 +735,16 @@ impl RedundantState {
             redundant_store_counts: vec![0u32; n_pixels],
             local_max_redundant_store_count,
             global_max_redundant_store_count,
-            applied_k: 0,
+            applied_store_k: 0,
+            applied_load_k: 0,
         })
     }
 
     fn reset(&mut self) {
         self.last_values.iter_mut().for_each(|v| *v = None);
         self.redundant_store_counts.iter_mut().for_each(|c| *c = 0);
-        self.applied_k = 0;
+        self.applied_store_k = 0;
+        self.applied_load_k = 0;
     }
 
     fn apply_store(&mut self, pkt: &TracePacket) {
@@ -758,55 +781,77 @@ impl RedundantState {
         );
     }
 
-    pub fn to_tabular_data(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
-        let max = match normalization_mode {
-            NormalizationMode::AcrossFuncs => self.global_max_redundant_store_count,
-            NormalizationMode::PerFunc => self.local_max_redundant_store_count,
-        };
+    /// A load observes the current value at `(x, y, channel)`, so it breaks the redundancy chain:
+    /// clear the last-written value there so a subsequent store is never counted as redundant
+    /// against a value that predates the load.
+    fn apply_load(&mut self, pkt: &TracePacket) {
+        let FuncGeometry {
+            width,
+            height,
+            channels,
+            min_x,
+            min_y,
+            min_c,
+            ..
+        } = self.geom;
 
-        let exceeds_max_bins = max > 64;
-        // Pre-allocate tabular_data, capping to 64 bins.
-        let mut tabular_data = vec![
-            0u32;
-            if exceeds_max_bins {
-                64
-            } else {
-                max as usize + 1
-            }
-        ];
-
-        for &c in &self.redundant_store_counts {
-            let bucket = if exceeds_max_bins { c * 63 / max } else { c };
-
-            tabular_data[bucket.clamp(0, 63) as usize] += 1;
-        }
-
-        tabular_data
+        for_each_lane_pixel(
+            pkt,
+            min_x,
+            min_y,
+            width,
+            height,
+            Some((min_c, channels)),
+            |_lane, _pixel_idx, val_idx: usize| {
+                self.last_values[val_idx] = None;
+            },
+        );
     }
-}
 
-impl Renderer for RedundantState {
-    type Value = u32;
+    /// Seeks to the state after the first `target_store_k` stores and `target_load_k` loads.
+    /// Events are replayed in global packet order via a two-pointer merge of the two sorted index
+    /// lists. Backward seeks (either counter regresses) reset and replay from zero.
+    pub fn seek(
+        &mut self,
+        trace: &Trace,
+        store_indices: &[usize],
+        load_indices: &[usize],
+        target_store_k: usize,
+        target_load_k: usize,
+    ) {
+        let target_store_k = target_store_k.min(store_indices.len());
+        let target_load_k = target_load_k.min(load_indices.len());
 
-    fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
-        let target_k = target_k.min(store_indices.len());
-        if target_k < self.applied_k {
+        if target_store_k < self.applied_store_k || target_load_k < self.applied_load_k {
             self.reset();
         }
-        for &global_idx in &store_indices[self.applied_k..target_k] {
-            self.apply_store(&trace.packets[global_idx]);
+
+        let store_slice = &store_indices[self.applied_store_k..target_store_k];
+        let load_slice = &load_indices[self.applied_load_k..target_load_k];
+        let mut si = 0;
+        let mut li = 0;
+
+        while si < store_slice.len() || li < load_slice.len() {
+            let next_is_store = si < store_slice.len()
+                && (li >= load_slice.len() || store_slice[si] < load_slice[li]);
+
+            if next_is_store {
+                self.apply_store(&trace.packets[store_slice[si]]);
+                si += 1;
+            } else {
+                self.apply_load(&trace.packets[load_slice[li]]);
+                li += 1;
+            }
         }
-        self.applied_k = target_k;
+
+        self.applied_store_k = target_store_k;
+        self.applied_load_k = target_load_k;
     }
 
-    fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8> {
+    pub fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
 
-        let gradient = colorous::INFERNO;
-        let lut: [[u8; 3]; 256] = std::array::from_fn(|i| {
-            let c = gradient.eval_continuous(i as f64 / 255.0);
-            [c.r, c.g, c.b]
-        });
+        let lut = Colormap::from_hex(&METRIC_PALETTE).to_lut();
 
         let scale = match (normalization_mode, self.global_max_redundant_store_count) {
             (NormalizationMode::AcrossFuncs, 0) => 0.0,
@@ -837,11 +882,37 @@ impl Renderer for RedundantState {
         out
     }
 
-    fn to_values(&self) -> Vec<u32> {
+    pub fn to_tabular_data(&self, normalization_mode: NormalizationMode) -> Vec<u32> {
+        let max = match normalization_mode {
+            NormalizationMode::AcrossFuncs => self.global_max_redundant_store_count,
+            NormalizationMode::PerFunc => self.local_max_redundant_store_count,
+        };
+
+        let exceeds_max_bins = max > 64;
+        // Pre-allocate tabular_data, capping to 64 bins.
+        let mut tabular_data = vec![
+            0u32;
+            if exceeds_max_bins {
+                64
+            } else {
+                max as usize + 1
+            }
+        ];
+
+        for &c in &self.redundant_store_counts {
+            let bucket = if exceeds_max_bins { c * 63 / max } else { c };
+
+            tabular_data[bucket.clamp(0, 63) as usize] += 1;
+        }
+
+        tabular_data
+    }
+
+    pub fn to_values(&self) -> Vec<u32> {
         self.redundant_store_counts.clone()
     }
 
-    fn to_nan_inf_overlay(&self, include_nan: IncludeNan, include_inf: IncludeInf) -> Vec<u8> {
+    pub fn to_nan_inf_overlay(&self, include_nan: IncludeNan, include_inf: IncludeInf) -> Vec<u8> {
         let FuncGeometry {
             width,
             height,
@@ -1032,11 +1103,7 @@ impl ReuseDistanceState {
     pub fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8> {
         let FuncGeometry { width, height, .. } = self.geom;
 
-        let gradient = colorous::INFERNO;
-        let lut: [[u8; 3]; 256] = std::array::from_fn(|i| {
-            let c = gradient.eval_continuous(i as f64 / 255.0);
-            [c.r, c.g, c.b]
-        });
+        let lut = Colormap::from_hex(&METRIC_PALETTE).to_lut();
 
         let scale = match (normalization_mode, self.global_max_reuse_distance) {
             (NormalizationMode::AcrossFuncs, 0) => 0.0,
