@@ -1289,7 +1289,7 @@ public:
             }
         }
 
-        return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
+        return op->with(op->min, op->max, body);
     }
 
     Scope<> let_vars_in_scope;
