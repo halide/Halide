@@ -829,6 +829,8 @@ struct HoistedFactor {
 // distributive law of the outer associative op, extract a loop-invariant factor
 // that distributes over the outer op. `reduction_vars` is the set of RVar names
 // the factor must not reference.
+// TODO: if we flatten by the outer op here we can make tuple-valued reductions
+//   for things like: f(r) += a * g(r) + b * h(r)
 optional<HoistedFactor> extract_factor(const Expr &increment,
                                        const DistributiveLaw &law,
                                        const Scope<> &reduction_vars) {
