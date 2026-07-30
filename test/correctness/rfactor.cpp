@@ -1746,6 +1746,66 @@ int hoist_invariants_after_rfactor_test() {
     return 0;
 }
 
+// A direct 2D Gaussian blur can be made separable by preserving r.y with
+// rfactor(), then hoisting kernel(r.y) out of the intermediate's remaining
+// r.x reduction. The factor-free intermediate performs the horizontal blur;
+// its write-back applies the vertical kernel weight, and the original Func
+// combines those weighted rows.
+int hoist_invariants_separable_gaussian_after_rfactor_test() {
+    constexpr int radius = 2;
+    constexpr int diameter = 2 * radius + 1;
+    constexpr int width = 17;
+    constexpr int height = 13;
+
+    Buffer<float> kernel(diameter);
+    kernel.set_min(-radius);
+    const int binomial_weights[diameter] = {1, 4, 6, 4, 1};
+    for (int i = 0; i < diameter; i++) {
+        kernel(i - radius) = (float)binomial_weights[i] / 16.0f;
+    }
+
+    Buffer<float> input(width + 2 * radius, height + 2 * radius);
+    input.set_min(-radius, -radius);
+    for (int y = input.dim(1).min(); y <= input.dim(1).max(); y++) {
+        for (int x = input.dim(0).min(); x <= input.dim(0).max(); x++) {
+            input(x, y) = (float)((7 * x + 13 * y + 101) % 29 - 14);
+        }
+    }
+
+    Var x{"x"}, y{"y"}, dy{"dy"};
+
+    auto make_pipeline = [&](const std::string &func_name, const std::string &rdom_name) {
+        RDom r(-radius, diameter, -radius, diameter, rdom_name);
+        Func f{func_name};
+        f(x, y) = 0.0f;
+        f(x, y) += kernel(r.x) * kernel(r.y) * input(x + r.x, y + r.y);
+        return std::make_pair(f, r);
+    };
+
+    auto [reference, ref_r] = make_pipeline("gaussian_reference", "ref_r");
+    auto [blur, r] = make_pipeline("gaussian_blur", "r");
+
+    Func vertical_partials = blur.update().rfactor(r.y, dy);
+    Func horizontal = vertical_partials.update().hoist_invariants();
+
+    vertical_partials.compute_root();
+    horizontal.compute_root();
+
+    Buffer<float> expected = reference.realize({width, height});
+    Buffer<float> actual = blur.realize({width, height});
+    for (int yy = 0; yy < height; yy++) {
+        for (int xx = 0; xx < width; xx++) {
+            const float error = std::abs(actual(xx, yy) - expected(xx, yy));
+            internal_assert(error < 1e-5f)
+                << "separable Gaussian after rfactor/hoist_invariants mismatch at ("
+                << xx << ", " << yy << "): " << actual(xx, yy)
+                << " vs ref " << expected(xx, yy) << "\n";
+        }
+    }
+
+    return 0;
+}
+
 #if HALIDE_WITH_EXCEPTIONS
 // The min/max + add hoisting law is only valid for integer types where addition
 // has no defined wraparound behavior. For UInt(8), hoisting the invariant 250
@@ -1883,6 +1943,7 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (strict_float preserved)", hoist_invariants_strict_float_test},
         {"hoist_invariants test (predicated RDom)", hoist_invariants_predicated_rdom_test},
         {"hoist_invariants test (after rfactor)", hoist_invariants_after_rfactor_test},
+        {"hoist_invariants test (separable Gaussian after rfactor)", hoist_invariants_separable_gaussian_after_rfactor_test},
 #if HALIDE_WITH_EXCEPTIONS
         {"hoist_invariants test (invalid law rejected)", hoist_invariants_invalid_law_rejected_test},
         {"hoist_invariants test (nothing to hoist rejected)", hoist_invariants_nothing_to_hoist_rejected_test},
