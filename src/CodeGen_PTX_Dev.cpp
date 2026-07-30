@@ -17,6 +17,7 @@
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
+#include "ModulusRemainder.h"
 #include "MultiRamp.h"
 #include "Simplify.h"
 #include "Solve.h"
@@ -787,6 +788,31 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
             return false;
         }
     }
+    // The hardware needs both addresses aligned to the width of the copy. A
+    // stride that isn't a multiple of it - which is what an odd align_storage
+    // produces - shows up here as an unprovable alignment.
+    if (t.lanes() > 1) {
+        // Use the alignment lowering worked out, which knows what the loop
+        // variables in the index are multiples of.
+        // Only the destination is checked. Its alignment is what align_storage
+        // controls, so it is the one a schedule can get wrong. A source in a
+        // buffer whose strides are not known until runtime has no provable
+        // alignment either way, and rejecting those would fail schedules that
+        // are fine.
+        auto aligned = [&](const ModulusRemainder &a, const Expr &base) {
+            auto ok = [&](const ModulusRemainder &m) {
+                return m.modulus % t.lanes() == 0 && m.remainder % t.lanes() == 0;
+            };
+            return ok(a) || ok(modulus_remainder(base));
+        };
+        if (!aligned(op->alignment, dst_base)) {
+            *reason = "the destination is not known to be aligned to the width of "
+                      "the copy. Any align_storage on this Func has to be a multiple "
+                      "of the number of elements each thread copies";
+            return false;
+        }
+    }
+
     Value *dst = codegen_buffer_pointer(op->name, t.element_of(), dst_base);
     Value *src_ptr = codegen_buffer_pointer(src->name, t.element_of(), src_base);
 
@@ -869,7 +895,41 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
             user_error
                 << op->name << " is scheduled in GPUSharedAsync memory, but this "
                 << "store to it cannot be done with an asynchronous copy, because "
-                << reason << ".\n"
+                << reason << ".\n\n"
+                << "An asynchronous copy hands a block of bytes to the copy engine, "
+                << "which moves them from global memory to shared memory without "
+                << "going through registers. For that to be possible:\n"
+                << "  1. The Func must be a plain copy - its value must be a single "
+                << "load from a buffer the kernel did not allocate. No cast, no "
+                << "arithmetic, and no boundary condition, because the bytes are "
+                << "moved untouched.\n"
+                << "  2. Each thread must move 4, 8 or 16 bytes at a time, so the "
+                << "dense dimension must be vectorized by that many elements.\n"
+                << "  3. The source must be dense in the same dimension as the "
+                << "destination, so that both addresses advance one element at a "
+                << "time. For a matrix that means splitting the dimension that is "
+                << "dense in memory, which differs between the two operands.\n"
+                << "  4. Any align_storage must be a multiple of the number of "
+                << "elements each thread copies, or the rows stop being aligned "
+                << "enough for the copy.\n"
+                << "  5. The remaining dimensions must be spread over the threads "
+                << "of the block, so that between them they issue the whole copy.\n"
+                << "  6. The target must be CUDA compute capability 8.0 or above.\n\n"
+                << "A schedule that satisfies all of them, for a 16-bit Func "
+                << "staged inside a reduction loop, looks like:\n\n"
+                << "    // stage(x, y) = src(x, y);  <- a plain copy, nothing else\n"
+                << "    Var xo, xi, t, ti, tw;\n"
+                << "    stage.compute_at(consumer, r)\n"
+                << "         .store_in(MemoryType::GPUSharedAsync)\n"
+                << "         .align_storage(x, padded_width)  // a multiple of 8\n"
+                << "         .split(x, xo, xi, 8)   // 8 halves is 16 bytes\n"
+                << "         .fuse(xo, y, t)        // flatten what is left\n"
+                << "         .split(t, t, ti, 32)   // one chunk per lane\n"
+                << "         .split(t, t, tw, warps_per_block)\n"
+                << "         .gpu_lanes(ti)\n"
+                << "         .gpu_threads(tw)\n"
+                << "         .vectorize(xi);\n\n"
+                << "The store that could not be made asynchronous was:\n"
                 << Stmt(op);
         }
     }
