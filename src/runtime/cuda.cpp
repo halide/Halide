@@ -526,19 +526,11 @@ WEAK int validate_device_pointer(void *user_context, halide_buffer_t *buf, size_
 WEAK CUmodule compile_kernel(void *user_context, const char *ptx_src, int size) {
     debug(user_context) << "CUDA: compile_kernel cuModuleLoadData " << (void *)ptx_src << ", " << size << " -> ";
 
-    CUjit_option options[] = {CU_JIT_MAX_REGISTERS};
-    unsigned int max_regs_per_thread = 64;
-
-    // A hack to enable control over max register count for
-    // testing. This should be surfaced in the schedule somehow
-    // instead.
-    char *regs = getenv("HL_CUDA_JIT_MAX_REGISTERS");
-    if (regs) {
-        max_regs_per_thread = atoi(regs);
-    }
-    void *optionValues[] = {(void *)(uintptr_t)max_regs_per_thread};
+    // Let the driver pick the register count. Capping it trades spilling
+    // against occupancy, and the driver has more information about the kernel
+    // and the device than we do.
     CUmodule loaded_module;
-    CUresult err = cuModuleLoadDataEx(&loaded_module, ptx_src, 1, options, optionValues);
+    CUresult err = cuModuleLoadData(&loaded_module, ptx_src);
 
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuModuleLoadData failed: "
