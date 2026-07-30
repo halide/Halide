@@ -3745,20 +3745,19 @@ Func Func::change_type(Type t, bool unsafe) {
     }
     const bool is_min_max = op && (*op == IRNodeType::Min || *op == IRNodeType::Max);
 
-    optional<Expr> translated_identity;
+    Expr translated_identity;
     Expr identity_precondition;
     if (is_min_max) {
         const Expr &initial = func.values()[0];
-        const optional<Expr> old_id = get_associative_identity(old_t, *op);
-        if (old_id && can_prove(initial == *old_id)) {
+        const Expr old_id = get_associative_identity(old_t, *op);
+        if (old_id.defined() && can_prove(initial == old_id)) {
             translated_identity = get_associative_identity(t, *op);
-            user_assert(translated_identity)
+            user_assert(translated_identity.defined())
                 << "change_type() could not find an identity for "
                 << IRNodeType_string(*op) << " at type " << t << ".\n";
 
-            const Expr round_tripped =
-                simplify(cast(old_t, *translated_identity));
-            if (!unsafe && !can_prove(round_tripped == *old_id)) {
+            const Expr round_tripped = cast(old_t, translated_identity);
+            if (!unsafe && !can_prove(round_tripped == old_id)) {
                 const auto err =
                     nonempty_dense_update_precondition(func, &identity_precondition);
                 user_assert(!err)
@@ -3774,17 +3773,9 @@ Func Func::change_type(Type t, bool unsafe) {
     Func typed(fname + "_typed");
 
     // Pure definition.
-    {
-        internal_assert(func.values().size() == 1);
-        Expr pure_value = func.values()[0];
-
-        Expr retyped = translated_identity.value_or(Expr());
-        if (!retyped.defined()) {
-            retyped = retype_leaf(pure_value, t, func_bounds);
-        }
-
-        typed(pure_vars) = retyped;
-    }
+    typed(pure_vars) = translated_identity.defined() ?
+                           translated_identity :
+                           retype_leaf(value(), t, func_bounds);
 
     // Update definitions. The retyped values still reference the original
     // reduction domain, so pass a default domain and let define_update discover
