@@ -461,7 +461,7 @@ protected:
 
         if ((fixed_size_thread_allocation &&
              op->memory_type != MemoryType::Heap &&
-             op->memory_type != MemoryType::GPUShared &&
+             !is_gpu_shared(op->memory_type) &&
              op->memory_type != MemoryType::GPUTexture) ||
             op->memory_type == MemoryType::Register ||
             op->memory_type == MemoryType::Stack) {
@@ -470,7 +470,7 @@ protected:
         }
 
         user_assert(op->memory_type == MemoryType::Auto ||
-                    op->memory_type == MemoryType::GPUShared ||
+                    is_gpu_shared(op->memory_type) ||
                     op->memory_type == MemoryType::GPUTexture ||
                     op->memory_type == MemoryType::Heap)
             << "Allocation " << op->name << " must live in shared or heap memory, "
@@ -1396,6 +1396,7 @@ protected:
         debug(4) << "Encountered store to " << op->name << "\n";
         auto mem_type = memory_type_for_name(op->name);
         switch (mem_type) {
+        case MemoryType::GPUSharedAsync:
         case MemoryType::GPUShared:
             debug(4) << "   memory type is shared\n";
             shared_stores.insert(op->name);
@@ -1421,6 +1422,7 @@ protected:
         debug(4) << "Encountered load from " << op->name << "\n";
         auto mem_type = memory_type_for_name(op->name);
         switch (mem_type) {
+        case MemoryType::GPUSharedAsync:
         case MemoryType::GPUShared:
             debug(4) << "   memory type is shared\n";
             shared_loads.insert(op->name);
