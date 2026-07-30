@@ -317,6 +317,41 @@ impl RgbState {
     fn normalize(&self, v: f64) -> u8 {
         (255.0 * (v - self.min_v) / (self.max_v - self.min_v)).clamp(0.0, 255.0) as u8
     }
+
+    /// Bins the raw (pre-normalization) per-channel values into 256 fixed-width buckets spanning
+    /// `[min_v, max_v]`. When `channels >= 3`, returns three histograms back to back (R, then G,
+    /// then B, 256 `u32`s each — the caller recovers the channel count as `len / 256`). Otherwise
+    /// falls back to a single histogram over channel 0, matching `GrayscaleState::to_histogram`.
+    pub fn to_histogram(&self) -> Vec<u32> {
+        const NUM_BINS: usize = 256;
+        let channels = self.geom.channels;
+        let range = self.max_v - self.min_v;
+
+        let bucket_of = |v: f64| -> usize {
+            let bucket = if range > 0.0 {
+                (((v - self.min_v) / range) * NUM_BINS as f64) as usize
+            } else {
+                0
+            };
+            bucket.min(NUM_BINS - 1)
+        };
+
+        if channels < 3 {
+            let mut bins = vec![0u32; NUM_BINS];
+            for src in self.values.chunks_exact(channels) {
+                bins[bucket_of(src[0])] += 1;
+            }
+            return bins;
+        }
+
+        let mut bins = vec![0u32; NUM_BINS * 3];
+        for src in self.values.chunks_exact(channels) {
+            for c in 0..3 {
+                bins[c * NUM_BINS + bucket_of(src[c])] += 1;
+            }
+        }
+        bins
+    }
 }
 
 impl Renderer for RgbState {

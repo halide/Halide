@@ -286,6 +286,7 @@ pub fn render_rgb(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    include_tabular_data: bool,
     include_nan: IncludeNan,
     include_inf: IncludeInf,
     state: State<AppState>,
@@ -310,11 +311,16 @@ pub fn render_rgb(
     renderer.seek(trace, store_indices, k);
 
     let pixels = renderer.to_rgba(normalization_mode);
+    let histogram = if include_tabular_data {
+        renderer.to_histogram()
+    } else {
+        Vec::new()
+    };
     let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
     Ok(Response::new(pack_render_response(
         pixels,
         nan_inf_overlays,
-        &[],
+        &histogram,
     )))
 }
 
