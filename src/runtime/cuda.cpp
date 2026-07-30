@@ -526,9 +526,7 @@ WEAK int validate_device_pointer(void *user_context, halide_buffer_t *buf, size_
 WEAK CUmodule compile_kernel(void *user_context, const char *ptx_src, int size) {
     debug(user_context) << "CUDA: compile_kernel cuModuleLoadData " << (void *)ptx_src << ", " << size << " -> ";
 
-    // Let the driver pick the register count. Capping it trades spilling
-    // against occupancy, and the driver has more information about the kernel
-    // and the device than we do.
+    // Use driver defaults for all JIT options.
     CUmodule loaded_module;
     CUresult err = cuModuleLoadData(&loaded_module, ptx_src);
 
