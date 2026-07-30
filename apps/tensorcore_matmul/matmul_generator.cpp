@@ -1,5 +1,7 @@
 #include "Halide.h"
 
+#include <algorithm>
+
 namespace {
 
 using namespace Halide;
@@ -21,10 +23,13 @@ public:
 
     // How many tensor core tiles of accumulator each warp holds, and how many
     // warps there are per block in each dimension.
-    GeneratorParam<int> tiles_x{"tiles_x", 5};
-    GeneratorParam<int> tiles_y{"tiles_y", 4};
-    GeneratorParam<int> warps_x{"warps_x", 2};
-    GeneratorParam<int> warps_y{"warps_y", 1};
+    // Zero means pick a shape based on the problem size. The best block gets
+    // smaller as the matrices do, because a large one leaves too few blocks to
+    // fill the machine.
+    GeneratorParam<int> tiles_x{"tiles_x", 0};
+    GeneratorParam<int> tiles_y{"tiles_y", 0};
+    GeneratorParam<int> warps_x{"warps_x", 0};
+    GeneratorParam<int> warps_y{"warps_y", 0};
     // How much of the reduction is staged in shared memory at a time.
     GeneratorParam<int> block_k{"block_k", 32};
     // Extra elements per row of the shared panels, which spreads consecutive
@@ -91,8 +96,24 @@ public:
             // tiles_y) multiplies, so this is what gets us reuse out of the
             // loads.
             const int tile = 16;
-            const int block_x = tile * tiles_x * warps_x;
-            const int block_y = tile * tiles_y * warps_y;
+            int tx = tiles_x, ty = tiles_y, wx = warps_x, wy = warps_y;
+            int pb = pad_b;
+            if (tx == 0 || ty == 0 || wx == 0 || wy == 0) {
+                // The padding goes with the shape: it is what keeps consecutive
+                // rows of the staged panel in different banks, so the right
+                // amount depends on how wide the panel is.
+                const int n = std::min({(int)M, (int)N, (int)K});
+                if (n <= 1024) {
+                    // Small problems need small blocks: a 160x64 block leaves
+                    // only a few dozen of them to cover 36 SMs, and 160 does
+                    // not divide 1024 so the last one in each row is ragged.
+                    tx = 8, ty = 2, wx = 1, wy = 1, pb = 8;
+                } else {
+                    tx = 5, ty = 4, wx = 2, wy = 1, pb = 24;
+                }
+            }
+            const int block_x = tile * tx * wx;
+            const int block_y = tile * ty * wy;
 
             Var xi("xi"), yi("yi"), xt("xt"), yt("yt"), mmxi("mmxi"), mmyi("mmyi");
             Var xw("xw"), yw("yw"), rxi("rxi"), ryi("ryi");
@@ -101,10 +122,10 @@ public:
             output.bound(x, 0, N)
                 .bound(y, 0, M)
                 .split(x, x, xi, block_x)
-                .split(xi, xt, xi, tile * tiles_x)
+                .split(xi, xt, xi, tile * tx)
                 .split(xi, xi, mmxi, tile)
                 .split(y, y, yi, block_y)
-                .split(yi, yt, yi, tile * tiles_y)
+                .split(yi, yt, yi, tile * ty)
                 .split(yi, yi, mmyi, tile)
                 .gpu_blocks(x, y)
                 .gpu_threads(xt, yt)
@@ -120,9 +141,9 @@ public:
             // loop over warps, which lets every warp share one staged panel.
             prod.compute_at(output, x)
                 .store_in(MemoryType::WMMAFragment)
-                .split(x, xw, xi, tile * tiles_x)
+                .split(x, xw, xi, tile * tx)
                 .split(xi, xi, rxi, tile)
-                .split(y, yw, yi, tile * tiles_y)
+                .split(y, yw, yi, tile * ty)
                 .split(yi, yi, ryi, tile)
                 .reorder(rxi, ryi, xi, yi, xw, yw)
                 .gpu_threads(xw, yw)
@@ -133,9 +154,9 @@ public:
 
             prod.update()
                 .split(k, ko, ki, block_k)
-                .split(x, xw, xi, tile * tiles_x)
+                .split(x, xw, xi, tile * tx)
                 .split(xi, xi, rxi, tile)
-                .split(y, yw, yi, tile * tiles_y)
+                .split(y, yw, yi, tile * ty)
                 .split(yi, yi, ryi, tile)
                 .split(ki, ki, rri, tile)
                 .reorder(rri, rxi, ryi, xi, yi, ki, xw, yw, ko)
@@ -163,20 +184,20 @@ public:
                 .split(kk, kko, kki, vec)
                 .fuse(kko, y, t)
                 .split(t, t, ti, 32)
-                .split(t, t, tw, warps_x)
-                .split(t, to, tw2, warps_y)
+                .split(t, t, tw, wx)
+                .split(t, to, tw2, wy)
                 .gpu_lanes(ti)
                 .gpu_threads(tw, tw2)
                 .vectorize(kki);
 
             Bs.compute_at(prod, ko)
                 .store_in(MemoryType::GPUSharedAsync)
-                .align_storage(x, block_x + (int)pad_b)
+                .align_storage(x, block_x + pb)
                 .split(x, xxo, xxi, vec)
                 .fuse(xxo, kk, t)
                 .split(t, t, ti, 32)
-                .split(t, t, tw, warps_x)
-                .split(t, to, tw2, warps_y)
+                .split(t, t, tw, wx)
+                .split(t, to, tw2, wy)
                 .gpu_lanes(ti)
                 .gpu_threads(tw, tw2)
                 .vectorize(xxi);
