@@ -3233,8 +3233,7 @@ Func &Func::compute_inline() {
     return compute_at(LoopLevel::inlined());
 }
 
-Func &Func::eager_inline(const std::vector<Func> &fs) {
-    invalidate_cache();
+Stage &Stage::eager_inline(const std::vector<Func> &fs) {
     for (const Func &f : fs) {
         user_assert(f.defined())
             << "eager_inline() was passed an undefined Func.\n";
@@ -3242,12 +3241,20 @@ Func &Func::eager_inline(const std::vector<Func> &fs) {
             << "eager_inline() cannot inline " << f.name()
             << ": it must be a pure Func with no update or extern definition and "
             << "no specializations.\n";
-        // Rewrites this Func's pure and update definitions in place, replacing
-        // every direct call to f with f's body. Processing fs left to right means
-        // a body spliced in by an earlier inline exposes its own direct calls to
-        // later fs, which the next iteration then inlines.
-        Internal::inline_function(func, f.function());
+        // Rewrites this stage's definition in place, replacing every direct call
+        // to f with f's body. Processing fs left to right means a body spliced in
+        // by an earlier inline exposes its own direct calls to later fs, which the
+        // next iteration then inlines.
+        Internal::inline_function(definition, f.function());
     }
+    return *this;
+}
+
+Func &Func::eager_inline(const std::vector<Func> &fs) {
+    invalidate_cache();
+    // Target the initial (pure) definition, mirroring other Func-level scheduling
+    // shorthands; use f.update(n).eager_inline(...) to inline into an update.
+    Stage(func, func.definition(), 0).eager_inline(fs);
     return *this;
 }
 

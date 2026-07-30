@@ -23,6 +23,7 @@ tests(
     bad_device_api.cpp
     bad_dimensions.cpp
     bad_eager_inline.cpp
+    bad_eager_inline_undefined.cpp
     bad_extern_split.cpp
     bad_fold.cpp
     bad_func_object.cpp
