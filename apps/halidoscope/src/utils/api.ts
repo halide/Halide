@@ -93,6 +93,7 @@ export async function renderGrayscale({
   normalizationMode,
   width,
   height,
+  includeTabularData,
   includeNan,
   includeInf,
 }: RenderFuncParams): Promise<RenderFuncResponse> {
@@ -100,6 +101,7 @@ export async function renderGrayscale({
     func,
     globalIndex,
     normalizationMode,
+    includeTabularData,
     includeNan,
     includeInf,
   });
@@ -108,7 +110,7 @@ export async function renderGrayscale({
     buffer,
     width,
     height,
-    includeTabularData: false,
+    includeTabularData,
   });
 }
 

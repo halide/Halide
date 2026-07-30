@@ -241,6 +241,7 @@ pub fn render_grayscale(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    include_tabular_data: bool,
     include_nan: IncludeNan,
     include_inf: IncludeInf,
     state: State<AppState>,
@@ -265,11 +266,16 @@ pub fn render_grayscale(
     renderer.seek(trace, store_indices, k);
 
     let pixels = renderer.to_rgba(normalization_mode);
+    let histogram = if include_tabular_data {
+        renderer.to_histogram()
+    } else {
+        Vec::new()
+    };
     let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
     Ok(Response::new(pack_render_response(
         pixels,
         nan_inf_overlays,
-        &[],
+        &histogram,
     )))
 }
 
@@ -434,8 +440,10 @@ pub fn render_redundant_stores(
     let renderer = redundant_renderers.get_mut(&func).expect("just inserted");
 
     let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
-    let k = store_indices.partition_point(|&p| p <= global_index as usize);
-    renderer.seek(trace, store_indices, k);
+    let load_indices = trace.func_load_indices(&func).unwrap_or(&[]);
+    let store_k = store_indices.partition_point(|&p| p <= global_index as usize);
+    let load_k = load_indices.partition_point(|&p| p <= global_index as usize);
+    renderer.seek(trace, store_indices, load_indices, store_k, load_k);
 
     let pixels = renderer.to_rgba(normalization_mode);
     let histogram = if include_tabular_data {

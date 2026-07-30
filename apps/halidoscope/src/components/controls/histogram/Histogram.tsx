@@ -1,34 +1,22 @@
 import * as Plot from "@observablehq/plot";
 import * as d3 from "d3";
-import { useAtomValue } from "jotai";
 import * as React from "react";
 
-import { tabularDataAtom } from "@/state/tabularData";
+import type { Scale } from "@/state/tabularData";
 
 interface HistogramProps {
   data: { x1: number; x2: number; y: number }[];
   domain: [number, number];
+  range: string[];
+  scale: Scale;
   labels: {
     x: string;
     y: string;
   };
 }
 
-function Histogram({ data, domain, labels }: HistogramProps) {
+function Histogram({ data, domain, scale, range, labels }: HistogramProps) {
   const ref = React.useRef<HTMLDivElement>(null);
-  const { scale } = useAtomValue(tabularDataAtom);
-
-  // Build the data for the bottom colorbar.
-  const colorbar = React.useMemo(() => {
-    const range = domain[1] - domain[0];
-    const count = range <= 64 ? range : 64;
-    const step = range / count;
-    return new Array(count).fill(0).map((_, i) => ({
-      x1: domain[0] + i * step,
-      x2: domain[0] + (i + 1) * step,
-      y: 0,
-    }));
-  }, [domain]);
 
   React.useEffect(() => {
     if (!ref.current) {
@@ -48,7 +36,7 @@ function Histogram({ data, domain, labels }: HistogramProps) {
         ticks: 8,
       },
       x: {
-        domain,
+        domain: [data[0].x1, data[data.length - 1].x2],
         label: labels.x,
         labelAnchor: "right",
         labelArrow: "right",
@@ -56,18 +44,16 @@ function Histogram({ data, domain, labels }: HistogramProps) {
         tickPadding: 24,
         tickSize: 0,
         type: scale,
-        interval: domain[1] <= 64 ? 1 : undefined,
       },
       color: {
-        // Constrain the color scale to the bounds used for computing the canvas
-        // on the backend.
-        domain: [0, domain[1] - 1],
-        scheme: "Inferno",
+        domain,
+        range,
         type: "linear",
+        interpolate: "rgb" as const,
       },
       marks: [
         Plot.rectY(data, { x1: "x1", x2: "x2", y: "y", fill: "x1" }),
-        Plot.ruleY(colorbar, {
+        Plot.ruleY(data, {
           stroke: "x1",
           strokeWidth: 8,
           x1: "x1",
@@ -83,7 +69,7 @@ function Histogram({ data, domain, labels }: HistogramProps) {
     return () => {
       plot.remove();
     };
-  }, [data, domain, labels, scale, colorbar]);
+  }, [data, domain, labels, range, scale]);
 
   return data.every((d) => d.y === 0) ? (
     <div className="flex h-full flex-col items-center justify-center gap-2">
