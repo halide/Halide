@@ -57,7 +57,7 @@ function HistogramParameters() {
           </Select.Content>
         </Select.Root>
       </div>
-      {render.renderMode !== "Grayscale" ? (
+      {render.renderMode !== "Grayscale" && render.renderMode !== "RGB" ? (
         <div className="grid grid-cols-2 gap-2">
           <div className="flex flex-col gap-1">
             <Label.Root

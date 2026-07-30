@@ -5,7 +5,7 @@ import * as React from "react";
 import type { Scale } from "@/state/tabularData";
 
 interface HistogramProps {
-  data: { x1: number; x2: number; y: number }[];
+  data: { x1: number; x2: number; y0: number; y1: number; color: string }[];
   domain: [number, number];
   range: string[];
   scale: Scale;
@@ -19,7 +19,7 @@ function Histogram({ data, domain, scale, range, labels }: HistogramProps) {
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    if (!ref.current) {
+    if (!ref.current || data.length === 0) {
       return;
     }
 
@@ -36,7 +36,7 @@ function Histogram({ data, domain, scale, range, labels }: HistogramProps) {
         ticks: 8,
       },
       x: {
-        domain: [data[0].x1, data[data.length - 1].x2],
+        domain,
         label: labels.x,
         labelAnchor: "right",
         labelArrow: "right",
@@ -45,22 +45,32 @@ function Histogram({ data, domain, scale, range, labels }: HistogramProps) {
         tickSize: 0,
         type: scale,
       },
-      color: {
-        domain,
-        range,
-        type: "linear",
-        interpolate: "rgb" as const,
-      },
       marks: [
-        Plot.rectY(data, { x1: "x1", x2: "x2", y: "y", fill: "x1" }),
-        Plot.ruleY(data, {
-          stroke: "x1",
-          strokeWidth: 8,
+        // Bars carry a literal, precomputed `color` (rather than relying on Plot's shared
+        // `color` scale), since RGB's stacked per-channel bands need per-band colors that a
+        // single domain-to-color mapping can't express.
+        Plot.rect(data, {
           x1: "x1",
           x2: "x2",
-          y: 0,
-          dy: 12,
+          y1: "y0",
+          y2: "y1",
+          fill: "color",
         }),
+        // RGB's stacked bands don't have one representative color per bucket, so the axis
+        // color strip below is only meaningful (and only supplied via `range`) for the
+        // single-series histograms.
+        ...(range.length > 0
+          ? [
+              Plot.ruleY(data, {
+                stroke: "color",
+                strokeWidth: 8,
+                x1: "x1",
+                x2: "x2",
+                y: 0,
+                dy: 12,
+              }),
+            ]
+          : []),
       ],
     });
 
@@ -71,7 +81,7 @@ function Histogram({ data, domain, scale, range, labels }: HistogramProps) {
     };
   }, [data, domain, labels, range, scale]);
 
-  return data.every((d) => d.y === 0) ? (
+  return data.every((d) => d.y1 === d.y0) ? (
     <div className="flex h-full flex-col items-center justify-center gap-2">
       <svg
         xmlns="http://www.w3.org/2000/svg"

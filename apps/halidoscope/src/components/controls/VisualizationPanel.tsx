@@ -17,7 +17,7 @@ import { threadAtom, NO_THREAD_INFO_SENTINEL_ID } from "@/state/thread";
 
 const RENDER_MODE_TO_LABEL: Record<RM, string> = {
   Grayscale: "Value",
-  RGB: "",
+  RGB: "Value",
   "Store Frequency": "Store Count",
   "Load Frequency": "Load Count",
   "Redundant Stores": "Redundant Store Count",
@@ -40,10 +40,28 @@ const METRIC_PALETTE = [
 
 interface HistogramData {
   type: "Histogram";
-  data: { x1: number; x2: number; y: number }[];
+  data: { x1: number; x2: number; y0: number; y1: number; color: string }[];
   domain: [number, number];
   range: string[];
 }
+
+// Standard subtractive-light combinations used to render RGB's per-channel histograms as
+// stacked, flat-colored bands (e.g. overlapping red and green bars become one yellow band) —
+// the same result `mix-blend-mode: screen` produces, but precomputed so it doesn't depend on
+// (and get washed out by) whatever's behind the chart.
+const PURE_CHANNEL_COLORS: Record<"r" | "g" | "b", string> = {
+  r: "#ff0000",
+  g: "#00ff00",
+  b: "#0000ff",
+};
+
+const PAIR_CHANNEL_COLORS: Record<string, string> = {
+  bg: "#00ffff",
+  br: "#ff00ff",
+  gr: "#ffff00",
+};
+
+const TRIPLE_CHANNEL_COLOR = "#ffffff";
 
 interface BarChartData {
   type: "Bar Chart";
@@ -78,16 +96,98 @@ function VisualizationPanel() {
       const extent = domain[1] - domain[0];
       const step =
         domain.every(Number.isInteger) && extent <= 64 ? 1 : extent / buckets;
+      // Colors are resolved to literal values here (rather than left to Plot's shared `color`
+      // scale) so that this histogram can be composed alongside others (e.g. RGB's stacked
+      // per-channel bands) without needing a single shared domain-to-color mapping.
+      const colorScale = d3
+        .scaleLinear<string>()
+        .domain(
+          range.map(
+            (_, i) => domain[0] + (i * extent) / (range.length - 1 || 1),
+          ),
+        )
+        .range(range)
+        .interpolate(d3.interpolateRgb);
 
       return {
         type: "Histogram",
-        data: new Array(buckets).fill(0).map((_, i) => ({
-          x1: domain[0] + i * step,
-          x2: domain[0] + (i + 1) * step,
-          y: histogramData?.[i] ?? 0,
-        })),
+        data: new Array(buckets).fill(0).map((_, i) => {
+          const x1 = domain[0] + i * step;
+
+          return {
+            x1,
+            x2: domain[0] + (i + 1) * step,
+            y0: 0,
+            y1: histogramData?.[i] ?? 0,
+            color: colorScale(x1),
+          };
+        }),
         domain,
         range,
+      };
+    },
+    [],
+  );
+
+  const createRgbHistogramData = React.useCallback(
+    (
+      channelCounts: [Uint32Array, Uint32Array, Uint32Array],
+      domain: [number, number],
+    ): HistogramData => {
+      const [rCounts, gCounts, bCounts] = channelCounts;
+      const buckets = rCounts.length;
+      const extent = domain[1] - domain[0];
+      const step =
+        domain.every(Number.isInteger) && extent <= 64 ? 1 : extent / buckets;
+
+      const data: HistogramData["data"] = [];
+
+      for (let i = 0; i < buckets; i++) {
+        const x1 = domain[0] + i * step;
+        const x2 = domain[0] + (i + 1) * step;
+        const entries = (
+          [
+            ["r", rCounts[i] ?? 0],
+            ["g", gCounts[i] ?? 0],
+            ["b", bCounts[i] ?? 0],
+          ] as const
+        )
+          .slice()
+          .sort((a, b) => a[1] - b[1]);
+        const [lo, mid, hi] = entries;
+
+        // Stack up to three bands per bucket, from the ground up: the height all three
+        // channels share (white), then the height the top two share (their pairwise
+        // combination), then the remainder of the tallest channel alone (its pure color).
+        if (lo[1] > 0) {
+          data.push({ x1, x2, y0: 0, y1: lo[1], color: TRIPLE_CHANNEL_COLOR });
+        }
+        if (mid[1] > lo[1]) {
+          const pairKey = [mid[0], hi[0]].sort().join("");
+          data.push({
+            x1,
+            x2,
+            y0: lo[1],
+            y1: mid[1],
+            color: PAIR_CHANNEL_COLORS[pairKey],
+          });
+        }
+        if (hi[1] > mid[1]) {
+          data.push({
+            x1,
+            x2,
+            y0: mid[1],
+            y1: hi[1],
+            color: PURE_CHANNEL_COLORS[hi[0]],
+          });
+        }
+      }
+
+      return {
+        type: "Histogram",
+        data,
+        domain,
+        range: [],
       };
     },
     [],
@@ -104,6 +204,31 @@ function VisualizationPanel() {
           [min, max],
           ["#000000", "#ffffff"],
         );
+      }
+      case "RGB": {
+        const min = funcs[activeFunc].min_value ?? 0;
+        const max = funcs[activeFunc].max_value ?? 255;
+        const domain: [number, number] = [min, max];
+        const bins = 256;
+        const numChannels = tabularData
+          ? Math.floor(tabularData.length / bins)
+          : 0;
+
+        if (numChannels >= 3) {
+          return createRgbHistogramData(
+            [
+              tabularData!.slice(0, bins),
+              tabularData!.slice(bins, bins * 2),
+              tabularData!.slice(bins * 2, bins * 3),
+            ],
+            domain,
+          );
+        }
+
+        return createHistogramData(tabularData ?? new Uint32Array(), domain, [
+          "#000000",
+          "#ffffff",
+        ]);
       }
       case "Store Frequency": {
         const min = scale === "log" ? 1 : 0;
@@ -192,6 +317,7 @@ function VisualizationPanel() {
     scale,
     thread.op,
     createHistogramData,
+    createRgbHistogramData,
   ]);
 
   const renderChart = React.useCallback(() => {
