@@ -120,6 +120,7 @@ export async function renderRgb({
   normalizationMode,
   width,
   height,
+  includeTabularData,
   includeNan,
   includeInf,
 }: RenderFuncParams): Promise<RenderFuncResponse> {
@@ -127,6 +128,7 @@ export async function renderRgb({
     func,
     globalIndex,
     normalizationMode,
+    includeTabularData,
     includeNan,
     includeInf,
   });
@@ -135,7 +137,7 @@ export async function renderRgb({
     buffer,
     width,
     height,
-    includeTabularData: false,
+    includeTabularData,
   });
 }
 
