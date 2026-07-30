@@ -561,15 +561,22 @@ bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
 
 namespace {
 
-// Strip the casts, broadcasts and lane permutations off a load, moving the
+// Strip the cast, broadcasts and lane permutations off a load, moving the
 // ones that rearrange lanes onto a copy of the load's index, where
 // is_multiramp can make sense of them. A broadcast of a load is a load of a
 // broadcast of the index, and likewise for a lane permutation.
-const Load *peel_load(const Expr &e, Expr *index) {
+//
+// At most one cast is peeled, so that comparing the element type of the
+// original Expr against the type of the Load tells the caller whether the
+// values were cast, and to what.
+const Load *peel_load(const Expr &e, Expr *index, bool cast_allowed) {
     if (const Cast *cast = e.as<Cast>()) {
-        return peel_load(cast->value, index);
+        if (!cast_allowed) {
+            return nullptr;
+        }
+        return peel_load(cast->value, index, false);
     } else if (const Broadcast *broadcast = e.as<Broadcast>()) {
-        const Load *load = peel_load(broadcast->value, index);
+        const Load *load = peel_load(broadcast->value, index, cast_allowed);
         if (load) {
             *index = Broadcast::make(*index, broadcast->lanes);
         }
@@ -578,7 +585,7 @@ const Load *peel_load(const Expr &e, Expr *index) {
         if (shuffle->vectors.size() != 1) {
             return nullptr;
         }
-        const Load *load = peel_load(shuffle->vectors[0], index);
+        const Load *load = peel_load(shuffle->vectors[0], index, cast_allowed);
         if (load) {
             // Shuffling the values loaded is the same as shuffling the
             // addresses loaded from.
@@ -660,7 +667,7 @@ int get_subtile(const Expr &index, const std::string &description,
 
 const Load *is_load_of_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
     Expr index;
-    const Load *load = peel_load(e, &index);
+    const Load *load = peel_load(e, &index, true);
     if (load && is_multiramp(index, scope, result)) {
         return load;
     }

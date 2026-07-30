@@ -236,12 +236,17 @@ int get_subtile(const Expr &index, const std::string &description,
  * Returns false and leaves *result untouched if not. */
 bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result);
 
-/** Check if an Expr is a load of a multiramp, possibly wrapped in casts, in
+/** Check if an Expr is a load of a multiramp, possibly wrapped in a cast, in
  * broadcasts over dimensions the load doesn't depend on, and in the lane
  * permutations the simplifier introduces when it rewrites a strided load as a
  * dense load followed by a transpose. Returns the Load node underneath, with
  * *result describing the addresses it loads in the lane order of `e`, or null
- * if `e` isn't of that form (in which case *result is untouched). */
+ * if `e` isn't of that form (in which case *result is untouched).
+ *
+ * At most one cast is seen through, so `e.type().element_of()` and the
+ * returned Load's type together tell you whether the loaded values were cast,
+ * and to what. Callers that care about the type the values actually have -
+ * including its signedness - must use the former, not the Load's type. */
 const Load *is_load_of_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result);
 
 }  // namespace Internal

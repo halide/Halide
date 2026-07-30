@@ -130,6 +130,26 @@ void scenario_indirect() {
     mm.in().compile_jit(amx_target);
 }
 
+// A matmul over uint8 buffers whose values are reinterpreted as int8 before
+// multiplying. AMX types its tile registers by what was loaded, and their
+// signedness picks which of the four integer tdpb instructions runs, so
+// accepting this would run an unsigned multiply for a signed algorithm.
+// Triggers the "cast after being loaded" path in convert_to_matmul.
+void scenario_sign_changing_cast() {
+    Buffer<uint8_t> A(64, 64);
+    Buffer<uint8_t> B(4, 64, 16);
+    Var x("x"), y("y");
+    RDom r(0, 64, "r");
+
+    Func mm("matmul_sign_cast");
+    mm(x, y) = cast<int32_t>(0);
+    mm(x, y) +=
+        cast<int32_t>(cast<int8_t>(A(r, y))) *
+        cast<int32_t>(cast<int8_t>(B(r % 4, x, r / 4)));
+    schedule_matmul(mm, r.x, 8, 8, 8);
+    mm.in().compile_jit(amx_target);
+}
+
 // A 1D convolution of a 2D signal with per-row kernels, aggressively
 // vectorized. Structurally a sum-of-widening-multiplies with a contiguous
 // inner K, but the LHS depends on x, k, and y simultaneously (no broadcast
@@ -307,6 +327,7 @@ int main(int argc, char **argv) {
     failures += !expect_user_error("bad_result_type", scenario_bad_result_type);
     failures += !expect_user_error("naive_rhs", scenario_naive_rhs);
     failures += !expect_user_error("indirect", scenario_indirect);
+    failures += !expect_user_error("sign_changing_cast", scenario_sign_changing_cast);
     failures += !expect_user_error("conv1d", scenario_conv1d);
     failures += !expect_user_error("no_matmul", scenario_no_matmul);
     failures += !expect_user_error("widening_16bit", scenario_widening_16bit);

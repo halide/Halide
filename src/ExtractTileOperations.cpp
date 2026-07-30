@@ -135,7 +135,8 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     // Underneath all of this must be a load, though it may be wrapped in a
     // broadcast over the dimension it doesn't depend on, in the widening cast
     // (for floats - the integer branch above already extracted the cast inputs
-    // from the widening_mul intrinsic), and in a lane permutation.
+    // from the widening_mul intrinsic), and in a lane permutation. The cast is
+    // checked against the load's type below.
     // TODO: What if we want to multiply by the same matrix multiple times? It might be a let binding.
     MultiRamp lhs_mr, rhs_mr;
     Scope<Expr> empty_scope;
@@ -150,6 +151,14 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     }
 
     if (reduce->type.is_int_or_uint()) {
+        // The tile registers are typed by what was loaded, and the signedness
+        // of those types picks which of the four integer tdpb instructions
+        // gets used, so a cast between the load and the multiply would change
+        // the meaning of the multiply without changing the instruction.
+        if (lhs.type().element_of() != lhs_load->type.element_of() ||
+            rhs.type().element_of() != rhs_load->type.element_of()) {
+            return fail("the matrix multiply operands are cast after being loaded");
+        }
         if (lhs_load->type.bits() != 8 || rhs_load->type.bits() != 8) {
             return fail("the vector reduction operand or result types are not supported");
         }
