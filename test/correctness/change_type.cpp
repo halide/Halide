@@ -9,12 +9,6 @@ using namespace Halide;
 
 namespace {
 
-// TODO: add tests that compose change_type() with hoist_invariants() -- e.g.
-// retyping the float dot-product intermediate hoist_invariants() returns to an
-// Int(32) accumulator, and confirming a min-reduction retype uses the
-// reduction identity at the new type rather than a lossy cast of the original
-// float identity.
-
 // A symbolic reduction extent can't be bounded at schedule time, so change_type
 // injects a runtime precondition. With a valid (small) extent it passes and the
 // result is correct.
