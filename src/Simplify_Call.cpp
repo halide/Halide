@@ -866,8 +866,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         if (!changed) {
             return op;
         } else {
-            return Call::make(op->type, op->name, new_args, op->call_type,
-                              op->func, op->value_index, op->image, op->param);
+            return op->with(new_args);
         }
     }
 }

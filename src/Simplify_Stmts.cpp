@@ -123,12 +123,10 @@ Stmt Simplify::visit(const IfThenElse *op) {
                else_pc &&
                then_pc->name == else_pc->name &&
                then_pc->is_producer == else_pc->is_producer) {
-        return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
-                                      mutate(IfThenElse::make(condition, then_pc->body, else_pc->body)));
+        return then_pc->with(mutate(IfThenElse::make(condition, then_pc->body, else_pc->body)));
     } else if (then_pc &&
                is_no_op(else_case)) {
-        return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
-                                      mutate(IfThenElse::make(condition, then_pc->body)));
+        return then_pc->with(mutate(IfThenElse::make(condition, then_pc->body)));
     } else if (then_block &&
                else_block &&
                equal(then_block->first, else_block->first)) {
@@ -296,13 +294,13 @@ Stmt Simplify::visit(const For *op) {
                !stmt_uses_var(new_body, op->name) &&
                !is_const_zero(new_min) &&
                is_const(shifted_max = mutate((new_max - new_min), nullptr))) {
-        return For::make(op->name, make_zero(Int(32)), shifted_max, op->for_type, op->partition_policy, op->device_api, new_body);
+        return op->with(make_zero(Int(32)), shifted_max, new_body);
     } else if (op->min.same_as(new_min) &&
                op->max.same_as(new_max) &&
                op->body.same_as(new_body)) {
         return op;
     } else {
-        return For::make(op->name, new_min, new_max, op->for_type, op->partition_policy, op->device_api, new_body);
+        return op->with(new_min, new_max, new_body);
     }
 }
 
@@ -317,7 +315,7 @@ Stmt Simplify::visit(const Provide *op) {
     if (!(changed_args || changed_values) && new_predicate.same_as(op->predicate)) {
         return op;
     } else {
-        return Provide::make(op->name, new_values, new_args, new_predicate);
+        return op->with(new_values, new_args, new_predicate);
     }
 }
 
@@ -368,7 +366,7 @@ Stmt Simplify::visit(const Store *op) {
         return Evaluate::make(0);
     } else if (scalar_pred && !is_const_one(scalar_pred->value)) {
         return IfThenElse::make(scalar_pred->value,
-                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes(), nullptr), align, op->is_streaming));
+                                op->with(value, index, const_true(value.type().lanes(), nullptr), align));
     } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
         // foo[x] = foo[x] or foo[x] = undef is a no-op
         return Evaluate::make(0);
@@ -382,13 +380,7 @@ Stmt Simplify::visit(const Store *op) {
         std::vector<Stmt> stores;
         int lanes = 0;
         for (const Expr &idx : shuf->vectors) {
-            stores.push_back(Store::make(op->name,
-                                         Shuffle::make_slice(var, lanes, 1, idx.type().lanes()),
-                                         idx,
-                                         op->param,
-                                         Shuffle::make_slice(predicate, lanes, 1, idx.type().lanes()),
-                                         ModulusRemainder{},
-                                         op->is_streaming));
+            stores.push_back(op->with(Shuffle::make_slice(var, lanes, 1, idx.type().lanes()), idx, Shuffle::make_slice(predicate, lanes, 1, idx.type().lanes()), ModulusRemainder{}));
             lanes += idx.type().lanes();
         }
         Stmt s = Block::make(stores);
@@ -420,15 +412,14 @@ Stmt Simplify::visit(const Store *op) {
         } else {
             permuted_predicate = Shuffle::make_transpose(predicate, A);
         }
-        return mutate(Store::make(op->name, permuted_value, mr.to_expr(),
-                                  op->param, permuted_predicate, align, op->is_streaming));
+        return mutate(op->with(permuted_value, mr.to_expr(), permuted_predicate, align));
     } else if (predicate.same_as(op->predicate) &&
                value.same_as(op->value) &&
                index.same_as(op->index) &&
                align == op->alignment) {
         return op;
     } else {
-        return Store::make(op->name, value, index, op->param, predicate, align, op->is_streaming);
+        return op->with(value, index, predicate, align);
     }
 }
 
@@ -506,7 +497,7 @@ Stmt Simplify::visit(const ProducerConsumer *op) {
     } else if (body.same_as(op->body)) {
         return op;
     } else {
-        return ProducerConsumer::make(op->name, op->is_producer, body);
+        return op->with(body);
     }
 }
 
@@ -694,8 +685,7 @@ Stmt Simplify::visit(const Realize *op) {
         condition.same_as(op->condition)) {
         return op;
     }
-    return Realize::make(op->name, op->types, op->memory_type, new_bounds,
-                         std::move(condition), std::move(body));
+    return op->with(new_bounds, condition, body);
 }
 
 Stmt Simplify::visit(const Prefetch *op) {
@@ -715,7 +705,7 @@ Stmt Simplify::visit(const Prefetch *op) {
         condition.same_as(op->condition)) {
         return op;
     } else {
-        return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, std::move(condition), std::move(body));
+        return op->with(new_bounds, condition, body);
     }
 }
 
@@ -758,9 +748,7 @@ Stmt Simplify::visit(const Atomic *op) {
     } else if (body.same_as(op->body)) {
         return op;
     } else {
-        return Atomic::make(op->producer_name,
-                            op->mutex_name,
-                            std::move(body));
+        return op->with(body);
     }
 }
 
@@ -788,11 +776,7 @@ Stmt Simplify::visit(const StreamingLoads *op) {
 
 Stmt Simplify::visit(const HoistedStorage *op) {
     Stmt body = mutate(op->body);
-    if (body.same_as(op->body)) {
-        return op;
-    } else {
-        return HoistedStorage::make(op->name, body);
-    }
+    return op->with(body);
 }
 
 }  // namespace Internal

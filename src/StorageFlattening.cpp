@@ -663,8 +663,8 @@ protected:
     Stmt visit(const Store *op) override {
         Type t = upgrade(op->value.type());
         if (t != op->value.type()) {
-            return Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
-                               op->param, mutate(op->predicate), ModulusRemainder(), op->is_streaming);
+            return op->with(Cast::make(t, mutate(op->value)), mutate(op->index),
+                            mutate(op->predicate), ModulusRemainder());
         } else {
             return IRMutator::visit(op);
         }

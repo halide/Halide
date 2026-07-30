@@ -68,11 +68,8 @@ protected:
         if (allocs.contains(op->name) && op->free_function.empty()) {
             allocs.pop(op->name);
             return body;
-        } else if (body.same_as(op->body) && new_expr.same_as(op->new_expr)) {
-            return op;
         } else {
-            return Allocate::make(op->name, op->type, op->memory_type, op->extents, op->condition,
-                                  body, new_expr, op->free_function, op->padding);
+            return op->with(op->extents, op->condition, body, new_expr);
         }
     }
 
