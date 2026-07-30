@@ -539,6 +539,381 @@ int change_type_widening_fold_generalizes_test() {
     return 0;
 }
 
+// The overflow proof must include the initial value as well as the reduction
+// terms. Although ten increments of one fit in Int(8), starting from 120 makes
+// the final value 130, which does not.
+int change_type_initial_value_contributes_to_overflow_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    ImageParam A{UInt(1), 1, "A_seed_overflow"};
+    Var i{"i"};
+    RDom r(0, 10, "r");
+
+    Func Acc{"Acc_seed_overflow"};
+    Acc(i) = 120.0f;
+    Acc(i) += cast<float>(A(r));
+
+    bool threw = false;
+    try {
+        Acc.change_type(Int(8));
+    } catch (const Halide::CompileError &) {
+        threw = true;
+    }
+    internal_assert(threw)
+        << "change_type(Int(8)) should reject 120 + ten increments of one: "
+        << "the initial value makes the accumulator overflow\n";
+#endif
+    return 0;
+}
+
+// The accumulator range must flow from one update stage into the next. Each
+// stage adds only 100, which fits Int(8) in isolation, but together they add 200.
+int change_type_multiple_updates_accumulate_overflow_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    ImageParam A{UInt(1), 1, "A_multi_update_1"};
+    ImageParam B{UInt(1), 1, "B_multi_update_2"};
+    Var i{"i"};
+    RDom r1(0, 100, "r1"), r2(0, 100, "r2");
+
+    Func Acc{"Acc_multi_update_overflow"};
+    Acc(i) = 0.0f;
+    Acc(i) += cast<float>(A(r1));
+    Acc(i) += cast<float>(B(r2));
+
+    bool threw = false;
+    try {
+        Acc.change_type(Int(8));
+    } catch (const Halide::CompileError &) {
+        threw = true;
+    }
+    internal_assert(threw)
+        << "change_type(Int(8)) should reject two update stages that cumulatively "
+        << "add 200, even though each stage adds only 100\n";
+#endif
+    return 0;
+}
+
+// Looking only at the top-level '+' is not enough to classify an update as a
+// sum reduction: the self-containing branch can apply another recurrence. This
+// update grows as 2*x + 1 and reaches 255 after eight iterations.
+int change_type_nested_accumulator_recurrence_rejected_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    ImageParam A{UInt(1), 1, "A_nested_recurrence"};
+    Var i{"i"};
+    RDom r(0, 8, "r");
+
+    Func Acc{"Acc_nested_recurrence"};
+    Acc(i) = 0.0f;
+    Acc(i) = Acc(i) * 2.0f + cast<float>(A(r));
+
+    bool threw = false;
+    try {
+        Acc.change_type(Int(8));
+    } catch (const Halide::CompileError &) {
+        threw = true;
+    }
+    internal_assert(threw)
+        << "change_type(Int(8)) should reject a nested 2*x + 1 recurrence instead "
+        << "of treating it as a sum of eight ones\n";
+#endif
+    return 0;
+}
+
+// A min/max seed is not necessarily the operator identity. Retyping must
+// preserve a finite seed rather than unconditionally replacing it with the
+// target type's identity.
+int change_type_min_preserves_non_identity_seed_test() {
+    const int K = 4;
+    ImageParam A{Int(8), 1, "A_min_seed"};
+
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Min{"Min_non_identity_seed"};
+    Min(i) = 5.0f;
+    Min(i) = min(Min(i), cast<float>(A(r)));
+
+    Func Min_i8 = Min.change_type(Int(8));
+    Min_i8.compute_root();
+
+    Buffer<int8_t> a(K);
+    for (int k = 0; k < K; k++) {
+        a(k) = (int8_t)(10 + k);
+    }
+    A.set(a);
+
+    Buffer<float> result = Min.realize({1});
+    internal_assert(result(0) == 5.0f)
+        << "change_type() changed a min reduction's seed from 5 to the Int(8) "
+        << "identity; result was " << result(0) << " instead of 5\n";
+    return 0;
+}
+
+// The non-identity case above must not regress the intended special handling
+// for a true floating-point min identity, which cannot be cast directly to an
+// integer target without losing its identity semantics.
+int change_type_min_translates_identity_seed_test() {
+    const int K = 4;
+    ImageParam A{Int(8), 1, "A_min_identity"};
+
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Min{"Min_identity_seed"};
+    Min(i) = Float(32).max();
+    Min(i) = min(Min(i), cast<float>(A(r)));
+
+    Func Min_i8 = Min.change_type(Int(8));
+    Min_i8.compute_root();
+
+    Buffer<int8_t> a(K);
+    for (int k = 0; k < K; k++) {
+        a(k) = (int8_t)(10 + k);
+    }
+    A.set(a);
+
+    Buffer<float> result = Min.realize({1});
+    internal_assert(result(0) == 10.0f)
+        << "change_type() did not translate the Float(32) min identity to the "
+        << "Int(8) identity; result was " << result(0) << " instead of 10\n";
+    return 0;
+}
+
+// Translating an identity that does not round-trip through the target type is
+// only sound when the first update is guaranteed to replace it at every pure
+// coordinate. Constant empty domains are rejected, symbolic domains get a
+// runtime non-empty check, and scatter or predicated updates are rejected.
+int change_type_identity_translation_requires_dense_nonempty_update_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    // A statically empty dense reduction would expose the translated Int(8)
+    // identity (127) instead of the original Float(32) identity (+infinity).
+    {
+        Var i{"i"};
+        RDom r(0, 0, "r_static_empty");
+        Func Min{"Min_static_empty"};
+        Min(i) = Float(32).max();
+        Min(i) = min(Min(i), cast<float>(r % 2));
+
+        bool threw = false;
+        try {
+            Min.change_type(Int(8));
+        } catch (const Halide::CompileError &) {
+            threw = true;
+        }
+        internal_assert(threw)
+            << "change_type() should reject identity translation for a statically "
+            << "empty reduction domain\n";
+    }
+
+    // A symbolic dense reduction is allowed, but zero must fail its generated
+    // runtime precondition while a positive extent still computes normally.
+    {
+        Param<int32_t> extent{"identity_extent"};
+        Var i{"i"};
+        RDom r(0, extent, "r_symbolic_empty");
+        Func Min{"Min_symbolic_empty"};
+        Min(i) = Float(32).max();
+        Min(i) = min(Min(i), cast<float>(r % 2));
+
+        Func Min_i8 = Min.change_type(Int(8));
+        Min_i8.compute_root();
+
+        extent.set(0);
+        bool threw = false;
+        try {
+            (void)Min.realize({1});
+        } catch (const Halide::RuntimeError &) {
+            threw = true;
+        }
+        internal_assert(threw)
+            << "change_type() should require a symbolic reduction domain to be non-empty "
+            << "when translating an identity\n";
+
+        extent.set(1);
+        Buffer<float> result = Min.realize({1});
+        internal_assert(result(0) == 0.0f);
+    }
+
+    // A non-empty scatter domain does not update every pure coordinate.
+    {
+        Var x{"x"};
+        RDom r(0, 4, "r_scatter");
+        Func Min{"Min_scatter_identity"};
+        Min(x) = Float(32).max();
+        Min(r) = min(Min(r), cast<float>(r % 2));
+
+        bool threw = false;
+        try {
+            Min.change_type(Int(8));
+        } catch (const Halide::CompileError &) {
+            threw = true;
+        }
+        internal_assert(threw)
+            << "change_type() should reject identity translation for a scatter update\n";
+    }
+
+    // A predicate can filter out every reduction point for an output.
+    {
+        Var i{"i"};
+        RDom r(0, 4, "r_predicated");
+        r.where(r < 2);
+        Func Min{"Min_predicated_identity"};
+        Min(i) = Float(32).max();
+        Min(i) = min(Min(i), cast<float>(r % 2));
+
+        bool threw = false;
+        try {
+            Min.change_type(Int(8));
+        } catch (const Halide::CompileError &) {
+            threw = true;
+        }
+        internal_assert(threw)
+            << "change_type() should reject identity translation for a predicated update\n";
+    }
+#endif
+    return 0;
+}
+
+// A runtime guard installed by an earlier change_type() must survive a later
+// retype. The first step requires the symbolic reduction to fit Int(16); the
+// second step widens the actual accumulator to Int(32), but its cast-back wrapper
+// still narrows the result through Int(16).
+int change_type_chaining_preserves_runtime_checks_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    Param<int32_t> extent{"chain_extent"};
+    ImageParam A{Int(8), 1, "A_chain_checks"};
+
+    Var i{"i"};
+    RDom r(0, extent, "r");
+
+    Func Acc{"Acc_chain_checks"};
+    Acc(i) = 0.0f;
+    Acc(i) += cast<float>(A(r));
+
+    Func Acc_i16 = Acc.change_type(Int(16));
+    Func Acc_i32 = Acc_i16.change_type(Int(32));
+    Acc_i32.compute_root();
+
+    const int K = 300;
+    Buffer<int8_t> a(K);
+    a.fill(127);
+    A.set(a);
+    extent.set(K);
+
+    bool threw = false;
+    try {
+        (void)Acc.realize({1});
+    } catch (const Halide::RuntimeError &) {
+        threw = true;
+    }
+    internal_assert(threw)
+        << "the Int(16) overflow guard was lost after chaining change_type(Int(32)); "
+        << "a sum of 300 * 127 should have failed at runtime\n";
+#endif
+    return 0;
+}
+
+// The runtime guard itself must not use wrapping arithmetic. For a full-range
+// Int(64) term, multiplying either endpoint by a symbolic extent of two wraps,
+// making both comparisons spuriously true even though the accumulation can
+// overflow.
+int change_type_runtime_check_arithmetic_does_not_overflow_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    Param<int32_t> extent{"guard_extent"};
+    ImageParam A{Int(64), 1, "A_guard_overflow"};
+
+    Var i{"i"};
+    RDom r(0, extent, "r");
+
+    Func Acc{"Acc_guard_overflow"};
+    Acc(i) = cast<double>(0);
+    Acc(i) += cast<double>(A(r));
+
+    Func Acc_i64 = Acc.change_type(Int(64));
+    Acc_i64.compute_root();
+
+    Buffer<int64_t> a(2);
+    a.fill(int64_t{1} << 62);
+    A.set(a);
+
+    // One full-range term is permitted and must not be rejected by an overly
+    // conservative or malformed guard.
+    extent.set(1);
+    Buffer<double> safe_result = Acc.realize({1});
+    internal_assert(safe_result(0) == (double)(int64_t{1} << 62));
+
+    // Two such terms may overflow Int(64), so the guard must reject the extent
+    // before the reduction executes.
+    extent.set(2);
+
+    bool threw = false;
+    try {
+        (void)Acc.realize({1});
+    } catch (const Halide::RuntimeError &) {
+        threw = true;
+    }
+    internal_assert(threw)
+        << "the change_type(Int(64)) guard overflowed while checking a symbolic "
+        << "extent of two and failed to reject an overflowing accumulation\n";
+#endif
+    return 0;
+}
+
+// The compile-time term count must also use checked arithmetic. Three extents
+// of 2^22 have a product of 2^66; the unchecked signed multiplication is
+// undefined and, in this case, makes an enormous reduction look harmless.
+int change_type_static_extent_count_does_not_overflow_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    constexpr int extent = 1 << 22;
+    RDom r({{0, extent}, {0, extent}, {0, extent}}, "r");
+
+    Func Acc{"Acc_static_extent_overflow"};
+    Acc() = 0.0f;
+    // Keep all three RVars live without requiring an impossibly large buffer.
+    // Each loop extent is legal on its own, and a scalar reduction has no
+    // allocation proportional to the product of its reduction extents.
+    Acc() += cast<float>((r.x == 0) && (r.y == 0) && (r.z == 0));
+
+    bool threw = false;
+    try {
+        Acc.change_type(Int(8));
+    } catch (const Halide::CompileError &) {
+        threw = true;
+    }
+    internal_assert(threw)
+        << "change_type(Int(8)) should reject a 2^66-term reduction; its static "
+        << "term-count calculation overflowed and made the reduction appear safe\n";
+#endif
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -584,6 +959,42 @@ int main(int argc, char **argv) {
     }
     printf("Running change_type_widening_fold_generalizes_test\n");
     if (change_type_widening_fold_generalizes_test()) {
+        return 1;
+    }
+    printf("Running change_type_initial_value_contributes_to_overflow_test\n");
+    if (change_type_initial_value_contributes_to_overflow_test()) {
+        return 1;
+    }
+    printf("Running change_type_multiple_updates_accumulate_overflow_test\n");
+    if (change_type_multiple_updates_accumulate_overflow_test()) {
+        return 1;
+    }
+    printf("Running change_type_nested_accumulator_recurrence_rejected_test\n");
+    if (change_type_nested_accumulator_recurrence_rejected_test()) {
+        return 1;
+    }
+    printf("Running change_type_min_preserves_non_identity_seed_test\n");
+    if (change_type_min_preserves_non_identity_seed_test()) {
+        return 1;
+    }
+    printf("Running change_type_min_translates_identity_seed_test\n");
+    if (change_type_min_translates_identity_seed_test()) {
+        return 1;
+    }
+    printf("Running change_type_identity_translation_requires_dense_nonempty_update_test\n");
+    if (change_type_identity_translation_requires_dense_nonempty_update_test()) {
+        return 1;
+    }
+    printf("Running change_type_chaining_preserves_runtime_checks_test\n");
+    if (change_type_chaining_preserves_runtime_checks_test()) {
+        return 1;
+    }
+    printf("Running change_type_runtime_check_arithmetic_does_not_overflow_test\n");
+    if (change_type_runtime_check_arithmetic_does_not_overflow_test()) {
+        return 1;
+    }
+    printf("Running change_type_static_extent_count_does_not_overflow_test\n");
+    if (change_type_static_extent_count_does_not_overflow_test()) {
         return 1;
     }
 

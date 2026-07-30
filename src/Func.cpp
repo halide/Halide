@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -3322,6 +3323,14 @@ bool contains_self_reference(const Expr &e, const string &fname) {
     return finder.found;
 }
 
+// Is `e` itself a direct call to `fname`?
+bool is_self_reference(const Expr &e, const string &fname) {
+    if (const Call *c = e.as<Call>()) {
+        return c->call_type == Call::Halide && c->name == fname;
+    }
+    return false;
+}
+
 /**
  * Initialize a constant-bounds cache with the FuncValueBounds-derived range
  * of every Func call in \p e. The bounds machinery keys its cache by pointer
@@ -3413,10 +3422,10 @@ Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
     return cast(t, folded);
 }
 
-// Retype a whole definition value to type `t`, retargeting self-references from
-// `fname` to `dst` and pushing casts down to the increment leaves. Only reduction
-// updates shaped as a tree of binary combiners over a self-reference and an
-// increment are supported.
+// Retype a whole definition value to type `t`, retargeting a direct
+// self-reference from `fname` to `dst` and retyping the other operand as the
+// increment. The direct-call restriction keeps the recurrence visible to the
+// overflow proof.
 Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type t,
                   const FuncValueBounds &fvb) {
     if (const Call *c = e.as<Call>()) {
@@ -3426,9 +3435,19 @@ Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type 
     }
     if (contains_self_reference(e, fname)) {
         optional<pair<Expr, Expr>> operands = as_binary_operands(e);
-        user_assert(operands)
-            << "change_type() only supports update definitions built from binary "
-            << "operators over the accumulator; " << fname << " has an unsupported shape.\n";
+        user_assert(operands) << "change_type() only supports update definitions "
+                                 "built from a binary operator with a direct call to "
+                              << fname << " as one operand.\n";
+        const bool a_is_self = is_self_reference(operands->first, fname);
+        const bool b_is_self = is_self_reference(operands->second, fname);
+        user_assert(a_is_self != b_is_self &&
+                    !contains_self_reference(a_is_self ? operands->second : operands->first, fname))
+            << "change_type() requires the accumulator operand of every update to "
+               "be a single direct call to "
+            << fname << ".\n";
+        user_assert(e.node_type() != IRNodeType::Sub || a_is_self)
+            << "change_type() only supports difference reductions of the form "
+            << fname << "(...) - term.\n";
         return make_binary_op(e.node_type(),
                               retype_value(operands->first, fname, dst, t, fvb),
                               retype_value(operands->second, fname, dst, t, fvb));
@@ -3437,13 +3456,123 @@ Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type 
 }
 
 // The top-level associative combiner of a (let-stripped) reduction update value,
-// i.e. the node type of the binary op whose operands are the self-reference and
-// the increment. Returns nullopt if `val` isn't such a shape.
+// i.e. the node type of the binary op whose operands are a direct self-reference
+// and a self-reference-free increment. Returns nullopt if `val` isn't such a
+// shape.
 optional<IRNodeType> reduction_op(const Expr &val, const string &fname) {
-    optional<pair<Expr, Expr>> split = select_binary_operand(val, val.node_type(), [&](const Expr &e) {
-        return contains_self_reference(e, fname);
-    });
-    return split ? std::make_optional(val.node_type()) : std::nullopt;
+    optional<pair<Expr, Expr>> operands = as_binary_operands(val);
+    if (!operands) {
+        return std::nullopt;
+    }
+    const bool a_is_self = is_self_reference(operands->first, fname);
+    const bool b_is_self = is_self_reference(operands->second, fname);
+    if (a_is_self == b_is_self) {
+        return std::nullopt;
+    }
+    const Expr &increment = a_is_self ? operands->second : operands->first;
+    if (contains_self_reference(increment, fname) ||
+        (val.node_type() == IRNodeType::Sub && !a_is_self)) {
+        return std::nullopt;
+    }
+    return val.node_type();
+}
+
+// Given a current accumulator interval, a per-step contribution interval, and
+// the target type's limits, return the largest non-negative term count that is
+// guaranteed not to overflow. Safety is monotonic in the term count, so use
+// ConstantInterval's overflow-aware arithmetic in a binary search rather than
+// duplicating its endpoint math here.
+int64_t maximum_safe_term_count(const ConstantInterval &accumulator,
+                                const ConstantInterval &step,
+                                const ConstantInterval &limit) {
+    internal_assert(accumulator.is_bounded() && limit.is_bounded());
+    internal_assert(limit.contains(accumulator));
+
+    uint64_t min_safe = 0;
+    uint64_t max_possible = std::numeric_limits<int64_t>::max();
+    while (min_safe < max_possible) {
+        const uint64_t midpoint =
+            min_safe + (max_possible - min_safe + 1) / 2;
+        const ConstantInterval contribution =
+            step * ConstantInterval(0, (int64_t)midpoint);
+        if (limit.contains(accumulator + contribution)) {
+            min_safe = midpoint;
+        } else {
+            max_possible = midpoint - 1;
+        }
+    }
+    return (int64_t)min_safe;
+}
+
+// Build an overflow-free runtime predicate that the product of all reduction
+// extents is non-negative and at most `limit`. `product` is kept valid by a
+// select whenever a factor would exceed the remaining budget, so no wrapping
+// multiplication feeds a later comparison.
+Expr reduction_cardinality_fits(const Definition &def, int64_t limit) {
+    Expr product = make_const(Int(64), 1);
+    Expr all_non_negative = const_true();
+    Expr any_zero = const_false();
+    Expr product_fits = const_true();
+    const Expr max_terms = make_const(Int(64), limit);
+    for (const auto &rv : def.schedule().rvars()) {
+        Expr extent = cast(Int(64), rv.extent);
+        Expr positive_extent = max(extent, 1);
+        Expr factor_ok = product <= max_terms / positive_extent;
+        all_non_negative = all_non_negative && (extent >= 0);
+        any_zero = any_zero || (extent == 0);
+        product_fits = product_fits && factor_ok;
+        product = select(factor_ok, product * extent, max_terms);
+    }
+    return simplify(all_non_negative && (any_zero || product_fits));
+}
+
+// Prove that the first update executes at least once for every pure coordinate,
+// as required when translating an identity that does not round-trip through the
+// target type. Symbolic extents produce a runtime precondition.
+std::optional<std::string> nonempty_dense_update_precondition(const Function &fn,
+                                                              Expr *condition) {
+    *condition = Expr();
+    internal_assert(fn.has_update_definition());
+    const Definition &def = fn.update(0);
+
+    if (def.args().size() != fn.args().size()) {
+        return "the first update does not cover every pure coordinate";
+    }
+    for (size_t i = 0; i < def.args().size(); i++) {
+        const Variable *arg = def.args()[i].as<Variable>();
+        if (!arg || arg->name != fn.args()[i] ||
+            arg->param.defined() || arg->image.defined() ||
+            arg->reduction_domain.defined()) {
+            return "the first update does not cover every pure coordinate";
+        }
+    }
+
+    if (!is_const_one(simplify(def.predicate()))) {
+        return "the first update is predicated";
+    }
+
+    Expr positive_extents = const_true();
+    for (const auto &rv : def.schedule().rvars()) {
+        Expr extent = simplify(rv.extent);
+        if (optional<int64_t> ext = as_const_int(extent)) {
+            if (*ext <= 0) {
+                return "the first update has an empty reduction domain";
+            }
+        } else if (optional<uint64_t> ext = as_const_uint(extent)) {
+            if (*ext == 0) {
+                return "the first update has an empty reduction domain";
+            }
+        } else {
+            positive_extents =
+                positive_extents && (cast(Int(64), extent) > 0);
+        }
+    }
+
+    positive_extents = simplify(positive_extents);
+    if (!is_const_one(positive_extents)) {
+        *condition = positive_extents;
+    }
+    return std::nullopt;
 }
 
 // Prove that computing `typed`'s reduction at type `t` cannot overflow. Returns
@@ -3455,7 +3584,15 @@ std::optional<std::string> change_type_prove_safe(
 ) {
     *condition = Expr();
     const Function fn = typed.function();
-    const ConstantInterval limit = ConstantInterval::bounds_of_type(t);
+    ConstantInterval limit = ConstantInterval::bounds_of_type(t);
+    if (!limit.max_defined) {
+        // ConstantInterval cannot represent UInt(64)'s true upper bound. Use the
+        // largest representable conservative subset rather than treating an
+        // unbounded upper range as safe.
+        internal_assert(t.is_uint() && t.bits() == 64);
+        limit.max_defined = true;
+        limit.max = std::numeric_limits<int64_t>::max();
+    }
 
     // Bound `e` using constant integer bounds, refined by the proven value ranges
     // of any producer Funcs it references (e.g. a clamp upstream). retype_leaf()
@@ -3472,11 +3609,13 @@ std::optional<std::string> change_type_prove_safe(
         return constant_integer_bounds(v, Scope<ConstantInterval>::empty_scope(), &cache);
     };
 
-    // Pure / identity values must be representable at the new type.
-    for (const Expr &v : fn.values()) {
-        if (!limit.contains(bounds_of(v))) {
-            return "the initial value may not be representable in the target type";
-        }
+    // The initial accumulator value must be representable at the new type. Carry
+    // its interval through every update so each stage is checked against all
+    // preceding work rather than against an implicit zero.
+    internal_assert(fn.values().size() == 1);
+    ConstantInterval accumulator = bounds_of(fn.values()[0]);
+    if (!limit.contains(accumulator)) {
+        return "the initial value may not be representable in the target type";
     }
 
     for (const Definition &def : fn.updates()) {
@@ -3503,10 +3642,15 @@ std::optional<std::string> change_type_prove_safe(
             return "a term may not be representable in the target type";
         }
 
-        // min / max / and / or leave the accumulator within a single term's range,
-        // which we just proved fits, so they need nothing more.
-        if (op && (*op == IRNodeType::Min || *op == IRNodeType::Max ||
-                   *op == IRNodeType::And || *op == IRNodeType::Or)) {
+        // min and max leave the result within the union of the previous
+        // accumulator and a term. and/or are closed over the target type, but
+        // use its full interval for any later update.
+        if (op && (*op == IRNodeType::Min || *op == IRNodeType::Max)) {
+            accumulator = ConstantInterval::make_union(accumulator, term);
+            continue;
+        }
+        if (op && (*op == IRNodeType::And || *op == IRNodeType::Or)) {
+            accumulator = limit;
             continue;
         }
 
@@ -3523,31 +3667,42 @@ std::optional<std::string> change_type_prove_safe(
         // Each reduction step adds (Add) or subtracts (Sub) a term, so bound the
         // accumulator by (number of terms) x (per-step contribution).
         const ConstantInterval step = (*op == IRNodeType::Sub) ? -term : term;
-        int64_t n_max = 1;
+        ConstantInterval cardinality = ConstantInterval::single_point(1);
         bool symbolic = false;
-        Expr n_terms = make_const(Int(64), 1);
         for (const auto &rv : def.schedule().rvars()) {
-            n_terms = simplify(n_terms * cast(Int(64), rv.extent));
             // Only a literal extent is known at compile time; a symbolic extent
             // (e.g. an ImageParam dimension) gets only type-based bounds, which we
             // must not treat as a static bound.
             if (optional<int64_t> ext = as_const_int(simplify(rv.extent)); ext && *ext >= 0) {
-                n_max *= *ext;
+                cardinality *= *ext;
+                if (!cardinality.is_single_point()) {
+                    return "the reduction extent exceeds the range of Int(64)";
+                }
             } else {
                 symbolic = true;
             }
         }
+
         if (!symbolic) {
-            if (!limit.contains(step * ConstantInterval(0, n_max))) {
+            ConstantInterval next =
+                accumulator + step * ConstantInterval(0, cardinality.max);
+            if (!limit.contains(next)) {
                 return "the accumulated sum may exceed the target type's range";
             }
+            accumulator = next;
             continue;
         }
-        // Symbolic term count: emit a runtime precondition instead. step's
-        // endpoints are defined because term's are (checked above).
-        Expr cond = (make_const(Int(64), step.max) * n_terms <= make_const(Int(64), limit.max)) &&
-                    (make_const(Int(64), step.min) * n_terms >= make_const(Int(64), limit.min));
+
+        // Symbolic term count: constrain the cardinality directly rather than
+        // multiplying it by a range endpoint, since either product could itself
+        // overflow while evaluating the guard.
+        const int64_t max_terms =
+            maximum_safe_term_count(accumulator, step, limit);
+        Expr cond = reduction_cardinality_fits(def, max_terms);
         *condition = condition->defined() ? (*condition && cond) : cond;
+        // Under the runtime condition the result fits, but without retaining a
+        // symbolic interval its tightest conservative range is the whole target.
+        accumulator = limit;
     }
     return std::nullopt;
 }
@@ -3590,24 +3745,45 @@ Func Func::change_type(Type t, bool unsafe) {
     }
     const bool is_min_max = op && (*op == IRNodeType::Min || *op == IRNodeType::Max);
 
+    optional<Expr> translated_identity;
+    Expr identity_precondition;
+    if (is_min_max) {
+        const Expr &initial = func.values()[0];
+        const optional<Expr> old_id = get_associative_identity(old_t, *op);
+        if (old_id && can_prove(initial == *old_id)) {
+            translated_identity = get_associative_identity(t, *op);
+            user_assert(translated_identity)
+                << "change_type() could not find an identity for "
+                << IRNodeType_string(*op) << " at type " << t << ".\n";
+
+            const Expr round_tripped =
+                simplify(cast(old_t, *translated_identity));
+            if (!unsafe && !can_prove(round_tripped == *old_id)) {
+                const auto err =
+                    nonempty_dense_update_precondition(func, &identity_precondition);
+                user_assert(!err)
+                    << "change_type(" << t << ") on " << fname
+                    << " cannot safely translate its " << IRNodeType_string(*op)
+                    << " identity because " << *err << ".\n"
+                    << "Pass unsafe=true to bypass this check.\n";
+            }
+        }
+    }
+
     // Build the retyped clone.
     Func typed(fname + "_typed");
 
     // Pure definition.
     {
-        vector<Expr> retyped;
-        for (const Expr &v : func.values()) {
-            if (is_min_max) {
-                optional<Expr> id = get_associative_identity(t, *op);
-                user_assert(id) << "change_type() could not find an identity for "
-                                << IRNodeType_string(*op) << " at type " << t << ".\n";
-                retyped.push_back(*id);
-            } else {
-                retyped.push_back(retype_leaf(v, t, func_bounds));
-            }
+        internal_assert(func.values().size() == 1);
+        Expr pure_value = func.values()[0];
+
+        Expr retyped = translated_identity.value_or(Expr());
+        if (!retyped.defined()) {
+            retyped = retype_leaf(pure_value, t, func_bounds);
         }
-        // Single-output only (asserted above), so there is exactly one value.
-        typed(pure_vars) = retyped[0];
+
+        typed(pure_vars) = retyped;
     }
 
     // Update definitions. The retyped values still reference the original
@@ -3621,8 +3797,22 @@ Func Func::change_type(Type t, bool unsafe) {
         for (const Expr &v : def.values()) {
             vals.push_back(retype_value(substitute_in_all_lets(v), fname, typed.function(), t, func_bounds));
         }
-        typed.function().define_update(def.args(), vals, ReductionDomain{});
+        typed.function().define_update(def.args(), vals);
         typed.function().update(u).schedule() = def.schedule().get_copy();
+    }
+
+    // Retyping an already-retyped Func must not discard the preconditions that
+    // made the earlier cast-back wrapper safe.
+    typed.function().schedule().type_change_checks() =
+        func.schedule().type_change_checks();
+
+    if (identity_precondition.defined()) {
+        std::ostringstream msg;
+        msg << "change_type(" << t << ") on " << fname
+            << " requires a non-empty reduction domain to translate its "
+            << IRNodeType_string(*op) << " identity";
+        typed.function().schedule().type_change_checks().emplace_back(
+            identity_precondition, msg.str());
     }
 
     // Safety check.
