@@ -47,6 +47,7 @@ tests(
     parallel_scenarios.cpp
     profiler.cpp
     rfactor.cpp
+    separable_downsample.cpp
     sort.cpp
     stack_vs_heap.cpp
     thread_safe_jit_callable.cpp
