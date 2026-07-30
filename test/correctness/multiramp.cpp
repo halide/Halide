@@ -1,6 +1,7 @@
 #include "Halide.h"
 
 #include <cstdio>
+#include <numeric>
 #include <set>
 #include <vector>
 
@@ -583,6 +584,124 @@ void check_reject_non_multiramp_sum() {
     CHECK(!is_multiramp(sum, scope, &m), "reject coprime-shape add");
 }
 
+// ---- MultiRamp::transpose ------------------------------------------------
+
+// Mirror Shuffle::make_transpose: view v as a row-major matrix with `cols`
+// columns and transpose it.
+std::vector<int> transpose_vec(const std::vector<int> &v, int cols) {
+    int rows = (int)v.size() / cols;
+    std::vector<int> result(v.size());
+    for (int j = 0; j < cols; j++) {
+        for (int i = 0; i < rows; i++) {
+            result[j * rows + i] = v[i * cols + j];
+        }
+    }
+    return result;
+}
+
+void check_transpose_on_dim_boundary() {
+    // cols matches the innermost dim exactly, so no dim needs splitting.
+    MultiRamp A{0, {1, 100}, {4, 3}};
+    auto want = transpose_vec(expand(A), 4);
+    CHECK(A.transpose(4), "transpose on a dim boundary");
+    CHECK_SEQ(expand(A), want, "transpose on a dim boundary values");
+}
+
+void check_transpose_splits_a_dim() {
+    // cols lands in the middle of the only dim, which must be broken in two.
+    MultiRamp A{0, {1}, {8}};
+    auto want = transpose_vec(expand(A), 4);
+    CHECK(A.transpose(4), "transpose splitting a dim");
+    CHECK_SEQ(expand(A), want, "transpose splitting a dim values");
+}
+
+void check_transpose_spans_dims() {
+    // cols covers the two innermost dims together.
+    MultiRamp A{0, {1, 10, 100}, {2, 2, 3}};
+    auto want = transpose_vec(expand(A), 4);
+    CHECK(A.transpose(4), "transpose spanning dims");
+    CHECK_SEQ(expand(A), want, "transpose spanning dims values");
+}
+
+void check_transpose_rejects_indivisible() {
+    // The innermost dim of 3 can't be cut to leave a prefix of exactly 2 lanes.
+    MultiRamp A{0, {1, 100}, {3, 4}};
+    CHECK(!A.transpose(2), "transpose with an indivisible split rejected");
+}
+
+// ---- Shuffles ------------------------------------------------------------
+
+void check_recognize_transpose_shuffle() {
+    Expr e = Shuffle::make_transpose(Ramp::make(Expr(0), Expr(1), 12), 4);
+    Scope<Expr> scope;
+    MultiRamp m;
+    CHECK(is_multiramp(e, scope, &m), "recognize a transpose shuffle");
+    std::vector<int> in(12);
+    std::iota(in.begin(), in.end(), 0);
+    CHECK_SEQ(expand(m), transpose_vec(in, 4), "transpose shuffle values");
+}
+
+void check_recognize_reshaping_shuffle() {
+    // A shuffle of a 1D ramp whose lane indices are themselves a multiramp is
+    // a reshaping of the ramp rather than an arbitrary gather. Indices
+    // [0,2,4,6,1,3,5,7] have shape (4,2) and strides (2,1).
+    Expr r = Ramp::make(Expr(0), Expr(3), 8);
+    Expr e = Shuffle::make({r}, {0, 2, 4, 6, 1, 3, 5, 7});
+    Scope<Expr> scope;
+    MultiRamp m;
+    CHECK(is_multiramp(e, scope, &m), "recognize a reshaping shuffle");
+    CHECK_SEQ_LIT(expand(m), "reshaping shuffle values",
+                  0, 6, 12, 18, 3, 9, 15, 21);
+}
+
+void check_reject_gather_shuffle() {
+    // Lane indices that aren't a multiramp really are a gather.
+    Expr r = Ramp::make(Expr(0), Expr(3), 8);
+    Expr e = Shuffle::make({r}, {0, 3, 1, 7, 2, 5, 4, 6});
+    Scope<Expr> scope;
+    MultiRamp m;
+    CHECK(!is_multiramp(e, scope, &m), "reject a gather shuffle");
+}
+
+// ---- is_load_of_multiramp ------------------------------------------------
+
+Expr make_test_load(int lanes) {
+    return Load::make(Int(16, lanes), "buf", Ramp::make(Expr(0), Expr(1), lanes),
+                      Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder());
+}
+
+void check_load_under_cast_and_broadcast() {
+    // A broadcast of a load is a load at a stride-zero outer dim.
+    Expr e = Broadcast::make(Cast::make(Int(32, 4), make_test_load(4)), 3);
+    Scope<Expr> scope;
+    MultiRamp m;
+    const Load *load = is_load_of_multiramp(e, scope, &m);
+    CHECK(load && load->name == "buf", "see through cast and broadcast");
+    if (load) {
+        CHECK_SEQ_LIT(expand(m), "broadcast load addresses",
+                      0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3);
+    }
+}
+
+void check_load_under_shuffle() {
+    // Permuting the loaded values permutes the addresses loaded from.
+    Expr e = Shuffle::make_transpose(make_test_load(4), 2);
+    Scope<Expr> scope;
+    MultiRamp m;
+    const Load *load = is_load_of_multiramp(e, scope, &m);
+    CHECK(load && load->name == "buf", "see through a lane permutation");
+    if (load) {
+        CHECK_SEQ_LIT(expand(m), "permuted load addresses", 0, 2, 1, 3);
+    }
+}
+
+void check_reject_non_load() {
+    Scope<Expr> scope;
+    MultiRamp m;
+    CHECK(!is_load_of_multiramp(Ramp::make(Expr(0), Expr(1), 4), scope, &m),
+          "reject an Expr with no load underneath");
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -630,6 +749,19 @@ int main(int argc, char **argv) {
     check_rotate_stride_one_innermost_noop();
     check_roundtrips();
     check_reject_non_multiramp_sum();
+
+    check_transpose_on_dim_boundary();
+    check_transpose_splits_a_dim();
+    check_transpose_spans_dims();
+    check_transpose_rejects_indivisible();
+
+    check_recognize_transpose_shuffle();
+    check_recognize_reshaping_shuffle();
+    check_reject_gather_shuffle();
+
+    check_load_under_cast_and_broadcast();
+    check_load_under_shuffle();
+    check_reject_non_load();
 
     if (failures) {
         printf("%d failures\n", failures);

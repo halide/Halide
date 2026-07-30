@@ -121,11 +121,6 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
             return fail("the vector reduction is not of a widening multiply");
         }
 
-        if (lhs.type().bits() != 8 ||
-            rhs.type().bits() != 8) {
-            return fail("the vector reduction operand or result types are not supported");
-        }
-
     } else {
         // Lower a widening_mul intrinsic, as they can be used but aren't lifted to for bf16.
         Expr reduce_value = simplify(lower_intrinsics(reduce->value));
@@ -137,65 +132,31 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
         rhs = mul->b;
     }
 
-    // There may be a broadcast next (it can get hoisted outside of other ops)
-    auto debroadcast = [](Expr &e) -> int {
-        if (const Broadcast *b = e.as<Broadcast>()) {
-            int lanes = b->lanes;
-            e = b->value;
-            return lanes;
-        } else {
-            return 1;
-        }
-    };
-    int lhs_broadcast = debroadcast(lhs);
-    int rhs_broadcast = debroadcast(rhs);
-
-    // Unpack the casts, if it was a direct multiply. This should only happen
-    // for floats (the integer branch above already extracted the cast inputs
-    // from the widening_mul intrinsic).
-    if (reduce->type.is_float()) {
-        const auto *lhs_cast = lhs.as<Cast>();
-        const auto *rhs_cast = rhs.as<Cast>();
-        if (!lhs_cast || !rhs_cast) {
-            return fail("the vector reduction is not of a widening multiply");
-        }
-        lhs = lhs_cast->value;
-        rhs = rhs_cast->value;
-        if (!lhs.type().is_bfloat() ||
-            rhs.type().element_of() != lhs.type().element_of()) {
-            return fail("the vector reduction operand or result types are not supported");
-        }
-    }
-
-    // Underneath all of this must be a load
+    // Underneath all of this must be a load, though it may be wrapped in a
+    // broadcast over the dimension it doesn't depend on, in the widening cast
+    // (for floats - the integer branch above already extracted the cast inputs
+    // from the widening_mul intrinsic), and in a lane permutation.
     // TODO: What if we want to multiply by the same matrix multiple times? It might be a let binding.
-    const auto *lhs_load = lhs.as<Load>();
-    const auto *rhs_load = rhs.as<Load>();
+    MultiRamp lhs_mr, rhs_mr;
+    Scope<Expr> empty_scope;
+    const auto *lhs_load = is_load_of_multiramp(lhs, empty_scope, &lhs_mr);
+    const auto *rhs_load = is_load_of_multiramp(rhs, empty_scope, &rhs_mr);
     if (!lhs_load || !rhs_load) {
-        return fail("the matrix multiply operands are not loads");
+        return fail("the matrix multiply operands are not loads with affine indices");
     }
     // The loads must be unpredicated
     if (!is_const_one(lhs_load->predicate) || !is_const_one(rhs_load->predicate)) {
         return fail("the matrix multiply operands are predicated loads");
     }
 
-    // Now we analyze the load indices as multiramps
-    MultiRamp lhs_mr, rhs_mr;
-    Scope<Expr> empty_scope;
-    if (!is_multiramp(lhs_load->index, empty_scope, &lhs_mr) ||
-        !is_multiramp(rhs_load->index, empty_scope, &rhs_mr)) {
-        return fail("the matrix multiply loads indices are not affine");
-    }
-
-    // Add back on any broadcasts as a stride-0 outer dim.
-    auto add_broadcast = [](MultiRamp &mr, int extent) {
-        if (extent > 1) {
-            mr.strides.push_back(make_zero(mr.base.type()));
-            mr.lanes.push_back(extent);
+    if (reduce->type.is_int_or_uint()) {
+        if (lhs_load->type.bits() != 8 || rhs_load->type.bits() != 8) {
+            return fail("the vector reduction operand or result types are not supported");
         }
-    };
-    add_broadcast(lhs_mr, lhs_broadcast);
-    add_broadcast(rhs_mr, rhs_broadcast);
+    } else if (!lhs_load->type.is_bfloat() ||
+               rhs_load->type.element_of() != lhs_load->type.element_of()) {
+        return fail("the vector reduction operand or result types are not supported");
+    }
 
     // In a matrix multiply with row-major inputs and outputs, the algorithm
     // looks like:
@@ -234,7 +195,6 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
 
     // Now deduce LHS and RHS. First some helpers.
     auto swap_sides = [&]() {
-        std::swap(lhs, rhs);
         std::swap(lhs_mr, rhs_mr);
         std::swap(lhs_load, rhs_load);
     };
@@ -309,8 +269,8 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     {
         Type t = op->value.type();
         bool result_ok = t.bytes() * I * J <= 1024;
-        bool lhs_ok = lhs.type().bytes() * I * K <= 1024;
-        bool rhs_ok = rhs.type().bytes() * K * J <= 1024;
+        bool lhs_ok = lhs_load->type.bytes() * I * K <= 1024;
+        bool rhs_ok = rhs_load->type.bytes() * K * J <= 1024;
         if (!result_ok || !lhs_ok || !rhs_ok) {
             return fail("one more more matrices are too large to fit in AMX registers (more than 1024 bytes)");
         }
@@ -428,76 +388,9 @@ class ExtractTileOperations : public IRMutator {
     // registers as 2D sub-tiles. This map tracks those.
     std::vector<MultiRamp> amx_subtiles;
 
-    // Returns a unique subtile index for a load or store index, or -1 if it
-    // overlaps with an existing subtile, or is otherwise poorly behaved.
-    int get_subtile(const Expr &index) {
-        MultiRamp mr;
-        if (!is_multiramp(index, Scope<Expr>::empty_scope(), &mr)) {
-            user_error << "Access to AMX tile not affine: " << index << "\n";
-        }
-        if (!can_prove(mr.alias_free())) {
-            // What are you doing?
-            user_error << "Access to AMX tile may have duplicated lanes: " << index << "\n";
-        }
-        if (amx_subtiles.empty()) {
-            amx_subtiles.push_back(std::move(mr));
-            return 0;
-        }
-
-        // All strides and lanes must match across all subtiles, or we give up.
-        const MultiRamp &first = amx_subtiles[0];
-        if (mr.dimensions() != first.dimensions()) {
-            user_error
-                << "Access to AMX tile does not have the same shape as other accesses to the same memory.";
-            return -1;
-        }
-        for (int i = 0; i < first.dimensions(); i++) {
-            if (!can_prove(mr.strides[i] == first.strides[i]) ||
-                mr.lanes[i] != first.lanes[i]) {
-                user_error
-                    << "Access to AMX tile has different size and strides to other "
-                    << "accesses to the same memory. All accesses must have the same "
-                    << "subtile size and strides: " << index;
-            }
-        }
-
-        // Now check for disjointedness
-        // Add a synthetic dimension, the purpose of which will become clear.
-        mr.strides.emplace_back();
-        mr.lanes.push_back(2);
-        for (int i = 0; i < (int)amx_subtiles.size(); i++) {
-            auto &other = amx_subtiles[i];
-            // One of two things must be true:
-            // 1) All of the lanes of mr equal the corresponding lane of
-            // other. We've already checked the strides and lanes, so it's just
-            // a matter of checking the base.
-            if (can_prove(mr.base == other.base)) {
-                return i;
-            }
-
-            // 2) None of the lanes or mr equal any of the lanes of other. To do
-            // this we'll construct a combined mr that can be either 'mr' or
-            // 'other', and ask if it's alias-free. This is what the synthetic
-            // dimension was for.
-            mr.strides.back() = mr.base - other.base;
-            if (!can_prove(mr.alias_free())) {
-                user_error
-                    << "Failed to prove access to AMX does not partially overlap "
-                    << "another distinct access: " << index;
-                return -1;
-            }
-        }
-
-        // Didn't already exist and didn't alias with anything.
-        mr.strides.pop_back();
-        mr.lanes.pop_back();
-        amx_subtiles.push_back(std::move(mr));
-        return (int)amx_subtiles.size() - 1;
-    }
-
     // Returns an index expression for a given load or store index. user_asserts if impossible
     std::string get_subtile_name(const Expr &index) {
-        int idx = get_subtile(index);
+        int idx = get_subtile(index, "AMX tile", &amx_subtiles);
         internal_assert(idx >= 0);  // errors handled already
         return amx_name + std::to_string(idx);
     }

@@ -113,7 +113,7 @@ void scenario_naive_rhs() {
 // A gather-style matmul with an indirect row index — natural for sparse /
 // pruned matmul, indirect attention, embedding lookups. The LHS load index
 // goes through a table lookup, so the multiramp lift fails. Triggers the
-// "loads indices are not affine" path in convert_to_matmul.
+// "not loads with affine indices" path in convert_to_matmul.
 void scenario_indirect() {
     Buffer<int8_t> A(64, 64);
     Buffer<int8_t> B(4, 64, 16);
