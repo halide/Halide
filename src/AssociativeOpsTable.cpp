@@ -372,19 +372,19 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     return table;
 }
 
-std::optional<Expr> get_associative_identity(Type type, IRNodeType root) {
+Expr get_associative_identity(Type type, IRNodeType root) {
     std::scoped_lock lock_guard(ops_table_lock());
 
     const vector<AssociativePattern> &table = get_ops_table_helper({type}, root, 1);
     if (table.empty()) {
-        return std::nullopt;
+        return Expr();
     }
 
     const Expr &identity = table.front().identities.front();
     for (const AssociativePattern &pattern : table) {
         internal_assert(pattern.size() == 1);
         if (!equal(pattern.identities.front(), identity)) {
-            return std::nullopt;
+            return Expr();
         }
     }
     return identity;
