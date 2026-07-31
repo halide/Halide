@@ -116,9 +116,7 @@ void scenario_too_narrow() {
 }
 
 // Each copy has to be contiguous in both the source and the destination, so a
-// strided read of the input can't be done this way. A strided load is staged
-// as a shuffle of dense loads, so what the peephole sees is a value that isn't
-// a plain load.
+// strided read of the input can't be done this way.
 void scenario_strided_source() {
     Buffer<float> in(512, 64);
     in.fill(0.f);
@@ -131,6 +129,24 @@ void scenario_strided_source() {
         .store_in(MemoryType::GPUSharedAsync)
         .gpu_threads(y)
         .vectorize(x, 4);
+    out.compile_jit(async_target());
+}
+
+// A predicated tail means some lanes are masked off, which the copy engine
+// can't express.
+void scenario_predicated() {
+    Buffer<float> in(256, 64);
+    in.fill(0.f);
+    Var x("x"), y("y"), xi("xi"), yi("yi");
+    Func stage("stage"), out("out");
+    stage(x, y) = in(x, y);
+    out(x, y) = stage(x, y);
+    out.gpu_tile(x, y, xi, yi, 66, 8);
+    stage.compute_at(out, x)
+        .store_in(MemoryType::GPUSharedAsync)
+        .align_storage(x, 4)
+        .gpu_threads(y)
+        .vectorize(x, 4, TailStrategy::Predicate);
     out.compile_jit(async_target());
 }
 
@@ -163,10 +179,11 @@ int main(int argc, char **argv) {
     int failures = 0;
 
     failures += !expect_user_error("not_a_copy", "not a load", scenario_not_a_copy);
-    failures += !expect_user_error("source_inside_kernel", "not a load", scenario_source_inside_kernel);
+    failures += !expect_user_error("source_inside_kernel", "another allocation inside the", scenario_source_inside_kernel);
     failures += !expect_user_error("bad_vector_width", "4, 8 or 16 bytes", scenario_bad_vector_width);
     failures += !expect_user_error("too_narrow", "4, 8 or 16 bytes", scenario_too_narrow);
-    failures += !expect_user_error("strided_source", "not a load", scenario_strided_source);
+    failures += !expect_user_error("strided_source", "not read densely", scenario_strided_source);
+    failures += !expect_user_error("predicated", "predicated", scenario_predicated);
     failures += !expect_user_error("misaligned_destination", "aligned", scenario_misaligned_destination);
 
     if (failures != 0) {

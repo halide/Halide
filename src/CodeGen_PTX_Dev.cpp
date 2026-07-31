@@ -444,10 +444,28 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
         return false;
     }
     const Load *src = op->value.as<Load>();
-    if (!src || alloc_memory_type.contains(src->name)) {
+    if (!src) {
+        // A load that isn't dense is broken up into a shuffle of dense loads
+        // well before we get here, so say what that means for the copy rather
+        // than describing it as not being a load.
+        Expr value = op->value;
+        while (const Let *let = value.as<Let>()) {
+            value = let->body;
+        }
+        if (const Shuffle *s = value.as<Shuffle>();
+            s && !s->vectors.empty()) {
+            *reason = "the source is not read densely. Each copy moves one run of "
+                      "bytes, so the Func must read its source with a stride of one";
+            return false;
+        }
         *reason = "the value stored is not a load from a buffer outside the kernel. "
                   "An asynchronous copy moves bytes untouched, so the Func must be a "
                   "plain copy - no cast, no arithmetic, and no boundary condition";
+        return false;
+    }
+    if (alloc_memory_type.contains(src->name)) {
+        *reason = "the value stored is loaded from another allocation inside the "
+                  "kernel. An asynchronous copy reads from global memory";
         return false;
     }
     if (!is_const_one(op->predicate) || !is_const_one(src->predicate)) {
