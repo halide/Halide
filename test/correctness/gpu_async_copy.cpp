@@ -8,7 +8,8 @@ using namespace Halide;
 // The copy engine moves 4, 8 or 16 bytes per thread, so the cases below cover
 // each of those widths at several element sizes, as well as the shapes a
 // staged input tends to take: a two-dimensional tile, more than one input
-// staged into the same kernel, and a wrapper made with Func::in.
+// staged into the same kernel, a kernel that mixes the two staging modes, and
+// a wrapper made with Func::in.
 
 namespace {
 
@@ -137,6 +138,36 @@ void test_two_inputs() {
     check_result("two_inputs", result, a);
 }
 
+// One input staged by the copy engine and one staged the ordinary way, in
+// either order. The two get separate shared allocations, which have to be
+// placed at different addresses within the block's shared memory.
+void test_mixed(const char *name, MemoryType first, MemoryType second) {
+    const int W = 256, H = 32;
+    Buffer<float> a = make_input<float>(W, H);
+    Buffer<float> b = make_input<float>(W, H);
+
+    Var x("x"), y("y"), xi("xi"), yi("yi");
+    Func sa("sa"), sb("sb"), out("out");
+    sa(x, y) = a(x, y);
+    sb(x, y) = b(x, y);
+    out(x, y) = sa(x, y) + sb(x, y);
+
+    out.gpu_tile(x, y, xi, yi, 64, 8);
+    sa.compute_at(out, x)
+        .store_in(first)
+        .gpu_threads(y)
+        .vectorize(x, 4);
+    sb.compute_at(out, x)
+        .store_in(second)
+        .gpu_threads(y)
+        .vectorize(x, 4);
+
+    Buffer<float> result(W, H);
+    out.realize(result);
+    result.copy_to_host();
+    check_result(name, result, a);
+}
+
 // Func::in is the idiomatic way to get a Func that is a plain copy, and is
 // what the error message points users at.
 void test_wrapper() {
@@ -190,9 +221,33 @@ void test_opt_out() {
     check_result("opt_out_async", async, input);
 }
 
+// GPU APIs with no copy engine have to treat this memory type as ordinary
+// shared memory rather than failing to compile. Only compiling is needed, so
+// this runs whether or not such a device is present.
+void test_other_gpu_apis() {
+    const int W = 256, H = 32;
+    Buffer<float> input = make_input<float>(W, H);
+
+    for (Target::Feature api : {Target::OpenCL, Target::Metal}) {
+        Var x("x"), y("y"), xi("xi"), yi("yi");
+        Func stage("stage"), out("out");
+        stage(x, y) = input(x, y);
+        out(x, y) = stage(x, y) * 2;
+        out.gpu_tile(x, y, xi, yi, 64, 8);
+        stage.compute_at(out, x)
+            .store_in(MemoryType::GPUSharedAsync)
+            .gpu_threads(y)
+            .vectorize(x, 4);
+        out.compile_to_module({}, "f", get_host_target().with_feature(api));
+    }
+    printf("[other_gpu_apis] OK\n");
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
+    test_other_gpu_apis();
+
     Target target = get_jit_target_from_environment();
     if (!target.has_feature(Target::CUDA)) {
         printf("[SKIP] No CUDA target enabled.\n");
@@ -218,6 +273,8 @@ int main(int argc, char **argv) {
     test_2d_tile();
     test_padded_storage();
     test_two_inputs();
+    test_mixed("mixed_sync_first", MemoryType::GPUShared, MemoryType::GPUSharedAsync);
+    test_mixed("mixed_async_first", MemoryType::GPUSharedAsync, MemoryType::GPUShared);
     test_wrapper();
     test_opt_out();
 

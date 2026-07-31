@@ -716,6 +716,20 @@ struct Call : public ExprNode<Call> {
         concat_bits,
         count_leading_zeros,
         count_trailing_zeros,
+        // cuda_await_copies(group) waits for every asynchronous copy in the
+        // given group to have landed in shared memory. Appears in an Evaluate
+        // node at the point where the copied data is first read.
+        cuda_await_copies,
+        // cuda_bypass_registers(value, group, func_name) marks a value that must be moved
+        // to its destination without being materialized in registers, which the
+        // CUDA backend does with the copy engine. It is only valid as the whole
+        // value of a Store, and promises that the store is a copy the copy
+        // engine can make: a dense, aligned, unpredicated run of 4, 8 or 16
+        // bytes read from outside the kernel. `group` names a batch of such
+        // copies that are waited for together by cuda_await_copies, and
+        // `func_name` is the Func the store belonged to before the shared
+        // allocations were packed together, for error messages.
+        cuda_bypass_registers,
         debug_to_file,
         // Declares that a box region of an allocation has been touched (used by bounds inference)
         declare_box_touched,

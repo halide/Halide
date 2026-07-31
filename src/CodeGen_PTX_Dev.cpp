@@ -17,6 +17,7 @@
 #include "ModulusRemainder.h"
 #include "Simplify.h"
 #include "Solve.h"
+#include "Substitute.h"
 #include "Target.h"
 
 #include <fstream>
@@ -107,19 +108,32 @@ protected:
      * copies into shared memory can be recognized. */
     Scope<MemoryType> alloc_memory_type;
 
-    /** Whether we're inside a producer node, which is where the wait for any
-     * asynchronous copies gets emitted, and whether any have been issued in
-     * it. */
+    /** Whether we're inside a producer node. */
     bool in_producer = false;
-    bool issued_async_copy = false;
+
+    /** The groups of asynchronous copies committed so far, oldest first, and
+     * the group of any copies issued since the last commit. Waits are FIFO -
+     * the hardware can only wait for all but the newest N groups - so a
+     * group's position here is what determines the N we emit for it. */
+    std::vector<int> committed_groups;
+    int uncommitted_group = -1;
 
     /** Try to emit a store into shared memory as an asynchronous copy, which
      * moves the data straight from global memory without routing it through
      * registers. Returns false if this store isn't one we can do that for. */
     bool codegen_async_copy(const Store *op, const char **reason);
 
-    /** Wait for any asynchronous copies issued so far to have landed. */
-    void wait_for_async_copies();
+    /** Close the current group of asynchronous copies, if there is one. */
+    void commit_copies();
+
+    /** Emit a wait that leaves at most n groups of copies outstanding. */
+    void emit_copy_wait(int n);
+
+    /** Wait for the asynchronous copies in the given group to have landed. */
+    void await_copies(int group);
+
+    /** Wait for every asynchronous copy issued so far to have landed. */
+    void await_all_copies();
 
     bool supports_atomic_add(const Type &t) const override;
 };
@@ -284,6 +298,15 @@ void CodeGen_PTX_Dev::init_module() {
 }
 
 void CodeGen_PTX_Dev::visit(const Call *op) {
+    if (op->is_intrinsic(Call::cuda_await_copies)) {
+        internal_assert(op->args.size() == 1);
+        auto group = as_const_int(op->args[0]);
+        internal_assert(group) << "cuda_await_copies group is not a constant integer\n";
+        await_copies((int)*group);
+        value = ConstantInt::get(i32_t, 0);
+        return;
+    }
+
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         // Even though we always insert a __syncthreads equivalent
         // (which has both a device and shared memory fence)
@@ -293,7 +316,7 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
 
         // A barrier tells other threads the shared memory this thread wrote is
         // ready, so any asynchronous copies must have landed by now.
-        wait_for_async_copies();
+        await_all_copies();
 
         auto fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
@@ -413,6 +436,15 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
     CodeGen_LLVM::visit(op);
 }
 
+// The name of the Func a marked store belonged to, for error messages. The
+// store itself is named after the packed allocation it ended up in.
+std::string async_copy_func_name(const Call *marker) {
+    internal_assert(marker->args.size() == 3);
+    const StringImm *name = marker->args[2].as<StringImm>();
+    internal_assert(name) << "cuda_bypass_registers name is not a string\n";
+    return name->value;
+}
+
 // A copy from global memory into shared memory can be done by the hardware
 // without going through registers, which saves the load, the store, and the
 // registers in between. The copy is asynchronous, so it has to be waited for
@@ -433,25 +465,32 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
         return false;
     }
 
-    // The destination must be shared memory that was asked for asynchronously,
-    // and the source must be a plain load from something we didn't allocate in
-    // here, which is to say global memory. Stores to plain GPUShared that
-    // happen to match the pattern are left synchronous, so that a schedule can
-    // ask for either one.
-    const MemoryType *dst_memory_type = alloc_memory_type.find(op->name);
-    if (!dst_memory_type || *dst_memory_type != MemoryType::GPUSharedAsync) {
-        *reason = "the destination is not stored in MemoryType::GPUSharedAsync";
+    // The value must be one the schedule asked to have moved without passing
+    // through registers, and it must be a plain load from something we didn't
+    // allocate in here, which is to say global memory. An ordinary store that
+    // happens to match the pattern is left synchronous.
+    // CSE and LICM lift common subexpressions of a stored value into Lets
+    // around it, which would hide the marker. Substituting them back in leaves
+    // an expression that stands alone, which is what the analysis below and
+    // codegen_buffer_pointer both need. It has to be held in a local, because
+    // everything below points into it.
+    const Expr stored = substitute_in_all_lets(op->value);
+    const Call *marker = stored.as<Call>();
+    if (!(marker && marker->is_intrinsic(Call::cuda_bypass_registers))) {
+        *reason = "the store was not marked as an asynchronous copy";
         return false;
     }
-    const Load *src = op->value.as<Load>();
+    internal_assert(marker->args.size() == 3);
+    const Expr &copied = marker->args[0];
+    auto group = as_const_int(marker->args[1]);
+    internal_assert(group) << "cuda_bypass_registers group is not a constant integer\n";
+
+    const Load *src = copied.as<Load>();
     if (!src) {
         // A load that isn't dense is broken up into a shuffle of dense loads
         // well before we get here, so say what that means for the copy rather
         // than describing it as not being a load.
-        Expr value = op->value;
-        while (const Let *let = value.as<Let>()) {
-            value = let->body;
-        }
+        Expr value = copied;
         if (const Shuffle *s = value.as<Shuffle>();
             s && !s->vectors.empty()) {
             *reason = "the source is not read densely. Each copy moves one run of "
@@ -475,7 +514,7 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
 
     // The hardware copies 4, 8 or 16 bytes at a time, from and to consecutive
     // addresses.
-    const Type t = op->value.type();
+    const Type t = copied.type();
     const int bytes = t.bytes() * t.lanes();
     if (!(bytes == 4 || bytes == 8 || bytes == 16)) {
         *reason = "each thread must copy 4, 8 or 16 bytes at a time. Vectorize the "
@@ -539,8 +578,13 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
     internal_assert(id != llvm::Intrinsic::not_intrinsic)
         << "Could not find the nvvm intrinsic " << name.str() << "\n";
     llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), id);
+    // Copies are committed in groups, so close the previous group before
+    // starting one for a different batch.
+    if (uncommitted_group != -1 && uncommitted_group != (int)*group) {
+        commit_copies();
+    }
     builder->CreateCall(fn, {dst, src_ptr});
-    issued_async_copy = true;
+    uncommitted_group = (int)*group;
     return true;
 }
 
@@ -550,30 +594,58 @@ void CodeGen_PTX_Dev::visit(const ProducerConsumer *op) {
         return;
     }
 
-    ScopedValue<bool> old_issued(issued_async_copy, false);
     ScopedValue<bool> old_in(in_producer, true);
     codegen(op->body);
-    // Everything issued in here has to have landed before the values are used,
-    // which is after this producer.
-    wait_for_async_copies();
 }
 
-void CodeGen_PTX_Dev::wait_for_async_copies() {
-    if (!issued_async_copy) {
+void CodeGen_PTX_Dev::commit_copies() {
+    if (uncommitted_group == -1) {
         return;
     }
-    for (const char *intrin : {"llvm.nvvm.cp.async.commit.group",
-                               "llvm.nvvm.cp.async.wait.group"}) {
-        llvm::Intrinsic::ID id = llvm::Intrinsic::lookupIntrinsicID(intrin);
-        internal_assert(id != llvm::Intrinsic::not_intrinsic);
-        llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), id);
-        vector<Value *> args;
-        if (fn->getFunctionType()->getNumParams() == 1) {
-            args.push_back(ConstantInt::get(i32_t, 0));
-        }
-        builder->CreateCall(fn, args);
+    llvm::Intrinsic::ID id =
+        llvm::Intrinsic::lookupIntrinsicID("llvm.nvvm.cp.async.commit.group");
+    internal_assert(id != llvm::Intrinsic::not_intrinsic);
+    builder->CreateCall(llvm::Intrinsic::getOrInsertDeclaration(module.get(), id), {});
+    committed_groups.push_back(uncommitted_group);
+    uncommitted_group = -1;
+}
+
+void CodeGen_PTX_Dev::emit_copy_wait(int n) {
+    llvm::Intrinsic::ID id =
+        llvm::Intrinsic::lookupIntrinsicID("llvm.nvvm.cp.async.wait.group");
+    internal_assert(id != llvm::Intrinsic::not_intrinsic);
+    llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), id);
+    vector<Value *> args;
+    if (fn->getFunctionType()->getNumParams() == 1) {
+        args.push_back(ConstantInt::get(i32_t, n));
     }
-    issued_async_copy = false;
+    builder->CreateCall(fn, args);
+}
+
+void CodeGen_PTX_Dev::await_copies(int group) {
+    commit_copies();
+    // The wait is FIFO, so waiting for this group means letting everything
+    // committed after it stay outstanding. Searching from the newest end finds
+    // the most recent batch with this group, which is the one just issued.
+    for (size_t i = committed_groups.size(); i > 0; i--) {
+        if (committed_groups[i - 1] != group) {
+            continue;
+        }
+        emit_copy_wait((int)(committed_groups.size() - i));
+        committed_groups.erase(committed_groups.begin(),
+                               committed_groups.begin() + i);
+        return;
+    }
+    // Nothing from that group is outstanding, so there is nothing to wait for.
+}
+
+void CodeGen_PTX_Dev::await_all_copies() {
+    commit_copies();
+    if (committed_groups.empty()) {
+        return;
+    }
+    emit_copy_wait(0);
+    committed_groups.clear();
 }
 
 void CodeGen_PTX_Dev::visit(const Store *op) {
@@ -588,13 +660,14 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
         if (codegen_async_copy(op, &reason)) {
             return;
         }
-        // Asking for this memory type is a promise that the stores to it are
+        // Asking for that memory type is a promise that the stores to it are
         // copies the hardware can make asynchronously. If one isn't, say so
         // rather than quietly emitting a load and a store instead.
-        const MemoryType *t = alloc_memory_type.find(op->name);
-        if (t && *t == MemoryType::GPUSharedAsync) {
+        const Expr stored = substitute_in_all_lets(op->value);
+        const Call *marker = stored.as<Call>();
+        if (marker && marker->is_intrinsic(Call::cuda_bypass_registers)) {
             user_error
-                << op->name << " is scheduled in GPUSharedAsync memory, but this "
+                << async_copy_func_name(marker) << " is scheduled in GPUSharedAsync memory, but this "
                 << "store to it cannot be done with an asynchronous copy, because "
                 << reason << ".\n\n"
                 << "An asynchronous copy moves bytes from global memory into shared "
