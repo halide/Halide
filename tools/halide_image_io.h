@@ -1025,15 +1025,6 @@ bool save_png(ImageType &im, const std::string &filename) {
 
 #endif  // not HALIDE_NO_PNG
 
-// Extents that came out of a file header must be positive before we hand them
-// to Buffer. Its shape arithmetic is signed and unchecked, so a negative extent
-// gives a size_in_bytes() that wraps to just under SIZE_MAX; allocate() rounds
-// that up to zero and satisfies it with a single alignment block, and the
-// payload read that follows then runs off the end of that block.
-inline bool extents_are_valid(const std::vector<int> &extents) {
-    return std::all_of(extents.begin(), extents.end(), [](int extent) { return extent > 0; });
-}
-
 template<Internal::CheckFunc check>
 bool read_pnm_header(Internal::FileOpener &f, const std::string &hdr_fmt, int *width, int *height, int *bit_depth) {
     if (!check(f.f != nullptr, "File could not be opened for reading")) {
@@ -1053,7 +1044,7 @@ bool read_pnm_header(Internal::FileOpener &f, const std::string &hdr_fmt, int *w
         return false;
     }
 
-    if (!check(extents_are_valid({*width, *height}), "Invalid width or height")) {
+    if (!check(*width > 0 && *height > 0, "Invalid width or height")) {
         return false;
     }
 
@@ -1377,10 +1368,6 @@ bool load_npy(const std::string &filename, ImageType *im) {
         }
     }
     if (!check(im_type.bits != 0, "Unsupported type in load_npy")) {
-        return false;
-    }
-
-    if (!check(extents_are_valid(h.extents), "Bad shape in .npy header")) {
         return false;
     }
 
@@ -1808,9 +1795,6 @@ bool load_mat(const std::string &filename, ImageType *im) {
     int dims = shape_header[1] / 4;
     std::vector<int> extents(dims);
     if (!check(f.read_vector(&extents), "Could not read .mat header\n")) {
-        return false;
-    }
-    if (!check(extents_are_valid(extents), "Could not parse this .mat file: bad shape\n")) {
         return false;
     }
     if (dims & 1) {
