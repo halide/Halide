@@ -400,7 +400,6 @@ class ExtractTileOperations : public IRMutator {
     // Returns an index expression for a given load or store index. user_asserts if impossible
     std::string get_subtile_name(const Expr &index) {
         int idx = get_subtile(index, "AMX tile", &amx_subtiles);
-        internal_assert(idx >= 0);  // errors handled already
         return amx_name + std::to_string(idx);
     }
 
