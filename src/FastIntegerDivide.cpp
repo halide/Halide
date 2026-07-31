@@ -168,6 +168,11 @@ Expr fast_integer_divide_impl(Expr numerator, Expr denominator, bool round_to_ze
 
     Type wide = t.widen();
 
+    // Preserve the original numerator: the signed non-round-to-zero branch
+    // below rewrites `numerator` in place, but the denominator == 1 fixup
+    // needs the unmodified value.
+    Expr original_numerator = numerator;
+
     Expr result;
     if (t.is_uint()) {
         Expr mul, shift = shift_for_denominator(denominator);
@@ -295,7 +300,7 @@ Expr fast_integer_divide_impl(Expr numerator, Expr denominator, bool round_to_ze
     }
 
     // The tables don't work for denominator == 1
-    result = select(std::move(denominator) == 1, std::move(numerator), result);
+    result = select(std::move(denominator) == 1, std::move(original_numerator), result);
 
     internal_assert(result.type() == t);
 

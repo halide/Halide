@@ -113,6 +113,7 @@ tests(
     extract_concat_bits.cpp
     failed_unroll.cpp
     fallback_vscale_sve.cpp
+    fast_integer_divide.cpp
     fast_trigonometric.cpp
     fibonacci.cpp
     fit_function.cpp
