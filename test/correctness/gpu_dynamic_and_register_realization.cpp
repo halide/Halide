@@ -15,8 +15,8 @@ using namespace Halide;
 // both copies.
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
-    if (!t.has_feature(Target::CUDA)) {
-        printf("[SKIP] CUDA not enabled\n");
+    if (!t.has_gpu_feature()) {
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 
