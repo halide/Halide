@@ -133,6 +133,7 @@ tests(
     fuzz_schedule.cpp
     gameoflife.cpp
     gather.cpp
+    generator_cache.cpp
     gpu_alloc_group_profiling.cpp
     gpu_allocation_cache.cpp
     gpu_arg_types.cpp
@@ -525,4 +526,5 @@ set_target_properties(
 
 if (WITH_SERIALIZATION)
     target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
+    target_compile_definitions(correctness_generator_cache PRIVATE TEST_WITH_SERIALIZATION)
 endif ()
