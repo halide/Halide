@@ -30,6 +30,97 @@ using std::vector;
 
 namespace {
 
+// Being filled by the copy engine is a property of the stores to an
+// allocation, not of the memory it lives in, so MemoryType::GPUSharedAsync is
+// only the schedule's way of saying it. Rewrite such allocations to ordinary
+// shared memory, wrapping the value of each store to them in a
+// cuda_bypass_registers intrinsic and awaiting the copies where the data is
+// consumed. Everything below then sees one kind of shared memory, which is
+// what lets all of a kernel's shared allocations be packed together.
+class MarkAsyncCopies : public IRMutator {
+    using IRMutator::visit;
+
+    // The allocations being filled by the copy engine, and the group each
+    // one's copies belong to. Copies in a group are awaited together.
+    map<string, int> groups;
+    int next_group = 0;
+
+    // Only CUDA has a copy engine to drive. Elsewhere the allocation still
+    // becomes ordinary shared memory, but the stores to it stay ordinary too.
+    DeviceAPI device_api = DeviceAPI::None;
+
+    Stmt visit(const For *op) override {
+        ScopedValue<DeviceAPI> d(device_api, op->device_api == DeviceAPI::None ?
+                                                 device_api :
+                                                 op->device_api);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Allocate *op) override {
+        if (op->memory_type != MemoryType::GPUSharedAsync) {
+            return IRMutator::visit(op);
+        }
+
+        // One group per allocation, so that consuming one Func doesn't wait
+        // for the copies into another.
+        auto [it, inserted] = groups.emplace(op->name, next_group++);
+        internal_assert(inserted)
+            << "Two asynchronously copied allocations are both named " << op->name << "\n";
+
+        Stmt body = mutate(op->body);
+        groups.erase(it);
+
+        return Allocate::make(op->name, op->type, MemoryType::GPUShared,
+                              op->extents, mutate(op->condition), body,
+                              op->new_expr, op->free_function, op->padding);
+    }
+
+    Stmt visit(const Store *op) override {
+        auto it = groups.find(op->name);
+        if (it == groups.end() || device_api != DeviceAPI::CUDA) {
+            return IRMutator::visit(op);
+        }
+        // The Func name is carried along because the allocations get packed
+        // together below, after which the store no longer knows which Func it
+        // belongs to, and that is the name an error has to name.
+        Expr value = Call::make(op->value.type(), Call::cuda_bypass_registers,
+                                {mutate(op->value), it->second, StringImm::make(op->name)},
+                                Call::Intrinsic);
+        return Store::make(op->name, value, mutate(op->index), op->param,
+                           mutate(op->predicate), op->alignment, op->is_streaming);
+    }
+
+    Stmt visit(const ProducerConsumer *op) override {
+        Stmt body = mutate(op->body);
+        auto it = groups.find(op->name);
+        if (op->is_producer && it != groups.end() && device_api == DeviceAPI::CUDA) {
+            // At the end of the producer, which is before the barrier that
+            // publishes the data to the rest of the block, and before any of
+            // it is read.
+            Expr wait = Call::make(Int(32), Call::cuda_await_copies,
+                                   {it->second}, Call::Intrinsic);
+            body = Block::make(body, Evaluate::make(wait));
+        }
+        return op->with(body);
+    }
+
+public:
+    using IRMutator::mutate;
+};
+
+// The copy engine moves up to 16 bytes at a time, and needs its destination
+// aligned to the width of the copy. Allocations are packed one after another,
+// so a group has to end on a 16-byte boundary for whatever follows it to be
+// copyable into. Round a group's size up accordingly, given the size in bytes
+// of the units it is measured in.
+Expr round_up_group_size(const Expr &size, int unit_bytes) {
+    const int alignment = 16;
+    if (unit_bytes >= alignment) {
+        return size;
+    }
+    return align_up(size, alignment / unit_bytes);
+}
+
 class ExtractBlockSize : public IRVisitor {
 protected:
     Expr block_extent[3], block_count[3];
@@ -873,7 +964,7 @@ public:
                 int ratio = alloc.widest_type.bytes() / alloc_type.bytes();
                 internal_assert(ratio != 0)
                     << "alloc_type should have been at most as wide as the widest type in group\n";
-                total_size += alloc.max_size * ratio;
+                total_size += round_up_group_size(alloc.max_size * ratio, alloc_type.bytes());
             }
 
             // Upgrade the alloc type to the widest type found, and
@@ -948,7 +1039,8 @@ public:
                         offset = Variable::make(Int(32), name + "." + std::to_string(i - 1) + ".offset");
                         int ratio = (widest_type.bytes() / cluster[i - 1].widest_type.bytes());
                         internal_assert(ratio != 0);
-                        offset += simplify((cluster[i - 1].max_size + ratio - 1) / ratio);
+                        offset += simplify(round_up_group_size(
+                            (cluster[i - 1].max_size + ratio - 1) / ratio, widest_type.bytes()));
                     } else {
                         if (memory_type == MemoryType::Heap) {
                             // One slice of a larger global allocation
@@ -1242,98 +1334,6 @@ public:
     bool has_thread_loop = false;
 };
 
-// Gather the names loaded from before the first barrier at the top level of a
-// statement. Barriers under a loop or an if don't count, because they don't
-// necessarily run before the loads that follow.
-class LoadsBeforeBarrier : public IRVisitor {
-    using IRVisitor::visit;
-
-    bool at_top_level = true;
-
-    void visit(const Block *op) override {
-        op->first.accept(this);
-        if (!found_barrier && op->rest.defined()) {
-            op->rest.accept(this);
-        }
-    }
-
-    void visit(const For *op) override {
-        ScopedValue<bool> s(at_top_level, false);
-        IRVisitor::visit(op);
-    }
-
-    void visit(const IfThenElse *op) override {
-        ScopedValue<bool> s(at_top_level, false);
-        IRVisitor::visit(op);
-    }
-
-    void visit(const Evaluate *op) override {
-        const Call *c = op->value.as<Call>();
-        if (at_top_level && c && c->is_intrinsic(Call::gpu_thread_barrier)) {
-            found_barrier = true;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-    void visit(const Load *op) override {
-        loads.insert(op->name);
-        IRVisitor::visit(op);
-    }
-
-public:
-    bool found_barrier = false;
-    std::set<std::string> loads;
-};
-
-// Add fence types to the first barrier at the top level of a statement, so
-// that it can stand in for one that would otherwise have preceded it.
-class WidenFirstBarrier : public IRMutator {
-    using IRMutator::visit;
-
-    bool at_top_level = true;
-    int mask;
-
-    Stmt visit(const Block *op) override {
-        Stmt first = mutate(op->first);
-        if (done || !op->rest.defined()) {
-            return Block::make(first, op->rest);
-        }
-        return Block::make(first, mutate(op->rest));
-    }
-
-    Stmt visit(const For *op) override {
-        ScopedValue<bool> s(at_top_level, false);
-        return op;
-    }
-
-    Stmt visit(const IfThenElse *op) override {
-        ScopedValue<bool> s(at_top_level, false);
-        return op;
-    }
-
-    Stmt visit(const Evaluate *op) override {
-        const Call *c = op->value.as<Call>();
-        if (at_top_level && !done && c && c->is_intrinsic(Call::gpu_thread_barrier)) {
-            done = true;
-            auto old_mask = as_const_int(c->args[0]);
-            internal_assert(old_mask);
-            return Evaluate::make(Call::make(Int(32), Call::gpu_thread_barrier,
-                                             {IntImm::make(Int(32), *old_mask | mask)},
-                                             Call::Intrinsic));
-        }
-        return op;
-    }
-
-public:
-    using IRMutator::mutate;
-
-    bool done = false;
-    WidenFirstBarrier(int mask)
-        : mask(mask) {
-    }
-};
-
 class InjectThreadBarriers : public IRMutator {
 protected:
     bool in_threads = false, injected_barrier;
@@ -1477,24 +1477,6 @@ protected:
                     mask |= CodeGen_GPU_Dev::MemoryFenceType::Device;
                     break;
                 }
-            }
-            // If nothing in rest reads what first wrote until after a barrier
-            // of its own, that barrier can stand in for this one.
-            LoadsBeforeBarrier lbb;
-            rest.accept(&lbb);
-            bool needed = false;
-            for (const auto &st : shared_stores) {
-                needed |= lbb.loads.count(st) > 0;
-            }
-            for (const auto &st : device_stores) {
-                needed |= lbb.loads.count(st) > 0;
-            }
-            if (!needed && lbb.found_barrier) {
-                WidenFirstBarrier widen(mask);
-                rest = widen.mutate(rest);
-                internal_assert(widen.done);
-                injected_barrier = true;
-                return Block::make(first, rest);
             }
             injected_barrier = true;
             return Block::make({first, make_barrier(mask), rest});
@@ -1747,6 +1729,9 @@ Stmt fuse_gpu_thread_loops(Stmt s) {
     // into the innermost GPU block. FuseGPUThreadLoops would then
     // merge the predicate into the merged GPU thread.
     s = NormalizeIfStatements()(s);
+    // Must run before the allocations are packed together, because packing
+    // them relies on there being only one kind of shared memory.
+    s = MarkAsyncCopies().mutate(s);
     s = FuseGPUThreadLoops()(s);
     s = ZeroGPULoopMins()(s);
     return s;
