@@ -53,16 +53,12 @@ public:
     void generate() {
         r = RDom(0, size, "r");
 
-        // Wrappers for the operands, so that the tensor core schedule can
-        // stage them through shared memory. Left inline, they are just A
-        // and B. They keep the operand type, so that half precision operands
-        // are staged as half precision and reach the tensor cores as such -
-        // the widening to the accumulator type happens at the multiply.
-        As(x, rr) = A(x, rr);
-        Bs(rr, y) = B(rr, y);
-
         prod(x, y) = 0.f;
-        prod(x, y) += cast<float>(As(x, r)) * cast<float>(Bs(r, y));
+        // The widening to the accumulator type happens here, at the multiply,
+        // rather than in the operand wrappers the schedule stages through
+        // shared memory. That way half precision operands are staged as half
+        // precision and reach the tensor cores as such.
+        prod(x, y) += cast<float>(A(x, r)) * cast<float>(B(r, y));
 
         out(x, y) = prod(x, y);
     }
@@ -89,7 +85,8 @@ public:
     }
 
 private:
-    // 688 us for 1024x1024 floats on an RTX 2060, where cublas is 512 us.
+    // 315 us for 1024x1024 on an RTX 5060 Ti, where cublas is 150 us at the
+    // same precision.
     void schedule_cuda() {
         Var xi, yi, xii, yii;
 
@@ -109,10 +106,12 @@ private:
             .unroll(y)
             .unroll(r, 8);
 
-        As.compute_at(prod, r).vectorize(x).unroll(rr);
-        Bs.compute_at(prod, r).vectorize(rr).unroll(y);
+        A.in().compute_at(prod, r).vectorize(_0).unroll(_1);
+        B.in().compute_at(prod, r).vectorize(_0).unroll(_1);
     }
 
+    // 57 us for 1024x1024 on an RTX 5060 Ti, which is 5.5x the schedule above
+    // and 2.6x cublas at single precision.
     void schedule_tensor_cores() {
         // The tensor core tile shape, and how many of them each warp
         // accumulates at once. Each operand tile loaded feeds tiles_x (or
@@ -197,36 +196,16 @@ private:
         Var rro("rro"), rrv("rrv"), xxo("xxo"), xxi("xxi");
         Var t("t"), ti("ti"), tw("tw"), tw2("tw2"), to("to");
 
-        // Bs is dense in the reduction dimension.
-        Bs.compute_at(prod, ro)
-            .store_in(MemoryType::GPUSharedAsync)
-            .align_storage(rr, (int)block_r + (int)pad_a)
-            .split(rr, rro, rrv, vec)
-            .fuse(rro, y, t)
-            .split(t, t, ti, 32)
-            .split(t, t, tw, wx)
-            .split(t, to, tw2, wy)
-            .gpu_lanes(ti)
-            .gpu_threads(tw, tw2)
-            .vectorize(rrv);
+        // B.in() is dense in the reduction dimension, which is its _0.
+        B.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, (int)block_r + (int)pad_a).split(_0, rro, rrv, vec).fuse(rro, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(rrv);
 
-        // As is dense in x.
-        As.compute_at(prod, ro)
-            .store_in(MemoryType::GPUSharedAsync)
-            .align_storage(x, block_x + pb)
-            .split(x, xxo, xxi, vec)
-            .fuse(xxo, rr, t)
-            .split(t, t, ti, 32)
-            .split(t, t, tw, wx)
-            .split(t, to, tw2, wy)
-            .gpu_lanes(ti)
-            .gpu_threads(tw, tw2)
-            .vectorize(xxi);
+        // A.in() is dense in x, which is its _0.
+        A.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, block_x + pb).split(_0, xxo, xxi, vec).fuse(xxo, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(xxi);
     }
 
-    Var x{"x"}, y{"y"}, rr{"rr"};
+    Var x{"x"}, y{"y"};
     RDom r;
-    Func prod{"prod"}, As{"As"}, Bs{"Bs"};
+    Func prod{"prod"};
 };
 
 }  // namespace
