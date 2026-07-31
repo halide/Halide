@@ -14,6 +14,7 @@ namespace Internal {
 
 class IRMutator;
 class IRVisitor;
+struct Load;
 
 /** A multi-dimensional ramp. I.e. a ramp of ramps of ramps of ramps...
  *
@@ -210,9 +211,36 @@ struct MultiRamp {
                                         const std::vector<int> &pos) const;
 };
 
+/** Locate the subtile of a tile-memory allocation that an access refers to.
+ * Such an allocation may hold several tile registers as disjoint sub-tiles, and
+ * each one becomes its own allocation, so the accesses have to be partitioned
+ * between them.
+ *
+ * `subtiles` accumulates the distinct subtiles found so far. Returns the index
+ * within it of the one `index` refers to, appending a new one if this is the
+ * first access to it. Every subtile must have the same shape, and any two must
+ * be either identical or disjoint - a partial overlap can't be expressed as
+ * separate tile registers. Anything else is a user error, reported in terms of
+ * `description`, which should name the kind of memory (e.g. "AMX tile"). */
+int get_subtile(const Expr &index, const std::string &description,
+                std::vector<MultiRamp> *subtiles);
+
 /** Check if a vector Expr is a multiramp, and assign to result if so.
  * Returns false and leaves *result untouched if not. */
 bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result);
+
+/** Check if an Expr is a load of a multiramp, possibly wrapped in a cast, in
+ * broadcasts over dimensions the load doesn't depend on, and in the lane
+ * permutations the simplifier introduces when it rewrites a strided load as a
+ * dense load followed by a transpose. Returns the Load node underneath, with
+ * *result describing the addresses it loads in the lane order of `e`, or null
+ * if `e` isn't of that form (in which case *result is untouched).
+ *
+ * At most one cast is seen through, so `e.type().element_of()` and the
+ * returned Load's type together tell you whether the loaded values were cast,
+ * and to what. Callers that care about the type the values actually have -
+ * including its signedness - must use the former, not the Load's type. */
+const Load *is_load_of_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result);
 
 }  // namespace Internal
 }  // namespace Halide

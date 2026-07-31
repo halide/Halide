@@ -410,6 +410,52 @@ std::optional<Expr> unbroadcast(const Expr &e) {
     }
 }
 
+// Recognize a list of constant lane indices as a MultiRamp of constants, which
+// is what it means for a shuffle to be a reshaping of its input rather than an
+// arbitrary gather.
+bool multiramp_of_constants(const std::vector<int> &idx, Type t, MultiRamp *result) {
+    const int n = (int)idx.size();
+    internal_assert(n > 0);
+    if (n == 1) {
+        *result = MultiRamp(make_const(t, idx[0]), {}, {});
+        return true;
+    }
+
+    // The innermost dim is the longest prefix that's an arithmetic progression.
+    const int stride = idx[1] - idx[0];
+    int extent = 1;
+    while (extent < n && idx[extent] == idx[0] + extent * stride) {
+        extent++;
+    }
+    if (n % extent) {
+        return false;
+    }
+
+    // Every block of that length has to be the same progression.
+    std::vector<int> starts;
+    starts.reserve(n / extent);
+    for (int b = 0; b < n; b += extent) {
+        for (int j = 0; j < extent; j++) {
+            if (idx[b + j] != idx[b] + j * stride) {
+                return false;
+            }
+        }
+        starts.push_back(idx[b]);
+    }
+
+    MultiRamp outer;
+    if (!multiramp_of_constants(starts, t, &outer)) {
+        return false;
+    }
+
+    std::vector<Expr> strides{make_const(t, stride)};
+    strides.insert(strides.end(), outer.strides.begin(), outer.strides.end());
+    std::vector<int> lanes{extent};
+    lanes.insert(lanes.end(), outer.lanes.begin(), outer.lanes.end());
+    *result = MultiRamp(outer.base, strides, lanes);
+    return true;
+}
+
 // Internal is_multiramp. May leave *result in a partial state on failure;
 // the public is_multiramp below protects callers by only committing on
 // success. Recursive calls go through the public wrapper, so each branch
@@ -429,6 +475,23 @@ bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *resul
         result->strides.push_back(make_zero(elem_t));
         result->lanes.push_back(b->lanes);
         return true;
+    } else if (const Shuffle *s = e.as<Shuffle>(); s && s->vectors.size() == 1) {
+        // A shuffle of a single vector is a reshaping of it, rather than a
+        // gather, if the lane indices are themselves a multiramp. That covers
+        // transposes, whose masks are multiramps of constants. But we can only
+        // say what the result is if the values being shuffled are an affine
+        // function of the lane index, i.e. the input is one-dimensional. This
+        // is the shape that flatten_nested_ramps leaves a strided load in.
+        MultiRamp inner, perm;
+        if (is_multiramp(s->vectors[0], scope, &inner) &&
+            inner.dimensions() == 1 &&
+            multiramp_of_constants(s->indices, inner.base.type(), &perm)) {
+            perm.mul(inner.strides[0]);
+            perm.base = simplify(perm.base + inner.base);
+            *result = perm;
+            return true;
+        }
+        return false;
     } else if (const Ramp *r = e.as<Ramp>()) {
         if (auto stride = unbroadcast(r->stride)) {
             if (is_multiramp(r->base, scope, result)) {
@@ -478,6 +541,7 @@ bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *resul
             }
         }
     }
+
     return false;
 }
 }  // namespace
@@ -491,6 +555,121 @@ bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
         return true;
     }
     return false;
+}
+
+namespace {
+
+// Strip the cast, broadcasts and lane permutations off a load, moving the
+// ones that rearrange lanes onto a copy of the load's index, where
+// is_multiramp can make sense of them. A broadcast of a load is a load of a
+// broadcast of the index, and likewise for a lane permutation.
+//
+// At most one cast is peeled, so that comparing the element type of the
+// original Expr against the type of the Load tells the caller whether the
+// values were cast, and to what.
+const Load *peel_load(const Expr &e, Expr *index, bool cast_allowed) {
+    if (const Cast *cast = e.as<Cast>()) {
+        if (!cast_allowed) {
+            return nullptr;
+        }
+        return peel_load(cast->value, index, false);
+    } else if (const Broadcast *broadcast = e.as<Broadcast>()) {
+        const Load *load = peel_load(broadcast->value, index, cast_allowed);
+        if (load) {
+            *index = Broadcast::make(*index, broadcast->lanes);
+        }
+        return load;
+    } else if (const Shuffle *shuffle = e.as<Shuffle>()) {
+        if (shuffle->vectors.size() != 1) {
+            return nullptr;
+        }
+        const Load *load = peel_load(shuffle->vectors[0], index, cast_allowed);
+        if (load) {
+            // Shuffling the values loaded is the same as shuffling the
+            // addresses loaded from.
+            *index = Shuffle::make({*index}, shuffle->indices);
+        }
+        return load;
+    } else if (const Load *load = e.as<Load>()) {
+        *index = load->index;
+        return load;
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+int get_subtile(const Expr &index, const std::string &description,
+                std::vector<MultiRamp> *subtiles) {
+    MultiRamp mr;
+    if (!is_multiramp(index, Scope<Expr>::empty_scope(), &mr)) {
+        user_error << "Access to " << description << " not affine: " << index << "\n";
+    }
+    if (!can_prove(mr.alias_free())) {
+        user_error << "Access to " << description << " may have duplicated lanes: "
+                   << index << "\n";
+    }
+    if (subtiles->empty()) {
+        subtiles->push_back(std::move(mr));
+        return 0;
+    }
+
+    // All strides and lanes must match across all subtiles, or we give up.
+    const MultiRamp &first = (*subtiles)[0];
+    if (mr.dimensions() != first.dimensions()) {
+        user_error << "Access to " << description << " does not have the same shape as "
+                   << "other accesses to the same memory.";
+        return -1;
+    }
+    for (int i = 0; i < first.dimensions(); i++) {
+        if (!can_prove(mr.strides[i] == first.strides[i]) ||
+            mr.lanes[i] != first.lanes[i]) {
+            user_error << "Access to " << description << " has different size and strides "
+                       << "to other accesses to the same memory. All accesses must have "
+                       << "the same subtile size and strides: " << index;
+        }
+    }
+
+    // Now check for disjointedness. Add a synthetic dimension, the purpose of
+    // which will become clear.
+    mr.strides.emplace_back();
+    mr.lanes.push_back(2);
+    for (int i = 0; i < (int)subtiles->size(); i++) {
+        const MultiRamp &other = (*subtiles)[i];
+        // One of two things must be true:
+        // 1) All of the lanes of mr equal the corresponding lane of other.
+        // We've already checked the strides and lanes, so it's just a matter of
+        // checking the base.
+        if (can_prove(mr.base == other.base)) {
+            return i;
+        }
+
+        // 2) None of the lanes of mr equal any of the lanes of other. To do
+        // this we construct a combined mr that can be either 'mr' or 'other',
+        // and ask if it's alias-free. This is what the synthetic dimension was
+        // for.
+        mr.strides.back() = mr.base - other.base;
+        if (!can_prove(mr.alias_free())) {
+            user_error << "Failed to prove access to " << description << " does not "
+                       << "partially overlap another distinct access: " << index;
+            return -1;
+        }
+    }
+
+    // Didn't already exist and didn't alias with anything.
+    mr.strides.pop_back();
+    mr.lanes.pop_back();
+    subtiles->push_back(std::move(mr));
+    return (int)subtiles->size() - 1;
+}
+
+const Load *is_load_of_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
+    Expr index;
+    const Load *load = peel_load(e, &index, true);
+    if (load && is_multiramp(index, scope, result)) {
+        return load;
+    }
+    return nullptr;
 }
 
 Expr MultiRamp::operator==(const MultiRamp &other) const {
