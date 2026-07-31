@@ -309,6 +309,8 @@ void expect_load_fails(const std::string &filename, const char *what) {
     if (loaded) {
         std::cout << "Expected loading " << what << " to fail, but it succeeded\n";
         exit(1);
+    } else {
+        std::cout << "Testing invalid: Correctly rejected " << what << "\n";
     }
 }
 
@@ -364,7 +366,7 @@ void test_negative_extents() {
     std::ostringstream pgm_name;
     pgm_name << Internal::get_test_tmp_dir() << "test_negative_extents.pgm";
     write_file(pgm_name.str(), "P5\n4 -1\n255\n" + payload);
-    expect_load_fails(pgm_name.str(), "a .pgm with a negative height");
+    expect_load_fails(pgm_name.str(), "a .pgm with a negative extent");
 }
 
 #ifndef HALIDE_NO_PNG
