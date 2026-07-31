@@ -152,6 +152,19 @@ struct MultiRamp {
      * a vector in the old lane order from one in the new order. */
     int rotate_stride_one_innermost();
 
+    /** Permute the lanes by a mask. `mask` gives, for each lane of the
+     * result, which lane of *this to take, so its lanes must be a permutation
+     * of [0, total_lanes()). That is the case exactly when its base is zero
+     * and its strides are the prefix products of its lane counts in some
+     * order, which makes it a reshaping of the lane index rather than a
+     * gather - a transpose being the two-dimensional example.
+     *
+     * The mask's dims and ours are refined against each other until both are
+     * groupings of a common shape, and the result is that shape reordered the
+     * way the mask asks for. Returns false, leaving *this unchanged, if the
+     * mask isn't a permutation or the two shapes have no common refinement. */
+    bool shuffle(const MultiRamp &mask);
+
     /** The dimensionality. May be lower than you expected, because this
      * gets flattened when possible by the operations above. */
     int dimensions() const;
