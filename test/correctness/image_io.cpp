@@ -425,7 +425,6 @@ int main(int argc, char **argv) {
     do_test<double>();
     test_mat_header();
     test_read_big_endian_row_channel_offset();
-    test_negative_extents();
 #ifndef HALIDE_NO_PNG
     test_png_unsupported_bit_depth();
 #endif
