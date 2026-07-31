@@ -515,6 +515,11 @@ table WrapperRef {
     func_index: int32;
 }
 
+table TypeChangeCheck {
+    condition: Expr;
+    message: string;
+}
+
 table FuncSchedule {
     store_level: LoopLevel;
     compute_level: LoopLevel;
@@ -528,6 +533,7 @@ table FuncSchedule {
     async: bool;
     ring_buffer: Expr;
     memoize_eviction_key: Expr;
+    type_change_checks: [TypeChangeCheck];
 }
 
 table Specialization {
