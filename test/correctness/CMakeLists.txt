@@ -135,6 +135,7 @@ tests(
     gpu_allocation_cache.cpp
     gpu_arg_types.cpp
     gpu_assertion_in_kernel.cpp
+    gpu_barrier_sinking.cpp
     gpu_bounds_inference_failure.cpp
     gpu_condition_lifting.cpp
     gpu_cpu_simultaneous_read.cpp
