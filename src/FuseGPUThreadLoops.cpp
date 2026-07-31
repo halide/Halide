@@ -242,44 +242,6 @@ bool allocation_goes_to_registers(const Allocate *op, bool in_threads) {
 // Rename an allocation and all of its loads, stores, and frees. Relies on the
 // invariant that no allocation of the same name is nested inside this one, so
 // every reference in the body belongs to it.
-class RenameAllocation : public IRMutator {
-    const string &from, &to;
-
-    using IRMutator::visit;
-
-    Expr visit(const Load *op) override {
-        if (op->name == from) {
-            return Load::make(op->type, to, mutate(op->index), op->image, op->param,
-                              mutate(op->predicate), op->alignment, op->is_streaming);
-        }
-        return IRMutator::visit(op);
-    }
-
-    Stmt visit(const Store *op) override {
-        if (op->name == from) {
-            return Store::make(to, mutate(op->value), mutate(op->index), op->param,
-                               mutate(op->predicate), op->alignment, op->is_streaming);
-        }
-        return IRMutator::visit(op);
-    }
-
-    Stmt visit(const Free *op) override {
-        if (op->name == from) {
-            return Free::make(to);
-        }
-        return op;
-    }
-
-public:
-    RenameAllocation(const string &from, const string &to)
-        : from(from), to(to) {
-    }
-
-    Stmt operator()(const Stmt &s) {
-        return mutate(s);
-    }
-};
-
 class ExtractSharedAndHeapAllocations : public IRMutator {
 protected:
     using IRMutator::visit;
@@ -1216,7 +1178,30 @@ protected:
         Stmt body = op->body;
         if (block_alloc_names.count(op->name)) {
             name = unique_name(op->name);
-            body = RenameAllocation(op->name, name)(body);
+            const string &from = op->name;
+            const string &to = name;
+            body = mutate_with(
+                body,
+                [&](auto *self, const Load *load) -> Expr {
+                    if (load->name == from) {
+                        return Load::make(load->type, to, self->mutate(load->index), load->image, load->param,
+                                          self->mutate(load->predicate), load->alignment, load->is_streaming);
+                    }
+                    return self->visit_base(load);
+                },
+                [&](auto *self, const Store *store) -> Stmt {
+                    if (store->name == from) {
+                        return Store::make(to, self->mutate(store->value), self->mutate(store->index), store->param,
+                                           self->mutate(store->predicate), store->alignment, store->is_streaming);
+                    }
+                    return self->visit_base(store);
+                },
+                [&](auto *, const Free *free) -> Stmt {
+                    if (free->name == from) {
+                        return Free::make(to);
+                    }
+                    return free;
+                });
         }
 
         RegisterAllocation alloc;
