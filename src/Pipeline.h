@@ -494,8 +494,33 @@ public:
     /** Generate begin_pipeline and end_pipeline tracing calls for this pipeline. */
     void trace_pipeline();
 
+    /** Development/debugging aid: run this pipeline twice under
+     * instrumentation (once with full tracing enabled, once with the
+     * profiler enabled), write the resulting trace and profile artifacts to
+     * a temporary directory, and open them in the Halidoscope GUI
+     * (https://github.com/halide/Halide, apps/halidoscope). The
+     * `halidoscope` executable is looked up on $PATH, unless the
+     * HALIDOSCOPE_PATH environment variable is set, in which case that path
+     * is used instead.
+     *
+     * This performs two additional realizations of the pipeline purely for
+     * the sake of instrumentation -- it does not realize the "real" output
+     * for the caller, and any output produced by these runs is discarded.
+     * This method blocks until the Halidoscope window is closed, at which
+     * point the temporary directory is deleted.
+     *
+     * Not reentrant/thread-safe; do not call this concurrently with itself
+     * or with another Halide JIT realization in the same process. */
+    // @{
+    void halidoscope(std::vector<int32_t> sizes = {}, const Target &target = Target());
+    void halidoscope(RealizationArg output, const Target &target = Target());
+    // @}
+
 private:
     std::string generate_function_name() const;
+
+    void halidoscope_impl(const std::function<void(Pipeline &, const Target &)> &do_realize,
+                          const Target &target_arg);
 };
 
 struct ExternSignature {
