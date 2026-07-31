@@ -405,7 +405,20 @@ enum class MemoryType {
     /** AMX Tile register for X86. Any data that would be used in an AMX matrix
      * multiplication must first be loaded into an AMX tile register. */
     AMXTile,
+
+    /** GPU shared memory, written by an asynchronous copy instruction that
+     * moves data straight from global memory without routing it through
+     * registers. The only stores allowed to such an allocation are unpredicated
+     * copies of a whole number of 4, 8 or 16 byte chunks from a densely indexed
+     * global buffer, because that is all the hardware can do. On GPU APIs with
+     * no such instruction this is ordinary shared memory. */
+    GPUSharedAsync,
 };
+
+/** Whether a MemoryType places an allocation in GPU shared memory. */
+inline bool is_gpu_shared(MemoryType t) {
+    return t == MemoryType::GPUShared || t == MemoryType::GPUSharedAsync;
+}
 
 /** Whether a MemoryType is backed by tile-shaped storage with native 2D
  * loads and stores. Generic optimizations that rewrite the structure of

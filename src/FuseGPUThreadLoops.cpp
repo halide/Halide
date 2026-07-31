@@ -461,7 +461,7 @@ protected:
 
         if ((fixed_size_thread_allocation &&
              op->memory_type != MemoryType::Heap &&
-             op->memory_type != MemoryType::GPUShared &&
+             !is_gpu_shared(op->memory_type) &&
              op->memory_type != MemoryType::GPUTexture) ||
             op->memory_type == MemoryType::Register ||
             op->memory_type == MemoryType::Stack) {
@@ -470,7 +470,7 @@ protected:
         }
 
         user_assert(op->memory_type == MemoryType::Auto ||
-                    op->memory_type == MemoryType::GPUShared ||
+                    is_gpu_shared(op->memory_type) ||
                     op->memory_type == MemoryType::GPUTexture ||
                     op->memory_type == MemoryType::Heap)
             << "Allocation " << op->name << " must live in shared or heap memory, "
@@ -1240,6 +1240,98 @@ public:
     bool has_thread_loop = false;
 };
 
+// Gather the names loaded from before the first barrier at the top level of a
+// statement. Barriers under a loop or an if don't count, because they don't
+// necessarily run before the loads that follow.
+class LoadsBeforeBarrier : public IRVisitor {
+    using IRVisitor::visit;
+
+    bool at_top_level = true;
+
+    void visit(const Block *op) override {
+        op->first.accept(this);
+        if (!found_barrier && op->rest.defined()) {
+            op->rest.accept(this);
+        }
+    }
+
+    void visit(const For *op) override {
+        ScopedValue<bool> s(at_top_level, false);
+        IRVisitor::visit(op);
+    }
+
+    void visit(const IfThenElse *op) override {
+        ScopedValue<bool> s(at_top_level, false);
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Evaluate *op) override {
+        const Call *c = op->value.as<Call>();
+        if (at_top_level && c && c->is_intrinsic(Call::gpu_thread_barrier)) {
+            found_barrier = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Load *op) override {
+        loads.insert(op->name);
+        IRVisitor::visit(op);
+    }
+
+public:
+    bool found_barrier = false;
+    std::set<std::string> loads;
+};
+
+// Add fence types to the first barrier at the top level of a statement, so
+// that it can stand in for one that would otherwise have preceded it.
+class WidenFirstBarrier : public IRMutator {
+    using IRMutator::visit;
+
+    bool at_top_level = true;
+    int mask;
+
+    Stmt visit(const Block *op) override {
+        Stmt first = mutate(op->first);
+        if (done || !op->rest.defined()) {
+            return Block::make(first, op->rest);
+        }
+        return Block::make(first, mutate(op->rest));
+    }
+
+    Stmt visit(const For *op) override {
+        ScopedValue<bool> s(at_top_level, false);
+        return op;
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        ScopedValue<bool> s(at_top_level, false);
+        return op;
+    }
+
+    Stmt visit(const Evaluate *op) override {
+        const Call *c = op->value.as<Call>();
+        if (at_top_level && !done && c && c->is_intrinsic(Call::gpu_thread_barrier)) {
+            done = true;
+            auto old_mask = as_const_int(c->args[0]);
+            internal_assert(old_mask);
+            return Evaluate::make(Call::make(Int(32), Call::gpu_thread_barrier,
+                                             {IntImm::make(Int(32), *old_mask | mask)},
+                                             Call::Intrinsic));
+        }
+        return op;
+    }
+
+public:
+    using IRMutator::mutate;
+
+    bool done = false;
+    WidenFirstBarrier(int mask)
+        : mask(mask) {
+    }
+};
+
 class InjectThreadBarriers : public IRMutator {
 protected:
     bool in_threads = false, injected_barrier;
@@ -1304,6 +1396,7 @@ protected:
         debug(4) << "Encountered store to " << op->name << "\n";
         auto mem_type = memory_type_for_name(op->name);
         switch (mem_type) {
+        case MemoryType::GPUSharedAsync:
         case MemoryType::GPUShared:
             debug(4) << "   memory type is shared\n";
             shared_stores.insert(op->name);
@@ -1329,6 +1422,7 @@ protected:
         debug(4) << "Encountered load from " << op->name << "\n";
         auto mem_type = memory_type_for_name(op->name);
         switch (mem_type) {
+        case MemoryType::GPUSharedAsync:
         case MemoryType::GPUShared:
             debug(4) << "   memory type is shared\n";
             shared_loads.insert(op->name);
@@ -1379,6 +1473,24 @@ protected:
                     mask |= CodeGen_GPU_Dev::MemoryFenceType::Device;
                     break;
                 }
+            }
+            // If nothing in rest reads what first wrote until after a barrier
+            // of its own, that barrier can stand in for this one.
+            LoadsBeforeBarrier lbb;
+            rest.accept(&lbb);
+            bool needed = false;
+            for (const auto &st : shared_stores) {
+                needed |= lbb.loads.count(st) > 0;
+            }
+            for (const auto &st : device_stores) {
+                needed |= lbb.loads.count(st) > 0;
+            }
+            if (!needed && lbb.found_barrier) {
+                WidenFirstBarrier widen(mask);
+                rest = widen.mutate(rest);
+                internal_assert(widen.done);
+                injected_barrier = true;
+                return Block::make(first, rest);
             }
             injected_barrier = true;
             return Block::make({first, make_barrier(mask), rest});

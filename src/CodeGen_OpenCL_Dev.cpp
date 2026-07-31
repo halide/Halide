@@ -780,7 +780,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
     user_assert(!op->new_expr.defined()) << "Allocate node inside OpenCL kernel has custom new expression.\n"
                                          << "(Memoization is not supported inside GPU kernels at present.)\n";
 
-    if (op->memory_type == MemoryType::GPUShared) {
+    if (is_gpu_shared(op->memory_type)) {
         // Already handled
         op->body.accept(this);
     } else {
@@ -1063,7 +1063,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     const Allocate *shared_alloc = nullptr;
     shared_name = "__shared";
     visit_with(s, [&](auto *self, const Allocate *op) {
-        if (op->memory_type == MemoryType::GPUShared) {
+        if (is_gpu_shared(op->memory_type)) {
             internal_assert(shared_alloc == nullptr)
                 << "Found multiple shared allocations in metal kernel\n";
             shared_alloc = op;
