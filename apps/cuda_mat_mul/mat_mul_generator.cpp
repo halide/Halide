@@ -85,7 +85,7 @@ public:
     }
 
 private:
-    // 315 us for 1024x1024 on an RTX 5060 Ti, where cublas is 150 us at the
+    // 311 us for 1024x1024 on an RTX 5060 Ti, where cublas is 146 us at the
     // same precision.
     void schedule_cuda() {
         Var xi, yi, xii, yii;
@@ -110,8 +110,14 @@ private:
         B.in().compute_at(prod, r).vectorize(_0).unroll(_1);
     }
 
-    // 57 us for 1024x1024 on an RTX 5060 Ti, which is 5.5x the schedule above
-    // and 2.6x cublas at single precision.
+    // 53 us for 1024x1024 on an RTX 5060 Ti, which is 5.9x the schedule above
+    // and 2.8x cublas at single precision.
+    //
+    // Against cublas doing the same thing - half precision operands into a
+    // single precision accumulator - this is slower at every size: 96% of its
+    // throughput at 1024, 94% at 2048, and 84% at 4096. Our throughput peaks
+    // at 2048 and falls off after it while cublas keeps climbing, so the block
+    // shapes chosen below are the thing to revisit for large matrices.
     void schedule_tensor_cores() {
         // The tensor core tile shape, and how many of them each warp
         // accumulates at once. Each operand tile loaded feeds tiles_x (or

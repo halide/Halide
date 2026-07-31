@@ -10,7 +10,6 @@
 #include "mat_mul_f16.h"
 
 using Halide::Runtime::Buffer;
-using Halide::Tools::benchmark;
 
 namespace {
 
@@ -47,6 +46,36 @@ double gflops(int size, double seconds) {
     return 2.0 * size * size * size / seconds * 1e-9;
 }
 
+// Time a batch of launches with a single synchronization at the end, rather
+// than synchronizing after each one. Both implementations queue work
+// asynchronously, and cublas in particular does a heuristic lookup on the host
+// for every call, so synchronizing per launch measures that host work instead
+// of letting it overlap with the GPU.
+// `sync` has to match the launcher: Halide runs on its own CUDA context, so
+// cudaDeviceSynchronize does not wait for it.
+template<typename F, typename S>
+double bench_batched(F &&launch, S &&sync) {
+    const int samples = 5, iterations = 5;
+    for (int i = 0; i < iterations; i++) {
+        launch();
+    }
+    sync();
+    double best = 0;
+    for (int s = 0; s < samples; s++) {
+        auto t0 = Halide::Tools::benchmark_now();
+        for (int i = 0; i < iterations; i++) {
+            launch();
+        }
+        sync();
+        auto t1 = Halide::Tools::benchmark_now();
+        double t = Halide::Tools::benchmark_duration_seconds(t0, t1) / iterations;
+        if (s == 0 || t < best) {
+            best = t;
+        }
+    }
+    return best;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -78,10 +107,8 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        double t = benchmark(5, 5, [&]() {
-            mat_mul(A, B, C);
-            C.device_sync();
-        });
+        double t = bench_batched([&]() { mat_mul(A, B, C); },
+                                 [&]() { C.device_sync(); });
         printf("Halide float: %f s (%.1f GFlop/s)\n", t, gflops(size, t));
     }
 
@@ -105,37 +132,59 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        double t = benchmark(5, 5, [&]() {
-            mat_mul_f16(A, B, C);
-            C.device_sync();
-        });
+        double t = bench_batched([&]() { mat_mul_f16(A, B, C); },
+                                 [&]() { C.device_sync(); });
         printf("Halide half (tensor cores): %f s (%.1f GFlop/s)\n",
                t, gflops(size, t));
     }
 
-    // Benchmark cublas at single precision, for reference.
+    // Benchmark cublas for reference, at both precisions. The half precision
+    // one accumulates in single precision, matching what the Halide pipeline
+    // does, so the two are comparable.
 #ifdef _MSC_VER
     // https://github.com/halide/Halide/issues/5053
     printf("Skipping cublas on Windows; see https://github.com/halide/Halide/issues/5053\n");
 #else
     {
-        float *A, *B, *C;
-        cudaMalloc((void **)&A, size * size * 4);
-        cudaMalloc((void **)&B, size * size * 4);
-        cudaMalloc((void **)&C, size * size * 4);
+        void *A, *B, *C;
+        cudaMalloc(&A, (size_t)size * size * 4);
+        cudaMalloc(&B, (size_t)size * size * 4);
+        cudaMalloc(&C, (size_t)size * size * 4);
+        // Touch the memory before timing anything, so that no part of the
+        // benchmark pays for faulting it in, and so that the operands are
+        // definite values rather than whatever was there. This byte pattern is
+        // a normal number read either as float or as half, which matters
+        // because denormals can be slow.
+        cudaMemset(A, 0x3c, (size_t)size * size * 4);
+        cudaMemset(B, 0x3c, (size_t)size * size * 4);
+        cudaMemset(C, 0, (size_t)size * size * 4);
         cublasHandle_t handle;
         cublasCreate(&handle);
         float alpha = 1.0f, beta = 1.0f;
-        double t = benchmark(5, 5, [&]() {
-            cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
-                        size, size, size, &alpha, A, size, B, size, &beta, C, size);
-            cudaDeviceSynchronize();
-        });
+
+        double t = bench_batched([&]() { cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+                                                     size, size, size, &alpha, (const float *)A, size,
+                                                     (const float *)B, size, &beta, (float *)C, size); },
+                                 []() { cudaDeviceSynchronize(); });
+        printf("cublas float: %f s (%.1f GFlop/s)\n", t, gflops(size, t));
+
+        if (ver >= 70) {
+            // Half precision operands into a single precision accumulator,
+            // which is what the tensor cores do natively.
+            t = bench_batched([&]() { cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+                                                   size, size, size, &alpha,
+                                                   A, CUDA_R_16F, size,
+                                                   B, CUDA_R_16F, size, &beta,
+                                                   C, CUDA_R_32F, size,
+                                                   CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT); },
+                              []() { cudaDeviceSynchronize(); });
+            printf("cublas half: %f s (%.1f GFlop/s)\n", t, gflops(size, t));
+        }
+
         cudaFree(A);
         cudaFree(B);
         cudaFree(C);
         cublasDestroy(handle);
-        printf("cublas float: %f s (%.1f GFlop/s)\n", t, gflops(size, t));
     }
 #endif
 
