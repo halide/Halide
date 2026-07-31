@@ -179,7 +179,7 @@ public:
             Var t("t"), ti("ti"), tw("tw"), tw2("tw2"), to("to");
 
             As.compute_at(prod, ko)
-                .store_in(MemoryType::GPUShared)
+                .store_in(MemoryType::GPUSharedAsync)
                 .align_storage(kk, (int)block_k + (int)pad_a)
                 .split(kk, kko, kki, vec)
                 .fuse(kko, y, t)

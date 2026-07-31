@@ -50,7 +50,8 @@ void define_enums(py::module &m) {
         .value("LockedCache", MemoryType::LockedCache)
         .value("VTCM", MemoryType::VTCM)
         .value("AMXTile", MemoryType::AMXTile)
-        .value("GPUSharedAsync", MemoryType::GPUSharedAsync);
+        .value("GPUSharedAsync", MemoryType::GPUSharedAsync)
+        .value("WMMAFragment", MemoryType::WMMAFragment);
 
     py::enum_<NameMangling>(m, "NameMangling")
         .value("Default", NameMangling::Default)
