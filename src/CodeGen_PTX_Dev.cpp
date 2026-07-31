@@ -486,6 +486,8 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
     if (t.lanes() > 1) {
         // Shared allocations are given an offset into one big block after the
         // last simplification pass, so the indices need simplifying here.
+        // strided_ramp_base returns undefined unless the stride is exactly
+        // one, so this checks the density as well as finding the address.
         dst_base = strided_ramp_base(simplify(op->index));
         src_base = strided_ramp_base(simplify(src->index));
         if (!dst_base.defined() || !src_base.defined()) {

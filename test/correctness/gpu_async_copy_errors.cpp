@@ -150,6 +150,24 @@ void scenario_predicated() {
     out.compile_jit(async_target());
 }
 
+// Each copy has to be dense at both ends. Storing the staged Func in the
+// opposite order to the one it is read in leaves the source dense but the
+// destination strided.
+void scenario_strided_destination() {
+    Buffer<float> in = input_f32();
+    Var x("x"), y("y"), xi("xi"), yi("yi");
+    Func stage("stage"), out("out");
+    stage(x, y) = in(x, y);
+    out(x, y) = stage(x, y);
+    out.gpu_tile(x, y, xi, yi, 64, 8);
+    stage.compute_at(out, x)
+        .store_in(MemoryType::GPUSharedAsync)
+        .reorder_storage(y, x)
+        .gpu_threads(y)
+        .vectorize(x, 4);
+    out.compile_jit(async_target());
+}
+
 // The destination address of each copy has to be aligned to its width. Padding
 // the rows to a stride that isn't a multiple of the vector width breaks that
 // for every row after the first.
@@ -184,6 +202,7 @@ int main(int argc, char **argv) {
     failures += !expect_user_error("too_narrow", "4, 8 or 16 bytes", scenario_too_narrow);
     failures += !expect_user_error("strided_source", "not read densely", scenario_strided_source);
     failures += !expect_user_error("predicated", "predicated", scenario_predicated);
+    failures += !expect_user_error("strided_destination", "densely", scenario_strided_destination);
     failures += !expect_user_error("misaligned_destination", "aligned", scenario_misaligned_destination);
 
     if (failures != 0) {
