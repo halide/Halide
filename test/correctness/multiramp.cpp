@@ -599,6 +599,84 @@ std::vector<int> transpose_vec(const std::vector<int> &v, int cols) {
     return result;
 }
 
+// A mask whose strides are the prefix products of its lane counts, in some
+// order, is a permutation of the lanes. Build one from a dim order.
+MultiRamp permutation_mask(const std::vector<int> &shape, const std::vector<int> &order,
+                           Type t) {
+    std::vector<int64_t> flat(shape.size());
+    int64_t s = 1;
+    for (size_t i = 0; i < shape.size(); i++) {
+        flat[i] = s;
+        s *= shape[i];
+    }
+    std::vector<Expr> strides;
+    std::vector<int> lanes;
+    for (int d : order) {
+        strides.push_back(make_const(t, flat[d]));
+        lanes.push_back(shape[d]);
+    }
+    return MultiRamp(make_zero(t), strides, lanes);
+}
+
+// Apply a mask the slow way, for comparison.
+std::vector<int> apply_mask(const std::vector<int> &v, const MultiRamp &mask) {
+    std::vector<int> result;
+    for (int i : expand(mask)) {
+        result.push_back(v[i]);
+    }
+    return result;
+}
+
+void check_shuffle_case(const MultiRamp &m, const std::vector<int> &shape,
+                        const std::vector<int> &order, const char *msg) {
+    MultiRamp a = m;
+    MultiRamp mask = permutation_mask(shape, order, Int(32));
+    auto want = apply_mask(expand(a), mask);
+    if (!a.shuffle(mask)) {
+        printf("FAIL: %s: shuffle returned false\n", msg);
+        failures++;
+        return;
+    }
+    check_seq(expand(a), want, msg, __LINE__);
+}
+
+void check_shuffles() {
+    // The two-dimensional transpose the wmma pass does to an operand tile.
+    check_shuffle_case(MultiRamp{0, {1, 64}, {16, 16}}, {16, 16}, {1, 0},
+                       "transpose of a 2D tile");
+    // A transpose that falls inside a dim, so it has to be split.
+    check_shuffle_case(MultiRamp{0, {1}, {8}}, {4, 2}, {1, 0},
+                       "transpose splitting a dim");
+    // A permutation whose dims collapse to something coarser than the
+    // multiramp's, so both shapes need refining before they line up.
+    check_shuffle_case(MultiRamp{0, {1, 10, 100}, {2, 2, 3}}, {2, 2, 3}, {2, 0, 1},
+                       "permutation needing a common refinement");
+    // A broadcast dim has stride zero, which never merges with its neighbour.
+    check_shuffle_case(MultiRamp{0, {1, 64, 0}, {16, 16, 16}}, {16, 256}, {1, 0},
+                       "transpose of a broadcast tile");
+}
+
+void check_shuffle_rejects_gather() {
+    // Strides that aren't the prefix products of the lane counts don't
+    // describe a permutation.
+    MultiRamp A{0, {1, 100}, {4, 4}};
+    MultiRamp mask{0, {1, 2}, {4, 4}};
+    CHECK(!A.shuffle(mask), "shuffle rejects a non-permutation mask");
+}
+
+void check_shuffle_rejects_coprime_shapes() {
+    // Lane counts of 3 and 2 innermost have no common refinement.
+    MultiRamp A{0, {1, 100}, {2, 3}};
+    MultiRamp mask = permutation_mask({3, 2}, {1, 0}, Int(32));
+    CHECK(!A.shuffle(mask), "shuffle rejects coprime shapes");
+}
+
+void check_shuffle_rejects_wrong_size() {
+    MultiRamp A{0, {1, 100}, {4, 4}};
+    MultiRamp mask = permutation_mask({2, 2}, {1, 0}, Int(32));
+    CHECK(!A.shuffle(mask), "shuffle rejects a mask of the wrong size");
+}
+
 void check_recognize_transpose_shuffle() {
     Expr e = Shuffle::make_transpose(Ramp::make(Expr(0), Expr(1), 12), 4);
     Scope<Expr> scope;
@@ -717,6 +795,11 @@ int main(int argc, char **argv) {
     check_rotate_stride_one_innermost_noop();
     check_roundtrips();
     check_reject_non_multiramp_sum();
+
+    check_shuffles();
+    check_shuffle_rejects_gather();
+    check_shuffle_rejects_coprime_shapes();
+    check_shuffle_rejects_wrong_size();
 
     check_recognize_transpose_shuffle();
     check_recognize_reshaping_shuffle();
