@@ -37,7 +37,7 @@ public:
     // rows across different banks. A multiple of eight keeps the rows aligned
     // enough for the widest asynchronous copy.
     GeneratorParam<int> pad_a{"pad_a", 8};
-    GeneratorParam<int> pad_b{"pad_b", 24};
+    GeneratorParam<int> pad_b{"pad_b", 8};
 
     Input<Buffer<void, 2>> A{"A"};
     Input<Buffer<void, 2>> B{"B"};
@@ -114,28 +114,29 @@ private:
     // and 2.8x cublas at single precision.
     //
     // Against cublas doing the same thing - half precision operands into a
-    // single precision accumulator - this is slower at every size: 96% of its
-    // throughput at 1024, 94% at 2048, and 84% at 4096. Our throughput peaks
-    // at 2048 and falls off after it while cublas keeps climbing, so the block
-    // shapes chosen below are the thing to revisit for large matrices.
+    // single precision accumulator - this is a little slower at every size:
+    // 96% of its throughput at 1024, 95% at 2048, and 97% at 4096, with the
+    // block shapes below picked per size by measurement.
     void schedule_tensor_cores() {
         // The tensor core tile shape, and how many of them each warp
         // accumulates at once. Each operand tile loaded feeds tiles_x (or
         // tiles_y) multiplies, so this is what gets us reuse out of the loads.
         const int tile = 16;
         int tx = tiles_x, ty = tiles_y, wx = warps_x, wy = warps_y;
-        int pb = pad_b;
         if (tx == 0 || ty == 0 || wx == 0 || wy == 0) {
-            // The padding goes with the shape: it is what keeps consecutive
-            // rows of the staged panel in different banks, so the right amount
-            // depends on how wide the panel is.
+            // Measured on an RTX 5060 Ti. These do not follow a trend worth
+            // extrapolating from, so they are three measured points rather
+            // than a formula, and each is 4% to 11% better at its own size
+            // than either of the others would be. What changes is how much
+            // accumulator a warp holds: at 4096 a small one spread over four
+            // warps beats a large one, because the occupancy hides the memory
+            // latency better than a large accumulator's reuse does.
             if ((int)size <= 1024) {
-                // Small problems need small blocks: a 160x64 block leaves only
-                // a few dozen of them to cover 36 SMs, and 160 does not divide
-                // 1024 so the last one in each row is ragged.
-                tx = 8, ty = 2, wx = 1, wy = 1, pb = 8;
+                tx = 8, ty = 2, wx = 1, wy = 1;
+            } else if ((int)size <= 2048) {
+                tx = 5, ty = 4, wx = 2, wy = 2;
             } else {
-                tx = 5, ty = 4, wx = 2, wy = 1, pb = 24;
+                tx = 4, ty = 2, wx = 2, wy = 2;
             }
         }
         const int block_x = tile * tx * wx;
@@ -206,7 +207,7 @@ private:
         B.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, (int)block_r + (int)pad_a).split(_0, rro, rrv, vec).fuse(rro, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(rrv);
 
         // A.in() is dense in x, which is its _0.
-        A.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, block_x + pb).split(_0, xxo, xxi, vec).fuse(xxo, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(xxi);
+        A.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, block_x + pad_b).split(_0, xxo, xxi, vec).fuse(xxo, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(xxi);
     }
 
     Var x{"x"}, y{"y"};
