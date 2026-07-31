@@ -433,12 +433,14 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
         return false;
     }
 
-    // The destination must be shared memory, and the source must be a plain
-    // load from something we didn't allocate in here, which is to say global
-    // memory.
+    // The destination must be shared memory that was asked for asynchronously,
+    // and the source must be a plain load from something we didn't allocate in
+    // here, which is to say global memory. Stores to plain GPUShared that
+    // happen to match the pattern are left synchronous, so that a schedule can
+    // ask for either one.
     const MemoryType *dst_memory_type = alloc_memory_type.find(op->name);
-    if (!dst_memory_type || !is_gpu_shared(*dst_memory_type)) {
-        *reason = "the destination is not in shared memory";
+    if (!dst_memory_type || *dst_memory_type != MemoryType::GPUSharedAsync) {
+        *reason = "the destination is not stored in MemoryType::GPUSharedAsync";
         return false;
     }
     const Load *src = op->value.as<Load>();

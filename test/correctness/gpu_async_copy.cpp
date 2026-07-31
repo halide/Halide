@@ -162,6 +162,34 @@ void test_wrapper() {
     check_result("wrapper", result, input);
 }
 
+// The same staging in plain GPUShared must stay synchronous, so that a
+// schedule can ask for either one and compare them.
+void test_opt_out() {
+    const int W = 256, H = 32;
+    Buffer<float> input = make_input<float>(W, H);
+
+    auto build = [&](MemoryType mt) {
+        Var x("x"), y("y"), xi("xi"), yi("yi");
+        Func stage("stage"), out("out");
+        stage(x, y) = input(x, y);
+        out(x, y) = stage(x, y) * 2;
+        out.gpu_tile(x, y, xi, yi, 64, 8);
+        stage.compute_at(out, x)
+            .store_in(mt)
+            .gpu_threads(y)
+            .vectorize(x, 4);
+        Buffer<float> result(W, H);
+        out.realize(result);
+        result.copy_to_host();
+        return result;
+    };
+
+    Buffer<float> shared = build(MemoryType::GPUShared);
+    check_result("opt_out_shared", shared, input);
+    Buffer<float> async = build(MemoryType::GPUSharedAsync);
+    check_result("opt_out_async", async, input);
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -191,6 +219,7 @@ int main(int argc, char **argv) {
     test_padded_storage();
     test_two_inputs();
     test_wrapper();
+    test_opt_out();
 
     if (failures) {
         printf("%d case(s) failed\n", failures);
