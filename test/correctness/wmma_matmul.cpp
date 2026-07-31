@@ -214,19 +214,7 @@ bool test_block_level_accumulator() {
     Var kko("kko"), kki("kki"), xxo("xxo"), xxi("xxi");
     RVar ko("ko"), ki("ki"), rri("rri");
 
-    out.bound(x, 0, N).bound(y, 0, M)
-        .split(x, x, xi, block_x)
-        .split(xi, xt, xi, tile * tiles_x)
-        .split(xi, xi, mmxi, tile)
-        .split(y, y, yi, block_y)
-        .split(yi, yi, mmyi, tile)
-        .gpu_blocks(x, y)
-        .gpu_threads(xt)
-        .reorder(mmxi, mmyi, xi, yi, xt, x, y)
-        .unroll(xi)
-        .unroll(yi)
-        .vectorize(mmxi)
-        .vectorize(mmyi);
+    out.bound(x, 0, N).bound(y, 0, M).split(x, x, xi, block_x).split(xi, xt, xi, tile * tiles_x).split(xi, xi, mmxi, tile).split(y, y, yi, block_y).split(yi, yi, mmyi, tile).gpu_blocks(x, y).gpu_threads(xt).reorder(mmxi, mmyi, xi, yi, xt, x, y).unroll(xi).unroll(yi).vectorize(mmxi).vectorize(mmyi);
 
     prod.compute_at(out, x)
         .store_in(MemoryType::WMMAFragment)

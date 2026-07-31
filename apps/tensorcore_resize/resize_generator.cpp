@@ -75,11 +75,7 @@ const KernelInfo kernel_info[] = {
 class Resize : public Halide::Generator<Resize> {
 public:
     GeneratorParam<InterpolationType> interpolation_type{
-        "interpolation_type", InterpolationType::Lanczos,
-        {{"box", InterpolationType::Box},
-         {"linear", InterpolationType::Linear},
-         {"cubic", InterpolationType::Cubic},
-         {"lanczos", InterpolationType::Lanczos}}};
+        "interpolation_type", InterpolationType::Lanczos, {{"box", InterpolationType::Box}, {"linear", InterpolationType::Linear}, {"cubic", InterpolationType::Cubic}, {"lanczos", InterpolationType::Lanczos}}};
 
     // If we statically know whether we're upsampling or downsampling, we can
     // generate different pipelines (we want to reorder the resample in x and
@@ -87,8 +83,7 @@ public:
     GeneratorParam<bool> upsample{"upsample", false};
 
     GeneratorParam<Schedule> gpu_schedule{
-        "gpu_schedule", Schedule::TensorCore,
-        {{"cudaonly", Schedule::CUDA}, {"tensorcore", Schedule::TensorCore}}};
+        "gpu_schedule", Schedule::TensorCore, {{"cudaonly", Schedule::CUDA}, {"tensorcore", Schedule::TensorCore}}};
 
     Input<Buffer<float16_t, 3>> input{"input"};
     Input<float> scale_factor{"scale_factor"};
