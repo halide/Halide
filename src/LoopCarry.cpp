@@ -209,7 +209,7 @@ class LoopCarryOverLoop : public IRMutator {
             body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = LetStmt::make(op->name, value, body);
+            stmt = op->with(value, body);
         }
 
         containing_lets.pop_back();
@@ -545,7 +545,7 @@ class LoopCarry : public IRMutator {
         } else {
             ScopedBinding<> bind(in_consume, op->name);
             Stmt body = mutate(op->body);
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            return op->with(body);
         }
     }
 
@@ -555,11 +555,7 @@ class LoopCarry : public IRMutator {
             Stmt body = mutate(op->body);
             LoopCarryOverLoop carry(op->name, in_consume, max_carried_values);
             body = carry(body);
-            if (body.same_as(op->body)) {
-                stmt = op;
-            } else {
-                stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
-            }
+            stmt = op->with(op->min, op->max, body);
 
             // Inject the scratch buffer allocations.
             for (const auto &alloc : carry.allocs) {

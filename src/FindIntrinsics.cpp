@@ -1106,13 +1106,7 @@ protected:
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
         predicate = narrow_predicate(predicate, op->type);
-        if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
-            return op;
-        } else {
-            return Load::make(op->type, op->name, std::move(index),
-                              op->image, op->param, std::move(predicate),
-                              op->alignment, op->is_streaming);
-        }
+        return op->with(index, predicate, op->alignment);
     }
 
     Stmt visit(const Store *op) override {
@@ -1120,11 +1114,7 @@ protected:
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
         predicate = narrow_predicate(predicate, value.type());
-        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
-            return op;
-        } else {
-            return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment, op->is_streaming);
-        }
+        return op->with(value, index, predicate, op->alignment);
     }
 };
 

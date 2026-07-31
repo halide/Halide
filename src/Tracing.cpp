@@ -216,7 +216,7 @@ protected:
                 }
             }
 
-            stmt = Provide::make(op->name, traces, args, op->predicate);
+            stmt = op->with(traces, args, op->predicate);
             for (const auto &p : lets) {
                 stmt = LetStmt::make(p.first, p.second, stmt);
             }
@@ -270,9 +270,7 @@ protected:
             body.same_as(op->body)) {
             return op;
         }
-        return For::make(op->name, std::move(min), std::move(max),
-                         op->for_type, op->partition_policy, op->device_api,
-                         std::move(body));
+        return op->with(min, max, body);
     }
 
     Stmt visit(const Realize *op) override {
@@ -290,9 +288,7 @@ protected:
                 Stmt _keep_alive = IRMutator::visit(op);
                 op = _keep_alive.as<Realize>();
                 internal_assert(op);
-                return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition,
-                                     LetStmt::make(op->name + ".trace_id", 0,
-                                                   op->body));
+                return op->with(op->bounds, op->condition, LetStmt::make(op->name + ".trace_id", 0, op->body));
             } else {
                 return IRMutator::visit(op);
             }
@@ -329,9 +325,7 @@ protected:
         builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
         Expr call_after = builder.build();
 
-        return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition,
-                             LetStmt::make(op->name + ".trace_id", call_before,
-                                           Block::make(op->body, Evaluate::make(call_after))));
+        return op->with(op->bounds, op->condition, LetStmt::make(op->name + ".trace_id", call_before, Block::make(op->body, Evaluate::make(call_after))));
     }
 
     Stmt visit(const ProducerConsumer *op) override {
@@ -377,10 +371,7 @@ protected:
         Expr end_op_call = builder.build();
 
         return LetStmt::make(op->name + ".trace_id", begin_op_call,
-                             ProducerConsumer::make(op->name, op->is_producer,
-                                                    Block::make(
-                                                        op->body,
-                                                        Evaluate::make(end_op_call))));
+                             op->with(Block::make(op->body, Evaluate::make(end_op_call))));
     }
 };
 }  // namespace

@@ -429,6 +429,7 @@ int main(int argc, char **argv) {
 #ifndef HALIDE_NO_PNG
     test_png_unsupported_bit_depth();
 #endif
+    test_negative_extents();
     printf("Success!\n");
     return 0;
 }
