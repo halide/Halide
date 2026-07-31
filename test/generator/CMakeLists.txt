@@ -801,10 +801,7 @@ _add_halide_aot_tests(rdom_input)
 # custom allocator, thread count, and error handler) stays independent. The test
 # runs host objects directly, so it is skipped for wasm.
 if (NOT ${_USING_WASM})
-    add_halide_generator(
-        runtime_prefixes_iso.generator
-        SOURCES runtime_prefixes_iso_generator.cpp
-    )
+    add_halide_generator(runtime_prefixes_iso.generator SOURCES runtime_prefixes_iso_generator.cpp)
 
     # none: the stock halide_ runtime.
     add_halide_runtime(rniso_rt_none)

@@ -585,9 +585,9 @@ void rename_runtime_symbol(llvm::GlobalValue &g, const std::string &new_name) {
 }
 
 void apply_runtime_prefixes_prefixes(llvm::Module &module,
-                                      const RuntimeNamespaceMap &prefixes,
-                                      const std::set<std::string> &pipeline_functions,
-                                      const std::set<std::string> &runtime_symbols) {
+                                     const RuntimeNamespaceMap &prefixes,
+                                     const std::set<std::string> &pipeline_functions,
+                                     const std::set<std::string> &runtime_symbols) {
     if (prefixes.empty()) {
         return;
     }

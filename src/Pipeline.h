@@ -220,7 +220,7 @@ public:
 
     /** Apply any runtime namespace prefixes to allow custom runtime method names to be emitted */
     void apply_runtime_prefixes(const Target &target,
-                                 const RuntimePrefixParams &runtime_prefixes_params) const;
+                                const RuntimePrefixParams &runtime_prefixes_params) const;
 
     /** Return handle to the index-th Func within the pipeline based on the
      * topological order. */
