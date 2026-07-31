@@ -313,10 +313,11 @@ Variables set by the package:
 
 Variables that control package behavior:
 
-| Variable                  | Description                                                                                                                                     |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Halide_PYTHON_LAUNCHER`  | Semicolon separated list containing a command to launch the Python interpreter. Can be used to set environment variables for Python generators. |
-| `Halide_NO_DEFAULT_FLAGS` | Off by default. When enabled, suppresses recommended compiler flags that would be added by `add_halide_generator`                               |
+| Variable                  | Description                                                                                                                                                                                                    |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Halide_PYTHON_LAUNCHER`  | Semicolon separated list containing a command to launch the Python interpreter. Can be used to set environment variables for Python generators.                                                                |
+| `Halide_NO_DEFAULT_FLAGS` | Off by default. When enabled, suppresses recommended compiler flags that would be added by `add_halide_generator`                                                                                              |
+| `Halide_CACHE_DIR`        | Defaults to `$ENV{HL_CACHE_DIR}`. When set, routes `HL_CACHE_DIR` to every generator/GenRT invocation so it can reuse cached artifacts instead of recompiling. See [doc/GeneratorCache.md](GeneratorCache.md). |
 
 ## Imported targets
 
