@@ -75,8 +75,8 @@ void define_pipeline(py::module &m) {
             .def("apply_autoscheduler", &Pipeline::apply_autoscheduler,
                  py::arg("target"), py::arg("autoscheduler_params"))
             .def(
-                "apply_runtime_namespace", [](Pipeline &p, const Target &target, const std::map<RuntimeVisibility, std::string> &namespace_map) {
-                    p.apply_runtime_namespace(target, RuntimeNamespaceParams(namespace_map));
+                "apply_runtime_prefixes", [](Pipeline &p, const Target &target, const std::map<RuntimeLinkage, std::string> &namespace_map) {
+                    p.apply_runtime_prefixes(target, RuntimePrefixParams(namespace_map));
                 },
                 py::arg("target"), py::arg("namespace_map"))
             .def("get_func", &Pipeline::get_func, py::arg("index"))

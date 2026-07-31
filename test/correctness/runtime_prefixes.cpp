@@ -38,7 +38,7 @@ Pipeline make_pipeline() {
 // namespace prefixes and return the text. `extra_features` lets callers add
 // e.g. Target::NoRuntime.
 std::string compile_to_ll(const std::string &tag,
-                          const std::map<RuntimeVisibility, std::string> &prefixes,
+                          const std::map<RuntimeLinkage, std::string> &prefixes,
                           const std::vector<Target::Feature> &extra_features = {}) {
     Pipeline p = make_pipeline();
 
@@ -49,11 +49,11 @@ std::string compile_to_ll(const std::string &tag,
     }
 
     if (!prefixes.empty()) {
-        p.apply_runtime_namespace(target, RuntimeNamespaceParams(prefixes));
+        p.apply_runtime_prefixes(target, RuntimePrefixParams(prefixes));
     }
 
     const std::string path =
-        Internal::get_test_tmp_dir() + "runtime_namespace_" + tag + ".ll";
+        Internal::get_test_tmp_dir() + "runtime_prefixes_" + tag + ".ll";
     Internal::ensure_no_file_exists(path);
 
     Module m = p.compile_to_module({}, "consumer_" + tag, target);
@@ -92,8 +92,8 @@ int main(int argc, char **argv) {
     // renamed with the export prefix.
     // ------------------------------------------------------------------
     {
-        const std::string exp = "my_ns_";
-        const std::string ll = compile_to_ll("export", {{RuntimeVisibility::Export, exp}});
+        const std::string exp = "my_prefix_";
+        const std::string ll = compile_to_ll("export", {{RuntimeLinkage::Export, exp}});
         check(contains(ll, "@" + exp + "malloc"),
               "export: expected @" + exp + "malloc");
         check(contains(ll, "@" + exp + "free"),
@@ -110,9 +110,9 @@ int main(int argc, char **argv) {
     // declarations, renamed with the import prefix.
     // ------------------------------------------------------------------
     {
-        const std::string imp = "my_ns_";
+        const std::string imp = "my_prefix_";
         const std::string ll = compile_to_ll("import",
-                                             {{RuntimeVisibility::Import, imp}},
+                                             {{RuntimeLinkage::Import, imp}},
                                              {Target::NoRuntime});
         check(contains(ll, "@" + imp + "malloc"),
               "import: expected @" + imp + "malloc");
@@ -137,8 +137,8 @@ int main(int argc, char **argv) {
     {
         // (a) With the runtime linked in, the internal namespace state must be
         // renamed and no un-prefixed Halide::Runtime::Internal symbol remains.
-        const std::string internal = "my_ns_internal_";
-        const std::string ll = compile_to_ll("internal", {{RuntimeVisibility::Internal, internal}});
+        const std::string internal = "my_prefix_internal_";
+        const std::string ll = compile_to_ll("internal", {{RuntimeLinkage::Internal, internal}});
         // Itanium mangling of the Halide::Runtime::Internal namespace.
         const std::string ns = "6Halide7Runtime8Internal";
         check(contains(ll, "@" + internal + "_ZN" + ns),
@@ -150,9 +150,9 @@ int main(int argc, char **argv) {
         // (b) NoRuntime kernel: an internal-only prefix must not touch the
         // kernel's halide_ imports.
         const std::string ll = compile_to_ll("internal_only",
-                                             {{RuntimeVisibility::Internal, "my_ns_internal_"}},
+                                             {{RuntimeLinkage::Internal, "my_prefix_internal_"}},
                                              {Target::NoRuntime});
-        check(!contains(ll, "@my_ns_internal_malloc"),
+        check(!contains(ll, "@my_prefix_internal_malloc"),
               "internal: kernel-called declarations must NOT get the internal prefix");
         check(contains(ll, "@halide_malloc"),
               "internal: kernel-called halide_malloc should be unchanged by an internal-only prefix");
@@ -163,10 +163,10 @@ int main(int argc, char **argv) {
     // runtime linked in and with NoRuntime, and confirm they all compile.
     // ------------------------------------------------------------------
     for (int mask = 0; mask < 8; mask++) {
-        std::map<RuntimeVisibility, std::string> prefixes;
-        if (mask & 1) prefixes[RuntimeVisibility::Import] = "imp_";
-        if (mask & 2) prefixes[RuntimeVisibility::Export] = "exp_";
-        if (mask & 4) prefixes[RuntimeVisibility::Internal] = "int_";
+        std::map<RuntimeLinkage, std::string> prefixes;
+        if (mask & 1) prefixes[RuntimeLinkage::Import] = "imp_";
+        if (mask & 2) prefixes[RuntimeLinkage::Export] = "exp_";
+        if (mask & 4) prefixes[RuntimeLinkage::Internal] = "int_";
 
         for (bool no_runtime : {false, true}) {
             std::vector<Target::Feature> features;
@@ -181,8 +181,8 @@ int main(int argc, char **argv) {
             // must be gone. With the runtime linked in, halide_malloc is a
             // definition (export); with NoRuntime it is a kernel-called
             // declaration (import).
-            const RuntimeVisibility relevant =
-                no_runtime ? RuntimeVisibility::Import : RuntimeVisibility::Export;
+            const RuntimeLinkage relevant =
+                no_runtime ? RuntimeLinkage::Import : RuntimeLinkage::Export;
             if (prefixes.count(relevant)) {
                 check(contains(ll, "@" + prefixes[relevant] + "malloc"),
                       tag + ": expected renamed malloc");
@@ -201,11 +201,11 @@ int main(int argc, char **argv) {
     if (Halide::exceptions_enabled()) {
         Pipeline p = make_pipeline();
         Target jit_target = get_host_target().with_feature(Target::JIT);
-        RuntimeNamespaceParams ns({{RuntimeVisibility::Export, "my_ns_"}});
+        RuntimePrefixParams ns({{RuntimeLinkage::Export, "my_prefix_"}});
 
         bool error = false;
         try {
-            p.apply_runtime_namespace(jit_target, ns);
+            p.apply_runtime_prefixes(jit_target, ns);
         } catch (const Halide::CompileError &e) {
             error = true;
             printf("Expected compile error:\n%s\n", e.what());

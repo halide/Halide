@@ -322,7 +322,7 @@ void CodeGen_LLVM::init_module() {
 
     // Record the runtime's symbols now, before any pipeline functions are
     // emitted, so that runtime-namespace renaming can identify runtime-internal
-    // symbols precisely (see apply_runtime_namespace_prefixes).
+    // symbols precisely (see apply_runtime_prefixes_prefixes).
     runtime_symbols.clear();
     for (const llvm::Function &f : module->functions()) {
         runtime_symbols.insert(f.getName().str());
@@ -584,7 +584,7 @@ void rename_runtime_symbol(llvm::GlobalValue &g, const std::string &new_name) {
     }
 }
 
-void apply_runtime_namespace_prefixes(llvm::Module &module,
+void apply_runtime_prefixes_prefixes(llvm::Module &module,
                                       const RuntimeNamespaceMap &prefixes,
                                       const std::set<std::string> &pipeline_functions,
                                       const std::set<std::string> &runtime_symbols) {
@@ -594,13 +594,13 @@ void apply_runtime_namespace_prefixes(llvm::Module &module,
 
     const std::string halide_prefix = "halide_";
 
-    auto find_prefix = [&prefixes](RuntimeVisibility v) -> const std::string * {
+    auto find_prefix = [&prefixes](RuntimeLinkage v) -> const std::string * {
         auto it = prefixes.find(v);
         return (it != prefixes.end()) ? &it->second : nullptr;
     };
-    const std::string *import_prefix = find_prefix(RuntimeVisibility::Import);
-    const std::string *export_prefix = find_prefix(RuntimeVisibility::Export);
-    const std::string *internal_prefix = find_prefix(RuntimeVisibility::Internal);
+    const std::string *import_prefix = find_prefix(RuntimeLinkage::Import);
+    const std::string *export_prefix = find_prefix(RuntimeLinkage::Export);
+    const std::string *internal_prefix = find_prefix(RuntimeLinkage::Internal);
 
     // Is `f` one of the generated kernel's own entry points?
     auto is_kernel_function = [&pipeline_functions](const llvm::Function *f) {
@@ -839,7 +839,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         pipeline_functions.insert(names.argv_name);
         pipeline_functions.insert(names.metadata_name);
     }
-    apply_runtime_namespace_prefixes(*module, input.get_runtime_namespace_map(), pipeline_functions, runtime_symbols);
+    apply_runtime_prefixes_prefixes(*module, input.get_runtime_prefixes_map(), pipeline_functions, runtime_symbols);
 
     return finish_codegen();
 }

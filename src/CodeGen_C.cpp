@@ -243,9 +243,9 @@ void collect_runtime_function_names(const char *header, std::set<std::string> &n
 }  // namespace
 
 CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard,
-                     const std::string &runtime_namespace_import_prefix)
+                     const std::string &runtime_prefixes_import_prefix)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
-      runtime_namespace_import_prefix(runtime_namespace_import_prefix) {
+      runtime_prefixes_import_prefix(runtime_prefixes_import_prefix) {
 
     if (output_kind == CPlusPlusFunctionInfoHeader) {
         // If it's a header, emit an include guard.
@@ -310,13 +310,13 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
         // consistently -- while leaving types, typedefs, and enum values alone.
         // (Emitted for implementation output only; headers must stay un-renamed
         // so that several namespaced headers can be included together.)
-        if (!runtime_namespace_import_prefix.empty()) {
+        if (!runtime_prefixes_import_prefix.empty()) {
             std::set<std::string> fns;
             collect_runtime_function_names((const char *)halide_internal_runtime_header_HalideRuntime_h, fns);
             stream << "// Halide runtime namespace: rename the runtime C ABI.\n";
             for (const auto &name : fns) {
                 stream << "#define " << name << " "
-                       << runtime_namespace_import_prefix << name.substr(strlen("halide_")) << "\n";
+                       << runtime_prefixes_import_prefix << name.substr(strlen("halide_")) << "\n";
             }
             stream << "\n";
         }

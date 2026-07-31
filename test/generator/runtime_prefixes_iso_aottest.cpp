@@ -3,8 +3,8 @@
 #include <cstdlib>
 #include <string>
 
-// One header per namespaced variant. All variants come from the same generator,
-// each linked against a runtime with a distinct symbol namespace:
+// One header per prefixes variant. All variants come from the same generator,
+// each linked against a runtime with a distinct symbol prefix:
 //   - "none": the stock halide_ runtime.
 //   - "a":    export/import prefix "runtime_a_", internal prefix "runtime_ai_".
 //   - "b":    export/import prefix "runtime_b_", internal prefix "runtime_bi_".

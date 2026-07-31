@@ -44,7 +44,7 @@ public:
               const Target &target,
               OutputKind output_kind = CImplementation,
               const std::string &include_guard = "",
-              const std::string &runtime_namespace_import_prefix = "");
+              const std::string &runtime_prefixes_import_prefix = "");
     ~CodeGen_C() override;
 
     /** Emit the declarations contained in the module as C code. */
@@ -99,7 +99,7 @@ protected:
      * with this prefix (replacing the leading "halide_"), so the generated
      * source imports a namespaced runtime rather than the stock one. Applies to
      * C/C++ *implementation* output only. */
-    std::string runtime_namespace_import_prefix;
+    std::string runtime_prefixes_import_prefix;
 
     /** A cache of generated values in scope */
     std::map<std::string, std::string> cache;

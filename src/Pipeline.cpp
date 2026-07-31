@@ -152,8 +152,8 @@ struct PipelineContents {
     bool trace_pipeline = false;
 
     /** Optional prefixes used to rename halide_-prefixed runtime symbols.
-     * Empty unless set via Pipeline::apply_runtime_namespace(). */
-    RuntimeNamespaceParams runtime_namespace_params;
+     * Empty unless set via Pipeline::apply_runtime_prefixes(). */
+    RuntimePrefixParams runtime_prefixes_params;
 
     PipelineContents()
         : module("", Target()) {
@@ -268,12 +268,12 @@ AutoSchedulerResults Pipeline::apply_autoscheduler(const Target &target, const A
     return results;
 }
 
-void Pipeline::apply_runtime_namespace(const Target &target, const RuntimeNamespaceParams &runtime_namespace_params) const {
-    user_assert(!runtime_namespace_params.prefixes.empty()) << "apply_runtime_namespace was called with no namespace prefixes specified.";
+void Pipeline::apply_runtime_prefixes(const Target &target, const RuntimePrefixParams &runtime_prefixes_params) const {
+    user_assert(!runtime_prefixes_params.prefixes.empty()) << "apply_runtime_prefixes was called with no namespace prefixes specified.";
     user_assert(!target.has_feature(Target::JIT))
         << "Runtime namespace prefixes are not supported for JIT targets: the JIT resolves runtime "
         << "calls against a process-global shared runtime that is not namespaced. Use an AOT target instead.";
-    contents->runtime_namespace_params = runtime_namespace_params;
+    contents->runtime_prefixes_params = runtime_prefixes_params;
 }
 
 /* static */
@@ -579,7 +579,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                  custom_passes);
     }
 
-    if (!contents->runtime_namespace_params.prefixes.empty()) {
+    if (!contents->runtime_prefixes_params.prefixes.empty()) {
         // JIT cannot honor renamed runtime symbols (they'd be unresolved against
         // the shared runtime), so reject it explicitly rather than silently
         // producing a module that fails to link at run time.
@@ -588,7 +588,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     }
     // Carry the (possibly empty) prefixes onto the Module so codegen can rename
     // halide_-prefixed runtime symbols. Empty is a no-op.
-    contents->module.set_runtime_namespace_map(contents->runtime_namespace_params.prefixes);
+    contents->module.set_runtime_prefixes_map(contents->runtime_prefixes_params.prefixes);
 
     return contents->module;
 }

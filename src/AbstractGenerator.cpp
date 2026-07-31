@@ -35,7 +35,7 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
 
     const auto &nsp = context.namespace_params();
     if (!nsp.prefixes.empty()) {
-        pipeline.apply_runtime_namespace(context.target(), nsp);
+        pipeline.apply_runtime_prefixes(context.target(), nsp);
     }
 
     std::vector<Argument> filter_arguments;

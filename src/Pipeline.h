@@ -67,11 +67,11 @@ struct AutoschedulerParams {
  * The "internal" prefix corresponds to the method names called within the runtime library
  *
  */
-struct RuntimeNamespaceParams {
-    std::map<RuntimeVisibility, std::string> prefixes;
+struct RuntimePrefixParams {
+    std::map<RuntimeLinkage, std::string> prefixes;
 
-    RuntimeNamespaceParams() = default;
-    /*not-explicit*/ RuntimeNamespaceParams(const std::map<RuntimeVisibility, std::string> &m)
+    RuntimePrefixParams() = default;
+    /*not-explicit*/ RuntimePrefixParams(const std::map<RuntimeLinkage, std::string> &m)
         : prefixes(m) {
     }
 };
@@ -219,8 +219,8 @@ public:
     static void add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler);
 
     /** Apply any runtime namespace prefixes to allow custom runtime method names to be emitted */
-    void apply_runtime_namespace(const Target &target,
-                                 const RuntimeNamespaceParams &runtime_namespace_params) const;
+    void apply_runtime_prefixes(const Target &target,
+                                 const RuntimePrefixParams &runtime_prefixes_params) const;
 
     /** Return handle to the index-th Func within the pipeline based on the
      * topological order. */

@@ -22,26 +22,26 @@ namespace Halide {
 GeneratorContext::GeneratorContext(const Target &target)
     : target_(target),
       autoscheduler_params_(),
-      runtime_namespace_params_() {
+      runtime_prefixes_params_() {
 }
 
 GeneratorContext::GeneratorContext(const Target &target,
                                    const AutoschedulerParams &autoscheduler_params)
     : target_(target),
       autoscheduler_params_(autoscheduler_params),
-      runtime_namespace_params_() {
+      runtime_prefixes_params_() {
 }
 
 GeneratorContext::GeneratorContext(const Target &target,
                                    const AutoschedulerParams &autoscheduler_params,
-                                   const RuntimeNamespaceParams &runtime_namespace_params)
+                                   const RuntimePrefixParams &runtime_prefixes_params)
     : target_(target),
       autoscheduler_params_(autoscheduler_params),
-      runtime_namespace_params_(runtime_namespace_params) {
+      runtime_prefixes_params_(runtime_prefixes_params) {
 }
 
 GeneratorContext GeneratorContext::with_target(const Target &t) const {
-    return GeneratorContext(t, autoscheduler_params_, runtime_namespace_params_);
+    return GeneratorContext(t, autoscheduler_params_, runtime_prefixes_params_);
 }
 
 namespace Internal {
@@ -178,7 +178,7 @@ private:
             // These are always propagated specially.
             if ((p->name() == "target") ||
                 (p->name() == "autoscheduler") ||
-                (p->name() == "runtime_namespace")) {
+                (p->name() == "runtime_prefixes")) {
                 continue;
             }
             if (p->is_synthetic_param()) {
@@ -221,8 +221,8 @@ void StubEmitter::emit_generator_params_struct() {
             std::string c_type = p->get_c_type();
             if (c_type == "AutoschedulerParams") {
                 c_type = "const AutoschedulerParams&";
-            } else if (c_type == "RuntimeNamespaceParams") {
-                c_type = "const RuntimeNamespaceParams&";
+            } else if (c_type == "RuntimePrefixParams") {
+                c_type = "const RuntimePrefixParams&";
             }
 
             stream << get_indent() << comma << c_type << " " << p->name() << "\n";
@@ -1073,24 +1073,24 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             debug(1) << "Building runtime for computed target: " << gcd_target << "\n";
         }
 
-        // Extract any runtime_namespace.{import,export,internal} generator
+        // Extract any runtime_prefixes.{import,export,internal} generator
         // params so a standalone runtime can be emitted with custom symbol
         // prefixes (the kernel path handles these via the Generator, but the
         // runtime has no Generator instance).
-        RuntimeNamespaceMap runtime_namespace_map;
+        RuntimeNamespaceMap runtime_prefixes_map;
         for (const auto &kv : args.generator_params) {
-            if (kv.first == "runtime_namespace.import") {
-                runtime_namespace_map[RuntimeVisibility::Import] = kv.second;
-            } else if (kv.first == "runtime_namespace.export") {
-                runtime_namespace_map[RuntimeVisibility::Export] = kv.second;
-            } else if (kv.first == "runtime_namespace.internal") {
-                runtime_namespace_map[RuntimeVisibility::Internal] = kv.second;
+            if (kv.first == "runtime_prefixes.import") {
+                runtime_prefixes_map[RuntimeLinkage::Import] = kv.second;
+            } else if (kv.first == "runtime_prefixes.export") {
+                runtime_prefixes_map[RuntimeLinkage::Export] = kv.second;
+            } else if (kv.first == "runtime_prefixes.internal") {
+                runtime_prefixes_map[RuntimeLinkage::Internal] = kv.second;
             }
         }
 
         auto output_files = compute_output_files(gcd_target, base_path, args.output_types);
         // Runtime doesn't get to participate in the CompilerLogger party
-        compile_standalone_runtime(output_files, gcd_target, runtime_namespace_map);
+        compile_standalone_runtime(output_files, gcd_target, runtime_prefixes_map);
     }
 
     if (!args.generator_name.empty()) {
@@ -1166,7 +1166,7 @@ void GeneratorParamBase::check_value_readable() const {
     // These are always readable.
     if (name() == "target" ||
         name() == "autoscheduler" ||
-        name() == "runtime_namespace") {
+        name() == "runtime_prefixes") {
         return;
     }
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
@@ -1225,44 +1225,44 @@ bool GeneratorParam_AutoSchedulerParams::try_set(const std::string &key, const s
     }
 }
 
-GeneratorParam_RuntimeNamespaceParams::GeneratorParam_RuntimeNamespaceParams()
-    : GeneratorParamImpl<RuntimeNamespaceParams>("runtime_namespace", {}) {
+GeneratorParam_RuntimePrefixParams::GeneratorParam_RuntimePrefixParams()
+    : GeneratorParamImpl<RuntimePrefixParams>("runtime_prefixes", {}) {
 }
 
-void GeneratorParam_RuntimeNamespaceParams::set_from_string(const std::string &new_value_string) {
+void GeneratorParam_RuntimePrefixParams::set_from_string(const std::string &new_value_string) {
     internal_error << "This method should never be called.";
 }
 
-std::string GeneratorParam_RuntimeNamespaceParams::get_default_value() const {
-    internal_error << "This method should never be called.";
-    return "";
-}
-
-std::string GeneratorParam_RuntimeNamespaceParams::call_to_string(const std::string &v) const {
+std::string GeneratorParam_RuntimePrefixParams::get_default_value() const {
     internal_error << "This method should never be called.";
     return "";
 }
 
-std::string GeneratorParam_RuntimeNamespaceParams::get_c_type() const {
+std::string GeneratorParam_RuntimePrefixParams::call_to_string(const std::string &v) const {
     internal_error << "This method should never be called.";
     return "";
 }
 
-bool GeneratorParam_RuntimeNamespaceParams::try_set(const std::string &key, const std::string &value) {
+std::string GeneratorParam_RuntimePrefixParams::get_c_type() const {
+    internal_error << "This method should never be called.";
+    return "";
+}
+
+bool GeneratorParam_RuntimePrefixParams::try_set(const std::string &key, const std::string &value) {
     const auto &n = this->name();
-    // Sub-keys arrive as "runtime_namespace.import" / ".export" / ".internal";
+    // Sub-keys arrive as "runtime_prefixes.import" / ".export" / ".internal";
     // there is no bare top-level string form for this GeneratorParam.
     if (starts_with(key, n + ".")) {
         const auto sub_key = key.substr(n.size() + 1);
         if (sub_key == "internal") {
-            user_assert(this->value_.prefixes.count(RuntimeVisibility::Internal) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
-            this->value_.prefixes.insert({RuntimeVisibility::Internal, value});
+            user_assert(this->value_.prefixes.count(RuntimeLinkage::Internal) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+            this->value_.prefixes.insert({RuntimeLinkage::Internal, value});
         } else if (sub_key == "export") {
-            user_assert(this->value_.prefixes.count(RuntimeVisibility::Export) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
-            this->value_.prefixes.insert({RuntimeVisibility::Export, value});
+            user_assert(this->value_.prefixes.count(RuntimeLinkage::Export) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+            this->value_.prefixes.insert({RuntimeLinkage::Export, value});
         } else if (sub_key == "import") {
-            user_assert(this->value_.prefixes.count(RuntimeVisibility::Import) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
-            this->value_.prefixes.insert({RuntimeVisibility::Import, value});
+            user_assert(this->value_.prefixes.count(RuntimeLinkage::Import) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+            this->value_.prefixes.insert({RuntimeLinkage::Import, value});
         } else {
             return false;
         }
@@ -1440,13 +1440,13 @@ GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name)
 }
 
 GeneratorContext GeneratorBase::context() const {
-    return GeneratorContext(target, autoscheduler_.value(), runtime_namespace_.value());
+    return GeneratorContext(target, autoscheduler_.value(), runtime_prefixes_.value());
 }
 
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     target.set(context.target_);
     autoscheduler_.set(context.autoscheduler_params_);
-    runtime_namespace_.set(context.runtime_namespace_params_);
+    runtime_prefixes_.set(context.runtime_prefixes_params_);
 
     // preemptively build our param_info now
     internal_assert(param_info_ptr == nullptr);
@@ -1607,7 +1607,7 @@ void GeneratorBase::set_generatorparam_value(const std::string &name, const std:
     if (autoscheduler_.try_set(name, value)) {
         return;
     }
-    if (runtime_namespace_.try_set(name, value)) {
+    if (runtime_prefixes_.try_set(name, value)) {
         return;
     }
 

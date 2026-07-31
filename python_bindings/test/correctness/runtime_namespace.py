@@ -26,9 +26,9 @@ def make_pipeline():
 
 def main():
     # The three scopes are exposed as an enum.
-    assert hl.RuntimeVisibility.Import is not None
-    assert hl.RuntimeVisibility.Export is not None
-    assert hl.RuntimeVisibility.Internal is not None
+    assert hl.RuntimeLinkage.Import is not None
+    assert hl.RuntimeLinkage.Export is not None
+    assert hl.RuntimeLinkage.Internal is not None
 
     tmpdir = tempfile.mkdtemp()
     host = hl.Target("host")
@@ -40,11 +40,11 @@ def main():
         rt,
         host,
         {
-            hl.RuntimeVisibility.Export: "my_ns_",
-            hl.RuntimeVisibility.Internal: "my_ns_internal_",
+            hl.RuntimeLinkage.Export: "my_prefix_",
+            hl.RuntimeLinkage.Internal: "my_prefix_internal_",
         },
     )
-    assert b"my_ns_malloc" in _read_bytes(rt)
+    assert b"my_prefix_malloc" in _read_bytes(rt)
 
     # The namespace_map argument is optional (backward compatible): a plain
     # standalone runtime keeps the stock halide_ names.
@@ -56,18 +56,18 @@ def main():
     # after which its runtime calls reference the renamed symbols.
     aot = hl.Target("host-no_runtime")
     p = make_pipeline()
-    p.apply_runtime_namespace(aot, {hl.RuntimeVisibility.Import: "my_ns_"})
+    p.apply_runtime_prefixes(aot, {hl.RuntimeLinkage.Import: "my_prefix_"})
     ll = os.path.join(tmpdir, "kern.ll")
     p.compile_to({hl.OutputFileType.llvm_assembly: ll}, [], "kern", aot)
     text = _read_text(ll)
-    assert "@my_ns_malloc" in text
+    assert "@my_prefix_malloc" in text
     assert "@halide_malloc" not in text
 
     # Runtime namespacing is unsupported for JIT and must raise.
     error = False
     try:
-        make_pipeline().apply_runtime_namespace(
-            hl.Target("host-jit"), {hl.RuntimeVisibility.Export: "my_ns_"}
+        make_pipeline().apply_runtime_prefixes(
+            hl.Target("host-jit"), {hl.RuntimeLinkage.Export: "my_prefix_"}
         )
     except hl.HalideError:
         error = True

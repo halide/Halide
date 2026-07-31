@@ -27,7 +27,7 @@ set(tests
     pystub.py
     rdom.py
     realize_warnings.py
-    runtime_namespace.py
+    runtime_prefixes.py
     serialization.py
     target.py
     tuple_select.py

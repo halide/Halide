@@ -5,9 +5,9 @@ namespace {
 // A tiny pipeline with a compute_root intermediate whose extent depends on the
 // (runtime) output extent, so it is heap-allocated and therefore exercises the
 // runtime's halide_malloc / halide_free (and thus the runtime's custom-malloc
-// state). Used by runtime_namespace_iso_aottest.cpp to check that separately
+// state). Used by runtime_prefixes_iso_aottest.cpp to check that separately
 // namespaced runtimes keep independent state.
-class RuntimeNamespaceIso : public Halide::Generator<RuntimeNamespaceIso> {
+class RuntimePrefixesIso : public Halide::Generator<RuntimePrefixesIso> {
 public:
     Output<Buffer<int32_t, 1>> output{"output"};
 
@@ -22,4 +22,4 @@ public:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(RuntimeNamespaceIso, runtime_namespace_iso)
+HALIDE_REGISTER_GENERATOR(RuntimePrefixesIso, runtime_prefixes_iso)
