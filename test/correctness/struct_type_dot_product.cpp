@@ -26,6 +26,37 @@ namespace {
 // map to quants 0..15, high nibbles to 16..31, each biased by -8), dotted with
 // the 32 int8 q8_0 activations, scaled by the product of the two fp16 deltas,
 // and summed across all blocks.
+//
+// The *algorithm* is written as the obvious thing: dequantize each side to
+// float on its own -- x_wt for the 4-bit weights, y_wt for the int8
+// activations, each scaling by its block's fp16 delta -- and sum the products
+// over all quants. result's update is then just
+//   result() += x_wt(k, b) * y_wt(k, b)
+// a plain float dot product over a single quant index k in [0, 32), with none
+// of the packed-integer kernel structure spelled out.
+//
+// The efficient kernel is then *derived by the schedule*, composing the four
+// quantization directives plus a split of the quant reduction:
+//
+//   * split(r_quant, ko, ki, 16) cuts the 32 quants into the two nibble halves
+//     ko and the packed byte ki. Because x_wt indexes qs by k % 16 and picks
+//     its nibble by k < 16, unrolling ko folds those to a constant nibble and a
+//     dense byte index, so both qs arrays load as whole vectors over ki rather
+//     than a strided gather.
+//   * rfactor(r_block, u) splits the (block, quant) reduction so each block's
+//     quants reduce into their own partial sum, partial(u).
+//   * eager_inline(x_wt, y_wt) substitutes the two dequantizers into partial's
+//     update, surfacing the per-block deltas xd(u), yd(u) and the integer
+//     weight/activation terms as explicit leaves hoist_invariants() can see.
+//   * hoist_invariants() lifts xd(u) and yd(u) -- invariant across the quants
+//     of a block -- out of the reduction, leaving a scale-free integer dot
+//     dot(u) and a single scale multiply in the write-back.
+//   * change_type(Int(32)) proves the per-block term can't overflow Int(32) and
+//     retypes dot's accumulation accordingly, so the quants reduce with
+//     smull/addv instead of a float round-trip.
+//
+// x_wt and y_wt are left unscheduled: eager_inline() has already folded them
+// into the reduction, so nothing else computes them.
 Type q4_0_type() {
     return Type::Struct({{"d", Float(16)}, {"qs", UInt(8), 16}});
 }
@@ -41,8 +72,6 @@ struct Pipeline {
     ImageParam x{q4_0_type(), 1, "x"};  // nb q4_0 weight blocks
     ImageParam y{q8_0_type(), 1, "y"};  // nb q8_0 activation blocks
     Func result{"qdot"};
-    RVar rb;
-    Var b;
 
     Pipeline() {
         // Alignment hints: dense, base-aligned blocks.
@@ -51,40 +80,46 @@ struct Pipeline {
         x.set_host_alignment(16);
         y.set_host_alignment(16);
 
-        Var bb("b");
-        RDom j(0, 16, "j");
+        Var b("b"), k("k"), u("u");
 
-        // Unpack the 4-bit weights: low nibble -> quant j, high nibble ->
-        // quant j+16, each biased by -8 to signed [-8, 7].
-        Expr nib = field(x(bb), "qs")[j];  // uint8
-        Expr x_lo = cast<int32_t>(nib % 16) - 8;
-        Expr x_hi = cast<int32_t>(nib / 16) - 8;
-        Expr y_lo = cast<int32_t>(field(y(bb), "qs")[j]);
-        Expr y_hi = cast<int32_t>(field(y(bb), "qs")[j + 16]);
+        // Dequantize one 4-bit weight to float: quant k is a nibble of the
+        // packed byte k % 16 -- its low nibble for k < 16, its high nibble
+        // otherwise -- biased by -8 to signed [-8, 7], times the block delta.
+        Expr nib = field(x(b), "qs")[k % 16];  // uint8
+        Expr w = cast<int32_t>(select(k < 16, nib % 16, nib / 16)) - 8;
+        Func x_wt("x_wt");
+        x_wt(k, b) = cast<float>(field(x(b), "d")) * cast<float>(w);
 
-        // Per-block integer dot product: a horizontal reduction over the 16
-        // nibble lanes.
-        Func idot("idot");
-        idot(bb) = 0;
-        idot(bb) += x_lo * y_lo + x_hi * y_hi;
+        // Dequantize one int8 activation to float: quant k is int8 k, times the
+        // block delta.
+        Expr a = cast<int32_t>(field(y(b), "qs")[k]);
+        Func y_wt("y_wt");
+        y_wt(k, b) = cast<float>(field(y(b), "d")) * cast<float>(a);
 
-        // Per-block scaled contribution.
-        Func contrib("contrib");
-        Expr scale = cast<float>(field(x(bb), "d")) * cast<float>(field(y(bb), "d"));
-        contrib(bb) = scale * cast<float>(idot(bb));
-
-        // Reduce over blocks to a single scalar dot product.
-        RDom r(0, x.dim(0).extent(), "rb");
+        // The algorithm: dequantize each side and sum every product.
+        RDom r(0, x.dim(0).extent(), 0, 32, "r");  // block, quant
         result() = 0.0f;
-        result() += contrib(r);
+        result() += x_wt(r[1], r[0]) * y_wt(r[1], r[0]);
 
-        rb = r.x;
-        b = bb;
+        // Derive the packed-integer kernel from the schedule. Split the 32
+        // quants into the two nibble halves ko and the packed byte ki first, so
+        // the derived stages carry that structure through.
+        RVar ko("ko"), ki("ki");
+        result.update().split(r[1], ko, ki, 16);
+        Func partial = result.update().rfactor(r[0], u);
+        Func dot = partial.update().eager_inline(x_wt, y_wt).hoist_invariants();
+        Func dot_i32 = dot.change_type(Int(32));
 
-        // Schedule: horizontally reduce the 16 nibble lanes as a vector.
-        idot.compute_at(result, rb);
-        idot.update().atomic().vectorize(j, 16);
-        contrib.compute_at(result, rb);
+        // One block's scaled contribution per outer step; its quants reduce
+        // horizontally, vectorized across the packed byte and unrolled over the
+        // two nibble halves.
+        partial.compute_at(result, r[0]);
+        dot_i32.compute_at(partial, u)
+            .update()
+            .reorder(ki, ko, u)
+            .atomic()
+            .vectorize(ki, 16)
+            .unroll(ko);
     }
 };
 
