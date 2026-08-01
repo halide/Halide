@@ -499,6 +499,8 @@ typedef enum halide_type_code_t
     halide_type_float = 2,   ///< IEEE floating point numbers
     halide_type_handle = 3,  ///< opaque pointer type (void *)
     halide_type_bfloat = 4,  ///< floating point numbers in the bfloat format
+    halide_type_struct = 5,  ///< a packed, by-value aggregate; its total byte
+                             ///< size is carried in halide_type_t::reserved
 } halide_type_code_t;
 
 // Note that while __attribute__ can go before or after the declaration,
@@ -532,7 +534,9 @@ struct halide_type_t {
     HALIDE_ATTRIBUTE_ALIGN(1)
     uint8_t bits;
 
-    /** Reserved for future element-kind payloads. */
+    /** Element-kind payload. For a struct type (code == halide_type_struct)
+     * this holds the total packed byte size of the aggregate; the ordinary
+     * `bits` field is not meaningful for a struct. Zero for all other types. */
     HALIDE_ATTRIBUTE_ALIGN(2)
     uint16_t reserved;
 
@@ -563,9 +567,11 @@ struct halide_type_t {
         return static_cast<uint32_t>(*this) < static_cast<uint32_t>(other);
     }
 
-    /** Size in bytes for a single element of this type. */
+    /** Size in bytes for a single element of this type. For a struct type the
+     * packed aggregate size is carried in `reserved` rather than derived from
+     * `bits`. */
     HALIDE_ALWAYS_INLINE constexpr int bytes() const {
-        return (bits + 7) / 8;
+        return code == halide_type_struct ? reserved : (bits + 7) / 8;
     }
 
     HALIDE_ALWAYS_INLINE constexpr operator uint32_t() const {
@@ -2502,6 +2508,8 @@ inline std::ostream &operator<<(std::ostream &os, const halide_type_t &type) {
         return os << "(void*)";
     case halide_type_bfloat:
         return os << "bfloat" << (int)type.bits;
+    case halide_type_struct:
+        return os << "struct(" << (int)type.reserved << " bytes)";
     }
     return os;
 }
