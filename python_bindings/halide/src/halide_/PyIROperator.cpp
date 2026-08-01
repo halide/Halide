@@ -1,7 +1,9 @@
 #include "PyIROperator.h"
 
+#include <pybind11/functional.h>
 #include <utility>
 
+#include "PyBinaryOperators.h"
 #include "PyTuple.h"
 
 namespace Halide {
@@ -72,6 +74,39 @@ py::object py_select(const py::args &args) {
 }  // namespace
 
 void define_operators(py::module &m) {
+    auto field_ref_class =
+        py::class_<FieldRef>(m, "FieldRef")
+            .def("__getitem__", &FieldRef::operator[])
+            .def("size", &FieldRef::size)
+            .def("__len__", &FieldRef::size);
+    add_binary_operators(field_ref_class);
+
+    m.def("field", static_cast<FieldRef (*)(const Expr &, const std::string &)>(&field),
+          py::arg("struct_value"), py::arg("name"));
+    m.def("field", static_cast<FieldRef (*)(const Expr &, int)>(&field),
+          py::arg("struct_value"), py::arg("index"));
+    // Per-field pack_struct: one initializer per struct field, in declaration
+    // order. Each item is an Expr (a scalar field's value; a gather() packet or
+    // a single expression with one `_` placeholder swept over an array field's
+    // extent) or a FieldRef (to copy a whole same-typed field). Mirrors the C++
+    // per-field pack_struct overload.
+    m.def(
+        "pack_struct",
+        [](const Type &type, const py::iterable &fields) -> Expr {
+            std::vector<StructFieldInit> inits;
+            for (py::handle item : fields) {
+                // Check FieldRef first: a scalar FieldRef also converts to Expr,
+                // but here it means "copy this field", not "use its value".
+                if (py::isinstance<FieldRef>(item)) {
+                    inits.emplace_back(item.cast<FieldRef>());
+                } else {
+                    inits.emplace_back(item.cast<Expr>());
+                }
+            }
+            return pack_struct(type, inits);
+        },
+        py::arg("type"), py::arg("fields"));
+
     m.def("max", [](const py::args &args) -> Expr {
         if (args.size() < 2) {
             throw py::value_error("max() must have at least 2 arguments");
@@ -189,6 +224,11 @@ void define_operators(py::module &m) {
     m.def("strict_float", &strict_float);
     m.def("scatter", static_cast<Expr (*)(const std::vector<Expr> &)>(&scatter));
     m.def("gather", static_cast<Expr (*)(const std::vector<Expr> &)>(&gather));
+    // Generator form: gather(extent, gen) builds a packet of `extent` elements
+    // by calling gen(k) for k in [0, extent), e.g. to fill a struct array field.
+    m.def("gather",
+          static_cast<Expr (*)(int, const std::function<Expr(Expr)> &)>(&gather),
+          py::arg("extent"), py::arg("gen"));
     m.def("extract_bits", static_cast<Expr (*)(Type, const Expr &, const Expr &)>(&extract_bits));
     m.def("concat_bits", &concat_bits);
     m.def("widen_right_add", &widen_right_add);

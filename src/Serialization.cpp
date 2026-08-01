@@ -401,6 +401,11 @@ Offset<String> Serializer::serialize_string(FlatBufferBuilder &builder, const st
 }
 
 Offset<Serialize::Type> Serializer::serialize_type(FlatBufferBuilder &builder, const Type &type) {
+    // The serialization schema's TypeCode has no struct variant (a struct also
+    // carries a field layout the flat Type table can't hold), so reject struct
+    // types outright rather than emitting an out-of-range code.
+    user_assert(!type.is_struct())
+        << "Serialization of struct types is not supported.\n";
     const int bits = type.bits();
     const int lanes = type.lanes();
     halide_type_code_t code = type.code();
