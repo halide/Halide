@@ -61,6 +61,7 @@ target_sources(
     AlignLoads.h
     AllocationBoundsInference.h
     ApplySplit.h
+    Approximation.h
     Argument.h
     AssociativeOpsTable.h
     Associativity.h
@@ -246,6 +247,7 @@ target_sources(
     AlignLoads.cpp
     AllocationBoundsInference.cpp
     ApplySplit.cpp
+    Approximation.cpp
     Argument.cpp
     AssociativeOpsTable.cpp
     Associativity.cpp
