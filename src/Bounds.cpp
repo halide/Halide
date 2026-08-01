@@ -256,6 +256,8 @@ protected:
         if ((t.is_uint() || t.is_int()) && t.bits() <= 16) {
             interval = Interval(t.min(), t.max());
         } else {
+            // Handle and struct types (and wider integers/floats) have no
+            // meaningful bounded numeric range.
             interval = Interval::everything();
         }
     }
