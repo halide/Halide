@@ -43,7 +43,7 @@ extern "C" int sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void 
 #endif
 
 #if defined(_WIN32) || (defined(COMPILING_HALIDE_RUNTIME) && WINDOWS)
-extern "C" int IsProcessorFeaturePresent(unsigned long feature);
+extern "C" int __stdcall IsProcessorFeaturePresent(unsigned long feature);
 #endif
 
 namespace Halide {
