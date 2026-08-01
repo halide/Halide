@@ -110,6 +110,7 @@ tests(
     compute_at_reordered_update_stage.cpp
     compute_at_split_rvar.cpp
     compute_inside_guard.cpp
+    compute_offline.cpp
     compute_with_crossing_edges1.cpp
     compute_with_crossing_edges2.cpp
     compute_with_fuse_in_specialization.cpp
