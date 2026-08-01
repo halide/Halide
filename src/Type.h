@@ -7,6 +7,8 @@
 #include "runtime/HalideRuntime.h"
 #include <cstdint>
 #include <optional>
+#include <string>
+#include <vector>
 
 /** \file
  * Defines halide types
@@ -268,6 +270,9 @@ struct halide_handle_traits {
 
 namespace Halide {
 
+struct StructField;
+struct StructTypeInfo;
+
 namespace Internal {
 struct ConstantInterval;
 
@@ -280,6 +285,19 @@ struct ConstantInterval;
  * 0 without locking, so non-handle type construction pays nothing. */
 uint32_t intern_handle_type(const halide_handle_cplusplus_type *handle_type);
 const halide_handle_cplusplus_type *get_interned_handle_type(uint32_t index);
+
+/** Struct types carry their field layout the same way handles carry their C++
+ * pointee metadata: by a 4-byte index into a process-wide intern table of
+ * (leaked, program-lifetime) StructTypeInfo pointers, rather than an inline
+ * pointer, so a struct-typed `Type` stays 8 bytes. Index 0 means "no struct
+ * metadata"; a well-formed struct Type always has a nonzero index. */
+uint32_t intern_struct_type(const StructTypeInfo *struct_type);
+const StructTypeInfo *get_interned_struct_type(uint32_t index);
+
+/** Intern (memoized by size) a field-opaque struct of the given total byte
+ * size, used to reconstruct a struct Type from its ABI form, which records
+ * only the size. Returns a nonzero struct-table index. */
+uint32_t intern_opaque_struct_type(int total_bytes);
 }  // namespace Internal
 
 struct Expr;
@@ -294,9 +312,12 @@ private:
     halide_type_code_t type_code;
     uint8_t type_bits;
     uint16_t type_lanes;
-    // Index into the process-wide handle-type intern table (0 == no handle
-    // metadata).
-    uint32_t handle_index_ = 0;
+    // Index into a process-wide intern table. Its meaning is selected by
+    // type_code: for a Handle it indexes the handle-type table (0 == void *),
+    // for a Struct it indexes the struct-type table (0 == malformed struct).
+    // Unused (0) for numeric types. A Type is never both a handle and a struct,
+    // so one slot serves both and keeps sizeof(Type) == 8.
+    uint32_t metadata_index_ = 0;
 
 public:
     /** Aliases for halide_type_code_t values for legacy compatibility
@@ -307,6 +328,7 @@ public:
     static constexpr halide_type_code_t Float = halide_type_float;
     static constexpr halide_type_code_t BFloat = halide_type_bfloat;
     static constexpr halide_type_code_t Handle = halide_type_handle;
+    static constexpr halide_type_code_t StructKind = halide_type_struct;
     // @}
 
     /** Exposed so code that needs to reason about the maximum representable
@@ -314,10 +336,34 @@ public:
      * it from Type itself instead of hardcoding a width. */
     static constexpr int kLanesBits = 8 * sizeof(type_lanes);
 
-    /** The number of bytes required to store a single scalar value of this type. Ignores vector lanes. */
-    int bytes() const {
-        return (bits() + 7) / 8;
+    /** The number of bytes required to store a single scalar value of this
+     * type. Ignores vector lanes. For a struct type, this is the packed
+     * size of the whole struct. */
+    int bytes() const;
+
+    /** Construct a packed, named-field aggregate type, matching a C struct
+     * with no alignment padding. The resulting Type has its own honest type
+     * code (Type::Struct); its packed byte size is recorded so it survives
+     * erasure to the ABI (see to_abi()). */
+    static Type Struct(const std::vector<StructField> &fields);
+
+    /** Is this type a struct type, as constructed by `Type::Struct`? */
+    HALIDE_ALWAYS_INLINE
+    bool is_struct() const {
+        return code() == StructKind;
     }
+
+    /** If this is a struct type, its field list/offsets. Null otherwise.
+     * Backed by an intern index rather than an inline pointer (like
+     * handle_type()), so this is an accessor rather than a public field. */
+    const StructTypeInfo *struct_type() const {
+        return is_struct() ? Internal::get_interned_struct_type(metadata_index_) : nullptr;
+    }
+
+    /** Check that the struct layout of two struct types matches structurally
+     * (same field names, types, order, and array extents), not just by
+     * pointer identity of the interned `StructTypeInfo`. */
+    bool same_struct_type(const Type &other) const;
 
     // Default ctor initializes everything to predictable-but-unlikely values
     constexpr Type()
@@ -331,7 +377,7 @@ public:
     HALIDE_ALWAYS_INLINE
     Type(halide_type_code_t code, int bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
         : type_code(code), type_bits((uint8_t)bits), type_lanes((uint16_t)lanes),
-          handle_index_(handle_type ? Internal::intern_handle_type(handle_type) : 0) {
+          metadata_index_(handle_type ? Internal::intern_handle_type(handle_type) : 0) {
         internal_assert(lanes == (int)type_lanes)
             << "Halide only supports vector types with up to 65535 lanes. " << lanes << " lanes requested.";
         internal_assert(bits == (int)type_bits)
@@ -346,23 +392,41 @@ public:
     /** Trivial copy assignment operator. */
     Type &operator=(const Type &that) = default;
 
-    /** Construct a (scalar) language Type from an ABI element type. */
+    /** Construct a (scalar) language Type from an ABI element type. A struct
+     * ABI type carries only its packed byte size, not its field layout (just
+     * as a buffer of handles forgets its C++ pointee type), so it rebuilds a
+     * faithful-sized but field-opaque struct -- enough for bytes()/to_abi() to
+     * round-trip and for buffer-bind compatibility, but not for field access. */
     HALIDE_ALWAYS_INLINE
     Type(halide_type_t that, const halide_handle_cplusplus_type *handle_type = nullptr)
         : Type(that.code, that.bits, 1, handle_type) {
+        if (that.code == halide_type_struct) {
+            metadata_index_ = Internal::intern_opaque_struct_type(that.reserved);
+        }
     }
 
     /** Erase this language Type to the ABI/runtime halide_type_t for use in
      * runtime calls, buffer/argument metadata, etc. This is a *checked*
      * erasure: the ABI element type has no lanes, so a vector type
      * (lanes >= 2) has no image here and asserts rather than silently
-     * dropping its lanes. */
+     * dropping its lanes. A struct type erases to code halide_type_struct
+     * carrying its packed byte size in the reserved field, so the aggregate's
+     * true size survives the boundary (an ordinary numeric type erases with
+     * reserved == 0). */
     HALIDE_ALWAYS_INLINE
     halide_type_t to_abi() const {
         internal_assert(type_lanes < 2)
             << "Cannot erase a vector type with " << type_lanes
             << " lanes to a scalar ABI halide_type_t.\n";
-        return halide_type_t(code(), type_bits);
+        halide_type_t t(code(), type_bits);
+        if (is_struct()) {
+            int n = bytes();
+            internal_assert(n <= 0xffff)
+                << "Struct type of " << n << " bytes is too large to erase to "
+                << "the ABI; the halide_type_t size field is 16 bits.\n";
+            t.reserved = (uint16_t)n;
+        }
+        return t;
     }
 
     /** Return the underlying data type of an element as an enum value. */
@@ -371,7 +435,10 @@ public:
         return type_code;
     }
 
-    /** Return the bit size of a single element of this type. */
+    /** Return the bit size of a single element of this type. Not meaningful
+     * for a struct type (whose real size is a byte count that need not be a
+     * whole number of machine words, and can exceed what this field holds) --
+     * use bytes() for a struct's size. */
     HALIDE_ALWAYS_INLINE
     int bits() const {
         return type_bits;
@@ -388,7 +455,13 @@ public:
     Type with_code(halide_type_code_t new_code) const {
         Type t = *this;
         t.type_code = new_code;
-        t.handle_index_ = new_code != code() ? 0 : handle_index_;  // Changing the type code invalidates any handle metadata.
+        if (new_code != code()) {
+            // The kind of type is changing, so any handle or struct metadata
+            // (which described the old kind) no longer applies. This keeps the
+            // code-based is_struct()/is_handle() consistent with metadata: a
+            // struct only stays a struct while its code stays halide_type_struct.
+            t.metadata_index_ = 0;
+        }
         return t;
     }
 
@@ -397,7 +470,10 @@ public:
     Type with_bits(int new_bits) const {
         Type t = *this;
         t.type_bits = (uint8_t)new_bits;
-        t.handle_index_ = new_bits != bits() ? 0 : handle_index_;  // Changing the bit width invalidates any handle metadata.
+        // The type code (and thus its kind) is unchanged, so handle/struct
+        // metadata survives -- bits() is not meaningful for either anyway, and
+        // a struct must not silently degrade into a plain integer partway
+        // through lowering (e.g. StorageFlattening rounding bits up to a byte).
         return t;
     }
 
@@ -407,6 +483,9 @@ public:
     Type with_lanes(int new_lanes) const {
         Type t = *this;
         t.type_lanes = (uint16_t)new_lanes;
+        // Handle and struct metadata describe the *element* type, so they
+        // survive a change in lane count (a vector of handles/structs keeps
+        // the same element metadata); no need to touch metadata_index_.
         return t;
     }
 
@@ -442,9 +521,11 @@ public:
      * index rather than stored inline, so this is now an accessor rather than a
      * public field. */
     const halide_handle_cplusplus_type *handle_type() const {
-        // Inline the common (non-handle) case so it needs no call or table
-        // lookup; only a real handle index reaches the intern table.
-        return handle_index_ == 0 ? nullptr : Internal::get_interned_handle_type(handle_index_);
+        // Inline the common case so it needs no call or table lookup. The
+        // shared metadata_index_ only names the handle table when this is a
+        // handle; for a struct it indexes the struct table instead, so guard
+        // on the code to avoid a cross-table lookup.
+        return (code() != Handle || metadata_index_ == 0) ? nullptr : Internal::get_interned_handle_type(metadata_index_);
     }
 
     /** Is this type boolean (represented as UInt(1))? */
@@ -485,7 +566,10 @@ public:
         return code() == Int;
     }
 
-    /** Is this type an unsigned integer type? */
+    /** Is this type an unsigned integer type? A struct type has its own honest
+     * code (halide_type_struct), so this reports false for it -- struct types
+     * no longer masquerade as UInt(8), and numeric reasoning is naturally
+     * excluded without a separate is_struct() guard. */
     HALIDE_ALWAYS_INLINE
     bool is_uint() const {
         return code() == UInt;
@@ -521,13 +605,31 @@ public:
     /** Compare two types for equality */
     HALIDE_ALWAYS_INLINE
     bool operator==(const Type &other) const {
+        // Equal type_code already implies both are (or aren't) handles/structs,
+        // so the deep metadata comparison only needs to run for that code.
         return type_code == other.type_code && type_bits == other.type_bits &&
-               type_lanes == other.type_lanes && (code() != Handle || same_handle_type(other));
+               type_lanes == other.type_lanes &&
+               (code() != Handle || same_handle_type(other)) &&
+               (code() != StructKind || same_struct_type(other));
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
         return !(*this == other);
+    }
+
+    /** Is `buffer_type` an acceptable type for a `halide_buffer_t` bound to a
+     * Parameter/ImageParam declared with this Type? This mirrors the runtime
+     * type check emitted by AddImageChecks: the buffer's ABI element type must
+     * equal this type's. For a struct that means the same struct code and
+     * packed byte size -- the buffer only carries the ABI halide_type_t, which
+     * forgets a struct's field layout (like a buffer of handles forgets its
+     * pointee type), so two structs of equal size are ABI-compatible. */
+    bool is_compatible_for_buffer_bind(const Type &buffer_type) const {
+        if (*this == buffer_type) {
+            return true;
+        }
+        return is_struct() && buffer_type.to_abi() == to_abi();
     }
 
     /** Compare a language type to an ABI element type. Equal iff this type is a
@@ -541,17 +643,12 @@ public:
         return !(*this == other);
     }
 
-    /** Compare ordering of two types so they can be used in certain containers and algorithms */
-    bool operator<(const Type &other) const {
-        if (std::tie(type_code, type_bits, type_lanes) <
-            std::tie(other.type_code, other.type_bits, other.type_lanes)) {
-            return true;
-        }
-        if (code() == Handle) {
-            return handle_type() < other.handle_type();
-        }
-        return false;
-    }
+    /** Compare ordering of two types so they can be used in certain
+     * containers and algorithms. Consistent with operator==: two struct
+     * types that compare equal (same field names/types/order/extents, per
+     * same_struct_type) always compare as neither-less-than-the-other,
+     * regardless of whether they share a StructTypeInfo pointer. */
+    bool operator<(const Type &other) const;
 
     /** Produce the scalar type (that of a single element) of this vector type */
     HALIDE_ALWAYS_INLINE
@@ -591,8 +688,34 @@ public:
     Expr min() const;
 };
 
-static_assert(sizeof(Type) == 8, "Halide::Type is a code+bits+lanes triple plus a 4-byte handle-type index");
+// Type stays 8 bytes: struct field layout is referenced by the same 4-byte
+// intern index that carries handle metadata (a Type is never both), not by an
+// inline side-table pointer. It must also stay trivially copyable, since Types
+// are copied all over the compiler.
+static_assert(sizeof(Type) == 8, "Type should stay 8 bytes");
 static_assert(std::is_trivially_copyable_v<Type>, "Type must stay trivially copyable");
+
+/** One field of a struct: a name, a type, and (for array fields)
+ * a number of elements. */
+struct StructField {
+    std::string name;
+    Type type;
+    std::optional<int> array_extent = std::nullopt;
+
+    bool operator==(const StructField &other) const;
+    bool operator<(const StructField &other) const;
+};
+
+/** The compile-time information a struct carries: its field list
+ * and the byte offset of each field */
+struct StructTypeInfo {
+    std::vector<StructField> fields;
+    std::vector<int> offsets;  // one per field, in bytes
+    int total_bytes = 0;
+
+    /** Find a field by name. Returns -1 if not found. */
+    int find_field(const std::string &name) const;
+};
 
 /** Constructing a signed integer type */
 HALIDE_ALWAYS_INLINE Type Int(int bits, int lanes = 1) {

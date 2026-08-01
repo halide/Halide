@@ -8,8 +8,10 @@
  */
 
 #include <cmath>
+#include <functional>
 #include <map>
 #include <optional>
+#include <type_traits>
 #include <utility>
 
 #include "Bounds.h"
@@ -1610,21 +1612,33 @@ f(select(p, scatter(3, 5, 5), scatter(1, 2, 3))) = f(select(p, gather(5, 3, 3), 
 *
 * Note that in the p == true case, we redundantly load from 3 and write
 * to 5 twice.
+*
+* A gather is also the way to supply the elements of a struct's array field to
+* pack_struct(): the packet's values become that field's elements, in order.
+* See pack_struct and \ref gather(int, const std::function<Expr(Expr)> &).
 */
 //@{
 Expr scatter(const std::vector<Expr> &args);
 Expr gather(const std::vector<Expr> &args);
 
-template<typename... Args>
+template<typename... Args,
+         typename = std::enable_if_t<(std::is_convertible_v<Args, Expr> && ...)>>
 Expr scatter(const Expr &e, Args &&...args) {
     return scatter({e, std::forward<Args>(args)...});
 }
 
-template<typename... Args>
+template<typename... Args,
+         typename = std::enable_if_t<(std::is_convertible_v<Args, Expr> && ...)>>
 Expr gather(const Expr &e, Args &&...args) {
     return gather({e, std::forward<Args>(args)...});
 }
 // @}
+
+/** Build a gather packet of `extent` elements by evaluating `gen(k)` for each
+ * `k` in `[0, extent)` (passed as an int32 constant). This is the general way
+ * to fill a struct array field with a computed value per element when the fill
+ * can't be written as a single placeholder sweep; see pack_struct. */
+Expr gather(int extent, const std::function<Expr(Expr)> &gen);
 
 /** Extract a contiguous subsequence of the bits of 'e', starting at the bit
  * index given by 'lsb', where zero is the least-significant bit, returning a
@@ -1673,6 +1687,93 @@ f32.vectorize(x, 8);
  * See test/correctness/extract_concat_bits.cpp for a complete example.
  */
 Expr concat_bits(const std::vector<Expr> &e);
+
+/** A reference to one field of a struct-typed Expr, returned by field().
+ * Implicitly converts to Expr for a scalar field; supports operator[] for
+ * an array field. Using the wrong one of these for how the field was actually
+ * declared is a user_error.
+ */
+class FieldRef {
+    Expr struct_value;
+    int field_index;
+    Type elem_type;
+    std::optional<int> array_extent;
+
+    Expr read(const Expr &elem_index) const;
+
+public:
+    FieldRef(Expr struct_value, int field_index, Type elem_type, std::optional<int> array_extent);
+
+    /** Valid only for a scalar field. */
+    operator Expr() const;
+
+    /** Valid only for an array field. i may be a runtime Expr. */
+    Expr operator[](const Expr &i) const;
+
+    /** The number of elements, for an array field. 1 for a scalar field. */
+    int size() const {
+        return array_extent.value_or(1);
+    }
+
+    /** Whether this refers to an array field (vs. a scalar field). */
+    bool is_array() const {
+        return array_extent.has_value();
+    }
+
+    /** The element type of the field. */
+    Type element_type() const {
+        return elem_type;
+    }
+};
+
+/** Extract field `name` (or `index`) from a struct-typed Expr. The field's
+ * offset and type are resolved eagerly.
+ */
+// @{
+FieldRef field(const Expr &struct_value, const std::string &name);
+FieldRef field(const Expr &struct_value, int index);
+// @}
+
+/** Construct a value of struct type `t` (see Type::Struct) from one Expr
+ * per field, in declaration order. All fields must be supplied; array
+ * fields take `array_extent` Exprs, flattened into the same list. This is the
+ * low-level form; prefer the per-field overload below. */
+Expr pack_struct(const Type &t, const std::vector<Expr> &field_values);
+
+/** One field's worth of initializer for the per-field pack_struct() overload.
+ * Implicitly constructible from anything convertible to Expr -- a scalar
+ * field's value; a gather() packet whose elements fill an array field; or a
+ * single expression containing one implicit-var placeholder `_`, swept over the
+ * array field's extent (index arithmetic on `_` is allowed) -- and from a
+ * FieldRef, to copy a whole same-typed field out of another struct. */
+class StructFieldInit {
+public:
+    template<typename T,
+             typename = std::enable_if_t<std::is_convertible_v<T, Expr> &&
+                                         !std::is_same_v<std::decay_t<T>, FieldRef>>>
+    StructFieldInit(T &&e)
+        : value(Expr(std::forward<T>(e))) {
+    }
+    StructFieldInit(const FieldRef &f)
+        : source(f) {
+    }
+
+private:
+    friend Expr pack_struct(const Type &t, const std::vector<StructFieldInit> &fields);
+    // Exactly one of these is engaged.
+    std::optional<Expr> value;
+    std::optional<FieldRef> source;
+};
+
+/** Construct a value of struct type `t` with one initializer per field, in
+ * declaration order (contrast the flattened form above). A scalar field takes a
+ * scalar Expr; an array field takes a gather() packet, a single expression with
+ * one `_` placeholder swept over the field extent, or a FieldRef to a
+ * same-typed array field to copy element-by-element. */
+// @{
+Expr pack_struct(const Type &t, const std::vector<StructFieldInit> &fields);
+Expr pack_struct(const Type &t, std::initializer_list<StructFieldInit> fields);
+// @}
 
 /** Below is a collection of intrinsics for fixed-point programming. Most of
  * them can be expressed via other means, but this is more natural for some, as

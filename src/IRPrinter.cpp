@@ -45,8 +45,22 @@ ostream &operator<<(ostream &out, const Type &type) {
     case Type::BFloat:
         out << "bfloat";
         break;
+    case Type::StructKind:
+        out << "struct{";
+        if (const StructTypeInfo *info = type.struct_type()) {
+            const char *sep = "";
+            for (const auto &f : info->fields) {
+                out << sep << f.name << ": " << f.type;
+                if (f.array_extent) {
+                    out << "[" << *f.array_extent << "]";
+                }
+                sep = ", ";
+            }
+        }
+        out << "}";
+        break;
     }
-    if (!type.is_handle()) {
+    if (!type.is_handle() && !type.is_struct()) {
         out << type.bits();
     }
     if (type.lanes() > 1) {

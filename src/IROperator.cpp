@@ -18,6 +18,7 @@
 #include "IRVisitor.h"
 #include "Interval.h"
 #include "StrictifyFloat.h"
+#include "Substitute.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -1041,7 +1042,7 @@ void split_into_ands(const Expr &cond, std::vector<Expr> &result) {
 }
 
 Expr BufferBuilder::build() const {
-    std::vector<Expr> args(10);
+    std::vector<Expr> args(11);
     if (buffer_memory.defined()) {
         args[0] = buffer_memory;
     } else {
@@ -1079,7 +1080,11 @@ Expr BufferBuilder::build() const {
 
     args[5] = (int)type.code();
     args[6] = type.bits();
-    args[7] = dimensions;
+    // A struct element type carries its packed byte size in the ABI's reserved
+    // field; thread it through so the runtime buffer's type is faithful (and
+    // its element stride/allocation size correct). Zero for ordinary types.
+    args[7] = (int)type.to_abi().reserved;
+    args[8] = dimensions;
 
     std::vector<Expr> shape;
     for (size_t i = 0; i < (size_t)dimensions; i++) {
@@ -1107,11 +1112,11 @@ Expr BufferBuilder::build() const {
     }
     Expr shape_arg = Call::make(type_of<halide_dimension_t *>(), Call::make_struct, shape, Call::Intrinsic);
     if (shape_memory.defined()) {
-        args[8] = shape_arg;
+        args[9] = shape_arg;
     } else if (dimensions == 0) {
-        args[8] = make_zero(type_of<halide_dimension_t *>());
+        args[9] = make_zero(type_of<halide_dimension_t *>());
     } else {
-        args[8] = shape_var;
+        args[9] = shape_var;
     }
 
     Expr flags = make_zero(UInt(64));
@@ -1125,7 +1130,7 @@ Expr BufferBuilder::build() const {
                                make_const(UInt(64), halide_buffer_flag_device_dirty),
                                make_zero(UInt(64)));
     }
-    args[9] = flags;
+    args[10] = flags;
 
     Expr e = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init, args, Call::Extern);
 
@@ -2954,6 +2959,16 @@ Expr gather(const std::vector<Expr> &args) {
     return make_scatter_gather(args);
 }
 
+Expr gather(int extent, const std::function<Expr(Expr)> &gen) {
+    user_assert(extent >= 1) << "gather() extent must be at least 1, got " << extent << ".\n";
+    std::vector<Expr> elems;
+    elems.reserve(extent);
+    for (int k = 0; k < extent; k++) {
+        elems.push_back(gen(make_const(Int(32), k)));
+    }
+    return make_scatter_gather(elems);
+}
+
 Expr extract_bits(Type t, const Expr &e, const Expr &lsb) {
     return Call::make(t, Call::extract_bits, {e, lsb}, Call::Intrinsic);
 }
@@ -2966,6 +2981,189 @@ Expr concat_bits(const std::vector<Expr> &e) {
         user_assert(e[i].type() == t) << "All arguments to concat_bits must have the same type\n";
     }
     return Call::make(t.with_bits(t.bits() * (int)e.size()), Call::concat_bits, e, Call::Intrinsic);
+}
+
+Expr FieldRef::read(const Expr &elem_index) const {
+    return Call::make(elem_type, Call::struct_field_read,
+                      {struct_value, make_const(Int(32), field_index), elem_index}, Call::PureIntrinsic);
+}
+
+FieldRef::FieldRef(Expr struct_value, int field_index, Type elem_type, std::optional<int> array_extent)
+    : struct_value(std::move(struct_value)), field_index(field_index), elem_type(elem_type), array_extent(array_extent) {
+}
+
+FieldRef::operator Expr() const {
+    user_assert(!array_extent.has_value())
+        << "This struct field is an array field; use operator[] to access an element of it, "
+        << "not an implicit conversion to Expr.\n";
+    return read(make_const(Int(32), 0));
+}
+
+Expr FieldRef::operator[](const Expr &i) const {
+    user_assert(array_extent.has_value())
+        << "This struct field is a scalar field; it can't be indexed with operator[].\n";
+    Expr idx = cast<int32_t>(i);
+    if (auto ci = as_const_int(idx)) {
+        user_assert(*ci >= 0 && *ci < *array_extent)
+            << "Struct array field index " << *ci << " is out of range [0, " << *array_extent << ").\n";
+    }
+    return read(idx);
+}
+
+namespace {
+FieldRef make_field_ref(const Expr &struct_value, int index) {
+    user_assert(struct_value.defined() && struct_value.type().is_struct())
+        << "field() requires an Expr of a struct type.\n";
+    const StructTypeInfo *info = struct_value.type().struct_type();
+    user_assert(index >= 0 && index < (int)info->fields.size())
+        << "Struct field index " << index << " is out of range; this struct has "
+        << info->fields.size() << " fields.\n";
+    const StructField &f = info->fields[index];
+    return FieldRef(struct_value, index, f.type, f.array_extent);
+}
+}  // namespace
+
+FieldRef field(const Expr &struct_value, const std::string &name) {
+    user_assert(struct_value.defined() && struct_value.type().is_struct())
+        << "field() requires an Expr of a struct type (see Type::Struct).\n";
+    int index = struct_value.type().struct_type()->find_field(name);
+    user_assert(index >= 0) << "Struct type has no field named \"" << name << "\".\n";
+    return make_field_ref(struct_value, index);
+}
+
+FieldRef field(const Expr &struct_value, int index) {
+    return make_field_ref(struct_value, index);
+}
+
+Expr pack_struct(const Type &t, const std::vector<Expr> &field_values) {
+    user_assert(t.is_struct()) << "pack_struct() requires a struct type.\n";
+    const StructTypeInfo &info = *t.struct_type();
+
+    size_t expected = 0;
+    for (const auto &f : info.fields) {
+        expected += (size_t)f.array_extent.value_or(1);
+    }
+    user_assert(field_values.size() == expected)
+        << "pack_struct() for a " << expected << "-element struct (counting array fields "
+        << "element-by-element) was given " << field_values.size() << " values.\n";
+
+    size_t idx = 0;
+    for (const auto &f : info.fields) {
+        int n = f.array_extent.value_or(1);
+        for (int i = 0; i < n; i++) {
+            user_assert(field_values[idx].defined() && field_values[idx].type() == f.type)
+                << "pack_struct(): value " << idx << " has type " << field_values[idx].type()
+                << " but struct field \"" << f.name << "\" has type " << f.type << ".\n";
+            idx++;
+        }
+    }
+
+    return Call::make(t, Call::struct_pack, field_values, Call::PureIntrinsic);
+}
+
+namespace {
+// Collect the distinct implicit-var names (`_`, `_0`, ...) appearing in an
+// Expr, in first-encountered order. These are the placeholder(s) a pack_struct
+// array-field initializer sweeps over its extent.
+class FindImplicitVars : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+    std::set<std::string> seen;
+
+    void visit(const Variable *op) override {
+        if (Var::is_implicit(op->name) && seen.insert(op->name).second) {
+            names.push_back(op->name);
+        }
+    }
+
+public:
+    std::vector<std::string> names;
+};
+
+std::vector<std::string> find_implicit_vars(const Expr &e) {
+    FindImplicitVars finder;
+    e.accept(&finder);
+    return finder.names;
+}
+}  // namespace
+
+Expr pack_struct(const Type &t, const std::vector<StructFieldInit> &fields) {
+    user_assert(t.is_struct()) << "pack_struct() requires a struct type.\n";
+    const StructTypeInfo &info = *t.struct_type();
+
+    user_assert(fields.size() == info.fields.size())
+        << "pack_struct() for a " << info.fields.size() << "-field struct type was given "
+        << fields.size() << " field initializers. Supply exactly one initializer per field "
+        << "(an array field's elements go in a single gather() or a swept `_` expression).\n";
+
+    std::vector<Expr> flat;
+    for (size_t fi = 0; fi < info.fields.size(); fi++) {
+        const StructField &f = info.fields[fi];
+        const int extent = f.array_extent.value_or(1);
+        const bool is_array = f.array_extent.has_value();
+        const StructFieldInit &init = fields[fi];
+
+        if (init.source) {
+            // Copy a whole same-typed field out of another struct.
+            const FieldRef &r = *init.source;
+            user_assert(r.element_type() == f.type)
+                << "pack_struct(): field \"" << f.name << "\" of type " << f.type
+                << " is initialized from a field of type " << r.element_type() << ".\n";
+            user_assert(r.size() == extent)
+                << "pack_struct(): field \"" << f.name << "\" has " << extent
+                << " element(s), but is initialized from a field with " << r.size() << ".\n";
+            if (is_array) {
+                for (int k = 0; k < extent; k++) {
+                    flat.push_back(r[k]);
+                }
+            } else {
+                flat.push_back(Expr(r));
+            }
+            continue;
+        }
+
+        const Expr &e = *init.value;
+        if (const Call *g = e.as<Call>(); g != nullptr && g->is_intrinsic(Call::scatter_gather)) {
+            // An explicit gather() packet fills an array field's elements.
+            user_assert(is_array)
+                << "pack_struct(): scalar field \"" << f.name << "\" was given a gather() packet; "
+                << "a gather fills an array field.\n";
+            user_assert((int)g->args.size() == extent)
+                << "pack_struct(): array field \"" << f.name << "\" has extent " << extent
+                << ", but its gather() supplies " << g->args.size() << " element(s).\n";
+            flat.insert(flat.end(), g->args.begin(), g->args.end());
+            continue;
+        }
+
+        std::vector<std::string> implicit = find_implicit_vars(e);
+        user_assert(implicit.size() <= 1)
+            << "pack_struct(): the initializer for field \"" << f.name << "\" contains "
+            << implicit.size() << " placeholders (" << (implicit.empty() ? "" : implicit[0])
+            << " ...); an array field may sweep at most one.\n";
+
+        if (!implicit.empty()) {
+            // A single `_` placeholder swept over the field's extent.
+            user_assert(is_array)
+                << "pack_struct(): scalar field \"" << f.name << "\" was given a swept `_` "
+                << "expression; a placeholder sweep fills an array field.\n";
+            for (int k = 0; k < extent; k++) {
+                flat.push_back(substitute(implicit[0], make_const(Int(32), k), e));
+            }
+        } else {
+            // A plain value: only a scalar field.
+            user_assert(!is_array)
+                << "pack_struct(): array field \"" << f.name << "\" needs its " << extent
+                << " elements supplied via gather(), a swept `_` expression, or a field() copy, "
+                << "not a single value.\n";
+            flat.push_back(e);
+        }
+    }
+
+    // The flattened form does the final per-element type check and builds the node.
+    return pack_struct(t, flat);
+}
+
+Expr pack_struct(const Type &t, std::initializer_list<StructFieldInit> fields) {
+    return pack_struct(t, std::vector<StructFieldInit>(fields));
 }
 
 Expr target_arch_is(Target::Arch arch) {

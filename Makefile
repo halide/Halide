@@ -544,6 +544,7 @@ SOURCE_FILES = \
   Lower.cpp \
   LowerParallelTasks.cpp \
   LowerSMEStreamingTasks.cpp \
+  LowerStructTypes.cpp \
   LowerWarpShuffles.cpp \
   Memoization.cpp \
   Module.cpp \
@@ -750,6 +751,7 @@ HEADER_FILES = \
   Lower.h \
   LowerParallelTasks.h \
   LowerSMEStreamingTasks.h \
+  LowerStructTypes.h \
   LowerWarpShuffles.h \
   Memoization.h \
   Module.h \

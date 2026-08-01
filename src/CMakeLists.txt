@@ -158,6 +158,7 @@ target_sources(
     Lower.h
     LowerParallelTasks.h
     LowerSMEStreamingTasks.h
+    LowerStructTypes.h
     LowerWarpShuffles.h
     Memoization.h
     Module.h
@@ -337,6 +338,7 @@ target_sources(
     Lower.cpp
     LowerParallelTasks.cpp
     LowerSMEStreamingTasks.cpp
+    LowerStructTypes.cpp
     LowerWarpShuffles.cpp
     Memoization.cpp
     Module.cpp

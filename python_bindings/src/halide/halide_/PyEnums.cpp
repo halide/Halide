@@ -250,7 +250,8 @@ void define_enums(py::module &m) {
         .value("Int", Type::Int)
         .value("UInt", Type::UInt)
         .value("Float", Type::Float)
-        .value("Handle", Type::Handle);
+        .value("Handle", Type::Handle)
+        .value("Struct", Type::StructKind);
 
     py::enum_<OutputFileType>(m, "OutputFileType")
         .value("assembly", OutputFileType::assembly)
