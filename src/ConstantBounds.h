@@ -34,6 +34,8 @@ ConstantInterval constant_integer_bounds(const Expr &e,
                                          std::map<Expr, ConstantInterval, ExprCompare> *cache = nullptr,
                                          const FuncValueBounds *func_bounds = nullptr);
 
+void constant_bounds_test();
+
 }  // namespace Internal
 }  // namespace Halide
 
