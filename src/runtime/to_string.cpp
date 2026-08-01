@@ -281,6 +281,10 @@ WEAK char *halide_type_to_string(char *dst, char *end, const halide_type_t *t) {
     case halide_type_bfloat:
         code_name = "bfloat";
         break;
+    case halide_type_struct:
+        // A struct's size lives in `reserved`, not `bits`; print the byte count.
+        dst = halide_string_to_string(dst, end, "struct");
+        return halide_uint64_to_string(dst, end, t->reserved, 1);
     default:
         code_name = "bad_type_code";
         break;

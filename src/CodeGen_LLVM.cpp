@@ -1078,7 +1078,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
     Constant *type_fields[] = {
         ConstantInt::get(i8_t, buf.type().code()),
         ConstantInt::get(i8_t, buf.type().bits()),
-        ConstantInt::get(i16_t, 0)};
+        ConstantInt::get(i16_t, buf.type().to_abi().reserved)};  // struct byte size, else 0
 
     Constant *shape = nullptr;
     if (buf.dimensions()) {
@@ -1273,7 +1273,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         Constant *type_fields[] = {
             ConstantInt::get(i8_t, args[arg].type.code()),
             ConstantInt::get(i8_t, args[arg].type.bits()),
-            ConstantInt::get(i16_t, 0)};  // reserved (formerly lanes); must be 0
+            ConstantInt::get(i16_t, args[arg].type.to_abi().reserved)};  // struct byte size, else 0
         Constant *type = ConstantStruct::get(type_t_type, type_fields);
 
         auto argument_estimates = args[arg].argument_estimates;
@@ -6031,6 +6031,9 @@ int CodeGen_LLVM::get_vector_num_elements(const llvm::Value *v) {
 llvm::Type *CodeGen_LLVM::llvm_type_of(LLVMContext *c, Halide::Type t,
                                        int effective_vscale) const {
     if (t.lanes() == 1) {
+        if (t.is_struct()) {
+            return llvm::ArrayType::get(llvm::Type::getInt8Ty(*c), t.bytes());
+        }
         if (t.is_float() && !t.is_bfloat()) {
             switch (t.bits()) {
             case 16:
