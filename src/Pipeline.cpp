@@ -8,6 +8,7 @@
 #include "FindCalls.h"
 #include "Func.h"
 #include "IRVisitor.h"
+#include "ImageParam.h"
 #include "InferArguments.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
@@ -229,6 +230,81 @@ vector<Func> Pipeline::outputs() const {
 
 std::vector<Internal::Stmt> Pipeline::requirements() const {
     return contents->requirements;
+}
+
+namespace {
+
+ComputeOfflineResult compute_offline_impl(const Pipeline &pipeline, const vector<Func> &to_sever,
+                                          const vector<ImageParam> *bind_to) {
+    vector<Function> output_funcs;
+    for (const Func &f : pipeline.outputs()) {
+        output_funcs.push_back(f.function());
+    }
+    std::map<string, Function> env = build_environment(output_funcs);
+
+    // Everything transitively reachable from to_sever (to_sever itself, plus
+    // anything only *it* depends on, e.g. a per-block reduction Func or a
+    // sibling encode() output one of to_sever's own definitions reads) is
+    // part of the offline half and must keep computing its true values --
+    // none of it should have its calls redirected to an online stand-in,
+    // even if it's also present in `env` because it used to be reachable
+    // from *this's outputs before severing.
+    vector<Function> to_sever_funcs;
+    to_sever_funcs.reserve(to_sever.size());
+    for (const Func &f : to_sever) {
+        to_sever_funcs.push_back(f.function());
+    }
+    std::map<string, Function> offline_env = build_environment(to_sever_funcs);
+
+    if (bind_to) {
+        user_assert(bind_to->size() == to_sever.size())
+            << "Pipeline::compute_offline(): bind_to has " << bind_to->size()
+            << " ImageParams, but to_sever has " << to_sever.size() << " Funcs\n";
+    }
+
+    std::map<FunctionPtr, FunctionPtr> substitutions;
+    vector<ImageParam> online_inputs;
+    online_inputs.reserve(to_sever.size());
+    for (size_t i = 0; i < to_sever.size(); i++) {
+        const Func &f = to_sever[i];
+        user_assert(f.types().size() == 1)
+            << "Pipeline::compute_offline() requires single-valued Funcs, but "
+            << f.name() << " has " << f.types().size() << " values\n";
+
+        ImageParam im = bind_to ? (*bind_to)[i] : ImageParam(f.types()[0], f.dimensions(), f.name() + "_im");
+        if (bind_to) {
+            user_assert(im.type() == f.types()[0] && im.dimensions() == f.dimensions())
+                << "Pipeline::compute_offline(): bind_to[" << i << "] (" << im.name()
+                << ") has type/dimensionality mismatched with " << f.name() << "\n";
+        }
+
+        Func stand_in(f.name() + "_offline_input");
+        vector<Var> args = f.args();
+        vector<Expr> args_as_exprs(args.begin(), args.end());
+        stand_in(args) = im(args_as_exprs);
+
+        substitutions[f.function().get_contents()] = stand_in.function().get_contents();
+        online_inputs.push_back(im);
+    }
+
+    for (auto &entry : env) {
+        if (offline_env.count(entry.first)) {
+            continue;
+        }
+        entry.second.substitute_calls(substitutions);
+    }
+
+    return {Pipeline(to_sever), std::move(online_inputs)};
+}
+
+}  // namespace
+
+ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever) {
+    return compute_offline_impl(*this, to_sever, nullptr);
+}
+
+ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever, const vector<ImageParam> &bind_to) {
+    return compute_offline_impl(*this, to_sever, &bind_to);
 }
 
 /* static */

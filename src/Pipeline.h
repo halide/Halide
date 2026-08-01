@@ -25,7 +25,9 @@ namespace Halide {
 struct Argument;
 class Callable;
 class Func;
+class ImageParam;
 struct PipelineContents;
+struct ComputeOfflineResult;
 
 /** Special the Autoscheduler to be used (if any), along with arbitrary
  * additional arguments specific to the given Autoscheduler.
@@ -209,6 +211,41 @@ public:
 
     /** Get the requirements of this pipeline. */
     std::vector<Internal::Stmt> requirements() const;
+
+    /** Rewrite every call to each Func in `to_sever`, anywhere in this
+     * Pipeline's transitive call graph, to instead call a fresh ImageParam
+     * of matching type and dimensionality -- severing this Pipeline's
+     * *computation* of `to_sever` (and anything only `to_sever` depended on)
+     * while preserving the shape contract those Funcs stood in for. This is
+     * eager and destructive, like rfactor()/approximate_by(): by the time
+     * this call returns, none of this Pipeline's outputs depend on
+     * `to_sever` for their computation, only for the shape the returned
+     * ImageParams must satisfy.
+     *
+     * This is the seam doc/ApproximationDesign.md calls "compute_offline":
+     * splicing it after a static weight quantizer's encode() step turns
+     * that quantization from something recomputed on every realize() into
+     * ordinary input data, supplied once from wherever `offline` was
+     * realized or compiled.
+     *
+     * v1 restriction: each Func in `to_sever` must be single-valued (no
+     * Tuples). */
+    ComputeOfflineResult compute_offline(const std::vector<Func> &to_sever);
+
+    /** Like compute_offline(const std::vector<Func> &) above, but binds each
+     * severed Func to a caller-supplied ImageParam instead of minting a
+     * fresh one -- e.g. a Generator's own Input<Buffer<>> (which converts to
+     * ImageParam implicitly), so the online half's severed input is exactly
+     * the port `configure()`/`add_input()` already declared, rather than an
+     * unrelated ImageParam nothing else in the compiled artifact knows
+     * about. `bind_to` must have the same length as `to_sever`, and each
+     * `bind_to[i]` must have the same type and dimensionality as
+     * `to_sever[i]`. `online_inputs` in the result is `bind_to` itself,
+     * returned for symmetry with the other overload -- callers that already
+     * have `bind_to` don't need it, but code generic over both overloads
+     * still gets a uniform result shape. */
+    ComputeOfflineResult compute_offline(const std::vector<Func> &to_sever,
+                                         const std::vector<ImageParam> &bind_to);
 
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
     AutoSchedulerResults apply_autoscheduler(const Target &target,
@@ -516,6 +553,17 @@ public:
 
 private:
     std::string generate_function_name() const;
+};
+
+/** The result of Pipeline::compute_offline(): `offline` computes exactly
+ * `to_sever`'s original values, unmodified -- realize it once (JIT) or
+ * compile it as its own artifact (AOT), then feed the result to
+ * `online_inputs` before realizing the pipeline compute_offline() was called
+ * on again. `online_inputs` has one ImageParam per element of `to_sever`, in
+ * the same order, with matching type and dimensionality. */
+struct ComputeOfflineResult {
+    Pipeline offline;
+    std::vector<ImageParam> online_inputs;
 };
 
 struct ExternSignature {
