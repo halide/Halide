@@ -203,7 +203,7 @@ const halide_buffer_t *Parameter::raw_buffer() const {
 void Parameter::set_buffer(const Buffer<> &b) {
     check_is_buffer();
     if (b.defined()) {
-        user_assert(contents->type == b.type())
+        user_assert(contents->type.is_compatible_for_buffer_bind(b.type()))
             << "Can't bind Parameter " << name()
             << " of type " << contents->type
             << " to Buffer " << b.name()

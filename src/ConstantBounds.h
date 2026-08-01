@@ -29,6 +29,8 @@ ConstantInterval constant_integer_bounds(const Expr &e,
                                          const Scope<ConstantInterval> &scope = Scope<ConstantInterval>::empty_scope(),
                                          std::map<Expr, ConstantInterval, ExprCompare> *cache = nullptr);
 
+void constant_bounds_test();
+
 }  // namespace Internal
 }  // namespace Halide
 

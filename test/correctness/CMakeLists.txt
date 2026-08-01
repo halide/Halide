@@ -174,6 +174,7 @@ tests(
     gpu_reuse_shared_memory.cpp
     gpu_specialize.cpp
     gpu_store_in_register_with_no_lanes_loop.cpp
+    gpu_struct_type.cpp
     gpu_sum_scan.cpp
     gpu_texture.cpp
     gpu_thread_barrier.cpp
@@ -349,6 +350,8 @@ tests(
     strict_float_bounds.cpp
     strict_fma.cpp
     strided_load.cpp
+    struct_type.cpp
+    struct_type_dot_product.cpp
     sve_codegen_predicated.cpp
     sve_codegen_reinterpret.cpp
     target.cpp

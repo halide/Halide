@@ -129,6 +129,8 @@ tests(
     store_root_without_compute_root.cpp
     stream_loads_illegal_self.cpp
     stream_stores_illegal_rvar.cpp
+    struct_nested_field_load.cpp
+    struct_nested_field_store.cpp
     thread_id_outside_block_id.cpp
     too_many_args.cpp
     treat_rvar_as_var.cpp
