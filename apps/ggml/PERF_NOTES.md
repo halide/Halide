@@ -8,13 +8,13 @@ on ARM (measured on an M3 Max). Branch `alexreinking/ggml-on-qk`, worktree
 
 Measured at n=4096, best of many runs (see "Measuring" below):
 
-| type | ggml-cpu | halide   | ratio | at session start |
-| ---- | -------- | -------- | ----- | ---------------- |
-| q4_0 | 94.2 ns  | 97.3 ns  | 0.97x | 0.52x            |
-| q4_1 | 106.7 ns | 133.8 ns | 0.80x | 0.03x            |
-| q5_0 | 122.2 ns | 241.7 ns | 0.51x | 0.38x            |
-| q5_1 | 143.4 ns | 288.1 ns | 0.50x | 0.04x            |
-| q8_0 | 71.9 ns  | 75.6 ns  | 0.95x | 0.61x            |
+| type | ggml-cpu | halide   | ratio | before stored-s |
+| ---- | -------- | -------- | ----- | --------------- |
+| q4_0 | 87.8 ns  | 90.7 ns  | 0.97x | 0.97x           |
+| q4_1 | 106.7 ns | 110.2 ns | 0.97x | 0.80x           |
+| q5_0 | 115.6 ns | 225.3 ns | 0.51x | 0.51x           |
+| q5_1 | 133.5 ns | 207.8 ns | 0.64x | 0.50x           |
+| q8_0 | 69.1 ns  | 70.4 ns  | 0.98x | 0.95x           |
 
 Everything else in the table is still on the unscheduled float path
 (0.01x-0.12x) and untouched. All 28 roundtrip tests pass; `kernel-bench --all`
@@ -31,17 +31,30 @@ Commits, oldest first:
 
 ## Uncommitted
 
-`apps/ggml/halide/vec_dot_generator_base.h` has a probe branch guarded by
-`getenv("GGML_PER_BLOCK_PROBE")` -- "variant A", the per-block (single rfactor)
-schedule. It exists only to measure; delete it or keep it as the base for the
-next step (see below). The default path is unchanged and measures as above.
+The stored-block-sum work (see "The stored block sum" below) is implemented and
+uncommitted. Touched files:
+
+- `halide/vec_dot_generator_base.h` -- the `sever_sum` branch (default for
+  affine x Q8_1), the third `s_blocks` Input, its pinned fp16 stride.
+- `halide/quant_components.h` -- `SchemeAndBytes::has_block_sums`, set by
+  `make_symmetric_byte_sum_block_scheme`.
+- `halide/symmetric_vec_dot_generator.cpp` -- captures the flag into
+  `VecDotSpec::act_has_block_sums`.
+- `halide/ggml_quants.cpp` -- `StackBuffer::blocks_field_f16` + the q4_1/q5_1
+  wrappers passing the `s` view (q5_1 also moved off `Buffer` onto
+  `StackBuffer`).
+
+The `getenv("GGML_PER_BLOCK_PROBE")` branch (original "variant A" via
+`sdot_partial`) is kept, now reachable only for the *symmetric* SDOT formats
+(q4_0/q8_0/q5_0) -- a dev aid to measure per-block vs the lane-split default.
+The affine formats reach `sever_sum` first and never see it.
 
 Note the generator reads the env var at *generator run time*, so changing it
 does not invalidate ninja's outputs. Force regeneration:
 
 ```sh
-rm -f build/apps/ggml/halide/q4_1_vec_dot.o build/apps/ggml/halide/libq4_1_vec_dot.a
-GGML_PER_BLOCK_PROBE=1 cmake --build build/apps/ggml -j --target q4_1_vec_dot
+rm -f build/apps/ggml/halide/q4_0_vec_dot.o build/apps/ggml/halide/libq4_0_vec_dot.a
+GGML_PER_BLOCK_PROBE=1 cmake --build build/apps/ggml -j --target q4_0_vec_dot
 cmake --build build/apps/ggml -j
 ```
 
@@ -174,104 +187,80 @@ to 133.8 ns / 0.80x.
   `change_type` to grow multi-output support. Fusing the terms' loop nests is
   `compute_with`'s job.
 
-## Next step: the stored block sum
+## The stored block sum -- DONE (q4_1 0.97x)
 
 ggml does *not* recompute `sum(act)` at vec_dot time -- it reads the `s` field
 that `block_q8_1` stores at quantize time
 (`{ggml_half d; ggml_half s; int8_t qs[32]}`, 36 bytes). Our Q8_1 codec already
 computes that field (`AppendSums{block_size, SumMode::ScaledFloat}` in
-`make_symmetric_byte_sum_block_scheme`).
+`make_symmetric_byte_sum_block_scheme`). We now sever the offset term's
+accumulator straight to it via `compute_offline`, which needs no new Halide
+directive: its contract already *is* this claim -- sever a Func's computation,
+replace calls with an ImageParam read, discard the recomputing reduction.
 
-**This needs no new Halide directive.** `compute_offline`'s contract already
-*is* this claim: it severs a Func's computation, replaces calls with an
-ImageParam read, and hands back an `offline` Pipeline that computes exactly
-those values -- which for Q8_1 is the quantizer that writes `s`. Same claim
-already made for the packed codes. Proven end to end in a standalone probe:
+**Result: variant A + sever measured 110.2 ns / 0.97x** (q5_1: 208 ns / 0.64x).
+This *matched* the lane-split+sever projection, so the second route below
+(teaching `distribute()` to split into separate update definitions for per-term
+rfactors) is **not needed** -- skip it. All correct: 28 roundtrips,
+`kernel-bench --all` clean, odd tails at n = 32/96/160/224/1056.
 
-```
-accumulators: 2
-inner accumulator type: int32
-reference = -1535.121338
-severed   = -1535.112305  (rel err 5.88e-06)
-```
+The recipe, as implemented in `vec_dot_generator_base.h`'s `sever_sum` branch
+(reached when `distribute_terms && act_has_block_sums`, i.e. affine x Q8_1):
 
-The recipe that works:
+1. `acc_dot = Acc.update().rfactor({{r.y, u}})` -- whole-block partials (variant
+   A). Inline **only the weight's** decode chain (replacement + inlinable
+   handles, multi-pass), leaving the activation decode `Act`
+   (`act_r.replacement`) whole. `distribute()`, then `hoist_invariants()`. The
+   offset term's accumulator body is then `Act(r.x, u)`, so the accumulator *is*
+   `sum_k decode_act(k, blk)` = the stored `s`.
+2. `parts[1].change_type(Float(16))` -- makes the severed Func's type match the
+   data. Faithful: the encoder rounds `s` to fp16 too (the ~6e-06 rel err is
+   exactly that rounding, same as ggml's).
+3. `Pipeline({Acc}).compute_offline({s16}, {s_blocks})` -- second
+   `compute_offline` on the pipeline (the first, at configure top, severs the
+   encode halves to x_blocks/y_blocks). `s_blocks` is the third Input.
+4. Product term: inline `Act`'s **full** chain into `parts[0]` (one Act
+   eager_inline is not enough -- the chain has intermediate levels, and a single
+   inline leaves the second hoist with no visible d_act factor and it errors),
+   re-`hoist_invariants()` to pull d_act out, `change_type(Int(32))` -- the
+   survivor reaches SDOT. Verified: 8 `sdot` in the `.s`; writeback is
+   `d_w*(d_act*int32_dot) + m_w*s_blocks[blk]`, ggml's exact decomposition, with
+   no `sum(act)` reduction left anywhere in the stmt.
 
-1. Leave the **activation decode un-inlined** through `distribute()` and the
-   first hoist, so the offset term's accumulator body is exactly `Act(r.x, u)`
-   and the accumulator *is* `sum_k decode_act(k, blk)`. (`sdot_partial()`
-   currently eager-inlines both operands' whole decode chains; for this path it
-   must inline the weight's only.)
-2. `parts[1].change_type(Float(16))` -- the stored field is fp16, and this is
-   what makes the severed Func's type match the data. Faithful: the encoder
-   rounds to fp16 too. The 5.9e-06 error above is that rounding, same as ggml's.
-3. `Pipeline({Acc}).compute_offline({sum16}, {stored_param})`.
-4. `parts[0].update().eager_inline({Act})` then hoist again to pull the
-   activation scale out, then `change_type(Int(32))` -- the survivor still
-   reaches SDOT.
+Plumbing (all landed, see Uncommitted):
 
-**The structural conflict.** The two terms need different rfactors:
+- `s_blocks`: 1-D `Float(16)` Input, `dim(0).set_stride(act_bytes/2)` (= 18 for
+  Q8_1) -- pinning it makes the read an immediate offset, *and* is required:
+  left dynamic, Halide's default constrains the innermost stride to 1 and the
+  bound-check fails against the strided view.
+- ABI: `StackBuffer::blocks_field_f16(base, nb, byte_offset=2, block_bytes=36)`
+  -- a zero-copy fp16 view of the `s` slot, stride `block_bytes/2`.
+- Format knowledge lives with the codec: `SchemeAndBytes::has_block_sums` set by
+  `make_symmetric_byte_sum_block_scheme`, carried to
+  `VecDotSpec::act_has_block_sums` (guarded `&& a_nat == wbs`, so a Reblock'd
+  activation stays off it).
 
-| term            | preserved dims        | why                                                                                 |
-| --------------- | --------------------- | ----------------------------------------------------------------------------------- |
-| `sum(code*act)` | `{rxo->lane, r.y->u}` | the lane split is the q4_0/q8_0 win                                                 |
-| `sum(act)`      | `{r.y->u}` only       | must be the *whole-block* sum to equal `s`; lane-split gives four per-lane partials |
-
-One update definition can only be rfactored one way, and `distribute()` +
-`hoist_invariants()` produce two accumulator Funcs from a *single* update, so
-both inherit its rfactor.
-
-**Measured cost of each way out** (this is the important part -- an earlier
-estimate that this was net-zero was wrong):
-
-| structure             | q4_0 (1 accumulator) | q4_1 (2 accumulators) | cost of the 2nd |
-| --------------------- | -------------------- | --------------------- | --------------- |
-| lane-split (current)  | 97.3 ns              | 133.8 ns              | 36.5 ns         |
-| per-block (variant A) | 105.7 ns             | 169.9 ns              | 64.2 ns         |
-
-The per-block structure costs only **+8.4 ns** on the base (97.3 -> 105.7). Most
-of the apparent 30.8 ns q4_1 penalty is the second accumulator getting more
-expensive -- exactly what severing removes. ggml's own q4_1 - q4_0 delta is
-**12.6 ns**, which is what a well-scheduled stored-`s` offset term costs.
-
-So:
-
-| route              | projection                 | ratio  | machinery                            |
-| ------------------ | -------------------------- | ------ | ------------------------------------ |
-| today              | 133.8 ns                   | 0.80x  | --                                   |
-| variant A + sever  | ~105.7 + 12.6 = **118 ns** | ~0.90x | severing plumbing only               |
-| lane-split + sever | ~97.3 + 12.6 = **110 ns**  | ~0.97x | + distribute-into-update-definitions |
-
-`compute_with` **is** verified to fuse a lane-split reduction with a block-only
-one over the same block loop (probe: one block-group loop, correct result),
-using `LoopAlignStrategy::AlignStart` and *matching split-variable names* -- the
-loop variables must be named identically in both stages or it errors with
-"cannot find <var> in <stage>".
-
-**Recommended order:** build the severing plumbing on variant A first (it is
-shared by both routes), measure the real number, then decide whether the last ~8
-ns justifies teaching `distribute()` to split into separate update definitions
-so each term can be rfactored on its own.
-
-Plumbing still to write:
-
-- A third generator input: 1-D `Float(16)` ImageParam for the block sums.
-- The ABI wrapper passes a zero-copy view of the `s` field: `host = base + 2`,
-  1-D, extent `nb`, **stride 18 in fp16 units** (= 36 bytes). `StackBuffer` in
-  `ggml_quants.cpp` already builds `halide_buffer_t`s in place; add a
-  `blocks_field_f16` helper.
-- Where the "this activation stores its block sums" knowledge lives. It is
-  format knowledge, so it belongs with the codec --
-  `make_symmetric_byte_sum_block_scheme` is the Approximation construction site,
-  and `SchemeAndBytes`/`VecDotSpec` is the natural carrier. Do not put it in the
-  generator's schedule block.
+**The structural conflict (why variant A, not lane-split).** The two terms want
+different rfactors: `sum(code*act)` wants `{rxo->lane, r.y->u}` (the lane split
+is the q4_0/q8_0 win); `sum(act)` must be the *whole-block* sum to equal `s`, so
+`{r.y->u}` only. One update rfactors one way. Variant A gives both `{r.y->u}`;
+severing then deletes the offset accumulator entirely, so its per-lane-partial
+problem never arises -- and the surviving product dot, alone in its block loop,
+schedules close enough to the lane-split base that the ~8 ns gap projected
+between the routes did not materialize. `compute_with` (verified to fuse a
+lane-split with a block-only reduction using `AlignStart` + matching split-var
+names) is therefore unnecessary here; keep it in mind for formats that keep two
+live accumulators.
 
 ## Not started
 
-q5_0 (0.51x) and q5_1 (0.50x) are on the SDOT path but well behind; the 5-bit
-high bit comes from a separate 4-byte field and the reconstruction may not be
-folding into the codes leaf as cleanly as q4_0's nibble unpack. Everything else
-(k-quants, IQ family, tq\*) is still on the default unscheduled float reduction
-and would benefit from the same treatment as q4_1 -- the k-quants' two-level
-scales are also sums of scaled sub-reductions, which is what `distribute()` was
-built for.
+q5_0 (0.51x) and q5_1 (0.64x) are on the SDOT path but well behind. q5_1 got the
+stored-`s` sever above (0.50x -> 0.64x), so its *offset* term is now free --
+what remains is the **5-bit product term**, which it shares with q5_0 (unmoved
+at 0.51x). The 5-bit high bit comes from a separate 4-byte field and the
+reconstruction may not be folding into the codes leaf as cleanly as q4_0's
+nibble unpack; that leaf, not the offset, is the q5_x bottleneck now. Everything
+else (k-quants, IQ family, tq\*) is still on the default unscheduled float
+reduction and would benefit from the same treatment as q4_1 -- the k-quants'
+two-level scales are also sums of scaled sub-reductions, which is what
+`distribute()` was built for.
