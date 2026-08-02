@@ -65,6 +65,12 @@ struct VecDotSpec {
     // activation) just leaves its type unset.
     Halide::Type weight_type;
     Halide::Type act_type;
+    // Set when the activation stores a per-block scaled sum of its codes (Q8_1's
+    // `s` field). Together with distribute_terms (an affine weight), this lets
+    // configure() sever the offset term's sum(act) accumulator to a stored fp16
+    // field supplied as a third Input, instead of recomputing it -- ggml's own
+    // q4_1/q5_1 optimization. See SchemeAndBytes::has_block_sums.
+    bool act_has_block_sums = false;
 };
 
 template<typename Derived>
@@ -86,6 +92,15 @@ public:
         const bool act_struct = spec.act_type.is_struct();
         ImageParam x_blocks = wt_struct ? ImageParam(spec.weight_type, 1, "x_blocks") : ImageParam(UInt(8), 2, "x_blocks");
         ImageParam y_blocks = act_struct ? ImageParam(spec.act_type, 1, "y_blocks") : ImageParam(UInt(8), 2, "y_blocks");
+
+        // Third Input, present only for the affine-x-Q8_1 pairings: the
+        // activation's stored per-block scaled code sum (`s`). configure() severs
+        // the offset term's sum(act) accumulator to this field rather than
+        // recomputing it -- a zero-copy 1-D fp16 view of the `s` slot the ABI
+        // wrapper passes (stride = block width). See the SDOT sever branch below.
+        const bool sever_sum = spec.sched == ScheduleKind::SDOT &&
+                               spec.distribute_terms && spec.act_has_block_sums;
+        ImageParam s_blocks = sever_sum ? ImageParam(Float(16), 1, "s_blocks") : ImageParam();
 
         // The packed-block buffers are quantized GGML rows: their base pointers
         // are cache-line aligned. Without this Halide assumes 1-byte alignment
@@ -151,7 +166,86 @@ public:
             }
         }
 
-        if (spec.sched == ScheduleKind::SDOT) {
+        if (sever_sum) {
+            // Affine weight x Q8_1: the per-block product (d*code + m)*(d_act*act)
+            // distributes into d*d_act*sum(code*act) + m*d_act*sum(act). ggml does
+            // not recompute the second sum -- it reads the `s` field Q8_1 stores.
+            // We do the same by severing that term's accumulator to the stored
+            // field (the third Input, s_blocks), leaving only the Int(32) dot.
+            //
+            // rfactor to whole-block partials (variant A), inlining only the
+            // WEIGHT's decode chain so the activation decode (Act) stays whole:
+            // the offset term's accumulator is then sum_k Act(k, blk), which *is*
+            // the stored `s`. The product term re-inlines Act's full chain and
+            // re-hoists to recover the scale-free Int(32) dot.
+            Func acc_dot = Acc.update().rfactor({{r.y, u}});
+
+            std::vector<Func> winl = {wt_r.replacement};
+            for (const Func &h : wt_r.handles) {
+                if (h.function().can_be_inlined()) {
+                    winl.push_back(h);
+                }
+            }
+            for (size_t pass = 0; pass < winl.size(); pass++) {
+                acc_dot.update().eager_inline(winl);
+            }
+
+            acc_dot.update().distribute();
+            std::vector<Func> parts = acc_dot.update().hoist_invariants();
+            // parts[0] = product term (scale * sum code_w*Act); parts[1] = offset
+            // term (min * sum Act == stored s).
+
+            // Sever the offset term to the stored fp16 field. change_type(Float16)
+            // makes the severed accumulator's type match the data (the encoder
+            // rounds `s` to fp16 too, so this reproduces ggml's own rounding);
+            // compute_offline then replaces every call to it with a read of
+            // s_blocks and discards the recomputing reduction.
+            Func s16 = parts[1].change_type(Float(16));
+            Pipeline({Acc}).compute_offline({s16}, {s_blocks});
+
+            // Product term: flatten the activation's full decode chain and
+            // re-hoist to pull d_act out, leaving the scale-free Int(32) dot.
+            std::vector<Func> ainl = {act_r.replacement};
+            for (const Func &h : act_r.handles) {
+                if (h.function().can_be_inlined()) {
+                    ainl.push_back(h);
+                }
+            }
+            for (size_t pass = 0; pass < ainl.size(); pass++) {
+                parts[0].update().eager_inline(ainl);
+            }
+            Func prod_i32 = parts[0].update().hoist_invariants()[0].change_type(Int(32));
+
+            RVar ryo("ryo"), ryi("ryi");
+            Var bacc("bacc");
+            Acc.update(0).split(r.y, ryo, ryi, kUnrollBlocks);
+            Func acc_vec = Acc.update(0).rfactor(ryi, bacc);
+            acc_vec.compute_root().unroll(bacc);
+            acc_vec.update().unroll(bacc);
+
+            // Only the product dot is computed per block now; the offset term is
+            // a severed read of s_blocks (nothing to schedule).
+            prod_i32.compute_at(acc_vec, bacc).update().atomic().vectorize(r.x, bs);
+            Acc.update(1).unscheduled();
+        } else if (spec.sched == ScheduleKind::SDOT && getenv("GGML_PER_BLOCK_PROBE")) {
+            // PROBE (variant A): rfactor only the block index, so both terms are
+            // whole-block reductions. Costs a horizontal reduce per block and a
+            // scalar cross-block accumulator; kept for measuring the non-sum
+            // formats against the lane-split default below.
+            std::vector<Func> parts = sdot_partial(Acc, {{r.y, u}}, {wt_r, act_r}, spec.distribute_terms);
+
+            RVar ryo("ryo"), ryi("ryi");
+            Var bacc("bacc");
+            Acc.update(0).split(r.y, ryo, ryi, kUnrollBlocks);
+            Func acc_vec = Acc.update(0).rfactor(ryi, bacc);
+            acc_vec.compute_root().unroll(bacc);
+            acc_vec.update().unroll(bacc);
+
+            for (Func &part : parts) {
+                part.compute_at(acc_vec, bacc).update().atomic().vectorize(r.x, bs);
+            }
+            Acc.update(1).unscheduled();
+        } else if (spec.sched == ScheduleKind::SDOT) {
             // The reduction is over (within-block r.x) x (block r.y). The lanes
             // of the accumulator come from r.x, so the sdot's four Int(32) lanes
             // survive all the way into the float accumulator and no block pays
@@ -243,9 +337,19 @@ public:
             y_blocks.dim(0).set_bounds(0, spec.act_bytes);
             y_blocks.dim(1).set_min(0).set_stride(spec.act_bytes);
         }
+        if (sever_sum) {
+            // A gathered view of the `s` slot within each packed block: the field
+            // repeats every act_bytes, so the fp16 stride is act_bytes/2 (18 for
+            // Q8_1's 36-byte block). Pinning it makes the per-block read a
+            // compile-time immediate offset rather than a dynamic pointer chain.
+            s_blocks.dim(0).set_min(0).set_stride(spec.act_bytes / 2);
+        }
 
         this->add_input(x_blocks);
         this->add_input(y_blocks);
+        if (sever_sum) {
+            this->add_input(s_blocks);
+        }
         this->add_output(result);
     }
 
