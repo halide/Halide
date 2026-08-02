@@ -53,6 +53,11 @@ struct VecDotSpec {
     int act_bytes;
     int block_size;
     ScheduleKind sched;
+    // Whether the SDOT schedule must multiply the per-block product out before
+    // hoisting. Set for the formats whose weight decode carries an offset (the
+    // affine family): (d*code + m) * (d_act*act) has no single scale to hoist
+    // until it is expanded. See sdot_schedule.h.
+    bool distribute_terms;
     // When set (is_struct()), the corresponding operand's packed blocks are a
     // first-class 1-D Type::Struct buffer (one struct per block) rather than a
     // 2-D (byte, blk) UInt(8) buffer. Default-invalid keeps a codec on the byte
@@ -172,7 +177,7 @@ public:
             // their per-block scales out of the surviving rxi reduction, leaving
             // the scale-free Int(32) dot. See sdot_schedule.h.
             Var lane("lane");
-            Func Acc_i32 = sdot_partial(Acc, {{rxo, lane}, {r.y, u}}, {wt_r, act_r});
+            Func Acc_i32 = sdot_partial(Acc, {{rxo, lane}, {r.y, u}}, {wt_r, act_r}, spec.distribute_terms);
 
             // Acc's update now reduces over (rxo, r.y). Peel rxo back off as the
             // vector lanes, and peel kUnrollBlocks consecutive blocks off
