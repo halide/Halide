@@ -37,10 +37,10 @@ namespace ggml_halide {
 // it is d*d_act * sum(code*act) + m*d_act * sum(act), and hoist_invariants()
 // gives each term its own accumulator -- both with integer bodies, so both reach
 // SDOT. That is ggml's own decomposition of the affine formats.
-inline Halide::Func sdot_partial(Halide::Func &acc,
-                                 const std::vector<std::pair<Halide::RVar, Halide::Var>> &preserved,
-                                 const std::vector<Halide::ApproximationResult> &operands,
-                                 bool distribute = false) {
+inline std::vector<Halide::Func> sdot_partial(Halide::Func &acc,
+                                              const std::vector<std::pair<Halide::RVar, Halide::Var>> &preserved,
+                                              const std::vector<Halide::ApproximationResult> &operands,
+                                              bool distribute = false) {
     using namespace Halide;
 
     Func acc_dot = acc.update().rfactor(preserved);
@@ -63,8 +63,15 @@ inline Halide::Func sdot_partial(Halide::Func &acc,
     if (distribute) {
         acc_dot.update().distribute();
     }
-    Func acc_ff = acc_dot.update().hoist_invariants();
-    return acc_ff.change_type(Int(32));
+
+    // One accumulator per term -- one for a symmetric weight, two once an affine
+    // weight's product has been multiplied out. Each is its own Func, so each
+    // retypes on its own.
+    std::vector<Func> parts;
+    for (Func &part : acc_dot.update().hoist_invariants()) {
+        parts.push_back(part.change_type(Int(32)));
+    }
+    return parts;
 }
 
 }  // namespace ggml_halide
