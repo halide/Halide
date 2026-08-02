@@ -164,6 +164,16 @@ struct StackBuffer {
         return init(data, 2);
     }
 
+    // A gathered 1-D fp16 view of one field within each packed block -- e.g.
+    // Q8_1's stored `s` (scaled code sum) at byte_offset 2 of its 36-byte block.
+    // Zero-copy: the field repeats every block_bytes, so the fp16 stride is
+    // block_bytes/2. Used to sever a stored per-block quantity into a vec_dot.
+    halide_buffer_t *blocks_field_f16(const void *base, int nb, int byte_offset, int block_bytes) {
+        buf.type = halide_type_t(halide_type_float, 16);
+        dims[0] = {0, nb, block_bytes / 2, 0};  // stride in fp16 units
+        return init(static_cast<const uint8_t *>(base) + byte_offset, 1);
+    }
+
     // The 0-D float32 result.
     halide_buffer_t *scalar_f32(float *data) {
         buf.type = halide_type_t(halide_type_float, 32);
@@ -240,9 +250,10 @@ void ggml_quants_halide_vec_dot_q4_1_q8_1(int n, float *s, size_t bs, const void
                                           size_t by, int nrc) {
     constexpr int kQK = 32, kBlockBytesX = 4 + kQK / 2, kBlockBytesY = 4 + kQK;
     const int32_t nb = static_cast<int32_t>(n / kQK);
-    StackBuffer xb, yb, result;
+    StackBuffer xb, yb, sb, result;
     check(q4_1_vec_dot(xb.blocks_bytes(vx, nb, kBlockBytesX),
                        yb.blocks_bytes(vy, nb, kBlockBytesY),
+                       sb.blocks_field_f16(vy, nb, 2, kBlockBytesY),  // Q8_1 stored `s`
                        result.scalar_f32(s)),
           "q4_1_vec_dot");
 }
@@ -307,12 +318,12 @@ void ggml_quants_halide_vec_dot_q5_1_q8_1(int n, float *s, size_t bs, const void
                                           size_t by, int nrc) {
     constexpr int kQK = 32, kBlockBytesX = 4 + 4 + kQK / 2, kBlockBytesY = 4 + kQK;
     const int32_t nb = static_cast<int32_t>(n / kQK);
-    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
-    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
-    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
-    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
-    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
-    check(q5_1_vec_dot(xb, yb, result), "q5_1_vec_dot");
+    StackBuffer xb, yb, sb, result;
+    check(q5_1_vec_dot(xb.blocks_bytes(vx, nb, kBlockBytesX),
+                       yb.blocks_bytes(vy, nb, kBlockBytesY),
+                       sb.blocks_field_f16(vy, nb, 2, kBlockBytesY),  // Q8_1 stored `s`
+                       result.scalar_f32(s)),
+          "q5_1_vec_dot");
 }
 
 //
