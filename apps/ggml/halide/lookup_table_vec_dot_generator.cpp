@@ -62,15 +62,12 @@ public:
         switch (family.value()) {
         case Family::IQ4_NL:
             // 4-bit codebook, single fp16 scale x Q8_0: single per-block scale
-            // and int8 codebook values -> SDOT-eligible in principle. See the
-            // TODO in symmetric_vec_dot_generator.cpp: mature hoist_invariants()
-            // can't lift the scale through approximate_by()'s round-trip
-            // replacement, so use the correct Float schedule for now.
-            return {make_iq4_nl_scheme(Layout::BlockIndexed).scheme, 18, q8_0_codec(), 34, 32, ScheduleKind::Float};
+            // and int8 codebook values -> SDOT-eligible (the base header's
+            // deep-inline SDOT exposes the scale even through the codebook LUT).
+            return {make_iq4_nl_scheme(Layout::BlockIndexed).scheme, 18, q8_0_codec(), 34, 32, ScheduleKind::SDOT};
         case Family::MXFP4:
-            // Same single-scale codebook shape as IQ4_NL (E8M0 scale) x Q8_0;
-            // same SDOT/hoist_invariants limitation -> Float for now.
-            return {make_mxfp4_scheme(Layout::BlockIndexed).scheme, 17, q8_0_codec(), 34, 32, ScheduleKind::Float};
+            // Same single-scale codebook shape as IQ4_NL (E8M0 scale) x Q8_0.
+            return {make_mxfp4_scheme(Layout::BlockIndexed).scheme, 17, q8_0_codec(), 34, 32, ScheduleKind::SDOT};
         case Family::NVFP4:
             // 64-element block (4 sub-scales) x Q8_0 (32-block): the activation
             // is Reblocked 32 -> 64 so both share the weight's block. Sub-block
