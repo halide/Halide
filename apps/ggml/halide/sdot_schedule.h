@@ -21,6 +21,8 @@
 
 #include "Halide.h"
 
+#include <algorithm>
+#include <string>
 #include <vector>
 
 namespace ggml_halide {
@@ -37,13 +39,25 @@ namespace ggml_halide {
 // it is d*d_act * sum(code*act) + m*d_act * sum(act), and hoist_invariants()
 // gives each term its own accumulator -- both with integer bodies, so both reach
 // SDOT. That is ggml's own decomposition of the affine formats.
+// `keep_out` names decode-chain Funcs that must NOT be flattened -- a caller
+// that has scheduled one as a materialization boundary (e.g. Q5_x's
+// reconstructed `combine_bits_code`, computed once per block so its qh
+// byte->bits table read is a contiguous load instead of a per-lane gather).
+// can_be_inlined() only checks purity, so a compute_root schedule alone does not
+// stop eager_inline from flattening it; excluding it here does. The scale still
+// hoists past it, since it stays an opaque r.x-dependent factor of the product.
 inline std::vector<Halide::Func> sdot_partial(Halide::Func &acc,
                                               const std::vector<std::pair<Halide::RVar, Halide::Var>> &preserved,
                                               const std::vector<Halide::ApproximationResult> &operands,
-                                              bool distribute = false) {
+                                              bool distribute = false,
+                                              const std::vector<std::string> &keep_out = {}) {
     using namespace Halide;
 
     Func acc_dot = acc.update().rfactor(preserved);
+
+    auto excluded = [&](const Func &f) {
+        return std::find(keep_out.begin(), keep_out.end(), f.name()) != keep_out.end();
+    };
 
     std::vector<Func> decode_funcs;
     for (const ApproximationResult &op : operands) {
@@ -51,7 +65,7 @@ inline std::vector<Halide::Func> sdot_partial(Halide::Func &acc,
     }
     for (const ApproximationResult &op : operands) {
         for (const Func &h : op.handles) {
-            if (h.function().can_be_inlined()) {
+            if (h.function().can_be_inlined() && !excluded(h)) {
                 decode_funcs.push_back(h);
             }
         }
