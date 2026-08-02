@@ -53,6 +53,13 @@ struct VecDotSpec {
     int act_bytes;
     int block_size;
     ScheduleKind sched;
+    // When set (is_struct()), the corresponding operand's packed blocks are a
+    // first-class 1-D Type::Struct buffer (one struct per block) rather than a
+    // 2-D (byte, blk) UInt(8) buffer. Default-invalid keeps a codec on the byte
+    // path -- so an operand whose codec isn't struct-typed (e.g. a Reblock'd
+    // activation) just leaves its type unset.
+    Halide::Type weight_type;
+    Halide::Type act_type;
 };
 
 template<typename Derived>
@@ -63,9 +70,12 @@ public:
         VecDotSpec spec = static_cast<Derived *>(this)->build_vec_dot();
         int bs = spec.block_size;
 
-        // dim 0: byte-within-block, dim 1: block index.
-        ImageParam x_blocks(UInt(8), 2, "x_blocks");  // weight format
-        ImageParam y_blocks(UInt(8), 2, "y_blocks");  // activation format
+        // A struct-typed operand's packed blocks are a 1-D Type::Struct buffer
+        // (block index only); a byte-path operand is 2-D (byte, blk).
+        const bool wt_struct = spec.weight_type.is_struct();
+        const bool act_struct = spec.act_type.is_struct();
+        ImageParam x_blocks = wt_struct ? ImageParam(spec.weight_type, 1, "x_blocks") : ImageParam(UInt(8), 2, "x_blocks");
+        ImageParam y_blocks = act_struct ? ImageParam(spec.act_type, 1, "y_blocks") : ImageParam(UInt(8), 2, "y_blocks");
 
         // Naive fp32 placeholders -- never realized; compute_offline() severs
         // Acc from them entirely, and the real values come from the
@@ -76,7 +86,7 @@ public:
         Wt(kk, blk) = 0.0f;
         Vec(kk, blk) = 0.0f;
 
-        RDom r(0, bs, 0, x_blocks.dim(1).extent(), "r");
+        RDom r(0, bs, 0, x_blocks.dim(wt_struct ? 0 : 1).extent(), "r");
         Func Acc("acc");
         Acc() = 0.0f;
         Acc() += Wt(r.x, r.y) * Vec(r.x, r.y);
@@ -125,10 +135,18 @@ public:
         Func result("result");
         result() = Acc();
 
-        x_blocks.dim(0).set_bounds(0, spec.weight_bytes);
-        x_blocks.dim(1).set_min(0);
-        y_blocks.dim(0).set_bounds(0, spec.act_bytes);
-        y_blocks.dim(1).set_min(0);
+        if (wt_struct) {
+            x_blocks.dim(0).set_min(0);
+        } else {
+            x_blocks.dim(0).set_bounds(0, spec.weight_bytes);
+            x_blocks.dim(1).set_min(0);
+        }
+        if (act_struct) {
+            y_blocks.dim(0).set_min(0);
+        } else {
+            y_blocks.dim(0).set_bounds(0, spec.act_bytes);
+            y_blocks.dim(1).set_min(0);
+        }
 
         this->add_input(x_blocks);
         this->add_input(y_blocks);
