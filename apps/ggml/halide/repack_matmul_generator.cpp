@@ -145,7 +145,7 @@ public:
         // single per-block-invariant factor, so they keep the default schedule.
         if (!kq) {
             Var u("u");
-            Func s_i32 = sdot_partial(s, {{r.y, u}}, {wr, ar});
+            Func s_i32 = sdot_partial(s, {{r.y, u}}, {wr, ar})[0];
             s_i32.compute_root().update().atomic().vectorize(r.x, block_size);
         }
 
@@ -255,7 +255,7 @@ public:
         // default schedule. See sdot_schedule.h.
         if (!is_kquant(family)) {
             Var u("u");
-            Func s_i32 = sdot_partial(s, {{r.y, u}}, {wr, ar});
+            Func s_i32 = sdot_partial(s, {{r.y, u}}, {wr, ar})[0];
             s_i32.compute_root().update().atomic().vectorize(r.x, block_size);
         }
 
