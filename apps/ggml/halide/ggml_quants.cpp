@@ -136,6 +136,49 @@ Halide::Runtime::Buffer<void, 1> struct_block_buffer(const void *data, int nb, i
     return Halide::Runtime::Buffer<void, 1>(ty, const_cast<void *>(data), 1, shape);
 }
 
+// vec_dot is called once per output element of a matvec, so the argument
+// marshalling is not amortized over anything: at the row lengths GGML actually
+// uses, building three Halide::Runtime::Buffers costs about as much as the dot
+// product itself. These kernels know their shapes exactly, so the vec_dot
+// wrappers below fill a halide_buffer_t in place instead. (The quantize /
+// dequantize / gemv wrappers stay on Buffer -- they run over whole rows or
+// tiles, where the difference is noise.)
+struct StackBuffer {
+    halide_buffer_t buf{};
+    halide_dimension_t dims[2]{};
+
+    // Packed blocks as a 1-D Type::Struct buffer: one struct per block, with the
+    // block width in the type's `reserved` field (see Halide::Type::to_abi()).
+    halide_buffer_t *blocks_struct(const void *data, int nb, int block_bytes) {
+        buf.type = halide_type_t(halide_type_struct, 8);
+        buf.type.reserved = static_cast<uint16_t>(block_bytes);
+        dims[0] = {0, nb, 1, 0};
+        return init(data, 1);
+    }
+
+    // Packed blocks as a 2-D (byte, block) UInt(8) buffer.
+    halide_buffer_t *blocks_bytes(const void *data, int nb, int block_bytes) {
+        buf.type = halide_type_t(halide_type_uint, 8);
+        dims[0] = {0, block_bytes, 1, 0};
+        dims[1] = {0, nb, block_bytes, 0};
+        return init(data, 2);
+    }
+
+    // The 0-D float32 result.
+    halide_buffer_t *scalar_f32(float *data) {
+        buf.type = halide_type_t(halide_type_float, 32);
+        return init(data, 0);
+    }
+
+private:
+    halide_buffer_t *init(const void *data, int dimensions) {
+        buf.host = const_cast<uint8_t *>(static_cast<const uint8_t *>(data));
+        buf.dimensions = dimensions;
+        buf.dim = dimensions ? dims : nullptr;
+        return &buf;
+    }
+};
+
 }  // namespace
 
 extern "C" {
@@ -164,11 +207,11 @@ void ggml_quants_halide_vec_dot_q4_0_q8_0(int n, float *s, size_t bs, const void
                                           size_t by, int nrc) {
     constexpr int kQK = 32, kBlockBytesX = 2 + kQK / 2, kBlockBytesY = 2 + kQK;
     const int32_t nb = static_cast<int32_t>(n / kQK);
-    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
-    auto xb = struct_block_buffer(vx, nb, kBlockBytesX);  // weight: struct-typed
-    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
-    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
-    check(q4_0_vec_dot(xb, yb, result), "q4_0_vec_dot");
+    StackBuffer xb, yb, result;
+    check(q4_0_vec_dot(xb.blocks_struct(vx, nb, kBlockBytesX),  // weight: struct-typed
+                       yb.blocks_bytes(vy, nb, kBlockBytesY),
+                       result.scalar_f32(s)),
+          "q4_0_vec_dot");
 }
 
 //
@@ -197,12 +240,11 @@ void ggml_quants_halide_vec_dot_q4_1_q8_1(int n, float *s, size_t bs, const void
                                           size_t by, int nrc) {
     constexpr int kQK = 32, kBlockBytesX = 4 + kQK / 2, kBlockBytesY = 4 + kQK;
     const int32_t nb = static_cast<int32_t>(n / kQK);
-    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
-    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
-    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
-    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
-    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
-    check(q4_1_vec_dot(xb, yb, result), "q4_1_vec_dot");
+    StackBuffer xb, yb, result;
+    check(q4_1_vec_dot(xb.blocks_bytes(vx, nb, kBlockBytesX),
+                       yb.blocks_bytes(vy, nb, kBlockBytesY),
+                       result.scalar_f32(s)),
+          "q4_1_vec_dot");
 }
 
 //
@@ -297,11 +339,11 @@ void ggml_quants_halide_vec_dot_q8_0_q8_0(int n, float *s, size_t bs, const void
                                           size_t by, int nrc) {
     constexpr int kQK = 32, kBlockBytes = 2 + kQK;
     const int32_t nb = static_cast<int32_t>(n / kQK);
-    halide_dimension_t yshape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
-    auto xb = struct_block_buffer(vx, nb, kBlockBytes);  // weight: struct-typed
-    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
-    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
-    check(q8_0_vec_dot(xb, yb, result), "q8_0_vec_dot");
+    StackBuffer xb, yb, result;
+    check(q8_0_vec_dot(xb.blocks_struct(vx, nb, kBlockBytes),  // weight: struct-typed
+                       yb.blocks_bytes(vy, nb, kBlockBytes),
+                       result.scalar_f32(s)),
+          "q8_0_vec_dot");
 }
 
 //
