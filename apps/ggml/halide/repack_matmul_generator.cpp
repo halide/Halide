@@ -12,6 +12,7 @@
 #include "Halide.h"
 
 #include "quant_components.h"
+#include "sdot_schedule.h"
 
 using namespace Halide;
 using namespace ggml_halide;
@@ -136,6 +137,18 @@ public:
             }
         }
 
+        // Simple single-scale weight families (Q4_0/Q8_0/IQ4_NL/MXFP4) reduce
+        // as a scale-free Int(32) dot (SDOT), same as the vec_dot path: the
+        // per-block weight scale depends only on (block, column) and the
+        // activation scale only on the block, so both hoist out of the r.x sum.
+        // K-quant weights carry two-level (super/sub-block) scales that aren't a
+        // single per-block-invariant factor, so they keep the default schedule.
+        if (!kq) {
+            Var u("u");
+            Func s_i32 = sdot_partial(s, {{r.y, u}}, {wr, ar});
+            s_i32.compute_root().update().atomic().vectorize(r.x, block_size);
+        }
+
         weight_blocks.dim(0).set_bounds(0, w.block_bytes);
         weight_blocks.dim(1).set_min(0);
         weight_blocks.dim(2).set_min(0);
@@ -235,6 +248,15 @@ public:
             if (h.has_update_definition()) {
                 h.compute_root();
             }
+        }
+
+        // Simple single-scale weight families reduce as a scale-free Int(32) dot
+        // (SDOT), same as gemv/vec_dot; K-quant's two-level scales keep the
+        // default schedule. See sdot_schedule.h.
+        if (!is_kquant(family)) {
+            Var u("u");
+            Func s_i32 = sdot_partial(s, {{r.y, u}}, {wr, ar});
+            s_i32.compute_root().update().atomic().vectorize(r.x, block_size);
         }
 
         weight_blocks.dim(0).set_bounds(0, w.block_bytes);
