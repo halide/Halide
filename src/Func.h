@@ -251,8 +251,46 @@ public:
      *
      * This reduces the number of factor applications from |R| to one per pure
      * point. It is an error if no distributable invariant factor is found.
+     *
+     * A sum whose increment is written as several terms gets one accumulator per
+     * term, so that terms with different factors can each be hoisted:
+     * \code
+     * f(x)  = 0;
+     * f(x) += a(x) * g(x, r) + b(x) * h(x, r);
+     * \endcode
+     * becomes a two-value intermediate accumulating g and h together in one
+     * loop, with the write-back applying a and b to their own values. Terms
+     * sharing a factor stay in one accumulator. To reach the terms of a product
+     * of sums, which is not written as a sum at all, multiply it out first with
+     * distribute().
      */
     Func hoist_invariants();
+
+    /** Multiply out products over sums in this update definition's increment,
+     * so that hoist_invariants() sees a flat sum of terms. Like rfactor(), this
+     * must be called on an update definition, and it rewrites that definition in
+     * place. Returns this Stage, so it can be chained.
+     *
+     * (a + b) * c becomes a * c + b * c, recursively. Subtraction is left alone.
+     *
+     * This is a schedule decision, not a normalization: whether it pays depends
+     * on what the terms turn out to contain. It pays when the sum hides operands
+     * with different loop-invariant factors, since each then reduces to a
+     * factor-free body of its own:
+     * \code
+     * f() += (d*q(r) + m) * (e*p(r));
+     * \endcode
+     * multiplies out to d*e * q(r)*p(r) + m*e * p(r), which hoist_invariants()
+     * turns into two factor-free accumulators. Left alone, the best it could do
+     * is hoist e and reduce over the sum.
+     *
+     * It costs an accumulator per distinct factor, so it is a pessimization when
+     * the terms share a factor that was already hoistable -- s * (r + 1) is
+     * better left as one accumulator with factor s than split into two.
+     *
+     * It is an error if there is no product over a sum to multiply out.
+     */
+    Stage &distribute();
 
     /** Schedule the iteration over this stage to be fused with another
      * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
@@ -2738,11 +2776,19 @@ public:
      * reduction extents must be statically positive or satisfy an injected
      * runtime precondition that they are positive.
      *
-     * Currently supports single-output Funcs whose update definitions use a
-     * binary operator with one operand that is a direct call to the accumulator
-     * and one self-reference-free term. Difference reductions must have the
-     * accumulator as the left operand. */
+     * A Tuple-valued Func may be retyped either uniformly, or with one target
+     * type per value. Each value accumulates independently, so each gets its own
+     * combiner, identity translation and overflow proof; a failure names the
+     * value it came from.
+     *
+     * Currently supports Funcs whose update definitions use a binary operator
+     * with one operand that is a direct call to the accumulator and one
+     * self-reference-free term. Difference reductions must have the accumulator
+     * as the left operand. */
+    // @{
     Func change_type(Type t, bool unsafe = false);
+    Func change_type(const std::vector<Type> &ts, bool unsafe = false);
+    // @}
 
     /** Immediately inline direct calls to each of the given Funcs into this
      * Func's initial (pure) definition. The Funcs are inlined in dependency

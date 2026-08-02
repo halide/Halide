@@ -1806,7 +1806,153 @@ int hoist_invariants_separable_gaussian_after_rfactor_test() {
     return 0;
 }
 
+// An increment written as a sum of terms with *different* invariant factors has
+// no single factor to hoist. Each term gets its own accumulator instead, all
+// advanced by one loop, with the write-back applying each factor once.
+int hoist_invariants_terms_test() {
+    const int K = 64;
+    ImageParam G{Int(8), 1, "G"};
+    ImageParam H{Int(8), 1, "H"};
+    ImageParam A{Float(32), 1, "A"};
+    ImageParam B{Float(32), 1, "B"};
+
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Acc{"Acc"};
+    Acc(i) = 0.0f;
+    Acc(i) += A(i) * cast<float>(G(r)) + B(i) * cast<float>(H(r));
+
+    Func Acc_intm = Acc.update().hoist_invariants();
+    internal_assert(Acc_intm.outputs() == 2)
+        << "hoist_invariants terms: expected one accumulator per term, got "
+        << Acc_intm.outputs() << "\n";
+    Acc_intm.compute_root();
+
+    Buffer<int8_t> g_buf(K), h_buf(K);
+    Buffer<float> a_buf(1), b_buf(1);
+    for (int k = 0; k < K; k++) {
+        g_buf(k) = 3;
+        h_buf(k) = 5;
+    }
+    a_buf(0) = 2.0f;
+    b_buf(0) = 7.0f;
+    G.set(g_buf);
+    H.set(h_buf);
+    A.set(a_buf);
+    B.set(b_buf);
+
+    Buffer<float> result = Acc.realize({1});
+    const float expected = (2.0f * 3.0f + 7.0f * 5.0f) * (float)K;
+    internal_assert(result(0) == expected)
+        << "hoist_invariants terms: got " << result(0) << ", expected " << expected << "\n";
+
+    // Terms that share a factor are not worth separate accumulators, and stay in
+    // one: sum_k(s*g_k) + sum_k(s*h_k) is sum_k(g_k + h_k) scaled once.
+    Func Shared{"Shared"};
+    Shared(i) = 0.0f;
+    Shared(i) += A(i) * cast<float>(G(r)) + A(i) * cast<float>(H(r));
+    Func Shared_intm = Shared.update().hoist_invariants();
+    internal_assert(Shared_intm.outputs() == 1)
+        << "hoist_invariants terms: expected terms sharing a factor to share an "
+        << "accumulator, got " << Shared_intm.outputs() << "\n";
+    Shared_intm.compute_root();
+
+    Buffer<float> shared = Shared.realize({1});
+    const float shared_expected = 2.0f * (3.0f + 5.0f) * (float)K;
+    internal_assert(shared(0) == shared_expected)
+        << "hoist_invariants shared factor: got " << shared(0) << ", expected "
+        << shared_expected << "\n";
+
+    return 0;
+}
+
+// distribute() multiplies a product of sums out so that hoist_invariants() can
+// see terms that were not written as terms. This is the affine-quantized dot
+// product: sum_k (d*q_k + m) * (e*p_k), whose expansion
+// d*e*sum_k(q_k*p_k) + m*e*sum_k(p_k) has two integer-bodied accumulators where
+// the unexpanded form has one float one.
+int hoist_invariants_distribute_test() {
+    const int K = 32;
+    ImageParam Q{Int(8), 1, "Q"};
+    ImageParam P{Int(8), 1, "P"};
+    ImageParam D{Float(32), 1, "D"};
+    ImageParam M{Float(32), 1, "M"};
+    ImageParam E{Float(32), 1, "E"};
+
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Acc{"Acc"};
+    Acc(i) = 0.0f;
+    Acc(i) += (cast<float>(Q(r)) * D(i) + M(i)) * (cast<float>(P(r)) * E(i));
+
+    Func Acc_intm = Acc.update().distribute().hoist_invariants();
+    internal_assert(Acc_intm.outputs() == 2)
+        << "distribute: expected the multiplied-out increment to yield two "
+        << "accumulators, got " << Acc_intm.outputs() << "\n";
+
+    // Both bodies are integer sums of int8 products, so both retype -- and each
+    // value may take its own target type.
+    Func Acc_typed = Acc_intm.change_type({Int(32), Int(16)});
+    internal_assert(Acc_typed.types()[0] == Int(32) && Acc_typed.types()[1] == Int(16))
+        << "distribute: change_type did not apply per-value types, got "
+        << Acc_typed.types()[0] << " and " << Acc_typed.types()[1] << "\n";
+    Acc_typed.compute_root();
+
+    Buffer<int8_t> q_buf(K), p_buf(K);
+    Buffer<float> d_buf(1), m_buf(1), e_buf(1);
+    int64_t sum_qp = 0, sum_p = 0;
+    for (int k = 0; k < K; k++) {
+        q_buf(k) = (int8_t)(k % 15);
+        p_buf(k) = (int8_t)((k * 5) % 127 - 63);
+        sum_qp += (int64_t)q_buf(k) * p_buf(k);
+        sum_p += p_buf(k);
+    }
+    d_buf(0) = 0.25f;
+    m_buf(0) = -0.5f;
+    e_buf(0) = 2.0f;
+    Q.set(q_buf);
+    P.set(p_buf);
+    D.set(d_buf);
+    M.set(m_buf);
+    E.set(e_buf);
+
+    Buffer<float> result = Acc.realize({1});
+    const float expected = 0.25f * 2.0f * (float)sum_qp + -0.5f * 2.0f * (float)sum_p;
+    internal_assert(std::abs(result(0) - expected) < 1e-3f)
+        << "distribute: got " << result(0) << ", expected " << expected << "\n";
+
+    return 0;
+}
+
 #if HALIDE_WITH_EXCEPTIONS
+// distribute() is a schedule decision, so it says so when there is nothing to
+// multiply out rather than quietly leaving the reduction alone.
+int distribute_nothing_to_do_rejected_test() {
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+    ImageParam A{Float(32), 1, "A"};
+    Var i{"i"};
+    RDom r(0, 8, "r");
+
+    Func f{"f"};
+    f(i) = 0.0f;
+    f(i) += A(i) * cast<float>(r);
+
+    try {
+        f.update().distribute();
+    } catch (const Halide::CompileError &e) {
+        const std::string msg = e.what();
+        internal_assert(msg.find("no product over a sum") != std::string::npos)
+            << "distribute() rejected the update for the wrong reason: " << msg << "\n";
+        return 0;
+    }
+    internal_assert(false) << "distribute() accepted an update with nothing to multiply out\n";
+    return 0;
+}
+
 // The min/max + add hoisting law is only valid for integer types where addition
 // has no defined wraparound behavior. For UInt(8), hoisting the invariant 250
 // would incorrectly turn min_k((250 + x_k) mod 256) into (250 + min_k(x_k)) mod
@@ -1944,9 +2090,12 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (predicated RDom)", hoist_invariants_predicated_rdom_test},
         {"hoist_invariants test (after rfactor)", hoist_invariants_after_rfactor_test},
         {"hoist_invariants test (separable Gaussian after rfactor)", hoist_invariants_separable_gaussian_after_rfactor_test},
+        {"hoist_invariants test (one accumulator per term)", hoist_invariants_terms_test},
+        {"distribute test (affine dot product)", hoist_invariants_distribute_test},
 #if HALIDE_WITH_EXCEPTIONS
         {"hoist_invariants test (invalid law rejected)", hoist_invariants_invalid_law_rejected_test},
         {"hoist_invariants test (nothing to hoist rejected)", hoist_invariants_nothing_to_hoist_rejected_test},
+        {"distribute test (nothing to distribute rejected)", distribute_nothing_to_do_rejected_test},
 #endif
     };
 

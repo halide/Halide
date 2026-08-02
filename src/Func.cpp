@@ -829,12 +829,44 @@ struct HoistedFactor {
                       // job of the separate change_type() directive.
 };
 
+// Multiply out products over sums, so that a sum reduction's increment becomes
+// a flat sum of products: (a + b) * c -> a * c + b * c. This exposes terms with
+// *different* invariant factors, which a single flattening of the multiply chain
+// cannot see -- in (a + b) * c the sum is one opaque leaf.
+//
+// Subtraction is deliberately left alone (treated as a leaf): distributing it
+// would have to push the sign into one side, which does not group and is not
+// meaningful for unsigned wraparound.
+Expr distribute_products(const Expr &e, int &budget) {
+    if (--budget < 0) {
+        return e;
+    }
+    if (e.node_type() == IRNodeType::Add) {
+        auto [a, b] = *as_binary_operands(e);
+        return Add::make(distribute_products(a, budget), distribute_products(b, budget));
+    }
+    if (const Mul *mul = e.as<Mul>()) {
+        Expr a = distribute_products(mul->a, budget);
+        Expr b = distribute_products(mul->b, budget);
+        // Recurse on the rewritten form: either side may itself be a product of
+        // sums that only became visible after this step.
+        if (a.node_type() == IRNodeType::Add) {
+            auto [a0, a1] = *as_binary_operands(a);
+            return distribute_products(Add::make(Mul::make(a0, b), Mul::make(a1, b)), budget);
+        }
+        if (b.node_type() == IRNodeType::Add) {
+            auto [b0, b1] = *as_binary_operands(b);
+            return distribute_products(Add::make(Mul::make(a, b0), Mul::make(a, b1)), budget);
+        }
+        return Mul::make(a, b);
+    }
+    return e;
+}
+
 // Given the non-self-reference increment from an update body and the
 // distributive law of the outer associative op, extract a loop-invariant factor
 // that distributes over the outer op. `reduction_vars` is the set of RVar names
 // the factor must not reference.
-// TODO: if we flatten by the outer op here we can make tuple-valued reductions
-//   for things like: f(r) += a * g(r) + b * h(r)
 optional<HoistedFactor> extract_factor(const Expr &increment,
                                        const DistributiveLaw &law,
                                        const Scope<> &reduction_vars) {
@@ -877,11 +909,73 @@ optional<HoistedFactor> extract_factor(const Expr &increment,
     return HoistedFactor{law.inner_op, factor, body};
 }
 
-vector<optional<HoistedFactor>> extract_hoisted_factors(const vector<Expr> &values,
-                                                        const AssociativeOp &prover_result,
-                                                        const string &func_name,
-                                                        const Scope<> &reduction_vars) {
-    vector<optional<HoistedFactor>> result(values.size());
+// How many nodes distribute_products() may rewrite before giving up. Multiplying
+// out is exponential in the nesting depth of sums, and a reduction body deep
+// enough to hit this has no business being split into that many accumulators.
+constexpr int distribute_budget = 1024;
+
+// Split one value's increment into the terms that will each get their own
+// accumulator, grouped so that terms sharing a factor stay together.
+//
+// A sum of terms with *different* invariant factors -- a*g(r) + b*h(r) -- has no
+// single factor to hoist, so without splitting there is nothing this can do with
+// it. Each term keeps its own factor and its own accumulator instead.
+//
+// Terms are grouped by their factor, so an increment that is already a sum over
+// one factor, s*g(r) + s*h(r), stays a single accumulator: splitting it would
+// cost an accumulator and hoist nothing extra. Whether to multiply out a product
+// of sums first, and so create terms that were not written as terms, is
+// Stage::distribute()'s job -- a schedule decision, not one to guess at here.
+vector<HoistedFactor> extract_terms(const Expr &increment,
+                                    const DistributiveLaw &law,
+                                    const Scope<> &reduction_vars) {
+    // Only sums of products split. The min/max/and/or laws distribute an
+    // operand over the reduction, but their increments are not sums of terms in
+    // the sense of separate accumulators.
+    if (law.outer_op != IRNodeType::Add || law.inner_op != IRNodeType::Mul) {
+        if (optional<HoistedFactor> f = extract_factor(increment, law, reduction_vars)) {
+            return {*f};
+        }
+        return {};
+    }
+
+    vector<Expr> terms;
+    flatten_associative_chain(increment, IRNodeType::Add, terms);
+
+    vector<HoistedFactor> groups;
+    for (const Expr &term : terms) {
+        optional<HoistedFactor> f = extract_factor(term, law, reduction_vars);
+        // A term with nothing to hoist still needs an accumulator; give it an
+        // undefined factor and group all such terms together.
+        Expr factor = f ? f->factor : Expr();
+        Expr body = f ? f->inner_body : term;
+
+        auto same_factor = [&](const HoistedFactor &g) {
+            return factor.defined() == g.factor.defined() &&
+                   (!factor.defined() || equal(factor, g.factor));
+        };
+        auto it = std::find_if(groups.begin(), groups.end(), same_factor);
+        if (it == groups.end()) {
+            groups.push_back(HoistedFactor{law.inner_op, factor, body});
+        } else {
+            it->inner_body = Add::make(it->inner_body, body);
+        }
+    }
+
+    // Nothing was hoisted: one group holding the whole increment unchanged.
+    if (groups.size() == 1 && !groups[0].factor.defined()) {
+        return {};
+    }
+    return groups;
+}
+
+// One entry per value of the update definition, each holding that value's terms
+// (empty if nothing could be hoisted from it).
+vector<vector<HoistedFactor>> extract_hoisted_factors(const vector<Expr> &values,
+                                                      const AssociativeOp &prover_result,
+                                                      const string &func_name,
+                                                      const Scope<> &reduction_vars) {
+    vector<vector<HoistedFactor>> result(values.size());
 
     auto is_orig_self_ref = [&](const Expr &e) {
         const Call *c = e.as<Call>();
@@ -900,22 +994,40 @@ vector<optional<HoistedFactor>> extract_hoisted_factors(const vector<Expr> &valu
             // Inline them so the outer op is visible to the pattern match.
             Expr value = substitute_in_all_lets(values[i]);
             if (optional<Expr> increment = extract_increment(value, *law)) {
-                result[i] = extract_factor(*increment, *law, reduction_vars);
+                result[i] = extract_terms(*increment, *law, reduction_vars);
             }
         }
     }
     return result;
 }
 
-// Re-apply the hoisted factor to the intermediate's result at the write-back
-// step. The intermediate accumulates the inner body at its natural type (the
-// same type as the outer op), so no cast is needed.
-Expr apply_hoisted_factor(const Expr &r, const optional<HoistedFactor> &factor) {
-    if (!factor) {
+// Re-apply a term's hoisted factor to the intermediate's result at the
+// write-back step. The intermediate accumulates the inner body at its natural
+// type (the same type as the outer op), so no cast is needed.
+Expr apply_hoisted_factor(const Expr &r, const HoistedFactor &term) {
+    if (!term.factor.defined()) {
         return r;
     }
-    return make_binary_op(factor->op, factor->factor, r);
+    return make_binary_op(term.op, term.factor, r);
 }
+
+// Where a value's terms live in the intermediate's tuple. Each value of the
+// original update contributes as many slots as it has terms, so a scalar Func
+// whose increment split in two gets a two-slot intermediate.
+struct TupleLayout {
+    vector<size_t> first_slot;  // per value
+    size_t slots = 0;
+
+    explicit TupleLayout(const vector<vector<HoistedFactor>> &terms) {
+        first_slot.reserve(terms.size());
+        for (size_t i = 0; i < terms.size(); ++i) {
+            first_slot.push_back(slots);
+            // A value with nothing hoistable still needs its own slot, since the
+            // intermediate carries every value of the original reduction.
+            slots += std::max<size_t>(terms[i].size(), 1);
+        }
+    }
+};
 
 }  // namespace
 
@@ -1229,6 +1341,55 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     return intm;
 }
 
+Stage &Stage::distribute() {
+    user_assert(!definition.is_init()) << "distribute() must be called on an update definition\n";
+
+    definition.schedule().touched() = true;
+
+    const auto &prover_result = prove_associativity(function.name(), definition.args(), definition.values());
+    user_assert(prover_result.associative())
+        << "distribute() requires an associative update definition, but the update "
+        << "definition of " << function.name() << " is not associative.\n";
+
+    auto is_self_ref = [&](const Expr &e) {
+        const Call *c = e.as<Call>();
+        return c && c->name == function.name() && c->call_type == Call::Halide;
+    };
+
+    vector<Expr> values = definition.values();
+    bool changed = false;
+    for (size_t i = 0; i < values.size(); ++i) {
+        optional<DistributiveLaw> law = distributive_law_for(prover_result.pattern.ops[i]);
+        if (!law || law->outer_op != IRNodeType::Add || law->inner_op != IRNodeType::Mul) {
+            continue;
+        }
+        // Lets may hide the combiner (e.g. an rfactor of this same update
+        // introduced promise_clamped bindings), so inline them first.
+        Expr value = substitute_in_all_lets(values[i]);
+        optional<pair<Expr, Expr>> split = select_binary_operand(value, law->outer_op, is_self_ref);
+        if (!split) {
+            continue;
+        }
+        int budget = distribute_budget;
+        Expr expanded = distribute_products(split->second, budget);
+        user_assert(budget >= 0)
+            << "distribute() gave up multiplying out the update definition of "
+            << function.name() << ": it expands to more than " << distribute_budget
+            << " nodes.\n";
+        if (!equal(expanded, split->second)) {
+            values[i] = Add::make(split->first, expanded);
+            changed = true;
+        }
+    }
+
+    user_assert(changed)
+        << "distribute() found no product over a sum to multiply out in the update "
+        << "definition of " << function.name() << ".\n";
+
+    definition.values() = values;
+    return *this;
+}
+
 Func Stage::hoist_invariants() {
     user_assert(!definition.is_init()) << "hoist_invariants() must be called on an update definition\n";
 
@@ -1247,27 +1408,57 @@ Func Stage::hoist_invariants() {
         reduction_vars.push(var);
         reduction_bounds.push(var, Interval{min, min + extent - 1});
     }
-    vector<optional<HoistedFactor>> hoisted_factors =
+    vector<vector<HoistedFactor>> hoisted_terms =
         extract_hoisted_factors(definition.values(), prover_result,
                                 function.name(), reduction_vars);
-    const bool any_hoisted = std::any_of(hoisted_factors.begin(), hoisted_factors.end(),
-                                         [](const auto &f) { return f.has_value(); });
+    const bool any_hoisted = std::any_of(hoisted_terms.begin(), hoisted_terms.end(),
+                                         [](const auto &t) { return !t.empty(); });
     user_assert(any_hoisted)
         << "hoist_invariants() could not find a distributable loop-invariant "
         << "factor in the update definition of " << function.name() << ".\n";
 
-    Func intm(function.name() + "_intm");
-    intm(dim_vars_exprs) = Tuple(prover_result.pattern.identities);
+    // Splitting one value across several accumulators renumbers the
+    // intermediate's tuple slots, which a Tuple-valued update could not follow:
+    // its values may reference each other's slots, and a split value no longer
+    // has a single slot to point at.
+    const bool splits = std::any_of(hoisted_terms.begin(), hoisted_terms.end(),
+                                    [](const auto &t) { return t.size() > 1; });
+    user_assert(!splits || definition.values().size() == 1)
+        << "hoist_invariants() can only split a reduction into one accumulator "
+        << "per term for a single-valued update definition, but "
+        << function.name() << " is Tuple-valued.\n";
 
-    // Define the factor-free intermediate reduction.
+    // With that restriction, a value's slot index is its own index unless the
+    // definition is single-valued, in which case term j occupies slot j.
+    const TupleLayout layout(hoisted_terms);
+
+    Func intm(function.name() + "_intm");
     {
-        vector<Expr> values = definition.values();
-        for (size_t i = 0; i < values.size(); ++i) {
-            if (hoisted_factors[i]) {
-                Expr self_ref = Call::make(hoisted_factors[i]->inner_body.type(), function.name(),
-                                           dim_vars_exprs, Call::Halide, FunctionPtr(), (int)i);
-                values[i] = make_binary_op(prover_result.pattern.ops[i].node_type(),
-                                           self_ref, hoisted_factors[i]->inner_body);
+        vector<Expr> identities;
+        identities.reserve(layout.slots);
+        for (size_t i = 0; i < hoisted_terms.size(); ++i) {
+            const size_t n = std::max<size_t>(hoisted_terms[i].size(), 1);
+            identities.insert(identities.end(), n, prover_result.pattern.identities[i]);
+        }
+        intm(dim_vars_exprs) = Tuple(identities);
+    }
+
+    // Define the factor-free intermediate reduction: one accumulator per term,
+    // all advanced by the same loop over the same reduction domain.
+    {
+        vector<Expr> values;
+        values.reserve(layout.slots);
+        for (size_t i = 0; i < hoisted_terms.size(); ++i) {
+            if (hoisted_terms[i].empty()) {
+                values.push_back(definition.values()[i]);
+                continue;
+            }
+            for (size_t j = 0; j < hoisted_terms[i].size(); ++j) {
+                const size_t slot = layout.first_slot[i] + j;
+                Expr self_ref = Call::make(hoisted_terms[i][j].inner_body.type(), function.name(),
+                                           dim_vars_exprs, Call::Halide, FunctionPtr(), (int)slot);
+                values.push_back(make_binary_op(prover_result.pattern.ops[i].node_type(),
+                                                self_ref, hoisted_terms[i][j].inner_body));
             }
         }
         values = substitute_self_reference(values, function.name(), intm.function(), {});
@@ -1283,8 +1474,20 @@ Func Stage::hoist_invariants() {
         SubstitutionMap writeback_map;
         for (size_t i = 0; i < definition.values().size(); ++i) {
             if (!prover_result.ys[i].var.empty()) {
-                Expr r = (definition.values().size() == 1) ? Expr(intm(dim_vars_exprs)) : Expr(intm(dim_vars_exprs)[i]);
-                r = apply_hoisted_factor(r, hoisted_factors[i]);
+                // Re-apply each term's factor to its own accumulator, then
+                // recombine the terms with the reduction's own operator.
+                auto slot = [&](size_t s) {
+                    return layout.slots == 1 ? Expr(intm(dim_vars_exprs)) : Expr(intm(dim_vars_exprs)[s]);
+                };
+                Expr r;
+                if (hoisted_terms[i].empty()) {
+                    r = slot(layout.first_slot[i]);
+                } else {
+                    for (size_t j = 0; j < hoisted_terms[i].size(); ++j) {
+                        Expr term = apply_hoisted_factor(slot(layout.first_slot[i] + j), hoisted_terms[i][j]);
+                        r = r.defined() ? make_binary_op(prover_result.pattern.ops[i].node_type(), r, term) : term;
+                    }
+                }
                 add_let(writeback_map, prover_result.ys[i].var, r);
             }
 
@@ -3847,12 +4050,13 @@ ConstantInterval float_exact_integer_bounds(Type t) {
     return ConstantInterval(-bound, bound);
 }
 
-// Prove that computing `typed`'s reduction at type `t` cannot overflow. Returns
-// true if it is safe; if safety can only be guaranteed under a runtime
-// precondition, that condition is returned in *condition. Returns an error
-// message if it cannot be proven.
+// Prove that computing value `idx` of `typed`'s reduction at type `t` cannot
+// overflow. Returns true if it is safe; if safety can only be guaranteed under a
+// runtime precondition, that condition is returned in *condition. Returns an
+// error message if it cannot be proven. Each value of a Tuple-valued reduction
+// accumulates independently, so each is proven on its own.
 std::optional<std::string> change_type_prove_safe(
-    const Func &typed, Type t, const FuncValueBounds &fvb, Expr *condition  //
+    const Func &typed, Type t, size_t idx, const FuncValueBounds &fvb, Expr *condition  //
 ) {
     *condition = Expr();
     const Function fn = typed.function();
@@ -3901,14 +4105,14 @@ std::optional<std::string> change_type_prove_safe(
     // The initial accumulator value must be representable at the new type. Carry
     // its interval through every update so each stage is checked against all
     // preceding work rather than against an implicit zero.
-    internal_assert(fn.values().size() == 1);
-    ConstantInterval accumulator = bounds_of(fn.values()[0]);
+    internal_assert(idx < fn.values().size());
+    ConstantInterval accumulator = bounds_of(fn.values()[idx]);
     if (!limit.contains(accumulator)) {
         return "the initial value may not be representable in the target type";
     }
 
     for (const Definition &def : fn.updates()) {
-        Expr val = substitute_in_all_lets(def.values()[0]);
+        Expr val = substitute_in_all_lets(def.values()[idx]);
         optional<IRNodeType> op = reduction_op(val, fn.name());
 
         // The increment is the non-self-reference operand of the combiner.
@@ -4001,22 +4205,28 @@ std::optional<std::string> change_type_prove_safe(
 
 Func Func::change_type(Type t, bool unsafe) {
     user_assert(defined()) << "change_type() called on undefined Func.\n";
+    return change_type(vector<Type>(outputs(), t), unsafe);
+}
+
+Func Func::change_type(const vector<Type> &ts, bool unsafe) {
+    user_assert(defined()) << "change_type() called on undefined Func.\n";
     user_assert(!func.has_extern_definition())
         << "change_type() cannot be applied to the extern Func " << name() << ".\n";
-    user_assert(outputs() == 1)
-        << "change_type() currently supports only single-output Funcs, but "
-        << name() << " has " << outputs() << " outputs.\n";
+    user_assert((int)ts.size() == outputs())
+        << "change_type() was given " << ts.size() << " types for " << name()
+        << ", which has " << outputs() << " outputs.\n";
 
     invalidate_cache();
 
-    const Type old_t = func.output_types()[0];
-    if (old_t == t) {
+    const vector<Type> old_ts = func.output_types();
+    if (old_ts == ts) {
         return *this;
     }
 
     const string fname = func.name();
     const vector<Var> pure_vars = args();
     const vector<Expr> pure_arg_exprs(pure_vars.begin(), pure_vars.end());
+    const size_t n_values = ts.size();
 
     // Proven value ranges for this Func's producers. Retyping references the same
     // producers (only self-references and casts are rewritten), so bounds keyed
@@ -4027,32 +4237,37 @@ Func Func::change_type(Type t, bool unsafe) {
         return compute_function_value_bounds(topological_order({func}, env), env);
     }();
 
-    // Determine the reduction op (if any), so min/max accumulations get the
-    // right identity at the new type rather than a lossy cast of e.g. +inf.
-    optional<IRNodeType> op;
-    if (func.has_update_definition()) {
-        op = reduction_op(substitute_in_all_lets(func.update(0).values()[0]), fname);
-    }
-    const bool is_min_max = op && (*op == IRNodeType::Min || *op == IRNodeType::Max);
+    // Each value of a Tuple-valued reduction has its own combiner, so the
+    // identity translation below is decided per value.
+    vector<optional<IRNodeType>> ops(n_values);
+    vector<Expr> translated_identities(n_values);
+    vector<Expr> identity_preconditions(n_values);
 
-    Expr translated_identity;
-    Expr identity_precondition;
-    if (is_min_max) {
-        const Expr &initial = func.values()[0];
-        const Expr old_id = get_associative_identity(old_t, *op);
+    for (size_t i = 0; i < n_values; ++i) {
+        // Determine the reduction op (if any), so min/max accumulations get the
+        // right identity at the new type rather than a lossy cast of e.g. +inf.
+        if (func.has_update_definition()) {
+            ops[i] = reduction_op(substitute_in_all_lets(func.update(0).values()[i]), fname);
+        }
+        const bool is_min_max = ops[i] && (*ops[i] == IRNodeType::Min || *ops[i] == IRNodeType::Max);
+        if (!is_min_max) {
+            continue;
+        }
+        const Expr &initial = func.values()[i];
+        const Expr old_id = get_associative_identity(old_ts[i], *ops[i]);
         if (old_id.defined() && can_prove(initial == old_id)) {
-            translated_identity = get_associative_identity(t, *op);
-            user_assert(translated_identity.defined())
+            translated_identities[i] = get_associative_identity(ts[i], *ops[i]);
+            user_assert(translated_identities[i].defined())
                 << "change_type() could not find an identity for "
-                << IRNodeType_string(*op) << " at type " << t << ".\n";
+                << IRNodeType_string(*ops[i]) << " at type " << ts[i] << ".\n";
 
-            const Expr round_tripped = cast(old_t, translated_identity);
+            const Expr round_tripped = cast(old_ts[i], translated_identities[i]);
             if (!unsafe && !can_prove(round_tripped == old_id)) {
                 const auto err =
-                    nonempty_dense_update_precondition(func, &identity_precondition);
+                    nonempty_dense_update_precondition(func, &identity_preconditions[i]);
                 user_assert(!err)
-                    << "change_type(" << t << ") on " << fname
-                    << " cannot safely translate its " << IRNodeType_string(*op)
+                    << "change_type(" << ts[i] << ") on " << fname << " value " << i
+                    << " cannot safely translate its " << IRNodeType_string(*ops[i])
                     << " identity because " << *err << ".\n"
                     << "Pass unsafe=true to bypass this check.\n";
             }
@@ -4063,9 +4278,16 @@ Func Func::change_type(Type t, bool unsafe) {
     Func typed(fname + "_typed");
 
     // Pure definition.
-    typed(pure_vars) = translated_identity.defined() ?
-                           translated_identity :
-                           retype_leaf(value(), t, func_bounds);
+    {
+        vector<Expr> init;
+        init.reserve(n_values);
+        for (size_t i = 0; i < n_values; ++i) {
+            init.push_back(translated_identities[i].defined() ?
+                               translated_identities[i] :
+                               retype_leaf(func.values()[i], ts[i], func_bounds));
+        }
+        typed(pure_vars) = Tuple(init);
+    }
 
     // Update definitions. The retyped values still reference the original
     // reduction domain, so pass a default domain and let define_update discover
@@ -4075,8 +4297,9 @@ Func Func::change_type(Type t, bool unsafe) {
         const Definition &def = func.update(u);
         vector<Expr> vals;
         vals.reserve(def.values().size());
-        for (const Expr &v : def.values()) {
-            vals.push_back(retype_value(substitute_in_all_lets(v), fname, typed.function(), t, func_bounds));
+        for (size_t i = 0; i < def.values().size(); ++i) {
+            vals.push_back(retype_value(substitute_in_all_lets(def.values()[i]), fname,
+                                        typed.function(), ts[i], func_bounds));
         }
         typed.function().define_update(def.args(), vals);
         typed.function().update(u).schedule() = def.schedule().get_copy();
@@ -4087,25 +4310,32 @@ Func Func::change_type(Type t, bool unsafe) {
     typed.function().schedule().type_change_checks() =
         func.schedule().type_change_checks();
 
-    if (identity_precondition.defined()) {
+    for (size_t i = 0; i < n_values; ++i) {
+        if (!identity_preconditions[i].defined()) {
+            continue;
+        }
         std::ostringstream msg;
-        msg << "change_type(" << t << ") on " << fname
+        msg << "change_type(" << ts[i] << ") on " << fname << " value " << i
             << " requires a non-empty reduction domain to translate its "
-            << IRNodeType_string(*op) << " identity";
+            << IRNodeType_string(*ops[i]) << " identity";
         typed.function().schedule().type_change_checks().emplace_back(
-            identity_precondition, msg.str());
+            identity_preconditions[i], msg.str());
     }
 
-    // Safety check.
-    if (!unsafe && (t.is_int_or_uint() || t.is_float())) {
+    // Safety check, per value: each accumulates independently.
+    for (size_t i = 0; i < n_values && !unsafe; ++i) {
+        if (!ts[i].is_int_or_uint() && !ts[i].is_float()) {
+            continue;
+        }
         Expr condition;
-        const auto err = change_type_prove_safe(typed, t, func_bounds, &condition);
+        const auto err = change_type_prove_safe(typed, ts[i], i, func_bounds, &condition);
         user_assert(!err)
-            << "change_type(" << t << ") on " << fname << " may overflow: " << *err << ".\n"
+            << "change_type(" << ts[i] << ") on " << fname << " value " << i
+            << " may overflow: " << *err << ".\n"
             << "Pass unsafe=true to change_type() to bypass this check.\n";
         if (condition.defined()) {
             std::ostringstream msg;
-            msg << "change_type(" << t << ") on " << fname
+            msg << "change_type(" << ts[i] << ") on " << fname << " value " << i
                 << " requires the reduction extent to be small enough not to overflow";
             typed.function().schedule().type_change_checks().emplace_back(condition, msg.str());
         }
@@ -4113,14 +4343,18 @@ Func Func::change_type(Type t, bool unsafe) {
 
     // Rewrite this Func into an inline cast-back wrapper of the retyped clone, so
     // that every existing consumer keeps seeing the original type.
-    const Expr wrapped = cast(old_t, Call::make(typed.function(), pure_arg_exprs, 0, /*follow_global_wrappers=*/true));
+    vector<Expr> wrapped;
+    wrapped.reserve(n_values);
+    for (size_t i = 0; i < n_values; ++i) {
+        wrapped.push_back(cast(old_ts[i], Call::make(typed.function(), pure_arg_exprs, (int)i, /*follow_global_wrappers=*/true)));
+    }
     vector<string> arg_names;
     arg_names.reserve(pure_vars.size());
     for (const Var &v : pure_vars) {
         arg_names.push_back(v.name());
     }
     func.clear_definition();
-    func.define(arg_names, {wrapped});
+    func.define(arg_names, wrapped);
 
     return typed;
 }
