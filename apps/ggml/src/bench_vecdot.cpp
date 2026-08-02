@@ -7,9 +7,39 @@
 #include "data_gen.h"
 #include "timing.h"
 
+#include <cstdlib>
+#include <cstring>
+
 namespace {
 // Divisible by every quant block size in play (32 for the q4/q5/q8 family, 256 for the k-quants).
-constexpr int64_t kElements = 4096;
+// Dev iteration aid: KERNEL_BENCH_N overrides it (must stay a multiple of 256),
+// which is how per-call overhead is separated from per-block cost.
+int64_t elements() {
+    const char *n = std::getenv("KERNEL_BENCH_N");
+    return (n && *n) ? std::atoll(n) : 4096;
+}
+const int64_t kElements = elements();
+
+// Dev iteration aid: KERNEL_BENCH_FILTER=q4_0,q8_0 restricts the sweep to
+// matching type names (substring match, comma-separated). Empty => all.
+bool passes_filter(const char *name) {
+    const char *f = std::getenv("KERNEL_BENCH_FILTER");
+    if (!f || !*f) {
+        return true;
+    }
+    std::string filt(f), item;
+    size_t pos = 0;
+    while (pos <= filt.size()) {
+        size_t comma = filt.find(',', pos);
+        if (comma == std::string::npos) comma = filt.size();
+        item = filt.substr(pos, comma - pos);
+        if (!item.empty() && std::strstr(name, item.c_str())) {
+            return true;
+        }
+        pos = comma + 1;
+    }
+    return false;
+}
 }  // namespace
 
 BenchReport run_vecdot_benchmarks(const KernelRegistries &registries) {
@@ -20,6 +50,9 @@ BenchReport run_vecdot_benchmarks(const KernelRegistries &registries) {
         const ggml_type type = static_cast<ggml_type>(t);
         const Impl<vec_dot_fn_t> *ref = registries.vec_dot.reference(type);
         if (!ref) {
+            continue;
+        }
+        if (!passes_filter(ggml_type_name(type))) {
             continue;
         }
 
@@ -54,8 +87,8 @@ BenchReport run_vecdot_benchmarks(const KernelRegistries &registries) {
         BenchRow row;
         row.label = ggml_type_name(type);
         row.ref_name = ref->name;
-        row.ref_ns = ref_time.median_ns;
-        row.ref_throughput = bytes_per_sec(vx.size() + vy.size(), ref_time.median_ns) / 1e9;
+        row.ref_ns = ref_time.min_ns;
+        row.ref_throughput = bytes_per_sec(vx.size() + vy.size(), ref_time.min_ns) / 1e9;
 
         for (const auto &cand : registries.vec_dot.candidates(type)) {
             BenchCandidate bc;
@@ -68,9 +101,9 @@ BenchReport run_vecdot_benchmarks(const KernelRegistries &registries) {
 
                 const TimingResult cand_time =
                     time_calls([&] { cand.fn(kElements, &cand_result, 0, vx.data(), 0, vy.data(), 0, 1); });
-                bc.ns = cand_time.median_ns;
-                bc.throughput = bytes_per_sec(vx.size() + vy.size(), cand_time.median_ns) / 1e9;
-                bc.speedup = ref_time.median_ns / cand_time.median_ns;
+                bc.ns = cand_time.min_ns;
+                bc.throughput = bytes_per_sec(vx.size() + vy.size(), cand_time.min_ns) / 1e9;
+                bc.speedup = ref_time.min_ns / cand_time.min_ns;
             }
             row.candidates.push_back(bc);
         }
