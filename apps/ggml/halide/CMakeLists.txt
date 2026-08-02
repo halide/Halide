@@ -85,6 +85,7 @@ add_halide_library(
     FROM quants.generator
     GENERATOR symmetric_vec_dot
     PARAMS w_kind=symmetric_5bit block_size=32 w_qmax=16 a_kind=q8_0 a_qmax=127
+    FEATURES no_asserts no_bounds_query
 )
 # Q5_1 is affine like Q4_1, but 5-bit: quant_components.h's AffineQuantize +
 # FiveBitPack, matching block_q5_1's {fp16 d; fp16 m; qh[4]; qs[16];}.
@@ -105,8 +106,9 @@ add_halide_library(
     FROM quants.generator
     GENERATOR symmetric_vec_dot
     PARAMS
-    w_kind=affine_5bit block_size=32 w_levels=31 w_affine_rounding=unclamped_uint8 a_kind=q8_1
-    a_qmax=127
+        w_kind=affine_5bit block_size=32 w_levels=31 w_affine_rounding=unclamped_uint8 a_kind=q8_1
+        a_qmax=127
+    FEATURES no_asserts no_bounds_query
 )
 add_halide_library(
     q8_0_quantize
