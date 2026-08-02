@@ -284,12 +284,11 @@ void ggml_quants_halide_vec_dot_q5_0_q8_0(int n, float *s, size_t bs, const void
                                           size_t by, int nrc) {
     constexpr int kQK = 32, kBlockBytesX = 2 + 4 + kQK / 2, kBlockBytesY = 2 + kQK;
     const int32_t nb = static_cast<int32_t>(n / kQK);
-    halide_dimension_t xshape[2] = {{0, kBlockBytesX, 1}, {0, nb, kBlockBytesX}};
-    halide_dimension_t yshape[2] = {{0, kBlockBytesY, 1}, {0, nb, kBlockBytesY}};
-    Buffer<uint8_t, 2> xb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vx)), 2, xshape);
-    Buffer<uint8_t, 2> yb(const_cast<uint8_t *>(static_cast<const uint8_t *>(vy)), 2, yshape);
-    Buffer<float, 0> result = Buffer<float, 0>::make_scalar(s);
-    check(q5_0_vec_dot(xb, yb, result), "q5_0_vec_dot");
+    StackBuffer xb, yb, result;
+    check(q5_0_vec_dot(xb.blocks_bytes(vx, nb, kBlockBytesX),
+                       yb.blocks_bytes(vy, nb, kBlockBytesY),
+                       result.scalar_f32(s)),
+          "q5_0_vec_dot");
 }
 
 //
