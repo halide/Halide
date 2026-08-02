@@ -124,6 +124,18 @@ void check(int result, const char *what) {
     }
 }
 
+// A 1-D Type::Struct block buffer over `nb` blocks of `block_bytes` each,
+// wrapping GGML's raw packed bytes at `data`. The struct's ABI tag is
+// {halide_type_struct, bits=8, reserved=block_bytes}; each element is one whole
+// block, dim-0 stride 1 in struct units (see Halide::Type::to_abi()). This is
+// how a Phase-3 struct-typed codec kernel receives GGML's byte layout unchanged.
+Halide::Runtime::Buffer<void, 1> struct_block_buffer(const void *data, int nb, int block_bytes) {
+    halide_type_t ty(halide_type_struct, 8);
+    ty.reserved = static_cast<uint16_t>(block_bytes);
+    halide_dimension_t shape[1] = {{0, nb, 1}};
+    return Halide::Runtime::Buffer<void, 1>(ty, const_cast<void *>(data), 1, shape);
+}
+
 }  // namespace
 
 extern "C" {
@@ -136,16 +148,14 @@ void ggml_quants_halide_quantize_q4_0(const float *x, void *y, int64_t k) {
     constexpr int kQK = 32, kBlockBytes = 2 + kQK / 2;
     Buffer<float, 1> xb(const_cast<float *>(x), static_cast<int>(k));
     const int32_t nb = static_cast<int32_t>(k / kQK);
-    halide_dimension_t shape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
-    Buffer<uint8_t, 2> blocks(static_cast<uint8_t *>(y), 2, shape);
+    auto blocks = struct_block_buffer(y, nb, kBlockBytes);
     check(q4_0_quantize(xb, blocks), "q4_0_quantize");
 }
 
 void ggml_quants_halide_dequantize_q4_0(const void *x, float *y, int64_t k) {
     constexpr int kQK = 32, kBlockBytes = 2 + kQK / 2;
     const int32_t nb = static_cast<int32_t>(k / kQK);
-    halide_dimension_t shape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
-    Buffer<uint8_t, 2> blocks(const_cast<uint8_t *>(static_cast<const uint8_t *>(x)), 2, shape);
+    auto blocks = struct_block_buffer(x, nb, kBlockBytes);
     Buffer<float, 1> yb(y, static_cast<int>(k));
     check(q4_0_dequantize(blocks, yb), "q4_0_dequantize");
 }
@@ -272,16 +282,14 @@ void ggml_quants_halide_quantize_q8_0(const float *x, void *y, int64_t k) {
     constexpr int kQK = 32, kBlockBytes = 2 + kQK;
     Buffer<float, 1> xb(const_cast<float *>(x), static_cast<int>(k));
     const int32_t nb = static_cast<int32_t>(k / kQK);
-    halide_dimension_t shape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
-    Buffer<uint8_t, 2> blocks(static_cast<uint8_t *>(y), 2, shape);
+    auto blocks = struct_block_buffer(y, nb, kBlockBytes);
     check(q8_0_quantize(xb, blocks), "q8_0_quantize");
 }
 
 void ggml_quants_halide_dequantize_q8_0(const void *x, float *y, int64_t k) {
     constexpr int kQK = 32, kBlockBytes = 2 + kQK;
     const int32_t nb = static_cast<int32_t>(k / kQK);
-    halide_dimension_t shape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
-    Buffer<uint8_t, 2> blocks(const_cast<uint8_t *>(static_cast<const uint8_t *>(x)), 2, shape);
+    auto blocks = struct_block_buffer(x, nb, kBlockBytes);
     Buffer<float, 1> yb(y, static_cast<int>(k));
     check(q8_0_dequantize(blocks, yb), "q8_0_dequantize");
 }
@@ -518,16 +526,14 @@ void ggml_quants_halide_quantize_q1_0(const float *x, void *y, int64_t k) {
     constexpr int kQK = 128, kBlockBytes = 2 + kQK / 8;
     Buffer<float, 1> xb(const_cast<float *>(x), static_cast<int>(k));
     const int32_t nb = static_cast<int32_t>(k / kQK);
-    halide_dimension_t shape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
-    Buffer<uint8_t, 2> blocks(static_cast<uint8_t *>(y), 2, shape);
+    auto blocks = struct_block_buffer(y, nb, kBlockBytes);
     check(q1_0_quantize(xb, blocks), "q1_0_quantize");
 }
 
 void ggml_quants_halide_dequantize_q1_0(const void *x, float *y, int64_t k) {
     constexpr int kQK = 128, kBlockBytes = 2 + kQK / 8;
     const int32_t nb = static_cast<int32_t>(k / kQK);
-    halide_dimension_t shape[2] = {{0, kBlockBytes, 1}, {0, nb, kBlockBytes}};
-    Buffer<uint8_t, 2> blocks(const_cast<uint8_t *>(static_cast<const uint8_t *>(x)), 2, shape);
+    auto blocks = struct_block_buffer(x, nb, kBlockBytes);
     Buffer<float, 1> yb(y, static_cast<int>(k));
     check(q1_0_dequantize(blocks, yb), "q1_0_dequantize");
 }
