@@ -83,6 +83,13 @@ namespace ggml_halide {
 struct SchemeAndBytes {
     std::unique_ptr<Halide::Approximation> scheme;
     int block_bytes;
+    // When set (is_struct()), the scheme's encoded form is a first-class
+    // Type::Struct block (one struct per block index) rather than a 2-D
+    // (byte, blk) UInt(8) buffer. The Generator uses this to declare a
+    // struct-typed, 1-D packed ImageParam/Output, and block_bytes is then just
+    // block_type.bytes() -- the single source of truth for the on-disk width.
+    // Default-constructed (invalid) for the byte-buffer schemes not yet ported.
+    Halide::Type block_type;
 };
 
 // Every make_*_scheme() factory below takes a Layout, selecting what its
@@ -1159,6 +1166,81 @@ private:
 
     std::vector<int> field_widths_;
     std::vector<int> input_index_;
+};
+
+// A struct-typed replacement for StructPack + Permute + the scale field's
+// Fp16Pack, backed by a first-class Halide::Type::Struct instead of hand-summed
+// byte offsets. `block_type` is the on-disk block's struct type (e.g.
+// block_q4_0's `{fp16 d; uint8 qs[16]}`); the compiler owns the field offsets
+// and the total byte size (`block_type.bytes()`), so nothing here computes them.
+//
+// This leaf sits at the OUTERMOST (on-disk-byte) end of a scheme's Compose,
+// exactly where the old make_block_layout() stack did. It produces the same two
+// logical Funcs the symmetric/affine quantize stage consumes, in slot order:
+//   slot 0: `codes_bytes(local, blk)` -- the raw UInt(8) bytes of the codes
+//           field, still to be interpreted by the code_pack (nibble/byte/bit
+//           extraction) composed just inside this leaf. Struct types subsume the
+//           *layout* of these bytes, not the packing trick that reads sub-byte
+//           codes out of them.
+//   slot 1: `scale(blk)` -- the block's scale, read straight out of the typed
+//           `d` field (Float(16) -> Float(32)); this is what subsumes Fp16Pack's
+//           manual `lo | (hi<<8)` reassembly + reinterpret.
+// v1 pilot: exactly one scalar scale field + one UInt(8) array codes field (the
+// block_q4_0/block_q8_0 shape). Affine (min) and split-code (q5_0) layouts stay
+// on make_block_layout for now.
+class StructBlockLayout : public Halide::Approximation {
+public:
+    StructBlockLayout(Halide::Type block_type, std::string scale_field, std::string codes_field)
+        : block_type_(block_type), scale_field_(std::move(scale_field)), codes_field_(std::move(codes_field)) {
+    }
+
+    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
+        using namespace Halide;
+        Func codes_bytes = inputs[0];  // codes_bytes(local, blk), UInt(8)
+        Func scale = inputs[1];        // scale(blk), Float(32)
+        Var blk("blk");
+
+        // Assemble one value per field element, in field declaration order, for
+        // the flattened pack_struct() form. The compiler places each at its own
+        // offset -- no hand-rolled shifts/masks/reinterpret in the reverse
+        // direction the way the old encode path needed.
+        const StructTypeInfo *info = block_type_.struct_type();
+        std::vector<Expr> vals;
+        for (const StructField &f : info->fields) {
+            int extent = f.array_extent.value_or(1);
+            for (int i = 0; i < extent; i++) {
+                if (f.name == scale_field_) {
+                    vals.push_back(cast(f.type, scale(blk)));
+                } else if (f.name == codes_field_) {
+                    vals.push_back(cast(f.type, codes_bytes(i, blk)));
+                } else {
+                    _halide_internal_error << "StructBlockLayout: unexpected field \"" << f.name << "\"\n";
+                }
+            }
+        }
+
+        Func packed("struct_block_packed");
+        packed(blk) = pack_struct(block_type_, vals);
+        return {{packed}, {}};
+    }
+
+    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
+        using namespace Halide;
+        Func packed = encoded[0];  // packed(blk), struct-typed
+        Var local("local"), blk("blk");
+
+        Func scale("struct_block_scale");
+        scale(blk) = cast<float>(field(packed(blk), scale_field_));
+
+        Func codes_bytes("struct_block_codes_bytes");
+        codes_bytes(local, blk) = cast<uint8_t>(field(packed(blk), codes_field_)[local]);
+
+        return {{codes_bytes, scale}, {}};
+    }
+
+private:
+    Halide::Type block_type_;
+    std::string scale_field_, codes_field_;
 };
 
 // One field, in ON-DISK byte order, of a struct-packed block layout: an
@@ -2565,9 +2647,27 @@ inline CodePackField make_code_pack(int block_size, int code_bits, int qmax) {
 // pair.
 inline SchemeAndBytes make_symmetric_block_scheme(
     int block_size, int qmax, RoundingMode rounding, ScaleAnchor anchor, int code_bits,
-    Layout layout = Layout::FlatRow) {
+    Layout layout = Layout::FlatRow, bool struct_layout = false) {
     using namespace Halide;
     auto [code_pack, code_bytes] = make_code_pack(block_size, code_bits, qmax);
+
+    if (struct_layout) {
+        // The on-disk block as a first-class struct: `{fp16 d; uint8 qs[...]}`,
+        // matching every symmetric GGML block_* layout. The compiler owns the
+        // offsets and the total byte size; StructBlockLayout reads/writes `d` as
+        // a typed field (subsuming Fp16Pack) and hands the `qs` bytes to the same
+        // code_pack the byte-buffer path uses. Apply{0, code_pack} interprets
+        // those bytes (nibble/byte/bit extraction) exactly as before.
+        Type block_type = Type::Struct({{"d", Float(16)}, {"qs", UInt(8), code_bytes}});
+        return {std::make_unique<Compose>(
+                    StructBlockLayout{block_type, "d", "qs"},
+                    Apply{0, std::move(code_pack)},
+                    SymmetricAffineQuantize{block_size, qmax, rounding, anchor},
+                    BlockReshape{block_size, layout == Layout::BlockIndexed}),
+                block_type.bytes(),
+                block_type};
+    }
+
     BlockLayout bl = make_block_layout(
         FieldSpec{1, 2, std::make_unique<Fp16Pack>()},    // scale
         FieldSpec{0, code_bytes, std::move(code_pack)});  // codes

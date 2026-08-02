@@ -46,6 +46,12 @@ public:
         using namespace Halide;
         SchemeAndBytes sb = static_cast<Derived *>(this)->build_scheme();
 
+        // A structured scheme's encoded form is a first-class 1-D Type::Struct
+        // block (one struct per block index); an unported one is the flat 2-D
+        // (byte, blk) UInt(8) buffer. block_type.bytes() is the on-disk width in
+        // the struct case -- no separately-threaded block_bytes needed.
+        const bool structured = sb.block_type.is_struct();
+
         // The "obvious" identity: a real ImageParam (never a placeholder --
         // that's what lets *both* directions share this one call below)
         // flowing through unchanged.
@@ -59,45 +65,44 @@ public:
             h.compute_root();
         }
 
-        // Every scheme here produces a single 2-D uint8 packed byte buffer
-        // as its encoded form -- bind compute_offline() to a properly-named
-        // ImageParam of that shape up front, instead of letting it mint one
-        // named after whatever internal Func happened to produce
-        // r.encoded[0] (e.g. "struct_pack_packed"). Only Dequantize below
-        // adopts it as a port (named "blocks_in" rather than reusing
-        // Quantize's output name "blocks_out" below, so the two don't
-        // collide and get uniquified within this same configure() call --
-        // they're never both real ports at once, but both objects always
-        // exist).
-        ImageParam blocks_in(UInt(8), 2, "blocks_in");
+        // Bind compute_offline() to a properly-named ImageParam of the packed
+        // block's shape up front, instead of letting it mint one named after
+        // whatever internal Func produced r.encoded[0]. Only Dequantize below
+        // adopts it as a port (named "blocks_in" rather than reusing Quantize's
+        // output name "blocks_out"); the two are never both real ports at once,
+        // but both objects always exist.
+        ImageParam blocks_in = structured ? ImageParam(sb.block_type, 1, "blocks_in") : ImageParam(UInt(8), 2, "blocks_in");
 
         // Severs `identity` from `input`/encode() entirely: `q.offline`
         // recomputes r.encoded (quantize) from `input`, while `identity`
         // (post-severance) instead reads from `blocks_in` (dequantize).
-        // Each direction below adopts exactly one of these two independent
-        // halves; the other is simply never registered as a port and so
-        // never gets compiled in.
         ComputeOfflineResult q = Pipeline({identity}).compute_offline(r.encoded, {blocks_in});
 
         if constexpr (dir == Direction::Quantize) {
             input.dim(0).set_min(0);
 
-            // q.offline.outputs()[0] is r.encoded[0] itself (an internally-
-            // named Func) -- a thin renamed passthrough is the only way to
-            // give the compiled Output a clean name, the same way
-            // `blocks_in` above did for the Input side; Halide inlines it
-            // away, so this costs nothing.
+            // A thin renamed passthrough gives the compiled Output a clean name
+            // (the way `blocks_in` did for the Input side); Halide inlines it.
             Func blocks_out("blocks_out");
             Var byte("byte"), blk("blk");
-            blocks_out(byte, blk) = q.offline.outputs()[0](byte, blk);
-            blocks_out.output_buffer().dim(0).set_bounds(0, sb.block_bytes);
-            blocks_out.output_buffer().dim(1).set_min(0);
+            if (structured) {
+                blocks_out(blk) = q.offline.outputs()[0](blk);
+                blocks_out.output_buffer().dim(0).set_min(0);
+            } else {
+                blocks_out(byte, blk) = q.offline.outputs()[0](byte, blk);
+                blocks_out.output_buffer().dim(0).set_bounds(0, sb.block_bytes);
+                blocks_out.output_buffer().dim(1).set_min(0);
+            }
 
             this->add_input(input);
             this->add_output(blocks_out);
         } else {
-            blocks_in.dim(0).set_bounds(0, sb.block_bytes);
-            blocks_in.dim(1).set_min(0);
+            if (structured) {
+                blocks_in.dim(0).set_min(0);
+            } else {
+                blocks_in.dim(0).set_bounds(0, sb.block_bytes);
+                blocks_in.dim(1).set_min(0);
+            }
             identity.output_buffer().dim(0).set_min(0);
 
             this->add_input(blocks_in);
