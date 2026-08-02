@@ -31,9 +31,16 @@ namespace ggml_halide {
 // retype the scale-free inner dot to Int(32). Returns that Int(32) Func -- it
 // holds the real reduction, so the caller schedules *it* (compute_root,
 // vectorize the within-block RVar, etc.).
+// `distribute` multiplies the per-block product out before hoisting, for
+// formats whose decode carries an offset: an affine weight makes the product
+// (d*code + m) * (d_act*act), which has no single scale to hoist. Multiplied out
+// it is d*d_act * sum(code*act) + m*d_act * sum(act), and hoist_invariants()
+// gives each term its own accumulator -- both with integer bodies, so both reach
+// SDOT. That is ggml's own decomposition of the affine formats.
 inline Halide::Func sdot_partial(Halide::Func &acc,
                                  const std::vector<std::pair<Halide::RVar, Halide::Var>> &preserved,
-                                 const std::vector<Halide::ApproximationResult> &operands) {
+                                 const std::vector<Halide::ApproximationResult> &operands,
+                                 bool distribute = false) {
     using namespace Halide;
 
     Func acc_dot = acc.update().rfactor(preserved);
@@ -53,6 +60,9 @@ inline Halide::Func sdot_partial(Halide::Func &acc,
         acc_dot.update().eager_inline(decode_funcs);
     }
 
+    if (distribute) {
+        acc_dot.update().distribute();
+    }
     Func acc_ff = acc_dot.update().hoist_invariants();
     return acc_ff.change_type(Int(32));
 }
