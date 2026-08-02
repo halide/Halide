@@ -27,6 +27,7 @@
 
 #include "codec_generator_base.h"  // Direction/SchemeAndBytes live here; shared idiom
 #include "quant_components.h"
+#include "sdot_schedule.h"
 
 namespace ggml_halide {
 
@@ -107,46 +108,11 @@ public:
         }
 
         if (spec.sched == ScheduleKind::SDOT) {
-            // The per-block scale depends on the block index r.y, so it is only
-            // invariant across the *within-block* reduction r.x. rfactor() runs
-            // first, preserving r.y as u so the partial Acc_dot reduces over r.x
-            // alone.
-            Func Acc_dot = Acc.update().rfactor({{r.y, u}});
-
-            // hoist_invariants() needs each operand's per-block scale to appear
-            // as a top-level factor of Acc_dot's update product. A single
-            // eager_inline() of the two .replacements only peels the outermost
-            // relayout wrapper; the scale*codes product lives deeper, inside the
-            // dequantizer Func the Approximation combinators build (see the SDOT
-            // investigation). So fold in the *entire* decode chain of both
-            // operands: eager_inline() no-ops on any Func not (currently)
-            // directly called and flattens exposed calls left to right, so
-            // inlining the whole set of inlinable decode handles, one pass per
-            // possible chain level, flattens it regardless of build order --
-            // leaving Acc_dot's update as (codes*scale)*(codes*scale) with the
-            // scales as loop-invariant leaves.
-            std::vector<Func> decode_funcs = {wt_r.replacement, act_r.replacement};
-            for (const Func &h : wt_r.handles) {
-                if (h.function().can_be_inlined()) {
-                    decode_funcs.push_back(h);
-                }
-            }
-            for (const Func &h : act_r.handles) {
-                if (h.function().can_be_inlined()) {
-                    decode_funcs.push_back(h);
-                }
-            }
-            for (size_t pass = 0; pass < decode_funcs.size(); pass++) {
-                Acc_dot.update().eager_inline(decode_funcs);
-            }
-
-            // hoist_invariants() lifts the now-invariant scales out of the r.x
-            // sum; change_type() retypes the scale-free inner dot to Int(32),
-            // leaving an SDOT-eligible integer dot (CodeGen_ARM matches it to
-            // SDOT). See test/correctness/struct_type_dot_product.cpp for the
-            // same q4_0 x q8_0 case written directly (single dequant Func).
-            Func Acc_ff = Acc_dot.update().hoist_invariants();
-            Func Acc_i32 = Acc_ff.change_type(Int(32));
+            // Accumulate the per-block dot as a scale-free Int(32) reduction
+            // (preserving the block index r.y) so CodeGen_ARM matches it to
+            // SDOT; sdot_partial() flattens both operands' decode chains and
+            // hoists their per-block scales out. See sdot_schedule.h.
+            Func Acc_i32 = sdot_partial(Acc, {{r.y, u}}, {wt_r, act_r});
             Acc_i32.compute_root()
                 .update()
                 .atomic()
