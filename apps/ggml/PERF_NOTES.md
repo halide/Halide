@@ -12,8 +12,8 @@ Measured at n=4096, best of many runs (see "Measuring" below):
 | ---- | -------- | -------- | ----- | ---------------- |
 | q4_0 | 87.8 ns  | 90.7 ns  | 0.97x | 0.97x            |
 | q4_1 | 106.7 ns | 110.2 ns | 0.97x | 0.80x            |
-| q5_0 | 115.6 ns | 183.0 ns | 0.63x | 0.51x            |
-| q5_1 | 133.5 ns | 195.8 ns | 0.68x | 0.50x            |
+| q5_0 | 115.6 ns | 166.6 ns | 0.69x | 0.51x            |
+| q5_1 | 133.7 ns | 170.3 ns | 0.78x | 0.50x            |
 | q8_0 | 69.1 ns  | 70.4 ns  | 0.98x | 0.95x            |
 
 q5_K (still on the float path) also improved 8615 -> 6730 ns from the same
@@ -242,7 +242,7 @@ lane-split with a block-only reduction using `AlignStart` + matching split-var
 names) is therefore unnecessary here; keep it in mind for formats that keep two
 live accumulators.
 
-## The q5_x 5-bit high bit -- partway (0.51 -> 0.63x, 0.50 -> 0.68x)
+## The q5_x 5-bit high bit -- partway (0.51 -> 0.69x, 0.50 -> 0.78x)
 
 q5_0/q5_1 reach SDOT, but every code carries a per-element high bit unpacked
 from the `qh` field, and that reconstruction -- not the dot, not (for q5_1) the
@@ -265,7 +265,11 @@ byte) embedded in the binary. Two things make it pay:
    gather, `ld1` per lane, measured 0.12x). So the reconstructed codes are
    **materialized** per block (`combine_bits_code` compute_at the block loop,
    `kk` split `(byte, pos)`: pos vectorizes the load, byte unrolls to a scalar
-   index).
+   index). To keep the codes in the vector register file rather than round-trip
+   a stack buffer, the materialization is `store_in(MemoryType::Register)` with
+   `kk` split further into 16-code units (one sdot chunk = two `qh` bytes x 8
+   positions) so the store width matches the sdot's read width -- otherwise the
+   8-wide table-load store vs 16-wide sdot load mismatch keeps it in memory.
 2. Materializing needs the codes leaf kept out of `sdot_partial()`'s deep inline
    (`can_be_inlined()` ignores compute level, so a `compute_root`/`compute_at`
    schedule alone does not stop `eager_inline` -- a `keep_out` name list does).
@@ -280,14 +284,21 @@ The transpose is gone (verified: no `uzp2`/`dup.8b`); reconstruction is a
 handful of ops + 4 contiguous LUT loads/block. Bonus: the same decode change
 sped up q5_K on the float path (8615 -> 6730 ns).
 
-**Ceiling.** This lands q5_0 at 0.63x, q5_1 at 0.68x -- real, but short of the
-0.95x the symmetric formats hit. The residual is the materialization
-**store/reload**: the codes must round-trip a per-block stack buffer (the sdot's
-lane layout can't consume them in registers without bringing the per-lane gather
-back). Group-level compute (all 4 blocks first) measured *worse* (0.50x), not
-better. Closing the last ~0.3x looks like it needs either a Halide CodeGen_ARM
-improvement (feed materialized codes to the sdot without the L1 round-trip) or
-ggml's exact hand-scheduled load/compute balance; the LUT approach caps here.
+**Build-flag bug.** q5_0/q5_1's `add_halide_library` were missing
+`FEATURES no_asserts no_bounds_query` (every other tuned vec_dot has it), so
+they paid the assert/bounds-query prologue -- ~11 ns of pure startup on a ~170
+ns call. Adding it was worth 0.63 -> 0.67x on its own; the register store
+another 0.67 -> 0.69x (q5_1 to 0.78x). Check this first on any new kernel.
+
+**Ceiling.** This lands q5_0 at 0.69x, q5_1 at 0.78x -- real, still short of the
+0.95x the symmetric formats hit. The residual is the reconstruction op count and
+load traffic vs ggml's hand-tuned kernel: ggml's `table_b2b_1[byte]` stores
+`(!bit)<<4`, so one `vsubq_s8` does both the high-bit add *and* the -16 offset;
+ours stores the raw bit, so `CombineBits` does `shl #4` + `add` (nibble) +
+`sub #16` (three ops). Folding the table like ggml (and loading `qh` as one word
+instead of four `ldrb`) is the next lever. Group-level codes compute (all 4
+blocks first) measured *worse* (0.50x) than per-block. See the "what differs
+from ggml" analysis in the session log.
 
 ## Not started
 

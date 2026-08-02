@@ -199,14 +199,18 @@ public:
         }
         auto schedule_codes = [&](LoopLevel level) {
             // Split kk into (byte, pos): pos (8) vectorizes the contiguous table
-            // load, byte unrolls to a scalar index. Computed at the block-group
-            // level so all kUnrollBlocks blocks' codes are reconstructed before
-            // the sdots, hiding the table-load latency behind them.
-            Var kc = codes_leaf.args()[0], ko("ko"), ki("ki");
+            // load, byte unrolls to a scalar index. store_in(Register) keeps the
+            // reconstructed codes in the vector register file straight into the
+            // sdot instead of round-tripping a stack buffer (all stores are at
+            // constant coordinates once ki is vectorized and ko unrolled).
+            Var kc = codes_leaf.args()[0], co("co"), ci("ci"), byte("byte"), pos("pos");
             codes_leaf.compute_at(level)
-                .split(kc, ko, ki, 8)
-                .vectorize(ki, 8)
-                .unroll(ko);
+                .store_in(MemoryType::Register)
+                .split(kc, co, ci, 16)    // 16-code register unit = one sdot chunk
+                .split(ci, byte, pos, 8)  // within it, two qh bytes x 8 positions
+                .vectorize(pos, 8)
+                .unroll(byte)
+                .unroll(co);
         };
 
         // Only handles with update definitions (per-block stat reductions) need
