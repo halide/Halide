@@ -90,6 +90,13 @@ struct SchemeAndBytes {
     // block_type.bytes() -- the single source of truth for the on-disk width.
     // Default-constructed (invalid) for the byte-buffer schemes not yet ported.
     Halide::Type block_type;
+    // Set when the scheme appends a per-block scaled sum of its codes (Q8_1's
+    // `s` field -- AppendSums{SumMode::ScaledFloat}). A vec_dot pairing an
+    // affine weight against such an activation can sever the offset term's
+    // sum(act) accumulator straight to this stored field instead of recomputing
+    // it -- see VecDotGeneratorBase::configure(). Purely a byte-path,
+    // 32-element-block property today (Q8_1); wider layouts leave it false.
+    bool has_block_sums = false;
 };
 
 // Every make_*_scheme() factory below takes a Layout, selecting what its
@@ -2751,7 +2758,9 @@ inline SchemeAndBytes make_symmetric_byte_sum_block_scheme(int block_size, int q
                 AppendSums{block_size, SumMode::ScaledFloat},
                 SymmetricAffineQuantize{block_size, qmax, RoundingMode::Nearest, ScaleAnchor::AbsMax},
                 BlockReshape{block_size, layout == Layout::BlockIndexed}),
-            bl.bytes};
+            bl.bytes,
+            /*block_type=*/Halide::Type{},
+            /*has_block_sums=*/true};
 }
 
 // Q8_K: activation-only (quantize_row only, matching Q8_1's own situation

@@ -137,22 +137,30 @@ public:
         const int a_nat = 32;
         std::unique_ptr<Halide::Approximation> ac;
         int ab;
+        bool act_has_block_sums = false;
         switch (a_kind.value()) {
         case AKind::Q8_0:
             ac = make_symmetric_block_scheme(a_nat, a_qmax, RoundingMode::Nearest, ScaleAnchor::AbsMax, 8, Layout::BlockIndexed).scheme;
             ab = 2 + a_nat;
             break;
-        case AKind::Q8_1:
-            ac = make_symmetric_byte_sum_block_scheme(a_nat, a_qmax, Layout::BlockIndexed).scheme;
+        case AKind::Q8_1: {
+            SchemeAndBytes sb = make_symmetric_byte_sum_block_scheme(a_nat, a_qmax, Layout::BlockIndexed);
+            ac = std::move(sb.scheme);
             ab = 2 + 2 + a_nat;
+            // Q8_1 stores its per-block scaled code sum (`s`); the affine vec_dot
+            // severs the offset term straight to it. Only meaningful when the
+            // activation block matches the weight block (a_nat == wbs, i.e. no
+            // Reblock) -- true for the q4_1/q5_1 pairings.
+            act_has_block_sums = sb.has_block_sums && a_nat == wbs;
             break;
+        }
         }
         ac = reblock_activation(std::move(ac), a_nat, wbs);
 
         // Activation stays on the byte path for now (Q8_0/Q8_1 are shared across
         // many weight formats, and the Reblock relayout is byte-based); only the
         // weight operand is struct-typed here.
-        return {std::move(wc), wb, std::move(ac), ab, wbs, sched, distribute, weight_type, Halide::Type{}};
+        return {std::move(wc), wb, std::move(ac), ab, wbs, sched, distribute, weight_type, Halide::Type{}, act_has_block_sums};
     }
 };
 
