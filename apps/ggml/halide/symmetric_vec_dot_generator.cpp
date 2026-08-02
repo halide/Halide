@@ -80,6 +80,7 @@ public:
         std::unique_ptr<Halide::Approximation> wc;
         int wb;
         ScheduleKind sched;
+        bool distribute = false;   // set for the affine (offset-carrying) weights
         Halide::Type weight_type;  // set -> weight blocks are a 1-D Type::Struct buffer
         switch (w_kind.value()) {
         case WKind::Symmetric: {
@@ -100,7 +101,13 @@ public:
         case WKind::Affine:
             wc = make_affine_block_scheme(wbs, w_levels, w_affine_rounding, w_code_bits, Layout::BlockIndexed).scheme;
             wb = 2 + 2 + (w_code_bits == 4 ? wbs / 2 : wbs);
-            sched = ScheduleKind::Float;
+            // The affine decode is (d*code + m), so the per-block product is not
+            // a single scaled term. hoist_invariants() multiplies it out into
+            //   d*d_act * sum(code*act)  +  m*d_act * sum(act)
+            // and gives each term its own accumulator, which is ggml's own
+            // decomposition -- both inner sums are integer, so both reach SDOT.
+            sched = ScheduleKind::SDOT;
+            distribute = true;
             break;
         case WKind::Symmetric5Bit:
             wc = make_symmetric_5bit_block_scheme(wbs, w_qmax, Layout::BlockIndexed).scheme;
@@ -115,7 +122,11 @@ public:
         case WKind::Affine5Bit:
             wc = make_affine_5bit_block_scheme(wbs, w_levels, w_affine_rounding, Layout::BlockIndexed).scheme;
             wb = 2 + 2 + 4 + wbs / 2;
-            sched = ScheduleKind::Float;
+            // Same offset-carrying decode as the 4-bit affine case above; the
+            // 5-bit code reconstruction stays inside the codes leaf, so the
+            // multiplied-out terms are integer just the same.
+            sched = ScheduleKind::SDOT;
+            distribute = true;
             break;
         }
 
@@ -141,7 +152,7 @@ public:
         // Activation stays on the byte path for now (Q8_0/Q8_1 are shared across
         // many weight formats, and the Reblock relayout is byte-based); only the
         // weight operand is struct-typed here.
-        return {std::move(wc), wb, std::move(ac), ab, wbs, sched, weight_type, Halide::Type{}};
+        return {std::move(wc), wb, std::move(ac), ab, wbs, sched, distribute, weight_type, Halide::Type{}};
     }
 };
 
