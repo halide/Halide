@@ -135,9 +135,19 @@ public:
         Func Acc("acc");
         Acc() = 0.0f;
         Acc() += Wt(r.x, r.y) * Vec(r.x, r.y);
+
+        // The odd-block tail decodes through its OWN placeholder Funcs, given a
+        // separate decode chain by a second approximate_by below. This lets the
+        // main reduction materialize a reconstructed-codes leaf (Q5_x) via
+        // compute_at while the tail -- a different loop nest that could not see
+        // that per-block buffer -- reconstructs inline, at negligible cost (fewer
+        // than kUnrollBlocks blocks). Both chains read the same x_blocks/y_blocks.
+        Func WtT("wt_naive_tail"), VecT("vec_naive_tail");
+        WtT(kk, blk) = 0.0f;
+        VecT(kk, blk) = 0.0f;
         RDom r_tail(0, bs, main_blocks, nblocks - main_blocks, "r_tail");
         if (sdot) {
-            Acc() += Wt(r_tail.x, r_tail.y) * Vec(r_tail.x, r_tail.y);
+            Acc() += WtT(r_tail.x, r_tail.y) * VecT(r_tail.x, r_tail.y);
         }
 
         ApproximationResult wt_r = Wt.approximate_by(*spec.weight_codec, {Acc});
@@ -150,7 +160,54 @@ public:
         std::vector<Func> to_sever = wt_r.encoded;
         to_sever.insert(to_sever.end(), act_r.encoded.begin(), act_r.encoded.end());
         std::vector<ImageParam> bind_to = {x_blocks, y_blocks};
+        if (sdot) {
+            ApproximationResult wtT_r = WtT.approximate_by(*spec.weight_codec, {Acc});
+            ApproximationResult actT_r = VecT.approximate_by(*spec.act_codec, {Acc});
+            to_sever.insert(to_sever.end(), wtT_r.encoded.begin(), wtT_r.encoded.end());
+            to_sever.insert(to_sever.end(), actT_r.encoded.begin(), actT_r.encoded.end());
+            bind_to.push_back(x_blocks);
+            bind_to.push_back(y_blocks);
+            for (Func h : wtT_r.handles) {
+                if (h.has_update_definition()) {
+                    h.compute_root();
+                }
+            }
+            for (Func h : actT_r.handles) {
+                if (h.has_update_definition()) {
+                    h.compute_root();
+                }
+            }
+        }
         Pipeline({Acc}).compute_offline(to_sever, bind_to);
+
+        // Q5_0/Q5_1 reconstruct each code from a nibble plus a per-element high
+        // bit read from the qh field's byte->bits expansion table (see
+        // PlanarBitPack::decode). That table read is only a *contiguous* 8-byte
+        // load -- matching ggml's table_b2b -- when the qh byte is a scalar and
+        // the 8 bit positions are the vector lanes. Inlined into the sdot it is
+        // the opposite (qh byte per lane -> a per-lane gather), so the SDOT
+        // branches materialize the reconstructed int8 codes per block (compute_at
+        // the block loop, kk split as (byte, pos): pos vectorizes the table load,
+        // byte unrolls to a scalar index). The odd-block tail decodes through its
+        // own inline chain (see above), so it does not need this buffer.
+        Func codes_leaf;
+        for (const Func &h : wt_r.handles) {
+            if (h.name() == "combine_bits_code") {
+                codes_leaf = h;
+                break;
+            }
+        }
+        auto schedule_codes = [&](LoopLevel level) {
+            // Split kk into (byte, pos): pos (8) vectorizes the contiguous table
+            // load, byte unrolls to a scalar index. Computed at the block-group
+            // level so all kUnrollBlocks blocks' codes are reconstructed before
+            // the sdots, hiding the table-load latency behind them.
+            Var kc = codes_leaf.args()[0], ko("ko"), ki("ki");
+            codes_leaf.compute_at(level)
+                .split(kc, ko, ki, 8)
+                .vectorize(ki, 8)
+                .unroll(ko);
+        };
 
         // Only handles with update definitions (per-block stat reductions) need
         // explicit scheduling; pure pass-throughs stay inline (same reasoning as
@@ -182,7 +239,10 @@ public:
 
             std::vector<Func> winl = {wt_r.replacement};
             for (const Func &h : wt_r.handles) {
-                if (h.function().can_be_inlined()) {
+                // Keep the materialized codes leaf (Q5_1) out of the flatten, so
+                // its qh table read stays a per-block contiguous load.
+                if (h.function().can_be_inlined() &&
+                    !(codes_leaf.defined() && h.name() == codes_leaf.name())) {
                     winl.push_back(h);
                 }
             }
@@ -226,6 +286,9 @@ public:
             // Only the product dot is computed per block now; the offset term is
             // a severed read of s_blocks (nothing to schedule).
             prod_i32.compute_at(acc_vec, bacc).update().atomic().vectorize(r.x, bs);
+            if (codes_leaf.defined()) {
+                schedule_codes(LoopLevel(acc_vec, bacc));
+            }
             Acc.update(1).unscheduled();
         } else if (spec.sched == ScheduleKind::SDOT && getenv("GGML_PER_BLOCK_PROBE")) {
             // PROBE (variant A): rfactor only the block index, so both terms are
@@ -271,7 +334,11 @@ public:
             // their per-block scales out of the surviving rxi reduction, leaving
             // the scale-free Int(32) dot. See sdot_schedule.h.
             Var lane("lane");
-            std::vector<Func> Acc_i32 = sdot_partial(Acc, {{rxo, lane}, {r.y, u}}, {wt_r, act_r}, spec.distribute_terms);
+            std::vector<std::string> keep_out;
+            if (codes_leaf.defined()) {
+                keep_out.push_back(codes_leaf.name());
+            }
+            std::vector<Func> Acc_i32 = sdot_partial(Acc, {{rxo, lane}, {r.y, u}}, {wt_r, act_r}, spec.distribute_terms, keep_out);
 
             // Acc's update now reduces over (rxo, r.y). Peel rxo back off as the
             // vector lanes, and peel kUnrollBlocks consecutive blocks off
@@ -299,6 +366,9 @@ public:
                     .vectorize(rxi, 4)
                     .vectorize(lane, lanes)
                     .unroll(rxc);
+            }
+            if (codes_leaf.defined()) {
+                schedule_codes(LoopLevel(acc_vec, bacc));
             }
 
             // Collapsing the lanes x unrolled-blocks accumulators is a fixed
