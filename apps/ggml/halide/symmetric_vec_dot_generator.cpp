@@ -80,15 +80,23 @@ public:
         std::unique_ptr<Halide::Approximation> wc;
         int wb;
         ScheduleKind sched;
+        Halide::Type weight_type;  // set -> weight blocks are a 1-D Type::Struct buffer
         switch (w_kind.value()) {
-        case WKind::Symmetric:
-            wc = make_symmetric_block_scheme(wbs, w_qmax, w_rounding, w_anchor, w_code_bits, Layout::BlockIndexed).scheme;
+        case WKind::Symmetric: {
+            // Struct-typed weight blocks (`{fp16 d; uint8 qs[...]}`); SDOT still
+            // works because the base header's deep inline flattens the struct
+            // decode's dequantizer just like the byte path's.
+            SchemeAndBytes sb = make_symmetric_block_scheme(wbs, w_qmax, w_rounding, w_anchor, w_code_bits,
+                                                            Layout::BlockIndexed, /*struct_layout=*/true);
+            wc = std::move(sb.scheme);
+            weight_type = sb.block_type;
             wb = 2 + (w_code_bits == 4 ? wbs / 2 : (w_code_bits == 1 ? wbs / 8 : wbs));
             // 1-bit (Q1_0) stays Float: change_type(Int(32)) can't prove its
             // deep-inlined per-term range fits Int(32) (its 128-wide block trips
             // the overflow check), and it's a niche format. Q4_0/Q8_0 -> SDOT.
             sched = w_code_bits == 1 ? ScheduleKind::Float : ScheduleKind::SDOT;
             break;
+        }
         case WKind::Affine:
             wc = make_affine_block_scheme(wbs, w_levels, w_affine_rounding, w_code_bits, Layout::BlockIndexed).scheme;
             wb = 2 + 2 + (w_code_bits == 4 ? wbs / 2 : wbs);
@@ -130,7 +138,10 @@ public:
         }
         ac = reblock_activation(std::move(ac), a_nat, wbs);
 
-        return {std::move(wc), wb, std::move(ac), ab, wbs, sched};
+        // Activation stays on the byte path for now (Q8_0/Q8_1 are shared across
+        // many weight formats, and the Reblock relayout is byte-based); only the
+        // weight operand is struct-typed here.
+        return {std::move(wc), wb, std::move(ac), ab, wbs, sched, weight_type, Halide::Type{}};
     }
 };
 
