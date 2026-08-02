@@ -263,8 +263,15 @@ public:
      * sharing a factor stay in one accumulator. To reach the terms of a product
      * of sums, which is not written as a sum at all, multiply it out first with
      * distribute().
+     *
+     * Returns one Func per accumulator, in the order the terms appear in the
+     * increment. Each is single-valued, so each can be scheduled -- or severed
+     * by Pipeline::compute_offline(), if something upstream already computed it
+     * -- independently of the others. An update definition that did not split
+     * returns exactly one Func, carrying every value of the original reduction.
+     * To fuse the terms' loop nests back together, use compute_with().
      */
-    Func hoist_invariants();
+    std::vector<Func> hoist_invariants();
 
     /** Multiply out products over sums in this update definition's increment,
      * so that hoist_invariants() sees a flat sum of terms. Like rfactor(), this
@@ -2776,19 +2783,11 @@ public:
      * reduction extents must be statically positive or satisfy an injected
      * runtime precondition that they are positive.
      *
-     * A Tuple-valued Func may be retyped either uniformly, or with one target
-     * type per value. Each value accumulates independently, so each gets its own
-     * combiner, identity translation and overflow proof; a failure names the
-     * value it came from.
-     *
-     * Currently supports Funcs whose update definitions use a binary operator
-     * with one operand that is a direct call to the accumulator and one
-     * self-reference-free term. Difference reductions must have the accumulator
-     * as the left operand. */
-    // @{
+     * Currently supports single-output Funcs whose update definitions use a
+     * binary operator with one operand that is a direct call to the accumulator
+     * and one self-reference-free term. Difference reductions must have the
+     * accumulator as the left operand. */
     Func change_type(Type t, bool unsafe = false);
-    Func change_type(const std::vector<Type> &ts, bool unsafe = false);
-    // @}
 
     /** Immediately inline direct calls to each of the given Funcs into this
      * Func's initial (pure) definition. The Funcs are inlined in dependency
