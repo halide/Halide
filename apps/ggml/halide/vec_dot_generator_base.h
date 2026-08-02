@@ -177,7 +177,7 @@ public:
             // their per-block scales out of the surviving rxi reduction, leaving
             // the scale-free Int(32) dot. See sdot_schedule.h.
             Var lane("lane");
-            Func Acc_i32 = sdot_partial(Acc, {{rxo, lane}, {r.y, u}}, {wt_r, act_r}, spec.distribute_terms);
+            std::vector<Func> Acc_i32 = sdot_partial(Acc, {{rxo, lane}, {r.y, u}}, {wt_r, act_r}, spec.distribute_terms);
 
             // Acc's update now reduces over (rxo, r.y). Peel rxo back off as the
             // vector lanes, and peel kUnrollBlocks consecutive blocks off
@@ -198,12 +198,14 @@ public:
             // sdot is one block's worth of registers, whereas at `ryo` it is a
             // kUnrollBlocks-long buffer that Halide has to allocate, zero, and
             // accumulate through memory.
-            Acc_i32.compute_at(acc_vec, bacc)
-                .update()
-                .atomic()
-                .vectorize(rxi, 4)
-                .vectorize(lane, lanes)
-                .unroll(rxc);
+            for (Func &part : Acc_i32) {
+                part.compute_at(acc_vec, bacc)
+                    .update()
+                    .atomic()
+                    .vectorize(rxi, 4)
+                    .vectorize(lane, lanes)
+                    .unroll(rxc);
+            }
 
             // Collapsing the lanes x unrolled-blocks accumulators is a fixed
             // cost, but at the row lengths GGML uses it is not a negligible one:
