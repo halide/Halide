@@ -98,7 +98,10 @@ public:
         // arithmetic to duplicate here.
         switch (kind.value()) {
         case SchemeKind::Symmetric:
-            return make_symmetric_block_scheme(block_size, qmax, rounding, anchor, code_bits);
+            // Phase 3 pilot: the symmetric codecs (Q4_0/Q8_0/Q1_0) build their
+            // on-disk block as a first-class Type::Struct.
+            return make_symmetric_block_scheme(block_size, qmax, rounding, anchor, code_bits,
+                                               Layout::FlatRow, /*struct_layout=*/true);
         case SchemeKind::Affine:
             return make_affine_block_scheme(block_size, levels, affine_rounding, code_bits);
         case SchemeKind::Symmetric5Bit:
