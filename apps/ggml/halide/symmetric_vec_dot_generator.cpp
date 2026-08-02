@@ -84,17 +84,10 @@ public:
         case WKind::Symmetric:
             wc = make_symmetric_block_scheme(wbs, w_qmax, w_rounding, w_anchor, w_code_bits, Layout::BlockIndexed).scheme;
             wb = 2 + (w_code_bits == 4 ? wbs / 2 : (w_code_bits == 1 ? wbs / 8 : wbs));
-            // TODO(ggml-on-qk, SDOT): the mature hoist_invariants() can't lift the
-            // per-block scale out of the reduction here. Unlike
-            // test/correctness/struct_type_dot_product.cpp (which eager_inline()s
-            // the dequantizer Funcs directly, exposing the scale as a leaf), this
-            // app builds the dequant via approximate_by()'s round-trip replacement,
-            // and a single eager_inline() of that replacement leaves the scale
-            // behind decode-chain Func boundaries hoist_invariants() can't see
-            // through. Correct (non-SDOT) Float schedule for now; see the base
-            // header's SDOT branch. Restoring SDOT needs deeper inlining of the
-            // decode chain or a hoist_invariants() that sees through it.
-            sched = ScheduleKind::Float;
+            // 1-bit (Q1_0) stays Float: change_type(Int(32)) can't prove its
+            // deep-inlined per-term range fits Int(32) (its 128-wide block trips
+            // the overflow check), and it's a niche format. Q4_0/Q8_0 -> SDOT.
+            sched = w_code_bits == 1 ? ScheduleKind::Float : ScheduleKind::SDOT;
             break;
         case WKind::Affine:
             wc = make_affine_block_scheme(wbs, w_levels, w_affine_rounding, w_code_bits, Layout::BlockIndexed).scheme;
@@ -104,14 +97,12 @@ public:
         case WKind::Symmetric5Bit:
             wc = make_symmetric_5bit_block_scheme(wbs, w_qmax, Layout::BlockIndexed).scheme;
             wb = 2 + 4 + wbs / 2;
-            // TODO(ggml-on-qk): the alpha rfactor(HoistInvariantFactor) hoisted
-            // q5_0's per-block scale even though the 5-bit code is assembled via
-            // CombineBits (nibble | (high_bit << 4)); the mature hoist_invariants()
-            // does not recognize the scale as a distributable factor through that
-            // reconstruction and errors. Use the correct (non-SDOT) Float schedule
-            // until either hoist_invariants() is taught this shape or the 5-bit
-            // codec is restructured to expose the scale as a clean leaf.
-            sched = ScheduleKind::Float;
+            // Q5_0's 5-bit code is assembled via CombineBits (nibble |
+            // (high_bit << 4)); that reconstruction is all inside the (r.x-
+            // dependent) codes leaf, so the per-block scale is still a top-level
+            // invariant factor once the decode chain is fully inlined -- SDOT
+            // works the same as Q4_0 (see the base header's deep-inline SDOT).
+            sched = ScheduleKind::SDOT;
             break;
         case WKind::Affine5Bit:
             wc = make_affine_5bit_block_scheme(wbs, w_levels, w_affine_rounding, Layout::BlockIndexed).scheme;
