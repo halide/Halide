@@ -1603,10 +1603,15 @@ public:
         Func dequantized("linear_dequantized");
         if (!has_super_d_) {
             Func codes = encoded[0], scale = encoded[1];
+            // cast<float> straight off the int8 codes (no int32 detour): the
+            // extra cast<int32_t> would break change_type()'s
+            // cast<f32>(int8)*cast<f32>(int8) SDOT pattern, forcing the vec_dot/
+            // repack inner product into a float16 multiply instead of an int8
+            // dot. See sdot_schedule.h.
             if (sub_size_ == 0) {
-                dequantized(kk, blk, _) = cast<float>(cast<int32_t>(codes(kk, blk, _))) * scale(blk, _);
+                dequantized(kk, blk, _) = cast<float>(codes(kk, blk, _)) * scale(blk, _);
             } else {
-                dequantized(kk, blk, _) = cast<float>(cast<int32_t>(codes(kk, blk, _))) * scale(kk / sub_size_, blk, _);
+                dequantized(kk, blk, _) = cast<float>(codes(kk, blk, _)) * scale(kk / sub_size_, blk, _);
             }
         } else if (has_min_) {
             Func d = encoded[0], dmin = encoded[1], scale_min = encoded[2], codes = encoded[3];
