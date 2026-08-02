@@ -8,13 +8,16 @@ on ARM (measured on an M3 Max). Branch `alexreinking/ggml-on-qk`, worktree
 
 Measured at n=4096, best of many runs (see "Measuring" below):
 
-| type | ggml-cpu | halide   | ratio | before stored-s |
-| ---- | -------- | -------- | ----- | --------------- |
-| q4_0 | 87.8 ns  | 90.7 ns  | 0.97x | 0.97x           |
-| q4_1 | 106.7 ns | 110.2 ns | 0.97x | 0.80x           |
-| q5_0 | 115.6 ns | 225.3 ns | 0.51x | 0.51x           |
-| q5_1 | 133.5 ns | 207.8 ns | 0.64x | 0.50x           |
-| q8_0 | 69.1 ns  | 70.4 ns  | 0.98x | 0.95x           |
+| type | ggml-cpu | halide   | ratio | before this work |
+| ---- | -------- | -------- | ----- | ---------------- |
+| q4_0 | 87.8 ns  | 90.7 ns  | 0.97x | 0.97x            |
+| q4_1 | 106.7 ns | 110.2 ns | 0.97x | 0.80x            |
+| q5_0 | 115.6 ns | 183.0 ns | 0.63x | 0.51x            |
+| q5_1 | 133.5 ns | 195.8 ns | 0.68x | 0.50x            |
+| q8_0 | 69.1 ns  | 70.4 ns  | 0.98x | 0.95x            |
+
+q5_K (still on the float path) also improved 8615 -> 6730 ns from the same
+qh-expansion table (it shares the 1-bit `PlanarBitPack` decode).
 
 Everything else in the table is still on the unscheduled float path
 (0.01x-0.12x) and untouched. All 28 roundtrip tests pass; `kernel-bench --all`
@@ -29,20 +32,7 @@ Commits, oldest first:
 - `6c72fb4c1` apps/ggml: take the affine vec_dots (q4_1, q5_1) to SDOT
 - `a6e9b0962` `hoist_invariants()`: return one Func per accumulator, not a Tuple
 
-## Uncommitted
-
-The stored-block-sum work (see "The stored block sum" below) is implemented and
-uncommitted. Touched files:
-
-- `halide/vec_dot_generator_base.h` -- the `sever_sum` branch (default for
-  affine x Q8_1), the third `s_blocks` Input, its pinned fp16 stride.
-- `halide/quant_components.h` -- `SchemeAndBytes::has_block_sums`, set by
-  `make_symmetric_byte_sum_block_scheme`.
-- `halide/symmetric_vec_dot_generator.cpp` -- captures the flag into
-  `VecDotSpec::act_has_block_sums`.
-- `halide/ggml_quants.cpp` -- `StackBuffer::blocks_field_f16` + the q4_1/q5_1
-  wrappers passing the `s` view (q5_1 also moved off `Buffer` onto
-  `StackBuffer`).
+## Dev aids
 
 The `getenv("GGML_PER_BLOCK_PROBE")` branch (original "variant A" via
 `sdot_partial`) is kept, now reachable only for the *symmetric* SDOT formats
@@ -252,15 +242,56 @@ lane-split with a block-only reduction using `AlignStart` + matching split-var
 names) is therefore unnecessary here; keep it in mind for formats that keep two
 live accumulators.
 
+## The q5_x 5-bit high bit -- partway (0.51 -> 0.63x, 0.50 -> 0.68x)
+
+q5_0/q5_1 reach SDOT, but every code carries a per-element high bit unpacked
+from the `qh` field, and that reconstruction -- not the dot, not (for q5_1) the
+offset -- is the whole gap vs q4_x.
+
+**What the reconstruction was.** `PlanarBitPack::decode`'s 1-bit case emitted
+`(qh[kk/8] >> (kk%8)) & 1`: a per-lane variable shift plus a `transpose_vector`
+to broadcast the two `qh` bytes across the 16 sdot lanes
+(`dup.8b + dup.4h + uzp2` per sdot, ~24 NEON ops/block). ggml avoids this with a
+1 KB `table_b2b` memory LUT (byte -> 8 expanded bytes, one contiguous load per
+`qh` byte).
+
+**What was done.** Mirrored the LUT: a compile-time `Buffer<uint8_t>` b2b(bit,
+byte) embedded in the binary. Two things make it pay:
+
+1. The table read is only a *contiguous* 8-byte load
+   (`b0[ramp(qh_byte*8, 1, 8)]`, matching ggml) when the `qh` byte is a
+   **scalar** and the 8 bit positions are the vector lanes. Inlined into the
+   sdot it is the opposite (the byte varies per lane -> a 16-wide per-lane
+   gather, `ld1` per lane, measured 0.12x). So the reconstructed codes are
+   **materialized** per block (`combine_bits_code` compute_at the block loop,
+   `kk` split `(byte, pos)`: pos vectorizes the load, byte unrolls to a scalar
+   index).
+2. Materializing needs the codes leaf kept out of `sdot_partial()`'s deep inline
+   (`can_be_inlined()` ignores compute level, so a `compute_root`/`compute_at`
+   schedule alone does not stop `eager_inline` -- a `keep_out` name list does).
+3. The odd-block **tail** reads the same codes but is a separate update
+   `compute_at` cannot reach. Fixed by giving the tail its **own** decode chain:
+   a second `Wt/Vec` placeholder pair, its own `approximate_by`, both bound to
+   the same `x_blocks/y_blocks`. Main materializes; the tail reconstructs inline
+   (< kUnrollBlocks blocks, negligible). This is also what unlocks the per-block
+   fusion -- with a shared chain Halide hoists the codes buffer to whole-row.
+
+The transpose is gone (verified: no `uzp2`/`dup.8b`); reconstruction is a
+handful of ops + 4 contiguous LUT loads/block. Bonus: the same decode change
+sped up q5_K on the float path (8615 -> 6730 ns).
+
+**Ceiling.** This lands q5_0 at 0.63x, q5_1 at 0.68x -- real, but short of the
+0.95x the symmetric formats hit. The residual is the materialization
+**store/reload**: the codes must round-trip a per-block stack buffer (the sdot's
+lane layout can't consume them in registers without bringing the per-lane gather
+back). Group-level compute (all 4 blocks first) measured *worse* (0.50x), not
+better. Closing the last ~0.3x looks like it needs either a Halide CodeGen_ARM
+improvement (feed materialized codes to the sdot without the L1 round-trip) or
+ggml's exact hand-scheduled load/compute balance; the LUT approach caps here.
+
 ## Not started
 
-q5_0 (0.51x) and q5_1 (0.64x) are on the SDOT path but well behind. q5_1 got the
-stored-`s` sever above (0.50x -> 0.64x), so its *offset* term is now free --
-what remains is the **5-bit product term**, which it shares with q5_0 (unmoved
-at 0.51x). The 5-bit high bit comes from a separate 4-byte field and the
-reconstruction may not be folding into the codes leaf as cleanly as q4_0's
-nibble unpack; that leaf, not the offset, is the q5_x bottleneck now. Everything
-else (k-quants, IQ family, tq\*) is still on the default unscheduled float
-reduction and would benefit from the same treatment as q4_1 -- the k-quants'
-two-level scales are also sums of scaled sub-reductions, which is what
+Everything else (k-quants, IQ family, tq\*) is still on the default unscheduled
+float reduction and would benefit from the same treatment as q4_1 -- the
+k-quants' two-level scales are also sums of scaled sub-reductions, which is what
 `distribute()` was built for.
