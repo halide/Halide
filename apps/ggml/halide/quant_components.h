@@ -859,7 +859,30 @@ public:
         Expr plane = rem / pos_count_;
         Expr pos = rem % pos_count_;
         Expr byte_idx = outer * pos_count_ + pos;
-        Expr field = (cast<uint32_t>(bytes(byte_idx, blk, _)) >> (plane * field_bits_)) & ((1u << field_bits_) - 1);
+        Expr byte = cast<uint32_t>(bytes(byte_idx, blk, _));
+        Expr field;
+        if (field_bits_ == 1) {
+            // A single-bit field (Q5_0/Q5_1's per-element high bit). Read it from
+            // a compile-time byte->bits expansion table (ggml's table_b2b idea):
+            // b2b(bit, byte) = (byte >> bit) & 1. The alternative arithmetic form
+            // `(byte >> plane) & 1` lowers to a per-lane byte-broadcast transpose
+            // plus mask (~24 NEON ops per 16 lanes), which is the whole
+            // q5_x-vs-q4_x gap. A Buffer<> is embedded in the binary as constant
+            // data, so this is a pure lookup, no runtime input.
+            static const Halide::Buffer<uint8_t> b2b = [] {
+                Halide::Buffer<uint8_t> t(8, 256);
+                t.set_min(0, 0);
+                for (int by = 0; by < 256; by++) {
+                    for (int bit = 0; bit < 8; bit++) {
+                        t(bit, by) = (by >> bit) & 1;
+                    }
+                }
+                return t;
+            }();
+            field = cast<uint32_t>(b2b(cast<int32_t>(plane * field_bits_), cast<int32_t>(byte)));
+        } else {
+            field = (byte >> (plane * field_bits_)) & ((1u << field_bits_) - 1);
+        }
         Func codes("planar_bit_pack_codes");
         codes(kk, blk, _) = cast<int8_t>(cast<int32_t>(field) - qmax_);
         return {{codes}, {}};
