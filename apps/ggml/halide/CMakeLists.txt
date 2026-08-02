@@ -37,6 +37,7 @@ add_halide_library(
     q4_0_vec_dot
     FROM quants.generator
     GENERATOR symmetric_vec_dot
+    FEATURES no_asserts no_bounds_query
     PARAMS
     w_kind=symmetric block_size=32 w_qmax=8 w_code_bits=4 w_rounding=truncate_half_up_with_offset
     w_anchor=extreme_signed a_kind=q8_0 a_qmax=127
@@ -59,6 +60,7 @@ add_halide_library(
     q4_1_vec_dot
     FROM quants.generator
     GENERATOR symmetric_vec_dot
+    FEATURES no_asserts no_bounds_query
     PARAMS
     w_kind=affine block_size=32 w_levels=15 w_code_bits=4 w_affine_rounding=clamped_int8 a_kind=q8_1
     a_qmax=127
@@ -122,6 +124,7 @@ add_halide_library(
     q8_0_vec_dot
     FROM quants.generator
     GENERATOR symmetric_vec_dot
+    FEATURES no_asserts no_bounds_query
     PARAMS
     w_kind=symmetric block_size=32 w_qmax=127 w_code_bits=8 w_rounding=nearest w_anchor=abs_max
     a_kind=q8_0 a_qmax=127
