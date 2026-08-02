@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
 
     Var dx{"dx"};
     Func vertical_weighted = separated.update().rfactor(r.x, dx);
-    Func vertical = vertical_weighted.update().hoist_invariants();
+    Func vertical = vertical_weighted.update().hoist_invariants()[0];
 
     separated.compute_root()
         .parallel(y)

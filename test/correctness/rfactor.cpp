@@ -1370,7 +1370,7 @@ int hoist_invariants_test() {
     // the reduction: the intermediate accumulates only the inner product and the
     // scale is applied once during write-back. The body's type (Float(32)) is
     // unchanged.
-    Func C_intm = C.update().hoist_invariants();
+    Func C_intm = C.update().hoist_invariants()[0];
 
     internal_assert(C_intm.types()[0] == Float(32))
         << "hoist_invariants: expected C_intm to keep its natural Float(32) type, got "
@@ -1444,7 +1444,7 @@ int hoist_invariants_scattered_factors_test() {
     Acc(i) = 0.0f;
     Acc(i) += (cast<float>(A(r)) * ScaleA(i)) * (cast<float>(B(r)) * ScaleB(i));
 
-    Func Acc_intm = Acc.update().hoist_invariants();
+    Func Acc_intm = Acc.update().hoist_invariants()[0];
     internal_assert(Acc_intm.types()[0] == Float(32))
         << "hoist_invariants: expected the intermediate to keep Float(32), got "
         << Acc_intm.types()[0] << "\n";
@@ -1487,7 +1487,7 @@ int hoist_invariants_scattered_factors_unsigned_test() {
     Acc(i) = 0.0f;
     Acc(i) += (cast<float>(A(r)) * ScaleA(i)) * (cast<float>(B(r)) * ScaleB(i));
 
-    Func Acc_intm = Acc.update().hoist_invariants();
+    Func Acc_intm = Acc.update().hoist_invariants()[0];
     internal_assert(Acc_intm.types()[0] == Float(32))
         << "hoist_invariants: expected the intermediate to keep Float(32), got "
         << Acc_intm.types()[0] << "\n";
@@ -1529,7 +1529,7 @@ int hoist_invariants_min_test() {
     C(i) = Float(32).max();
     C(i) = min(C(i), offset_p(i) + data_p(i, k));
 
-    Func C_intm = C.update().hoist_invariants();
+    Func C_intm = C.update().hoist_invariants()[0];
     C_intm.compute_root();
 
     const int M = 8;
@@ -1577,7 +1577,7 @@ int hoist_invariants_or_test() {
     valid(i) = cast<bool>(false);
     valid(i) = valid(i) || (mask_p(i) && check_p(i, k));
 
-    Func valid_intm = valid.update().hoist_invariants();
+    Func valid_intm = valid.update().hoist_invariants()[0];
     valid_intm.compute_root();
 
     const int M = 8;
@@ -1619,7 +1619,7 @@ int hoist_invariants_strict_float_test() {
     f() = 0.0f;
     f() += 1.5f * strict_float(cast<float>(data(k)));
 
-    Func intm = f.update().hoist_invariants();
+    Func intm = f.update().hoist_invariants()[0];
     intm.compute_root();
 
     internal_assert(intm.types()[0] == Float(32))
@@ -1646,7 +1646,7 @@ int hoist_invariants_predicated_rdom_test() {
     f() = 0;
     f() += require(enabled, 2, "hoisted factor evaluated outside RDom predicate") * (r + 1);
 
-    Func intm = f.update().hoist_invariants();
+    Func intm = f.update().hoist_invariants()[0];
     intm.compute_root();
 
     Module module = f.compile_to_module(f.infer_arguments(), "hoist_invariants_predicated_rdom");
@@ -1713,7 +1713,7 @@ int hoist_invariants_after_rfactor_test() {
     // Preserve r.y as u; the intermediate now reduces only over r.x, and
     // scale_p(u) is invariant across that reduction.
     Func intm = f.update().rfactor({{r.y, u}});
-    Func intm2 = intm.update().hoist_invariants();
+    Func intm2 = intm.update().hoist_invariants()[0];
     intm.compute_root();
     intm2.compute_root();
 
@@ -1786,7 +1786,7 @@ int hoist_invariants_separable_gaussian_after_rfactor_test() {
     auto [blur, r] = make_pipeline("gaussian_blur", "r");
 
     Func vertical_partials = blur.update().rfactor(r.y, dy);
-    Func horizontal = vertical_partials.update().hoist_invariants();
+    Func horizontal = vertical_partials.update().hoist_invariants()[0];
 
     vertical_partials.compute_root();
     horizontal.compute_root();
@@ -1823,11 +1823,13 @@ int hoist_invariants_terms_test() {
     Acc(i) = 0.0f;
     Acc(i) += A(i) * cast<float>(G(r)) + B(i) * cast<float>(H(r));
 
-    Func Acc_intm = Acc.update().hoist_invariants();
-    internal_assert(Acc_intm.outputs() == 2)
+    std::vector<Func> Acc_intm = Acc.update().hoist_invariants();
+    internal_assert(Acc_intm.size() == 2)
         << "hoist_invariants terms: expected one accumulator per term, got "
-        << Acc_intm.outputs() << "\n";
-    Acc_intm.compute_root();
+        << Acc_intm.size() << "\n";
+    for (Func &f : Acc_intm) {
+        f.compute_root();
+    }
 
     Buffer<int8_t> g_buf(K), h_buf(K);
     Buffer<float> a_buf(1), b_buf(1);
@@ -1852,11 +1854,11 @@ int hoist_invariants_terms_test() {
     Func Shared{"Shared"};
     Shared(i) = 0.0f;
     Shared(i) += A(i) * cast<float>(G(r)) + A(i) * cast<float>(H(r));
-    Func Shared_intm = Shared.update().hoist_invariants();
-    internal_assert(Shared_intm.outputs() == 1)
+    std::vector<Func> Shared_intm = Shared.update().hoist_invariants();
+    internal_assert(Shared_intm.size() == 1)
         << "hoist_invariants terms: expected terms sharing a factor to share an "
-        << "accumulator, got " << Shared_intm.outputs() << "\n";
-    Shared_intm.compute_root();
+        << "accumulator, got " << Shared_intm.size() << "\n";
+    Shared_intm[0].compute_root();
 
     Buffer<float> shared = Shared.realize({1});
     const float shared_expected = 2.0f * (3.0f + 5.0f) * (float)K;
@@ -1887,18 +1889,20 @@ int hoist_invariants_distribute_test() {
     Acc(i) = 0.0f;
     Acc(i) += (cast<float>(Q(r)) * D(i) + M(i)) * (cast<float>(P(r)) * E(i));
 
-    Func Acc_intm = Acc.update().distribute().hoist_invariants();
-    internal_assert(Acc_intm.outputs() == 2)
+    std::vector<Func> Acc_intm = Acc.update().distribute().hoist_invariants();
+    internal_assert(Acc_intm.size() == 2)
         << "distribute: expected the multiplied-out increment to yield two "
-        << "accumulators, got " << Acc_intm.outputs() << "\n";
+        << "accumulators, got " << Acc_intm.size() << "\n";
 
     // Both bodies are integer sums of int8 products, so both retype -- and each
-    // value may take its own target type.
-    Func Acc_typed = Acc_intm.change_type({Int(32), Int(16)});
-    internal_assert(Acc_typed.types()[0] == Int(32) && Acc_typed.types()[1] == Int(16))
-        << "distribute: change_type did not apply per-value types, got "
-        << Acc_typed.types()[0] << " and " << Acc_typed.types()[1] << "\n";
-    Acc_typed.compute_root();
+    // accumulator is its own Func, so each may take its own target type.
+    Func qp = Acc_intm[0].change_type(Int(32));
+    Func p_sum = Acc_intm[1].change_type(Int(16));
+    internal_assert(qp.types()[0] == Int(32) && p_sum.types()[0] == Int(16))
+        << "distribute: retyping the accumulators separately gave "
+        << qp.types()[0] << " and " << p_sum.types()[0] << "\n";
+    qp.compute_root();
+    p_sum.compute_root();
 
     Buffer<int8_t> q_buf(K), p_buf(K);
     Buffer<float> d_buf(1), m_buf(1), e_buf(1);

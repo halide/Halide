@@ -1008,24 +1008,6 @@ Expr apply_hoisted_factor(const Expr &r, const HoistedFactor &term) {
     return make_binary_op(term.op, term.factor, r);
 }
 
-// Where a value's terms live in the intermediate's tuple. Each value of the
-// original update contributes as many slots as it has terms, so a scalar Func
-// whose increment split in two gets a two-slot intermediate.
-struct TupleLayout {
-    vector<size_t> first_slot;  // per value
-    size_t slots = 0;
-
-    explicit TupleLayout(const vector<vector<HoistedFactor>> &terms) {
-        first_slot.reserve(terms.size());
-        for (size_t i = 0; i < terms.size(); ++i) {
-            first_slot.push_back(slots);
-            // A value with nothing hoistable still needs its own slot, since the
-            // intermediate carries every value of the original reduction.
-            slots += std::max<size_t>(terms[i].size(), 1);
-        }
-    }
-};
-
 }  // namespace
 
 pair<vector<Split>, vector<Split>> Stage::rfactor_validate_args(const std::vector<std::pair<RVar, Var>> &preserved, const AssociativeOp &prover_result) {
@@ -1387,7 +1369,7 @@ Stage &Stage::distribute() {
     return *this;
 }
 
-Func Stage::hoist_invariants() {
+vector<Func> Stage::hoist_invariants() {
     user_assert(!definition.is_init()) << "hoist_invariants() must be called on an update definition\n";
 
     definition.schedule().touched() = true;
@@ -1414,10 +1396,8 @@ Func Stage::hoist_invariants() {
         << "hoist_invariants() could not find a distributable loop-invariant "
         << "factor in the update definition of " << function.name() << ".\n";
 
-    // Splitting one value across several accumulators renumbers the
-    // intermediate's tuple slots, which a Tuple-valued update could not follow:
-    // its values may reference each other's slots, and a split value no longer
-    // has a single slot to point at.
+    // A Tuple-valued update's values may reference each other, so a value that
+    // splits across several accumulators has no single Func left to point at.
     const bool splits = std::any_of(hoisted_terms.begin(), hoisted_terms.end(),
                                     [](const auto &t) { return t.size() > 1; });
     user_assert(!splits || definition.values().size() == 1)
@@ -1425,45 +1405,51 @@ Func Stage::hoist_invariants() {
         << "per term for a single-valued update definition, but "
         << function.name() << " is Tuple-valued.\n";
 
-    // With that restriction, a value's slot index is its own index unless the
-    // definition is single-valued, in which case term j occupies slot j.
-    const TupleLayout layout(hoisted_terms);
+    // One accumulator Func per term, each single-valued, so that each can be
+    // scheduled -- or severed by Pipeline::compute_offline() -- on its own. A
+    // definition that did not split keeps the shape it had: a single
+    // intermediate carrying every value of the original reduction, whose values
+    // may reference each other's.
+    vector<Func> intms;
+    if (splits) {
+        internal_assert(hoisted_terms.size() == 1);
+        for (size_t j = 0; j < hoisted_terms[0].size(); ++j) {
+            Func intm(unique_name(function.name() + "_intm"));
+            intm(dim_vars_exprs) = prover_result.pattern.identities[0];
 
-    Func intm(function.name() + "_intm");
-    {
-        vector<Expr> identities;
-        identities.reserve(layout.slots);
-        for (size_t i = 0; i < hoisted_terms.size(); ++i) {
-            const size_t n = std::max<size_t>(hoisted_terms[i].size(), 1);
-            identities.insert(identities.end(), n, prover_result.pattern.identities[i]);
+            Expr self_ref = Call::make(hoisted_terms[0][j].inner_body.type(), function.name(),
+                                       dim_vars_exprs, Call::Halide, FunctionPtr(), 0);
+            vector<Expr> values = {make_binary_op(prover_result.pattern.ops[0].node_type(),
+                                                  self_ref, hoisted_terms[0][j].inner_body)};
+            values = substitute_self_reference(values, function.name(), intm.function(), {});
+
+            // The args and values still refer to the original RDom, so
+            // define_update() discovers and reuses it. Every term reduces over
+            // that same domain, and each carries the whole update schedule.
+            intm.function().define_update(definition.args(), values);
+            intm.function().update(0).schedule() = definition.schedule().get_copy();
+            intms.push_back(intm);
         }
-        intm(dim_vars_exprs) = Tuple(identities);
-    }
+    } else {
+        Func intm(function.name() + "_intm");
+        intm(dim_vars_exprs) = Tuple(prover_result.pattern.identities);
 
-    // Define the factor-free intermediate reduction: one accumulator per term,
-    // all advanced by the same loop over the same reduction domain.
-    {
-        vector<Expr> values;
-        values.reserve(layout.slots);
+        vector<Expr> values = definition.values();
         for (size_t i = 0; i < hoisted_terms.size(); ++i) {
             if (hoisted_terms[i].empty()) {
-                values.push_back(definition.values()[i]);
                 continue;
             }
-            for (size_t j = 0; j < hoisted_terms[i].size(); ++j) {
-                const size_t slot = layout.first_slot[i] + j;
-                Expr self_ref = Call::make(hoisted_terms[i][j].inner_body.type(), function.name(),
-                                           dim_vars_exprs, Call::Halide, FunctionPtr(), (int)slot);
-                values.push_back(make_binary_op(prover_result.pattern.ops[i].node_type(),
-                                                self_ref, hoisted_terms[i][j].inner_body));
-            }
+            internal_assert(hoisted_terms[i].size() == 1);
+            Expr self_ref = Call::make(hoisted_terms[i][0].inner_body.type(), function.name(),
+                                       dim_vars_exprs, Call::Halide, FunctionPtr(), (int)i);
+            values[i] = make_binary_op(prover_result.pattern.ops[i].node_type(),
+                                       self_ref, hoisted_terms[i][0].inner_body);
         }
         values = substitute_self_reference(values, function.name(), intm.function(), {});
 
-        // The args and values still refer to the original RDom, so define_update()
-        // discovers and reuses it. The entire update schedule transfers unchanged.
         intm.function().define_update(definition.args(), values);
         intm.function().update(0).schedule() = definition.schedule().get_copy();
+        intms.push_back(intm);
     }
 
     // Replace the original reduction with a factor-applying write-back update.
@@ -1473,17 +1459,17 @@ Func Stage::hoist_invariants() {
             if (!prover_result.ys[i].var.empty()) {
                 // Re-apply each term's factor to its own accumulator, then
                 // recombine the terms with the reduction's own operator.
-                auto slot = [&](size_t s) {
-                    return layout.slots == 1 ? Expr(intm(dim_vars_exprs)) : Expr(intm(dim_vars_exprs)[s]);
-                };
                 Expr r;
-                if (hoisted_terms[i].empty()) {
-                    r = slot(layout.first_slot[i]);
-                } else {
-                    for (size_t j = 0; j < hoisted_terms[i].size(); ++j) {
-                        Expr term = apply_hoisted_factor(slot(layout.first_slot[i] + j), hoisted_terms[i][j]);
-                        r = r.defined() ? make_binary_op(prover_result.pattern.ops[i].node_type(), r, term) : term;
+                if (splits) {
+                    for (size_t j = 0; j < hoisted_terms[0].size(); ++j) {
+                        Expr term = apply_hoisted_factor(intms[j](dim_vars_exprs), hoisted_terms[0][j]);
+                        r = r.defined() ? make_binary_op(prover_result.pattern.ops[0].node_type(), r, term) : term;
                     }
+                } else {
+                    Expr acc = definition.values().size() == 1 ?
+                                   Expr(intms[0](dim_vars_exprs)) :
+                                   Expr(intms[0](dim_vars_exprs)[i]);
+                    r = hoisted_terms[i].empty() ? acc : apply_hoisted_factor(acc, hoisted_terms[i][0]);
                 }
                 add_let(writeback_map, prover_result.ys[i].var, r);
             }
@@ -1524,7 +1510,7 @@ Func Stage::hoist_invariants() {
         definition.schedule().splits() = var_splits;
     }
 
-    return intm;
+    return intms;
 }
 
 void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor_arg, bool exact, TailStrategy tail) {
@@ -4065,13 +4051,12 @@ ConstantInterval float_exact_integer_bounds(Type t) {
     return ConstantInterval(-bound, bound);
 }
 
-// Prove that computing value `idx` of `typed`'s reduction at type `t` cannot
-// overflow. Returns true if it is safe; if safety can only be guaranteed under a
-// runtime precondition, that condition is returned in *condition. Returns an
-// error message if it cannot be proven. Each value of a Tuple-valued reduction
-// accumulates independently, so each is proven on its own.
+// Prove that computing `typed`'s reduction at type `t` cannot overflow. Returns
+// true if it is safe; if safety can only be guaranteed under a runtime
+// precondition, that condition is returned in *condition. Returns an error
+// message if it cannot be proven.
 std::optional<std::string> change_type_prove_safe(
-    const Func &typed, Type t, size_t idx, const FuncValueBounds &fvb, Expr *condition  //
+    const Func &typed, Type t, const FuncValueBounds &fvb, Expr *condition  //
 ) {
     *condition = Expr();
     const Function fn = typed.function();
@@ -4121,14 +4106,14 @@ std::optional<std::string> change_type_prove_safe(
     // The initial accumulator value must be representable at the new type. Carry
     // its interval through every update so each stage is checked against all
     // preceding work rather than against an implicit zero.
-    internal_assert(idx < fn.values().size());
-    ConstantInterval accumulator = bounds_of(fn.values()[idx]);
+    internal_assert(fn.values().size() == 1);
+    ConstantInterval accumulator = bounds_of(fn.values()[0]);
     if (!limit.contains(accumulator)) {
         return "the initial value may not be representable in the target type";
     }
 
     for (const Definition &def : fn.updates()) {
-        Expr val = substitute_in_all_lets(def.values()[idx]);
+        Expr val = substitute_in_all_lets(def.values()[0]);
         optional<IRNodeType> op = reduction_op(val, fn.name());
 
         // The increment is the non-self-reference operand of the combiner.
@@ -4220,28 +4205,22 @@ std::optional<std::string> change_type_prove_safe(
 
 Func Func::change_type(Type t, bool unsafe) {
     user_assert(defined()) << "change_type() called on undefined Func.\n";
-    return change_type(vector<Type>(outputs(), t), unsafe);
-}
-
-Func Func::change_type(const vector<Type> &ts, bool unsafe) {
-    user_assert(defined()) << "change_type() called on undefined Func.\n";
     user_assert(!func.has_extern_definition())
         << "change_type() cannot be applied to the extern Func " << name() << ".\n";
-    user_assert((int)ts.size() == outputs())
-        << "change_type() was given " << ts.size() << " types for " << name()
-        << ", which has " << outputs() << " outputs.\n";
+    user_assert(outputs() == 1)
+        << "change_type() currently supports only single-output Funcs, but "
+        << name() << " has " << outputs() << " outputs.\n";
 
     invalidate_cache();
 
-    const vector<Type> old_ts = func.output_types();
-    if (old_ts == ts) {
+    const Type old_t = func.output_types()[0];
+    if (old_t == t) {
         return *this;
     }
 
     const string fname = func.name();
     const vector<Var> pure_vars = args();
     const vector<Expr> pure_arg_exprs(pure_vars.begin(), pure_vars.end());
-    const size_t n_values = ts.size();
 
     // Proven value ranges for this Func's producers. Retyping references the same
     // producers (only self-references and casts are rewritten), so bounds keyed
@@ -4252,37 +4231,32 @@ Func Func::change_type(const vector<Type> &ts, bool unsafe) {
         return compute_function_value_bounds(topological_order({func}, env), env);
     }();
 
-    // Each value of a Tuple-valued reduction has its own combiner, so the
-    // identity translation below is decided per value.
-    vector<optional<IRNodeType>> ops(n_values);
-    vector<Expr> translated_identities(n_values);
-    vector<Expr> identity_preconditions(n_values);
+    // Determine the reduction op (if any), so min/max accumulations get the
+    // right identity at the new type rather than a lossy cast of e.g. +inf.
+    optional<IRNodeType> op;
+    if (func.has_update_definition()) {
+        op = reduction_op(substitute_in_all_lets(func.update(0).values()[0]), fname);
+    }
+    const bool is_min_max = op && (*op == IRNodeType::Min || *op == IRNodeType::Max);
 
-    for (size_t i = 0; i < n_values; ++i) {
-        // Determine the reduction op (if any), so min/max accumulations get the
-        // right identity at the new type rather than a lossy cast of e.g. +inf.
-        if (func.has_update_definition()) {
-            ops[i] = reduction_op(substitute_in_all_lets(func.update(0).values()[i]), fname);
-        }
-        const bool is_min_max = ops[i] && (*ops[i] == IRNodeType::Min || *ops[i] == IRNodeType::Max);
-        if (!is_min_max) {
-            continue;
-        }
-        const Expr &initial = func.values()[i];
-        const Expr old_id = get_associative_identity(old_ts[i], *ops[i]);
+    Expr translated_identity;
+    Expr identity_precondition;
+    if (is_min_max) {
+        const Expr &initial = func.values()[0];
+        const Expr old_id = get_associative_identity(old_t, *op);
         if (old_id.defined() && can_prove(initial == old_id)) {
-            translated_identities[i] = get_associative_identity(ts[i], *ops[i]);
-            user_assert(translated_identities[i].defined())
+            translated_identity = get_associative_identity(t, *op);
+            user_assert(translated_identity.defined())
                 << "change_type() could not find an identity for "
-                << IRNodeType_string(*ops[i]) << " at type " << ts[i] << ".\n";
+                << IRNodeType_string(*op) << " at type " << t << ".\n";
 
-            const Expr round_tripped = cast(old_ts[i], translated_identities[i]);
+            const Expr round_tripped = cast(old_t, translated_identity);
             if (!unsafe && !can_prove(round_tripped == old_id)) {
                 const auto err =
-                    nonempty_dense_update_precondition(func, &identity_preconditions[i]);
+                    nonempty_dense_update_precondition(func, &identity_precondition);
                 user_assert(!err)
-                    << "change_type(" << ts[i] << ") on " << fname << " value " << i
-                    << " cannot safely translate its " << IRNodeType_string(*ops[i])
+                    << "change_type(" << t << ") on " << fname
+                    << " cannot safely translate its " << IRNodeType_string(*op)
                     << " identity because " << *err << ".\n"
                     << "Pass unsafe=true to bypass this check.\n";
             }
@@ -4293,16 +4267,9 @@ Func Func::change_type(const vector<Type> &ts, bool unsafe) {
     Func typed(fname + "_typed");
 
     // Pure definition.
-    {
-        vector<Expr> init;
-        init.reserve(n_values);
-        for (size_t i = 0; i < n_values; ++i) {
-            init.push_back(translated_identities[i].defined() ?
-                               translated_identities[i] :
-                               retype_leaf(func.values()[i], ts[i], func_bounds));
-        }
-        typed(pure_vars) = Tuple(init);
-    }
+    typed(pure_vars) = translated_identity.defined() ?
+                           translated_identity :
+                           retype_leaf(value(), t, func_bounds);
 
     // Update definitions. The retyped values still reference the original
     // reduction domain, so pass a default domain and let define_update discover
@@ -4312,9 +4279,8 @@ Func Func::change_type(const vector<Type> &ts, bool unsafe) {
         const Definition &def = func.update(u);
         vector<Expr> vals;
         vals.reserve(def.values().size());
-        for (size_t i = 0; i < def.values().size(); ++i) {
-            vals.push_back(retype_value(substitute_in_all_lets(def.values()[i]), fname,
-                                        typed.function(), ts[i], func_bounds));
+        for (const Expr &v : def.values()) {
+            vals.push_back(retype_value(substitute_in_all_lets(v), fname, typed.function(), t, func_bounds));
         }
         typed.function().define_update(def.args(), vals);
         typed.function().update(u).schedule() = def.schedule().get_copy();
@@ -4325,32 +4291,25 @@ Func Func::change_type(const vector<Type> &ts, bool unsafe) {
     typed.function().schedule().type_change_checks() =
         func.schedule().type_change_checks();
 
-    for (size_t i = 0; i < n_values; ++i) {
-        if (!identity_preconditions[i].defined()) {
-            continue;
-        }
+    if (identity_precondition.defined()) {
         std::ostringstream msg;
-        msg << "change_type(" << ts[i] << ") on " << fname << " value " << i
+        msg << "change_type(" << t << ") on " << fname
             << " requires a non-empty reduction domain to translate its "
-            << IRNodeType_string(*ops[i]) << " identity";
+            << IRNodeType_string(*op) << " identity";
         typed.function().schedule().type_change_checks().emplace_back(
-            identity_preconditions[i], msg.str());
+            identity_precondition, msg.str());
     }
 
-    // Safety check, per value: each accumulates independently.
-    for (size_t i = 0; i < n_values && !unsafe; ++i) {
-        if (!ts[i].is_int_or_uint() && !ts[i].is_float()) {
-            continue;
-        }
+    // Safety check.
+    if (!unsafe && (t.is_int_or_uint() || t.is_float())) {
         Expr condition;
-        const auto err = change_type_prove_safe(typed, ts[i], i, func_bounds, &condition);
+        const auto err = change_type_prove_safe(typed, t, func_bounds, &condition);
         user_assert(!err)
-            << "change_type(" << ts[i] << ") on " << fname << " value " << i
-            << " may overflow: " << *err << ".\n"
+            << "change_type(" << t << ") on " << fname << " may overflow: " << *err << ".\n"
             << "Pass unsafe=true to change_type() to bypass this check.\n";
         if (condition.defined()) {
             std::ostringstream msg;
-            msg << "change_type(" << ts[i] << ") on " << fname << " value " << i
+            msg << "change_type(" << t << ") on " << fname
                 << " requires the reduction extent to be small enough not to overflow";
             typed.function().schedule().type_change_checks().emplace_back(condition, msg.str());
         }
@@ -4358,18 +4317,22 @@ Func Func::change_type(const vector<Type> &ts, bool unsafe) {
 
     // Rewrite this Func into an inline cast-back wrapper of the retyped clone, so
     // that every existing consumer keeps seeing the original type.
+<<<<<<< HEAD
     vector<Expr> wrapped;
     wrapped.reserve(n_values);
     for (size_t i = 0; i < n_values; ++i) {
         wrapped.push_back(cast(old_ts[i], Call::make(typed.function(), pure_arg_exprs, (int)i, /*follow_global_wrappers=*/true)));
     }
+=======
+    const Expr wrapped = cast(old_t, Call::make(typed.function(), pure_arg_exprs, 0));
+>>>>>>> f630dee10 (hoist_invariants(): return one Func per accumulator, not a Tuple)
     vector<string> arg_names;
     arg_names.reserve(pure_vars.size());
     for (const Var &v : pure_vars) {
         arg_names.push_back(v.name());
     }
     func.clear_definition();
-    func.define(arg_names, wrapped);
+    func.define(arg_names, {wrapped});
 
     return typed;
 }
