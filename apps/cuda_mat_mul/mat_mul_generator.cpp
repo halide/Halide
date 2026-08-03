@@ -22,36 +22,39 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 // accumulator type, so it picks between the accumulators an operand type can
 // pair with.
 //
-// Time for one multiply on an RTX 5060 Ti, against cublas doing the same
-// thing at each pair of types. The block shapes below were picked by sweeping
-// sixty of them at each size and operand type.
+// GFlop/s on an RTX 5060 Ti, against cublas doing the same thing at each
+// pair of types, and against the peak the hardware could reach. The block
+// shapes below were picked by sweeping them at each size and operand type.
 //
-//                            1024      2048       4096
-//     Halide f32            312 us   1670 us   18812 us
-//     cublas f32            148 us   1026 us    7818 us
+//                             1024      2048      4096     peak
+//     Halide f32              6878     10294      7298    28500
+//     cublas f32             14503     16574     17449
 //
-//     Halide f16 -> f32      53 us    367 us    2810 us
-//     cublas f16 -> f32      51 us    350 us    2714 us
+//     Halide f16 -> f32      40070     46671     48888    56980
+//     cublas f16 -> f32      41658     49069     50440
 //
-//     Halide bf16 -> f32     53 us    367 us    2801 us
-//     cublas bf16 -> f32     51 us    350 us    2714 us
+//     Halide bf16 -> f32     40025     46681     48692    56980
+//     cublas bf16 -> f32     41664     49054     50437
 //
-//     Halide f16 -> f16      36 us    198 us    1589 us
-//     cublas f16 -> f16      31 us    228 us    1566 us
+//     Halide f16 -> f16      60349     86502     86599   113960
+//     cublas f16 -> f16      69221     75073     87073
 //
-//     Halide u8 -> i32       35 us    219 us    1691 us
-//     cublas s8 -> i32       20 us    140 us    1055 us
+//     Halide u8 -> i32       62869     82391     89641   227920
+//     cublas s8 -> i32      107868    122203    129970
+//
+// The peak column is 36 SMs times the 3090 MHz maximum clock times the rate
+// per SM per clock, which is 256 flops for the cuda cores, and 512, 1024 and
+// 2048 for the tensor cores at each accumulator width. Those per-SM rates are
+// the consumer part pattern rather than something measured here, so treat the
+// column as a scale rather than a number.
 //
 // Rows within a pair of types are comparable to each other; rows in different
 // pairs are not, because a narrower accumulator or narrower operands are less
-// work. The 16-bit float schedules land within a few percent of cublas, and
-// the half accumulator one is ahead of it at 2048. The float schedule is
-// about half of cublas, and the eight-bit one is the weakest: 55% of it at
-// 1024 and 62% at 4096. cublas is not using the wmma instructions there -
-// eight-bit operands have an mma shape with twice the reduction depth per
-// instruction, which this schedule has no way to reach. cublas takes signed
-// operands where the variant here takes unsigned ones; the hardware runs both
-// at the same rate.
+// work. The two 16-bit float schedules land within a few percent of cublas,
+// and the half accumulator one is ahead of it at 2048. The eight-bit one is
+// the weakest against cublas, at 58% to 69% of it, though it is the fastest
+// thing here in absolute terms - which is what makes bytes interesting for
+// imaging, where the inputs are usually bytes anyway.
 //
 class MatMul : public Halide::Generator<MatMul> {
 public:
@@ -65,8 +68,9 @@ public:
     GeneratorParam<int> tiles_y{"tiles_y", 0};
     GeneratorParam<int> warps_x{"warps_x", 0};
     GeneratorParam<int> warps_y{"warps_y", 0};
-    // How much of the reduction is staged in shared memory at a time.
-    GeneratorParam<int> block_r{"block_r", 32};
+    // How much of the reduction is staged in shared memory at a time. Zero
+    // means pick it along with the block shape below.
+    GeneratorParam<int> block_r{"block_r", 0};
     // Extra elements per row of the shared panels, which spreads consecutive
     // rows across different banks. Zero means pad by sixteen bytes, which is
     // the least that keeps each row aligned both for the widest asynchronous
@@ -183,6 +187,9 @@ private:
         // tiles_y) multiplies, so this is what gets us reuse out of the loads.
         const int tile = 16;
         int tx = tiles_x, ty = tiles_y, wx = warps_x, wy = warps_y;
+        // The staging depth goes with the shape, so an explicit block_r only
+        // wins if it was asked for.
+        int br = 32;
         if (tx == 0 || ty == 0 || wx == 0 || wy == 0) {
             // Measured on an RTX 5060 Ti by sweeping sixty shapes at each size
             // and operand type. These do not follow a trend worth
@@ -192,19 +199,21 @@ private:
             // type matters as much as the size: bytes make the operand loads
             // cheap enough to pay for a much larger accumulator, so they want
             // a tall block spread over four warps, where the 16-bit types want
-            // a wide one over fewer.
+            // a wide one over fewer, with a deeper staged panel to match.
             //
             // Brain floats pick out exactly the same shapes as halves at
             // every size, so they share a row here.
             const bool bytes = A.type().bits() == 8;
             const bool half_accumulator = out.type() == Float(16);
             if (bytes) {
+                // Bytes stage twice the reduction depth in the same shared
+                // memory, and mostly want to.
                 if ((int)size <= 1024) {
-                    tx = 2, ty = 8, wx = 4, wy = 1;
+                    tx = 2, ty = 8, wx = 2, wy = 1, br = 64;
                 } else if ((int)size <= 2048) {
-                    tx = 2, ty = 10, wx = 4, wy = 1;
+                    tx = 2, ty = 10, wx = 2, wy = 1, br = 32;
                 } else {
-                    tx = 2, ty = 8, wx = 4, wy = 1;
+                    tx = 2, ty = 8, wx = 2, wy = 1, br = 64;
                 }
             } else if (half_accumulator) {
                 if ((int)size <= 1024) {
@@ -223,6 +232,9 @@ private:
                     tx = 4, ty = 2, wx = 2, wy = 2;
                 }
             }
+        }
+        if (block_r) {
+            br = block_r;
         }
         const int block_x = tile * tx * wx;
         const int block_y = tile * ty * wy;
@@ -266,7 +278,7 @@ private:
             .unroll(yi);
 
         prod.update()
-            .split(r, ro, ri, block_r)
+            .split(r, ro, ri, br)
             .split(x, xw, xi, tile * tx)
             .split(xi, xi, rxi, tile)
             .split(y, yw, yi, tile * ty)
@@ -287,12 +299,14 @@ private:
         // bytes at a time along the dense dimension, so that the reads from
         // global memory coalesce and the writes to shared memory can be done
         // as asynchronous copies.
-        const int vec = 8;
+        // Each thread moves sixteen bytes, the widest asynchronous copy the
+        // hardware has. How many elements that is depends on the operand type.
+        const int vec = 16 / A.type().bytes();
         Var rro("rro"), rrv("rrv"), xxo("xxo"), xxi("xxi");
         Var t("t"), ti("ti"), tw("tw"), tw2("tw2"), to("to");
 
         // B.in() is dense in the reduction dimension, which is its _0.
-        B.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, (int)block_r + pa).split(_0, rro, rrv, vec).fuse(rro, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(rrv);
+        B.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, br + pa).split(_0, rro, rrv, vec).fuse(rro, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(rrv);
 
         // A.in() is dense in x, which is its _0.
         A.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, block_x + pb).split(_0, xxo, xxi, vec).fuse(xxo, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(xxi);
