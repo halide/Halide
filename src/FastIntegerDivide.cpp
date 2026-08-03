@@ -299,8 +299,12 @@ Expr fast_integer_divide_impl(Expr numerator, Expr denominator, bool round_to_ze
         result -= xsign;
     }
 
-    // The tables don't work for denominator == 1
-    result = select(std::move(denominator) == 1, std::move(original_numerator), result);
+    // The tables don't work for denominator == 1. Denominator == 0 is
+    // defined to give a result of 0, matching Halide's ordinary division
+    // operator.
+    Expr is_zero = denominator == 0;
+    Expr is_one = std::move(denominator) == 1;
+    result = select(is_zero, make_zero(t), select(is_one, std::move(original_numerator), std::move(result)));
 
     internal_assert(result.type() == t);
 
@@ -319,7 +323,12 @@ Expr fast_integer_divide(const Expr &numerator, const Expr &denominator) {
 
 Expr fast_integer_modulo(const Expr &numerator, const Expr &denominator) {
     Expr ratio = fast_integer_divide(numerator, denominator);
-    return numerator - ratio * denominator;
+    Expr result = numerator - ratio * denominator;
+    // Denominator == 0 gives a result of 0, matching Halide's ordinary
+    // modulo operator. fast_integer_divide already returns 0 for a zero
+    // denominator, but multiplying that back by denominator (also 0)
+    // would otherwise leave the numerator unchanged instead of zeroing it.
+    return select(denominator == 0, make_zero(numerator.type()), std::move(result));
 }
 
 }  // namespace Halide
