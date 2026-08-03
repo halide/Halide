@@ -164,6 +164,28 @@ void test_positive_const_multiplier_still_rewritten() {
                 (x != 2) || (Mod::make(seven, three) != 0));
 }
 
+// IROperator::is_const(e, -1) used to ignore signedness in casts. When `c`
+// was a cast from `-1` to uint8, Solve.cpp's `f(x) * c cmp b` rewrite for
+// `c == -1` treated `c` as -1 rather than the correct value (255).
+void test_cast_signedness_respected() {
+    // int32(uint8(-1_i8)) == 255, not -1.
+    Expr fake_negative_one = Cast::make(Int(32), Cast::make(UInt(8), -1));
+
+    // Let N = fake_negative_one.
+    // Broken: y < N * x ~> x < -y    ~> 1 < -100      ~> false
+    // Fixed:  y < N * x ~> x * N > y ~> 1 * 255 > 100 ~> true
+    std::map<std::string, Expr> vars{
+        {"x", Expr(1)},
+        {"y", Expr(100)},
+    };
+    check_solve_equivalent(y < fake_negative_one * x, vars);
+    check_solve_equivalent(y <= fake_negative_one * x, vars);
+    check_solve_equivalent(y > fake_negative_one * x, vars);
+    check_solve_equivalent(y >= fake_negative_one * x, vars);
+    check_solve_equivalent(y == fake_negative_one * x, vars);
+    check_solve_equivalent(y != fake_negative_one * x, vars);
+}
+
 // Solver used to rewrite `f(x) + f(x) -> f(x) * 2` via `operator*(Expr, int)`,
 // which rejects constants that don't fit in the expression type. For UInt(1),
 // the literal 2 isn't representable, aborting the whole solve. Use Mul::make
@@ -568,6 +590,22 @@ void test_float_select_condition_not_simplified() {
          {"z", make_const(Float(32), 1.5e9f)}});
 }
 
+void test_outer_interval_max_min() {
+    // max(x, 1) * 2 <= x is always false: the max branch gives 2*x <= x (so
+    // x <= 0) while the constant branch gives 2 <= x (so x >= 2); these
+    // constraints are disjoint, so the outer interval is empty.
+    check_outer_interval(max(x, 1) * 2 <= x, Interval::pos_inf(), Interval::neg_inf());
+
+    // max(abs(select(x < 0, f(x-1), 5)), 2) <= x: the constant branch requires
+    // 2 <= x (i.e. x >= 2), so x < 2 is always false regardless of f.
+    // abs(Int(32)) returns UInt(32) in Halide, so cast back to Int(32) first to
+    // keep max(...) as the outermost node (otherwise an implicit Cast wraps it).
+    Expr fx1 = Call::make(Int(32), "f", {x - 1}, Call::PureExtern);
+    Expr abs_val = cast<int32_t>(Halide::abs(select(x < 0, fx1, Expr(5))));
+    Expr expr2 = max(abs_val, 2) <= x;
+    check_outer_interval(expr2, 2, Interval::pos_inf());
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -594,11 +632,13 @@ int main(int argc, char **argv) {
     test_unsigned_equality_still_rearranged();
     test_nonconstant_multiplier_not_rewritten();
     test_positive_const_multiplier_still_rewritten();
+    test_cast_signedness_respected();
     test_solve_does_not_abort_on_narrow_self_add();
     test_narrow_div_add_equivalence();
     test_simplify_preserves_float_to_uint_cast_chain();
     test_float_mul_eq_zero_divisor_not_rewritten();
     test_float_select_condition_not_simplified();
+    test_outer_interval_max_min();
     std::printf("Success!\n");
     return 0;
 }

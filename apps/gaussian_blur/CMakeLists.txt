@@ -15,25 +15,29 @@ find_package(Halide REQUIRED)
 add_halide_generator(gaussian_blur.generator SOURCES gaussian_blur_generator.cpp)
 
 # Filters
-add_halide_library(gaussian_blur_direct FROM gaussian_blur.generator
-                   GENERATOR gaussian_blur_direct)
+add_halide_library(gaussian_blur_direct FROM gaussian_blur.generator GENERATOR gaussian_blur_direct)
 
 set(VARIANTS gaussian_blur_direct)
 foreach (U IN ITEMS 2 3 4)
     foreach (D IN ITEMS 1 2 3)
         foreach (F IN ITEMS 2 4 8 16)
-            add_halide_library(gaussian_blur_${U}_${D}_${F} FROM gaussian_blur.generator
-                               GENERATOR gaussian_blur
-                               USE_RUNTIME gaussian_blur_direct.runtime
-                               PARAMS upsample_order=${U} downsample_order=${D} factor=${F})
+            add_halide_library(
+                gaussian_blur_${U}_${D}_${F}
+                FROM gaussian_blur.generator
+                GENERATOR gaussian_blur
+                USE_RUNTIME gaussian_blur_direct.runtime
+                PARAMS upsample_order=${U} downsample_order=${D} factor=${F}
+            )
             list(APPEND VARIANTS gaussian_blur_${U}_${D}_${F})
         endforeach ()
     endforeach ()
 endforeach ()
 
 # Generate combined header blurs.h that includes all variant headers
-file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/blurs.h"
-     CONTENT "$<JOIN:$<LIST:TRANSFORM,${VARIANTS},REPLACE,^(.+)$,#include \"\\1.h\">,\n>")
+file(GENERATE
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/blurs.h"
+    CONTENT "$<JOIN:$<LIST:TRANSFORM,${VARIANTS},REPLACE,^(.+)$,#include \"\\1.h\">,\n>"
+)
 
 # Main executable
 add_executable(gaussian_blur_filter filter.cpp)
@@ -45,8 +49,11 @@ set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/gray.png)
 if (EXISTS ${IMAGE})
     configure_file(${IMAGE} gray.png COPYONLY)
     add_test(NAME gaussian_blur_filter COMMAND gaussian_blur_filter gray.png 10)
-    set_tests_properties(gaussian_blur_filter PROPERTIES
-                         LABELS gaussian_blur
-                         PASS_REGULAR_EXPRESSION "Success!"
-                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+    set_tests_properties(
+        gaussian_blur_filter
+        PROPERTIES
+        LABELS gaussian_blur
+        PASS_REGULAR_EXPRESSION "Success!"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+    )
 endif ()

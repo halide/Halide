@@ -185,14 +185,14 @@ public:
             // it just to reduce code size for the common case of T != void.
 
 #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
-    case halide_type_t(CODE, BITS).as_u32():                                              \
+    case halide_type_t(CODE, BITS):                                                       \
         user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
             << "The value " << val << " cannot be losslessly converted to type " << type; \
         param.set_scalar<TYPE>(Internal::StaticCast<TYPE>::value(val));                   \
         break;
 
-            const Type type = param.type();
-            switch (((halide_type_t)type).element_of().as_u32()) {
+            const halide_type_t type = param.type().to_abi();
+            switch (type) {
                 HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 32, float)
                 HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 64, double)
                 HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 8, int8_t)
@@ -262,14 +262,14 @@ public:
             // it just to reduce code size for the common case of T != void.
 
 #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
-    case halide_type_t(CODE, BITS).as_u32():                                              \
+    case halide_type_t(CODE, BITS):                                                       \
         user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
             << "The value " << val << " cannot be losslessly converted to type " << type; \
         param.set_estimate(Expr(Internal::StaticCast<TYPE>::value(val)));                 \
         break;
 
-            const Type type = param.type();
-            switch (((halide_type_t)type).element_of().as_u32()) {
+            const halide_type_t type = param.type().to_abi();
+            switch (type) {
                 HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 32, float)
                 HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 64, double)
                 HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 8, int8_t)

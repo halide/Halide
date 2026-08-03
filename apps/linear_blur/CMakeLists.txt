@@ -26,41 +26,38 @@ add_halide_stub(linear_to_srgb.stub FROM linear_to_srgb.generator GENERATOR line
 add_halide_generator(
     linear_blur.generator
     SOURCES
-    linear_blur_generator.cpp
-    srgb_to_linear_generator.cpp
-    simple_blur_generator.cpp
-    linear_to_srgb_generator.cpp
-
+        linear_blur_generator.cpp
+        srgb_to_linear_generator.cpp
+        simple_blur_generator.cpp
+        linear_to_srgb_generator.cpp
     LINK_LIBRARIES
-    srgb_to_linear.stub
-    simple_blur.stub
-    linear_to_srgb.stub
+        srgb_to_linear.stub
+        simple_blur.stub
+        linear_to_srgb.stub
 )
 
 # AOT-compiled filter libraries
-add_halide_library(simple_blur FROM simple_blur.generator
-                   PARAMS
-                   input.type=float32 input.dim=3
-                   output.type=float32 output.dim=3)
-add_halide_library(linear_blur FROM linear_blur.generator
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+add_halide_library(
+    simple_blur
+    FROM simple_blur.generator
+    PARAMS input.type=float32 input.dim=3 output.type=float32 output.dim=3
+)
+add_halide_library(linear_blur FROM linear_blur.generator AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(linear_blur_process run_linear_blur.cpp)
-target_link_libraries(linear_blur_process
-                      PRIVATE
-                      Halide::ImageIO
-                      linear_blur
-                      simple_blur)
+target_link_libraries(linear_blur_process PRIVATE Halide::ImageIO linear_blur simple_blur)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
 if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgb.png COPYONLY)
-    add_test(NAME linear_blur_test
-             COMMAND linear_blur_process 1 rgb.png out.png)
-    set_tests_properties(linear_blur_test PROPERTIES
-                         LABELS linear_blur
-                         PASS_REGULAR_EXPRESSION "Using linear blur"
-                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+    add_test(NAME linear_blur_test COMMAND linear_blur_process 1 rgb.png out.png)
+    set_tests_properties(
+        linear_blur_test
+        PROPERTIES
+        LABELS linear_blur
+        PASS_REGULAR_EXPRESSION "Using linear blur"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+    )
 endif ()

@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "halide_test_dirs.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -45,7 +46,7 @@ void fill_buffer_b(Buffer<IntT> &buf, int col, int acc) {
 }
 
 bool equal_eps(float lhs, float rhs, float eps) {
-    return std::abs(lhs - rhs) < eps;
+    return std::abs(lhs - rhs) / (std::max(std::abs(lhs), std::abs(rhs)) + 1e-10f) < eps;
 }
 
 struct make_uint_t {
@@ -88,7 +89,7 @@ void print_mat_rhs(const Buffer<T> &buf, int rows, int cols) {
 }
 
 template<typename LhsInt8, typename RhsInt8>
-bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
+bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool use_intrinsic) {
     Buffer<LhsInt8> A_buf(acc, row);
     Buffer<RhsInt8> B_buf(4, col, acc / 4);
 
@@ -96,11 +97,24 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
     RDom r(0, acc);
 
     Func mm("matmul");
-    mm(x, y) = cast<int32_t>(0);
-    mm(x, y) += cast<int32_t>(A_buf(r, y)) * cast<int32_t>(B_buf(r % 4, x, r / 4));
 
-    Var rxi("rxi"), ryi("ryi");
+    mm(x, y) = 0;
+
+    if (use_intrinsic) {
+        mm(x, y) += widening_mul(A_buf(r, y), B_buf(r % 4, x, r / 4));
+    } else {
+        mm(x, y) += cast<int32_t>(A_buf(r, y)) * cast<int32_t>(B_buf(r % 4, x, r / 4));
+    }
+
+    Var rxi("rxi"), ryi("ryi"), xi("xi"), yi("yi");
     RVar rri("rri"), rro("rro");
+
+    // An outer layer of tiling is necessary to reuse repeated subtile
+    // loads. But if you go too big you'll run out of tile registers and
+    // compilation will fail (The LLVM AMX register allocator will spill, but it
+    // seems to be fussy about it). Doing this also tests the case of more than
+    // one matrix multiply operation applied to a single AMXTile allocation.
+    int outer_tile_x = col > tile_x ? 2 : 1, outer_tile_y = row > tile_y ? 2 : 1;
 
     mm.compute_at(mm.in(), x)
         .store_in(MemoryType::AMXTile)
@@ -111,20 +125,28 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
         .atomic()
         .vectorize(rri)
         .vectorize(rxi)
-        .vectorize(ryi);
+        .vectorize(ryi)
+        .tile(x, y, xi, yi, outer_tile_x, outer_tile_y)
+        .reorder(rri, rxi, ryi, xi, yi, rro, x, y)
+        .unroll(xi)
+        .unroll(yi);
 
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), x)
         .tile(x, y, ixi, iyi, tile_x, tile_y)
         .vectorize(ixi)
-        .vectorize(iyi);
+        .vectorize(iyi)
+        .unroll(x)
+        .unroll(y);
 
     // schedule the consumer
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
-        .tile(x, y, mmxi, mmyi, tile_x, tile_y)
-        .vectorize(mmxi)
-        .vectorize(mmyi);
+        .tile(x, y, mmxi, mmyi, tile_x * outer_tile_x, tile_y * outer_tile_y)
+        .vectorize(mmxi, tile_x)
+        .vectorize(mmyi, tile_y)
+        .unroll(mmxi)
+        .unroll(mmyi);
 
     Func result = mm.in();
 
@@ -133,7 +155,15 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
 
     Buffer<int32_t> out(col, row);
 
-    result.realize(out);
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::AVX512_SapphireRapids)) {
+        result.realize(out);
+    } else {
+        // Just compile it to see if anything crashes
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s",
+                                   {A_buf, B_buf}, Target{"x86-64-linux-avx512_sapphirerapids-no_asserts-no_runtime-no_bounds_query"});
+        return true;
+    }
 
     // uncomment to check the matrices
     // std::cout << "Matrix A\n";
@@ -159,11 +189,10 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
         }
     }
 
-    std::cout << "Success!\n";
     return true;
 }
 
-bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
+bool matmul_bf16(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool use_intrinsics) {
     Var x("x"), y("y");
     Buffer<bfloat16_t> A(acc, row);
     Buffer<bfloat16_t> B(2, col, acc / 2);
@@ -171,8 +200,12 @@ bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) 
     RDom r(0, acc, "acc");
 
     Func mm("matmul");
-    mm(x, y) = cast<float>(0);
-    mm(x, y) += cast<float>(cast<float>(A(r.x, y))) * cast<float>(B(r.x % 2, x, r.x / 2));
+    mm(x, y) = 0.f;
+    if (use_intrinsics) {
+        mm(x, y) += widening_mul(A(r.x, y), B(r.x % 2, x, r.x / 2));
+    } else {
+        mm(x, y) += cast<float>(A(r.x, y)) * cast<float>(B(r.x % 2, x, r.x / 2));
+    }
 
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
@@ -212,7 +245,14 @@ bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) 
     // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
     // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
 
-    result.realize(out);
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::AVX512_SapphireRapids)) {
+        result.realize(out);
+    } else {
+        // Just compile it to see if anything crashes
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids"});
+        return true;
+    }
 
     // uncomment to check the matrices
     // std::cout << "Matrix A\n";
@@ -229,7 +269,7 @@ bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) 
             for (int k = 0; k < acc; ++k) {
                 val += static_cast<float>(A(k, j)) * static_cast<float>(B(k % 2, i, k / 2));
             }
-            if (!equal_eps(val, out(i, j), 0.03f)) {
+            if (!equal_eps(val, out(i, j), 0.01f)) {
                 std::cerr << "Invalid result at " << i << ", " << j << "\n"
                           << out(i, j) << " != " << val << "\n"
                           << "Matrix dims: " << row << "x" << col << "x" << acc << "\nTile dims: " << tile_x << "x" << tile_y << "x" << tile_r << "\n";
@@ -238,7 +278,6 @@ bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) 
         }
     }
 
-    std::cout << "Success!\n";
     return true;
 }
 
@@ -247,17 +286,62 @@ auto matmul_us = &matmul<uint8_t, int8_t>;
 auto matmul_su = &matmul<int8_t, uint8_t>;
 auto matmul_uu = &matmul<uint8_t, uint8_t>;
 
-bool run_tests(bool (*fn)(int, int, int, int, int, int), int element_width) {
-    return fn(2, 2, 16, 2, 2, 8 / element_width) && fn(4, 4, 8, 4, 4, 8 / element_width) && fn(32, 32, 32, 8, 8, 8 / element_width) && fn(32, 32, 32, 8, 8, 4 / element_width);
+bool run_tests(bool (*fn)(int, int, int, int, int, int, bool), int element_width) {
+    struct Cfg {
+        int col, row, acc, tx, ty, tr;
+        bool intrin;
+    };
+    Cfg cfgs[] = {
+        {2, 2, 16, 2, 2, 8 / element_width, true},
+        {4, 4, 8, 4, 4, 8 / element_width, false},
+        {32, 32, 32, 8, 8, 8 / element_width, true},
+        {32, 32, 32, 8, 8, 4 / element_width, false},
+
+        // Asymmetric tiles
+        {32, 16, 32, 8, 4, 8 / element_width, true},
+        {16, 32, 32, 4, 8, 8 / element_width, false},
+        {32, 32, 32, 8, 4, 4 / element_width, true},
+        {32, 32, 32, 4, 8, 4 / element_width, false},
+
+        // Degenerate along I or J axis (a matrix-vector multiply)
+        {8, 8, 64, 2, 1, 64 / element_width, false},
+
+        {8, 8, 64, 1, 2, 64 / element_width, false},
+
+        // Degenerate along both (a dot product)
+        {1, 1, 64, 1, 1, 64 / element_width, false},
+
+        // A matmul scheduled as individual dot products
+        {8, 8, 64, 1, 1, 64 / element_width, false},
+
+        // The size of the intermediate vector (and the number of multiplies
+        // done) is IJK. AMX requires:
+        // I <= 16,
+        // K <= 64 / element_width
+        // IJ <= 256
+        // JK <= 1024 / element_width
+        // IK <= 1024 / element_width
+        // Under these constraints, IJK is maximized when I = J = 16, K = 64 / element_width.
+        // So this is the setting that does the most work for us.
+        {32, 32, 64, 16, 16, 64 / element_width, false},
+
+        // Larger-than-native tiles (unsupported for now, may destructure into
+        // multiple ops in future)
+        // {64, 64, 64, 32, 16, 8 / element_width, true},
+    };
+    for (const auto &c : cfgs) {
+        std::cerr << "Testing col=" << c.col << " row=" << c.row << " acc=" << c.acc
+                  << " tx=" << c.tx << " ty=" << c.ty << " tr=" << c.tr << "\n";
+        if (!fn(c.col, c.row, c.acc, c.tx, c.ty, c.tr, c.intrin)) {
+            std::cerr << "Failed at col=" << c.col << " row=" << c.row << " acc=" << c.acc
+                      << " tx=" << c.tx << " ty=" << c.ty << " tr=" << c.tr << "\n";
+            return false;
+        }
+    }
+    return true;
 }
 
 int main(int argc, char **argv) {
-    Target t = get_jit_target_from_environment();
-    if (!t.has_feature(Target::AVX512_SapphireRapids)) {
-        printf("[SKIP] No AMX target enabled\n");
-        return 0;
-    }
-
     printf("Running AMX matmul (signed/signed)\n");
     if (!run_tests(matmul_ss, 1)) {
         return 1;
@@ -282,6 +366,8 @@ int main(int argc, char **argv) {
     if (!run_tests(matmul_bf16, 2)) {
         return 1;
     }
+
+    printf("Success!\n");
 
     return 0;
 }

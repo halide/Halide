@@ -11,18 +11,10 @@ foreach (out IN ITEMS out out.gn)
     endforeach ()
 endforeach ()
 
-find_library(
-    V8_LIBRARY
-    NAMES v8_monolith
-    PATH_SUFFIXES ${_FindV8_PATH_SUFFIXES}
-)
+find_library(V8_LIBRARY NAMES v8_monolith PATH_SUFFIXES ${_FindV8_PATH_SUFFIXES})
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(
-    V8
-    REQUIRED_VARS V8_LIBRARY V8_INCLUDE_DIR
-    HANDLE_COMPONENTS
-)
+find_package_handle_standard_args(V8 REQUIRED_VARS V8_LIBRARY V8_INCLUDE_DIR HANDLE_COMPONENTS)
 
 if (V8_FOUND AND NOT TARGET V8::V8)
     add_library(V8::V8 UNKNOWN IMPORTED)

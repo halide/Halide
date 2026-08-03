@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
              &auto_viz_demo_complex_up},
             {&auto_viz_demo_naive_down,
              &auto_viz_demo_lessnaive_down,
-             &auto_viz_demo_complex_up},
+             &auto_viz_demo_complex_down},
         };
 
     int schedule_idx = 0;

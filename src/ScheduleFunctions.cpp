@@ -112,7 +112,7 @@ class SubstituteIn : public IRGraphMutator {
             changed = changed || !args.back().same_as(i);
         }
         if (changed) {
-            return Provide::make(p->name, p->values, args, p->predicate);
+            return p->with(p->values, args, p->predicate);
         } else {
             return p;
         }
@@ -152,11 +152,11 @@ class AddPredicates : public IRGraphMutator {
             for (Expr &v : values) {
                 v = select(cond, v, Call::make(func, args, idx++));
             }
-            return Provide::make(p->name, values, args, predicate);
+            return p->with(values, args, predicate);
         } else if (type == ApplySplitResult::PredicateProvides) {
-            return Provide::make(p->name, values, args, predicate && cond);
+            return p->with(values, args, predicate && cond);
         } else if (changed_args || changed_values || !predicate.same_as(p->predicate)) {
-            return Provide::make(p->name, values, args, predicate);
+            return p->with(values, args, predicate);
         } else {
             return p;
         }
@@ -466,6 +466,25 @@ Stmt build_loop_nest(
     return stmt;
 }
 
+// A Stage's Definition may be expanded, by build_provide_loop_nest below,
+// into several Provide nodes: one per (possibly recursively nested)
+// specialization, plus the base/default Definition. stream_stores() is set
+// independently on each of these, so return true if *any* of them (reachable
+// via a non-failing specialization) requests it. Used to decide whether a
+// fence is needed after this Stage's production; it's safe to over-fence a
+// branch that didn't ask for streaming, but not to under-fence one that did.
+bool any_specialization_requests_streaming(const Definition &def) {
+    if (def.schedule().stream_stores()) {
+        return true;
+    }
+    for (const Specialization &s : def.specializations()) {
+        if (s.failure_message.empty() && any_specialization_requests_streaming(s.definition)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest(const map<string, Function> &env,
                              const string &prefix,
@@ -513,6 +532,16 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
             // emitting VectorReduce ops or scalarizing.
             body = Atomic::make(func.name(), std::string{}, body);
         }
+    }
+    if (def.schedule().stream_stores()) {
+        // Wrapped outside any Atomic node (rather than inside it), so that
+        // passes between here and storage flattening which pattern-match an
+        // Atomic node's body as being directly a Provide node (e.g.
+        // SplitTuples) continue to see that exact shape.
+        body = StreamingStore::make(func.name(), body);
+    }
+    if (const auto &names = def.schedule().stream_loads_names(); !names || !names->empty()) {
+        body = StreamingLoads::make(names, body);
     }
 
     // Default schedule/values if there is no specialization
@@ -981,13 +1010,7 @@ private:
         if (body.same_as(for_loop->body)) {
             return for_loop;
         } else {
-            return For::make(for_loop->name,
-                             for_loop->min,
-                             for_loop->max,
-                             for_loop->for_type,
-                             for_loop->partition_policy,
-                             for_loop->device_api,
-                             body);
+            return for_loop->with(for_loop->min, for_loop->max, body);
         }
     }
 };
@@ -1118,8 +1141,7 @@ Stmt add_loop_var_aliases(Stmt s, const map<string, set<string>> &loop_var_alias
                 body = LetStmt::make(alias, var, body);
             }
 
-            return For::make(op->name, op->min, op->max, op->for_type,
-                             op->partition_policy, op->device_api, std::move(body));
+            return op->with(op->min, op->max, body);
         }
 
     public:
@@ -1146,7 +1168,7 @@ class ShiftLoopNest : public IRMutator {
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + iter->second;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
+            stmt = op->with(op->min, op->max, body);
         }
         return stmt;
     }
@@ -1200,12 +1222,38 @@ public:
         return _found_hoist_storage_levels_for_funcs.size() == funcs.size();
     }
 
+    Stmt operator()(const Stmt &stmt) {
+        return IRMutator::operator()(stmt);
+    }
+
 protected:
     bool _found_compute_level{};
     std::set<string> _found_store_levels_for_funcs;
     std::set<string> _found_hoist_storage_levels_for_funcs;
 
     using IRMutator::visit;
+
+    // Emit a (intrin, name_arg, min_0, max_0, min_1, max_1, ...) Call
+    // wrapping `stmt`. Used for declare_box_touched, which bounds
+    // inference uses to know which Realize node is being touched. Its
+    // first arg must be a Variable<Handle>(func.name()) — a reference
+    // to the Realize-named buffer in scope — because passes that
+    // substitute names of in-scope buffers (most notably box_touched
+    // analysis itself) follow that name.
+    Stmt declare_box(const Stmt &stmt, const Function &f, Call::IntrinsicOp intrin) {
+        Expr name_arg = Variable::make(Handle(), f.name());
+        std::vector<Expr> args;
+        args.reserve(2 * f.dimensions() + 1);
+        args.push_back(std::move(name_arg));
+        const std::vector<std::string> &var_names = f.args();
+        for (int i = 0; i < f.dimensions(); i++) {
+            std::string v = concat_strings(f.name(), ".s0.", var_names[i]);
+            args.emplace_back(Variable::make(Int(32), v + ".min"));
+            args.emplace_back(Variable::make(Int(32), v + ".max"));
+        }
+        Expr d = Call::make(Int(32), intrin, args, Call::Intrinsic);
+        return Block::make(Evaluate::make(d), stmt);
+    }
 
     Stmt visit(const For *for_loop) override {
         debug(3) << "Injecting " << funcs << " entering for-loop over " << for_loop->name << "\n";
@@ -1319,13 +1367,7 @@ protected:
         if (body.same_as(for_loop->body)) {
             return for_loop;
         } else {
-            return For::make(for_loop->name,
-                             for_loop->min,
-                             for_loop->max,
-                             for_loop->for_type,
-                             for_loop->partition_policy,
-                             for_loop->device_api,
-                             body);
+            return for_loop->with(for_loop->min, for_loop->max, body);
         }
     }
 
@@ -1369,18 +1411,7 @@ private:
         if (func.has_extern_definition()) {
             // Add an annotation to let bounds inference know that
             // this will write to the entire bounds required.
-            vector<Expr> args;
-            args.emplace_back(Variable::make(Handle(), func.name()));
-            for (int i = 0; i < func.dimensions(); i++) {
-                string prefix = func.name() + ".s0." + func.args()[i];
-                string min_name = prefix + ".min";
-                string max_name = prefix + ".max";
-
-                args.emplace_back(Variable::make(Int(32), min_name));
-                args.emplace_back(Variable::make(Int(32), max_name));
-            }
-            Expr decl = Call::make(Int(32), Call::declare_box_touched, args, Call::Intrinsic);
-            s = Block::make(Evaluate::make(decl), s);
+            s = declare_box(s, func, Call::declare_box_touched);
         }
 
         if (!is_output) {
@@ -1546,6 +1577,15 @@ private:
             add_lets.emplace_back(let->name, let->value);
             produce = let->body;
         }
+
+        // Only one branch runs at a time, so a single trailing fence
+        // after the whole (specialized) production is equivalent to,
+        // and simpler than, fencing inside each branch individually.
+        if (any_specialization_requests_streaming(def)) {
+            Expr fence = Call::make(Int(32), Call::stream_store_fence, {}, Call::Intrinsic);
+            produce = Block::make(produce, Evaluate::make(fence));
+        }
+
         return produce;
     }
 
@@ -1802,8 +1842,8 @@ private:
             string def_prefix = f.name() + ".s" + std::to_string(func_stage.second) + ".";
             const auto &def = (func_stage.second == 0) ? f.definition() : f.updates()[func_stage.second - 1];
 
-            const Stmt &produce_def = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
-                                                               replacements, add_lets, aliases);
+            Stmt produce_def = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
+                                                        replacements, add_lets, aliases);
             producer = inject_stmt(producer, produce_def, def.schedule().fuse_level().level);
         }
 
@@ -2087,10 +2127,9 @@ public:
     }
 };
 
-// Check a schedule is legal, throwing an error if it is not. Returns
-// whether or not a realization of the Func should be injected. Unused
-// intermediate Funcs that somehow made it into the Func DAG can be
-// discarded.
+// Check a schedule is legal, throwing an error if it is not. Returns whether or
+// not a realization of the Func should be injected. Unused intermediate Funcs
+// that somehow made it into the Func DAG can be discarded.
 bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_output, const map<string, Function> &env) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
@@ -2156,8 +2195,8 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
-    // If the func is scheduled on the gpu, check that the relevant
-    // api is enabled in the target.
+    // If the func is scheduled to use device API,
+    // check that the relevant feature is enabled in the target.
     vector<Definition> definitions;
     if (f.has_pure_definition()) {
         definitions.push_back(f.definition());
@@ -2553,6 +2592,27 @@ class RemoveLoopsOverOutermost : public IRMutator {
     }
 };
 
+class ValidateHostLoopContext : public IRVisitor {
+    using IRVisitor::visit;
+
+    DeviceAPI current_device_api = DeviceAPI::Host;
+
+    void visit(const For *op) override {
+        if (op->device_api == DeviceAPI::Host) {
+            user_assert(current_device_api == DeviceAPI::Host ||
+                        current_device_api == DeviceAPI::SMEStreaming)
+                << "The host() schedule directive cannot be used inside a "
+                << current_device_api << " loop. It is currently only supported "
+                << "to leave an enclosing sme_streaming() loop or in host loop redundantly.\n";
+        }
+
+        const DeviceAPI next_device_api =
+            op->device_api == DeviceAPI::None ? current_device_api : op->device_api;
+        ScopedValue<DeviceAPI> scoped_device_api(current_device_api, next_device_api);
+        IRVisitor::visit(op);
+    }
+};
+
 bool group_should_be_inlined(const vector<Function> &funcs) {
     return (funcs.size() == 1 &&
             (funcs[0].has_extern_definition() || funcs[0].definition().schedule().fused_pairs().empty()) &&
@@ -2576,13 +2636,64 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     validate_fused_groups_schedule(fused_groups, env);
 
+    // Collect consecutive inlinable groups and apply them in one
+    // inline_functions pass. We flush the batch before each realization so
+    // the realization's validate_schedule sees the post-inline 's' (its
+    // callers, if they were inlined, will have been substituted in by then).
+    vector<Function> pending_inlines;
+    auto flush_pending_inlines = [&]() {
+        if (pending_inlines.empty()) {
+            return;
+        }
+        debug(1) << "Inlining group of " << pending_inlines.size()
+                 << " function(s): " << pending_inlines << "\n";
+        s = inline_functions(s, pending_inlines);
+        pending_inlines.clear();
+        debug(2) << "Lowering after inlining group of functions:\n"
+                 << s << "\n";
+    };
+
     for (const auto &group : reverse_view(fused_groups)) {
+        vector<Function> group_funcs;
+        group_funcs.reserve(group.size());
+        for (const string &name : group) {
+            group_funcs.push_back(env.find(name)->second);
+        }
+
+        if (group_should_be_inlined(group_funcs)) {
+            // Inlinable groups have a single pure func. Check the
+            // schedule-property errors directly here; we can't call
+            // validate_schedule (which walks 's' for call sites) because
+            // batched inline chains may not yet have their inner call
+            // sites exposed in 's'.
+            const Function &f = group_funcs[0];
+            const LoopLevel &store_at = f.schedule().store_level();
+            const LoopLevel &hoist_storage_at = f.schedule().hoist_storage_level();
+            if (store_at.is_root()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled store_root(), but is inlined. Funcs that use store_root must also call compute_root or compute_at.\n";
+            } else if (!store_at.is_inlined()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled store_at(), but is inlined. Funcs that use store_at must also call compute_at.\n";
+            }
+            if (hoist_storage_at.is_root()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage_root(), but is inlined. Funcs that use hoist_storage_root must also call compute_root or compute_at.\n";
+            } else if (!hoist_storage_at.is_inlined()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage(), but is inlined. Funcs that use hoist_storage_root must also call compute_at.\n";
+            }
+            validate_schedule_inlined_function(f);
+            pending_inlines.push_back(f);
+            continue;
+        }
+
+        // Realization: flush any pending inlines first so that
+        // validate_schedule and the InjectFunctionRealization walk see the
+        // post-inline 's'. In particular, ComputeLegalSchedules inside
+        // validate_schedule needs the inlined call sites to be visible to
+        // find this group's funcs.
+        flush_pending_inlines();
+
         vector<Function> funcs;
         vector<bool> is_output_list;
-
-        for (const string &name : group) {
-            Function f = env.find(name)->second;
-
+        for (const Function &f : group_funcs) {
             bool is_output = false;
             for (const Function &o : outputs) {
                 is_output = is_output | o.same_as(f);
@@ -2612,19 +2723,25 @@ Stmt schedule_functions(const vector<Function> &outputs,
             debug(1) << "Injecting realization of " << funcs << "\n";
             InjectFunctionRealization injector(funcs, is_output_list, target, env);
             s = injector(s);
-            internal_assert(injector.found_store_level() && injector.found_compute_level() && injector.found_hoist_storage_level());
+            internal_assert(injector.found_store_level() &&
+                            injector.found_compute_level() &&
+                            injector.found_hoist_storage_level());
         }
 
         debug(2) << s << "\n";
     }
+    flush_pending_inlines();
 
-    // We can remove the loop over root now
-    const For *root_loop = s.as<For>();
-    internal_assert(root_loop);
-    s = root_loop->body;
+    // We can remove the loop over root now. It's the outermost one.
+    s = mutate_with(s, [&](auto *self, const For *op) {
+        return op->body;
+    });
 
     // We can also remove all the loops over __outermost now.
     s = RemoveLoopsOverOutermost()(s);
+
+    ValidateHostLoopContext validate_host_loop_context;
+    s.accept(&validate_host_loop_context);
 
     return s;
 }

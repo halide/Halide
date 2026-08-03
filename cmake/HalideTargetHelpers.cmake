@@ -63,14 +63,16 @@ if (NOT DEFINED Halide_HOST_TARGET)
 endif ()
 
 set(Halide_HOST_TARGET "${Halide_HOST_TARGET}"
-    CACHE STRING "Halide target triple matching the Halide library")
+    CACHE STRING "Halide target triple matching the Halide library"
+)
 
 if (NOT DEFINED Halide_CMAKE_TARGET)
     _Halide_cmake_target(Halide_CMAKE_TARGET)
 endif ()
 
 set(Halide_CMAKE_TARGET "${Halide_CMAKE_TARGET}"
-    CACHE STRING "Halide target triple matching the CMake target")
+    CACHE STRING "Halide target triple matching the CMake target"
+)
 
 ##
 # Cache variable to control the global target for add_halide_library.
@@ -86,14 +88,17 @@ if (NOT DEFINED Halide_TARGET)
     endif ()
 endif ()
 
-set(Halide_TARGET "${Halide_TARGET}"
-    CACHE STRING "The default target to use when AOT compiling")
+set(Halide_TARGET "${Halide_TARGET}" CACHE STRING "The default target to use when AOT compiling")
 
 ##
 # Print the active values of all special target triples.
 ##
 
-get_property(${CMAKE_FIND_PACKAGE_NAME}_MESSAGE_PRINTED GLOBAL PROPERTY ${CMAKE_FIND_PACKAGE_NAME}_MESSAGE_PRINTED)
+get_property(
+    ${CMAKE_FIND_PACKAGE_NAME}_MESSAGE_PRINTED
+    GLOBAL PROPERTY
+    ${CMAKE_FIND_PACKAGE_NAME}_MESSAGE_PRINTED
+)
 if (NOT ${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY AND NOT ${CMAKE_FIND_PACKAGE_NAME}_MESSAGE_PRINTED)
     message(STATUS "Halide 'host' platform triple:   ${Halide_HOST_TARGET}")
     message(STATUS "Halide 'cmake' platform triple:  ${Halide_CMAKE_TARGET}")

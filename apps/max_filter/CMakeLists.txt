@@ -16,26 +16,28 @@ add_halide_generator(max_filter.generator SOURCES max_filter_generator.cpp)
 
 # Filters
 add_halide_library(max_filter FROM max_filter.generator)
-add_halide_library(max_filter_auto_schedule FROM max_filter.generator
-                   GENERATOR max_filter
-                   AUTOSCHEDULER Halide::Mullapudi2016
-                   PARAMS autoscheduler.experimental_gpu_schedule=1)
+add_halide_library(
+    max_filter_auto_schedule
+    FROM max_filter.generator
+    GENERATOR max_filter
+    AUTOSCHEDULER Halide::Mullapudi2016
+    PARAMS autoscheduler.experimental_gpu_schedule=1
+)
 
 # Main executable
 add_executable(max_filter_filter filter.cpp)
-target_link_libraries(max_filter_filter
-                      PRIVATE
-                      Halide::ImageIO
-                      max_filter
-                      max_filter_auto_schedule)
+target_link_libraries(max_filter_filter PRIVATE Halide::ImageIO max_filter max_filter_auto_schedule)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgba.png COPYONLY)
     add_test(NAME max_filter_filter COMMAND max_filter_filter rgba.png out.png)
-    set_tests_properties(max_filter_filter PROPERTIES
-                         LABELS max_filter
-                         PASS_REGULAR_EXPRESSION "Success!"
-                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+    set_tests_properties(
+        max_filter_filter
+        PROPERTIES
+        LABELS max_filter
+        PASS_REGULAR_EXPRESSION "Success!"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+    )
 endif ()

@@ -76,6 +76,8 @@ class IRVisitor;
     X(Evaluate)                    \
     X(Prefetch)                    \
     X(Atomic)                      \
+    X(StreamingStore)              \
+    X(StreamingLoads)              \
     X(HoistedStorage)
 
 #define HALIDE_FOR_EACH_IR_NODE(X) \
@@ -404,6 +406,16 @@ enum class MemoryType {
      * multiplication must first be loaded into an AMX tile register. */
     AMXTile,
 };
+
+/** Whether a MemoryType is backed by tile-shaped storage with native 2D
+ * loads and stores. Generic optimizations that rewrite the structure of
+ * loads or stores (deinterleaving, strided-load staging, etc.) should
+ * skip allocations of these types — the IR for them is consumed by a
+ * dedicated lowering pass that requires the original 2D-shaped loads
+ * and stores to remain intact. */
+inline bool is_tile_memory_type(MemoryType t) {
+    return t == MemoryType::AMXTile;
+}
 
 namespace Internal {
 

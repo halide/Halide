@@ -5,6 +5,7 @@
  * Subtypes for Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
  */
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -309,11 +310,21 @@ struct Load : public ExprNode<Load> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
+    // Whether this access should bypass the cache when supported by the target.
+    bool is_streaming;
+
     static Expr make(Type type, const std::string &name,
                      Expr index, Buffer<> image,
                      Parameter param,
                      Expr predicate,
-                     ModulusRemainder alignment);
+                     ModulusRemainder alignment,
+                     bool is_streaming = false);
+
+    /** Make a Load that loads from the same buffer as this one, but with new
+     * children. The type is the element type of this Load, with the lane count
+     * taken from the new index. Returns this Load unchanged if the new children
+     * are the same as the existing ones. */
+    Expr with(const Expr &index, const Expr &predicate, ModulusRemainder alignment) const;
 
     static const IRNodeType _node_type = IRNodeType::Load;
 };
@@ -356,6 +367,11 @@ struct Let : public ExprNode<Let> {
 
     static Expr make(const std::string &name, Expr value, Expr body);
 
+    /** Make a Let with the same name as this one, but with new children.
+     * Returns this Let unchanged if the new children are the same as the
+     * existing ones. */
+    Expr with(const Expr &value, const Expr &body) const;
+
     static const IRNodeType _node_type = IRNodeType::Let;
 };
 
@@ -367,6 +383,11 @@ struct LetStmt : public StmtNode<LetStmt> {
     Stmt body;
 
     static Stmt make(const std::string &name, Expr value, Stmt body);
+
+    /** Make a LetStmt with the same name as this one, but with new children.
+     * Returns this LetStmt unchanged if the new children are the same as the
+     * existing ones. */
+    Stmt with(const Expr &value, const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::LetStmt;
 };
@@ -380,6 +401,10 @@ struct AssertStmt : public StmtNode<AssertStmt> {
     Expr message;
 
     static Stmt make(Expr condition, Expr message);
+
+    /** Make an AssertStmt with new children. Returns this AssertStmt unchanged
+     * if the new children are the same as the existing ones. */
+    Stmt with(const Expr &condition, const Expr &message) const;
 
     static const IRNodeType _node_type = IRNodeType::AssertStmt;
 };
@@ -405,6 +430,11 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
 
     static Stmt make(const std::string &name, bool is_producer, Stmt body);
 
+    /** Make a ProducerConsumer with the same name and producer/consumer flag as
+     * this one, but with a new body. Returns this ProducerConsumer unchanged if
+     * the new body is the same as the existing one. */
+    Stmt with(const Stmt &body) const;
+
     static Stmt make_produce(const std::string &name, Stmt body);
     static Stmt make_consume(const std::string &name, Stmt body);
 
@@ -427,8 +457,17 @@ struct Store : public StmtNode<Store> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
+    // Whether this access should bypass the cache when supported by the target.
+    bool is_streaming;
+
     static Stmt make(const std::string &name, Expr value, Expr index,
-                     Parameter param, Expr predicate, ModulusRemainder alignment);
+                     Parameter param, Expr predicate, ModulusRemainder alignment,
+                     bool is_streaming = false);
+
+    /** Make a Store to the same buffer as this one, but with new children.
+     * Returns this Store unchanged if the new children are the same as the
+     * existing ones. */
+    Stmt with(const Expr &value, const Expr &index, const Expr &predicate, ModulusRemainder alignment) const;
 
     static const IRNodeType _node_type = IRNodeType::Store;
 };
@@ -447,6 +486,12 @@ struct Provide : public StmtNode<Provide> {
     Expr predicate;
 
     static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate);
+
+    /** Make a Provide to the same Func as this one, but with new children.
+     * Returns this Provide unchanged if the new children are the same as the
+     * existing ones. */
+    Stmt with(const std::vector<Expr> &values, const std::vector<Expr> &args,
+              const Expr &predicate) const;
 
     static const IRNodeType _node_type = IRNodeType::Provide;
 };
@@ -487,6 +532,18 @@ struct Allocate : public StmtNode<Allocate> {
                      Expr condition, Stmt body,
                      Expr new_expr = Expr(), const std::string &free_function = std::string(), int padding = 0);
 
+    /** Make an Allocate with the same name, type, memory type, custom
+     * new/free, and padding as this one, but with new children. Returns this
+     * Allocate unchanged if the new children are the same as the existing
+     * ones. */
+    Stmt with(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body) const;
+
+    /** As above, but also replacing the custom new expression. There is no
+     * default for new_expr, because an undefined new_expr means "use the
+     * default allocator" rather than "leave it alone". */
+    Stmt with(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body,
+              const Expr &new_expr) const;
+
     /** A routine to check if the extents are all constants, and if so verify
      * the total size is less than 2^31 - 1. If the result is constant, but
      * overflows, this routine asserts. This returns 0 if the extents are
@@ -523,6 +580,11 @@ struct Realize : public StmtNode<Realize> {
 
     static Stmt make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body);
 
+    /** Make a Realize with the same name, types, and memory type as this one,
+     * but with new children. Returns this Realize unchanged if the new children
+     * are the same as the existing ones. */
+    Stmt with(const Region &bounds, const Expr &condition, const Stmt &body) const;
+
     static const IRNodeType _node_type = IRNodeType::Realize;
 };
 
@@ -532,6 +594,10 @@ struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     static Stmt make(Stmt first, Stmt rest);
+
+    /** Make a Block with new children. Returns this Block unchanged if the new
+     * children are the same as the existing ones. */
+    Stmt with(const Stmt &first, const Stmt &rest) const;
 
     /** Construct zero or more Blocks to invoke a list of statements in order.
      * This method may not return a Block statement if stmts.size() <= 1. */
@@ -548,6 +614,10 @@ struct Fork : public StmtNode<Fork> {
 
     static Stmt make(Stmt first, Stmt rest);
 
+    /** Make a Fork with new children. Returns this Fork unchanged if the new
+     * children are the same as the existing ones. */
+    Stmt with(const Stmt &first, const Stmt &rest) const;
+
     static const IRNodeType _node_type = IRNodeType::Fork;
 };
 
@@ -558,6 +628,12 @@ struct IfThenElse : public StmtNode<IfThenElse> {
 
     static Stmt make(Expr condition, Stmt then_case, Stmt else_case = Stmt());
 
+    /** Make an IfThenElse with new children. Note that else_case has no default
+     * here, because an undefined else_case means "no else clause" rather than
+     * "leave it alone". Returns this IfThenElse unchanged if the new children
+     * are the same as the existing ones. */
+    Stmt with(const Expr &condition, const Stmt &then_case, const Stmt &else_case) const;
+
     static const IRNodeType _node_type = IRNodeType::IfThenElse;
 };
 
@@ -566,6 +642,10 @@ struct Evaluate : public StmtNode<Evaluate> {
     Expr value;
 
     static Stmt make(Expr v);
+
+    /** Make an Evaluate of a new value. Returns this Evaluate unchanged if the
+     * new value is the same as the existing one. */
+    Stmt with(const Expr &value) const;
 
     static const IRNodeType _node_type = IRNodeType::Evaluate;
 };
@@ -605,80 +685,68 @@ struct Call : public ExprNode<Call> {
     // Please keep this list sorted alphabetically; the specific enum values
     // are *not* guaranteed to be stable across time.
     enum IntrinsicOp {
-        abs,
+        // keep-sorted start sticky_comments=yes
 
+        abs,
         // Absolute difference between two values. absd(a, b) = abs(a - b), but
         // without overflow issues for integer types.
         absd,
-
         // Marks the point where assertions on input images should be inserted
         add_image_checks_marker,
-
         alloca,
         bitwise_and,
         bitwise_not,
         bitwise_or,
         bitwise_xor,
-
         // Converts a boolean to a mask. Scalar bools become -1 (all bits set) when true,
         // 0 when false. Vector bools are converted to proper vector masks.
         bool_to_mask,
-
         // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
         bundle,
-
         // Takes a sequence of (condition, function) pairs, and calls the first
         // function for which the associated condition is true. Caches this
         // choice and directly calls the associated function on all subsequent
         // uses. Args to the containing function are passed through to the
         // callee. Used to implement multi-target switching.
         call_cached_indirect_function,
-
         // Casts a mask (boolean vector) to a different bit width
         cast_mask,
-
         // Concatenate bits of the args, with least significant bits as the
         // first arg (i.e. little-endian)
         concat_bits,
         count_leading_zeros,
         count_trailing_zeros,
         debug_to_file,
-
         // Declares that a box region of an allocation has been touched (used by bounds inference)
         declare_box_touched,
-
         div_round_to_zero,
-
         // A shuffle operation with runtime-varying indices.
         dynamic_shuffle,
-
         // Extract some contiguous slice of bits from the argument starting at
         // the nth bit, counting from the least significant bit, with the number
         // of bits determined by the return type.
         extract_bits,
-
         // Extracts a single element from a mask vector
         extract_mask_element,
-
+        // Returns the runtime value of ARM SME streaming vscale (the vector length multiplier in streaming mode)
+        get_runtime_streaming_vscale,
+        // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
+        get_runtime_vscale,
         get_user_context,
         gpu_thread_barrier,
         halving_add,
         halving_sub,
-
         // Hexagon HVX gather/scatter operations for indirect memory access
         hvx_gather,
         hvx_scatter,
         hvx_scatter_acc,
         hvx_scatter_release,
-
         if_then_else,
-
         // Vectorized if-then-else that operates on mask types
         if_then_else_mask,
         image_load,
         image_store,
         lerp,
-
         // Loop partitioning hints used to help identify the 'steady state' of
         // loops. likely marks an if condition expression as likely to be true,
         // or marks the side of a min or max node which dominates in the steady
@@ -686,75 +754,66 @@ struct Call : public ExprNode<Call> {
         // innermost loop.
         likely,
         likely_if_innermost,
-
         // Loads a member from a typed struct (used for halide_buffer_t and
         // related structures)
         load_typed_struct_member,
-
         make_struct,
-
         // Marks an expression to be memoized (computed once and cached)
         memoize_expr,
-
         mod_round_to_zero,
         mul_shift_right,
         mux,
+        // A pointer into a sub-range of another allocation.
+        // offset_pointer(base, offset) returns the base pointer of the
+        // allocation named by the Variable `base`, advanced by `offset`
+        // elements (in units of the aliasing allocation's element type). Used
+        // as the new_expr of an Allocate node to express that it aliases a
+        // sub-range of a larger backing allocation. GPU allocation fusing emits
+        // these so that per-Func names survive lowering (for the profiler and
+        // for a readable conceptual stmt); they are folded into the indices of
+        // loads and stores by inject_gpu_offload before GPU codegen.
+        offset_pointer,
         popcount,
         prefetch,
-
         // Marks the point where profiling should start counting pipeline instances
         // (used to exclude bounds queries from profiling)
         profiling_enable_instance_marker,
-
         // Promises that a value is clamped to the given range. This allows the compiler
         // to optimize based on this assumption. promise_clamped is safe (adds a runtime check),
         // unsafe_promise_clamped skips the check.
         promise_clamped,
-
         random,
-
         // Registers a destructor function to be called when an object goes out
         // of scope. Used internally in codegen.
         register_destructor,
-
         // Runtime assertions. require checks the condition and errors if false.
         // require_mask is the vectorized version that operates on masks.
         require,
         require_mask,
-
         // Evaluates both arguments but returns the second one. Used to sequence side effects.
         return_second,
-
         // Round a floating point value to nearest integer, with ties going to even
         round,
-
         rounding_halving_add,
         rounding_mul_shift_right,
         rounding_shift_left,
         rounding_shift_right,
         saturating_add,
-        saturating_sub,
         saturating_cast,
-
+        saturating_sub,
         // Used to implement scatter and gather (see IROperator.h)
         scatter_gather,
-
         // Vectorized select that operates on mask types (similar to if_then_else_mask)
         select_mask,
-
         shift_left,
         shift_right,
-
         // Represents a signed integer overflow that occurred. Used to mark overflow points
         // rather than producing undefined behavior.
         signed_integer_overflow,
-
         size_of_halide_buffer_t,
-
         // Marks the point in lowering where the outermost skip stages checks
         // should be introduced.
         skip_stages_marker,
-
         // Takes a realization name and a loop variable. Declares that values of
         // the realization that were stored on earlier loop iterations of the
         // given loop are potentially loaded in this loop iteration somewhere
@@ -763,10 +822,11 @@ struct Call : public ExprNode<Call> {
         // nodes. Communicates to storage folding that sliding window took
         // place.
         sliding_window_marker,
-
         // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         sorted_avg,
-
+        // Emits a target-specific memory fence after a Stage that
+        // contains non-temporal (streaming) stores.
+        stream_store_fence,
         // strict floating point ops. These are floating point ops that we would
         // like to optimize around (or let llvm optimize around) by treating
         // them as reals and ignoring the existence of nan and inf. Using these
@@ -782,28 +842,22 @@ struct Call : public ExprNode<Call> {
         strict_min,
         strict_mul,
         strict_sub,
-
         // Convert a list of Exprs to a string
         stringify,
-
         // Query properties of the compiled-for target (resolved at compile-time)
         target_arch_is,
         target_bits,
         target_has_feature,
         target_natural_vector_size,
         target_os_is,
-
         // An undef is a magic value where storing it has no observable effect.
         undef,
-
         // Mark a code path as unreachable so that it can be dead-code eliminated.
         unreachable,
-
         // Promise an expression is bounded. Not checked. Injected by the
         // compiler itself during lowering when an early pass needs to
         // communicate boundedness to a later pass.
         unsafe_promise_clamped,
-
         // One-sided variants of widening_add, widening_mul, and widening_sub.
         // arg[0] + widen(arg[1])
         widen_right_add,
@@ -811,16 +865,12 @@ struct Call : public ExprNode<Call> {
         widen_right_mul,
         // arg[0] - widen(arg[1])
         widen_right_sub,
-
         widening_add,
         widening_mul,
         widening_shift_left,
         widening_shift_right,
         widening_sub,
-
-        // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
-        get_runtime_vscale,
-
+        // keep-sorted end
         IntrinsicOpCount  // Sentinel: keep last.
     };
 
@@ -874,6 +924,10 @@ struct Call : public ExprNode<Call> {
     static Expr make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
                      Buffer<> image = Buffer<>(), Parameter param = Parameter());
+
+    /** Make the same call as this one, but with new args. Returns this Call
+     * unchanged if the new args are the same as the existing ones. */
+    Expr with(const std::vector<Expr> &args) const;
 
     /** Convenience constructor for calls to other halide functions */
     static Expr make(const Function &func, const std::vector<Expr> &args, int idx = 0,
@@ -1031,6 +1085,11 @@ struct For : public StmtNode<For> {
                      DeviceAPI device_api,
                      Stmt body);
 
+    /** Make a For loop with the same name, for type, partition policy, and
+     * device API as this one, but with new children. Returns this For unchanged
+     * if the new children are the same as the existing ones. */
+    Stmt with(const Expr &min, const Expr &max, const Stmt &body) const;
+
     bool is_unordered_parallel() const {
         return Halide::Internal::is_unordered_parallel(for_type);
     }
@@ -1052,6 +1111,10 @@ struct Acquire : public StmtNode<Acquire> {
     Stmt body;
 
     static Stmt make(Expr semaphore, Expr count, Stmt body);
+
+    /** Make an Acquire with new children. Returns this Acquire unchanged if the
+     * new children are the same as the existing ones. */
+    Stmt with(const Expr &semaphore, const Expr &count, const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::Acquire;
 };
@@ -1158,6 +1221,11 @@ struct Prefetch : public StmtNode<Prefetch> {
                      const PrefetchDirective &prefetch,
                      Expr condition, Stmt body);
 
+    /** Make a Prefetch of the same Func with the same directive as this one,
+     * but with new children. Returns this Prefetch unchanged if the new
+     * children are the same as the existing ones. */
+    Stmt with(const Region &bounds, const Expr &condition, const Stmt &body) const;
+
     static const IRNodeType _node_type = IRNodeType::Prefetch;
 };
 
@@ -1172,6 +1240,11 @@ struct HoistedStorage : public StmtNode<HoistedStorage> {
 
     static Stmt make(const std::string &name,
                      Stmt body);
+
+    /** Make a HoistedStorage with the same name as this one, but with a new
+     * body. Returns this HoistedStorage unchanged if the new body is the same
+     * as the existing one. */
+    Stmt with(const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::HoistedStorage;
 };
@@ -1194,7 +1267,46 @@ struct Atomic : public StmtNode<Atomic> {
                      const std::string &mutex_name,
                      Stmt body);
 
+    /** Make an Atomic over the same producer and mutex as this one, but with a
+     * new body. Returns this Atomic unchanged if the new body is the same as
+     * the existing one. */
+    Stmt with(const Stmt &body) const;
+
     static const IRNodeType _node_type = IRNodeType::Atomic;
+};
+
+/** Marks the store(s) produced by the wrapped body as requesting
+ * non-temporal (streaming) stores, as scheduled via Stage::stream_stores.
+ * Created directly around a Provide node (or an Atomic node wrapping
+ * one) during scheduling and is never nested. Consumed by storage flattening,
+ * which uses it to set Store::is_streaming on the resulting Store node(s) and
+ * then discards it. */
+struct StreamingStore : public StmtNode<StreamingStore> {
+    std::string producer_name;
+    Stmt body;
+
+    static Stmt make(const std::string &producer_name,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::StreamingStore;
+};
+
+/** Marks the Halide-Func loads made while evaluating the wrapped body as
+ * requesting non-temporal (streaming) loads, as scheduled via
+ * Stage::stream_loads. If `names` is nullopt, every direct load of another
+ * Func is streamed (except a self-load, which is never streamed);
+ * otherwise only loads of Funcs named in `*names` are streamed. Created
+ * directly around a Provide node during scheduling and is never nested.
+ * Consumed by storage flattening, which uses it to set Load::is_streaming
+ * on the resulting Load node(s) and then discards it. */
+struct StreamingLoads : public StmtNode<StreamingLoads> {
+    std::optional<std::vector<std::string>> names;
+    Stmt body;
+
+    static Stmt make(std::optional<std::vector<std::string>> names,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::StreamingLoads;
 };
 
 /** Horizontally reduce a vector to a scalar or narrower vector using

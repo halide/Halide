@@ -119,6 +119,10 @@ struct FunctionContents {
 
     bool no_profiling = false;
 
+    // Optional override for the name shown in the profiler. The IR-level
+    // name is `name`; this is purely cosmetic.
+    std::string profiler_display_name;
+
     bool frozen = false;
 
     // A weak pointer to this Func's global wrapper, if it has one (created by
@@ -377,6 +381,7 @@ void Function::update_with_deserialization(const std::string &name,
                                            bool trace_realizations,
                                            const std::vector<std::string> &trace_tags,
                                            bool no_profiling,
+                                           const std::string &profiler_display_name,
                                            bool frozen) {
     contents->name = name;
     contents->origin_name = origin_name;
@@ -399,6 +404,7 @@ void Function::update_with_deserialization(const std::string &name,
     contents->trace_realizations = trace_realizations;
     contents->trace_tags = trace_tags;
     contents->no_profiling = no_profiling;
+    contents->profiler_display_name = profiler_display_name;
     contents->frozen = frozen;
 }
 
@@ -538,6 +544,7 @@ void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const
     copy->trace_realizations = contents->trace_realizations;
     copy->trace_tags = contents->trace_tags;
     copy->no_profiling = contents->no_profiling;
+    copy->profiler_display_name = contents->profiler_display_name;
     copy->frozen = contents->frozen;
     copy->output_buffers = contents->output_buffers;
     copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
@@ -1228,6 +1235,13 @@ bool Function::should_not_profile() const {
     return contents->no_profiling;
 }
 
+void Function::set_profiler_display_name(const std::string &n) {
+    contents->profiler_display_name = n;
+}
+const std::string &Function::profiler_display_name() const {
+    return contents->profiler_display_name;
+}
+
 void Function::freeze() {
     contents->frozen = true;
 }
@@ -1290,8 +1304,7 @@ const Call *Function::is_wrapper() const {
         expected_args.push_back(Variable::make(Int(32), v));
     }
     Expr expected_rhs =
-        Call::make(call->type, call->name, expected_args, call->call_type,
-                   call->func, call->value_index, call->image, call->param);
+        call->with(expected_args);
     if (equal(rhs[0], expected_rhs)) {
         return call;
     } else {

@@ -36,6 +36,19 @@ void collapse_adjacent_dims(MultiRamp *m) {
 
 }  // namespace
 
+MultiRamp::MultiRamp(Expr base, std::vector<Expr> strides, std::vector<int> lanes)
+    : base(std::move(base)), strides(std::move(strides)), lanes(std::move(lanes)) {
+    internal_assert(this->strides.size() == this->lanes.size());
+    for (size_t i = this->lanes.size(); i-- > 0;) {
+        internal_assert(this->lanes[i] >= 1);
+        if (this->lanes[i] == 1) {
+            this->strides.erase(this->strides.begin() + i);
+            this->lanes.erase(this->lanes.begin() + i);
+        }
+    }
+    collapse_adjacent_dims(this);
+}
+
 // Multiramps with compatible lanes form a vector space. Here is scalar multiplication.
 void MultiRamp::mul(const Expr &e) {
     internal_assert(e.type().is_scalar());
@@ -111,6 +124,62 @@ bool MultiRamp::add(const MultiRamp &other) {
         // The up-front lane-count check ensures both sides always exhaust
         // together, so neither side should be done here.
     }
+}
+
+bool MultiRamp::strides_for_shape(const std::vector<int> &target_lanes,
+                                  std::vector<Expr> *out_strides) const {
+    // We rely on the canonical-form invariant that adjacent dims of *this
+    // with aligned strides have already been collapsed (see
+    // collapse_adjacent_dims). That makes the mapping easy: each MR dim
+    // entirely consumes some consecutive target dims whose lane-counts
+    // multiply up to that MR dim's lane count. If a target dim's lane
+    // count doesn't divide what's left of the current MR dim, no mapping
+    // exists — merging multiple MR dims to fill one target dim would
+    // require their strides to align, but if they did, they'd already be
+    // a single dim.
+    int total = 1;
+    for (int n : target_lanes) {
+        internal_assert(n >= 1) << "target_lanes entries must be >= 1\n";
+        total *= n;
+    }
+    if (total != total_lanes()) {
+        return false;
+    }
+
+    out_strides->clear();
+    out_strides->reserve(target_lanes.size());
+    Type t = base.type();
+
+    size_t target_idx = 0;
+    auto consume_extent_one_targets = [&]() {
+        while (target_idx < target_lanes.size() && target_lanes[target_idx] == 1) {
+            out_strides->push_back(make_zero(t));
+            target_idx++;
+        }
+    };
+
+    for (size_t mr_idx = 0; mr_idx < lanes.size(); mr_idx++) {
+        int needed = lanes[mr_idx];
+        int accumulated = 1;
+        while (needed > 1) {
+            consume_extent_one_targets();
+            if (target_idx >= target_lanes.size()) {
+                return false;
+            }
+            int n = target_lanes[target_idx];
+            if (needed % n != 0) {
+                return false;
+            }
+            out_strides->push_back(simplify(strides[mr_idx] * accumulated));
+            accumulated *= n;
+            needed /= n;
+            target_idx++;
+        }
+    }
+    consume_extent_one_targets();
+    // Total-lane check up front guarantees we've consumed every target dim.
+    internal_assert(target_idx == target_lanes.size());
+    return true;
 }
 
 namespace {

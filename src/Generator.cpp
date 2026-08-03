@@ -107,6 +107,7 @@ Func make_param_func(const Parameter &p, const std::string &name) {
         }
         f(args) = Internal::Call::make(p, args_expr);
     }
+    f.function().set_profiler_display_name(name + " (input)");
     return f;
 }
 
@@ -639,7 +640,7 @@ std::string halide_type_to_c_type(const Type &t) {
         {encode(Float(16)), "uint16_t"},   // TODO: see Issues #3709, #3967
         {encode(Float(32)), "float"},
         {encode(Float(64)), "double"},
-        {encode(Handle(64)), "void*"}};
+        {encode(Handle()), "void*"}};
     internal_assert(m.count(encode(t))) << t << " " << encode(t);
     return m.at(encode(t));
 }

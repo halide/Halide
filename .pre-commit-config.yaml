@@ -25,7 +25,7 @@ repos:
         exclude: \.patch$
 
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.11
+    rev: v1.7.12
     hooks:
       - id: actionlint
 
@@ -51,7 +51,7 @@ repos:
     rev: v2.4.1
     hooks:
       - id: codespell
-        args: [ --ignore-words-list, "CreateOr,implementors,PADD,re-use,re-used,re-using,subtile,subtiles,tRe" ]
+        args: [ --ignore-words-list, "CreateOr,implementors,PADD,re-use,re-used,re-using,SME,+sme,subtile,subtiles,tRe" ]
         exclude: |
           (?x)(
             ^src/autoschedulers/common/cmdline\.h$
@@ -112,8 +112,14 @@ repos:
     hooks:
       - id: taplo-format
 
+  - repo: https://github.com/halide/cmtk-pre-commit
+    rev: v0.1.0
+    hooks:
+      - id: cmtk
+
   - repo: local
     hooks:
+
       - id: check-cmake-file-lists
         name: check CMake file lists
         entry: python3 tools/check_cmake_file_lists.py

@@ -19,6 +19,7 @@ typedef struct {
 } CriticalSection;
 
 extern WIN32API Thread CreateThread(void *, size_t, void *(*fn)(void *), void *, int32_t, int32_t *);
+extern WIN32API uint32_t GetCurrentThreadId();
 extern WIN32API void InitializeConditionVariable(ConditionVariable *);
 extern WIN32API void WakeConditionVariable(ConditionVariable *);
 extern WIN32API void SleepConditionVariableCS(ConditionVariable *, CriticalSection *, int);
@@ -50,6 +51,13 @@ WEAK void *spawn_thread_helper(void *arg) {
 }  // namespace Halide
 
 extern "C" {
+
+using namespace Halide::Runtime::Internal;
+
+WEAK int32_t halide_current_thread_id() {
+    const uint32_t id = GetCurrentThreadId();
+    return (int32_t)(id ? id : 1);
+}
 
 WEAK int halide_host_cpu_count() {
     // Apparently a standard windows environment variable

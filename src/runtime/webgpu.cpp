@@ -1007,7 +1007,6 @@ WEAK int halide_webgpu_run(void *user_context,
             }
 
             halide_type_t arg_type = arg_types[a];
-            halide_debug_assert(user_context, arg_type.lanes == 1);
             halide_debug_assert(user_context, arg_type.bits > 0);
             halide_debug_assert(user_context, arg_type.bits <= 32);
 

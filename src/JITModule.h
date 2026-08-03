@@ -297,6 +297,13 @@ public:
      * avoid deadlock when using the async scheduling directive. Returns the old
      * number. */
     static int set_num_threads(int);
+
+    /** Search the shared JIT runtime for `target` for a symbol with the
+     * given name. Returns the first match's address, or nullptr if no
+     * runtime module exports it. JIT shared runtimes are created
+     * lazily, so this returns nullptr if no Halide code targeting this
+     * target has been run yet. */
+    static void *find_symbol(const Target &target, const std::string &name);
 };
 
 void *get_symbol_address(const char *s);

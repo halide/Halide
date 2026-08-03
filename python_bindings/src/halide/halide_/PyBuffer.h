@@ -20,16 +20,19 @@ Halide::Runtime::Buffer<T, Dims, InClassDimStorage> pybufferinfo_to_halidebuffer
     halide_dimension_t *dims = (halide_dimension_t *)alloca(info.ndim * sizeof(halide_dimension_t));
     _halide_user_assert(dims);
     for (int i = 0; i < info.ndim; i++) {
-        if (INT_MAX < info.shape[i] || INT_MAX < (info.strides[i] / t.bytes())) {
+        // Strides may be negative in both numpy and Halide. So check against both INT_MIN and
+        // INT_MAX.
+        const auto elem_stride = info.strides[i] / t.bytes();
+        if (info.shape[i] > INT_MAX || elem_stride < INT_MIN || elem_stride > INT_MAX) {
             throw py::value_error("Out of range dimensions in buffer conversion.");
         }
-        // Halide's default indexing convention is col-major (the most rapidly varying index comes first);
+        // Reverse axes if requested.
         // Numpy's default is row-major (most rapidly varying comes last).
-        // We usually want to reverse the order so that most-varying comes first.
+
         const int dst_axis = reverse_axes ? (info.ndim - i - 1) : i;
-        dims[dst_axis] = {0, (int32_t)info.shape[i], (int32_t)(info.strides[i] / t.bytes())};
+        dims[dst_axis] = {0, (int32_t)info.shape[i], (int32_t)elem_stride};
     }
-    return Halide::Runtime::Buffer<T, Dims, InClassDimStorage>(t, info.ptr, (int)info.ndim, dims);
+    return Halide::Runtime::Buffer<T, Dims, InClassDimStorage>(t.to_abi(), info.ptr, (int)info.ndim, dims);
 }
 
 }  // namespace PythonBindings

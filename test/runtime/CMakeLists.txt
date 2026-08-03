@@ -1,9 +1,14 @@
 function(_set_target_options NAME)
-    target_include_directories(${NAME} PRIVATE "${Halide_SOURCE_DIR}/src" "${Halide_SOURCE_DIR}/src/runtime")
+    target_include_directories(
+        ${NAME}
+        PRIVATE
+        "${Halide_SOURCE_DIR}/src"
+        "${Halide_SOURCE_DIR}/src/runtime"
+    )
     if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         # Halide runtime lib has declarations for memcmp etc that conflict with GNU stdlib
-        target_compile_options(${NAME} PRIVATE -Wno-builtin-declaration-mismatch )
-    endif()
+        target_compile_options(${NAME} PRIVATE -Wno-builtin-declaration-mismatch)
+    endif ()
     math(EXPR bits "8 * ${CMAKE_SIZEOF_VOID_P}")
     target_compile_definitions(
         ${NAME}
@@ -26,12 +31,14 @@ function(halide_define_runtime_internal_test NAME)
 endfunction()
 
 # NOTE: These tests directly include runtime_internal.h which isn't compatible with MSVC
-if(NOT MSVC)
+if (NOT MSVC)
     # Weak linkages are easier to get right with OBJECT libraries
-    add_library(runtime_internal_common OBJECT
-                common.cpp
-                "${Halide_SOURCE_DIR}/src/runtime/msan_stubs.cpp"
-                "${Halide_SOURCE_DIR}/src/runtime/to_string.cpp")
+    add_library(
+        runtime_internal_common OBJECT
+        common.cpp
+        "${Halide_SOURCE_DIR}/src/runtime/msan_stubs.cpp"
+        "${Halide_SOURCE_DIR}/src/runtime/to_string.cpp"
+    )
     _set_target_options(runtime_internal_common)
 
     # block_allocator.cpp
@@ -51,4 +58,4 @@ if(NOT MSVC)
 
     # string_table.cpp
     halide_define_runtime_internal_test(string_table)
-endif()
+endif ()

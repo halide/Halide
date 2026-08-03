@@ -6,6 +6,7 @@
 #include "halide_thread_pool.h"
 #include "test_sharding.h"
 
+#include <cctype>
 #include <fstream>
 #include <iostream>
 
@@ -149,6 +150,7 @@ public:
                  Target::SSE41,
                  Target::SVE,
                  Target::SVE2,
+                 Target::SME2,
                  Target::VSX,
              }) {
             if (target.has_feature(f) != host_target.has_feature(f)) {
@@ -213,12 +215,12 @@ public:
                     return true;
                 }
             } while (*str++);
-        } else if (*p == ' ') {  // ignore whitespace in pattern
+        } else if (std::isspace(static_cast<unsigned char>(*p))) {  // ignore whitespace in pattern
             p++;
             if (wildcard_match(p, str)) {
                 return true;
             }
-        } else if (*str == ' ') {  // ignore whitespace in string
+        } else if (std::isspace(static_cast<unsigned char>(*str))) {  // ignore whitespace in string
             str++;
             if (wildcard_match(p, str)) {
                 return true;
@@ -321,6 +323,7 @@ public:
         f(x, y) = e;
         f.bound(x, 0, W).vectorize(x, vector_width);
         f.compute_root();
+        apply_additional_schedule(f);
 
         // Include a scalar version
         Halide::Func f_scalar("scalar_" + name);
@@ -339,12 +342,13 @@ public:
             // Do the reduction separately in f_scalar
             g.clone_in(f_scalar);
 
-            g.compute_at(f, x)
-                .update()
-                .split(x, xo, xi, vector_width)
-                .atomic(true)
-                .vectorize(g.rvars()[0])
-                .vectorize(xi);
+            auto stage = g.compute_at(f, x)
+                             .update()
+                             .split(x, xo, xi, vector_width)
+                             .atomic(true)
+                             .vectorize(g.rvars()[0])
+                             .vectorize(xi);
+            apply_additional_schedule(stage);
         }
 
         compile_and_check(f, op, name, vector_width, arg_types, error_msg);
@@ -371,7 +375,7 @@ public:
             std::vector<Argument> args(image_params.size() + 1);
             for (size_t i = 0; i < image_params.size(); i++) {
                 args[i] = image_params[i];
-                inputs[i] = Runtime::Buffer<>(args[i].type, nullptr, 0);
+                inputs[i] = Runtime::Buffer<>(args[i].type.to_abi(), nullptr, 0);
             }
             args.back() = rows;
 
@@ -481,6 +485,14 @@ public:
             return std::atoi(t.c_str());
         }
         return Halide::Tools::ThreadPool<void>::num_processors_online();
+    }
+
+    virtual void apply_additional_schedule(Stage &stage) const {
+        return;
+    }
+
+    virtual void apply_additional_schedule(Func &f) const {
+        return;
     }
 
     virtual bool test_all() {

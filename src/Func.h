@@ -461,7 +461,32 @@ public:
     Stage &allow_race_conditions();
     Stage &atomic(bool override_associativity_test = false);
 
+    /** Use non-temporal (streaming) stores for writes done by this Stage. On
+     * targets that require it, Halide emits a fence immediately after this
+     * Stage's production to ensure the streamed values are visible to
+     * whatever reads them next. Only legal on a Stage all of whose RVars (if
+     * any) are pure, i.e. already proven safe to parallelize: a Stage with a
+     * genuine loop-carried self-dependency could otherwise observe data it
+     * streamed earlier in the same Stage, before the fence. It is a user
+     * error to call this on a Stage that doesn't meet this condition. */
+    Stage &stream_stores();
+
+    /** Use non-temporal (streaming) loads for every direct read this Stage
+     * makes of another Func or external buffer (e.g. an ImageParam). This
+     * is a hint to keep data that is only read once from displacing reusable
+     * data from the cache. */
+    Stage &stream_loads();
+
+    /** Use non-temporal (streaming) loads for this Stage's direct reads of
+     * the named Funcs. It is a user error to name this Stage's own Func
+     * (a self-load can't be streamed). */
+    Stage &stream_loads(const std::vector<Func> &funcs);
+
     Stage &hexagon(const VarOrRVar &x = Var::outermost());
+
+    Stage &sme_streaming(const VarOrRVar &x = Var::outermost());
+
+    Stage &host(const VarOrRVar &x = Var::outermost());
 
     Stage &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
@@ -2027,6 +2052,16 @@ public:
      * Hexagon, that loop is executed on a Hexagon DSP. */
     Func &hexagon(const VarOrRVar &x = Var::outermost());
 
+    /** Schedule for aarch64 SME Streaming Mode.
+     * When a loop is marked with sme_streaming(), that loop including its inner loops
+     * are executed in Streaming mode. */
+    Func &sme_streaming(const VarOrRVar &x = Var::outermost());
+
+    /** Schedule a loop for execution on the host. This can be used inside an
+     * device loop to prevent nested inner loops from being executed on device.
+     * Currently, supported only in sme_streaming() loop. */
+    Func &host(const VarOrRVar &x = Var::outermost());
+
     /** Prefetch data written to or read from a Func or an ImageParam by a
      * subsequent loop iteration, at an optionally specified iteration offset. You may specify
      * specification of different vars for the location of the prefetch() instruction
@@ -2608,6 +2643,25 @@ public:
      * in global vs shared vs local on the GPU. See the documentation
      * on MemoryType for more detail. */
     Func &store_in(MemoryType memory_type);
+
+    /** Use non-temporal (streaming) loads for every direct read this Func's
+     * pure (initial) definition makes of another Func. Equivalent to calling
+     * stream_loads() on Stage 0; see \ref Stage::stream_loads. To stream the
+     * loads of an update definition, call stream_loads() on the Stage returned
+     * by \ref Func::update instead. */
+    Func &stream_loads();
+
+    /** Use non-temporal (streaming) loads for this Func's pure (initial)
+     * definition's direct reads of the named Funcs. Equivalent to calling
+     * stream_loads(funcs) on Stage 0; see \ref Stage::stream_loads. */
+    Func &stream_loads(const std::vector<Func> &funcs);
+
+    /** Use non-temporal (streaming) stores for writes done by this Func's
+     * pure (initial) definition. Equivalent to calling stream_stores() on
+     * Stage 0; see \ref Stage::stream_stores. To stream the stores of an
+     * update definition, call stream_stores() on the Stage returned by
+     * \ref Func::update instead. */
+    Func &stream_stores();
 
     /** Trace all loads from this Func by emitting calls to
      * halide_trace. If the Func is inlined, this has no

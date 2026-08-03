@@ -606,6 +606,26 @@ void check_vectors() {
     check(ramp(ramp(cast<uint8_t>(x), cast<uint8_t>(-1), 4), cast(UInt(8, 4), -4), 3),
           ramp(cast<uint8_t>(x), cast<uint8_t>(-1), 12));
 
+    // Dividing a nested vector by a broadcast should give the same answer as
+    // dividing the equivalent flat one, even though the lanes are laid out
+    // differently.
+    check(ramp(broadcast(x * 16, 16), broadcast(1, 16), 16) / broadcast(16, 256),
+          broadcast(x, 256));
+    check(broadcast(ramp(broadcast(x * 16, 16), broadcast(1, 16), 16), 16) / broadcast(16, 4096),
+          broadcast(x, 4096));
+    check(broadcast(ramp(x, 1, 4), 2) / broadcast(y, 8),
+          broadcast(ramp(x, 1, 4) / broadcast(y, 4), 2));
+
+    // An affine base works too, as long as the offset leaves room within its
+    // own multiple of the denominator for the rest of the ramp.
+    check(ramp(x * 16 + 4, 1, 4) / broadcast(16, 4), broadcast(x, 4));
+    check(ramp(x * 16 - 4, 1, 4) / broadcast(16, 4), broadcast(x + (-1), 4));
+    check(ramp(broadcast(x * 16 + 4, 16), broadcast(1, 16), 4) / broadcast(16, 64),
+          broadcast(x, 64));
+    // ... but not when it spills over into the next one.
+    check(ramp(x * 16 + 14, 1, 4) / broadcast(16, 4),
+          ramp(x * 16 + 14, 1, 4) / broadcast(16, 4));
+
     // Any linear combination of simple ramps and broadcasts should
     // reduce to a single ramp or broadcast.
     std::mt19937 rng(0);
@@ -2104,30 +2124,30 @@ void check_overflow() {
 
 template<typename T>
 void check_clz(uint64_t value, uint64_t result) {
-    Expr x = Variable::make(halide_type_of<T>(), "x");
+    Expr x = Variable::make(type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_leading_zeros(x)), cast<T>(Expr(result)));
 
-    Type vt = halide_type_of<T>().with_lanes(4);
+    Type vt = type_of<T>().with_lanes(4);
     Expr xv = Variable::make(vt, "x");
     check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_leading_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_ctz(uint64_t value, uint64_t result) {
-    Expr x = Variable::make(halide_type_of<T>(), "x");
+    Expr x = Variable::make(type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_trailing_zeros(x)), cast<T>(Expr(result)));
 
-    Type vt = halide_type_of<T>().with_lanes(4);
+    Type vt = type_of<T>().with_lanes(4);
     Expr xv = Variable::make(vt, "x");
     check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_trailing_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_popcount(uint64_t value, uint64_t result) {
-    Expr x = Variable::make(halide_type_of<T>(), "x");
+    Expr x = Variable::make(type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), popcount(x)), cast<T>(Expr(result)));
 
-    Type vt = halide_type_of<T>().with_lanes(4);
+    Type vt = type_of<T>().with_lanes(4);
     Expr xv = Variable::make(vt, "x");
     check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), popcount(xv)), cast(vt, broadcast(Expr(result), 4)));
 }

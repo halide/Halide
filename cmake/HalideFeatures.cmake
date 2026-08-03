@@ -1,7 +1,7 @@
 if (PROJECT_IS_TOP_LEVEL)
     include(FeatureSummary)
-    cmake_language(
-        DEFER DIRECTORY "${Halide_SOURCE_DIR}"
+    cmake_language(DEFER
+        DIRECTORY "${Halide_SOURCE_DIR}"
         CALL feature_summary WHAT ENABLED_FEATURES DISABLED_FEATURES
     )
 endif ()

@@ -272,4 +272,4 @@ TAGS
 
 # TODO: these should become .cmake.in
 !packaging/common/HalideConfig.cmake
-!packaging/common/HalideHelpersConfig.cmake
+!packaging/common/HalideCompilerConfig.cmake

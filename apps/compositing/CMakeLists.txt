@@ -12,32 +12,42 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_halide_generator(compositing.generator
-                     SOURCES compositing_generator.cpp
-                     LINK_LIBRARIES Halide::Tools)
+add_halide_generator(
+    compositing.generator
+    SOURCES compositing_generator.cpp
+    LINK_LIBRARIES Halide::Tools
+)
 
 # Filters
 add_halide_library(compositing FROM compositing.generator)
-add_halide_library(compositing_auto_schedule FROM compositing.generator
-                   GENERATOR compositing
-                   AUTOSCHEDULER Halide::Mullapudi2016
-                   PARAMS autoscheduler.experimental_gpu_schedule=1)
+add_halide_library(
+    compositing_auto_schedule
+    FROM compositing.generator
+    GENERATOR compositing
+    AUTOSCHEDULER Halide::Mullapudi2016
+    PARAMS autoscheduler.experimental_gpu_schedule=1
+)
 
 # Main executable
 add_executable(compositing_process process.cpp)
-target_link_libraries(compositing_process
-                      PRIVATE
-                      Halide::ImageIO
-                      compositing
-                      compositing_auto_schedule)
+target_link_libraries(
+    compositing_process
+    PRIVATE
+    Halide::ImageIO
+    compositing
+    compositing_auto_schedule
+)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgba.png COPYONLY)
     add_test(NAME compositing_process COMMAND compositing_process rgba.png 10 out.png)
-    set_tests_properties(compositing_process PROPERTIES
-                         LABELS compositing
-                         PASS_REGULAR_EXPRESSION "Success!"
-                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+    set_tests_properties(
+        compositing_process
+        PROPERTIES
+        LABELS compositing
+        PASS_REGULAR_EXPRESSION "Success!"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+    )
 endif ()

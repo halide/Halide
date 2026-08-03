@@ -10,15 +10,15 @@ target_precompile_headers(_test_internal PRIVATE <Halide.h>)
 if (Halide_CCACHE_BUILD)
     if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         target_compile_options(
-            _test_internal PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>"
+            _test_internal
+            PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>"
         )
     endif ()
 endif ()
 
 add_halide_test(_test_internal GROUPS internal)
 
-Halide_feature(WITH_TEST_AUTO_SCHEDULE "Build autoscheduler tests" AUTO
-               DEPENDS WITH_AUTOSCHEDULERS)
+Halide_feature(WITH_TEST_AUTO_SCHEDULE "Build autoscheduler tests" AUTO DEPENDS WITH_AUTOSCHEDULERS)
 if (WITH_TEST_AUTO_SCHEDULE)
     add_subdirectory(autoschedulers)
 endif ()
@@ -59,8 +59,7 @@ endif ()
 # some platform specific ifdefs for attributes and types that are causing compile
 # errors.
 #
-Halide_feature(WITH_TEST_RUNTIME "Build runtime tests" AUTO
-               DEPENDS NOT MSVC)
+Halide_feature(WITH_TEST_RUNTIME "Build runtime tests" AUTO DEPENDS NOT MSVC)
 if (WITH_TEST_RUNTIME)
     add_subdirectory(runtime)
 endif ()

@@ -90,6 +90,7 @@ public:
                                      bool trace_realizations,
                                      const std::vector<std::string> &trace_tags,
                                      bool no_profiling,
+                                     const std::string &profiler_display_name,
                                      bool frozen);
 
     /** Get a handle on the halide function contents that this Function
@@ -297,6 +298,17 @@ public:
 
     /** Check if the function is marked as one that should not be profiled. */
     bool should_not_profile() const;
+
+    /** Override the name shown for this Function in the profiler. The
+     * Function's internal name (used in IR and as the wrapper-graph
+     * key) is unchanged. Used to display auto-generated wrapper Funcs
+     * with names that the user will recognize -- e.g. "foo (input)"
+     * for an input buffer wrapper, or "foo.in(bar)" for a Func::in()
+     * wrapper. */
+    void set_profiler_display_name(const std::string &);
+
+    /** Get the profiler display name; empty if not overridden. */
+    const std::string &profiler_display_name() const;
 
     /** Mark function as frozen, which means it cannot accept new
      * definitions. */
