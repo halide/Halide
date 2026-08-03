@@ -39,7 +39,7 @@ namespace ggml_halide {
 // it is d*d_act * sum(code*act) + m*d_act * sum(act), and hoist_invariants()
 // gives each term its own accumulator -- both with integer bodies, so both reach
 // SDOT. That is ggml's own decomposition of the affine formats.
-// `keep_out` names decode-chain Funcs that must NOT be flattened -- a caller
+// `keep_out` identifies decode-chain Funcs that must NOT be flattened -- a caller
 // that has scheduled one as a materialization boundary (e.g. Q5_x's
 // reconstructed `combine_bits_code`, computed once per block so its qh
 // byte->bits table read is a contiguous load instead of a per-lane gather).
@@ -50,13 +50,15 @@ inline std::vector<Halide::Func> sdot_partial(Halide::Func &acc,
                                               const std::vector<std::pair<Halide::RVar, Halide::Var>> &preserved,
                                               const std::vector<Halide::ApproximationResult> &operands,
                                               bool distribute = false,
-                                              const std::vector<std::string> &keep_out = {}) {
+                                              const std::vector<Halide::Func> &keep_out = {}) {
     using namespace Halide;
 
     Func acc_dot = acc.update().rfactor(preserved);
 
     auto excluded = [&](const Func &f) {
-        return std::find(keep_out.begin(), keep_out.end(), f.name()) != keep_out.end();
+        return std::any_of(keep_out.begin(), keep_out.end(), [&](const Func &kept) {
+            return kept.defined() && kept.function().same_as(f.function());
+        });
     };
 
     std::vector<Func> decode_funcs;
