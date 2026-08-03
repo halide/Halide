@@ -1,15 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getMatches } from "@tauri-apps/plugin-cli";
 import { useSetAtom } from "jotai";
 import { Tabs } from "radix-ui";
 import * as React from "react";
 
-import Profiler from "@/components/views/profiler/Profiler";
-import Tracer from "@/components/views/tracer/Tracer";
+import Profile from "@/components/views/profile/Profile";
+import Trace from "@/components/views/trace/Trace";
+import TraceUpload from "@/components/views/trace/TraceUpload";
+import TraceLoading from "@/components/views/trace/TraceLoading";
 import { ProfileContextProvider } from "@/hooks/profile";
 import { TraceContextProvider } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
-import { Profile, type FuncMeta, type StatsMeta } from "@/types";
+import type { Profile as Pfile, FuncMeta, StatsMeta } from "@/types";
 import { openProfile, openTrace } from "@/utils/api";
 
 import "./App.css";
@@ -20,7 +23,31 @@ async function resolvePath(path: string) {
     : `${await invoke<string>("get_cwd")}/${path}`;
 }
 
+class TracePathError extends Error {
+  public readonly name: string;
+
+  constructor(message: string) {
+    super(message);
+
+    this.name = "TracePathError";
+    Object.setPrototypeOf(this, TracePathError.prototype);
+  }
+}
+
+enum TraceLoadingState {
+  Loading,
+  Loaded,
+  NeedsUpload,
+}
+
 function App() {
+  // Loading state.
+  const [traceLoading, setTraceLoading] = React.useState<{
+    state: TraceLoadingState;
+    progress: number;
+  }>({ state: TraceLoadingState.Loading, progress: 0 });
+
+  // Trace state.
   const [funcs, setFuncs] = React.useState<Record<string, FuncMeta>>({});
   const [dagEdges, setDagEdges] = React.useState<Record<string, string[]>>({});
   const [packetCount, setPacketCount] = React.useState<number>(0);
@@ -31,23 +58,24 @@ function App() {
     global_max_reuse_distance: 0,
     global_thread_ids: [],
   });
-  const [profile, setProfile] = React.useState<Profile | null>(null);
 
+  // Profile state.
+  const [profile, setProfile] = React.useState<Pfile | null>(null);
+
+  // GUI state.
   const setActiveFunc = useSetAtom(funcAtom);
 
-  React.useEffect(() => {
-    async function loadTraceFromCLI() {
-      const matches = await getMatches();
-      const tracePath = matches.args.trace?.value;
+  const loadTrace = React.useCallback(
+    async (path: string) => {
+      setTraceLoading({ state: TraceLoadingState.Loading, progress: 0 });
 
-      if (typeof tracePath !== "string") {
-        return;
-      }
-      const resolvedTracePath = await resolvePath(tracePath);
+      const unlisten = await listen<number>("trace-load-progress", (event) => {
+        setTraceLoading((prev) => ({ ...prev, progress: event.payload }));
+      });
 
       try {
         const { funcs, total_packets, dag_edges, stats } =
-          await openTrace(resolvedTracePath);
+          await openTrace(path);
 
         const byName: Record<string, FuncMeta> = {};
         for (const func of funcs) {
@@ -59,13 +87,42 @@ function App() {
         setPacketCount(total_packets);
         setStats(stats);
         setActiveFunc(funcs[0]?.name ?? "");
+      } finally {
+        unlisten();
+        setTraceLoading({ state: TraceLoadingState.Loaded, progress: 100 });
+      }
+    },
+    [setActiveFunc],
+  );
+
+  React.useEffect(() => {
+    async function loadTraceFromCLI() {
+      try {
+        const matches = await getMatches();
+        const tracePath = matches.args.trace?.value;
+
+        if (typeof tracePath !== "string") {
+          throw new TracePathError(
+            `Unexpected value for trace path: ${tracePath}`,
+          );
+        }
+
+        const resolvedTracePath = await resolvePath(tracePath);
+        await loadTrace(resolvedTracePath);
       } catch (err) {
-        console.error("Error loading trace from CLI: ", err);
+        if (err instanceof TracePathError) {
+          setTraceLoading((prev) => ({
+            ...prev,
+            state: TraceLoadingState.NeedsUpload,
+          }));
+        } else {
+          console.error("Error loading trace: ", err);
+        }
       }
     }
 
     loadTraceFromCLI();
-  }, [setActiveFunc]);
+  }, [loadTrace]);
 
   React.useEffect(() => {
     async function loadProfileFromCLI() {
@@ -87,6 +144,17 @@ function App() {
 
     loadProfileFromCLI();
   }, []);
+
+  const renderTrace = React.useCallback(() => {
+    switch (traceLoading.state) {
+      case TraceLoadingState.Loading:
+        return <TraceLoading progress={traceLoading.progress} />;
+      case TraceLoadingState.NeedsUpload:
+        return <TraceUpload onUpload={loadTrace} />;
+      case TraceLoadingState.Loaded:
+        return <Trace />;
+    }
+  }, [traceLoading, loadTrace]);
 
   return (
     <Tabs.Root className="flex h-screen w-screen flex-col" defaultValue="trace">
@@ -115,16 +183,14 @@ function App() {
             stats,
           }}
         >
-          <main className="h-full w-full">
-            <Tracer />
-          </main>
+          <main className="h-full w-full">{renderTrace()}</main>
         </TraceContextProvider>
       </Tabs.Content>
       {profile !== null ? (
         <Tabs.Content value="profile" className="flex-1 overflow-hidden">
           <ProfileContextProvider value={profile}>
             <main className="h-full w-full">
-              <Profiler />
+              <Profile />
             </main>
           </ProfileContextProvider>
         </Tabs.Content>

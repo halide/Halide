@@ -7,11 +7,11 @@ import { packetAtom } from "@/state/packet";
 import { playbackRateAtom } from "@/state/playback";
 import { SCRUB_DEBOUNCE_MS } from "@/utils/constants";
 
-interface TracerTimelineProps {
+interface Props {
   packetCount: number;
 }
 
-function TracerTimeline({ packetCount }: TracerTimelineProps) {
+function TraceTimeline({ packetCount }: Props) {
   // Local slider position, for a smooth thumb independent of render cadence.
   const [packetIndex, setPacketIndex] = React.useState<number>(0);
   const [playing, setPlaying] = React.useState<boolean>(false);
@@ -168,4 +168,4 @@ function TracerTimeline({ packetCount }: TracerTimelineProps) {
   );
 }
 
-export default TracerTimeline;
+export default TraceTimeline;

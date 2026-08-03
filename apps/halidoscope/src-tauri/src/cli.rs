@@ -34,7 +34,7 @@ fn dot(subcommand: Box<SubcommandMatches>) -> Option<()> {
     let destination = args.get("destination").and_then(|a| a.value.as_str());
 
     // Load and parse the trace.
-    let trace = Trace::load_from_file(trace_path).unwrap_or_else(|e| {
+    let trace = Trace::load_from_file(trace_path, |_| {}).unwrap_or_else(|e| {
         eprintln!("Error loading trace: {}", e);
         std::process::exit(1);
     });
@@ -75,7 +75,7 @@ fn list(subcommand: Box<SubcommandMatches>) -> Option<()> {
     let trace_path = args.get("trace").and_then(|a| a.value.as_str())?;
 
     // Load and parse the trace.
-    let trace = Trace::load_from_file(trace_path).unwrap_or_else(|e| {
+    let trace = Trace::load_from_file(trace_path, |_| {}).unwrap_or_else(|e| {
         eprintln!("Error loading trace: {}", e);
         std::process::exit(1);
     });
@@ -129,7 +129,7 @@ fn stats(subcommand: Box<SubcommandMatches>) -> Option<()> {
     let func = args.get("func").and_then(|a| a.value.as_str());
 
     // Load and parse the trace.
-    let trace = Trace::load_from_file(trace_path).unwrap_or_else(|e| {
+    let trace = Trace::load_from_file(trace_path, |_| {}).unwrap_or_else(|e| {
         eprintln!("Error loading trace: {}", e);
         std::process::exit(1);
     });
@@ -230,7 +230,7 @@ fn snapshot(subcommand: Box<SubcommandMatches>) -> Option<()> {
     let destination = args.get("destination").and_then(|a| a.value.as_str())?;
 
     // Load and parse the trace.
-    let trace = Trace::load_from_file(trace_path).unwrap_or_else(|e| {
+    let trace = Trace::load_from_file(trace_path, |_| {}).unwrap_or_else(|e| {
         eprintln!("Error loading trace: {}", e);
         std::process::exit(1);
     });
