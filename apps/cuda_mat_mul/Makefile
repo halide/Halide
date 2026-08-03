@@ -30,6 +30,12 @@ $(BIN)/%/mat_mul_f16.a: $(GENERATOR_BIN)/mat_mul.generator
 	    target=$(HALF_TARGET) size=$(MATRIX_SIZE) \
 	    A.type=float16 B.type=float16 out.type=float32
 
+$(BIN)/%/mat_mul_f16_acc16.a: $(GENERATOR_BIN)/mat_mul.generator
+	@mkdir -p $(@D)
+	$^ -g mat_mul -f mat_mul_f16_acc16 -e $(GENERATOR_OUTPUTS) -o $(@D) \
+	    target=$(HALF_TARGET) size=$(MATRIX_SIZE) \
+	    A.type=float16 B.type=float16 out.type=float16
+
 $(BIN)/%/mat_mul_bf16.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
 	$^ -g mat_mul -f mat_mul_bf16 -e $(GENERATOR_OUTPUTS) -o $(@D) \
@@ -43,7 +49,8 @@ $(BIN)/%/mat_mul_u8.a: $(GENERATOR_BIN)/mat_mul.generator
 	    A.type=uint8 B.type=uint8 out.type=int32
 
 $(BIN)/%/runner: runner.cpp $(BIN)/%/mat_mul.a $(BIN)/%/mat_mul_f16.a \
-                 $(BIN)/%/mat_mul_bf16.a $(BIN)/%/mat_mul_u8.a
+                 $(BIN)/%/mat_mul_bf16.a $(BIN)/%/mat_mul_u8.a \
+                 $(BIN)/%/mat_mul_f16_acc16.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -lcudart -lcublas
 

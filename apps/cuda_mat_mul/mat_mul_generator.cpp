@@ -24,21 +24,26 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 //
 // Time for one multiply on an RTX 5060 Ti, against cublas doing the same
 // thing (cublasSgemm, and cublasGemmEx with half precision operands and a
-// single precision accumulator):
+// single precision accumulator). The block shapes below were picked by
+// sweeping sixty of them at each size and operand type.
 //
-//                     1024      2048       4096
-//     Halide f32     310 us   1667 us   18842 us
-//     cublas f32     147 us   1030 us    7869 us
-//     Halide f16      53 us    371 us    2797 us
-//     Halide bf16     53 us    365 us    2796 us
-//     Halide u8       51 us    247 us    2424 us
-//     cublas f16      51 us    347 us    2699 us
+//                            1024      2048       4096
+//     Halide f32            313 us   1679 us   18796 us
+//     cublas f32            148 us   1034 us    7938 us
+//     Halide f16 -> f32      53 us    368 us    2811 us
+//     Halide bf16 -> f32     54 us    367 us    2810 us
+//     cublas f16 -> f32      52 us    350 us    2724 us
+//     Halide f16 -> f16      36 us    199 us    1592 us
+//     Halide u8 -> i32       35 us    220 us    1697 us
 //
-// The float schedule is about half of cublas, and the half precision one is
-// within a few percent of it. Eight-bit operands are the fastest of the lot -
-// they halve the traffic through shared memory, and beat cublas at half
-// precision by 40% at 2048 - which makes them the interesting case for
-// imaging, where the inputs are usually bytes to begin with.
+// The float schedule is about half of cublas. Against cublas doing the same
+// thing, half and brain float land within a few percent of it. The two rows
+// below that are doing less work per multiply, so they are not comparable to
+// the ones above: a half accumulator halves the registers it takes, and
+// eight-bit operands halve the traffic through shared memory. Both are around
+// 1.7x the single precision accumulator here, which makes bytes the
+// interesting case for imaging, where the inputs are usually bytes anyway.
+//
 class MatMul : public Halide::Generator<MatMul> {
 public:
     GeneratorParam<int> size{"size", 1024};
@@ -170,19 +175,44 @@ private:
         const int tile = 16;
         int tx = tiles_x, ty = tiles_y, wx = warps_x, wy = warps_y;
         if (tx == 0 || ty == 0 || wx == 0 || wy == 0) {
-            // Measured on an RTX 5060 Ti. These do not follow a trend worth
-            // extrapolating from, so they are three measured points rather
-            // than a formula, and each is 4% to 11% better at its own size
-            // than either of the others would be. What changes is how much
-            // accumulator a warp holds: at 4096 a small one spread over four
-            // warps beats a large one, because the occupancy hides the memory
-            // latency better than a large accumulator's reuse does.
-            if ((int)size <= 1024) {
-                tx = 8, ty = 2, wx = 1, wy = 1;
-            } else if ((int)size <= 2048) {
-                tx = 5, ty = 4, wx = 2, wy = 2;
+            // Measured on an RTX 5060 Ti by sweeping sixty shapes at each size
+            // and operand type. These do not follow a trend worth
+            // extrapolating from, so they are measured points rather than a
+            // formula. What moves between them is how much accumulator a warp
+            // holds and how many warps share a staged panel, and the operand
+            // type matters as much as the size: bytes make the operand loads
+            // cheap enough to pay for a much larger accumulator, so they want
+            // a tall block spread over four warps, where the 16-bit types want
+            // a wide one over fewer.
+            //
+            // Brain floats pick out exactly the same shapes as halves at
+            // every size, so they share a row here.
+            const bool bytes = A.type().bits() == 8;
+            const bool half_accumulator = out.type() == Float(16);
+            if (bytes) {
+                if ((int)size <= 1024) {
+                    tx = 2, ty = 8, wx = 4, wy = 1;
+                } else if ((int)size <= 2048) {
+                    tx = 2, ty = 10, wx = 4, wy = 1;
+                } else {
+                    tx = 2, ty = 8, wx = 4, wy = 1;
+                }
+            } else if (half_accumulator) {
+                if ((int)size <= 1024) {
+                    tx = 4, ty = 4, wx = 2, wy = 1;
+                } else if ((int)size <= 2048) {
+                    tx = 5, ty = 4, wx = 2, wy = 2;
+                } else {
+                    tx = 4, ty = 4, wx = 2, wy = 2;
+                }
             } else {
-                tx = 4, ty = 2, wx = 2, wy = 2;
+                if ((int)size <= 1024) {
+                    tx = 8, ty = 2, wx = 1, wy = 1;
+                } else if ((int)size <= 2048) {
+                    tx = 5, ty = 4, wx = 1, wy = 2;
+                } else {
+                    tx = 4, ty = 2, wx = 2, wy = 2;
+                }
             }
         }
         const int block_x = tile * tx * wx;

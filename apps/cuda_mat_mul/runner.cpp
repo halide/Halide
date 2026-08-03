@@ -10,6 +10,7 @@
 #include "mat_mul.h"
 #include "mat_mul_bf16.h"
 #include "mat_mul_f16.h"
+#include "mat_mul_f16_acc16.h"
 #include "mat_mul_u8.h"
 
 using Halide::Runtime::Buffer;
@@ -154,6 +155,28 @@ int main(int argc, char **argv) {
         double t = bench_batched([&]() { mat_mul_f16(A, B, C); },
                                  [&]() { C.device_sync(); });
         printf("Halide half (tensor cores): %f s (%.1f GFlop/s)\n",
+               t, gflops(size, t));
+    }
+
+    // Half precision operands accumulated into half precision, which halves
+    // the registers the accumulator needs. The operands here are sparse zeros
+    // and ones, so the dot products stay small enough to be exact even in a
+    // half accumulator, whose integers run out at 2048.
+    if (ver >= 70) {
+        Buffer<_Float16, 2> A(size, size), B(size, size);
+        Buffer<_Float16, 2> C(size, size);
+        A.for_each_value([](_Float16 &v) { v = (_Float16)((rand() & 3) == 0); });
+        B.for_each_value([](_Float16 &v) { v = (_Float16)((rand() & 3) == 0); });
+        A.set_host_dirty();
+        B.set_host_dirty();
+        mat_mul_f16_acc16(A, B, C);
+        C.copy_to_host();
+        if (!check(A, B, C, size, "half into half")) {
+            return 1;
+        }
+        double t = bench_batched([&]() { mat_mul_f16_acc16(A, B, C); },
+                                 [&]() { C.device_sync(); });
+        printf("Halide half into half (tensor cores): %f s (%.1f GFlop/s)\n",
                t, gflops(size, t));
     }
 

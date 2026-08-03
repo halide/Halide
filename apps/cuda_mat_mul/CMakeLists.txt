@@ -38,6 +38,10 @@ add_halide_library(mat_mul_f16 FROM mat_mul.generator
                    FEATURES cuda cuda_capability_80
                    PARAMS size=1024 A.type=float16 B.type=float16 out.type=float32)
 
+add_halide_library(mat_mul_f16_acc16 FROM mat_mul.generator
+                   GENERATOR mat_mul
+                   FEATURES cuda cuda_capability_80
+                   PARAMS size=1024 A.type=float16 B.type=float16 out.type=float16)
 add_halide_library(mat_mul_bf16 FROM mat_mul.generator
                    GENERATOR mat_mul
                    FEATURES cuda cuda_capability_80
@@ -49,7 +53,7 @@ add_halide_library(mat_mul_u8 FROM mat_mul.generator
 
 # Main executable
 add_executable(runner runner.cpp)
-target_link_libraries(runner PRIVATE mat_mul mat_mul_f16 mat_mul_bf16 mat_mul_u8 Halide::Tools CUDA::cudart CUDA::cublas)
+target_link_libraries(runner PRIVATE mat_mul mat_mul_f16 mat_mul_f16_acc16 mat_mul_bf16 mat_mul_u8 Halide::Tools CUDA::cudart CUDA::cublas)
 
 # Test that the app actually works!
 add_test(NAME mat_mul COMMAND runner)
