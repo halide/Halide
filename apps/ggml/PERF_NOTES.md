@@ -148,6 +148,47 @@ Two traps found along the way:
   directives applied *after* `specialize()` do not reach the specialized branch.
   It silently dropped the vectorize/unroll and made things 4x slower.
 
+### q4_0/q8_0 core-composition cleanup
+
+The tuned schedule above is now fed by faithful, public core Approximation
+compositions rather than ggml's legacy `StructBlockLayout` and code-pack
+wrappers:
+
+- q4_0 `{Float16 d; UInt8 qs[16]}` is
+  `StructLayout -> StorageCast -> PlanarFieldPack -> AdditiveOffset -> SymmetricBlockQuantize -> BlockReshape`.
+  `AdditiveOffset<int8_t, uint8_t>{8}` is the representation policy that maps
+  signed codes `[-8, 7]` to stored nibbles `[0, 15]`; planar packing remains an
+  exact, policy-free bit layout.
+- q8_0 `{Float16 d; Int8 qs[32]}` is
+  `StructLayout -> StorageCast -> SymmetricBlockQuantize -> BlockReshape`. Its
+  faithful signed array means the old UInt8 `BytePack` reinterpretation is
+  unnecessary.
+
+Both formats share one traced weight/activation decode graph between the main
+and remainder updates. The shared stages are eagerly inlined only into the tail
+before the four-block main update is transformed. The main assembly remains
+eight SDOTs per iteration with paired 128-bit code loads, four persistent vector
+accumulators, an explicitly unrolled epilogue, and no accumulator spill. The
+scalar tail is still intentionally proportional to its one-to-three-block
+remainder; include those cases in the planned named scaling/odd-tail
+`kernel-bench` mode.
+
+A struct-typed q8_0 activation input was also tested. It was correct, but it
+broadened load-shape changes across q4_0 and q5_0 without removing any target
+weight/codec representation debt, so the shared activation ABI remains on its
+stable byte path. The standalone q8_0 codecs and q8_0 weight operand use the
+faithful struct composition. Q1_0 and struct-aware reblocking are the remaining
+symmetric compatibility work.
+
+Ten final paired n=4096 runs measured q4_0 at 95.088 ns GGML / 97.000 ns Halide
+(0.9803x), versus a worktree baseline of 92.585 / 95.784 ns (0.9666x). Q8_0
+measured 72.973 / 74.951 ns (0.9736x), versus 70.618 / 74.870 ns (0.9432x).
+Absolute times moved with core placement; the paired ratios improved, and Halide
+time changed by +1.27% and +0.11%, respectively. No compiler change was
+required: the simplifier folded q4's offset/planar stages into the expected
+mask, shifts, and vector add, while q8's signed field lowered to direct vector
+loads.
+
 ## The q4_1 story so far
 
 q4_1 is affine: the weight decodes to `d*code + m`, so the per-block product
