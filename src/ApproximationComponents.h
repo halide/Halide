@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -240,6 +241,48 @@ public:
         decoded(args) = strict_float(cast<Decoded>(input(Internal::approximation_component_exprs(args))));
         return {{decoded}, {}};
     }
+};
+
+/** Losslessly translate an integral decoded alphabet by a fixed offset into
+ * its stored integral alphabet. This is representation policy, not bit
+ * packing: e.g. signed q4 codes [-8, 7] become stored nibbles [0, 15] before
+ * PlanarFieldPack handles their physical layout. */
+template<typename Decoded, typename Storage>
+class AdditiveOffset : public Approximation {
+    static_assert(std::is_integral_v<Decoded> && std::is_integral_v<Storage>,
+                  "AdditiveOffset requires integral types");
+
+public:
+    explicit AdditiveOffset(int64_t offset)
+        : offset_(offset) {
+    }
+
+    EncodeResult encode(std::vector<Func> inputs) override {
+        user_assert(inputs.size() == 1 && inputs[0].types() == std::vector<Type>{type_of<Decoded>()})
+            << "AdditiveOffset::encode input type mismatch\n";
+        Func input = inputs[0];
+        std::vector<Var> args = Internal::approximation_component_vars(input.dimensions(), "offset");
+        std::vector<Expr> call_args = Internal::approximation_component_exprs(args);
+        Func stored("additive_offset_stored");
+        Expr offset = Internal::make_const(Int(64), offset_);
+        stored(args) = cast<Storage>(cast<int64_t>(input(call_args)) + offset);
+        return {{stored}, {}};
+    }
+
+    DecodeResult decode(std::vector<Func> encoded) override {
+        user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{type_of<Storage>()})
+            << "AdditiveOffset::decode storage type mismatch\n";
+        Func input = encoded[0];
+        std::vector<Var> args = Internal::approximation_component_vars(input.dimensions(), "offset");
+        std::vector<Expr> call_args = Internal::approximation_component_exprs(args);
+        Func decoded("additive_offset_decoded");
+        Expr offset = Internal::make_const(Int(64), offset_);
+        decoded(args) = cast<Decoded>(cast<int64_t>(input(call_args)) - offset);
+        return {{decoded}, {}};
+    }
+
+private:
+    int64_t offset_;
 };
 
 /** Convert a scalar integral word per record to/from a leading little-endian

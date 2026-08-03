@@ -119,6 +119,21 @@ int test_scalar_components() {
 
 int test_code_components() {
     Var element("element"), record("record");
+    Func signed_nibbles("signed_nibbles");
+    signed_nibbles(element, record) = cast<int8_t>((element % 16) - 8);
+    AdditiveOffset<int8_t, uint8_t> offset(8);
+    EncodeResult offset_codes = offset.encode({signed_nibbles});
+    DecodeResult signed_roundtrip = offset.decode(offset_codes.encoded);
+    Buffer<uint8_t> stored_nibbles = offset_codes.encoded[0].realize({16, 2});
+    Buffer<int8_t> restored_nibbles = signed_roundtrip.decoded[0].realize({16, 2});
+    for (int r = 0; r < 2; ++r) {
+        for (int i = 0; i < 16; ++i) {
+            if (stored_nibbles(i, r) != i || restored_nibbles(i, r) != i - 8) {
+                return 1;
+            }
+        }
+    }
+
     Func high("high");
     high(element, record) = cast<int8_t>(select(((element + record) & 1) != 0, 0, -16));
     BinaryAlphabetPack<int8_t> binary(32, UInt(32), -16, 0);
@@ -206,6 +221,58 @@ int test_block_components() {
     return 0;
 }
 
+int test_standard_quant_compositions() {
+    Var k("k");
+
+    Type q4_type = Type::Struct({{"d", Float(16)}, {"qs", UInt(8), 16}});
+    Func q4_values("q4_values");
+    q4_values(k) = cast<float>((k % 16) - 8);
+    Compose q4(
+        StructLayout{q4_type, {"qs", "d"}},
+        Apply{1, StorageCast<float, float16_t>{}},
+        Apply{0, PlanarFieldPack{4, 16}},
+        Apply{0, AdditiveOffset<int8_t, uint8_t>{8}},
+        SymmetricBlockQuantize{32, 8, BlockRoundingMode::TruncateHalfUpWithOffset,
+                               BlockScaleAnchor::ExtremeSignedValue},
+        BlockReshape{32});
+    EncodeResult q4_encoded = q4.encode({q4_values});
+    for (Func handle : q4_encoded.handles) {
+        handle.compute_root();
+    }
+    DecodeResult q4_decoded = q4.decode(q4_encoded.encoded);
+    Buffer<float> q4_roundtrip = q4_decoded.decoded[0].realize({64});
+    for (int i = 0; i < 64; ++i) {
+        if (q4_roundtrip(i) != (i % 16) - 8) {
+            return 1;
+        }
+    }
+
+    Type q8_type = Type::Struct({{"d", Float(16)}, {"qs", Int(8), 32}});
+    Func q8_values("q8_values");
+    Expr local = k % 32;
+    q8_values(k) = cast<float>(select(local == 0, -127, local - 16));
+    Compose q8(
+        StructLayout{q8_type, {"qs", "d"}},
+        Apply{1, StorageCast<float, float16_t>{}},
+        SymmetricBlockQuantize{32, 127, BlockRoundingMode::Nearest,
+                               BlockScaleAnchor::AbsMax},
+        BlockReshape{32});
+    EncodeResult q8_encoded = q8.encode({q8_values});
+    for (Func handle : q8_encoded.handles) {
+        handle.compute_root();
+    }
+    DecodeResult q8_decoded = q8.decode(q8_encoded.encoded);
+    Buffer<float> q8_roundtrip = q8_decoded.decoded[0].realize({64});
+    for (int i = 0; i < 64; ++i) {
+        int local_i = i % 32;
+        float expected = local_i == 0 ? -127.0f : local_i - 16.0f;
+        if (q8_roundtrip(i) != expected) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -217,7 +284,8 @@ int main(int argc, char **argv) {
                  {"StructLayout contract errors", test_struct_layout_contract_errors},
                  {"scalar packs", test_scalar_components},
                  {"code packs", test_code_components},
-                 {"block components", test_block_components}};
+                 {"block components", test_block_components},
+                 {"standard quant compositions", test_standard_quant_compositions}};
     for (const Test &test : tests) {
         if (test.run()) {
             printf("Approximation component test failed: %s\n", test.name);
