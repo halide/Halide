@@ -109,8 +109,10 @@ public:
             sched = ScheduleKind::SDOT;
             distribute = true;
             break;
-        case WKind::Symmetric5Bit:
-            wc = make_symmetric_5bit_block_scheme(wbs, w_qmax, Layout::BlockIndexed).scheme;
+        case WKind::Symmetric5Bit: {
+            SchemeAndBytes sb = make_symmetric_5bit_block_scheme(wbs, w_qmax, Layout::BlockIndexed);
+            wc = std::move(sb.scheme);
+            weight_type = sb.block_type;
             wb = 2 + 4 + wbs / 2;
             // Q5_0's 5-bit code is assembled via CombineBits (nibble |
             // (high_bit << 4)); that reconstruction is all inside the (r.x-
@@ -119,8 +121,11 @@ public:
             // works the same as Q4_0 (see the base header's deep-inline SDOT).
             sched = ScheduleKind::SDOT;
             break;
-        case WKind::Affine5Bit:
-            wc = make_affine_5bit_block_scheme(wbs, w_levels, w_affine_rounding, Layout::BlockIndexed).scheme;
+        }
+        case WKind::Affine5Bit: {
+            SchemeAndBytes sb = make_affine_5bit_block_scheme(wbs, w_levels, w_affine_rounding, Layout::BlockIndexed);
+            wc = std::move(sb.scheme);
+            weight_type = sb.block_type;
             wb = 2 + 2 + 4 + wbs / 2;
             // Same offset-carrying decode as the 4-bit affine case above; the
             // 5-bit code reconstruction stays inside the codes leaf, so the
@@ -128,6 +133,7 @@ public:
             sched = ScheduleKind::SDOT;
             distribute = true;
             break;
+        }
         }
 
         // Q8_0/Q8_1 activations are 32-element blocks. Build the codec at that
@@ -160,7 +166,9 @@ public:
         // Activation stays on the byte path for now (Q8_0/Q8_1 are shared across
         // many weight formats, and the Reblock relayout is byte-based); only the
         // weight operand is struct-typed here.
-        return {std::move(wc), wb, std::move(ac), ab, wbs, sched, distribute, weight_type, Halide::Type{}, act_has_block_sums};
+        const bool five_bit = w_kind.value() == WKind::Symmetric5Bit || w_kind.value() == WKind::Affine5Bit;
+        return {std::move(wc), wb, std::move(ac), ab, wbs, sched, distribute, weight_type, Halide::Type{}, act_has_block_sums,
+                five_bit ? 2 : 4};
     }
 };
 

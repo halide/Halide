@@ -12,8 +12,8 @@ Measured at n=4096, best of many runs (see "Measuring" below):
 | ---- | -------- | -------- | ----- | ---------------- |
 | q4_0 | 87.8 ns  | 90.7 ns  | 0.97x | 0.97x            |
 | q4_1 | 106.7 ns | 110.2 ns | 0.97x | 0.80x            |
-| q5_0 | 115.6 ns | 166.6 ns | 0.69x | 0.51x            |
-| q5_1 | 133.7 ns | 170.3 ns | 0.78x | 0.50x            |
+| q5_0 | 122.2 ns | 130.2 ns | 0.94x | 0.51x            |
+| q5_1 | 143.5 ns | 153.7 ns | 0.93x | 0.50x            |
 | q8_0 | 69.1 ns  | 70.4 ns  | 0.98x | 0.95x            |
 
 q5_K (still on the float path) also improved 8615 -> 6730 ns from the same
@@ -140,8 +140,8 @@ Two traps found along the way:
   `GuardWithIf` makes the per-block sdot a dynamic-extent allocation that Halide
   has to `bzero` and accumulate *through memory*, roughly doubling the cost of
   every block. Fixed by giving the main reduction an exactly divisible extent
-  (`(nb / kUnrollBlocks) * kUnrollBlocks`) and sweeping the remainder in a
-  second update at the default schedule. `kUnrollBlocks` must be a power of two
+  (`(nb / unroll_blocks) * unroll_blocks`) and sweeping the remainder in a
+  second update at the default schedule. `unroll_blocks` must be a power of two
   -- 3 and 6 measured 40% worse because the simplifier cannot discharge the
   tail.
 - **`specialize()` inherits the schedule as of the call**, so scheduling
@@ -242,7 +242,7 @@ lane-split with a block-only reduction using `AlignStart` + matching split-var
 names) is therefore unnecessary here; keep it in mind for formats that keep two
 live accumulators.
 
-## The q5_x 5-bit high bit -- partway (0.51 -> 0.69x, 0.50 -> 0.78x)
+## The q5_x 5-bit high bit -- DONE (q5_0 0.94x, q5_1 0.93x)
 
 q5_0/q5_1 reach SDOT, but every code carries a per-element high bit unpacked
 from the `qh` field, and that reconstruction -- not the dot, not (for q5_1) the
@@ -255,8 +255,11 @@ to broadcast the two `qh` bytes across the 16 sdot lanes
 1 KB `table_b2b` memory LUT (byte -> 8 expanded bytes, one contiguous load per
 `qh` byte).
 
-**What was done.** Mirrored the LUT: a compile-time `Buffer<uint8_t>` b2b(bit,
-byte) embedded in the binary. Two things make it pay:
+**What was done.** Mirrored the LUT: compile-time b2b tables embedded in the
+binary. The q5 tables contain the final high-bit contribution (`-16/0` for q5_0,
+`0/16` for q5_1), so the lookup folds the shift and q5_0 zero-point into the
+load rather than reconstructing a raw bit and applying them afterward. Several
+other details are necessary:
 
 1. The table read is only a *contiguous* 8-byte load
    (`b0[ramp(qh_byte*8, 1, 8)]`, matching ggml) when the `qh` byte is a
@@ -273,16 +276,52 @@ byte) embedded in the binary. Two things make it pay:
 2. Materializing needs the codes leaf kept out of `sdot_partial()`'s deep inline
    (`can_be_inlined()` ignores compute level, so a `compute_root`/`compute_at`
    schedule alone does not stop `eager_inline` -- a `keep_out` name list does).
-3. The odd-block **tail** reads the same codes but is a separate update
+3. `block_q5_0` and `block_q5_1` are represented as packed Halide struct types,
+   including `qh` as a scalar `UInt(32)`. `LowerStructTypes` now preserves a
+   multi-byte packed field read as `concat_bits()` of adjacent bytes instead of
+   immediately expanding it into a shift/or tree. LLVM can consequently issue
+   one unaligned `ldr/ldur w`, matching ggml, rather than four `ldrb`s. A
+   correctness/codegen regression test covers the deliberately unaligned qh
+   field at byte offset 2.
+4. The odd-block **tail** reads the same codes but is a separate update
    `compute_at` cannot reach. Fixed by giving the tail its **own** decode chain:
    a second `Wt/Vec` placeholder pair, its own `approximate_by`, both bound to
    the same `x_blocks/y_blocks`. Main materializes; the tail reconstructs inline
-   (< kUnrollBlocks blocks, negligible). This is also what unlocks the per-block
-   fusion -- with a shared chain Halide hoists the codes buffer to whole-row.
+   (< `unroll_blocks` blocks, negligible). This is also what unlocks the
+   per-block fusion -- with a shared chain Halide hoists the codes buffer to
+   whole-row.
 
 The transpose is gone (verified: no `uzp2`/`dup.8b`); reconstruction is a
 handful of ops + 4 contiguous LUT loads/block. Bonus: the same decode change
 sped up q5_K on the float path (8615 -> 6730 ns).
+
+**The schedule changes still matter after the compiler fix.** The compiler
+change is the dominant improvement, but it does not make the schedule work
+redundant:
+
+- Removing the explicit qh `compute_at(...).store_in(Register)` schedule made
+  q5_0 regress from about 122 to 129 ns and q5_1 from about 152 to 162 ns, even
+  though both generated versions contained a word load. Keep it: it changes
+  placement/reuse around the four bit extracts, not merely the load width.
+- Interleaving two q5 blocks gives better latency hiding/register pressure than
+  the four-block setting used by q4/q8. Applying two globally regressed q4_0 and
+  q4_1, so this is a per-format `VecDotSpec` choice.
+- Explicitly unrolling the fixed-size final rfactor reductions removes a stack
+  spill and one-iteration epilogue loops (roughly another 1 ns here).
+
+**q5_1 needs a different reduction shape.** The generic affine path horizontally
+reduced each block's Int32 dot before accumulating floats. The q5_1-specific
+schedule keeps four float dot lanes live across the entire block loop, maintains
+two scalar `m*s` accumulators alongside them, and fuses their two-block loops.
+The generated steady state now matches the important shape of ggml's kernel: two
+SDOTs per block, persistent vector FMAs, and scalar offset FMAs, with one
+horizontal reduction at the end.
+
+One representative paired n=4096 run after the final epilogue change was q5_0
+122.2 ns ggml / 130.2 ns Halide (0.94x), and q5_1 143.5 / 153.7 ns (0.93x). Core
+migration moves both the absolute numbers and ratios; another run measured 121.8
+/ 121.8 and 143.2 / 144.3 before the final ~1 ns epilogue improvement. Use
+repeated paired runs rather than treating either sample as a fixed score.
 
 **Build-flag bug.** q5_0/q5_1's `add_halide_library` were missing
 `FEATURES no_asserts no_bounds_query` (every other tuned vec_dot has it), so
@@ -290,15 +329,10 @@ they paid the assert/bounds-query prologue -- ~11 ns of pure startup on a ~170
 ns call. Adding it was worth 0.63 -> 0.67x on its own; the register store
 another 0.67 -> 0.69x (q5_1 to 0.78x). Check this first on any new kernel.
 
-**Ceiling.** This lands q5_0 at 0.69x, q5_1 at 0.78x -- real, still short of the
-0.95x the symmetric formats hit. The residual is the reconstruction op count and
-load traffic vs ggml's hand-tuned kernel: ggml's `table_b2b_1[byte]` stores
-`(!bit)<<4`, so one `vsubq_s8` does both the high-bit add *and* the -16 offset;
-ours stores the raw bit, so `CombineBits` does `shl #4` + `add` (nibble) +
-`sub #16` (three ops). Folding the table like ggml (and loading `qh` as one word
-instead of four `ldrb`) is the next lever. Group-level codes compute (all 4
-blocks first) measured *worse* (0.50x) than per-block. See the "what differs
-from ggml" analysis in the session log.
+Group-level codes compute (all blocks first) measured worse than the final
+per-block materialization. Likewise, removing qh materialization because the new
+compiler lowering already produced `ldr w` was a measured regression; the two
+optimizations address different parts of the generated loop.
 
 ## Not started
 
