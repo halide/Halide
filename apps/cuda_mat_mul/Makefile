@@ -21,14 +21,29 @@ $(GENERATOR_BIN)/mat_mul.generator: mat_mul_generator.cpp $(GENERATOR_DEPS)
 $(BIN)/%/mat_mul.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
 	$^ -g mat_mul -f mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) \
-	    target=$(FLOAT_TARGET) size=$(MATRIX_SIZE) A.type=float32 B.type=float32
+	    target=$(FLOAT_TARGET) size=$(MATRIX_SIZE) \
+	    A.type=float32 B.type=float32 out.type=float32
 
 $(BIN)/%/mat_mul_f16.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
 	$^ -g mat_mul -f mat_mul_f16 -e $(GENERATOR_OUTPUTS) -o $(@D) \
-	    target=$(HALF_TARGET) size=$(MATRIX_SIZE) A.type=float16 B.type=float16
+	    target=$(HALF_TARGET) size=$(MATRIX_SIZE) \
+	    A.type=float16 B.type=float16 out.type=float32
 
-$(BIN)/%/runner: runner.cpp $(BIN)/%/mat_mul.a $(BIN)/%/mat_mul_f16.a
+$(BIN)/%/mat_mul_bf16.a: $(GENERATOR_BIN)/mat_mul.generator
+	@mkdir -p $(@D)
+	$^ -g mat_mul -f mat_mul_bf16 -e $(GENERATOR_OUTPUTS) -o $(@D) \
+	    target=$(HALF_TARGET) size=$(MATRIX_SIZE) \
+	    A.type=bfloat16 B.type=bfloat16 out.type=float32
+
+$(BIN)/%/mat_mul_u8.a: $(GENERATOR_BIN)/mat_mul.generator
+	@mkdir -p $(@D)
+	$^ -g mat_mul -f mat_mul_u8 -e $(GENERATOR_OUTPUTS) -o $(@D) \
+	    target=$(HALF_TARGET) size=$(MATRIX_SIZE) \
+	    A.type=uint8 B.type=uint8 out.type=int32
+
+$(BIN)/%/runner: runner.cpp $(BIN)/%/mat_mul.a $(BIN)/%/mat_mul_f16.a \
+                 $(BIN)/%/mat_mul_bf16.a $(BIN)/%/mat_mul_u8.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -lcudart -lcublas
 

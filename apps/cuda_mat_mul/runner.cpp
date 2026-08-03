@@ -3,11 +3,14 @@
 #include "halide_benchmark.h"
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
 #include "mat_mul.h"
+#include "mat_mul_bf16.h"
 #include "mat_mul_f16.h"
+#include "mat_mul_u8.h"
 
 using Halide::Runtime::Buffer;
 
@@ -18,28 +21,44 @@ namespace {
 // and once with half operands, which get the tensor cores. Both accumulate in
 // and return single precision, so the two are directly comparable.
 
-template<typename T>
+template<typename T, typename O>
 bool check(const Buffer<T, 2> &A, const Buffer<T, 2> &B,
-           const Buffer<float, 2> &C, int size, const char *name) {
+           const Buffer<O, 2> &C, int size, const char *name) {
     // Spot check on strides that are coprime with the tile sizes, so the
     // samples land at varying offsets within a tile.
     for (int y = 0; y < size; y += 97) {
         for (int x = 0; x < size; x += 89) {
-            float correct = 0.f;
+            double correct = 0;
             for (int k = 0; k < size; k++) {
-                correct += (float)A(x, k) * (float)B(k, y);
+                correct += (double)A(x, k) * (double)B(k, y);
             }
             // The operands are small integers, which are exact in both float
             // and half, and the accumulator is single precision either way, so
             // the answer should be exact.
-            if (C(x, y) != correct) {
+            if ((double)C(x, y) != correct) {
                 printf("%s: bad result at %d %d: %f != %f\n",
-                       name, x, y, C(x, y), correct);
+                       name, x, y, (double)C(x, y), correct);
                 return false;
             }
         }
     }
     return true;
+}
+
+// There is no C++ type for bfloat16 here, so the buffer carries the type at
+// runtime and these convert. A bfloat is the top half of a float, so for the
+// small integers this uses the conversion is exact in both directions.
+uint16_t to_bf16(float f) {
+    uint32_t bits;
+    memcpy(&bits, &f, 4);
+    return (uint16_t)(bits >> 16);
+}
+
+float from_bf16(uint16_t h) {
+    uint32_t bits = (uint32_t)h << 16;
+    float f;
+    memcpy(&f, &bits, 4);
+    return f;
 }
 
 double gflops(int size, double seconds) {
@@ -136,6 +155,64 @@ int main(int argc, char **argv) {
                                  [&]() { C.device_sync(); });
         printf("Halide half (tensor cores): %f s (%.1f GFlop/s)\n",
                t, gflops(size, t));
+    }
+
+    // The other operand types the tensor cores multiply. Brain floats
+    // accumulate into single precision like halves do, and eight-bit integers
+    // into 32-bit ones, which is the interesting case for imaging.
+    if (ver >= 80) {
+        {
+            const halide_type_t bf16(halide_type_bfloat, 16);
+            Buffer<void, 2> A(bf16, size, size), B(bf16, size, size);
+            Buffer<float, 2> C(size, size);
+            // The buffer carries its type at runtime, so index the raw
+            // storage rather than going through a typed view.
+            uint16_t *Ap = (uint16_t *)A.data(), *Bp = (uint16_t *)B.data();
+            auto Af = [&](int i, int j) { return from_bf16(Ap[j * size + i]); };
+            auto Bf = [&](int i, int j) { return from_bf16(Bp[j * size + i]); };
+            for (int i = 0; i < size * size; i++) {
+                Ap[i] = to_bf16((float)((rand() & 3) - 1));
+                Bp[i] = to_bf16((float)((rand() & 3) - 1));
+            }
+            A.set_host_dirty();
+            B.set_host_dirty();
+            mat_mul_bf16(A, B, C);
+            C.copy_to_host();
+            for (int y = 0; y < size; y += 97) {
+                for (int x = 0; x < size; x += 89) {
+                    double correct = 0;
+                    for (int k = 0; k < size; k++) {
+                        correct += (double)Af(x, k) * (double)Bf(k, y);
+                    }
+                    if ((double)C(x, y) != correct) {
+                        printf("bfloat: bad result at %d %d: %f != %f\n",
+                               x, y, (double)C(x, y), correct);
+                        return 1;
+                    }
+                }
+            }
+            double t = bench_batched([&]() { mat_mul_bf16(A, B, C); },
+                                     [&]() { C.device_sync(); });
+            printf("Halide bfloat (tensor cores): %f s (%.1f GFlop/s)\n",
+                   t, gflops(size, t));
+        }
+        {
+            Buffer<uint8_t, 2> A(size, size), B(size, size);
+            Buffer<int32_t, 2> C(size, size);
+            A.for_each_value([](uint8_t &v) { v = (uint8_t)(rand() & 3); });
+            B.for_each_value([](uint8_t &v) { v = (uint8_t)(rand() & 3); });
+            A.set_host_dirty();
+            B.set_host_dirty();
+            mat_mul_u8(A, B, C);
+            C.copy_to_host();
+            if (!check(A, B, C, size, "uint8")) {
+                return 1;
+            }
+            double t = bench_batched([&]() { mat_mul_u8(A, B, C); },
+                                     [&]() { C.device_sync(); });
+            printf("Halide uint8 (tensor cores): %f s (%.1f GFlop/s)\n",
+                   t, gflops(size, t));
+        }
     }
 
     // Benchmark cublas for reference, at both precisions. The half precision

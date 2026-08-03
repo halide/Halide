@@ -446,6 +446,14 @@ WMMAMatrixLayout matrix_in_memory(const string &name, const MultiRamp &mr, int r
 
 }  // namespace
 
+// The nvvm intrinsics take and return a fragment as 32-bit registers. Halide
+// represents half precision as llvm's half, which is what the intrinsics for
+// it take directly, but bfloat and the eight-bit integers have no llvm vector
+// type in the signature - those intrinsics take the lanes packed into an i32.
+bool wmma_reg_is_packed_i32(Type t) {
+    return t.bits() < 32 && t.element_of() != Float(16);
+}
+
 void CodeGen_PTX_Dev::split_fragment(const Expr &e, vector<Value *> &args) {
     // One llvm value per 32-bit register.
     const int num_regs = e.type().bits() * e.type().lanes() / 32;
@@ -462,9 +470,13 @@ void CodeGen_PTX_Dev::split_fragment(const Expr &e, vector<Value *> &args) {
     Value *v = codegen(e);
     const int lanes_per_reg = 32 / e.type().bits();
     for (int i = 0; i < e.type().lanes() / lanes_per_reg; i++) {
-        args.push_back(lanes_per_reg == 1 ?
-                           builder->CreateExtractElement(v, i) :
-                           slice_vector(v, i * lanes_per_reg, lanes_per_reg));
+        Value *reg = lanes_per_reg == 1 ?
+                         builder->CreateExtractElement(v, i) :
+                         slice_vector(v, i * lanes_per_reg, lanes_per_reg);
+        if (wmma_reg_is_packed_i32(e.type())) {
+            reg = builder->CreateBitCast(reg, i32_t);
+        }
+        args.push_back(reg);
     }
 }
 
@@ -484,16 +496,29 @@ void CodeGen_PTX_Dev::codegen_wmma(const Call *op) {
     // Reassemble the returned struct into a Halide vector.
     llvm::Type *result_type = llvm_type_of(op->type);
     const int num_regs = op->type.bits() * op->type.lanes() / 32;
+    // A fragment that is a single register comes back as that register rather
+    // than as a struct holding one of them.
+    auto get_reg = [&](int i) {
+        return result->getType()->isStructTy() ?
+                   builder->CreateExtractValue(result, i) :
+                   result;
+    };
     if (op->type.bits() == 32) {
         value = UndefValue::get(result_type);
         for (int i = 0; i < num_regs; i++) {
-            value = builder->CreateInsertElement(value, builder->CreateExtractValue(result, i), i);
+            value = builder->CreateInsertElement(value, get_reg(i), i);
         }
     } else {
         vector<Value *> regs;
         regs.reserve(num_regs);
         for (int i = 0; i < num_regs; i++) {
-            regs.push_back(builder->CreateExtractValue(result, i));
+            Value *reg = get_reg(i);
+            if (wmma_reg_is_packed_i32(op->type)) {
+                reg = builder->CreateBitCast(
+                    reg, get_vector_type(llvm_type_of(op->type.element_of()),
+                                         32 / op->type.bits()));
+            }
+            regs.push_back(reg);
         }
         value = concat_vectors(regs);
     }
@@ -546,6 +571,28 @@ void CodeGen_PTX_Dev::codegen_fragment_store(const Store *op) {
     }
 }
 
+// The element type the wmma intrinsic names use for a Halide type. The
+// hardware takes 16-bit floats or 8-bit integers as multiplicands, and
+// accumulates the first into 16 or 32-bit floats and the second into 32-bit
+// integers.
+std::string wmma_type_suffix(Type t) {
+    if (t == Float(16)) {
+        return "f16";
+    } else if (t == BFloat(16)) {
+        return "bf16";
+    } else if (t == Float(32)) {
+        return "f32";
+    } else if (t == Int(8)) {
+        return "s8";
+    } else if (t == UInt(8)) {
+        return "u8";
+    } else if (t == Int(32)) {
+        return "s32";
+    }
+    user_error << "There is no tensor core instruction for " << t << ".\n";
+    return "";
+}
+
 llvm::Value *CodeGen_PTX_Dev::codegen_wmma_raw(const Call *op) {
     // The nvvm wmma intrinsics take and return fragments as a flat list of
     // 32-bit registers, packaged up as a literal struct. We represent them in
@@ -566,11 +613,19 @@ llvm::Value *CodeGen_PTX_Dev::codegen_wmma_raw(const Call *op) {
     vector<llvm::Type *> overloads;
 
     if (op->is_intrinsic(Call::wmma_mma)) {
-        // The two type suffixes are the types of the d and c operands, which
-        // for us are always the same.
-        const char *suffix = op->type.bits() == 32 ? "f32" : "f16";
+        // Half precision multiplicands name the instruction after the d and c
+        // operands, which for us are always the same type. Everything else
+        // names it after the multiplicands, which are in args 5 and 6.
+        const Type operand_type = op->args[5].type().element_of();
+        std::string signature;
+        if (operand_type == Float(16)) {
+            const std::string acc = wmma_type_suffix(op->type.element_of());
+            signature = acc + "." + acc;
+        } else {
+            signature = wmma_type_suffix(operand_type);
+        }
         name << "mma." << layouts[get_int_arg(3)] << "." << layouts[get_int_arg(4)]
-             << "." << suffix << "." << suffix;
+             << "." << signature;
         split_fragment(op->args[5], args);
         split_fragment(op->args[6], args);
         split_fragment(op->args[7], args);
@@ -590,9 +645,7 @@ llvm::Value *CodeGen_PTX_Dev::codegen_wmma_raw(const Call *op) {
             << "load with an affine index by the time it reaches the backend.\n";
         WMMAMatrixLayout mem = matrix_in_memory(matrix->name, mr,
                                                 is_b ? K : M, is_a ? K : N, arg);
-        // The a and b operands are always 16-bit; an accumulator may be either.
-        const char *type_suffix =
-            is_a || is_b ? "f16" : (op->type.bits() == 32 ? "f32" : "f16");
+        const std::string type_suffix = wmma_type_suffix(op->type.element_of());
         name << "load." << (is_a ? "a" : is_b ? "b" :
                                                 "c")
              << "." << (mem.row_major ? "row" : "col") << ".stride." << type_suffix;
@@ -640,7 +693,7 @@ void CodeGen_PTX_Dev::codegen_wmma_store(const Store *op) {
     std::ostringstream name;
     name << "llvm.nvvm.wmma.m" << M << "n" << N << "k" << K << ".store.d."
          << (mem.row_major ? "row" : "col") << ".stride."
-         << (fragment.type().bits() == 32 ? "f32" : "f16");
+         << wmma_type_suffix(fragment.type().element_of());
 
     Value *ptr = codegen_buffer_pointer(op->name, op->value.type().element_of(), mem.base);
     vector<Value *> args{ptr};

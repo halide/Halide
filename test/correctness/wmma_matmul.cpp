@@ -6,6 +6,10 @@ using namespace Halide;
 namespace {
 
 struct Params {
+    // The type of the two matrices being multiplied. The accumulator type
+    // follows from it: the integer instructions accumulate into int32, and the
+    // float ones into float32 unless half_accumulator asks otherwise.
+    Type operand = Float(16);
     // The size of the matrices.
     int M = 64, N = 64, K = 64;
     // The tensor core tile shape to use.
@@ -17,6 +21,7 @@ struct Params {
     // Whether each input matrix is stored with its rows or its columns dense.
     bool a_transposed = false, b_transposed = false;
     // Whether to accumulate in half precision instead of single precision.
+    // Only available with half precision operands.
     bool half_accumulator = false;
     // Whether to stage the operand tiles through shared memory inside the
     // reduction loop.
@@ -34,23 +39,69 @@ std::ostream &operator<<(std::ostream &s, const Params &p) {
              << " tiles, " << p.tiles_m << "x" << p.tiles_n << " tiles per warp, "
              << p.warps << " warps, a" << (p.a_transposed ? "T" : "")
              << " b" << (p.b_transposed ? "T" : "")
+             << " of " << p.operand
              << (p.half_accumulator ? ", f16 accumulator" : "")
              << (p.stage_in_shared ? ", staged through shared" : "")
              << (p.init_from_memory ? ", accumulator initialized from memory" : "")
              << (p.out_transposed ? ", transposed output" : "");
 }
 
-void fill(Buffer<float16_t> &buf) {
-    buf.fill([]() {
-        return float16_t(((float)rand() / RAND_MAX) - 0.5f);
-    });
+// Small non-negative integers, which every type here represents exactly, and
+// which keep the dot products small enough to be exact in the accumulator too.
+// That lets the results be checked for equality rather than to a tolerance.
+void fill(Buffer<> buf) {
+    Type t = buf.type();
+    for (int y = 0; y < buf.height(); y++) {
+        for (int x = 0; x < buf.width(); x++) {
+            int v = rand() & 3;
+            if (t == Float(16)) {
+                buf.as<float16_t>()(x, y) = float16_t((float)v);
+            } else if (t == BFloat(16)) {
+                buf.as<bfloat16_t>()(x, y) = bfloat16_t((float)v);
+            } else if (t == Int(8)) {
+                buf.as<int8_t>()(x, y) = (int8_t)v;
+            } else if (t == UInt(8)) {
+                buf.as<uint8_t>()(x, y) = (uint8_t)v;
+            } else {
+                assert(false && "unhandled operand type");
+            }
+        }
+    }
+}
+
+// Read an element of a buffer of any of the types this test uses.
+double read(const Buffer<> &buf, int x, int y) {
+    Type t = buf.type();
+    if (t == Float(16)) {
+        return (double)Buffer<const float16_t>(buf)(x, y);
+    } else if (t == BFloat(16)) {
+        return (double)Buffer<const bfloat16_t>(buf)(x, y);
+    } else if (t == Float(32)) {
+        return Buffer<const float>(buf)(x, y);
+    } else if (t == Int(8)) {
+        return Buffer<const int8_t>(buf)(x, y);
+    } else if (t == UInt(8)) {
+        return Buffer<const uint8_t>(buf)(x, y);
+    } else if (t == Int(32)) {
+        return Buffer<const int32_t>(buf)(x, y);
+    }
+    assert(false && "unhandled buffer type");
+    return 0;
+}
+
+// The accumulator the hardware pairs with a given operand type.
+Type accumulator_for(const Params &p) {
+    if (p.operand.is_int() || p.operand.is_uint()) {
+        return Int(32);
+    }
+    return p.half_accumulator ? Float(16) : Float(32);
 }
 
 bool test(const Params &p) {
     // Halide indexes matrices with the dense dimension first, so A(k, y) is a
     // row-major M x K matrix, and A(y, k) is a column-major one.
-    Buffer<float16_t> A(p.a_transposed ? p.M : p.K, p.a_transposed ? p.K : p.M);
-    Buffer<float16_t> B(p.b_transposed ? p.K : p.N, p.b_transposed ? p.N : p.K);
+    Buffer<> A(p.operand, p.a_transposed ? p.M : p.K, p.a_transposed ? p.K : p.M);
+    Buffer<> B(p.operand, p.b_transposed ? p.K : p.N, p.b_transposed ? p.N : p.K);
     fill(A);
     fill(B);
 
@@ -67,15 +118,10 @@ bool test(const Params &p) {
     // float16, so the output has to be float16 too.
     // The accumulator either starts at zero, or at a matrix that already exists
     // in memory, which the hardware can load straight into the fragments.
-    Type acc_type = p.half_accumulator ? Float(16) : Float(32);
-    init(x, y) = cast(acc_type, (x * 3 + y) % 7) * cast(acc_type, 0.25f);
-    if (p.half_accumulator) {
-        prod(x, y) = p.init_from_memory ? init(x, y) : cast<float16_t>(0.f);
-        prod(x, y) += a * b;
-    } else {
-        prod(x, y) = p.init_from_memory ? init(x, y) : Expr(0.f);
-        prod(x, y) += cast<float>(a) * cast<float>(b);
-    }
+    Type acc_type = accumulator_for(p);
+    init(x, y) = cast(acc_type, (x * 3 + y) % 7);
+    prod(x, y) = p.init_from_memory ? init(x, y) : cast(acc_type, 0);
+    prod(x, y) += cast(acc_type, a) * cast(acc_type, b);
     out(x, y) = prod(x, y);
 
     Var xi("xi"), yi("yi"), xt("xt"), mmxi("mmxi"), mmyi("mmyi");
@@ -150,35 +196,26 @@ bool test(const Params &p) {
 
     // A transposed output is a view of a buffer with the dimensions swapped, so
     // its columns are dense in memory instead of its rows.
-    Buffer<float> result_storage(p.out_transposed ? p.M : p.N,
-                                 p.out_transposed ? p.N : p.M);
-    Buffer<float> result =
+    Buffer<> result_storage(acc_type, p.out_transposed ? p.M : p.N,
+                            p.out_transposed ? p.N : p.M);
+    Buffer<> result =
         p.out_transposed ? result_storage.transposed(0, 1) : result_storage;
-    Buffer<float16_t> result_half(p.N, p.M);
-    auto get = [&](int i, int j) {
-        return p.half_accumulator ? (float)result_half(i, j) : result(i, j);
-    };
-    if (p.half_accumulator) {
-        out.realize(result_half);
-        result_half.copy_to_host();
-    } else {
-        out.realize(result);
-        result.copy_to_host();
-    }
+    out.realize(result);
+    result.copy_to_host();
 
     for (int j = 0; j < p.M; j++) {
         for (int i = 0; i < p.N; i++) {
-            float ref = p.init_from_memory ? (float)(((i * 3 + j) % 7) * 0.25f) : 0.f;
+            double ref = p.init_from_memory ? (double)((i * 3 + j) % 7) : 0.0;
             for (int l = 0; l < p.K; l++) {
-                ref += (float)(p.a_transposed ? A(j, l) : A(l, j)) *
-                       (float)(p.b_transposed ? B(l, i) : B(i, l));
+                ref += read(A, p.a_transposed ? j : l, p.a_transposed ? l : j) *
+                       read(B, p.b_transposed ? l : i, p.b_transposed ? i : l);
             }
-            // The accumulation happens in a different order on the GPU, and
-            // the inputs are half-precision, so allow some slack.
-            float tolerance = p.half_accumulator ? 5e-2f : 1e-2f;
-            if (std::abs(get(i, j) - ref) > tolerance * std::max(1.f, std::abs(ref))) {
+            // The operands are small integers and the dot products stay small
+            // enough to be exact in every accumulator type here, so the answer
+            // should be exact however the GPU orders the accumulation.
+            if (read(result, i, j) != ref) {
                 std::cerr << "Mismatch at " << i << ", " << j << ": "
-                          << get(i, j) << " != " << ref << "\n"
+                          << read(result, i, j) << " != " << ref << "\n"
                           << "For matmul of " << p << "\n";
                 return false;
             }
@@ -521,6 +558,22 @@ int main(int argc, char **argv) {
     // accumulator fragment.
     params.push_back({.half_accumulator = true});
     params.push_back({.tiles_m = 2, .tiles_n = 2, .half_accumulator = true});
+
+    // The other operand types the hardware multiplies. Brain floats accumulate
+    // into single precision, and eight-bit integers into 32-bit ones, which is
+    // the interesting case for imaging.
+    for (Type t : {BFloat(16), Int(8), UInt(8)}) {
+        params.push_back({.operand = t});
+        params.push_back({.operand = t, .tile_m = 32, .tile_n = 8});
+        params.push_back({.operand = t, .tile_m = 8, .tile_n = 32});
+        params.push_back({.operand = t, .tiles_m = 2, .tiles_n = 2});
+        params.push_back({.operand = t, .warps = 2});
+        params.push_back({.operand = t, .a_transposed = true});
+        params.push_back({.operand = t, .b_transposed = true});
+        params.push_back({.operand = t, .stage_in_shared = true});
+        params.push_back({.operand = t, .init_from_memory = true});
+        params.push_back({.operand = t, .out_transposed = true});
+    }
 
     // Operand tiles staged through shared memory inside the reduction loop.
     // This only works if the loop over lanes wraps the individual wmma

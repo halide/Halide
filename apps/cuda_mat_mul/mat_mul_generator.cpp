@@ -17,22 +17,28 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 // A square matrix multiply, scheduled two ways. The operands are untyped, so
 // their type is a generator param, and it is what picks the schedule: half
 // precision operands get the tensor cores, and anything else gets a schedule
-// that keeps the accumulator in ordinary registers. The product is always
-// accumulated and returned in single precision.
+// that keeps the accumulator in ordinary registers. The tensor cores multiply
+// halves, brain floats, or eight-bit integers; the output type is also the
+// accumulator type, so it picks between the accumulators an operand type can
+// pair with.
 //
 // Time for one multiply on an RTX 5060 Ti, against cublas doing the same
-// thing at each precision (cublasSgemm, and cublasGemmEx with half precision
-// operands and a single precision accumulator):
+// thing (cublasSgemm, and cublasGemmEx with half precision operands and a
+// single precision accumulator):
 //
-//                    1024      2048       4096
-//     Halide f32    311 us   1675 us   18727 us
-//     cublas f32    147 us   1029 us    7813 us
-//     Halide f16     53 us    365 us    2784 us
-//     cublas f16     51 us    347 us    2699 us
+//                     1024      2048       4096
+//     Halide f32     310 us   1667 us   18842 us
+//     cublas f32     147 us   1030 us    7869 us
+//     Halide f16      53 us    371 us    2797 us
+//     Halide bf16     53 us    365 us    2796 us
+//     Halide u8       51 us    247 us    2424 us
+//     cublas f16      51 us    347 us    2699 us
 //
-// So the tensor core schedule is within a few percent of cublas, and the
-// float one is about half its speed - the tensor cores are what this app has
-// been tuned for.
+// The float schedule is about half of cublas, and the half precision one is
+// within a few percent of it. Eight-bit operands are the fastest of the lot -
+// they halve the traffic through shared memory, and beat cublas at half
+// precision by 40% at 2048 - which makes them the interesting case for
+// imaging, where the inputs are usually bytes to begin with.
 class MatMul : public Halide::Generator<MatMul> {
 public:
     GeneratorParam<int> size{"size", 1024};
@@ -48,31 +54,62 @@ public:
     // How much of the reduction is staged in shared memory at a time.
     GeneratorParam<int> block_r{"block_r", 32};
     // Extra elements per row of the shared panels, which spreads consecutive
-    // rows across different banks. A multiple of eight keeps the rows aligned
-    // enough for the widest asynchronous copy.
-    GeneratorParam<int> pad_a{"pad_a", 8};
-    GeneratorParam<int> pad_b{"pad_b", 8};
+    // rows across different banks. Zero means pad by sixteen bytes, which is
+    // the least that keeps each row aligned both for the widest asynchronous
+    // copy and for the tensor core loads, whose matrix addresses have to be
+    // sixteen byte aligned. How many elements that is depends on the operand
+    // type, which is why it is not just a number here.
+    GeneratorParam<int> pad_a{"pad_a", 0};
+    GeneratorParam<int> pad_b{"pad_b", 0};
 
     Input<Buffer<void, 2>> A{"A"};
     Input<Buffer<void, 2>> B{"B"};
 
-    Output<Buffer<float, 2>> out{"out"};
+    // The output type is also the accumulator type - there is no tensor core
+    // store from a half precision fragment into single precision memory - so
+    // asking for a half precision output is what asks to accumulate in half.
+    // That halves the registers the accumulator takes, but summing a long
+    // reduction in half precision loses accuracy badly, so it is only worth
+    // asking for when the numerics of the problem allow it.
+    Output<Buffer<void, 2>> out{"out"};
 
-    // Tensor cores multiply half precision operands into a single precision
-    // accumulator, so asking for half precision inputs is what asks for them.
+    // The tensor cores multiply 16-bit floats or 8-bit integers, so asking for
+    // one of those operand types is what asks for them. Anything else gets the
+    // schedule that accumulates in ordinary registers.
     bool use_tensor_cores() const {
-        return A.type() == Float(16);
+        Type t = A.type();
+        return t == Float(16) || t == BFloat(16) || t == Int(8) || t == UInt(8);
+    }
+
+    // The accumulator each operand type pairs with. Half precision can also
+    // accumulate into halves, which is what asking for a half output does.
+    Type natural_accumulator() const {
+        Type t = A.type();
+        if (t == Int(8) || t == UInt(8)) {
+            return Int(32);
+        }
+        return Float(32);
     }
 
     void generate() {
+        _halide_user_assert(A.type() == B.type())
+            << "The two operands must have the same type, but they are "
+            << A.type() << " and " << B.type() << ".\n";
+        _halide_user_assert(out.type() == natural_accumulator() ||
+                            (out.type() == Float(16) && A.type() == Float(16)))
+            << "A " << A.type() << " matrix multiply accumulates into "
+            << natural_accumulator()
+            << (A.type() == Float(16) ? " or float16" : "")
+            << ", but a " << out.type() << " output was asked for.\n";
         r = RDom(0, size, "r");
 
-        prod(x, y) = 0.f;
+        Type acc = out.type();
+        prod(x, y) = cast(acc, 0);
         // The widening to the accumulator type happens here, at the multiply,
         // rather than in the operand wrappers the schedule stages through
         // shared memory. That way half precision operands are staged as half
         // precision and reach the tensor cores as such.
-        prod(x, y) += cast<float>(A(x, r)) * cast<float>(B(r, y));
+        prod(x, y) += cast(acc, A(x, r)) * cast(acc, B(r, y));
 
         out(x, y) = prod(x, y);
     }
@@ -151,6 +188,9 @@ private:
         const int block_x = tile * tx * wx;
         const int block_y = tile * ty * wy;
 
+        const int pa = pad_a ? (int)pad_a : 16 / A.type().bytes();
+        const int pb = pad_b ? (int)pad_b : 16 / A.type().bytes();
+
         Var xi("xi"), yi("yi"), xt("xt"), yt("yt"), mmxi("mmxi"), mmyi("mmyi");
         Var xw("xw"), yw("yw"), rxi("rxi"), ryi("ryi");
         RVar ro("ro"), ri("ri"), rri("rri");
@@ -213,10 +253,10 @@ private:
         Var t("t"), ti("ti"), tw("tw"), tw2("tw2"), to("to");
 
         // B.in() is dense in the reduction dimension, which is its _0.
-        B.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, (int)block_r + (int)pad_a).split(_0, rro, rrv, vec).fuse(rro, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(rrv);
+        B.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, (int)block_r + pa).split(_0, rro, rrv, vec).fuse(rro, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(rrv);
 
         // A.in() is dense in x, which is its _0.
-        A.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, block_x + pad_b).split(_0, xxo, xxi, vec).fuse(xxo, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(xxi);
+        A.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, block_x + pb).split(_0, xxo, xxi, vec).fuse(xxo, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(xxi);
     }
 
     Var x{"x"}, y{"y"};

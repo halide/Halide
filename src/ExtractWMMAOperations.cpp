@@ -94,16 +94,50 @@ const char *role_name(Role role) {
     }
 }
 
-// Every warp is 32 lanes. An accumulator tile holds 256 elements, so each lane
-// holds 8 of them. The hardware hands back operand fragments as 8 32-bit
-// registers per lane whatever the shape, replicating elements across lanes for
-// the shapes that hold fewer, so those are 16 16-bit elements per lane.
+// Every warp is 32 lanes, and an accumulator tile holds 256 elements whatever
+// its shape, so each lane holds 8 of them whatever their type.
 constexpr int warp_lanes = 32;
 constexpr int accumulator_elements = 8;
-constexpr int operand_elements = 16;
+// Half precision operand fragments are eight 32-bit registers per lane
+// whatever the shape, which is sixteen elements. For the shapes that hold
+// fewer than that the hardware replicates elements across lanes.
+constexpr int half_operand_elements = 16;
 
-int elements_per_lane(Role role) {
-    return role == Role::Accumulator ? accumulator_elements : operand_elements;
+// The multiplicand and accumulator type combinations the tensor cores have an
+// instruction for. Half precision multiplicands accumulate into halves or
+// floats, brain floats accumulate into floats, and eight-bit integers
+// accumulate into 32-bit ones. The multiplicands must match each other: at
+// this shape there is no instruction for mixed signedness.
+bool wmma_types_supported(Type operand, Type accumulator) {
+    if (operand == Float(16)) {
+        return accumulator == Float(16) || accumulator == Float(32);
+    } else if (operand == BFloat(16)) {
+        return accumulator == Float(32);
+    } else if (operand == Int(8) || operand == UInt(8)) {
+        return accumulator == Int(32);
+    }
+    return false;
+}
+
+// The shape of the matrix each fragment is taken out of.
+void fragment_matrix_shape(Role role, const Shape &shape, int *rows, int *cols) {
+    *rows = role == Role::B ? shape.K : shape.M;
+    *cols = role == Role::A ? shape.K : shape.N;
+}
+
+// How many elements of a fragment each lane holds. Every type but half
+// precision holds exactly its share of the matrix, so this follows from the
+// shape; half precision is the fixed size above however small the shape is.
+int elements_per_lane(Role role, const Shape &shape, Type t) {
+    if (role == Role::Accumulator) {
+        return accumulator_elements;
+    }
+    if (t == Float(16)) {
+        return half_operand_elements;
+    }
+    int rows, cols;
+    fragment_matrix_shape(role, shape, &rows, &cols);
+    return rows * cols / warp_lanes;
 }
 
 // One operand of a matrix multiply, described in the canonical [K, N, M]
@@ -184,19 +218,14 @@ Expr make_matrix_address(const string &name, Type element_type, const Expr &base
                       const_true(lanes), ModulusRemainder());
 }
 
-// The shape of the matrix each fragment is taken out of.
-void fragment_matrix_shape(Role role, const Shape &shape, int *rows, int *cols) {
-    *rows = role == Role::B ? shape.K : shape.M;
-    *cols = role == Role::A ? shape.K : shape.N;
-}
-
 Expr make_matrix_to_fragment(Role role, const Shape &shape, Layout layout,
                              const Load *load, const Expr &base, const Expr &stride) {
     int rows, cols;
     fragment_matrix_shape(role, shape, &rows, &cols);
     Expr address = make_matrix_address(load->name, load->type.element_of(), base,
                                        rows, cols, layout, stride, load->image, load->param);
-    Type type = load->type.element_of().with_lanes(elements_per_lane(role));
+    Type type = load->type.element_of().with_lanes(
+        elements_per_lane(role, shape, load->type.element_of()));
     return Call::make(type, intrinsic_for_role(role),
                       {shape.M, shape.N, shape.K, std::move(address)},
                       Call::Intrinsic);
@@ -264,11 +293,12 @@ MatmulInfo analyze_matmul(const Store *op) {
         return fail("the load or store is predicated");
     }
 
-    if (!reduce->type.is_float() ||
-        !(reduce->type.bits() == 32 || reduce->type.bits() == 16)) {
-        return fail("the accumulator type is not 32-bit or 16-bit float");
-    }
     info.accumulator_type = reduce->type.element_of();
+    if (!(info.accumulator_type == Float(32) ||
+          info.accumulator_type == Float(16) ||
+          info.accumulator_type == Int(32))) {
+        return fail("the accumulator type is not float32, float16, or int32");
+    }
 
     // The vector reduce must be of a widening multiply. FindIntrinsics does
     // not lift float widening muls, so we just expect a multiply of two casts.
@@ -288,9 +318,13 @@ MatmulInfo analyze_matmul(const Store *op) {
     if (!is_const_one(info.lhs.load->predicate) || !is_const_one(info.rhs.load->predicate)) {
         return fail("the matrix multiply operands are predicated loads");
     }
-    if (info.lhs.load->type.element_of() != Float(16) ||
-        info.rhs.load->type.element_of() != Float(16)) {
-        return fail("the matrix multiply operands are not both float16");
+    const Type operand_type = info.lhs.load->type.element_of();
+    if (info.rhs.load->type.element_of() != operand_type) {
+        return fail("the matrix multiply operands do not have the same type");
+    }
+    if (!wmma_types_supported(operand_type, info.accumulator_type)) {
+        return fail("there is no tensor core instruction that multiplies these "
+                    "operands into an accumulator of this type");
     }
 
     // In a matrix multiply with row-major inputs and outputs, the algorithm
@@ -408,7 +442,8 @@ struct Fragment {
     vector<MultiRamp> subtiles;
 
     Type value_type() const {
-        return element_type.with_lanes(elements_per_lane(role));
+        return element_type.with_lanes(
+            elements_per_lane(role, shape, element_type));
     }
 };
 
@@ -508,7 +543,7 @@ class ExtractWMMAOperations : public IRMutator {
     Expr operand_value(const Operand &operand, Role role, const Shape &shape,
                        Layout layout, const Expr &stride) {
         if (Fragment *f = find_fragment(operand.load->name)) {
-            const int lanes = elements_per_lane(role);
+            const int lanes = f->value_type().lanes();
             const string name =
                 operand_subtile_name(f, operand.mr.base, role, shape, layout, stride);
             return Load::make(f->value_type(), name, Ramp::make(0, 1, lanes), {}, {},
@@ -532,7 +567,7 @@ class ExtractWMMAOperations : public IRMutator {
         const string name = subtile_name(
             f, make_matrix_index(dest.base, rows, cols,
                                  dest.row_major ? Layout::Row : Layout::Col, dest.stride));
-        const int lanes = elements_per_lane(f->role);
+        const int lanes = f->value_type().lanes();
         Expr value;
         if (is_const_zero(op->value)) {
             // Zeroing a fragment is layout-independent, so it doesn't need an
@@ -616,9 +651,10 @@ class ExtractWMMAOperations : public IRMutator {
             return IRMutator::visit(op);
         }
 
-        user_assert(op->type == Float(32) || op->type == Float(16))
-            << "Tensor core fragments must hold 32-bit or 16-bit floats, but "
-            << op->name << " holds " << op->type << ".\n";
+        user_assert(op->type == Float(32) || op->type == Float(16) ||
+                    op->type == Int(32))
+            << "Tensor core fragments must hold 32-bit or 16-bit floats, or "
+            << "32-bit integers, but " << op->name << " holds " << op->type << ".\n";
 
         Fragment &f = fragments[op->name];
         if (pass == 0) {
@@ -645,7 +681,7 @@ class ExtractWMMAOperations : public IRMutator {
         // get replicated per thread.
         for (int i = 0; i < (int)f.subtiles.size(); i++) {
             body = Allocate::make(f.fragment_name + std::to_string(i), f.element_type,
-                                  MemoryType::WMMAFragment, {elements_per_lane(f.role)},
+                                  MemoryType::WMMAFragment, {f.value_type().lanes()},
                                   const_true(), body);
         }
         return body;
