@@ -288,6 +288,26 @@ int main(int argc, char **argv) {
         printf("Vector bits not round tripped properly.\n");
         return 1;
     }
+    Target with_vector_bits_sve2(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE2}, 512);
+    if (with_vector_bits_sve2.natural_vector_size(Int(32)) != 16) {
+        printf("Wrong natural_vector_size.\n");
+        return 1;
+    }
+
+    // SME streaming vector length
+    if (Target().sme_streaming_vector_bits() != 0) {
+        printf("Default Target SME SVL not 0.\n");
+        return 1;
+    }
+    if (Target::sme_svl_feature_from_bits(1024) != Target::SME_SVL1024) {
+        printf("SME SVL feature lookup failed.\n");
+        return 1;
+    }
+    Target with_sme_svl(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE2, Target::SME2, Target::SME_SVL1024}, 512);
+    if (with_sme_svl.sme_streaming_vector_bits() != 1024) {
+        printf("SME SVL not populated in constructor.\n");
+        return 1;
+    }
 
     // Feature implications. Each entry is {input, set_implied_features result,
     // set-then-unset (minimal) result}.
@@ -325,6 +345,9 @@ int main(int argc, char **argv) {
         {"arm-64-linux-sve2",
          "arm-64-linux-armv8a-armv81a-armv82a-arm_fp16-arm_dot_prod-sve2",
          "arm-64-linux-sve2"},
+        {"arm-64-linux-sme2-sme_svl512",
+         "arm-64-linux-armv8a-armv81a-armv82a-arm_fp16-arm_dot_prod-sme2-sme_svl512",
+         "arm-64-linux-sme2-sme_svl512"},
         // Apple silicon implies at least ARM v8.4a.
         {"arm-64-osx",
          "arm-64-osx-armv8a-armv81a-armv82a-armv83a-armv84a",

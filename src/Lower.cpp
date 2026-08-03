@@ -44,6 +44,7 @@
 #include "LICM.h"
 #include "LoopCarry.h"
 #include "LowerParallelTasks.h"
+#include "LowerSMEStreamingTasks.h"
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "OffloadGPULoops.h"
@@ -517,6 +518,21 @@ void lower_impl(const vector<Function> &output_funcs,
         result_module.append(lowered_func);
     }
     debug(2) << "Lowering after generating parallel tasks and closures:\n"
+             << s << "\n\n";
+
+    debug(1) << "Lowering SME Streaming Tasks...\n";
+    closure_implementations.clear();
+    s = lower_sme_streaming_tasks(s, closure_implementations, pipeline_name, t);
+    for (size_t i = initial_lowered_function_count; i < result_module.functions().size(); i++) {
+        // Note that lower_parallel_tasks() appends to the end of closure_implementations
+        result_module.functions()[i].body =
+            lower_sme_streaming_tasks(result_module.functions()[i].body, closure_implementations,
+                                      result_module.functions()[i].name, t);
+    }
+    for (auto &lowered_func : closure_implementations) {
+        result_module.append(lowered_func);
+    }
+    debug(2) << "Lowering after generating SME streaming tasks and closures:\n"
              << s << "\n\n";
 
     vector<Argument> public_args = args;
