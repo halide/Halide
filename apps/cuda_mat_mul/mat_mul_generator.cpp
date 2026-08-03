@@ -16,7 +16,7 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 
 // A square matrix multiply. The operands are untyped, so their type is a
 // generator param, and it picks the schedule: the tensor cores multiply
-// halves, brain floats and bytes, and anything else accumulates in ordinary
+// halves, bfloats and bytes, and anything else accumulates in ordinary
 // registers. The output type is the accumulator type, so it picks between the
 // accumulators an operand type can pair with.
 //
@@ -189,9 +189,8 @@ private:
             // operand type. There is no trend worth extrapolating from, so
             // these are measured points. The operand type matters as much as
             // the size: bytes want a tall block and a deep staged panel, where
-            // the 16-bit types want a wide block and a shallow one. Brain
-            // floats pick out the same shapes as halves at every size, so they
-            // share a row.
+            // the 16-bit types want a wide block and a shallow one. Bfloats pick
+            // out the same shapes as halves at every size, so they share a row.
             const bool bytes = A.type().bits() == 8;
             const bool half_accumulator = out.type() == Float(16);
             if (bytes) {
@@ -293,10 +292,32 @@ private:
         Var t("t"), ti("ti"), tw("tw"), tw2("tw2"), to("to");
 
         // B.in() is dense in the reduction dimension, which is its _0.
-        B.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, br + pa).split(_0, rro, rrv, vec).fuse(rro, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(rrv);
+        B.in()
+            .compute_at(prod, ro)
+            .store_in(MemoryType::GPUSharedAsync)
+            .align_storage(_0, br + pa)
+            .split(_0, rro, rrv, vec)
+            .fuse(rro, _1, t)
+            .split(t, t, ti, 32)
+            .split(t, t, tw, wx)
+            .split(t, to, tw2, wy)
+            .gpu_lanes(ti)
+            .gpu_threads(tw, tw2)
+            .vectorize(rrv);
 
         // A.in() is dense in x, which is its _0.
-        A.in().compute_at(prod, ro).store_in(MemoryType::GPUSharedAsync).align_storage(_0, block_x + pb).split(_0, xxo, xxi, vec).fuse(xxo, _1, t).split(t, t, ti, 32).split(t, t, tw, wx).split(t, to, tw2, wy).gpu_lanes(ti).gpu_threads(tw, tw2).vectorize(xxi);
+        A.in()
+            .compute_at(prod, ro)
+            .store_in(MemoryType::GPUSharedAsync)
+            .align_storage(_0, block_x + pb)
+            .split(_0, xxo, xxi, vec)
+            .fuse(xxo, _1, t)
+            .split(t, t, ti, 32)
+            .split(t, t, tw, wx)
+            .split(t, to, tw2, wy)
+            .gpu_lanes(ti)
+            .gpu_threads(tw, tw2)
+            .vectorize(xxi);
     }
 
     Var x{"x"}, y{"y"};
