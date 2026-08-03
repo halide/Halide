@@ -71,20 +71,20 @@ struct VecDotSpec {
     // field supplied as a third Input, instead of recomputing it -- ggml's own
     // q4_1/q5_1 optimization. See SchemeAndBytes::has_block_sums.
     bool act_has_block_sums = false;
+    // Number of adjacent blocks kept in flight by the SDOT schedule. The
+    // ordinary q4/q8 paths prefer four; q5's table-expansion live ranges make
+    // two faster and match GGML's paired-block loop.
+    int unroll_blocks = 4;
 };
 
 template<typename Derived>
 class VecDotGeneratorBase : public Halide::Generator<Derived> {
 public:
-    // How many blocks the SDOT schedule keeps in flight as independent float
-    // accumulators. Four is enough to hide the accumulate latency without
-    // running the block loop out of vector registers.
-    static constexpr int kUnrollBlocks = 4;
-
     void configure() {
         using namespace Halide;
         VecDotSpec spec = static_cast<Derived *>(this)->build_vec_dot();
         int bs = spec.block_size;
+        const int unroll_blocks = spec.unroll_blocks;
 
         // A struct-typed operand's packed blocks are a 1-D Type::Struct buffer
         // (block index only); a byte-path operand is 2-D (byte, blk).
@@ -119,17 +119,17 @@ public:
         Wt(kk, blk) = 0.0f;
         Vec(kk, blk) = 0.0f;
 
-        // The SDOT schedule interleaves kUnrollBlocks blocks into independent
+        // The SDOT schedule interleaves unroll_blocks blocks into independent
         // accumulators, so it wants a block count divisible by that. Letting
         // Halide's split produce the odd tail instead is not a local cost: the
         // predicate it inserts makes the per-block sdot a dynamic-extent
         // allocation that has to be zeroed and accumulated through memory,
         // roughly doubling the cost of *every* block. So the main reduction gets
         // an exactly divisible extent and a second update sweeps the remainder
-        // at the default schedule (at most kUnrollBlocks - 1 blocks).
+        // at the default schedule (at most unroll_blocks - 1 blocks).
         const bool sdot = spec.sched == ScheduleKind::SDOT;
         Expr nblocks = x_blocks.dim(wt_struct ? 0 : 1).extent();
-        Expr main_blocks = sdot ? (nblocks / kUnrollBlocks) * kUnrollBlocks : nblocks;
+        Expr main_blocks = sdot ? (nblocks / unroll_blocks) * unroll_blocks : nblocks;
 
         RDom r(0, bs, 0, main_blocks, "r");
         Func Acc("acc");
@@ -141,7 +141,7 @@ public:
         // main reduction materialize a reconstructed-codes leaf (Q5_x) via
         // compute_at while the tail -- a different loop nest that could not see
         // that per-block buffer -- reconstructs inline, at negligible cost (fewer
-        // than kUnrollBlocks blocks). Both chains read the same x_blocks/y_blocks.
+        // than unroll_blocks blocks). Both chains read the same x_blocks/y_blocks.
         Func WtT("wt_naive_tail"), VecT("vec_naive_tail");
         WtT(kk, blk) = 0.0f;
         VecT(kk, blk) = 0.0f;
@@ -160,9 +160,10 @@ public:
         std::vector<Func> to_sever = wt_r.encoded;
         to_sever.insert(to_sever.end(), act_r.encoded.begin(), act_r.encoded.end());
         std::vector<ImageParam> bind_to = {x_blocks, y_blocks};
+        ApproximationResult wtT_r, actT_r;
         if (sdot) {
-            ApproximationResult wtT_r = WtT.approximate_by(*spec.weight_codec, {Acc});
-            ApproximationResult actT_r = VecT.approximate_by(*spec.act_codec, {Acc});
+            wtT_r = WtT.approximate_by(*spec.weight_codec, {Acc});
+            actT_r = VecT.approximate_by(*spec.act_codec, {Acc});
             to_sever.insert(to_sever.end(), wtT_r.encoded.begin(), wtT_r.encoded.end());
             to_sever.insert(to_sever.end(), actT_r.encoded.begin(), actT_r.encoded.end());
             bind_to.push_back(x_blocks);
@@ -190,11 +191,12 @@ public:
         // the block loop, kk split as (byte, pos): pos vectorizes the table load,
         // byte unrolls to a scalar index). The odd-block tail decodes through its
         // own inline chain (see above), so it does not need this buffer.
-        Func codes_leaf;
+        Func codes_leaf, qh_leaf;
         for (const Func &h : wt_r.handles) {
             if (h.name() == "combine_bits_code") {
                 codes_leaf = h;
-                break;
+            } else if (h.name() == "q5_struct_block_qh") {
+                qh_leaf = h;
             }
         }
         auto schedule_codes = [&](LoopLevel level) {
@@ -211,6 +213,9 @@ public:
                 .vectorize(pos, 8)
                 .unroll(byte)
                 .unroll(co);
+            if (qh_leaf.defined()) {
+                qh_leaf.compute_at(level).store_in(MemoryType::Register);
+            }
         };
 
         // Only handles with update definitions (per-block stat reductions) need
@@ -227,7 +232,97 @@ public:
             }
         }
 
-        if (sever_sum) {
+        Func final_value = Acc;
+        if (sever_sum && codes_leaf.defined()) {
+            // Q5_1 needs two differently shaped reductions: a four-lane dot
+            // accumulator that survives across blocks, and the scalar m*s
+            // term supplied by Q8_1's stored sum. Express them independently,
+            // then fuse their paired-block loops. This mirrors GGML and avoids
+            // the generic sever path's horizontal Int(32) reduction per block.
+            Func min_leaf, scale_leaf;
+            for (const Func &h : wt_r.handles) {
+                if (h.name() == "q5_struct_block_min") {
+                    min_leaf = h;
+                } else if (h.name() == "q5_struct_block_scale") {
+                    scale_leaf = h;
+                }
+            }
+            Func codes_tail, scale_tail;
+            for (const Func &h : wtT_r.handles) {
+                if (h.name().find("combine_bits_code") == 0) {
+                    codes_tail = h;
+                } else if (h.name().find("q5_struct_block_scale") == 0) {
+                    scale_tail = h;
+                }
+            }
+            _halide_internal_assert(min_leaf.defined() && scale_leaf.defined() &&
+                                    codes_tail.defined() && scale_tail.defined());
+
+            Func wt_product("q5_1_product_weight");
+            wt_product(kk, blk) = cast<float>(codes_leaf(kk, blk)) * scale_leaf(blk);
+            Func wt_product_tail("q5_1_product_weight_tail");
+            wt_product_tail(kk, blk) = cast<float>(codes_tail(kk, blk)) * scale_tail(blk);
+
+            RDom rd(0, bs, 0, main_blocks, "rd");
+            RDom rd_tail(0, bs, main_blocks, nblocks - main_blocks, "rd_tail");
+            Func dot_acc("q5_1_dot_acc");
+            dot_acc() = 0.0f;
+            dot_acc() += wt_product(rd.x, rd.y) * act_r.replacement(rd.x, rd.y);
+            dot_acc() += wt_product_tail(rd_tail.x, rd_tail.y) * actT_r.replacement(rd_tail.x, rd_tail.y);
+
+            const int lanes = 4;
+            RVar rxc("rxc"), rxr("rxr"), rxo("rxo"), rxi("rxi");
+            dot_acc.update(0).split(rd.x, rxc, rxr, 4 * lanes);
+            dot_acc.update(0).split(rxr, rxo, rxi, 4);
+            dot_acc.update(0).eager_inline(wt_product);
+            Var lane("lane");
+            std::vector<Func> dot_i32 = sdot_partial(dot_acc, {{rxo, lane}, {rd.y, u}},
+                                                     {act_r}, false, {codes_leaf.name()});
+
+            RVar ryo("ryo"), ryi("ryi");
+            Var lv("lv"), bacc("bacc");
+            dot_acc.update(0).split(rd.y, ryo, ryi, unroll_blocks);
+            Func acc_vec = dot_acc.update(0).rfactor({{rxo, lv}, {ryi, bacc}});
+            acc_vec.compute_root().vectorize(lv, lanes).unroll(bacc);
+            acc_vec.update().vectorize(lv, lanes).unroll(bacc);
+            for (Func &part : dot_i32) {
+                part.compute_at(acc_vec, bacc)
+                    .update()
+                    .atomic()
+                    .vectorize(rxi, 4)
+                    .vectorize(lane, lanes)
+                    .unroll(rxc);
+            }
+            schedule_codes(LoopLevel(acc_vec, bacc));
+
+            Var lv2("lv2");
+            Func dot_lanes = dot_acc.update(0).rfactor(rxo, lv2);
+            dot_lanes.compute_root().vectorize(lv2, lanes);
+            dot_lanes.update().vectorize(lv2, lanes).unroll(ryi);
+            dot_acc.update(0).atomic().vectorize(rxo, lanes);
+            dot_acc.update(1).unscheduled();
+
+            RDom rb(0, main_blocks, "rb");
+            RDom rb_tail(main_blocks, nblocks - main_blocks, "rb_tail");
+            Func offset_acc("q5_1_offset_acc");
+            offset_acc() = 0.0f;
+            offset_acc() += min_leaf(rb) * cast<float>(s_blocks(rb));
+            offset_acc() += min_leaf(rb_tail) * cast<float>(s_blocks(rb_tail));
+
+            RVar rbi("rbi");
+            Var offset_bacc("offset_bacc");
+            offset_acc.update(0).split(rb.x, ryo, rbi, unroll_blocks);
+            Func offset_vec = offset_acc.update(0).rfactor(rbi, offset_bacc);
+            offset_vec.compute_root().unroll(offset_bacc);
+            offset_vec.update().unroll(offset_bacc);
+            offset_vec.update().compute_with(acc_vec.update(), ryo, LoopAlignStrategy::AlignStart);
+            offset_acc.update(0).unroll(rbi);
+            offset_acc.update(1).unscheduled();
+
+            Func combined("q5_1_combined_acc");
+            combined() = dot_acc() + offset_acc();
+            final_value = combined;
+        } else if (sever_sum) {
             // Affine weight x Q8_1: the per-block product (d*code + m)*(d_act*act)
             // distributes into d*d_act*sum(code*act) + m*d_act*sum(act). ggml does
             // not recompute the second sum -- it reads the `s` field Q8_1 stores.
@@ -282,7 +377,7 @@ public:
 
             RVar ryo("ryo"), ryi("ryi");
             Var bacc("bacc");
-            Acc.update(0).split(r.y, ryo, ryi, kUnrollBlocks);
+            Acc.update(0).split(r.y, ryo, ryi, unroll_blocks);
             Func acc_vec = Acc.update(0).rfactor(ryi, bacc);
             acc_vec.compute_root().unroll(bacc);
             acc_vec.update().unroll(bacc);
@@ -303,7 +398,7 @@ public:
 
             RVar ryo("ryo"), ryi("ryi");
             Var bacc("bacc");
-            Acc.update(0).split(r.y, ryo, ryi, kUnrollBlocks);
+            Acc.update(0).split(r.y, ryo, ryi, unroll_blocks);
             Func acc_vec = Acc.update(0).rfactor(ryi, bacc);
             acc_vec.compute_root().unroll(bacc);
             acc_vec.update().unroll(bacc);
@@ -345,7 +440,7 @@ public:
             std::vector<Func> Acc_i32 = sdot_partial(Acc, {{rxo, lane}, {r.y, u}}, {wt_r, act_r}, spec.distribute_terms, keep_out);
 
             // Acc's update now reduces over (rxo, r.y). Peel rxo back off as the
-            // vector lanes, and peel kUnrollBlocks consecutive blocks off
+            // vector lanes, and peel unroll_blocks consecutive blocks off
             // alongside it into separate accumulators. The accumulators have to
             // be split over *blocks*: every lane of one accumulator advances on
             // every block, so widening the vector does not shorten the
@@ -354,14 +449,14 @@ public:
             // whole kernel.
             RVar ryo("ryo"), ryi("ryi");
             Var lv("lv"), bacc("bacc");
-            Acc.update(0).split(r.y, ryo, ryi, kUnrollBlocks);
+            Acc.update(0).split(r.y, ryo, ryi, unroll_blocks);
             Func acc_vec = Acc.update(0).rfactor({{rxo, lv}, {ryi, bacc}});
             acc_vec.compute_root().vectorize(lv, lanes).unroll(bacc);
             acc_vec.update().vectorize(lv, lanes).unroll(bacc);
 
             // Inside the unrolled body, not at the block-group loop: at `bacc` the
             // sdot is one block's worth of registers, whereas at `ryo` it is a
-            // kUnrollBlocks-long buffer that Halide has to allocate, zero, and
+            // unroll_blocks-long buffer that Halide has to allocate, zero, and
             // accumulate through memory.
             for (Func &part : Acc_i32) {
                 part.compute_at(acc_vec, bacc)
@@ -383,7 +478,7 @@ public:
             Var lv2("lv2");
             Func acc_lanes = Acc.update(0).rfactor(rxo, lv2);
             acc_lanes.compute_root().vectorize(lv2, lanes);
-            acc_lanes.update().vectorize(lv2, lanes);
+            acc_lanes.update().vectorize(lv2, lanes).unroll(ryi);
             Acc.update(0).atomic().vectorize(rxo, lanes);
 
             // The odd-block tail deliberately keeps the default schedule.
@@ -394,7 +489,7 @@ public:
         // is a separate step.
 
         Func result("result");
-        result() = Acc();
+        result() = final_value();
 
         // A byte-path operand's block stride is pinned to its block width: these
         // are densely packed GGML rows, and leaving the stride dynamic costs a
