@@ -77,6 +77,11 @@ struct VecDotSpec {
     int unroll_blocks = 4;
     Halide::ApproximationStageKey reconstructed_codes_stage;
     Halide::ApproximationStageKey packed_high_word_stage;
+    // Clean core-composed schemes can share one traced decode graph between
+    // the four-block main update and its tiny remainder update. Legacy schemes
+    // retain separate traces until their representation stages are migrated.
+    bool share_weight_tail = false;
+    bool share_act_tail = false;
 };
 
 template<typename Derived>
@@ -131,6 +136,8 @@ public:
         // at the default schedule (at most unroll_blocks - 1 blocks).
         const bool sdot = spec.sched == ScheduleKind::SDOT;
         const bool keyed_q5 = spec.reconstructed_codes_stage.defined();
+        const bool share_weight_tail = keyed_q5 || spec.share_weight_tail;
+        const bool share_act_tail = spec.share_act_tail;
         Expr nblocks = x_blocks.dim(wt_struct ? 0 : 1).extent();
         Expr main_blocks = sdot ? (nblocks / unroll_blocks) * unroll_blocks : nblocks;
 
@@ -153,8 +160,9 @@ public:
             // q5_0 shares the main decode graph with its tiny odd-block tail.
             // The tail update is eagerly inlined below before the reconstructed
             // codes leaf is materialized for the main paired-block update.
-            Func tail_weight = keyed_q5 ? Wt : WtT;
-            Acc() += tail_weight(r_tail.x, r_tail.y) * VecT(r_tail.x, r_tail.y);
+            Func tail_weight = share_weight_tail ? Wt : WtT;
+            Func tail_act = share_act_tail ? Vec : VecT;
+            Acc() += tail_weight(r_tail.x, r_tail.y) * tail_act(r_tail.x, r_tail.y);
         }
 
         ApproximationResult wt_r = Wt.approximate_by(*spec.weight_codec, {Acc});
@@ -169,28 +177,36 @@ public:
         std::vector<ImageParam> bind_to = {x_blocks, y_blocks};
         ApproximationResult wtT_r, actT_r;
         if (sdot) {
-            if (!keyed_q5) {
+            if (!share_weight_tail) {
                 wtT_r = WtT.approximate_by(*spec.weight_codec, {Acc});
             }
-            actT_r = VecT.approximate_by(*spec.act_codec, {Acc});
-            if (!keyed_q5) {
+            if (!share_act_tail) {
+                actT_r = VecT.approximate_by(*spec.act_codec, {Acc});
+            }
+            if (!share_weight_tail) {
                 to_sever.insert(to_sever.end(), wtT_r.encoded.begin(), wtT_r.encoded.end());
             }
-            to_sever.insert(to_sever.end(), actT_r.encoded.begin(), actT_r.encoded.end());
-            if (!keyed_q5) {
+            if (!share_act_tail) {
+                to_sever.insert(to_sever.end(), actT_r.encoded.begin(), actT_r.encoded.end());
+            }
+            if (!share_weight_tail) {
                 bind_to.push_back(x_blocks);
             }
-            bind_to.push_back(y_blocks);
-            if (!keyed_q5) {
+            if (!share_act_tail) {
+                bind_to.push_back(y_blocks);
+            }
+            if (!share_weight_tail) {
                 for (Func h : wtT_r.handles) {
                     if (h.has_update_definition()) {
                         h.compute_root();
                     }
                 }
             }
-            for (Func h : actT_r.handles) {
-                if (h.has_update_definition()) {
-                    h.compute_root();
+            if (!share_act_tail) {
+                for (Func h : actT_r.handles) {
+                    if (h.has_update_definition()) {
+                        h.compute_root();
+                    }
                 }
             }
         }
@@ -223,15 +239,25 @@ public:
         }
         _halide_internal_assert(!keyed_q5 || (codes_leaf.defined() && qh_leaf.defined()));
 
-        if (keyed_q5) {
-            // This update has at most one block (the paired q5 schedule's odd
-            // remainder). Flatten only its weight decode chain so it reconstructs
-            // eagerly, while the same stage Funcs remain materialization
-            // boundaries in the main update.
-            std::vector<Func> tail_inline = {wt_r.replacement};
-            for (const Func &h : wt_r.handles) {
-                if (h.function().can_be_inlined()) {
-                    tail_inline.push_back(h);
+        if (share_weight_tail || share_act_tail) {
+            // Flatten shared decode stages into this update only. The main
+            // update is scheduled independently below, so its SDOT boundaries
+            // and any keyed materializations remain intact.
+            std::vector<Func> tail_inline;
+            if (share_weight_tail) {
+                tail_inline.push_back(wt_r.replacement);
+                for (const Func &h : wt_r.handles) {
+                    if (h.function().can_be_inlined()) {
+                        tail_inline.push_back(h);
+                    }
+                }
+            }
+            if (share_act_tail) {
+                tail_inline.push_back(act_r.replacement);
+                for (const Func &h : act_r.handles) {
+                    if (h.function().can_be_inlined()) {
+                        tail_inline.push_back(h);
+                    }
                 }
             }
             for (size_t pass = 0; pass < tail_inline.size(); ++pass) {
