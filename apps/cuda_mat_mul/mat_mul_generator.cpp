@@ -14,18 +14,16 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
         .set_stride(size);
 }
 
-// A square matrix multiply, scheduled two ways. The operands are untyped, so
-// their type is a generator param, and it is what picks the schedule: half
-// precision operands get the tensor cores, and anything else gets a schedule
-// that keeps the accumulator in ordinary registers. The tensor cores multiply
-// halves, brain floats, or eight-bit integers; the output type is also the
-// accumulator type, so it picks between the accumulators an operand type can
-// pair with.
+// A square matrix multiply. The operands are untyped, so their type is a
+// generator param, and it picks the schedule: the tensor cores multiply
+// halves, brain floats and bytes, and anything else accumulates in ordinary
+// registers. The output type is the accumulator type, so it picks between the
+// accumulators an operand type can pair with.
 //
-// GFlop/s on an RTX 5060 Ti, against cublas doing the same thing at each
-// pair of types, and against the ceiling of the instructions this schedule
-// uses. The block shapes below were picked by sweeping them at each size and
-// operand type.
+// GFlop/s on an RTX 5060 Ti, against cublas and against the ceiling of the
+// instructions used. Rows within a pair of types are comparable; rows in
+// different pairs are not, because narrower operands or a narrower
+// accumulator are less work.
 //
 //                             1024      2048      4096   ceiling
 //     Halide f32              6878     10294      7298     25960
@@ -43,81 +41,64 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 //     Halide u8 -> i32       62869     82391     89641    100650
 //     cublas s8 -> i32      107868    122203    129970
 //
-// The ceiling for the tensor core rows is measured, by issuing back-to-back
-// wmma instructions out of registers with no memory traffic at all. The one
-// for the float row is 36 SMs times the 2817 MHz this part averages while
-// benchmarking times 256 flops per SM per clock, which is what the cuda cores
-// do. Rows within a pair of types are comparable to each other; rows in
-// different pairs are not, because a narrower accumulator or narrower
-// operands are less work.
+// The tensor core ceilings are measured, by issuing wmma instructions back to
+// back out of registers. The float one is 36 SMs times the 2817 MHz this part
+// averages while benchmarking times the 256 flops per SM per clock the cuda
+// cores do.
 //
-// The float row is the one far from its ceiling, at 28%, and that is a
-// missing scheduling primitive rather than a bad schedule. A fast single
-// precision matmul wants the loop over chunks of the reduction above the
-// thread loops, so that one staged panel serves the whole block, and the
-// accumulator below them in registers, living across that loop. An
-// accumulator that outlives the chunk loop has to be declared outside it,
-// which puts it at block level, and a block level MemoryType::Register
-// allocation is sized for the whole block tile and spills to local memory.
-// So this schedule stages its operands per thread instead, and shares
-// nothing across the block. The tensor core schedules get around it only
-// because a WMMAFragment allocation at block level is already per-lane.
+// The tensor core schedules reach 87% to 95% of their ceilings, and match
+// cublas at f16 -> f16. Two rows fall short for reasons outside the schedule.
 //
-// So the tensor core schedules reach 95%, 87% and 89% of what their
-// instructions can do,
-// and the last of those matches cublas at f16 -> f16 exactly. The one row
-// that does not is eight-bit, where cublas is 29% past the ceiling of the
-// instruction used here: wmma multiplies bytes at the same rate it multiplies
-// halves into halves, whereas the mma instructions reach 188355 GOP/s at the
-// same shape - 1.87x - so cublas must be using those. Both instructions do
-// the same 8192 ops each; what differs is how fast they issue. Reaching that
-// needs mma rather than wmma, which is a different fragment layout and not
-// something this schedule can express.
+// At eight bits cublas is 29% past the ceiling, so it is not using wmma, which
+// multiplies bytes no faster than it multiplies halves into halves. The mma
+// instructions reach 188355 GOP/s at the same shape, 1.87x, for the same 8192
+// ops per instruction. Reaching that needs mma's fragment layout, which this
+// schedule cannot express.
+//
+// The float row is at 28% because sharing a staged panel across a block needs
+// the reduction chunk loop above the thread loops and the accumulator below
+// them, living across it. Such an accumulator lands at block level, where a
+// Register allocation is sized for the whole block tile and spills. So it
+// stages per thread and shares nothing. The tensor core schedules only escape
+// this because a WMMAFragment allocation at block level is already per-lane.
 //
 class MatMul : public Halide::Generator<MatMul> {
 public:
     GeneratorParam<int> size{"size", 1024};
 
     // How many tensor core tiles of accumulator each warp holds, and how many
-    // warps there are per block in each dimension. Zero means pick a shape
-    // based on the problem size. The best block gets smaller as the matrices
-    // do, because a large one leaves too few blocks to fill the machine.
+    // warps per block in each dimension. Zero means use the measured shapes
+    // below.
     GeneratorParam<int> tiles_x{"tiles_x", 0};
     GeneratorParam<int> tiles_y{"tiles_y", 0};
     GeneratorParam<int> warps_x{"warps_x", 0};
     GeneratorParam<int> warps_y{"warps_y", 0};
     // How much of the reduction is staged in shared memory at a time. Zero
-    // means pick it along with the block shape below.
+    // means use the depth that goes with the shape below.
     GeneratorParam<int> block_r{"block_r", 0};
-    // Extra elements per row of the shared panels, which spreads consecutive
-    // rows across different banks. Zero means pad by sixteen bytes, which is
-    // the least that keeps each row aligned both for the widest asynchronous
-    // copy and for the tensor core loads, whose matrix addresses have to be
-    // sixteen byte aligned. How many elements that is depends on the operand
-    // type, which is why it is not just a number here.
+    // Extra elements per row of the shared panels, to spread consecutive rows
+    // across banks. Zero means sixteen bytes, the least that keeps each row
+    // aligned for both the widest asynchronous copy and the tensor core loads.
+    // That is a different number of elements per operand type.
     GeneratorParam<int> pad_a{"pad_a", 0};
     GeneratorParam<int> pad_b{"pad_b", 0};
 
     Input<Buffer<void, 2>> A{"A"};
     Input<Buffer<void, 2>> B{"B"};
 
-    // The output type is also the accumulator type - there is no tensor core
-    // store from a half precision fragment into single precision memory - so
-    // asking for a half precision output is what asks to accumulate in half.
-    // That halves the registers the accumulator takes, but summing a long
-    // reduction in half precision loses accuracy badly, so it is only worth
-    // asking for when the numerics of the problem allow it.
+    // The output type is the accumulator type - there is no tensor core store
+    // from a half fragment into single precision memory. A half accumulator
+    // halves the registers it takes, but loses accuracy over a long reduction,
+    // so only ask for it when the numerics allow.
     Output<Buffer<void, 2>> out{"out"};
 
-    // The tensor cores multiply 16-bit floats or 8-bit integers, so asking for
-    // one of those operand types is what asks for them. Anything else gets the
-    // schedule that accumulates in ordinary registers.
+    // Asking for a type the tensor cores multiply is what asks for them.
     bool use_tensor_cores() const {
         Type t = A.type();
         return t == Float(16) || t == BFloat(16) || t == Int(8) || t == UInt(8);
     }
 
-    // The accumulator each operand type pairs with. Half precision can also
+    // The accumulator each operand type pairs with. Halves can also
     // accumulate into halves, which is what asking for a half output does.
     Type natural_accumulator() const {
         Type t = A.type();
@@ -141,10 +122,9 @@ public:
 
         Type acc = out.type();
         prod(x, y) = cast(acc, 0);
-        // The widening to the accumulator type happens here, at the multiply,
-        // rather than in the operand wrappers the schedule stages through
-        // shared memory. That way half precision operands are staged as half
-        // precision and reach the tensor cores as such.
+        // The widening happens here, at the multiply, rather than in the
+        // operand wrappers the schedule stages through shared memory, so that
+        // narrow operands are staged narrow and reach the tensor cores so.
         prod(x, y) += cast(acc, A(x, r)) * cast(acc, B(r, y));
 
         out(x, y) = prod(x, y);
@@ -172,7 +152,7 @@ public:
     }
 
 private:
-    // The float schedule. See the table above for how it does.
+    // See the table above.
     void schedule_cuda() {
         Var xi, yi, xii, yii;
 
@@ -196,36 +176,25 @@ private:
         B.in().compute_at(prod, r).vectorize(_0).unroll(_1);
     }
 
-    // The tensor core schedule, which reaches 96%, 95% and 97% of cublas at
-    // the three sizes in the table above. The block shapes below are picked
-    // per size by measurement.
+    // See the table above.
     void schedule_tensor_cores() {
-        // The tensor core tile shape, and how many of them each warp
-        // accumulates at once. Each operand tile loaded feeds tiles_x (or
-        // tiles_y) multiplies, so this is what gets us reuse out of the loads.
+        // Each operand tile loaded feeds tiles_x (or tiles_y) multiplies, so
+        // the tile counts are what get reuse out of the loads.
         const int tile = 16;
         int tx = tiles_x, ty = tiles_y, wx = warps_x, wy = warps_y;
-        // The staging depth goes with the shape, so an explicit block_r only
-        // wins if it was asked for.
+        // The staging depth goes with the shape below unless asked for.
         int br = 32;
         if (tx == 0 || ty == 0 || wx == 0 || wy == 0) {
-            // Measured on an RTX 5060 Ti by sweeping sixty shapes at each size
-            // and operand type. These do not follow a trend worth
-            // extrapolating from, so they are measured points rather than a
-            // formula. What moves between them is how much accumulator a warp
-            // holds and how many warps share a staged panel, and the operand
-            // type matters as much as the size: bytes make the operand loads
-            // cheap enough to pay for a much larger accumulator, so they want
-            // a tall block spread over four warps, where the 16-bit types want
-            // a wide one over fewer, with a deeper staged panel to match.
-            //
-            // Brain floats pick out exactly the same shapes as halves at
-            // every size, so they share a row here.
+            // Measured on an RTX 5060 Ti by sweeping shapes at each size and
+            // operand type. There is no trend worth extrapolating from, so
+            // these are measured points. The operand type matters as much as
+            // the size: bytes want a tall block and a deep staged panel, where
+            // the 16-bit types want a wide block and a shallow one. Brain
+            // floats pick out the same shapes as halves at every size, so they
+            // share a row.
             const bool bytes = A.type().bits() == 8;
             const bool half_accumulator = out.type() == Float(16);
             if (bytes) {
-                // Bytes stage twice the reduction depth in the same shared
-                // memory, and mostly want to.
                 if ((int)size <= 1024) {
                     tx = 2, ty = 8, wx = 2, wy = 1, br = 64;
                 } else if ((int)size <= 2048) {
