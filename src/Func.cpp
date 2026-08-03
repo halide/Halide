@@ -2932,7 +2932,9 @@ ApproximationResult Func::approximate_by(Approximation &p, const vector<Func> &c
     vector<Func> handles = enc.encoded;
     handles.insert(handles.end(), enc.handles.begin(), enc.handles.end());
     handles.insert(handles.end(), dec.handles.begin(), dec.handles.end());
-    return {round_trip, enc.encoded, handles};
+    enc.stage_outputs.push_back({p.stage_key(), enc.encoded});
+    dec.stage_outputs.push_back({p.stage_key(), dec.decoded});
+    return {round_trip, enc.encoded, handles, enc.stage_outputs, dec.stage_outputs};
 }
 
 Func Func::copy_to_device(DeviceAPI d) {
