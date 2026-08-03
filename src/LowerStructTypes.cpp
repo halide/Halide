@@ -99,12 +99,20 @@ class LowerStructTypesMutator : public IRMutator {
             return field_type == UInt(8) ? bl : Reinterpret::make(field_type, bl);
         }
 
-        Type wide = UInt(8 * elem_bytes);
-        Expr combined = cast(wide, byte_load(0));
-        for (int i = 1; i < elem_bytes; i++) {
-            combined = combined | (cast(wide, byte_load(i)) << (8 * i));
+        // Keep a packed scalar field as a bit-concatenation of adjacent bytes
+        // rather than immediately expanding it to a shift/or tree. The
+        // concat_bits lowering turns this into a dense byte shuffle followed
+        // by a vector reinterpret, which gives LLVM enough structure to issue
+        // one (possibly unaligned) wide load. Expanding here obscures that the
+        // byte loads are adjacent once individual extracts of the field have
+        // simplified, and commonly leaves one scalar load per byte.
+        vector<Expr> bytes;
+        bytes.reserve(elem_bytes);
+        for (int b = 0; b < elem_bytes; b++) {
+            bytes.push_back(byte_load(b));
         }
-        return Reinterpret::make(field_type, combined);
+        Expr combined = concat_bits(bytes);
+        return field_type == combined.type() ? combined : Reinterpret::make(field_type, combined);
     }
 
     // Project field field_index's element elem_index (0 for a scalar

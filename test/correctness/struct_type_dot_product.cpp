@@ -32,6 +32,10 @@ Type q4_0_type() {
 Type q8_0_type() {
     return Type::Struct({{"d", Float(16)}, {"qs", Int(8), 32}});
 }
+Type q5_0_type() {
+    // Deliberately packed: qh is a four-byte scalar at the unaligned offset 2.
+    return Type::Struct({{"d", Float(16)}, {"qh", UInt(32)}, {"qs", UInt(8), 16}});
+}
 
 struct Pipeline {
     ImageParam x{q4_0_type(), 1, "x"};  // nb q4_0 weight blocks
@@ -189,11 +193,37 @@ void test_arm_codegen() {
     }
 }
 
+void test_packed_scalar_field_codegen() {
+    ImageParam blocks(q5_0_type(), 1, "blocks");
+    Var b("b");
+    Func qh("read_qh");
+    qh(b) = cast<uint32_t>(field(blocks(b), "qh"));
+
+    std::string s_path = Internal::get_test_tmp_dir() + "struct_type_packed_scalar.s";
+    qh.compile_to_assembly(s_path, {blocks}, "read_qh", arm_target());
+    std::string asm_text = read_file(s_path);
+
+    // The packed UInt(32) field starts at byte offset two and is therefore
+    // unaligned. It should nevertheless remain one wide load; decomposing it
+    // into four byte loads obscures common reuse by subsequent bit extracts.
+    int byte_loads = count_occurrences(asm_text, "ldrb");
+    int word_loads = count_occurrences(asm_text, "ldr\tw") +
+                     count_occurrences(asm_text, "ldur\tw");
+    if (byte_loads != 0 || word_loads < 1) {
+        printf("Unexpected packed UInt(32) struct-field ARM codegen: byte_loads=%d (want 0), "
+               "word_loads=%d (want >= 1).\n",
+               byte_loads, word_loads);
+        printf("---- ARM assembly ----\n%s\n", asm_text.c_str());
+        exit(1);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
     test_correctness();
     test_arm_codegen();
+    test_packed_scalar_field_codegen();
     printf("Success!\n");
     return 0;
 }
