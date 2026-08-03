@@ -330,6 +330,26 @@ void check_no_orphan_allocation_entries(const halide_profiler_pipeline_stats *p)
     }
 }
 
+// The counters_approximated bitmask flags counters that are conservative
+// upper bounds rather than exact. It only happens on GPU, where a guarded
+// contribution summed over a loop can't be counted exactly (the reporter
+// marks those columns with a leading '<'). On CPU every counter is flushed
+// at runtime, so nothing is ever flagged. Verify the mechanism is active on
+// GPU (at least one entry flagged) and silent on CPU.
+void check_counters_approximated(const halide_profiler_pipeline_stats *p, bool has_gpu) {
+    int flagged = 0;
+    for (int i = 0; i < p->num_funcs; i++) {
+        if (p->funcs[i].counters_approximated) {
+            flagged++;
+        }
+    }
+    if (has_gpu) {
+        REQUIRE(flagged > 0);
+    } else {
+        REQUIRE(flagged == 0);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -374,6 +394,8 @@ int main(int argc, char **argv) {
     if (!entries_of(target, "dev_only_mid").empty()) {
         check_device_only_compute_root_allocation(target);
     }
+
+    check_counters_approximated(target, !entries_of(target, "shared_out").empty());
 
     // Holds regardless of target: the fused-allocation backing name should
     // never surface as its own profiler entry.

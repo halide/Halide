@@ -1990,6 +1990,19 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * canonical id of the Func whose buffer is being copied. -1 otherwise. */
     int buffer_func_id;
 
+    /** A bitmask flagging which of this Func's aggregated counters are
+     * conservative upper bounds rather than exact values. The bits index the
+     * counters passed to halide_profiler_update_counters, in that order:
+     * bit 0 = memory_total, 1 = num_allocs, 2 = parallel_loops,
+     * 3 = parallel_tasks, 4 = points_required_at_root, 5 = points_computed.
+     * (active_threads_numerator/denominator are sampled at runtime rather
+     * than summed over loops, so they are never approximated and have no
+     * bit.) A set bit only happens on GPU, where a guarded contribution
+     * can't be summed exactly and is bounded instead; the reporter marks
+     * such columns with a leading '<'. Must stay in sync with the counter
+     * enum in src/Profiling.cpp. */
+    uint32_t counters_approximated;
+
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t HALIDE_ATTRIBUTE_ALIGN(8) time;
 

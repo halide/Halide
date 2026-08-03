@@ -76,6 +76,7 @@ struct Names {
     std::string profiler_func_stack_peak_buf;
     std::string profiler_func_kinds;
     std::string profiler_func_buffer_func_ids;
+    std::string profiler_func_counters_approximated;
     std::string profiler_start_error_code;
 
     // IDs 0-3 are reserved for bookkeeping slots, in this order.
@@ -94,6 +95,7 @@ struct Names {
           profiler_func_stack_peak_buf(unique_name("profiler_func_stack_peak_buf")),
           profiler_func_kinds(unique_name("profiler_func_kinds")),
           profiler_func_buffer_func_ids(unique_name("profiler_func_buffer_func_ids")),
+          profiler_func_counters_approximated(unique_name("profiler_func_counters_approximated")),
           profiler_start_error_code(unique_name("profiler_start_error_code")) {
 
         // Reserve the bookkeeping slots first so their ids match the
@@ -426,6 +428,12 @@ protected:
 
     std::map<int, Counters> counters;
 
+    // entry id -> bitmask (over the num_counters counter slots) of counters
+    // that were summed as a conservative upper bound rather than exactly
+    // (see sum_counters_over_gpu_loop). Read by inject_profiling to fill the
+    // per-Func counters_approximated field.
+    std::map<int, uint32_t> counters_approximated;
+
     // name -> all entry ids with that name. Built once in the constructor;
     // only declare_box_required_root reads it.
     std::map<std::string, std::vector<int>> entries_by_name;
@@ -530,9 +538,17 @@ protected:
         Scope<Interval> scope;
         scope.push(var, loop_bounds);
         for (auto &[id, c] : counters) {
-            for (auto &counter : c.counters) {
+            for (int ci = 0; ci < num_counters; ci++) {
+                Expr &counter = c.counters[ci];
                 if (!counter.defined()) {
                     continue;
+                }
+                // A counter that varies over the loop is summed as val.max ×
+                // (contributing width), a conservative upper bound rather than
+                // an exact sum, so flag it. (An invariant counter reduces to
+                // its exact value × extent below.)
+                if (expr_uses_var(counter, var)) {
+                    counters_approximated[id] |= (1u << ci);
                 }
                 Interval val = bounds_of_expr_in_scope(counter, scope);
                 if (!val.has_upper_bound()) {
@@ -891,6 +907,12 @@ protected:
 public:
     Stmt operator()(const Stmt &s) {
         return flush_all(IRMutator::operator()(s));
+    }
+
+    // Counter-approximation bitmask for entry `id` (0 if all exact).
+    uint32_t approximated_counters(int id) const {
+        auto it = counters_approximated.find(id);
+        return it == counters_approximated.end() ? 0 : it->second;
     }
 };
 
@@ -1464,6 +1486,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     Expr func_canonical_ids_buf = Variable::make(Handle(), names.profiler_func_canonical_ids);
     Expr func_kinds_buf = Variable::make(Handle(), names.profiler_func_kinds);
     Expr func_buffer_func_ids_buf = Variable::make(Handle(), names.profiler_func_buffer_func_ids);
+    Expr func_counters_approximated_buf = Variable::make(Handle(), names.profiler_func_counters_approximated);
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_instance_start",
                                      {pipeline_name,
@@ -1473,6 +1496,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
                                       func_canonical_ids_buf,
                                       func_kinds_buf,
                                       func_buffer_func_ids_buf,
+                                      func_counters_approximated_buf,
                                       make_const(UInt(64), target.natural_vector_size(UInt(8))),
                                       instance},
                                      Call::Extern);
@@ -1524,6 +1548,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     std::vector<Expr> func_canonical_ids(num_funcs);
     std::vector<Expr> func_kinds(num_funcs);
     std::vector<Expr> func_buffer_func_ids(num_funcs);
+    std::vector<Expr> func_counters_approximated(num_funcs);
     for (int i = 0; i < num_funcs; i++) {
         const auto &info = names.entry_info[i];
         func_names[i] = info.name;
@@ -1531,6 +1556,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
         func_canonical_ids[i] = info.canonical_id;
         func_kinds[i] = make_const(Int(32), (int)info.kind);
         func_buffer_func_ids[i] = info.buffer_func_id;
+        func_counters_approximated[i] = make_const(UInt(32), injector.approximated_counters(i));
     }
 
     s = LetStmt::make(names.profiler_func_names, Call::make(Handle(), Call::make_struct, func_names, Call::Intrinsic), s);
@@ -1538,6 +1564,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     s = LetStmt::make(names.profiler_func_canonical_ids, Call::make(Handle(), Call::make_struct, func_canonical_ids, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_kinds, Call::make(Handle(), Call::make_struct, func_kinds, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_buffer_func_ids, Call::make(Handle(), Call::make_struct, func_buffer_func_ids, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_counters_approximated, Call::make(Handle(), Call::make_struct, func_counters_approximated, Call::Intrinsic), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 
     // Allocate memory for the profiler instance state
