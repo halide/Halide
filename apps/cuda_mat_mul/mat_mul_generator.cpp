@@ -51,7 +51,20 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 // different pairs are not, because a narrower accumulator or narrower
 // operands are less work.
 //
-// So the schedules reach 95%, 87% and 89% of what their instructions can do,
+// The float row is the one far from its ceiling, at 28%, and that is a
+// missing scheduling primitive rather than a bad schedule. A fast single
+// precision matmul wants the loop over chunks of the reduction above the
+// thread loops, so that one staged panel serves the whole block, and the
+// accumulator below them in registers, living across that loop. An
+// accumulator that outlives the chunk loop has to be declared outside it,
+// which puts it at block level, and a block level MemoryType::Register
+// allocation is sized for the whole block tile and spills to local memory.
+// So this schedule stages its operands per thread instead, and shares
+// nothing across the block. The tensor core schedules get around it only
+// because a WMMAFragment allocation at block level is already per-lane.
+//
+// So the tensor core schedules reach 95%, 87% and 89% of what their
+// instructions can do,
 // and the last of those matches cublas at f16 -> f16 exactly. The one row
 // that does not is eight-bit, where cublas is 29% past the ceiling of the
 // instruction used here: wmma multiplies bytes at the same rate it multiplies
