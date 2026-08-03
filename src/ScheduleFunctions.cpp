@@ -112,7 +112,7 @@ class SubstituteIn : public IRGraphMutator {
             changed = changed || !args.back().same_as(i);
         }
         if (changed) {
-            return Provide::make(p->name, p->values, args, p->predicate);
+            return p->with(p->values, args, p->predicate);
         } else {
             return p;
         }
@@ -152,11 +152,11 @@ class AddPredicates : public IRGraphMutator {
             for (Expr &v : values) {
                 v = select(cond, v, Call::make(func, args, idx++));
             }
-            return Provide::make(p->name, values, args, predicate);
+            return p->with(values, args, predicate);
         } else if (type == ApplySplitResult::PredicateProvides) {
-            return Provide::make(p->name, values, args, predicate && cond);
+            return p->with(values, args, predicate && cond);
         } else if (changed_args || changed_values || !predicate.same_as(p->predicate)) {
-            return Provide::make(p->name, values, args, predicate);
+            return p->with(values, args, predicate);
         } else {
             return p;
         }
@@ -1010,13 +1010,7 @@ private:
         if (body.same_as(for_loop->body)) {
             return for_loop;
         } else {
-            return For::make(for_loop->name,
-                             for_loop->min,
-                             for_loop->max,
-                             for_loop->for_type,
-                             for_loop->partition_policy,
-                             for_loop->device_api,
-                             body);
+            return for_loop->with(for_loop->min, for_loop->max, body);
         }
     }
 };
@@ -1147,8 +1141,7 @@ Stmt add_loop_var_aliases(Stmt s, const map<string, set<string>> &loop_var_alias
                 body = LetStmt::make(alias, var, body);
             }
 
-            return For::make(op->name, op->min, op->max, op->for_type,
-                             op->partition_policy, op->device_api, std::move(body));
+            return op->with(op->min, op->max, body);
         }
 
     public:
@@ -1175,7 +1168,7 @@ class ShiftLoopNest : public IRMutator {
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + iter->second;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
+            stmt = op->with(op->min, op->max, body);
         }
         return stmt;
     }
@@ -1385,13 +1378,7 @@ protected:
         if (body.same_as(for_loop->body)) {
             return for_loop;
         } else {
-            return For::make(for_loop->name,
-                             for_loop->min,
-                             for_loop->max,
-                             for_loop->for_type,
-                             for_loop->partition_policy,
-                             for_loop->device_api,
-                             body);
+            return for_loop->with(for_loop->min, for_loop->max, body);
         }
     }
 
@@ -2651,13 +2638,64 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     validate_fused_groups_schedule(fused_groups, env);
 
+    // Collect consecutive inlinable groups and apply them in one
+    // inline_functions pass. We flush the batch before each realization so
+    // the realization's validate_schedule sees the post-inline 's' (its
+    // callers, if they were inlined, will have been substituted in by then).
+    vector<Function> pending_inlines;
+    auto flush_pending_inlines = [&]() {
+        if (pending_inlines.empty()) {
+            return;
+        }
+        debug(1) << "Inlining group of " << pending_inlines.size()
+                 << " function(s): " << pending_inlines << "\n";
+        s = inline_functions(s, pending_inlines);
+        pending_inlines.clear();
+        debug(2) << "Lowering after inlining group of functions:\n"
+                 << s << "\n";
+    };
+
     for (const auto &group : reverse_view(fused_groups)) {
+        vector<Function> group_funcs;
+        group_funcs.reserve(group.size());
+        for (const string &name : group) {
+            group_funcs.push_back(env.find(name)->second);
+        }
+
+        if (group_should_be_inlined(group_funcs)) {
+            // Inlinable groups have a single pure func. Check the
+            // schedule-property errors directly here; we can't call
+            // validate_schedule (which walks 's' for call sites) because
+            // batched inline chains may not yet have their inner call
+            // sites exposed in 's'.
+            const Function &f = group_funcs[0];
+            const LoopLevel &store_at = f.schedule().store_level();
+            const LoopLevel &hoist_storage_at = f.schedule().hoist_storage_level();
+            if (store_at.is_root()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled store_root(), but is inlined. Funcs that use store_root must also call compute_root or compute_at.\n";
+            } else if (!store_at.is_inlined()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled store_at(), but is inlined. Funcs that use store_at must also call compute_at.\n";
+            }
+            if (hoist_storage_at.is_root()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage_root(), but is inlined. Funcs that use hoist_storage_root must also call compute_root or compute_at.\n";
+            } else if (!hoist_storage_at.is_inlined()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage(), but is inlined. Funcs that use hoist_storage_root must also call compute_at.\n";
+            }
+            validate_schedule_inlined_function(f);
+            pending_inlines.push_back(f);
+            continue;
+        }
+
+        // Realization: flush any pending inlines first so that
+        // validate_schedule and the InjectFunctionRealization walk see the
+        // post-inline 's'. In particular, ComputeLegalSchedules inside
+        // validate_schedule needs the inlined call sites to be visible to
+        // find this group's funcs.
+        flush_pending_inlines();
+
         vector<Function> funcs;
         vector<bool> is_output_list;
-
-        for (const string &name : group) {
-            Function f = env.find(name)->second;
-
+        for (const Function &f : group_funcs) {
             bool is_output = false;
             for (const Function &o : outputs) {
                 is_output = is_output | o.same_as(f);
@@ -2694,6 +2732,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
         debug(2) << s << "\n";
     }
+    flush_pending_inlines();
 
     // We can remove the loop over root now. It's the outermost one.
     s = mutate_with(s, [&](auto *self, const For *op) {

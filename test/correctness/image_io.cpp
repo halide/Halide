@@ -294,6 +294,118 @@ void test_read_big_endian_row_channel_offset() {
     }
 }
 
+// A negative extent in the header makes size_in_bytes() exceed the
+// allocation, so the payload read runs off the end of the buffer.
+void test_negative_extents() {
+    const auto write_file = [](const std::string &filename, const std::vector<uint8_t> &bytes) {
+        std::ofstream fs(filename.c_str(), std::ofstream::binary);
+        fs.write((const char *)bytes.data(), bytes.size());
+        fs.close();
+    };
+    const auto append32 = [](std::vector<uint8_t> &bytes, uint32_t value) {
+        for (int i = 0; i < 4; i++) {
+            bytes.push_back((uint8_t)(value >> (8 * i)));
+        }
+    };
+
+    {
+        // .npy with a shape of (2, -3)
+        std::string dict = "{'descr': '<i4', 'fortran_order': False, 'shape': (2, -3), }";
+        while ((6 + 2 + 2 + dict.size()) % 64 != 0) {
+            dict += ' ';
+        }
+        std::vector<uint8_t> bytes = {0x93, 'N', 'U', 'M', 'P', 'Y', 1, 0};
+        bytes.push_back((uint8_t)(dict.size() & 0xff));
+        bytes.push_back((uint8_t)((dict.size() >> 8) & 0xff));
+        bytes.insert(bytes.end(), dict.begin(), dict.end());
+        bytes.resize(bytes.size() + 16, 0);
+
+        std::ostringstream o;
+        o << Internal::get_test_tmp_dir() << "test_negative_extents.npy";
+        std::string filename = o.str();
+        write_file(filename, bytes);
+
+        Buffer<> buf;
+        if (Tools::load<Buffer<>, Tools::Internal::CheckReturn>(filename, &buf)) {
+            std::cout << "Loaded " << filename << " despite a negative extent\n";
+            exit(1);
+        }
+    }
+
+    {
+        // .mat with extents of (4, -4)
+        std::vector<uint8_t> bytes(128, 0);
+        append32(bytes, Tools::Internal::miMATRIX);
+        append32(bytes, 64);
+        append32(bytes, Tools::Internal::miUINT32);
+        append32(bytes, 8);
+        append32(bytes, Tools::Internal::miUINT8);
+        append32(bytes, 1);
+        append32(bytes, Tools::Internal::miINT32);
+        append32(bytes, 8);
+        append32(bytes, 4);
+        append32(bytes, (uint32_t)-4);
+        append32(bytes, Tools::Internal::miINT8);
+        append32(bytes, 0);
+        append32(bytes, Tools::Internal::miUINT8);
+        append32(bytes, 16);
+        bytes.resize(bytes.size() + 16, 0);
+
+        std::ostringstream o;
+        o << Internal::get_test_tmp_dir() << "test_negative_extents.mat";
+        std::string filename = o.str();
+        write_file(filename, bytes);
+
+        Buffer<> buf;
+        if (Tools::load<Buffer<>, Tools::Internal::CheckReturn>(filename, &buf)) {
+            std::cout << "Loaded " << filename << " despite a negative extent\n";
+            exit(1);
+        }
+    }
+}
+
+#ifndef HALIDE_NO_PNG
+void test_png_unsupported_bit_depth() {
+    // A 1-bit grayscale PNG is a valid file, but load_png only supports 8- and
+    // 16-bit samples. Before the fix it selected the 16-bit row reader and read
+    // past the packed row buffer; now it should reject the file cleanly.
+    std::ostringstream o;
+    o << Internal::get_test_tmp_dir() << "test_1bit.png";
+    std::string filename = o.str();
+
+    const int width = 64, height = 8;
+    FILE *fp = fopen(filename.c_str(), "wb");
+    if (!fp) {
+        std::cout << "Cannot write " << filename << "\n";
+        exit(1);
+    }
+    png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+    png_infop info = png_create_info_struct(png);
+    if (setjmp(png_jmpbuf(png))) {
+        std::cout << "Failed to write " << filename << "\n";
+        exit(1);
+    }
+    png_init_io(png, fp);
+    png_set_IHDR(png, info, width, height, 1, PNG_COLOR_TYPE_GRAY,
+                 PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+    png_write_info(png, info);
+    std::vector<uint8_t> row((width + 7) / 8, 0xaa);
+    for (int y = 0; y < height; y++) {
+        png_write_row(png, row.data());
+    }
+    png_write_end(png, nullptr);
+    png_destroy_write_struct(&png, &info);
+    fclose(fp);
+
+    Halide::Runtime::Buffer<> img;
+    bool loaded = Tools::load<Halide::Runtime::Buffer<>, Tools::Internal::CheckReturn>(filename, &img);
+    if (loaded) {
+        std::cout << "Expected loading a 1-bit PNG to fail, but it succeeded\n";
+        exit(1);
+    }
+}
+#endif
+
 int main(int argc, char **argv) {
     do_test<int8_t>();
     do_test<int16_t>();
@@ -310,6 +422,10 @@ int main(int argc, char **argv) {
     do_test<double>();
     test_mat_header();
     test_read_big_endian_row_channel_offset();
+#ifndef HALIDE_NO_PNG
+    test_png_unsupported_bit_depth();
+#endif
+    test_negative_extents();
     printf("Success!\n");
     return 0;
 }

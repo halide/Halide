@@ -905,6 +905,14 @@ bool load_png(const std::string &filename, ImageType *im) {
     const int channels = png_get_channels(png_ptr, info_ptr);
     const int bit_depth = png_get_bit_depth(png_ptr, info_ptr);
 
+    // Only 8- and 16-bit samples map to a supported buffer type. Sub-byte
+    // depths (1/2/4) keep a packed row layout, but the row reader below is
+    // selected as 16-bit for anything that isn't 8-bit, so it would read past
+    // the packed row and write past the buffer. Reject them here.
+    if (!check(bit_depth == 8 || bit_depth == 16, "Unsupported PNG bit depth")) {
+        return false;
+    }
+
     const halide_type_t im_type(halide_type_uint, bit_depth);
     std::vector<int> im_dimensions = {width, height};
     if (channels != 1) {
@@ -1337,6 +1345,12 @@ bool load_npy(const std::string &filename, ImageType *im) {
     NpyHeader h;
     if (!check(h.parse(header), "Could not parse .npy header dict")) {
         return false;
+    }
+
+    for (const int extent : h.extents) {
+        if (!check(extent > 0, "Bad extent in .npy file")) {
+            return false;
+        }
     }
 
     halide_type_t im_type((halide_type_code_t)0, 0);
@@ -1779,6 +1793,12 @@ bool load_mat(const std::string &filename, ImageType *im) {
     if (dims & 1) {
         uint32_t padding;
         if (!check(f.read_bytes(&padding, 4), "Could not read .mat header\n")) {
+            return false;
+        }
+    }
+
+    for (const int extent : extents) {
+        if (!check(extent > 0, "Bad extent in .mat file\n")) {
             return false;
         }
     }
