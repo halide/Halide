@@ -63,6 +63,57 @@ int main(int argc, char **argv) {
     SymmetricQuantizer quant;
     ApproximationResult result = f.approximate_by(quant, {g});
 
+    // Stage tracing preserves opaque identities through nested combinators,
+    // including repeated component types and Apply/TrustedInverse ownership.
+    Identity first_identity, second_identity, trusted_encoder, trusted_decoder;
+    const ApproximationStageKey first_key = first_identity.stage_key();
+    const ApproximationStageKey second_key = second_identity.stage_key();
+    const ApproximationStageKey encoder_key = trusted_encoder.stage_key();
+    const ApproximationStageKey decoder_key = trusted_decoder.stage_key();
+    Apply applied(0, second_identity);
+    const ApproximationStageKey apply_key = applied.stage_key();
+    TrustedInverse trusted(trusted_encoder, trusted_decoder);
+    const ApproximationStageKey trusted_key = trusted.stage_key();
+    Compose nested(first_identity, std::move(applied), std::move(trusted));
+    const ApproximationStageKey nested_key = nested.stage_key();
+
+    Func traced_source("traced_source"), traced_consumer("traced_consumer");
+    traced_source(x) = cast<float>(x);
+    traced_consumer(x) = traced_source(x);
+    ApproximationResult traced = traced_source.approximate_by(nested, {traced_consumer});
+
+    auto require_port = [&](const ApproximationStageKey &key, const char *label) {
+        if (!traced.encoded_by(key).defined() || !traced.decoded_by(key).defined()) {
+            printf("Missing encode/decode stage trace for %s\n", label);
+            return false;
+        }
+        return true;
+    };
+    if (!require_port(first_key, "first repeated Identity") ||
+        !require_port(second_key, "second repeated Identity") ||
+        !require_port(apply_key, "Apply") ||
+        !require_port(trusted_key, "TrustedInverse") ||
+        !require_port(nested_key, "outer Compose")) {
+        return 1;
+    }
+    if (!traced.encoded_by(encoder_key).defined() || traced.decoded_by(encoder_key).defined() ||
+        traced.encoded_by(decoder_key).defined() || !traced.decoded_by(decoder_key).defined()) {
+        printf("TrustedInverse did not preserve direction-specific child traces\n");
+        return 1;
+    }
+    if (first_key == second_key) {
+        printf("Distinct Approximation instances unexpectedly share a stage key\n");
+        return 1;
+    }
+    Identity unused;
+    if (traced.encoded_by(unused.stage_key()).defined() ||
+        traced.decoded_by(unused.stage_key()).defined() ||
+        traced.encoded_by(first_key, 1).defined() ||
+        traced.decoded_by(first_key, 1).defined()) {
+        printf("Invalid stage key or port unexpectedly resolved\n");
+        return 1;
+    }
+
     if (result.handles.empty()) {
         printf("Expected approximate_by() to return scheduling handles\n");
         return 1;

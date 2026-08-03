@@ -275,21 +275,19 @@ other details are necessary:
    8-wide table-load store vs 16-wide sdot load mismatch keeps it in memory.
 2. Materializing needs the codes leaf kept out of `sdot_partial()`'s deep inline
    (`can_be_inlined()` ignores compute level, so a `compute_root`/`compute_at`
-   schedule alone does not stop `eager_inline` -- a `keep_out` name list does).
-3. `block_q5_0` and `block_q5_1` are represented as packed Halide struct types,
-   including `qh` as a scalar `UInt(32)`. `LowerStructTypes` now preserves a
-   multi-byte packed field read as `concat_bits()` of adjacent bytes instead of
-   immediately expanding it into a shift/or tree. LLVM can consequently issue
-   one unaligned `ldr/ldur w`, matching ggml, rather than four `ldrb`s. A
-   correctness/codegen regression test covers the deliberately unaligned qh
-   field at byte offset 2.
-4. The odd-block **tail** reads the same codes but is a separate update
-   `compute_at` cannot reach. Fixed by giving the tail its **own** decode chain:
-   a second `Wt/Vec` placeholder pair, its own `approximate_by`, both bound to
-   the same `x_blocks/y_blocks`. Main materializes; the tail reconstructs inline
-   (< `unroll_blocks` blocks, negligible). This is also what unlocks the
-   per-block fusion -- with a shared chain Halide hoists the codes buffer to
-   whole-row.
+   schedule alone does not stop `eager_inline`). `sdot_partial()` now takes
+   resolved `Func` identities, not generated-name strings; q5_0 obtains the
+   identity from its `AdditiveRadixSplit` stage key.
+3. q5_0 uses its faithful packed type `{Float16 d; UInt8 qh[4]; UInt8 qs[16]}`.
+   `LittleEndianScalarPack<uint32_t>` decodes qh with `concat_bits()`;
+   `LowerStructTypes` and LLVM consequently issue one unaligned `ldr/ldur w`,
+   matching ggml, rather than four `ldrb`s. q5_1 retains the older scalar
+   `UInt(32)` struct field as explicit transitional debt.
+4. q5_0's odd-block **tail** now shares the main Approximation graph. Before the
+   main update materializes the keyed reconstructed-code and qh-word Funcs, the
+   tail update alone eagerly inlines that decode chain. This removes the second
+   q5_0 weight `approximate_by` graph while keeping the tail inline and the main
+   loop register-resident. q5_1 retains its separate legacy tail chain.
 
 The transpose is gone (verified: no `uzp2`/`dup.8b`); reconstruction is a
 handful of ops + 4 contiguous LUT loads/block. Bonus: the same decode change
@@ -317,11 +315,23 @@ The generated steady state now matches the important shape of ggml's kernel: two
 SDOTs per block, persistent vector FMAs, and scalar offset FMAs, with one
 horizontal reduction at the end.
 
-One representative paired n=4096 run after the final epilogue change was q5_0
-122.2 ns ggml / 130.2 ns Halide (0.94x), and q5_1 143.5 / 153.7 ns (0.93x). Core
-migration moves both the absolute numbers and ratios; another run measured 121.8
-/ 121.8 and 143.2 / 144.3 before the final ~1 ns epilogue improvement. Use
-repeated paired runs rather than treating either sample as a fixed score.
+After the core-composition migration, ten paired n=4096 runs had q5_0 medians of
+122.147 ns GGML / 130.645 ns Halide and a median paired ratio of 0.9349x. The
+committed baseline was 122.172 / 130.259 ns and 0.9379x, so the refactor is
+performance-neutral (+0.30% Halide time). q5_1 remained within noise at 143.728
+/ 153.956 ns and 0.9336x. Use repeated paired runs rather than treating either
+sample as a fixed score.
+
+**Core composition now mirrors the representation.** q5_0 is
+`StructLayout -> StorageCast -> LittleEndianScalarPack -> BinaryAlphabetPack -> PlanarFieldPack -> AdditiveRadixSplit -> SymmetricBlockQuantize -> BlockReshape`.
+Opaque Approximation stage keys carry the reconstructed-code and qh-word
+identities into `VecDotSpec`; generated Func names no longer control q5_0's
+schedule. `BlockReshape` and symmetric block quantization now live in the public
+Approximation component library, with ggml compatibility aliases/wrappers.
+
+Reusable performance experiments should become discoverable `kernel-bench`
+modes. In particular, promote the odd-tail n sweep (32, 96, 160, 224, 1056)
+instead of preserving it only as a shell loop.
 
 **Build-flag bug.** q5_0/q5_1's `add_halide_library` were missing
 `FEATURES no_asserts no_bounds_query` (every other tuned vec_dot has it), so

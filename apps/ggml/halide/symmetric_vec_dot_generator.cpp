@@ -82,6 +82,7 @@ public:
         ScheduleKind sched;
         bool distribute = false;   // set for the affine (offset-carrying) weights
         Halide::Type weight_type;  // set -> weight blocks are a 1-D Type::Struct buffer
+        Halide::ApproximationStageKey reconstructed_codes_stage, packed_high_word_stage;
         switch (w_kind.value()) {
         case WKind::Symmetric: {
             // Struct-typed weight blocks (`{fp16 d; uint8 qs[...]}`); SDOT still
@@ -113,6 +114,8 @@ public:
             SchemeAndBytes sb = make_symmetric_5bit_block_scheme(wbs, w_qmax, Layout::BlockIndexed);
             wc = std::move(sb.scheme);
             weight_type = sb.block_type;
+            reconstructed_codes_stage = sb.reconstructed_codes_stage;
+            packed_high_word_stage = sb.packed_high_word_stage;
             wb = 2 + 4 + wbs / 2;
             // Q5_0's 5-bit code is assembled via CombineBits (nibble |
             // (high_bit << 4)); that reconstruction is all inside the (r.x-
@@ -168,7 +171,7 @@ public:
         // weight operand is struct-typed here.
         const bool five_bit = w_kind.value() == WKind::Symmetric5Bit || w_kind.value() == WKind::Affine5Bit;
         return {std::move(wc), wb, std::move(ac), ab, wbs, sched, distribute, weight_type, Halide::Type{}, act_has_block_sums,
-                five_bit ? 2 : 4};
+                five_bit ? 2 : 4, reconstructed_codes_stage, packed_high_word_stage};
     }
 };
 
