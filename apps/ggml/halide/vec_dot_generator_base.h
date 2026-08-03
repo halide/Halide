@@ -75,6 +75,8 @@ struct VecDotSpec {
     // ordinary q4/q8 paths prefer four; q5's table-expansion live ranges make
     // two faster and match GGML's paired-block loop.
     int unroll_blocks = 4;
+    Halide::ApproximationStageKey reconstructed_codes_stage;
+    Halide::ApproximationStageKey packed_high_word_stage;
 };
 
 template<typename Derived>
@@ -128,6 +130,7 @@ public:
         // an exactly divisible extent and a second update sweeps the remainder
         // at the default schedule (at most unroll_blocks - 1 blocks).
         const bool sdot = spec.sched == ScheduleKind::SDOT;
+        const bool keyed_q5 = spec.reconstructed_codes_stage.defined();
         Expr nblocks = x_blocks.dim(wt_struct ? 0 : 1).extent();
         Expr main_blocks = sdot ? (nblocks / unroll_blocks) * unroll_blocks : nblocks;
 
@@ -147,7 +150,11 @@ public:
         VecT(kk, blk) = 0.0f;
         RDom r_tail(0, bs, main_blocks, nblocks - main_blocks, "r_tail");
         if (sdot) {
-            Acc() += WtT(r_tail.x, r_tail.y) * VecT(r_tail.x, r_tail.y);
+            // q5_0 shares the main decode graph with its tiny odd-block tail.
+            // The tail update is eagerly inlined below before the reconstructed
+            // codes leaf is materialized for the main paired-block update.
+            Func tail_weight = keyed_q5 ? Wt : WtT;
+            Acc() += tail_weight(r_tail.x, r_tail.y) * VecT(r_tail.x, r_tail.y);
         }
 
         ApproximationResult wt_r = Wt.approximate_by(*spec.weight_codec, {Acc});
@@ -162,15 +169,23 @@ public:
         std::vector<ImageParam> bind_to = {x_blocks, y_blocks};
         ApproximationResult wtT_r, actT_r;
         if (sdot) {
-            wtT_r = WtT.approximate_by(*spec.weight_codec, {Acc});
+            if (!keyed_q5) {
+                wtT_r = WtT.approximate_by(*spec.weight_codec, {Acc});
+            }
             actT_r = VecT.approximate_by(*spec.act_codec, {Acc});
-            to_sever.insert(to_sever.end(), wtT_r.encoded.begin(), wtT_r.encoded.end());
+            if (!keyed_q5) {
+                to_sever.insert(to_sever.end(), wtT_r.encoded.begin(), wtT_r.encoded.end());
+            }
             to_sever.insert(to_sever.end(), actT_r.encoded.begin(), actT_r.encoded.end());
-            bind_to.push_back(x_blocks);
+            if (!keyed_q5) {
+                bind_to.push_back(x_blocks);
+            }
             bind_to.push_back(y_blocks);
-            for (Func h : wtT_r.handles) {
-                if (h.has_update_definition()) {
-                    h.compute_root();
+            if (!keyed_q5) {
+                for (Func h : wtT_r.handles) {
+                    if (h.has_update_definition()) {
+                        h.compute_root();
+                    }
                 }
             }
             for (Func h : actT_r.handles) {
@@ -191,12 +206,36 @@ public:
         // the block loop, kk split as (byte, pos): pos vectorizes the table load,
         // byte unrolls to a scalar index). The odd-block tail decodes through its
         // own inline chain (see above), so it does not need this buffer.
-        Func codes_leaf, qh_leaf;
-        for (const Func &h : wt_r.handles) {
-            if (h.name() == "combine_bits_code") {
-                codes_leaf = h;
-            } else if (h.name() == "q5_struct_block_qh") {
-                qh_leaf = h;
+        Func codes_leaf = wt_r.decoded_by(spec.reconstructed_codes_stage);
+        Func qh_leaf = wt_r.decoded_by(spec.packed_high_word_stage);
+        if (!keyed_q5) {
+            // Transitional q5_1 debt: its legacy composition has not yet
+            // exported stage keys. Keep its existing generated-name discovery
+            // local to that path; all scheduling boundaries below use Func
+            // identity once resolved.
+            for (const Func &h : wt_r.handles) {
+                if (h.name() == "combine_bits_code") {
+                    codes_leaf = h;
+                } else if (h.name() == "q5_struct_block_qh") {
+                    qh_leaf = h;
+                }
+            }
+        }
+        _halide_internal_assert(!keyed_q5 || (codes_leaf.defined() && qh_leaf.defined()));
+
+        if (keyed_q5) {
+            // This update has at most one block (the paired q5 schedule's odd
+            // remainder). Flatten only its weight decode chain so it reconstructs
+            // eagerly, while the same stage Funcs remain materialization
+            // boundaries in the main update.
+            std::vector<Func> tail_inline = {wt_r.replacement};
+            for (const Func &h : wt_r.handles) {
+                if (h.function().can_be_inlined()) {
+                    tail_inline.push_back(h);
+                }
+            }
+            for (size_t pass = 0; pass < tail_inline.size(); ++pass) {
+                Acc.update(1).eager_inline(tail_inline);
             }
         }
         auto schedule_codes = [&](LoopLevel level) {
@@ -277,7 +316,7 @@ public:
             dot_acc.update(0).eager_inline(wt_product);
             Var lane("lane");
             std::vector<Func> dot_i32 = sdot_partial(dot_acc, {{rxo, lane}, {rd.y, u}},
-                                                     {act_r}, false, {codes_leaf.name()});
+                                                     {act_r}, false, {codes_leaf});
 
             RVar ryo("ryo"), ryi("ryi");
             Var lv("lv"), bacc("bacc");
@@ -433,9 +472,9 @@ public:
             // their per-block scales out of the surviving rxi reduction, leaving
             // the scale-free Int(32) dot. See sdot_schedule.h.
             Var lane("lane");
-            std::vector<std::string> keep_out;
+            std::vector<Func> keep_out;
             if (codes_leaf.defined()) {
-                keep_out.push_back(codes_leaf.name());
+                keep_out.push_back(codes_leaf);
             }
             std::vector<Func> Acc_i32 = sdot_partial(Acc, {{rxo, lane}, {r.y, u}}, {wt_r, act_r}, spec.distribute_terms, keep_out);
 
