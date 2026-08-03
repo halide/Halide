@@ -97,6 +97,12 @@ struct SchemeAndBytes {
     // it -- see VecDotGeneratorBase::configure(). Purely a byte-path,
     // 32-element-block property today (Q8_1); wider layouts leave it false.
     bool has_block_sums = false;
+    // Optional scheduling identities exported by composed schemes. q5_0 uses
+    // these to materialize reconstructed codes and its packed qh word without
+    // relying on generated Func names. Legacy q5_1 intentionally leaves them
+    // undefined until its separate migration.
+    Halide::ApproximationStageKey reconstructed_codes_stage;
+    Halide::ApproximationStageKey packed_high_word_stage;
 };
 
 // Every make_*_scheme() factory below takes a Layout, selecting what its
@@ -140,81 +146,8 @@ enum class Layout { FlatRow,
 // In block-indexed mode a single-extent reshape is a (kk,blk) passthrough,
 // and a multi-extent one collapses the nested dims (elem,l,group,blk) into
 // (kk,blk) -- the only difference from flat mode is folding blk into k or not.
-class BlockReshape : public Halide::Approximation {
-public:
-    explicit BlockReshape(int block_size, bool block_indexed = false)
-        : extents_{block_size}, block_indexed_(block_indexed) {
-    }
-    explicit BlockReshape(std::vector<int> extents, bool block_indexed = false)
-        : extents_(std::move(extents)), block_indexed_(block_indexed) {
-    }
-
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
-        using namespace Halide;
-        Func flat = inputs[0];  // f(k), or f(kk, blk) when block_indexed_
-        std::vector<Var> dims = block_vars();
-        Var blk("blk");
-
-        // packed(d0, d1, ..., blk) = flat(<within>), within = d0 + e0*d1 + ...
-        Expr within = cast<int>(0);
-        int stride = 1;
-        for (size_t i = 0; i < dims.size(); i++) {
-            within += dims[i] * stride;
-            stride *= extents_[i];
-        }
-        std::vector<Var> args = dims;
-        args.push_back(blk);
-        Func packed("block_reshape_packed");
-        packed(args) = block_indexed_ ? flat(within, blk) : flat(blk * block_size() + within);
-        return {{packed}, {}};
-    }
-
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
-        using namespace Halide;
-        Func packed = encoded[0];
-        Var k("k"), kk("kk"), blk("blk");
-
-        // Read packed(within%e0, (within/e0)%e1, ..., block); the within-block
-        // index and block index come from either a flat k or a (kk, blk) pair.
-        Expr within = block_indexed_ ? (Expr)kk : k % block_size();
-        Expr block = block_indexed_ ? (Expr)blk : k / block_size();
-        std::vector<Expr> args;
-        Expr rem = within;
-        for (int e : extents_) {
-            args.push_back(rem % e);
-            rem = rem / e;
-        }
-        args.push_back(block);
-        Func out("block_reshape_unpacked");
-        if (block_indexed_) {
-            out(kk, blk) = packed(args);
-        } else {
-            out(k) = packed(args);
-        }
-        return {{out}, {}};
-    }
-
-private:
-    std::vector<int> extents_;
-    bool block_indexed_;
-
-    int block_size() const {
-        int p = 1;
-        for (int e : extents_) {
-            p *= e;
-        }
-        return p;
-    }
-    // One Var per within-block dimension; the familiar "kk" in the common
-    // one-dimensional case, "d0"/"d1"/... otherwise.
-    std::vector<Halide::Var> block_vars() const {
-        std::vector<Halide::Var> vs;
-        for (size_t i = 0; i < extents_.size(); i++) {
-            vs.push_back(extents_.size() == 1 ? Halide::Var("kk") : Halide::Var("d" + std::to_string(i)));
-        }
-        return vs;
-    }
-};
+// Compatibility alias: the implementation is now a public core component.
+using BlockReshape = Halide::BlockReshape;
 
 // ---------------------------------------------------------------------------
 // Lossless block-layout relayouts (Reblock, and the repack Interleave below).
@@ -361,95 +294,40 @@ enum class ScaleAnchor { AbsMax,
 // decode(): {codes, scale} -> cast<float>(codes) * scale -- this half is
 // exactly the same regardless of rounding/anchor (both Q4_0's and Q8_0's
 // existing hand-written dequantize math already reduce to this one formula).
-class SymmetricAffineQuantize : public Halide::Approximation {
+class SymmetricAffineQuantize : public Halide::SymmetricBlockQuantize {
 public:
     SymmetricAffineQuantize(int block_size, int qmax, RoundingMode rounding, ScaleAnchor anchor)
-        : block_size_(block_size), qmax_(qmax), rounding_(rounding), anchor_(anchor) {
-    }
-
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
-        using namespace Halide;
-        Func block = inputs[0];  // block(kk, blk)
-        Var kk("kk"), blk("blk");
-        RDom r(0, block_size_, "r");
-
-        Func stat("affine_quantize_stat");
-        Func scale("affine_quantize_scale");
-        Func id("affine_quantize_id");
-        auto define_extreme_signed_stat = [&]() {
-            stat(blk) = Tuple(0.0f, 0.0f);  // {amax, extreme_signed}
-            Expr v = block(r, blk);
-            Expr take = abs(v) > stat(blk)[0];
-            stat(blk) = Tuple(select(take, abs(v), stat(blk)[0]),
-                              select(take, v, stat(blk)[1]));
-        };
-        if (anchor_ == ScaleAnchor::AbsMax) {
-            stat(blk) = 0.0f;
-            stat(blk) = max(stat(blk), abs(block(r, blk)));
-            scale(blk) = stat(blk) / (float)qmax_;
-            id(blk) = select(scale(blk) != 0.0f, 1.0f / scale(blk), 0.0f);
-        } else if (anchor_ == ScaleAnchor::ExtremeSignedValue) {
-            define_extreme_signed_stat();
-            scale(blk) = stat(blk)[1] * (-1.0f / (float)qmax_);
-            id(blk) = select(scale(blk) != 0.0f, 1.0f / scale(blk), 0.0f);
-        } else if (anchor_ == ScaleAnchor::MeanAbs) {
-            stat(blk) = 0.0f;
-            stat(blk) += abs(block(r, blk));
-            scale(blk) = stat(blk) / (float)block_size_;
-            id(blk) = select(scale(blk) != 0.0f, 1.0f / scale(blk), 0.0f);
-        } else {  // ExtremeSignedValueTwoStep
-            define_extreme_signed_stat();
-            // `id` (== GGML's `iscale`) is computed FIRST here, and `scale`
-            // is derived from it -- the reverse order of every other
-            // anchor above -- because GGML's own reference computes
-            // `iscale = -qmax/extreme` then `d = 1/iscale` as two
-            // *separate* divisions, and quantizes using `iscale` directly.
-            // Re-deriving `id` as `1/scale` afterward (like every other
-            // anchor does) would round through an extra reciprocal
-            // (`1/(1/iscale)`) that isn't guaranteed to reproduce `iscale`
-            // bit-for-bit.
-            id(blk) = select(stat(blk)[0] == 0.0f, 0.0f, (-1.0f * (float)qmax_) / stat(blk)[1]);
-            scale(blk) = select(id(blk) != 0.0f, 1.0f / id(blk), 0.0f);
-        }
-        // stat has an update definition, so it must be scheduled somewhere
-        // (Halide can't inline it) -- like SymmetricRowQuantize's `amax` in
-        // approximation_composition.cpp, that's left to the caller via
-        // `handles`, not decided here.
-
-        Expr x0 = block(kk, blk) * id(blk);
-
-        Func codes("affine_quantize_codes");
-        if (rounding_ == RoundingMode::Nearest) {
-            // Matches Q8_0's actual (bit-exact-verified) reference: no
-            // explicit clamp, since id was derived so |x0| doesn't exceed
-            // qmax in practice.
-            codes(kk, blk) = cast<int8_t>(round(x0));
-        } else if (rounding_ == RoundingMode::TruncateHalfUpWithOffset) {
-            Expr raw = cast<int32_t>(cast<int8_t>(x0 + (float)qmax_ + 0.5f));
-            codes(kk, blk) = cast<int8_t>(min(raw, 2 * qmax_ - 1) - qmax_);
-        } else if (rounding_ == RoundingMode::SignOnly) {
-            codes(kk, blk) = cast<int8_t>(select(block(kk, blk) >= 0.0f, 1, -1));
-        } else {  // NearestEvenClampedHigh
-            Expr q_raw = nearest_int(x0);
-            codes(kk, blk) = cast<int8_t>(min(qmax_, q_raw));
-        }
-
-        return {{codes, scale}, {stat}};
-    }
-
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
-        using namespace Halide;
-        Func codes = encoded[0], scale = encoded[1];
-        Var kk("kk"), blk("blk");
-        Func dequantized("affine_dequantized");
-        dequantized(kk, blk) = cast<float>(codes(kk, blk)) * scale(blk);
-        return {{dequantized}, {}};
+        : Halide::SymmetricBlockQuantize(block_size, qmax, core_rounding(rounding), core_anchor(anchor)) {
     }
 
 private:
-    int block_size_, qmax_;
-    RoundingMode rounding_;
-    ScaleAnchor anchor_;
+    static Halide::BlockRoundingMode core_rounding(RoundingMode mode) {
+        switch (mode) {
+        case RoundingMode::Nearest:
+            return Halide::BlockRoundingMode::Nearest;
+        case RoundingMode::TruncateHalfUpWithOffset:
+            return Halide::BlockRoundingMode::TruncateHalfUpWithOffset;
+        case RoundingMode::SignOnly:
+            return Halide::BlockRoundingMode::SignOnly;
+        case RoundingMode::NearestEvenClampedHigh:
+            return Halide::BlockRoundingMode::NearestEvenClampedHigh;
+        }
+        _halide_internal_error << "Unknown symmetric rounding mode\n";
+    }
+
+    static Halide::BlockScaleAnchor core_anchor(ScaleAnchor anchor) {
+        switch (anchor) {
+        case ScaleAnchor::AbsMax:
+            return Halide::BlockScaleAnchor::AbsMax;
+        case ScaleAnchor::ExtremeSignedValue:
+            return Halide::BlockScaleAnchor::ExtremeSignedValue;
+        case ScaleAnchor::MeanAbs:
+            return Halide::BlockScaleAnchor::MeanAbs;
+        case ScaleAnchor::ExtremeSignedValueTwoStep:
+            return Halide::BlockScaleAnchor::ExtremeSignedValueTwoStep;
+        }
+        _halide_internal_error << "Unknown symmetric scale anchor\n";
+    }
 };
 
 // How AffineQuantize rounds+truncates code = round((x-min)*id) into its
@@ -2852,16 +2730,31 @@ inline SchemeAndBytes make_symmetric_5bit_block_scheme(int block_size, int qmax,
                                                        Layout layout = Layout::FlatRow) {
     using namespace Halide;
     _halide_user_assert(block_size == 32) << "The Q5 struct layout requires a 32-element block.\n";
-    Type block_type = Type::Struct({{"d", Float(16)}, {"qh", UInt(32)}, {"qs", UInt(8), 16}});
-    CodePackField code = make_code_pack(block_size, /*code_bits=*/5, qmax);
-    return {std::make_unique<Compose>(
-                Q5StructBlockLayout{block_type, /*affine=*/false},
-                Apply{0, std::move(code.pack)},
-                SymmetricAffineQuantize{block_size, qmax, RoundingMode::TruncateHalfUpWithOffset,
-                                        ScaleAnchor::ExtremeSignedValue},
-                BlockReshape{block_size, layout == Layout::BlockIndexed}),
-            block_type.bytes(),
-            block_type};
+    _halide_user_assert(qmax == 16) << "The q5_0 additive representation requires qmax 16.\n";
+
+    // Faithful physical declaration: qh remains an array of four bytes in the
+    // public type. LittleEndianScalarPack's concat_bits decode lets
+    // LowerStructTypes recover a single unaligned word load from those bytes.
+    Type block_type = Type::Struct({{"d", Float(16)}, {"qh", UInt(8), 4}, {"qs", UInt(8), 16}});
+
+    Halide::LittleEndianScalarPack<uint32_t> qh_word;
+    Halide::AdditiveRadixSplit radix_split(16, 16);
+    ApproximationStageKey qh_word_key = qh_word.stage_key();
+    ApproximationStageKey reconstructed_codes_key = radix_split.stage_key();
+
+    auto scheme = std::make_unique<Compose>(
+        Halide::StructLayout{block_type, {"qs", "qh", "d"}},
+        Apply{2, Halide::StorageCast<float, float16_t>{}},
+        Apply{1, std::move(qh_word)},
+        Apply{1, Halide::BinaryAlphabetPack<int8_t>{32, UInt(32), -16, 0}},
+        Apply{0, Halide::PlanarFieldPack{4, 16}},
+        Apply{0, /*encode_arity=*/1, /*decode_arity=*/2, std::move(radix_split)},
+        Halide::SymmetricBlockQuantize{block_size, qmax,
+                                       Halide::BlockRoundingMode::TruncateHalfUpWithOffset,
+                                       Halide::BlockScaleAnchor::ExtremeSignedValue},
+        Halide::BlockReshape{block_size, layout == Layout::BlockIndexed});
+    return {std::move(scheme), block_type.bytes(), block_type, false,
+            reconstructed_codes_key, qh_word_key};
 }
 
 // Affine quantize (like make_affine_block_scheme()) but 5-bit -- likewise now
