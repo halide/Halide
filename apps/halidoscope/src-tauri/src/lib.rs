@@ -28,19 +28,30 @@ fn get_cwd() -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_cli::init())
         .setup(|app| {
             match app.cli().matches() {
-                Ok(matches) => match matches.subcommand {
-                    Some(subcommand) => halidoscope_cli(subcommand),
-                    None => {
-                        tauri::WebviewWindowBuilder::from_config(
-                            app.handle(),
-                            &app.config().app.windows[0],
-                        )?
-                        .build()?;
+                Ok(matches) => {
+                    if let Some(help) = matches.args.get("help").and_then(|a| a.value.as_str()) {
+                        println!("{}", help);
+                        std::process::exit(0);
                     }
-                },
+                    if matches.args.contains_key("version") {
+                        println!("{}", app.package_info().version);
+                        std::process::exit(0);
+                    }
+                    match matches.subcommand {
+                        Some(subcommand) => halidoscope_cli(subcommand),
+                        None => {
+                            tauri::WebviewWindowBuilder::from_config(
+                                app.handle(),
+                                &app.config().app.windows[0],
+                            )?
+                            .build()?;
+                        }
+                    }
+                }
                 Err(e) => {
                     eprintln!("Error parsing CLI arguments: {}", e);
                     std::process::exit(1);

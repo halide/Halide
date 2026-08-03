@@ -414,14 +414,19 @@ fn parse_func_type_and_dim(
 // ── Trace loading ─────────────────────────────────────────────────────────────
 
 impl Trace {
-    pub fn load_from_file(path: &str) -> Result<Self, String> {
+    pub fn load_from_file(path: &str, on_progress: impl FnMut(u8)) -> Result<Self, String> {
         let data = std::fs::read(path).map_err(|e| e.to_string())?;
-        Self::load_from_bytes(&data)
+        Self::load_from_bytes(&data, on_progress)
     }
 
-    pub fn load_from_bytes(data: &[u8]) -> Result<Self, String> {
+    /// Parses `data` into a `Trace`, invoking `on_progress` with the percentage (0-100) of bytes
+    /// consumed each time it crosses a new integer percentage point. Progress tracks bytes
+    /// consumed rather than packet count since the total packet count isn't known until parsing
+    /// completes (packets are variable-length).
+    pub fn load_from_bytes(data: &[u8], mut on_progress: impl FnMut(u8)) -> Result<Self, String> {
         let total = data.len();
         let mut pos = 0;
+        let mut last_reported_pct: u8 = 0;
 
         let mut packets: Vec<TracePacket> = Vec::new();
         let mut funcs: BTreeMap<String, FuncStats> = BTreeMap::new();
@@ -663,6 +668,14 @@ impl Trace {
 
             packets.push(pkt);
             pos += size;
+
+            // Intentionally max pct at 95 to support movement to 100 after all stats below are
+            // computed.
+            let pct = (pos as u64 * 100 / total.max(1) as u64).max(95) as u8;
+            if pct > last_reported_pct {
+                last_reported_pct = pct;
+                on_progress(pct);
+            }
         }
 
         // ── DAG inference ────────────────────────────────────────────────────────────────────────
@@ -985,6 +998,8 @@ impl Trace {
                 }
             }
         }
+
+        on_progress(100);
 
         Ok(Self {
             packets,
