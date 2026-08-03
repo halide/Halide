@@ -179,23 +179,8 @@ public:
         if (sdot) {
             if (!share_weight_tail) {
                 wtT_r = WtT.approximate_by(*spec.weight_codec, {Acc});
-            }
-            if (!share_act_tail) {
-                actT_r = VecT.approximate_by(*spec.act_codec, {Acc});
-            }
-            if (!share_weight_tail) {
                 to_sever.insert(to_sever.end(), wtT_r.encoded.begin(), wtT_r.encoded.end());
-            }
-            if (!share_act_tail) {
-                to_sever.insert(to_sever.end(), actT_r.encoded.begin(), actT_r.encoded.end());
-            }
-            if (!share_weight_tail) {
                 bind_to.push_back(x_blocks);
-            }
-            if (!share_act_tail) {
-                bind_to.push_back(y_blocks);
-            }
-            if (!share_weight_tail) {
                 for (Func h : wtT_r.handles) {
                     if (h.has_update_definition()) {
                         h.compute_root();
@@ -203,6 +188,9 @@ public:
                 }
             }
             if (!share_act_tail) {
+                actT_r = VecT.approximate_by(*spec.act_codec, {Acc});
+                to_sever.insert(to_sever.end(), actT_r.encoded.begin(), actT_r.encoded.end());
+                bind_to.push_back(y_blocks);
                 for (Func h : actT_r.handles) {
                     if (h.has_update_definition()) {
                         h.compute_root();
