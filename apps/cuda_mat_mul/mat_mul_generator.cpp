@@ -23,38 +23,43 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 // pair with.
 //
 // GFlop/s on an RTX 5060 Ti, against cublas doing the same thing at each
-// pair of types, and against the peak the hardware could reach. The block
-// shapes below were picked by sweeping them at each size and operand type.
+// pair of types, and against the ceiling of the instructions this schedule
+// uses. The block shapes below were picked by sweeping them at each size and
+// operand type.
 //
-//                             1024      2048      4096     peak
-//     Halide f32              6878     10294      7298    28500
+//                             1024      2048      4096   ceiling
+//     Halide f32              6878     10294      7298     25960
 //     cublas f32             14503     16574     17449
 //
-//     Halide f16 -> f32      40070     46671     48888    56980
+//     Halide f16 -> f32      40070     46671     48888     51541
 //     cublas f16 -> f32      41658     49069     50440
 //
-//     Halide bf16 -> f32     40025     46681     48692    56980
+//     Halide bf16 -> f32     40025     46681     48692     51541
 //     cublas bf16 -> f32     41664     49054     50437
 //
-//     Halide f16 -> f16      60349     86502     86599   113960
+//     Halide f16 -> f16      60349     86502     86599     99626
 //     cublas f16 -> f16      69221     75073     87073
 //
-//     Halide u8 -> i32       62869     82391     89641   227920
+//     Halide u8 -> i32       62869     82391     89641    100650
 //     cublas s8 -> i32      107868    122203    129970
 //
-// The peak column is 36 SMs times the 3090 MHz maximum clock times the rate
-// per SM per clock, which is 256 flops for the cuda cores, and 512, 1024 and
-// 2048 for the tensor cores at each accumulator width. Those per-SM rates are
-// the consumer part pattern rather than something measured here, so treat the
-// column as a scale rather than a number.
+// The ceiling for the tensor core rows is measured, by issuing back-to-back
+// wmma instructions out of registers with no memory traffic at all. The one
+// for the float row is 36 SMs times the 2817 MHz this part averages while
+// benchmarking times 256 flops per SM per clock, which is what the cuda cores
+// do. Rows within a pair of types are comparable to each other; rows in
+// different pairs are not, because a narrower accumulator or narrower
+// operands are less work.
 //
-// Rows within a pair of types are comparable to each other; rows in different
-// pairs are not, because a narrower accumulator or narrower operands are less
-// work. The two 16-bit float schedules land within a few percent of cublas,
-// and the half accumulator one is ahead of it at 2048. The eight-bit one is
-// the weakest against cublas, at 58% to 69% of it, though it is the fastest
-// thing here in absolute terms - which is what makes bytes interesting for
-// imaging, where the inputs are usually bytes anyway.
+// So the schedules reach 95%, 87% and 89% of what their instructions can do,
+// and the last of those matches cublas at f16 -> f16 exactly. The one row
+// that does not is eight-bit, where cublas is 29% past the ceiling of the
+// instruction used here: wmma multiplies bytes at the same rate it multiplies
+// halves into halves, whereas the mma instructions reach 188355 GOP/s at the
+// same shape - 1.87x - so cublas must be using those. Both instructions do
+// the same 8192 ops each; what differs is how fast they issue. Reaching that
+// needs mma rather than wmma, which is a different fragment layout and not
+// something this schedule can express.
 //
 class MatMul : public Halide::Generator<MatMul> {
 public:
