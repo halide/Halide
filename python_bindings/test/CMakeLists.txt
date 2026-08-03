@@ -10,3 +10,4 @@ endif ()
 
 add_subdirectory(correctness)
 add_subdirectory(generators)
+add_subdirectory(runtime)

@@ -87,3 +87,6 @@ add_custom_command(
 
 add_custom_target(Halide_Python_sources DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/${stamp_file}")
 add_dependencies(Halide_Python Halide_Python_sources)
+
+# The standalone `halide.runtime` submodule (links only Halide::Runtime).
+add_subdirectory(runtime)

@@ -20,6 +20,7 @@ set(tests
     lesson_12_using_the_gpu.py
     lesson_13_tuples.py
     lesson_14_types.py
+    lesson_15_runtime.py
     # keep-sorted end
 )
 

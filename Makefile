@@ -632,7 +632,8 @@ SOURCE_FILES = \
 
  C_TEMPLATE_FILES = \
    CodeGen_C_prologue \
-   CodeGen_C_vectors
+   CodeGen_C_vectors \
+   PythonExtensionRuntime
 
 HTML_TEMPLATE_FILES = \
    StmtToHTML_dependencies.html \
