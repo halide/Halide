@@ -218,7 +218,7 @@ void load_webgpu() {
     if (!env_libname.empty()) {
         error = try_load(env_libname.c_str());
     }
-    if (!error.empty()) {
+    if (env_libname.empty() || !error.empty()) {
         const char *libnames[] = {
             // Dawn (Chromium).
             "libwebgpu_dawn.so",

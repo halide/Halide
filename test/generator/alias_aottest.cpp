@@ -1,8 +1,12 @@
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
 
+#include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#if defined(TEST_WEBGPU)
+#include "HalideRuntimeWebGPU.h"
+#endif
 
 #include "alias.h"
 #include "alias_Adams2019.h"
@@ -57,5 +61,15 @@ int main(int argc, char **argv) {
     });
 
     printf("Success!\n");
+
+    // WebGPU via Node requires all references to any GPU objects be released,
+    // otherwise the process will not exit.
+#if defined(TEST_WEBGPU)
+    const halide_device_interface_t *interface = halide_webgpu_device_interface();
+    input.device_free();
+    output.device_free();
+    halide_device_release(nullptr, interface);
+#endif
+
     return 0;
 }

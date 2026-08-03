@@ -6,6 +6,13 @@
   "license": "MIT",
   "supports": "!uwp",
   "builtin-baseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1",
+  "overrides": [
+    {
+      "name": "dawn",
+      "version": "20260624.223603",
+      "port-version": 1
+    }
+  ],
   "default-features": [
     "jit"
   ],
@@ -184,6 +191,12 @@
       "description": "Include built-in WASM executor",
       "dependencies": [
         "wabt"
+      ]
+    },
+    "webgpu-native": {
+      "description": "Native WebGPU support via Dawn (libwebgpu_dawn)",
+      "dependencies": [
+        "dawn"
       ]
     }
   }
