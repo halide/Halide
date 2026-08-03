@@ -709,11 +709,7 @@ protected:
             body = IfThenElse::make(used, body);
             inner_unbound_use_of_used_or_loaded_vars = true;
 
-            if (body.same_as(op->body)) {
-                return op;
-            } else {
-                return ProducerConsumer::make(op->name, op->is_producer, std::move(body));
-            }
+            return op->with(body);
         } else {
             ScopedBinding<> bind_if(!unconditionally_used &&
                                         in_realize.contains(op->name),
@@ -754,13 +750,7 @@ protected:
 
         // We don't need to visit the bounds, because there can't be call nodes
         // in them.
-        if (body.same_as(op->body) &&
-            condition.same_as(op->condition)) {
-            return op;
-        } else {
-            return Realize::make(op->name, op->types, op->memory_type,
-                                 op->bounds, std::move(condition), std::move(body));
-        }
+        return op->with(op->bounds, condition, body);
     }
 
     bool in_vector_loop = false;
@@ -817,12 +807,7 @@ protected:
         merge_func_info(&old, func_info);
         old.swap(func_info);
 
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return For::make(op->name, op->min, op->max,
-                             op->for_type, op->partition_policy, op->device_api, std::move(body));
-        }
+        return op->with(op->min, op->max, body);
     }
 };
 
